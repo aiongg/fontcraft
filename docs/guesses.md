@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**1659 guesses on 1079 rows (393 of them live commands).**
+**1660 guesses on 1079 rows (393 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -1459,8 +1459,9 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `proof` (cli) | M12 | docs | – | Pages of an SVG proof are numbered with at least three digits after the name (A.proof-001.svg); a one-page proof keeps the plain name. Nothing in the references fixes it. |
 | `features list` (cli) | M12 | docs | – | The text layout is ours (one line per table and feature, then an indented script/language line each, lookups after a colon; --by script swaps the two levels), since no reference prints this list in one format; JSON is the stable form. A request for spot's or comparefamily's layout would change it. |
 | `variations build-avar` (cli) | M12 | docs | – | Without a designspace the font's own version 1 avar is read back as user-space maps and built again (fontTools' deprecated varLib.avar prints the maps instead); a version 2 avar is refused. Comparing with a user's expectations of the reference tool would settle it. |
-| `mcp` (cli) | M13 | inferred | – | `--read-only` admits only commands that declare themselves queries; `--allow` and `--deny` take shell-style patterns over command ids, deny winning; `--root` refuses any file parameter outside the named folders. No reference has such options; settled by the sibling apps' conventions. |
-| `mcp` (cli) | M13 | inferred | – | File parameters are recognised by name (path, file, files, folder, destination, font, input, output, outputDir and their plurals) at any depth, and macro, recent-document and URL commands are refused under any restriction because their files and steps are not in their parameters; a per-command declaration of file parameters in the registry would settle it more precisely. |
+| `mcp` (cli) | M13 | inferred | – | `--read-only` admits only commands that declare themselves queries; `--allow` and `--deny` take shell-style patterns over command ids, deny winning. No reference has such options; settled by the sibling apps' conventions. |
+| `mcp` (cli) | M13 | inferred | – | File access is unrestricted by default; `--automation-read-root` and `--automation-write-root` each take one folder, grant read and write access separately, and are an error with `--connect`. No reference has such options; settled by the sibling apps' conventions. |
+| `mcp` (cli) | M13 | inferred | – | Macro, recent-document and URL commands are refused while a root, `--read-only`, `--allow` or `--deny` is set, because their files and steps are not in their parameters; agents' needs would settle whether a checked macro runner is worth building. |
 | `mcp` (cli) | M13 | inferred | – | No log notifications are sent until the client calls logging/setLevel; the protocol leaves the default to the server, and client feedback would settle it. |
 | `mcp` (cli) | M13 | inferred | – | The five prompts are start_family, add_master, build_accented_glyphs, kern_pair_list and prepare_release, with the steps of docs/mcp.md; agents' use of them would settle the wording. |
 | `bench` (cli) | M12 | inferred | – | Bench's options come before the timed subcommand and everything from the subcommand on is timed, so a subcommand's own options (such as --json) never clash with bench's; the reference benchmark modules take no such command line, so use will settle it. |
