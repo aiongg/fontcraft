@@ -177,6 +177,9 @@ pub struct FontInfoState {
     /// A text field had the keyboard at the end of the last frame.
     #[serde(skip)]
     pub text_focus: bool,
+    /// The Masters tab's icon picker or metric editor was open at the end of the last frame.
+    #[serde(skip)]
+    pub popup: bool,
 }
 
 impl FontInfoState {
@@ -373,26 +376,37 @@ fn features_read_only(app: &mut FontcraftApp, ui: &mut egui::Ui, _pending: &mut 
     }
 }
 
-/// Whether Copy, Paste and Cmd+Delete act on the window's rows: it is open, the last press
-/// landed in it, and no text field, picker or dialog has the keyboard.
+/// Whether the window has the keyboard: it is open, the last press landed in it, and no text
+/// field or dialog has the keyboard. Copy, Paste and the window's shortcuts are then its own,
+/// even while a picker over it is open.
+pub fn has_keyboard(app: &FontcraftApp) -> bool {
+    let fi = &app.state.panels.font_info;
+    fi.open && fi.keys && !fi.text_focus && app.dialog.is_none()
+}
+
+/// Whether Copy, Paste and Cmd+Delete act on the window's rows: it has the keyboard and no
+/// picker, icon picker or metric editor is open over it.
 pub fn takes_clipboard(app: &FontcraftApp) -> bool {
     let fi = &app.state.panels.font_info;
-    fi.open && fi.keys && !fi.text_focus && fi.picker.is_none() && app.dialog.is_none()
+    has_keyboard(app) && fi.picker.is_none() && !fi.popup
 }
 
 /// A menu item or shortcut while the window has the keyboard: Edit › Copy copies the selected
-/// rows, and the shortcut of `font.info.removeField` (Cmd+Delete) removes them, whichever
-/// command the keymap matched it to. `None`: the run is not the window's.
+/// rows, and `font.info.removeField` (Cmd+Delete, which the keymap gives the window while it has
+/// the keyboard) removes them. `None`: the run is not the window's.
 pub fn menu_command(app: &mut FontcraftApp, id: &str) -> Option<Result<Value, String>> {
-    if !takes_clipboard(app) {
+    if !has_keyboard(app) {
         return None;
+    }
+    if !takes_clipboard(app) {
+        // A picker is open over the window: Copy and Cmd+Delete do nothing rather than reach
+        // the glyphs behind it.
+        return (id == "edit.copy" || id == REMOVE_FIELD).then(|| Ok(Value::Null));
     }
     if id == "edit.copy" {
         return Some(copy(app));
     }
-    let remove = fontcraft_engine::find_command(REMOVE_FIELD).and_then(|c| c.shortcut);
-    let shortcut = fontcraft_engine::find_command(id).and_then(|c| c.shortcut);
-    if id == REMOVE_FIELD || (remove.is_some() && shortcut == remove) {
+    if id == REMOVE_FIELD {
         return Some(remove_selected(app));
     }
     None
@@ -412,6 +426,7 @@ fn keyboard(app: &mut FontcraftApp, ctx: &egui::Context, window: Option<egui::Re
         }
     }
     fi.text_focus = ctx.text_edit_focused();
+    fi.popup = masters_tab::open_editor(ctx).is_some() || masters_tab::open_icon_picker(ctx).is_some();
     if !takes_clipboard(app) {
         return;
     }

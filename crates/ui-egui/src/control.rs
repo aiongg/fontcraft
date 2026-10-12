@@ -405,7 +405,7 @@ fn key(app: &mut FontcraftApp, name: &str, mods: Modifiers, action: KeyAction) -
         let egui_key = egui::Key::from_name(name).or_else(|| egui::Key::from_name(&name.to_uppercase()));
         if !handled && let Some(k) = egui_key {
             let m = egui::Modifiers { alt: mods.alt, ctrl: mods.ctrl, shift: mods.shift, mac_cmd: false, command: mods.cmd };
-            if let Some((id, params)) = keymap::command_for(k, m) {
+            if let Some((id, params)) = keymap::command_for(k, m, keymap::focused_panel(app)) {
                 handled = true;
                 command = Some((id, app.run_menu_command(id, params)));
             }

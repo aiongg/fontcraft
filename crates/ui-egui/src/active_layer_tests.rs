@@ -177,8 +177,8 @@ fn shift_and_cmd_clicks_extend_the_row_selection_without_moving_the_active_layer
 
 #[test]
 fn cmd_digits_select_masters() {
-    let (id, params) = crate::shell::keymap::command_for(egui::Key::Num2, egui::Modifiers::COMMAND).unwrap();
+    let (id, params) = crate::shell::keymap::command_for(egui::Key::Num2, egui::Modifiers::COMMAND, None).unwrap();
     assert_eq!((id, params), ("view.selectMaster", json!({"master": 1})));
-    let (id, _): (&str, Value) = crate::shell::keymap::command_for(egui::Key::Num1, egui::Modifiers::COMMAND | egui::Modifiers::ALT).unwrap();
+    let (id, _): (&str, Value) = crate::shell::keymap::command_for(egui::Key::Num1, egui::Modifiers::COMMAND | egui::Modifiers::ALT, None).unwrap();
     assert_ne!(id, "view.selectMaster", "Cmd+Alt+1 is Font View's");
 }

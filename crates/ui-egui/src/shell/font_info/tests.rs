@@ -186,11 +186,18 @@ fn cmd_delete_removes_two_selected_rows() {
     s.click(&mut app, field("designers"), Modifiers::NONE);
     s.click(&mut app, param("underlineThickness"), Modifiers::COMMAND);
     assert_eq!(app.state.panels.font_info.selected_rows, [0, 2]);
-    let (id, _) = crate::shell::keymap::command_for(Key::Delete, Modifiers::COMMAND).expect("Cmd+Delete is a shortcut");
     // While the window does not have the keyboard, the shortcut is not the window's.
     app.state.panels.font_info.open = true;
-    assert!(super::menu_command(&mut app, id).is_none());
+    assert_eq!(crate::shell::keymap::focused_panel(&app), None);
+    let (other, _) = crate::shell::keymap::command_for(Key::Delete, Modifiers::COMMAND, None).expect("Cmd+Delete is a shortcut");
+    assert_ne!(other, "font.info.removeField");
+    assert!(super::menu_command(&mut app, other).is_none());
     app.state.panels.font_info.keys = true;
+    // Glyph › Remove Glyph from the menu is still not the window's.
+    assert!(super::menu_command(&mut app, other).is_none());
+    let panel = crate::shell::keymap::focused_panel(&app);
+    let (id, _) = crate::shell::keymap::command_for(Key::Delete, Modifiers::COMMAND, panel).expect("Cmd+Delete is a shortcut");
+    assert_eq!(id, "font.info.removeField");
     let r = app.run_menu_command(id, json!({})).unwrap();
     assert_eq!(r, json!({"removed": 2}));
     assert!(!has_field(&app, "designers"));

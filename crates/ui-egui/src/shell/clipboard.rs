@@ -54,7 +54,7 @@ fn special_key() -> egui::Id {
 pub fn events(app: &mut FontcraftApp, ctx: &egui::Context) -> Vec<(&'static str, Value)> {
     let asked = ctx.data_mut(|d| d.remove_temp::<u64>(special_key()));
     let special_asked = asked.is_some_and(|frame| ctx.cumulative_frame_nr() <= frame.saturating_add(1));
-    if app.dialog.is_some() || ctx.text_edit_focused() || super::kerning_window::takes_clipboard(app) || super::font_info::takes_clipboard(app) {
+    if app.dialog.is_some() || ctx.text_edit_focused() || super::kerning_window::takes_clipboard(app) || super::font_info::has_keyboard(app) {
         return Vec::new();
     }
     let (events, alt) = ctx.input(|i| {

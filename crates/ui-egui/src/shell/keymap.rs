@@ -16,24 +16,43 @@ use super::UI_COMMANDS;
 /// The `when` of the shortcuts that work only while the Text tool is active.
 pub const TEXT_MODE: &str = "textMode";
 
+/// The prefix of a `when` that limits a shortcut to the time a panel or window has the keyboard
+/// (`panel:fontInfo`). Such a shortcut wins over another command's same shortcut there.
+const PANEL: &str = "panel:";
+
 /// Every shortcut, the most specific first: egui matches a shortcut while extra Shift or Alt are
 /// held, so `Cmd+Shift+W` must be tried before a `Cmd+W` would be.
-static KEYMAP: LazyLock<Vec<(&'static str, KeyboardShortcut)>> = LazyLock::new(|| {
+static KEYMAP: LazyLock<Vec<(&'static str, KeyboardShortcut, Option<&'static str>)>> = LazyLock::new(|| {
     // The `textMode` shortcuts work only in text mode, where [`text_mode_command`] finds them.
-    let engine = fontcraft_engine::command_specs().iter().filter(|c| c.when != Some(TEXT_MODE)).filter_map(|c| Some((c.id, c.shortcut?)));
-    let shell = UI_COMMANDS.iter().map(|c| (c.0, c.3));
-    let mut map: Vec<(&'static str, KeyboardShortcut)> = Vec::new();
-    for (id, text) in engine.chain(shell) {
+    let engine = fontcraft_engine::command_specs()
+        .iter()
+        .filter(|c| c.when != Some(TEXT_MODE))
+        .filter_map(|c| Some((c.id, c.shortcut?, c.when.and_then(|w| w.strip_prefix(PANEL)))));
+    let shell = UI_COMMANDS.iter().map(|c| (c.0, c.3, None));
+    let mut map: Vec<(&'static str, KeyboardShortcut, Option<&'static str>)> = Vec::new();
+    for (id, text, panel) in engine.chain(shell) {
         let Some(shortcut) = parse(text).filter(|s| has_modifier(s.modifiers)) else { continue };
-        map.push((id, shortcut));
+        map.push((id, shortcut, panel));
         // On most layouts Plus is Shift and Equals: take the unshifted key too.
         if shortcut.logical_key == Key::Plus {
-            map.push((id, KeyboardShortcut::new(shortcut.modifiers, Key::Equals)));
+            map.push((id, KeyboardShortcut::new(shortcut.modifiers, Key::Equals), panel));
         }
     }
-    map.sort_by_key(|(_, s)| std::cmp::Reverse(modifier_count(s.modifiers)));
+    // Panel shortcuts first, so that they win over a menu command's same shortcut while their
+    // panel has the keyboard; then the most modifiers first.
+    map.sort_by_key(|(_, s, panel)| (panel.is_none(), std::cmp::Reverse(modifier_count(s.modifiers))));
     map
 });
+
+/// The panel or window that has the keyboard, by the name its `panel:` shortcuts use.
+pub fn focused_panel(app: &crate::app::FontcraftApp) -> Option<&'static str> {
+    super::font_info::has_keyboard(app).then_some("fontInfo")
+}
+
+/// Whether a shortcut limited to `panel` applies while `focused` has the keyboard.
+fn applies(panel: Option<&str>, focused: Option<&str>) -> bool {
+    panel.is_none() || panel == focused
+}
 
 fn has_modifier(m: Modifiers) -> bool {
     m.command || m.ctrl || m.alt || m.mac_cmd
@@ -65,8 +84,9 @@ pub fn parse(text: &str) -> Option<KeyboardShortcut> {
 
 /// The commands whose shortcuts were pressed this frame. Nothing fires while a text field has
 /// the keyboard, or had it when the last frame ended (`text_focus`). Another focused widget,
-/// such as a list, leaves the menu shortcuts working and keeps only its own.
-pub fn pressed(ctx: &egui::Context, text_focus: bool) -> Vec<(&'static str, Value)> {
+/// such as a list, leaves the menu shortcuts working and keeps only its own. `panel` is the
+/// panel that has the keyboard ([`focused_panel`]).
+pub fn pressed(ctx: &egui::Context, text_focus: bool, panel: Option<&str>) -> Vec<(&'static str, Value)> {
     if text_focus || ctx.text_edit_focused() {
         return Vec::new();
     }
@@ -80,8 +100,8 @@ pub fn pressed(ctx: &egui::Context, text_focus: bool) -> Vec<(&'static str, Valu
                 out.push(("view.showTab", json!({"index": n})));
             }
         }
-        for (id, shortcut) in KEYMAP.iter() {
-            if !NUMBERED.contains(id) && !kept.contains(shortcut) && input.consume_shortcut(shortcut) {
+        for (id, shortcut, only) in KEYMAP.iter() {
+            if !NUMBERED.contains(id) && applies(*only, panel) && !kept.contains(shortcut) && input.consume_shortcut(shortcut) {
                 out.push((*id, json!({})));
             }
         }
@@ -108,8 +128,8 @@ const NUMBERED: &[&str] = &["view.showTab", "view.selectMaster"];
 const MASTER_DIGITS: [Key; 9] = [Key::Num1, Key::Num2, Key::Num3, Key::Num4, Key::Num5, Key::Num6, Key::Num7, Key::Num8, Key::Num9];
 
 /// The command a key with these modifiers runs as a menu shortcut, matched as [`pressed`] matches
-/// it (`ui.key` on the control channel).
-pub fn command_for(key: Key, modifiers: Modifiers) -> Option<(&'static str, Value)> {
+/// it (`ui.key` on the control channel). `panel` is the panel that has the keyboard.
+pub fn command_for(key: Key, modifiers: Modifiers, panel: Option<&str>) -> Option<(&'static str, Value)> {
     let digits = [Key::Num2, Key::Num3, Key::Num4, Key::Num5, Key::Num6, Key::Num7, Key::Num8, Key::Num9];
     if modifiers.matches_logically(Modifiers::COMMAND | Modifiers::ALT)
         && let Some(n) = (2u64..).zip(digits).find(|(_, k)| *k == key).map(|(n, _)| n)
@@ -118,8 +138,8 @@ pub fn command_for(key: Key, modifiers: Modifiers) -> Option<(&'static str, Valu
     }
     let found = KEYMAP
         .iter()
-        .find(|(id, s)| !NUMBERED.contains(id) && s.logical_key == key && modifiers.matches_logically(s.modifiers))
-        .map(|(id, _)| (*id, json!({})));
+        .find(|(id, s, only)| !NUMBERED.contains(id) && applies(*only, panel) && s.logical_key == key && modifiers.matches_logically(s.modifiers))
+        .map(|(id, _, _)| (*id, json!({})));
     if found.is_some() {
         return found;
     }
