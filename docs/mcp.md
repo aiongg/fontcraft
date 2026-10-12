@@ -117,6 +117,11 @@ fontcraft-cli mcp --automation-read-root /work/fonts --automation-write-root /wo
 - How a path is compared:
   - It is made absolute against the server's working directory, and its links are followed. A
     file or folder link that leads out of a root is outside it.
+  - A parameter marked `from_document` (the image files of `glyph.addImage`,
+    `layer.setIColorImage` and `layer.setSvgImage`) is read by its command relative to the active
+    document's folder. A relative path there is made absolute against that folder instead, so it
+    names the same file with and without roots. For a document never saved, the working
+    directory is used.
   - For a file that does not exist yet, the links of its nearest existing folder are followed and
     the rest of the path must be plain names: `..` below a missing folder is refused, as is a link
     that leads nowhere (writing through it would create its target).

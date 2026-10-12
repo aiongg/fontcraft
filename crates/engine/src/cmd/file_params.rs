@@ -35,17 +35,21 @@ pub struct FileParam {
     /// Values of the parameter that are not paths (`"nice"` for a list of names).
     #[serde(skip_serializing_if = "<[_]>::is_empty")]
     pub keywords: &'static [&'static str],
+    /// A relative path is relative to the active document's folder (to the working directory
+    /// for a document never saved), as the command reads it.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub from_document: bool,
 }
 
 impl FileParam {
     /// A parameter naming a file or folder the command reads.
     pub const fn read(name: &'static str) -> Self {
-        Self { name, access: FileAccess::Read, form: FileForm::Path, keywords: &[] }
+        Self { name, access: FileAccess::Read, form: FileForm::Path, keywords: &[], from_document: false }
     }
 
     /// A parameter naming a file or folder the command writes (or stores as a place to write).
     pub const fn write(name: &'static str) -> Self {
-        Self { name, access: FileAccess::Write, form: FileForm::Path, keywords: &[] }
+        Self { name, access: FileAccess::Write, form: FileForm::Path, keywords: &[], from_document: false }
     }
 
     /// Sets [`FileParam::form`] to [`FileForm::Tables`].
@@ -57,6 +61,12 @@ impl FileParam {
     /// Sets [`FileParam::form`] to [`FileForm::Document`].
     pub const fn document(mut self) -> Self {
         self.form = FileForm::Document;
+        self
+    }
+
+    /// Sets [`FileParam::from_document`].
+    pub const fn from_document(mut self) -> Self {
+        self.from_document = true;
         self
     }
 

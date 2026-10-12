@@ -208,3 +208,21 @@ fn the_session_snippet_folder_is_checked_when_no_folder_is_given() {
     run(&mut s, "font.features.listSnippets", json!({}));
     let _ = std::fs::remove_dir_all(base);
 }
+
+#[test]
+fn a_relative_image_path_starts_from_the_document_folder_under_roots() {
+    let (base, roots) = folders("relative");
+    // A 1 × 1 PNG header; Add Image reads only the header.
+    let mut png = b"\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR\0\0\0\x01\0\0\0\x01\x08\x06\0\0\0".to_vec();
+    png.extend([0; 4]);
+    png.extend(b"\0\0\0\0IEND\0\0\0\0");
+    std::fs::write(base.join("in/A.png"), png).unwrap();
+    let mut s = Session::new();
+    confine(Some(&roots), || {
+        run(&mut s, "file.open", json!({"path": base.join("in/Font.glyphs")}));
+        // The working directory lies outside the read root; the document's folder does not.
+        let placed = run(&mut s, "glyph.addImage", json!({"files": ["A.png"], "glyphs": ["zz.linked"]}));
+        assert_eq!(placed["placed"][0]["path"], "A.png", "{placed}");
+    });
+    let _ = std::fs::remove_dir_all(base);
+}

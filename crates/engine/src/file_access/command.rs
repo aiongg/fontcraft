@@ -79,13 +79,15 @@ pub fn check_files(s: &Session, id: &str, files: &[FileParam], params: &Value, r
     if let Value::Object(map) = &mut params {
         let open: Vec<&str> =
             s.documents().iter().flat_map(|d| [Some(d.title.as_str()), d.path.as_deref().and_then(Path::to_str)]).flatten().collect();
-        let mut checker = Checker { roots, open: &open, left: MAX_PATHS, access: Access::Read, reads: Vec::new() };
+        let folder = s.active().and_then(|d| d.path.as_deref()).and_then(|p| std::path::absolute(p).ok()).and_then(|p| p.parent().map(Path::to_path_buf));
+        let mut checker = Checker { roots, open: &open, left: MAX_PATHS, access: Access::Read, base: None, reads: Vec::new() };
         for f in files {
             if let Some(value) = map.get_mut(f.name) {
                 checker.access = match f.access {
                     FileAccess::Read => Access::Read,
                     FileAccess::Write => Access::Write,
                 };
+                checker.base = folder.as_deref().filter(|_| f.from_document);
                 checker.value(f, value)?;
             }
         }
@@ -177,6 +179,9 @@ struct Checker<'a> {
     left: usize,
     /// The access the parameter being checked declares.
     access: Access,
+    /// The folder a relative path of the parameter being checked starts from, when not the
+    /// working directory ([`FileParam::from_document`]).
+    base: Option<&'a Path>,
     /// The resolved paths of the files the command reads.
     reads: Vec<std::path::PathBuf>,
 }
@@ -260,6 +265,14 @@ impl Checker<'_> {
 
     fn path(&mut self, key: &str, text: &str) -> std::result::Result<String, String> {
         self.left = self.left.checked_sub(1).ok_or_else(|| format!("more than {MAX_PATHS} paths in one command"))?;
+        let joined = match self.base {
+            Some(base) if Path::new(text).is_relative() => Some(base.join(text)),
+            _ => None,
+        };
+        let text = match &joined {
+            Some(joined) => joined.to_str().ok_or_else(|| format!("`{key}`: {text} in the document's folder is not a UTF-8 path"))?,
+            None => text,
+        };
         let resolved = self.roots.resolved(text, self.access).map_err(|e| format!("`{key}`: {e}"))?;
         if self.access == Access::Read {
             self.reads.push(resolved.clone());
@@ -287,7 +300,7 @@ mod tests {
 
     fn check(roots: &AutomationRoots, open: &[&str], f: &FileParam, mut value: Value) -> std::result::Result<Value, String> {
         let access = if f.access == FileAccess::Read { Access::Read } else { Access::Write };
-        let mut checker = Checker { roots, open, left: MAX_PATHS, access, reads: Vec::new() };
+        let mut checker = Checker { roots, open, left: MAX_PATHS, access, base: None, reads: Vec::new() };
         checker.value(f, &mut value).map(|()| value)
     }
 

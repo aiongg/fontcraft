@@ -84,7 +84,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{glyph: name, layer: id (an iColor layer), path: string (a .png, .jpg, .jpeg, .tif or .tiff file)} reference the bitmap file as the layer's image, replacing any image it had; it is placed with its bottom-left corner at the bottom left of the master layer's path bounds (the origin when the master layer has no paths) at unitsPerEm ÷ size units per pixel. The file is not read. A relative path is relative to the document's folder (to the working directory for a document never saved); the layer stores it relative to that folder, absolute until the first save → {glyph, layer, master, kind: \"iColor\", label, size, width, image: stored path}",
             has_doc,
             set_icolor_image
-        ).files(const { &[FileParam::read("path")] })
+        ).files(const { &[FileParam::read("path").from_document()] })
         .targets(LAYER_TARGET),
         cmd!(
             "layer.convertToSvg",
@@ -105,7 +105,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{glyph: name, layer: id (an svg layer), path: string (an .svg file)} reference the SVG file as the layer's artwork, replacing any image it had; its viewBox is placed with the bottom-left corner at the layer origin, one SVG unit per font unit. The file is not read. A relative path is relative to the document's folder (to the working directory for a document never saved); the layer stores it relative to that folder, absolute until the first save → {glyph, layer, master, kind: \"svg\", label, width, image: stored path}",
             has_doc,
             set_svg_image
-        ).files(const { &[FileParam::read("path")] })
+        ).files(const { &[FileParam::read("path").from_document()] })
         .targets(LAYER_TARGET),
         cmd!(
             "layer.convertToColor",
