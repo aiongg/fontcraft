@@ -225,3 +225,17 @@ fn class_names_of_older_sources_show_as_their_numbers() {
     assert_eq!(class_value(Some(&StyleClass::Name("Medium (normal)".into())), WIDTH_NAMES, 5.0), Some(5.0));
     assert_eq!(class_value(Some(&StyleClass::Name("Wobbly".into())), WEIGHT_NAMES, 400.0), None);
 }
+
+#[test]
+fn a_preview_wider_than_the_largest_texture_is_drawn_smaller_to_fit() {
+    let app = exports_app(&["Regular"]);
+    let font = app.session.font().unwrap();
+    let master = font.masters.first().unwrap().id.clone();
+    let names = vec!["A".to_string(); 200];
+    let ctx = egui::Context::default();
+    let texture = render_preview(&ctx, &app.tokens, font, &master, &names, 60.0, 256).expect("the preview is drawn smaller");
+    let [width, height] = texture.size();
+    assert!(width <= 256 && height <= 256 && width > 64, "{width}×{height}");
+    let full = render_preview(&ctx, &app.tokens, font, &master, &names, 60.0, 1 << 16).unwrap();
+    assert!(full.size()[0] > 256, "a large enough texture keeps the asked size");
+}

@@ -61,7 +61,7 @@ fn number_json(n: f64) -> Value {
 
 /// Draws the tab's contents inside the Font Info window.
 pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
-    let Ok(settings) = app.session.execute("font.settings.get", &json!({})) else { return };
+    let Ok(settings) = app.session.query("font.settings.get", &json!({})) else { return };
     let tokens = &app.tokens;
     let number = |key: &str| settings.get(key).and_then(Value::as_f64);
     ui.add_space(tokens.dialog_spacing);

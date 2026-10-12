@@ -291,3 +291,17 @@ fn pasted_parameters_match_other_spellings_and_name_parameters_become_properties
     );
     assert_eq!(r["skipped"].as_array().unwrap().len(), 1, "{r}");
 }
+
+/// Views read settings every frame through `Session::query`, which leaves no command-log entry
+/// and runs only queries.
+#[test]
+fn a_query_read_leaves_the_command_log_alone_and_refuses_an_edit() {
+    let mut s = Session::with_document();
+    let logged = s.extensions().log.len();
+    let read = s.query("font.settings.get", &json!({})).unwrap();
+    assert_eq!(read, s.execute("font.settings.get", &json!({})).unwrap());
+    assert_eq!(s.extensions().log.len(), logged + 1, "only the execute is logged");
+    let font = Arc::clone(&s.doc().unwrap().font);
+    assert!(s.query("font.settings.set", &json!({"gridSpacing": 5})).is_err());
+    assert!(Arc::ptr_eq(&font, &s.doc().unwrap().font));
+}

@@ -236,3 +236,64 @@ fn preview_name_lists_a_glyph_or_the_members_of_a_class() {
     assert_eq!(r, json!({"kind": "glyph", "name": "a", "unicodes": ["0061"], "export": true}));
     refused(&mut s, "font.features.previewName", json!({"name": "nothing"}), "no glyph or class");
 }
+
+/// Many classes and many short feature entries: completion collects names in time linear in the
+/// font, and a class naming every other class is walked through one lookup per name.
+#[test]
+fn completion_and_class_preview_stay_fast_on_many_classes_and_entries() {
+    const N: usize = 50_000;
+    let mut s = Session::with_document();
+    s.edit("many entries", |font| {
+        let features = Arc::make_mut(&mut font.features);
+        let mut all = String::new();
+        for i in 0..N {
+            features.classes.push(fontcraft_model::Snippet { name: format!("c{i}"), code: "a".into(), ..Default::default() });
+            all.push_str(&format!("@c{i} "));
+            let code = if i % 2 == 0 { String::new() } else { ";".to_string() };
+            features.features.push(fontcraft_model::Snippet { name: "liga".into(), code, ..Default::default() });
+        }
+        features.classes.push(fontcraft_model::Snippet { name: "All".into(), code: all, ..Default::default() });
+        Ok(())
+    })
+    .unwrap();
+    let started = std::time::Instant::now();
+    let r = run(&mut s, "font.features.complete", json!({"kind": "feature", "name": "liga", "index": 1, "position": 4, "code": "sub "}));
+    assert!(!r["completions"].as_array().unwrap().is_empty(), "{r}");
+    let r = run(&mut s, "font.features.previewName", json!({"name": "@All"}));
+    assert_eq!((r["glyphs"].clone(), r["unknown"].clone()), (json!(["a"]), json!([])));
+    assert!(started.elapsed() < std::time::Duration::from_secs(20), "took {:?}", started.elapsed());
+}
+
+/// A reused compile follows the files the code includes, and its preview font is built again
+/// after an edit elsewhere in the document (outlines and widths are not in the code).
+#[test]
+fn a_reused_compile_follows_included_files_and_rebuilds_the_preview_after_other_edits() {
+    let dir = std::env::temp_dir().join(format!("fontcraft-feature-cache-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("rules.fea"), "sub a by b;\n").unwrap();
+    let font = Session::with_document().font().unwrap().clone();
+    let mut s = Session::new();
+    s.add_document(font, Some(dir.join("Font.fontcraft"))).unwrap();
+    run(&mut s, "font.features.addFeature", json!({"tag": "liga", "code": "include(rules.fea);"}));
+    let compile = |s: &mut Session| {
+        let r = run(s, "font.features.compile", json!({}));
+        assert_eq!((r["ok"].clone(), r["preview"].clone()), (json!(true), json!(true)), "{r}");
+        r["cached"].as_bool().unwrap()
+    };
+    let preview = |s: &Session| s.feature_state_of(s.doc().unwrap().id).unwrap().preview.clone().unwrap();
+
+    assert!(!compile(&mut s));
+    assert!(compile(&mut s));
+    std::fs::write(dir.join("rules.fea"), "sub a by c;\nsub b by d;\n").unwrap();
+    assert!(!compile(&mut s), "an included file changed");
+
+    let first = preview(&s);
+    run(&mut s, "font.numbers.add", json!({"name": "gap", "values": {"m01": 1}}));
+    assert!(compile(&mut s), "the code and glyph order are the same");
+    let rebuilt = preview(&s);
+    assert!(!Arc::ptr_eq(&first, &rebuilt), "the preview of an older revision was served");
+    assert!(compile(&mut s));
+    assert!(Arc::ptr_eq(&rebuilt, &preview(&s)), "the same revision reuses its preview");
+    let _ = std::fs::remove_dir_all(&dir);
+}

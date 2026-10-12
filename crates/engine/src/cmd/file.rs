@@ -43,7 +43,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Save",
             ["File"],
             Some("Cmd+S"),
-            "{path?: string, force?: bool} write the document to its file in the format it was opened in (or to `path`, choosing the format from its extension). Refuses when the file changed on disk since it was read (for a designspace: the document or any of its UFOs), unless force is true. Single files are written atomically; a package or UFO rewrites only changed files; a designspace writes its UFOs, then the document → {path, format, version?, bytes, filesWritten, filesRemoved, losses}",
+            "{path?: string, force?: bool, document?: number} write the document to its file in the format it was opened in (or to `path`, choosing the format from its extension). document: the session id of the document meant, as the app records it when it asks to overwrite; refused when another document is active. Refuses when the file changed on disk since it was read (for a designspace: the document or any of its UFOs), unless force is true. Single files are written atomically; a package or UFO rewrites only changed files; a designspace writes its UFOs, then the document → {path, format, version?, bytes, filesWritten, filesRemoved, losses}",
             has_doc,
             save
         ).files(const { &[FileParam::write("path")] }).writes_files(),
@@ -309,6 +309,12 @@ fn smart_choice(font: &Font, outlines: bool) -> (Option<Font>, Vec<Value>) {
 fn save(s: &mut Session, p: &Value) -> Result<Value> {
     use crate::io::SaveFormat;
     let p = Params::new("file.save", p)?;
+    if let Some(id) = p.opt_int("document", 0, i64::MAX)? {
+        let active = s.doc()?;
+        if i64::try_from(active.id).ok() != Some(id) {
+            return Err(p.bad(format!("document {id} is not the active document ({}): show it and save again", active.title)));
+        }
+    }
     let (path, format) = match p.opt_str("path")? {
         Some(path) => {
             let path = std::path::PathBuf::from(path);

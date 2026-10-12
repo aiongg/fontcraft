@@ -1201,6 +1201,7 @@ guesses = [
   "Export refuses a project with unsaved changes as well as one never saved; exporting in the reference app with an unsaved change settles it.",
   "Export reads the font file on disk even when the font is open with unsaved changes; exporting with the font open and edited settles it.",
   "Export builds TrueType outlines in plain files unless asked otherwise, and a project without an active static instance is refused rather than exporting the font's first master; the reference app's export from a project settles both.",
+  "Export is refused, writing nothing, when one of its files would replace the linked font (a compiled font in the destination folder); exporting such a project in the reference app settles it.",
 ]
 
 [[command]]

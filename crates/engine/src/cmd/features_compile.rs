@@ -19,12 +19,12 @@
 //! The editor's queries read the active document: `complete` (`fontInfo.features.autocomplete`),
 //! `evaluateToken` (Option-click on a token), `previewName` (Alt-click on a glyph or class name).
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use fontcraft_compile::preview::{self, PreviewKind};
+use fontcraft_compile::preview::{self, PreviewFont, PreviewKind};
 use fontcraft_fea::{CompileRequest, Diagnostic, GlyphOrder, LayoutTable, MAX_DIAGNOSTICS, MAX_GLYPHS, Severity};
 use fontcraft_features::edit::{self, CompletionKind, CompletionNames, Definitions, Fix, MAX_FIXES};
 use fontcraft_features::tokens::{self, TokenValue};
@@ -45,6 +45,13 @@ const MAX_QUOTED_CHARS: usize = 300;
 const MAX_CLASS_DEPTH: usize = 64;
 /// Most names a class preview lists as not in the font.
 const MAX_UNKNOWN: usize = 1_000;
+/// Most included files whose modification times key a reused compile; code that includes more
+/// is compiled every time.
+const MAX_KEYED_INCLUDES: usize = 256;
+/// Most bytes of included files read to find the files they include in turn, for the same key.
+const MAX_KEYED_INCLUDE_BYTES: usize = 4 << 20;
+/// Most bytes after `include` searched for the closing parenthesis of the file name.
+const MAX_INCLUDE_NAME_BYTES: usize = 1_024;
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
@@ -219,6 +226,69 @@ fn feature_error(p: &Params, e: FeatureError) -> EngineError {
     }
 }
 
+/// The preview font of `master`, or `None` with the reason in `message`.
+fn build_preview(font: &Font, master: &str, message: &mut Option<String>) -> Option<Arc<PreviewFont>> {
+    match preview::layout_font(font, master, PreviewKind::GsubOnly) {
+        Ok(built) => Some(Arc::new(built)),
+        Err(e) => {
+            *message = Some(e.to_string());
+            None
+        }
+    }
+}
+
+/// The file names `text` includes (`include(name)`), unchecked: a match in a comment only adds a
+/// name to the cache key.
+fn include_names(text: &str) -> impl Iterator<Item = &str> {
+    text.match_indices("include").filter_map(|(at, word)| {
+        let rest = text.get(at + word.len()..)?.trim_start().strip_prefix('(')?;
+        let (end, _) = rest.char_indices().take(MAX_INCLUDE_NAME_BYTES).find(|(_, c)| *c == ')')?;
+        Some(rest.get(..end)?.trim()).filter(|name| !name.is_empty())
+    })
+}
+
+/// Adds the modification time and length of each file the code includes from `dir` to
+/// `hasher`, following the includes of included files. An include is looked up both in `dir`
+/// and next to the file that names it. Returns `false` when there were more files or bytes than
+/// [`MAX_KEYED_INCLUDES`] and [`MAX_KEYED_INCLUDE_BYTES`] allow, so the compile is not reused.
+fn hash_included_files(files: &fontcraft_fea::VirtualFiles, dir: &std::path::Path, hasher: &mut DefaultHasher) -> bool {
+    let parent = |p: &std::path::Path| p.parent().map(|d| d.to_path_buf()).unwrap_or_else(|| dir.to_path_buf());
+    let mut pending: Vec<(PathBuf, Arc<str>)> = files.iter().map(|(path, text)| (parent(&dir.join(path)), Arc::from(text))).collect();
+    let mut seen: HashSet<PathBuf> = HashSet::new();
+    let mut read_bytes = 0usize;
+    while let Some((from_dir, text)) = pending.pop() {
+        for name in include_names(&text) {
+            for candidate in [dir.join(name), from_dir.join(name)] {
+                if !seen.insert(candidate.clone()) {
+                    continue;
+                }
+                if seen.len() > MAX_KEYED_INCLUDES {
+                    return false;
+                }
+                candidate.hash(hasher);
+                let Ok(meta) = std::fs::metadata(&candidate) else {
+                    false.hash(hasher);
+                    continue;
+                };
+                meta.len().hash(hasher);
+                meta.modified().ok().hash(hasher);
+                if !meta.is_file() {
+                    continue;
+                }
+                read_bytes = read_bytes.saturating_add(usize::try_from(meta.len()).unwrap_or(usize::MAX));
+                if read_bytes > MAX_KEYED_INCLUDE_BYTES {
+                    return false;
+                }
+                // A file that cannot be read fails the compile the same way each time.
+                if let Ok(included) = std::fs::read_to_string(&candidate) {
+                    pending.push((parent(&candidate), Arc::from(included)));
+                }
+            }
+        }
+    }
+    true
+}
+
 // ── Compile ─────────────────────────────────────────────────────────────────────────────────────
 
 /// The compiled font's glyphs: `.notdef` first, then the exporting glyphs in the font's order.
@@ -277,15 +347,26 @@ fn compile(s: &mut Session, raw: &Value) -> Result<Value> {
                 g.name.hash(&mut hasher);
                 g.unicodes.hash(&mut hasher);
             }
+            let includes_keyed = include_dir.as_deref().is_none_or(|dir| hash_included_files(&files, dir, &mut hasher));
             // Zero marks a state that compiled nothing.
             let hash = hasher.finish().max(1);
-            match previous.filter(|prev| !force && prev.source_hash == hash && prev.master == master) {
+            match previous.filter(|prev| !force && includes_keyed && prev.source_hash == hash && prev.master == master) {
                 Some(prev) => {
                     cached = true;
                     // The stored code may differ where the assembled code does not (a token
                     // replaced by its value), so the places are mapped again.
-                    let diagnostics = prev.diagnostics.iter().map(|d| assembly.map.map(d.diagnostic.clone())).collect();
-                    FeatureState { revision, diagnostics, ..prev.as_ref().clone() }
+                    let diagnostics: Vec<EntryDiagnostic> = prev.diagnostics.iter().map(|d| assembly.map.map(d.diagnostic.clone())).collect();
+                    // The compiled features depend only on the hashed code and glyph order; the
+                    // preview font also holds outlines and widths, so it is reused only from the
+                    // same revision of the document.
+                    let preview = if diagnostics.iter().any(|d| d.diagnostic.is_error()) {
+                        None
+                    } else if prev.revision == revision {
+                        prev.preview.clone()
+                    } else {
+                        build_preview(font, &master, &mut preview_message)
+                    };
+                    FeatureState { revision, diagnostics, preview, ..prev.as_ref().clone() }
                 }
                 None => {
                     let (features, diagnostics) = match GlyphOrder::new(names) {
@@ -299,17 +380,7 @@ fn compile(s: &mut Session, raw: &Value) -> Result<Value> {
                         }
                     };
                     let errors = diagnostics.iter().any(|d: &EntryDiagnostic| d.diagnostic.is_error());
-                    let preview = if errors {
-                        None
-                    } else {
-                        match preview::layout_font(font, &master, PreviewKind::GsubOnly) {
-                            Ok(built) => Some(Arc::new(built)),
-                            Err(e) => {
-                                preview_message = Some(e.to_string());
-                                None
-                            }
-                        }
-                    };
+                    let preview = if errors { None } else { build_preview(font, &master, &mut preview_message) };
                     FeatureState { revision, master: master.clone(), preview, features, diagnostics, source_hash: hash }
                 }
             }
@@ -419,11 +490,8 @@ impl Names {
     fn of(font: &Font, replace: Option<(EntryRef, &str)>) -> Self {
         let glyphs = font.glyphs.as_arcs().iter().map(|g| g.name.clone()).collect();
         let mut definitions = Definitions::default();
-        let mut seen: HashSet<String> = HashSet::new();
         for class in &font.features.classes {
-            if seen.insert(class.name.clone()) {
-                definitions.classes.push(class.name.clone());
-            }
+            definitions.add_class(&class.name);
         }
         let mut budget = MAX_NAME_SCAN_BYTES;
         let f = &font.features;
@@ -433,7 +501,7 @@ impl Names {
                     Some((entry, text)) if entry == (EntryRef { kind, index }) => text,
                     _ => e.code.as_str(),
                 };
-                if code.len() > budget {
+                if code.is_empty() || code.len() > budget {
                     continue;
                 }
                 budget -= code.len();
@@ -445,7 +513,7 @@ impl Names {
     }
 
     fn completion(&self) -> CompletionNames<'_> {
-        CompletionNames { glyphs: &self.glyphs, classes: &self.definitions.classes, lookups: &self.definitions.lookups, numbers: &self.numbers }
+        CompletionNames { glyphs: &self.glyphs, classes: self.definitions.classes(), lookups: self.definitions.lookups(), numbers: &self.numbers }
     }
 }
 
@@ -781,7 +849,8 @@ fn complete(s: &mut Session, raw: &Value) -> Result<Value> {
 
 /// Adds the members of class entry `name` to `out`, following classes it names.
 struct ClassWalk<'a> {
-    font: &'a Font,
+    /// The class entries by name; the first entry wins where names repeat.
+    classes: &'a HashMap<&'a str, &'a Snippet>,
     values: &'a dyn TargetValues,
     glyphs: &'a HashSet<&'a str>,
     seen_classes: HashSet<String>,
@@ -795,7 +864,7 @@ impl ClassWalk<'_> {
         if depth > MAX_CLASS_DEPTH || !self.seen_classes.insert(name.to_string()) {
             return;
         }
-        let Some(entry) = self.font.features.classes.iter().find(|c| c.name == name) else {
+        let Some(entry) = self.classes.get(name) else {
             if self.unknown.len() < MAX_UNKNOWN {
                 self.unknown.push(format!("@{name}"));
             }
@@ -827,7 +896,11 @@ fn preview_name(s: &mut Session, raw: &Value) -> Result<Value> {
     let name = p.str("name")?.trim();
     let data = s.glyph_data()?;
     let font = s.font()?;
-    let is_class_entry = |n: &str| font.features.classes.iter().any(|c| c.name == n);
+    let mut classes: HashMap<&str, &Snippet> = HashMap::new();
+    for c in &font.features.classes {
+        classes.entry(c.name.as_str()).or_insert(c);
+    }
+    let is_class_entry = |n: &str| classes.contains_key(n);
     let class = match name.strip_prefix('@') {
         Some(rest) => Some(rest),
         None if font.glyphs.get(name).is_none() && is_class_entry(name) => Some(name),
@@ -846,7 +919,7 @@ fn preview_name(s: &mut Session, raw: &Value) -> Result<Value> {
     let values = MasterValues::new(font, &data, &master).map_err(|e| feature_error(&p, e))?;
     let glyphs: HashSet<&str> = font.glyphs.as_arcs().iter().map(|g| g.name.as_str()).collect();
     let mut walk = ClassWalk {
-        font,
+        classes: &classes,
         values: &values,
         glyphs: &glyphs,
         seen_classes: HashSet::new(),

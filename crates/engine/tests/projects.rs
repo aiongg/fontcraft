@@ -198,3 +198,37 @@ fn a_refused_project_command_changes_nothing() {
     assert_eq!(s.projects().len(), 1);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A project linked to a compiled font in its own destination folder refuses an export that
+/// would write over that font.
+#[test]
+fn an_export_that_would_replace_the_linked_font_is_refused() {
+    let dir = temp("replace");
+    let source = saved_font(&dir);
+    let out = dir.join("out");
+    let mut s = Session::new();
+    run(&mut s, "file.newProject", json!({}));
+    run(&mut s, "project.linkFont", json!({"font": source.to_string_lossy()}));
+    run(&mut s, "project.removeInstances", json!({"instances": ["Bold"]}));
+    let file_name = json!({"customParameters": [{"action": "add", "name": "fileName", "value": "Shared"}]});
+    run(&mut s, "project.editInstance", json!({"instance": "Regular", "changes": file_name}));
+    run(&mut s, "project.setExportDestination", json!({"folder": out.to_string_lossy()}));
+    run(&mut s, "project.save", json!({"path": dir.join("first.fontcraftproject").to_string_lossy()}));
+    run(&mut s, "project.export", json!({"timestamp": 0}));
+    let compiled = out.join("Shared.ttf");
+    let compiled_bytes = std::fs::read(&compiled).unwrap();
+    run(&mut s, "project.close", json!({}));
+
+    run(&mut s, "file.newProject", json!({}));
+    let copied = run(&mut s, "project.linkFont", json!({"font": compiled.to_string_lossy()}))["copied"].as_u64().unwrap();
+    run(&mut s, "project.addInstance", json!({"styleName": "Again"}));
+    run(&mut s, "project.editInstance", json!({"instance": copied, "changes": file_name}));
+    run(&mut s, "project.setExportDestination", json!({"folder": out.to_string_lossy()}));
+    run(&mut s, "project.save", json!({"path": dir.join("second.fontcraftproject").to_string_lossy()}));
+    let err = fails(&mut s, "project.export", json!({"timestamp": 0}));
+    assert!(err.contains("replace the linked font"), "{err}");
+    assert_eq!(std::fs::read(&compiled).unwrap(), compiled_bytes, "the linked font is unchanged");
+    let left: Vec<_> = std::fs::read_dir(&out).unwrap().map(|e| e.unwrap().file_name()).collect();
+    assert_eq!(left, [std::ffi::OsString::from("Shared.ttf")], "no staged file is left behind");
+    let _ = std::fs::remove_dir_all(&dir);
+}

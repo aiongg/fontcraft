@@ -471,18 +471,44 @@ pub fn highlight(code: &str) -> Vec<Highlight> {
 /// The class and lookup names `code` defines (`@Name = …`, `markClass … @Name;`,
 /// `lookup Name { … }`), each once, in order of first appearance, at most
 /// [`MAX_DEFINITIONS`] of each. Names carry no `@`.
+///
+/// The value keeps the sets of names it holds, so each call to [`definitions`] costs time in
+/// proportion to its own code, however many names earlier calls collected.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Definitions {
-    pub classes: Vec<String>,
-    pub lookups: Vec<String>,
+    classes: Vec<String>,
+    lookups: Vec<String>,
+    seen_classes: HashSet<String>,
+    seen_lookups: HashSet<String>,
+}
+
+impl Definitions {
+    /// The class names, in order of first appearance.
+    pub fn classes(&self) -> &[String] {
+        &self.classes
+    }
+
+    /// The lookup names, in order of first appearance.
+    pub fn lookups(&self) -> &[String] {
+        &self.lookups
+    }
+
+    /// Adds class `name` unless it is already there. Not counted against [`MAX_DEFINITIONS`]:
+    /// the caller bounds what it adds this way (the font's class entries).
+    pub fn add_class(&mut self, name: &str) {
+        if self.seen_classes.insert(name.to_string()) {
+            self.classes.push(name.to_string());
+        }
+    }
 }
 
 /// Adds the names `code` defines to `into` (see [`Definitions`]).
 pub fn definitions(code: &str, into: &mut Definitions) {
+    if code.is_empty() {
+        return;
+    }
     let marks = highlight(code);
     let text = |h: &Highlight| code.get(h.range.clone()).unwrap_or("");
-    let mut seen_classes: HashSet<String> = into.classes.iter().cloned().collect();
-    let mut seen_lookups: HashSet<String> = into.lookups.iter().cloned().collect();
     let mut statement_keyword: Option<&str> = None;
     let mut statement_start = true;
     for (k, h) in marks.iter().enumerate() {
@@ -498,7 +524,7 @@ pub fn definitions(code: &str, into: &mut Definitions) {
                 if (next_is_equals || statement_keyword == Some("markClass"))
                     && !name.is_empty()
                     && into.classes.len() < MAX_DEFINITIONS
-                    && seen_classes.insert(name.to_string())
+                    && into.seen_classes.insert(name.to_string())
                 {
                     into.classes.push(name.to_string());
                 }
@@ -506,7 +532,7 @@ pub fn definitions(code: &str, into: &mut Definitions) {
             HighlightKind::LookupName => {
                 let opens = marks.get(k + 1).is_some_and(|n| text(n) == "{" || text(n) == "useExtension");
                 let name = text(h);
-                if opens && into.lookups.len() < MAX_DEFINITIONS && seen_lookups.insert(name.to_string()) {
+                if opens && into.lookups.len() < MAX_DEFINITIONS && into.seen_lookups.insert(name.to_string()) {
                     into.lookups.push(name.to_string());
                 }
             }
@@ -918,8 +944,8 @@ mod tests {
             &mut defs,
         );
         definitions("lookup L2 useExtension { sub a by b; } L2;\n@Up = [B];", &mut defs);
-        assert_eq!(defs.classes, ["Up", "TOP"]);
-        assert_eq!(defs.lookups, ["L1", "L2"]);
+        assert_eq!(defs.classes(), ["Up", "TOP"]);
+        assert_eq!(defs.lookups(), ["L1", "L2"]);
     }
 
     #[test]

@@ -20,7 +20,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     {
         query.insert("master".into(), json!(master.id));
     }
-    let Ok(result) = app.session.execute("dimensions.getValues", &Value::Object(query)) else {
+    let Ok(result) = app.session.query("dimensions.getValues", &Value::Object(query)) else {
         palette::note(app, ui, "No font master");
         return;
     };

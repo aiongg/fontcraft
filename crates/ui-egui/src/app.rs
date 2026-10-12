@@ -155,7 +155,7 @@ impl FontcraftApp {
                 // A save refused because the file changed on disk asks whether to overwrite it,
                 // so the person can always save their work.
                 if self.dialog.is_none()
-                    && let Some(given) = crate::dialogs::save_changed_on_disk::after_error(id, params, &e)
+                    && let Some(given) = crate::dialogs::save_changed_on_disk::after_error(id, params, &e, self.session.active().map(|d| d.id))
                     && let Err(open) = crate::dialogs::open(self, &crate::dialogs::save_changed_on_disk::DIALOG, &given)
                 {
                     self.state.status = open;

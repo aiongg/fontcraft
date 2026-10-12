@@ -546,6 +546,14 @@ fn export(s: &mut Session, v: &Value) -> Result<Value> {
     if report.fonts.is_empty() {
         return Err(compile::nothing_built(&report));
     }
+    // A compiled font in the destination may be the linked font itself; the staged files are
+    // dropped unwritten.
+    if let Some(target) = report.fonts.iter().flat_map(|f| &f.files).filter_map(|f| f.path.as_deref()).find(|t| same_file(t, &font_path)) {
+        return Err(p.bad(format!(
+            "the export would replace the linked font {}: choose another destination, or give the instance another file name",
+            target.display()
+        )));
+    }
     sink.commit()?;
     Ok(json!({
         "destination": destination.to_string_lossy(),
@@ -554,6 +562,24 @@ fn export(s: &mut Session, v: &Value) -> Result<Value> {
         "skipped": report.skipped,
         "warnings": report.warnings,
     }))
+}
+
+/// Whether `a` and `b` name the same existing file, through links and letter case on file
+/// systems that ignore it.
+#[cfg(not(target_arch = "wasm32"))]
+fn same_file(a: &Path, b: &Path) -> bool {
+    let (Ok(a), Ok(b)) = (a.canonicalize(), b.canonicalize()) else { return false };
+    if a == b {
+        return true;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt as _;
+        if let (Ok(ma), Ok(mb)) = (a.metadata(), b.metadata()) {
+            return ma.dev() == mb.dev() && ma.ino() == mb.ino();
+        }
+    }
+    false
 }
 
 #[cfg(target_arch = "wasm32")]

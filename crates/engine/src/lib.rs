@@ -614,6 +614,16 @@ impl Session {
         self.run_command(id, params, true, |_| Ok(()))
     }
 
+    /// Runs the query `id` without writing it to the command log, for views that read engine
+    /// state on every frame. A command that is not a query is refused.
+    pub fn query(&mut self, id: &str, params: &Value) -> Result<Value> {
+        let spec = find_command(id).ok_or_else(|| EngineError::UnknownCommand(id.to_string()))?;
+        if spec.journal {
+            return Err(EngineError::Disabled(id.to_string(), "it changes the document: run it as a command".into()));
+        }
+        self.run_command(id, params, false, |_| Ok(()))
+    }
+
     /// [`Session::execute`] without the interaction rule. `record`: journal the command when it
     /// succeeds. `accept` judges the outcome before it is kept; its error rolls the command back.
     fn run_command(&mut self, id: &str, params: &Value, record: bool, accept: impl Fn(&Session) -> Result<()>) -> Result<Value> {

@@ -60,6 +60,8 @@ const LIST_COLUMNS: f32 = 4.0;
 const PREVIEW_ROWS: f32 = 3.0;
 /// Empty pixels around the preview's glyphs.
 const PREVIEW_PADDING: u32 = 4;
+/// Most times the preview is drawn again, smaller, to fit the largest texture.
+const PREVIEW_FIT_TRIES: usize = 3;
 
 /// The standard weight classes the Weight Class menu lists (OpenType `OS/2` names).
 pub const WEIGHT_CLASSES: [(u16, &str); 9] = [
@@ -643,7 +645,8 @@ fn preview(ui: &mut egui::Ui, tokens: &Tokens, font: &Font, index: usize, doc: O
     let texture = match kept.filter(|k| k.key == key) {
         Some(k) => k.texture,
         None => {
-            let texture = render_preview(ui.ctx(), tokens, font, &master, &names, height * ppp);
+            let max_side = ui.ctx().input(|i| i.max_texture_side);
+            let texture = render_preview(ui.ctx(), tokens, font, &master, &names, height * ppp, max_side);
             ui.ctx().data_mut(|d| d.insert_temp(cache, PreviewTexture { key, texture: texture.clone() }));
             texture
         }
@@ -657,24 +660,46 @@ fn preview(ui: &mut egui::Ui, tokens: &Tokens, font: &Font, index: usize, doc: O
 }
 
 /// Draws `names` of `master` into a texture `pixels` high (about: the line spans the master's
-/// descender to ascender).
-fn render_preview(ctx: &egui::Context, tokens: &Tokens, font: &Font, master: &str, names: &[String], pixels: f32) -> Option<TextureHandle> {
+/// descender to ascender), drawn smaller where a line that high would be wider than `max_side`
+/// pixels, the largest texture the graphics backend takes.
+fn render_preview(
+    ctx: &egui::Context,
+    tokens: &Tokens,
+    font: &Font,
+    master: &str,
+    names: &[String],
+    pixels: f32,
+    max_side: usize,
+) -> Option<TextureHandle> {
     let [r, g, b, a] = tokens.glyph_fill.to_srgba_unmultiplied();
-    let em = f64::from(pixels) - 2.0 * f64::from(PREVIEW_PADDING);
-    if !(em.is_finite() && em >= 1.0) {
-        return None;
-    }
-    let options = LineOptions {
-        master: Some(master.to_string()),
-        size: Some(em),
-        scale: None,
-        padding: PREVIEW_PADDING,
-        style: Style { ink: [r, g, b, a], background: [0, 0, 0, 0], anti_alias: true },
-    };
+    let padding = f64::from(PREVIEW_PADDING);
+    let mut em = f64::from(pixels) - 2.0 * padding;
     let glyphs: Vec<&str> = names.iter().map(String::as_str).collect();
-    let image = render_line(font, &glyphs, &options).ok()?;
-    let colour = ColorImage::from_rgba_premultiplied([image.width as usize, image.height as usize], &image.pixels);
-    Some(ctx.load_texture("font-info-instance-preview", colour, TextureOptions::LINEAR))
+    // Each try scales the em by how far the last image overshot; rounding can leave it a pixel
+    // over, which the next try settles.
+    for _ in 0..PREVIEW_FIT_TRIES {
+        if !(em.is_finite() && em >= 1.0) {
+            return None;
+        }
+        let options = LineOptions {
+            master: Some(master.to_string()),
+            size: Some(em),
+            scale: None,
+            padding: PREVIEW_PADDING,
+            style: Style { ink: [r, g, b, a], background: [0, 0, 0, 0], anti_alias: true },
+        };
+        let image = render_line(font, &glyphs, &options).ok()?;
+        let (width, height) = (image.width as usize, image.height as usize);
+        let longest = width.max(height);
+        if longest <= max_side {
+            let colour = ColorImage::from_rgba_premultiplied([width, height], &image.pixels);
+            return Some(ctx.load_texture("font-info-instance-preview", colour, TextureOptions::LINEAR));
+        }
+        let room = (max_side as f64 - 2.0 * padding).max(0.0);
+        let drawn = (longest as f64 - 2.0 * padding).max(1.0);
+        em = (em * room / drawn).floor();
+    }
+    None
 }
 
 #[cfg(test)]
