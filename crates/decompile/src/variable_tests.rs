@@ -472,8 +472,9 @@ fn many_instances_naming_one_id_with_many_records_choose_the_record_once() {
     let (few, many) = (font(50), font(count));
     let (few_time, _) = open_time(&few);
     let (many_time, opened) = open_time(&many);
-    // Lookups that each search the records grow with the instances; one choice per ID does not.
-    assert!(many_time < few_time * 5 + std::time::Duration::from_millis(50), "{many_time:?} for {count} instances, {few_time:?} for 50");
+    // Lookups that each search the records grow with the instances (a hundredfold here); one
+    // choice per ID does not.
+    assert!(many_time < few_time * 2 + std::time::Duration::from_millis(20), "{many_time:?} for {count} instances, {few_time:?} for 50");
     assert_eq!(opened.font.instances.len(), usize::from(count));
     assert!(opened.font.instances.iter().all(|i| i.name == "Book"));
 }
