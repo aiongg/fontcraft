@@ -66,9 +66,10 @@ use write_fonts::types::{GlyphId16, Tag};
 
 use crate::FeatureError;
 use crate::properties::{
-    COMMON_SCRIPT, DFLT_LANG, DFLT_SCRIPT, INHERITED_SCRIPT, ScriptCode, ScriptDirection, dist_feature_enabled_scripts, script_to_ot_tags,
-    unicode_script_extensions,
+    COMMON_SCRIPT, DFLT_LANG, DFLT_SCRIPT, INHERITED_SCRIPT, ScriptCode, ScriptDirection, dist_feature_enabled_scripts, glyphs_matching,
+    script_to_ot_tags, unicode_script_extensions,
 };
+use read_fonts::tables::gsub::Gsub;
 
 #[path = "gdef.rs"]
 mod gdef;
@@ -166,6 +167,9 @@ pub struct MarkRequest<'a> {
     pub master: &'a str,
     pub tags: MarkTags,
     pub limits: MarkLimits,
+    /// The feature code's `GSUB` alone ([`fontcraft_fea::FirstPass::gsub`]): the glyphs the
+    /// substitutions reach join the `abvm` and `blwm` glyphs of the code points they come from.
+    pub gsub: Option<&'a [u8]>,
 }
 
 /// The generated attachment and glyph classes.
@@ -995,8 +999,9 @@ fn is_below_mark(name: &str) -> bool {
     name.starts_with("bottom") || name.starts_with("nukta")
 }
 
-/// The glyphs of `abvm`/`blwm` and those of `mark`/`mkmk`; a glyph may be in both.
-fn split_abvm(char_map: &HashMap<u32, GlyphId16>, glyph_count: usize, language_systems: &[(Tag, Tag)]) -> (GlyphSet, GlyphSet) {
+/// The glyphs of `abvm`/`blwm` and those of `mark`/`mkmk`; a glyph may be in both. Each side
+/// also gets the glyphs its code points' glyphs reach through `gsub`.
+fn split_abvm(char_map: &HashMap<u32, GlyphId16>, glyph_count: usize, language_systems: &[(Tag, Tag)], gsub: Option<&Gsub>) -> (GlyphSet, GlyphSet) {
     // The Indic scripts, the Universal Shaping Engine's and Khmer.
     let myanmar = ScriptCode::parse("Mymr");
     let abvm_scripts: HashSet<ScriptCode> = dist_feature_enabled_scripts().into_iter().filter(|s| Some(*s) != myanmar).collect();
@@ -1022,13 +1027,12 @@ fn split_abvm(char_map: &HashMap<u32, GlyphId16>, glyph_count: usize, language_s
     }
     let mut abvm = GlyphSet::none(glyph_count);
     let mut other = GlyphSet::none(glyph_count);
-    for (cp, gid) in char_map {
-        if is_abvm(*cp) == Some(true) {
-            abvm.insert(*gid);
-        }
-        if unicode_script_extensions(*cp).any(|s| !abvm_scripts.contains(&s)) {
-            other.insert(*gid);
-        }
+    for gid in glyphs_matching(char_map, is_abvm, gsub).iter() {
+        abvm.insert(gid);
+    }
+    // The other side counts every script that is not an abvm script, declared or not.
+    for gid in glyphs_matching(char_map, |cp| Some(unicode_script_extensions(cp).any(|s| !abvm_scripts.contains(&s))), gsub).iter() {
+        other.insert(gid);
     }
     for (i, slot) in other.0.iter_mut().enumerate() {
         if !abvm.0.get(i).copied().unwrap_or(false) {
@@ -1079,7 +1083,8 @@ pub fn generate_marks(req: &MarkRequest, warnings: &mut Vec<String>) -> Result<G
 
     let writer = MarkWriter::new(&all, classes.clone(), &mut budget)?;
     let groups = Groups { base: writer.mark_to_base_groups(), lig: writer.mark_to_ligature_groups(&mut budget)?, mark: writer.mark_to_mark_groups() };
-    let (abvm_glyphs, mark_glyphs) = split_abvm(&char_map, glyph_count, &language_systems);
+    let gsub: Option<Gsub> = req.gsub.and_then(|bytes| read_fonts::FontRead::read(read_fonts::FontData::new(bytes)).ok());
+    let (abvm_glyphs, mark_glyphs) = split_abvm(&char_map, glyph_count, &language_systems, gsub.as_ref());
 
     let mut mark_mkmk =
         if tags.mark || tags.mkmk { MarkWriter::lookups(&groups, MARK, MKMK, &mark_glyphs, |_| true, &mut budget)? } else { ByType::default() };

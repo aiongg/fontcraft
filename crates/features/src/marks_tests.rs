@@ -21,7 +21,7 @@ fn glyph(name: &str, cps: &[u32], category: Option<&str>, sub: Option<&str>, anc
 }
 
 fn write(input: &MarkInput, tags: MarkTags) -> MarkFeatures {
-    mark_features(&MarkRequest { input, master: "m01", tags, limits: MarkLimits::default() }).unwrap()
+    mark_features(&MarkRequest { input, master: "m01", tags, limits: MarkLimits::default(), gsub: None }).unwrap()
 }
 
 /// The probe both reference compilers build to the same tables: a base with two anchors, a
@@ -362,7 +362,7 @@ fn hostile_anchors_are_left_out_with_a_warning_and_the_work_is_capped() {
     // A repeated name keeps its last position.
     assert_eq!(describe(out.gpos.as_ref().unwrap(), &names), ["0 base 0 - acutecomb@120,520 <- A@300,700"]);
 
-    let limited = mark_features(&MarkRequest { input: &input, master: "m01", tags: MarkTags::default(), limits: MarkLimits { work: 3 } });
+    let limited = mark_features(&MarkRequest { input: &input, master: "m01", tags: MarkTags::default(), limits: MarkLimits { work: 3 }, gsub: None });
     assert!(matches!(limited, Err(FeatureError::TooMany { what: "steps of work", limit: 3 })), "{limited:?}");
 }
 
@@ -402,6 +402,6 @@ fn ligature_component_slots_are_charged_to_the_work_budget() {
     glyphs.push(glyph("mark", &[0x301], Some("Mark"), Some("Nonspacing"), &mark_anchors));
     let input = MarkInput { glyphs, ..Default::default() };
     let work = 1_000_000;
-    let limited = mark_features(&MarkRequest { input: &input, master: "m01", tags: MarkTags::default(), limits: MarkLimits { work } });
+    let limited = mark_features(&MarkRequest { input: &input, master: "m01", tags: MarkTags::default(), limits: MarkLimits { work }, gsub: None });
     assert!(matches!(limited, Err(FeatureError::TooMany { what: "steps of work", .. })), "{limited:?}");
 }

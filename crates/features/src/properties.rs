@@ -187,6 +187,13 @@ pub(crate) fn scripts_by_glyph(
     result
 }
 
+/// The glyphs whose code points `predicate` holds for, with the glyphs they reach through
+/// `gsub` (fontc's `glyphs_matching_predicate`). A code point the predicate gives no answer for
+/// is neutral.
+pub(crate) fn glyphs_matching(char_map: &HashMap<u32, GlyphId16>, predicate: impl Fn(u32) -> Option<bool>, gsub: Option<&Gsub>) -> IntSet<GlyphId16> {
+    classify(char_map, |cp, buf| buf.extend(predicate(cp)), gsub).remove(&true).unwrap_or_default()
+}
+
 /// The glyphs of each strong direction.
 pub(crate) fn glyphs_by_bidi_class(char_map: &HashMap<u32, GlyphId16>, gsub: Option<&Gsub>) -> BTreeMap<Bidi, IntSet<GlyphId16>> {
     classify(char_map, |cp, buf| buf.extend(unicode_bidi_type(cp)), gsub)

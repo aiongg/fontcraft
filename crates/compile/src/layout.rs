@@ -247,7 +247,8 @@ pub fn build(input: &LayoutInput, opts: &LayoutOptions, warnings: &mut Vec<Strin
             Some(font) => crate::marks::tags(font, &resolved.master, any_anchor, &declared, warnings),
             None => fontcraft_features::marks::MarkTags::default(),
         };
-        let mark_request = MarkRequest { input: &mark_input, master: &resolved.master, tags: mark_tags, limits: MarkLimits::default() };
+        let mark_request =
+            MarkRequest { input: &mark_input, master: &resolved.master, tags: mark_tags, limits: MarkLimits::default(), gsub: first.gsub.as_deref() };
         let implicit = generated(&ImplicitRequest { kern: kern_request.as_ref(), marks: Some(&mark_request) });
         warnings.extend(implicit.warnings);
         generated_lookups = implicit.lookups;

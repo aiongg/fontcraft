@@ -165,6 +165,70 @@ fn a_ufo_source_propagates_anchors_only_when_its_filter_list_says_so() {
     assert_eq!(mark_bases(&compile_ttf(&f, &Options::default()).unwrap()), ["A"]);
 }
 
+/// The x of each base anchor of the mark-to-base lookups, by base glyph.
+fn base_anchor_xs(out: &Compiled) -> Vec<(String, i16)> {
+    let font = FontRef::new(&out.bytes).unwrap();
+    let list = font.gpos().unwrap().lookup_list().unwrap();
+    let mut xs = Vec::new();
+    for lookup in list.lookups().iter() {
+        if let PositionSubtables::MarkToBase(subtables) = lookup.unwrap().subtables().unwrap() {
+            for t in subtables.iter() {
+                let t = t.unwrap();
+                let bases = t.base_array().unwrap();
+                for (g, record) in t.base_coverage().unwrap().iter().zip(bases.base_records().iter()) {
+                    let anchor = record.unwrap().base_anchors(bases.offset_data()).get(0).unwrap().unwrap();
+                    xs.push((out.glyph_order[usize::from(g.to_u16())].clone(), anchor.x_coordinate()));
+                }
+            }
+        }
+    }
+    xs
+}
+
+/// A `*origin` anchor moves the outline when compiled, and the glyph's other anchors with it.
+#[test]
+fn an_origin_anchor_moves_the_anchors_of_mark_attachment() {
+    let mut f = font();
+    f.glyph_mut("A").unwrap().layers[0].anchors.push(Anchor::new("*origin", -20.0, 0.0));
+    let out = compile_ttf(&f, &Options::default()).unwrap();
+    // A's own anchor moves; Aacute's top comes from its acute, which overrides A's.
+    assert_eq!(base_anchor_xs(&out), [("A".to_string(), 320), ("Aacute".to_string(), 300)]);
+}
+
+/// A glyph the substitutions reach from abvm glyphs joins the abvm attachment, as the reference
+/// compilers close the abvm glyphs over the feature code's substitutions.
+#[test]
+fn a_ligature_of_abvm_marks_joins_the_abvm_mark_to_mark_lookup() {
+    let mut f = font();
+    f.add_glyph("acutecomb_acutecomb", vec![], 0.0).unwrap();
+    {
+        let mut m = f.glyph_mut("acutecomb_acutecomb").unwrap();
+        m.layers[0].shapes.push(Shape::Path(Path::rect(50.0, 500.0, 150.0, 1100.0)));
+        m.layers[0].anchors.push(Anchor::new("_top", 100.0, 500.0));
+        m.layers[0].anchors.push(Anchor::new("top", 100.0, 1100.0));
+        m.info = fontcraft_model::GlyphInfoBox::new(fontcraft_model::GlyphInfo {
+            category: Some("Mark".into()),
+            sub_category: Some("Nonspacing".into()),
+            ..Default::default()
+        });
+    }
+    Arc::make_mut(&mut f.features).features.push(Snippet {
+        name: "ccmp".into(),
+        code: "sub acutecomb acutecomb by acutecomb_acutecomb;".into(),
+        ..Default::default()
+    });
+    let out = compile_ttf(&f, &Options::default()).unwrap();
+    let font = FontRef::new(&out.bytes).unwrap();
+    let list = font.gpos().unwrap().lookup_list().unwrap();
+    // The first mark-to-mark lookup is abvm's: the ligature is one of its bases.
+    let abvm = list.lookups().iter().find_map(|l| match l.unwrap().subtables().unwrap() {
+        PositionSubtables::MarkToMark(subtables) => Some(subtables.get(0).unwrap()),
+        _ => None,
+    });
+    let bases: Vec<String> = abvm.unwrap().mark2_coverage().unwrap().iter().map(|g| out.glyph_order[usize::from(g.to_u16())].clone()).collect();
+    assert_eq!(bases, ["acutecomb", "acutecomb_acutecomb"], "{:?}", out.warnings);
+}
+
 /// A smart component passes on the anchors of its glyph: propagation reads the source, before
 /// the smart component is drawn as contours.
 #[test]

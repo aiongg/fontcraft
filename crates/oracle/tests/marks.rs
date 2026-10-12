@@ -18,7 +18,8 @@
 //!
 //! Opt-in and slow: `cargo test -p fontcraft-oracle --features oracle --test marks -- --ignored
 //! --nocapture`. `FONTCRAFT_CORPUS` names the corpus folder (default: the repository's
-//! `corpus/`); `MARKS_SHOWN=<n>` prints more than 20 differences per source and reference.
+//! `corpus/`); `MARKS_SHOWN=<n>` prints more than 20 differences per source and reference;
+//! `MARKS_MATCH=<text>` measures only the sources whose path contains the text.
 //! Skips, with a message, when a tool is not installed.
 #![cfg(feature = "oracle")]
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
@@ -45,7 +46,52 @@ const MARK_TAGS: [&str; 5] = ["mark", "mkmk", "abvm", "blwm", "curs"];
 /// Differences with a known cause: the source's file name, the reference, the kind (see
 /// [`Kind::name`]), how many facts of that kind differ, and the cause. They are reported and do
 /// not fail the measure; another count does.
-const KNOWN: &[(&str, &str, &str, usize, &str)] = &[];
+const KNOWN: &[(&str, &str, &str, usize, &str)] = &[
+    ("AlumniSans-wononly.glyphs", "fontc", "mark-to-base", 1, BRACKET),
+    ("AlumniSans-wononly.glyphs", "fontc", "glyph class", 1, BRACKET),
+    ("AlumniSans-wononly.glyphs", "fontmake", "mark-to-base", 1, BRACKET),
+    ("AlumniSans-wononly.glyphs", "fontmake", "glyph class", 1, BRACKET),
+    ("BlankAlternateLayers.glyphs", "fontc", "glyph class", 2, BRACKET),
+    ("BlankAlternateLayers.glyphs", "fontmake", "glyph class", 2, BRACKET),
+    ("COLRv0-2layers.glyphs", "fontc", "glyph class", 2, COLOUR),
+    ("COLRv0-component-anchors.glyphs", "fontc", "mark-to-base", 1, COLOUR),
+    ("COLRv0-component-anchors.glyphs", "fontc", "glyph class", 1, COLOUR),
+    ("COLRv1-manyshapes-per-glyph.glyphs", "fontc", "glyph class", 2, COLOUR),
+    ("LibreFranklin-bracketlayer.glyphs", "fontc", "glyph class", 2, BRACKET),
+    ("LibreFranklin-bracketlayer.glyphs", "fontmake", "glyph class", 2, BRACKET),
+    ("PropagateAnchorsTest-propagated.glyphs", "fontc", "mark-to-base", 38, BRACKET),
+    ("PropagateAnchorsTest-propagated.glyphs", "fontc", "glyph class", 4, BRACKET),
+    ("PropagateAnchorsTest-propagated.glyphs", "fontmake", "mark-to-base", 38, BRACKET),
+    ("PropagateAnchorsTest-propagated.glyphs", "fontmake", "glyph class", 4, BRACKET),
+    ("PropagateAnchorsTest.glyphs", "fontc", "mark-to-base", 36, BRACKET),
+    ("PropagateAnchorsTest.glyphs", "fontc", "glyph class", 4, BRACKET),
+    ("PropagateAnchorsTest.glyphs", "fontmake", "mark-to-base", 36, BRACKET),
+    ("PropagateAnchorsTest.glyphs", "fontmake", "glyph class", 4, BRACKET),
+    ("ReverseBracketLayers.glyphs", "fontc", "mark-to-base", 3, BRACKET),
+    ("ReverseBracketLayers.glyphs", "fontc", "glyph class", 3, BRACKET),
+    ("ReverseBracketLayers.glyphs", "fontmake", "mark-to-base", 3, BRACKET),
+    ("ReverseBracketLayers.glyphs", "fontmake", "glyph class", 3, BRACKET),
+    ("ReverseBracketLayersMirror.glyphs", "fontc", "mark-to-base", 4, BRACKET),
+    ("ReverseBracketLayersMirror.glyphs", "fontc", "glyph class", 4, BRACKET),
+    ("ReverseBracketLayersMirror.glyphs", "fontmake", "mark-to-base", 4, BRACKET),
+    ("ReverseBracketLayersMirror.glyphs", "fontmake", "glyph class", 4, BRACKET),
+    ("UfoFiltersDontPropagateAnchors.glyphs", "fontc", "mark-to-base", 1, FILTERS),
+    ("UfoFiltersDontPropagateAnchors.glyphs", "fontc", "glyph class", 1, FILTERS),
+    ("UfoFiltersWithoutPropagateAnchors.glyphs", "fontc", "mark-to-base", 1, FILTERS),
+    ("UfoFiltersWithoutPropagateAnchors.glyphs", "fontc", "glyph class", 1, FILTERS),
+    ("glyph-with-bracket-component.glyphs", "fontc", "glyph class", 2, BRACKET),
+    ("glyph-with-bracket-component.glyphs", "fontmake", "glyph class", 2, BRACKET),
+];
+
+/// The references make each bracket layer a glyph of its own (`.BRACKET.varAlt…`).
+const BRACKET: &str =
+    "bracket layers become glyphs of their own in the references; FontCraft compiles the master layers until feature variations land (M9)";
+/// fontc makes each colour layer a glyph of its own (`.color…`).
+const COLOUR: &str = "fontc makes colour layers glyphs of their own; FontCraft does not build those glyphs (M11)";
+/// A `.glyphs` source with a ufo2ft filter list: fontc propagates anchors only when the list has a
+/// `propagateAnchors` entry; fontmake follows the Propagate Anchors setting, as the reference app
+/// does, and so does FontCraft.
+const FILTERS: &str = "fontc decides propagation by the ufo2ft filter list, fontmake and FontCraft by the Propagate Anchors setting";
 
 /// Sources of the measure outside the oracle corpus, when fetched.
 const EXTRA: &[&str] = &["inter/src/Inter-Roman.glyphspackage"];
@@ -330,6 +376,10 @@ fn mark_attachment_equals_both_references() {
     let limit = shown();
     let mut sources = fontcraft_oracle::corpus::discover(&corpus()).unwrap();
     sources.extend(EXTRA.iter().map(|p| corpus().join(p)).filter(|p| p.exists()));
+    let only = std::env::var("MARKS_MATCH").ok();
+    if let Some(text) = &only {
+        sources.retain(|p| p.to_string_lossy().contains(text.as_str()));
+    }
     let scratch = std::env::temp_dir().join(format!("fontcraft-marks-measure-{}", std::process::id()));
     let mut skipped = Vec::new();
     let mut with_code = 0usize;

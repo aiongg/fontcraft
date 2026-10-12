@@ -586,3 +586,19 @@ table = "maxp"
 key = "maxp.maxPoints"
 oracle = "fontmake"
 reason = "Overlap removal: the two engines leave different numbers of points where contours merge (FontCraft keeps a point on a straight line where two contours met, docs/plans/M3.md › M3.6, rule 7), so the largest point count of a glyph can differ by a few points."
+
+# --- Anchor propagation beside a ufo2ft filter list (M8.7b) -------------------------------------
+
+[[allow]]
+table = "GPOS"
+key = "lookup 0"
+sources = ["/UfoFiltersDontPropagateAnchors.glyphs", "/UfoFiltersWithoutPropagateAnchors.glyphs"]
+oracle = "fontc"
+reason = "Decided difference: in a .glyphs source with a ufo2ft filter list, fontc propagates anchors only when the list has a propagateAnchors entry. fontmake and FontCraft follow the Propagate Anchors setting, as the reference app does, so a composite's anchors differ."
+
+[[allow]]
+table = "GDEF"
+key = "outside lookups"
+sources = ["/UfoFiltersDontPropagateAnchors.glyphs", "/UfoFiltersWithoutPropagateAnchors.glyphs"]
+oracle = "fontc"
+reason = "Follows from the propagated anchors (see GPOS): a composite with an attaching anchor is a base glyph."

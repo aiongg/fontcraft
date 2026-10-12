@@ -20,7 +20,7 @@ use fontcraft_components::propagate::effective_anchors_for_master_with;
 use fontcraft_features::FEATURE_WRITERS_KEY;
 use fontcraft_features::marks::{MarkAnchor, MarkGlyph, MarkInput, MarkTags, MasterAnchors, mark_tags};
 use fontcraft_model::glyphdata::GlyphData;
-use fontcraft_model::{Font, Resolved, ResolvedGlyph, is_ufo_family, ufo_classes};
+use fontcraft_model::{Font, ORIGIN_ANCHOR, Resolved, ResolvedGlyph, is_ufo_family, ufo_classes};
 
 use crate::components_opt::{Scope, listed_filter, reaches};
 
@@ -78,7 +78,12 @@ pub(crate) fn input(
         .iter()
         .map(|g| {
             let anchors: Vec<MarkAnchor> = match propagated.as_ref().filter(|_| reaches(&scopes, &g.name)).and_then(|map| map.get(&g.name)) {
-                Some(list) => list.iter().map(|a| MarkAnchor { name: a.name.clone(), x: a.x, y: a.y }).collect(),
+                Some(list) => {
+                    let anchors = list.iter().map(|a| MarkAnchor { name: a.name.clone(), x: a.x, y: a.y }).collect();
+                    // Propagation keeps a glyph's own `*origin` when it has no components; the
+                    // compiled outline is moved by it (`Font::resolve`), so its anchors are too.
+                    if ufo { anchors } else { origin_adjusted(anchors) }
+                }
                 None => g.anchors.iter().map(|(name, p)| MarkAnchor { name: name.clone(), x: p.x, y: p.y }).collect(),
             };
             let opentype_category = if ufo { stated.get(&g.name).cloned() } else { None };
@@ -93,6 +98,12 @@ pub(crate) fn input(
         })
         .collect();
     MarkInput { glyphs, explicit_classes: ufo, language_systems }
+}
+
+/// `anchors` moved by minus the first `*origin` anchor's position, without the `*origin` anchors.
+fn origin_adjusted(anchors: Vec<MarkAnchor>) -> Vec<MarkAnchor> {
+    let Some((ox, oy)) = anchors.iter().find(|a| a.name == ORIGIN_ANCHOR).map(|a| (a.x, a.y)) else { return anchors };
+    anchors.into_iter().filter(|a| a.name != ORIGIN_ANCHOR).map(|a| MarkAnchor { x: a.x - ox, y: a.y - oy, ..a }).collect()
 }
 
 /// The generated features the source asks for: its feature-writer setting, less the features
