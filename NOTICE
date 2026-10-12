@@ -181,7 +181,9 @@ bundled, the file says so in its header and the project is listed here with its 
   4504578c3f74c2739f7e55cae133bbfe773f6d8c: the kern writer (fontbe/src/features/kern.rs: value
   lookup, script and direction splitting, mark splitting, feature assignment, lookup pruning),
   the script and direction properties and OpenType script tags (fontbe/src/features/properties.rs
-  and ot_tags.rs, which follow fontTools' unicodedata, MIT License), the Unicode 18 overlay of
+  and ot_tags.rs, which follow fontTools' unicodedata, MIT License; with M8.7 also the
+  substitution closure of `classify`, the script of an OpenType tag, and the feature code's
+  language systems in the kern writer's feature assignment), the Unicode 18 overlay of
   the ICU4X data (fontdrasil/src/unicode18.rs, whose tables fontc generated from the Unicode
   Character Database 18.0.0: Unicode License v3, Copyright (c) 1991-2026 Unicode, Inc.,
   crates/glyphdata/data/LICENSE-Unicode.txt), the joining of right-to-left kerning and the kern

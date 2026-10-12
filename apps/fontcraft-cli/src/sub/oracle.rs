@@ -119,7 +119,12 @@ fn oracle(args: &[String]) -> Outcome {
                 warnings.push(format!("compiled master `{}`, the variable font origin, instead of the first", master.name));
             }
             let hint = fontcraft_oracle::Hint { family: font.family_name.clone(), style: master.name.clone() };
-            let options = fontcraft_engine::compile::Options { timestamp, remove_overlap: against.removes_overlaps(), ..Default::default() };
+            let options = fontcraft_engine::compile::Options {
+                timestamp,
+                remove_overlap: against.removes_overlaps(),
+                feature_dir: fontcraft_engine::io::feature_dir(path),
+                ..Default::default()
+            };
             let target = fontcraft_engine::model::Target::Master(master.id.clone());
             let outlines = match flavour {
                 Flavour::TrueType => fontcraft_engine::compile::Flavour::TrueType,

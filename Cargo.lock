@@ -1214,6 +1214,7 @@ dependencies = [
  "fontcraft-model",
  "fontcraft-pathops",
  "fontcraft-spacing",
+ "fontcraft-tables",
  "serde",
  "skrifa 0.48.0",
  "toml",

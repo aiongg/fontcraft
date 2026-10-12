@@ -4,6 +4,7 @@
 use std::path::PathBuf;
 
 use fea_rs::compile::{Compilation, NopVariationInfo};
+use fea_rs::typed::{self, AstNode};
 use fea_rs::{DiagnosticSet, GlyphMap, Kind, Node, Opts, ParseTree};
 use write_fonts_052::tables::gdef::GlyphClassDef;
 use write_fonts_052::tables::layout::{ClassDef, FeatureList, ScriptList};
@@ -11,8 +12,8 @@ use write_fonts_052::tables::layout::{ClassDef, FeatureList, ScriptList};
 use crate::provider::{self, Provider};
 use crate::resolve::{self, Loaded, MapResolver};
 use crate::{
-    CompileRequest, Compiled, Diagnostic, FeatureSummary, GeneratedLookups, GlyphClass, HeadValues, LayoutTable, Limits, MetricsValues, Os2Values,
-    STACK_SIZE, Severity,
+    CompileRequest, Compiled, Diagnostic, FeatureSummary, FirstPass, GeneratedLookups, GlyphClass, HeadValues, LayoutTable, Limits, MetricsValues,
+    Os2Values, STACK_SIZE, Severity,
 };
 
 /// What fea-rs needs, without the variation interface (which is not `Sync`).
@@ -24,12 +25,29 @@ struct Job<'a> {
     first_name_id: u16,
     gpos: bool,
     limits: Limits,
-    build: bool,
+    mode: Mode,
 }
 
-/// [`crate::compile`] when `build`, else [`crate::validate`] (the result then holds the
-/// warnings only).
-pub(crate) fn run(req: &CompileRequest, build: bool) -> Result<Compiled, Vec<Diagnostic>> {
+/// How far a run goes.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Mode {
+    /// Parse and validate ([`crate::validate`]).
+    Validate,
+    /// Parse, validate and compile `GSUB` alone, without generated lookups ([`crate::first_pass`]).
+    FirstPass,
+    /// Everything ([`crate::compile`]).
+    Build,
+}
+
+/// What a run gives back.
+pub(crate) enum Output {
+    Compiled(Compiled),
+    FirstPass(FirstPass),
+}
+
+/// One run of `mode` on the request.
+pub(crate) fn run(req: &CompileRequest, mode: Mode) -> Result<Output, Vec<Diagnostic>> {
+    let build = mode == Mode::Build;
     let refuse = |m: &str| Err(vec![Diagnostic::request(Severity::Error, m)]);
     if req.variations.is_some() {
         return refuse("compiling feature code for a variable font is not available yet");
@@ -45,16 +63,8 @@ pub(crate) fn run(req: &CompileRequest, build: bool) -> Result<Compiled, Vec<Dia
         provider::check(generated, req.glyph_order.len(), limits.rules, limits.ligature_components).map_err(|d| vec![d])?;
     }
     let (root, files) = resolve::load(req.files, &limits)?;
-    let job = Job {
-        root,
-        files,
-        names: req.glyph_order.names(),
-        generated: req.generated,
-        first_name_id: req.first_name_id,
-        gpos: req.gpos,
-        limits,
-        build,
-    };
+    let job =
+        Job { root, files, names: req.glyph_order.names(), generated: req.generated, first_name_id: req.first_name_id, gpos: req.gpos, limits, mode };
     on_big_stack(|| job.run())
 }
 
@@ -79,7 +89,7 @@ pub(crate) fn on_big_stack<T: Send>(work: impl FnOnce() -> Result<T, Vec<Diagnos
 }
 
 impl Job<'_> {
-    fn run(self) -> Result<Compiled, Vec<Diagnostic>> {
+    fn run(self) -> Result<Output, Vec<Diagnostic>> {
         let max = self.limits.diagnostics.max(1);
         let glyph_map = GlyphMap::new(self.names.iter().map(String::as_str))
             .map_err(|e| vec![Diagnostic::request(Severity::Error, format!("the glyph order cannot be used: {e}"))])?;
@@ -101,8 +111,10 @@ impl Job<'_> {
         if validated.has_errors() {
             return Err(messages);
         }
-        if !self.build {
-            return Ok(Compiled { warnings: messages, ..Compiled::default() });
+        match self.mode {
+            Mode::Validate => return Ok(Output::Compiled(Compiled { warnings: messages, ..Compiled::default() })),
+            Mode::FirstPass => return first_pass(&tree, &glyph_map, max, messages).map(Output::FirstPass),
+            Mode::Build => {}
         }
         let opts = Opts::new().compile_gpos(self.gpos).max_error_messages(max);
         let provider = self.generated.map(|generated| Provider { generated });
@@ -110,7 +122,7 @@ impl Job<'_> {
             Ok((compilation, warnings)) => {
                 messages.extend(convert(&tree, &warnings, max));
                 messages.truncate(max);
-                self.output(&tree, compilation, messages)
+                self.output(&tree, compilation, messages).map(Output::Compiled)
             }
             Err(errors) => {
                 messages.extend(convert(&tree, &errors, max));
@@ -204,6 +216,60 @@ impl Job<'_> {
             gdef_from_code,
             warnings,
         })
+    }
+}
+
+/// The first pass fontc makes over the code before the feature writers run: `GSUB` alone, and
+/// what the writers read from the code (its language systems, its top-level features and their
+/// `# Automatic Code` markers, the classes of a `table GDEF` block).
+fn first_pass(tree: &ParseTree, glyph_map: &GlyphMap, max: usize, mut messages: Vec<Diagnostic>) -> Result<FirstPass, Vec<Diagnostic>> {
+    let opts = Opts::new().compile_gpos(false).max_error_messages(max);
+    let compilation = match fea_rs::compile::compile::<NopVariationInfo, Provider>(tree, glyph_map, None, None, opts) {
+        Ok((compilation, warnings)) => {
+            messages.extend(convert(tree, &warnings, max));
+            messages.truncate(max);
+            compilation
+        }
+        Err(errors) => {
+            messages.extend(convert(tree, &errors, max));
+            messages.truncate(max);
+            return Err(messages);
+        }
+    };
+    let gsub = match compilation.gsub.as_ref().map(write_fonts_052::dump_table).transpose() {
+        Ok(bytes) => bytes,
+        Err(e) => return Err(vec![Diagnostic::request(Severity::Error, format!("the GSUB table could not be written: {e}"))]),
+    };
+    let gdef_classes = compilation
+        .gdef_classes
+        .as_ref()
+        .map(|classes| classes.iter().filter_map(|(g, c)| Some((*g, glyph_class(*c)?))).collect::<std::collections::BTreeMap<_, _>>());
+    let mut language_systems = Vec::new();
+    let mut features: Vec<(crate::Tag, bool)> = Vec::new();
+    for statement in tree.typed_root().statements() {
+        if let Some(system) = typed::LanguageSystem::cast(statement) {
+            let system = (system.script().to_raw(), system.language().to_raw());
+            if !language_systems.contains(&system) {
+                language_systems.push(system);
+            }
+        } else if let Some(feature) = typed::Feature::cast(statement) {
+            let (tag, marker) = (feature.tag().to_raw(), feature.has_insert_marker());
+            match features.iter_mut().find(|(t, _)| *t == tag) {
+                Some(found) => found.1 |= marker,
+                None => features.push((tag, marker)),
+            }
+        }
+    }
+    Ok(FirstPass { language_systems, features, gsub, gdef_classes, warnings: messages })
+}
+
+fn glyph_class(class: GlyphClassDef) -> Option<GlyphClass> {
+    match class {
+        GlyphClassDef::Base => Some(GlyphClass::Base),
+        GlyphClassDef::Ligature => Some(GlyphClass::Ligature),
+        GlyphClassDef::Mark => Some(GlyphClass::Mark),
+        GlyphClassDef::Component => Some(GlyphClass::Component),
+        _ => None,
     }
 }
 

@@ -69,7 +69,7 @@ pub use limits::{
     Limits, MAX_AXES, MAX_DELTAS, MAX_DIAGNOSTICS, MAX_FEATURE_VARIATIONS, MAX_GENERATED_LOOKUPS, MAX_GENERATED_RULES, MAX_GLYPHS, MAX_INCLUDE_DEPTH,
     MAX_INCLUDE_FILES, MAX_LOCATIONS, MAX_NESTING_DEPTH, MAX_PATH_BYTES, STACK_SIZE,
 };
-pub use output::{Compiled, FeatureSummary, HeadValues, LayoutTable, MetricsValues, Os2Values};
+pub use output::{Compiled, FeatureSummary, FirstPass, HeadValues, LayoutTable, MetricsValues, Os2Values};
 pub use variations::{Axis, FeaVariations, Location};
 pub use write_fonts_052::types::{GlyphId16, Tag};
 
@@ -102,15 +102,29 @@ impl<'a> CompileRequest<'a> {
 /// Compiles the request's files to layout tables. Errors and warnings fea-rs reports, and
 /// refusals of the pre-checks, come back as diagnostics; at most [`Limits::diagnostics`] of them.
 pub fn compile(req: &CompileRequest) -> Result<Compiled, Vec<Diagnostic>> {
-    run::run(req, true)
+    match run::run(req, run::Mode::Build)? {
+        run::Output::Compiled(compiled) => Ok(compiled),
+        run::Output::FirstPass(_) => Err(vec![Diagnostic::request(Severity::Error, "the compiler stopped early")]),
+    }
+}
+
+/// Parses and validates the request's files and compiles `GSUB` alone, without the generated
+/// lookups: what the feature writers read from the code before [`compile`] merges their lookups
+/// (fontc's first pass). The request's generated lookups are not used.
+pub fn first_pass(req: &CompileRequest) -> Result<FirstPass, Vec<Diagnostic>> {
+    match run::run(req, run::Mode::FirstPass)? {
+        run::Output::FirstPass(first) => Ok(first),
+        run::Output::Compiled(_) => Err(vec![Diagnostic::request(Severity::Error, "the compiler stopped early")]),
+    }
 }
 
 /// Parses and validates the request's files without building tables: the diagnostics
 /// [`compile`] would report about the code itself (`font.features.listErrors`). A list without
 /// errors means the code is valid.
 pub fn validate(req: &CompileRequest) -> Vec<Diagnostic> {
-    match run::run(req, false) {
-        Ok(compiled) => compiled.warnings,
+    match run::run(req, run::Mode::Validate) {
+        Ok(run::Output::Compiled(compiled)) => compiled.warnings,
+        Ok(run::Output::FirstPass(first)) => first.warnings,
         Err(diagnostics) => diagnostics,
     }
 }

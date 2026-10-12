@@ -41,8 +41,10 @@ const MAX_LISTED: usize = 10;
 
 /// The tables FontCraft writes in M2, in report order.
 pub const CORE: &[&str] = &["head", "hhea", "maxp", "OS/2", "hmtx", "cmap", "name", "post", "glyf", "loca", "CFF ", "vhea", "vmtx"];
-/// Layout tables, compared from M8.
+/// Layout tables.
 pub const LAYOUT: &[&str] = &["GSUB", "GPOS", "GDEF", "kern", "BASE", "JSTF", "MATH"];
+/// The layout tables compared lookup by lookup ([`crate::layout`]); the others are skipped.
+pub const COMPARED_LAYOUT: &[&str] = &["GSUB", "GPOS", "GDEF"];
 /// Variation tables, compared from M9.
 pub const VARIATION: &[&str] = &["fvar", "gvar", "avar", "HVAR", "VVAR", "MVAR", "STAT", "cvar", "CFF2"];
 
@@ -74,6 +76,7 @@ pub struct Comparison {
 
 /// One font, read.
 struct Side<'a> {
+    bytes: &'a [u8],
     font: FontRef<'a>,
     names: Vec<String>,
     by_name: HashMap<String, GlyphId>,
@@ -94,7 +97,7 @@ impl<'a> Side<'a> {
             by_name.insert(name.clone(), id);
             names.push(name);
         }
-        Ok(Side { font, names, by_name })
+        Ok(Side { bytes, font, names, by_name })
     }
 
     fn name(&self, gid: GlyphId) -> String {
@@ -245,8 +248,21 @@ fn table(
     in_b: bool,
     outlines: Outlines,
 ) -> TableResult {
+    if COMPARED_LAYOUT.contains(&tag) {
+        match (in_a, in_b) {
+            (true, false) => return result(tag, false, vec![diff("table", "present", "absent")], None),
+            (false, true) => return result(tag, false, vec![diff("table", "absent", "present")], None),
+            _ => {}
+        }
+        let same = a.table(tag) == b.table(tag);
+        let rename: BTreeMap<String, String> = renamed.iter().map(|(_, ours, theirs)| (theirs.clone(), ours.clone())).collect();
+        return match crate::layout::compare(tag, a.bytes, b.bytes, &rename) {
+            Ok(differences) => result(tag, same, differences, Some("compared lookup by lookup as feature code".to_string())),
+            Err(e) => skipped(tag, &format!("cannot be decompiled: {e}")),
+        };
+    }
     if LAYOUT.contains(&tag) {
-        return skipped(tag, "layout table: compared from M8");
+        return skipped(tag, "layout table: not compared");
     }
     if VARIATION.contains(&tag) {
         return skipped(tag, "variation table: compared from M9");

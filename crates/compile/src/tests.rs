@@ -1533,86 +1533,133 @@ fn kerning_is_written_to_gpos_with_the_values_that_apply() {
     assert!(out.warnings.iter().any(|w| w.starts_with("the kerning was not written") && w.contains("kerning rules")), "{:?}", out.warnings);
 }
 
-#[test]
-fn only_a_hand_written_kern_feature_keeps_the_generated_kerning_out() {
+/// The kerning pairs `out`'s `GPOS` gives `A V` in `latn`.
+fn latn_av(out: &Compiled) -> i32 {
+    let eval = fontcraft_features::evaluate::PairEvaluator::new(&out.bytes).unwrap();
+    let gid = |name: &str| out.glyph_order.iter().position(|n| n == name).unwrap() as u16;
+    eval.value(skrifa::raw::types::Tag::new(b"latn"), gid("A"), gid("V"))
+}
+
+fn kern_font() -> Font {
     use fontcraft_model::Snippet;
     let mut f = Font::new("Kern Sans");
+    for (name, cp) in [("f", Some(0x66)), ("i", Some(0x69)), ("f_i", None)] {
+        if f.glyph(name).is_none() {
+            f.add_glyph(name, cp.into_iter().collect(), 500.0).unwrap();
+        }
+    }
     Arc::make_mut(&mut f.kerning).ltr.set("m01", "A", "V", -80.0);
-    // What a `.glyphs` source usually carries: code the editor writes itself.
     let features = Arc::make_mut(&mut f.features);
     features.prefixes.push(Snippet {
         name: "Languagesystems".into(),
-        code: "languagesystem DFLT dflt;".into(),
-        automatic: true,
+        code: "languagesystem DFLT dflt;\nlanguagesystem latn dflt;".into(),
         ..Default::default()
     });
-    features.features.push(Snippet { name: "liga".into(), code: "sub f i by f_i;".into(), automatic: true, ..Default::default() });
-    features.features.push(Snippet { name: "kern".into(), code: "# Automatic Code\n".into(), ..Default::default() });
-    let out = compile_ttf(&f, &Options::default()).unwrap();
-    assert!(FontRef::new(&out.bytes).unwrap().gpos().is_ok(), "{:?}", out.warnings);
-    let not_compiled = "feature code is compiled from M8: these features were not written to the font: liga";
-    assert!(out.warnings.iter().any(|w| w == not_compiled), "{:?}", out.warnings);
-
-    let mut hand = f.clone();
-    let features = Arc::make_mut(&mut hand.features);
-    features.features.retain(|s| s.name != "kern");
-    features.features.push(Snippet { name: "kern".into(), code: "pos A V -100;".into(), ..Default::default() });
-    let out = compile_ttf(&hand, &Options::default()).unwrap();
-    assert!(FontRef::new(&out.bytes).unwrap().gpos().is_err());
-    assert!(out.warnings.iter().any(|w| w.contains("hand-written kern feature")), "{:?}", out.warnings);
-    assert!(crate::has_kern_feature_code(&hand));
-
-    // A UFO's features.fea read as one text: its kern block is found in it.
-    let mut ufo = f.clone();
-    Arc::make_mut(&mut ufo.features).features.clear();
-    Arc::make_mut(&mut ufo.features).prefixes = vec![Snippet {
-        code: "languagesystem DFLT dflt; # feature kern {\nfeature liga{ sub f i by f_i; } liga;\nfeature kern {pos A V -100;} kern;".into(),
-        ..Default::default()
-    }];
-    assert_eq!(
-        crate::kern::feature_code(&ufo),
-        crate::kern::FeatureCode { hand_written_kern: true, includes: vec![], features: vec!["liga".into(), "kern".into()] }
-    );
+    features.features.push(Snippet { name: "liga".into(), code: "sub f i by f_i;".into(), ..Default::default() });
+    f
 }
 
 #[test]
-fn a_kern_feature_with_use_extension_or_through_an_include_keeps_the_generated_kerning_out() {
-    use crate::kern::{FeatureCode, feature_code};
+fn feature_code_is_compiled_with_the_generated_kerning() {
     use fontcraft_model::Snippet;
-    let mut f = Font::new("Kern Sans");
-    Arc::make_mut(&mut f.kerning).ltr.set("m01", "A", "V", -80.0);
-    // A UFO's features.fea, read as one text.
-    let with = |code: &str| {
-        let mut g = f.clone();
-        Arc::make_mut(&mut g.features).prefixes = vec![Snippet { code: code.into(), ..Default::default() }];
-        g
+    let f = kern_font();
+    let out = compile_ttf(&f, &Options::default()).unwrap();
+    let font = FontRef::new(&out.bytes).unwrap();
+    assert!(font.gsub().is_ok(), "{:?}", out.warnings);
+    assert_eq!(latn_av(&out), -80);
+
+    // A hand-written kern feature gets the generated kerning after its own rules, so both
+    // lookups adjust the pair.
+    let mut hand = f.clone();
+    Arc::make_mut(&mut hand.features).features.push(Snippet { name: "kern".into(), code: "pos A V -100;".into(), ..Default::default() });
+    let out = compile_ttf(&hand, &Options::default()).unwrap();
+    assert_eq!(latn_av(&out), -180, "{:?}", out.warnings);
+
+    // A UFO's features.fea read as one text, its kern feature without a marker: no generated
+    // kerning (the skip mode).
+    let mut ufo = f.clone();
+    Arc::make_mut(&mut ufo.features).features.clear();
+    Arc::make_mut(&mut ufo.features).prefixes =
+        vec![Snippet { code: "languagesystem DFLT dflt;\nfeature kern { pos A V -20; } kern;\n".into(), ..Default::default() }];
+    let out = compile_ttf(&ufo, &Options::default()).unwrap();
+    assert_eq!(latn_av(&out), -20, "{:?}", out.warnings);
+    let lookups = FontRef::new(&out.bytes).unwrap().gpos().unwrap().lookup_list().unwrap().lookup_count();
+    assert_eq!(lookups, 1);
+
+    // With the marker, the generated lookups go there.
+    Arc::make_mut(&mut ufo.features).prefixes[0].code = "languagesystem DFLT dflt;\nfeature kern {\n# Automatic Code\npos A V -20;\n} kern;\n".into();
+    let out = compile_ttf(&ufo, &Options::default()).unwrap();
+    assert_eq!(latn_av(&out), -80, "{:?}", out.warnings);
+
+    // Skipping features leaves every layout table out.
+    let out = compile_ttf(&f, &Options { skip_features: true, ..Options::default() }).unwrap();
+    let font = FontRef::new(&out.bytes).unwrap();
+    assert!(font.gsub().is_err() && font.gpos().is_err());
+}
+
+#[test]
+fn the_generated_kerning_reaches_the_code_s_language_systems_and_substitutions() {
+    use fontcraft_model::Snippet;
+    let mut f = kern_font();
+    for (name, cp) in [("de-cy", Some(0x0434)), ("f_f", None)] {
+        f.add_glyph(name, cp.into_iter().collect(), 500.0).unwrap();
+    }
+    Arc::make_mut(&mut f.kerning).ltr.set("m01", "f_f", "V", -30.0);
+    Arc::make_mut(&mut f.kerning).ltr.set("m01", "de-cy", "de-cy", -10.0);
+    let features = Arc::make_mut(&mut f.features);
+    features.prefixes[0].code = "languagesystem DFLT dflt;\nlanguagesystem latn dflt;\nlanguagesystem latn TRK;\nlanguagesystem cyrl dflt;".into();
+    features.features.push(Snippet { name: "dlig".into(), code: "sub f f by f_f;".into(), ..Default::default() });
+    let out = compile_ttf(&f, &Options::default()).unwrap();
+    let font = FontRef::new(&out.bytes).unwrap();
+    let gpos = font.gpos().unwrap();
+    let scripts = gpos.script_list().unwrap();
+    let latn = scripts.script_records().iter().find(|r| r.script_tag() == skrifa::raw::types::Tag::new(b"latn")).unwrap();
+    let latn = latn.script(scripts.offset_data()).unwrap();
+    let langs: Vec<String> = latn.lang_sys_records().iter().map(|r| r.lang_sys_tag().to_string()).collect();
+    assert_eq!(langs, ["TRK "], "{:?}", out.warnings);
+    // `f_f` comes from Latin letters through the substitutions, so its pair is not in `cyrl`.
+    let eval = fontcraft_features::evaluate::PairEvaluator::new(&out.bytes).unwrap();
+    let gid = |name: &str| out.glyph_order.iter().position(|n| n == name).unwrap() as u16;
+    assert_eq!(eval.value(skrifa::raw::types::Tag::new(b"latn"), gid("f_f"), gid("V")), -30);
+    assert_eq!(eval.value(skrifa::raw::types::Tag::new(b"cyrl"), gid("f_f"), gid("V")), 0);
+}
+
+#[test]
+fn a_feature_code_error_stops_the_export_with_the_entry_named() {
+    use fontcraft_model::Snippet;
+    let mut f = kern_font();
+    Arc::make_mut(&mut f.features).features.push(Snippet { name: "smcp".into(), code: "sub a by a.sc;".into(), ..Default::default() });
+    let Err(CompileError::Features(found)) = compile_ttf(&f, &Options::default()) else { panic!("the export should stop") };
+    let place = found.iter().find_map(|d| d.place.clone()).expect("a place");
+    assert_eq!(place.entry, fontcraft_features::EntryRef { kind: fontcraft_features::EntryKind::Feature, index: 1 });
+
+    // An include of a file outside the source folder, or with no folder given, is an error too.
+    let mut include = kern_font();
+    Arc::make_mut(&mut include.features).prefixes[0].code.push_str("\ninclude(common.fea);");
+    assert!(matches!(compile_ttf(&include, &Options::default()), Err(CompileError::Features(_))));
+}
+
+#[test]
+fn automatic_code_is_regenerated_at_export_unless_update_features_is_off() {
+    use fontcraft_model::{Param, Snippet};
+    let mut f = kern_font();
+    // Stale automatic code: the glyphs call for `f i`, not this rule (`f_i` is a dlig ligature).
+    Arc::make_mut(&mut f.features).features[0] =
+        Snippet { name: "dlig".into(), code: "sub i f by f_i;".into(), automatic: true, ..Default::default() };
+    let substituted = |out: &Compiled| {
+        let font = FontRef::new(&out.bytes).unwrap();
+        let gsub = font.gsub().unwrap();
+        let lookup = gsub.lookup_list().unwrap().lookups().get(0).unwrap();
+        let skrifa::raw::tables::gsub::SubstitutionSubtables::Ligature(subtables) = lookup.subtables().unwrap() else { panic!("a ligature") };
+        let coverage = subtables.get(0).unwrap().coverage().unwrap();
+        coverage.iter().map(|g| out.glyph_order[g.to_u32() as usize].clone()).collect::<Vec<_>>()
     };
-    let compiled = |g: &Font| {
-        let out = compile_ttf(g, &Options::default()).unwrap();
-        (FontRef::new(&out.bytes).unwrap().gpos().is_ok(), out.warnings)
-    };
+    let out = compile_ttf(&f, &Options::default()).unwrap();
+    assert_eq!(substituted(&out), ["f"], "{:?}", out.warnings);
 
-    let extension = with("feature kern useExtension {\n  pos A V -100;\n} kern;\n");
-    assert_eq!(feature_code(&extension), FeatureCode { hand_written_kern: true, includes: vec![], features: vec!["kern".into()] });
-    let (gpos, warnings) = compiled(&extension);
-    assert!(!gpos && warnings.iter().any(|w| w.contains("hand-written kern feature")), "{warnings:?}");
-
-    // Only a top-level include may bring a kern feature; one inside a feature block cannot.
-    let include = with("languagesystem DFLT dflt;\ninclude(../common.fea);\nfeature liga { include(liga.fea); } liga;\n");
-    assert_eq!(
-        feature_code(&include),
-        FeatureCode { hand_written_kern: false, includes: vec!["../common.fea".into()], features: vec!["liga".into()] }
-    );
-    let (gpos, warnings) = compiled(&include);
-    assert!(!gpos && warnings.iter().any(|w| w.contains("includes ../common.fea")), "{warnings:?}");
-    assert!(crate::has_kern_feature_code(&include));
-
-    // A kern block that holds only comments is no kern feature.
-    let comments = with("feature kern {\n# Automatic Code\n} kern;\nfeature liga { sub f i by f_i; } liga;\n");
-    assert_eq!(feature_code(&comments), FeatureCode { hand_written_kern: false, includes: vec![], features: vec!["liga".into()] });
-    let (gpos, warnings) = compiled(&comments);
-    assert!(gpos, "{warnings:?}");
-    assert!(!crate::has_kern_feature_code(&comments));
+    Arc::make_mut(&mut f.info).params.0.push(Param::new("Update Features", fontcraft_model::plist::Value::Bool(false)));
+    let out = compile_ttf(&f, &Options::default()).unwrap();
+    assert_eq!(substituted(&out), ["i"], "{:?}", out.warnings);
 }
 
 /// Corner components and smart components are drawn into the glyphs before the build, so the

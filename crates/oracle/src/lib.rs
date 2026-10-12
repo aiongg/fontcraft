@@ -6,8 +6,9 @@
 //! fonts back and compares them normalised ([`compare`]). Each table comes out identical,
 //! equivalent (it differs only where normalisation allows), coverage-equal (outline tables only:
 //! some glyphs differ in their points but cover the same pixels), allowed (every difference is on
-//! the allow-list, [`allow`]), different, or skipped (outside the comparison for now: layout tables
-//! until M8, variation tables until M9). Differences in how the two programs read the source, such
+//! the allow-list, [`allow`]), different, or skipped (outside the comparison for now: the layout
+//! tables other than `GSUB`, `GPOS` and `GDEF`, variation tables until M9). `GSUB`, `GPOS` and
+//! `GDEF` are compared lookup by lookup (`layout`). Differences in how the two programs read the source, such
 //! as a different glyph set or order, are reported apart as source-reading findings.
 //!
 //! The reference compilers are optional: when one is missing, [`tools::locate`] says so and the
@@ -18,6 +19,7 @@
 pub mod allow;
 pub mod compare;
 pub mod corpus;
+mod layout;
 pub mod outline;
 pub mod tools;
 

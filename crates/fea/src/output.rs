@@ -1,7 +1,9 @@
 //! What a compile produces: layout tables as bytes, the values the code's table blocks set, and
 //! a summary of the features for the Features menu.
 
-use crate::{Diagnostic, Tag};
+use std::collections::BTreeMap;
+
+use crate::{Diagnostic, GlyphClass, GlyphId16, Tag};
 
 /// Which layout table a feature is in.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -81,5 +83,21 @@ pub struct Compiled {
     /// `GDEF` came from the code's `table GDEF` block rather than the generated classes.
     pub gdef_from_code: bool,
     /// Warnings that did not stop the compile.
+    pub warnings: Vec<Diagnostic>,
+}
+
+/// What [`crate::first_pass`] reads from the code for the feature writers.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct FirstPass {
+    /// The `languagesystem` statements, as (script, language), each once, in code order.
+    pub language_systems: Vec<(Tag, Tag)>,
+    /// The top-level feature blocks, each tag once in code order, with `true` when one of its
+    /// blocks holds an `# Automatic Code` marker.
+    pub features: Vec<(Tag, bool)>,
+    /// `GSUB` compiled from the code alone; `None` when the code has no substitutions.
+    pub gsub: Option<Vec<u8>>,
+    /// The glyph classes of the code's `table GDEF` block, when it has one.
+    pub gdef_classes: Option<BTreeMap<GlyphId16, GlyphClass>>,
+    /// Warnings that did not stop the pass.
     pub warnings: Vec<Diagnostic>,
 }

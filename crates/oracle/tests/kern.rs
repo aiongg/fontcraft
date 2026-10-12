@@ -110,6 +110,15 @@ fn covered_by_direction(font: &Font, index: &KernIndex, master: &str) -> Vec<(bo
     out.into_iter().collect()
 }
 
+/// Whether the feature code has a hand-written `kern` feature, or a top-level include that may
+/// hold one: such a source's kerning is the code's as well as the generated lookups.
+fn has_kern_feature_code(font: &Font) -> bool {
+    let f = &font.features;
+    let has_code = |code: &str| code.lines().any(|l| !l.split('#').next().unwrap_or("").trim().is_empty());
+    let kern = f.features.iter().any(|s| !s.disabled && !s.automatic && s.name == "kern" && has_code(&s.code));
+    kern || f.prefixes.iter().chain(&f.classes).any(|s| !s.disabled && (s.code.contains("feature kern") || s.code.contains("include(")))
+}
+
 /// Glyph id by `post` name.
 fn ids_by_name(bytes: &[u8]) -> Option<HashMap<String, u16>> {
     let font = FontRef::new(bytes).ok()?;
@@ -166,12 +175,13 @@ fn generated_kerning_equals_both_references() {
         if pairs.is_empty() {
             continue;
         }
-        if fontcraft_compile::has_kern_feature_code(&font) {
+        if has_kern_feature_code(&font) {
             eprintln!("not compared, a kern feature in the feature code or an include: {label}");
             with_code += 1;
             continue;
         }
-        let options = Options { timestamp: fontcraft_oracle::DEFAULT_TIMESTAMP, ..Default::default() };
+        let options =
+            Options { timestamp: fontcraft_oracle::DEFAULT_TIMESTAMP, feature_dir: fontcraft_engine::io::feature_dir(source), ..Default::default() };
         let ours = match compile(&font, &fontcraft_model::Target::Master(master.clone()), fontcraft_compile::Flavour::TrueType, &options) {
             Ok(c) => c,
             Err(e) => {
@@ -331,8 +341,9 @@ fn index_lookup_equals_both_references() {
         if pairs.is_empty() {
             continue;
         }
-        let hand_written = fontcraft_compile::has_kern_feature_code(&font);
-        let options = Options { timestamp: fontcraft_oracle::DEFAULT_TIMESTAMP, ..Default::default() };
+        let hand_written = has_kern_feature_code(&font);
+        let options =
+            Options { timestamp: fontcraft_oracle::DEFAULT_TIMESTAMP, feature_dir: fontcraft_engine::io::feature_dir(source), ..Default::default() };
         // Our build gives the production names that match unencoded glyphs.
         let ours = match compile(&font, &fontcraft_model::Target::Master(master.clone()), fontcraft_compile::Flavour::TrueType, &options) {
             Ok(c) => c,

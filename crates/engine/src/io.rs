@@ -200,6 +200,23 @@ pub fn read_folder(root: &Path) -> Result<BTreeMap<String, Vec<u8>>> {
     Ok(out)
 }
 
+/// The folder the feature code of the source at `path` reads its `include` files from, as the
+/// reference compilers resolve them: the folder that holds the UFO (for a designspace, its first
+/// UFO), else the folder the source file is in. `None` when that cannot be told.
+pub fn feature_dir(path: &Path) -> Option<std::path::PathBuf> {
+    if path.join("metainfo.plist").is_file() {
+        return path.parent().map(Path::to_path_buf);
+    }
+    let is_designspace = path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("designspace"));
+    if is_designspace {
+        let bytes = read_file(path).ok()?;
+        let text = std::str::from_utf8(&bytes).ok()?;
+        let first = fontcraft_io_ufo::designspace::ufo_paths(text).ok()?.into_iter().next()?;
+        return path.parent()?.join(first).parent().map(Path::to_path_buf);
+    }
+    path.parent().map(Path::to_path_buf)
+}
+
 /// Reads the source at `path`, recognising its format by content, with what reading it left out
 /// (compiled fonts only). `face` chooses a member of a font collection.
 pub fn open(path: &Path, face: Option<u32>) -> Result<(Font, Vec<String>)> {

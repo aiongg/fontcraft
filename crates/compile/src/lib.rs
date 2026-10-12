@@ -11,12 +11,11 @@
 //! | Glyph data | [`fill_glyph_data`] | production names and categories a glyph does not store, from the glyph database; non-spacing marks get no advance |
 //! | Export parameters | [`export_params`] | Export, Keep, Remove, Rename and Reencode Glyphs and the Arabic presentation forms change the resolved glyphs; the renames and removals go to the kerning writers |
 //! | Glyph order | [`order`] | the export order, `.notdef` first and drawn when the font has none, at most 65,535 glyphs |
-//! | Pair kerning | `kern` | the master's kerning as `GPOS` (`fontcraft_features`), for a source without a hand-written `kern` feature |
 //! | Component options | [`components_opt`] | decomposition and flattening the options, parameters and filter list ask for |
-//! | Mark attachment | `marks` | the master's propagated anchors as `mark`, `mkmk`, `abvm`, `blwm` and `curs` lookups merged into the `GPOS`, and the `GDEF` classes, carets and mark filtering sets |
+//! | Layout | [`layout`] (with `kern` and `marks`) | the feature code for the target (automatic entries regenerated, instance parameters, tokens) compiled with the generated kerning and mark attachment: `GSUB`, `GPOS`, `GDEF`; a compile error stops the export |
 //! | Outline preparation | [`outline`] | decomposition (mixed glyphs, transforms beyond ±2, everything for CFF), overlap removal, cubic to quadratic, contour direction |
 //! | Hinting (M10) | [`cff_hints`], [`tt_hints`], [`points`], [`gasp`] | CFF stem hints, masks and flex; `cvt `, `fpgm`, `prep` and glyph programs against the point map; `gasp` |
-//! | Table builders and assembly | `build`, [`cff`], [`names`], [`kern_table`] | `glyf`/`loca` with composites, or `CFF ` (cubic outlines in their drawn direction, decomposed); `hmtx`, `hhea`, `maxp`, `head`, `cmap`, `OS/2`, `name`, `post` with production names, `GPOS` when there is kerning or mark attachment, `GDEF` when glyphs have classes, carets or mark filtering sets, then the font file |
+//! | Table builders and assembly | `build`, [`cff`], [`names`], [`kern_table`] | `glyf`/`loca` with composites, or `CFF ` (cubic outlines in their drawn direction, decomposed); `hmtx`, `hhea`, `maxp`, `head`, `cmap`, `OS/2`, `name`, `post` with production names, the layout tables, then the font file |
 //!
 //! The output is a **static font** of one master, with TrueType outlines ([`Flavour::TrueType`],
 //! as fontc builds it) or CFF outlines ([`Flavour::Cff`], as fontmake builds it: `maxp` 0.5, `post`
@@ -72,7 +71,6 @@ use std::time::Duration;
 use fontcraft_model::glyphdata::GlyphData;
 use fontcraft_model::{Font, ModelError, Resolved, Target};
 
-pub use kern::has_kern_feature_code;
 pub use outline::Flavour;
 
 /// Largest coordinate, in font units, an outline point may have in a TrueType outline. `glyf`
@@ -182,6 +180,12 @@ pub struct Options {
     pub assets: AssetsRef,
     /// Also write `CBDT` and `CBLC` from the iColor layers (`color.export.cbdtNotInReference`).
     pub cbdt: bool,
+    /// Leave the layout tables out: no feature code, kerning or mark attachment, for fast
+    /// outline-only builds (`compile.skipFeatures`).
+    pub skip_features: bool,
+    /// The folder the feature code's `include` statements read from: the source's folder.
+    /// `None`: an include of a file on disk is an error.
+    pub feature_dir: Option<std::path::PathBuf>,
 }
 
 /// The asset store a compile reads ([`Options::assets`]). Two are equal when they are the same
@@ -252,6 +256,8 @@ impl Default for Options {
             hinting: HintingOptions::default(),
             assets: AssetsRef::default(),
             cbdt: false,
+            skip_features: false,
+            feature_dir: None,
         }
     }
 }
@@ -331,11 +337,7 @@ fn compile_stages(font: Option<&Font>, mut resolved: Resolved, flavour: Flavour,
     let glyph_data = font.and_then(|_| compile_glyph_data(options));
     let color_plan = color::plan(font, &resolved, options);
     let (glyphs, made) = color::append_layer_glyphs(font, &color_plan, &resolved, glyphs, &mut warnings)?;
-    let kern = match font {
-        Some(font) => kern::generate(font, &resolved, &glyphs, &edits, &mut warnings),
-        None => None,
-    };
-    let layout = marks::generate(font, glyph_data.as_deref(), &resolved, &glyphs, kern, &mut warnings);
+    let layout = layout_tables(font, glyph_data.as_deref(), &resolved, &glyphs, &edits, options, &mut warnings)?;
     let upm = f64::from(resolved.units_per_em);
     let error =
         if options.conversion_error.is_finite() && options.conversion_error > 0.0 { options.conversion_error } else { DEFAULT_CONVERSION_ERROR };
@@ -358,14 +360,30 @@ fn compile_stages(font: Option<&Font>, mut resolved: Resolved, flavour: Flavour,
         &outlines,
         flavour,
         synthesised_notdef,
-        layout.gpos.as_ref(),
-        layout.gdef.as_ref(),
+        &layout.tables(),
         kern_table.as_deref(),
         &color_tables.tables,
         options,
         &mut warnings,
     )?;
     Ok(Compiled { bytes, glyph_order: glyphs.into_iter().map(|g| g.name).collect(), warnings })
+}
+
+/// The layout stage of a static build ([`layout::build`]); nothing when the options skip features.
+pub(crate) fn layout_tables(
+    font: Option<&Font>,
+    data: Option<&GlyphData>,
+    resolved: &Resolved,
+    order: &[fontcraft_model::ResolvedGlyph],
+    edits: &export_params::ExportEdits,
+    options: &Options,
+    warnings: &mut Vec<String>,
+) -> Result<layout::LayoutTables, CompileError> {
+    if options.skip_features {
+        return Ok(layout::LayoutTables::default());
+    }
+    let input = layout::LayoutInput { font, data, resolved, order, edits, include_dir: options.feature_dir.as_deref() };
+    layout::build(&input, &layout::LayoutOptions::default(), warnings)
 }
 
 /// Fills what the glyphs do not store from the glyph database ([`Resolved::apply_glyph_data`])

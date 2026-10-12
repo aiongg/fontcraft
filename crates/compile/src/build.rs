@@ -24,9 +24,7 @@ use fontcraft_geom::{Affine, Point, Rect};
 use fontcraft_model::{MAX_OUTLINE_ELEMENTS, ModelError, Resolved, ResolvedGlyph};
 use write_fonts::FontBuilder;
 use write_fonts::tables::cmap::Cmap;
-use write_fonts::tables::gdef::Gdef;
 use write_fonts::tables::glyf::{Anchor, Bbox, Component, ComponentFlags, CompositeGlyph, GlyfLocaBuilder, Glyph as TtGlyph, SimpleGlyph, Transform};
-use write_fonts::tables::gpos::Gpos;
 use write_fonts::tables::head::{Flags, Head, MacStyle};
 use write_fonts::tables::hhea::Hhea;
 use write_fonts::tables::hmtx::{Hmtx, LongMetric};
@@ -348,8 +346,7 @@ pub fn assemble(
     outlines: &[Prepared],
     flavour: Flavour,
     synthesised_notdef: bool,
-    gpos: Option<&Gpos>,
-    gdef: Option<&Gdef>,
+    layout: &[(Tag, &[u8])],
     kern: Option<&[u8]>,
     color: &[(Tag, Vec<u8>)],
     options: &Options,
@@ -437,9 +434,9 @@ pub fn assemble(
         caret_offset: i16_of(m.caret_offset),
         number_of_h_metrics: u16::try_from(h_metrics.len()).unwrap_or(u16::MAX),
     };
-    // Pair, cursive and mark positioning each look at two glyphs; nothing else is compiled
-    // before M8.
-    let max_context = if gpos.is_some() { 2 } else { 0 };
+    // Pair, cursive and mark positioning each look at two glyphs; the longest context of the
+    // code's lookups is M8.8's.
+    let max_context = if layout.is_empty() { 0 } else { 2 };
     let os2 = os2(&info, &horizontal.metrics, &code_points, max_context);
 
     // Glyph names: in `post` 2.0 for TrueType when there are few enough; CFF keeps them in its
@@ -468,11 +465,8 @@ pub fn assemble(
     builder.add_table(&cmap).map_err(table("cmap"))?;
     builder.add_table(&name).map_err(table("name"))?;
     builder.add_table(&post).map_err(table("post"))?;
-    if let Some(gpos) = gpos {
-        builder.add_table(gpos).map_err(table("GPOS"))?;
-    }
-    if let Some(gdef) = gdef {
-        builder.add_table(gdef).map_err(table("GDEF"))?;
+    for (tag, bytes) in layout {
+        builder.add_raw(*tag, *bytes);
     }
     if let Some(kern) = kern {
         builder.add_raw(Tag::new(b"kern"), kern);

@@ -7,16 +7,19 @@
 //! `KernSplitContext`, `merge_scripts`, `split_lookups_by_script`, `assign_lookups_to_scripts`,
 //! `prune_unreferenced_lookups`). fontc follows ufo2ft's `kernFeatureWriter.py`.
 //!
-//! Differences from fontc, while FontCraft compiles no feature code (M8): there are no
-//! language systems from feature code, no substitution closure for unencoded glyphs, and no
-//! `GDEF` table, so a lookup that skips marks is flagged to ignore marks even where fontc gives it
-//! a mark filtering set of the spacing marks.
+//! The feature code's language systems and its `GSUB` closure ([`KernCode`]) come from the
+//! compiler's first pass, as in fontc. Each lookup keeps its rules in the compiler's neutral form
+//! too ([`fontcraft_fea::GlyphPair`], [`fontcraft_fea::ClassPair`]), for the feature compiler.
+//! The `GPOS` written directly ([`crate::kern_feature`]) has no `GDEF`, so there a lookup that
+//! skips marks ignores every mark; in the neutral form it gets fontc's mark filtering set of the
+//! spacing marks when the font has any.
 
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, btree_map};
 
 use read_fonts::collections::IntSet;
-use write_fonts::tables::gpos::builders::PairPosBuilder;
+use read_fonts::tables::gsub::Gsub;
+use write_fonts::tables::gpos::builders::{PairPosBuilder, ValueRecordBuilder};
 use write_fonts::tables::layout::LookupFlag;
 use write_fonts::types::{GlyphId16, Tag};
 
@@ -43,11 +46,15 @@ pub(crate) struct FeatureKey {
     pub(crate) script: Tag,
 }
 
-/// A lookup before it is written: its rules and flags.
+/// A lookup before it is written: its rules and flags, and the same rules in neutral form.
 #[derive(Debug)]
 pub(crate) struct PendingLookup {
     pub(crate) builder: PairPosBuilder,
     pub(crate) flags: LookupFlag,
+    /// The lookup skips marks (base pairs); `flags` then has `IGNORE_MARKS`.
+    pub(crate) ignore_marks: bool,
+    pub(crate) glyph_pairs: Vec<fontcraft_fea::GlyphPair>,
+    pub(crate) class_pairs: Vec<fontcraft_fea::ClassPair>,
 }
 
 /// The kern writer's output: lookups, and for each feature key the indices of its lookups.
@@ -55,6 +62,38 @@ pub(crate) struct PendingLookup {
 pub(crate) struct Kerns {
     pub(crate) lookups: Vec<PendingLookup>,
     pub(crate) features: BTreeMap<FeatureKey, Vec<usize>>,
+}
+
+/// What the kern writer reads from the feature code (fontc's first pass).
+#[derive(Default)]
+pub(crate) struct KernCode<'a> {
+    /// The languages of each script the code's `languagesystem` statements name.
+    pub(crate) languages: BTreeMap<Tag, Vec<Tag>>,
+    pub(crate) gsub: Option<Gsub<'a>>,
+}
+
+impl<'a> KernCode<'a> {
+    /// From the code's language systems, (script, language) in code order, and its `GSUB` bytes
+    /// (a table that cannot be read is left out).
+    pub(crate) fn new(language_systems: &[(Tag, Tag)], gsub: Option<&'a [u8]>) -> Self {
+        let mut languages: BTreeMap<Tag, Vec<Tag>> = BTreeMap::new();
+        for (script, lang) in language_systems {
+            languages.entry(*script).or_default().push(*lang);
+        }
+        let gsub = gsub.and_then(|bytes| read_fonts::FontRead::read(read_fonts::FontData::new(bytes)).ok());
+        Self { languages, gsub }
+    }
+}
+
+/// A value record in the compiler's neutral form.
+pub(crate) fn neutral_value(v: &ValueRecordBuilder) -> fontcraft_fea::Value {
+    let metric = |m: &Option<write_fonts::tables::layout::builders::Metric>| m.as_ref().map(|m| fontcraft_fea::Metric::fixed(m.default));
+    fontcraft_fea::Value {
+        x_placement: metric(&v.x_placement),
+        y_placement: metric(&v.y_placement),
+        x_advance: metric(&v.x_advance),
+        y_advance: metric(&v.y_advance),
+    }
 }
 
 /// What the writer left out, for the compile report.
@@ -68,8 +107,10 @@ pub(crate) struct Skipped {
 
 /// The lookups and features of `pairs` (sorted). `char_map` maps code points to glyphs;
 /// `marks` gives the glyphs of the mark class and whether they have an advance.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn finalize_kerning(
     pairs: &[KernPair],
+    code: &KernCode,
     char_map: &HashMap<u32, GlyphId16>,
     marks: HashMap<GlyphId16, MarkSpacing>,
     tags: KernTags,
@@ -80,13 +121,14 @@ pub(crate) fn finalize_kerning(
     if pairs.is_empty() {
         return Ok(Kerns::default());
     }
-    let known_scripts = guess_font_scripts(char_map);
-    let split_ctx = KernSplitContext::new(char_map, &known_scripts, marks, *limits);
+    let fea_scripts: Vec<Tag> = code.languages.keys().copied().collect();
+    let known_scripts = guess_font_scripts(char_map, &fea_scripts);
+    let split_ctx = KernSplitContext::new(char_map, &known_scripts, marks, *limits, code.gsub.as_ref());
     let lookups = split_ctx.make_lookups(pairs, budget, skipped)?;
     let (lookups_by_script, lookups) = split_lookups_by_script(lookups);
-    let mut features: BTreeMap<FeatureKey, Vec<usize>> = assign_lookups_to_scripts(lookups_by_script.clone(), KERN)
+    let mut features: BTreeMap<FeatureKey, Vec<usize>> = assign_lookups_to_scripts(lookups_by_script.clone(), KERN, &code.languages)
         .into_iter()
-        .chain(assign_lookups_to_scripts(lookups_by_script, DIST))
+        .chain(assign_lookups_to_scripts(lookups_by_script, DIST, &code.languages))
         .filter(|(key, _)| if key.feature == KERN { tags.kern } else { tags.dist })
         .collect();
     dedupe_lookups(&mut features);
@@ -142,7 +184,12 @@ fn split_lookups_by_script(lookups: BTreeMap<BTreeSet<ScriptCode>, Vec<PendingLo
 /// gets the common lookups and, for `kern`, those of the left-to-right scripts (or, when there
 /// are none, of the right-to-left ones); every script gets its own lookups and the common and
 /// inherited ones.
-fn assign_lookups_to_scripts(mut lookups_by_script: BTreeMap<ScriptCode, Vec<usize>>, current_feature: Tag) -> BTreeMap<FeatureKey, Vec<usize>> {
+fn assign_lookups_to_scripts(
+    mut lookups_by_script: BTreeMap<ScriptCode, Vec<usize>>,
+    current_feature: Tag,
+    fea_langs_by_script: &BTreeMap<Tag, Vec<Tag>>,
+) -> BTreeMap<FeatureKey, Vec<usize>> {
+    let dflt_langs = vec![DFLT_LANG];
     let dist_enabled_scripts = dist_feature_enabled_scripts();
     let is_kern_feature = current_feature == KERN;
 
@@ -171,7 +218,9 @@ fn assign_lookups_to_scripts(mut lookups_by_script: BTreeMap<ScriptCode, Vec<usi
 
     let mut features = BTreeMap::new();
     if !default_lookups.is_empty() {
-        features.insert(FeatureKey { feature: current_feature, language: DFLT_LANG, script: DFLT_SCRIPT }, default_lookups);
+        for lang in fea_langs_by_script.get(&DFLT_SCRIPT).unwrap_or(&dflt_langs) {
+            features.insert(FeatureKey { feature: current_feature, language: *lang, script: DFLT_SCRIPT }, default_lookups.clone());
+        }
     }
 
     let common_lookups = lookups_by_script.remove(&COMMON_SCRIPT);
@@ -192,12 +241,14 @@ fn assign_lookups_to_scripts(mut lookups_by_script: BTreeMap<ScriptCode, Vec<usi
         lookups.sort_unstable();
         lookups.dedup();
         for tag in script_to_ot_tags(&script) {
-            let key = FeatureKey { feature: current_feature, language: DFLT_LANG, script: tag };
-            match features.entry(key) {
-                btree_map::Entry::Vacant(entry) => {
-                    entry.insert(lookups.clone());
+            for lang in fea_langs_by_script.get(&tag).unwrap_or(&dflt_langs) {
+                let key = FeatureKey { feature: current_feature, language: *lang, script: tag };
+                match features.entry(key) {
+                    btree_map::Entry::Vacant(entry) => {
+                        entry.insert(lookups.clone());
+                    }
+                    btree_map::Entry::Occupied(entry) => entry.into_mut().extend_from_slice(&lookups),
                 }
-                btree_map::Entry::Occupied(entry) => entry.into_mut().extend_from_slice(&lookups),
             }
         }
     }
@@ -244,6 +295,26 @@ fn class_cells(builder: &PairPosBuilder, budget: &mut Budget) -> Result<usize, F
     Ok(total)
 }
 
+/// The rules of one lookup, in the table builder and in neutral form.
+#[derive(Default)]
+struct Rules {
+    builder: PairPosBuilder,
+    glyph_pairs: Vec<fontcraft_fea::GlyphPair>,
+    class_pairs: Vec<fontcraft_fea::ClassPair>,
+}
+
+impl Rules {
+    fn pair(&mut self, left: GlyphId16, value: &ValueRecordBuilder, right: GlyphId16) {
+        self.glyph_pairs.push(fontcraft_fea::GlyphPair { left, right, value: neutral_value(value) });
+        self.builder.insert_pair(left, value.clone(), right, Default::default());
+    }
+
+    fn classes(&mut self, left: IntSet<GlyphId16>, value: ValueRecordBuilder, right: IntSet<GlyphId16>) {
+        self.class_pairs.push(fontcraft_fea::ClassPair { left: left.iter().collect(), right: right.iter().collect(), value: neutral_value(&value) });
+        self.builder.insert_classes(left, value, right, Default::default());
+    }
+}
+
 /// What the lookups made so far hand the table builder.
 #[derive(Default)]
 struct Totals {
@@ -258,11 +329,12 @@ impl KernSplitContext {
         known_scripts: &HashSet<ScriptCode>,
         mark_glyphs: HashMap<GlyphId16, MarkSpacing>,
         limits: KernLimits,
+        gsub: Option<&Gsub>,
     ) -> Self {
         Self {
             mark_glyphs,
-            glyph_scripts: scripts_by_glyph(char_map, known_scripts),
-            bidi_glyphs: glyphs_by_bidi_class(char_map),
+            glyph_scripts: scripts_by_glyph(char_map, known_scripts, gsub),
+            bidi_glyphs: glyphs_by_bidi_class(char_map, gsub),
             dflt_scripts: HashSet::from([COMMON_SCRIPT, INHERITED_SCRIPT]),
             common_scripts: HashSet::from([COMMON_SCRIPT]),
             limits,
@@ -300,7 +372,7 @@ impl KernSplitContext {
         for (scripts, pairs) in kerning_per_script {
             let Some(first_script) = scripts.first() else { continue };
             let script_is_rtl = ScriptDirection::for_script(first_script) == ScriptDirection::RightToLeft;
-            let mut builder = PairPosBuilder::default();
+            let mut builder = Rules::default();
             let mut size = LookupSize::default();
             for mut pair in pairs {
                 bidi_buf.clear();
@@ -320,7 +392,7 @@ impl KernSplitContext {
             }
             // The class tables are allocated when the lookup is built: their cells are counted
             // from the builder's subtables, before that.
-            let cells = class_cells(&builder, budget)?;
+            let cells = class_cells(&builder.builder, budget)?;
             if cells > self.limits.class_cells {
                 return Err(FeatureError::TooMany { what: "kerning class cells in one lookup", limit: self.limits.class_cells });
             }
@@ -335,12 +407,12 @@ impl KernSplitContext {
         Ok(lookups_by_script)
     }
 
-    fn make_lookup(&self, builder: PairPosBuilder, ignore_marks: bool) -> PendingLookup {
+    fn make_lookup(&self, rules: Rules, ignore_marks: bool) -> PendingLookup {
         let mut flags = LookupFlag::empty();
         if ignore_marks {
             flags |= LookupFlag::IGNORE_MARKS;
         }
-        PendingLookup { builder, flags }
+        PendingLookup { builder: rules.builder, flags, ignore_marks, glyph_pairs: rules.glyph_pairs, class_pairs: rules.class_pairs }
     }
 
     /// The rules of each set of scripts, merged where the sets share a script; each list sorted.
@@ -490,7 +562,7 @@ impl KernSplitContext {
     fn add_to(
         &self,
         pair: KernPair,
-        builder: &mut PairPosBuilder,
+        builder: &mut Rules,
         size: &mut LookupSize,
         totals: &mut Totals,
         budget: &mut Budget,
@@ -509,18 +581,18 @@ impl KernSplitContext {
         match (side1, side2) {
             (KernSide::Glyph(side1), KernSide::Glyph(side2)) => {
                 add_glyph_pairs(1)?;
-                builder.insert_pair(side1, value, side2, Default::default());
+                builder.pair(side1, &value, side2);
             }
             (KernSide::Glyph(side1), KernSide::Group(side2)) => {
                 add_glyph_pairs(side2.len())?;
                 for side2 in side2.iter() {
-                    builder.insert_pair(side1, value.clone(), side2, Default::default());
+                    builder.pair(side1, &value, side2);
                 }
             }
             (KernSide::Group(side1), KernSide::Glyph(side2)) => {
                 add_glyph_pairs(side1.len())?;
                 for side1 in side1.iter() {
-                    builder.insert_pair(side1, value.clone(), side2, Default::default());
+                    builder.pair(side1, &value, side2);
                 }
             }
             (KernSide::Group(side1), KernSide::Group(side2)) => {
@@ -534,7 +606,7 @@ impl KernSplitContext {
                 if size.first_classes.len().max(size.second_classes.len()) > limits.classes_per_lookup {
                     return Err(FeatureError::TooMany { what: "kerning classes on one side of a lookup", limit: limits.classes_per_lookup });
                 }
-                builder.insert_classes(side1, value, side2, Default::default());
+                builder.classes(side1, value, side2);
             }
         }
         Ok(())

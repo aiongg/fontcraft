@@ -60,7 +60,16 @@ fn build_with(f: &Font, marks: &[(&str, MarkSpacing)], limits: KernLimits) -> Re
         .iter()
         .map(|g| KernGlyph { name: &g.name, codepoints: &g.unicodes, mark: marks.iter().find(|(m, _)| *m == g.name).map(|(_, s)| *s) })
         .collect();
-    kern_feature(&KernRequest { font: f, index: &index, master: "m01", glyphs: &glyphs, tags: KernTags::ALL, limits })
+    kern_feature(&KernRequest {
+        font: f,
+        index: &index,
+        master: "m01",
+        glyphs: &glyphs,
+        tags: KernTags::ALL,
+        limits,
+        language_systems: &[],
+        gsub: None,
+    })
 }
 
 /// The cap `result` was refused by, by its description.
@@ -245,9 +254,17 @@ fn a_font_without_pairs_gets_no_table() {
     let f = font(&[("A", Some(0x41))]);
     let index = KernIndex::new(&f);
     let glyphs: Vec<KernGlyph> = f.glyphs.iter().map(|g| KernGlyph { name: &g.name, codepoints: &[], mark: None }).collect();
-    let out =
-        kern_feature(&KernRequest { font: &f, index: &index, master: "m01", glyphs: &glyphs, tags: KernTags::ALL, limits: KernLimits::default() })
-            .unwrap();
+    let out = kern_feature(&KernRequest {
+        font: &f,
+        index: &index,
+        master: "m01",
+        glyphs: &glyphs,
+        tags: KernTags::ALL,
+        limits: KernLimits::default(),
+        language_systems: &[],
+        gsub: None,
+    })
+    .unwrap();
     assert!(out.gpos.is_none());
 }
 
@@ -273,7 +290,16 @@ fn the_feature_writer_setting_decides_which_kern_features_are_written() {
     set(&mut f, Direction::Ltr, "A", "V", -80.0);
     let index = KernIndex::new(&f);
     let glyphs: Vec<KernGlyph> = f.glyphs.iter().map(|g| KernGlyph { name: &g.name, codepoints: &g.unicodes, mark: None }).collect();
-    let request = |tags| KernRequest { font: &f, index: &index, master: "m01", glyphs: &glyphs, tags, limits: KernLimits::default() };
+    let request = |tags| KernRequest {
+        font: &f,
+        index: &index,
+        master: "m01",
+        glyphs: &glyphs,
+        tags,
+        limits: KernLimits::default(),
+        language_systems: &[],
+        gsub: None,
+    };
     assert!(kern_feature(&request(KernTags::NONE)).unwrap().gpos.is_none());
     assert!(kern_feature(&request(KernTags { kern: false, dist: true })).unwrap().gpos.is_none(), "Latin kerning goes to kern only");
     assert!(kern_feature(&request(KernTags::ALL)).unwrap().gpos.is_some());

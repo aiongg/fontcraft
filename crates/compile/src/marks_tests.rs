@@ -103,14 +103,15 @@ fn a_hand_written_mark_feature_keeps_only_the_generated_mark_feature_out() {
     let mut f = font();
     Arc::make_mut(&mut f.features).features.push(Snippet {
         name: "mark".into(),
-        code: "pos base A <anchor 300 700> mark @TOP;".into(),
+        code: "markClass acutecomb <anchor 100 500> @TOP;\npos base A <anchor 300 700> mark @TOP;".into(),
         ..Default::default()
     });
     let out = compile_ttf(&f, &Options::default()).unwrap();
+    // The code's mark lookup comes first; the generated lookups follow it, with no generated
+    // mark feature.
     let (systems, kinds) = layout(&out);
-    assert_eq!(systems, ["DFLT/dflt abvm[1] kern[0] mkmk[2]", "latn/dflt kern[0]"]);
-    assert_eq!(kinds, ["pair", "mkmk", "mkmk"]);
-    assert!(out.warnings.iter().any(|w| w.contains("hand-written mark feature")), "{:?}", out.warnings);
+    assert_eq!(systems, ["DFLT/dflt abvm[2] kern[1] mark[0] mkmk[3]", "latn/dflt kern[1]"]);
+    assert_eq!(kinds, ["base", "pair", "mkmk", "mkmk"]);
 }
 
 #[test]
@@ -119,7 +120,6 @@ fn the_language_systems_of_the_feature_code_get_the_mark_features() {
     Arc::make_mut(&mut f.features).prefixes.push(Snippet {
         name: "Languagesystems".into(),
         code: "languagesystem DFLT dflt;\n\nlanguagesystem latn dflt;\n".into(),
-        automatic: true,
         ..Default::default()
     });
     let out = compile_ttf(&f, &Options::default()).unwrap();

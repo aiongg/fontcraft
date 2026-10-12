@@ -17,6 +17,7 @@ oracle = []
 [dependencies]
 fontcraft-geom.workspace = true
 fontcraft-pathops.workspace = true
+fontcraft-tables.workspace = true
 serde.workspace = true
 skrifa.workspace = true
 toml = "1"

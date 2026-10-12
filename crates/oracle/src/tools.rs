@@ -186,13 +186,12 @@ pub struct Built {
     pub alternatives: Vec<PathBuf>,
 }
 
-/// Builds `req.source` with the reference compiler. fontc leaves the layout tables out.
+/// Builds `req.source` with the reference compiler, layout tables included.
 pub fn build(req: &Request) -> Result<Built, String> {
-    build_as(req, false)
+    build_as(req, true)
 }
 
-/// Builds `req.source` with the reference compiler, layout tables included: fontc compiles
-/// features too, for the comparison of the generated kerning. fontmake always does.
+/// Builds `req.source` with the reference compiler, layout tables included, as [`build`] does.
 pub fn build_with_features(req: &Request) -> Result<Built, String> {
     build_as(req, true)
 }
@@ -225,9 +224,6 @@ fn build_fontc(req: &Request, kind: SourceKind, source: &Path, features: bool) -
         _ => source.to_path_buf(),
     };
     let out = req.work_dir.join(format!("reference.{}", req.flavour.extension()));
-    // Layout tables are compared from M8 and FontCraft compiles no features before then: leave
-    // them out of the reference build too, so a feature file only fontc rejects does not stop the
-    // comparison of the other tables.
     let mut cmd = Command::new(req.tool);
     if !features {
         cmd.arg("--skip-features");

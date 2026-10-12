@@ -1,6 +1,7 @@
 //! The source's feature-writer setting (the `com.github.googlei18n.ufo2ft.featureWriters` key of
-//! its user data or UFO lib): which generated features run. Only the kern writer's part is read
-//! here; the other writers come with M8.
+//! its user data or UFO lib): which generated features run ([`kern_tags`] here, the mark,
+//! cursive and `GDEF` writers' in [`crate::marks::mark_tags`]) and which writers run in append
+//! mode ([`append_tags`]).
 //!
 //! Follows fontc's reading of the key (`fontir/src/ir/feature_writers.rs`, ported from fontc at
 //! commit 4504578c3f74c2739f7e55cae133bbfe773f6d8c, Apache-2.0), which mirrors ufo2ft: without
@@ -68,8 +69,7 @@ fn kern_entry(entry: &Value, warnings: &mut Vec<String>) -> Option<KernTags> {
         for (key, value) in &options.as_dict()?.entries {
             match key.as_str() {
                 "mode" => {
-                    // The mode decides how generated lookups meet feature code, which a source
-                    // whose kerning is generated here does not have.
+                    // Append mode is read by `append_tags`.
                     if !matches!(value.as_str(), Some("skip" | "append")) {
                         return None;
                     }
@@ -123,4 +123,36 @@ fn features(value: &Value) -> Option<KernTags> {
         }
     }
     Some(tags)
+}
+
+/// The generated features whose writer the setting puts in append mode (`mode = append`): their
+/// lookups go after every hand-written lookup, `# Automatic Code` markers ignored, and a feature
+/// the code declares does not keep them out (`compile.featureWriterModes`). A writer's
+/// `features` option limits its tags; the last entry of a writer decides.
+pub fn append_tags(setting: Option<&Value>) -> Vec<&'static str> {
+    let Some(entries) = setting.and_then(Value::as_array) else { return Vec::new() };
+    const KERN: &[&str] = &["kern", "dist"];
+    const MARK: &[&str] = &["mark", "mkmk", "abvm", "blwm"];
+    const CURS: &[&str] = &["curs"];
+    let mut by_writer: Vec<(&'static [&'static str], Vec<&'static str>)> = Vec::new();
+    for entry in &entries.items {
+        let Some(dict) = entry.as_dict() else { continue };
+        let all: &'static [&'static str] = match dict.get("class").and_then(Value::as_str) {
+            Some(KERN_CLASS) => KERN,
+            Some("MarkFeatureWriter" | "ContextualMarkFeatureWriter") => MARK,
+            Some("CursFeatureWriter") => CURS,
+            _ => continue,
+        };
+        let options = dict.get("options").and_then(Value::as_dict);
+        let append = options.and_then(|o| o.get("mode")).and_then(Value::as_str) == Some("append");
+        let wanted: Option<Vec<String>> = options
+            .and_then(|o| o.get("features"))
+            .and_then(Value::as_array)
+            .map(|a| a.items.iter().filter_map(|v| v.as_str().map(str::to_string)).collect());
+        let tags: Vec<&'static str> =
+            if append { all.iter().copied().filter(|t| wanted.as_ref().is_none_or(|w| w.iter().any(|x| x == t))).collect() } else { Vec::new() };
+        by_writer.retain(|(w, _)| !std::ptr::eq(*w, all));
+        by_writer.push((all, tags));
+    }
+    by_writer.into_iter().flat_map(|(_, tags)| tags).collect()
 }

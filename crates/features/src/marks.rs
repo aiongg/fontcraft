@@ -299,8 +299,7 @@ fn writer_entry(entry: &Value, warnings: &mut Vec<String>) -> Option<(WriterKind
         for (key, value) in &options.as_dict()?.entries {
             match (key.as_str(), writer) {
                 ("mode", _) => {
-                    // The mode decides how generated lookups meet feature code, which is compiled
-                    // from M8; a hand-written feature keeps its generated one out either way.
+                    // Append mode is read by `crate::append_tags`.
                     if !matches!(value.as_str(), Some("skip" | "append")) {
                         return None;
                     }

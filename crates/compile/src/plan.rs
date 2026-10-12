@@ -60,11 +60,8 @@ fn plan_stages(font: Option<&Font>, mut resolved: Resolved, flavour: Flavour, op
     let glyph_data = font.and_then(|_| crate::compile_glyph_data(options));
     let color_plan = crate::color::plan(font, &resolved, options);
     let (glyphs, _) = crate::color::append_layer_glyphs(font, &color_plan, &resolved, glyphs, &mut warnings)?;
-    let kern = match font {
-        Some(font) => crate::kern::generate(font, &resolved, &glyphs, &edits, &mut warnings),
-        None => None,
-    };
-    let layout = crate::marks::generate(font, glyph_data.as_deref(), &resolved, &glyphs, kern, &mut warnings);
+    let layout = crate::layout_tables(font, glyph_data.as_deref(), &resolved, &glyphs, &edits, options, &mut warnings)?;
+    let layout_tags: Vec<String> = layout.tables().iter().map(|(tag, _)| tag.to_string()).collect();
     let final_names = if flavour == Flavour::Cff || glyphs.len() <= crate::MAX_POST_NAMES {
         names::final_names(&resolved, &glyphs, &mut warnings)
     } else {
@@ -75,7 +72,7 @@ fn plan_stages(font: Option<&Font>, mut resolved: Resolved, flavour: Flavour, op
     Ok(Plan {
         glyph_order: glyphs.into_iter().map(|g| g.name).collect(),
         final_names,
-        tables: tables(flavour, names.vertical, layout.gpos.is_some(), layout.gdef.is_some(), &color_plan.tables()),
+        tables: tables(flavour, names.vertical, &layout_tags, &color_plan.tables()),
         postscript_name: names.name(6),
         style_name,
         warnings,
@@ -96,7 +93,7 @@ pub fn file_stem(resolved: &Resolved, options: &Options, source: &str) -> Option
 }
 
 /// The tables `build::assemble` writes for `flavour`, sorted by tag as the table directory is.
-fn tables(flavour: Flavour, vertical: bool, gpos: bool, gdef: bool, color: &[&'static str]) -> Vec<String> {
+fn tables(flavour: Flavour, vertical: bool, layout: &[String], color: &[&'static str]) -> Vec<String> {
     let mut tags: Vec<&str> = vec!["OS/2", "cmap", "head", "hhea", "hmtx", "maxp", "name", "post"];
     match flavour {
         Flavour::TrueType => tags.extend(["glyf", "loca"]),
@@ -105,12 +102,7 @@ fn tables(flavour: Flavour, vertical: bool, gpos: bool, gdef: bool, color: &[&'s
     if vertical {
         tags.extend(["vhea", "vmtx"]);
     }
-    if gpos {
-        tags.push("GPOS");
-    }
-    if gdef {
-        tags.push("GDEF");
-    }
+    tags.extend(layout.iter().map(String::as_str));
     tags.extend_from_slice(color);
     tags.sort_unstable();
     tags.into_iter().map(str::to_string).collect()

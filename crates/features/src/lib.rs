@@ -86,8 +86,8 @@ use fontcraft_spacing::kerning::KernIndex;
 pub use source_map::{EntryDiagnostic, EntryKind, EntryRange, EntryRef, OffsetMap, SourceMap};
 pub use target::{GlyphMetric, MasterValues, Target, TargetValues};
 use write_fonts::tables::gpos::Gpos;
-use write_fonts::types::GlyphId16;
-pub use writers::{FEATURE_WRITERS_KEY, KernTags, kern_tags};
+use write_fonts::types::{GlyphId16, Tag};
+pub use writers::{FEATURE_WRITERS_KEY, KernTags, append_tags, kern_tags};
 
 /// Most bytes of code one prefix, class or feature may hold.
 pub const MAX_ENTRY_BYTES: usize = 4 << 20;
@@ -192,6 +192,12 @@ pub struct KernRequest<'a> {
     /// The features the source's feature-writer setting asks for ([`kern_tags`]).
     pub tags: KernTags,
     pub limits: KernLimits,
+    /// The feature code's language systems, as (script, language) in code order
+    /// ([`fontcraft_fea::FirstPass::language_systems`]); empty without feature code.
+    pub language_systems: &'a [(Tag, Tag)],
+    /// The feature code's `GSUB` alone ([`fontcraft_fea::FirstPass::gsub`]): unencoded glyphs it
+    /// reaches take the scripts and directions of the glyphs they come from.
+    pub gsub: Option<&'a [u8]>,
 }
 
 /// The generated kerning.
@@ -229,14 +235,55 @@ impl Budget {
 
 /// The `GPOS` table of `req.master`'s kerning.
 pub fn kern_feature(req: &KernRequest) -> Result<KernFeature, FeatureError> {
+    let (kerns, warnings) = kern_rules(req)?;
+    let lookups = kerns.lookups.len();
+    let gpos = gpos::build(kerns)?;
+    Ok(KernFeature { lookups: if gpos.is_some() { lookups } else { 0 }, gpos, warnings })
+}
+
+/// `req.master`'s kerning in the feature compiler's neutral form, with the warnings: each lookup
+/// that skips marks gets a mark filtering set of the spacing marks when the font has any, as
+/// fontc writes it beside a `GDEF` table.
+pub fn kern_lookups(req: &KernRequest) -> Result<(fontcraft_fea::GeneratedLookups, Vec<String>), FeatureError> {
+    let (kerns, warnings) = kern_rules(req)?;
+    let mut spacing_marks: Vec<GlyphId16> = req
+        .glyphs
+        .iter()
+        .enumerate()
+        .filter(|(_, g)| g.mark == Some(MarkSpacing::Spacing))
+        .filter_map(|(i, _)| u16::try_from(i).ok().map(GlyphId16::new))
+        .collect();
+    spacing_marks.sort_unstable();
+    let mut out = fontcraft_fea::GeneratedLookups::default();
+    for lookup in kerns.lookups {
+        let (flags, filter_set) = match (lookup.ignore_marks, spacing_marks.is_empty()) {
+            (true, true) => (fontcraft_fea::LookupFlags::IGNORE_MARKS, None),
+            (true, false) => (0, Some(spacing_marks.clone())),
+            (false, _) => (0, None),
+        };
+        out.lookups.push(fontcraft_fea::GeneratedLookup {
+            class: String::new(),
+            flags: fontcraft_fea::LookupFlags(flags),
+            filter_set,
+            rules: fontcraft_fea::GeneratedRules::Pair { glyph_pairs: lookup.glyph_pairs, class_pairs: lookup.class_pairs },
+        });
+    }
+    for (key, indices) in kerns.features {
+        out.features.insert(fontcraft_fea::FeatureKey { feature: key.feature, script: key.script, language: key.language }, indices);
+    }
+    Ok((out, warnings))
+}
+
+/// The kern writer's lookups and features, with the warnings.
+fn kern_rules(req: &KernRequest) -> Result<(kern::Kerns, Vec<String>), FeatureError> {
     let mut budget = Budget::new(req.limits.work);
     let mut warnings = Vec::new();
     if !req.tags.any() {
-        return Ok(KernFeature { gpos: None, lookups: 0, warnings });
+        return Ok((kern::Kerns::default(), warnings));
     }
     let mut pairs = resolve::kern_pairs(req, &mut budget, &mut warnings)?;
     if pairs.is_empty() {
-        return Ok(KernFeature { gpos: None, lookups: 0, warnings });
+        return Ok((kern::Kerns::default(), warnings));
     }
     pairs.sort();
 
@@ -253,8 +300,9 @@ pub fn kern_feature(req: &KernRequest) -> Result<KernFeature, FeatureError> {
         }
     }
 
+    let code = kern::KernCode::new(req.language_systems, req.gsub);
     let mut skipped = kern::Skipped::default();
-    let kerns = kern::finalize_kerning(&pairs, &char_map, marks, req.tags, &req.limits, &mut budget, &mut skipped)?;
+    let kerns = kern::finalize_kerning(&pairs, &code, &char_map, marks, req.tags, &req.limits, &mut budget, &mut skipped)?;
     if skipped.ambiguous_direction > 0 {
         warnings.push(format!(
             "{} kerning rules were left out: their glyphs mix left-to-right and right-to-left characters",
@@ -265,9 +313,7 @@ pub fn kern_feature(req: &KernRequest) -> Result<KernFeature, FeatureError> {
         warnings
             .push(format!("{} parts of kerning rules were left out: their sides belong to scripts of opposite directions", skipped.mixed_direction));
     }
-    let lookups = kerns.lookups.len();
-    let gpos = gpos::build(kerns)?;
-    Ok(KernFeature { lookups: if gpos.is_some() { lookups } else { 0 }, gpos, warnings })
+    Ok((kerns, warnings))
 }
 
 #[cfg(test)]
