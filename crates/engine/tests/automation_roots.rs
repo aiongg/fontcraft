@@ -124,7 +124,9 @@ fn a_designspace_source_above_its_folder_is_not_written_under_roots() {
     }
     save_ufo(&base.join("masters/A.ufo"), "zz.one");
     std::fs::write(base.join("src/x.designspace"), designspace("../masters/A.ufo")).unwrap();
-    let written = |name: &str| std::fs::read_dir(base.join("masters/A.ufo/glyphs")).unwrap().flatten().any(|e| e.file_name().to_string_lossy().starts_with(name));
+    let written = |name: &str| {
+        std::fs::read_dir(base.join("masters/A.ufo/glyphs")).unwrap().flatten().any(|e| e.file_name().to_string_lossy().starts_with(name))
+    };
     let roots = AutomationRoots::new(Some(&base), Some(&base.join("out"))).unwrap().unwrap();
     let mut s = Session::new();
     confine(Some(&roots), || {
