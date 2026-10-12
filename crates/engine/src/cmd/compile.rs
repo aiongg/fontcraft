@@ -734,6 +734,9 @@ impl Stage {
         if !self.outside_allowed && self.outside(name) {
             return Err(EngineError::Io(format!("{} is outside the export destination {}", target.display(), self.root.display())));
         }
+        // The names are compared as text above; a folder link on the way can still lead out of
+        // the automation write root.
+        crate::file_access::check_write(&target).map_err(|e| EngineError::Io(format!("cannot write {}: {e}", target.display())))?;
         let key = output_key(&target);
         let earlier = self.by_output.get(&key).copied();
         if let Some((tmp, _)) = earlier.and_then(|i| self.staged.get(i)) {
@@ -917,6 +920,25 @@ mod stage_tests {
         assert_eq!(left, ["A.ttf"]);
         assert_eq!(std::fs::read(dir.join("A.ttf")).unwrap(), b"old");
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A folder link inside the destination that leads out of the automation write root is
+    /// refused, though the file's name stays inside the destination.
+    #[cfg(unix)]
+    #[test]
+    fn a_folder_link_out_of_the_write_root_is_refused() {
+        let base = std::env::temp_dir().join(format!("fontcraft-stage-link-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(base.join("out")).unwrap();
+        std::fs::create_dir_all(base.join("outside")).unwrap();
+        std::os::unix::fs::symlink(base.join("outside"), base.join("out/sub")).unwrap();
+        let roots = crate::file_access::AutomationRoots::new(None, Some(&base.join("out"))).unwrap().unwrap();
+        let mut stage = Stage::new(base.join("out"), false, false);
+        let put = crate::file_access::confine(Some(&roots), || stage.put("sub/B.ttf", b"new", &mut Vec::new()));
+        assert!(put.is_err_and(|e| e.to_string().contains("outside the write root")));
+        drop(stage);
+        assert_eq!(std::fs::read_dir(base.join("outside")).unwrap().count(), 0, "nothing was written through the link");
+        std::fs::remove_dir_all(&base).unwrap();
     }
 
     /// Stages committed together are undone together: a move that fails in the second stage takes

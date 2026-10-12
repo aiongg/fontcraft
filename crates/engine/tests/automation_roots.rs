@@ -165,3 +165,29 @@ fn a_linked_designspace_reads_no_ufo_outside_the_read_root() {
     assert!(!built.to_string().contains("outside the read root"), "{built}");
     let _ = std::fs::remove_dir_all(base);
 }
+
+#[cfg(unix)]
+#[test]
+fn a_link_inside_a_ufo_does_not_lead_a_save_out_of_the_write_root() {
+    let base = std::env::temp_dir().join(format!("fontcraft-automation-ufolink-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    for d in ["out", "outside"] {
+        std::fs::create_dir_all(base.join(d)).unwrap();
+    }
+    let ufo = base.join("out/A.ufo");
+    save_ufo(&ufo, "zz.one");
+    let roots = AutomationRoots::new(Some(&base), Some(&base.join("out"))).unwrap().unwrap();
+    let mut s = Session::new();
+    confine(Some(&roots), || {
+        run(&mut s, "file.open", json!({"path": ufo}));
+        run(&mut s, "glyph.newGlyph", json!({"name": "zz.two"}));
+        // The layer folder becomes a link out of the write root after the UFO was read.
+        std::fs::rename(ufo.join("glyphs"), base.join("outside/glyphs")).unwrap();
+        std::os::unix::fs::symlink(base.join("outside/glyphs"), ufo.join("glyphs")).unwrap();
+        let e = refused(&mut s, "file.save", json!({"force": true}));
+        assert!(e.contains("outside the write root"), "{e}");
+    });
+    let names: Vec<_> = std::fs::read_dir(base.join("outside/glyphs")).unwrap().flatten().map(|e| e.file_name()).collect();
+    assert!(!names.iter().any(|n| n.to_string_lossy().starts_with("zz.two")), "{names:?}");
+    let _ = std::fs::remove_dir_all(base);
+}
