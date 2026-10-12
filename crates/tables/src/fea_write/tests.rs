@@ -94,8 +94,8 @@ fn gpos_font() -> SfntFont {
             wl::ClassDef::format_2(vec![wl::ClassRangeRecord::new(g(4), g(4), 1)]),
             vec![
                 wpos::Class1Record::new(vec![
-                    wpos::Class2Record::new(wpos::ValueRecord::new(), wpos::ValueRecord::new()),
-                    wpos::Class2Record::new(wpos::ValueRecord::new(), wpos::ValueRecord::new()),
+                    wpos::Class2Record::new(wpos::ValueRecord::new().with_x_advance(0), wpos::ValueRecord::new()),
+                    wpos::Class2Record::new(wpos::ValueRecord::new().with_x_advance(0), wpos::ValueRecord::new()),
                 ]),
                 wpos::Class1Record::new(vec![
                     wpos::Class2Record::new(wpos::ValueRecord::new().with_x_advance(0), wpos::ValueRecord::new()),
@@ -207,8 +207,10 @@ fn layout_decompile_features_writes_positioning_language_systems_and_gdef() {
 #[test]
 fn layout_list_features_lists_every_language_system() {
     let list = list_features(&gpos_font()).unwrap();
-    let rows: Vec<(String, String, String, Vec<u16>)> =
-        list.iter().map(|e| (tag_str(e.script), tag_str(e.language), tag_str(e.feature), e.lookups.clone())).collect();
+    let rows: Vec<(String, String, String, Vec<u16>)> = list
+        .iter()
+        .map(|e| (crate::sfnt::tag_str(e.script), crate::sfnt::tag_str(e.language), crate::sfnt::tag_str(e.feature), e.lookups.clone()))
+        .collect();
     assert_eq!(
         rows,
         vec![

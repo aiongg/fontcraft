@@ -43,7 +43,7 @@ use crate::features::{
     BASE, Budget, DFLT_LANG, GDEF, GPOS, GSUB, Provider, feature_at, glyph_count, glyph_names, language_systems, layout_lists, read_err,
 };
 use crate::limits::{MAX_FEATURE_SOURCE, MAX_LOOKUP_NESTING};
-use crate::sfnt::{SfntFont, Tag, tag_str};
+use crate::sfnt::{SfntFont, Tag};
 use crate::{Result, TablesError};
 
 /// What [`decompile`] writes.
@@ -79,7 +79,7 @@ pub fn decompile_report(font: &SfntFont, options: &DecompileOptions) -> Result<D
     let all = [GSUB, GPOS, GDEF, BASE];
     for t in &options.tables {
         if !all.contains(t) {
-            return Err(TablesError::BadOptions(format!("`{}` is not a layout table: give GSUB, GPOS, GDEF or BASE", tag_str(*t))));
+            return Err(TablesError::BadOptions(format!("`{}` is not a layout table: give GSUB, GPOS, GDEF or BASE", fea_tag(*t))));
         }
     }
     let wanted = |t: Tag| (options.tables.is_empty() || options.tables.contains(&t)) && font.get(t).is_some();
@@ -108,7 +108,7 @@ pub fn decompile_report(font: &SfntFont, options: &DecompileOptions) -> Result<D
         }
         let Some((scripts, features)) = layout_lists(&provider, table)? else { continue };
         if has_feature_variations(&provider, table) {
-            let line = w.note(&format!("the {} feature variations (alternate lookups chosen by axis location)", tag_str(table)));
+            let line = w.note(&format!("the {} feature variations (alternate lookups chosen by axis location)", fea_tag(table)));
             head.push(line);
         }
         let systems = language_systems(&scripts, &mut w.budget)?;
@@ -138,7 +138,7 @@ pub fn decompile_report(font: &SfntFont, options: &DecompileOptions) -> Result<D
                 for li in ids {
                     let Some(slot) = names.get_mut(usize::from(li)) else {
                         let line =
-                            w.note(&format!("feature '{}' names {} lookup {li}, which the lookup list does not have", tag_str(tag), tag_str(table)));
+                            w.note(&format!("feature '{}' names {} lookup {li}, which the lookup list does not have", fea_tag(tag), fea_tag(table)));
                         head.push(line);
                         continue;
                     };
@@ -153,7 +153,7 @@ pub fn decompile_report(font: &SfntFont, options: &DecompileOptions) -> Result<D
         let names: Vec<String> = names
             .into_iter()
             .enumerate()
-            .map(|(i, n)| n.unwrap_or_else(|| format!("{}_{i}", tag_str(table).trim_end())))
+            .map(|(i, n)| n.unwrap_or_else(|| format!("{}_{i}", fea_tag(table).trim_end())))
             .map(|n| w.unique_lookup_name(n))
             .collect();
         w.lookup_names.insert(table, names);
@@ -221,7 +221,7 @@ pub fn decompile_report(font: &SfntFont, options: &DecompileOptions) -> Result<D
 
     // Feature blocks.
     for (tag, systems) in &feats {
-        let name = tag_str(*tag);
+        let name = fea_tag(*tag);
         body.push(Line::text(0, format!("feature {} {{", name.trim_end())));
         if let Some(lines) = params.remove(tag) {
             body.extend(lines);
@@ -246,7 +246,7 @@ pub fn decompile_report(font: &SfntFont, options: &DecompileOptions) -> Result<D
                 scripts.entry((*nd, *script)).or_default().push((*lang, *required, ids));
             }
             for ((_, script), langs) in scripts {
-                body.push(Line::text(1, format!("script {};", tag_str(script))));
+                body.push(Line::text(1, format!("script {};", fea_tag(script))));
                 let dflt: Vec<(Tag, u16)> = langs.iter().find(|(l, _, _)| *l == DFLT_LANG).map(|(_, _, ids)| (*ids).clone()).unwrap_or_default();
                 for (lang, required, ids) in &langs {
                     let req = if *required { " required" } else { "" };
@@ -256,11 +256,11 @@ pub fn decompile_report(font: &SfntFont, options: &DecompileOptions) -> Result<D
                         }
                         (*ids).clone()
                     } else if !dflt.is_empty() && dflt.iter().all(|d| ids.contains(d)) {
-                        body.push(Line::text(2, format!("language {}{req};", tag_str(*lang))));
+                        body.push(Line::text(2, format!("language {}{req};", fea_tag(*lang))));
                         ids.iter().filter(|i| !dflt.contains(*i)).copied().collect()
                     } else {
                         let ex = if dflt.is_empty() { "" } else { " exclude_dflt" };
-                        body.push(Line::text(2, format!("language {}{ex}{req};", tag_str(*lang))));
+                        body.push(Line::text(2, format!("language {}{ex}{req};", fea_tag(*lang))));
                         (*ids).clone()
                     };
                     for (t, li) in list {
@@ -274,7 +274,7 @@ pub fn decompile_report(font: &SfntFont, options: &DecompileOptions) -> Result<D
     }
     // Features with parameters but no lookups (`size`).
     for (tag, lines) in params {
-        let name = tag_str(tag);
+        let name = fea_tag(tag);
         body.push(Line::text(0, format!("feature {} {{", name.trim_end())));
         body.extend(lines);
         body.push(Line::text(0, format!("}} {};", name.trim_end())));
@@ -283,7 +283,7 @@ pub fn decompile_report(font: &SfntFont, options: &DecompileOptions) -> Result<D
 
     let mut lines: Vec<Line> = vec![Line::text(0, "# Feature code decompiled from the font's layout tables.".into()), Line::text(0, String::new())];
     for (_, script, _, lang) in &systems_seen {
-        lines.push(Line::text(0, format!("languagesystem {} {};", tag_str(*script), tag_str(*lang))));
+        lines.push(Line::text(0, format!("languagesystem {} {};", fea_tag(*script), fea_tag(*lang))));
     }
     if !systems_seen.is_empty() {
         lines.push(Line::text(0, String::new()));
@@ -335,12 +335,12 @@ fn lookup_count(p: &Provider, table: Tag) -> Result<usize> {
     } else {
         p.gpos().and_then(|t| t.lookup_list()).map(|l| l.lookup_count())
     };
-    n.map(usize::from).map_err(|e| read_err(&format!("{} lookup list", tag_str(table)), e))
+    n.map(usize::from).map_err(|e| read_err(&format!("{} lookup list", fea_tag(table)), e))
 }
 
 /// A tag as part of a name: trailing spaces dropped, other characters a name cannot hold as `_`.
 fn sanitize_tag(tag: Tag) -> String {
-    sanitize(tag_str(tag).trim_end())
+    sanitize(fea_tag(tag).trim_end())
 }
 
 fn sanitize(s: &str) -> String {
@@ -515,7 +515,7 @@ impl<'a> Writer<'a> {
     }
 
     fn lookup_name(&self, table: Tag, li: u16) -> String {
-        self.lookup_names.get(&table).and_then(|v| v.get(usize::from(li))).cloned().unwrap_or_else(|| format!("{}_{li}", tag_str(table).trim_end()))
+        self.lookup_names.get(&table).and_then(|v| v.get(usize::from(li))).cloned().unwrap_or_else(|| format!("{}_{li}", fea_tag(table).trim_end()))
     }
 
     fn set(&mut self, mut glyphs: Vec<u16>) -> usize {
@@ -572,7 +572,7 @@ impl<'a> Writer<'a> {
     fn lookup(&mut self, p: &Provider<'a>, table: Tag, li: u16) -> Result<LookupOut> {
         let name = self.lookup_name(table, li);
         let mut out = LookupOut { table, index: li, name, extension: false, flag: None, pre: Vec::new(), body: Vec::new(), refs: BTreeSet::new() };
-        let what = format!("{} lookup {li}", tag_str(table));
+        let what = format!("{} lookup {li}", fea_tag(table));
         if table == GSUB {
             let list = p.gsub().and_then(|t| t.lookup_list()).map_err(|e| read_err("GSUB lookup list", e))?;
             let lookup: SubstitutionLookup = list.lookups().get(usize::from(li)).map_err(|e| read_err(&what, e))?;
@@ -1418,7 +1418,7 @@ impl<'a> Writer<'a> {
             };
             let tags: Vec<Tag> = tags.baseline_tags().iter().map(|t| t.get().into_bytes()).collect();
             self.budget.charge(tags.len())?;
-            let tag_text: Vec<String> = tags.iter().map(|t| tag_str(*t)).collect();
+            let tag_text: Vec<String> = tags.iter().map(|t| fea_tag(*t)).collect();
             lines.push(Line::text(1, format!("{prefix}.BaseTagList {};", tag_text.join(" "))));
             let scripts = axis.base_script_list().map_err(|e| read_err("BASE script list", e))?;
             let data = scripts.offset_data();
@@ -1437,9 +1437,9 @@ impl<'a> Writer<'a> {
                             coords.push(c.map(|c| c.coordinate()).unwrap_or(0).to_string());
                         }
                         coords.resize(tags.len(), "0".into());
-                        records.push(format!("{} {} {}", tag_str(script), tag_str(default), coords.join(" ")));
+                        records.push(format!("{} {} {}", fea_tag(script), fea_tag(default), coords.join(" ")));
                     }
-                    _ => self.unsupported.push(format!("BASE script '{}' without baseline values", tag_str(script))),
+                    _ => self.unsupported.push(format!("BASE script '{}' without baseline values", fea_tag(script))),
                 }
                 if let Some(Ok(mm)) = bs.default_min_max()
                     && let Some(line) = self.min_max(prefix, script, DFLT_LANG, &mm)
@@ -1467,11 +1467,11 @@ impl<'a> Writer<'a> {
 
     fn min_max(&mut self, prefix: &str, script: Tag, lang: Tag, mm: &read_fonts::tables::base::MinMax) -> Option<Line> {
         if mm.feat_min_max_count() > 0 {
-            self.unsupported.push(format!("BASE feature extents of '{}'", tag_str(script)));
+            self.unsupported.push(format!("BASE feature extents of '{}'", fea_tag(script)));
         }
         match (mm.min_coord(), mm.max_coord()) {
             (Some(Ok(min)), Some(Ok(max))) => {
-                Some(Line::text(1, format!("{prefix}.MinMax {} {} {}, {};", tag_str(script), tag_str(lang), min.coordinate(), max.coordinate())))
+                Some(Line::text(1, format!("{prefix}.MinMax {} {} {}, {};", fea_tag(script), fea_tag(lang), min.coordinate(), max.coordinate())))
             }
             _ => None,
         }
@@ -1492,7 +1492,7 @@ impl<'a> Writer<'a> {
                 }
                 lines
             }
-            _ => vec![self.note(&format!("the parameters of feature '{}' (names it shows in menus)", tag_str(tag)))],
+            _ => vec![self.note(&format!("the parameters of feature '{}' (names it shows in menus)", fea_tag(tag)))],
         }
     }
 
@@ -1680,6 +1680,11 @@ fn class_name(glyphs: &[u16], raw: &[String], taken: &mut Taken) -> String {
 fn is_zero(vr: &ValueRecord) -> bool {
     let devices = [vr.x_placement_device(), vr.y_placement_device(), vr.x_advance_device(), vr.y_advance_device()];
     [vr.x_placement(), vr.y_placement(), vr.x_advance(), vr.y_advance()].iter().all(|v| v.unwrap_or(0) == 0) && devices.iter().all(Option::is_none)
+}
+
+/// A tag as feature code writes it: trailing spaces dropped (`TRK ` is `TRK`).
+fn fea_tag(tag: Tag) -> String {
+    crate::sfnt::tag_str(tag).trim_end().to_string()
 }
 
 #[cfg(test)]
