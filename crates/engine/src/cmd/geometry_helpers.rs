@@ -324,8 +324,14 @@ fn selection_shapes(t: &Targets, layer: &str, shapes: Vec<usize>) -> Value {
 
 // ── Add Nodes at Intersections ──────────────────────────────────────────────────────────────────
 
-/// Adds nodes where the chosen paths cross; returns the new nodes' addresses.
-fn add_intersections(shapes: &mut [Shape], chosen: Option<&BTreeSet<usize>>, step: f64) -> std::result::Result<Vec<(usize, usize)>, String> {
+/// Adds nodes where the chosen paths cross, taking the comparisons from `work`; returns the new
+/// nodes' addresses.
+fn add_intersections(
+    shapes: &mut [Shape],
+    chosen: Option<&BTreeSet<usize>>,
+    step: f64,
+    work: &mut usize,
+) -> std::result::Result<Vec<(usize, usize)>, String> {
     let mut owners = Vec::new();
     let mut pieces = Vec::new();
     for (i, path) in paths(shapes) {
@@ -337,7 +343,7 @@ fn add_intersections(shapes: &mut [Shape], chosen: Option<&BTreeSet<usize>>, ste
             pieces.push(seg.pieces);
         }
     }
-    let crossings = gh::segment_crossings(&pieces)?;
+    let crossings = gh::segment_crossings_within(&pieces, work)?;
     let mut cuts: BTreeMap<usize, BTreeMap<usize, Vec<f64>>> = BTreeMap::new();
     for ((shape, end, open), ts) in owners.into_iter().zip(crossings) {
         if open && !ts.is_empty() {
@@ -362,10 +368,12 @@ fn find_intersections(s: &mut Session, v: &Value) -> Result<Value> {
     if p.get("glyphs").is_some() {
         let sc = scope(&p, s.font()?)?;
         let mut count = 0;
+        // One budget for the whole command, however many layers it covers.
+        let mut work = gh::MAX_CROSSING_WORK;
         let out = s.edit("Add Nodes at Intersections", |font| {
             each_layer(font, &sc, p.command(), |_, layer| {
                 let shapes = layer.parts_mut(LayerSide::Foreground).shapes;
-                match add_intersections(shapes, None, step) {
+                match add_intersections(shapes, None, step, &mut work) {
                     Err(why) => Ok(Some(why)),
                     Ok(added) if added.is_empty() => Ok(Some("no paths cross".into())),
                     Ok(added) => {
@@ -387,12 +395,13 @@ fn find_intersections(s: &mut Session, v: &Value) -> Result<Value> {
     }
     let layer = t.layer_id(s.font()?)?;
     let chosen: Option<BTreeSet<usize>> = (!t.shapes.is_empty()).then(|| t.shapes.iter().copied().collect());
+    let mut work = gh::MAX_CROSSING_WORK;
     let added = s.edit("Add Nodes at Intersections", |font| {
         t.edit_layer(font, |l| {
             if t.side == LayerSide::Background && l.info.background.is_none() {
                 return Ok(Vec::new());
             }
-            add_intersections(l.parts_mut(t.side).shapes, chosen.as_ref(), step).map_err(|m| p.bad(m))
+            add_intersections(l.parts_mut(t.side).shapes, chosen.as_ref(), step, &mut work).map_err(|m| p.bad(m))
         })
     })?;
     let glyphs: Vec<&str> = if added.is_empty() { Vec::new() } else { vec![t.glyph.as_str()] };
@@ -982,6 +991,52 @@ mod tests {
         assert_eq!(r["added"], json!(0));
         let r = run(&mut s, "path.findIntersections", json!({"glyphs": ["A"]}));
         assert_eq!(r["skipped"][0]["reason"], json!("no paths cross"));
+    }
+
+    /// The comparison budget is one per command: layers that each fit it alone stop fitting
+    /// once the layers before them have used it.
+    #[test]
+    fn find_intersections_on_many_layers_shares_one_work_budget() {
+        // Nearly parallel arches: every pair's boxes overlap and each pair needs subdivision.
+        let arches: Vec<Shape> = (0..80)
+            .map(|i| {
+                let y = f64::from(i) * 0.01;
+                let node = |x: f64, y: f64, kind| Node::new(x, y, kind);
+                Shape::Path(Path::new(
+                    false,
+                    vec![
+                        node(0.0, y, NodeKind::Line),
+                        node(300.0, y + 600.0, NodeKind::OffCurve),
+                        node(700.0, y + 600.0, NodeKind::OffCurve),
+                        node(1000.0, y, NodeKind::Curve),
+                    ],
+                ))
+            })
+            .collect();
+        let mut used = gh::MAX_CROSSING_WORK;
+        add_intersections(&mut arches.clone(), None, 1.0, &mut used).unwrap();
+        let used = gh::MAX_CROSSING_WORK - used;
+        assert!(used > 0 && used < gh::MAX_CROSSING_WORK / 2, "one layer takes {used}");
+        let layers = gh::MAX_CROSSING_WORK / used + 1;
+        let names: Vec<String> = (0..layers).map(|i| format!("arches{i}")).collect();
+        let mut s = Session::with_document();
+        s.edit("fixture", |font| {
+            let id = font.default_master()?.id.clone();
+            for name in &names {
+                let mut layer = fontcraft_model::Layer::new(&id, 1000.0);
+                layer.shapes = arches.clone();
+                let mut g = fontcraft_model::Glyph::new(name);
+                g.layers.push(layer);
+                font.glyphs.push(g);
+            }
+            Ok(())
+        })
+        .unwrap();
+        let r = run(&mut s, "path.findIntersections", json!({"glyphs": names}));
+        let reasons: Vec<&str> = r["skipped"].as_array().unwrap().iter().map(|k| k["reason"].as_str().unwrap()).collect();
+        assert_eq!(reasons.len(), layers, "{r}");
+        assert_eq!(reasons.first(), Some(&"no paths cross"), "the first layer fits the budget");
+        assert!(reasons.last().unwrap().contains("work limit"), "{r}");
     }
 
     #[test]
