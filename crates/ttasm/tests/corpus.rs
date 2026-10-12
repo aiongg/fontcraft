@@ -90,10 +90,10 @@ fn glyph_programs(font: &[u8]) -> Vec<(usize, Vec<u8>)> {
         };
         let Some(at) = at else { continue };
         let Some(len) = u16_at(g, at) else { continue };
-        if let Some(program) = g.get(at + 2..at + 2 + usize::from(len)) {
-            if !program.is_empty() {
-                out.push((gid, program.to_vec()));
-            }
+        if let Some(program) = g.get(at + 2..at + 2 + usize::from(len))
+            && !program.is_empty()
+        {
+            out.push((gid, program.to_vec()));
         }
     }
     out

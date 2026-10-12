@@ -206,7 +206,7 @@ fn a_variable_font_opens_into_masters_and_intermediate_layers() {
     assert_eq!((right(&a.layers[1]), right(&a.layers[2])), (510.0, 660.0));
     let c = f.glyph("C").unwrap();
     let Some(Shape::Component(comp)) = c.layers[2].shapes.first() else { panic!("C keeps its component: {:?}", c.layers[2].shapes) };
-    assert_eq!((comp.glyph.as_str(), comp.transform.clone(), c.layers[2].width), ("A", Transform::Matrix([1.0, 0.0, 0.0, 1.0, 80.0, 0.0]), 800.0));
+    assert_eq!((comp.glyph.as_str(), comp.transform, c.layers[2].width), ("A", Transform::Matrix([1.0, 0.0, 0.0, 1.0, 80.0, 0.0]), 800.0));
 
     // The region only B uses becomes an intermediate layer of B at design 550.
     assert_eq!(a.layers.len(), 3);

@@ -153,6 +153,7 @@ mod tests {
     }
 
     /// The `gasp` records of `f` compiled at `target` as TrueType, and the warnings.
+    #[allow(clippy::type_complexity)]
     fn compiled(f: &Font, target: &Target) -> (Option<(u16, Vec<(u16, u16)>)>, Vec<String>) {
         let out = compile(f, target, Flavour::TrueType, &Options::default()).unwrap();
         let font = FontRef::new(&out.bytes).unwrap();

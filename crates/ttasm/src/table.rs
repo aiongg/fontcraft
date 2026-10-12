@@ -242,14 +242,15 @@ pub(crate) fn parse_head(code: &str) -> Result<(Head, &str), String> {
             Ok((Head::Push { words, counted: false, count: Some(usize::from(n) + 1) }, rest))
         }
         _ => {
-            if let Some(digits) = name.strip_prefix("INSTR") {
-                if !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit()) {
-                    let byte = digits.parse::<u8>().map_err(|_| format!("{name}: {digits} is not a byte"))?;
-                    if lookup(byte).is_some() || push_form(byte).is_some() {
-                        return Err(format!("{name}: byte {byte} is a named instruction; use its mnemonic"));
-                    }
-                    return no_flags(Head::Op(byte));
+            if let Some(digits) = name.strip_prefix("INSTR")
+                && !digits.is_empty()
+                && digits.chars().all(|c| c.is_ascii_digit())
+            {
+                let byte = digits.parse::<u8>().map_err(|_| format!("{name}: {digits} is not a byte"))?;
+                if lookup(byte).is_some() || push_form(byte).is_some() {
+                    return Err(format!("{name}: byte {byte} is a named instruction; use its mnemonic"));
                 }
+                return no_flags(Head::Op(byte));
             }
             let o = OPS.iter().find(|o| o.name == name).ok_or_else(|| format!("unknown instruction “{raw_name}”"))?;
             if o.bits == 0 {

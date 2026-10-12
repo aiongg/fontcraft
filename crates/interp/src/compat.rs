@@ -137,7 +137,7 @@ pub fn check_glyph(font: &Font, sources: &GlyphSources, scope: &MasterPairs) -> 
         out.ok = false;
         return out;
     };
-    let in_scope = |s: &Source| scope.masters.iter().any(|m| *m == s.master);
+    let in_scope = |s: &Source| scope.masters.contains(&s.master);
     let any_master = sources.main.iter().any(|s| s.is_master && in_scope(s));
     let groups = std::iter::once(sources.main.as_slice()).chain(sources.alternates.iter().map(|a| a.sources.as_slice()));
     for group in groups {
@@ -383,6 +383,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::type_complexity)]
     fn each_compatibility_rule_broken_once_is_reported() {
         assert_eq!(check_pair(base("black", "black")), Compat { ok: true, ..Compat::default() });
         let broken: Vec<(Box<dyn Fn(&mut Layer)>, MismatchKind)> = vec![

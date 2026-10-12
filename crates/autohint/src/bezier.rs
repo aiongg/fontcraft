@@ -43,9 +43,12 @@ fn get2<T: Copy + Default>(a: &[[T; 2]; 2], i: usize, j: usize) -> T {
     a.get(i).and_then(|row| row.get(j)).copied().unwrap_or_default()
 }
 
+/// The points and curve parameters of a bounds record's extremes.
+type Extremes<'a> = (&'a mut [[Pt; 2]; 2], &'a mut [[f64; 2]; 2]);
+
 /// `mergePt` with the record of extremes passed separately, so `b` can be one of the state's
 /// own rectangles.
-fn merge_into(b: &mut Rect, mut ext: Option<(&mut [[Pt; 2]; 2], &mut [[f64; 2]; 2])>, p: Pt, t: f64) {
+fn merge_into(b: &mut Rect, mut ext: Option<Extremes<'_>>, p: Pt, t: f64) {
     for i in 0..2 {
         for j in 0..2 {
             let (v, cur) = (coord(p, j), rect_get(b, i, j));

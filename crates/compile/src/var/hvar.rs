@@ -116,10 +116,10 @@ fn advance_store(
         .collect::<Result<Vec<_>, _>>()?;
     let map: DeltaSetIndexMap = indices.into_iter().collect();
 
-    if let Some(direct) = direct {
-        if size(&direct, table)? <= size(&store, table)? + size(&map, table)? {
-            return Ok((direct, None));
-        }
+    if let Some(direct) = direct
+        && size(&direct, table)? <= size(&store, table)? + size(&map, table)?
+    {
+        return Ok((direct, None));
     }
     Ok((store, Some(map)))
 }

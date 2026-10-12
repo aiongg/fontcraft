@@ -245,7 +245,7 @@ impl DimHinter<'_> {
         if l.bonus.min(u.bonus) > 0.0 {
             spc += 2.0;
         }
-        if self.dominant_stems().iter().any(|&dsw| dsw == loc_d) {
+        if self.dominant_stems().contains(&loc_d) {
             spc += 1.0;
         }
         dist = dist.max(2.0);

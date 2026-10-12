@@ -643,6 +643,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::type_complexity)]
     fn segments_at_one_location_merge_and_short_bends_go() {
         let mut hs = GlyphHintState::default();
         let calls: [(f64, f64, f64, Option<usize>, Option<usize>, SegType, f64, bool); 7] = [

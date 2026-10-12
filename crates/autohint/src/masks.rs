@@ -531,9 +531,10 @@ impl DimHinter<'_> {
                         Some(sidx)
                     } else if valj.val < CONFLICT_VAL_MIN && vali.val > valj.val * CONFLICT_VAL_MULT && self.ok_to_rem(segj.loc, valj.spc) {
                         Some(sjdx)
-                    } else if pe.is_line || (self.flat_quo(p0, p1, false) > 0.0 && self.ok_to_rem(segi.loc, vali.spc)) {
-                        Some(sidx)
-                    } else if prev.is_some_and(|p| diff_sign(o1 - o0, p.s.o(dim) - o0)) {
+                    } else if pe.is_line
+                        || (self.flat_quo(p0, p1, false) > 0.0 && self.ok_to_rem(segi.loc, vali.spc))
+                        || prev.is_some_and(|p| diff_sign(o1 - o0, p.s.o(dim) - o0))
+                    {
                         Some(sidx)
                     } else if next.is_some_and(|n| diff_sign(n.e.o(dim) - o1, o0 - o1)) {
                         Some(sjdx)

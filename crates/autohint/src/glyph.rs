@@ -1369,7 +1369,7 @@ mod tests {
             (1.00005, 1.0001, 1.0, 1.00005),
             (2.00015, 2.0002, 2.0, 2.00015),
             (0.12345, 0.1235, 0.1, 0.12345),
-            (-3.14159265, -3.1416, -3.1, -3.141593),
+            (-1.23456789, -1.2346, -1.2, -1.234568),
             (1e-5, 0.0, 0.0, 1e-5),
             (12.34565, 12.3456, 12.3, 12.34565),
             (2.675, 2.675, 2.7, 2.675),
@@ -1455,6 +1455,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::type_complexity)]
     fn overlap_free_outline_is_matched_and_split_as_the_original() {
         // Two overlapping rectangles and their union, a T on its side.
         let orig = glyph(&[

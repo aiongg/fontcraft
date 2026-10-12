@@ -124,10 +124,10 @@ fn flush(p: Pending, out: &mut Vec<u8>) -> Result<(), AsmError> {
                 if n == 0 || n > 8 {
                     return Err(syntax(p.line, format!("{family} carries 1 to 8 values, found {n}; use N{family} or PUSH")));
                 }
-                if let Some(c) = count {
-                    if c != n {
-                        return Err(syntax(p.line, format!("{family}'s flags say {c} values, found {n}")));
-                    }
+                if let Some(c) = count
+                    && c != n
+                {
+                    return Err(syntax(p.line, format!("{family}'s flags say {c} values, found {n}")));
                 }
                 let base = if words { PUSHW } else { PUSHB };
                 base.saturating_add(u8::try_from(n - 1).unwrap_or(0))

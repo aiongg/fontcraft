@@ -210,7 +210,7 @@ pub fn feature_variations(
             }
             conditions.push((axis_tag(axes, span.axis)?, span.min, span.max));
         }
-        conditions.sort_by(|a, b| a.0.cmp(&b.0));
+        conditions.sort_by_key(|c| c.0);
         // The payloads in order, the later one winning a glyph several substitute.
         let mut map: BTreeMap<&str, &str> = BTreeMap::new();
         for (glyph, alternate) in record.payloads.iter().flatten() {
@@ -285,7 +285,7 @@ pub fn build_gsub(variations: &[FeatureVariation], axes: &VarAxes, glyph_order: 
         let mut conditions: Vec<Condition> = Vec::with_capacity(record.region.0.len());
         let mut spans: Vec<(Tag, &AxisSpan)> =
             record.region.0.iter().map(|s| Ok((axis_tag(axes, s.axis)?, s))).collect::<Result<_, CompileError>>()?;
-        spans.sort_by(|a, b| a.0.cmp(&b.0));
+        spans.sort_by_key(|s| s.0);
         for (_, span) in spans {
             let axis = u16::try_from(span.axis).map_err(|_| table_error("too many axes for a feature variation condition"))?;
             conditions.push(ConditionFormat1::new(axis, F2Dot14::from_f64(span.min), F2Dot14::from_f64(span.max)).into());

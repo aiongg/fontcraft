@@ -326,6 +326,9 @@ fn update(a: &mut Substitutions, b: &Substitutions) {
     }
 }
 
+/// A region box as a hashable key: per axis, the axis index and the bits of its two bounds.
+type BoxKey = Vec<(usize, u64, u64)>;
+
 /// `overlayFeatureVariations`: the rules with the same substitutions merged into one rule over
 /// all their boxes, the rules with the same region merged into one rule (the earlier rule's
 /// replacement winning for a glyph both substitute), then [`overlay`].
@@ -342,7 +345,7 @@ pub fn overlay_substitutions(rules: &[OverlayRule<Substitutions>], budget: usize
 
     // Reversed, so that the earlier of two rules for one region has the last word.
     let mut by_region: Vec<(Vec<RegionBox>, Substitutions)> = Vec::new();
-    let mut index: HashMap<Vec<Vec<(usize, u64, u64)>>, usize> = HashMap::new();
+    let mut index: HashMap<Vec<BoxKey>, usize> = HashMap::new();
     for rule in merged.into_iter().rev() {
         work.charge(1usize.saturating_add(rule.boxes.len()))?;
         let mut boxes = rule.boxes.iter().map(RegionBox::canonical).collect::<Result<Vec<_>, _>>()?;

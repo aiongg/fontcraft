@@ -581,9 +581,7 @@ impl DimHinter<'_> {
             // A glyph whose shape has one contour above (or below) the others gets a bonus on
             // that contour's segments.
             self.st.bonus = 0.0;
-            if self.is_special(false) && self.rel_position(c, false) {
-                self.st.bonus = SPECIAL_CHAR_BONUS;
-            } else if self.is_special(true) && self.rel_position(c, true) {
+            if (self.is_special(false) && self.rel_position(c, false)) || (self.is_special(true) && self.rel_position(c, true)) {
                 self.st.bonus = SPECIAL_CHAR_BONUS;
             }
         }

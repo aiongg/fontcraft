@@ -358,6 +358,9 @@ fn mappings_value(axes: &[VarAxis]) -> Value {
     Value::Dict(all)
 }
 
+/// A component's base glyph name, matrix and offset.
+type PlacedComponent = (String, [f64; 4], (f64, f64));
+
 /// A glyph's `glyf` data, read once and placed at each location.
 enum TtGlyph {
     Simple {
@@ -368,7 +371,7 @@ enum TtGlyph {
     },
     /// Each component's base glyph (`None` for one placed by point matching, which the static
     /// reader leaves out), matrix and offset.
-    Composite(Vec<Option<(String, [f64; 4], (f64, f64))>>),
+    Composite(Vec<Option<PlacedComponent>>),
     Empty,
 }
 
