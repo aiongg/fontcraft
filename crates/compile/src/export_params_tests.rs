@@ -274,3 +274,23 @@ fn hostile_and_unknown_entries_are_reported_and_the_font_is_still_written() {
     assert!(out.warnings.iter().any(|w| w.contains("unknown query keys") && w.contains("weight")), "{:?}", out.warnings);
     assert!(out.warnings.iter().any(|w| w.contains("colorIndex=2")), "{:?}", out.warnings);
 }
+
+#[test]
+fn pattern_lines_times_glyphs_are_capped_and_the_cap_is_reported() {
+    let mut f = font();
+    for i in 0..2_000 {
+        f.add_glyph(&format!("g{i:04}"), vec![], 500.0).unwrap();
+    }
+    let mut lines = vec!["B.al*".to_string()];
+    lines.extend((1..fontcraft_fontinfo::MAX_GLYPHSET_LINES).map(|i| format!("zz{i}*")));
+    let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+    set(&mut f, "Remove Glyphs", list(&refs));
+    let id = f.masters[0].id.clone();
+    let mut resolved = f.resolve(&fontcraft_model::Target::Master(id)).unwrap();
+    let mut warnings = Vec::new();
+    let started = std::time::Instant::now();
+    let edits = super::apply(Some(&f), &mut resolved, &mut warnings).unwrap();
+    assert!(started.elapsed() < std::time::Duration::from_secs(20), "took {:?}", started.elapsed());
+    assert!(edits.removed.contains("B.alt"), "the lines within the cap are applied");
+    assert!(warnings.iter().any(|w| w.contains("limit of") && w.contains("Remove Glyphs")), "{warnings:?}");
+}

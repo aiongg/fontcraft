@@ -24,7 +24,8 @@
 //! which the kerning writers read so that pairs follow renamed glyphs and leave removed ones out.
 //!
 //! Values that cannot be used are reported as warnings and skipped; the values were checked when
-//! a command set them, but a file may hold anything. The engine's stage (Filter, PreFilter, Scale
+//! a command set them, but a file may hold anything. A list's name patterns and queries are tested
+//! against every glyph, at most [`MAX_PATTERN_TESTS`] times per list. The engine's stage (Filter, PreFilter, Scale
 //! to UPM, linked sources, Export Folder) runs before resolving, in `engine/src/export_steps.rs`.
 //!
 //! Rows: `Export Glyphs`, `Keep Glyphs`, `Remove Glyphs`, `Rename Glyphs`, `Reencode Glyphs`,
@@ -51,6 +52,11 @@ const ALWAYS_KEPT: [&str; 2] = [".notdef", "space"];
 
 /// Most names one warning lists.
 const MAX_NAMED: usize = 10;
+
+/// Most pattern and query tests one list makes: its non-exact lines times the glyphs. Exact names
+/// are looked up, so they do not count. Past the cap, the lines that fit are used and the rest are
+/// skipped with a warning.
+pub const MAX_PATTERN_TESTS: usize = 4_000_000;
 
 /// What the export parameters changed in the resolved glyph set.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -111,7 +117,7 @@ pub fn apply(font: Option<&Font>, resolved: &mut Resolved, warnings: &mut Vec<St
     }
 
     if let Some(list) = &lists.export {
-        let matcher = Matcher::new(list, EXPORT_GLYPHS, warnings);
+        let matcher = Matcher::new(list, EXPORT_GLYPHS, resolved.glyphs.len(), warnings);
         let hits = matcher.hits(&ctx, &resolved.glyphs, &sources);
         for (g, hit) in resolved.glyphs.iter_mut().zip(hits) {
             g.export |= hit;
@@ -122,7 +128,7 @@ pub fn apply(font: Option<&Font>, resolved: &mut Resolved, warnings: &mut Vec<St
         warnings.push(format!("`{KEEP_GLYPHS}` and `{REMOVE_GLYPHS}` are both set: `{KEEP_GLYPHS}` was applied first, then `{REMOVE_GLYPHS}`"));
     }
     if let Some(list) = &lists.keep {
-        let matcher = Matcher::new(list, KEEP_GLYPHS, warnings);
+        let matcher = Matcher::new(list, KEEP_GLYPHS, resolved.glyphs.len(), warnings);
         let hits = matcher.hits(&ctx, &resolved.glyphs, &sources);
         for ((g, hit), source) in resolved.glyphs.iter_mut().zip(hits).zip(&sources) {
             if g.export && !hit && !ALWAYS_KEPT.contains(&g.name.as_str()) {
@@ -135,7 +141,7 @@ pub fn apply(font: Option<&Font>, resolved: &mut Resolved, warnings: &mut Vec<St
         let drops_unexported = list.patterns.iter().any(|p| matches!(p.entry(), Entry::Flag(FlagKey::Export, false)));
         let unexported: HashSet<String> =
             if drops_unexported { resolved.glyphs.iter().filter(|g| !g.export).map(|g| g.name.clone()).collect() } else { HashSet::new() };
-        let matcher = Matcher::new(list, REMOVE_GLYPHS, warnings);
+        let matcher = Matcher::new(list, REMOVE_GLYPHS, resolved.glyphs.len(), warnings);
         let hits = matcher.hits(&ctx, &resolved.glyphs, &sources);
         for ((g, hit), source) in resolved.glyphs.iter_mut().zip(hits).zip(&sources) {
             if hit && g.export {
@@ -330,7 +336,7 @@ struct Matcher<'a> {
 }
 
 impl<'a> Matcher<'a> {
-    fn new(list: &'a GlyphList, param: &str, warnings: &mut Vec<String>) -> Self {
+    fn new(list: &'a GlyphList, param: &str, glyphs: usize, warnings: &mut Vec<String>) -> Self {
         let mut names = HashSet::new();
         let mut others = Vec::new();
         let mut unknown: Vec<&str> = Vec::new();
@@ -354,6 +360,16 @@ impl<'a> Matcher<'a> {
                 "`{param}`: removing the shapes of one palette colour is not available yet, so these lines were skipped: {}",
                 listed(&colors)
             ));
+        }
+        let fit = MAX_PATTERN_TESTS.checked_div(glyphs).unwrap_or(usize::MAX);
+        if others.len() > fit {
+            let skipped: Vec<&str> = others.get(fit..).unwrap_or_default().iter().map(|p| p.text()).collect();
+            warnings.push(format!(
+                "`{param}`: {} patterns and queries on {glyphs} glyphs pass the limit of {MAX_PATTERN_TESTS} tests, so the first {fit} were used and these skipped: {}",
+                others.len(),
+                listed(&skipped)
+            ));
+            others.truncate(fit);
         }
         Self { names, others }
     }
