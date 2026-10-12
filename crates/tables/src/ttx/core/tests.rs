@@ -6,7 +6,10 @@
 //! out (they hold no data, and `ttx` puts tracebacks in some).
 
 use crate::sfnt::{Flavour, SfntFont};
-use crate::ttx::{DumpFormat, DumpOptions, dump, dump_split, fixed_to_str, num2binary, py_float, tag_to_identifier, tag_to_xml};
+use std::time::{Duration, Instant};
+
+use crate::TablesError;
+use crate::ttx::{DumpFormat, DumpOptions, dump, dump_split, dump_within, fixed_to_str, num2binary, py_float, tag_to_identifier, tag_to_xml};
 
 /// Big-endian table builder.
 #[derive(Default)]
@@ -162,6 +165,91 @@ fn numbers_are_written_as_fonttools_writes_them() {
     assert_eq!(tag_to_xml(*b"OS/2"), "OS_2");
     assert_eq!(tag_to_identifier(*b"glyf"), "_g_l_y_f");
     assert_eq!(tag_to_identifier(*b"OS/2"), "O_S_2f_2");
+}
+
+/// A font of `head`, `maxp`, long `loca` and `glyf` holding `glyphs`.
+fn glyf_font(glyphs: &[Vec<u8>]) -> SfntFont {
+    let mut font = SfntFont::new(Flavour::TrueType);
+    let mut head = vec![0u8; 54];
+    head[50..52].copy_from_slice(&1i16.to_be_bytes());
+    font.insert(*b"head", head);
+    let mut maxp = Be::default();
+    maxp.u32s(&[0x5000]);
+    maxp.u16s(&[glyphs.len() as u16]);
+    font.insert(*b"maxp", maxp.0);
+    let (mut glyf, mut loca) = (Vec::new(), Be::default());
+    for g in glyphs {
+        loca.u32s(&[glyf.len() as u32]);
+        glyf.extend_from_slice(g);
+    }
+    loca.u32s(&[glyf.len() as u32]);
+    font.insert(*b"loca", loca.0);
+    font.insert(*b"glyf", glyf);
+    font
+}
+
+/// A simple glyph whose contours end at `ends`, over 65,535 on-curve points at the origin
+/// (flags repeated in runs of 256, no coordinate bytes).
+fn many_point_glyph(ends: &[u16]) -> Vec<u8> {
+    let mut g = Be::default();
+    g.i16s(&[ends.len() as i16, 0, 0, 0, 0]);
+    g.u16s(ends);
+    g.u16s(&[0]);
+    for _ in 0..255 {
+        g.u8s(&[0x39, 255]);
+    }
+    g.u8s(&[0x39, 254]);
+    g.0
+}
+
+#[test]
+fn decreasing_contour_ends_are_refused_at_once() {
+    // Ends alternating 65,534 and 0 would repeat the 65,535 points in every other contour:
+    // about a billion points.
+    let ends: Vec<u16> = (0..32_767).map(|i| if i % 2 == 0 { 65_534 } else { 0 }).collect();
+    let font = glyf_font(&[many_point_glyph(&ends)]);
+    let only = DumpOptions { tables: vec![*b"glyf"], ..DumpOptions::default() };
+    let started = Instant::now();
+    let text = dump(&font, &only).unwrap();
+    assert!(text.contains("ERROR=\"decompilation error\"") && text.contains("decrease"), "{}", text.chars().take(2000).collect::<String>());
+    assert!(dump(&font, &DumpOptions { strict: true, ..only.clone() }).is_err());
+    assert!(started.elapsed() < Duration::from_secs(5));
+}
+
+#[test]
+fn a_dump_past_its_budget_stops_with_an_error() {
+    // 1,000 glyphs of 65,535 points each: about two gigabytes of text.
+    let font = glyf_font(&vec![many_point_glyph(&[65_534]); 1000]);
+    let only = DumpOptions { tables: vec![*b"glyf"], ..DumpOptions::default() };
+    let json = DumpOptions { format: DumpFormat::Json, ..only.clone() };
+    let started = Instant::now();
+    assert!(matches!(dump_within(&font, &only, 1 << 20), Err(TablesError::TooLarge { .. })));
+    assert!(matches!(dump_within(&font, &json, 1 << 20), Err(TablesError::TooLarge { .. })), "the JSON tree counts too");
+    assert!(started.elapsed() < Duration::from_secs(5));
+    let one = glyf_font(&[many_point_glyph(&[65_534])]);
+    let text = dump_within(&one, &only, 16 << 20).unwrap();
+    assert_eq!(text.matches("<pt ").count(), 65_535, "within the budget the glyph is written whole");
+}
+
+#[test]
+fn cmap_records_sharing_a_subtable_count_toward_one_total() {
+    // 1,000 records share one format 12 subtable of 1,048,576 code points.
+    let records = 1000u32;
+    let mut t = Be::default();
+    t.u16s(&[0, records as u16]);
+    for _ in 0..records {
+        t.u16s(&[3, 10]);
+        t.u32s(&[4 + 8 * records]);
+    }
+    t.u16s(&[12, 0]);
+    t.u32s(&[28, 0, 1, 0x1_0000, 0x10_FFFF, 1]);
+    let mut font = glyf_font(&[]);
+    font.insert(*b"cmap", t.0);
+    let only = DumpOptions { tables: vec![*b"cmap"], ..DumpOptions::default() };
+    let text = dump(&font, &only).unwrap();
+    assert!(text.contains("<cmap ERROR=\"decompilation error\""), "{}", text.chars().take(2000).collect::<String>());
+    let strict = dump(&font, &DumpOptions { strict: true, ..only });
+    assert!(strict.is_err_and(|e| e.to_string().contains("'cmap' mappings")));
 }
 
 mod fonts {

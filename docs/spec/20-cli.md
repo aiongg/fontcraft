@@ -1431,6 +1431,13 @@ Engine command: `woff.decompress`.
 | ttLib.woff2 | `-v / --verbose / -q / --quiet` | -v / -q |  |
 | pyftsubset | `--flavor none` | subset --container plain |  |
 
+A WOFF2 collection unwraps to a collection whose `head` tables keep bit 11 of `flags`, which the
+encoder sets, and the `checkSumAdjustment` they had before. The directory checksums match those
+bytes, so the `head` checksums differ from the collection that was compressed, and each
+`checkSumAdjustment` no longer balances its member. A single font's adjustment is recomputed; a
+collection's is kept as given, as the AFDKO collection tools keep it. Not yet checked against a
+reference decoder.
+
 ### `diff`
 
 Compares two fonts table by table and says which tables differ and how: presence, byte equality, the first differing offset, a hex diff, or a text diff of the decoded tables. Normalisation modes hide differences that do not change behaviour, for comparing two versions of a font or the output of two compilers. A and B may also be two folders, or a font and a folder, in which case fonts with the same file name are paired.

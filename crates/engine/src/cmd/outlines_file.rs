@@ -3,10 +3,12 @@
 //! Each package fills its own function below, so packages that share this module do not edit
 //! the same lines.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
 
+use super::collection::resolved;
 use super::file_io::{self, InputKind, OutputRequest};
 use super::{CommandSpec, always, cmd};
 use crate::params::Params;
@@ -151,6 +153,26 @@ fn decompose(_: &mut Session, v: &Value) -> Result<Value> {
     let mut done = Vec::with_capacity(inputs.len());
     for input in &inputs {
         done.push(prepare(&p, Path::new(input), &o)?);
+    }
+    // Two inputs written to one file, or an output that replaces another input, would lose a
+    // result: refused before anything is written.
+    let mut sources: HashMap<PathBuf, usize> = HashMap::with_capacity(inputs.len());
+    for (i, input) in inputs.iter().enumerate() {
+        sources.entry(resolved(Path::new(input))).or_insert(i);
+    }
+    let mut targets: HashMap<PathBuf, usize> = HashMap::with_capacity(done.len());
+    for (i, d) in done.iter().enumerate() {
+        let target = resolved(&d.output);
+        let name = |k: usize| inputs.get(k).copied().unwrap_or_default();
+        if let Some(&other) = targets.get(&target) {
+            return Err(p.bad(format!("{} and {} would both be written to {}", name(other), name(i), d.output.display())));
+        }
+        if let Some(&other) = sources.get(&target)
+            && resolved(&d.input) != target
+        {
+            return Err(p.bad(format!("the output of {} would replace the input {}", name(i), name(other))));
+        }
+        targets.insert(target, i);
     }
     let mut results = Vec::with_capacity(done.len());
     for d in done {

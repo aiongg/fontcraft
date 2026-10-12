@@ -9,14 +9,14 @@
 //! tags first appear (a tag new to a later font goes in at that font's table position), each
 //! group holding the distinct versions of its table in the order they were met. Table bytes are
 //! kept as given, `head.checkSumAdjustment` included; checksums are computed. [`unpack`] gives
-//! each member with its own copy of every table it uses.
+//! each member with its own copy of every table it uses, within [`MAX_UNPACKED`] in all.
 
 use std::collections::HashMap;
 use std::hash::BuildHasher;
 
 use fontcraft_container::sfnt as csfnt;
 
-use crate::limits::MAX_COLLECTION_FONTS;
+use crate::limits::{MAX_COLLECTION_FONTS, MAX_UNPACKED};
 use crate::sfnt::{Flavour, SfntFont, Tag};
 use crate::{Result, TablesError};
 
@@ -156,6 +156,14 @@ pub fn unpack(bytes: &[u8]) -> Result<Vec<SfntFont>> {
     let count = crate::sfnt::face_count(bytes)?;
     if bytes.get(..4) == Some(b"ttcf".as_slice()) && count == 0 {
         return Err(TablesError::invalid("the collection holds no fonts"));
+    }
+    // Members share tables, so the copies are counted from the directories before any is made.
+    let mut total = 0usize;
+    for face in 0..count {
+        total = total.saturating_add(crate::sfnt::tables_size(bytes, face)?);
+        if total > MAX_UNPACKED {
+            return Err(TablesError::TooLarge { what: "the total size of the unpacked fonts", limit: MAX_UNPACKED });
+        }
     }
     (0..count).map(|face| crate::sfnt::read(bytes, face)).collect()
 }
@@ -346,5 +354,26 @@ Font 1: FontBold.ttf
         huge[8..12].copy_from_slice(&u32::MAX.to_be_bytes());
         assert!(list(&huge).is_err() && unpack(&huge).is_err(), "a font count past the limit is refused before anything is read");
         assert_eq!(postscript_name(&[0, 0, 0, 9]), None);
+    }
+
+    #[test]
+    fn collection_unpack_refuses_shared_tables_past_the_total_limit() {
+        // Five members share one directory of 250 tables over the same MiB: 250 MiB each is
+        // within a font's limit, 1,250 MiB together is not.
+        let (members, count, size) = (5usize, 250usize, 1usize << 20);
+        let dir = 12 + 4 * members;
+        let data_at = dir + 12 + 16 * count;
+        let mut ttc = b"ttcf".to_vec();
+        ttc.extend_from_slice(&0x0001_0000u32.to_be_bytes());
+        ttc.extend_from_slice(&(members as u32).to_be_bytes());
+        for _ in 0..members {
+            ttc.extend_from_slice(&(dir as u32).to_be_bytes());
+        }
+        ttc.extend_from_slice(&crate::tests::overlapping_directory(count, data_at, size));
+        ttc.resize(data_at + size, 7);
+        let started = std::time::Instant::now();
+        assert!(matches!(unpack(&ttc), Err(TablesError::TooLarge { limit: MAX_UNPACKED, .. })));
+        assert!(started.elapsed() < std::time::Duration::from_secs(1), "refused before any table is copied");
+        assert_eq!(list(&ttc).unwrap().len(), members, "listing copies nothing and still works");
     }
 }

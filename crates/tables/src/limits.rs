@@ -7,6 +7,9 @@ pub const MAX_SFNT: usize = fontcraft_container::MAX_SFNT;
 pub const MAX_TABLES: usize = fontcraft_container::MAX_TABLES;
 /// Most fonts in one collection.
 pub const MAX_COLLECTION_FONTS: usize = 256;
+/// Largest summed size of the fonts a collection unpacks to, in bytes. Members share tables, so
+/// the copies can outgrow the collection: four times [`MAX_SFNT`].
+pub const MAX_UNPACKED: usize = 4 * MAX_SFNT;
 /// Most fonts merged into one.
 pub const MAX_MERGE_FONTS: usize = 64;
 /// Most fonts treated as one family.
@@ -18,6 +21,12 @@ pub const MAX_TTX_BYTES: usize = 256 << 20;
 pub const MAX_TTX_DEPTH: usize = 64;
 /// Most elements in one TTX input.
 pub const MAX_TTX_ELEMENTS: usize = 50_000_000;
+/// Largest text dump (TTX or JSON) written for one call, in bytes: the text, plus an estimate
+/// of the element tree the JSON form is built from.
+pub const MAX_TTX_OUTPUT: usize = 1 << 30;
+/// Most `cmap` mappings a text dump reads, summed over every subtable record (a subtable that
+/// several records share counts once per record).
+pub const MAX_TTX_CMAP_ENTRIES: usize = 1 << 23;
 
 /// Most glyphs in a glyph list, rename map or GOADB.
 pub const MAX_GLYPHS: usize = fontcraft_model::MAX_GLYPHS;

@@ -94,6 +94,15 @@ fn outlines_direction_extremes_round_and_decompose() {
     assert!(dir.join("dec").join("in.ttf").exists());
 
     assert!(session.execute("outlines.decompose", &json!({"inputs": [binary, binary], "output": dir.join("x.ttf")})).is_err());
+    // Two inputs that would be written to one file are refused before anything is written.
+    let other = dir.join("other");
+    std::fs::create_dir_all(&other).unwrap();
+    std::fs::copy(&binary, other.join("in.ttf")).unwrap();
+    let clash = dir.join("clash");
+    std::fs::create_dir_all(&clash).unwrap();
+    assert!(session.execute("outlines.decompose", &json!({"inputs": [binary, other.join("in.ttf")], "outputDir": clash})).is_err());
+    assert!(!clash.join("in.ttf").exists(), "nothing is written");
+    assert!(session.execute("outlines.decompose", &json!({"inputs": [binary, binary], "inPlace": true})).is_err(), "the same input twice");
     assert!(session.execute("outlines.roundCoordinates", &json!({"input": binary, "output": dir.join("l.ttf"), "layer": "public.default"})).is_err());
     assert!(session.execute("outlines.roundCoordinates", &json!({"input": dir.join("missing.ttf"), "output": dir.join("m.ttf")})).is_err());
     let _ = std::fs::remove_dir_all(&dir);

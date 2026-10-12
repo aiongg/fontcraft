@@ -39,3 +39,34 @@ fn hostile_directories_are_refused() {
     assert!(read(&bytes[..6], 0).is_err(), "a cut directory");
     assert!(read(&bytes, 1).is_err(), "a face that does not exist");
 }
+
+/// A table directory of `count` tables that all point at the same `size` bytes at `data_at`.
+pub(crate) fn overlapping_directory(count: usize, data_at: usize, size: usize) -> Vec<u8> {
+    let mut d = Vec::with_capacity(12 + 16 * count);
+    d.extend_from_slice(&[0, 1, 0, 0]);
+    d.extend_from_slice(&(count as u16).to_be_bytes());
+    d.extend_from_slice(&[0; 6]);
+    for i in 0..count {
+        d.extend_from_slice(&[b'a' + (i / 26 % 26) as u8, b'a' + (i % 26) as u8, b'0' + (i / 676) as u8, b' ']);
+        d.extend_from_slice(&[0; 4]);
+        d.extend_from_slice(&(data_at as u32).to_be_bytes());
+        d.extend_from_slice(&(size as u32).to_be_bytes());
+    }
+    d
+}
+
+#[test]
+fn overlapping_tables_past_the_size_limit_are_refused_before_copying() {
+    // 300 tables over the same MiB would copy 300 MiB.
+    let (count, size) = (300, 1 << 20);
+    let data_at = 12 + 16 * count;
+    let mut bytes = overlapping_directory(count, data_at, size);
+    bytes.resize(data_at + size, 7);
+    let started = std::time::Instant::now();
+    assert!(matches!(read(&bytes, 0), Err(crate::TablesError::TooLarge { .. })));
+    assert!(started.elapsed() < std::time::Duration::from_secs(1));
+    // Within the limit the same layout reads.
+    let mut small = overlapping_directory(3, 12 + 16 * 3, 64);
+    small.resize(12 + 16 * 3 + 64, 7);
+    assert_eq!(read(&small, 0).unwrap().tables.len(), 3);
+}

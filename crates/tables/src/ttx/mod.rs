@@ -25,6 +25,10 @@
 //! names from [`XmlWriter::glyph_order`] and format numbers with [`fixed_to_str`],
 //! [`py_float`], [`num2binary`] and [`py_hex`], so every module writes them as `ttx` does.
 //!
+//! A dump stops with an error past [`MAX_TTX_OUTPUT`]: every writer made from one dump charges
+//! the same budget, and once it is spent the writer drops what it is given. Loops over counts
+//! read from the font check [`XmlWriter::check`] as they go.
+//!
 //! The JSON form carries the same element tree (comments left out): each element is an object
 //! `{"name", "attributes", "text", "children"}`, with empty members left out. The hex form lists
 //! each table as offset, bytes and ASCII.
@@ -47,8 +51,10 @@ pub mod read_otdata;
 pub mod read_var;
 pub mod var;
 
+use std::cell::Cell;
 use std::rc::Rc;
 
+use crate::limits::MAX_TTX_OUTPUT;
 use crate::sfnt::{Flavour, SfntFont, Tag};
 use crate::{Result, TablesError};
 
@@ -87,19 +93,28 @@ pub struct DumpOptions {
     pub strict: bool,
 }
 
-/// The font's tables as text.
+/// The font's tables as text, within [`MAX_TTX_OUTPUT`].
 pub fn dump(font: &SfntFont, options: &DumpOptions) -> Result<String> {
+    dump_within(font, options, MAX_TTX_OUTPUT)
+}
+
+/// [`dump`] with a budget of `limit` bytes.
+pub(crate) fn dump_within(font: &SfntFont, options: &DumpOptions, limit: usize) -> Result<String> {
     check_options(options)?;
     match options.format {
         DumpFormat::Hex => Ok(hex_dump(font, options)),
         DumpFormat::Ttx => {
             let mut w = writer_for(font, options);
+            w.limit = limit;
             write_document(font, options, &mut w)?;
+            w.check()?;
             Ok(w.finish())
         }
         DumpFormat::Json => {
             let mut w = writer_for(font, options);
+            w.limit = limit;
             write_document(font, options, &mut w)?;
+            w.check()?;
             let mut out = String::new();
             for element in w.tree() {
                 element_json(&mut out, element, 0)?;
@@ -145,9 +160,11 @@ pub fn dump_split(font: &SfntFont, options: &DumpOptions, stem: &str, ext: &str)
         part.blank();
         write_entry(font, options, &mut part, entry)?;
         part.close("ttFont");
+        part.check()?;
         files.push((name, part.finish()));
     }
     main.close("ttFont");
+    main.check()?;
     let mut out = vec![(format!("{stem}{ext}"), main.finish())];
     out.extend(files);
     Ok(out)
@@ -163,6 +180,7 @@ fn check_options(options: &DumpOptions) -> Result<()> {
 fn writer_for(font: &SfntFont, options: &DumpOptions) -> XmlWriter {
     let mut w = XmlWriter::new();
     w.disassemble = !options.no_disassemble;
+    w.tree = options.format == DumpFormat::Json;
     w.glyph_order = Some(glyph_order(font).map(Rc::new));
     w
 }
@@ -215,6 +233,7 @@ fn write_document(font: &SfntFont, options: &DumpOptions, w: &mut XmlWriter) -> 
     w.blank();
     for entry in entries(font, options) {
         write_entry(font, options, w, entry)?;
+        w.check()?;
     }
     w.close("ttFont");
     Ok(())
@@ -231,6 +250,7 @@ fn write_entry(font: &SfntFont, options: &DumpOptions, w: &mut XmlWriter, entry:
                     for (i, name) in names.iter().enumerate() {
                         w.simple("GlyphID", &[("id", &i.to_string()), ("name", name)]);
                     }
+                    w.check()?;
                 }
                 Err(e) if options.strict => return Err(e),
                 Err(e) => w.comment(&format!("The glyph order could not be read: {e}")),
@@ -250,7 +270,15 @@ fn write_table(font: &SfntFont, options: &DumpOptions, w: &mut XmlWriter, tag: T
     let element = tag_to_xml(tag);
     if !options.hex.contains(&tag) {
         let mut body = w.child_at(1);
-        match write_known(tag, data, font, &mut body) {
+        let charged = w.used.get();
+        let written = write_known(tag, data, font, &mut body);
+        // A spent budget ends the dump; it is not a fault of the table.
+        body.check()?;
+        if !matches!(written, Ok(true)) {
+            // The body is dropped: what it charged is given back.
+            w.used.set(charged);
+        }
+        match written {
             Ok(true) => {
                 w.open(&element, &[]);
                 w.append(body);
@@ -803,11 +831,27 @@ pub struct XmlWriter {
     done: Vec<Element>,
     disassemble: bool,
     glyph_order: Option<Result<Rc<Vec<String>>>>,
+    /// Whether the element tree is built (the JSON form needs it, the TTX text does not).
+    tree: bool,
+    /// Bytes of text and tree written so far, shared with the writers made by [`Self::child_at`].
+    used: Rc<Cell<usize>>,
+    /// The budget for `used`.
+    limit: usize,
 }
 
 impl Default for XmlWriter {
     fn default() -> Self {
-        Self { out: String::new(), depth: 0, open_elements: Vec::new(), done: Vec::new(), disassemble: true, glyph_order: None }
+        Self {
+            out: String::new(),
+            depth: 0,
+            open_elements: Vec::new(),
+            done: Vec::new(),
+            disassemble: true,
+            glyph_order: None,
+            tree: true,
+            used: Rc::new(Cell::new(0)),
+            limit: MAX_TTX_OUTPUT,
+        }
     }
 }
 
@@ -818,68 +862,112 @@ impl XmlWriter {
 
     /// `<name a="v" …>` and one level deeper.
     pub fn open(&mut self, name: &str, attributes: &[(&str, &str)]) {
-        self.start(name, attributes);
-        self.out.push_str(">\n");
+        let e = if self.spent() {
+            Element::default()
+        } else {
+            let before = self.out.len();
+            self.start(name, attributes);
+            self.out.push_str(">\n");
+            self.charge_text(before);
+            self.element(name, attributes)
+        };
         self.depth = self.depth.saturating_add(1);
-        self.open_elements.push(element(name, attributes));
+        self.open_elements.push(e);
     }
 
     /// `</name>` one level up.
     pub fn close(&mut self, name: &str) {
         self.depth = self.depth.saturating_sub(1);
+        let e = self.open_elements.pop();
+        if self.spent() {
+            return;
+        }
+        let before = self.out.len();
         self.indent();
         self.out.push_str("</");
         self.out.push_str(name);
         self.out.push_str(">\n");
-        if let Some(e) = self.open_elements.pop() {
+        self.charge_text(before);
+        if let Some(e) = e {
             self.attach(e);
         }
     }
 
     /// `<name a="v" …/>`.
     pub fn simple(&mut self, name: &str, attributes: &[(&str, &str)]) {
+        if self.spent() {
+            return;
+        }
+        let before = self.out.len();
         self.start(name, attributes);
         self.out.push_str("/>\n");
-        self.attach(element(name, attributes));
+        self.charge_text(before);
+        let e = self.element(name, attributes);
+        self.attach(e);
     }
 
     /// `<name a="v" …/><!-- comment -->` on one line.
     pub fn simple_comment(&mut self, name: &str, attributes: &[(&str, &str)], comment: &str) {
+        if self.spent() {
+            return;
+        }
+        let before = self.out.len();
         self.start(name, attributes);
         self.out.push_str("/>");
         self.comment_body(comment);
         self.out.push('\n');
-        self.attach(element(name, attributes));
+        self.charge_text(before);
+        let e = self.element(name, attributes);
+        self.attach(e);
     }
 
     /// A line of text at the current depth.
     pub fn text(&mut self, text: &str) {
+        if self.spent() {
+            return;
+        }
+        let before = self.out.len();
         self.indent();
         escape_into(&mut self.out, text, false);
         self.out.push('\n');
+        self.charge_text(before);
         self.add_text(text);
     }
 
     /// A line written as given, unescaped, at the current depth; `tree_text` is what the element
     /// tree holds for it.
     pub fn text_raw(&mut self, line: &str, tree_text: &str) {
+        if self.spent() {
+            return;
+        }
+        let before = self.out.len();
         self.indent();
         self.out.push_str(line);
         self.out.push('\n');
+        self.charge_text(before);
         self.add_text(tree_text);
     }
 
     /// `<!-- text -->` at the current depth; the lines after the first are indented by five
     /// more spaces.
     pub fn comment(&mut self, text: &str) {
+        if self.spent() {
+            return;
+        }
+        let before = self.out.len();
         self.indent();
         self.comment_body(text);
         self.out.push('\n');
+        self.charge_text(before);
     }
 
     /// An empty line.
     pub fn blank(&mut self) {
+        if self.spent() {
+            return;
+        }
         self.out.push('\n');
+        self.charge(1);
     }
 
     /// Bytes as hex, 16 per line in groups of four, as fontTools' `dumphex` writes them (a short
@@ -887,6 +975,9 @@ impl XmlWriter {
     pub fn hex(&mut self, data: &[u8]) {
         const DIGITS: &[u8; 16] = b"0123456789abcdef";
         for chunk in data.chunks(16) {
+            if self.spent() {
+                return;
+            }
             let mut hexline = String::with_capacity(32);
             for b in chunk {
                 hexline.push(char::from(DIGITS.get(usize::from(b >> 4)).copied().unwrap_or(b'0')));
@@ -918,6 +1009,15 @@ impl XmlWriter {
         order
     }
 
+    /// An error once the dump has passed its budget ([`MAX_TTX_OUTPUT`]); the text is incomplete
+    /// from then on.
+    pub fn check(&self) -> Result<()> {
+        if self.spent() {
+            return Err(TablesError::TooLarge { what: "the text dump", limit: self.limit });
+        }
+        Ok(())
+    }
+
     /// The text written so far.
     pub fn finish(self) -> String {
         self.out
@@ -937,12 +1037,18 @@ impl XmlWriter {
             done: Vec::new(),
             disassemble: self.disassemble,
             glyph_order: self.glyph_order.clone(),
+            tree: self.tree,
+            used: Rc::clone(&self.used),
+            limit: self.limit,
         }
     }
 
     /// Appends what `other` wrote: its text, and its finished elements as children of the
-    /// element open here.
+    /// element open here. Both charge the same budget, so nothing is charged again.
     pub(crate) fn append(&mut self, other: XmlWriter) {
+        if self.spent() {
+            return;
+        }
         self.out.push_str(&other.out);
         if self.glyph_order.is_none() {
             self.glyph_order = other.glyph_order;
@@ -954,12 +1060,46 @@ impl XmlWriter {
 
     /// A line written as given, outside any element (the XML declaration).
     pub(crate) fn line(&mut self, line: &str) {
+        if self.spent() {
+            return;
+        }
+        let before = self.out.len();
         self.indent();
         self.out.push_str(line);
         self.out.push('\n');
+        self.charge_text(before);
+    }
+
+    fn spent(&self) -> bool {
+        self.used.get() > self.limit
+    }
+
+    fn charge(&self, bytes: usize) {
+        self.used.set(self.used.get().saturating_add(bytes));
+    }
+
+    /// Charges what was written to `out` since it was `before` bytes long.
+    fn charge_text(&self, before: usize) {
+        self.charge(self.out.len().saturating_sub(before));
+    }
+
+    /// A tree element, charged at an estimate of its size; an empty one without a tree.
+    fn element(&self, name: &str, attributes: &[(&str, &str)]) -> Element {
+        if !self.tree {
+            return Element::default();
+        }
+        let pair = 2 * std::mem::size_of::<String>();
+        let size = attributes.iter().fold(std::mem::size_of::<Element>().saturating_add(name.len()), |sum, (k, v)| {
+            sum.saturating_add(pair).saturating_add(k.len()).saturating_add(v.len())
+        });
+        self.charge(size);
+        element(name, attributes)
     }
 
     fn attach(&mut self, e: Element) {
+        if !self.tree {
+            return;
+        }
         match self.open_elements.last_mut() {
             Some(parent) => parent.children.push(e),
             None => self.done.push(e),
@@ -967,6 +1107,10 @@ impl XmlWriter {
     }
 
     fn add_text(&mut self, text: &str) {
+        if !self.tree {
+            return;
+        }
+        self.charge(text.len().saturating_add(1));
         if let Some(e) = self.open_elements.last_mut() {
             if !e.text.is_empty() {
                 e.text.push('\n');

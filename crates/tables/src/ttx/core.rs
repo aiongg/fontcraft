@@ -562,8 +562,10 @@ pub(crate) fn names_from_cmap(font: &SfntFont, count: usize) -> Vec<String> {
     let Some(data) = font.get(*b"cmap") else { return order };
     let Ok((_, subtables)) = cmap::parse(data) else { return order };
     let mut lowest: Vec<Option<u32>> = vec![None; count];
+    // Records that share a subtable give the same names: each is read once.
+    let mut done: std::collections::HashSet<*const cmap::Kind> = std::collections::HashSet::new();
     for st in &subtables {
-        if !st.is_unicode() {
+        if !st.is_unicode() || !done.insert(std::rc::Rc::as_ptr(&st.kind)) {
             continue;
         }
         for &(code, gid) in st.map() {

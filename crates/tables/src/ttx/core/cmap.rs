@@ -2,6 +2,10 @@
 //! left out, a later mapping of a code point replaces an earlier one, format 4's last segment is
 //! never read, and formats fontTools does not read (8, 10 and unknown ones) are written as hex.
 
+use std::collections::HashMap;
+use std::rc::Rc;
+
+use crate::limits::MAX_TTX_CMAP_ENTRIES;
 use crate::sfnt::SfntFont;
 use crate::{Result, TablesError};
 
@@ -15,10 +19,10 @@ pub(crate) struct Subtable {
     pub platform: u16,
     pub encoding: u16,
     pub format: u16,
-    pub kind: Kind,
+    /// Records that point at the same offset share one decoded subtable.
+    pub kind: Rc<Kind>,
 }
 
-#[derive(Clone)]
 pub(crate) enum Kind {
     /// Formats 0, 2, 4 and 6: code point and glyph id, sorted by code point.
     Short { language: u32, map: Vec<(u32, u32)> },
@@ -38,14 +42,26 @@ impl Subtable {
 
     /// The code point to glyph id mappings.
     pub fn map(&self) -> &[(u32, u32)] {
-        match &self.kind {
+        match self.kind.as_ref() {
             Kind::Short { map, .. } | Kind::Long { map, .. } => map,
             _ => &[],
         }
     }
 }
 
-/// The table version and the subtables, in directory order.
+impl Kind {
+    /// How many mappings the subtable holds.
+    fn entries(&self) -> usize {
+        match self {
+            Kind::Short { map, .. } | Kind::Long { map, .. } => map.len(),
+            Kind::Uvs { entries } => entries.len(),
+            Kind::Unknown { .. } => 0,
+        }
+    }
+}
+
+/// The table version and the subtables, in directory order, within
+/// [`MAX_TTX_CMAP_ENTRIES`] mappings over all the records.
 pub(crate) fn parse(data: &[u8]) -> Result<(u16, Vec<Subtable>)> {
     if data.len() < 4 {
         return Err(TablesError::invalid("the 'cmap' table is too short"));
@@ -54,7 +70,8 @@ pub(crate) fn parse(data: &[u8]) -> Result<(u16, Vec<Subtable>)> {
     let version = r.u16()?;
     let count = usize::from(r.u16()?);
     let mut out: Vec<Subtable> = Vec::with_capacity(count);
-    let mut seen: Vec<(usize, usize)> = Vec::new();
+    let mut seen: HashMap<usize, Rc<Kind>> = HashMap::new();
+    let mut total = 0usize;
     for _ in 0..count {
         let platform = r.u16()?;
         let encoding = r.u16()?;
@@ -82,13 +99,18 @@ pub(crate) fn parse(data: &[u8]) -> Result<(u16, Vec<Subtable>)> {
             return Err(TablesError::invalid("a 'cmap' subtable is cut short"));
         }
         let body = data.get(offset..offset.saturating_add(length)).unwrap_or_default();
-        let kind = match seen.iter().find(|(o, _)| *o == offset).and_then(|(_, at)| out.get(*at)) {
-            Some(earlier) => earlier.kind.clone(),
+        let kind = match seen.get(&offset) {
+            Some(earlier) => Rc::clone(earlier),
             None => {
-                seen.push((offset, out.len()));
-                read_subtable(format, body)?
+                let kind = Rc::new(read_subtable(format, body)?);
+                seen.insert(offset, Rc::clone(&kind));
+                kind
             }
         };
+        total = total.saturating_add(kind.entries());
+        if total > MAX_TTX_CMAP_ENTRIES {
+            return Err(TablesError::TooLarge { what: "the number of 'cmap' mappings over all subtables", limit: MAX_TTX_CMAP_ENTRIES });
+        }
         out.push(Subtable { platform, encoding, format, kind });
     }
     Ok((version, out))
@@ -352,17 +374,17 @@ fn format14(body: &[u8]) -> Result<Vec<(u32, u32, Option<u32>)>> {
 
 pub(super) fn write(data: &[u8], font: &SfntFont, w: &mut XmlWriter) -> Result<()> {
     let (version, subtables) = parse(data)?;
-    let needs_names = subtables.iter().any(|s| !matches!(s.kind, Kind::Unknown { .. }));
+    let needs_names = subtables.iter().any(|s| !matches!(s.kind.as_ref(), Kind::Unknown { .. }));
     let order = if needs_names { w.glyph_order(font)? } else { std::rc::Rc::new(Vec::new()) };
     w.simple("tableVersion", &[("version", &version.to_string())]);
     for st in &subtables {
         let platform = st.platform.to_string();
         let encoding = st.encoding.to_string();
         let element = format!("cmap_format_{}", st.format);
-        match &st.kind {
+        match st.kind.as_ref() {
             Kind::Short { language, map } => {
                 w.open(&element, &[("platformID", &platform), ("platEncID", &encoding), ("language", &language.to_string())]);
-                write_map(w, map, &order);
+                write_map(w, map, &order)?;
                 w.close(&element);
             }
             Kind::Long { reserved, length, language, groups, map } => {
@@ -378,7 +400,7 @@ pub(super) fn write(data: &[u8], font: &SfntFont, w: &mut XmlWriter) -> Result<(
                         ("nGroups", &groups.to_string()),
                     ],
                 );
-                write_map(w, map, &order);
+                write_map(w, map, &order)?;
                 w.close(&element);
             }
             Kind::Uvs { entries } => {
@@ -390,6 +412,7 @@ pub(super) fn write(data: &[u8], font: &SfntFont, w: &mut XmlWriter) -> Result<(
                         Some(g) => w.simple("map", &[("uv", &uv), ("uvs", &uvs), ("name", &glyph_name(&order, *g))]),
                         None => w.simple("map", &[("uv", &uv), ("uvs", &uvs)]),
                     }
+                    w.check()?;
                 }
                 w.close(&element);
             }
@@ -403,8 +426,10 @@ pub(super) fn write(data: &[u8], font: &SfntFont, w: &mut XmlWriter) -> Result<(
     Ok(())
 }
 
-fn write_map(w: &mut XmlWriter, map: &[(u32, u32)], order: &[String]) {
+fn write_map(w: &mut XmlWriter, map: &[(u32, u32)], order: &[String]) -> Result<()> {
     for (code, gid) in map {
         w.simple("map", &[("code", &py_hex(i64::from(*code))), ("name", &glyph_name(order, *gid))]);
+        w.check()?;
     }
+    Ok(())
 }

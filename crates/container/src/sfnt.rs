@@ -173,6 +173,8 @@ pub fn assemble_collection(version: u16, members: &[Member], data: &[Table<'_>])
             return Err(Error::invalid(FORMAT, "the collection is too large"));
         }
     }
+    // Members share tables: each distinct table is summed once.
+    let checksums: Vec<u32> = data.iter().map(|t| table_checksum(t.tag, t.data)).collect();
     let mut out = Vec::with_capacity(at);
     out.extend_from_slice(&TTCF.to_be_bytes());
     out.extend_from_slice(&version.to_be_bytes());
@@ -203,11 +205,13 @@ pub fn assemble_collection(version: u16, members: &[Member], data: &[Table<'_>])
             }
         }
         for (tag, index) in records {
-            let (Some(table), Some(&offset)) = (data.get(index), offsets.get(index)) else {
+            let (Some(table), Some(&offset), Some(&sum)) = (data.get(index), offsets.get(index), checksums.get(index)) else {
                 return Err(Error::invalid(FORMAT, "a font names a table that does not exist"));
             };
+            // The `head` rule depends on the tag the member gives the table.
+            let sum = if tag == table.tag { sum } else { table_checksum(tag, table.data) };
             out.extend_from_slice(&tag);
-            out.extend_from_slice(&table_checksum(tag, table.data).to_be_bytes());
+            out.extend_from_slice(&sum.to_be_bytes());
             out.extend_from_slice(&to_u32(FORMAT, offset, "the collection")?.to_be_bytes());
             out.extend_from_slice(&to_u32(FORMAT, table.data.len(), "a table")?.to_be_bytes());
         }

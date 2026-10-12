@@ -54,6 +54,7 @@ pub(super) fn write(data: &[u8], font: &SfntFont, w: &mut XmlWriter) -> Result<(
         let Some(bytes) = glyphs.get(name.as_str()) else { continue };
         glyph(bytes, name, &order, w)?;
         w.blank();
+        w.check()?;
     }
     Ok(())
 }
@@ -89,9 +90,14 @@ fn glyph(data: &[u8], name: &str, order: &[String], w: &mut XmlWriter) -> Result
 
 fn simple(data: &[u8], contours: usize, w: &mut XmlWriter) -> Result<()> {
     let mut r = Rd::new(data);
-    let mut ends = Vec::with_capacity(contours);
+    let mut ends: Vec<usize> = Vec::with_capacity(contours);
     for _ in 0..contours {
-        ends.push(usize::from(r.u16()?));
+        let end = usize::from(r.u16()?);
+        // Decreasing end points would make later contours repeat earlier points.
+        if ends.last().is_some_and(|&last| end < last) {
+            return Err(bad("the contour end points decrease"));
+        }
+        ends.push(end);
     }
     let instruction_length = usize::try_from(r.i16()?).map_err(|_| bad("a negative instruction length"))?;
     let instructions = r.bytes(instruction_length)?;

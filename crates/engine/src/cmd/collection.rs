@@ -4,12 +4,13 @@
 //! written atomically, a refusal on the web. Every output is built in memory first; a command
 //! with several outputs checks all their paths before it writes the first.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use fontcraft_container::{Extras, woff, woff2};
 use fontcraft_tables::TablesError;
 use fontcraft_tables::collection::{self, PackOptions};
+use fontcraft_tables::limits::MAX_UNPACKED;
 use fontcraft_tables::sfnt::{self, Flavour, SfntFont, Tag, WriteOptions};
 use serde_json::{Value, json};
 
@@ -141,9 +142,14 @@ fn pack(_: &mut Session, p: &Value) -> Result<Value> {
         forced.push((sfnt::parse_tag(tag)?, index));
     }
     let mut fonts: Vec<SfntFont> = Vec::new();
+    let mut total = 0usize;
     for path in &paths {
         let input = font_input(&p, path)?;
         let members = collection::unpack(&input.bytes).map_err(|e| EngineError::Io(format!("{path}: {e}")))?;
+        total = members.iter().flat_map(|f| f.tables.values()).fold(total, |sum, t| sum.saturating_add(t.len()));
+        if total > MAX_UNPACKED {
+            return Err(p.bad(format!("the inputs' tables add up to more than {MAX_UNPACKED} bytes")));
+        }
         fonts.extend(members);
         if fonts.len() > fontcraft_tables::limits::MAX_COLLECTION_FONTS {
             return Err(p.bad(format!("the inputs hold more than {} fonts", fontcraft_tables::limits::MAX_COLLECTION_FONTS)));
@@ -160,21 +166,17 @@ fn pack(_: &mut Session, p: &Value) -> Result<Value> {
         }
     }
     let ttc = collection::pack(&fonts, &PackOptions { share_tables: share, ..PackOptions::default() })?;
-    // What sharing saved: each tag's bytes over all members, less the bytes stored.
+    // What sharing saved: for each tag, the bytes of every copy after the first.
     let mut saved: BTreeMap<String, u64> = BTreeMap::new();
-    let mut stored: BTreeMap<Tag, Vec<&[u8]>> = BTreeMap::new();
-    for font in &fonts {
-        for (tag, data) in &font.tables {
-            *saved.entry(tag_text(*tag)).or_default() += data.len() as u64;
-            let seen = stored.entry(*tag).or_default();
-            if !share || !seen.contains(&data.as_slice()) {
-                seen.push(data.as_slice());
+    if share {
+        let mut stored: HashSet<(Tag, &[u8])> = HashSet::new();
+        for font in &fonts {
+            for (tag, data) in &font.tables {
+                if !stored.insert((*tag, data.as_slice())) {
+                    let total = saved.entry(tag_text(*tag)).or_default();
+                    *total = total.saturating_add(data.len() as u64);
+                }
             }
-        }
-    }
-    for (tag, versions) in &stored {
-        if let Some(total) = saved.get_mut(&tag_text(*tag)) {
-            *total = total.saturating_sub(versions.iter().map(|v| v.len() as u64).sum());
         }
     }
     saved.retain(|_, v| *v > 0);
@@ -226,35 +228,89 @@ fn unpack(_: &mut Session, p: &Value) -> Result<Value> {
     let req = OutputRequest { output_dir: output_dir.clone(), no_clobber: p.bool_or("noClobber", false)?, ..OutputRequest::default() };
     let dir = output_dir.or_else(|| path.parent().map(Path::to_path_buf)).unwrap_or_default();
     let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| "collection".into());
+    let source = resolved(&path);
     let mut planned: Vec<(usize, PathBuf, Vec<u8>, Option<String>)> = Vec::with_capacity(chosen.len());
-    let mut names: Vec<PathBuf> = Vec::new();
+    // The targets planned so far, resolved, so two spellings of one file count as one.
+    let mut taken: HashSet<PathBuf> = HashSet::new();
     for i in chosen {
         let (Some(font), Some(member)) = (fonts.get(i), members.get(i)) else { continue };
         let ext = if font.flavour == Flavour::Cff { "otf" } else { "ttf" };
         let usable = member.postscript_name.as_deref().filter(|n| !by_index && is_file_name(n));
+        let numbered = |n: usize| dir.join(format!("{stem}-font{n}.{ext}"));
         let mut target = match (&output, usable) {
             (Some(out), _) => out.clone(),
             (None, Some(name)) => dir.join(format!("{name}.{ext}")),
-            (None, None) => dir.join(format!("{stem}-font{i}.{ext}")),
+            (None, None) => numbered(i),
         };
-        if output.is_none() && names.contains(&target) {
-            target = dir.join(format!("{stem}-font{i}.{ext}"));
+        if output.is_none() && taken.contains(&resolved(&target)) {
+            // The member's own number first, then the next one no other member has.
+            target = (0..=taken.len())
+                .map(|k| numbered(i.saturating_add(k)))
+                .find(|t| !taken.contains(&resolved(t)))
+                .ok_or_else(|| EngineError::Internal("no free name for an unpacked member".into()))?;
         }
-        if target == path {
+        let key = resolved(&target);
+        if key == source {
             return Err(p.bad(format!("member {i} would replace the collection {}", path.display())));
         }
         if req.no_clobber && target.exists() {
             return Err(EngineError::Io(format!("{} exists and noClobber is set", target.display())));
         }
-        names.push(target.clone());
+        taken.insert(key);
         planned.push((i, target, sfnt::write(font, &WriteOptions::default())?, member.postscript_name.clone()));
     }
-    let mut outputs = Vec::with_capacity(planned.len());
-    for (face, target, bytes, name) in planned {
-        file_io::write_output(&target, &bytes, &req)?;
-        outputs.push(json!({ "face": face, "path": target.to_string_lossy(), "postscriptName": name }));
-    }
+    let files: Vec<(&Path, &[u8])> = planned.iter().map(|(_, target, bytes, _)| (target.as_path(), bytes.as_slice())).collect();
+    write_all(&files, &req)?;
+    let outputs: Vec<Value> =
+        planned.iter().map(|(face, target, _, name)| json!({ "face": face, "path": target.to_string_lossy(), "postscriptName": name })).collect();
     Ok(json!({ "outputs": outputs }))
+}
+
+/// `path` as the file system names it: canonical when it exists, else its folder made canonical
+/// and its name kept, so two spellings of one file compare equal.
+pub(super) fn resolved(path: &Path) -> PathBuf {
+    if let Ok(canonical) = std::fs::canonicalize(path) {
+        return canonical;
+    }
+    match (path.parent(), path.file_name()) {
+        (Some(dir), Some(name)) => {
+            let dir = if dir.as_os_str().is_empty() { Path::new(".") } else { dir };
+            std::fs::canonicalize(dir).map(|d| d.join(name)).unwrap_or_else(|_| path.to_path_buf())
+        }
+        _ => path.to_path_buf(),
+    }
+}
+
+/// Writes every file, in order. When one fails, the files this call created before it are
+/// removed again, and the error says so and names the files it had replaced.
+pub(super) fn write_all(files: &[(&Path, &[u8])], req: &OutputRequest) -> Result<()> {
+    let mut written: Vec<(&Path, bool)> = Vec::with_capacity(files.len());
+    for &(target, bytes) in files {
+        let existed = target.exists();
+        if let Err(e) = file_io::write_output(target, bytes, req) {
+            let mut message = e.to_string();
+            let mut removed = 0usize;
+            let mut kept: Vec<String> = Vec::new();
+            for (done, existed) in written {
+                if existed {
+                    kept.push(done.display().to_string());
+                } else if std::fs::remove_file(done).is_ok() {
+                    removed = removed.saturating_add(1);
+                } else {
+                    kept.push(done.display().to_string());
+                }
+            }
+            if removed > 0 {
+                message.push_str(&format!("; the {removed} files written before it were removed"));
+            }
+            if !kept.is_empty() {
+                message.push_str(&format!("; these were written and remain: {}", kept.join(", ")));
+            }
+            return Err(EngineError::Io(message));
+        }
+        written.push((target, existed));
+    }
+    Ok(())
 }
 
 /// A PostScript name that can be a file name as it is.
@@ -355,6 +411,16 @@ fn decompress(_: &mut Session, p: &Value) -> Result<Value> {
             blocks.push((key, PathBuf::from(target), data.clone()));
         }
     }
+    // No two outputs may be one file, and none may be the input.
+    let mut taken: Vec<(String, PathBuf)> = vec![("the input".into(), resolved(&input.path))];
+    let named = std::iter::once(("the output".to_string(), &out)).chain(blocks.iter().map(|b| (format!("`{}`", b.0), &b.1)));
+    for (what, target) in named {
+        let here = resolved(target);
+        if let Some((other, _)) = taken.iter().find(|(_, t)| *t == here) {
+            return Err(p.bad(format!("{what} {} is the same file as {other}", target.display())));
+        }
+        taken.push((what, here));
+    }
     if req.no_clobber {
         for target in std::iter::once(&out).chain(blocks.iter().map(|b| &b.1)) {
             if target.exists() {
@@ -362,10 +428,11 @@ fn decompress(_: &mut Session, p: &Value) -> Result<Value> {
             }
         }
     }
-    file_io::write_output(&out, &unwrapped.sfnt, &req)?;
+    let files: Vec<(&Path, &[u8])> =
+        std::iter::once((out.as_path(), unwrapped.sfnt.as_slice())).chain(blocks.iter().map(|b| (b.1.as_path(), b.2.as_slice()))).collect();
+    write_all(&files, &req)?;
     let mut result = json!({ "output": out.to_string_lossy(), "format": input.kind.name(), "size": unwrapped.sfnt.len() });
-    for (key, target, data) in blocks {
-        file_io::write_output(&target, &data, &req)?;
+    for (key, target, _) in blocks {
         let name = if key == "extractMetadata" { "metadata" } else { "privateData" };
         if let Some(obj) = result.as_object_mut() {
             obj.insert(name.into(), json!(target.to_string_lossy()));
@@ -472,6 +539,53 @@ mod tests {
         assert!(s.execute("woff.compress", &json!({"font": a, "quality": 3})).is_err(), "only the default quality is written");
         assert!(s.execute("woff.compress", &json!({"font": a, "format": "woff", "zopfli": 15})).is_err());
         assert!(s.execute("woff.decompress", &json!({"font": a})).is_err(), "a plain font is not a WOFF file");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn woff_decompress_refuses_blocks_that_name_another_file_of_the_call() {
+        let dir = scratch("woff-same");
+        let a = dir.join("A.ttf");
+        std::fs::write(&a, font(1, "Demo-Regular", false)).unwrap();
+        std::fs::write(dir.join("meta.xml"), b"<?xml version=\"1.0\"?><metadata version=\"1.0\"/>").unwrap();
+        let mut s = Session::new();
+        s.execute("woff.compress", &json!({"font": a, "metadata": dir.join("meta.xml")})).unwrap();
+        let packed = dir.join("A.woff2");
+        let before = std::fs::read(&packed).unwrap();
+        let out = dir.join("back.ttf");
+        let other_spelling = dir.join(".").join("back.ttf");
+        for meta in [&packed, &out, &other_spelling] {
+            let r = s.execute("woff.decompress", &json!({"font": packed, "output": out, "extractMetadata": meta}));
+            assert!(r.is_err(), "{} is refused", meta.display());
+        }
+        assert_eq!(std::fs::read(&packed).unwrap(), before, "the input is untouched");
+        assert!(!out.exists(), "a refused call writes nothing");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn collection_unpack_names_never_collide_and_a_failed_write_is_undone() {
+        let dir = scratch("unpack-names");
+        // Member 0 is named like member 2's numbered fallback; member 2 has no usable name.
+        let fonts = [font(1, "Demo-font2", false), font(2, "Demo-Bold", false), font(3, "", false)];
+        let paths: Vec<PathBuf> = (0..3).map(|i| dir.join(format!("{i}.ttf"))).collect();
+        for (path, bytes) in paths.iter().zip(&fonts) {
+            std::fs::write(path, bytes).unwrap();
+        }
+        let ttc = dir.join("Demo.ttc");
+        let mut s = Session::new();
+        s.execute("collection.pack", &json!({"fonts": paths, "output": ttc})).unwrap();
+        let out = dir.join("out");
+        let r = s.execute("collection.unpack", &json!({"file": ttc, "outputDir": out})).unwrap();
+        let written: Vec<&str> = r["outputs"].as_array().unwrap().iter().map(|o| o["path"].as_str().unwrap()).collect();
+        assert_eq!(written.len(), 3);
+        assert!(written.iter().collect::<std::collections::HashSet<_>>().len() == 3, "{written:?}");
+        assert!(written[2].ends_with("Demo-font3.ttf"), "the next free number: {written:?}");
+        // A write that fails part way removes the fonts this call wrote before it.
+        let again = dir.join("again");
+        std::fs::create_dir_all(again.join("Demo-Bold.ttf")).unwrap();
+        assert!(s.execute("collection.unpack", &json!({"file": ttc, "outputDir": again})).is_err());
+        assert!(!again.join("Demo-font2.ttf").exists(), "the first member's file is removed again");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -469,7 +469,7 @@ summary = "Writes the contents of a font as text: every table or chosen tables, 
 ref = "fontTools ttx; AFDKO spot (main.c usage and per-table usage), tx -dump / -dcf help, ttxn.py, detype1; fontc otl-normalizer; fontTools varLib.avar.unbuild"
 status = "docs"
 notes = "M12.4: --format ttx, json and hex, -t (repeatable, in the order given), -x, --split tables, -o, --output-dir, --face, --no-disassemble, --strict, --no-clobber and --newline are built. The TTX form follows ttx 4.66 for the core tables (head hhea maxp OS/2 name post cmap hmtx loca glyf gasp vhea vmtx fpgm prep cvt hdmx), checked against its output on a font built in the tests; the other tables are written as hex until M12.5 to M12.7. The character names ttx writes as comments after cmap mappings are left out. The text views, @font, @glyphs, --normalize and --split glyphs wait for M12.10."
-guesses = ["Without -o or --output-dir the dump goes to standard output, where ttx writes FONT.ttx beside the input; a user of the reference command line would settle it.", "The JSON form is the TTX element tree, each element an object with name, attributes, text and children; no reference tool writes JSON, so readers of it settle the shape.", "The hex form lists each table with a header line, then offset, 16 bytes in two groups of eight and their ASCII, as hexdump -C does; no reference tool settles it."]
+guesses = ["Without -o or --output-dir the dump goes to standard output, where ttx writes FONT.ttx beside the input; a user of the reference command line would settle it.", "The JSON form is the TTX element tree, each element an object with name, attributes, text and children; no reference tool writes JSON, so readers of it settle the shape.", "The hex form lists each table with a header line, then offset, 16 bytes in two groups of eight and their ASCII, as hexdump -C does; no reference tool settles it.", "A dump past 1 GiB of text (the JSON form counting its element tree) stops with an error, and a simple glyph whose contour end points decrease is written as hex with the decompilation error, where ttx would write repeated points; a font that needs more would settle the limit."]
 
 [[cli]]
 id = "info"
@@ -2475,6 +2475,7 @@ milestone = "M12"
 summary = "Writes the members of a collection (or one of them) as standalone fonts and returns their paths."
 ref = "docs/spec/20-cli.md › collection"
 status = "docs"
+guesses = ["A member whose file name another member already takes gets the collection name plus -fontN, N its own index or the next number no other member uses; otc2otf on such a collection would settle it.", "When a later file cannot be written, the fonts this call created before it are removed and the error says so; no reference tool documents a partial failure."]
 
 [[command]]
 id = "woff.compress"
@@ -2501,6 +2502,7 @@ milestone = "M12"
 summary = "Unwraps a WOFF or WOFF2 file into a plain font or collection, restoring transformed tables and recomputing checksums, and returns the output path."
 ref = "docs/spec/20-cli.md › woff"
 status = "docs"
+guesses = ["extractMetadata and extractPrivateData that name the input, the font output or each other (compared as resolved paths) are refused before anything is written; no reference tool documents the case."]
 
 [[command]]
 id = "font.diff"
@@ -2610,6 +2612,7 @@ summary = "Applies glyph.decomposeGlyph to every selected composite of sources o
 ref = "docs/spec/20-cli.md › outlines"
 status = "docs"
 notes = "Built in M12.28; see the `outlines decompose` row. On a source it needs glyph.decomposeGlyphForAllMasters, which M6 builds."
+guesses = ["Several inputs whose outputs resolve to one file, or an output that would replace another input, are refused before anything is written; no reference tool documents the case."]
 
 [[command]]
 id = "hints.remove"

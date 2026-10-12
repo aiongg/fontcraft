@@ -159,22 +159,55 @@ pub fn read(bytes: &[u8], face: u32) -> Result<SfntFont> {
     }
     let unwrapped = fontcraft_container::to_sfnt(bytes)?;
     let bytes: &[u8] = &unwrapped;
+    read_directory(bytes, directory_at(bytes, face)?)
+}
+
+/// Where the table directory of face `face` of a plain sfnt or collection starts.
+fn directory_at(bytes: &[u8], face: u32) -> Result<usize> {
     let version = u32_at(bytes, 0).ok_or_else(|| TablesError::invalid("the file is too short to be a font"))?;
-    let dir = if version == csfnt::TTCF {
+    if version == csfnt::TTCF {
         let count = collection_count(bytes)?;
         let index = usize::try_from(face).unwrap_or(usize::MAX);
         if index >= count {
             return Err(TablesError::BadOptions(format!("the collection has {count} fonts; face {face} does not exist")));
         }
         let at = index.checked_mul(4).and_then(|o| o.checked_add(12)).ok_or_else(|| TablesError::invalid("face index out of range"))?;
-        u32_at(bytes, at).ok_or_else(|| TablesError::invalid("the collection header is cut short"))? as usize
+        Ok(u32_at(bytes, at).ok_or_else(|| TablesError::invalid("the collection header is cut short"))? as usize)
     } else {
         if face != 0 {
             return Err(TablesError::BadOptions(format!("the file holds one font; face {face} does not exist")));
         }
-        0
-    };
-    read_directory(bytes, dir)
+        Ok(0)
+    }
+}
+
+/// The summed length of the tables face `face` of the plain sfnt or collection `bytes` lists,
+/// read from its directory without copying anything.
+pub(crate) fn tables_size(bytes: &[u8], face: u32) -> Result<usize> {
+    let dir = directory_at(bytes, face)?;
+    Ok(directory_entries(bytes, dir)?.iter().fold(0usize, |sum, e| sum.saturating_add(e.2)))
+}
+
+/// The directory entries at `dir` (tag, offset, length), at most [`MAX_TABLES`] of them, each
+/// inside `bytes`.
+fn directory_entries(bytes: &[u8], dir: usize) -> Result<Vec<(Tag, usize, usize)>> {
+    let cut = || TablesError::invalid("the table directory is cut short");
+    let count = usize::from(u16_at(bytes, dir.checked_add(4).ok_or_else(cut)?).ok_or_else(cut)?);
+    if count > MAX_TABLES {
+        return Err(TablesError::TooLarge { what: "the table count", limit: MAX_TABLES });
+    }
+    let mut entries = Vec::with_capacity(count);
+    for i in 0..count {
+        let at = i.checked_mul(16).and_then(|o| o.checked_add(dir)).and_then(|o| o.checked_add(12)).ok_or_else(cut)?;
+        let tag: Tag = bytes.get(at..at.saturating_add(4)).and_then(|t| t.try_into().ok()).ok_or_else(cut)?;
+        let offset = u32_at(bytes, at.saturating_add(8)).ok_or_else(cut)? as usize;
+        let length = u32_at(bytes, at.saturating_add(12)).ok_or_else(cut)? as usize;
+        if offset.checked_add(length).is_none_or(|end| end > bytes.len()) {
+            return Err(TablesError::invalid(format!("table '{}' lies outside the file", tag_str(tag))));
+        }
+        entries.push((tag, offset, length));
+    }
+    Ok(entries)
 }
 
 /// The table directory at `dir`; table offsets count from the start of `bytes`.
@@ -182,16 +215,14 @@ fn read_directory(bytes: &[u8], dir: usize) -> Result<SfntFont> {
     let cut = || TablesError::invalid("the table directory is cut short");
     let version = u32_at(bytes, dir).ok_or_else(cut)?;
     let flavour = Flavour::from_sfnt_version(version).ok_or_else(|| TablesError::invalid("not a TrueType or OpenType font"))?;
-    let count = usize::from(u16_at(bytes, dir.checked_add(4).ok_or_else(cut)?).ok_or_else(cut)?);
-    if count > MAX_TABLES {
-        return Err(TablesError::TooLarge { what: "the table count", limit: MAX_TABLES });
+    let entries = directory_entries(bytes, dir)?;
+    // Entries may point at the same bytes, so the copies can outgrow the file.
+    let total = entries.iter().fold(0usize, |sum, e| sum.saturating_add(e.2));
+    if total > MAX_SFNT {
+        return Err(TablesError::TooLarge { what: "the total size of the font's tables", limit: MAX_SFNT });
     }
     let mut font = SfntFont::new(flavour);
-    for i in 0..count {
-        let at = i.checked_mul(16).and_then(|o| o.checked_add(dir)).and_then(|o| o.checked_add(12)).ok_or_else(cut)?;
-        let tag: Tag = bytes.get(at..at.saturating_add(4)).and_then(|t| t.try_into().ok()).ok_or_else(cut)?;
-        let offset = u32_at(bytes, at.saturating_add(8)).ok_or_else(cut)? as usize;
-        let length = u32_at(bytes, at.saturating_add(12)).ok_or_else(cut)? as usize;
+    for &(tag, offset, length) in &entries {
         let data = offset
             .checked_add(length)
             .and_then(|end| bytes.get(offset..end))
@@ -202,15 +233,7 @@ fn read_directory(bytes: &[u8], dir: usize) -> Result<SfntFont> {
         font.insert(tag, data.to_vec());
     }
     // The directory is sorted by tag; the file order is the order of the offsets.
-    let mut by_offset: Vec<(usize, Tag)> = Vec::with_capacity(count);
-    for i in 0..count {
-        let at = dir.saturating_add(12).saturating_add(i.saturating_mul(16));
-        if let (Some(tag), Some(offset)) =
-            (bytes.get(at..at.saturating_add(4)).and_then(|t| Tag::try_from(t).ok()), u32_at(bytes, at.saturating_add(8)))
-        {
-            by_offset.push((offset as usize, tag));
-        }
-    }
+    let mut by_offset: Vec<(usize, Tag)> = entries.iter().map(|&(tag, offset, _)| (offset, tag)).collect();
     by_offset.sort();
     font.order = by_offset.into_iter().map(|(_, t)| t).collect();
     Ok(font)
