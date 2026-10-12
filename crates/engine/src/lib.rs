@@ -250,6 +250,8 @@ pub struct Session {
     assets: assets::SessionAssets,
     /// Installed modules, macros, recording, the command log (`extensions`).
     extensions: extensions::ExtensionState,
+    /// Exports may write where an Export Folder parameter climbs out of the destination folder.
+    export_outside: bool,
 }
 
 /// A running interaction (see [`Session::begin`]).
@@ -403,6 +405,18 @@ impl Session {
     /// changes (`fontView.column.lastChanged`). `None`, the default, stamps nothing.
     pub fn set_clock(&mut self, clock: Option<Clock>) {
         self.clock = clock;
+    }
+
+    /// Lets exports write files outside their destination folder when an Export Folder parameter
+    /// climbs out of it with `..`. Off by default: headless, MCP and control-channel exports skip
+    /// such a font with a message. The desktop app turns it on for what the user runs there.
+    pub fn set_export_outside(&mut self, allow: bool) {
+        self.export_outside = allow;
+    }
+
+    /// Whether exports may write outside their destination folder ([`Session::set_export_outside`]).
+    pub fn export_outside(&self) -> bool {
+        self.export_outside
     }
 
     /// The user's settings (`settings.get`).

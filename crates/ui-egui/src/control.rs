@@ -135,7 +135,13 @@ pub fn handle_request(app: &mut FontcraftApp, request: &Value) -> Handled {
             Some(_) => Handled::Reply(reply(&id, Err("ui.screenshot: `path` must be a file path".into()))),
         };
     }
-    Handled::Reply(match guard::catch_panic(|| dispatch(app, method, &params)) {
+    // A client of the control channel exports inside the destination it names, whatever the app
+    // allows the user.
+    let outside = app.session.export_outside();
+    app.session.set_export_outside(false);
+    let result = guard::catch_panic(|| dispatch(app, method, &params));
+    app.session.set_export_outside(outside);
+    Handled::Reply(match result {
         Ok(result) => reply(&id, result),
         Err(panic) => reply(&id, Err(format!("internal error (please report it): `{method}` failed unexpectedly: {panic}"))),
     })

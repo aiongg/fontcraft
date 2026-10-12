@@ -268,7 +268,7 @@ fn names(dir: &Path) -> Vec<String> {
 }
 
 /// `export.instanceExportFolder`: nested folders, `..` out of the destination (named in the
-/// warnings), and an absolute path refused for that instance.
+/// warnings) where the session allows it, and an absolute path refused for that instance.
 #[test]
 fn export_folder_places_each_instance_and_refuses_an_absolute_path() {
     let dir = temp("folder");
@@ -283,6 +283,23 @@ fn export_folder_places_each_instance_and_refuses_an_absolute_path() {
     let planned: Vec<&str> = plan["outputs"].as_array().unwrap().iter().map(|o| o["files"][0]["name"].as_str().unwrap()).collect();
     assert_eq!(planned, ["../Trial Versions/Untitled-Regular.ttf", "web/fonts/Untitled-Web.ttf", "Untitled-Plain.ttf"]);
 
+    // Outside the desktop app, a font whose Export Folder climbs out of the destination is skipped.
+    let out = run(&mut s, "file.exportStatic", json!({"destination": dest, "timestamp": 0}));
+    assert_eq!(names(&dir), ["out/Untitled-Plain.ttf", "out/web/fonts/Untitled-Web.ttf"]);
+    let skipped = out["skipped"].as_array().unwrap();
+    assert_eq!(skipped.len(), 2, "{out}");
+    assert_eq!(skipped[0]["instance"], "Regular");
+    assert!(skipped[0]["reason"].as_str().unwrap().contains("outside the export destination"), "{out}");
+
+    // `..` back into the destination stays inside it.
+    let mut inside = font();
+    add_instance(&mut inside, "Back", vec![("Export Folder", text("../out/back"))]);
+    let out = run(&mut inside, "file.exportStatic", json!({"destination": dest, "timestamp": 0}));
+    assert!(out["skipped"].as_array().unwrap().is_empty(), "{out}");
+    assert!(names(&dir).contains(&"out/back/Untitled-Back.ttf".to_string()));
+
+    std::fs::remove_dir_all(&dir).unwrap();
+    s.set_export_outside(true);
     let out = run(&mut s, "file.exportStatic", json!({"destination": dest, "timestamp": 0}));
     assert_eq!(names(&dir), ["Trial Versions/Untitled-Regular.ttf", "out/Untitled-Plain.ttf", "out/web/fonts/Untitled-Web.ttf"]);
     let skipped = out["skipped"].as_array().unwrap();

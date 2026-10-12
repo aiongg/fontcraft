@@ -429,22 +429,6 @@ pub(crate) fn in_folder(folder: &Path, name: &str) -> String {
     out.join("/")
 }
 
-/// Whether `folder` climbs out of the destination at some point.
-pub(crate) fn leaves_destination(folder: &Path) -> bool {
-    let mut depth: i64 = 0;
-    for part in folder.iter() {
-        if part == ".." {
-            depth -= 1;
-            if depth < 0 {
-                return true;
-            }
-        } else {
-            depth += 1;
-        }
-    }
-    false
-}
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -465,9 +449,5 @@ mod tests {
         }
         assert!(folder_path(&"a/".repeat(40)).is_err(), "too many levels");
         assert!(folder_path(&"a".repeat(2_000)).is_err(), "too long");
-        assert!(leaves_destination(Path::new("../trial")));
-        assert!(leaves_destination(Path::new("a/../../b")));
-        assert!(!leaves_destination(Path::new("a/../b")));
-        assert!(!leaves_destination(Path::new("web")));
     }
 }

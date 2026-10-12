@@ -477,7 +477,7 @@ fn export_static(s: &mut Session, p: &Value) -> Result<Value> {
     compile::check_size(&req, jobs.len())?;
     let mut report = Report::default();
     compile::check_glyph_names(font)?;
-    let mut sink = Sink::new(&req.dest, true)?;
+    let mut sink = Sink::new(&req.dest, true, s.export_outside())?;
     compile::build(font, &s.doc()?.title, s.doc()?.path.as_deref(), s.glyph_data()?, &jobs, &req, &mut sink, &mut report)?;
     if report.fonts.is_empty() {
         return Err(compile::nothing_built(&report));
@@ -549,7 +549,7 @@ fn export_all(s: &mut Session, p: &Value) -> Result<Value> {
         jobs.push(compile::jobs(&doc.font, &Pick::Exportable, false, &p)?);
     }
     compile::check_size(&req, jobs.iter().map(Vec::len).sum())?;
-    let mut sink = Sink::new(&req.dest, false)?;
+    let mut sink = Sink::new(&req.dest, false, s.export_outside())?;
     let mut warnings: Vec<String> = Vec::new();
     let mut reports = Vec::with_capacity(chosen.len());
     for (&i, jobs) in chosen.iter().zip(&jobs) {

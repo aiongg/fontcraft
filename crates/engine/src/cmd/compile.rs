@@ -37,7 +37,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Compile Fonts",
             [],
             None,
-            "{formats?: [\"ttf\"|\"otf\"], containers?: [\"plain\"|\"woff\"|\"woff2\"], instances?: bool|[string], mastersAsInstances?: bool, destination?: string, outlines?: {keepDirection?: bool, conversionError?: number, removeOverlaps?: bool, flattenComponents?: bool, decomposeComponents?: bool, decomposeTransformedComponents?: bool}, timestamp?: number|\"now\"} build static fonts from the active document: every exportable instance (instances: true, the default; a font without instances builds its first master), the named instances, or none (false); mastersAsInstances adds one font per master. Instances between masters are skipped. Each font is built once per format (ttf: TrueType outlines, otf: CFF; default ttf) and written once per container (default plain). destination: a folder (files named by the instance's fileName parameter, else the PostScript name, with the document's file name standing in for a missing family name; with several formats each goes into a ttf or otf subfolder; an Export Folder parameter puts a font's files in that sub-folder, `..` climbing out of the destination), or a file path when exactly one file results; without it the fonts are built in memory and only described. conversionError: in em, default 0.001. removeOverlaps: merge overlapping contours in every glyph (default true; a glyph whose overlaps cannot be removed keeps them, with a warning). decomposeComponents: write every composite as contours (default false: only the composites the source's parameters and filter list name). decomposeTransformedComponents: write as contours every composite with a scaled, mirrored, slanted or rotated component (default: as the source's filter list says). flattenComponents: replace a component that points at a composite by the glyphs it reaches, so no composite is nested (default: as the source's filter list says). timestamp: seconds since the Unix epoch for the head table (default SOURCE_DATE_EPOCH, else now). Glyphs are written under their production names unless the Don't use Production Names parameter or Use Custom Naming is on; a name the font cannot hold is made valid, with a warning → {fonts: [{instance, source, format, glyphs, warnings, files: [{name, container, bytes, path?}]}], skipped: [{instance, source, reason}], warnings}",
+            "{formats?: [\"ttf\"|\"otf\"], containers?: [\"plain\"|\"woff\"|\"woff2\"], instances?: bool|[string], mastersAsInstances?: bool, destination?: string, outlines?: {keepDirection?: bool, conversionError?: number, removeOverlaps?: bool, flattenComponents?: bool, decomposeComponents?: bool, decomposeTransformedComponents?: bool}, timestamp?: number|\"now\"} build static fonts from the active document: every exportable instance (instances: true, the default; a font without instances builds its first master), the named instances, or none (false); mastersAsInstances adds one font per master. Instances between masters are skipped. Each font is built once per format (ttf: TrueType outlines, otf: CFF; default ttf) and written once per container (default plain). destination: a folder (files named by the instance's fileName parameter, else the PostScript name, with the document's file name standing in for a missing family name; with several formats each goes into a ttf or otf subfolder; an Export Folder parameter puts a font's files in that sub-folder, `..` climbing out of the destination; outside the desktop app a font whose files would land outside the destination is skipped), or a file path when exactly one file results; without it the fonts are built in memory and only described. conversionError: in em, default 0.001. removeOverlaps: merge overlapping contours in every glyph (default true; a glyph whose overlaps cannot be removed keeps them, with a warning). decomposeComponents: write every composite as contours (default false: only the composites the source's parameters and filter list name). decomposeTransformedComponents: write as contours every composite with a scaled, mirrored, slanted or rotated component (default: as the source's filter list says). flattenComponents: replace a component that points at a composite by the glyphs it reaches, so no composite is nested (default: as the source's filter list says). timestamp: seconds since the Unix epoch for the head table (default SOURCE_DATE_EPOCH, else now). Glyphs are written under their production names unless the Don't use Production Names parameter or Use Custom Naming is on; a name the font cannot hold is made valid, with a warning → {fonts: [{instance, source, format, glyphs, warnings, files: [{name, container, bytes, path?}]}], skipped: [{instance, source, reason}], warnings}",
             has_doc,
             compile
         ),
@@ -308,11 +308,6 @@ impl Request {
             _ => name,
         }
     }
-
-    /// Whether the files of a job with Export Folder `folder` land outside the destination folder.
-    fn outside(&self, folder: Option<&std::path::Path>) -> bool {
-        matches!(self.dest, Dest::Folder(_)) && folder.is_some_and(crate::export_steps::leaves_destination)
-    }
 }
 
 /// The file name stem of a font: its `fileName` parameter, else its PostScript name, else family
@@ -413,13 +408,15 @@ pub(super) enum Sink {
 impl Sink {
     /// A sink for `dest`. `keep`: hold the files of a memory build (for the result), or only
     /// count them.
-    pub(super) fn new(dest: &Dest, keep: bool) -> Result<Self> {
+    /// `outside`: files may land outside a destination folder where an Export Folder parameter
+    /// climbs out of it ([`crate::Session::export_outside`]).
+    pub(super) fn new(dest: &Dest, keep: bool, outside: bool) -> Result<Self> {
         match dest {
             Dest::Memory => Ok(Sink::Memory { bytes: 0, keep }),
             #[cfg(not(target_arch = "wasm32"))]
-            Dest::Folder(path) => Ok(Sink::Disk(Stage::new(path.clone(), false))),
+            Dest::Folder(path) => Ok(Sink::Disk(Stage::new(path.clone(), false, outside))),
             #[cfg(not(target_arch = "wasm32"))]
-            Dest::File(path) => Ok(Sink::Disk(Stage::new(path.clone(), true))),
+            Dest::File(path) => Ok(Sink::Disk(Stage::new(path.clone(), true, outside))),
             #[cfg(target_arch = "wasm32")]
             _ => Err(EngineError::Unsupported("writing to a path in the browser; omit `destination` to get the fonts in the result".into())),
         }
@@ -446,6 +443,20 @@ impl Sink {
             Sink::Disk(stage) => {
                 let path = stage.put(&name, &data, warnings)?;
                 Ok(FileOut { name, container, bytes, path: Some(path), data: None })
+            }
+        }
+    }
+
+    /// Whether the file `name` (relative to the destination) lands outside the destination folder,
+    /// and whether that is refused.
+    #[cfg_attr(target_arch = "wasm32", allow(unused_variables))]
+    fn outside(&self, name: &str) -> (bool, bool) {
+        match self {
+            Sink::Memory { .. } => (false, false),
+            #[cfg(not(target_arch = "wasm32"))]
+            Sink::Disk(stage) => {
+                let out = stage.outside(name);
+                (out, out && !stage.outside_allowed)
             }
         }
     }
@@ -505,14 +516,25 @@ pub(super) fn build(
                 continue;
             }
         };
+        let names = |flavour: Flavour, container: Container| req.placed(folder.as_deref(), req.file_name(&stem, flavour, container));
+        let refused = req.flavours.iter().flat_map(|&f| req.containers.iter().map(move |&c| (f, c))).find(|&(f, c)| sink.outside(&names(f, c)).1);
+        if let Some((f, c)) = refused {
+            let reason = format!(
+                "the Export Folder parameter puts {} outside the export destination; only an export run in the app may write there",
+                names(f, c)
+            );
+            report.skipped.push(skip(job, &reason));
+            continue;
+        }
         for &flavour in &req.flavours {
             let compiled = fontcraft_compile::compile_resolved_from(font, resolved.clone(), flavour, &options)?;
             let mut files = Vec::with_capacity(req.containers.len());
             for &container in &req.containers {
                 let data = container.wrap(&compiled.bytes)?;
-                let name = req.placed(folder.as_deref(), req.file_name(&stem, flavour, container));
+                let name = names(flavour, container);
+                let outside = sink.outside(&name).0;
                 let file = sink.put(name, container, data, &mut report.warnings)?;
-                if req.outside(folder.as_deref()) {
+                if outside {
                     let at = file.path.as_ref().map_or_else(|| file.name.clone(), |p| p.to_string_lossy().into_owned());
                     report.warnings.push(format!("{at} is written outside the export destination, as the Export Folder parameter asks"));
                 }
@@ -551,9 +573,13 @@ pub(super) fn check_size(req: &Request, jobs: usize) -> Result<()> {
 /// that was not committed removes its temporary files and the folders it created.
 #[cfg(not(target_arch = "wasm32"))]
 pub(super) struct Stage {
+    /// Absolute, without `.` or `..`, so that an Export Folder's `..` climbs out of the folder the
+    /// user named whatever text named it.
     root: std::path::PathBuf,
     /// `root` is the one file to write, not a folder.
     single: bool,
+    /// Files may land outside `root` ([`Sink::new`]).
+    outside_allowed: bool,
     /// (temporary, final) paths.
     staged: Vec<(std::path::PathBuf, std::path::PathBuf)>,
     /// Folders this stage created, outermost first.
@@ -564,6 +590,26 @@ pub(super) struct Stage {
 #[cfg(not(target_arch = "wasm32"))]
 fn same_output(a: &std::path::Path, b: &std::path::Path) -> bool {
     a == b || a.to_string_lossy().to_lowercase() == b.to_string_lossy().to_lowercase()
+}
+
+/// `path` from the root of the file system, with `.` dropped and `..` taking off the folder before
+/// it (by the text, as the Export Folder's `..` is read). Left as given when the working folder
+/// is unknown.
+#[cfg(not(target_arch = "wasm32"))]
+fn absolute(path: &std::path::Path) -> std::path::PathBuf {
+    use std::path::Component;
+    let Ok(full) = std::path::absolute(path) else { return path.to_path_buf() };
+    let mut out = std::path::PathBuf::new();
+    for c in full.components() {
+        match c {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                out.pop();
+            }
+            c => out.push(c),
+        }
+    }
+    out
 }
 
 /// The folder that holds `path`.
@@ -616,28 +662,39 @@ fn set_aside(target: &std::path::Path) -> std::io::Result<std::path::PathBuf> {
 
 #[cfg(not(target_arch = "wasm32"))]
 impl Stage {
-    fn new(root: std::path::PathBuf, single: bool) -> Self {
-        Self { root, single, staged: Vec::new(), made: Vec::new() }
+    fn new(root: std::path::PathBuf, single: bool, outside_allowed: bool) -> Self {
+        Self { root: absolute(&root), single, outside_allowed, staged: Vec::new(), made: Vec::new() }
+    }
+
+    /// Where the file `name` (relative to the destination folder) goes. `..` (an Export Folder
+    /// above the destination) is resolved here, so no folder is created on the way up.
+    fn target(&self, name: &str) -> std::path::PathBuf {
+        if self.single {
+            return self.root.clone();
+        }
+        name.split('/').fold(self.root.clone(), |mut p, part| {
+            match part {
+                ".." => {
+                    p.pop();
+                }
+                "" | "." => {}
+                part => p.push(part),
+            }
+            p
+        })
+    }
+
+    /// Whether the file `name` lands outside the destination folder.
+    fn outside(&self, name: &str) -> bool {
+        !self.single && !self.target(name).starts_with(&self.root)
     }
 
     fn put(&mut self, name: &str, bytes: &[u8], warnings: &mut Vec<String>) -> Result<std::path::PathBuf> {
         use std::io::Write as _;
-        // `..` (an Export Folder above the destination) is resolved here, so no folder is
-        // created on the way up.
-        let target = if self.single {
-            self.root.clone()
-        } else {
-            name.split('/').fold(self.root.clone(), |mut p, part| {
-                match part {
-                    ".." => {
-                        p.pop();
-                    }
-                    "" | "." => {}
-                    part => p.push(part),
-                }
-                p
-            })
-        };
+        let target = self.target(name);
+        if !self.outside_allowed && self.outside(name) {
+            return Err(EngineError::Io(format!("{} is outside the export destination {}", target.display(), self.root.display())));
+        }
         if let Some(i) = self.staged.iter().position(|(_, f)| same_output(f, &target)) {
             let (tmp, _) = self.staged.remove(i);
             let _ = std::fs::remove_file(tmp);
@@ -771,7 +828,7 @@ mod stage_tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("A.ttf"), b"old").unwrap();
-        let mut stage = Stage::new(dir.clone(), false);
+        let mut stage = Stage::new(dir.clone(), false, false);
         let mut warnings = Vec::new();
         stage.put("A.ttf", b"new", &mut warnings).unwrap();
         stage.put("sub/B.ttf", b"new", &mut warnings).unwrap();
@@ -784,6 +841,22 @@ mod stage_tests {
         assert_eq!(left, ["A.ttf"]);
         assert_eq!(std::fs::read(dir.join("A.ttf")).unwrap(), b"old");
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A destination typed as `.` or with `..` in it is the folder it names: an Export Folder's
+    /// `..` climbs out of that folder, not out of the typed text.
+    #[test]
+    fn export_folder_climbs_out_of_the_folder_a_relative_destination_names() {
+        let cwd = std::env::current_dir().unwrap();
+        let up = cwd.parent().unwrap().to_path_buf();
+        let stage = Stage::new(".".into(), false, false);
+        assert_eq!(stage.target("../Trial/F.ttf"), up.join("Trial/F.ttf"));
+        assert!(stage.outside("../Trial/F.ttf"));
+        assert!(!stage.outside("web/F.ttf"));
+        let name = cwd.file_name().unwrap().to_string_lossy().into_owned();
+        assert!(!stage.outside(&format!("../{name}/F.ttf")), "back into the destination is inside it");
+        let stage = Stage::new(std::path::Path::new("a/../b").into(), false, false);
+        assert_eq!(stage.target("../F.ttf"), cwd.join("F.ttf"));
     }
 }
 
@@ -870,7 +943,7 @@ fn compile(s: &mut Session, p: &Value) -> Result<Value> {
     req.options.timestamp = timestamp(&p)?;
     let doc = s.doc()?;
     let mut report = Report::default();
-    let mut sink = Sink::new(&req.dest, false)?;
+    let mut sink = Sink::new(&req.dest, false, s.export_outside())?;
     build(&doc.font, &doc.title, doc.path.as_deref(), s.glyph_data()?, &jobs, &req, &mut sink, &mut report)?;
     if matches!(req.dest, Dest::File(_)) && report.file_count() > 1 {
         return Err(p.bad(format!("`destination` is one file, but {} fonts were built: give a folder", report.fonts.len())));

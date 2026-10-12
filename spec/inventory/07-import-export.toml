@@ -372,9 +372,10 @@ milestone = "M7"
 summary = "An instance carrying the Export Folder custom parameter is written to that sub-path, resolved relative to the export destination. Forward slashes create nested folders and '..' segments climb out of the destination (for example '../Trial Versions')."
 ref = "Import & Export › Exporting Font Files › Export Destination"
 status = "handbook"
-notes = "Documented, not yet observed. The Export Folder parameter itself is an M2 row. Since M7.10 File › Export, `font.compile` and `font.compilePlan` place each instance's files in it; a one-file destination ignores it."
+notes = "Documented, not yet observed. The Export Folder parameter itself is an M2 row. Since M7.10 File › Export, `font.compile` and `font.compilePlan` place each instance's files in it; a one-file destination ignores it. The destination is made absolute first, so `..` climbs out of the folder it names even when typed as `.`. Exports run in the desktop app write outside the destination as the parameter asks; headless, MCP and control-channel exports skip such an instance with the reason (a safety limit of ours for callers that are not the person at the app)."
 guesses = [
   "The sub-path is used as written, `..` segments included, as the handbook says; an absolute path, an empty segment, a folder name with a character such as `:` or `\\`, or a path of more than 32 segments makes export skip that instance with the reason, one trailing `/` is ignored, and the warnings name every file written outside the export destination; an Export Folder of `../x` and one of `/tmp/x` in the reference app settle it.",
+  "Exports from the command line, MCP and the control channel skip an instance whose Export Folder resolves outside the destination folder; the reference app has no such callers, so nothing there settles it.",
 ]
 observe = [
   "In font C (m7-export), export with Export Folder `../trial`, then `/tmp/x`: note where the files go.",

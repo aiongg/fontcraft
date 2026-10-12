@@ -76,7 +76,7 @@ fn build(s: &Session, p: &Params, flavour: Flavour) -> Result<Built> {
     let job = job(font, p)?;
     let options = Options { hinting: HintingOptions { autohint: p.bool_or("autohint", false)?, ..Default::default() }, ..Default::default() };
     let req = Request { flavours: vec![flavour], containers: vec![Container::Plain], options, dest: Dest::Memory, first_only: false };
-    let mut sink = Sink::new(&req.dest, true)?;
+    let mut sink = Sink::new(&req.dest, true, s.export_outside())?;
     let mut report = Report::default();
     let doc = s.doc()?;
     compile::build(font, &doc.title, doc.path.as_deref(), s.glyph_data()?, std::slice::from_ref(&job), &req, &mut sink, &mut report)?;
