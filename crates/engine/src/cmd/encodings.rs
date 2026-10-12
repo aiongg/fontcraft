@@ -123,7 +123,7 @@ fn numbered_lines<'a>(text: &'a str, what: &str) -> std::result::Result<Vec<(usi
 fn header_title(line: &str, kinds: &[&str]) -> std::result::Result<Option<String>, String> {
     let upper = line.to_ascii_uppercase();
     for kind in kinds {
-        let prefix = format!("%%FONTLAB {kind}:");
+        let prefix = format!("%%FONTLAB {kind}:"); // brand-ok: the file-format key
         if upper.starts_with(&prefix) {
             let rest = line.get(prefix.len()..).unwrap_or("");
             let title = rest.split_once(';').map_or(rest, |(_, t)| t).trim();
