@@ -410,3 +410,36 @@ fn many_named_instances_read_their_names_from_one_pass_over_the_name_table() {
     assert_eq!(opened.font.instances.len(), usize::from(count));
     assert_eq!(opened.font.instances.last().unwrap().name, (count - 1).to_string());
 }
+
+#[test]
+fn many_instances_naming_one_id_with_many_records_choose_the_record_once() {
+    // 5,000 Korean records and one English record all under name ID 256, and 5,000 instances
+    // naming it: choosing the record per lookup would make 25 million record checks. The name
+    // table's 16-bit storage offset caps the record count near 5,400.
+    let (_, compiled) = source();
+    let base = FontRef::new(&compiled.bytes).unwrap();
+    let count = 5_000u16;
+    let mut records = vec![NameRecord::new(3, 1, 0x409, NameId::new(1), write_fonts::OffsetMarker::new("Var Test".to_string()))];
+    records.extend((0..count).map(|k| NameRecord::new(3, 1, 0x412, NameId::new(256), write_fonts::OffsetMarker::new(format!("k{}", k % 10)))));
+    records.push(NameRecord::new(3, 1, 0x409, NameId::new(256), write_fonts::OffsetMarker::new("Book".to_string())));
+    let instances: Vec<InstanceRecord> = (0..count)
+        .map(|_| InstanceRecord {
+            subfamily_name_id: NameId::new(256),
+            flags: 0,
+            coordinates: vec![Fixed::from_f64(400.0)],
+            post_script_name_id: None,
+        })
+        .collect();
+    let fvar = Fvar::new(AxisInstanceArrays::new(
+        vec![VariationAxisRecord::new(Tag::new(b"wght"), Fixed::from_f64(300.0), Fixed::from_f64(400.0), Fixed::from_f64(700.0), 0, NameId::new(1))],
+        instances,
+    ));
+    let mut builder = FontBuilder::new();
+    builder.add_table(&fvar).unwrap().add_table(&Name::new(records)).unwrap();
+    builder.copy_missing_tables(base);
+    let started = std::time::Instant::now();
+    let opened = open_variable(&builder.build(), None).unwrap();
+    assert!(started.elapsed() < std::time::Duration::from_secs(10));
+    assert_eq!(opened.font.instances.len(), usize::from(count));
+    assert!(opened.font.instances.iter().all(|i| i.name == "Book"));
+}

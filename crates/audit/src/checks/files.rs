@@ -6,7 +6,6 @@
 //! rasteriser are our own parser, text dump and outline drawing rather than external programs.
 
 use read_fonts::tables::glyf::{Glyph, PointFlags, SimpleGlyph};
-use read_fonts::tables::name::Name;
 use read_fonts::types::{GlyphId, Point, Tag};
 use read_fonts::{FontRef, ReadError, TableProvider};
 use skrifa::MetadataProvider;
@@ -14,6 +13,7 @@ use skrifa::instance::{LocationRef, Size};
 use skrifa::outline::{DrawSettings, Engine, HintingInstance, HintingOptions, OutlinePen, Target};
 
 use crate::export::{ValidatorFacts, known_validator_issue};
+use crate::name_records::{self, MAX_NAME_TEXT_BYTES};
 use crate::services::{ExternalTool, MAX_EXTERNAL_MESSAGES};
 use crate::{BinaryCtx, FamilyCtx, Hit, Location, Params, Severity, Sink, Threshold, num};
 
@@ -483,20 +483,20 @@ pub(crate) fn external_validator(ctx: &BinaryCtx<'_>, _: &Params<'_>, sink: &mut
 }
 
 /// The English name with the first of `ids` the font has, else any of its names, as fontTools'
-/// `getDebugName` picks it.
-fn best_name(name: &Name<'_>, ids: &[u16]) -> Option<String> {
-    let data = name.string_data();
+/// `getDebugName` picks it. Decoding is charged to `budget`, so a table that points every record
+/// at one long string decodes at most [`MAX_NAME_TEXT_BYTES`] bytes in all.
+fn best_name(font: &FontRef<'_>, budget: &mut usize, ids: &[u16]) -> Option<String> {
+    let read = name_records::read(font, budget, |_, _, _, id| ids.contains(&id)).ok()?;
     ids.iter().find_map(|&id| {
         let mut some = None;
-        for record in name.name_record().iter().filter(|r| r.name_id().to_u16() == id) {
-            let Ok(s) = record.string(data) else { continue };
-            let text = s.chars().collect::<String>();
-            if matches!((record.platform_id(), record.language_id()), (1, 0) | (3, 0x409)) {
-                return Some(text);
+        for r in read.records.iter().filter(|r| r.id == id) {
+            let Some(text) = &r.text else { continue };
+            if matches!((r.platform, r.language), (1, 0) | (3, 0x409)) {
+                return Some(text.clone());
             }
             some = Some(text);
         }
-        some
+        some.cloned()
     })
 }
 
@@ -504,12 +504,12 @@ fn best_name(name: &Name<'_>, ids: &[u16]) -> Option<String> {
 /// `Family[tags].ext` (with `-Italic` before the bracket for an italic) for a variable one. The
 /// extension is `otf` for CFF outlines and `ttf` otherwise, or the file's own `woff` or `woff2`.
 fn canonical_name(font: &FontRef<'_>, current: &str) -> Option<String> {
-    let name = font.name().ok()?;
-    let family: String = best_name(&name, &[16, 1])?.chars().filter(|c| *c != ' ').collect();
+    let mut budget = MAX_NAME_TEXT_BYTES;
+    let family: String = best_name(font, &mut budget, &[16, 1])?.chars().filter(|c| *c != ' ').collect();
     if family.is_empty() {
         return None;
     }
-    let style: String = best_name(&name, &[17, 2]).unwrap_or_default().chars().filter(|c| *c != ' ').collect();
+    let style: String = best_name(font, &mut budget, &[17, 2]).unwrap_or_default().chars().filter(|c| *c != ' ').collect();
     let style = if style.is_empty() { "Regular".to_string() } else { style };
     let own = current.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase());
     let ext = match own.as_deref() {

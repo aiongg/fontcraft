@@ -113,44 +113,40 @@ pub(crate) fn read_any(font: &FontRef) -> Result<Decompiled, DecompileError> {
     }
 }
 
-/// The name table's records grouped by name ID, read once: a font with many named instances or
-/// STAT values would otherwise scan every record for each of them.
+/// For each name ID, the record a lookup reads: its first English record, else its first record
+/// (the static reader's choice). Chosen in one pass over the records, so a font with many
+/// records under one ID and many named instances or STAT values naming it does no repeated work.
 struct Names<'a> {
     name: Option<Name<'a>>,
-    by_id: BTreeMap<u16, Vec<&'a NameRecord>>,
+    by_id: BTreeMap<u16, (&'a NameRecord, bool)>,
 }
 
 impl<'a> Names<'a> {
     fn new(sfnt: &FontRef<'a>) -> Self {
         let name = sfnt.name().ok();
-        let mut by_id: BTreeMap<u16, Vec<&'a NameRecord>> = BTreeMap::new();
+        let mut by_id: BTreeMap<u16, (&'a NameRecord, bool)> = BTreeMap::new();
         if let Some(n) = &name {
             for record in n.name_record() {
-                by_id.entry(record.name_id().to_u16()).or_default().push(record);
+                let id = record.name_id().to_u16();
+                if by_id.get(&id).is_some_and(|(_, english)| *english) {
+                    continue;
+                }
+                let english = LocalizedString::new(n, record).language().is_some_and(|l| l.starts_with("en"));
+                if english || !by_id.contains_key(&id) {
+                    by_id.insert(id, (record, english));
+                }
             }
         }
         Names { name, by_id }
     }
 
-    /// The first of `ids` with a string that is not blank: its first English record, else its
-    /// first record (the static reader's choice). At most [`MAX_DECODED_CHARS`] characters are
-    /// decoded.
+    /// The first of `ids` with a string that is not blank. At most [`MAX_DECODED_CHARS`]
+    /// characters are decoded.
     fn english(&self, ids: &[StringId]) -> Option<String> {
         let name = self.name.as_ref()?;
         ids.iter().find_map(|id| {
-            let mut first = None;
-            let mut english = None;
-            for record in self.by_id.get(&id.to_u16())? {
-                let s = LocalizedString::new(name, record);
-                if s.language().is_some_and(|l| l.starts_with("en")) {
-                    english = Some(s);
-                    break;
-                }
-                if first.is_none() {
-                    first = Some(s);
-                }
-            }
-            let text: String = english.or(first)?.chars().take(MAX_DECODED_CHARS).collect();
+            let (record, _) = self.by_id.get(&id.to_u16())?;
+            let text: String = LocalizedString::new(name, record).chars().take(MAX_DECODED_CHARS).collect();
             (!text.trim().is_empty()).then_some(text)
         })
     }

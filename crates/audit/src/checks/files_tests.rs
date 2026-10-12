@@ -467,3 +467,42 @@ fn canonical_file_name_is_built_from_the_names() {
     let r = run(&ctx, "check.files.canonicalFileName");
     assert!(r.findings.is_empty(), "{:?}", r.findings);
 }
+
+#[test]
+fn canonical_file_name_decodes_a_hostile_name_table_within_the_budget() {
+    // 5,000 Korean records of name ID 1 all point at one 64 KiB string: decoding each of them
+    // would decode 320 MB of text. The byte budget stops after a few dozen.
+    let text: Vec<u8> = "A".repeat(32_767).encode_utf16().flat_map(u16::to_be_bytes).collect();
+    let count = 5_000u16;
+    let mut table = Vec::new();
+    be16(&mut table, 0);
+    be16(&mut table, count);
+    be16(&mut table, 6 + 12 * count);
+    for _ in 0..count {
+        for v in [3, 1, 0x412, 1, text.len() as u16, 0] {
+            be16(&mut table, v);
+        }
+    }
+    table.extend(&text);
+    let glyphs = vec![Vec::new(), triangle()];
+    let (glyf, loca) = glyf_loca(&glyphs);
+    let tables: Vec<(&[u8; 4], Vec<u8>)> = vec![
+        (b"head", head()),
+        (b"hhea", hhea(2)),
+        (b"maxp", maxp(2)),
+        (b"hmtx", hmtx(2)),
+        (b"cmap", cmap()),
+        (b"name", table),
+        (b"OS/2", os2()),
+        (b"post", post()),
+        (b"glyf", glyf),
+        (b"loca", loca),
+    ];
+    let bytes = sfnt(TRUETYPE, &tables);
+    let services = NoServices;
+    let ctx = BinaryCtx::new("f0", &bytes, 0, &services).unwrap().with_file("out/test.ttf", 100);
+    let started = std::time::Instant::now();
+    let r = run(&ctx, "check.files.canonicalFileName");
+    assert!(started.elapsed() < std::time::Duration::from_secs(10));
+    assert_eq!(codes(&r), ["bad-filename"]);
+}
