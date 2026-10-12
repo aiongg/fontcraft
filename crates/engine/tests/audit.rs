@@ -297,7 +297,10 @@ fn the_registry_is_listed_and_described() {
     let mut s = Session::with_document();
     let list = run(&mut s, "audit.list", json!({}));
     let checks = list["checks"].as_array().unwrap();
-    assert!(checks.iter().all(|c| c["id"].as_str().unwrap().starts_with("check.outlines.")));
+    let listed: Vec<&str> = checks.iter().map(|c| c["id"].as_str().unwrap()).collect();
+    let registered: Vec<&str> = fontcraft_audit::CHECKS.iter().map(|c| c.id).collect();
+    assert_eq!(listed.len(), registered.len());
+    assert!(listed.iter().all(|id| registered.contains(id)));
     let by_id = |id: &str| checks.iter().find(|c| c["id"] == id).unwrap().clone();
     assert_eq!(by_id("check.outlines.missingExtremes")["fixAvailable"], json!(true));
     assert_eq!(by_id("check.outlines.tinyContour")["fixAvailable"], json!(false), "no command deletes contours yet");
