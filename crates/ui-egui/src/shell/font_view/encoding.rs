@@ -51,7 +51,7 @@ pub fn run(app: &mut FontcraftApp, id: &str, args: &Args) -> Result<Value, Strin
             path
         }
     };
-    app.run("fontView.selectEntries", &json!({"entries": [path]}))?;
+    app.run("fontView.selectSidebarEntries", &json!({"entries": [path]}))?;
     Ok(json!({"filter": path, "slots": encoding.slots.len(), "filled": encoding.filled(), "glyphs": names}))
 }
 
