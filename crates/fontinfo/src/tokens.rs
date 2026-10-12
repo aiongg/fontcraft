@@ -124,9 +124,10 @@ pub fn expand(text: &str, ctx: &TokenContext) -> Expanded {
     let mut tokens = 0usize;
     let mut rest = text;
     let mut from = 0usize;
+    let mut finds = Finds::default();
     while let Some(found) = rest.get(from..).and_then(|s| s.find(OPEN)) {
         let open = from + found;
-        let Some((inner, end)) = token_at(rest, open) else {
+        let Some((inner, end)) = token_at(rest, open, &mut finds) else {
             // `{` is one byte, so `open + 1` is a character boundary.
             from = open + 1;
             continue;
@@ -159,28 +160,50 @@ pub fn expand(text: &str, ctx: &TokenContext) -> Expanded {
         }
         rest = after;
         from = 0;
+        finds = Finds::default();
     }
     text_out.push_str(rest);
     out.text = text_out;
     out
 }
 
+/// The last search for `}}}` and for a line break in one text, each as (searched from, found at).
+/// The scan only moves forward, so a later search is answered from the last one while that one
+/// found nothing or found a place at or after the new start: a text of many `{{{` without their
+/// `}}}` is then read once, not once per `{{{`.
+#[derive(Default)]
+struct Finds {
+    close: Option<(usize, Option<usize>)>,
+    newline: Option<(usize, Option<usize>)>,
+}
+
+/// The first `pat` at or after byte `from` of `text`, reusing `last` (see [`Finds`]).
+fn find_from(text: &str, pat: &str, from: usize, last: &mut Option<(usize, Option<usize>)>) -> Option<usize> {
+    if let Some((searched, found)) = *last
+        && searched <= from
+        && found.is_none_or(|at| at >= from)
+    {
+        return found;
+    }
+    let found = text.get(from..).and_then(|s| s.find(pat)).and_then(|i| i.checked_add(from));
+    *last = Some((from, found));
+    found
+}
+
 /// The token whose `{{{` starts at byte `open` of `text`: its inner text and the byte just past
 /// its `}}}`. At least one character between the delimiters, none of them a line break.
-fn token_at(text: &str, open: usize) -> Option<(&str, usize)> {
+fn token_at<'t>(text: &'t str, open: usize, finds: &mut Finds) -> Option<(&'t str, usize)> {
     let start = open.checked_add(OPEN.len())?;
-    let body = text.get(start..)?;
-    let first = body.chars().next()?;
+    let first = text.get(start..)?.chars().next()?;
     if first == '\n' {
         return None;
     }
-    let skip = first.len_utf8();
-    let close = skip.checked_add(body.get(skip..)?.find(CLOSE)?)?;
-    let inner = body.get(..close)?;
-    if inner.contains('\n') {
+    let close = find_from(text, CLOSE, start.checked_add(first.len_utf8())?, &mut finds.close)?;
+    if find_from(text, "\n", start, &mut finds.newline).is_some_and(|n| n < close) {
         return None;
     }
-    Some((inner, start.checked_add(close)?.checked_add(CLOSE.len())?))
+    let inner = text.get(start..close)?;
+    Some((inner, close.checked_add(CLOSE.len())?))
 }
 
 struct Resolver<'c, 'a> {
@@ -414,6 +437,20 @@ mod tests {
         // One level: the copyright's own token is not expanded when it is the value of another.
         assert_eq!(run(&f, None, None, "{{{copyright}}}").text, "© {{{familyName}}}");
         assert_eq!(run(&f, None, None, "{{{date}}} {{{unitsPerEm}}}").text, "2026-10-08 12:00:00 +0000 1000");
+    }
+
+    #[test]
+    fn many_unclosed_openings_are_read_in_linear_time() {
+        let f = font();
+        // 400,000 `{{{` with a close only on the next line, then none at all.
+        for text in [format!("{}\n}}}}}}", "{{{".repeat(400_000)), "{{{".repeat(400_000)] {
+            let started = std::time::Instant::now();
+            let e = run(&f, None, None, &text);
+            assert!(started.elapsed() < std::time::Duration::from_secs(10), "took {:?}", started.elapsed());
+            assert_eq!(e.text, text, "nothing is a token");
+        }
+        // The cached searches still find later tokens on later lines.
+        assert_eq!(run(&f, None, None, "{{{ a\n{{{familyName}}} {{{x\n}}} {{{vendorID}}}").text, "{{{ a\nTest Sans {{{x\n}}} TEST");
     }
 
     #[test]
