@@ -238,27 +238,59 @@ fn build_preview(font: &Font, master: &str, message: &mut Option<String>) -> Opt
 }
 
 /// The file names `text` includes (`include(name)`), unchecked: a match in a comment only adds a
-/// name to the cache key.
+/// name to the cache key. A name ends at `)` and cannot span a line; the search goes on after the
+/// scanned name, so each byte of `text` is scanned a bounded number of times.
 fn include_names(text: &str) -> impl Iterator<Item = &str> {
-    text.match_indices("include").filter_map(|(at, word)| {
-        let rest = text.get(at + word.len()..)?.trim_start().strip_prefix('(')?;
-        let (end, _) = rest.char_indices().take(MAX_INCLUDE_NAME_BYTES).find(|(_, c)| *c == ')')?;
-        Some(rest.get(..end)?.trim()).filter(|name| !name.is_empty())
+    const WORD: &str = "include";
+    let mut from = 0usize;
+    std::iter::from_fn(move || {
+        loop {
+            let at = from + text.get(from..)?.find(WORD)?;
+            let after = at + WORD.len();
+            from = after;
+            let tail = text.get(after..)?;
+            let Some(rest) = tail.trim_start().strip_prefix('(') else {
+                continue;
+            };
+            let start = text.len() - rest.len();
+            let mut end = None;
+            let mut scanned = 0;
+            for (i, c) in rest.char_indices().take(MAX_INCLUDE_NAME_BYTES) {
+                scanned = i + c.len_utf8();
+                if c == ')' {
+                    end = Some(i);
+                    break;
+                }
+                if c == '\n' {
+                    break;
+                }
+            }
+            from = start + scanned;
+            if let Some(name) = end.and_then(|end| rest.get(..end)).map(str::trim).filter(|name| !name.is_empty()) {
+                return Some(name);
+            }
+        }
     })
 }
 
 /// Adds the modification time and length of each file the code includes from `dir` to
 /// `hasher`, following the includes of included files. An include is looked up both in `dir`
-/// and next to the file that names it. Returns `false` when there were more files or bytes than
-/// [`MAX_KEYED_INCLUDES`] and [`MAX_KEYED_INCLUDE_BYTES`] allow, so the compile is not reused.
+/// and next to the file that names it; a file outside `dir` is skipped, as the compiler refuses
+/// it. Returns `false` when there were more files or bytes than [`MAX_KEYED_INCLUDES`] and
+/// [`MAX_KEYED_INCLUDE_BYTES`] allow, so the compile is not reused.
 fn hash_included_files(files: &fontcraft_fea::VirtualFiles, dir: &std::path::Path, hasher: &mut DefaultHasher) -> bool {
-    let parent = |p: &std::path::Path| p.parent().map(|d| d.to_path_buf()).unwrap_or_else(|| dir.to_path_buf());
-    let mut pending: Vec<(PathBuf, Arc<str>)> = files.iter().map(|(path, text)| (parent(&dir.join(path)), Arc::from(text))).collect();
+    use std::io::Read;
+    let Ok(root) = dir.canonicalize() else {
+        // No folder, nothing to include: the compile fails the same way each time.
+        return true;
+    };
+    let parent = |p: &std::path::Path| p.parent().map(|d| d.to_path_buf()).unwrap_or_else(|| root.clone());
+    let mut pending: Vec<(PathBuf, Arc<str>)> = files.iter().map(|(path, text)| (parent(&root.join(path)), Arc::from(text))).collect();
     let mut seen: HashSet<PathBuf> = HashSet::new();
     let mut read_bytes = 0usize;
     while let Some((from_dir, text)) = pending.pop() {
         for name in include_names(&text) {
-            for candidate in [dir.join(name), from_dir.join(name)] {
+            for candidate in [root.join(name), from_dir.join(name)] {
                 if !seen.insert(candidate.clone()) {
                     continue;
                 }
@@ -266,7 +298,11 @@ fn hash_included_files(files: &fontcraft_fea::VirtualFiles, dir: &std::path::Pat
                     return false;
                 }
                 candidate.hash(hasher);
-                let Ok(meta) = std::fs::metadata(&candidate) else {
+                let Some(real) = candidate.canonicalize().ok().filter(|real| real.starts_with(&root)) else {
+                    false.hash(hasher);
+                    continue;
+                };
+                let Ok(meta) = std::fs::metadata(&real) else {
                     false.hash(hasher);
                     continue;
                 };
@@ -275,13 +311,22 @@ fn hash_included_files(files: &fontcraft_fea::VirtualFiles, dir: &std::path::Pat
                 if !meta.is_file() {
                     continue;
                 }
-                read_bytes = read_bytes.saturating_add(usize::try_from(meta.len()).unwrap_or(usize::MAX));
+                // The length on record can be wrong (special files report zero), so the read
+                // itself is capped at what the budget has left.
+                let remaining = MAX_KEYED_INCLUDE_BYTES.saturating_sub(read_bytes);
+                let limit = u64::try_from(remaining).unwrap_or(u64::MAX).saturating_add(1);
+                let mut bytes = Vec::new();
+                let Ok(file) = std::fs::File::open(&real) else {
+                    continue;
+                };
+                // A file that cannot be read fails the compile the same way each time.
+                let readable = file.take(limit).read_to_end(&mut bytes).is_ok();
+                read_bytes = read_bytes.saturating_add(bytes.len());
                 if read_bytes > MAX_KEYED_INCLUDE_BYTES {
                     return false;
                 }
-                // A file that cannot be read fails the compile the same way each time.
-                if let Ok(included) = std::fs::read_to_string(&candidate) {
-                    pending.push((parent(&candidate), Arc::from(included)));
+                if let Some(included) = readable.then(|| String::from_utf8(bytes).ok()).flatten() {
+                    pending.push((parent(&real), Arc::from(included)));
                 }
             }
         }
@@ -929,4 +974,19 @@ fn preview_name(s: &mut Session, raw: &Value) -> Result<Value> {
     };
     walk.walk(class, 0);
     Ok(json!({ "kind": "class", "name": class, "glyphs": walk.out, "unknown": walk.unknown }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn include_names_end_at_a_parenthesis_on_the_same_line_and_scan_in_linear_time() {
+        let names: Vec<&str> = include_names("include(a.fea); include ( b.fea );\ninclude(c\n.fea);").collect();
+        assert_eq!(names, ["a.fea", "b.fea"]);
+        let hostile = "include(".repeat(2_000_000);
+        let started = std::time::Instant::now();
+        assert_eq!(include_names(&hostile).count(), 0);
+        assert!(started.elapsed() < std::time::Duration::from_secs(5), "took {:?}", started.elapsed());
+    }
 }

@@ -316,3 +316,34 @@ fn a_reused_compile_rebuilds_the_preview_after_other_edits() {
     assert!(Arc::ptr_eq(&rebuilt, &preview(&s)), "the same revision reuses its preview");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// The cache key skips an included file outside the document's folder (the compiler refuses
+/// it), however large it is, and a large file inside the folder stops the compile from being
+/// reused.
+#[test]
+fn a_reused_compile_skips_includes_outside_the_folder_and_caps_what_it_reads() {
+    let root = std::env::temp_dir().join(format!("fontcraft-feature-cache-outside-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let dir = root.join("source");
+    std::fs::create_dir_all(&dir).unwrap();
+    let outside = root.join("outside.fea");
+    let big = "# filler\n".repeat(600_000);
+    std::fs::write(&outside, &big).unwrap();
+    let font = Session::with_document().font().unwrap().clone();
+    let mut s = Session::new();
+    s.add_document(font, Some(dir.join("Font.fontcraft"))).unwrap();
+    let absolute = outside.to_str().unwrap();
+    let code = format!("include(../outside.fea);\ninclude({absolute});\n");
+    run(&mut s, "font.features.addFeature", json!({"tag": "liga", "code": code}));
+    let cached = |s: &mut Session| run(s, "font.features.compile", json!({}))["cached"].as_bool().unwrap();
+    assert!(!cached(&mut s));
+    assert!(cached(&mut s), "a file outside the folder is not read for the key");
+    std::fs::write(&outside, format!("{big}{big}")).unwrap();
+    assert!(cached(&mut s), "a file outside the folder is not in the key");
+
+    std::fs::write(dir.join("inside.fea"), &big).unwrap();
+    run(&mut s, "font.features.addFeature", json!({"tag": "calt", "code": "include(inside.fea);"}));
+    assert!(!cached(&mut s));
+    assert!(!cached(&mut s), "more included bytes than the key reads");
+    let _ = std::fs::remove_dir_all(&root);
+}
