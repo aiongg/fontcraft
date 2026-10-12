@@ -1491,7 +1491,7 @@ fn heuristic(ctx: &GlyphCtx<'_>, sink: &mut Sink, test: Test, tolerance: f64, ki
         sink.skip(reason.clone());
         return;
     }
-    for f in compare_pairs(font, &prep, test, tolerance, kinkiness) {
+    for f in compare_pairs(font, prep, test, tolerance, kinkiness) {
         let (Some(pa), Some(pb)) = (prep.parts.get(f.a), prep.parts.get(f.b)) else { continue };
         let items = prep.items.get(f.b).map(Vec::as_slice).unwrap_or(&[]);
         let shape = f.item.and_then(|i| items.get(i)).map(|x| x.shape);

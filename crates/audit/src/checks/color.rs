@@ -103,7 +103,7 @@ pub(crate) fn palette_brightness(ctx: &BinaryCtx<'_>, params: &Params<'_>, sink:
                 break;
             };
             budget = left;
-            let worst = worst_layer(own, &colors, start, entries, margin);
+            let worst = worst_layer(own, colors, start, entries, margin);
             measured.insert(range, worst);
             worst
         };

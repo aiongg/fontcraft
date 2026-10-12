@@ -406,7 +406,7 @@ fn add_image(s: &mut Session, p: &Value) -> Result<Value> {
     // Read every file before anything changes, so a bad file refuses the whole call. Each file
     // is read once, however many glyphs it goes on.
     let store = s.assets();
-    let mut read: HashMap<&str, (Image, ImageFormat, Option<(u32, u32)>)> = HashMap::new();
+    let mut read: HashMap<&str, ReadImage> = HashMap::new();
     let mut placements = Vec::with_capacity(pairs.len());
     for (glyph, file) in pairs {
         let (image, format, pixels) = match read.get(file) {
@@ -452,9 +452,12 @@ fn add_image(s: &mut Session, p: &Value) -> Result<Value> {
     Ok(json!({ "placed": placed, "unmatched": unmatched }))
 }
 
+/// An image as Add Image places it, its format and its pixel size when known.
+type ReadImage = (Image, ImageFormat, Option<(u32, u32)>);
+
 /// The image Add Image places for `file`, its format and pixel size. Only the file's start is
 /// read ([`HEADER_BYTES`]) unless the header lies beyond it, as a TIFF's may.
-fn read_image(s: &Session, store: &dyn AssetStore, p: &Params, file: &str) -> Result<(Image, ImageFormat, Option<(u32, u32)>)> {
+fn read_image(s: &Session, store: &dyn AssetStore, p: &Params, file: &str) -> Result<ReadImage> {
     let stored = s.stored_image_path(file).ok_or_else(|| p.bad(format!("`{file}` is not a usable file path")))?;
     let mut bytes = store.read_head(&stored, HEADER_BYTES).map_err(|e| p.bad(e.to_string()))?;
     let cut = bytes.len() >= HEADER_BYTES;

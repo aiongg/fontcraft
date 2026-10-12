@@ -345,7 +345,7 @@ pub(crate) fn max_four_fonts_per_family_name(ctx: &FamilyCtx<'_>, _: &Params<'_>
 /// FontBakery `opentype/family/bold_italic_unique_for_nameid1`; comparefamily family test 5.
 pub(crate) fn unique_style_linking(ctx: &FamilyCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
     let faces = faces(ctx, sink);
-    for (name, group) in style_linked(&faces) {
+    for (name, group) in style_linked(faces) {
         let mut seen: Vec<((bool, bool), Vec<&Face<'_>>)> = Vec::new();
         for face in group {
             let key = (face.bold, face.italic);
@@ -381,7 +381,7 @@ fn yes(b: bool) -> &'static str {
 /// comparefamily family test 3 (with `strict`).
 pub(crate) fn consistent_family_name(ctx: &FamilyCtx<'_>, params: &Params<'_>, sink: &mut Sink) {
     let faces = faces(ctx, sink);
-    let by_name = group_by(&faces, |f| f.win(16).or_else(|| f.win(1)).unwrap_or_default());
+    let by_name = group_by(faces, |f| f.win(16).or_else(|| f.win(1)).unwrap_or_default());
     if by_name.len() > 1 {
         let detail = list(by_name.iter().map(|(name, group)| format!("'{name}' in {}", labels(group))));
         sink.push(
@@ -391,7 +391,7 @@ pub(crate) fn consistent_family_name(ctx: &FamilyCtx<'_>, params: &Params<'_>, s
     if !strict(params, "check.family.consistentFamilyName") {
         return;
     }
-    for (name, group) in style_linked(&faces) {
+    for (name, group) in style_linked(faces) {
         let mut languages: Vec<u16> = Vec::new();
         let mut seen: BTreeSet<u16> = BTreeSet::new();
         for face in &group {
@@ -440,7 +440,7 @@ fn quoted(s: Option<&str>) -> String {
 /// comparefamily family test 2.
 pub(crate) fn name_record_sets(ctx: &FamilyCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
     let faces = faces(ctx, sink);
-    for (name, group) in style_linked(&faces) {
+    for (name, group) in style_linked(faces) {
         let mut counts: BTreeMap<(u16, u16, u16, u16), usize> = BTreeMap::new();
         for face in &group {
             let keys: BTreeSet<(u16, u16, u16, u16)> = face
@@ -482,7 +482,7 @@ fn base_and_bold<'f, 'a>(group: &[&'f Face<'a>]) -> (Option<&'f Face<'a>>, Optio
 /// comparefamily family test 6 (base font).
 pub(crate) fn style_linked_group_shape(ctx: &FamilyCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
     let faces = faces(ctx, sink);
-    for (name, group) in style_linked(&faces) {
+    for (name, group) in style_linked(faces) {
         let (base, bold) = base_and_bold(&group);
         let Some(base) = base else {
             sink.push(
@@ -519,7 +519,7 @@ fn bold_range(regular: u16) -> Option<(u16, u16)> {
 /// comparefamily family tests 6 (weight ranges) and 8.
 pub(crate) fn bold_link_weights(ctx: &FamilyCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
     let faces = faces(ctx, sink);
-    for (name, group) in style_linked(&faces) {
+    for (name, group) in style_linked(faces) {
         // Family test 6.
         if let (Some(base), Some(bold)) = base_and_bold(&group)
             && !std::ptr::eq(base, bold)
@@ -629,7 +629,7 @@ pub(crate) fn bold_link_weights(ctx: &FamilyCtx<'_>, _: &Params<'_>, sink: &mut 
 /// comparefamily family test 9.
 pub(crate) fn width_class(ctx: &FamilyCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
     let faces = faces(ctx, sink);
-    for (name, group) in style_linked(&faces) {
+    for (name, group) in style_linked(faces) {
         let Some((first, rest)) = group.split_first() else { continue };
         // comparefamily ends the whole test, not just the group, at a first font without OS/2.
         let Some(base) = first.os2 else {
@@ -702,7 +702,7 @@ fn without_years(s: &str) -> String {
 /// comparefamily family test 7.
 pub(crate) fn copyright_and_trademark(ctx: &FamilyCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
     let faces = faces(ctx, sink);
-    for (name, group) in typographic(&faces) {
+    for (name, group) in typographic(faces) {
         let Some((first, rest)) = group.split_first() else { continue };
         for (id, what, differs, years) in
             [(0u16, "copyright", "copyright-differs", "copyright-years-only"), (7, "trademark", "trademark-differs", "trademark-years-only")]
@@ -740,7 +740,7 @@ fn same_menu_name(win: &str, mac: &str) -> bool {
 /// comparefamily family test 11, for fonts that keep Macintosh names.
 pub(crate) fn mac_windows_menu_names(ctx: &FamilyCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
     let faces = faces(ctx, sink);
-    for (_, group) in style_linked(&faces) {
+    for (_, group) in style_linked(faces) {
         for face in group {
             if !face.mac_names || ps_info(face.font).is_cid() {
                 continue;
@@ -803,7 +803,7 @@ pub(crate) fn duplicate_full_names(ctx: &FamilyCtx<'_>, _: &Params<'_>, sink: &m
 /// FontBakery `opentype/family/equal_font_versions`.
 pub(crate) fn equal_versions(ctx: &FamilyCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
     let faces = faces(ctx, sink);
-    for (name, group) in typographic(&faces) {
+    for (name, group) in typographic(faces) {
         let versions: BTreeSet<i32> = group.iter().filter_map(|f| f.revision).collect();
         if versions.len() > 1 {
             let detail = list(group.iter().filter_map(|f| Some(format!("{} {}", f.label, revision_text(f.revision?)))));
@@ -824,7 +824,7 @@ fn revision_text(bits: i32) -> String {
 pub(crate) fn panose_family_type(ctx: &FamilyCtx<'_>, params: &Params<'_>, sink: &mut Sink) {
     let strict = strict(params, "check.family.panoseFamilyType");
     let faces = faces(ctx, sink);
-    for (name, group) in typographic(&faces) {
+    for (name, group) in typographic(faces) {
         let mut types: BTreeMap<u8, Vec<&Face<'_>>> = BTreeMap::new();
         for face in &group {
             let Some(o) = face.os2 else {
@@ -869,7 +869,7 @@ pub(crate) fn panose_family_type(ctx: &FamilyCtx<'_>, params: &Params<'_>, sink:
 /// FontBakery `opentype/family/underline_thickness`; comparefamily family test 15.
 pub(crate) fn underline_consistency(ctx: &FamilyCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
     let faces = faces(ctx, sink);
-    for (name, group) in typographic(&faces) {
+    for (name, group) in typographic(faces) {
         let Some((first, rest)) = group.split_first() else { continue };
         let Some((pos, thick)) = first.underline else { continue };
         for face in rest {
@@ -929,7 +929,7 @@ fn metric_differences<'f>(group: &[&'f Face<'_>]) -> Vec<MetricDifference<'f>> {
 /// FontBakery `family/vertical_metrics`.
 pub(crate) fn vertical_metrics(ctx: &FamilyCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
     let faces = faces(ctx, sink);
-    for (name, group) in typographic(&faces) {
+    for (name, group) in typographic(faces) {
         let mut missing = false;
         for face in &group {
             if face.os2.is_none() {
@@ -966,7 +966,7 @@ pub(crate) fn vertical_metrics(ctx: &FamilyCtx<'_>, _: &Params<'_>, sink: &mut S
 /// the typographic families among the fonts given.
 pub(crate) fn superfamily_vertical_metrics(ctx: &FamilyCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
     let faces = faces(ctx, sink);
-    let families = typographic(&faces);
+    let families = typographic(faces);
     if families.len() < 2 {
         return;
     }
@@ -987,7 +987,7 @@ pub(crate) fn superfamily_vertical_metrics(ctx: &FamilyCtx<'_>, _: &Params<'_>, 
 /// FontBakery `adobefonts/family/consistent_upm`; comparefamily single-face test 16.
 pub(crate) fn units_per_em(ctx: &FamilyCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
     let faces = faces(ctx, sink);
-    for (name, group) in typographic(&faces) {
+    for (name, group) in typographic(faces) {
         let values: BTreeSet<u16> = group.iter().filter_map(|f| f.upm).collect();
         if values.len() > 1 {
             sink.push(
@@ -1005,7 +1005,7 @@ pub(crate) fn units_per_em(ctx: &FamilyCtx<'_>, _: &Params<'_>, sink: &mut Sink)
 pub(crate) fn wws_bit(ctx: &FamilyCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
     const WWS: u16 = 1 << 8;
     let faces = faces(ctx, sink);
-    for (name, group) in typographic(&faces) {
+    for (name, group) in typographic(faces) {
         let with: Vec<(&Face<'_>, Os2)> = group.iter().filter_map(|f| Some((*f, f.os2?))).collect();
         let set: Vec<&Face<'_>> = with.iter().filter(|(_, o)| o.fs_selection & WWS != 0).map(|(f, _)| *f).collect();
         if set.is_empty() {
@@ -1054,7 +1054,7 @@ pub(crate) fn wws_bit(ctx: &FamilyCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
 /// comparefamily family test 14.
 pub(crate) fn embedding_permissions(ctx: &FamilyCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
     let faces = faces(ctx, sink);
-    for (name, group) in typographic(&faces) {
+    for (name, group) in typographic(faces) {
         let Some((first, rest)) = group.split_first() else { continue };
         let Some(base) = first.os2 else { continue };
         for face in rest {
@@ -1079,7 +1079,7 @@ pub(crate) fn embedding_permissions(ctx: &FamilyCtx<'_>, _: &Params<'_>, sink: &
 /// weight and width classes instead of file names.
 pub(crate) fn italics_have_uprights(ctx: &FamilyCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
     let faces = faces(ctx, sink);
-    for (name, group) in typographic(&faces) {
+    for (name, group) in typographic(faces) {
         for face in group.iter().filter(|f| f.italic) {
             let partner = group.iter().any(|u| {
                 !u.italic
@@ -1127,7 +1127,7 @@ fn widths(font: &FontRef<'_>, names: &[String]) -> HashMap<String, u16> {
 /// comparefamily family test 16.
 pub(crate) fn glyph_width_ratio(ctx: &FamilyCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
     let faces = faces(ctx, sink);
-    for (name, group) in typographic(&faces) {
+    for (name, group) in typographic(faces) {
         if group.len() < 2 {
             continue;
         }
@@ -1215,7 +1215,7 @@ fn codepoints(font: &FontRef<'_>) -> BTreeSet<u32> {
 /// `typenetwork/family/equal_numbers_of_glyphs`.
 pub(crate) fn codepoint_coverage(ctx: &FamilyCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
     let faces = faces(ctx, sink);
-    for (name, group) in typographic(&faces) {
+    for (name, group) in typographic(faces) {
         if group.len() < 2 {
             continue;
         }
@@ -1278,7 +1278,7 @@ pub(crate) fn codepoint_coverage(ctx: &FamilyCtx<'_>, _: &Params<'_>, sink: &mut
 pub(crate) fn tabular_figure_widths(ctx: &FamilyCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
     let faces = faces(ctx, sink);
     let mut any_names = false;
-    for (name, group) in typographic(&faces) {
+    for (name, group) in typographic(faces) {
         // Width → the tabular glyphs (font, glyph) with it, in the order widths are first seen.
         let mut by_width: Vec<(u16, Vec<(&Face<'_>, String)>)> = Vec::new();
         let mut slot: HashMap<u16, usize> = HashMap::new();
@@ -1346,7 +1346,7 @@ pub(crate) fn tabular_figure_widths(ctx: &FamilyCtx<'_>, _: &Params<'_>, sink: &
 /// FontBakery `opentype/varfont/family_axis_ranges` and `varfont/consistent_axes`.
 pub(crate) fn axis_ranges(ctx: &FamilyCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
     let faces = faces(ctx, sink);
-    for (name, group) in typographic(&faces) {
+    for (name, group) in typographic(faces) {
         type AxisRanges = Vec<(Tag, [i32; 3])>;
         let axes: Vec<(&Face<'_>, AxisRanges)> = group
             .iter()
@@ -1462,7 +1462,7 @@ fn add_layout(table: &'static str, scripts: &ScriptList<'_>, features: &FeatureL
 /// comparefamily family test 12.
 pub(crate) fn layout_consistency(ctx: &FamilyCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
     let faces = faces(ctx, sink);
-    for (name, group) in typographic(&faces) {
+    for (name, group) in typographic(faces) {
         if group.len() < 2 {
             continue;
         }
@@ -1516,7 +1516,7 @@ fn size_params(font: &FontRef<'_>) -> [u16; 5] {
 /// comparefamily family test 4.
 pub(crate) fn size_feature_groups(ctx: &FamilyCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
     let faces = faces(ctx, sink);
-    for (name, group) in typographic(&faces) {
+    for (name, group) in typographic(faces) {
         let sizes: Vec<(&Face<'_>, [u16; 5], String)> = group
             .iter()
             .map(|f| {
@@ -1720,10 +1720,10 @@ fn numbers(v: &[f64]) -> String {
 /// hinting checks).
 pub(crate) fn blue_value_array_sizes(ctx: &FamilyCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
     let faces = faces(ctx, sink);
-    if !blue_family(&faces, sink) {
+    if !blue_family(faces, sink) {
         return;
     }
-    for (name, group) in style_linked(&faces) {
+    for (name, group) in style_linked(faces) {
         let subgroups = group_equal(group.into_iter().map(|face| (glyph_names(face.font).0, face)));
         for (_, members) in subgroups {
             let Some((first, rest)) = members.split_first() else { continue };
@@ -1763,10 +1763,10 @@ pub(crate) fn blue_value_array_sizes(ctx: &FamilyCtx<'_>, _: &Params<'_>, sink: 
 /// FamilyBlues, 5 for FamilyOtherBlues.
 pub(crate) fn family_blues(ctx: &FamilyCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
     let faces = faces(ctx, sink);
-    if !blue_family(&faces, sink) {
+    if !blue_family(faces, sink) {
         return;
     }
-    for (name, group) in typographic(&faces) {
+    for (name, group) in typographic(faces) {
         if group.len() < 2 {
             continue;
         }
@@ -1856,10 +1856,10 @@ pub(crate) fn family_blues(ctx: &FamilyCtx<'_>, _: &Params<'_>, sink: &mut Sink)
 /// comparefamily family tests 20 and 21.
 pub(crate) fn blue_scale_and_shift(ctx: &FamilyCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
     let faces = faces(ctx, sink);
-    if !blue_family(&faces, sink) {
+    if !blue_family(faces, sink) {
         return;
     }
-    for (name, group) in style_linked(&faces) {
+    for (name, group) in style_linked(faces) {
         let Some((first, rest)) = group.split_first() else { continue };
         let Some(base) = ps_info(first.font).plain() else { continue };
         for face in rest {
