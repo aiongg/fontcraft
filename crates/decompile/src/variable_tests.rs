@@ -413,39 +413,67 @@ fn many_named_instances_read_their_names_from_one_pass_over_the_name_table() {
 
 #[test]
 fn many_instances_naming_one_id_with_many_records_choose_the_record_once() {
-    // 5,000 records in other languages and one English record all under name ID 256, and 5,000 instances
-    // naming it: choosing the record per lookup would make 25 million record checks. The name
-    // table's 16-bit storage offset caps the record count near 5,400.
+    // 5,000 records in other languages and one English record all under name ID 256, and 5,000
+    // instances naming it: choosing the record per lookup would make 25 million record checks.
+    // The English record (English, Singapore) sorts after the others, so a per-lookup search
+    // passes all of them each time. The name table's 16-bit storage offset caps the record count
+    // near 5,400.
     let (_, compiled) = source();
     let base = FontRef::new(&compiled.bytes).unwrap();
     let count = 5_000u16;
     // In the table's sort order: platform, encoding, language, then name ID.
     let mut records = vec![
         NameRecord::new(3, 1, 0x409, NameId::new(1), write_fonts::OffsetMarker::new("Var Test".to_string())),
-        NameRecord::new(3, 1, 0x409, NameId::new(256), write_fonts::OffsetMarker::new("Book".to_string())),
+        NameRecord::new(3, 1, 0x4809, NameId::new(256), write_fonts::OffsetMarker::new("Book".to_string())),
     ];
     // A name table holds one record per platform, encoding, language and name ID, so each of
-    // the other records has a language of its own.
-    records.extend((0..count).map(|k| NameRecord::new(3, 1, 0x412 + k, NameId::new(256), write_fonts::OffsetMarker::new(format!("k{}", k % 10)))));
+    // the other records has a language of its own, none of them English (primary language 9).
+    let others = (0x412u16..).filter(|l| l & 0x3ff != 0x09).take(usize::from(count));
+    records
+        .extend(others.enumerate().map(|(k, l)| NameRecord::new(3, 1, l, NameId::new(256), write_fonts::OffsetMarker::new(format!("k{}", k % 10)))));
     records.sort();
-    let instances: Vec<InstanceRecord> = (0..count)
-        .map(|_| InstanceRecord {
-            subfamily_name_id: NameId::new(256),
-            flags: 0,
-            coordinates: vec![Fixed::from_f64(400.0)],
-            post_script_name_id: None,
-        })
-        .collect();
-    let fvar = Fvar::new(AxisInstanceArrays::new(
-        vec![VariationAxisRecord::new(Tag::new(b"wght"), Fixed::from_f64(300.0), Fixed::from_f64(400.0), Fixed::from_f64(700.0), 0, NameId::new(1))],
-        instances,
-    ));
-    let mut builder = FontBuilder::new();
-    builder.add_table(&fvar).unwrap().add_table(&Name::new(records)).unwrap();
-    builder.copy_missing_tables(base);
-    let started = std::time::Instant::now();
-    let opened = open_variable(&builder.build(), None).unwrap();
-    assert!(started.elapsed() < std::time::Duration::from_secs(10));
+    let font = |instances: u16| {
+        let instances: Vec<InstanceRecord> = (0..instances)
+            .map(|_| InstanceRecord {
+                subfamily_name_id: NameId::new(256),
+                flags: 0,
+                coordinates: vec![Fixed::from_f64(400.0)],
+                post_script_name_id: None,
+            })
+            .collect();
+        let fvar = Fvar::new(AxisInstanceArrays::new(
+            vec![VariationAxisRecord::new(
+                Tag::new(b"wght"),
+                Fixed::from_f64(300.0),
+                Fixed::from_f64(400.0),
+                Fixed::from_f64(700.0),
+                0,
+                NameId::new(1),
+            )],
+            instances,
+        ));
+        let mut builder = FontBuilder::new();
+        builder.add_table(&fvar).unwrap().add_table(&Name::new(records.clone())).unwrap();
+        builder.copy_missing_tables(base.clone());
+        builder.build()
+    };
+    // The fastest of three opens, so a busy machine does not decide the comparison.
+    let open_time = |bytes: &[u8]| {
+        let mut runs: Vec<_> = (0..3)
+            .map(|_| {
+                let started = std::time::Instant::now();
+                let opened = open_variable(bytes, None).unwrap();
+                (started.elapsed(), opened)
+            })
+            .collect();
+        runs.sort_by_key(|(t, _)| *t);
+        runs.swap_remove(0)
+    };
+    let (few, many) = (font(50), font(count));
+    let (few_time, _) = open_time(&few);
+    let (many_time, opened) = open_time(&many);
+    // Lookups that each search the records grow with the instances; one choice per ID does not.
+    assert!(many_time < few_time * 5 + std::time::Duration::from_millis(50), "{many_time:?} for {count} instances, {few_time:?} for 50");
     assert_eq!(opened.font.instances.len(), usize::from(count));
     assert!(opened.font.instances.iter().all(|i| i.name == "Book"));
 }
