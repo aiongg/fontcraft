@@ -17,6 +17,8 @@ fn drawer(section: &str) -> Option<Draw> {
         "layers" => Some(layers::show),
         "relatedGlyphs" => Some(super::related_glyphs::show),
         "transformations" => Some(transformations::show),
+        "referenceFont" => Some(super::reference_font::show),
+        "selections" => Some(super::selections::show),
         _ => None,
     }
 }

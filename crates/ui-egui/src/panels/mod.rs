@@ -60,8 +60,14 @@ use crate::tools_glue;
 pub type Pending = Vec<(&'static str, Value)>;
 
 /// The Palette sections, in order: (id, title).
-pub const SECTIONS: [(&str, &str); 4] =
-    [("dimensions", "Dimensions"), ("fitCurve", "Fit Curve"), ("layers", "Layers"), ("transformations", "Transformations")];
+pub const SECTIONS: [(&str, &str); 6] = [
+    ("dimensions", "Dimensions"),
+    ("fitCurve", "Fit Curve"),
+    ("layers", "Layers"),
+    ("transformations", "Transformations"),
+    ("referenceFont", "Reference Font"),
+    ("selections", "Selections"),
+];
 /// The metric lines a Transformations origin can sit on.
 pub const METRICS: [&str; 5] = ["baseline", "halfXHeight", "xHeight", "halfCapHeight", "capHeight"];
 
@@ -110,6 +116,7 @@ pub struct PanelState {
     pub kerning_review: crate::shell::kerning_review::KerningReviewState,
     pub edit_aids: crate::shell::edit_aids::EditAidsState,
     pub attach: crate::shell::attach::AttachState,
+    pub reference_font: reference_font::ReferenceFontState,
 }
 
 impl Default for PanelState {
@@ -139,6 +146,7 @@ impl Default for PanelState {
             kerning_review: Default::default(),
             edit_aids: Default::default(),
             attach: Default::default(),
+            reference_font: Default::default(),
         }
     }
 }
@@ -192,7 +200,7 @@ pub const COMMANDS: &[UiCommand] = &[
         "Collapse / Expand Section",
         &[],
         "",
-        "{section: \"dimensions\" | \"fitCurve\" | \"layers\" | \"transformations\", expanded?: bool (omitted: toggle)} collapse a Palette section to its title row or expand it → {section, expanded}",
+        "{section: \"dimensions\" | \"fitCurve\" | \"layers\" | \"transformations\" | \"referenceFont\" | \"selections\", expanded?: bool (omitted: toggle)} collapse a Palette section to its title row or expand it → {section, expanded}",
     ),
     (
         "infoBox.setReferencePoint",

@@ -91,6 +91,8 @@ pub const MODULES: &[(&[UiCommand], Handler)] = &[
     (kerning_review::COMMANDS, kerning_review::run),
     (edit_aids::COMMANDS, edit_aids::run),
     (attach::COMMANDS, attach::run),
+    (crate::panels::reference_font::COMMANDS, crate::panels::reference_font::run),
+    (crate::panels::selections::COMMANDS, crate::panels::selections::run),
 ];
 
 /// Every shell command, in module order.

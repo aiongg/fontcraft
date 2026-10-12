@@ -217,6 +217,9 @@ pub struct Tokens {
     /// Other layers of the glyph whose eye is on (`layers.visibleLayerOutline`).
     pub visible_layer_outline: Color32,
     pub visible_layer_outline_width: f32,
+    /// The reference font's glyph behind the outline (`view.setReferenceFont`).
+    pub reference_font_outline: Color32,
+    pub reference_font_outline_width: f32,
     /// Laid over the canvas while the background is the side being edited (`background.darkenedCanvas`).
     pub background_tint: Color32,
     /// Arrows, circles, plus and minus signs, and the edges of notes.
@@ -440,6 +443,8 @@ impl Tokens {
             background_outline_width: 1.0,
             visible_layer_outline: Color32::from_rgba_unmultiplied(0x2d, 0x8c, 0xeb, 0xb0),
             visible_layer_outline_width: 0.75,
+            reference_font_outline: Color32::from_rgba_unmultiplied(0x30, 0xa0, 0x60, 0xa0),
+            reference_font_outline_width: 1.0,
             background_tint: Color32::from_rgba_unmultiplied(0x00, 0x00, 0x00, 0x18),
             annotation: Color32::from_rgb(0xe0, 0x30, 0x30),
             annotation_width: 2.0,

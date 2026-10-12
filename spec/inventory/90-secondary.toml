@@ -394,6 +394,14 @@ summary = "Stores node selections per glyph under names and recalls them later, 
 ref = "FontLab 8 What's new › Edit & refine › Selecting contours"
 status = "docs"
 origin = "fontlab"
+notes = "Documented, not yet observed. FontCraft's Palette section lists the edited glyph's stored selections with a name field; Add stores the current selection under the typed name (edit.storeSelection), Update stores it under the clicked entry's name, Remove deletes the clicked entry (edit.removeStoredSelection), and clicking a name recalls it (edit.recallSelection). Selection changes are view state in FontCraft and make no undo steps, so the separate selection undo is not built."
+guesses = [
+  "The section sits after Transformations in the Palette and shows only the edited glyph's entries; FontLab's panel placement would settle it.",
+  "Add with a name that already exists replaces that entry rather than refusing; observing the panel's Add on a duplicate name would settle it.",
+]
+observe = [
+  "In FontLab 8, store a selection named 'stem' in one master, switch to another master and click the entry: check whether the same node indexes are selected and whether a mismatched master selects part or nothing.",
+]
 
 [[command]]
 id = "edit.storeSelection"
@@ -401,13 +409,50 @@ label = "Store Selection"
 menu = ["Edit", "Selection"]
 shortcut = ""
 kind = "engine"
-params = "{glyph?, name: string, nodes?: [nodeRef]}"
+params = "{glyph: name, layer?: id, side?: side, name: string, points?: [[shape, node]], shapes?: [index], anchors?: [name]}"
 area = "drawing"
 milestone = "M13"
 summary = "Saves the current node selection of the glyph under a name in the glyph's data, replacing an existing entry of that name."
 ref = "FontLab 8 What's new › Edit & refine › Selections panel"
 status = "docs"
 origin = "fontlab"
+notes = "Documented, not yet observed. Kept in the glyph's user data under com.fontcraft.storedSelections as {name, nodes: [[shape, node]], anchors, components}, so .glyphs and UFO files keep it. Commands take explicit targets, so the glyph is required; the shell fills it and the lists from the Edit View selection. At most 256 entries per glyph."
+guesses = [
+  "Selected anchors and components are stored with the nodes, by anchor name and shape index; FontLab documents node selections only, and its panel on a selection with a component would settle it.",
+  "Storing an empty selection is refused; FontLab's Add button with nothing selected would settle it.",
+]
+
+[[command]]
+id = "edit.removeStoredSelection"
+label = "Remove Stored Selection"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, name: string}"
+area = "drawing"
+milestone = "M13"
+summary = "Deletes a named stored selection from the glyph's data (the Remove button of the Selections panel)."
+ref = "FontLab 8 What's new › Edit & refine › Selections panel"
+status = "docs"
+origin = "fontlab"
+notes = "Documented as the panel's Remove button, not yet observed."
+
+[[command]]
+id = "edit.getStoredSelections"
+label = "Get Stored Selections"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, layer?: id, side?: side, name?: string}"
+area = "drawing"
+milestone = "M13"
+summary = "Lists a glyph's stored selections, each mapped onto a layer by node index and anchor name, with the count of stored items that do not resolve there. A query for agents and for the Selections panel."
+ref = "FontLab 8 What's new › Edit & refine › Selections panel"
+status = "inferred"
+origin = "fontlab"
+guesses = [
+  "A query that maps stored selections onto any layer is our addition for agents and scripts; FontLab has no such command."
+]
 
 [[command]]
 id = "edit.recallSelection"
@@ -415,13 +460,17 @@ label = "Recall Selection"
 menu = ["Edit", "Selection"]
 shortcut = ""
 kind = "ui"
-params = "{glyph?, name: string, layer?}"
+params = "{name: string, glyph?: name, layer?: id}"
 area = "drawing"
 milestone = "M13"
 summary = "Selects the nodes recorded in a stored selection; on another compatible master the nodes with the same indexes are selected."
 ref = "FontLab 8 What's new › Edit & refine › Selections panel"
 status = "docs"
 origin = "fontlab"
+notes = "Documented, not yet observed. Works on the edited glyph and layer; glyph and layer, when given, must name them. Replaces the Edit View selection with what resolves on the edited layer."
+guesses = [
+  "On a layer where only part of a stored selection resolves (an incompatible master), the parts that resolve are selected and the reply counts the rest as missing; recalling where nothing resolves is refused. FontLab's panel on an incompatible master would settle it.",
+]
 
 [[command]]
 id = "view.lockOutline"
@@ -3192,6 +3241,11 @@ summary = "Holds compiled fonts to draw against. The glyph for the character bei
 ref = "Fontra reference › Editor › Panels › Reference font; Glyph editor appearance (Reference font)"
 status = "docs"
 origin = "fontra"
+notes = "Documented, not yet observed. FontCraft's Palette section has a path field with Add, the list of reference fonts (click selects, a button removes), a Show switch, and the character and language fields; every control runs view.setReferenceFont."
+guesses = [
+  "Fonts are added by typing or pasting a path; dropping files onto the section is not built. The reference app's drop behaviour would settle whether anything else happens on drop.",
+  "The list keeps at most 16 fonts and loads only the selected one; the reference app does not document a limit.",
+]
 
 [[command]]
 id = "view.setReferenceFont"
@@ -3199,13 +3253,22 @@ label = "Set Reference Font"
 menu = ["View"]
 shortcut = ""
 kind = "ui"
-params = "{path?: path, show?: bool, character?: string, language?: string}"
+params = "{path?: path, remove?: path, show?: bool, character?: string, language?: string}"
 area = "drawing"
 milestone = "M13"
 summary = "Adds a compiled font file as a reference and toggles the background display of its glyph for the current character."
 ref = "Fontra reference › Editor › Panels › Reference font"
 status = "docs"
 origin = "fontra"
+notes = "Documented, not yet observed. The font is read through the same reading code and limits as File › Open, read-only and never part of the document. The glyph is found by the custom character when one is set, else by the edited glyph's first code point, else by the edited glyph's name; it is drawn as an outline at the edited glyph's origin, scaled from the reference font's units per em to the edited font's."
+guesses = [
+  "The language code picks a glyph named like the found one plus .locl and the code in capitals (A.loclTRK for TRK); applying the reference font's own locl substitutions through the shaper would settle what the reference app does.",
+  "Adding a path selects that font and turns the display on; the reference app's panel would settle whether adding also shows it.",
+  "Any font the open path reads (sources too, not only compiled fonts) can be a reference, drawn from its first master.",
+]
+observe = [
+  "In Fontra, drop a compiled font on the Reference font panel, type a character in the custom character field and a language code such as 'tr', and note which glyph is drawn behind the edited one and in what colour.",
+]
 
 [[panel]]
 id = "palette.relatedGlyphs"
