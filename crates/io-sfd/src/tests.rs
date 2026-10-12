@@ -380,3 +380,94 @@ fn sfdir_reads_glyph_files_in_glyph_index_order() {
     assert!(is_sfd(b"SplineFontDB: 3.0\n"));
     assert!(read_sfdir(&Files::new()).is_err());
 }
+
+/// A font of `n` empty glyphs named `g0`, `g1`…, with `header` before the glyphs.
+fn many_glyphs(n: usize, header: &str) -> String {
+    let mut s = format!("SplineFontDB: 3.0\nFamilyName: K\nAscent: 800\nDescent: 200\n{header}BeginChars: {n} {n}\n");
+    for i in 0..n {
+        s.push_str(&format!("StartChar: g{i}\nEncoding: {i} -1 {i}\nWidth: 600\nEndChar\n"));
+    }
+    s.push_str("EndChars\nEndSplineFont\n");
+    s
+}
+
+/// A class kerning table with one class per side holding `members`, then the class 0 cells
+/// and one value.
+fn one_class_table(members: &str) -> String {
+    format!("KernClass2: 2 2 \"k\"\n {} {members}\n {} {members}\n 0 0\n 0 -10\n", members.len(), members.len())
+}
+
+#[test]
+fn sfd_quoted_values_continue_over_lines_with_escapes_and_stay_linear() {
+    let text = BASIC.replace("Encoding: UnicodeBmp\n", "Encoding: UnicodeBmp\nUComments: \"one \\\"two\nthree\\\"\nfour\"\n");
+    let font = read(&text).font;
+    assert_eq!(font.note, "one \"two\nthree\"\nfour");
+    assert!(font.glyph("A").is_some());
+    // An open quote followed by millions of empty lines: each line is scanned once.
+    let text = format!("SplineFontDB: 3.0\nPickledData: \"{}", "\n".repeat(MAX_LINE_BYTES + 1));
+    let err = read_sfd(text.as_bytes()).err().unwrap().to_string();
+    assert!(err.contains("longer than"), "{err}");
+}
+
+#[test]
+fn sfd_alternate_code_points_stop_at_the_glyph_limit() {
+    // Lines of distinct code points: the list stops growing at the model's limit.
+    let mut lines = String::new();
+    for l in 0..200 {
+        let cps: Vec<String> = (0..1024u32).map(|i| format!("{:x}", 0x10000 + l * 1024 + i)).collect();
+        lines.push_str(&format!("AltUni2: {}\n", cps.join(" ")));
+    }
+    let text = one_glyph(false, "").replace("Width: 600\n", &format!("Width: 600\n{lines}"));
+    let import = read(&text);
+    assert_eq!(import.font.glyph("o").unwrap().unicodes.len(), fontcraft_model::MAX_UNICODES);
+    assert!(kinds(&import).iter().any(|k| k.starts_with("code points beyond")));
+}
+
+#[test]
+fn sfd_points_are_capped_per_glyph_layer() {
+    // Two contours, each within the contour limit, that together pass the layer limit.
+    let half = fontcraft_model::MAX_OUTLINE_ELEMENTS / 2 + 1;
+    let contour = format!("0 0 m 1\n{}", " 1 1 l 1\n".repeat(half));
+    let err = read_sfd(one_glyph(false, &contour.repeat(2)).as_bytes()).err().unwrap().to_string();
+    assert!(err.contains("layer 1 of the glyph holds more than"), "{err}");
+}
+
+#[test]
+fn sfd_a_glyph_repeated_across_classes_of_one_table_keeps_its_first_class() {
+    // 300 classes per side, each listing all 300 glyphs: every cell used to expand to every
+    // member pair.
+    let n = 300;
+    let members: Vec<String> = (0..n).map(|i| format!("g{i}")).collect();
+    let line = members.join(" ");
+    let mut table = format!("KernClass2: {} {} \"k\"\n", n + 1, n + 1);
+    for _ in 0..2 * n {
+        table.push_str(&format!(" {} {line}\n", line.len()));
+    }
+    for _ in 0..=n {
+        table.push_str(&format!("{}\n", vec!["-10"; n + 1].join(" ")));
+    }
+    let import = read(&many_glyphs(n, &table));
+    let k = &import.font.kerning.ltr;
+    assert_eq!(k.get(MASTER, "@MMK_L_g0", "@MMK_R_g0"), Some(-10.0));
+    assert_eq!(k.pair_count(), 1);
+    assert!(kinds(&import).contains(&"kerning class members listed more than once on one side of a table"));
+}
+
+#[test]
+fn sfd_class_kerning_that_expands_beyond_the_work_limit_is_refused() {
+    // The first table groups every glyph; each later table lists them again in one class,
+    // where they kern by name: 810,000 writes per table, below the pair limit.
+    let n = 900;
+    let line = (0..n).map(|i| format!("g{i}")).collect::<Vec<_>>().join(" ");
+    let tables = one_class_table(&line).repeat(MAX_KERN_WORK / (n * n) + 2);
+    let err = read_sfd(many_glyphs(n, &tables).as_bytes()).err().unwrap().to_string();
+    assert!(err.contains("expands to more than"), "{err}");
+}
+
+#[test]
+fn sfd_numbered_group_names_fit_the_name_limit() {
+    let long = "é".repeat(127) + "a";
+    let name = build::numbered(&long, 12);
+    assert!(name.len() <= fontcraft_model::MAX_NAME_LEN && name.ends_with("_12"), "{name}");
+    assert_eq!(build::numbered("T", 2), "T_2");
+}

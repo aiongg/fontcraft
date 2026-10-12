@@ -57,15 +57,21 @@ impl<'a> Lines<'a> {
     /// A keyword's value continued over the following lines while a quoted string in it is open
     /// (pickled data and comments can hold line breaks).
     pub(crate) fn value<'s>(&mut self, first: &'s str) -> Result<std::borrow::Cow<'s, str>> {
-        if !quote_open(first) {
+        let mut quote = Quote::default();
+        quote.scan(first);
+        if !quote.open {
             return Ok(first.into());
         }
         let mut text = first.to_string();
-        while quote_open(&text) {
+        // Only the new line is scanned each time: rescanning the gathered text would make a
+        // value of many short lines quadratic.
+        while quote.open {
             let Some(next) = self.next()? else { break };
             if text.len() + next.len() + 1 > MAX_LINE_BYTES {
                 return Err(self.err(format!("a quoted string is longer than {MAX_LINE_BYTES} bytes")));
             }
+            quote.scan("\n");
+            quote.scan(next);
             text.push('\n');
             text.push_str(next);
         }
@@ -94,19 +100,25 @@ pub(crate) fn keyword(line: &str) -> (&str, &str) {
     (k, rest.trim())
 }
 
-fn quote_open(s: &str) -> bool {
-    let mut open = false;
-    let mut escaped = false;
-    for c in s.chars() {
-        if escaped {
-            escaped = false;
-        } else if c == '\\' && open {
-            escaped = true;
-        } else if c == '"' {
-            open = !open;
+/// Whether a quoted string is open at the end of the text scanned so far.
+#[derive(Default)]
+struct Quote {
+    open: bool,
+    escaped: bool,
+}
+
+impl Quote {
+    fn scan(&mut self, s: &str) {
+        for c in s.chars() {
+            if self.escaped {
+                self.escaped = false;
+            } else if c == '\\' && self.open {
+                self.escaped = true;
+            } else if c == '"' {
+                self.open = !self.open;
+            }
         }
     }
-    open
 }
 
 /// A token of a value: a quoted string (unescaped), a brace group (`{12-13 -1,-1}`, kept with

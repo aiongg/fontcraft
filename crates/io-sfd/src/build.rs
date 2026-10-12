@@ -6,12 +6,12 @@ use std::sync::Arc;
 use fontcraft_model::plist::{Array, Number, Value};
 use fontcraft_model::{
     Anchor, Background, ColorLabel, Component, DEFAULT_LANGUAGE, Font, Glyph, GlyphTable, LANGUAGES, Layer, Localized, MAX_COORDINATE, MAX_NAME_LEN,
-    MetricValue, NodeKind, Param, Properties, Property, PropertyValue, Shape, Transform, UPM_RANGE, metric,
+    MAX_UNICODES, MetricValue, NodeKind, Param, Properties, Property, PropertyValue, Shape, Transform, UPM_RANGE, metric,
 };
 
 use crate::glyph::{Piece, RawGlyph, RawKern};
 use crate::header::{KernClass, RawFont, short};
-use crate::{MAX_KERN_PAIRS, Report, Result, SfdError};
+use crate::{MAX_KERN_PAIRS, MAX_KERN_WORK, Report, Result, SfdError};
 
 const MASTER: &str = "m01";
 /// The language the format's US English name records (1033) map to.
@@ -198,7 +198,9 @@ fn build_glyphs(raw: &RawFont, list: Vec<RawGlyph>, upm: u16, report: &mut Repor
     for g in list {
         let width = g.width.unwrap_or(f64::from(upm));
         let mut glyph = Glyph::new(g.name.clone());
-        glyph.unicodes = g.unicode.into_iter().chain(g.alt_unicodes.iter().copied()).collect();
+        // An `Encoding` line after the `AltUni2` lines can repeat an alternate code point.
+        let alternates = g.alt_unicodes.iter().copied().filter(|&u| Some(u) != g.unicode);
+        glyph.unicodes = g.unicode.into_iter().chain(alternates).take(MAX_UNICODES).collect();
         let mut master = Layer::new(MASTER, width);
         let mut extra_layers = Vec::new();
         for (n, pieces) in g.layers {
@@ -269,7 +271,14 @@ fn shapes(pieces: Vec<Piece>, own: &str, resolve: &dyn Fn(i64, i64) -> Option<St
 fn kerning(font: &mut Font, raw: &RawFont, glyph_kerns: &[GlyphKerns], glyphs: &mut Glyphs, report: &mut Report) -> Result<()> {
     let mut table = font.kerning.ltr.clone();
     let mut pairs = 0usize;
+    let mut work = 0usize;
     let mut set = |table: &mut fontcraft_model::KernTable, first: &str, second: &str, value: f64| -> Result<()> {
+        // Class cells expand to one write per member pair, and a write that finds the pair
+        // already set costs a lookup too, so every write counts.
+        work = work.saturating_add(1);
+        if work > MAX_KERN_WORK {
+            return Err(SfdError::Unsupported(format!("kerning that expands to more than {MAX_KERN_WORK} values")));
+        }
         if table.get(MASTER, first, second).is_none() {
             pairs += 1;
             if pairs > MAX_KERN_PAIRS {
@@ -338,10 +347,12 @@ fn kerning(font: &mut Font, raw: &RawFont, glyph_kerns: &[GlyphKerns], glyphs: &
 
 /// The kerning sides of each class of one side of a table: a group (`@MMK_L_x`, `@MMK_R_x`) for
 /// the members that have no group on that side yet, and the other members by name. Class 0 is
-/// empty unless the table listed it.
+/// empty unless the table listed it. A glyph belongs to one class per side of a table: the first
+/// class that lists it.
 fn class_sides(kc: &KernClass, first: bool, glyphs: &mut Glyphs, used: &mut BTreeSet<String>, report: &mut Report) -> Vec<Vec<String>> {
     let classes = if first { &kc.firsts } else { &kc.seconds };
     let mut out = Vec::with_capacity(classes.len());
+    let mut placed = BTreeSet::new();
     for (i, members) in classes.iter().enumerate() {
         if i == 0 && !(first && kc.first_zero_listed) {
             out.push(Vec::new());
@@ -351,6 +362,7 @@ fn class_sides(kc: &KernClass, first: bool, glyphs: &mut Glyphs, used: &mut BTre
         let mut free = Vec::new();
         for m in members {
             match glyphs.by_name.get(m).copied() {
+                Some(gi) if !placed.insert(gi) => report.skip("kerning class members listed more than once on one side of a table", &kc.at),
                 Some(gi) => {
                     let Some(g) = glyphs.list.get(gi) else { continue };
                     let side = if first { &g.kern_groups.right } else { &g.kern_groups.left };
@@ -363,7 +375,7 @@ fn class_sides(kc: &KernClass, first: bool, glyphs: &mut Glyphs, used: &mut BTre
             let mut group = name.clone();
             let mut n = 2usize;
             while used.contains(&group) {
-                group = format!("{name}_{n}");
+                group = numbered(&name, n);
                 n += 1;
             }
             used.insert(group.clone());
@@ -378,6 +390,17 @@ fn class_sides(kc: &KernClass, first: bool, glyphs: &mut Glyphs, used: &mut BTre
         out.push(keys);
     }
     out
+}
+
+/// `{name}_{n}`, with `name` cut at a character boundary so the result is at most
+/// `MAX_NAME_LEN` bytes.
+pub(crate) fn numbered(name: &str, n: usize) -> String {
+    let suffix = format!("_{n}");
+    let mut end = MAX_NAME_LEN.saturating_sub(suffix.len()).min(name.len());
+    while !name.is_char_boundary(end) {
+        end = end.saturating_sub(1);
+    }
+    format!("{}{suffix}", name.get(..end).unwrap_or_default())
 }
 
 fn number(v: f64) -> Value {

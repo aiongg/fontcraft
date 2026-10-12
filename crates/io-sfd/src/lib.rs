@@ -49,6 +49,9 @@ pub const MAX_FILE_BYTES: usize = 256 << 20;
 pub const MAX_LINE_BYTES: usize = 4 << 20;
 /// Most points in all contours of the file together.
 pub const MAX_TOTAL_POINTS: usize = 10_000_000;
+/// Most points in all layers of one glyph together. Each layer on its own is held to the
+/// model's limit for one outline, [`fontcraft_model::MAX_OUTLINE_ELEMENTS`].
+pub const MAX_GLYPH_POINTS: usize = 4 * fontcraft_model::MAX_OUTLINE_ELEMENTS;
 /// Most layers a font may declare, and the largest layer number a glyph may use.
 pub const MAX_LAYERS: usize = 256;
 /// Most classes on one side of a class kerning table.
@@ -57,6 +60,9 @@ pub const MAX_KERN_CLASSES: usize = 65_536;
 pub const MAX_KERN_CELLS: usize = 4_000_000;
 /// Most kerning pairs the import creates, glyph pairs and class pairs together.
 pub const MAX_KERN_PAIRS: usize = 1_000_000;
+/// Most kerning values the import writes: each glyph pair, and each class value once for every
+/// pair of members it expands to.
+pub const MAX_KERN_WORK: usize = 16_000_000;
 /// Most anchors one glyph may have.
 pub const MAX_ANCHORS_PER_GLYPH: usize = 4_096;
 /// Most files a `.sfdir` folder may hold.

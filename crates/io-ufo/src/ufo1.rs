@@ -18,7 +18,7 @@
 
 use std::collections::HashSet;
 
-use fontcraft_plist::{Array, Dict, Num, Number, Str, Value};
+use fontcraft_plist::{Array, Dict, Num, Number, Spacing, Str, Value};
 
 use crate::ufo::patch;
 
@@ -224,12 +224,31 @@ fn pairs(v: &Value) -> Option<Vec<Value>> {
 
 /// Removes `key` from `d` wherever it occurs, returning its first value.
 fn take(d: &mut Dict, key: &str) -> Option<Value> {
+    let repeats = d.entries.iter().filter(|(k, _)| k.as_str() == key).count();
+    if repeats <= 1 {
+        let i = d.entries.iter().position(|(k, _)| k.as_str() == key)?;
+        return d.remove_at(i).map(|(_, v)| v);
+    }
+    // A key repeated in malformed input: one pass over the entries, so the work stays linear.
+    // Each entry has two gaps (before its key and before its value), then one before the end.
+    let gaps = d.spacing.gaps(d.entries.len() * 2).map(<[Box<str>]>::to_vec);
+    let mut kept_gaps = Vec::new();
     let mut first = None;
-    while let Some(i) = d.entries.iter().position(|(k, _)| k.as_str() == key) {
-        let removed = d.remove_at(i).map(|(_, v)| v);
-        if first.is_none() {
-            first = removed;
+    for (i, (k, v)) in std::mem::take(&mut d.entries).into_iter().enumerate() {
+        if k.as_str() == key {
+            if first.is_none() {
+                first = Some(v);
+            }
+            continue;
         }
+        if let Some(g) = &gaps {
+            kept_gaps.extend(g.get(i * 2..i * 2 + 2).unwrap_or_default().iter().map(ToString::to_string));
+        }
+        d.entries.push((k, v));
+    }
+    if let Some(g) = gaps {
+        kept_gaps.extend(g.last().map(ToString::to_string));
+        d.spacing = Spacing::new(kept_gaps);
     }
     first
 }
@@ -395,5 +414,26 @@ mod tests {
         assert_eq!(take_lib_data(&mut lib, &mut Dict::new()).as_deref(), Some("feature kern {} kern;\n\nfeature liga {} liga;\n"));
         assert!(lib.is_empty());
         assert_eq!(take_lib_data(&mut dict(&[("other", n(1))]), &mut Dict::new()), None);
+    }
+
+    #[test]
+    fn a_repeated_lib_key_is_taken_in_one_pass_keeping_its_first_value() {
+        let mut lib = Dict::new();
+        lib.entries.push((Str::from("keep"), n(0)));
+        for i in 0..200_000 {
+            lib.entries.push((Str::from(CLASSES), s(if i == 0 { "@A = [A];\n" } else { "@B = [B];\n" })));
+        }
+        lib.entries.push((Str::from("other"), n(1)));
+        assert_eq!(take(&mut lib, CLASSES), Some(s("@A = [A];\n")));
+        assert_eq!(lib.entries.iter().map(|(k, _)| k.as_str()).collect::<Vec<_>>(), ["keep", "other"]);
+        // The whitespace of the entries that stay is kept with them.
+        let mut lib = dict(&[("keep", n(0))]);
+        for k in [CLASSES, CLASSES, "other"] {
+            lib.entries.push((Str::from(k), n(1)));
+        }
+        lib.spacing = Spacing::new((0..9).map(|i| format!("g{i}")).collect());
+        take(&mut lib, CLASSES);
+        let gaps: Vec<&str> = lib.spacing.gaps(4).unwrap().iter().map(|g| &**g).collect();
+        assert_eq!(gaps, ["g0", "g1", "g6", "g7", "g8"]);
     }
 }

@@ -66,7 +66,8 @@ pub const MAX_EPS_GSAVE_DEPTH: usize = 64;
 pub const MAX_EPS_STACK: usize = 10_000;
 /// Most operations run: every token executed, plus the values copied by stack operators.
 pub const MAX_EPS_OPERATIONS: usize = 10_000_000;
-/// Most array elements created, over the whole file.
+/// Most array elements created, plus path segments copied away from a saved graphics state,
+/// over the whole file.
 pub const MAX_EPS_ALLOCATED: usize = 1_000_000;
 /// Most names defined.
 pub const MAX_EPS_DEFINITIONS: usize = 10_000;
@@ -103,7 +104,7 @@ pub enum EpsError {
     Unsupported { op: String },
     #[error("the file runs more than {MAX_EPS_OPERATIONS} operations")]
     TooMuchWork,
-    #[error("the file creates more than {MAX_EPS_ALLOCATED} array elements or {MAX_EPS_DEFINITIONS} definitions")]
+    #[error("the file creates more than {MAX_EPS_ALLOCATED} array elements and copied path segments, or more than {MAX_EPS_DEFINITIONS} definitions")]
     TooMuchData,
     #[error("the file has a number beyond ±{MAX_EPS_NUMBER}, or one that is not a number")]
     NumberOutOfRange,
@@ -769,6 +770,13 @@ fn multiply(m: Matrix, n: Matrix) -> Matrix {
     [a * na + b * nc, a * nb + b * nd, c * na + d * nc, c * nb + d * nd, e * na + f * nc + ne, e * nb + f * nd + nf]
 }
 
+/// Refuses an array among the elements of a new array. Arrays here only hold matrices and
+/// similar flat lists; refusing nesting keeps every value shallow, so dropping one never
+/// recurses deeply.
+fn flat(op: &str, items: &[Value]) -> Result<()> {
+    if items.iter().any(|v| matches!(v, Value::Array(_))) { Err(EpsError::TypeCheck { op: shown(op) }) } else { Ok(()) }
+}
+
 fn usable(v: f64) -> bool {
     v.is_finite() && v.abs() <= MAX_EPS_NUMBER
 }
@@ -1078,8 +1086,13 @@ impl Interp {
             return Err(EpsError::TooManyNodes);
         }
         if Rc::strong_count(&self.gs.path) > 1 {
-            // The edit copies a path shared with a saved state.
+            // The edit copies a path shared with a saved state. Each saved state can keep its own
+            // copy alive, so the copy counts as allocated memory as well as work.
             self.charge(len)?;
+            self.allocated = self.allocated.saturating_add(len);
+            if self.allocated > MAX_EPS_ALLOCATED {
+                return Err(EpsError::TooMuchData);
+            }
         }
         edit(Rc::make_mut(&mut self.gs.path));
         self.next_id = self.next_id.wrapping_add(1);
@@ -1365,6 +1378,7 @@ impl Interp {
                 let at = self.stack.iter().rposition(|v| matches!(v, Value::Mark)).ok_or_else(|| EpsError::StackUnderflow { op: shown(name) })?;
                 let items = self.stack.split_off(at.saturating_add(1));
                 self.stack.truncate(at);
+                flat(name, &items)?;
                 self.charge(items.len())?;
                 self.allocate(items.len())?;
                 self.push(Value::Array(Rc::new(items)))?;
@@ -1425,6 +1439,7 @@ impl Interp {
                 };
                 let from = self.stack.len().checked_sub(a.len()).ok_or_else(|| EpsError::StackUnderflow { op: shown(name) })?;
                 let items = self.stack.split_off(from);
+                flat(name, &items)?;
                 self.charge(items.len())?;
                 self.allocate(items.len())?;
                 self.push(Value::Array(Rc::new(items)))?;

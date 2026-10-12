@@ -265,3 +265,26 @@ fn eps_file_names_map_to_glyph_names() {
     assert_eq!(glyph_name_for_file("art/A.eps"), "A");
     assert_eq!(glyph_name_for_file("comma.PDF"), "comma");
 }
+
+#[test]
+fn eps_arrays_inside_arrays_are_refused_so_values_stay_shallow() {
+    // Each step wraps the previous array in a new one. Read to the end, the chain would be
+    // dropped recursively, one stack frame per level; the reader refuses the first nesting and
+    // drops a shallow interpreter.
+    let mut body = String::from("[ ] ");
+    body.push_str(&"[ exch ] ".repeat(200_000));
+    assert_eq!(err(&eps(&body)), EpsError::TypeCheck { op: "]".into() });
+    assert_eq!(err(&eps("[ ] 1 array astore")), EpsError::TypeCheck { op: "astore".into() });
+    // A flat matrix still works.
+    assert!(read_eps(eps("[ 1 0 0 1 10 10 ] concat 0 0 10 10 rectfill").as_bytes(), TOP_200).is_ok());
+}
+
+#[test]
+fn eps_path_copies_kept_by_saved_states_count_against_the_allocation_limit() {
+    // Every `gsave` shares the path, and the next `lineto` copies it; the saved states keep
+    // each copy alive.
+    let mut body = String::from("0 0 moveto ");
+    body.push_str(&"1 1 lineto ".repeat(100_000));
+    body.push_str(&"gsave 1 1 lineto ".repeat(11));
+    assert_eq!(err(&eps(&body)), EpsError::TooMuchData);
+}

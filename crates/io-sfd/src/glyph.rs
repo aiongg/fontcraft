@@ -1,13 +1,13 @@
 //! One `StartChar` … `EndChar` block: contours, references, anchors, metrics and per-glyph
 //! kerning; the rest is skipped and reported.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
-use fontcraft_model::{MAX_COORDINATE, MAX_NAME_LEN, MAX_OUTLINE_ELEMENTS, Node, NodeKind, Path};
+use fontcraft_model::{MAX_COORDINATE, MAX_NAME_LEN, MAX_OUTLINE_ELEMENTS, MAX_UNICODES, Node, NodeKind, Path};
 
 use crate::header::{RawFont, short, skip_a85, skip_instructions, skip_to};
 use crate::lines::{self, Lines, Tok};
-use crate::{MAX_ANCHORS_PER_GLYPH, MAX_LAYERS, MAX_TOTAL_POINTS, Report, Result};
+use crate::{MAX_ANCHORS_PER_GLYPH, MAX_GLYPH_POINTS, MAX_LAYERS, MAX_TOTAL_POINTS, Report, Result};
 
 /// A shape of a layer, in file order.
 #[derive(Clone, Debug)]
@@ -41,6 +41,8 @@ pub(crate) struct RawGlyph {
     pub(crate) unicode: Option<u32>,
     pub(crate) gid: Option<i64>,
     pub(crate) alt_unicodes: Vec<u32>,
+    /// The code points in `alt_unicodes`, for a membership test that stays fast on long lists.
+    alt_seen: BTreeSet<u32>,
     pub(crate) width: Option<f64>,
     pub(crate) vert_width: Option<f64>,
     /// Font layer number → shapes.
@@ -124,6 +126,7 @@ pub(crate) fn read_char(lines: &mut Lines<'_>, raw: &mut RawFont, report: &mut R
     let mut g = RawGlyph { name, at: lines.at(), ..RawGlyph::default() };
     let mut layer = 1usize;
     let mut contour: Option<Contour> = None;
+    let mut points = GlyphPoints::default();
     let block = format!("glyph `{}` (no `EndChar` line)", g.name);
     loop {
         let line = lines.need(&block)?;
@@ -141,6 +144,7 @@ pub(crate) fn read_char(lines: &mut Lines<'_>, raw: &mut RawFont, report: &mut R
                         implied: Vec::new(),
                     });
                     count_points(lines, raw, 1)?;
+                    points.add(lines, raw, layer, 1)?;
                 }
                 (op, flags) => {
                     let Some(c) = contour.as_mut() else {
@@ -148,6 +152,7 @@ pub(crate) fn read_char(lines: &mut Lines<'_>, raw: &mut RawFont, report: &mut R
                     };
                     let added = add_segment(c, op, flags);
                     count_points(lines, raw, added)?;
+                    points.add(lines, raw, c.layer, added)?;
                     if c.nodes.len() > MAX_OUTLINE_ELEMENTS {
                         return Err(lines.err(format!("a contour has more than {MAX_OUTLINE_ELEMENTS} points")));
                     }
@@ -234,6 +239,31 @@ pub(crate) fn read_char(lines: &mut Lines<'_>, raw: &mut RawFont, report: &mut R
         }
     }
     Ok(g)
+}
+
+/// The points of one glyph so far, in all layers and per layer.
+#[derive(Default)]
+struct GlyphPoints {
+    total: usize,
+    /// Keyed by layer number, which is below `MAX_LAYERS`.
+    per_layer: BTreeMap<usize, usize>,
+}
+
+impl GlyphPoints {
+    fn add(&mut self, lines: &Lines<'_>, raw: &RawFont, layer: usize, n: usize) -> Result<()> {
+        // A layer the font does not declare joins the master layer when the font is built.
+        let layer = if layer <= 1 || raw.layers.contains_key(&layer) { layer } else { 1 };
+        self.total = self.total.saturating_add(n);
+        if self.total > MAX_GLYPH_POINTS {
+            return Err(lines.err(format!("the glyph holds more than {MAX_GLYPH_POINTS} points")));
+        }
+        let in_layer = self.per_layer.entry(layer).or_default();
+        *in_layer = in_layer.saturating_add(n);
+        if *in_layer > MAX_OUTLINE_ELEMENTS {
+            return Err(lines.err(format!("layer {layer} of the glyph holds more than {MAX_OUTLINE_ELEMENTS} points")));
+        }
+        Ok(())
+    }
 }
 
 fn count_points(lines: &Lines<'_>, raw: &mut RawFont, n: usize) -> Result<()> {
@@ -429,13 +459,17 @@ fn anchor(g: &mut RawGlyph, v: &str, report: &mut Report, lines: &Lines<'_>) -> 
 
 /// `AltUni2: <code point>.<variation selector>.<reserved> …`, in hex.
 fn alt_unicodes(g: &mut RawGlyph, v: &str, report: &mut Report, lines: &Lines<'_>) {
-    for triple in v.split_whitespace().take(fontcraft_model::MAX_UNICODES) {
+    for triple in v.split_whitespace() {
+        if usize::from(g.unicode.is_some()) + g.alt_unicodes.len() >= MAX_UNICODES {
+            report.skip(&format!("code points beyond the {MAX_UNICODES} one glyph may have"), &lines.at());
+            return;
+        }
         let mut parts = triple.split('.');
         let cp = parts.next().and_then(|p| u32::from_str_radix(p, 16).ok()).filter(|&u| char::from_u32(u).is_some());
         let vs = parts.next().map(|p| p.trim_start_matches('-'));
         match (cp, vs) {
             (Some(cp), None | Some("ffffffff" | "FFFFFFFF" | "1")) => {
-                if g.unicode != Some(cp) && !g.alt_unicodes.contains(&cp) {
+                if g.unicode != Some(cp) && g.alt_seen.insert(cp) {
                     g.alt_unicodes.push(cp);
                 }
             }

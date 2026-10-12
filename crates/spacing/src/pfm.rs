@@ -166,18 +166,24 @@ pub fn read(data: &[u8]) -> Result<Pfm, ReadError> {
         widths = table.chunks_exact(2).filter_map(|w| Some(u16::from_le_bytes([*w.first()?, *w.get(1)?]))).collect();
     }
 
-    let pairs = if kern_at == 0 { Vec::new() } else { kern_pairs(data, kern_at, usize::from(etm_pairs))? };
+    // Where the pair list must end: the next part the file places after it, or the file's end.
+    let parts = [etm_at, extent_at, field(2), field(4), field(5), u32_at(header, 101).unwrap_or_default(), u32_at(header, 105).unwrap_or_default()];
+    let list_end = parts.into_iter().filter(|&p| p > kern_at).min().unwrap_or(data.len()).min(data.len());
+    let pairs = if kern_at == 0 { Vec::new() } else { kern_pairs(data, kern_at, usize::from(etm_pairs), list_end)? };
     Ok(Pfm { version, char_set, first_char, last_char, face, master_units, widths, pairs })
 }
 
 /// The pair list at `at`: `count` pairs, after a count word when the word there equals `count`
-/// (or gives the count when `count` is 0).
-fn kern_pairs(data: &[u8], at: usize, count: usize) -> Result<Vec<KernPair>, ReadError> {
+/// (or gives the count when `count` is 0). The first pair's two codes can read as a word equal
+/// to `count`, so a list without the word that ends exactly at `list_end` (the next part of the
+/// file, or its end) is taken as it is.
+fn kern_pairs(data: &[u8], at: usize, count: usize, list_end: usize) -> Result<Vec<KernPair>, ReadError> {
     let word = u16_at(data, at).map(usize::from);
-    let fits = |start: usize, n: usize| start.checked_add(4 * n).is_some_and(|end| end <= data.len());
+    let end = |start: usize, n: usize| start.checked_add(4 * n);
+    let fits = |start: usize, n: usize| end(start, n).is_some_and(|e| e <= data.len());
     let (start, count) = match word {
         Some(w) if count == 0 => (at + 2, w),
-        Some(w) if w == count && fits(at + 2, count) => (at + 2, count),
+        Some(w) if w == count && fits(at + 2, count) && end(at, count) != Some(list_end) => (at + 2, count),
         _ => (at, count),
     };
     let count = count.min(MAX_PAIRS);
@@ -287,6 +293,21 @@ mod tests {
         assert_eq!(unicodes(CHARSET_ANSI, 0x93), vec![0x201C]);
         assert_eq!(unicodes(CHARSET_ANSI, 0x81), Vec::<u32>::new());
         assert_eq!(unicodes(CHARSET_SYMBOL, 0x41), vec![0xF041, 0x41]);
+    }
+
+    #[test]
+    fn a_first_pair_that_reads_as_the_count_is_kept_when_a_part_follows_the_list() {
+        // The first pair's codes (3, 0) read as the word 3, the number of pairs. A track kerning
+        // table follows the list, so the list does not end at the file's end.
+        let pairs = [(3, 0, -10), (b'A', b'V', -80), (b'T', b'o', -45)];
+        for count_word in [false, true] {
+            let mut d = build(&pairs, count_word);
+            let track = d.len() as u32;
+            d.extend_from_slice(&[0, 0]);
+            d[HEADER_LEN + 2 + 16..HEADER_LEN + 6 + 16].copy_from_slice(&track.to_le_bytes());
+            let got: Vec<_> = read(&d).unwrap().pairs.iter().map(|p| (p.first, p.second, p.value)).collect();
+            assert_eq!(got, pairs, "count word: {count_word}");
+        }
     }
 
     #[test]
