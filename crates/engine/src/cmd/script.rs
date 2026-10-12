@@ -8,11 +8,16 @@
 //! with the macro's title, as `command.batch` does.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use serde_json::{Map, Value, json};
 
 use super::*;
-use crate::macros::{self, BUILT_IN_ARGS, MACRO_EXTENSION, MAX_MACRO_NESTING, MAX_MACRO_TEXT, Macro, MacroError, Recording, Step};
+use crate::extensions::{LoadedMacro, MacroRun};
+use crate::macros::{
+    self, BUILT_IN_ARGS, MACRO_EXTENSION, MAX_MACRO_NESTING, MAX_MACRO_RUN_BYTES, MAX_MACRO_RUN_STEPS, MAX_MACRO_TEXT, Macro, MacroError, Recording,
+    Step,
+};
 use crate::params::Params;
 use crate::{Batch, EngineError};
 
@@ -107,7 +112,7 @@ struct Loaded {
     key: Option<String>,
     /// What `script.rerunLast` keeps: the macro's path in the Macros folder or its file.
     path: Option<String>,
-    m: Macro,
+    m: Arc<Macro>,
 }
 
 fn run(s: &mut Session, value: &Value) -> Result<Value> {
@@ -122,7 +127,7 @@ fn run_action_set(s: &mut Session, value: &Value) -> Result<Value> {
     let p = Params::new("script.runActionSet", value)?;
     let set = p.get("set").ok_or_else(|| p.bad("give `set`: an action set's name, a path to its file or its steps"))?;
     let loaded = match set {
-        Value::Array(steps) => Loaded { key: None, path: None, m: Macro::from_value(&json!({ "title": "Action Set", "steps": steps }))? },
+        Value::Array(steps) => Loaded { key: None, path: None, m: Arc::new(Macro::from_value(&json!({ "title": "Action Set", "steps": steps }))?) },
         other => load(s, &p, other)?,
     };
     let args = call_args(&p)?;
@@ -150,28 +155,63 @@ fn rerun(s: &mut Session, p: Params) -> Result<Value> {
             args.insert((*key).to_string(), v.clone());
         }
     }
-    run_loaded(s, Loaded { key: None, path, m }, Value::Object(args), false)
+    run_loaded(s, Loaded { key: None, path, m: Arc::new(m) }, Value::Object(args), false)
 }
 
-/// The macro `spec` names: one of the Macros folder, a macro file, or the macro itself.
-fn load(s: &Session, p: &Params, spec: &Value) -> Result<Loaded> {
+/// The macro `spec` names: one of the Macros folder, a macro file, or the macro itself. Inside a
+/// run, each named macro is read once and kept in the run's [`MacroRun`].
+fn load(s: &mut Session, p: &Params, spec: &Value) -> Result<Loaded> {
     match spec {
         Value::String(name) => {
-            if let Some((path, m)) = s.extensions().find_macro(name) {
-                return Ok(Loaded { key: Some(format!("folder:{path}")), path: Some(path.to_string()), m: m.clone() });
+            let in_run = s.batch.is_some() && !s.extensions().running_macros.is_empty();
+            let by_name = format!("name:{name}");
+            if in_run && let Some(hit) = s.extensions().macro_run.loaded.get(&by_name) {
+                return Ok(Loaded { key: Some(hit.key.clone()), path: Some(hit.path.clone()), m: Arc::clone(&hit.m) });
             }
-            if name.len() > MAX_MACRO_TEXT || !(macros::is_macro_file(name) || name.contains(['/', '\\'])) {
-                return Err(p.bad(format!("there is no macro named {name:?} in the Macros folder")));
+            let folder_key = s.extensions().find_macro(name).map(|(path, _)| format!("folder:{path}"));
+            // A folder macro named by its path, its path without extension and its title is
+            // copied once.
+            let copied = folder_key.as_ref().filter(|_| in_run).and_then(|key| s.extensions().macro_run.loaded.get(key)).cloned();
+            let loaded = match (copied, folder_key) {
+                (Some(hit), _) => hit,
+                (None, Some(key)) => {
+                    let Some((path, m)) = s.extensions().find_macro(name) else { return Err(p.bad(format!("{name}: not found"))) };
+                    let loaded = LoadedMacro { key: key.clone(), path: path.to_string(), m: Arc::new(m.clone()) };
+                    if in_run {
+                        s.extensions_mut().macro_run.loaded.insert(key, loaded.clone());
+                    }
+                    loaded
+                }
+                (None, None) => read_file(s, p, name, in_run)?,
+            };
+            if in_run {
+                s.extensions_mut().macro_run.loaded.insert(by_name, loaded.clone());
             }
-            let path = Path::new(name);
-            let bytes = macros::read_macro_file(path).map_err(|e| p.bad(format!("{name}: {e}")))?;
-            let m = Macro::parse(&bytes).map_err(|e| p.bad(format!("{name}: {e}")))?;
-            let key = std::fs::canonicalize(path).map_or_else(|_| name.clone(), |c| c.display().to_string());
-            Ok(Loaded { key: Some(format!("file:{key}")), path: Some(name.clone()), m })
+            Ok(Loaded { key: Some(loaded.key), path: Some(loaded.path), m: loaded.m })
         }
-        Value::Object(_) => Ok(Loaded { key: None, path: None, m: Macro::from_value(spec)? }),
+        Value::Object(_) => Ok(Loaded { key: None, path: None, m: Arc::new(Macro::from_value(spec)?) }),
         _ => Err(p.bad("`macro` is a macro's name, a path to a macro file or a macro object")),
     }
+}
+
+/// Reads the macro file `name`. Inside a run its bytes count against the run's
+/// [`MAX_MACRO_RUN_BYTES`].
+fn read_file(s: &mut Session, p: &Params, name: &str, in_run: bool) -> Result<LoadedMacro> {
+    if name.len() > MAX_MACRO_TEXT || !(macros::is_macro_file(name) || name.contains(['/', '\\'])) {
+        return Err(p.bad(format!("there is no macro named {name:?} in the Macros folder")));
+    }
+    let path = Path::new(name);
+    let bytes = macros::read_macro_file(path).map_err(|e| p.bad(format!("{name}: {e}")))?;
+    if in_run {
+        let run = &mut s.extensions_mut().macro_run;
+        run.bytes_left = run
+            .bytes_left
+            .checked_sub(bytes.len())
+            .ok_or_else(|| p.bad(format!("{name}: the macro reads more than {} MiB of macro files in all", MAX_MACRO_RUN_BYTES >> 20)))?;
+    }
+    let m = Macro::parse(&bytes).map_err(|e| p.bad(format!("{name}: {e}")))?;
+    let key = std::fs::canonicalize(path).map_or_else(|_| name.to_string(), |c| c.display().to_string());
+    Ok(LoadedMacro { key: format!("file:{key}"), path: name.to_string(), m: Arc::new(m) })
 }
 
 /// The arguments of a run: `args`, with `glyphs` and `layers` given beside it.
@@ -205,6 +245,10 @@ fn run_loaded(s: &mut Session, loaded: Loaded, args: Value, dry_run: bool) -> Re
     if s.batch.is_none() {
         s.extensions_mut().running_macros.clear();
     }
+    let outermost = s.extensions().running_macros.is_empty();
+    if outermost {
+        s.extensions_mut().macro_run = MacroRun::default();
+    }
     let running = &s.extensions().running_macros;
     if running.len() >= MAX_MACRO_NESTING {
         return Err(MacroError::Nesting.into());
@@ -214,7 +258,10 @@ fn run_loaded(s: &mut Session, loaded: Loaded, args: Value, dry_run: bool) -> Re
     {
         return Err(MacroError::SelfReference(label).into());
     }
-    let steps = m.resolve(&args)?;
+    let mut values_left = s.extensions().macro_run.values_left;
+    let resolved = m.resolve_within(&args, &mut values_left);
+    s.extensions_mut().macro_run.values_left = values_left;
+    let steps = resolved?;
     if dry_run {
         return Ok(json!({ "title": label, "steps": steps }));
     }
@@ -224,12 +271,14 @@ fn run_loaded(s: &mut Session, loaded: Loaded, args: Value, dry_run: bool) -> Re
     if outer {
         s.batch = None;
     }
-    let running = &mut s.extensions_mut().running_macros;
-    running.pop();
-    let top = running.is_empty();
+    s.extensions_mut().running_macros.pop();
+    if outermost {
+        // Frees the macros read during the run.
+        s.extensions_mut().macro_run = MacroRun::default();
+    }
     let results = ran.map_err(|panic| EngineError::Internal(format!("the macro `{label}` failed unexpectedly: {panic}")))??;
-    if top {
-        s.extensions_mut().last_macro = Some((path, m, args));
+    if outermost {
+        s.extensions_mut().last_macro = Some((path, Arc::unwrap_or_clone(m), args));
     }
     Ok(json!({ "title": label, "steps": steps.len(), "results": results }))
 }
@@ -243,6 +292,15 @@ fn run_steps(s: &mut Session, label: &str, steps: &[Step], outer: bool) -> Resul
     let mut results = Vec::with_capacity(steps.len());
     let mut ran = Ok(());
     for (i, step) in steps.iter().enumerate() {
+        let run = &mut s.extensions_mut().macro_run;
+        let Some(left) = run.steps_left.checked_sub(1) else {
+            ran = Err(EngineError::BadParams {
+                command: "script.run".into(),
+                message: format!("the macro runs more than {MAX_MACRO_RUN_STEPS} steps in all, counting the steps of the macros it runs"),
+            });
+            break;
+        };
+        run.steps_left = left;
         match s.execute(&step.command, &step.params) {
             Ok(v) => results.push(v),
             Err(e) => {
@@ -368,7 +426,14 @@ fn record_macro(s: &mut Session, value: &Value) -> Result<Value> {
             s.extensions_mut().recording = None;
             let mut out = json!({ "recording": false, "macro": m.to_json(), "steps": m.steps.len(), "full": full, "path": path });
             if full && let Value::Object(map) = &mut out {
-                map.insert("message".into(), json!(format!("recording stopped taking steps at {}", macros::MAX_RECORDED_STEPS)));
+                map.insert(
+                    "message".into(),
+                    json!(format!(
+                        "recording stopped taking steps at {} steps or {} MiB of parameters",
+                        macros::MAX_RECORDED_STEPS,
+                        macros::MAX_RECORDED_BYTES >> 20
+                    )),
+                );
             }
             Ok(out)
         }

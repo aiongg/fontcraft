@@ -15,8 +15,9 @@
 //! recorder, whose bodies those packages write.
 
 use std::cmp::Ordering;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use fontcraft_plugins::Registry;
 use fontcraft_plugins::reporter::ReporterCache;
@@ -24,7 +25,9 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::log::CommandLog;
-use crate::macros::{FolderFile, MAX_MACRO_TEXT, Macro, Recording, file_stem, natural_cmp};
+use crate::macros::{
+    FolderFile, MAX_MACRO_RUN_BYTES, MAX_MACRO_RUN_STEPS, MAX_MACRO_TEXT, MAX_RESOLVED_VALUES, Macro, Recording, file_stem, natural_cmp,
+};
 
 /// Most files listed from one extension folder (subfolders included).
 pub const MAX_FOLDER_FILES: usize = 10_000;
@@ -71,6 +74,37 @@ impl FolderStamps {
     }
 }
 
+/// The budget a top-level macro run shares with every macro it runs, and the macros it has read,
+/// so a macro run many times is read and parsed once. The outermost run resets it.
+#[derive(Debug)]
+pub struct MacroRun {
+    /// Steps it may still execute.
+    pub steps_left: usize,
+    /// JSON values its resolved steps may still hold.
+    pub values_left: usize,
+    /// Bytes of macro files it may still read.
+    pub bytes_left: usize,
+    /// The macros read so far: by the name a step gave (`name:` and the name) and by their path
+    /// in the Macros folder (`folder:` and the path).
+    pub loaded: HashMap<String, LoadedMacro>,
+}
+
+impl Default for MacroRun {
+    fn default() -> Self {
+        Self { steps_left: MAX_MACRO_RUN_STEPS, values_left: MAX_RESOLVED_VALUES, bytes_left: MAX_MACRO_RUN_BYTES, loaded: HashMap::new() }
+    }
+}
+
+/// A macro read during a run.
+#[derive(Clone, Debug)]
+pub struct LoadedMacro {
+    /// What the self-reference check compares.
+    pub key: String,
+    /// Its path in the Macros folder, or its file as given.
+    pub path: String,
+    pub m: Arc<Macro>,
+}
+
 /// Everything about extensions a session keeps.
 #[derive(Debug, Default)]
 pub struct ExtensionState {
@@ -87,10 +121,14 @@ pub struct ExtensionState {
     pub recording: Option<Recording>,
     /// The macros of the Macros folder that could be read, by their path in `macros`.
     pub macro_files: BTreeMap<String, Macro>,
+    /// Each title of `macros` that can run, with the path of the first such macro in menu order.
+    macro_titles: BTreeMap<String, String>,
     /// The macros running now, outermost first: their folder path or file (empty for one given
     /// inline). `script.run` refuses a macro already on it, and more than
     /// [`MAX_MACRO_NESTING`](crate::macros::MAX_MACRO_NESTING) of them.
     pub running_macros: Vec<String>,
+    /// What the running top-level macro may still do, and the macros it has read.
+    pub macro_run: MacroRun,
     /// Modules are listed but none runs (`app.launchWithoutPlugins`).
     pub safe_mode: bool,
     /// The Modules folder; `None` in the web app and in headless sessions without one.
@@ -172,6 +210,7 @@ impl ExtensionState {
         if changed {
             self.macros = entries;
             self.macro_files = bodies;
+            self.index_titles();
             self.macros_revision = self.macros_revision.wrapping_add(1);
         }
         changed
@@ -186,7 +225,15 @@ impl ExtensionState {
         self.macros.push(MacroEntry { path: path.clone(), title, description: m.description.clone(), error: None });
         self.macros.sort_by(menu_order);
         self.macro_files.insert(path, m);
+        self.index_titles();
         self.macros_revision = self.macros_revision.wrapping_add(1);
+    }
+
+    fn index_titles(&mut self) {
+        self.macro_titles.clear();
+        for e in self.macros.iter().filter(|e| e.error.is_none()) {
+            self.macro_titles.entry(e.title.clone()).or_insert_with(|| e.path.clone());
+        }
     }
 
     /// The macro of the Macros folder that `name` names: its path (`Tools/Tighten.fcmacro`), its
@@ -195,7 +242,7 @@ impl ExtensionState {
         let by_path = |p: &str| self.macro_files.get_key_value(p).map(|(k, m)| (k.as_str(), m));
         by_path(name)
             .or_else(|| by_path(&format!("{name}.{}", crate::macros::MACRO_EXTENSION)))
-            .or_else(|| self.macros.iter().filter(|e| e.error.is_none() && e.title == name).find_map(|e| by_path(&e.path)))
+            .or_else(|| self.macro_titles.get(name).and_then(|path| by_path(path)))
     }
 }
 

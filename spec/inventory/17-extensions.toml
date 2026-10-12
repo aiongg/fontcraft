@@ -259,6 +259,7 @@ status = "inferred"
 notes = "The command has no static menu item: the Script menu lists each macro of the Macros folder as an item that runs script.run with its path. Arguments the macro does not declare are refused, and steps are counted from 1 in error messages."
 guesses = [
   "A macro runs as one undo step that is undone as a whole, like command.batch; the reference undoes script edits per glyph and does not say how a script's changes group.",
+  "One top-level macro run executes at most 1,000,000 steps, the steps of the macros it runs included, and reads at most 256 MiB of macro files; past either it fails as a whole. Our own limit; no source describes one for scripts in the reference.",
 ]
 
 [[command]]
@@ -646,3 +647,6 @@ ref = "Extensions › Scripts"
 status = "inferred"
 own = true
 notes = "Decision 0005 names recorded actions among the scripting surfaces. Saving, reloading and opening the macros folder and starting or stopping a recording are not recorded; a re-run of the last macro is recorded as script.run with that macro inline. Edits committed from a drag or a live-preview dialog are not recorded yet: they are journalled by the interaction commit, which does not pass through the recording hook."
+guesses = [
+  "A recording also stops taking steps once their parameters reach 64 MiB as JSON, and says so as for the step limit. Our own limit: the reference has no recorder.",
+]

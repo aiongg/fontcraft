@@ -12,8 +12,10 @@
 //! id (renamed ids through their aliases, decision 0004 item 8) and every placeholder first, so
 //! an unknown command or argument changes nothing; then the steps run as one transaction and one
 //! undo step, like `command.batch`, and the first failing step is named. A macro may run another
-//! macro up to [`MAX_MACRO_NESTING`] deep; one that reaches itself is refused. Steps are counted
-//! from 1 in messages.
+//! macro up to [`MAX_MACRO_NESTING`] deep; one that reaches itself is refused. One top-level run
+//! executes at most [`MAX_MACRO_RUN_STEPS`] steps and fills in at most [`MAX_RESOLVED_VALUES`]
+//! values, nested macros included, and reads each macro file once. Steps are counted from 1 in
+//! messages.
 //!
 //! Recording (`script.recordMacro`): while a [`Recording`] is set in the session's
 //! `ExtensionState`, the hook in `Session::execute` hands it every successful font-changing
@@ -53,6 +55,13 @@ pub const MAX_MACRO_ARGS: usize = 64;
 pub const MAX_PLACEHOLDER_DEPTH: usize = 32;
 /// Most steps one recording keeps; recording then stops with a message and keeps what it has.
 pub const MAX_RECORDED_STEPS: usize = 100_000;
+/// Most bytes of step parameters (as JSON) one recording keeps; past it the recording is full.
+pub const MAX_RECORDED_BYTES: usize = 64 << 20;
+/// Most steps one top-level macro run executes, the steps of every macro it runs included. Without
+/// it, macros that run macros multiply their step counts level by level.
+pub const MAX_MACRO_RUN_STEPS: usize = 1_000_000;
+/// Most bytes of macro files one top-level macro run reads, nested macros included.
+pub const MAX_MACRO_RUN_BYTES: usize = 256 << 20;
 /// The arguments the shell fills from its selection without a declaration.
 pub const BUILT_IN_ARGS: &[&str] = &["glyphs", "layers"];
 /// Most module ids in `requires` (as many as can be installed).
@@ -220,7 +229,14 @@ impl Macro {
     /// `glyphs` and `layers` always allowed). An unknown command or argument is refused before
     /// anything runs.
     pub fn resolve(&self, args: &Value) -> Result<Vec<Step>, MacroError> {
-        self.resolve_with(args, COMMAND_ALIASES, PARAM_ALIASES)
+        let mut left = MAX_RESOLVED_VALUES;
+        self.resolve_with(args, COMMAND_ALIASES, PARAM_ALIASES, &mut left)
+    }
+
+    /// [`Macro::resolve`] with the values still allowed in `left`, which a run shares with the
+    /// macros it runs; what the steps hold is taken from it.
+    pub fn resolve_within(&self, args: &Value, left: &mut usize) -> Result<Vec<Step>, MacroError> {
+        self.resolve_with(args, COMMAND_ALIASES, PARAM_ALIASES, left)
     }
 
     /// Checks what can be checked without arguments: every command id resolves and may be a
@@ -245,11 +261,17 @@ impl Macro {
         Ok(())
     }
 
-    fn resolve_with(&self, args: &Value, commands: &[(&str, &str)], renames: &[(&str, &str, &str)]) -> Result<Vec<Step>, MacroError> {
+    fn resolve_with(
+        &self,
+        args: &Value,
+        commands: &[(&str, &str)],
+        renames: &[(&str, &str, &str)],
+        left: &mut usize,
+    ) -> Result<Vec<Step>, MacroError> {
         self.check_limits()?;
         let values = self.arg_values(args)?;
         let sizes: HashMap<String, usize> = values.iter().map(|(k, v)| (k.clone(), count_values(v, MAX_RESOLVED_VALUES))).collect();
-        let mut budget = Budget { left: MAX_RESOLVED_VALUES, sizes: &sizes };
+        let mut budget = Budget { left: *left, sizes: &sizes };
         let mut out = Vec::with_capacity(self.steps.len());
         for (i, step) in self.steps.iter().enumerate() {
             let n = i + 1;
@@ -270,6 +292,7 @@ impl Macro {
             }
             out.push(Step { command: command.to_string(), params });
         }
+        *left = budget.left;
         Ok(out)
     }
 
@@ -468,8 +491,11 @@ fn check_placeholders(value: &Value, declared: &Map<String, Value>, step: usize,
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Recording {
     pub steps: Vec<Step>,
-    /// Recording reached [`MAX_RECORDED_STEPS`] and stopped taking steps.
+    /// Recording reached [`MAX_RECORDED_STEPS`] or [`MAX_RECORDED_BYTES`] and stopped taking
+    /// steps.
     pub full: bool,
+    /// The recorded steps' parameters, in JSON bytes.
+    pub bytes: usize,
 }
 
 impl Recording {
@@ -483,6 +509,12 @@ impl Recording {
         if self.full || NOT_RECORDED.contains(&command) {
             return;
         }
+        let size = json_size(params).saturating_add(command.len());
+        let Some(bytes) = self.bytes.checked_add(size).filter(|b| *b <= MAX_RECORDED_BYTES) else {
+            self.full = true;
+            return;
+        };
+        self.bytes = bytes;
         let params = if params.is_null() { Value::Object(Map::new()) } else { params.clone() };
         self.steps.push(Step { command: command.to_string(), params });
         if self.steps.len() >= MAX_RECORDED_STEPS {
@@ -493,6 +525,25 @@ impl Recording {
     /// The recorded steps as a macro titled `title`.
     pub fn finish(self, title: &str) -> Macro {
         Macro { title: title.to_string(), steps: self.steps, ..Macro::default() }
+    }
+}
+
+/// How many bytes `value` takes as compact JSON, without building the text.
+fn json_size(value: &Value) -> usize {
+    struct Count(usize);
+    impl std::io::Write for Count {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0 = self.0.saturating_add(buf.len());
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut count = Count(0);
+    match serde_json::to_writer(&mut count, value) {
+        Ok(()) => count.0,
+        Err(_) => usize::MAX,
     }
 }
 
@@ -709,7 +760,9 @@ mod tests {
     #[test]
     fn renamed_commands_and_parameters_resolve_through_their_aliases() {
         let m = Macro::from_value(&json!({"steps": [{"command": "glyph.makeGlyph", "params": {"glyphName": "x"}}]})).unwrap();
-        let steps = m.resolve_with(&Value::Null, &[("glyph.makeGlyph", "glyph.newGlyph")], &[("glyph.newGlyph", "glyphName", "name")]).unwrap();
+        let mut left = MAX_RESOLVED_VALUES;
+        let steps =
+            m.resolve_with(&Value::Null, &[("glyph.makeGlyph", "glyph.newGlyph")], &[("glyph.newGlyph", "glyphName", "name")], &mut left).unwrap();
         assert_eq!(steps, [Step { command: "glyph.newGlyph".into(), params: json!({"name": "x"}) }]);
         assert!(m.resolve(&Value::Null).is_err(), "the test alias is not a real one");
         for (old, new) in COMMAND_ALIASES {
@@ -738,6 +791,21 @@ mod tests {
         }
         assert_eq!(r.steps.len(), MAX_RECORDED_STEPS);
         assert!(r.full);
+    }
+
+    #[test]
+    fn recording_stops_at_its_byte_limit() {
+        let mut r = Recording::new();
+        let big = json!({"name": "x".repeat(1 << 20)});
+        for _ in 0..(MAX_RECORDED_BYTES >> 20) + 5 {
+            r.record("glyph.newGlyph", &big);
+        }
+        assert!(r.full);
+        assert!(r.bytes <= MAX_RECORDED_BYTES);
+        assert!(r.steps.len() < (MAX_RECORDED_BYTES >> 20));
+        let kept = r.steps.len();
+        r.record("glyph.newGlyph", &json!({}));
+        assert_eq!(r.steps.len(), kept, "a full recording takes no more steps");
     }
 
     #[test]

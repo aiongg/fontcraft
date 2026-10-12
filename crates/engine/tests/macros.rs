@@ -113,6 +113,29 @@ fn script_run_refuses_self_reference_and_deep_nesting() {
 }
 
 #[test]
+fn nested_macros_share_one_step_budget() {
+    let mut s = Session::with_document();
+    let start = s.font().unwrap().clone();
+    let leaf = json!({"command": "colorPalette.list", "params": {}});
+    let mut files = vec![("L4.fcmacro".to_string(), json!({"format": "fontcraft.macro", "version": 1, "steps": vec![leaf; 1000]}))];
+    for i in 1..=3 {
+        let step = json!({"command": "script.run", "params": {"macro": format!("L{}", i + 1)}});
+        files.push((format!("L{i}.fcmacro"), json!({"format": "fontcraft.macro", "version": 1, "steps": vec![step; 100]})));
+    }
+    let files: Vec<(&str, Value)> = files.iter().map(|(p, m)| (p.as_str(), m.clone())).collect();
+    with_macros(&mut s, &files);
+    // 100 × 100 × 100 × 1,000 steps without a shared budget.
+    let t = std::time::Instant::now();
+    let err = s.execute("script.run", &json!({"macro": "L1"})).unwrap_err().to_string();
+    assert!(err.contains("steps in all"), "{err}");
+    assert!(t.elapsed() < std::time::Duration::from_secs(60), "{:?}", t.elapsed());
+    assert_eq!(s.font().unwrap(), &start);
+    // The next top-level run starts with the whole budget.
+    let out = run(&mut s, "script.run", json!({"macro": "L3"}));
+    assert_eq!(out["steps"], 100);
+}
+
+#[test]
 fn a_recorded_macro_replays_to_the_same_font() {
     let mut s = Session::with_document();
     run(&mut s, "script.recordMacro", json!({"action": "start"}));
