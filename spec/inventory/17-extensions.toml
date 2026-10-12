@@ -410,12 +410,18 @@ label = "Macro Panel"
 menu = ["Window"]
 shortcut = "Cmd+Alt+M"
 kind = "ui"
-params = "{}"
+params = "{open?: bool, line?: string, clear?: bool, copy?: bool}"
 area = "extensions"
 milestone = "M13"
 summary = "Opens the Macro Panel, whose console receives the log output of scripts and plug-ins unless output is redirected to the system console; this chapter and the Settings chapter say nothing more about it. FontCraft: opens the Command Console, where a command is typed as an id followed by JSON parameters, or as a `fontcraft-cli run` style line, with the log of commands and module output below."
 ref = "Settings › Addons › Console Output"
 status = "inferred"
+notes = "The handbook names the window and its shortcut (Window › Macro Panel, Cmd+Alt+M) in the Console Output setting; documented, not yet observed. FontCraft (M13.9): `line` runs a console line through the same path as every other surface; a line of several engine commands runs as one `command.batch`; shell commands and lines that cannot be read are logged by the console; `clear` empties the pane only; `copy` puts the pane's text on the clipboard."
+guesses = [
+  "A run-style line with several commands runs them as one transaction and one undo step, and may name engine commands only, so a failing line changes nothing; the command-line tool runs them one by one and simply does not save after a failure.",
+  "Clear empties the console's pane but keeps the session's command log, which other readers use; the reference's clear behaviour is not described.",
+  "The history lives for the session only and is not saved between launches; watching whether the reference keeps typed text after a relaunch would settle it.",
+]
 observe = [
   "Open Window › Macro Panel: screenshot it, note how code is run (a button, a shortcut, both), whether it has tabs, and whether the typed text is still there after closing and reopening the panel and after relaunching.",
 ]
@@ -435,8 +441,10 @@ milestone = "M13"
 summary = "Window with a console showing script and plug-in log output; in the reference it also runs ad-hoc Python (recalled, not stated in these chapters). FontCraft: the Command Console: an input line with completion of command ids and glyph names and the parameter docs of the command being typed, a history, and a log pane holding each command run, its result or error, and module log lines."
 ref = "Settings › Addons › Console Output"
 status = "inferred"
+notes = "FontCraft (M13.9): completion offers command ids for the first word (or the word after `--cmd`) and glyph names inside a JSON string value; prefix matches come first, then matches in any case, at most 50. Tab takes the first suggestion, a click any of them."
 guesses = [
   "The console's input is one line with a history, not a multi-line editor, because commands are one line of JSON; the reference's panel layout is not described (open question).",
+  "Tab takes the first completion suggestion and Up and Down stay with the history, because the history is the row's documented use of those keys; nothing describes completion keys in the reference.",
 ]
 
 # --- Plug-in kinds ---

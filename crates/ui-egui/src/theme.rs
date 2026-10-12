@@ -297,6 +297,12 @@ pub struct Tokens {
     pub text_preview_match: Color32,
     pub text_preview_current: Color32,
     pub text_preview_fallback: Color32,
+    /// The Command Console: its first size, the height of the log pane's rows and the most
+    /// height its completion list takes.
+    pub console_width: f32,
+    pub console_height: f32,
+    pub console_row_height: f32,
+    pub console_completion_height: f32,
 }
 
 impl Tokens {
@@ -497,6 +503,10 @@ impl Tokens {
             text_preview_match: Color32::from_rgba_unmultiplied(0xf2, 0xd0, 0x3c, 0x60),
             text_preview_current: Color32::from_rgba_unmultiplied(0xf2, 0xa1, 0x1d, 0xa0),
             text_preview_fallback: Color32::from_rgb(0x1a, 0x1a, 0x1b),
+            console_width: 640.0,
+            console_height: 400.0,
+            console_row_height: 18.0,
+            console_completion_height: 140.0,
         }
     }
 

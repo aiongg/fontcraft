@@ -902,7 +902,10 @@ milestone = "M13"
 summary = "Sends log output of scripts and plug-ins to the operating system's console instead of the Macro Panel console; meant for debugging when the Macro Panel cannot be reached."
 ref = "Settings › Addons › Console Output"
 status = "handbook"
-notes = "FontCraft (M13.9): Also Write Extension Log to Standard Error. Module log lines and macro step results always go to the Command Console; with this on they are also written to standard error, for debugging when the window cannot be reached."
+notes = "FontCraft (M13.9): Also Write Extension Log to Standard Error. Module log lines and macro step results always go to the Command Console; with this on they are also written to standard error, for debugging when the window cannot be reached. The desktop app writes each log entry once, as one line starting `fontcraft: `, while the setting is on; entries logged while it is off are not written later."
+guesses = [
+  "With the setting on, the log still shows in the Command Console as well as on standard error, where the handbook says the reference sends it to the system console instead; keeping both loses nothing and the switch stays off by default.",
+]
 
 [[setting]]
 id = "addons.alternatePluginRepos"
