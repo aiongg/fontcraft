@@ -120,3 +120,34 @@ pub(crate) fn color_layers_follow_master(next: &mut Font, before: &Font) {
         }
     }
 }
+
+#[cfg(test)]
+mod measure {
+    use std::time::Instant;
+
+    use fontcraft_model::Font;
+
+    use super::color_layers_follow_master;
+
+    #[test]
+    #[ignore = "measure: the cost of the colour-layer hook on a one-glyph edit of a large source"]
+    fn color_layer_hook_cost_on_one_glyph_edit() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus/inter/src/Inter-Roman.glyphspackage");
+        let Ok((font, _)) = crate::io::open(&path, None) else { return };
+        let name = font.glyphs.iter().find(|g| g.name == "A").map(|g| g.name.clone()).unwrap_or_default();
+        const RUNS: u32 = 200;
+        let mut total = std::time::Duration::ZERO;
+        for _ in 0..RUNS {
+            let mut next = Font::clone(&font);
+            if let Some(mut g) = next.glyphs.get_mut(&name)
+                && let Some(l) = g.layers.first_mut()
+            {
+                l.width += 1.0;
+            }
+            let t = Instant::now();
+            color_layers_follow_master(&mut next, &font);
+            total += t.elapsed();
+        }
+        eprintln!("{} glyphs: {:?} per edit", font.glyphs.len(), total / RUNS);
+    }
+}
