@@ -19,6 +19,7 @@
 pub mod cache;
 pub mod cell_images;
 pub mod columns;
+pub mod encoding;
 pub mod grid;
 pub mod images;
 pub mod inspector;

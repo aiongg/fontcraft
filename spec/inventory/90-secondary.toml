@@ -1823,6 +1823,15 @@ summary = "Uses an imported encoding file (an ordered list of glyph names or cod
 ref = "FontLab 8 What's new since VI › Glyphs & fonts (Encoding files); Glyphs & fonts › Font window"
 status = "docs"
 origin = "fontlab"
+notes = "Documented, not yet observed. The encoding becomes a list filter in the Filters section, selected at once; a slot whose glyph the font lacks stays in the list and shows in the filter's missing badge. Empty slots draw no cell in Font View, and exporting an encoding file is not built yet. Reader limits: 8 MiB, 300,000 lines, 65,536 slots."
+guesses = [
+  "Encoding files are read in three line forms (`name slot`, `0xSlot 0xCodePoint`, and one name or code point for the next slot) with `%%FONTLAB ENCODING:` and `%%FONTLAB CODEPAGE:` titles; FontLab's own encoding and code page files would settle the forms it accepts.",
+  "Without `path`, `name` picks a built-in code page (ASCII, Latin 1, Windows 1252, Mac OS Roman); with `path` it names the filter. FontLab's list of bundled encodings would settle which ones ship.",
+  "A code-point slot the font has no glyph for lists the glyph data's name for that code point, and running the command again with the same name replaces the list filter instead of adding a second one.",
+]
+observe = [
+  "Open an encoding file with gaps in FontLab 8 and check whether the Font window draws a cell for each empty slot and for each slot whose glyph the font lacks.",
+]
 
 [[command]]
 id = "font.compareInTable"
@@ -1830,13 +1839,21 @@ label = "Compare Fonts in List"
 menu = ["Window"]
 shortcut = ""
 kind = "ui"
-params = "{fonts: [fontRef], property: name}"
+params = "{fonts?: [fontRef], property?: name}"
 area = "font-view"
 milestone = "M13"
 summary = "Shows the glyph list with one column per selected open font for a chosen property (advance width, sidebearings, node count, and so on), so differences between fonts of a family can be read across a row."
 ref = "FontLab 8 What's new › Glyphs & fonts › Font window (Font comparison)"
 status = "docs"
 origin = "fontlab"
+notes = "Documented, not yet observed. A window with one row per glyph (the first font's order, then other fonts' extra glyphs) and one column per font; properties width, lsb, rsb, nodes, paths, components, anchors and unicodes, read from each font's first master; rows that differ are highlighted and Only Differences hides the rest. A fontRef is a position in the open-document list, a title or a path; at most 64 fonts. This is not the two-document Compare Fonts window."
+guesses = [
+  "Each font is read in its first master, and without `fonts` every open document is compared; FontLab's Font window comparison mode would settle which master and fonts it uses.",
+  "Measured values are rounded to hundredths of a unit before rows are marked as differing; the reference's own comparison display would settle the precision.",
+]
+observe = [
+  "In FontLab 8, turn on font comparison in the Font window with two fonts of a family and note the properties offered, which master each column reads and how differing values are marked.",
+]
 
 [[behavior]]
 id = "fontInfo.importantNote"
@@ -2946,6 +2963,12 @@ summary = "Renames glyphs to the names a name list gives for their code points; 
 ref = "FontForge Encoding menu › Load Namelist, Rename Glyphs, Save Namelist of Font, Create Named Glyphs"
 status = "docs"
 origin = "fontforge"
+notes = "Documented, not yet observed. Renaming is built: lines `0x0041 A`, `U+0041 A` or `A;0041`, `%`/`#` comments, `Lang:` lines skipped, `Based:` refused; the built-in lists `nice` and `production` are the glyph data's names. Saving the font's mapping as a name list and creating glyphs from bare names are not built yet. Reader limits: 8 MiB, 300,000 lines, 200,000 entries."
+guesses = [
+  "An unencoded glyph named after a renamed glyph plus a suffix is renamed with it (uni0041.sc to A.sc); the reference's documentation does not say, and renaming such a font in it would settle it.",
+  "Renamed glyphs keep their code points and their places in the glyph order, and when a code point is named twice in a list the first name counts.",
+  "With updateReferences (the default) components, metrics keys, kerning, groups and the glyphOrder parameter follow the new names, as Rename Glyph does.",
+]
 
 [[command]]
 id = "cid.convertToCid"

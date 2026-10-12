@@ -117,6 +117,7 @@ pub struct PanelState {
     pub edit_aids: crate::shell::edit_aids::EditAidsState,
     pub attach: crate::shell::attach::AttachState,
     pub reference_font: reference_font::ReferenceFontState,
+    pub compare_table: crate::dialogs::compare_fonts::CompareTableState,
 }
 
 impl Default for PanelState {
@@ -147,6 +148,7 @@ impl Default for PanelState {
             edit_aids: Default::default(),
             attach: Default::default(),
             reference_font: Default::default(),
+            compare_table: Default::default(),
         }
     }
 }

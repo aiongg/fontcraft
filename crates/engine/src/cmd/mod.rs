@@ -130,7 +130,7 @@ mod cross_axis;
 mod derived_glyphs;
 mod detect;
 mod drag_aids;
-mod encodings;
+pub mod encodings;
 pub mod export_profiles;
 mod expressions;
 pub mod external_changes;

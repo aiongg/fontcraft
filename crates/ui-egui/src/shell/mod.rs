@@ -95,6 +95,8 @@ pub const MODULES: &[(&[UiCommand], Handler)] = &[
     (crate::panels::reference_font::COMMANDS, crate::panels::reference_font::run),
     (crate::panels::selections::COMMANDS, crate::panels::selections::run),
     (url::COMMANDS, url::run),
+    (font_view::encoding::COMMANDS, font_view::encoding::run),
+    (crate::dialogs::compare_fonts::COMMANDS, crate::dialogs::compare_fonts::run),
 ];
 
 /// Every shell command, in module order.
@@ -116,6 +118,7 @@ pub fn windows(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'s
     actions::show(app, ui, pending);
     space_center::show(app, ui, pending);
     kerning_review::show(app, ui, pending);
+    crate::dialogs::compare_fonts::show(app, ui, pending);
 }
 
 pub fn is_ui_command(id: &str) -> bool {
