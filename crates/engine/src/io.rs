@@ -340,7 +340,7 @@ fn follow_references(
         // A compiled font refers to nothing; a few bytes tell, where opening it would decompile it.
         let mut head = Vec::new();
         let Ok(file) = std::fs::File::open(path) else { return Ok(()) };
-        if file.take(64).read_to_end(&mut head).is_err() || fontcraft_decompile::sniff(&head).is_some() {
+        if file.take(64).read_to_end(&mut head).is_err() || fontcraft_decompile::sniff(&head).is_some() || is_image(&head) {
             return Ok(());
         }
         let bytes = read_file(path).unwrap_or_default();
@@ -364,6 +364,13 @@ fn follow_references(
         follow_references(&linked, false, &mut *admit, left)?;
     }
     Ok(())
+}
+
+/// Whether `head`, a file's first bytes, starts like a bitmap or PDF file, which refers to no
+/// other file.
+fn is_image(head: &[u8]) -> bool {
+    const MAGIC: [&[u8]; 8] = [b"\x89PNG\r\n\x1a\n", b"\xFF\xD8\xFF", b"II*\0", b"MM\0*", b"%PDF-", b"8BPS", b"GIF87a", b"GIF89a"];
+    MAGIC.iter().any(|m| head.starts_with(m))
 }
 
 /// Whether text that starts with `{` is a native file: JSON whose first key is a quoted string

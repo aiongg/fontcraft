@@ -79,7 +79,8 @@ pub fn check_files(s: &Session, id: &str, files: &[FileParam], params: &Value, r
     if let Value::Object(map) = &mut params {
         let open: Vec<&str> =
             s.documents().iter().flat_map(|d| [Some(d.title.as_str()), d.path.as_deref().and_then(Path::to_str)]).flatten().collect();
-        let folder = s.active().and_then(|d| d.path.as_deref()).and_then(|p| std::path::absolute(p).ok()).and_then(|p| p.parent().map(Path::to_path_buf));
+        let folder =
+            s.active().and_then(|d| d.path.as_deref()).and_then(|p| std::path::absolute(p).ok()).and_then(|p| p.parent().map(Path::to_path_buf));
         let mut checker = Checker { roots, open: &open, left: MAX_PATHS, access: Access::Read, base: None, reads: Vec::new() };
         for f in files {
             if let Some(value) = map.get_mut(f.name) {
@@ -91,6 +92,9 @@ pub fn check_files(s: &Session, id: &str, files: &[FileParam], params: &Value, r
                 checker.value(f, value)?;
             }
         }
+        // One source named many times is opened once.
+        checker.reads.sort();
+        checker.reads.dedup();
         for path in &checker.reads {
             check_references(path, roots)?;
             if id == "project.open" {
