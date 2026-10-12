@@ -7,6 +7,9 @@
 //! spacing crate measures them (slanted back in an italic master), its anchors. The exported
 //! glyphs are those whose export flag is on, in the font's order.
 
+use std::cell::RefCell;
+
+use fontcraft_glyphquery::ClassResolver;
 use fontcraft_glyphquery::predicate::Predicate;
 use fontcraft_model::glyphdata::GlyphData;
 use fontcraft_model::{Font, Layer, Master};
@@ -96,6 +99,9 @@ pub struct MasterValues<'a> {
     master: &'a Master,
     glyphs: Vec<String>,
     anchors: Option<AnchorSource<'a>>,
+    /// The feature classes `class(…)` reads, resolved once for every predicate token, with
+    /// one work cap for all of them.
+    classes: RefCell<ClassResolver<'a>>,
 }
 
 impl<'a> MasterValues<'a> {
@@ -105,7 +111,8 @@ impl<'a> MasterValues<'a> {
             return Err(FeatureError::Unsupported(format!("the font has no master `{master}`")));
         };
         let glyphs = font.glyphs.as_arcs().iter().filter(|g| g.export).map(|g| g.name.clone()).collect();
-        Ok(Self { target: Target::Master(master.to_string()), font, data, master: found, glyphs, anchors: None })
+        let classes = RefCell::new(ClassResolver::new(font, data, Some(found.id.as_str())));
+        Ok(Self { target: Target::Master(master.to_string()), font, data, master: found, glyphs, anchors: None, classes })
     }
 
     /// Reads anchors from `source` (propagated anchors) instead of the layers' stored ones.
@@ -168,12 +175,12 @@ impl TargetValues for MasterValues<'_> {
     /// Layer attributes read this master; `class(…)` reads the font's enabled feature classes;
     /// non-exporting glyphs are left out.
     fn select(&self, predicate: &Predicate) -> Result<Vec<String>, String> {
-        let master = match &self.target {
-            Target::Master(id) => Some(id.as_str()),
-            _ => None,
-        };
+        let master = Some(self.master.id.as_str());
         let wanted = predicate.classes();
-        let classes = fontcraft_glyphquery::feature_classes(self.font, self.data, master, Some(wanted.as_slice())).map_err(|e| e.to_string())?;
+        let classes = {
+            let mut resolver = self.classes.try_borrow_mut().map_err(|_| "the feature classes are already being read".to_string())?;
+            resolver.classes(Some(wanted.as_slice())).map_err(|e| e.to_string())?
+        };
         let env = fontcraft_glyphquery::Env::new(self.font, self.data, master).map_err(|e| e.to_string())?.with_classes(classes);
         let names = fontcraft_glyphquery::predicate::evaluate(predicate, &env).map_err(|e| e.to_string())?;
         Ok(names.into_iter().filter(|n| self.font.glyph(n).is_some_and(|g| g.export)).collect())

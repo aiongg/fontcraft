@@ -141,6 +141,12 @@ pub fn token_ranges(code: &str) -> Vec<Range<usize>> {
     scan(code, MAX_TOKENS).tokens.into_iter().map(|t| t.range).collect()
 }
 
+/// Whether the token starting at byte `at` of `code` stands inside class brackets.
+#[cfg(test)]
+pub(crate) fn token_in_brackets(code: &str, at: usize) -> bool {
+    scan(code, MAX_TOKENS).tokens.iter().any(|t| t.range.start == at && t.in_brackets)
+}
+
 fn error(span: Range<usize>, message: impl Into<String>) -> Diagnostic {
     Diagnostic::at(String::new(), span, Severity::Error, message)
 }
@@ -176,6 +182,8 @@ enum Body {
 struct Token {
     range: Range<usize>,
     body: Body,
+    /// Whether the token stands inside class brackets, for where predicate tokens may stand.
+    in_brackets: bool,
 }
 
 struct Scanned {
@@ -188,9 +196,19 @@ fn scan(code: &str, limit: usize) -> Scanned {
     let b = code.as_bytes();
     let mut tokens = Vec::new();
     let mut beyond = None;
+    // Brackets outside comments, quoted text and tokens.
+    let mut depth = 0usize;
     let mut i = 0;
     while let Some(&c) = b.get(i) {
         match c {
+            b'[' => {
+                depth = depth.saturating_add(1);
+                i = i.saturating_add(1);
+            }
+            b']' => {
+                depth = depth.saturating_sub(1);
+                i = i.saturating_add(1);
+            }
             b'#' => i = find(b, i, |c| c == b'\n').unwrap_or(b.len()),
             b'"' => i = find(b, i.saturating_add(1), |c| c == b'"').map_or(b.len(), |e| e.saturating_add(1)),
             b'$' => {
@@ -198,7 +216,8 @@ fn scan(code: &str, limit: usize) -> Scanned {
                     beyond = Some(i);
                     break;
                 }
-                let token = scan_token(code, i);
+                let mut token = scan_token(code, i);
+                token.in_brackets = depth > 0;
                 i = token.range.end.max(i.saturating_add(1));
                 tokens.push(token);
             }
@@ -230,9 +249,9 @@ fn scan_token(code: &str, start: usize) -> Token {
                 } else {
                     Body::Expression(inner..end)
                 };
-                Token { range: start..end.saturating_add(1), body }
+                Token { in_brackets: false, range: start..end.saturating_add(1), body }
             }
-            stop => Token { range: start..stop.unwrap_or(b.len()), body: Body::Broken("the token is not closed with `}`") },
+            stop => Token { in_brackets: false, range: start..stop.unwrap_or(b.len()), body: Body::Broken("the token is not closed with `}`") },
         },
         Some(b'[') => {
             if let Some(len) = crate::tokens_predicate::token_len(code, start) {
@@ -242,7 +261,7 @@ fn scan_token(code: &str, start: usize) -> Token {
                 } else {
                     Body::Predicate(inner..end.saturating_sub(1))
                 };
-                return Token { range: start..end, body };
+                return Token { in_brackets: false, range: start..end, body };
             }
             // Not closed: the token ends where the statement does.
             let mut quote = None;
@@ -265,20 +284,20 @@ fn scan_token(code: &str, start: usize) -> Token {
                     } else {
                         Body::Predicate(inner..end)
                     };
-                    Token { range: start..end.saturating_add(1), body }
+                    Token { in_brackets: false, range: start..end.saturating_add(1), body }
                 }
-                stop => Token { range: start..stop.unwrap_or(b.len()), body: Body::Broken("the token is not closed with `]`") },
+                stop => Token { in_brackets: false, range: start..stop.unwrap_or(b.len()), body: Body::Broken("the token is not closed with `]`") },
             }
         }
         _ => {
             let rest = code.get(open..).unwrap_or_default();
             let len = rest.char_indices().find(|&(_, c)| !is_name_char(c)).map_or(rest.len(), |(i, _)| i);
             if len == 0 {
-                Token { range: start..open, body: Body::Broken("a `$` must start a token: `$name`, `${…}` or `$[…]`") }
+                Token { in_brackets: false, range: start..open, body: Body::Broken("a `$` must start a token: `$name`, `${…}` or `$[…]`") }
             } else if len > MAX_EXPRESSION_BYTES {
-                Token { range: start..open + len, body: Body::Broken("the token's name is longer than 4096 bytes") }
+                Token { in_brackets: false, range: start..open + len, body: Body::Broken("the token's name is longer than 4096 bytes") }
             } else {
-                Token { range: start..open + len, body: Body::Name(open..open + len) }
+                Token { in_brackets: false, range: start..open + len, body: Body::Name(open..open + len) }
             }
         }
     }
@@ -309,7 +328,7 @@ impl<'v> Evaluator<'v> {
         match &token.body {
             Body::Predicate(inner) => {
                 if let Some(kind) = self.kind {
-                    crate::tokens_predicate::check_placement(code, token.range.start, kind)?;
+                    crate::tokens_predicate::check_placement(token.in_brackets, kind)?;
                 }
                 let key = code.get(inner.clone()).unwrap_or_default().trim();
                 if let Some(done) = self.predicates.get(key) {

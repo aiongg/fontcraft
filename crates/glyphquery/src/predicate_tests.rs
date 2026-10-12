@@ -8,7 +8,7 @@ use fontcraft_glyphdata::GlyphData;
 use fontcraft_model::{Alignment, Anchor, Component, Font, Glyph, Hint, Layer, Node, NodeKind, Path, Shape, Snippet};
 use fontcraft_plist::{Dict, Value};
 
-use crate::predicate::{evaluate, parse, predicate_len};
+use crate::predicate::{evaluate, parse, predicate_len, predicate_len_within};
 use crate::*;
 
 fn hint(kind: &str) -> Hint {
@@ -182,6 +182,11 @@ fn hostile_predicates_and_classes_fail_with_a_message() {
     assert_eq!(predicate_len("name matches \"[a-z]\"] rest"), Some(20));
     assert_eq!(predicate_len("name == 'a]b'"), None);
     assert_eq!(predicate_len("name == \"\\\"]\"]"), Some(13));
+    // The scan stops after the longest predicate allowed.
+    assert_eq!(predicate_len_within("ab]", 2), Some(2));
+    assert_eq!(predicate_len_within("abc]", 2), None);
+    assert_eq!(predicate_len(&format!("{}]", "a".repeat(MAX_PREDICATE_BYTES))), Some(MAX_PREDICATE_BYTES));
+    assert_eq!(predicate_len(&format!("{}]", "a".repeat(MAX_PREDICATE_BYTES + 1))), None);
 
     let data = data();
     let mut font = Font::new("Test");
@@ -202,6 +207,19 @@ fn hostile_predicates_and_classes_fail_with_a_message() {
     assert_eq!(feature_classes(&font, &data, None, Some(["Many"].as_slice())).unwrap().get("Many").map(|m| m.len()), Some(font.glyphs.len()));
     // A broken class leaves Font View's class tests false instead of failing the query.
     assert_eq!(run(&font, &data, "name in class(C20)"), Vec::<String>::new());
+}
+
+/// Each predicate token naming a large class shares its resolved set instead of copying it.
+#[test]
+fn predicate_tokens_inside_classes_share_a_large_class() {
+    let data = data();
+    let mut font = Font::new("Test");
+    let names: Vec<String> = (0..100_000).map(|i| format!("n{i}")).collect();
+    let classes = &mut Arc::make_mut(&mut font.features).classes;
+    classes.push(class("Big", &names.join(" ")));
+    classes.push(class("Hits", &"$[name in class(Big)] ".repeat(5_000)));
+    let found = feature_classes(&font, &data, None, Some(["Hits"].as_slice())).unwrap();
+    assert_eq!(found.get("Hits").map(|m| m.len()), Some(0));
 }
 
 #[test]

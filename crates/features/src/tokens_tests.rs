@@ -187,6 +187,13 @@ fn hostile_tokens_are_refused_with_a_message() {
     let unterminated = "${a:anchors.".repeat(10_000);
     assert!(!expand(&unterminated, &values, EntryKind::Feature).unwrap_err().is_empty());
     assert!(evaluate(&long, &values).is_err());
+
+    // Each `$[` that nothing closes is looked at for a bounded length, not to the end.
+    let unclosed = "$[[]".repeat(25_000);
+    assert_eq!(token_ranges(&unclosed).len(), 25_000);
+    assert!(!expand(&unclosed, &values, EntryKind::Feature).unwrap_err().is_empty());
+    let long = format!("[$[{}]]", "a or ".repeat(MAX_EXPRESSION_BYTES));
+    assert!(expand(&long, &values, EntryKind::Feature).unwrap_err()[0].message.contains("longer than 4096 bytes"));
 }
 
 #[test]

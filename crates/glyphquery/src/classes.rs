@@ -7,12 +7,13 @@
 //! [`MAX_CLASS_GLYPH_TESTS`] glyphs tested by the predicate tokens inside classes.
 
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use fontcraft_glyphdata::GlyphData;
 use fontcraft_model::Font;
 
 use crate::predicate::{parse_predicate, predicate_len};
-use crate::{Env, QueryError, Subject, fail, short};
+use crate::{Env, MAX_PREDICATE_BYTES, QueryError, Subject, fail, short};
 
 /// Deepest chain of class references followed.
 pub const MAX_CLASS_DEPTH: usize = 16;
@@ -43,7 +44,7 @@ fn parts(code: &str) -> Result<Vec<Part<'_>>, QueryError> {
         }
         if let Some(after) = rest.strip_prefix("$[") {
             let Some(len) = predicate_len(after) else {
-                return fail(format!("the predicate token `{}` is not closed with `]`", short(rest)));
+                return fail(format!("the predicate token `{}` is not closed with `]` within {MAX_PREDICATE_BYTES} bytes", short(rest)));
             };
             out.push(Part::Predicate(after.get(..len).unwrap_or("")));
             rest = after.get(len + 1..).unwrap_or("");
@@ -59,17 +60,43 @@ fn parts(code: &str) -> Result<Vec<Part<'_>>, QueryError> {
     }
 }
 
-struct Resolver<'a> {
+/// The members of each class, by class name. Sets are shared, so handing them out is cheap.
+pub type ClassMembers = HashMap<String, Arc<HashSet<String>>>;
+
+/// Resolves feature classes and keeps what it resolved. The caps ([`MAX_CLASS_MEMBERS`],
+/// [`MAX_CLASS_GLYPH_TESTS`]) count over the resolver's whole life, so a caller that keeps one
+/// for many predicates (one feature-code expansion) bounds the work of all of them together.
+pub struct ClassResolver<'a> {
     font: &'a Font,
     data: &'a GlyphData,
     master: Option<&'a str>,
-    done: HashMap<String, HashSet<String>>,
+    done: HashMap<String, Arc<HashSet<String>>>,
     in_progress: Vec<String>,
     members: usize,
     tests: usize,
 }
 
-impl Resolver<'_> {
+impl<'a> ClassResolver<'a> {
+    /// Predicate tokens inside classes read `master`'s layers (the first master's when `None`).
+    pub fn new(font: &'a Font, data: &'a GlyphData, master: Option<&'a str>) -> Self {
+        Self { font, data, master, done: HashMap::new(), in_progress: Vec::new(), members: 0, tests: 0 }
+    }
+
+    /// The members of the enabled classes named in `names` (all of them when `None`). A name the
+    /// font has no enabled class for is an error.
+    pub fn classes(&mut self, names: Option<&[&str]>) -> Result<ClassMembers, QueryError> {
+        match names {
+            Some(names) => names.iter().map(|n| Ok((n.to_string(), self.resolve(n)?))).collect(),
+            None => {
+                let font = self.font;
+                for c in font.features.classes.iter().filter(|c| !c.disabled) {
+                    self.resolve(&c.name)?;
+                }
+                Ok(self.done.clone())
+            }
+        }
+    }
+
     fn add(&mut self, set: &mut HashSet<String>, name: &str) -> Result<(), QueryError> {
         self.members += 1;
         if self.members > MAX_CLASS_MEMBERS {
@@ -79,9 +106,9 @@ impl Resolver<'_> {
         Ok(())
     }
 
-    fn resolve(&mut self, name: &str) -> Result<HashSet<String>, QueryError> {
+    fn resolve(&mut self, name: &str) -> Result<Arc<HashSet<String>>, QueryError> {
         if let Some(done) = self.done.get(name) {
-            return Ok(done.clone());
+            return Ok(Arc::clone(done));
         }
         if self.in_progress.iter().any(|n| n == name) {
             return fail(format!("the class `{}` refers to itself", short(name)));
@@ -96,8 +123,8 @@ impl Resolver<'_> {
         self.in_progress.push(name.to_string());
         let result = self.members_of(&entry.code);
         self.in_progress.pop();
-        let set = result?;
-        self.done.insert(name.to_string(), set.clone());
+        let set = Arc::new(result?);
+        self.done.insert(name.to_string(), Arc::clone(&set));
         Ok(set)
     }
 
@@ -107,8 +134,8 @@ impl Resolver<'_> {
             match part {
                 Part::Name(n) => self.add(&mut set, n)?,
                 Part::Class(c) => {
-                    for n in self.resolve(c)? {
-                        self.add(&mut set, &n)?;
+                    for n in self.resolve(c)?.iter() {
+                        self.add(&mut set, n)?;
                     }
                 }
                 Part::Predicate(text) => {
@@ -134,28 +161,10 @@ impl Resolver<'_> {
     }
 }
 
-/// The members of the font's enabled feature classes named in `names` (all of them when `None`),
-/// with the classes they refer to. Predicate tokens inside classes read `master`'s layers (the
-/// first master's when `None`) and select exporting and non-exporting glyphs alike. A name the
-/// font has no enabled class for is an error.
-pub fn feature_classes(
-    font: &Font,
-    data: &GlyphData,
-    master: Option<&str>,
-    names: Option<&[&str]>,
-) -> Result<HashMap<String, HashSet<String>>, QueryError> {
-    let mut r = Resolver { font, data, master, done: HashMap::new(), in_progress: Vec::new(), members: 0, tests: 0 };
-    match names {
-        Some(names) => {
-            for n in names {
-                r.resolve(n)?;
-            }
-        }
-        None => {
-            for c in font.features.classes.iter().filter(|c| !c.disabled) {
-                r.resolve(&c.name)?;
-            }
-        }
-    }
-    Ok(r.done)
+/// The members of the font's enabled feature classes named in `names` (all of them when
+/// `None`), with a fresh [`ClassResolver`]. Predicate tokens inside classes read `master`'s
+/// layers (the first master's when `None`) and select exporting and non-exporting glyphs alike.
+/// A name the font has no enabled class for is an error.
+pub fn feature_classes(font: &Font, data: &GlyphData, master: Option<&str>, names: Option<&[&str]>) -> Result<ClassMembers, QueryError> {
+    ClassResolver::new(font, data, master).classes(names)
 }

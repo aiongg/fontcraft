@@ -19,14 +19,14 @@ mod sidebar;
 mod tests;
 
 use std::cell::OnceCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::fmt;
 use std::sync::{Arc, OnceLock};
 
 use fontcraft_glyphdata::GlyphData;
 use fontcraft_model::{Font, Glyph, GlyphProps, Layer, PropsCache, glyph_props, keeps_alternates};
 
-pub use classes::{MAX_CLASS_DEPTH, MAX_CLASS_GLYPH_TESTS, MAX_CLASS_MEMBERS, feature_classes};
+pub use classes::{ClassMembers, ClassResolver, MAX_CLASS_DEPTH, MAX_CLASS_GLYPH_TESTS, MAX_CLASS_MEMBERS, feature_classes};
 pub use filters::{
     Filter, add_filter, check_filter_name, filter_at, list_names, move_filter, remove_filter, rename_filter, replace_filter, validate_filters,
 };
@@ -119,8 +119,8 @@ pub struct Env<'a> {
     keep_alternates: bool,
     /// The classes `name in class(X)` reads: given by the caller, or else the font's feature
     /// classes, read when a predicate first asks.
-    classes: Option<HashMap<String, HashSet<String>>>,
-    font_classes: OnceLock<HashMap<String, HashSet<String>>>,
+    classes: Option<ClassMembers>,
+    font_classes: OnceLock<ClassMembers>,
     props: Option<&'a PropsCache>,
     out_of_sync: Option<&'a HashSet<String>>,
 }
@@ -151,7 +151,7 @@ impl<'a> Env<'a> {
 
     /// Gives `name in class(X)` these members of each class instead of the font's feature
     /// classes.
-    pub fn with_classes(mut self, classes: HashMap<String, HashSet<String>>) -> Self {
+    pub fn with_classes(mut self, classes: ClassMembers) -> Self {
         self.classes = Some(classes);
         self
     }

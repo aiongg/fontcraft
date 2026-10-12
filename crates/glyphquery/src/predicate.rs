@@ -1289,16 +1289,24 @@ pub type Predicate = Expr;
 
 /// The length in bytes of the predicate at the start of `text`, the text after a `$[`: up to
 /// the `]` that closes the token. Brackets inside quoted text (`name matches "[a-z]"`) and
-/// nested brackets do not close it. `None` when nothing does.
+/// nested brackets do not close it. `None` when nothing closes it within
+/// [`MAX_PREDICATE_BYTES`].
 pub fn predicate_len(text: &str) -> Option<usize> {
+    predicate_len_within(text, MAX_PREDICATE_BYTES)
+}
+
+/// [`predicate_len`] for a predicate at most `max` bytes long. The scan stops after `max + 1`
+/// bytes, so a caller that tries every `$[` of a text does bounded work for each.
+pub fn predicate_len_within(text: &str, max: usize) -> Option<usize> {
     let mut depth = 0usize;
-    let mut quote: Option<char> = None;
+    let mut quote: Option<u8> = None;
     let mut escaped = false;
-    for (at, c) in text.char_indices() {
+    // Every byte that matters is ASCII, and no byte of a multi-byte character is.
+    for (at, &c) in text.as_bytes().iter().enumerate().take(max.saturating_add(1)) {
         if let Some(q) = quote {
             if escaped {
                 escaped = false;
-            } else if c == '\\' {
+            } else if c == b'\\' {
                 escaped = true;
             } else if c == q {
                 quote = None;
@@ -1306,10 +1314,10 @@ pub fn predicate_len(text: &str) -> Option<usize> {
             continue;
         }
         match c {
-            '"' | '\'' => quote = Some(c),
-            '[' => depth += 1,
-            ']' if depth == 0 => return Some(at),
-            ']' => depth -= 1,
+            b'"' | b'\'' => quote = Some(c),
+            b'[' => depth += 1,
+            b']' if depth == 0 => return Some(at),
+            b']' => depth -= 1,
             _ => {}
         }
     }

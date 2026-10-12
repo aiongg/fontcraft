@@ -146,6 +146,24 @@ fn predicate_tokens_agree_with_glyphslib() {
     }
 }
 
+/// Many predicate tokens: each finds its brackets in the one scan, and a large class they name
+/// is resolved once for all of them.
+#[test]
+fn many_predicate_tokens_expand_in_linear_time() {
+    let (mut font, data) = (oracle_font(), GlyphData::new().unwrap());
+    let names: Vec<String> = (0..100_000).map(|i| format!("n{i}")).collect();
+    Arc::make_mut(&mut font.features).classes.push(Snippet { name: "Big".into(), code: names.join(" "), ..Snippet::default() });
+    let values = MasterValues::new(&font, &data, &font.masters[0].id).unwrap();
+
+    let code = format!("sub [{}] by x;", "$[name == \"a\"] ".repeat(50_000));
+    let (text, _) = crate::tokens::expand(&code, &values, EntryKind::Feature).unwrap();
+    assert_eq!(text.matches('a').count(), 50_000);
+
+    let code: String = (0..2_000).map(|i| format!("[$[name in class(Big) OR name == \"n{i}\"]] ")).collect();
+    let (text, _) = crate::tokens::expand(&code, &values, EntryKind::Feature).unwrap();
+    assert_eq!(text.matches("[]").count(), 2_000);
+}
+
 #[test]
 fn class_function_reads_the_feature_classes_and_errors_are_messages() {
     let (mut font, data) = (oracle_font(), GlyphData::new().unwrap());
@@ -171,11 +189,11 @@ fn predicate_tokens_stand_inside_class_brackets_in_code() {
         ("name \"[\"; sub $[case == lower] by x;", EntryKind::Feature, false),
         ("hyphen endash $[category == \"Number\"]", EntryKind::Class, true),
     ] {
-        assert_eq!(check_placement(code, at(code), kind).is_ok(), ok, "{code}");
+        assert_eq!(check_placement(crate::tokens::token_in_brackets(code, at(code)), kind).is_ok(), ok, "{code}");
     }
     let code = "sub [$[name matches \"[a-z]\"] $[case == upper]] by x;";
     let second = code.rfind("$[").unwrap();
-    assert!(inside_brackets(code, second));
+    assert!(crate::tokens::token_in_brackets(code, second));
     assert_eq!(token_len(code, 5), Some("$[name matches \"[a-z]\"]".len()));
     assert_eq!(token_len(code, 0), None);
     assert_eq!(token_len("$[name == 'a'", 0), None);
