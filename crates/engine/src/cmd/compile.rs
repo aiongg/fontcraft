@@ -486,7 +486,9 @@ pub(super) fn build(
     report: &mut Report,
 ) -> Result<()> {
     font.check()?;
-    let ctx = crate::export_steps::StepContext { data: &data, path };
+    let linked = crate::export_steps::linked(font, path, &mut report.warnings)?;
+    let font: &Font = &linked;
+    let ctx = crate::export_steps::StepContext { data: &data };
     let options = Options { glyph_data: DataRef(Some(data.clone())), ..req.options.clone() };
     let prepared = fontcraft_compile::prepare_source(font, &mut report.warnings);
     for job in jobs {
@@ -987,9 +989,11 @@ fn compile_plan(s: &mut Session, p: &Value) -> Result<Value> {
     let doc = s.doc()?;
     let (font, source) = (&doc.font, doc.title.as_str());
     font.check()?;
-    let ctx = crate::export_steps::StepContext { data: &data, path: doc.path.as_deref() };
-    let (mut outputs, mut instances, mut skipped) = (Vec::new(), Vec::new(), Vec::new());
     let mut warnings: Vec<String> = Vec::new();
+    let linked = crate::export_steps::linked(font, doc.path.as_deref(), &mut warnings)?;
+    let font: &Font = &linked;
+    let ctx = crate::export_steps::StepContext { data: &data };
+    let (mut outputs, mut instances, mut skipped) = (Vec::new(), Vec::new(), Vec::new());
     let prepared = fontcraft_compile::prepare_source(font, &mut warnings);
     let mut glyph_order: Option<Vec<String>> = None;
     let mut production_names: Option<Map<String, Value>> = None;

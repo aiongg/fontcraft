@@ -329,3 +329,17 @@ fn the_corpus_source_with_a_filter_parameter_exports() {
     let warnings = out["warnings"].to_string();
     assert!(!warnings.contains("HatchOutlineFilter"), "{warnings}");
 }
+
+/// Linked sources are read once per export, not once per font built: a missing file is one
+/// warning however many instances export.
+#[test]
+fn linked_sources_are_read_once_per_export() {
+    let mut s = font();
+    add_instance(&mut s, "Regular", vec![]);
+    add_instance(&mut s, "Bold", vec![]);
+    add_param(&mut s, false, "Import Font", text("Missing.glyphs"));
+    let out = run(&mut s, "font.compile", json!({"timestamp": 0}));
+    assert_eq!(out["fonts"].as_array().unwrap().len(), 2, "{out}");
+    let missing = out["warnings"].as_array().unwrap().iter().filter_map(Value::as_str).filter(|w| w.contains("Missing.glyphs")).count();
+    assert_eq!(missing, 1, "{out}");
+}

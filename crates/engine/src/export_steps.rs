@@ -1,8 +1,9 @@
 //! The engine's export stage (`docs/plans/M7.md` § 3 › Export-time parameters): the export-time
-//! parameters that need the engine, run on a copy of the font for one job before the compiler
-//! resolves it. In order:
+//! parameters that need the engine, run on a copy of the font before the compiler resolves it. In
+//! order:
 //!
-//! 1. linked sources: Import Font and Import Master refreshed from their files ([`crate::linked`]);
+//! 1. linked sources: Import Font and Import Master refreshed from their files ([`crate::linked`]),
+//!    once per export ([`linked`]);
 //! 2. PreFilter strings on the target master's layers, components still in place;
 //! 3. Scale to UPM, through `fontcraft_fontinfo::scale`;
 //! 4. Filter strings, after every composite of the target master's layers is decomposed.
@@ -26,7 +27,7 @@
 //! `fontcraft_compile::export_params`.
 //!
 //! File › Export, `font.compile`, the CLI, the control channel and the oracle harness all build
-//! through `cmd::compile::build`, which calls [`prepare`] for every job.
+//! through `cmd::compile::build`, which calls [`linked`] once and [`prepare`] for every job.
 //!
 //! Rows: `Filter`, `PreFilter`, the `filter.customParameter.*` rows, `export.instanceExportFolder`
 //! (M7.10); `Import Font`, `Import Master` (M7.12); `Scale to UPM` (M7.4 scales, M7.10 runs it).
@@ -62,18 +63,22 @@ const SAME_LOCATION: f64 = 1e-9;
 pub(crate) struct StepContext<'a> {
     /// The document's glyph database (filters that look up glyph data, decomposition).
     pub data: &'a Arc<GlyphData>,
-    /// The document's file, which relative linked-source paths start from; `None` for a document
-    /// never saved.
-    pub path: Option<&'a Path>,
 }
 
-/// The font `job` is built from: `font` itself when no step applies, else a changed copy.
-/// Warnings name the parameters that could not be used.
+/// `font` with its linked sources read from their files, once for a whole export: every job
+/// shares the result. `path` is the document's file, which relative paths start from; `None` for
+/// a document never saved.
+pub(crate) fn linked<'f>(font: &'f Font, path: Option<&Path>, warnings: &mut Vec<String>) -> Result<Cow<'f, Font>> {
+    Ok(match crate::linked::resolve(font, path, warnings)? {
+        Some(linked) => Cow::Owned(linked),
+        None => Cow::Borrowed(font),
+    })
+}
+
+/// The font `job` is built from: `font` (already [`linked`]) itself when no step applies, else a
+/// changed copy. Warnings name the parameters that could not be used.
 pub(crate) fn prepare<'f>(font: &'f Font, job: &Job, ctx: &StepContext, warnings: &mut Vec<String>) -> Result<Cow<'f, Font>> {
     let mut font = Cow::Borrowed(font);
-    if let Some(linked) = crate::linked::resolve(&font, ctx.path, warnings)? {
-        font = Cow::Owned(linked);
-    }
     // A target that is not a static instance at a master is left to the compiler to report.
     let Some(master) = target_master(&font, &job.target) else { return Ok(font) };
     let (pre, post, upm) = {
