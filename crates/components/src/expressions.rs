@@ -32,15 +32,20 @@
 //!   numbers or font settings changed), then automatic alignment ([`crate::metrics::realign`]),
 //!   then once more the expressions of the glyphs alignment changed and the alignment that
 //!   follows from them. Failures there are not reported; the commands that set expressions
-//!   report them.
+//!   report them. The glyphs that changed are found once per call. A font where no glyph has
+//!   anchor expressions or an automatic layer goes straight to alignment: whether a font has
+//!   any is remembered for the last few fonts [`follow_changes`] returned, and worked out for a
+//!   new one from that and the glyphs that changed.
 
+use std::cell::RefCell;
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use fontcraft_geom::expr::Expr;
 use fontcraft_geom::{grid_step, round_to_grid};
 use fontcraft_model::fc_keys::ANCHOR_EXPRESSIONS;
 use fontcraft_model::plist::{Dict, Str, Value};
-use fontcraft_model::{Anchor, Font, Glyph, Layer, MAX_COORDINATE, Master, Metrics, metric};
+use fontcraft_model::{Anchor, Font, Glyph, GlyphTable, Layer, MAX_COORDINATE, Master, Metrics, metric};
 
 use crate::ComponentsError;
 
@@ -226,10 +231,10 @@ pub fn evaluate_glyphs(font: Font, glyphs: &[String]) -> (Font, Vec<ExprFailure>
     (font, failures)
 }
 
-/// [`evaluate_glyphs`], and whether any anchor moved.
-fn evaluate_names(mut font: Font, glyphs: &[String]) -> (Font, Vec<ExprFailure>, bool) {
+/// [`evaluate_glyphs`], and the glyphs whose anchors moved.
+fn evaluate_names(mut font: Font, glyphs: &[String]) -> (Font, Vec<ExprFailure>, Vec<String>) {
     let mut failures = Vec::new();
-    let mut moved_any = false;
+    let mut moved_names = Vec::new();
     for name in glyphs {
         let Some(g) = font.glyph(name) else { continue };
         if g.info.locked || !has_expressions(g) {
@@ -247,15 +252,19 @@ fn evaluate_names(mut font: Font, glyphs: &[String]) -> (Font, Vec<ExprFailure>,
             continue;
         }
         if let Ok(mut g) = font.glyph_mut(name) {
+            let mut moved = false;
             for (i, anchors) in updates {
                 if let Some(layer) = g.layers.get_mut(i) {
                     layer.anchors = anchors;
-                    moved_any = true;
+                    moved = true;
                 }
+            }
+            if moved {
+                moved_names.push(name.clone());
             }
         }
     }
-    (font, failures, moved_any)
+    (font, failures, moved_names)
 }
 
 /// Whether something every expression may read changed between `a` and `b`.
@@ -267,30 +276,149 @@ fn inputs_changed(a: &Font, b: &Font) -> bool {
         || a.units_per_em != b.units_per_em
 }
 
-/// `after` with the expressions of the glyphs that changed since `before` worked out; whether
-/// any anchor moved.
-fn evaluate_changed(before: &Font, after: Font) -> (Font, bool) {
+/// `after` with the expressions of `changed` (the glyphs that changed since `before`) worked
+/// out; the glyphs whose anchors moved.
+fn evaluate_changed(before: &Font, after: Font, changed: &[String]) -> (Font, Vec<String>) {
+    #[cfg(test)]
+    EXPRESSION_PASSES.with(|n| n.set(n.get() + 1));
     let names: Vec<String> = if inputs_changed(before, &after) {
         after.glyphs.iter().filter(|g| has_expressions(g)).map(|g| g.name.clone()).collect()
     } else {
-        crate::metrics::changed_glyphs(before, &after).into_iter().filter(|n| after.glyph(n).is_some_and(|g| has_expressions(g))).collect()
+        changed.iter().filter(|n| after.glyph(n).is_some_and(|g| has_expressions(g))).cloned().collect()
     };
     if names.is_empty() {
-        return (after, false);
+        return (after, Vec::new());
     }
     let (font, _, moved) = evaluate_names(after, &names);
     (font, moved)
 }
 
+#[cfg(test)]
+thread_local! {
+    /// How many times the expression pass ran on this thread.
+    pub(crate) static EXPRESSION_PASSES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Fonts [`follow_changes`] remembers whether they have followers.
+const REMEMBERED_FONTS: usize = 2;
+
+thread_local! {
+    /// The glyph tables of the fonts [`follow_changes`] returned last, newest first, each with
+    /// whether a glyph in it has anchor expressions or an automatic layer. Holding a table keeps
+    /// its storage alive and unchanged (every change to a shared table copies it first), so a
+    /// table at the same address with the same length holds the same glyphs.
+    static FOLLOWERS: RefCell<Vec<(GlyphTable, bool)>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Whether `glyph` has something [`follow_changes`] keeps up to date before alignment.
+fn has_followers(glyph: &Glyph) -> bool {
+    has_expressions(glyph) || crate::auto_layer::has_auto_layer(glyph)
+}
+
+fn same_table(a: &GlyphTable, b: &GlyphTable) -> bool {
+    std::ptr::eq(a.as_arcs(), b.as_arcs())
+}
+
+/// Whether a glyph of `font` has followers: remembered, else looked up glyph by glyph.
+fn font_has_followers(font: &Font) -> bool {
+    let known = FOLLOWERS.with(|c| c.try_borrow().ok().and_then(|c| c.iter().find(|(t, _)| same_table(t, &font.glyphs)).map(|(_, f)| *f)));
+    known.unwrap_or_else(|| font.glyphs.iter().any(|g| has_followers(g)))
+}
+
+fn remember_followers(font: &Font, followers: bool) {
+    FOLLOWERS.with(|c| {
+        if let Ok(mut c) = c.try_borrow_mut() {
+            c.retain(|(t, _)| !same_table(t, &font.glyphs));
+            c.insert(0, (font.glyphs.clone(), followers));
+            c.truncate(REMEMBERED_FONTS);
+        }
+    });
+}
+
+/// Whether `a` and `b` hold the same glyph named `name` (or neither has one).
+fn same_glyph(a: &Font, b: &Font, name: &str) -> bool {
+    match (a.glyph(name), b.glyph(name)) {
+        (Some(x), Some(y)) => Arc::ptr_eq(x, y),
+        (None, None) => true,
+        _ => false,
+    }
+}
+
 /// The engine hook; see the module doc. Returns `new` (pointer-equal glyphs) when nothing
 /// follows; fails only as [`crate::metrics::realign`] fails.
 pub fn follow_changes(old: &Font, new: Font) -> Result<Font, ComponentsError> {
-    let built = crate::auto_layer::rebuild_auto_layers(old, new);
-    let (evaluated, _) = evaluate_changed(old, built);
-    let aligned = crate::metrics::realign(old, evaluated.clone())?;
-    let (again, moved) = evaluate_changed(&evaluated, aligned.clone());
-    if !moved {
+    let changed = crate::metrics::changed_glyphs(old, &new);
+    // A glyph has followers in `new` only if it had them in `old` or changed: the flag can
+    // stay set after the last one goes, never unset while one is there.
+    let followers = font_has_followers(old) || changed.iter().any(|n| new.glyph(n).is_some_and(|g| has_followers(g)));
+    let out = if followers { follow(old, new, changed)? } else { crate::metrics::realign_known(old, new, &changed)? };
+    remember_followers(&out, followers);
+    Ok(out)
+}
+
+/// [`follow_changes`] for a font with followers: automatic layers, expressions, alignment, then
+/// the expressions and alignment that follow from alignment.
+fn follow(old: &Font, new: Font, mut changed: Vec<String>) -> Result<Font, ComponentsError> {
+    let (built, rebuilt) = crate::auto_layer::rebuild_auto_layers_for(old, new, &changed);
+    let mut seen: HashSet<String> = changed.iter().cloned().collect();
+    let extra: Vec<String> = rebuilt.into_iter().filter(|n| seen.insert(n.clone())).collect();
+    changed.extend(extra);
+    let (evaluated, moved) = evaluate_changed(old, built, &changed);
+    let extra: Vec<String> = moved.into_iter().filter(|n| seen.insert(n.clone())).collect();
+    changed.extend(extra);
+    // The glyphs that differ from `old`, in font order (removed ones last), as alignment
+    // expects them.
+    changed.retain(|n| !same_glyph(old, &evaluated, n));
+    changed.sort_by_key(|n| evaluated.glyphs.position(n).unwrap_or(usize::MAX));
+    let aligned = crate::metrics::realign_known(old, evaluated.clone(), &changed)?;
+    let realigned = crate::metrics::changed_glyphs(&evaluated, &aligned);
+    let (again, moved) = evaluate_changed(&evaluated, aligned.clone(), &realigned);
+    if moved.is_empty() {
         return Ok(again);
     }
     crate::metrics::realign(&aligned, again)
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
+
+    use super::*;
+
+    fn font_of(n: usize) -> Font {
+        let mut f = Font::new("Test");
+        for i in 0..n {
+            let mut g = Glyph::new(format!("g{i}"));
+            let mut l = Layer::new("m01", 500.0);
+            l.anchors.push(Anchor::new("top", 0.0, 0.0));
+            g.layers.push(l);
+            f.glyphs.push(g);
+        }
+        f
+    }
+
+    #[test]
+    fn a_large_font_without_expressions_takes_no_expression_pass() {
+        let old = font_of(50_000);
+        let mut new = old.clone();
+        new.glyph_mut("g7").unwrap().layers[0].width = 600.0;
+        let passes = EXPRESSION_PASSES.with(std::cell::Cell::get);
+        let out = follow_changes(&old, new).unwrap();
+        assert_eq!(EXPRESSION_PASSES.with(std::cell::Cell::get), passes);
+        // The next edit starts from the remembered font.
+        let mut next = out.clone();
+        next.glyph_mut("g8").unwrap().layers[0].width = 600.0;
+        let out = follow_changes(&out, next).unwrap();
+        assert_eq!(EXPRESSION_PASSES.with(std::cell::Cell::get), passes);
+        // An expression added to a changed glyph is worked out at once.
+        let mut with = out.clone();
+        {
+            let mut g = with.glyph_mut("g9").unwrap();
+            let a = &mut g.layers[0].anchors[0];
+            set_anchor_expressions(a, &AnchorExpressions { x: Some("width / 2".into()), y: None });
+        }
+        let out = follow_changes(&out, with).unwrap();
+        assert!(EXPRESSION_PASSES.with(std::cell::Cell::get) > passes);
+        assert_eq!(out.glyph("g9").unwrap().layers[0].anchors[0].x, 250.0);
+    }
 }

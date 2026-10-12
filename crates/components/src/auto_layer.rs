@@ -196,10 +196,16 @@ pub fn rebuild_glyph(font: &mut Font, glyph: &str) -> bool {
 /// glyphs that changed, and, when glyphs were added, removed or renamed, those whose recipes
 /// name one of them. Pointer-equal to `new` when nothing is rebuilt. Never fails: a layer that
 /// cannot be rebuilt keeps what it has.
-pub fn rebuild_auto_layers(old: &Font, mut new: Font) -> Font {
+pub fn rebuild_auto_layers(old: &Font, new: Font) -> Font {
     let changed = crate::metrics::changed_glyphs(old, &new);
+    rebuild_auto_layers_for(old, new, &changed).0
+}
+
+/// [`rebuild_auto_layers`] with the glyphs that changed since `old` already known; also returns
+/// the glyphs whose automatic layers it tried to rebuild.
+pub(crate) fn rebuild_auto_layers_for(old: &Font, mut new: Font, changed: &[String]) -> (Font, Vec<String>) {
     if changed.is_empty() {
-        return new;
+        return (new, Vec::new());
     }
     let came_or_went: HashSet<&str> = changed.iter().filter(|n| old.glyph(n).is_none() || new.glyph(n).is_none()).map(String::as_str).collect();
     let mut targets: Vec<String> = changed.iter().filter(|n| new.glyph(n).is_some_and(|g| has_auto_layer(g))).cloned().collect();
@@ -223,5 +229,5 @@ pub fn rebuild_auto_layers(old: &Font, mut new: Font) -> Font {
     for name in &targets {
         rebuild_glyph(&mut new, name);
     }
-    new
+    (new, targets)
 }

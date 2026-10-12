@@ -116,13 +116,19 @@ pub fn changed_glyphs(old: &Font, new: &Font) -> Vec<String> {
     changes(old, new).0
 }
 
-/// [`changed_glyphs`], and whether the change reaches every glyph on every master: the masters,
-/// the alignment setting or Propagate Anchors changed.
-fn changes(old: &Font, new: &Font) -> (Vec<String>, bool) {
+/// Whether a change reaches every glyph on every master: the masters, the alignment setting or
+/// Propagate Anchors changed.
+fn reaches_everything(old: &Font, new: &Font) -> bool {
     let masters_changed = !Arc::ptr_eq(&old.masters, &new.masters) && old.masters != new.masters;
     let settings_changed = !Arc::ptr_eq(&old.info, &new.info)
         && (alignment_off(old) != alignment_off(new) || propagate_anchors_enabled(old) != propagate_anchors_enabled(new));
-    if masters_changed || settings_changed {
+    masters_changed || settings_changed
+}
+
+/// [`changed_glyphs`], and whether the change reaches every glyph on every master
+/// ([`reaches_everything`]).
+fn changes(old: &Font, new: &Font) -> (Vec<String>, bool) {
+    if reaches_everything(old, new) {
         return (new.glyphs.iter().map(|g| g.name.clone()).collect(), true);
     }
     let (now, before) = (new.glyphs.as_arcs(), old.glyphs.as_arcs());
@@ -325,6 +331,19 @@ pub fn realign(old: &Font, new: Font) -> Result<Font, ComponentsError> {
     }
     let masters = if everything { None } else { changed_masters(old, &new, &changed) };
     realign_on(new, &changed, masters.as_ref())
+}
+
+/// [`realign`] with the glyphs that changed since `old` already known (in the order
+/// [`changed_glyphs`] gives them), so the font is not compared glyph by glyph again.
+pub(crate) fn realign_known(old: &Font, new: Font, changed: &[String]) -> Result<Font, ComponentsError> {
+    if reaches_everything(old, &new) {
+        return realign(old, new);
+    }
+    if changed.is_empty() {
+        return Ok(new);
+    }
+    let masters = changed_masters(old, &new, changed);
+    realign_on(new, changed, masters.as_ref())
 }
 
 /// The masters of the layers that differ in the changed glyphs; `None` (every master) when a
