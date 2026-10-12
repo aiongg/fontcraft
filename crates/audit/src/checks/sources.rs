@@ -108,7 +108,7 @@ pub(crate) fn default_master(ctx: &SourceCtx<'_>, _: &Params<'_>, sink: &mut Sin
     let defaults: Vec<(f64, f64)> = (0..font.axes.len())
         .map(|i| {
             let user = axes::range(font, i).default;
-            (user, axes::piecewise_linear_map(user, &axes::mapping(font, i).pairs))
+            (user, axes::piecewise_linear_map(user, axes::mapping(font, i).pairs()))
         })
         .collect();
     let at_default =
