@@ -1735,7 +1735,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `font.numbers.list` (M8, inferred, live): List Number Values
   - Guess: Numbers are listed in the font's order, plus one master's values when asked; the Masters tab in the running app would settle the order.
 - [ ] `font.numbers.add` (M8, handbook, live): Add Number Value
-  - Guess: A number value name is letters, digits, `_` and `.`, not starting with a digit, and a name the font has is refused; naming a number value with a space or a hyphen in the reference app would settle it.
+  - Guess: A number value name is letters, digits and `_`, not starting with a digit, so that a `$name` token can read all of it; a leading `.` is allowed for settings such as `.monospace`, which the handbook names. A name the font has is refused. Naming a number value with a space, a hyphen or an inner dot in the reference app would settle it.
 - [ ] `font.numbers.rename` (M8, inferred, live): Rename Number Value
   - Guess: Renaming a number value leaves tokens in feature code unchanged, so they then name an unknown value and the next compile reports them; renaming one used in feature code in the reference app would settle it.
   - Observe: In F5 (tokens), rename the number value `tracking` while a feature uses `$tracking`: note whether the token in the feature follows the new name.
