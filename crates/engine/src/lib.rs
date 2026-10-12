@@ -781,6 +781,9 @@ impl Session {
         }
         push_undo(doc, it.label, it.before);
         if let Some(entry) = it.last {
+            // The interaction counts as one top-level command, its last preview's: the command
+            // log and a running macro recording see it once.
+            self.extensions.after_command(&entry.0, &entry.1, true, &Ok(Value::Null));
             self.journal.push(entry);
             if self.journal.len() > JOURNAL_LIMIT {
                 let extra = self.journal.len() - JOURNAL_LIMIT;
