@@ -232,8 +232,13 @@ pub fn open(path: &Path, face: Option<u32>) -> Result<(Font, Vec<String>)> {
     let text = std::str::from_utf8(&bytes).map_err(|_| EngineError::Io(format!("{} is not a font source: it is not UTF-8 text", path.display())))?;
     let body = text.trim_start_matches('\u{feff}').trim_start();
     if body.starts_with('<') {
+        if fontcraft_io_svg::svg_font::is_svg_font(body) {
+            let svg = fontcraft_io_svg::svg_font::read_svg_font(&bytes)
+                .map_err(|e| EngineError::Io(format!("cannot read the SVG font {}: {e}", path.display())))?;
+            return Ok((svg.font, svg.warnings));
+        }
         if !is_designspace(body) {
-            return Err(EngineError::Io(format!("{} is XML but not a designspace", path.display())));
+            return Err(EngineError::Io(format!("{} is XML but neither a designspace nor an SVG font", path.display())));
         }
         return Ok((open_designspace(path, text)?, Vec::new()));
     }
@@ -637,6 +642,18 @@ mod tests {
         assert!(!is_designspace("<?xml version='1.0'?>\n<plist version=\"1.0\">"));
         assert!(!is_designspace("<designspacex>"));
         assert!(!is_designspace("<?xml never closed"));
+    }
+
+    #[test]
+    fn svg_fonts_open_as_documents() {
+        let dir = std::env::temp_dir().join(format!("fontcraft-svg-font-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("Test.svg");
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg"><defs><font id="Test" horiz-adv-x="500"><font-face font-family="Test" units-per-em="1000"/><glyph glyph-name="A" unicode="A" d="M0 0L500 0L250 700Z"/></font></defs></svg>"#;
+        std::fs::write(&path, svg).unwrap();
+        let (font, _) = open(&path, None).unwrap();
+        assert!(font.glyphs.iter().any(|g| g.name == "A"));
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

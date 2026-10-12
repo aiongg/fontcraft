@@ -190,6 +190,7 @@ fn inspect(_: &mut Session, p: &Value) -> Result<Value> {
         let bytes = if meta.is_dir() { Vec::new() } else { read_bytes(path)? };
         if !meta.is_dir()
             && let Some(kind) = fontcraft_decompile::sniff(&bytes)
+            && !matches!(kind, "Type 1" | "bare CFF")
         {
             return inspect_binary(path, kind, &bytes, face, &wanted, all_names);
         }
