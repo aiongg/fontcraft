@@ -1717,7 +1717,14 @@ impl ValidatorFacts {
     /// Reads the outline format, the OS/2 version and the trailing empty glyphs (from `loca`) of
     /// face `face`; `single_style` comes from the caller, who knows the family.
     pub fn read(bytes: &[u8], face: u32, single_style: bool) -> Self {
-        let Ok(font) = FontRef::from_index(bytes, face) else { return Self { single_style, ..Self::default() } };
+        match FontRef::from_index(bytes, face) {
+            Ok(font) => Self::of_font(&font, single_style),
+            Err(_) => Self { single_style, ..Self::default() },
+        }
+    }
+
+    /// [`ValidatorFacts::read`] for a face already open.
+    pub fn of_font(font: &FontRef<'_>, single_style: bool) -> Self {
         let cff = font.table_data(Tag::new(b"CFF ")).is_some() || font.table_data(Tag::new(b"CFF2")).is_some();
         let os2_version = font.os2().ok().map(|t| t.version());
         let mut trailing = 0usize;

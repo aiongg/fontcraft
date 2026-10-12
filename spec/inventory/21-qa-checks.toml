@@ -3190,9 +3190,9 @@ milestone = "M12"
 summary = "Passes on the findings of an external validator when one is installed and configured (`validatorPath`), mapped to our severities and filtered through the known-false-positive list."
 ref = "fontbakery fontvalidator; afdko docs/MSFontValidatorIssues.md"
 status = "docs"
-notes = "Runs only when the project sets validatorPath and the engine provides the validator (AuditServices::run_external); otherwise skipped. The validator's errors and warnings are warnings here, anything milder information. Known false positives are dropped by a word list in checks/files.rs until audit.validatorKnownIssues supplies the list."
+notes = "Runs only when the project sets validatorPath and the engine provides the validator (AuditServices::run_external); otherwise skipped. The validator's errors and warnings are warnings here, anything milder information. Known false positives are dropped through the list of audit.validatorKnownIssues (export::known_validator_issue), matched by message code and the font's facts."
 guesses = [
-  "The known-issue filter matches words of the message, not validator message ids, because the public notes give no ids; the validator's output on a corpus font would settle it.",
+  "One face audited alone counts as part of a family, so the allowance for a slanted face without the italic bit (italicAngleWithoutItalicBit) never applies here; running the validator on a single slanted face and comparing would settle it.",
 ]
 
 [[check]]

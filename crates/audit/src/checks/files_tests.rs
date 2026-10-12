@@ -417,14 +417,14 @@ fn external_validator_maps_severities_and_drops_known_issues() {
         external: vec![
             message(Severity::Fail, "The glyph has an invalid contour"),
             message(Severity::Info, "Table checked"),
-            message(Severity::Warn, "Characters in the Private Use Area"),
+            ExternalMessage { id: Some("W1404".into()), ..message(Severity::Warn, "The line gap differs from the recommended value") },
         ],
         tools: vec![ExternalTool::Validator],
         ..Fake::default()
     };
     let ctx = BinaryCtx::new("f0", &bytes, 0, &services).unwrap();
     let r = run(&ctx, "check.files.externalValidator");
-    assert_eq!(codes(&r), ["validator-error", "validator-info"], "the Private Use Area message is a known false positive");
+    assert_eq!(codes(&r), ["validator-error", "validator-info"], "the line-metrics advice is a known false positive");
     assert_eq!(r.findings[0].severity, Severity::Warn, "the validator's errors are warnings here");
     assert_eq!(r.findings[1].severity, Severity::Info);
 }

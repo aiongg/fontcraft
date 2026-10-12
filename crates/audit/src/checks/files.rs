@@ -12,6 +12,7 @@ use skrifa::MetadataProvider;
 use skrifa::instance::{LocationRef, Size};
 use skrifa::outline::{DrawSettings, Engine, HintingInstance, HintingOptions, OutlinePen, Target};
 
+use crate::export::{ValidatorFacts, known_validator_issue};
 use crate::services::{ExternalTool, MAX_EXTERNAL_MESSAGES};
 use crate::{BinaryCtx, FamilyCtx, Hit, Location, Params, Severity, Sink, Threshold, num};
 
@@ -430,31 +431,6 @@ pub(crate) fn rasterises(ctx: &BinaryCtx<'_>, params: &Params<'_>, sink: &mut Si
     }
 }
 
-/// Message families of the external validator that are wrong or irrelevant for well-built fonts
-/// (`docs/spec/21-qa.md` § 9, from AFDKO's `MSFontValidatorIssues.md`). A message is known when
-/// it contains every word of an entry, compared in lower case; entries marked `true` apply to
-/// CFF fonts only.
-const KNOWN_VALIDATOR_ISSUES: &[(&[&str], bool)] = &[
-    (&["gasp", "missing"], true),
-    (&["kern", "missing"], true),
-    (&["hdmx", "missing"], true),
-    (&["vdmx", "missing"], true),
-    (&["rasterizer", "glyf"], true),
-    (&["size", "feature", "parameter"], false),
-    (&["feature", "not registered"], false),
-    (&["feature", "unregistered"], false),
-    (&["os/2", "version", "invalid"], false),
-    (&["os/2", "version", "corrupt"], false),
-    (&["code page", "character"], false),
-    (&["private use"], false),
-    (&["lowestrecppem"], false),
-];
-
-fn known_validator_issue(message: &str, cff: bool) -> bool {
-    let lower = message.to_lowercase();
-    KNOWN_VALIDATOR_ISSUES.iter().any(|(words, cff_only)| (cff || !cff_only) && words.iter().all(|w| lower.contains(w)))
-}
-
 /// `check.files.externalValidator`: the external validator's messages, less the known false
 /// positives. Its errors and warnings are warnings here, its notes information.
 pub(crate) fn external_validator(ctx: &BinaryCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
@@ -462,9 +438,11 @@ pub(crate) fn external_validator(ctx: &BinaryCtx<'_>, _: &Params<'_>, sink: &mut
         Ok(m) => m,
         Err(u) => return sink.skip(u.reason),
     };
-    let cff = is_cff(&ctx.font);
+    // One face alone does not say whether it is the italic of another face, so the
+    // single-style allowance is left off here.
+    let facts = ValidatorFacts::of_font(&ctx.font, false);
     for m in messages.iter().take(MAX_EXTERNAL_MESSAGES) {
-        if known_validator_issue(&m.message, cff) {
+        if known_validator_issue(m.id.as_deref().unwrap_or_default(), &m.message, &facts).is_some() {
             continue;
         }
         let code = match m.severity {
