@@ -75,6 +75,7 @@ pub mod math_table;
 pub mod metric_editor;
 mod missing_glyphs;
 pub mod paste_kerning_conflict;
+pub mod save_changed_on_disk;
 mod paste_special;
 pub mod pasted_outline_bounds;
 pub mod primitive_measurements;
@@ -269,6 +270,7 @@ pub const DIALOGS: &[Dialog] = &[
     find_and_replace::DIALOG,
     rename_kerning_group::DIALOG,
     paste_kerning_conflict::DIALOG,
+    save_changed_on_disk::DIALOG,
     transform_metrics::DIALOG,
     // Metrics export and import (the tab dialog first: the menu item opens it).
     export::METRICS,

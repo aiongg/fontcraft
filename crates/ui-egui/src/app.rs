@@ -149,7 +149,20 @@ impl FontcraftApp {
     /// opens the follow-up dialog its result asks for (`dialogs::after`). Copy and Cut also put
     /// their text on the system clipboard.
     pub fn run_from_shell(&mut self, id: &str, params: &Value) -> Result<Value, String> {
-        let result = self.run(id, params)?;
+        let result = match self.run(id, params) {
+            Ok(result) => result,
+            Err(e) => {
+                // A save refused because the file changed on disk asks whether to overwrite it,
+                // so the person can always save their work.
+                if self.dialog.is_none()
+                    && let Some(given) = crate::dialogs::save_changed_on_disk::after_error(id, params, &e)
+                    && let Err(open) = crate::dialogs::open(self, &crate::dialogs::save_changed_on_disk::DIALOG, &given)
+                {
+                    self.state.status = open;
+                }
+                return Err(e);
+            }
+        };
         shell::clipboard::after_run(self, id, &result);
         if self.dialog.is_none()
             && let Some((dialog, given)) = crate::dialogs::after(id, params, &result)

@@ -1330,3 +1330,19 @@ summary = "All project instances go into the project's export destination; any i
 ref = "Import & Export › Projects › Exporting a Project"
 status = "handbook"
 notes = "Documented, not yet observed. Same rules as export.instanceExportFolder. The project file format of the reference app (.glyphsproject) has no public specification and no sample in the corpus; until a project saved by the reference app is available (M7 plan § 8), projects are saved in FontCraft's own project format (M7 plan § 7, question 3). M7 plan § 4: M7.14."
+
+[[panel]]
+id = "dialog.saveChangedOnDisk"
+label = "Save: file changed on disk"
+location = "dialog"
+controls = ["Overwrite: save again with force, replacing the file on disk", "Cancel: leave the file and the document as they are"]
+area = "import-export"
+milestone = "M13"
+summary = "Asked when Save refuses because another program changed the document's file since it was read, so the person can always save their work."
+ref = "File › Save"
+status = "inferred"
+own = true
+notes = "Our design: file.save refuses to overwrite a file that changed on disk unless force is true, and this question is how the desktop app passes force. File › Review External Changes… takes the other program's changes in instead."
+guesses = [
+  "The reference app asks before overwriting a file changed on disk, with Overwrite and Cancel; saving over a file another program changed in the reference app settles it.",
+]
