@@ -394,7 +394,13 @@ fn set_glyph(s: &mut Session, v: &Value) -> Result<Value> {
 }
 
 fn set_scale(s: &mut Session, v: &Value) -> Result<Value> {
-    let p = Params::new("cornerComponent.setScale", v)?;
+    scale_corners(s, v, "cornerComponent.setScale", "Set Corner Scale")
+}
+
+/// cornerComponent.setScale run as command `id`, with `label` for its undo step: the Palette's
+/// mirror commands flip corners through it.
+pub(super) fn scale_corners(s: &mut Session, v: &Value, id: &'static str, label: &str) -> Result<Value> {
+    let p = Params::new(id, v)?;
     let x = p.opt_f64("scaleX")?.map(|v| v / 100.0);
     let y = p.opt_f64("scaleY")?.map(|v| v / 100.0);
     let flip = match p.opt_str("flip")? {
@@ -412,7 +418,7 @@ fn set_scale(s: &mut Session, v: &Value) -> Result<Value> {
     if let Some(y) = y {
         check_factor(&p, "scaleY", y)?;
     }
-    edit_corners(s, &p, "Set Corner Scale", |c, d| {
+    edit_corners(s, &p, label, |c, d| {
         let (mut sx, mut sy) = (x.unwrap_or(c.scale.x), y.unwrap_or(c.scale.y));
         match flip {
             Some(true) => sx = -sx,

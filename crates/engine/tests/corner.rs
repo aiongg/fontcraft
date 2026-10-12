@@ -206,8 +206,18 @@ fn corner_component_set_scale_and_mirroring() {
     assert_eq!(corners(&s, "I")[1].scale, Vec2::new(-1.0, -1.0));
     // The Palette's mirror commands flip selected corners the same way.
     run(&mut s, "transform.mirrorHorizontal", json!({"glyph": "I", "corners": [1]}));
+    assert_eq!(&*s.doc().unwrap().history.undo.last().unwrap().label, "Mirror Horizontally");
     run(&mut s, "transform.mirrorVertical", json!({"glyph": "I", "corners": [1]}));
+    assert_eq!(&*s.doc().unwrap().history.undo.last().unwrap().label, "Mirror Vertically");
     assert_eq!(corners(&s, "I")[1].scale, Vec2::new(1.0, 1.0));
+    assert_eq!(undo_steps(&s), 6);
+    // Corners flip in place: other targets and an origin are refused, not dropped.
+    for extra in [json!({"side": "background"}), json!({"shapes": [0]}), json!({"origin": [0, 0]})] {
+        let mut params = json!({"glyph": "I", "corners": [1]});
+        params.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+        let e = run_err(&mut s, "transform.mirrorHorizontal", params.clone());
+        assert!(e.contains("is not taken"), "{params}: {e}");
+    }
     assert_eq!(undo_steps(&s), 6);
 
     for (params, why) in [
