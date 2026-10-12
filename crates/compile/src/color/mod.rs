@@ -124,6 +124,40 @@ pub fn build(
         None => &empty,
     };
     // M11.6 to M11.11: each table builder in turn.
-    let _ = (font, order, assets, warnings);
-    Err(CompileError::NotYetImplemented("the colour tables"))
+    if plan.cpal.is_some() || plan.colr.is_some() || plan.sbix.is_some() || plan.cbdt.is_some() {
+        return Err(CompileError::NotYetImplemented("the colour tables"));
+    }
+    let mut out = ColorTables::default();
+    if let (Some(svg_plan), Some(font)) = (&plan.svg, font) {
+        out.tables.push((Tag::new(b"SVG "), svg::build(font, svg_plan, order, assets, warnings)?));
+    }
+    Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use fontcraft_color::export::{ExportPlan, SvgDocument, SvgPlan, SvgSource};
+    use fontcraft_color::paint::Paint;
+    use fontcraft_model::{Font, ResolvedGlyph};
+    use write_fonts::types::Tag;
+
+    use super::{GlyphOrder, build};
+    use crate::Options;
+
+    #[test]
+    fn an_svg_plan_makes_the_svg_table() {
+        let mut font = Font::new("Svg Sans");
+        font.add_glyph("heart", vec![0x2665], 600.0).unwrap();
+        let svg = SvgPlan {
+            palette: Vec::new(),
+            documents: vec![SvgDocument { glyph: "heart".into(), source: SvgSource::Paint(Paint::Layers(Vec::new())) }],
+        };
+        let plan = ExportPlan { svg: Some(svg), ..ExportPlan::default() };
+        let glyphs: Vec<ResolvedGlyph> = [".notdef", "heart"].into_iter().map(|n| ResolvedGlyph::new(n, 600.0)).collect();
+        let order = GlyphOrder::new(&glyphs, &[]).unwrap();
+        let tables = build(Some(&font), &plan, &order, &Options::default(), &mut Vec::new()).unwrap();
+        let tags: Vec<Tag> = tables.tables.iter().map(|(t, _)| *t).collect();
+        assert_eq!(tags, [Tag::new(b"SVG ")]);
+        assert!(!tables.tables[0].1.is_empty());
+    }
 }
