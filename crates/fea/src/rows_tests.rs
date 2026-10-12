@@ -1313,6 +1313,24 @@ fn an_included_file_is_read_from_the_source_folder() {
     assert_eq!(tags(&result.unwrap()), ["liga"]);
 }
 
+/// An include may climb out of the include folder, as the reference compilers read it; an
+/// include check refuses what it does not allow, with its message.
+#[test]
+fn an_include_may_climb_out_of_the_folder_unless_the_check_refuses_it() {
+    let dir = std::env::temp_dir().join(format!("fontcraft-fea-climb-{}", std::process::id()));
+    std::fs::create_dir_all(dir.join("source")).unwrap();
+    std::fs::create_dir_all(dir.join("features")).unwrap();
+    std::fs::write(dir.join("features/shared.fea"), "feature liga { sub f i by f_i; } liga;").unwrap();
+    let f = files("include(../features/shared.fea);").with_include_dir(dir.join("source"));
+    let read = run_files(&f);
+    let check = crate::IncludeCheck(std::sync::Arc::new(|_: &std::path::Path| Err("outside the read root".to_string())));
+    let refused = run_files(&f.with_include_check(check));
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(tags(&read.unwrap()), ["liga"]);
+    let d = refused.unwrap_err();
+    assert!(d.iter().any(|d| d.is_error() && d.message.contains("cannot be read: outside the read root")), "{d:#?}");
+}
+
 #[test]
 fn a_diagnostic_names_the_included_file() {
     let f = with_files("include(bad.fea);", &[("bad.fea", "feature liga { sub f i by nosuch; } liga;")]);

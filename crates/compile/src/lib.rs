@@ -186,6 +186,9 @@ pub struct Options {
     /// The folder the feature code's `include` statements read from: the source's folder.
     /// `None`: an include of a file on disk is an error.
     pub feature_dir: Option<std::path::PathBuf>,
+    /// Which included files on disk may be read; `None` reads any (see
+    /// [`fontcraft_fea::VirtualFiles`]).
+    pub include_check: Option<fontcraft_fea::IncludeCheck>,
 }
 
 /// The asset store a compile reads ([`Options::assets`]). Two are equal when they are the same
@@ -258,6 +261,7 @@ impl Default for Options {
             cbdt: false,
             skip_features: false,
             feature_dir: None,
+            include_check: None,
         }
     }
 }
@@ -382,7 +386,15 @@ pub(crate) fn layout_tables(
     if options.skip_features {
         return Ok(layout::LayoutTables::default());
     }
-    let input = layout::LayoutInput { font, data, resolved, order, edits, include_dir: options.feature_dir.as_deref() };
+    let input = layout::LayoutInput {
+        font,
+        data,
+        resolved,
+        order,
+        edits,
+        include_dir: options.feature_dir.as_deref(),
+        include_check: options.include_check.as_ref(),
+    };
     layout::build(&input, &layout::LayoutOptions::default(), warnings)
 }
 

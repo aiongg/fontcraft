@@ -1055,6 +1055,7 @@ fn compile_request(s: &Session, p: &Params) -> Result<(Vec<Job>, Request)> {
     options.skip_features = p.bool_or("skipFeatures", false)?;
     // Includes are read from the source's folder, when automation may read it.
     options.feature_dir = s.doc()?.path.as_deref().and_then(crate::io::feature_dir).filter(|d| crate::file_access::check_read(d).is_ok());
+    options.include_check = crate::file_access::include_check();
     let pick = Pick::read(p, "instances")?;
     let jobs = jobs(font, &pick, p.bool_or("mastersAsInstances", false)?, p)?;
     if jobs.is_empty() {

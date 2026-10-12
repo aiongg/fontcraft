@@ -2,7 +2,7 @@
 //! include statements may also read from.
 
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::{Diagnostic, MAX_INCLUDE_FILES, MAX_PATH_BYTES, Severity};
@@ -13,14 +13,44 @@ use crate::{Diagnostic, MAX_INCLUDE_FILES, MAX_PATH_BYTES, Severity};
 /// includes them in order.
 ///
 /// Includes that name no file here are read from [`VirtualFiles::include_dir`] when it is set
-/// (native targets only): each path is normalised and must stay inside that folder, each file
-/// is read once, and the files read count towards [`crate::Limits::include_files`] and
+/// (native targets only): each path is normalised against that folder and may climb out of it,
+/// as the reference compilers read it; each file is read once, must be a regular file, must pass
+/// the [`IncludeCheck`] when one is set, and counts towards [`crate::Limits::include_files`] and
 /// [`crate::Limits::text_bytes`].
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct VirtualFiles {
     root: String,
     files: BTreeMap<String, Arc<str>>,
     include_dir: Option<PathBuf>,
+    include_check: Option<IncludeCheck>,
+}
+
+/// Decides whether an included file on disk may be read: given its path with links followed, an
+/// `Err` refuses it with that message. Two are equal when they are the same check.
+#[derive(Clone)]
+pub struct IncludeCheck(pub Arc<IncludeCheckFn>);
+
+/// The function of an [`IncludeCheck`].
+pub type IncludeCheckFn = dyn Fn(&Path) -> Result<(), String> + Send + Sync;
+
+impl IncludeCheck {
+    pub(crate) fn check(&self, path: &Path) -> Result<(), String> {
+        (self.0)(path)
+    }
+}
+
+impl PartialEq for IncludeCheck {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl Eq for IncludeCheck {}
+
+impl std::fmt::Debug for IncludeCheck {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("IncludeCheck")
+    }
 }
 
 impl VirtualFiles {
@@ -30,7 +60,7 @@ impl VirtualFiles {
         check_path(root_path)?;
         let mut files = BTreeMap::new();
         files.insert(root_path.to_string(), Arc::from(root_text));
-        Ok(Self { root: root_path.to_string(), files, include_dir: None })
+        Ok(Self { root: root_path.to_string(), files, include_dir: None, include_check: None })
     }
 
     /// Adds or replaces a file. Refused: a bad path (as for [`VirtualFiles::new`]) or more than
@@ -49,6 +79,16 @@ impl VirtualFiles {
     pub fn with_include_dir(mut self, dir: PathBuf) -> Self {
         self.include_dir = Some(dir);
         self
+    }
+
+    /// Reads an included file on disk only when `check` allows it.
+    pub fn with_include_check(mut self, check: IncludeCheck) -> Self {
+        self.include_check = Some(check);
+        self
+    }
+
+    pub fn include_check(&self) -> Option<&IncludeCheck> {
+        self.include_check.as_ref()
     }
 
     pub fn root(&self) -> &str {

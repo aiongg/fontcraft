@@ -59,7 +59,7 @@ mod run;
 mod variations;
 
 pub use diagnostic::{Diagnostic, Severity};
-pub use files::VirtualFiles;
+pub use files::{IncludeCheck, VirtualFiles};
 pub use generated::{
     Anchor, ClassPair, Condition, FeatureKey, FeatureVariation, GeneratedLookup, GeneratedLookups, GeneratedRules, GlyphClass, GlyphPair,
     LookupFlags, Metric, Region, RegionAxis, Value,

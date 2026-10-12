@@ -317,34 +317,63 @@ fn a_reused_compile_rebuilds_the_preview_after_other_edits() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// The cache key skips an included file outside the document's folder (the compiler refuses
-/// it), however large it is, and a large file inside the folder stops the compile from being
-/// reused.
+/// The cache key follows an included file outside the document's folder, as the compiler reads
+/// it, skips an absolute path, which the compiler refuses, and a large included file stops the
+/// compile from being reused.
 #[test]
-fn a_reused_compile_skips_includes_outside_the_folder_and_caps_what_it_reads() {
+fn a_reused_compile_follows_includes_outside_the_folder_and_caps_what_it_reads() {
     let root = std::env::temp_dir().join(format!("fontcraft-feature-cache-outside-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     let dir = root.join("source");
     std::fs::create_dir_all(&dir).unwrap();
     let outside = root.join("outside.fea");
+    std::fs::write(&outside, "sub a by b;\n").unwrap();
+    let absolute = root.join("absolute.fea");
     let big = "# filler\n".repeat(600_000);
-    std::fs::write(&outside, &big).unwrap();
+    std::fs::write(&absolute, &big).unwrap();
     let font = Session::with_document().font().unwrap().clone();
     let mut s = Session::new();
     s.add_document(font, Some(dir.join("Font.fontcraft"))).unwrap();
-    let absolute = outside.to_str().unwrap();
-    let code = format!("include(../outside.fea);\ninclude({absolute});\n");
+    let code = format!("include(../outside.fea);\n# include({})\n", absolute.to_str().unwrap());
     run(&mut s, "font.features.addFeature", json!({"tag": "liga", "code": code}));
     let cached = |s: &mut Session| run(s, "font.features.compile", json!({}))["cached"].as_bool().unwrap();
     assert!(!cached(&mut s));
-    assert!(cached(&mut s), "a file outside the folder is not read for the key");
-    std::fs::write(&outside, format!("{big}{big}")).unwrap();
-    assert!(cached(&mut s), "a file outside the folder is not in the key");
+    assert!(cached(&mut s), "an absolute path is not read for the key");
+    std::fs::write(&outside, "sub a by c;\nsub b by d;\n").unwrap();
+    assert!(!cached(&mut s), "a file outside the folder is in the key");
 
     std::fs::write(dir.join("inside.fea"), &big).unwrap();
     run(&mut s, "font.features.addFeature", json!({"tag": "calt", "code": "include(inside.fea);"}));
     assert!(!cached(&mut s));
     assert!(!cached(&mut s), "more included bytes than the key reads");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// With automation roots in force, an include that climbs out of the read root is refused with a
+/// message; one inside it is read.
+#[test]
+fn a_confined_compile_refuses_an_include_outside_the_read_root() {
+    use fontcraft_engine::file_access::{AutomationRoots, confine};
+    let root = std::env::temp_dir().join(format!("fontcraft-feature-confined-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let dir = root.join("source");
+    std::fs::create_dir_all(dir.join("features")).unwrap();
+    std::fs::write(root.join("outside.fea"), "sub a by b;\n").unwrap();
+    std::fs::write(dir.join("features/inside.fea"), "sub a by b;\n").unwrap();
+    let roots = AutomationRoots::new(Some(&dir), None).unwrap().unwrap();
+    let font = Session::with_document().font().unwrap().clone();
+    let mut s = Session::new();
+    s.add_document(font, Some(dir.join("Font.fontcraft"))).unwrap();
+    run(&mut s, "font.features.addFeature", json!({"tag": "liga", "code": "include(features/../features/inside.fea);"}));
+    let r = confine(Some(&roots), || run(&mut s, "font.features.compile", json!({})));
+    assert_eq!(r["ok"], json!(true), "{r}");
+    run(&mut s, "font.features.addFeature", json!({"tag": "calt", "code": "include(../outside.fea);"}));
+    let r = confine(Some(&roots), || run(&mut s, "font.features.compile", json!({})));
+    assert_eq!(r["ok"], json!(false), "{r}");
+    assert!(first_error(&r)["message"].as_str().unwrap().contains("cannot be read"), "{r}");
+    // Without roots, the same include is read.
+    let r = run(&mut s, "font.features.compile", json!({}));
+    assert_eq!(r["ok"], json!(true), "{r}");
     let _ = std::fs::remove_dir_all(&root);
 }
 

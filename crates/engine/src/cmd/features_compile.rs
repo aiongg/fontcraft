@@ -275,8 +275,9 @@ fn include_names(text: &str) -> impl Iterator<Item = &str> {
 
 /// Adds the modification time and length of each file the code includes from `dir` to
 /// `hasher`, following the includes of included files. An include is looked up both in `dir`
-/// and next to the file that names it; a file outside `dir` is skipped, as the compiler refuses
-/// it. Returns `false` when there were more files or bytes than [`MAX_KEYED_INCLUDES`] and
+/// and next to the file that names it, and may climb out of `dir`; an absolute path, and a file
+/// the files' [`fontcraft_fea::IncludeCheck`] refuses, are skipped, as the compiler refuses them.
+/// Returns `false` when there were more files or bytes than [`MAX_KEYED_INCLUDES`] and
 /// [`MAX_KEYED_INCLUDE_BYTES`] allow, so the compile is not reused.
 fn hash_included_files(files: &fontcraft_fea::VirtualFiles, dir: &std::path::Path, hasher: &mut DefaultHasher) -> bool {
     use std::io::Read;
@@ -290,6 +291,9 @@ fn hash_included_files(files: &fontcraft_fea::VirtualFiles, dir: &std::path::Pat
     let mut read_bytes = 0usize;
     while let Some((from_dir, text)) = pending.pop() {
         for name in include_names(&text) {
+            if name.starts_with('/') || name.starts_with('\\') || name.as_bytes().get(1) == Some(&b':') {
+                continue;
+            }
             for candidate in [root.join(name), from_dir.join(name)] {
                 if !seen.insert(candidate.clone()) {
                     continue;
@@ -298,7 +302,8 @@ fn hash_included_files(files: &fontcraft_fea::VirtualFiles, dir: &std::path::Pat
                     return false;
                 }
                 candidate.hash(hasher);
-                let Some(real) = candidate.canonicalize().ok().filter(|real| real.starts_with(&root)) else {
+                let allowed = |real: &std::path::Path| files.include_check().is_none_or(|check| (check.0)(real).is_ok());
+                let Some(real) = candidate.canonicalize().ok().filter(|real| allowed(real)) else {
                     false.hash(hasher);
                     continue;
                 };
@@ -382,6 +387,9 @@ fn compile(s: &mut Session, raw: &Value) -> Result<Value> {
             let mut files = assembly.files;
             if let Some(dir) = &include_dir {
                 files = files.with_include_dir(dir.clone());
+            }
+            if let Some(check) = crate::file_access::include_check() {
+                files = files.with_include_check(check);
             }
             let mut hasher = DefaultHasher::new();
             master.hash(&mut hasher);

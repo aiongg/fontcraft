@@ -162,6 +162,16 @@ pub fn check_read(path: &Path) -> Result<(), String> {
     check(path, Access::Read)
 }
 
+/// The check for the files feature code includes: each must pass [`check_read`] against the
+/// roots in force now. `None` without roots.
+pub fn include_check() -> Option<fontcraft_fea::IncludeCheck> {
+    let roots = current()?;
+    Some(fontcraft_fea::IncludeCheck(Arc::new(move |path: &Path| {
+        let text = path.to_str().ok_or_else(|| format!("automation path rejected: not a UTF-8 path: {}", path.display()))?;
+        roots.check(text, Access::Read)
+    })))
+}
+
 /// May `path` be written here? Always, without roots in force.
 pub fn check_write(path: &Path) -> Result<(), String> {
     check(path, Access::Write)

@@ -385,7 +385,7 @@ milestone = "M8"
 summary = "A relative path is tried, in order, against the UFO font directory when the source is a UFO, then the directory of the top-level feature file, then the directory of the including file; the first hit wins. fea-rs: yes (include-resolution tests); the caller can also supply its own resolver."
 ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §3"
 status = "docs"
-notes = "FontCraft looks an include up against the root file's folder, then the including file's folder, inside the request's files and then the source's folder on disk; absolute paths and paths that climb out are refused."
+notes = "FontCraft looks an include up against the root file's folder, then the including file's folder, inside the request's files and then the source's folder on disk. Absolute paths are refused. A path may climb out of the source's folder, as fontc and fontmake read it; with automation roots in force, each file read from disk must lie inside the read root, else the include is refused with a message."
 
 [[behavior]]
 id = "fea.include.depth"

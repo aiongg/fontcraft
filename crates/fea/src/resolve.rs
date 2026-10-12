@@ -10,7 +10,9 @@
 //!
 //! A relative path is looked up against the root file's folder first, then against the
 //! including file's folder; the first that names a file wins. Paths are `/`-separated; an
-//! absolute path, or one that climbs above the top of the file set, is refused.
+//! absolute path is refused. A path may climb above the top of the file set: it then names a
+//! file on disk outside the include folder, which is read when the [`crate::IncludeCheck`]
+//! allows it (every file, without one).
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
@@ -112,10 +114,9 @@ impl Loader<'_> {
         let Some(file) = self.disk_path(path) else {
             return Err(format!("`{path}` was not found"));
         };
-        let dir = self.files.include_dir().and_then(|d| d.canonicalize().ok());
         let real = file.canonicalize().map_err(|e| format!("`{path}` could not be read: {e}"))?;
-        if !dir.is_some_and(|d| real.starts_with(d)) {
-            return Err(format!("`{path}` is outside the source's folder"));
+        if let Some(check) = self.files.include_check() {
+            check.check(&real).map_err(|e| format!("`{path}` cannot be read: {e}"))?;
         }
         // Opening a named pipe would wait for a writer.
         if !std::fs::metadata(&real).is_ok_and(|m| m.is_file()) {
@@ -156,8 +157,9 @@ fn parent(path: &str) -> &str {
     path.rsplit_once('/').map_or("", |(dir, _)| dir)
 }
 
-/// `raw` joined to `dir`, with `.` and `..` resolved. `None` for an absolute path, one that
-/// climbs above the top, an empty one or one longer than [`MAX_PATH_BYTES`].
+/// `raw` joined to `dir`, with `.` and `..` resolved; a path that climbs above the top keeps
+/// its leading `..` parts. `None` for an absolute path, an empty one or one longer than
+/// [`MAX_PATH_BYTES`].
 pub(crate) fn normalize(dir: &str, raw: &str) -> Option<String> {
     let absolute = raw.starts_with('/') || raw.starts_with('\\') || raw.as_bytes().get(1) == Some(&b':');
     if absolute || raw.len() > MAX_PATH_BYTES {
@@ -167,8 +169,8 @@ pub(crate) fn normalize(dir: &str, raw: &str) -> Option<String> {
     for part in dir.split('/').chain(raw.split('/')) {
         match part {
             "" | "." => {}
-            ".." => {
-                parts.pop()?;
+            ".." if parts.last().is_some_and(|p| *p != "..") => {
+                parts.pop();
             }
             _ => parts.push(part),
         }
@@ -281,10 +283,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn paths_are_normalised_and_kept_inside() {
+    fn paths_are_normalised_and_may_climb_out() {
         assert_eq!(normalize("a/b", "../c.fea").as_deref(), Some("a/c.fea"));
         assert_eq!(normalize("", "./x/./y.fea").as_deref(), Some("x/y.fea"));
-        assert_eq!(normalize("", "../c.fea"), None);
+        assert_eq!(normalize("", "../c.fea").as_deref(), Some("../c.fea"));
+        assert_eq!(normalize("a", "../../b/../c.fea").as_deref(), Some("../c.fea"));
         assert_eq!(normalize("", "/etc/passwd"), None);
         assert_eq!(normalize("", "C:/x.fea"), None);
     }

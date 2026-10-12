@@ -98,6 +98,8 @@ pub struct LayoutInput<'a> {
     pub edits: &'a ExportEdits,
     /// The folder `include` statements are read from (the source's folder).
     pub include_dir: Option<&'a Path>,
+    /// Which included files on disk may be read; `None` reads any.
+    pub include_check: Option<&'a fontcraft_fea::IncludeCheck>,
 }
 
 /// The entries compiled for `input`'s target: the automatic ones regenerated (unless off), then
@@ -200,6 +202,9 @@ pub fn build(input: &LayoutInput, opts: &LayoutOptions, warnings: &mut Vec<Strin
     let mut files = assembly.as_ref().map_or_else(|| empty_files.clone(), |a| a.files.clone());
     if let Some(dir) = input.include_dir {
         files = files.with_include_dir(dir.to_path_buf());
+    }
+    if let Some(check) = input.include_check {
+        files = files.with_include_check(check.clone());
     }
 
     // Step 3: what the writers read from the code.
