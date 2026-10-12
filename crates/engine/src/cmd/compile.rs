@@ -617,14 +617,18 @@ pub(super) struct Stage {
     outside_allowed: bool,
     /// (temporary, final) paths.
     staged: Vec<(std::path::PathBuf, std::path::PathBuf)>,
+    /// Index into `staged` by [`output_key`] of the final path, so a repeated name is found
+    /// without comparing it with every staged file.
+    by_output: std::collections::HashMap<String, usize>,
     /// Folders this stage created, outermost first.
     made: Vec<std::path::PathBuf>,
 }
 
-/// Whether two output paths can name the same file: some file systems ignore case.
+/// The key under which two output paths that can name the same file meet: some file systems
+/// ignore case.
 #[cfg(not(target_arch = "wasm32"))]
-fn same_output(a: &std::path::Path, b: &std::path::Path) -> bool {
-    a == b || a.to_string_lossy().to_lowercase() == b.to_string_lossy().to_lowercase()
+fn output_key(path: &std::path::Path) -> String {
+    path.to_string_lossy().to_lowercase()
 }
 
 /// `path` from the root of the file system, with `.` dropped and `..` taking off the folder before
@@ -698,7 +702,7 @@ fn set_aside(target: &std::path::Path) -> std::io::Result<std::path::PathBuf> {
 #[cfg(not(target_arch = "wasm32"))]
 impl Stage {
     pub(super) fn new(root: std::path::PathBuf, single: bool, outside_allowed: bool) -> Self {
-        Self { root: absolute(&root), single, outside_allowed, staged: Vec::new(), made: Vec::new() }
+        Self { root: absolute(&root), single, outside_allowed, staged: Vec::new(), by_output: std::collections::HashMap::new(), made: Vec::new() }
     }
 
     /// Where the file `name` (relative to the destination folder) goes. `..` (an Export Folder
@@ -730,8 +734,9 @@ impl Stage {
         if !self.outside_allowed && self.outside(name) {
             return Err(EngineError::Io(format!("{} is outside the export destination {}", target.display(), self.root.display())));
         }
-        if let Some(i) = self.staged.iter().position(|(_, f)| same_output(f, &target)) {
-            let (tmp, _) = self.staged.remove(i);
+        let key = output_key(&target);
+        let earlier = self.by_output.get(&key).copied();
+        if let Some((tmp, _)) = earlier.and_then(|i| self.staged.get(i)) {
             let _ = std::fs::remove_file(tmp);
             warnings.push(format!(
                 "two fonts are written to {}: the later one is kept (give instances a fileName parameter to keep both)",
@@ -749,10 +754,32 @@ impl Stage {
         drop(f);
         if let Err(e) = written {
             let _ = std::fs::remove_file(&tmp);
+            if let Some(i) = earlier {
+                self.forget(i);
+            }
             return Err(cannot(e));
         }
-        self.staged.push((tmp, target.clone()));
+        match earlier.and_then(|i| self.staged.get_mut(i)) {
+            Some(slot) => *slot = (tmp, target.clone()),
+            None => {
+                self.by_output.insert(key, self.staged.len());
+                self.staged.push((tmp, target.clone()));
+            }
+        }
         Ok(target)
+    }
+
+    /// Drops staged file `i`, whose temporary file is gone.
+    fn forget(&mut self, i: usize) {
+        if i < self.staged.len() {
+            self.staged.remove(i);
+        }
+        self.reindex();
+    }
+
+    /// Rebuilds [`Self::by_output`] after `staged` changed other than at its end.
+    fn reindex(&mut self) {
+        self.by_output = self.staged.iter().enumerate().map(|(i, (_, target))| (output_key(target), i)).collect();
     }
 
     /// Creates `dir` and the folders above it that are missing, remembering each.
@@ -833,6 +860,7 @@ fn swap(stages: &mut [Stage]) -> Result<()> {
         }
         for stage in stages.iter_mut() {
             stage.staged.clear();
+            stage.by_output.clear();
         }
         return Ok(());
     };
@@ -843,6 +871,7 @@ fn swap(stages: &mut [Stage]) -> Result<()> {
                 lost.push(format!("the new {} could not be removed ({e})", target.display()));
             }
         }
+        stage.reindex();
     }
     for (backup, target) in aside.iter().rev() {
         if let Err(e) = std::fs::rename(backup, target) {
