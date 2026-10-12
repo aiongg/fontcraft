@@ -458,13 +458,7 @@ fn field_row(ui: &mut egui::Ui, tokens: &Tokens, label: &str, content: impl FnOn
 
 /// A field's label, right-aligned in the label column.
 fn field_label(ui: &mut egui::Ui, tokens: &Tokens, label: &str) {
-    let size = vec2(tokens.list_column_unit * LABEL_COLUMNS, tokens.list_row_height);
-    let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
-    if ui.is_rect_visible(rect) {
-        let font = egui::TextStyle::Body.resolve(ui.style());
-        let at = pos2(rect.right() - tokens.dialog_spacing, rect.center().y);
-        ui.painter().with_clip_rect(rect).text(at, Align2::RIGHT_CENTER, label, font, tokens.text);
-    }
+    super::rows::label_cell(ui, tokens, None, label, false, true);
 }
 
 /// A class field with its disclosure menu of standard values. The value the user chose.
@@ -540,22 +534,7 @@ fn axes_rows(ui: &mut egui::Ui, tokens: &Tokens, font: &Font, all: &[&Instance],
 /// The fields added under General (familyNames, styleNames…), drawn with the shared row: they
 /// are selectable, copyable and removable as on the other tabs.
 fn added_fields(ui: &mut egui::Ui, tokens: &Tokens, fi: &mut FontInfoState, font: &Font, target: &Target, pending: &mut Pending) {
-    let fields = |i: usize| -> Vec<Row> { rows_of(font, Scope::Instance, i).into_iter().filter(|r| r.kind == RowKind::Field).collect() };
-    let rows = fields(target.first());
-    let others: Vec<Vec<Row>> = target.indices.iter().skip(1).map(|i| fields(*i)).collect();
-    for row in &rows {
-        let mixed = others.iter().any(|o| o.iter().find(|r| r.key == row.key).is_none_or(|r| r.value != row.value));
-        let index = fi.shown_rows.len();
-        let id = row_id(Scope::Instance, RowKind::Field, &row.key, 0);
-        let mut opts = RowOptions::for_row(id, row, fi.selected_rows.contains(&index));
-        opts.mixed = mixed;
-        fi.shown_rows.push(ShownRow { scope: Scope::Instance, kind: RowKind::Field, key: row.key.clone(), occurrence: 0, built_in: !opts.removable });
-        match row_with(ui, tokens, row, &opts) {
-            Some(RowAction::Select { extend, range }) => fi.select(index, extend, range),
-            Some(action) => pending.extend(action_commands(target, row, 0, &action)),
-            None => {}
-        }
-    }
+    super::rows::section_rows(ui, tokens, fi, font, target, RowKind::Field, pending);
 }
 
 /// A checkbox with a stable id: a check mark when `on`, a dash when the entries differ. True

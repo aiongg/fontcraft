@@ -143,20 +143,7 @@ fn under_label(ui: &mut egui::Ui, tokens: &Tokens, add: impl FnOnce(&mut egui::U
 /// A row label like the shared rows draw: right-aligned in the label column, highlighted when
 /// `selected`; its clicks select the row.
 fn row_label(ui: &mut egui::Ui, tokens: &Tokens, id: Id, text: &str, selected: bool) -> egui::Response {
-    let size = egui::vec2(label_width(tokens), tokens.list_row_height);
-    let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
-    let response = ui.interact(rect, id, Sense::click());
-    if ui.is_rect_visible(rect) {
-        let painter = ui.painter();
-        if selected {
-            painter.rect_filled(rect, f32::from(tokens.radius), tokens.row_selected);
-        }
-        let color = if selected { tokens.selected_text } else { tokens.text };
-        let font = egui::TextStyle::Body.resolve(ui.style());
-        let at = egui::pos2(rect.right() - tokens.dialog_spacing, rect.center().y);
-        painter.with_clip_rect(rect).text(at, Align2::RIGHT_CENTER, text, font, color);
-    }
-    response.on_hover_text(text)
+    rows::label_cell(ui, tokens, Some(id), text, selected, true)
 }
 
 /// Records the built-in field `key` as a shown row; its index.
@@ -277,17 +264,7 @@ fn date(ui: &mut egui::Ui, tokens: &Tokens, fi: &mut FontInfoState, font: &Font,
 
 /// The added General fields of the font, in stored order, with the shared row.
 fn added_fields(ui: &mut egui::Ui, tokens: &Tokens, fi: &mut FontInfoState, font: &Font, target: &Target, pending: &mut Pending) {
-    for row in rows_of(font, Scope::Font, 0).into_iter().filter(|r| r.kind == RowKind::Field) {
-        let index = fi.shown_rows.len();
-        let id = row_id(Scope::Font, RowKind::Field, &row.key, 0);
-        let opts = RowOptions::for_row(id, &row, fi.selected_rows.contains(&index));
-        fi.shown_rows.push(ShownRow { scope: Scope::Font, kind: RowKind::Field, key: row.key.clone(), occurrence: 0, built_in: !opts.removable });
-        match row_with(ui, tokens, &row, &opts) {
-            Some(RowAction::Select { extend, range }) => fi.select(index, extend, range),
-            Some(action) => pending.extend(action_commands(target, &row, 0, &action)),
-            None => {}
-        }
-    }
+    rows::section_rows(ui, tokens, fi, font, target, RowKind::Field, pending);
 }
 
 /// The font's axes, read-only: name, tag and the Hidden checkbox.

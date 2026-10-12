@@ -226,24 +226,33 @@ pub fn row_with(ui: &mut egui::Ui, tokens: &Tokens, row: &Row, opts: &RowOptions
 
 /// The row's label, which takes the clicks that select the row.
 fn label(ui: &mut egui::Ui, tokens: &Tokens, opts: &RowOptions, enabled: bool) -> egui::Response {
+    label_cell(ui, tokens, Some(opts.id), &opts.label, opts.selected, enabled)
+}
+
+/// A label right-aligned in the label column, highlighted when `selected`. With an `id` it takes
+/// the clicks that select its row.
+pub(crate) fn label_cell(ui: &mut egui::Ui, tokens: &Tokens, id: Option<Id>, text: &str, selected: bool, enabled: bool) -> egui::Response {
     let size = egui::vec2(tokens.list_column_unit * LABEL_COLUMNS, tokens.list_row_height);
-    let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
-    let response = ui.interact(rect, opts.id, Sense::click());
+    let (rect, hover) = ui.allocate_exact_size(size, Sense::hover());
+    let response = match id {
+        Some(id) => ui.interact(rect, id, Sense::click()),
+        None => hover,
+    };
     if ui.is_rect_visible(rect) {
         let painter = ui.painter();
-        if opts.selected {
+        if selected {
             painter.rect_filled(rect, f32::from(tokens.radius), tokens.row_selected);
         }
-        let color = match (opts.selected, enabled) {
+        let color = match (selected, enabled) {
             (true, _) => tokens.selected_text,
             (false, true) => tokens.text,
             (false, false) => tokens.text_dim,
         };
         let font = egui::TextStyle::Body.resolve(ui.style());
         let at = egui::pos2(rect.right() - tokens.dialog_spacing, rect.center().y);
-        painter.with_clip_rect(rect).text(at, egui::Align2::RIGHT_CENTER, &opts.label, font, color);
+        painter.with_clip_rect(rect).text(at, egui::Align2::RIGHT_CENTER, text, font, color);
     }
-    response.on_hover_text(opts.label.as_str())
+    response.on_hover_text(text)
 }
 
 /// The languages of a localizable field's value: a dictionary from language to text, or one text
@@ -394,7 +403,7 @@ pub fn builtin_field(ui: &mut egui::Ui, tokens: &Tokens, state: &mut FontInfoSta
 }
 
 /// The rows of `kind` of `target`, in stored order.
-fn section_rows(ui: &mut egui::Ui, tokens: &Tokens, state: &mut FontInfoState, font: &Font, target: &Target, kind: RowKind, pending: &mut Pending) {
+pub(crate) fn section_rows(ui: &mut egui::Ui, tokens: &Tokens, state: &mut FontInfoState, font: &Font, target: &Target, kind: RowKind, pending: &mut Pending) {
     let rows: Vec<Row> = rows_of(font, target.scope, target.first()).into_iter().filter(|r| r.kind == kind).collect();
     // The other targets' values by (key, occurrence), to mark the rows they differ in.
     let others: Vec<HashMap<(String, usize), Value>> = if target.below_font() {
