@@ -370,8 +370,15 @@ fn read_font(mut root: Dict) -> Result<Font> {
             .collect::<Result<Vec<_>>>()?,
         None => Vec::new(),
     };
+    // A version 3 file may spell its left-to-right kerning with the version 2 key, which
+    // glyphsLib reads as the same table. The key stays in the font's extra and is written back
+    // as read while the table is unchanged.
+    let ltr = match (root.get("kerningLTR"), root.get(V2_KERNING).and_then(kern_table)) {
+        (None, Some(table)) => table,
+        _ => take_kern_table(&mut root, "kerningLTR"),
+    };
     let kerning = Kerning {
-        ltr: take_kern_table(&mut root, "kerningLTR"),
+        ltr,
         rtl: take_kern_table(&mut root, "kerningRTL"),
         vertical: take_kern_table(&mut root, "kerningVertical"),
         context: if version >= 4 { take_kern_context(&mut root) } else { Vec::new() },
@@ -402,6 +409,9 @@ fn read_font(mut root: Dict) -> Result<Font> {
 
 /// A kerning table `{master: {first: {second: value}}}`, taken out of `d` when every value in it
 /// is a number; otherwise it stays in `d` as written.
+/// The version 2 key of the left-to-right kerning.
+const V2_KERNING: &str = "kerning";
+
 fn take_kern_table(d: &mut Dict, key: &str) -> KernTable {
     let Some(v) = d.get(key) else { return KernTable::default() };
     match kern_table(v) {
@@ -982,8 +992,17 @@ fn write_font(font: &Font, version: u32) -> Result<Dict> {
     }
     e.push(("fontMaster".into(), list(font.masters.iter().map(write_master).collect::<Result<_>>()?)));
     e.push(("glyphs".into(), list(font.glyphs.iter().map(|g| write_glyph(g, version).map(Value::Dict)).collect::<Result<_>>()?)));
-    for (key, table) in [("kerningLTR", &font.kerning.ltr), ("kerningRTL", &font.kerning.rtl), ("kerningVertical", &font.kerning.vertical)] {
-        if !table.is_empty() {
+    // Left-to-right kerning read from the version 2 key is written back as kept while the table
+    // is unchanged. A changed table goes under the version 3 key, which a reader takes first.
+    let ltr_key = match extra.get(Family::Glyphs, V2_KERNING) {
+        Some(kept) if kern_table(kept).as_ref() == Some(&font.kerning.ltr) => None,
+        _ => Some("kerningLTR"),
+    };
+    let tables = [(ltr_key, &font.kerning.ltr), (Some("kerningRTL"), &font.kerning.rtl), (Some("kerningVertical"), &font.kerning.vertical)];
+    for (key, table) in tables {
+        if let Some(key) = key
+            && !table.is_empty()
+        {
             e.push((key.into(), write_kern_table(table)?));
         }
     }

@@ -359,6 +359,18 @@ fn kerning_and_kerning_groups_are_fields() {
 }
 
 #[test]
+fn a_version_3_file_with_the_version_2_kerning_key_reads_its_kerning() {
+    let text = V3.replace("metrics = (", "kerning = {\nm01 = {\nA = {\nV = 4.2001;\n};\n};\n};\nmetrics = (");
+    let mut font = read(&text).unwrap();
+    assert_eq!(font.kerning.ltr.get("m01", "A", "V"), Some(4.2001));
+    assert_eq!(write(&font).unwrap(), text);
+    // A changed table is written under the version 3 key, which is read first.
+    std::sync::Arc::make_mut(&mut font.kerning).ltr.set("m01", "A", "V", -40.0);
+    let back = read(&write(&font).unwrap()).unwrap();
+    assert_eq!(back.kerning.ltr.get("m01", "A", "V"), Some(-40.0));
+}
+
+#[test]
 fn a_kerning_table_with_other_values_is_kept_as_written() {
     let text = V3.replace("metrics = (", "kerningLTR = {\nm01 = {\nA = {\nV = \"odd\";\n};\n};\n};\nmetrics = (");
     let font = read(&text).unwrap();
