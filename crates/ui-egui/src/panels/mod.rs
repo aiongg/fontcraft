@@ -60,11 +60,12 @@ use crate::tools_glue;
 pub type Pending = Vec<(&'static str, Value)>;
 
 /// The Palette sections, in order: (id, title).
-pub const SECTIONS: [(&str, &str); 6] = [
+pub const SECTIONS: [(&str, &str); 7] = [
     ("dimensions", "Dimensions"),
     ("fitCurve", "Fit Curve"),
     ("layers", "Layers"),
     ("transformations", "Transformations"),
+    ("relatedGlyphs", "Related Glyphs & Characters"),
     ("referenceFont", "Reference Font"),
     ("selections", "Selections"),
 ];
