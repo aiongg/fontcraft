@@ -87,6 +87,9 @@ pub const ALL: &[Subcommand] = &[
     sources::SUBCOMMAND,
 ];
 
+/// The subcommands whose packages have not landed: each prints its usage and refuses to run.
+pub const PLANNED: &[&str] = &["subset", "instance", "merge", "transform", "optimize", "diff", "autohint", "stems", "check"];
+
 /// The subcommand named `name`.
 pub fn find(name: &str) -> Option<&'static Subcommand> {
     ALL.iter().find(|s| s.name == name)

@@ -18,9 +18,6 @@
 //! and found something": differences, failed checks.)
 #![forbid(unsafe_code)]
 
-// The M12 subcommands declare their options with `args`; until their packages land only the
-// stubs' help and the tests use it.
-#[allow(dead_code)]
 mod args;
 mod io;
 mod sub;
@@ -104,11 +101,17 @@ fn main() -> ExitCode {
     }
 }
 
-/// The general usage, then the subcommands whose packages have not landed, with their summaries.
+/// The general usage, then the other subcommands with their summaries: built ones first, then
+/// the ones whose packages have not landed.
 fn print_usage() -> io::Outcome {
     out(USAGE.trim_end())?;
+    let rest = || sub::ALL.iter().filter(|s| !USAGE.contains(&format!("fontcraft-cli {} ", s.name)));
+    out("\nMORE SUBCOMMANDS (each prints its usage with --help):")?;
+    for sub in rest().filter(|s| !sub::PLANNED.contains(&s.name)) {
+        out(&format!("  {:<12} {}", sub.name, sub.summary))?;
+    }
     out("\nPLANNED (each prints its usage with --help; not built yet):")?;
-    for sub in sub::ALL.iter().filter(|s| !USAGE.contains(&format!("fontcraft-cli {} ", s.name))) {
+    for sub in rest().filter(|s| sub::PLANNED.contains(&s.name)) {
         out(&format!("  {:<12} {}", sub.name, sub.summary))?;
     }
     Ok(())

@@ -32,7 +32,6 @@ pub enum Failure {
     /// Some inputs of a batch failed and the others succeeded: exit status 5.
     Partial(String),
     /// Interrupted by the user: exit status 130.
-    #[allow(dead_code)] // M12.43: the interrupt handler of long runs.
     Interrupted,
 }
 
@@ -82,13 +81,11 @@ pub fn out(line: &str) -> Outcome {
 }
 
 /// Prints one JSON value on one line (JSON lines).
-#[allow(dead_code)] // The M12 subcommands print their results with it.
 pub fn out_json_line(value: &Value) -> Outcome {
     out(&serde_json::to_string(value).map_err(|e| Failure::Failed(e.to_string()))?)
 }
 
 /// Prints one JSON value, indented.
-#[allow(dead_code)] // The M12 subcommands print their results with it.
 pub fn out_json(value: &Value) -> Outcome {
     out(&serde_json::to_string_pretty(value).map_err(|e| Failure::Failed(e.to_string()))?)
 }
@@ -96,13 +93,11 @@ pub fn out_json(value: &Value) -> Outcome {
 /// How much goes to stderr: 0 quiet, 1 normal, 2 verbose.
 static VERBOSITY: AtomicU8 = AtomicU8::new(1);
 
-#[allow(dead_code)] // M12 subcommands set it from -q/-v.
 pub fn set_verbosity(level: u8) {
     VERBOSITY.store(level, Ordering::Relaxed);
 }
 
 /// A message on stderr unless quiet.
-#[allow(dead_code)] // M12 subcommands report progress and warnings with it.
 pub fn note(message: &str) {
     if VERBOSITY.load(Ordering::Relaxed) >= 1 {
         eprintln!("fontcraft-cli: {message}");
@@ -110,7 +105,6 @@ pub fn note(message: &str) {
 }
 
 /// A message on stderr only when verbose.
-#[allow(dead_code)]
 pub fn detail(message: &str) {
     if VERBOSITY.load(Ordering::Relaxed) >= 2 {
         eprintln!("fontcraft-cli: {message}");
@@ -134,7 +128,6 @@ pub fn open(session: &mut Session, path: &str) -> Result<Value, Failure> {
 }
 
 /// The bytes of an input: a file, or stdin for `-`. At most [`MAX_INPUT`] bytes.
-#[allow(dead_code)] // The M12 subcommands that read stdin.
 pub fn read_input(path: &str) -> Result<Vec<u8>, Failure> {
     let mut bytes = Vec::new();
     let limit = MAX_INPUT as u64 + 1;
@@ -163,7 +156,6 @@ pub fn write_stdout_binary(bytes: &[u8]) -> Outcome {
 
 /// Runs `work` on every input with up to `jobs` threads and returns the results in input order,
 /// so `--jobs 1` and `--jobs 8` print the same thing.
-#[allow(dead_code)] // The M12 subcommands that take several inputs.
 pub fn batch<T: Send>(inputs: &[String], jobs: usize, work: impl Fn(&str) -> Result<T, Failure> + Sync) -> Result<Vec<Result<T, Failure>>, Failure> {
     if inputs.len() > MAX_BATCH_INPUTS {
         return Err(usage(format!("at most {MAX_BATCH_INPUTS} inputs in one run")));
@@ -193,7 +185,6 @@ pub fn batch<T: Send>(inputs: &[String], jobs: usize, work: impl Fn(&str) -> Res
 
 /// The outcome of a batch: success when every input succeeded, [`Failure::Partial`] when some
 /// failed, the failure itself when all failed.
-#[allow(dead_code)]
 pub fn batch_outcome<T>(results: &[Result<T, Failure>]) -> Outcome {
     let failed: Vec<&Failure> = results.iter().filter_map(|r| r.as_ref().err()).collect();
     match (failed.len(), results.len()) {
