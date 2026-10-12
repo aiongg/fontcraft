@@ -34,6 +34,9 @@ impl Window {
     }
 
     fn click(&self, app: &mut FontcraftApp, id: egui::Id) {
+        // A modal whose content changed size is centred again over the next two frames.
+        self.frame(app, Vec::new());
+        self.frame(app, Vec::new());
         let at = self.ctx.read_response(id).unwrap_or_else(|| panic!("{id:?} is drawn")).rect.center();
         self.frame(app, vec![Event::PointerMoved(at)]);
         self.frame(app, vec![Event::PointerButton { pos: at, button: PointerButton::Primary, pressed: true, modifiers: Modifiers::NONE }]);

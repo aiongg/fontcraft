@@ -38,6 +38,8 @@ impl Window {
     }
 
     fn click(&self, app: &mut FontcraftApp, id: egui::Id, modifiers: Modifiers) {
+        // A modal whose content changed size is centred again over the next two frames.
+        self.frame(app, Vec::new());
         self.frame(app, Vec::new());
         let at = self.at(id);
         self.frame(app, vec![Event::ModifiersChanged(modifiers), Event::PointerMoved(at)]);
@@ -197,7 +199,7 @@ fn exports_tab_preview_draws_aang126_or_the_instance_preview_glyphs_at_a_masters
     let names = |found: Result<(String, Vec<String>), &'static str>| found.map(|(_, n)| n);
     // The default text's characters the font has (it has no digits).
     assert_eq!(names(preview_glyphs(font, 0)), Ok(vec!["A".to_string(), "a".into(), "n".into(), "g".into()]));
-    app.run("font.customParameters.add", &json!({"scope": "instance", "targets": [0], "name": PREVIEW_PARAMETER, "value": "n A x"})).unwrap();
+    app.run("font.customParameters.add", &json!({"scope": "instance", "targets": [0], "name": PREVIEW_PARAMETER, "value": "n A x.missing"})).unwrap();
     let font = app.session.font().unwrap();
     assert_eq!(names(preview_glyphs(font, 0)), Ok(vec!["n".to_string(), "A".into()]), "names the font lacks are skipped");
     // The tab draws the line into a texture.
@@ -236,6 +238,8 @@ fn a_preview_wider_than_the_largest_texture_is_drawn_smaller_to_fit() {
     let texture = render_preview(&ctx, &app.tokens, font, &master, &names, 60.0, 256).expect("the preview is drawn smaller");
     let [width, height] = texture.size();
     assert!(width <= 256 && height <= 256 && width > 64, "{width}×{height}");
-    let full = render_preview(&ctx, &app.tokens, font, &master, &names, 60.0, 1 << 16).unwrap();
+    // The context's own largest texture side is 2048, so the full-size line is shorter.
+    let short = names.get(..30).unwrap();
+    let full = render_preview(&ctx, &app.tokens, font, &master, short, 60.0, 2048).unwrap();
     assert!(full.size()[0] > 256, "a large enough texture keeps the asked size");
 }

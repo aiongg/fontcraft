@@ -124,7 +124,7 @@ fn a_right_click_on_a_node_lists_the_node_commands_and_runs_them_like_the_comman
     let greyed: Vec<&str> = open.items().filter(|i| !i.enabled).map(|i| i.command).collect();
     assert_eq!(
         greyed,
-        ["path.connectNodes", "path.closeOpenPaths", "path.clearFocusOnPaths", "glyph.componentFromSelection"],
+        ["path.connectNodes", "path.closeOpenPaths", "path.clearFocusOnPaths", "glyph.componentFromSelection", "path.detectComponent"],
         "one node of a closed path: {:?}",
         open.sections
     );

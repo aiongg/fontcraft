@@ -132,11 +132,12 @@ mod tests {
         assert_eq!(name_at(0, WIDTHS), None);
         assert_eq!(name_at(WEIGHTS, 0), None);
         assert_eq!(label("SemiBold_Extended"), "SemiBold Extended");
-        let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
+        let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
             let painter = ui.painter();
             let rect = Rect::from_min_size(Pos2::ZERO, egui::vec2(32.0, 32.0));
             assert!(paint_builtin(painter, rect, "Bold_Condensed", Color32::WHITE));
             assert!(!paint_builtin(painter, rect, "Heavy", Color32::WHITE), "an unknown name draws nothing");
         });
+        output.textures_delta.clear();
     }
 }

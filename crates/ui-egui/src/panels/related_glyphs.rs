@@ -169,7 +169,7 @@ mod tests {
         let ctx = egui::Context::default();
         let input = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(Pos2::ZERO, egui::vec2(400.0, 800.0))), ..Default::default() };
         let mut pending = Pending::new();
-        let _ = ctx.run_ui(input, |ui| show(&mut app, ui, &mut pending));
+        ctx.run_ui(input, |ui| show(&mut app, ui, &mut pending)).textures_delta.clear();
         assert!(pending.is_empty());
 
         // An edit invalidates the cached result.

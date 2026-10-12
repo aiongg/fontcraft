@@ -100,7 +100,7 @@ fn the_components_cell_edits_the_shown_masters_components() {
     let ctx = egui::Context::default();
     let frame = |app: &mut FontcraftApp, events: Vec<Event>| {
         let input = egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(1280.0, 800.0))), events, ..Default::default() };
-        let _ = ctx.run_ui(input, |ui| app.ui(ui));
+        ctx.run_ui(input, |ui| app.ui(ui)).textures_delta.clear();
     };
     frame(&mut app, Vec::new());
     app.font_view.edit = Some(InlineEdit { glyph: "b".into(), column: Column::Components, text: String::new(), fresh: true });

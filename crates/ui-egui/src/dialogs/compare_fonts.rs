@@ -211,6 +211,6 @@ mod tests {
         let ctx = egui::Context::default();
         let input =
             egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 800.0))), ..Default::default() };
-        let _ = ctx.run_ui(input, |ui| app.ui(ui));
+        ctx.run_ui(input, |ui| app.ui(ui)).textures_delta.clear();
     }
 }
