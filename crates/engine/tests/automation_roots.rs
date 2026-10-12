@@ -92,3 +92,76 @@ fn a_linked_source_outside_the_read_root_is_missing_at_compile() {
     assert!(!warnings(&built).contains("treated as missing"), "{built}");
     let _ = std::fs::remove_dir_all(base);
 }
+
+/// A designspace naming the UFO `source` (relative to the designspace's folder).
+fn designspace(source: &str) -> String {
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<designspace format="5.0">
+  <axes><axis tag="wght" name="Weight" minimum="400" maximum="400" default="400"/></axes>
+  <sources>
+    <source filename="{source}" name="A"><location><dimension name="Weight" xvalue="400"/></location></source>
+  </sources>
+</designspace>
+"#
+    )
+}
+
+/// Saves a font with the glyph `glyph` as the UFO `path`.
+fn save_ufo(path: &std::path::Path, glyph: &str) {
+    let mut s = Session::with_document();
+    run(&mut s, "glyph.newGlyph", json!({"name": glyph}));
+    run(&mut s, "path.addPath", json!({"glyph": glyph, "nodes": [{"x": 0, "y": 0}, {"x": 100, "y": 0}, {"x": 100, "y": 100}]}));
+    run(&mut s, "file.saveAs", json!({"path": path}));
+}
+
+#[test]
+fn a_designspace_source_above_its_folder_is_not_written_under_roots() {
+    let base = std::env::temp_dir().join(format!("fontcraft-automation-dsup-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    for d in ["src", "out", "masters"] {
+        std::fs::create_dir_all(base.join(d)).unwrap();
+    }
+    save_ufo(&base.join("masters/A.ufo"), "zz.one");
+    std::fs::write(base.join("src/x.designspace"), designspace("../masters/A.ufo")).unwrap();
+    let written = |name: &str| std::fs::read_dir(base.join("masters/A.ufo/glyphs")).unwrap().flatten().any(|e| e.file_name().to_string_lossy().starts_with(name));
+    let roots = AutomationRoots::new(Some(&base), Some(&base.join("out"))).unwrap().unwrap();
+    let mut s = Session::new();
+    confine(Some(&roots), || {
+        run(&mut s, "file.open", json!({"path": base.join("src/x.designspace")}));
+        run(&mut s, "glyph.newGlyph", json!({"name": "zz.two"}));
+        // The designspace goes into the write root; its source `../masters/A.ufo` would not.
+        let e = refused(&mut s, "file.saveAs", json!({"path": base.join("out/x.designspace")}));
+        assert!(e.contains("../masters/A.ufo") && e.contains("confined"), "{e}");
+    });
+    assert!(!written("zz.two"), "the UFO outside the write root was not written");
+    assert!(!base.join("out/x.designspace").exists(), "a refused save writes nothing");
+    // Unconfined, the same save writes the UFO beside the designspace's folder, as designspaces expect.
+    run(&mut s, "file.saveAs", json!({"path": base.join("out/x.designspace")}));
+    assert!(written("zz.two"));
+    let _ = std::fs::remove_dir_all(base);
+}
+
+#[test]
+fn a_linked_designspace_reads_no_ufo_outside_the_read_root() {
+    let (base, roots) = folders("linked-ds");
+    save_ufo(&base.join("outside/Secret.ufo"), "zz.secret");
+    let linked = base.join("in/x.designspace");
+    std::fs::write(&linked, designspace("../outside/Secret.ufo")).unwrap();
+    let mut s = Session::with_document();
+    run(&mut s, "path.addPath", json!({"glyph": "A", "nodes": [{"x": 0, "y": 0}, {"x": 100, "y": 0}, {"x": 100, "y": 100}]}));
+    run(&mut s, "font.customParameters.add", json!({"scope": "font", "name": "Import Font", "value": linked.to_string_lossy()}));
+    let has_secret = |s: &Session| s.font().unwrap().glyphs.iter().any(|g| g.name.as_str() == "zz.secret");
+    confine(Some(&roots), || {
+        let built = run(&mut s, "font.compile", json!({"timestamp": 0, "destination": base.join("out")}));
+        let text = built.to_string();
+        assert!(text.contains("Secret.ufo") && text.contains("outside the read root"), "{text}");
+        // Opening the designspace itself is refused before anything is read.
+        let e = refused(&mut Session::new(), "file.open", json!({"path": linked}));
+        assert!(e.contains("outside the read root"), "{e}");
+    });
+    assert!(!has_secret(&s), "the UFO outside the read root was never read");
+    let built = run(&mut s, "font.compile", json!({"timestamp": 0, "destination": base.join("out")}));
+    assert!(!built.to_string().contains("outside the read root"), "{built}");
+    let _ = std::fs::remove_dir_all(base);
+}

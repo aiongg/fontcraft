@@ -87,6 +87,12 @@ fontcraft-cli mcp --automation-read-root /work/fonts --automation-write-root /wo
   - A source a command reads may read other files in turn: the UFOs of a designspace, the Import
     Font and Import Master files, a project's linked font. They must lie inside the read root too,
     and are checked before anything is read.
+  - A save writes more than the file it names: the UFOs of a designspace, the files inside a
+    package or UFO. Each must lie inside the write root too (a link inside a package can lead
+    elsewhere), and a designspace's UFOs are all checked before any is written.
+  - While roots are in force, a designspace source whose `filename` climbs above the
+    designspace's folder (`../masters/A.ufo`) is not written, even when it would land inside the
+    write root: the save is refused. Without roots such sources are written as usual.
   - Places a command uses without a parameter naming them:
 
     | Command | Checked |

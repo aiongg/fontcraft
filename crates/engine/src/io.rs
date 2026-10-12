@@ -292,13 +292,14 @@ fn is_designspace(body: &str) -> bool {
 }
 
 /// A designspace and the UFOs it names, read relative to its folder, within the same bounds as
-/// one package.
+/// one package. While automation roots are in force, a UFO outside the read root is refused.
 fn open_designspace(path: &Path, text: &str) -> Result<Font> {
     let dir = path.parent().unwrap_or(Path::new("."));
     let mut ufos = BTreeMap::new();
     let mut total = text.len();
     for rel in fontcraft_io_ufo::designspace::ufo_paths(text)? {
         let ufo_dir = dir.join(&rel);
+        crate::file_access::check_read(&ufo_dir).map_err(|e| EngineError::Io(format!("{}: the source `{rel}`: {e}", path.display())))?;
         if !ufo_dir.join("metainfo.plist").is_file() {
             return Err(EngineError::Io(format!("{}: the source `{rel}` is not a UFO folder", path.display())));
         }
@@ -546,6 +547,7 @@ pub fn save(font: &Font, path: &Path, format: SaveFormat) -> Result<Saved> {
             if path.exists() && !path.is_dir() {
                 return Err(EngineError::Io(format!("cannot write a package to {}: it is a file", path.display())));
             }
+            write_allowed(path)?;
             std::fs::create_dir_all(path).map_err(|e| io_err("create", path, e))?;
             let on_disk = read_folder(path)?;
             let mut written = 0;
@@ -577,8 +579,14 @@ pub fn save(font: &Font, path: &Path, format: SaveFormat) -> Result<Saved> {
             let out = fontcraft_io_ufo::designspace::write(font)?;
             let dir = path.parent().unwrap_or(Path::new("."));
             let (mut written, mut removed, mut bytes) = (0, 0, out.document.len());
+            // Every UFO is checked before any is written, so a refusal writes nothing.
+            let mut targets = Vec::with_capacity(out.ufos.len());
             for (rel, files) in &out.ufos {
                 let ufo_dir = safe_join_relative(dir, rel)?;
+                write_allowed(&ufo_dir)?;
+                targets.push((ufo_dir, files));
+            }
+            for (ufo_dir, files) in targets {
                 let (w, r) = write_ufo(&ufo_dir, files)?;
                 written += w;
                 removed += r;
@@ -634,6 +642,7 @@ fn write_ufo(path: &Path, files: &BTreeMap<String, Vec<u8>>) -> Result<(usize, u
     if path.is_dir() && !path.join("metainfo.plist").is_file() && std::fs::read_dir(path).map_err(|e| io_err("read", path, e))?.next().is_some() {
         return Err(EngineError::Io(format!("cannot write a UFO to {}: the folder is not empty and not a UFO", path.display())));
     }
+    write_allowed(path)?;
     std::fs::create_dir_all(path).map_err(|e| io_err("create", path, e))?;
     let on_disk = read_folder(path)?;
     let is_index = |rel: &str| rel.ends_with("/contents.plist") || rel == "layercontents.plist" || rel == "metainfo.plist";
@@ -674,17 +683,24 @@ fn write_ufo(path: &Path, files: &BTreeMap<String, Vec<u8>>) -> Result<(usize, u
 }
 
 /// A designspace's `filename` relative to its folder. `..` is allowed, as designspace files use
-/// it for UFOs beside their folder; absolute paths and backslashes are not.
+/// it for UFOs beside their folder, except while automation roots are in force
+/// ([`crate::file_access`]); absolute paths and backslashes are not.
 fn safe_join_relative(dir: &Path, rel: &str) -> Result<PathBuf> {
     let ok =
         !rel.is_empty() && !rel.starts_with('/') && !rel.contains('\\') && !rel.contains(':') && rel.split('/').all(|p| !p.is_empty() && p != ".");
     if !ok {
         return Err(EngineError::Io(format!("refusing to write the UFO `{rel}`: not a relative path")));
     }
+    if crate::file_access::current().is_some() && rel.split('/').any(|p| p == "..") {
+        return Err(EngineError::Io(format!(
+            "refusing to write the UFO `{rel}`: a source above the designspace's folder is not written while automation file access is confined"
+        )));
+    }
     Ok(dir.join(rel))
 }
 
-/// `root/rel`, refusing a relative path that would leave `root`.
+/// `root/rel`, refusing a relative path that would leave `root`, and one outside the automation
+/// write root.
 fn safe_join(root: &Path, rel: &str) -> Result<PathBuf> {
     let ok = !rel.is_empty()
         && !rel.starts_with('/')
@@ -692,7 +708,15 @@ fn safe_join(root: &Path, rel: &str) -> Result<PathBuf> {
     if !ok {
         return Err(EngineError::Io(format!("refusing to write `{rel}` outside the package")));
     }
-    Ok(root.join(rel))
+    let target = root.join(rel);
+    write_allowed(&target)?;
+    Ok(target)
+}
+
+/// May `path` be written while automation roots are in force (a link inside a package can lead
+/// out of the write root)? Always, without them.
+fn write_allowed(path: &Path) -> Result<()> {
+    crate::file_access::check_write(path).map_err(|e| EngineError::Io(format!("refusing to write {}: {e}", path.display())))
 }
 
 #[cfg(test)]
