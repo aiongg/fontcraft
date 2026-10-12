@@ -100,8 +100,8 @@ pub const MODULES: &[(&[UiCommand], Handler)] = &[
 ];
 
 /// The shell commands' parameters that name files, declared as engine commands declare theirs
-/// (`fontcraft_engine::cmd::FileParam`), so surfaces that restrict file access (the MCP server's
-/// `--root`) check them. Every shell command whose parameters name a file is listed here.
+/// (`fontcraft_engine::cmd::FileParam`), so the automation roots
+/// (`fontcraft_engine::file_access`) check them. Every shell command whose parameters name a file is listed here.
 pub const UI_FILE_PARAMS: &[(&str, &[fontcraft_engine::cmd::FileParam])] = &[
     ("file.showInFinder", &[fontcraft_engine::cmd::FileParam::read("path")]),
     ("view.setReferenceFont", &[fontcraft_engine::cmd::FileParam::read("path")]),

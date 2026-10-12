@@ -31,6 +31,10 @@ pub struct FontcraftApp {
     pub dialog: Option<crate::dialogs::OpenDialog>,
     /// The platform's file choosers; `None` where there are none (the browser, MCP, tests).
     pub picker: Option<Box<dyn shell::pickers::Picker>>,
+    /// The folders control-channel requests may read and write (`--automation-read-root`,
+    /// `--automation-write-root`); `None`: anywhere. What the person does in the window is not
+    /// confined. See [`fontcraft_engine::file_access`].
+    pub automation_roots: Option<std::sync::Arc<fontcraft_engine::file_access::AutomationRoots>>,
     /// Text for the system clipboard, handed to the platform at the end of the frame.
     pub(crate) clipboard_out: Option<String>,
     /// Where the menu bar was drawn in the last frame.
@@ -64,6 +68,7 @@ impl FontcraftApp {
             tools: ToolsState::default(),
             dialog: None,
             picker: None,
+            automation_roots: None,
             clipboard_out: None,
             menu_bar_rect: egui::Rect::NOTHING,
             menu_cache: MenuCache::default(),
@@ -83,6 +88,18 @@ impl FontcraftApp {
             shell::text::store_display_strings(self);
         }
         let before = self.session.active().map(|d| (d.id, d.font.clone()));
+        // A shell command a control request runs is checked as the engine checks its own.
+        let confined = match fontcraft_engine::file_access::current() {
+            Some(roots) if is_ui_command(id) => {
+                let files = shell::ui_file_params(id);
+                Some(
+                    fontcraft_engine::file_access::command::check_files(&self.session, id, files, params, &roots)
+                        .map_err(|e| format!("{id}: {e}"))?,
+                )
+            }
+            _ => None,
+        };
+        let params = confined.as_ref().unwrap_or(params);
         let result = if is_ui_command(id) {
             match guard::catch_panic(|| shell::run(self, id, params)) {
                 Ok(r) => r,

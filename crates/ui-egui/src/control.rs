@@ -10,7 +10,7 @@
 //! frame is captured. [`handle`] answers it with an error, for hosts without a window.
 
 use base64::Engine as _;
-use fontcraft_engine::guard;
+use fontcraft_engine::{file_access, guard};
 use fontcraft_geom::Point;
 use fontcraft_render::{Image, LineOptions};
 use fontcraft_tools::{Key, KeyEvent, Modifiers, PointerKind};
@@ -128,10 +128,19 @@ pub fn handle_request(app: &mut FontcraftApp, request: &Value) -> Handled {
         return Handled::Reply(reply(&id, Err("a request is a JSON object with a string `method`".into())));
     };
     let params = request.get("params").cloned().unwrap_or(Value::Null);
+    let roots = app.automation_roots.clone();
+    file_access::confine(roots.as_ref(), || handle_confined(app, id, method, &params))
+}
+
+/// [`handle_request`] with the automation roots in force.
+fn handle_confined(app: &mut FontcraftApp, id: Value, method: &str, params: &Value) -> Handled {
     if method == "ui.screenshot" {
         return match params.get("path") {
             None | Some(Value::Null) => Handled::Screenshot(ScreenshotRequest { id, path: None }),
-            Some(Value::String(p)) if !p.is_empty() => Handled::Screenshot(ScreenshotRequest { id, path: Some(p.clone()) }),
+            Some(Value::String(p)) if !p.is_empty() => match file_access::check_write(std::path::Path::new(p)) {
+                Ok(()) => Handled::Screenshot(ScreenshotRequest { id, path: Some(p.clone()) }),
+                Err(e) => Handled::Reply(reply(&id, Err(format!("ui.screenshot: {e}")))),
+            },
             Some(_) => Handled::Reply(reply(&id, Err("ui.screenshot: `path` must be a file path".into()))),
         };
     }
@@ -139,7 +148,7 @@ pub fn handle_request(app: &mut FontcraftApp, request: &Value) -> Handled {
     // allows the user.
     let outside = app.session.export_outside();
     app.session.set_export_outside(false);
-    let result = guard::catch_panic(|| dispatch(app, method, &params));
+    let result = guard::catch_panic(|| dispatch(app, method, params));
     app.session.set_export_outside(outside);
     Handled::Reply(match result {
         Ok(result) => reply(&id, result),
@@ -160,6 +169,7 @@ fn deliver(method: &str, image: &Image, path: Option<&str>) -> Result<Value, Str
     let mut result = json!({"width": image.width, "height": image.height});
     match path {
         Some(path) => {
+            file_access::check_write(std::path::Path::new(path)).map_err(|e| format!("{method}: {e}"))?;
             std::fs::write(path, &png).map_err(|e| format!("{method}: cannot write `{path}`: {e}"))?;
             set(&mut result, "path", json!(path));
         }

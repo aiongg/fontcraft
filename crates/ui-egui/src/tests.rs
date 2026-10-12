@@ -439,7 +439,7 @@ fn display_and_panel_toggles_change_what_is_shown() {
 
 #[test]
 fn shell_commands_that_name_files_declare_them() {
-    // A restricted MCP server (`--root`) checks only the file parameters a command declares, so a
+    // The automation roots check only the file parameters a command declares, so a
     // shell parameter that looks like a path is declared in `UI_FILE_PARAMS` or listed here.
     const NOT_FILES: &[(&str, &str, &str)] = &[
         ("view.setReferenceFont", "remove", "a listed reference font's path; no file is read"),
@@ -475,4 +475,39 @@ fn shell_commands_that_name_files_declare_them() {
     let listed = app.commands();
     let entry = listed["commands"].as_array().unwrap().iter().find(|c| c["id"] == "file.showInFinder").unwrap();
     assert_eq!(entry["file_params"][0]["name"], "path");
+}
+
+/// `fontcraft --control PORT --automation-read-root DIR --automation-write-root DIR`: control
+/// requests read and write only inside the roots; what the person does is not confined.
+#[test]
+fn control_requests_honour_the_automation_roots() {
+    let base = std::env::temp_dir().join(format!("fontcraft-ui-roots-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    for d in ["in", "out", "outside"] {
+        std::fs::create_dir_all(base.join(d)).unwrap();
+    }
+    let at = |p: &str| base.join(p).to_str().unwrap().to_string();
+    let mut app = FontcraftApp::new(fontcraft_engine::Session::with_document());
+    app.automation_roots = fontcraft_engine::file_access::AutomationRoots::new(Some(&base.join("in")), Some(&base.join("out"))).unwrap();
+    let ask = |app: &mut FontcraftApp, method: &str, params: Value| control::handle(app, &json!({"id": 1, "method": method, "params": params}));
+    let save = |path: String| json!({"command": "file.saveAs", "params": {"path": path}});
+
+    let r = ask(&mut app, "engine.execute", save(at("outside/x.fontcraft")));
+    assert!(r["ok"] == false && r["error"].as_str().unwrap_or("").contains("outside the write root"), "{r}");
+    assert!(!base.join("outside/x.fontcraft").exists());
+    let r = ask(&mut app, "engine.execute", save(at("out/x.fontcraft")));
+    assert!(r["ok"] == true && base.join("out/x.fontcraft").exists(), "{r}");
+    let r = ask(&mut app, "ui.render", json!({"path": at("outside/r.png"), "glyphs": ["A"]}));
+    assert!(r["ok"] == false && r["error"].as_str().unwrap_or("").contains("outside the write root"), "{r}");
+    let r = ask(&mut app, "ui.screenshot", json!({"path": at("in/s.png")}));
+    assert!(r["ok"] == false && r["error"].as_str().unwrap_or("").contains("outside the write root"), "{r}");
+    let r = ask(&mut app, "engine.execute", json!({"command": "script.run", "params": {"macro": "m"}}));
+    assert!(r["ok"] == false && r["error"].as_str().unwrap_or("").contains("automation roots"), "{r}");
+    // A shell command's declared file parameters are checked too.
+    let r = ask(&mut app, "engine.execute", json!({"command": "view.setReferenceFont", "params": {"path": at("outside/y.fontcraft")}}));
+    assert!(r["ok"] == false && r["error"].as_str().unwrap_or("").contains("outside the read root"), "{r}");
+    // The person at the keyboard is not confined.
+    app.run("file.saveAs", &json!({"path": at("outside/y.fontcraft")})).unwrap();
+    assert!(base.join("outside/y.fontcraft").exists());
+    let _ = std::fs::remove_dir_all(&base);
 }
