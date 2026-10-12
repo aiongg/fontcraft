@@ -586,6 +586,8 @@ fn duplicate(s: &mut Session, p: &Value) -> Result<Value> {
             let Some(source) = masters.get(at) else { continue };
             let mut m = source.clone();
             m.id = copy.clone();
+            // The copy is the document's own master: with the mark kept, saving would drop it.
+            crate::linked::unmark(&mut m.user_data);
             masters.insert(at + 1, m);
             made.push(json!({"index": at + 1, "id": copy, "of": original}));
             copy_layers(font, original, copy)?;

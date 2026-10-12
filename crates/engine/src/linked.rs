@@ -129,6 +129,13 @@ fn mark(data: &mut UserData, source: &str) {
     data.0.insert(LINKED_SOURCE, Value::String(Str::new(source)));
 }
 
+/// Drops the linked mark, for a copy of a linked master that belongs to the document itself.
+pub(crate) fn unmark(data: &mut UserData) {
+    if let Some(i) = data.0.entries.iter().position(|(k, _)| k.as_str() == LINKED_SOURCE) {
+        data.0.remove_at(i);
+    }
+}
+
 /// Import Font's path: a string, or a dictionary's `Path`.
 fn font_path(value: &Value) -> Option<&str> {
     let path = match value {

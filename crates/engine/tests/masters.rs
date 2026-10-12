@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use fontcraft_engine::cmd::masters::MASTER_ICONS;
 use fontcraft_engine::{EngineError, Session};
+use fontcraft_model::fc_keys::LINKED_SOURCE;
 use fontcraft_model::plist::{Str, Value as Plist};
 use fontcraft_model::{Axis, Font, Layer, Master, MetricValue, Param};
 use serde_json::{Value, json};
@@ -170,6 +171,23 @@ fn duplicate_copies_layers_brace_layers_and_kerning_right_after_the_original() {
 
     run(&mut s, "edit.undo", json!({}));
     assert_eq!(master_ids(&s), vec!["m01".to_string(), "m02".into()], "one undo step");
+}
+
+#[test]
+fn a_copy_of_a_linked_master_belongs_to_the_document() {
+    let mut s = two_masters();
+    s.edit("link Bold", |font| {
+        let bold = Arc::make_mut(&mut font.masters).get_mut(1).unwrap();
+        bold.user_data.0.insert(LINKED_SOURCE, Plist::String(Str::new("Other.glyphs")));
+        Ok(())
+    })
+    .unwrap();
+    let r = run(&mut s, "font.master.duplicate", json!({"masters": ["m02"]}));
+    let copy = r["masters"][0]["id"].as_str().unwrap().to_string();
+    let f = font(&s);
+    let m = f.masters.iter().find(|m| m.id == copy).unwrap();
+    assert!(m.user_data.get(LINKED_SOURCE).is_none(), "the copy is saved with the document, so it carries no linked mark");
+    assert!(f.masters[1].user_data.get(LINKED_SOURCE).is_some(), "the linked original keeps its mark");
 }
 
 #[test]
