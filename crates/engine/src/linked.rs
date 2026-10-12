@@ -98,6 +98,29 @@ pub(crate) fn resolve(font: &Font, path: Option<&Path>, warnings: &mut Vec<Strin
     Ok(Some(out))
 }
 
+/// The files [`resolve`] reads for `font` whose document file is `host`: the paths of the first
+/// Import Font and Import Master parameters, relative ones joined to the document's folder (left
+/// out without a document file, as [`resolve`] reads nothing for them), each once.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn linked_paths(font: &Font, host: Option<&Path>) -> Vec<std::path::PathBuf> {
+    let fonts = font.info.params.all(IMPORT_FONT).take(MAX_IMPORT_FONT).filter_map(font_path);
+    let masters = font.info.params.all(IMPORT_MASTER).take(MAX_IMPORT_MASTER).filter_map(|v| master_ref(v).map(|(p, _)| p));
+    let mut out: Vec<std::path::PathBuf> = Vec::new();
+    for rel in fonts.chain(masters) {
+        let written = Path::new(rel);
+        let full = if written.is_absolute() {
+            written.to_path_buf()
+        } else {
+            let Some(dir) = host.and_then(Path::parent) else { continue };
+            dir.join(written)
+        };
+        if !out.contains(&full) {
+            out.push(full);
+        }
+    }
+    out
+}
+
 /// `font` without its linked glyphs, linked masters, their layers and their kerning: what a source
 /// writer writes. Borrowed when nothing is linked.
 pub(crate) fn unlinked(font: &Font) -> Cow<'_, Font> {

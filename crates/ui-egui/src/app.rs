@@ -287,7 +287,14 @@ impl FontcraftApp {
         let mut list: Vec<Value> =
             fontcraft_engine::command_specs().iter().filter_map(|c| serde_json::to_value(c.info(&self.session)).ok()).collect();
         list.extend(UI_COMMANDS.iter().map(|(id, label, menu, shortcut, params)| {
-            json!({"id": id, "label": label, "menu": menu, "shortcut": if shortcut.is_empty() { Value::Null } else { json!(shortcut) }, "params": params, "ui": true, "enabled": true})
+            let mut entry = json!({"id": id, "label": label, "menu": menu, "shortcut": if shortcut.is_empty() { Value::Null } else { json!(shortcut) }, "params": params, "ui": true, "enabled": true});
+            let files = shell::ui_file_params(id);
+            if !files.is_empty()
+                && let (Some(map), Ok(declared)) = (entry.as_object_mut(), serde_json::to_value(files))
+            {
+                map.insert("file_params".into(), declared);
+            }
+            entry
         }));
         json!({ "commands": list })
     }

@@ -426,3 +426,43 @@ fn display_and_panel_toggles_change_what_is_shown() {
     assert!(tools.to_string().contains("\"knife\""), "{tools}");
     assert_eq!(tools["active"], "select", "{tools}");
 }
+
+#[test]
+fn shell_commands_that_name_files_declare_them() {
+    // A restricted MCP server (`--root`) checks only the file parameters a command declares, so a
+    // shell parameter that looks like a path is declared in `UI_FILE_PARAMS` or listed here.
+    const NOT_FILES: &[(&str, &str, &str)] = &[
+        ("view.setReferenceFont", "remove", "a listed reference font's path; no file is read"),
+        ("fontView.selectSidebarEntries", "entries", "a sidebar entry's path, not a file"),
+        ("font.compareInTable", "fonts", "open documents only"),
+        ("url.show", "files", "refused whenever file access is restricted (INDIRECT_COMMANDS)"),
+        ("url.show", "path", "inside `files`; refused whenever file access is restricted"),
+        ("dialog.externalChanges", "font", "an open document's position"),
+        ("file.openRecent", "path", "refused whenever file access is restricted (INDIRECT_COMMANDS)"),
+    ];
+    const PATH_NAMES: &[&str] =
+        &["path", "paths", "file", "files", "folder", "folders", "destination", "directory", "output", "input", "font", "fonts"];
+    let mut missing = Vec::new();
+    for (id, _, _, _, params) in UI_COMMANDS.iter() {
+        let part = params.split('→').next().unwrap_or(params);
+        for piece in part.split(['{', ',']) {
+            let Some((name, ty)) = piece.split_once(':') else { continue };
+            let name = name.trim().trim_end_matches('?');
+            if name.is_empty() || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+                continue;
+            }
+            let ty = ty.trim_start().trim_start_matches('[').to_lowercase();
+            let looks = PATH_NAMES.contains(&name) || ["path", "file", "folder"].iter().any(|w| ty.starts_with(w));
+            let declared = crate::shell::ui_file_params(id).iter().any(|f| f.name == name);
+            let excused = NOT_FILES.iter().any(|(c, n, _)| c == id && *n == name);
+            if looks && !declared && !excused {
+                missing.push(format!("{id}: `{name}`"));
+            }
+        }
+    }
+    assert!(missing.is_empty(), "declare these in UI_FILE_PARAMS or list them in NOT_FILES with the reason:\n{}", missing.join("\n"));
+    let app = FontcraftApp::default();
+    let listed = app.commands();
+    let entry = listed["commands"].as_array().unwrap().iter().find(|c| c["id"] == "file.showInFinder").unwrap();
+    assert_eq!(entry["file_params"][0]["name"], "path");
+}

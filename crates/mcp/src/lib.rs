@@ -375,7 +375,14 @@ impl Server {
                 let names_document =
                     facts.files.iter().any(|f| f.form == policy::FileForm::Document && params.get(&f.name).is_some_and(|v| !v.is_null()));
                 let open = if names_document { self.open_documents()? } else { Vec::new() };
-                self.policy.check_params(facts, params, &open)?;
+                let reads = self.policy.check_params_reads(facts, params, &open)?;
+                let what = format!("`{id}`");
+                for path in &reads {
+                    self.policy.check_references(path, &what)?;
+                    if id == "project.open" {
+                        self.check_project_link(path, &what)?;
+                    }
+                }
             }
         }
         if id == policy::BATCH_COMMAND && self.policy.is_restricted() {
@@ -428,12 +435,31 @@ impl Server {
                     for (key, what) in keys {
                         if let Some(path) = project.get(*key).and_then(Value::as_str) {
                             self.policy.check_implicit_path(path, &format!("`{id}` {what}"))?;
+                            if *key == "font" {
+                                self.policy.check_references(std::path::Path::new(path), &format!("`{id}`"))?;
+                            }
                         }
                     }
                 }
                 Ok(())
             }
         }
+    }
+
+    /// Checks the font a project file links, which `project.open` reads, and the files that font
+    /// reads in turn.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn check_project_link(&self, project: &std::path::Path, what: &str) -> Result<(), String> {
+        // A project file that cannot be read links nothing; project.open then fails on its own.
+        let Ok(Some(font)) = fontcraft_engine::project::linked_font(project) else { return Ok(()) };
+        let text = font.to_str().ok_or_else(|| format!("{what}: the project's linked font is not a UTF-8 path"))?;
+        self.policy.check_implicit_path(text, &format!("{what} reads the project's linked font"))?;
+        self.policy.check_references(&font, what)
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn check_project_link(&self, _: &std::path::Path, _: &str) -> Result<(), String> {
+        Ok(())
     }
 
     /// The titles and paths of the open documents.
@@ -778,6 +804,35 @@ mod tests {
         let save = json!({"name": "m", "steps": [{"command": "glyph.newGlyph", "params": {"name": "x"}}]});
         let (is_error, text) = tool(&mut s, "run_command", json!({"command": "script.saveActionSet", "params": save}));
         assert!(is_error && text.contains("Macros folder"), "{text}");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// Files a source or a project refers to are checked before they are read.
+    #[test]
+    fn files_a_source_or_project_refers_to_lie_inside_the_roots() {
+        let dir = std::env::temp_dir().join(format!("fontcraft-mcp-references-{}", std::process::id()));
+        let (root, outside) = (dir.join("root"), dir.join("outside"));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        let rooted = || Policy::unrestricted().root(&root).unwrap().base_dir(&root);
+
+        // A designspace inside the roots whose source lies outside them.
+        let doc = r#"<?xml version="1.0"?><designspace format="5.0"><sources><source filename="../outside/A.ufo" name="A"/></sources></designspace>"#;
+        std::fs::write(root.join("ds.designspace"), doc).unwrap();
+        let mut s = restricted(rooted());
+        let (is_error, text) = tool(&mut s, "run_command", json!({"command": "file.open", "params": {"path": "ds.designspace"}}));
+        assert!(is_error && text.contains("--root") && text.contains("A.ufo"), "{text}");
+
+        // A project inside the roots whose linked font lies outside them.
+        let mut h = Headless::with_document();
+        let font = outside.join("f.fontcraft");
+        h.execute("file.saveAs", &json!({"path": font})).unwrap();
+        h.execute("file.newProject", &json!({})).unwrap();
+        h.execute("project.linkFont", &json!({"font": font})).unwrap();
+        h.execute("project.save", &json!({"path": root.join("p.fontcraftproject")})).unwrap();
+        let mut s = Server::with_policy(Box::new(h), rooted());
+        let (is_error, text) = tool(&mut s, "run_command", json!({"command": "project.open", "params": {"path": "p.fontcraftproject"}}));
+        assert!(is_error && text.contains("linked font") && text.contains("--root"), "{text}");
         std::fs::remove_dir_all(&dir).ok();
     }
 

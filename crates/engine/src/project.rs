@@ -342,6 +342,14 @@ pub(crate) fn read_font(path: &Path) -> Result<(Font, Vec<String>)> {
     Ok((font, warnings))
 }
 
+/// The linked font the project file at `path` names, resolved against the project's folder as
+/// `project.open` resolves it; `None` when it names none. For surfaces that check the files a
+/// command reads before running it.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn linked_font(path: &Path) -> Result<Option<PathBuf>> {
+    Ok(from_stored(read_file(path)?, Some(path)).font)
+}
+
 /// Reads a project file, at most [`fontcraft_format::project::MAX_PROJECT_BYTES`].
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn read_file(path: &Path) -> Result<StoredProject> {

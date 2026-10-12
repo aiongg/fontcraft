@@ -287,15 +287,44 @@ impl Policy {
     /// (and the app, whose working directory may differ, reads the same file). `open` lists the
     /// titles and paths of the open documents, which a document parameter may name instead.
     pub fn check_params(&self, facts: &CommandFacts, params: &mut Value, open: &[String]) -> Result<(), String> {
-        let Some(roots) = self.path_roots() else { return Ok(()) };
-        let Value::Object(map) = params else { return Ok(()) };
-        let mut checker = Checker { roots, base: self.base()?, open, left: MAX_PATHS };
+        self.check_params_reads(facts, params, open).map(|_| ())
+    }
+
+    /// As [`Policy::check_params`], answering the resolved paths of the files the command reads,
+    /// whose own references ([`Policy::check_references`]) the caller checks next.
+    pub fn check_params_reads(&self, facts: &CommandFacts, params: &mut Value, open: &[String]) -> Result<Vec<PathBuf>, String> {
+        let Some(roots) = self.path_roots() else { return Ok(Vec::new()) };
+        let Value::Object(map) = params else { return Ok(Vec::new()) };
+        let mut checker = Checker { roots, base: self.base()?, open, left: MAX_PATHS, reading: false, reads: Vec::new() };
         for f in &facts.files {
             if let Some(value) = map.get_mut(&f.name) {
+                checker.reading = !f.write;
                 checker.value(f, value)?;
             }
         }
-        Ok(())
+        Ok(checker.reads)
+    }
+
+    /// Checks the files that reading the source at `path` reads in turn (a designspace's UFOs, the
+    /// Import Font and Import Master files) against the roots, before any of them is read. `what`
+    /// names the command for the refusal.
+    pub fn check_references(&self, path: &Path, what: &str) -> Result<(), String> {
+        if self.path_roots().is_none() {
+            return Ok(());
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let reader = path.display().to_string();
+            fontcraft_engine::io::check_references(path, &mut |p| {
+                let text = p.to_str().ok_or_else(|| format!("{what}: {reader} refers to a path that is not UTF-8"))?;
+                self.check_implicit_path(text, &format!("{what} reads, through {reader},"))
+            })
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = (path, what);
+            Ok(())
+        }
     }
 
     /// Checks one path a command writes or reads without naming it; `what` comes before the
@@ -329,6 +358,10 @@ struct Checker<'a> {
     open: &'a [String],
     /// Paths still allowed before the command is refused ([`MAX_PATHS`]).
     left: usize,
+    /// The parameter being checked names files the command reads.
+    reading: bool,
+    /// The resolved paths of the files the command reads.
+    reads: Vec<PathBuf>,
 }
 
 impl Checker<'_> {
@@ -413,6 +446,9 @@ impl Checker<'_> {
         let resolved = resolve(&self.base, text).map_err(|e| format!("`{key}`: {e}"))?;
         if !self.roots.iter().any(|r| resolved.starts_with(r)) {
             return Err(format!("`{key}`: {text} lies outside the folders this server may use (--root)"));
+        }
+        if self.reading {
+            self.reads.push(resolved.clone());
         }
         resolved.to_str().map(str::to_string).ok_or_else(|| format!("`{key}`: {text} does not resolve to a UTF-8 path"))
     }

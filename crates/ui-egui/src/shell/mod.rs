@@ -99,6 +99,20 @@ pub const MODULES: &[(&[UiCommand], Handler)] = &[
     (crate::dialogs::compare_fonts::COMMANDS, crate::dialogs::compare_fonts::run),
 ];
 
+/// The shell commands' parameters that name files, declared as engine commands declare theirs
+/// (`fontcraft_engine::cmd::FileParam`), so surfaces that restrict file access (the MCP server's
+/// `--root`) check them. Every shell command whose parameters name a file is listed here.
+pub const UI_FILE_PARAMS: &[(&str, &[fontcraft_engine::cmd::FileParam])] = &[
+    ("file.showInFinder", &[fontcraft_engine::cmd::FileParam::read("path")]),
+    ("view.setReferenceFont", &[fontcraft_engine::cmd::FileParam::read("path")]),
+    ("view.filterByEncodingFile", &[fontcraft_engine::cmd::FileParam::read("path")]),
+];
+
+/// The file parameters [`UI_FILE_PARAMS`] declares for the shell command `id`.
+pub fn ui_file_params(id: &str) -> &'static [fontcraft_engine::cmd::FileParam] {
+    UI_FILE_PARAMS.iter().find(|(c, _)| *c == id).map_or(&[], |(_, f)| f)
+}
+
 /// Every shell command, in module order.
 pub static UI_COMMANDS: LazyLock<Vec<UiCommand>> = LazyLock::new(|| MODULES.iter().flat_map(|(c, _)| c.iter().copied()).collect());
 

@@ -312,6 +312,59 @@ fn open_designspace(path: &Path, text: &str) -> Result<Font> {
     Ok(fontcraft_io_ufo::designspace::read(text, &ufos)?)
 }
 
+/// Most files [`check_references`] passes to its callback for one source.
+pub const MAX_REFERENCES: usize = 1_024;
+
+/// Passes every file that opening the source at `path` reads besides `path` itself to `admit`,
+/// each before any of them is read: the UFOs a designspace names, then the files of the font's
+/// Import Font and Import Master parameters, and the UFOs of a linked designspace. Stops at the
+/// first refusal. A file that does not open as a source refers to nothing. Surfaces that restrict
+/// file access (the MCP server's `--root`) call it on every path a command reads.
+pub fn check_references(path: &Path, admit: &mut dyn FnMut(&Path) -> std::result::Result<(), String>) -> std::result::Result<(), String> {
+    let mut left = MAX_REFERENCES;
+    follow_references(path, true, admit, &mut left)
+}
+
+fn follow_references(
+    path: &Path,
+    links: bool,
+    admit: &mut dyn FnMut(&Path) -> std::result::Result<(), String>,
+    left: &mut usize,
+) -> std::result::Result<(), String> {
+    let pass = |p: &Path, admit: &mut dyn FnMut(&Path) -> std::result::Result<(), String>, left: &mut usize| {
+        *left = left.checked_sub(1).ok_or_else(|| format!("{} refers to more than {MAX_REFERENCES} files", path.display()))?;
+        admit(p)
+    };
+    if !path.is_dir() {
+        // A compiled font refers to nothing; a few bytes tell, where opening it would decompile it.
+        let mut head = Vec::new();
+        let Ok(file) = std::fs::File::open(path) else { return Ok(()) };
+        if file.take(64).read_to_end(&mut head).is_err() || fontcraft_decompile::sniff(&head).is_some() {
+            return Ok(());
+        }
+        let bytes = read_file(path).unwrap_or_default();
+        let text = std::str::from_utf8(&bytes).unwrap_or_default();
+        let body = text.trim_start_matches('\u{feff}').trim_start();
+        if body.starts_with('<') && is_designspace(body) {
+            let dir = path.parent().unwrap_or(Path::new("."));
+            for rel in fontcraft_io_ufo::designspace::ufo_paths(text).unwrap_or_default() {
+                pass(&dir.join(rel), &mut *admit, left)?;
+            }
+        }
+    }
+    if !links {
+        return Ok(());
+    }
+    let Ok((font, _)) = open(path, None) else { return Ok(()) };
+    for linked in crate::linked::linked_paths(&font, Some(path)) {
+        pass(&linked, &mut *admit, left)?;
+        // A linked file's own links are not followed (`linked`), but a linked designspace reads
+        // its UFOs.
+        follow_references(&linked, false, &mut *admit, left)?;
+    }
+    Ok(())
+}
+
 /// Whether text that starts with `{` is a native file: JSON whose first key is a quoted string
 /// followed by `:` and which names the `fontcraft` format near the start.
 fn is_native(body: &str) -> bool {
