@@ -213,6 +213,10 @@ pub fn open(path: &Path, face: Option<u32>) -> Result<(Font, Vec<String>)> {
             let files = read_folder(path)?;
             return Ok((fontcraft_io_glyphs::read_package(&files)?, Vec::new()));
         }
+        if path.join("font.props").is_file() {
+            let files = read_folder(path)?;
+            return sfd_source(path, fontcraft_io_sfd::read_sfdir(&files));
+        }
         return Err(EngineError::Io(format!("{} is a folder but not a font source", path.display())));
     }
     let bytes = read_file(path)?;
@@ -228,6 +232,9 @@ pub fn open(path: &Path, face: Option<u32>) -> Result<(Font, Vec<String>)> {
     if fontcraft_decompile::sniff(&bytes).is_some() {
         let d = fontcraft_decompile::decompile(&bytes, face)?;
         return Ok((d.font, d.warnings));
+    }
+    if fontcraft_io_sfd::is_sfd(&bytes) {
+        return sfd_source(path, fontcraft_io_sfd::read_sfd(&bytes));
     }
     let text = std::str::from_utf8(&bytes).map_err(|_| EngineError::Io(format!("{} is not a font source: it is not UTF-8 text", path.display())))?;
     let body = text.trim_start_matches('\u{feff}').trim_start();
@@ -249,6 +256,17 @@ pub fn open(path: &Path, face: Option<u32>) -> Result<(Font, Vec<String>)> {
         return Ok((fontcraft_format::load(&bytes)?, Vec::new()));
     }
     Ok((fontcraft_io_glyphs::read(text)?, Vec::new()))
+}
+
+/// An SFD file or folder as read, with what the reader skipped as warnings. There is no SFD
+/// writer, so the document opens view-only as a compiled font does: Save cannot replace the
+/// source with another format, and Save As chooses one.
+fn sfd_source(path: &Path, read: std::result::Result<fontcraft_io_sfd::Import, fontcraft_io_sfd::SfdError>) -> Result<(Font, Vec<String>)> {
+    let import = read.map_err(|e| EngineError::Io(format!("cannot read the SFD source {}: {e}", path.display())))?;
+    let mut font = import.font;
+    font.source.format = SourceFormat::Binary;
+    let warnings = import.skipped.iter().map(|s| format!("skipped {} ({}×)", s.what, s.count)).collect();
+    Ok((font, warnings))
 }
 
 /// Whether XML text has `<designspace` as its root element: the first element after the
