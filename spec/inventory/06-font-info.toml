@@ -37,6 +37,7 @@ status = "handbook"
 notes = "Documented, not yet observed. The Features tab is M8's (fontInfo.features); until M8 the tab shows the stored prefixes, classes and features read-only. M7 plan § 4: M7.15."
 guesses = [
   "Font Info opens on the tab it last showed for that document, and on the Font tab the first time; opening it twice in the reference app settles it.",
+  "One Font Info window shows the active document, and switching documents shows the other document's information in it; opening Font Info in two documents of the reference app settles whether each keeps a window of its own.",
 ]
 observe = [
   "In font A (m7-one), open Font Info, switch to the Exports tab, close the window and open it again: note which tab it opens on.",
@@ -68,7 +69,7 @@ milestone = "M7"
 summary = "Switches the open Font Info window to one of its six tabs. The handbook only describes clicking the tabs; no shortcut is given."
 ref = "Font Info"
 status = "inferred"
-notes = "Our own command so a script can switch tabs; the reference app has only the tab clicks. M7 plan § 4: M7.15."
+notes = "Our own command so a script can switch tabs; the reference app has only the tab clicks. M7 plan § 4: M7.15. When the window is closed the command opens it on the tab."
 
 [[command]]
 id = "font.info.get"
@@ -269,6 +270,12 @@ summary = "Clicking a row selects it and Cmd+click builds a selection of several
 ref = "Font Info"
 status = "handbook"
 notes = "Documented, not yet observed. M7 plan § 4: M7.15."
+guesses = [
+  "Shift-click adds every row between the last row clicked and the clicked one; Shift-clicking in the reference app settles it.",
+  "Copy puts the rows' JSON on the system clipboard, and a selected row of a parameter whose name repeats copies every row of that name; pasting copied rows into a text editor from the reference app settles the format.",
+  "Paste replaces the rows with the same key in the shown font, masters or exports and appends repeatable parameters; pasting a row the target has in the reference app settles it.",
+  "Cmd+Delete removes the selected fields in one undo step and each selected parameter in one of its own, and leaves built-in fields; undoing after Cmd+Delete in the reference app settles the steps.",
+]
 
 [[behavior]]
 id = "fontInfo.rows.localizable"
@@ -278,6 +285,9 @@ summary = "A localizable field shows a language menu and a plus button; each add
 ref = "Font Info"
 status = "handbook"
 notes = "Documented, not yet observed. M7 plan § 4: M7.15."
+guesses = [
+  "The plus button adds the first language the field lacks, in the name table's tag order after the default language, with empty text; picking another language in a row's menu moves its text there; clicking the plus in the reference app settles both.",
+]
 
 [[behavior]]
 id = "fontInfo.general.textTokens"
@@ -324,6 +334,7 @@ status = "handbook"
 notes = "Documented, not yet observed. The fields offered per tab are listed in font.info.listFields. M7 plan § 4: M7.15."
 guesses = [
   "The picker lists only the fields not yet present on the selected font, masters or exports, in the order of font.info.listFields, and allows several to be selected; the picker of each tab in the reference app settles it.",
+  "A click selects one field and Cmd-click or Shift-click adds or removes one more; Add adds them in list order, each as an undo step of its own; using the picker in the reference app settles both.",
 ]
 observe = [
   "In font A (m7-one), click the plus button beside General on the Font tab: note the fields offered in order, and which of them get a language menu once added.",
@@ -690,6 +701,7 @@ notes = "Documented, not yet observed. The list and descriptions come from the p
 guesses = [
   "The list shows every catalogue parameter allowed in the tab's scope, in alphabetical order, including those already present; the search matches any part of the name, ignoring case; the picker in the reference app settles order and matching.",
   "A parameter whose appendix entry names no scope is offered in all three tabs; the picker of each tab in the reference app settles it.",
+  "The search also matches the descriptions and the other spellings of a name, and Add gives each parameter its kind's empty value; searching for a word of a description in the reference app settles the first, adding Filter there the second.",
 ]
 observe = [
   "In font A (m7-one), click the plus button beside Custom Parameters on the Font, Masters and Exports tabs: note which of typoAscender, Remove Glyphs, Filter, glyphOrder, versionString, familyNames and copyrights each tab offers, the order of the list, and whether the search matches inside names.",

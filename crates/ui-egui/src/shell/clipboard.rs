@@ -54,7 +54,7 @@ fn special_key() -> egui::Id {
 pub fn events(app: &mut FontcraftApp, ctx: &egui::Context) -> Vec<(&'static str, Value)> {
     let asked = ctx.data_mut(|d| d.remove_temp::<u64>(special_key()));
     let special_asked = asked.is_some_and(|frame| ctx.cumulative_frame_nr() <= frame.saturating_add(1));
-    if app.dialog.is_some() || ctx.text_edit_focused() || super::kerning_window::takes_clipboard(app) {
+    if app.dialog.is_some() || ctx.text_edit_focused() || super::kerning_window::takes_clipboard(app) || super::font_info::takes_clipboard(app) {
         return Vec::new();
     }
     let (events, alt) = ctx.input(|i| {
@@ -146,7 +146,11 @@ fn paste_special(app: &FontcraftApp, text: String) -> Value {
 /// Edit › Copy while the Kerning window takes the clipboard: the selected pairs go on it as
 /// kerning-text. `None`: the run is not the window's. (Edit › Paste asks for the clipboard's text
 /// as everywhere, and the window takes the text when it arrives.)
+/// The Font Info window's Copy and Cmd+Delete on its rows come first (`font_info::menu_command`).
 pub fn kerning_window_copy(app: &mut FontcraftApp, id: &str) -> Option<Result<Value, String>> {
+    if let Some(result) = super::font_info::menu_command(app, id) {
+        return Some(result);
+    }
     if id != COPY || !super::kerning_window::takes_clipboard(app) {
         return None;
     }
