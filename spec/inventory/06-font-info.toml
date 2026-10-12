@@ -2349,12 +2349,16 @@ label = "List Code Snippets"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{}"
+params = "{folder?: path}"
 area = "features"
 milestone = "M8"
 summary = "Returns the predefined and user-defined feature code snippets offered by the snippets button, including the automatic-code placeholder."
 ref = "Font Info › Features › Manual Feature Code"
 status = "inferred"
+notes = "The built-in snippets come first, then one group per user file in file-name order; a file that cannot be read is left out and named in `warnings`, and a missing folder has no user snippets."
+guesses = [
+  "The built-in snippets come before the user's groups, and the groups follow file-name order; opening the snippets menu with two snippet files in the folder would settle the order.",
+]
 
 [[command]]
 id = "font.features.insertSnippet"
@@ -2362,13 +2366,16 @@ label = "Insert Snippet"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{kind: 'prefix'|'class'|'feature', name: string, snippet: string, position?: integer}"
+params = "{kind: 'prefix'|'class'|'feature', name: string, index?: integer, snippet: title, group?: string, position?: integer, end?: integer, folder?: path}"
 area = "features"
 milestone = "M8"
 summary = "Inserts a snippet chosen from the snippets button at the bottom-right of the tab into the code of the current entry. One snippet inserts the '# Automatic Code' placeholder line."
 ref = "Font Info › Features › Manual Feature Code; Implicit Features"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. The snippet is named by its title and, for a user snippet, its group; `position` and `end` count characters, and the inserted code replaces the characters between them (`snippet.insertion`). An automatic entry is refused, as Set Feature Code refuses it. One undo step."
+guesses = [
+  "A title without a group finds the built-in snippet first, then the first user snippet of that title in menu order; only the menu names snippets in the reference app, so nothing there settles it.",
+]
 
 [[command]]
 id = "font.features.openSpec"

@@ -58,6 +58,9 @@ serde = { version = "1", features = ["derive", "rc"] }
 serde_json = { version = "1", features = ["float_roundtrip", "raw_value"] }
 log = "0.4"
 base64 = "0.22"
+# TOML, the editable form of the user's feature code snippet files (MIT OR Apache-2.0). Pure Rust,
+# builds for wasm.
+toml = "1"
 # Curve booleans for overlap removal (MIT OR Apache-2.0). See docs/plans/M3.md › M3.6.
 linesweeper = "0.5"
 # Unicode compatibility decomposition (NFKD) for PostScript strings in CFF (MIT OR Apache-2.0).

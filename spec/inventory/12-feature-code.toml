@@ -172,16 +172,16 @@ id = "font.features.showSnippetFolder"
 label = "Show Snippet Folder"
 menu = []
 shortcut = ""
-kind = "ui"
-params = "{}"
+kind = "engine"
+params = "{folder?: path}"
 area = "features"
 milestone = "M8"
 summary = "Reveals the folder in which user snippet files are placed."
 ref = "Appendix › Custom Feature Code Snippets"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. The engine command creates the folder when it is missing and returns its path; the app opens that path in the file manager. The web app has no snippet folder."
 guesses = [
-  "The snippet folder is `snippets/` inside FontCraft's configuration folder, created on first use; the reference's folder is inside its application support folder, which the running app would show.",
+  "The snippet folder is `snippets` inside FontCraft's settings folder (the folder of `settings.json`), created when Show Snippet Folder is chosen; the reference's folder is inside its application support folder, which the running app would show.",
 ]
 observe = [
   "In any font, choose Show Snippet Folder from the snippets menu: note which folder opens.",
@@ -2280,7 +2280,8 @@ ref = "Font Info › Features › Manual Feature Code; Font Info › Features �
 status = "handbook"
 notes = "Documented, not yet observed."
 guesses = [
-  "The built-in snippets are `# Automatic Code`, a named lookup block, a contextual substitution, a languagesystem line and a stylistic set with a featureNames block; opening the snippets menu in the reference app would settle the list.",
+  "The built-in snippets are Automatic Code, Lookup, Contextual Substitution, Language System and Stylistic Set Name (a featureNames block with a substitution); opening the snippets menu in the reference app would settle the list and the titles.",
+  "The Automatic Code snippet inserts `# Automatic Code` followed by a line break, so code after the caret is not commented out; inserting it in the middle of a line in the reference app would settle it.",
 ]
 observe = [
   "In any font, open the snippets menu of the feature editor: write down the built-in snippets.",
@@ -2293,7 +2294,10 @@ milestone = "M8"
 summary = "User snippets live in files named FeatureSnippets<NAME>.plist in the snippet folder; NAME becomes the group name in the menu."
 ref = "Appendix › Custom Feature Code Snippets"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. FeatureSnippets<NAME>.toml files are read too (`snippet.nativeFormat`). At most 256 files are read, the first by name; other files in the folder are ignored."
+guesses = [
+  "The extension is matched without regard to case and the `FeatureSnippets` prefix with it; a file whose NAME is empty is skipped with a warning; a snippet folder with such files in the reference app would settle both.",
+]
 
 [[behavior]]
 id = "snippet.fileFormat"
@@ -2302,7 +2306,11 @@ milestone = "M8"
 summary = "A snippet file is a property list holding an array of dictionaries, each with a `title` (menu label) and `code` (text to insert, may span lines)."
 ref = "Appendix › Custom Feature Code Snippets"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Read as OpenStep text (the handbook's example) or XML, in UTF-8 or UTF-16 with a byte-order mark; line ends become line feeds. Limits: 1 MB per file, 10,000 snippets from all files, titles of 1 to 256 characters. A file that is not a list of entries, too large, binary or badly encoded is skipped with a warning naming it."
+guesses = [
+  "An entry without a text `title` or `code` is skipped and counted in one warning for its file while the file's other entries are kept; a file with such an entry in the reference app would settle it.",
+  "A binary property list is refused with a message; whether the reference app reads one would settle it.",
+]
 
 [[behavior]]
 id = "snippet.insertion"
@@ -2325,3 +2333,4 @@ milestone = "M8"
 summary = "FontCraft reads the reference's plist snippet files unchanged and also accepts the same data as TOML (`[[snippet]] title, code`) so snippets can be edited without plist tools."
 ref = "Appendix › Custom Feature Code Snippets"
 status = "inferred"
+notes = "A TOML snippet file is named FeatureSnippets<NAME>.toml and holds `[[snippet]]` tables with `title` and `code`; other keys are ignored. The limits and warnings are those of the property-list form (`snippet.fileFormat`)."
