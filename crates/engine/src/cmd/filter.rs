@@ -72,6 +72,8 @@ pub fn specs() -> Vec<CommandSpec> {
             targets: if f.takes_selection() { SELECTION_TARGETS } else { LAYER_TARGETS },
             when: None,
             context: &[],
+            files: &[],
+            writes_files: false,
         })
         .collect();
     v.extend([

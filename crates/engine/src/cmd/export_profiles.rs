@@ -71,7 +71,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{fonts?: [title or path] (default: the active document), profiles: [name], destination?: folder, bySource?: bool, installTemporarily?: bool, timestamp?: number|\"now\"} export every listed open font through every listed export profile in one run: each profile's fonts go into its output subfolder of the destination, or with bySource: true of the folder that holds each font's source file (give one or the other). Each profile builds the font's exportable instances as file.exportAll does, in the profile's outline format and containers, with its overlap removal; instances between masters are skipped and listed. Two profiles that would write the same file are refused. A failing export writes nothing. installTemporarily (installing the fonts until the app quits) is not supported yet → {profiles: [{profile, documents: [{title, destination, fonts, skipped}]}], written, warnings}",
             has_doc,
             export_with_profiles
-        ),
+        ).files(const { &[FileParam::write("destination")] }).writes_files(),
         cmd!(
             "file.saveExportProfile",
             "Save Export Profile",
@@ -107,7 +107,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{glyphs?: [name] (default: every glyph), layer?: id (default: the first master's layer), format: \"svg\"|\"pdf\"|\"png\", directory?: folder, pixelsPerEm?: number (PNG only, 1 to 16384, default 256)} write one picture per glyph of the chosen layer, named after the glyph (characters a file name cannot hold become `_`; names that differ only in case get a number). A picture spans the advance width and the master's descender to ascender, widened to the outline where it reaches further; components are drawn, open paths are not. SVG and PDF are in font units (one point per unit, a PDF scaled down to at most 14400 points a side); PNG is black on a transparent background. Glyphs without the layer are skipped and listed. Without a directory the pictures are returned as dataBase64. A failing export writes nothing → {format, files: [{glyph, name, bytes, path? | dataBase64?}], skipped: [{glyph, reason}]}",
             has_doc,
             export_artwork
-        )
+        ).files(const { &[FileParam::write("directory")] }).writes_files()
         .targets(&[TargetKind::Glyphs]),
     ]
 }

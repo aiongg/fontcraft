@@ -35,7 +35,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{font: path, face?: number|name, tables: [\"TAG\"|\"TAG=FILE\"|{tag, file?}] | \"all\", outputDir?: path, noClobber?: bool} writes the raw bytes of each table to a file (default: the font's name without extension, a period and the tag with other characters than letters and digits as underscores) and changes nothing else; a table the font does not have is a warning → {files: [{tag, path, length}], warnings: [string]}",
             always,
             tables_extract
-        ),
+        ).files(const { &[FileParam::read("font"), FileParam::write("tables").tables(), FileParam::write("outputDir")] }).writes_files(),
         cmd!(
             query "tables.add",
             "Add or Replace Tables",
@@ -44,7 +44,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{font: path, face?: number|name, tables: [\"TAG=FILE\"|{tag, file?, from?: {font: path, face?: number|name}}], output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool} puts raw tables from files or from another font into the font, replacing tables with the same tag, and writes it in the recommended order with fresh checksums (default output: FONT.edited.EXT) → {output, added: [tag], replaced: [tag]}",
             always,
             tables_add
-        ),
+        ).files(const { &[FileParam::read("font"), FileParam::read("tables").tables(), FileParam::write("output"), FileParam::write("outputDir")] }).writes_files(),
         cmd!(
             query "tables.delete",
             "Delete Tables",
@@ -53,7 +53,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{font: path, face?: number|name, tables: [tag], output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool} removes the tables and writes the font with fresh checksums; a table the font does not have is a warning → {output, deleted: [tag], warnings: [string]}",
             always,
             tables_delete
-        ),
+        ).files(const { &[FileParam::read("font"), FileParam::write("output"), FileParam::write("outputDir")] }).writes_files(),
         cmd!(
             query "tables.edit",
             "Edit Tables",
@@ -62,7 +62,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{font: path, face?: number|name, extract?: [\"TAG\"|\"TAG=FILE\"|{tag, file?}], delete?: [tag], add?: [\"TAG=FILE\"|{tag, file}], output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool} extracts, then deletes, then adds, whatever order the parameters are in, and writes the font once when it changed → {files: [{tag, path, length}], output?, deleted: [tag], added: [tag], replaced: [tag], warnings: [string]}",
             always,
             tables_edit
-        ),
+        ).files(const { &[FileParam::read("font"), FileParam::write("extract").tables(), FileParam::read("add").tables(), FileParam::write("output"), FileParam::write("outputDir")] }).writes_files(),
         cmd!(
             query "tables.checksum",
             "Check Table Checksums",
@@ -71,7 +71,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{font: path, face?: number|name|\"all\", fix?: bool, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool} checks every table checksum and head.checkSumAdjustment (every member of a collection by default); with fix, writes the font again with correct values (default output: FONT.fixed.EXT) → {ok, faces: [{face, ok, mismatches: [{tag, stored, computed}], adjustment?: {stored, computed}}], output?}",
             always,
             tables_checksum
-        ),
+        ).files(const { &[FileParam::read("font"), FileParam::write("output"), FileParam::write("outputDir")] }).writes_files(),
         cmd!(
             query "tables.reorder",
             "Reorder Tables",
@@ -80,7 +80,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{font: path, face?: number|name, order?: \"recommended\"|[tag], output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool} writes the font with its tables in the recommended order, or the tags given first and the others after them in file order; table bytes are unchanged (default output: FONT.reordered.EXT) → {output, order: [tag]}",
             always,
             tables_reorder
-        ),
+        ).files(const { &[FileParam::read("font"), FileParam::write("output"), FileParam::write("outputDir")] }).writes_files(),
         cmd!(
             query "tables.show",
             "Show Tables",
@@ -89,7 +89,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{font: path, face?: number|name, tables?: [tag], path?: string, depth?: number, offsets?: bool, glyphNames?: bool} the decoded fields of tables as a tree (depth 3 by default; deeper records are counted in `more`); path narrows to one record, as GPOS.lookupList.lookups[3]; a table that is not decoded is listed with its length and any error; nothing is written → {tables: [{tag, length, checksum, decoded, truncated, tree, error?}]}, tree = {name, type, value?, offset?, children?, more?}",
             always,
             tables_show
-        ),
+        ).files(const { &[FileParam::read("font")] }),
     ]
 }
 

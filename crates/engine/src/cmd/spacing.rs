@@ -35,6 +35,8 @@ macro_rules! nudge_spec {
             targets: &[TargetKind::Glyphs],
             when: Some("textMode"),
             context: &[],
+            files: &[],
+            writes_files: false,
         }
     };
 }

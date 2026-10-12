@@ -65,7 +65,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{file?: path of a .fea file | text?: feature code (exactly one of the two)} adds the prefixes, classes and features of a feature file after the font's, as one undo step. A file's include statements are replaced by the files they name, which must lie inside the file's folder; text keeps its includes as written. A file in the form UFO features are written in splits back into its entries with their flags; any other file splits at the top level: each class definition is a class, each feature block a feature, and each run of other statements and comments between them a prefix named Prefix (a `# Prefix: name` comment names the prefix that follows it). A class or prefix whose name the font already has gets a numeric suffix (Upper2), and the imported code's references to a renamed class follow it; a feature keeps its tag even when the font has one with that tag. Refused: unbalanced braces, an unclosed string, a missing or outside include, nesting deeper than 64 or includes deeper than 50, more than 16 MB of text, no feature code → {source, prefixes, classes, features (the names added), counts: {prefixes, classes, features}, renamed: [{kind, from, to}], sharedTags, includes (files read), unresolvedIncludes}",
             has_doc,
             import_features
-        ),
+        ).files(const { &[FileParam::read("file")] }),
         cmd!(
             "file.exportFeatures",
             "Export Features",
@@ -74,7 +74,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{format?: \"fea\" (default) | \"fea-kern\", master?: id (default: the default master), path?: file, destination?: folder, fileName?: name without extension (with destination; default Family-Master, or Family-Master-kern for fea-kern)} writes a feature file. fea: the font's enabled prefixes, classes and features assembled for the master as export compiles them (classes, then prefixes, then features; tokens expanded, the syntax extensions lowered), without running Update first. fea-kern: the master's kerning pairs (those of the master it follows, when linked) as a kern feature: the groups the pairs use as @MMK_L_ and @MMK_R_ classes, then a lookup per direction with glyph pairs first, glyph–group pairs as enum rules next and group pairs last; right-to-left pairs also move the glyph. Values are rounded half up; pairs naming missing glyphs, empty groups or names feature code cannot spell are left out and counted in warnings. With path, or destination, the file is written atomically; with neither, the text is returned → {master, format, bytes, entries?, pairs?, classes?, warnings, path?, text?}",
             has_doc,
             export_features
-        ),
+        ).files(const { &[FileParam::write("path"), FileParam::write("destination")] }).writes_files(),
     ]
 }
 

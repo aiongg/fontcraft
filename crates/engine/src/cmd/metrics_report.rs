@@ -30,7 +30,7 @@ pub fn specs() -> Vec<CommandSpec> {
         "{font: path, face?: int|name, format?: \"text\"|\"json\"|\"csv\"|\"afm\", precision?: \"integer\"|\"real\", aggregateBbox?: bool, sidebearings?: bool, units?: \"font\"|1000, kerning?: bool, statistics?: bool, controlBox?: bool, fontOnly?: bool, glyphs?: selector, excludeGlyphs?: selector, fd?: [int], location?: {axis: number}, output?: path, noClobber?: bool} glyph metrics of a compiled font measured from its outlines: advance, exact bounding box, side bearings, the font bounding box with the glyphs that set its edges, flattened kerning pairs and shape statistics (area, centre of mass, variance, covariance, correlation, slant; area is negative for clockwise outer contours); a selector is a glyph-list string or a list of them → {unitsPerEm, units, glyphs: [{gid, name, unicode?, advance, bounds?, lsb?, rsb?, statistics?}], aggregate?, kerning?, fontStatistics?, warnings, text?, written?}",
         always,
         report_metrics
-    )]
+    ).files(const { &[FileParam::read("font"), FileParam::write("output"), FileParam::write("outputDir")] }).writes_files()]
 }
 
 fn report_metrics(_: &mut Session, p: &Value) -> Result<Value> {

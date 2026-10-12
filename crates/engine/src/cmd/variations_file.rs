@@ -35,7 +35,7 @@ fn map_specs() -> Vec<CommandSpec> {
             "{font: path, location: {axis: number}, from?: \"user\"|\"normalized\", to?: \"normalized\"|\"user\", allAxes?: bool, face?: number} converts a location of a variable font through fvar normalisation and the avar table (cross-axis mappings of avar version 2 included); axes not given are at their default; `to` defaults to the space other than `from`; `location` lists the axes given (with avar version 2, the axes that end away from 0), every axis with allAxes → {axes: [tag], to, location: {axis: number}, user: {axis: number}, normalized: {axis: number}, mapped: {axis: number}}",
             always,
             map_coordinates
-        ),
+        ).files(const { &[FileParam::read("font")] }),
         cmd!(
             "variations.buildAvar",
             "Build avar Table",
@@ -44,7 +44,7 @@ fn map_specs() -> Vec<CommandSpec> {
             "{font: path, designspace?: path, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool} writes the avar table of a TrueType or CFF variable font from the axis maps and cross-axis mappings of a designspace, or rebuilt from the font's own avar table without one; every map the identity and no cross-axis mapping writes no avar table; the output defaults to <name>.avar.<ext> beside the input → {output, avar: bool, version?: 1|2, segments: {axis: [[from, to]]}}",
             always,
             build_avar
-        ),
+        ).files(const { &[FileParam::read("font"), FileParam::read("designspace"), FileParam::write("output"), FileParam::write("outputDir")] }).writes_files(),
     ]
 }
 

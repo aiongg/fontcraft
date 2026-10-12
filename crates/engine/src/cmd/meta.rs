@@ -12,7 +12,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "List Commands",
             [],
             None,
-            "{pattern?: string} every command (or those whose id or label contains `pattern`, ignoring case) → {commands: [{id, label, menu, shortcut, params, query, targets?: [\"glyphs\"|\"layer\"|\"points\"|\"segments\"|\"shapes\"|\"anchors\"|\"guides\"|\"annotations\"], when?, context?: [menus], enabled, disabled_reason?}]}",
+            "{pattern?: string} every command (or those whose id or label contains `pattern`, ignoring case) → {commands: [{id, label, menu, shortcut, params, query, targets?: [\"glyphs\"|\"layer\"|\"points\"|\"segments\"|\"shapes\"|\"anchors\"|\"guides\"|\"annotations\"], when?, context?: [menus], file_params?: [{name, access: \"read\"|\"write\", form: \"path\"|\"tables\"|\"document\", keywords?: [string]}] (the parameters that name files), writes_files?: true (writes to disk, even as a query), enabled, disabled_reason?}]}",
             always,
             list
         ),

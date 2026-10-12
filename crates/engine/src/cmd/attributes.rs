@@ -174,7 +174,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{glyph: name, layer: id (a full-colour layer), side?, shapes?: [index] (default: every path), attribute: \"gradient\" | \"shadow\" | \"innerShadow\" | \"patternImage\", …} add a style to the paths. `gradient` takes the parameters of `attributes.addGradient`. `shadow` and `innerShadow` take blur?: number (font units, 0 to 10000), offset?: [x, y] (font units, within ±10000), color?: \"#RRGGBBAA\"; a new one is black at 50 % opacity with blur 10 and offset [10, −10], and given keys change an existing one. `patternImage` takes image?: path (a file reference). Shadows and pattern images are drawn by image export only and never written to a font → {glyph, layer, shapes, attributes} (as `attributes.setStrokeWidth`)",
             has_doc,
             add_attribute
-        ),
+        ).files(const { &[FileParam::read("image")] }),
     ];
     specs.into_iter().map(|c| c.targets(&[TargetKind::Layer, TargetKind::Shapes])).collect()
 }

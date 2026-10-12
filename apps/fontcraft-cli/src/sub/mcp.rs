@@ -13,7 +13,8 @@ const USAGE: &str = "\
       Run the MCP server on stdio. Default: attach to a running app at 127.0.0.1:7985
       (fontcraft --control 7985), falling back to a headless session with a new font.
       --root DIR: file parameters must lie inside DIR (repeatable; default the working
-      directory; --root / admits every path). --read-only: only commands that read run.
+      directory). --root / admits every path; with no other option nothing is restricted,
+      and macros run. --read-only: only commands that read and write no files run.
       --allow PATTERN: only commands whose id matches a pattern run; --deny PATTERN: commands
       that match are refused, even when allowed. Patterns are shell-style (* and ?) over whole
       command ids, for example 'glyph.*'. Refused commands are tool errors; they change nothing.

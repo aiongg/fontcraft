@@ -46,7 +46,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{files: [path], glyphs?: [names], layer?: id (default: the first master's layer), side?: \"foreground\" | \"background\"} place image files on glyph layers. With `glyphs`, give one file: it goes on each named glyph. Without `glyphs`, each file goes on the glyph named like the file without its extension (`Dje-cy.jpeg` on Dje-cy), case included; files with no such glyph change nothing and are listed. A relative path is relative to the document's folder (to the working directory for a document never saved); the document stores the path relative to its folder, absolute until its first save. The image sits at the layer origin, one point of the image (its stated resolution, else 72 pixels per inch) to one unit, and replaces the layer's image unless that one is locked. PNG, JPEG and TIFF are drawn; PDF, PSD and SVG are kept as references. At most 10,000 files → {placed: [{glyph, layer, file, path, format, pixelWidth, pixelHeight, scale: [x, y], replaced}], unmatched: [file]}",
             has_doc,
             add_image
-        ),
+        ).files(const { &[FileParam::read("files")] }),
         cmd!(
             "image.setTransform",
             "Set Image Transform",

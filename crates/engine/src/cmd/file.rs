@@ -37,7 +37,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{path: string, face?: number} open a font as a new document, recognising it by content: a .fontcraft file, a .glyphs file (format versions 2 to 4), a .glyphspackage folder, a UFO folder (versions 2 and 3), a .designspace file with the UFOs it names (one document, a master per source), or a compiled font (TrueType, OpenType with CFF, a collection member chosen by face, WOFF, WOFF2). A compiled font opens view-only: save it with Save As to a source format. GlyphData*.xml files beside the source and in an Info folder beside it add to the glyph data for this document, unless the font's Ignore custom GlyphData file parameter is on. A UFO or designspace has its composites aligned automatically as it opens, so their metrics follow their bases (aligned counts the glyphs that changed); with the user setting user.disableAutomaticAlignmentForImportedFiles on, the font's Disable Automatic Alignment option is switched on instead. warnings lists what reading a compiled font left out and the glyph data files that could not be used → {title, path, format, version?, glyphs, masters, viewOnly, aligned, warnings}",
             always,
             open
-        ),
+        ).files(const { &[FileParam::read("path")] }),
         cmd!(
             "file.save",
             "Save",
@@ -46,7 +46,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{path?: string, force?: bool} write the document to its file in the format it was opened in (or to `path`, choosing the format from its extension). Refuses when the file changed on disk since it was read (for a designspace: the document or any of its UFOs), unless force is true. Single files are written atomically; a package or UFO rewrites only changed files; a designspace writes its UFOs, then the document → {path, format, version?, bytes, filesWritten, filesRemoved, losses}",
             has_doc,
             save
-        ),
+        ).files(const { &[FileParam::write("path")] }).writes_files(),
         cmd!(
             "file.saveAs",
             "Save As…",
@@ -55,7 +55,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{path: string, format?: \"fontcraft\"|\"glyphs\"|\"glyphspackage\"|\"ufo\"|\"designspace\", version?: 2|3|4, compress?: bool, force?: bool, smartComponents?: \"components\"|\"outlines\"} write the document to a new file and make that its file; format defaults to the path's extension, version to the one the document has (3 for a new document; .glyphs has 2 to 4, UFO 2 and 3). A single UFO holds one master; a designspace writes a UFO per master beside it. compress: gzip a .fontcraft file (default: as it was opened). smartComponents (UFO and designspace): keep smart components as components with their values in the glyph lib (default), or draw them as outlines interpolated from the smart glyph's pole layers; the document keeps its components. losses lists what the format cannot hold → {path, format, version?, bytes, filesWritten, filesRemoved, losses}",
             has_doc,
             save_as
-        ),
+        ).files(const { &[FileParam::write("path")] }).writes_files(),
         cmd!(
             "file.exportUfo",
             "Export UFO",
@@ -64,7 +64,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{destination: string, masters?: [string], productionNames?: bool, decomposeSmartStuff?: bool} write each chosen master (default: all) as its own UFO 3 into the destination folder, named Family-Style.ufo. The document keeps its file and format. productionNames: rename glyphs to production names (not supported yet). decomposeSmartStuff: draw smart components as outlines interpolated from the smart glyph's pole layers (default true); false keeps them as components with their values in the glyph lib → {files: [{path, master, filesWritten}], losses}",
             has_doc,
             export_ufo
-        ),
+        ).files(const { &[FileParam::write("destination")] }).writes_files(),
         cmd!(
             "file.close",
             "Close",
@@ -82,7 +82,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{instances?: [string], outlines?: \"truetype\"|\"cff\", containers?: [\"plain\"|\"woff\"|\"woff2\"], destination?: string, removeOverlap?: bool, autohint?: bool, timestamp?: number|\"now\"} compile the active document's exportable instances (or the named ones; a font without instances exports its first master) to static fonts with TrueType (.ttf) or CFF (.otf) outlines, in each container asked for (default plain; WOFF and WOFF2 are .woff and .woff2). Instances between masters are skipped and listed. destination: a folder, created when missing, where each file is named by the instance's fileName parameter, else its PostScript name (with the document's file name standing in for a missing family name), in the sub-folder an instance's Export Folder parameter names (`..` climbs out of the destination); or one file path ending in .ttf, .otf, .woff or .woff2, which sets the outlines and container when they are not given and receives the first instance that can be built; without it the fonts are returned as dataBase64. Existing files are replaced; a failing export writes nothing. removeOverlap: merge overlapping contours in every glyph (default true; a glyph whose overlaps cannot be removed keeps them, with a warning). autohint: not supported yet. timestamp: seconds since the Unix epoch for the head table (default SOURCE_DATE_EPOCH, else now) → {fonts: [{instance, source, format, outlines, glyphs, warnings, files: [{name, container, bytes, path? | dataBase64?}]}], skipped: [{instance, source, reason}], warnings}; with one file also {path? | dataBase64?, bytes, glyphs, glyphOrder}",
             has_doc,
             export_static
-        ),
+        ).files(const { &[FileParam::write("destination")] }).writes_files(),
         cmd!(
             "file.exportAll",
             "Export All",
@@ -91,7 +91,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{documents?: [string], outlines?: [\"truetype\"|\"cff\"], containers?: [\"plain\"|\"woff\"|\"woff2\"], destination: string, removeOverlap?: bool, autohint?: bool, timestamp?: number|\"now\"} export every exportable instance of every open document (or of the documents named by title or path) in each outline format and container asked for (default truetype, plain) into the destination folder, as file.exportStatic names them; with both outline formats, the files go into ttf and otf subfolders. Instances between masters are skipped and listed. removeOverlap: as in file.exportStatic (default true). A failing export writes nothing → {documents: [{title, fonts, skipped}], written, warnings}",
             has_doc,
             export_all
-        ),
+        ).files(const { &[FileParam::write("destination")] }).writes_files(),
     ]
 }
 

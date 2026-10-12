@@ -38,7 +38,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{font?: path, face?: number, layer?: master id (default: the first master)} the glyphs of the active document, or of the font file at `font` without opening it, in glyph order → {glyphs: [{gid, name, unicodes: [hex], export, advance, shapes, bounds: [x0, y0, x1, y1] | null}]}",
             always,
             list_glyphs
-        ),
+        ).files(const { &[FileParam::read("font")] }),
     ]
 }
 

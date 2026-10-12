@@ -3,7 +3,7 @@
 //! Each package fills its own function below, so packages that share this module do not edit
 //! the same lines.
 
-use super::CommandSpec;
+use super::{CommandSpec, FileParam};
 
 /// The commands of this module, in package order.
 pub fn specs() -> Vec<CommandSpec> {
@@ -22,7 +22,7 @@ fn ttx_specs() -> Vec<CommandSpec> {
         "{font: path, face?: number, tables?: [tag | {tag, view?}], excludeTables?: [tag], format?: \"ttx\"|\"json\"|\"hex\"|\"text\", split?: \"tables\", output?: path, outputDir?: path, noClobber?: bool, disassemble?: bool, strict?: bool, newline?: \"lf\"|\"cr\"|\"crlf\"} the tables of a compiled font, collection face, WOFF or WOFF2 file as TTX (the XML of the reference dump tool), the same tree as JSON, or hex; tables that cannot be read are written as hex unless strict; tables leaves the glyph order out; split writes one file per table beside the main file → {format, text} or {format, json} without an output, {format, paths} with one",
         super::always,
         ttx::run
-    )]
+    ).files(const { &[FileParam::read("font"), FileParam::write("output"), FileParam::write("outputDir")] }).writes_files()]
 }
 
 mod ttx {

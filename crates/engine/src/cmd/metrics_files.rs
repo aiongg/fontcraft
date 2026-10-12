@@ -32,7 +32,7 @@ pub fn specs() -> Vec<CommandSpec> {
         "{path: an AFM or PFM file (told apart by content), masters?: [master ids] (default: the first master), merge?: \"replace\"|\"addMissing\" (default replace)} merges the file's kerning pairs into the left-to-right kerning of each master as glyph–glyph pairs, as one undo step. replace: a pair the master has takes the file's value; addMissing: only pairs the master lacks are added. AFM pairs name glyphs; PFM pairs name character codes, read as Windows-1252 (a symbol font's code c as U+F000+c, then c) and found by Unicode value, with amounts scaled from the file's units per em to the font's and rounded half up. Pairs whose glyphs or codes the font lacks are left out and listed; ligature and track kerning data are not read. A master that follows another's metrics is refused → {format: \"afm\"|\"pfm\", face?, merge, pairs: pairs in the file, imported: pairs merged, masters: [{master, added, replaced, unchanged, kept}], unknownGlyphs: [names], unknownCodes: [codes]}",
         has_doc,
         import_metrics_file
-    )]
+    ).files(const { &[FileParam::read("path")] })]
 }
 
 #[derive(Clone, Copy, PartialEq)]

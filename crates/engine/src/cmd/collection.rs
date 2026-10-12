@@ -30,7 +30,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{file: path} the members of a collection (a WOFF2 collection is unwrapped; a single font lists as one member): index, PostScript name, outline flavour, tables, and the tables whose data another member shares → {format, members: [{index, postscriptName, flavour: \"truetype\"|\"cff\", tables: [tag], shared: [tag]}]}",
             always,
             list
-        ),
+        ).files(const { &[FileParam::read("file")] }),
         cmd!(
             "collection.pack",
             "Pack Collection",
@@ -39,7 +39,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{fonts: [path], output: path, shareTables?: [{tag: string, index: int}], share?: bool, container?: \"plain\"|\"woff2\", noClobber?: bool} a collection of the fonts in order (members of input collections appended in order); identical tables are stored once unless share is false; shareTables makes every member use the table TAG of input font INDEX (zero-based, counting collection members) → {output, fonts, size, savedBySharing: {tag: bytes}}",
             always,
             pack
-        ),
+        ).files(const { &[FileParam::read("fonts"), FileParam::write("output")] }).writes_files(),
         cmd!(
             "collection.unpack",
             "Unpack Collection",
@@ -48,7 +48,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{file: path, face?: int|name, outputDir?: path, output?: path, nameBy?: \"postscript-name\"|\"index\", noClobber?: bool} every member (or the one face names, by index or PostScript name) as a font of its own, named POSTSCRIPTNAME.otf or .ttf by its outlines, or STEM-fontN without a PostScript name, with nameBy index, or when a name repeats; beside the collection unless outputDir; output only with one face → {outputs: [{face, path, postscriptName}]}",
             always,
             unpack
-        ),
+        ).files(const { &[FileParam::read("file"), FileParam::write("output"), FileParam::write("outputDir")] }).writes_files(),
         cmd!(
             "woff.compress",
             "Compress to WOFF",
@@ -57,7 +57,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{font: path, format?: \"woff2\"|\"woff\", output?: path, outputDir?: path, glyfTransform?: bool, hmtxTransform?: bool, quality?: int, zopfli?: bool|int, metadata?: path, privateData?: path, noClobber?: bool} a font or collection (collections only in WOFF2) wrapped in WOFF2 (default; glyf transform on, hmtx transform off) or WOFF 1.0; quality is 11 for WOFF2 and 6 for WOFF, the only levels written yet → {output, format, originalSize, size, tables: [{tag, origLength, storedLength?}]}",
             always,
             compress
-        ),
+        ).files(const { &[FileParam::read("font"), FileParam::read("metadata"), FileParam::read("privateData"), FileParam::write("output"), FileParam::write("outputDir")] }).writes_files(),
         cmd!(
             "woff.decompress",
             "Decompress WOFF",
@@ -66,7 +66,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{font: path, output?: path, outputDir?: path, extractMetadata?: path, extractPrivateData?: path, noClobber?: bool} the font or collection inside a WOFF or WOFF2 file, named .ttf, .otf or .ttc by its content; the metadata and private blocks are written where asked when the file has them → {output, format, size, metadata?: path, privateData?: path}",
             always,
             decompress
-        ),
+        ).files(const { &[FileParam::read("font"), FileParam::write("extractMetadata"), FileParam::write("extractPrivateData"), FileParam::write("output"), FileParam::write("outputDir")] }).writes_files(),
     ]
 }
 

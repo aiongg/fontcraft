@@ -30,7 +30,7 @@ fn normalize_specs() -> Vec<CommandSpec> {
         "{font: path, face?: number|name, table?: \"gpos\"|\"gsub\"|\"gdef\"|\"all\", location?: {axis: number}, output?: path, noClobber?: bool} the font's kerning, mark and cursive attachment and ligature carets as canonical sorted text, one flat rule per line, grouped by feature and the language systems that share its lookups; a variable value prints as the default and its value at each master location ({…}), or as the one value at `location` (user coordinates); GSUB prints no rules; with `output` the text is written there instead of returned → {text} | {output, bytes}",
         always,
         normalize
-    )]
+    ).files(const { &[FileParam::read("font"), FileParam::write("output")] }).writes_files()]
 }
 
 /// Most characters of a PostScript name given as `face`.
@@ -117,7 +117,7 @@ fn list_specs() -> Vec<CommandSpec> {
         "{font: path, face?: number, table?: \"GSUB\"|\"GPOS\", lookups?: bool, by?: \"feature\"|\"script\"} the scripts, language systems and features of a compiled font's GSUB and GPOS; with lookups, the lookups each feature names per language system with their type (an extension lookup's type read through) → by feature (default): {features: [{table, feature, systems: [{script, language, lookups?: [{index, type, extension}]}]}]}; by script: {systems: [{table, script, language, features: [{feature, lookups?}]}]}",
         super::always,
         m12_12::list_features
-    )]
+    ).files(const { &[FileParam::read("font")] })]
 }
 
 /// `layout.decompileFeatures` (M12.12).
@@ -130,7 +130,7 @@ fn decompile_specs() -> Vec<CommandSpec> {
         "{font: path, face?: number, tables?: [\"GSUB\"|\"GPOS\"|\"GDEF\"|\"BASE\"] (default all the font has), features?: [tag] (only these features and the lookups they reach), showExtensions?: bool, names?: \"final\"|\"source\" (source: development names from goadb), goadb?: path, classes?: \"auto\"|\"inline\" (auto names glyph sets used more than once), output?: path, outputDir?: path, noClobber?: bool} the font's layout tables as feature code; without output or outputDir the text is returned; constructs without feature syntax are written as comments and listed → {text?, output?, unsupported: [string]}",
         super::always,
         m12_12::decompile_features
-    )]
+    ).files(const { &[FileParam::read("font"), FileParam::read("goadb"), FileParam::write("output"), FileParam::write("outputDir")] }).writes_files()]
 }
 
 /// The runners of M12.12.

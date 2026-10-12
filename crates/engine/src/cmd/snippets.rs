@@ -33,7 +33,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{folder?: path (default: the session's snippet folder, which the desktop app sets and a headless session lacks)} the snippets the Features tab's snippets menu offers: the built-in ones, then one group per user file FeatureSnippets<NAME>.plist or .toml in the folder, by file name. A file that cannot be read is left out with a warning; a missing folder, or none, has no files → {folder: path|null, builtIn: [{title, code}], groups: [{name, file, snippets: [{title, code}]}], warnings: [text]}",
             always,
             list
-        ),
+        ).files(const { &[FileParam::read("folder")] }),
         cmd!(
             "font.features.insertSnippet",
             "Insert Snippet",
@@ -42,7 +42,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{kind: \"prefix\"|\"class\"|\"feature\", name, index?, snippet: title, group?: user group name (default: the built-in snippets, then the user groups in menu order), position?: character offset in the entry's code (default: its end), end?: character offset (default: position), folder?: path} put the snippet's code in place of the characters from position to end, as choosing it from the snippets menu does over a selection. An automatic entry is refused → {kind, name, index, caret: character offset after the inserted code}",
             has_doc,
             insert
-        ),
+        ).files(const { &[FileParam::read("folder")] }),
         cmd!(
             "font.features.showSnippetFolder",
             "Show Snippet Folder",
@@ -51,7 +51,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{folder?: path (default: the session's snippet folder)} the folder user snippet files go in, created when missing; the app opens it in the file manager. Refused when there is no folder → {path, created: bool}",
             always,
             show_folder
-        ),
+        ).files(const { &[FileParam::read("folder")] }),
     ]
 }
 

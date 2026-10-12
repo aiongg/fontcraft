@@ -41,7 +41,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{font?: path} a new, untitled project: export instances linked to a font file and kept apart from it, so other versions of the font can be exported without changing the font. With font, the font is linked at once as project.linkFont links it. The project becomes the active project; save it with project.save → {project: {id, title, path, font, fontRead, destination, instances: [{index, name, type, active}], modified}, copied, warnings}",
             always,
             new_project
-        ),
+        ).files(const { &[FileParam::read("font")] }),
         cmd!(
             "project.linkFont",
             "Choose",
@@ -50,7 +50,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{project?: id|path|title, font: path} link the project to a font file (default: the active project). The font is read from disk, so it need not be open, and is never written. A project without instances takes the font's instances as its starting list (copied counts them); one with instances keeps them → {project, copied, warnings}",
             has_project,
             link_font
-        ),
+        ).files(const { &[FileParam::read("font")] }),
         cmd!(
             "project.addInstance",
             "Add Instance",
@@ -113,7 +113,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{project?: id|path|title, folder: path} set the folder the project exports into; it need not exist yet, export creates it → {project}",
             has_project,
             set_destination
-        ),
+        ).files(const { &[FileParam::write("folder")] }),
         cmd!(
             "project.export",
             "Export",
@@ -122,7 +122,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{project?: id|path|title, outlines?: [\"truetype\"|\"cff\"], containers?: [\"plain\"|\"woff\"|\"woff2\"], removeOverlap?: bool, timestamp?: number|\"now\"} build every active static instance of the project from the linked font file, read from disk (it need not be open), into the export destination, through the same build as File › Export; an instance's Export Folder parameter puts its files in that sub-folder. Needs a saved project without unsaved changes, a font link that resolves and a destination. Default outlines truetype, container plain; with both outline formats the files go into ttf and otf subfolders. Instances between masters are skipped and listed. A failing export writes nothing → {destination, written, fonts: [{instance, source, format, outlines, glyphs, warnings, files}], skipped: [{instance, source, reason}], warnings}",
             has_project,
             export
-        ),
+        ).writes_files(),
         cmd!(
             "project.open",
             "Open Project",
@@ -131,7 +131,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{path: path} open a project file as the active project; one already open is made active. A font link that no longer resolves is kept and reported in warnings: choose the font again before exporting → {project, alreadyOpen, warnings}",
             always,
             open_project
-        ),
+        ).files(const { &[FileParam::read("path")] }),
         cmd!(
             "project.save",
             "Save Project",
@@ -140,7 +140,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{project?: id|path|title, path?: path} write the project to its file, or to path (ending in .fontcraftproject), which then becomes its file. The font link and the destination are stored relative to the project's folder where the two share a folder, else absolute. The file is written atomically; the linked font is not written → {project, path, bytes}",
             has_project,
             save_project
-        ),
+        ).files(const { &[FileParam::write("path")] }).writes_files(),
         cmd!(
             "project.close",
             "Close Project",

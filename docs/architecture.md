@@ -123,6 +123,12 @@ JSON out. Ids follow the reference's menu structure (`file.*`, `edit.*`, `glyph.
 `filter.*`, `view.*`…), and noun prefixes for what has no menu (`kerning.*`, `font.info.*`,
 `hint.tt.*`, `audit.*`, `tables.*`).
 
+A command that touches files declares it: `files` lists every parameter that holds a path (read
+or write, and its form), and `writes_files` marks a command that writes to disk, a query
+included. The catalogue carries both (`file_params`, `writes_files`); the MCP server's `--root`
+and `--read-only` checks read nothing else. A test in `crates/engine/src/cmd/file_params.rs`
+fails when a params doc names a path-like parameter that is not declared.
+
 What `Session::execute` guarantees for every command, checked for the whole registry by
 `crates/engine/tests/command_sweep.rs`:
 

@@ -90,12 +90,24 @@ impl LogLevel {
 pub struct Server {
     backend: Box<dyn Backend>,
     policy: Policy,
-    /// Command id → whether it is a query, read from the backend when the policy first needs it.
-    catalogue: Option<HashMap<String, bool>>,
+    /// Command id → what the policy needs to know about it, read from the backend when the
+    /// policy first needs it.
+    catalogue: Option<HashMap<String, policy::CommandFacts>>,
     /// Least severe level sent as a notification; `None` until the client sets one.
     log_level: Option<LogLevel>,
     /// Notifications produced while answering the current request.
     pending: Vec<Value>,
+}
+
+/// What one request's checks have already looked up.
+#[derive(Default)]
+struct Seen {
+    /// Every open document's file was checked against the roots.
+    documents: bool,
+    /// The open projects (`project.list`).
+    projects: Option<Value>,
+    /// An earlier step of the batch opens a project, whose stored places the server has not seen.
+    project_opened: bool,
 }
 
 /// The tools offered to agents. `run_command` reaches every command; the others save a round trip.
@@ -323,63 +335,118 @@ impl Server {
     }
 
     /// Whether the policy admits a command by id, reading the catalogue when it needs to know
-    /// whether the command is a query.
-    fn admit(&mut self, id: &str) -> Result<(), String> {
+    /// what the command is. Returns the catalogue entry when it was read.
+    fn admit(&mut self, id: &str) -> Result<Option<policy::CommandFacts>, String> {
         if !self.policy.is_restricted() {
-            return Ok(());
+            return Ok(None);
         }
-        let query = if self.policy.needs_catalogue() { self.query_flag(id)? } else { None };
-        self.policy.admit(id, query)
+        let facts = if self.policy.needs_catalogue() { self.facts(id)? } else { None };
+        self.policy.admit(id, facts.as_ref())?;
+        Ok(facts)
     }
 
-    fn query_flag(&mut self, id: &str) -> Result<Option<bool>, String> {
+    fn facts(&mut self, id: &str) -> Result<Option<policy::CommandFacts>, String> {
         if self.catalogue.is_none() {
             let all = self.backend.commands(None)?;
             let list = all.get("commands").and_then(Value::as_array).ok_or("the command catalogue has no `commands` list")?;
             if list.len() > MAX_CATALOGUE {
                 return Err(format!("the command catalogue has more than {MAX_CATALOGUE} entries"));
             }
-            let map = list
-                .iter()
-                .filter_map(|c| Some((c.get("id")?.as_str()?.to_string(), c.get("query").and_then(Value::as_bool).unwrap_or(false))))
-                .collect();
-            self.catalogue = Some(map);
+            self.catalogue = Some(list.iter().filter_map(policy::CommandFacts::from_entry).collect());
         }
-        Ok(self.catalogue.as_ref().and_then(|c| c.get(id).copied()))
+        Ok(self.catalogue.as_ref().and_then(|c| c.get(id).cloned()))
     }
 
     /// Checks a command and, for `command.batch`, each of its steps; `depth` counts batches.
-    fn check_command(&mut self, id: &str, params: &Value, depth: usize, documents_checked: &mut bool) -> Result<(), String> {
+    /// File parameters in `params` are replaced by the paths that were checked.
+    fn check_command(&mut self, id: &str, params: &mut Value, depth: usize, seen: &mut Seen) -> Result<(), String> {
         if depth > policy::MAX_BATCH_NESTING {
             return Err(format!("command.batch nests deeper than {} levels", policy::MAX_BATCH_NESTING));
         }
-        self.admit(id)?;
-        let names_path = params.get("path").is_some_and(|p| !p.is_null());
-        if self.policy.has_roots() && policy::IMPLICIT_FILE_COMMANDS.contains(&id) && !names_path && !*documents_checked {
-            // Which document a step saves can change inside a batch, so every open document's
-            // file must be inside the roots.
-            let documents = self.backend.inspect()?;
-            let list = documents.get("documents").and_then(Value::as_array).ok_or("cannot list the open documents")?;
-            for path in list.iter().filter_map(|d| d.get("path").and_then(Value::as_str)) {
-                self.policy.check_implicit_path(path)?;
+        let facts = self.admit(id)?;
+        if self.policy.restricts_paths() {
+            if let Some(place) = policy::implicit_place(id, params) {
+                self.check_implicit(id, place, seen)?;
             }
-            *documents_checked = true;
+            if id == "project.open" {
+                seen.project_opened = true;
+            }
+            if let Some(facts) = &facts {
+                let names_document =
+                    facts.files.iter().any(|f| f.form == policy::FileForm::Document && params.get(&f.name).is_some_and(|v| !v.is_null()));
+                let open = if names_document { self.open_documents()? } else { Vec::new() };
+                self.policy.check_params(facts, params, &open)?;
+            }
         }
         if id == policy::BATCH_COMMAND && self.policy.is_restricted() {
-            for step in params.get("steps").and_then(Value::as_array).into_iter().flatten() {
+            for step in params.get_mut("steps").and_then(Value::as_array_mut).into_iter().flatten() {
                 // A step without a command id is refused by the batch itself.
-                let Some(command) = step.get("command").and_then(Value::as_str) else { continue };
-                self.check_command(command, step.get("params").unwrap_or(&Value::Null), depth + 1, documents_checked)?;
+                let Some(command) = step.get("command").and_then(Value::as_str).map(str::to_string) else { continue };
+                let mut none = Value::Null;
+                let step_params = match step.get_mut("params") {
+                    Some(p) => p,
+                    None => &mut none,
+                };
+                self.check_command(&command, step_params, depth + 1, seen)?;
             }
         }
         Ok(())
     }
 
+    /// Checks a place a command writes to, or reads, without a parameter naming it. Which
+    /// document or project a step acts on can change inside a batch, so every open one is
+    /// checked.
+    fn check_implicit(&mut self, id: &str, place: policy::Implicit, seen: &mut Seen) -> Result<(), String> {
+        match place {
+            policy::Implicit::Hidden(why) => Err(format!("`{id}` {why}: this server restricts file access (--root)")),
+            policy::Implicit::Documents => {
+                if !seen.documents {
+                    let documents = self.backend.inspect()?;
+                    let list = documents.get("documents").and_then(Value::as_array).ok_or("cannot list the open documents")?;
+                    for path in list.iter().filter_map(|d| d.get("path").and_then(Value::as_str)) {
+                        self.policy.check_implicit_path(path, &format!("`{id}` writes to or beside the open document's file"))?;
+                    }
+                    seen.documents = true;
+                }
+                Ok(())
+            }
+            policy::Implicit::ProjectExports if seen.project_opened => {
+                Err(format!("`{id}` follows project.open in the same batch, so its destination cannot be checked first; run it on its own"))
+            }
+            policy::Implicit::ProjectFiles | policy::Implicit::ProjectExports => {
+                if seen.projects.is_none() {
+                    seen.projects = Some(self.backend.execute("project.list", &json!({}))?);
+                }
+                let projects =
+                    seen.projects.as_ref().and_then(|p| p.get("projects")).and_then(Value::as_array).ok_or("cannot list the open projects")?;
+                let keys: &[(&str, &str)] = if place == policy::Implicit::ProjectFiles {
+                    &[("path", "writes the project's file")]
+                } else {
+                    &[("destination", "writes into the project's export destination"), ("font", "reads the project's linked font")]
+                };
+                for project in projects {
+                    for (key, what) in keys {
+                        if let Some(path) = project.get(*key).and_then(Value::as_str) {
+                            self.policy.check_implicit_path(path, &format!("`{id}` {what}"))?;
+                        }
+                    }
+                }
+                Ok(())
+            }
+        }
+    }
+
+    /// The titles and paths of the open documents.
+    fn open_documents(&mut self) -> Result<Vec<String>, String> {
+        let documents = self.backend.inspect()?;
+        let list = documents.get("documents").and_then(Value::as_array).ok_or("cannot list the open documents")?;
+        Ok(list.iter().flat_map(|d| [d.get("title"), d.get("path")]).filter_map(|v| v.and_then(Value::as_str).map(str::to_string)).collect())
+    }
+
     /// The parameters to run a command with, once the policy admits it and its paths.
     fn checked(&mut self, id: &str, params: &Value) -> Result<Value, String> {
-        self.check_command(id, params, 0, &mut false)?;
         let mut params = params.clone();
-        self.policy.check_paths(&mut params)?;
+        self.check_command(id, &mut params, 0, &mut Seen::default())?;
         Ok(params)
     }
 
@@ -406,7 +473,8 @@ impl Server {
             let policy = &self.policy;
             list.retain(|c| {
                 let id = c.get("id").and_then(Value::as_str).unwrap_or("");
-                policy.admit(id, Some(c.get("query").and_then(Value::as_bool).unwrap_or(false))).is_ok()
+                let facts = policy::CommandFacts::from_entry(c).map(|(_, f)| f);
+                policy.admit(id, facts.as_ref()).is_ok()
             });
         }
         Ok(all)
@@ -652,6 +720,74 @@ mod tests {
         let (is_error, text) = tool(&mut s, "run_command", json!({"command": "file.save", "params": {"force": true}}));
         assert!(!is_error, "the document's own file is inside the root: {text}");
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// Inputs that once slipped past the policy: each is refused and writes nothing.
+    #[test]
+    fn undeclared_and_implicit_writes_are_refused() {
+        let dir = std::env::temp_dir().join(format!("fontcraft-mcp-writes-{}", std::process::id()));
+        let (root, outside) = (dir.join("root"), dir.join("outside"));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        let rooted = || Policy::unrestricted().root(&root).unwrap().base_dir(&root);
+        let out = |name: &str| outside.join(name).to_str().unwrap().to_string();
+
+        // A table file after the tag, alone or as a batch step.
+        let mut s = restricted(rooted());
+        let extract = json!({"font": "f.ttf", "tables": [format!("head={}", out("head.bin"))]});
+        let (is_error, text) = tool(&mut s, "run_command", json!({"command": "tables.extract", "params": extract.clone()}));
+        assert!(is_error && text.contains("--root"), "{text}");
+        let batch = json!({"steps": [{"command": "glyph.newGlyph", "params": {"name": "b"}}, {"command": "tables.extract", "params": extract}]});
+        let (is_error, text) = tool(&mut s, "run_command", json!({"command": "command.batch", "params": batch}));
+        assert!(is_error && text.contains("--root"), "{text}");
+        // A WOFF block extracted outside the roots.
+        let (is_error, text) =
+            tool(&mut s, "run_command", json!({"command": "woff.decompress", "params": {"font": "f.woff", "extractMetadata": out("meta.xml")}}));
+        assert!(is_error && text.contains("--root"), "{text}");
+        assert!(!outside.join("head.bin").exists() && !outside.join("meta.xml").exists());
+
+        // A query that writes in place, under --read-only.
+        std::fs::write(root.join("f.ttf"), b"not a font").unwrap();
+        let mut s = restricted(rooted().read_only(true));
+        let params = json!({"font": "f.ttf", "tables": ["DSIG"], "inPlace": true});
+        let (is_error, text) = tool(&mut s, "run_command", json!({"command": "tables.delete", "params": params}));
+        assert!(is_error && text.contains("read-only"), "{text}");
+        assert_eq!(std::fs::read(root.join("f.ttf")).unwrap(), b"not a font");
+        assert!(!listed(&mut s).iter().any(|i| i == "tables.delete" || i == "font.dumpTables"));
+
+        // A project whose stored file and destination lie outside the roots.
+        let mut h = Headless::with_document();
+        let stored = outside.join("p.fontcraftproject");
+        h.execute("file.newProject", &json!({})).unwrap();
+        h.execute("project.setExportDestination", &json!({"folder": out("fonts")})).unwrap();
+        h.execute("project.save", &json!({"path": stored})).unwrap();
+        std::fs::remove_file(&stored).unwrap();
+        let mut s = Server::with_policy(Box::new(h), rooted());
+        let (is_error, text) = tool(&mut s, "run_command", json!({"command": "project.save", "params": {}}));
+        assert!(is_error && text.contains("--root"), "{text}");
+        assert!(!stored.exists());
+        let (is_error, text) = tool(&mut s, "run_command", json!({"command": "project.export", "params": {}}));
+        assert!(is_error && text.contains("--root"), "{text}");
+        assert!(!outside.join("fonts").exists());
+        // A project opened earlier in the same batch: its stored destination is unknown.
+        let batch =
+            json!({"steps": [{"command": "project.open", "params": {"path": "p.fontcraftproject"}}, {"command": "project.export", "params": {}}]});
+        let (is_error, text) = tool(&mut s, "run_command", json!({"command": "command.batch", "params": batch}));
+        assert!(is_error && text.contains("on its own"), "{text}");
+        // Macros saved into the Macros folder, which the server cannot see.
+        let save = json!({"name": "m", "steps": [{"command": "glyph.newGlyph", "params": {"name": "x"}}]});
+        let (is_error, text) = tool(&mut s, "run_command", json!({"command": "script.saveActionSet", "params": save}));
+        assert!(is_error && text.contains("Macros folder"), "{text}");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn the_file_system_root_alone_restricts_nothing() {
+        let mut s = restricted(Policy::unrestricted().root(std::path::Path::new("/")).unwrap());
+        let (_, text) = tool(&mut s, "run_command", json!({"command": "script.run", "params": {"macro": "missing"}}));
+        assert!(!text.contains("cannot check"), "macros are admitted: {text}");
+        let r = ask(&mut s, json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}));
+        assert!(!r["result"]["instructions"].as_str().unwrap_or("").contains("This server is restricted"));
     }
 
     #[test]

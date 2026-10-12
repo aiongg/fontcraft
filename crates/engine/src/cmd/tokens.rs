@@ -19,7 +19,7 @@ pub fn specs() -> Vec<CommandSpec> {
         "{font?: path, text: string (at most 65,535 bytes), master?: id, name or index, instance?: id, name or index} `text` with its {{{token}}} tokens replaced as an export would replace them: versionString and buildNumber anywhere; glyph:path (width, LSB, RSB, bounds.origin.x, bounds.origin.y, bounds.size.width, bounds.size.height, anchors.<name>.x, anchors.<name>.y) on the master's layer, else the first master's; with `instance` the instance's names and classes, then the font's fields; with `master` alone its number values; otherwise the font's fields (familyName, versionMajor, versionMinor, unitsPerEm, date, copyright, designer, manufacturer, license, description, vendorID…). Reads the active document, or the font file at `font` without opening it. A token that names nothing is kept as written → {text, unresolved: [token], context: \"font\" | \"master\" | \"instance\"}",
         always,
         expand
-    )]
+    ).files(const { &[FileParam::read("font")] })]
 }
 
 fn expand(s: &mut Session, p: &Value) -> Result<Value> {

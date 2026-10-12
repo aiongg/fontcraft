@@ -45,7 +45,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{a: path, b: path, parts?: [\"glyphs\"|\"info\"|\"masters\"|\"instances\"|\"axes\"|\"kerning\"|\"features\"], glyphs?: [name], tolerance?: number} compare two source files (.glyphs, .glyphspackage, .fontcraft, UFO, designspace; the two may differ in format) and list every change from A to B. Glyphs match by name, and a glyph only one side has is matched as renamed when its outlines and code points are unchanged; masters and instances match by axis location, then by name; axes by tag. Per glyph: name, code points, export, glyph info, other layers, and per master the width, outlines, components, anchors and layer info; kerning pairs per master and direction, kerning groups (per glyph) and contexts; Font Info fields, custom parameters and properties; each field of masters, instances and axes; feature, class and prefix code and glyph groups; the order of each list. glyphs: only these glyphs (named in A or B; kerning pairs are not filtered); tolerance: widths, outlines, components and anchors closer than this many units count as equal (default 0). Each change has an id that source.merge takes; it changes when either value changes. Nothing is written → {same: bool, changes: [{id, part, kind: \"added\"|\"removed\"|\"renamed\"|\"changed\", glyph?, master?, field?, a?, b?}], summary: {part: count}}",
             always,
             diff
-        ),
+        ).files(const { &[FileParam::read("a"), FileParam::read("b")] }),
         cmd!(
             "source.merge",
             "Merge Sources",
@@ -54,7 +54,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{base: path, other: path, take: [id] | \"all\", parts?: [string], glyphs?: [name], tolerance?: number, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool} compare BASE with OTHER as source.diff does (parts, glyphs and tolerance as there) and apply the chosen changes from OTHER to a copy of BASE: the ids source.diff returned, or \"all\". The result is checked and written in BASE's format to output (or BASE.merged in outputDir or beside BASE); BASE itself is replaced only with inPlace. All or nothing: an id that is not among the changes as the sources are now (one of them changed since the comparison) refuses the whole merge, and so does a result that is not a consistent font; then nothing is written. A designspace is not written beside BASE's own UFOs unless inPlace → {applied: [id], output: path, format, losses}",
             always,
             merge
-        ),
+        ).files(const { &[FileParam::read("base"), FileParam::read("other"), FileParam::write("output"), FileParam::write("outputDir")] }).writes_files(),
         cmd!(
             "font.compareGlyphs",
             "Compare Glyphs of Two Fonts…",
@@ -63,7 +63,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{a: document title | path, b: document title | path, what?: [\"glyphSet\"|\"outlines\"|\"names\"], outlineMatch?: \"exact\"|\"near\", tolerance?: number, acceptInlinedComponents?: bool, differencesToBackground?: bool} compare the glyphs of two fonts (open documents, sources or compiled fonts) by glyph name and matched master: glyphs only one has, glyphs whose outlines or components differ, and glyphs whose code points differ (default: all three). near: coordinates within tolerance (default 1 unit; giving a tolerance means near) count as equal. acceptInlinedComponents: compare the drawn outlines, so components and the same contours drawn in place are equal. differencesToBackground: a must be the active document; each differing outline of b is put into the background of a's layer, as one undo step. Bitmaps, substitutions and positioning are not compared yet → {same: bool, onlyInA: [name], onlyInB: [name], outlines: [{glyph, master}], names: [{glyph, a: [codepoint], b: [codepoint]}], copiedToBackground?: number}",
             always,
             compare_glyphs
-        ),
+        ).files(const { &[FileParam::read("a").document(), FileParam::read("b").document()] }),
     ]
 }
 

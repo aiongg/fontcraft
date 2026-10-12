@@ -17,7 +17,7 @@ use serde_json::{Value, json};
 use skrifa::MetadataProvider as _;
 
 use super::file_io::{self, InputKind, OutputRequest};
-use super::{CommandSpec, always, cmd};
+use super::{CommandSpec, FileParam, always, cmd};
 use crate::params::Params;
 use crate::{EngineError, Result, Session};
 
@@ -34,7 +34,7 @@ pub fn specs() -> Vec<CommandSpec> {
         "{input: path, face?: int|name, glyphs?: selector, excludeGlyphs?: selector, keepFontHints?: bool, hintingTables?: [tag], keepFlex?: bool, gasp?: \"keep\"|\"smooth\"|\"remove\", output?: path, inPlace?: bool}",
         always,
         remove_hints
-    )]
+    ).files(const { &[FileParam::read("input"), FileParam::write("output"), FileParam::write("outputDir")] }).writes_files()]
 }
 
 fn remove_hints(_: &mut Session, v: &Value) -> Result<Value> {

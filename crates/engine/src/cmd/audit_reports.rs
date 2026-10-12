@@ -36,7 +36,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{path: path, format?: \"json\" | \"text\" | \"markdown\" | \"html\" (default from the extension of path: .json, .txt, .md, .html; else json), target?: \"document\" | path (default \"document\"), results?: a result document (written instead of the target's last results), minSeverity?: \"info\" | \"warn\" | \"fail\" = \"info\", noClobber?: bool} writes the last results of the target (those audit.results returns) to a file: the JSON result document, a plain-text log with one line per result (SEVERITY check-id [font] place: message) and a summary line, a Markdown report grouped by check with each check's description, or a self-contained HTML page with the same sections. Results below minSeverity are left out and the summary counts follow. The file is written in one step; nothing is written when the call fails → {path, format, results: count written, bytes}",
             always,
             export_report
-        ),
+        ).files(const { &[FileParam::write("path")] }).writes_files(),
         cmd!(
             query "audit.report.menuNames",
             "Menu Name Report",
@@ -45,7 +45,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{fonts?: [path], directory?: path} the menu names of each font, per typographic family: preferredMenu (typographic family/subfamily), macCompatibleMenu (the compatible full name), windowsCompatibleMenu (family/subfamily), and the family, subfamily, full, typographic family and subfamily, compatible full and PostScript names. fonts and directory: see audit.report.metrics → {families: [{family, fonts: [{path, postScriptName, preferredMenu, macCompatibleMenu, windowsCompatibleMenu, familyName, subfamilyName, fullName, typographicFamily, typographicSubfamily, compatibleFullName}]}], skipped?: [{path, reason}]}",
             always,
             menu_names
-        ),
+        ).files(const { &[FileParam::read("fonts"), FileParam::read("directory")] }),
         cmd!(
             query "audit.report.metrics",
             "Font Metrics Report",
@@ -54,7 +54,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{fonts?: [path], directory?: path} the global values of each typographic family: glyph count, typo ascender, descender, line gap, cap height and x-height, italic angle, the bold and italic bits of head.macStyle, font revision, embedding permissions, bounding box, weight and width class, underline position and thickness, vendor ID, and the copyright and trademark of the first face. A value every face shares is given once (same: true, value, label); otherwise each face is listed, sorted as the field says (glyph count rising; italic angle rising; bold or italic faces first; revision, weight, width and underline values falling; the rest in family order). The bounding boxes are always listed. A field whose table the first face lacks has skipped. fonts and directory: the fonts to read, as the four reports take them: compiled font files (TrueType, CFF, WOFF, WOFF2; every face of a collection) and the font files directly in a folder, in file-name order; other files in the folder are passed over and fonts that cannot be read are listed in skipped. Faces are ordered by Windows family name, then italic and bold, and grouped by typographic family → {families: [{family, values: [{field, source, same, value?, label?, fonts?: [{postScriptName, value, label?}], skipped?}], firstFace: {postScriptName, copyright, trademark}}], skipped?: [{path, reason}]}",
             always,
             metrics
-        ),
+        ).files(const { &[FileParam::read("fonts"), FileParam::read("directory")] }),
         cmd!(
             query "audit.report.panose",
             "PANOSE Report",
@@ -63,7 +63,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{fonts?: [path], directory?: path} the ten PANOSE digits of each font with the names their family kind gives them, per typographic family. The base face (weight class 400, width class 5, not italic, preferably subfamily Regular; else the first face) comes first, and each digit of the other faces says whether it differs from the base. fonts and directory: see audit.report.metrics → {families: [{family, base, fonts: [{postScriptName, digits, kind, fields: [{name, value, label, differs}]}], skipped?}], skipped?: [{path, reason}]}",
             always,
             panose
-        ),
+        ).files(const { &[FileParam::read("fonts"), FileParam::read("directory")] }),
         cmd!(
             query "audit.report.featureLanguages",
             "Feature Coverage Report",
@@ -72,7 +72,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{fonts?: [path], directory?: path} for GPOS and GSUB of each font: the scripts and their language systems (dflt for the default one), the sets of lookups features map to (numbered from 1 in the order the script list first reaches them), and for each feature the lookup set in each script and language column (null where absent) with same when every column agrees. Fonts whose tables agree are grouped; groups are sorted by their first font's PostScript name. fonts and directory: see audit.report.metrics → {same, groups: [{fonts: [postScriptName], tables: [{table, scripts: [{script, languages}], columns: [{script, language}], lookupSets: [{id, lookups}], features: [{feature, same, sets}], truncated?, error?}]}], skipped?: [{path, reason}]}",
             always,
             feature_languages
-        ),
+        ).files(const { &[FileParam::read("fonts"), FileParam::read("directory")] }),
     ]
 }
 

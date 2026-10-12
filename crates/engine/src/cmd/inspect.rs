@@ -32,7 +32,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{input: path, face?: number, sections?: [\"format\"|\"names\"|\"metrics\"|\"style\"|\"tables\"|\"cmap\"|\"layout\"|\"axes\"|\"instances\"|\"masters\"|\"color\"|\"hinting\"|\"faces\"], allNames?: bool} a summary of a font file or source without opening it; a section that cannot be read holds {error} → {path, format, <section>: …}",
             always,
             inspect
-        ),
+        ).files(const { &[FileParam::read("input")] }),
         cmd!(
             query "tables.list",
             "List Tables",
@@ -41,7 +41,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{font: path, face?: number|\"all\", sort?: \"file\"|\"tag\"|\"size\"} the table directory of a compiled font, collection, WOFF or WOFF2 file; for a collection, one list per member (all of them by default) with tables the members share marked; a WOFF2 table has no checksum, its offset is in the decompressed table data, and a transformed one gives its stored size as transformLength → {format, faces: [{face, sfntVersion, tables: [{tag, checksum?, offset, length, compressedLength?, transformLength?, shared?}]}]}",
             always,
             tables_list
-        ),
+        ).files(const { &[FileParam::read("font")] }),
     ]
 }
 

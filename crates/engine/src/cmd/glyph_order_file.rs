@@ -13,7 +13,7 @@
 use serde_json::{Value, json};
 
 use super::file_io::{InputKind, OutputRequest, output_path, read_input, write_output};
-use super::{CommandSpec, always, cmd};
+use super::{CommandSpec, FileParam, always, cmd};
 use crate::params::Params;
 use crate::{EngineError, Result, Session};
 use fontcraft_tables::goadb::{self, Goadb};
@@ -34,7 +34,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{font: path, face?: int, renames?: {old: new}, goadb?: path, map?: path, reverse?: bool, productionNames?: bool, updateUnicodes?: bool, order?: bool, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool} renames glyphs of a compiled font (post names and the CFF charset) or a source (with its components, kerning and groups). A GOADB renames from its second column to its first and is applied before `map` (new name, then old name per line) and `renames`; `reverse` applies the GOADB and map the other way; `productionNames` derives names from code points; `order` also puts the glyphs in the GOADB's order. Fails, writing nothing, when two glyphs would get the same name → {output, renamed: [{from, to}], missing: [names], stillUsed: [{name, place}]}",
             always,
             rename
-        ),
+        ).files(const { &[FileParam::read("font"), FileParam::read("goadb"), FileParam::read("map"), FileParam::write("output"), FileParam::write("outputDir")] }).writes_files(),
         cmd!(
             "font.reorderGlyphs",
             "Reorder Glyphs in Font",
@@ -43,7 +43,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{font: path, face?: int, order?: [name], orderFile?: path, goadb?: path, sort?: \"unicode\"|\"name\"|\"cid\"|\"size\", output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool} gives a compiled font or a source a new glyph order and rewrites every table indexed by glyph. Glyphs the order leaves out follow in their old order; .notdef stays first → {output, order: [[old index, new index]]}",
             always,
             reorder_cmd
-        ),
+        ).files(const { &[FileParam::read("font"), FileParam::read("orderFile"), FileParam::read("goadb"), FileParam::write("output"), FileParam::write("outputDir")] }).writes_files(),
     ]
 }
 

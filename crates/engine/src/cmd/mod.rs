@@ -102,6 +102,7 @@ mod dehint;
 mod diff;
 mod dump;
 pub mod file_io;
+mod file_params;
 mod glyph_order_file;
 mod instance;
 mod layout_file;
@@ -158,6 +159,7 @@ mod url;
 use serde::Serialize;
 use serde_json::Value;
 
+pub use self::file_params::{FileAccess, FileForm, FileParam};
 use crate::params::TargetKind;
 use crate::{Result, Session};
 
@@ -188,6 +190,12 @@ pub struct CommandSpec {
     /// The context menus that show the command (`canvas`, `canvas.node`…). Matches the
     /// inventory row's `context`.
     pub context: &'static [&'static str],
+    /// The parameters that name files or folders. Every parameter the command reads a path
+    /// from is listed: surfaces that restrict file access check only these.
+    pub files: &'static [FileParam],
+    /// Writes to disk: through a write parameter in [`CommandSpec::files`], `inPlace`, or a
+    /// place the parameters do not name (the document's own file, a stored destination).
+    pub writes_files: bool,
 }
 
 /// What `commands.list` and the control channel return for a command.
@@ -205,6 +213,10 @@ pub struct CommandInfo {
     pub when: Option<&'static str>,
     #[serde(skip_serializing_if = "<[_]>::is_empty")]
     pub context: Vec<&'static str>,
+    #[serde(skip_serializing_if = "<[_]>::is_empty")]
+    pub file_params: Vec<FileParam>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub writes_files: bool,
     pub enabled: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub disabled_reason: Option<String>,
@@ -229,6 +241,18 @@ impl CommandSpec {
         self
     }
 
+    /// Sets [`CommandSpec::files`]; pass `const { &[…] }`.
+    pub const fn files(mut self, files: &'static [FileParam]) -> Self {
+        self.files = files;
+        self
+    }
+
+    /// Sets [`CommandSpec::writes_files`].
+    pub const fn writes_files(mut self) -> Self {
+        self.writes_files = true;
+        self
+    }
+
     pub fn info(&self, s: &Session) -> CommandInfo {
         let e = (self.enabled)(s);
         CommandInfo {
@@ -241,6 +265,8 @@ impl CommandSpec {
             targets: self.targets.to_vec(),
             when: self.when,
             context: self.context.to_vec(),
+            file_params: self.files.to_vec(),
+            writes_files: self.writes_files,
             enabled: e.is_ok(),
             disabled_reason: e.err(),
         }
@@ -266,10 +292,10 @@ pub fn can_redo(s: &Session) -> std::result::Result<(), String> {
 /// only read.
 macro_rules! cmd {
     ($id:literal, $label:literal, [$($m:literal),*], $sc:expr, $params:literal, $en:expr, $run:expr) => {
-        $crate::cmd::CommandSpec { id: $id, label: $label, menu: &[$($m),*], shortcut: $sc, params: $params, enabled: $en, run: $run, journal: true, targets: &[], when: None, context: &[] }
+        $crate::cmd::CommandSpec { id: $id, label: $label, menu: &[$($m),*], shortcut: $sc, params: $params, enabled: $en, run: $run, journal: true, targets: &[], when: None, context: &[], files: &[], writes_files: false }
     };
     (query $id:literal, $label:literal, [$($m:literal),*], $sc:expr, $params:literal, $en:expr, $run:expr) => {
-        $crate::cmd::CommandSpec { id: $id, label: $label, menu: &[$($m),*], shortcut: $sc, params: $params, enabled: $en, run: $run, journal: false, targets: &[], when: None, context: &[] }
+        $crate::cmd::CommandSpec { id: $id, label: $label, menu: &[$($m),*], shortcut: $sc, params: $params, enabled: $en, run: $run, journal: false, targets: &[], when: None, context: &[], files: &[], writes_files: false }
     };
 }
 pub(crate) use cmd;

@@ -47,8 +47,8 @@ printf '%s\n' \
 
 | Option | Effect |
 |---|---|
-| `--root DIR` | File parameters must lie inside DIR. Repeatable. Default: the working directory; `--root /` admits every path |
-| `--read-only` | Only commands that read (`query: true` in the catalogue) run |
+| `--root DIR` | File parameters must lie inside DIR. Repeatable. Default: the working directory. `--root /` admits every path: with no other option, nothing is restricted and macros run |
+| `--read-only` | Only commands that read (`query: true` in the catalogue) and write no files run |
 | `--allow PATTERN` | Only commands whose id matches a pattern run. Repeatable |
 | `--deny PATTERN` | Commands whose id matches are refused, even when an allow pattern matches. Repeatable |
 
@@ -59,17 +59,38 @@ printf '%s\n' \
   query commands, so the same rules apply to them.
 - `command.batch` is checked step by step: one refused step refuses the whole batch. It must
   itself be admitted.
-- File parameters are the text values (or lists of texts) of the parameters `path`, `paths`,
-  `file`, `files`, `folder`, `folders`, `destination`, `directory`, `font`, `fonts`, `input`,
-  `inputs`, `output` and `outputDir`, at any depth. Each is resolved (relative to the working
-  directory, symbolic links followed) and replaced by its absolute path before the command runs.
-  A missing part of a path may not contain `..`.
-- `file.save` without `path` writes the document's own file: under `--root`, every open
-  document's file must lie inside the roots.
+- Each command declares in the catalogue the parameters that name files (`file_params`: name,
+  `read` or `write`, and form) and whether it writes to disk (`writes_files`). These are the file
+  parameters the server checks, and only these.
+  - Form `path`: a path or a list of paths.
+  - Form `tables`: `"TAG"`, `"TAG=FILE"` (several comma-separated in one string) or
+    `{tag, file?, from?: {font}}`; the file parts are checked.
+  - Form `document`: an open document's title or path is left as it is; anything else is
+    checked as a path.
+  - `keywords` are values that are not paths (`"nice"` for a list of names).
+- Each checked path is resolved (relative to the working directory, symbolic links followed) and
+  replaced by its absolute path before the command runs. A missing part of a path may not contain
+  `..`. A declared parameter that holds something other than text, a list of texts or null is
+  refused.
+- Under `--root`, a command that is not in the catalogue is refused.
+- Under `--read-only`, a query that writes files (`writes_files`, or a `write` parameter, as
+  `tables.delete` with `inPlace` or `font.dumpTables` with `output`) is refused.
+- Places a command uses without a parameter naming them are checked under `--root`:
+
+  | Command | Checked |
+  |---|---|
+  | `file.save` without `path`; `file.exportWithProfiles` with `bySource` | Every open document's file lies inside the roots |
+  | `project.save` without `path` | Every open project's file lies inside the roots |
+  | `project.export` | Every open project's export destination and linked font lie inside the roots |
+| `project.export` after `project.open` in the same batch | Refused: the opened project's places are not known yet |
+  | `script.saveActionSet` without `path`; `script.recordMacro` with `name` | Refused: they write into the Macros folder |
+
+- Outside the desktop app, the engine writes no file that an instance's Export Folder parameter
+  would put outside the export destination, so exports over MCP stay inside their destination.
 - Commands that run steps or open files the server cannot see in their parameters (`script.run`
   and the other macro commands, `file.openRecent`, `url.open`, `url.show`) are refused whenever
   any restriction is set, which with the default root is always. Run the steps with
-  `command.batch` instead.
+  `command.batch` instead, or start the server with `--root /` and no other option.
 - `initialize` describes the restrictions in its `instructions`.
 
 ## Prompts

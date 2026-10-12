@@ -66,7 +66,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{files: [paths], glyphs?: [names], layer?: id (default: the first master's layer), onMissingGlyph?: \"add\" | \"skip\" (default skip), scale?: \"unscaled\" | \"em\" (default unscaled)} imports SVG or EPS files (EPS by its `%!` or DOS EPS header) as outlines, added to the glyph's layer after its shapes, as one undo step. Each file goes to the glyph named by its base name (A.svg into A), or to the glyph at the same position in `glyphs`. A file whose glyph does not exist is listed in `unmatched`, or with add the glyph is created. unscaled reads one font unit per SVG unit with SVG y = 0 at the master's ascender; em scales the drawing's box to the em with its top edge at the ascender. Coordinates are rounded to the grid; styling is dropped and named in `notes`. A file that cannot be read is listed in `failed`; when no file is imported and one failed, the command fails. At most 4096 files and 2,000,000 nodes → {imported: [{file, glyph, paths, notes?}], added: [names], unmatched: [files], failed: [{file, error}]}",
             has_doc,
             import_outlines
-        ),
+        ).files(const { &[FileParam::read("files")] }),
     ]
 }
 

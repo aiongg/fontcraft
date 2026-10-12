@@ -73,7 +73,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{file?: path (a font source; default: this font, which keeps a copy of the current outlines), glyphs?: [names] (default: every glyph), master?: id (default: every master)} replace the shapes and anchors of the master layers' backgrounds with the foreground of the glyph of the same name in the source. Masters are matched by name, then by position; a source with fewer masters gives its first. Glyphs the source lacks, and locked glyphs, are skipped and listed → {glyphs: [names], skipped: [{glyph, layer?, reason}]}",
             has_doc,
             assign_background
-        )
+        ).files(const { &[FileParam::read("file")] })
         .targets(&[TargetKind::Glyphs]),
         cmd!(
             "path.interpolateWithBackground",
