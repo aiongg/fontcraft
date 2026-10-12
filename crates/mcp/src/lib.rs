@@ -699,6 +699,9 @@ mod tests {
         assert!(is_error && text.contains("read-only"), "{text}");
         let (is_error, text) = tool(&mut s, "run_command", json!({"command": "glyph.getInfo", "params": {}}));
         assert!(!is_error, "{text}");
+        // It creates the folder when missing.
+        let (is_error, text) = tool(&mut s, "run_command", json!({"command": "font.features.showSnippetFolder", "params": {"folder": "snippets"}}));
+        assert!(is_error && text.contains("read-only"), "{text}");
         let ids = listed(&mut s);
         assert!(ids.iter().any(|i| i == "glyph.getInfo") && !ids.iter().any(|i| i == "glyph.newGlyph"));
         let (_, text) = tool(&mut s, "inspect_document", json!({}));

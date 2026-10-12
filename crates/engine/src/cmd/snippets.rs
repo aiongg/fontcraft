@@ -51,7 +51,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{folder?: path (default: the session's snippet folder)} the folder user snippet files go in, created when missing; the app opens it in the file manager. Refused when there is no folder → {path, created: bool}",
             always,
             show_folder
-        ).files(const { &[FileParam::read("folder")] }),
+        ).files(const { &[FileParam::write("folder")] }).writes_files(),
     ]
 }
 
