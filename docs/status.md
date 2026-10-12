@@ -2,39 +2,60 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-12, the first waves of M6 to M12 integrated and gated on `master`; the second waves of M6, M7 and M8 and the first wave of M13 integrated on a separate branch, review fixes in progress._
+_Updated: 2026-10-12, the first waves of M6 to M12, seven second-wave packages and all 22 first-wave packages of M13 integrated and gated on `master`, with the automation file roots._
 
 ## State of the tree
 
-- `cargo xtask ci` passes all eleven steps (2,463 tests, 29 ignored).
+- `cargo xtask ci` passes all eleven steps (2,781 or more tests pass, none fail).
   Built and run on Linux x86-64 with Rust 1.97.
-- `master` holds the first waves of M6 to M12, merged and green, and is about to be pushed. The
-  second waves of M6, M7 and M8 and all 22 first-wave packages of M13 are written and integrated
-  on a separate branch; their review fixes are in progress, and the branch has not been merged
-  or run through the gate on top of `master`.
-- 571 of the 949 inventory commands exist (`docs/parity.md`); M3's, M4's and M5's are all live,
-  M6 has 38 of 46, M7 50 of 62, M8 28 of 41, M9 4 of 48, M10 5 of 56, M11 37 of 41, M12 46 of
-  81, M13 none. Feature parity is about 22% (ROADMAP.md › Parity estimate). 1,406 guesses on 984
-  rows are listed in `docs/guesses.md`; `docs/observe.md` lists 1,017 rows.
-- Round trips are unchanged: `.glyphs` 122/1/118/4, UFO 125 identical and 15 failed.
+- `master` holds everything described here, merged and green; the latest commits are not pushed.
+  It has the first waves of M6 to M12, the second-wave packages M6.14, M7.14, M7.15 to M7.18
+  (the Font Info window with all its tabs) and M8.15, all 22 first-wave packages of M13, the
+  fix passes that followed, and the automation file roots.
+- 658 of the 960 inventory commands exist (`docs/parity.md`); M3's, M4's and M5's are all live,
+  M6 has 38 of 46, M7 66 of 66, M8 36 of 41, M9 4 of 48, M10 5 of 56, M11 37 of 41, M12 46 of
+  81, M13 63 of 180. Feature parity is about 24% (ROADMAP.md › Parity estimate). 1,658 guesses
+  on 1,079 rows are listed in `docs/guesses.md`; `docs/observe.md` lists 1,097 rows.
+- Round trips: `.glyphs` 122/1/118/4, `.glyphspackage` 22/0/7/0, designspace 59 identical and 53
+  failed, UFO 125 identical, 2 different and 13 failed (two UFO 1 files now open).
+- Measures: console completion takes 2.28 ms at worst (target 5 ms, met). The follow-up hook
+  after a one-glyph edit on Inter takes 2.5 to 2.7 ms, almost all of it the existing alignment
+  pass (2.4 ms), over the 2 ms target. Detect Composites on Inter finishes in under 2 s (met)
+  but rebuilds only 45.4% of the composites from the same bases (target 95%): it picks
+  identical-outline bases such as `acute` for `acutecomb`, and composite bases instead of atoms.
+- Detect Composites keeps automatic alignment on where it reproduces the detected placement and
+  turns it off only where alignment would move a component (a guess on the row).
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
-  Edit View were looked at, and the screenshots of each M3, M4 and M5 UI package were reviewed. macOS and
-  Windows have **not** been built.
+  Edit View were looked at, and the screenshots of each M3, M4 and M5 UI package were reviewed.
+  The Font Info window and the M13 dialogs have frame tests and no screenshot review yet. macOS
+  and Windows have **not** been built.
 - The repository is private at `github.com/aiongg/fontcraft`. There is no hosted CI (the gate
   runs locally) and no release.
 
+### Automation file roots
+
+`fontcraft-cli mcp` takes `--automation-read-root DIR` and `--automation-write-root DIR`. The
+desktop app's control channel takes the same two flags, or the variables
+`FONTCRAFT_AUTOMATION_READ_ROOT` and `FONTCRAFT_AUTOMATION_WRITE_ROOT`. Without them, file access
+is unrestricted. Read and write roots are separate. While a root is in force, every declared file
+parameter, every implicit place (export folders, packages, snippet folders, screenshots) and every
+linked file is checked against it, and a linked file outside the read root reads as missing.
+`--read-only`, `--allow` and `--deny` are unchanged. Details: `docs/mcp.md`.
+
 ## Where to start
 
-1. **Merge the branch with the second waves of M6, M7 and M8 and M13's first wave** once its
-   review fixes are in, then run `cargo xtask ci` and the round trips on the result.
-2. **The skeleton pass for the later waves**: fix the interfaces the later packages of each plan
+1. **The skeleton pass for waves 2 to 5**: fix the interfaces the later packages of each plan
    share, as M6.1a and M7.1 to M13.1 did, so they can be written in parallel. A skeleton file
    marks each placeholder with the package that fills it (`// M8.5`).
-3. **The builder packages**, one at a time in the main checkout: M8.9 (the automatic feature
+2. **The builder packages**, one at a time in the main checkout: M8.9 (the automatic feature
    framework), M8.7 (layout tables at export), M7.8 (the name table at export), M6.10 (Edit View
    display and selection), M9.4 (static instances), M9.5 (the variable compile), M10.14 and
    M10.19 (hints at export), M11.5 (paint attributes in the formats), M12.44 (the audit runner),
    then the rest each plan's § 6 lists. The requests the integrations left for them are below.
+3. **The M13.15 base-choice follow-up**: among bases with identical outlines prefer the
+   combining-mark form (`acutecomb` over `acute`), and never use a detected composite as a base;
+   then rerun the recovery measure on Inter (target 95%). Also reduce the per-edit alignment
+   pass (`metrics::realign`) below the 2 ms hook target.
 4. **The measures**: the corpus measures of the M9 to M12 packages (each package's row in its
    plan's § 5; most were tested only against small oracle outputs), and the M6 measures
    (`docs/plans/M6.md` § 5): mark attachment against both oracles
@@ -42,6 +63,38 @@ _Updated: 2026-10-12, the first waves of M6 to M12 integrated and gated on `mast
    against glyphsLib (`crates/engine/tests/corpus_propagation.rs`, which reads a JSON file of
    glyphsLib's results made outside the repository), composition and alignment over the corpus
    (`corpus_composition.rs`, `corpus_alignment.rs`).
+
+Low findings from the last review (the automation roots), for a later fix pass:
+
+- Reading a UFO folder under roots still follows links inside the UFO (for example from
+  `glyphs/` to a folder outside the roots). Link entries should be skipped or checked while
+  roots are in force (`io.rs`, `read_folder`).
+- Following a reference to a file opens it even when it is a named pipe, which blocks. It should
+  return without opening unless the target is a regular file (`io.rs`, `follow_references`).
+- A timing bound in the variable-font decompile test (`few*2+20` ms) may fail under load. If it
+  does, count comparisons through a hook instead.
+- An image path taken from the document and resolved through links can be stored with `../..`
+  segments that climb out of the folder. Cosmetic.
+
+What the second-wave and M13 packages left for later packages (the hooks and gaps the integrators
+recorded):
+
+- Font Info: the Features tab stays read-only until M8.17; the Exports tab shows a message for
+  instances between masters until M9.4 and M9.20 draw interpolated instances (then the
+  `fontInfo.exports.instancePreview` row changes); Add Other Font on the Masters tab waits for
+  M9.23.
+- M8.15: prefix-defined classes cannot be previewed, and `markClass` shows only through
+  definitions; M8.19 should reuse the compiled tables in `layout_font` instead of compiling twice.
+- M7.14: the Save and Close buttons should run `project.save` and `project.close`, and
+  `file.open` should route `.fontcraftproject` to `project.open`; `Session::inspect` does not
+  list projects; project edits are not undo steps; `.glyphsproject` waits for a reference sample.
+- M6.14: each automatic composite copies the glyph list, so composing very many glyphs at once is
+  quadratic; compose without the per-glyph copy.
+- M13: `Session::commit` does not record interaction commits in the macro recorder. Command Console lines from filters wait for
+  M13.3. A URL tab shows one layer per glyph. SFD sources are read by `crates/io-sfd` but not
+  yet opened by File › Open or the CLI. Contour names persist only in the native format. The
+  Thickness tool has no toolbar button (needs an icon). Metrics-file import, Status Definitions
+  and the name-list rename have no dialog yet.
 
 The first waves of M9 to M12, as built (ROADMAP.md › What is real: the first waves of M6 to M12):
 
@@ -263,9 +316,8 @@ M12 first waves left the last two for the packages named. None can lose data.
 standards (O3), the application id (rest of O4), FontLab (O5), platforms (O6). O1 is answered (no
 licence; tutorial videos watched by the owner) and so is the repository's home.
 
-Also for the owner: with M13.11 (on the separate branch), the MCP server limits file access to its
-working directory by default; `--root`, `--allow`, `--deny` and `--read-only` change that. Is
-the working directory the right default, or should agents reach other folders without a flag?
+MCP and the control channel are unrestricted unless `--automation-read-root` and
+`--automation-write-root` are given, as in the sibling apps (owner's decision).
 
 ## Dev log
 
@@ -577,3 +629,17 @@ Append one terse entry per session: what landed, numbers, what is still open.
   rows; round trips unchanged (`.glyphs` 122/1/118/4, UFO 125/15). Colour-layer update after a
   one-glyph edit on Inter: 35.5 µs. Open: the builder packages and their requests (Where to
   start), the corpus measures, the branch with M6 to M8's second waves and M13's first wave.
+- **2026-10-12, batch 4 and the automation roots.** Integrated: M6.14, M7.14, M7.15 to M7.18
+  (the Font Info window), M8.15, and all 22 first-wave packages of M13 (tension, helpers, stem
+  filters, the Thickness tool, expressions, Detect Composites, stored selections, status
+  definitions, export profiles, external-change review, encoding tools, PFM and AFM import, UFO 1,
+  EPS and SFD reading, the Command Console, macros, the URL scheme, MCP permissions, prompts and
+  resources). Fix passes bounded hostile-input work in the EPS, SFD, UFO 1 and PFM readers,
+  features previews, macros, outline matching, intersections and stem filters, made multi-profile
+  exports all-or-nothing, bounded name-table reads, and made `avar` segment maps for axis maps
+  outside the axis range match fontmake (`docs/spec/40-compile.md`). MCP and the control channel
+  take `--automation-read-root` and `--automation-write-root`; files are unrestricted without them.
+  2,781 or more tests pass, none fail; all eleven gate steps pass; 658 of 960 commands live; 1,658
+  guesses on 1,079 rows; 1,097 observe rows. Open: the Lows listed under Where to start, the
+  Detect Composites base choice (45.4% against 95%), the per-edit alignment pass (2.4 ms against
+  2 ms), the skeleton pass for waves 2 to 5, and the builder packages.
