@@ -2544,6 +2544,7 @@ summary = "Applies path.correctPathDirection to every selected glyph of a source
 ref = "docs/spec/20-cli.md › outlines"
 status = "inferred"
 notes = "Built in M12.28; see the `outlines direction` row."
+guesses = ["Without flavour a source gets the PostScript convention (the editor's) and a TrueType font the TrueType one; a reference run on a source drawn for TrueType outlines would settle the source default.", "Composites are left alone, since their direction comes from their bases; no reference documents whole-font direction fixing of composites."]
 
 [[command]]
 id = "outlines.addExtremes"
@@ -2558,6 +2559,7 @@ summary = "Applies path.addExtremes to every selected glyph of a source or binar
 ref = "docs/spec/20-cli.md › outlines"
 status = "inferred"
 notes = "Built in M12.28; see the `outlines extremes` row."
+guesses = ["minSegment accepts only 3 (the editor's fixed threshold) or 0 (every extreme forced); a reference run with other values would settle whether other thresholds are wanted."]
 
 [[command]]
 id = "outlines.roundCoordinates"
@@ -2572,6 +2574,7 @@ summary = "Rounds point coordinates, component offsets, anchors and advances of 
 ref = "docs/spec/20-cli.md › outlines"
 status = "inferred"
 notes = "Built in M12.28; see the `outlines round` row."
+guesses = ["Halfway values round away from zero to the grid; fontTools' otRound rounds them up, which differs only for negative halves on a grid coarser than 1 unit.", "On sources advance widths stay, as in the editor's rounding command; on compiled fonts they are rounded with the points."]
 
 [[command]]
 id = "outlines.convertCurves"

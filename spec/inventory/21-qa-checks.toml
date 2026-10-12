@@ -3646,6 +3646,7 @@ summary = "Creates or replaces a user profile (application settings) or a projec
 ref = "Our design; cf. fontbakery custom profiles and configuration file"
 status = "inferred"
 notes = "Built in M12.59. Without `store` the profile goes to the user's settings (reserved id `audit.userProfiles`); a project profile goes to the source's font user data under `com.fontcraft.audit`, as one undo step. A project profile may include only built-in and project profiles and a user profile only built-in and user profiles, so a source's rules never depend on one person's settings; an id the other store already holds is refused. Overrides for one message code beat check-wide ones; otherwise later overrides win. Includes nest at most 8 deep, with cycle detection."
+guesses = ["Without store the profile goes to the user's settings rather than the project; a user report would settle which store people expect by default."]
 
 [[command]]
 id = "audit.profile.delete"
@@ -3660,6 +3661,7 @@ summary = "Deletes a user or project profile. Documents that named it as their d
 ref = "Our design"
 status = "inferred"
 notes = "Built in M12.59. Deleting a profile that another profile of its store includes is refused. A cleared default makes runs use the application default, else universal. `store` is needed only when both stores hold the id."
+guesses = ["Deleting a profile that another profile of its store includes is refused rather than removing the include; a user report would settle it."]
 
 [[command]]
 id = "audit.profile.setDefault"
@@ -3674,6 +3676,7 @@ summary = "Sets the profile used when audit.run is called without one, for the c
 ref = "Our design"
 status = "inferred"
 notes = "Built in M12.59. `target` defaults to the document; null clears the default. Order: the document's default, then the application's, then universal; a stored default that no longer exists is skipped with a note. A project profile cannot be the application default."
+guesses = ["target defaults to the document, so a source carries its own default; a user report would settle whether the application default is expected instead."]
 
 [[command]]
 id = "audit.config.get"
@@ -3716,6 +3719,7 @@ summary = "Adds an entry to the document's ignore list, from a result id or from
 ref = "Our design; cf. fontbakery exclude_checks"
 status = "inferred"
 notes = "Built in M12.59. An entry made from a result keeps the result's check, glyph, master and table-level location keys (table, field, nameId, platform, encoding, language, feature, script, lookup, axis, instance, pair); outline addresses change with every edit and are not kept. Ignoring the same issue again replaces its reason and date. The date comes from the session clock. At most 100,000 entries. Hiding matching results in audit.run and the exit status is the runner's (M12.44)."
+guesses = ["An entry made from a result keeps table-level keys but not outline addresses, which change with every edit; a user report would settle whether point-level entries are wanted."]
 
 [[command]]
 id = "audit.unignoreIssue"
@@ -3730,6 +3734,7 @@ summary = "Removes matching entries from the document's ignore list."
 ref = "Our design"
 status = "inferred"
 notes = "Built in M12.59. Keys left out match any entry; a call that matches no entry is refused."
+guesses = ["A call that matches no entry is refused rather than doing nothing, so a mistyped check id is noticed."]
 
 [[command]]
 id = "audit.listIgnored"
@@ -3744,6 +3749,7 @@ summary = "Returns the document's ignore list with the reason and date of each e
 ref = "Our design"
 status = "inferred"
 notes = "Built in M12.59. Whether an issue still occurs is judged against the run kept from the last audit.run: null when no run is kept or that run did not include the check."
+guesses = ["Whether an issue still occurs is judged only against the last kept run, with null when that run did not include the check, rather than running the check again."]
 
 [[command]]
 id = "audit.export"
