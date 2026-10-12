@@ -119,3 +119,54 @@ fn glyph_set_auto_layer_recipe_fills_in_when_the_missing_part_is_added() {
     assert_eq!(r["glyphs"], json!(["aacute"]));
     assert_eq!(components(s.font().unwrap(), "aacute"), ["a", "acutecomb"], "an ordinary layer keeps what it holds");
 }
+
+fn read_tree(dir: &std::path::Path, root: &std::path::Path, out: &mut fontcraft_io_glyphs::Files) {
+    for e in std::fs::read_dir(dir).unwrap().flatten() {
+        let p = e.path();
+        if p.is_dir() {
+            read_tree(&p, root, out);
+        } else {
+            out.insert(p.strip_prefix(root).unwrap().to_string_lossy().replace('\\', "/"), std::fs::read(&p).unwrap());
+        }
+    }
+}
+
+/// The cost of the engine's follow-up hook after a one-glyph edit on Inter Roman (no anchor
+/// expressions or automatic layers): the hook alone, and the whole command around it.
+/// `cargo test --release -p fontcraft-engine --test expressions -- --ignored --nocapture`.
+#[test]
+#[ignore = "speed measure"]
+fn follow_changes_per_edit_on_inter() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus/inter/src/Inter-Roman.glyphspackage");
+    if !dir.is_dir() {
+        return;
+    }
+    let mut files = fontcraft_io_glyphs::Files::new();
+    read_tree(&dir, &dir, &mut files);
+    let font = fontcraft_io_glyphs::read_package(&files).unwrap();
+    let mut s = Session::new();
+    s.add_document(font, None).unwrap();
+    const EDITS: u32 = 200;
+    let (mut hook, mut command, mut realign) = (std::time::Duration::ZERO, std::time::Duration::ZERO, std::time::Duration::ZERO);
+    for i in 0..EDITS {
+        let before: Arc<Font> = s.doc().unwrap().font.clone();
+        let t = std::time::Instant::now();
+        run(&mut s, "spacing.setWidth", json!({"glyphs": ["n"], "value": 500 + i % 2}));
+        command += t.elapsed();
+        let after: Arc<Font> = s.doc().unwrap().font.clone();
+        let t = std::time::Instant::now();
+        let out = fontcraft_components::expressions::follow_changes(&before, Font::clone(&after)).unwrap();
+        hook += t.elapsed();
+        assert!(out.same_as(&after));
+        let t = std::time::Instant::now();
+        let _ = fontcraft_components::metrics::realign(&before, Font::clone(&after)).unwrap();
+        realign += t.elapsed();
+    }
+    println!(
+        "{} glyphs: hook {:?}/edit (alignment alone {:?}), whole command {:?}/edit",
+        s.font().unwrap().glyphs.len(),
+        hook / EDITS,
+        realign / EDITS,
+        command / EDITS
+    );
+}
