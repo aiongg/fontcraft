@@ -2,7 +2,8 @@
 //! (W3C WOFF File Format 2.0).
 //!
 //! Both table transforms are supported, in both directions: `glyf`/`loca` (version 0,
-//! `woff2/glyf.rs`) and `hmtx` (version 1, `woff2/hmtx.rs`). Collections are refused.
+//! `woff2/glyf.rs`) and `hmtx` (version 1, `woff2/hmtx.rs`). Collections (`ttcf`) are written
+//! and read with the collection directory of the specification (`woff2/collection.rs`).
 //!
 //! The writer is a port of fontTools' `WOFF2Writer` (`ttLib/woff2.py`, MIT): `DSIG` dropped, bit 11
 //! of `head.flags` set, for the `glyf` transform `glyf` and `loca` laid out again with 4-byte glyph
@@ -11,10 +12,12 @@
 //! 22-bit window in font mode, the metadata in text mode. The known-tag table and the UIntBase128
 //! and 255UInt16 encodings are ported from the same file.
 
+pub(crate) mod collection;
 pub(crate) mod glyf;
 pub(crate) mod hmtx;
 
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 
 use crate::compress::{self, Mode, unbrotli};
 use crate::sfnt::{self, DSIG, GLYF, HEAD, HMTX, LOCA, OTTO, Table, Tag};
@@ -153,6 +156,24 @@ pub struct Woff2Directory {
     pub meta: (u32, u32, u32),
     /// Offset and length of the private data block.
     pub private: (u32, u32),
+    /// The collection directory, when the file holds a collection.
+    pub collection: Option<Woff2Collection>,
+}
+
+/// The collection directory of a WOFF2 collection.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Woff2Collection {
+    /// The collection header's version: `0x00010000` or `0x00020000`.
+    pub version: u32,
+    pub fonts: Vec<Woff2CollectionFont>,
+}
+
+/// One font of a WOFF2 collection.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Woff2CollectionFont {
+    pub flavor: u32,
+    /// Indices into [`Woff2Directory::tables`], one per table of the font.
+    pub tables: Vec<usize>,
 }
 
 impl Woff2Directory {
@@ -163,8 +184,8 @@ impl Woff2Directory {
 }
 
 /// Reads and checks the header and table directory of a WOFF2 file: signature, length, reserved
-/// field, table count, tags (each once), transform versions, and the size limits. Collections
-/// are refused.
+/// field, table count, tags (each once per font), transform versions, the collection directory of
+/// a collection, and the size limits.
 pub fn directory(woff2: &[u8]) -> Result<Woff2Directory, Error> {
     if woff2.get(..4) != Some(SIGNATURE.as_slice()) {
         return Err(bad("not a WOFF2 file"));
@@ -173,17 +194,16 @@ pub fn directory(woff2: &[u8]) -> Result<Woff2Directory, Error> {
     let w = |at| u32_at(woff2, at).ok_or_else(cut);
     let h = |at| u16_at(woff2, at).ok_or_else(cut);
     let flavor = w(4)?;
-    if flavor == sfnt::TTCF {
-        return Err(Error::Unsupported { format: FORMAT, what: "a font collection" });
-    }
-    if !sfnt::is_font_flavor(flavor) {
+    let is_collection = flavor == sfnt::TTCF;
+    if !is_collection && !sfnt::is_font_flavor(flavor) {
         return Err(bad("the font inside is neither TrueType nor OpenType"));
     }
     if w(8)? as usize != woff2.len() {
         return Err(bad("the file's length differs from the length in its header"));
     }
     let count = usize::from(h(12)?);
-    if count == 0 || count > MAX_TABLES {
+    // A collection lists each distinct table of all its fonts; the 16-bit field bounds it.
+    if count == 0 || (!is_collection && count > MAX_TABLES) {
         return Err(bad("the table count is out of range"));
     }
     if h(14)? != 0 {
@@ -212,7 +232,7 @@ pub fn directory(woff2: &[u8]) -> Result<Woff2Directory, Error> {
             **KNOWN_TAGS.get(usize::from(flags & 0x3f)).ok_or_else(|| bad("unknown table index"))?
         };
         let name = sfnt::tag_str(tag);
-        if tables.iter().any(|t| t.tag == tag) {
+        if !is_collection && tables.iter().any(|t| t.tag == tag) {
             return Err(bad(format!("table '{name}' is listed twice")));
         }
         let mut table = Woff2Table { tag, transform: flags >> 6, orig_length: read_base128(woff2, &mut at)?, transform_length: None, stream_offset };
@@ -233,16 +253,22 @@ pub fn directory(woff2: &[u8]) -> Result<Woff2Directory, Error> {
         }
         tables.push(table);
     }
-    let glyf = tables.iter().find(|t| t.tag == GLYF).map(Woff2Table::transformed);
-    let loca = tables.iter().find(|t| t.tag == LOCA).map(Woff2Table::transformed);
-    if matches!((glyf, loca), (Some(true), None | Some(false)) | (None | Some(false), Some(true))) {
-        return Err(bad("glyf and loca must be transformed together"));
+    let collection = if is_collection { Some(collection::read_directory(woff2, &mut at, &tables)?) } else { None };
+    let fonts: Vec<Vec<usize>> = match &collection {
+        Some(c) => c.fonts.iter().map(|f| f.tables.clone()).collect(),
+        None => vec![(0..tables.len()).collect()],
+    };
+    for font in &fonts {
+        let state = |tag: Tag| font.iter().filter_map(|&i| tables.get(i)).find(|t| t.tag == tag).map(Woff2Table::transformed);
+        if matches!((state(GLYF), state(LOCA)), (Some(true), None | Some(false)) | (None | Some(false), Some(true))) {
+            return Err(bad("glyf and loca must be transformed together"));
+        }
     }
     let end = at.checked_add(compressed_length).ok_or_else(|| bad("the compressed data lies outside the file"))?;
     if end > woff2.len() {
         return Err(bad("the compressed data lies outside the file"));
     }
-    Ok(Woff2Directory { flavor, total_sfnt_size, version, tables, compressed: (at, compressed_length), meta, private })
+    Ok(Woff2Directory { flavor, total_sfnt_size, version, tables, compressed: (at, compressed_length), meta, private, collection })
 }
 
 /// The decompressed table stream of a WOFF2 file whose directory has been read.
@@ -287,78 +313,119 @@ pub fn extras(woff2: &[u8], dir: &Woff2Directory) -> Result<Blocks, Error> {
 }
 
 /// Unwraps a WOFF2 file: the sfnt with the tables in directory order (transformed ones rebuilt),
-/// the header's version, the metadata (decompressed) and the private data.
+/// the header's version, the metadata (decompressed) and the private data. A WOFF2 collection
+/// gives a collection file with each distinct table once, in directory order.
 pub fn decode(woff2: &[u8]) -> Result<Unwrapped, Error> {
     let dir = directory(woff2)?;
     let data = stream(woff2, &dir)?;
     let (metadata, private) = extras(woff2, &dir)?;
-    let owned = tables(&dir, &data)?;
-    let list: Vec<Table<'_>> = owned.iter().map(|(tag, data)| Table { tag: *tag, data }).collect();
-    let sfnt = sfnt::assemble(dir.flavor, &list)?;
+    let sfnt = match &dir.collection {
+        Some(c) => collection::decode(&dir, c, &data)?,
+        None => {
+            let owned = tables(&dir, &data)?;
+            let list: Vec<Table<'_>> = owned.iter().map(|(tag, data)| Table { tag: *tag, data }).collect();
+            sfnt::assemble(dir.flavor, &list)?
+        }
+    };
     Ok(Unwrapped { sfnt, version: dir.version, metadata, private })
 }
 
 /// A table's tag and data, borrowed from the table stream or rebuilt.
 pub(crate) type OwnedTable<'a> = (Tag, Cow<'a, [u8]>);
 
-/// The sfnt tables of a WOFF2 file, in directory order, from its decompressed table stream;
-/// transformed tables are rebuilt.
+/// The sfnt tables of a single-font WOFF2 file, in directory order, from its decompressed table
+/// stream; transformed tables are rebuilt.
 pub(crate) fn tables<'a>(dir: &Woff2Directory, data: &'a [u8]) -> Result<Vec<OwnedTable<'a>>, Error> {
+    let built = build(dir, data, &[(0..dir.tables.len()).collect()])?;
+    Ok(dir.tables.iter().map(|t| t.tag).zip(built).collect())
+}
+
+/// The sfnt data of every directory entry, from the decompressed table stream. `fonts` lists the
+/// entries each font uses; a transformed table is rebuilt once, from the tables of the first font
+/// that uses it, so the work grows with the output, not with the number of fonts.
+pub(crate) fn build<'a>(dir: &Woff2Directory, data: &'a [u8], fonts: &[Vec<usize>]) -> Result<Vec<Cow<'a, [u8]>>, Error> {
     let raw = |t: &Woff2Table| {
         let end = t.stream_offset.saturating_add(t.stream_length() as usize);
         data.get(t.stream_offset..end).ok_or_else(|| bad("a table lies outside the table data"))
     };
-    let find = |tag: Tag| dir.tables.iter().find(|t| t.tag == tag);
-    let untransformed = |tag: Tag| match find(tag) {
-        Some(t) if !t.transformed() => raw(t).map(Some),
-        _ => Ok(None),
-    };
-    let mut rebuilt = match find(GLYF) {
-        Some(t) if t.transformed() => Some(glyf::reconstruct(raw(t)?)?),
-        _ => None,
-    };
-    let mut out = Vec::with_capacity(dir.tables.len());
-    // The tables' padded sizes so far, checked before they are put together.
-    let mut total = 0usize;
+    let entry = |font: &[usize], tag: Tag| font.iter().copied().find(|&i| dir.tables.get(i).is_some_and(|t| t.tag == tag));
+    let mut out: Vec<Option<Cow<'a, [u8]>>> = Vec::with_capacity(dir.tables.len());
     for t in &dir.tables {
-        let bytes = if !t.transformed() {
-            Cow::Borrowed(raw(t)?)
-        } else if t.tag == GLYF {
-            Cow::Owned(rebuilt.as_mut().map(|r| std::mem::take(&mut r.glyf)).unwrap_or_default())
-        } else if t.tag == LOCA {
-            let loca = rebuilt.as_mut().map(|r| std::mem::take(&mut r.loca)).unwrap_or_default();
-            if loca.len() != t.orig_length as usize {
+        out.push(if t.transformed() { None } else { Some(Cow::Borrowed(raw(t)?)) });
+    }
+    // Each rebuilt glyf entry's loca and glyph xMins, for the other entries that need them.
+    let mut rebuilt: BTreeMap<usize, (Vec<u8>, Vec<i16>)> = BTreeMap::new();
+    for font in fonts {
+        let Some((g, gt)) = entry(font, GLYF).and_then(|g| Some((g, dir.tables.get(g)?))) else { continue };
+        if !gt.transformed() {
+            continue;
+        }
+        let pair = || bad("glyf and loca must be transformed together");
+        let (l, lt) = entry(font, LOCA).and_then(|l| Some((l, dir.tables.get(l)?))).ok_or_else(pair)?;
+        if !lt.transformed() {
+            return Err(pair());
+        }
+        if let std::collections::btree_map::Entry::Vacant(slot) = rebuilt.entry(g) {
+            let r = glyf::reconstruct(raw(gt)?)?;
+            if let Some(o) = out.get_mut(g) {
+                *o = Some(Cow::Owned(r.glyf));
+            }
+            slot.insert((r.loca, r.x_mins));
+        }
+        if out.get(l).is_some_and(Option::is_none) {
+            let loca = rebuilt.get(&g).map(|r| r.0.clone()).unwrap_or_default();
+            if loca.len() != lt.orig_length as usize {
                 return Err(bad("the rebuilt loca table differs in size from the original"));
             }
-            Cow::Owned(loca)
-        } else if t.tag == HMTX {
-            let hhea = untransformed(HHEA)?.ok_or_else(|| bad("the hmtx transform needs an hhea table"))?;
-            let metrics = u16_at(hhea, HHEA_METRICS_AT).ok_or_else(|| bad("the hhea table is too short"))?;
-            let x_mins = match &rebuilt {
-                Some(r) => Cow::Borrowed(r.x_mins.as_slice()),
-                None => {
-                    let need = |tag: Tag, name: &str| untransformed(tag)?.ok_or_else(|| bad(format!("the hmtx transform needs a {name} table")));
-                    let (glyf_data, loca, head, maxp) = (need(GLYF, "glyf")?, need(LOCA, "loca")?, need(HEAD, "head")?, need(MAXP, "maxp")?);
-                    let long = u16_at(head, HEAD_LOCA_FORMAT_AT).ok_or_else(|| bad("the head table is too short"))? != 0;
-                    let count = u16_at(maxp, MAXP_GLYPHS_AT).ok_or_else(|| bad("the maxp table is too short"))?;
-                    Cow::Owned(glyf::x_mins(glyf_data, loca, long, usize::from(count))?)
-                }
-            };
-            let hmtx = hmtx::reconstruct(raw(t)?, metrics, &x_mins)?;
-            if hmtx.len() != t.orig_length as usize {
-                return Err(bad("the rebuilt hmtx table differs in size from the original"));
+            if let Some(o) = out.get_mut(l) {
+                *o = Some(Cow::Owned(loca));
             }
-            Cow::Owned(hmtx)
-        } else {
-            return Err(bad(format!("table '{}' uses an unknown transform", sfnt::tag_str(t.tag))));
+        }
+    }
+    for font in fonts {
+        let Some((h, ht)) = entry(font, HMTX).and_then(|h| Some((h, dir.tables.get(h)?))) else { continue };
+        if !ht.transformed() || out.get(h).is_some_and(Option::is_some) {
+            continue;
+        }
+        let untransformed = |tag: Tag| -> Result<Option<&'a [u8]>, Error> {
+            match entry(font, tag).and_then(|i| dir.tables.get(i)) {
+                Some(t) if !t.transformed() => raw(t).map(Some),
+                _ => Ok(None),
+            }
         };
+        let hhea = untransformed(HHEA)?.ok_or_else(|| bad("the hmtx transform needs an hhea table"))?;
+        let metrics = u16_at(hhea, HHEA_METRICS_AT).ok_or_else(|| bad("the hhea table is too short"))?;
+        let from_glyf = entry(font, GLYF).and_then(|g| rebuilt.get(&g)).map(|r| Cow::Borrowed(r.1.as_slice()));
+        let x_mins = match from_glyf {
+            Some(x) => x,
+            None => {
+                let need = |tag: Tag, name: &str| untransformed(tag)?.ok_or_else(|| bad(format!("the hmtx transform needs a {name} table")));
+                let (glyf_data, loca, head, maxp) = (need(GLYF, "glyf")?, need(LOCA, "loca")?, need(HEAD, "head")?, need(MAXP, "maxp")?);
+                let long = u16_at(head, HEAD_LOCA_FORMAT_AT).ok_or_else(|| bad("the head table is too short"))? != 0;
+                let count = u16_at(maxp, MAXP_GLYPHS_AT).ok_or_else(|| bad("the maxp table is too short"))?;
+                Cow::Owned(glyf::x_mins(glyf_data, loca, long, usize::from(count))?)
+            }
+        };
+        let hmtx = hmtx::reconstruct(raw(ht)?, metrics, &x_mins)?;
+        if hmtx.len() != ht.orig_length as usize {
+            return Err(bad("the rebuilt hmtx table differs in size from the original"));
+        }
+        if let Some(o) = out.get_mut(h) {
+            *o = Some(Cow::Owned(hmtx));
+        }
+    }
+    // The tables' padded sizes, checked before they are put together.
+    let mut total = 0usize;
+    let mut done = Vec::with_capacity(out.len());
+    for (t, bytes) in dir.tables.iter().zip(out) {
+        let bytes = bytes.ok_or_else(|| bad(format!("table '{}' uses an unknown transform", sfnt::tag_str(t.tag))))?;
         total = pad4(bytes.len()).and_then(|n| total.checked_add(n)).unwrap_or(usize::MAX);
         if total > MAX_SFNT {
             return Err(bad("the font is too large"));
         }
-        out.push((t.tag, bytes));
+        done.push(bytes);
     }
-    Ok(out)
+    Ok(done)
 }
 
 const HHEA: Tag = *b"hhea";
@@ -412,6 +479,9 @@ const HEAD_FLAGS_AT: usize = 16;
 /// the table's size does not match `hhea`, `maxp` and `loca`. A damaged glyph also leaves `glyf`
 /// untransformed, so wrapping never loses data.
 pub fn encode(sfnt_bytes: &[u8], options: &Options) -> Result<Vec<u8>, Error> {
+    if u32_at(sfnt_bytes, 0) == Some(sfnt::TTCF) {
+        return collection::encode(sfnt_bytes, options);
+    }
     let font = sfnt::parse(sfnt_bytes)?;
     let mut tables: Vec<(Tag, Cow<'_, [u8]>)> = font.tables.iter().filter(|t| t.tag != DSIG).map(|t| (t.tag, Cow::Borrowed(t.data))).collect();
     if tables.is_empty() {
@@ -465,9 +535,7 @@ pub fn encode(sfnt_bytes: &[u8], options: &Options) -> Result<Vec<u8>, Error> {
     let adjustment = sfnt::checksum_adjustment(font.flavor, &list)?;
     let head = head.as_deref().map(|h| sfnt::with_adjustment(h, adjustment)).transpose()?;
     let mut total_sfnt = 12 + 16 * list.len();
-    let mut stream = Vec::new();
-    let mut directory = Vec::with_capacity(HEADER + 10 * list.len());
-    directory.resize(HEADER, 0);
+    let mut stored = Vec::with_capacity(list.len());
     for t in &list {
         let data = match (&head, t.tag == HEAD) {
             (Some(h), true) => h.as_slice(),
@@ -479,34 +547,68 @@ pub fn encode(sfnt_bytes: &[u8], options: &Options) -> Result<Vec<u8>, Error> {
             HMTX => hmtx_stream.as_deref(),
             _ => None,
         };
-        stream.extend_from_slice(transformed.unwrap_or(data));
         total_sfnt = total_sfnt.saturating_add(pad4(data.len()).unwrap_or(usize::MAX));
-        let index = known_tag_index(t.tag);
         let version = match (t.tag, transformed.is_some()) {
             (GLYF | LOCA, false) => 3,
             (HMTX, true) => 1,
             _ => 0,
         };
-        directory.push(index | (version << 6));
-        if index == UNKNOWN_TAG {
-            directory.extend_from_slice(&t.tag);
-        }
-        push_base128(&mut directory, to_u32(FORMAT, data.len(), "a table")?);
-        if let Some(stored) = transformed {
-            push_base128(&mut directory, to_u32(FORMAT, stored.len(), "a table")?);
-        }
+        stored.push(Stored { tag: t.tag, version, orig_length: data.len(), transformed: transformed.is_some(), data: transformed.unwrap_or(data) });
     }
+    let version = options.extras.version.unwrap_or_else(|| crate::woff::revision(font.get(HEAD)));
+    write_file(font.flavor, &stored, &[], total_sfnt, &options.extras, version)
+}
+
+/// One table as [`write_file`] stores it.
+pub(crate) struct Stored<'a> {
+    pub tag: Tag,
+    /// The transform version written in the flags.
+    pub version: u8,
+    /// The table's size in the sfnt.
+    pub orig_length: usize,
+    /// Whether `data` is the transformed form, whose length the directory also records.
+    pub transformed: bool,
+    /// The bytes that go into the table stream.
+    pub data: &'a [u8],
+}
+
+/// A WOFF2 file: the header, the table directory of `tables`, the `collection` directory (empty
+/// for a single font), the compressed table stream, then the metadata and private blocks.
+pub(crate) fn write_file(
+    flavor: u32,
+    tables: &[Stored<'_>],
+    collection: &[u8],
+    total_sfnt: usize,
+    extras: &Extras,
+    version: (u16, u16),
+) -> Result<Vec<u8>, Error> {
     if total_sfnt > MAX_SFNT {
         return Err(bad("the font is too large"));
     }
+    let mut stream = Vec::new();
+    let mut directory = Vec::with_capacity(HEADER + 10 * tables.len() + collection.len());
+    directory.resize(HEADER, 0);
+    for t in tables {
+        stream.extend_from_slice(t.data);
+        let index = known_tag_index(t.tag);
+        directory.push(index | (t.version << 6));
+        if index == UNKNOWN_TAG {
+            directory.extend_from_slice(&t.tag);
+        }
+        push_base128(&mut directory, to_u32(FORMAT, t.orig_length, "a table")?);
+        if t.transformed {
+            push_base128(&mut directory, to_u32(FORMAT, t.data.len(), "a table")?);
+        }
+    }
+    directory.extend_from_slice(collection);
     let compressed = compress::brotli(&stream, Mode::Font)?;
     let mut out = directory;
     let compressed_length = compressed.len();
     out.extend_from_slice(&compressed);
     out.resize(pad4(out.len()).ok_or_else(|| bad("the file is too large"))?, 0);
     let (mut meta_offset, mut meta_length, mut meta_size) = (0, 0, 0);
-    let private = options.extras.private.as_deref().filter(|p| !p.is_empty());
-    if let Some(meta) = options.extras.metadata.as_deref().filter(|m| !m.is_empty()) {
+    let private = extras.private.as_deref().filter(|p| !p.is_empty());
+    if let Some(meta) = extras.metadata.as_deref().filter(|m| !m.is_empty()) {
         if meta.len() > MAX_METADATA {
             return Err(bad("the metadata is too large"));
         }
@@ -523,14 +625,13 @@ pub fn encode(sfnt_bytes: &[u8], options: &Options) -> Result<Vec<u8>, Error> {
         private_length = private.len();
         out.extend_from_slice(private);
     }
-    let version = options.extras.version.unwrap_or_else(|| crate::woff::revision(font.get(HEAD)));
     let length = to_u32(FORMAT, out.len(), "the file")?;
     if let Some(sig) = out.get_mut(..4) {
         sig.copy_from_slice(SIGNATURE);
     }
-    put_u32(&mut out, 4, font.flavor);
+    put_u32(&mut out, 4, flavor);
     put_u32(&mut out, 8, length);
-    put_u16(&mut out, 12, u16::try_from(list.len()).map_err(|_| bad("too many tables"))?);
+    put_u16(&mut out, 12, u16::try_from(tables.len()).map_err(|_| bad("too many tables"))?);
     put_u32(&mut out, 16, to_u32(FORMAT, total_sfnt, "the font")?);
     put_u32(&mut out, 20, to_u32(FORMAT, compressed_length, "the compressed data")?);
     put_u16(&mut out, 24, version.0);

@@ -2229,10 +2229,10 @@ Engine command: `layout.convertSyntax`.
 
 #### `features normalize`
 
-Prints the effective layout rules of a font in a canonical text form that does not depend on how the compiler arranged lookups and subtables, so that two builds can be compared with a text diff. Covers GPOS kerning, mark attachment and cursive attachment, the GDEF ligature-caret list, and GSUB substitutions.
+Prints the effective layout rules of a font in a canonical text form that does not depend on how the compiler arranged lookups and subtables, so that two builds can be compared with a text diff. Covers GPOS kerning, mark attachment and cursive attachment, and the GDEF ligature-caret list. GSUB is accepted but prints no rules, as in otl-normalizer 1.0.0.
 
 ```
-fontcraft-cli features normalize FONT [--table gpos|gsub|gdef|all] [-o OUT]
+fontcraft-cli features normalize FONT [--table gpos|gsub|gdef|all] [--location AXIS=VALUE,...] [--face N|NAME] [-o OUT] [--no-clobber]
 ```
 
 The method is described under *Oracles › Layout normalisation*. In short: rules are grouped by feature
@@ -2305,7 +2305,7 @@ Engine command: `variations.planAvar`.
 Converts a location between coordinate spaces of a variable font: user values through fvar normalisation and the avar table to final normalised coordinates, or back. Useful for checking what an avar mapping does at a given point.
 
 ```
-fontcraft-cli variations map FONT [AXIS=VALUE...] [--from user|normalized] [--to design|normalized|user] [--all-axes]
+fontcraft-cli variations map FONT [AXIS=VALUE...] [--from user|normalized] [--to normalized|user] [--all-axes]
 ```
 
 Engine command: `variations.mapCoordinates`.
@@ -2414,7 +2414,7 @@ fontcraft-cli mcp [--transport stdio|http] [--listen ADDR] [--root DIR]... [--re
 Times a subcommand: runs it several times on the given inputs, discards its outputs, and reports the minimum, median and spread of wall time and peak memory together with the per-stage breakdown. It can run reference tools found on PATH on the same input for a side-by-side figure.
 
 ```
-fontcraft-cli bench SUBCOMMAND [ARGS...] [--runs N] [--warmup N] [--compare TOOL...] [--json]
+fontcraft-cli bench [--runs N] [--warmup N] [--compare COMMAND]... [--stages] [--save FILE] [--baseline FILE] [--threshold PCT] [--json] SUBCOMMAND [ARGS...]
 ```
 
 | Reference tool | Reference option | Ours | Note |

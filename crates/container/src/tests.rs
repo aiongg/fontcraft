@@ -370,16 +370,96 @@ fn damaged_transformed_tables_never_panic() {
     }
 }
 
+/// Each member of a collection file: its flavour and its tables, sorted by tag.
+fn members(ttc: &[u8]) -> Vec<(u32, Vec<(Tag, Vec<u8>)>)> {
+    let (_, fonts) = sfnt::parse_collection(ttc).unwrap();
+    fonts
+        .iter()
+        .map(|f| {
+            let mut t: Vec<(Tag, Vec<u8>)> = f.tables.iter().map(|t| (t.tag, t.data.to_vec())).collect();
+            t.sort();
+            (f.flavor, t)
+        })
+        .collect()
+}
+
+/// A collection of two TrueType fonts with outlines that differ only in `hmtx`, then a CFF font
+/// with a `DSIG`; identical tables are stored once.
+fn collection() -> Vec<u8> {
+    let sources = [outline_font(0), outline_font(-7), font(false)];
+    let mut distinct: Vec<(Tag, Vec<u8>)> = Vec::new();
+    let mut list = Vec::new();
+    for bytes in &sources {
+        let f = sfnt::parse(bytes).unwrap();
+        let mut tables = Vec::new();
+        for t in &f.tables {
+            let i = distinct.iter().position(|(tag, d)| *tag == t.tag && d == t.data).unwrap_or_else(|| {
+                distinct.push((t.tag, t.data.to_vec()));
+                distinct.len() - 1
+            });
+            tables.push((t.tag, i));
+        }
+        list.push(sfnt::Member { flavor: f.flavor, tables });
+    }
+    let data: Vec<Table<'_>> = distinct.iter().map(|(tag, data)| Table { tag: *tag, data }).collect();
+    sfnt::assemble_collection(1, &list, &data).unwrap()
+}
+
 #[test]
-fn collections_are_refused() {
-    let mut ttc = b"ttcf\0\x01\0\0\0\0\0\x01\0\0\0\x10".to_vec();
-    ttc.extend_from_slice(&font(true));
-    assert!(matches!(woff::encode(&ttc, &Extras::default()), Err(Error::Unsupported { .. })));
-    assert!(matches!(woff2::encode(&ttc, &Options::untransformed()), Err(Error::Unsupported { .. })));
-    let mut w = woff2::encode(&font(true), &Options::untransformed()).unwrap();
-    w[4..8].copy_from_slice(b"ttcf");
-    assert!(matches!(woff2::decode(&w), Err(Error::Unsupported { .. })));
-    assert!(matches!(woff2::directory(&w), Err(Error::Unsupported { .. })));
+fn woff2_collections_round_trip() {
+    let ttc = collection();
+    let input = members(&ttc);
+    assert!(matches!(woff::encode(&ttc, &Extras::default()), Err(Error::Unsupported { .. })), "WOFF 1.0 has no collection form");
+    for options in [Options::untransformed(), Options::default(), Options::all_transforms()] {
+        let w = woff2::encode(&ttc, &options).unwrap();
+        let dir = woff2::directory(&w).unwrap();
+        let c = dir.collection.as_ref().expect("a collection directory");
+        assert_eq!(c.fonts.len(), 3);
+        // The two TrueType fonts share glyf, loca, hhea and maxp, not hmtx.
+        assert_eq!(dir.tables.iter().filter(|t| &t.tag == b"glyf").count(), 1);
+        assert_eq!(dir.tables.iter().filter(|t| &t.tag == b"hmtx").count(), 2);
+        assert!(!dir.tables.iter().any(|t| &t.tag == b"DSIG"), "DSIG is dropped");
+        let glyf_at = dir.tables.iter().position(|t| &t.tag == b"glyf").unwrap();
+        assert_eq!(&dir.tables[glyf_at + 1].tag, b"loca", "loca follows its glyf");
+        let back = woff2::decode(&w).unwrap().sfnt;
+        let output = members(&back);
+        assert_eq!(output.len(), 3);
+        for (i, ((flavor_in, tables_in), (flavor_out, tables_out))) in input.iter().zip(&output).enumerate() {
+            assert_eq!(flavor_in, flavor_out);
+            let kept: Vec<&(Tag, Vec<u8>)> = tables_in.iter().filter(|(tag, _)| tag != b"DSIG").collect();
+            assert_eq!(kept.len(), tables_out.len(), "font {i}");
+            // Each member decodes as the same font wrapped on its own (glyf and loca laid out the
+            // same way); head differs only in checkSumAdjustment, which a collection keeps.
+            let single = woff2::decode(&woff2::encode(&sfnt_of(&input[i]), &options).unwrap()).unwrap().sfnt;
+            for (tag, data) in tables_out {
+                let expected = table(&single, tag).unwrap();
+                if tag == b"head" {
+                    assert_eq!(data[..8], expected[..8]);
+                    assert_eq!(data[12..], expected[12..], "font {i}: head");
+                    assert_eq!(u16::from_be_bytes([data[16], data[17]]) & 0x800, 0x800, "bit 11 of head.flags");
+                } else {
+                    assert_eq!(data.as_slice(), expected, "font {i}: '{}'", sfnt::tag_str(*tag));
+                }
+            }
+        }
+        if options != Options::untransformed() {
+            let glyf = dir.tables.iter().find(|t| &t.tag == b"glyf").unwrap();
+            assert!(glyf.transformed(), "a glyf shared with one loca is transformed");
+        }
+        assert_eq!(woff2::encode(&back, &options).unwrap().len(), w.len(), "a second pass gives the same size");
+        // Damaged collection directories and streams never panic.
+        for at in (0..w.len().min(400)).step_by(3) {
+            let mut bad = w.clone();
+            bad[at] ^= 0x5a;
+            let _ = woff2::decode(&bad);
+        }
+    }
+}
+
+/// A single font of the tables of one member.
+fn sfnt_of(member: &(u32, Vec<(Tag, Vec<u8>)>)) -> Vec<u8> {
+    let list: Vec<Table<'_>> = member.1.iter().map(|(tag, data)| Table { tag: *tag, data }).collect();
+    sfnt::assemble(member.0, &list).unwrap()
 }
 
 #[test]

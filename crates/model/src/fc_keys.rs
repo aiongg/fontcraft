@@ -60,6 +60,10 @@ pub const EXPORT_PROFILES: &str = "com.fontcraft.exportProfiles";
 /// A glyph or master added from a linked source (Import Font, Import Master): the parameter's path as
 /// written (M7.12). Never written to a file: saving leaves linked glyphs and masters out.
 pub const LINKED_SOURCE: &str = "com.fontcraft.linkedSource";
+/// The font's audit settings: `{"defaultProfile"?, "config"?: {check: {threshold: number}},
+/// "values"?: {name: value}, "ignored"?: [{"check", "glyph"?, "master"?, "location"?, "reason"?,
+/// "date"?}], "profiles"?: [profile]}` (M12.59, `fontcraft_audit::profile`).
+pub const AUDIT: &str = "com.fontcraft.audit";
 
 /// Every key with the object it is stored on.
 pub const ALL: &[(&str, Owner)] = &[
@@ -78,6 +82,7 @@ pub const ALL: &[(&str, Owner)] = &[
     (STATUS_DEFINITIONS, Owner::Font),
     (EXPORT_PROFILES, Owner::Settings),
     (LINKED_SOURCE, Owner::Glyph),
+    (AUDIT, Owner::Font),
 ];
 
 /// Whether `key` is one of FontCraft's own keys.

@@ -1,0 +1,16 @@
+# Charstring programs of the Type 1 test font, one per line: `subr N:` or `glyph NAME:` and
+# Type 1 operators after their operands. The font around them is built by `tests/ps_fonts.rs`.
+subr 0: 3 0 callothersubr pop pop setcurrentpoint return
+subr 1: 0 1 callothersubr return
+subr 2: 0 2 callothersubr return
+subr 3: return
+subr 4: 300 40 hstem 30 60 vstem return
+subr 5: 100 0 rlineto return
+glyph .notdef: 50 500 hsbw 0 0 rmoveto 400 0 rlineto 0 700 rlineto -400 0 rlineto closepath endchar
+glyph space: 0 250 hsbw endchar
+glyph A: 20 600 hsbw 0 50 hstem 30 60 vstem 0 0 rmoveto 5 callsubr 0 50 rlineto 4 1 3 callothersubr pop callsubr 200 0 rlineto 0 600 rlineto closepath endchar
+glyph O: 40 700 hsbw 0 0 rmoveto 0 300 rlineto 1 callsubr 100 0 rmoveto 2 callsubr -50 0 rmoveto 2 callsubr 50 20 rmoveto 2 callsubr 50 0 rmoveto 2 callsubr 50 0 rmoveto 2 callsubr 50 -20 rmoveto 2 callsubr -50 0 rmoveto 2 callsubr 50 240 300 0 callsubr 0 -300 rlineto closepath endchar
+glyph acute: 30 300 hsbw 0 600 rmoveto 100 0 rlineto 50 100 rlineto -100 0 rlineto closepath endchar
+glyph Aacute: 20 600 hsbw 30 150 150 65 194 seac
+glyph E: 50 550 hsbw 0 50 300 40 650 50 hstem3 0 40 200 40 400 40 vstem3 700 -20 hstem 0 -21 hstem 0 0 rmoveto 400 hlineto 700 vlineto -400 hlineto closepath 50 -600 rmoveto 1000 4 div 0 rlineto 50 0 50 50 hvcurveto 50 -50 50 -50 vhcurveto closepath endchar
+glyph one: 40 0 500 0 sbw 0 0 rmoveto 100 hlineto 0 700 rlineto -100 hlineto closepath dotsection endchar

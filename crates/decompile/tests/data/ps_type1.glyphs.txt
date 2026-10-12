@@ -1,0 +1,68 @@
+## glyph[tag] {name,encoding,path}
+glyph[0] {.notdef,-,
+  500 width
+  50 0 move
+  450 0 line
+  450 700 line
+  50 700 line
+  endchar}
+glyph[1] {space,0x20,
+  250 width
+  endchar}
+glyph[2] {A,0x41,
+  600 width
+  0 50 hstem
+  50 110 vstem
+  20 0 move
+  120 0 line
+  120 50 line
+  newhints
+  300 340 hstem
+  50 110 vstem
+  320 50 line
+  320 650 line
+  endchar}
+glyph[3] {O,0x4F,
+  700 width
+  40 0 move
+  40 300 line
+  90 300 140 320 190 320 240 320 290 300 240 300 50 flex
+  240 0 line
+  endchar}
+glyph[4] {acute,0xC2,
+  300 width
+  30 600 move
+  130 600 line
+  180 700 line
+  80 700 line
+  endchar}
+glyph[5] {Aacute,-,
+  600 width
+  140 150 65 194 seac
+  endchar}
+glyph[6] {E,0x45,
+  550 width
+  0 50 hstem3
+  300 340 hstem3
+  650 700 hstem3
+  50 90 vstem3
+  250 290 vstem3
+  450 490 vstem3
+  700 topedge
+  -21 bottomedge
+  50 0 move
+  450 0 line
+  450 700 line
+  50 700 line
+  100 100 move
+  350 100 line
+  400 100 400 150 400 200 curve
+  400 250 350 300 300 300 curve
+  endchar}
+glyph[7] {one,0x31,
+  500 width
+  40 0 move
+  140 0 line
+  140 700 line
+  40 700 line
+  endchar}

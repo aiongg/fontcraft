@@ -6,6 +6,7 @@
 //!   converted after every transform is applied.
 //! - [`shapes_to_svg`], [`bez_to_svg`]: outlines as a compact SVG document, for other apps.
 //! - [`clipboard`]: our own JSON fragment of shapes, anchors and guides, with a version field.
+//! - [`svg_font`]: SVG 1.1 fonts read into a document and written from one master.
 //!
 //! SVG input is untrusted. It is checked against the limits below before usvg sees it, rewritten
 //! as a geometry-only document (so usvg never reads files, decodes images or runs filters), and
@@ -20,6 +21,7 @@ use fontcraft_model::MAX_COORDINATE;
 pub mod clipboard;
 mod read;
 mod sanitize;
+pub mod svg_font;
 mod write;
 
 pub use read::{Placement, SvgOutlines, read_svg};

@@ -1,0 +1,59 @@
+## Top Dict
+version             "1.0"
+Notice              "Test T1 is not a trademark of FontTools."
+Copyright           "Copyright c 2015 by FontTools. No rights reserved."
+FullName            "Test T1"
+FamilyName          "Test T1"
+Weight              "Regular"
+UnderlinePosition   -75
+FontBBox            {50,0,668,750}
+FSType              0
+sup.srcFontType     Type 1 (name-keyed)
+sup.nGlyphs         6
+## FontDict[0]
+FontName            "TestT1-Regular"
+## Private
+BlueValues          {0,0}
+## glyph[tag] {name,encoding,path}
+glyph[0] {.notdef,-,
+  500 width
+  450 0 move
+  450 750 line
+  50 750 line
+  50 0 line
+  100 50 move
+  100 700 line
+  400 700 line
+  400 50 line
+  endchar}
+glyph[1] {CR,-,
+  250 width
+  endchar}
+glyph[2] {space,-,
+  250 width
+  endchar}
+glyph[3] {period,-,
+  241 width
+  55 0 move
+  186 0 line
+  186 122 line
+  55 122 line
+  endchar}
+glyph[4] {ellipsis,-,
+  723 width
+  55 0 move
+  186 0 line
+  186 122 line
+  55 122 line
+  296 0 move
+  427 0 line
+  427 122 line
+  296 122 line
+  537 0 move
+  668 0 line
+  668 122 line
+  537 122 line
+  endchar}
+glyph[5] {.null,-,
+  0 width
+  endchar}

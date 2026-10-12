@@ -8,6 +8,7 @@ use std::collections::BTreeMap;
 use fontcraft_model::Font;
 use serde::Serialize;
 
+use crate::Severity;
 use crate::context::SourceMap;
 
 /// Most compatibility issues one report holds.
@@ -16,6 +17,10 @@ pub const MAX_COMPAT_ISSUES: usize = 100_000;
 pub const MAX_SHAPED_GLYPHS: usize = 65_535;
 /// Largest pixels-per-em a raster request may ask for.
 pub const MAX_RASTER_PPEM: u16 = 4_096;
+/// Most messages one run of an external tool passes on; the rest are dropped.
+pub const MAX_EXTERNAL_MESSAGES: usize = 10_000;
+/// Most problems one validation of a source's files reports; the rest are dropped.
+pub const MAX_SOURCE_FILE_ISSUES: usize = 10_000;
 
 /// A service that could not answer, and why (the check's skip reason).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -155,6 +160,54 @@ pub struct CompatibilityReport {
     pub compatible: BTreeMap<String, bool>,
 }
 
+/// An external program a check may hand a compiled font to. Each runs only when it is installed
+/// and the run asks for it, and stops after 60 seconds (`docs/plans/M12.md` § 3, limits).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ExternalTool {
+    /// A browser-style table sanitiser (`check.files.sanitiser`).
+    Sanitiser,
+    /// The validator the project value `validatorPath` names (`check.files.externalValidator`).
+    Validator,
+}
+
+/// One message of an external tool.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ExternalMessage {
+    /// The tool's error is [`Severity::Fail`], its warning [`Severity::Warn`], anything milder
+    /// [`Severity::Info`].
+    pub severity: Severity,
+    /// The tool's own message id, when it has one.
+    pub id: Option<String>,
+    pub message: String,
+    /// The table the message is about (tag text).
+    pub table: Option<String>,
+    /// The glyph the message is about.
+    pub glyph: Option<String>,
+}
+
+/// What is wrong with the files a source was read from.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum SourceFileProblem {
+    /// The designspace document cannot be parsed.
+    DesignspaceUnreadable,
+    /// The designspace document lists no sources.
+    NoSources,
+    /// A source the designspace document lists cannot be opened.
+    SourceUnreadable,
+    /// A UFO fails structural validation: a missing or malformed property list, layer contents
+    /// that do not match the files on disk, or an invalid glyph file.
+    UfoStructure,
+}
+
+/// One problem found when the files a source was read from are read again, strictly.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SourceFileIssue {
+    pub problem: SourceFileProblem,
+    /// The file, relative to the directory of the opened source (`Example-Bold.ufo/glyphs/a.glif`).
+    pub file: String,
+    pub message: String,
+}
+
 /// The L3 services checks may ask for. Every method answers [`Unavailable`] unless the
 /// implementer provides it.
 pub trait AuditServices {
@@ -187,6 +240,24 @@ pub trait AuditServices {
     fn rasterise(&self, bytes: &[u8], request: &RasterRequest) -> Result<Raster, Unavailable> {
         let _ = (bytes, request);
         Err(Unavailable::new("rasterising is not available here"))
+    }
+
+    /// Runs an external tool on the compiled font and returns its messages (at most
+    /// [`MAX_EXTERNAL_MESSAGES`]). Unavailable when the tool is not installed or the run did not
+    /// ask for it.
+    fn run_external(&self, tool: ExternalTool, bytes: &[u8]) -> Result<Vec<ExternalMessage>, Unavailable> {
+        let _ = bytes;
+        Err(Unavailable::new(match tool {
+            ExternalTool::Sanitiser => "no table sanitiser is installed or asked for",
+            ExternalTool::Validator => "no external validator is installed or asked for",
+        }))
+    }
+
+    /// Reads the files `font` was opened from again, strictly, and lists what is wrong with them
+    /// (at most [`MAX_SOURCE_FILE_ISSUES`]). Unavailable when the source has no files on disk.
+    fn check_source_files(&self, font: &Font) -> Result<Vec<SourceFileIssue>, Unavailable> {
+        let _ = font;
+        Err(Unavailable::new("the source files cannot be read again here"))
     }
 }
 

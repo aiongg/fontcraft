@@ -468,6 +468,8 @@ milestone = "M12"
 summary = "Writes the contents of a font as text: every table or chosen tables, as TTX-compatible XML, JSON, a readable report or hex. Tables can be shown in named views (raw fields, a friendlier listing, feature-file syntax, kerning pairs and so on), and the font program can be listed per glyph. A Type 1 font is dumped as its decrypted, readable text."
 ref = "fontTools ttx; AFDKO spot (main.c usage and per-table usage), tx -dump / -dcf help, ttxn.py, detype1; fontc otl-normalizer; fontTools varLib.avar.unbuild"
 status = "docs"
+notes = "M12.4: --format ttx, json and hex, -t (repeatable, in the order given), -x, --split tables, -o, --output-dir, --face, --no-disassemble, --strict, --no-clobber and --newline are built. The TTX form follows ttx 4.66 for the core tables (head hhea maxp OS/2 name post cmap hmtx loca glyf gasp vhea vmtx fpgm prep cvt hdmx), checked against its output on a font built in the tests; the other tables are written as hex until M12.5 to M12.7. The character names ttx writes as comments after cmap mappings are left out. The text views, @font, @glyphs, --normalize and --split glyphs wait for M12.10."
+guesses = ["Without -o or --output-dir the dump goes to standard output, where ttx writes FONT.ttx beside the input; a user of the reference command line would settle it.", "The JSON form is the TTX element tree, each element an object with name, attributes, text and children; no reference tool writes JSON, so readers of it settle the shape.", "The hex form lists each table with a header line, then offset, 16 bytes in two groups of eight and their ASCII, as hexdump -C does; no reference tool settles it."]
 
 [[cli]]
 id = "info"
@@ -531,6 +533,7 @@ status = "docs"
 
 [[cli]]
 id = "tables extract"
+notes = "Checked with AFDKO sfntedit 5.0.1 on a font built with fontTools: naming a table the font does not have prints a warning and exits 0, for extraction and deletion alike; we do the same. The default file name strips any extension, not only .otf and .ttf."
 usage = "fontcraft-cli tables extract FONT TAG[=FILE]... [--output-dir DIR]"
 options = [
   "TAG[=FILE]...: tables to extract; several tags may also be given comma-separated",
@@ -549,6 +552,7 @@ status = "docs"
 
 [[cli]]
 id = "tables add"
+notes = "Without -o or --in-place the result is written beside the input as FONT.edited.EXT (our naming; the reference tool edits in place). The output of add, delete and edit was compared byte for byte with sfntedit 5.0.1 on a font built in code (test `tables_edit_matches_the_reference_tool`)."
 usage = "fontcraft-cli tables add FONT TAG=FILE... [-o OUT | --in-place]"
 options = [
   "TAG=FILE...: table tag and the file holding its bytes",
@@ -623,6 +627,7 @@ guesses = ["Copying a table the target already has replaces it without a prompt,
 
 [[cli]]
 id = "tables checksum"
+notes = "Checked with AFDKO sfntedit 5.0.1: a wrong table checksum is reported for that table only; the expected head.checkSumAdjustment is computed with the directory's checksums corrected, so it is not reported as well. --fix writes FONT.fixed.EXT by default."
 usage = "fontcraft-cli tables checksum FONT... [--fix] [-o OUT | --in-place]"
 options = [
   "--fix: write a corrected copy",
@@ -659,6 +664,7 @@ status = "docs"
 
 [[cli]]
 id = "tables reorder"
+notes = "Our recommended order is fontTools' (DSIG last). sfntedit 5.0.1 puts DSIG before tables outside its order list (seen with an unknown tag `zzzz`); without DSIG both give the same bytes. Default output FONT.reordered.EXT."
 usage = "fontcraft-cli tables reorder FONT [--order recommended|TAG,...] [-o OUT | --in-place]"
 options = [
   "--order recommended|TAG,...: target order; default recommended",
@@ -736,6 +742,10 @@ milestone = "M12"
 summary = "Renames glyphs everywhere they are referenced: outline table, post or CFF names, and for sources also components, kerning, groups and feature code. Names come from a GOADB (source name to final name), a two-column map, the production-name rules, or pairs on the command line. Renaming two glyphs to the same name is an error."
 ref = "AFDKO tx -gf / -gr, MakeOTFUserGuide.md › GlyphOrderAndAliasDB; mergefonts glyph alias file"
 status = "docs"
+notes = "Built in M12.15 (crates/tables/src/rename.rs, cmd/glyph_order_file.rs). A compiled font gets new names in post (version 2) and, for a CFF font, in the charset; a CID-keyed font is refused. A source is renamed with the model's rename, so components, kerning, groups and the glyph order parameter follow; feature code is not rewritten yet: the result lists where an old name is still used. --update-unicodes works on sources only; on a compiled font it is refused."
+guesses = [
+  "Names a GOADB or map lists that the font lacks are reported as missing, not refused, since one GOADB serves a whole family. Settled by running tx -gf with a GOADB that names an absent glyph.",
+]
 
 [[cli]]
 id = "glyphs reorder"
@@ -757,6 +767,12 @@ milestone = "M12"
 summary = "Changes the glyph order of a font and rewrites everything indexed by glyph: outlines, metrics, cmap, coverage and class tables in GDEF/GSUB/GPOS, variation data, colour tables. The new order must contain every glyph exactly once, except that glyphs left unnamed keep their relative order at the end; .notdef stays at index 0."
 ref = "fontTools ttLib.reorderGlyphs (library); AFDKO tx -go, +b"
 status = "docs"
+notes = "Built in M12.15 (crates/tables/src/reorder.rs). Compiled fonts: glyf and loca, hmtx and vmtx (with the long-metric counts), cmap, post, CFF, GDEF, GSUB, GPOS, kern, gvar, HVAR, VVAR, VORG, hdmx and LTSH are rewritten, as fontTools ttLib.reorderGlyphs does through its object model; a font with CFF2, colour, bitmap, MATH, JSTF, SVG or Apple layout tables is refused. Unlike reorderGlyphs, a partial order is accepted (the rest follows in its old order). An HVAR or VVAR without an advance mapping gets an explicit one, since the implicit mapping goes by glyph id. Sources: unicode and name sorting only."
+guesses = [
+  "--sort unicode puts encoded glyphs first by their lowest code point and keeps the unencoded ones after them in their old order. Settled by tx's +b ordering on a font with unencoded glyphs.",
+  "--sort size sorts by the byte size of each glyph's outline data (glyf entry or charstring), smallest first. Settled by finding a reference tool that documents a size order.",
+  "A post version 3 TrueType font, which stores no names, gets the names glyphNNNNN; fontTools derives names from cmap instead. Settled by comparing glyph orders with fontTools on such a font.",
+]
 
 [[cli]]
 id = "metrics"
@@ -786,6 +802,12 @@ milestone = "M12"
 summary = "Reports glyph metrics computed from the outlines: per glyph the identity, advance width and exact bounding box, optionally side bearings, the font-wide bounding box with the glyphs that set each edge, the kerning pair list, and shape statistics (area, centre of mass, slant). It can also write an AFM file."
 ref = "AFDKO tx -mtx / -afm help, spot hmtx and kern views; fontTools pens.statisticsPen, cffLib.width"
 status = "docs"
+notes = "Statistics are reported in font units (the statistics pen scales to the em first); the area is signed, negative for clockwise outer contours as in TrueType. Bounds checked against tx -mtx -1 and statistics against pens.statisticsPen on a font built with fontTools. Not yet: vertical side bearings, sources as input (compile first), re: items in glyph lists; --location needs the instancer (M12.20)."
+guesses = [
+  "The text form adds statistics, font-statistics and kerning sections in the same bracketed style as the glyph lines; a comparison with a future tx release or user feedback would settle the layout.",
+  "Glyph names come from post, then the CFF charset, then uniXXXX from the cmap, then glyphNNNNN, with #n added to repeats as fontTools does; tx's own fallback names (g1, g2) were not followed.",
+  "With several fonts on the command line the text forms print a '## FONT' line before each report.",
+]
 
 [[cli]]
 id = "convert"
@@ -1074,6 +1096,7 @@ area = "cli-tools"
 milestone = "M12"
 summary = "Group of actions on OpenType collections (.ttc, .otc): list the member fonts and the tables they share, build a collection from separate fonts, and split a collection into separate fonts. Without an action it lists."
 ref = "AFDKO otf2otc.py, otc2otf.py; fontTools ttLib __main__"
+notes = "Without an action, a first argument that is an existing file is listed; any other first word that is not an action is a usage error (exit status 2)."
 status = "docs"
 
 [[cli]]
@@ -1092,6 +1115,7 @@ area = "cli-tools"
 milestone = "M12"
 summary = "Lists each member of a collection with its index, PostScript name, outline flavour and tables, marking the tables whose data is shared with another member. Writes nothing."
 ref = "AFDKO otc2otf -r"
+notes = "Shared means another member's directory points at the same bytes (same tag, offset and length), as otc2otf -r reports it. A WOFF2 collection is unwrapped first; a single font lists as one member."
 status = "docs"
 
 [[cli]]
@@ -1099,7 +1123,7 @@ id = "collection pack"
 usage = "fontcraft-cli collection pack FONT FONT... -o OUT.ttc [--share-table TAG=INDEX]... [--no-share]"
 options = [
   "FONT...: fonts or collections to combine; members of input collections are appended in order",
-  "--share-table TAG=INDEX: use the TAG table of the INDEX-th input font (zero-based) for every member; repeatable",
+  "--share-table TAG=INDEX[,TAG=INDEX...]: use the TAG table of the INDEX-th input font (zero-based, counting the members of input collections) for every member that has a TAG table; repeatable",
   "--no-share: store every table separately even when identical",
   "--container plain|woff2: write an ordinary collection or a WOFF2 collection",
   "[global options]: -o/--output, --output-dir, --in-place, --no-clobber, --face, --json, -q/--quiet, -v/--verbose, --log, --log-file, --color, -j/--jobs, --timing, --trace, --backtrace, --options, --save-options, --dry-run, --timestamp, @FILE, -h/--help, --version (behavior rows cli.global.*)",
@@ -1113,6 +1137,8 @@ area = "cli-tools"
 milestone = "M12"
 summary = "Builds a collection from two or more fonts in the order given. Tables whose bytes are identical in several fonts are stored once. A table can also be forced to come from one font for all members."
 ref = "AFDKO otf2otc.py help; fontTools ttLib __main__"
+notes = "The layout follows otf2otc 5.0.1 (checked by running it on fonts built in code): header version 1, font directories in input order, then the tables grouped by tag in the order the tags first appear (a tag new to a later font goes in at that font's table position), each group holding the distinct versions in the order met. Table bytes are kept, head.checkSumAdjustment included; directory checksums are computed. DSIG tables are kept as they are."
+guesses = ["A --share-table that names a font past the inputs, or a font without that table, is refused; otf2otc ignores it silently. A user report of a script that relies on otf2otc's behaviour would settle it."]
 status = "docs"
 
 [[cli]]
@@ -1120,7 +1146,7 @@ id = "collection unpack"
 usage = "fontcraft-cli collection unpack FILE.ttc [--face N|NAME] [--output-dir DIR]"
 options = [
   "--face N|NAME: extract only this member",
-  "--name-by postscript-name|index: output names from PostScript names (default) or as stem-N",
+  "--name-by postscript-name|index: output names from PostScript names (default) or as STEM-fontN",
   "[global options]: -o/--output, --output-dir, --in-place, --no-clobber, --face, --json, -q/--quiet, -v/--verbose, --log, --log-file, --color, -j/--jobs, --timing, --trace, --backtrace, --options, --save-options, --dry-run, --timestamp, @FILE, -h/--help, --version (behavior rows cli.global.*)",
 ]
 command = "collection.unpack"
@@ -1133,6 +1159,8 @@ area = "cli-tools"
 milestone = "M12"
 summary = "Writes each member of a collection as a separate font named after its PostScript name (or the collection name plus -fontN when it has none) with .ttf or .otf according to its outlines, or only the member chosen with --face. Shared tables are copied into every font that uses them."
 ref = "AFDKO otc2otf.py; fontTools ttLib __main__ (-y with -o)"
+notes = "Each member is written with the recommended table order and recomputed checksums, as otc2otf (fontTools' save) writes it; otc2otf also sets head.modified to the time of the run, which FontCraft does not, so a comparison with its output masks head.modified and head.checkSumAdjustment."
+guesses = ["When two members have the same PostScript name, the later ones are named STEM-fontN; otc2otf writes them to the same path, so the last one wins. A user report would settle whether the reference behaviour is wanted."]
 status = "docs"
 
 [[cli]]
@@ -1159,8 +1187,8 @@ options = [
   "--format woff2|woff: container to write; default woff2",
   "--glyf-transform / --no-glyf-transform: apply WOFF2's glyf/loca transform (default) or store them untransformed",
   "--hmtx-transform / --no-hmtx-transform: apply the optional hmtx transform that omits side bearings equal to xMin (default off)",
-  "--quality N: Brotli quality 0 to 11 for WOFF2 (default 11) or zlib level 1 to 9 for WOFF (default 9)",
-  "--zopfli[=ITERATIONS]: for WOFF, use the slower compressor that produces a few percent smaller files",
+  "--quality N: Brotli quality for WOFF2 (default 11) or zlib level for WOFF (default 6, fontTools' level); only the defaults are written yet",
+  "--zopfli: for WOFF, the slower compressor that produces a few percent smaller files (refused: not available yet)",
   "--metadata FILE: extended metadata XML block to embed",
   "--private-data FILE: private data block to embed",
   "[global options]: -o/--output, --output-dir, --in-place, --no-clobber, --face, --json, -q/--quiet, -v/--verbose, --log, --log-file, --color, -j/--jobs, --timing, --trace, --backtrace, --options, --save-options, --dry-run, --timestamp, @FILE, -h/--help, --version (behavior rows cli.global.*)",
@@ -1175,6 +1203,7 @@ area = "cli-tools"
 milestone = "M12"
 summary = "Compresses a TrueType or OpenType font, or a collection, into WOFF2 (default) or WOFF 1.0. The default output name replaces the extension with .woff2 or .woff."
 ref = "fontTools ttLib.woff2 compress; ttx --flavor woff|woff2, --with-zopfli"
+notes = "Collections are written only as WOFF2 (WOFF 1.0 has no collection form): each distinct table once, every font listing its tables, each loca right after its glyf. fontTools' WOFF2 module refuses collections, so the collection form has no oracle. A quality or zopfli request other than the defaults is refused instead of being ignored."
 status = "docs"
 
 [[cli]]
@@ -1194,6 +1223,7 @@ area = "cli-tools"
 milestone = "M12"
 summary = "Unwraps a WOFF or WOFF2 file into the plain font or collection it contains, named with .ttf, .otf or .ttc according to the content. Metadata and private blocks can be saved separately."
 ref = "fontTools ttLib.woff2 decompress"
+notes = "A WOFF2 collection decodes to a collection file (.ttc) with each distinct table once; head keeps its stored checkSumAdjustment there, while a single font gets it recomputed."
 status = "docs"
 
 [[cli]]
@@ -1257,7 +1287,7 @@ id = "outlines remove-overlaps"
 usage = "fontcraft-cli outlines remove-overlaps INPUT [GLYPH...] [--keep-hinting] [--ignore-errors] [--keep-unused-subroutines] [-o OUT]"
 options = [
   "GLYPH...: glyphs to process; default all",
-  "--keep-hinting: keep TrueType instructions or CFF hints of glyphs that did not change, and the font-wide hint tables; default drops all hinting of a TrueType font",
+  "--keep-hinting: keep TrueType instructions or CFF hints of glyphs that did not change; by default every processed glyph loses its instructions and the font-wide hint tables stay",
   "--ignore-errors: leave a glyph unchanged when its overlaps cannot be resolved instead of failing",
   "--keep-unused-subroutines: do not remove CFF subroutines that became unused",
   "--min-area N: delete resulting contours whose bounding box is smaller than N square units; default 25",
@@ -1276,6 +1306,11 @@ milestone = "M12"
 summary = "Merges overlapping contours and overlapping components of each glyph into a single non-overlapping outline. Composite glyphs whose components overlap are decomposed first. In a binary font, hints of glyphs that changed are dropped unless told otherwise."
 ref = "fontTools ttLib.removeOverlaps; AFDKO checkoutlinesufo (overlap removal), tx +V; fontTools varLib.instancer --remove-overlaps"
 status = "docs"
+notes = "Built in M12.28 (`fontcraft_tables::outlines`, `outlines.removeOverlaps`). TrueType fonts follow fontTools 4.66 `ttLib.removeOverlaps`, checked on a font built in code: simple glyphs first, then composites by depth; a composite is merged only when two of its components intersect; a glyph is replaced only when the merged contours differ, keeping its winding; replaced glyphs get lsb = xMin. Without --keep-hinting every processed glyph loses its instructions, while fpgm, prep and cvt stay, as in the oracle. CFF-flavoured and variable fonts are refused for now. Sources run path.removeOverlapForAllMasters, which leaves components alone."
+guesses = [
+  "--min-area (default 25) only drops contours of glyphs whose overlaps were merged, so glyphs without overlaps match the fontTools result; checkoutlinesufo's behaviour on tiny contours of unmerged glyphs would settle it.",
+  "--keep-contour-order has no effect: the editor's merge always keeps the order and start points of the contours it can match; checkoutlinesufo --ignore-contour-order output on a corpus font would show whether the difference matters.",
+]
 
 [[cli]]
 id = "outlines direction"
@@ -1294,6 +1329,10 @@ milestone = "M12"
 summary = "Sets the winding of every contour from how contours nest: outer contours counter-clockwise and inner ones clockwise for PostScript outlines, the opposite for TrueType, or simply reverses every contour."
 ref = "fontmake --keep-direction, cu2qu --keep-direction (direction is otherwise reversed for TrueType); AFDKO checkoutlinesufo (restores direction after overlap removal)"
 status = "inferred"
+notes = "Built in M12.28 with path.correctPathDirection's geometry; the TrueType convention reverses its result keeping each start point, reverse only reverses. Composites are left alone. TrueType fonts only among compiled fonts."
+guesses = [
+  "The default flavour of a source is the PostScript convention (the editor's); a source written for TrueType outlines would need --flavour truetype.",
+]
 
 [[cli]]
 id = "outlines extremes"
@@ -1309,6 +1348,7 @@ milestone = "M12"
 summary = "Inserts on-curve points where curves reach a horizontal or vertical extreme, without changing the shape, skipping extremes that would leave a segment shorter than the threshold."
 ref = "AFDKO comparefamily / otfautohint expectations (hinting needs points at extremes); editor command path.addExtremes"
 status = "inferred"
+notes = "Built in M12.28 with path.addExtremes (and path.forceExtremes for --min-segment 0). The editor's threshold is fixed at 3 units, so --min-segment accepts 3 or 0 only."
 
 [[cli]]
 id = "outlines round"
@@ -1327,6 +1367,10 @@ milestone = "M12"
 summary = "Rounds point coordinates, component offsets, anchors and advance widths to integers or to a coarser grid. The reference tools round by default and offer options to keep decimals; this action applies the rounding as a separate step."
 ref = "AFDKO checkoutlinesufo -d, otfautohint -d, makeinstancesufo -r (all: do not round); fontmake --round-instances, --cff-round-tolerance"
 status = "inferred"
+notes = "Built in M12.28. On compiled fonts point coordinates, component offsets and advance widths are rounded; instructions stay because no point changes index. On sources path.roundCoordinatesForAllMasters runs with the grid asked for (advance widths stay, as in the editor command); --tolerance is for compiled fonts only."
+guesses = [
+  "Halfway values round away from zero to the grid (Rust's rounding); fontTools' otRound rounds them up, which only differs for negative halves on a grid coarser than 1 unit.",
+]
 
 [[cli]]
 id = "outlines to-quadratic"
@@ -1409,6 +1453,7 @@ milestone = "M12"
 summary = "Replaces component references with the contours they stand for. In a TrueType font the decomposed glyphs lose their instructions. Options restrict the action to nested components (flattening to one level) or to components with a transform."
 ref = "AFDKO ttfdecomponentizer.py; fontmake -f; fontc --decompose-components, --decompose-transformed-components"
 status = "docs"
+notes = "Built in M12.28. Full decomposition matches ttfdecomponentizer (AFDKO 5.0.1) on a font built in code: contours start at their first on-curve point, decomposed glyphs have no instructions. --transformed-only decomposes a whole glyph when a direct component has a 2x2 transform (a glyf glyph cannot mix contours and components); --nested-only rewrites composites of composites as composites of simple glyphs with composed transforms, offsets rounded. Sources call glyph.decomposeGlyphForAllMasters (M6), whose options are not offered on sources yet."
 
 [[cli]]
 id = "autohint"
@@ -1492,6 +1537,12 @@ milestone = "M12"
 summary = "Removes hinting. From CFF outlines it removes stem hints, hint masks and flex; from TrueType glyphs their instructions; and unless told otherwise the font-wide hinting data as well. Hint-related leftovers in other tables are cleaned up. In a source it clears manual and stored automatic hints."
 ref = "AFDKO tx -n, ttxn -nh; fontTools pyftsubset --no-hinting / --hinting-tables"
 status = "docs"
+notes = "Binary fonts only so far: a source input is refused until clearing stored hints in sources is built on the hint commands. TrueType follows pyftsubset --no-hinting (glyph programs, the hinting tables, the maxp limits, GPOS device tables and contour-point anchors); CFF charstrings come out without subroutines, as tx writes them, with the Private DICT hint values pyftsubset deletes. Checked against pyftsubset 4.66 on a CFF font built for the test (stems, hint masks, flex, local and global subroutines)."
+guesses = [
+  "`--gasp smooth` writes one range up to 0xFFFF ppem with flags 0x000F, the value the font-quality checks expect on an unhinted font; the reference app's export of an unhinted TrueType font would settle it.",
+  "A WOFF, WOFF2 or collection input gives a plain font file of the chosen face; keeping the container would need a decision once collections and WOFF writing are commands.",
+  "With `--keep-font-hints` the TrueType hdmx, VDMX and LTSH tables still go, since they record the hinted glyphs; only fpgm, prep, cvt, cvar and the maxp limits stay.",
+]
 
 [[cli]]
 id = "check"
@@ -1657,6 +1708,13 @@ milestone = "M12"
 summary = "Draws proof sheets of a font's glyphs as PDF, SVG or HTML: overview palettes, one-glyph pages with points, coordinates and metrics, hint and alignment-zone overlays, size waterfalls, side-by-side comparison of several fonts, and sheets that show what layout features and the cmap do. Input may be a binary font, a Type 1 font or a source."
 ref = "AFDKO proofpdf.py help and pdflib/fontpdf.py parameter list (charplot, digiplot, fontplot, fontplot2, fontsetplot, hintplot, waterfallplot), tx -pdf / -ps help, spot proof options and table views; fontTools pens.svgPathPen, varLib.plot"
 status = "docs"
+notes = "M12.35 builds the palette, outline and waterfall layouts as SVG (one file per page, NAME.proof-001.svg …) and the HTML specimen; PDF is M12.36. The other layouts, --show/--hide and the other drawing options, --list-settings, --open and proofs of sources and Type 1 fonts refuse with a message until their packages land. Outline pages draw the points skrifa reports, so the implied on-curve points between two TrueType off-curve points appear as on-curve points."
+guesses = [
+  "A palette cell is one glyph size wide and tall, plus two label lines (name, then code point and advance) at a tenth of the glyph size; the glyph is scaled so the font's ascender-to-descender height fills the cell. Settled by measuring a fontplot page of the reference script on our own font.",
+  "An explicit --glyphs list is shown in --sort order (glyph order by default), not in the order given. Settled by running the reference script with an out-of-order -g list.",
+  "A waterfall without --text shows the characters of the selected glyphs, split into groups that fit one line at the largest size; each group is set at every size before the next group starts. Settled by a waterfallplot run of the reference script.",
+  "Pages of an SVG proof are numbered with at least three digits after the name (A.proof-001.svg); a one-page proof keeps the plain name. Nothing in the references fixes it.",
+]
 
 [[cli]]
 id = "features"
@@ -1791,7 +1849,7 @@ status = "docs"
 
 [[cli]]
 id = "features normalize"
-usage = "fontcraft-cli features normalize FONT [--table gpos|gsub|gdef|all] [-o OUT]"
+usage = "fontcraft-cli features normalize FONT [--table gpos|gsub|gdef|all] [--location AXIS=VALUE,...] [--face N|NAME] [-o OUT] [--no-clobber]"
 options = [
   "--table gpos|gsub|gdef|all: which part to print; default all",
   "--location AXIS=VALUE...: resolve variable values at this location instead of printing them as default plus deltas",
@@ -1803,9 +1861,10 @@ equivalents = [
 ]
 area = "features"
 milestone = "M12"
-summary = "Prints the effective layout rules of a font in a canonical text form that does not depend on how the compiler arranged lookups and subtables, so that two builds can be compared with a text diff. Covers GPOS kerning, mark attachment and cursive attachment, the GDEF ligature-caret list, and GSUB substitutions."
+summary = "Prints the effective layout rules of a font in a canonical text form that does not depend on how the compiler arranged lookups and subtables, so that two builds can be compared with a text diff. Covers GPOS kerning, mark attachment and cursive attachment, and the GDEF ligature-caret list; GSUB is accepted but prints no rules, as in otl-normalizer."
 ref = "fontc otl-normalizer README, args.rs and source"
 status = "docs"
+notes = "Ported from otl-normalizer 1.0.0 (MIT OR Apache-2.0) with its text format kept byte for byte: rules grouped by feature and by the language systems with the same lookups; within a lookup the first subtable that covers a pair or glyph wins; kerning values of one pair add up across the lookups of a feature, later mark and cursive rules replace earlier ones; variable values print as the default plus the value at each master location ({…}). otl-normalizer 1.0.0 prints nothing for GSUB (its GSUB printer is a stub), so neither do we. Glyph names come from post, else the AGLFN name of the lowest code point of the Unicode-platform cmap subtables, else uniXXXX/uXXXXX, else glyph.NNNNN, as otl-normalizer names them. Where otl-normalizer panics on damaged data we report an error; a pair or rule count past the work limit is refused. --location is ours (otl-normalizer has no location option): user coordinates normalised through fvar and avar, each value printed once. -o writes the file even when the text is empty, where otl-normalizer creates no file. Unconfirmed until the corpus measure: text identical to otl-normalizer on every corpus font with GPOS and on fontc's builds."
 
 [[cli]]
 id = "variations"
@@ -1840,6 +1899,8 @@ milestone = "M12"
 summary = "Builds the avar table of a variable font from the axis mappings of a designspace (per-axis maps, and cross-axis mappings as avar version 2) and stores it in the font. Without a designspace it rebuilds avar from the font's own data, which normalises it."
 ref = "fontTools varLib.avar __main__ / build"
 status = "docs"
+notes = "Built in M12.33: segment maps equal to fontTools 4.66 varLib.avar.build on a designspace built in code. The axis range is the font's fvar range (fontTools takes the designspace's; they agree in a consistent family); discrete designspace axes are left out; an fvar axis the designspace lacks gets the identity map where fontTools stops. Cross-axis mappings (avar version 2) need the variation model's deltas (M9.5) and are refused until then; the store is laid out by write-fonts' builder, so its bytes may differ from fontTools' while its values agree."
+guesses = ["Without a designspace the font's own version 1 avar is read back as user-space maps and built again (fontTools' deprecated varLib.avar prints the maps instead); a version 2 avar is refused. Comparing with a user's expectations of the reference tool would settle it."]
 
 [[cli]]
 id = "variations plan-avar"
@@ -1867,7 +1928,7 @@ status = "docs"
 
 [[cli]]
 id = "variations map"
-usage = "fontcraft-cli variations map FONT [AXIS=VALUE...] [--from user|normalized] [--to design|normalized|user] [--all-axes]"
+usage = "fontcraft-cli variations map FONT [AXIS=VALUE...] [--from user|normalized] [--to normalized|user] [--all-axes]"
 options = [
   "AXIS=VALUE...: location to convert; axes not given are at their default",
   "--from user|normalized: the input values are user-space values (default) or already normalised to -1..1",
@@ -1884,6 +1945,7 @@ milestone = "M12"
 summary = "Converts a location between coordinate spaces of a variable font: user values through fvar normalisation and the avar table to final normalised coordinates, or back. Useful for checking what an avar mapping does at a given point."
 ref = "fontTools varLib.avar.map"
 status = "docs"
+notes = "Built in M12.33 and checked against fontTools 4.66 varLib.avar.map on fvar and avar tables built in code: version 1 maps unquantised values; version 2 quantises to F2Dot14, adds the rounded store deltas and clamps. As fontTools prints them, the axes listed are the ones given, or with avar version 2 the ones that end away from 0; --all-axes lists every axis. Values print as C's %g. fontTools prints user values unless -o; here the default output is the space other than --from, as the options say. A designspace as FONT (which fontTools accepts) is not supported."
 
 [[cli]]
 id = "variations build-hvar"
@@ -2019,14 +2081,15 @@ guesses = [
 
 [[cli]]
 id = "bench"
-usage = "fontcraft-cli bench SUBCOMMAND [ARGS...] [--runs N] [--warmup N] [--compare TOOL...] [--json]"
+usage = "fontcraft-cli bench [--runs N] [--warmup N] [--compare COMMAND]... [--stages] [--save FILE] [--baseline FILE] [--threshold PCT] [--json] SUBCOMMAND [ARGS...]"
 options = [
-  "SUBCOMMAND [ARGS...]: the fontcraft-cli invocation to time",
+  "SUBCOMMAND [ARGS...]: the fontcraft-cli invocation to time; it comes after bench's own options (or after --)",
   "--runs N: timed repetitions; default 10",
   "--warmup N: untimed runs first; default 1",
-  "--compare TOOL...: also time these reference command lines (quoted), for example 'fontc Source.glyphs'",
-  "--stages: include the per-stage timing table of the last run",
+  "--compare COMMAND: also time this reference command line (quoted, found on PATH), for example 'fontc Source.glyphs'; may be repeated",
+  "--stages: include the per-stage timing table of one more run with --timing",
   "--save FILE / --baseline FILE: store the result, or compare with a stored result and exit 1 on a slowdown beyond --threshold PCT (default 10)",
+  "--json: print the result as JSON instead of text",
   "[global options]: -o/--output, --output-dir, --in-place, --no-clobber, --face, --json, -q/--quiet, -v/--verbose, --log, --log-file, --color, -j/--jobs, --timing, --trace, --backtrace, --options, --save-options, --dry-run, --timestamp, @FILE, -h/--help, --version (behavior rows cli.global.*)",
 ]
 command = ""
@@ -2039,6 +2102,10 @@ milestone = "M12"
 summary = "Times a subcommand: runs it several times on the given inputs, discards its outputs, and reports the minimum, median and spread of wall time and peak memory together with the per-stage breakdown. It can run reference tools found on PATH on the same input for a side-by-side figure."
 ref = "fontTools cu2qu/benchmark.py, qu2cu/benchmark.py; fontc --emit-timing; fontmake --timing"
 status = "inferred"
+notes = "Built in M12.43. Each run is a child process with its output discarded, so the figures include process start-up for us and for the reference tools alike. The figures are minimum, median, maximum and sample standard deviation of wall time (ms) and of peak resident memory (KiB, the VmHWM sampled every millisecond from /proc: Linux only, a lower bound for very short runs). A run of ours completes with exit status 0 or 1 (1 means it found something); a reference tool must exit 0, and one that fails or is not on PATH is reported in its entry without failing the run. --baseline compares the median wall time only; a timed subcommand that fails stops bench with exit status 4. --stages adds the standard error of one extra run with --timing, and reports none while the subcommand refuses that option. Limits: --runs 1 to 10,000, --warmup up to 1,000, 16 --compare lines, a stored result of at most 1 MiB."
+guesses = [
+  "Bench's options come before the timed subcommand and everything from the subcommand on is timed, so a subcommand's own options (such as --json) never clash with bench's; the reference benchmark modules take no such command line, so use will settle it.",
+]
 
 [[cli]]
 id = "completion"
@@ -2055,6 +2122,7 @@ milestone = "M12"
 summary = "Prints a shell completion script for the named shell to standard output. Completions cover subcommands, actions, option names and enumerated option values."
 ref = "AFDKO completion.py"
 status = "docs"
+notes = "Built in M12.43. The scripts are generated from the subcommand table: names, actions, every option of each subcommand's option table (switches with their --no- form) and the option names its usage synopsis shows, and the alternatives of a|b groups as option values or first-argument words. Other positions fall back to the shell's file-name completion. pwsh is accepted for powershell. The reference generator completes only command names."
 
 [[cli]]
 id = "help"
@@ -2117,6 +2185,7 @@ milestone = "M12"
 summary = "Read-only query that renders tables of a binary font as XML, JSON, readable text or hex and returns the text or the paths written. With format json and no output path the parsed tables are returned in the command result. Tables that fail to parse fall back to hex unless strict is set."
 ref = "docs/spec/20-cli.md › dump"
 status = "docs"
+notes = "M12.4: formats ttx, json and hex; tables as tags or {tag} (views wait for M12.10), excludeTables, face, split tables (with output or outputDir), disassemble, strict, newline, noClobber. The root carries ttLibVersion 4.66, the fontTools release whose dialect the writer follows."
 
 [[command]]
 id = "font.inspect"
@@ -2410,7 +2479,7 @@ label = "Compress to WOFF"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{font: path, format?: \"woff2\"|\"woff\", output?: path, glyfTransform?: bool, hmtxTransform?: bool, quality?: int, zopfli?: bool|int, metadata?: path, privateData?: path}"
+params = "{font: path, format?: \"woff2\"|\"woff\", output?: path, outputDir?: path, glyfTransform?: bool, hmtxTransform?: bool, quality?: int, zopfli?: bool|int, metadata?: path, privateData?: path}"
 area = "cli-tools"
 milestone = "M12"
 summary = "Wraps a font or collection in WOFF2 or WOFF 1.0 and returns the output path with original and compressed sizes per table. The WOFF2 result decodes to a font that is table-for-table equivalent to the input (byte-identical when the glyf transform is off)."
@@ -2455,6 +2524,7 @@ milestone = "M12"
 summary = "Applies the geometry of path.removeOverlap to every selected glyph of a source or binary font, decomposing composites with overlapping components first, and for a binary font rewrites only the outline table and its dependants. Returns the glyphs changed and the glyphs that failed."
 ref = "docs/spec/20-cli.md › outlines"
 status = "docs"
+notes = "Built in M12.28. TrueType fonts follow fontTools 4.66 `ttLib.removeOverlaps`, checked on a font built in code: simple glyphs first, then composites by depth; a composite is merged only when two of its components intersect; a glyph is replaced only when the merged contours differ, keeping its winding; replaced glyphs get lsb = xMin. Without --keep-hinting every processed glyph loses its instructions, while fpgm, prep and cvt stay, as in the oracle. CFF-flavoured and variable fonts are refused for now. Sources run path.removeOverlapForAllMasters, which leaves components alone."
 
 [[command]]
 id = "outlines.correctDirection"
@@ -2468,6 +2538,7 @@ milestone = "M12"
 summary = "Applies path.correctPathDirection to every selected glyph of a source or binary font for the chosen winding convention, or reverses all contours, and returns the glyphs changed."
 ref = "docs/spec/20-cli.md › outlines"
 status = "inferred"
+notes = "Built in M12.28; see the `outlines direction` row."
 
 [[command]]
 id = "outlines.addExtremes"
@@ -2481,6 +2552,7 @@ milestone = "M12"
 summary = "Applies path.addExtremes to every selected glyph of a source or binary font and returns the number of points added per glyph."
 ref = "docs/spec/20-cli.md › outlines"
 status = "inferred"
+notes = "Built in M12.28; see the `outlines extremes` row."
 
 [[command]]
 id = "outlines.roundCoordinates"
@@ -2494,6 +2566,7 @@ milestone = "M12"
 summary = "Rounds point coordinates, component offsets, anchors and advances of every selected glyph to the grid and returns the number of values changed."
 ref = "docs/spec/20-cli.md › outlines"
 status = "inferred"
+notes = "Built in M12.28; see the `outlines round` row."
 
 [[command]]
 id = "outlines.convertCurves"
@@ -2533,6 +2606,7 @@ milestone = "M12"
 summary = "Applies glyph.decomposeGlyph to every selected composite of sources or binary fonts, optionally only to nested or transformed components, dropping the instructions of decomposed TrueType glyphs. Returns the glyphs decomposed."
 ref = "docs/spec/20-cli.md › outlines"
 status = "docs"
+notes = "Built in M12.28; see the `outlines decompose` row. On a source it needs glyph.decomposeGlyphForAllMasters, which M6 builds."
 
 [[command]]
 id = "hints.remove"
@@ -2546,6 +2620,7 @@ milestone = "M12"
 summary = "Strips PostScript hints or TrueType instructions from the glyphs of a binary font or source and, unless kept, the font-wide hinting data and hint-dependent fields in other tables. Returns the glyphs affected and the tables removed."
 ref = "docs/spec/20-cli.md › dehint"
 status = "docs"
+notes = "Returns {output, bytes, glyphsChanged, tablesRemoved, tablesChanged}. Also takes outputDir and noClobber (file plumbing). Glyph selectors here take names, glyph ids (12, gid12), id ranges (3..9), U+XXXX and *; /CID and re: patterns are not read yet."
 
 [[command]]
 id = "font.proof"
@@ -2559,6 +2634,10 @@ milestone = "M12"
 summary = "Renders proof sheets for one or more fonts or sources in the chosen layout and returns the files written with page count. Read-only with respect to the fonts. The settings object accepts the low-level drawing parameters listed by 'proof --list-settings'."
 ref = "docs/spec/20-cli.md › proof"
 status = "docs"
+notes = "Built in M12.35 for compiled fonts: palette, outline and waterfall as SVG, and the HTML specimen for any layout; format pdf is M12.36. Parameters of other packages (show, hide, margins, settings and the rest) refuse with a message. The command changes no document, so it is not journalled. Result: {proofs: [{font, format, layout, pages, files}]}."
+guesses = [
+  "The HTML specimen has no script: feature switches are checkboxes and each axis is a row of stops (nine even values plus the default) that CSS turns into font settings, so the axes are not free sliders. Settled by the owner if a scripted slider is wanted.",
+]
 
 [[command]]
 id = "layout.listFeatures"
@@ -2572,6 +2651,7 @@ milestone = "M12"
 summary = "Read-only query returning the scripts, language systems and features of GSUB and GPOS and optionally the lookups (index and type) each feature references per language system."
 ref = "docs/spec/20-cli.md › features"
 status = "docs"
+notes = "Entries come in table, script and language order (the default language system first, as dflt), the required feature first. With lookups, each lookup has its index, its type (an extension lookup's type read through) and whether it is stored through Extension lookups. The face is chosen by number; choosing it by name is not built yet."
 
 [[command]]
 id = "layout.compileFeatures"
@@ -2598,6 +2678,8 @@ milestone = "M12"
 summary = "Read-only query that writes the GSUB, GPOS, GDEF and BASE tables of a binary font as feature code with stable generated class and lookup names, and returns the text or the path written plus a list of constructs that had no feature syntax."
 ref = "docs/spec/20-cli.md › features"
 status = "docs"
+notes = "Checked with fontTools feaLib 4.66.1: text written for a font built in code compiles back to the same lookup types, lookup order, language systems (exclude_dflt where a language drops default lookups) and GDEF classes. Lookups are top-level blocks in lookup-list order, except that a lookup a contextual rule calls comes first, because the compiler resolves lookup names as it reads. Known differences after a round trip: a type 5 or 7 contextual lookup comes back as chaining (6 or 8); the aalt feature is rebuilt by the compiler; feature parameters other than size, feature variations and variation indices are written as comments. Glyph names follow the names fontTools gives the font (CFF charset, post, then cmap names); cmap-derived names use the glyph list only for ASCII, uniXXXX otherwise."
+guesses = ["A lookup a feature uses is named feature_script_language_index after the first language system that uses it, and any other lookup GSUB_index or GPOS_index; the round-trip measure on the corpus would show whether stabler names are needed.", "Glyph sets of two or more glyphs used at least twice become named classes (@first_last); sets used once stay inline. Reading the decompiled text of a few corpus fonts would settle the threshold.", "Mark classes are named @MC_lookup_subtable_class, one set per subtable, so a mark that has different anchors in two subtables of one lookup never collides."]
 
 [[command]]
 id = "layout.lintFeatures"
@@ -2631,12 +2713,13 @@ label = "Normalise Layout Rules"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{font: path, face?: int|name, table?: \"gpos\"|\"gsub\"|\"gdef\"|\"all\", location?: {axis: number}, output?: path}"
+params = "{font: path, face?: int|name, table?: \"gpos\"|\"gsub\"|\"gdef\"|\"all\", location?: {axis: number}, output?: path, noClobber?: bool}"
 area = "features"
 milestone = "M12"
-summary = "Read-only query returning the font's effective positioning, substitution and ligature-caret rules as canonical sorted text that is independent of lookup and subtable arrangement."
+summary = "Returns the font's effective positioning and ligature-caret rules as canonical sorted text that is independent of lookup and subtable arrangement, or writes it to `output`."
 ref = "docs/spec/20-cli.md › features"
 status = "docs"
+notes = "The engine side of `features normalize`; see that row for the format. GSUB prints no rules, as in otl-normalizer 1.0.0. `face` takes a number or a PostScript name (name ID 6). Journaled, not a query, because `output` writes a file."
 
 [[command]]
 id = "variations.buildAvar"
@@ -2644,12 +2727,13 @@ label = "Build avar Table"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{font: path, designspace?: path, output?: path, inPlace?: bool}"
+params = "{font: path, designspace?: path, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool}"
 area = "cli-tools"
 milestone = "M12"
 summary = "Writes an avar table into a variable font from the axis maps and cross-axis mappings of a designspace, or re-derives it from the font's current data; returns the per-axis segment maps written."
 ref = "docs/spec/20-cli.md › variations"
 status = "docs"
+notes = "Built in M12.33 (see the `variations build-avar` row). Takes TrueType and CFF fonts; the output defaults to <name>.avar.<ext> beside the input, as fontTools names it. Result: {output, avar, version?, segments}."
 
 [[command]]
 id = "variations.planAvar"
@@ -2670,12 +2754,13 @@ label = "Map Variation Coordinates"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{font: path, location: {axis: number}, from?: \"user\"|\"normalized\", to?: \"normalized\"|\"user\", allAxes?: bool}"
+params = "{font: path, location: {axis: number}, from?: \"user\"|\"normalized\", to?: \"normalized\"|\"user\", allAxes?: bool, face?: number}"
 area = "cli-tools"
 milestone = "M12"
 summary = "Read-only query converting a location between user space and final normalised space of a variable font, applying fvar normalisation and the avar table (including avar 2 cross-axis mappings)."
 ref = "docs/spec/20-cli.md › variations"
 status = "docs"
+notes = "Built in M12.33 (see the `variations map` row). Result: {axes, to, location, user, normalized, mapped}; `face` picks a collection member."
 
 [[command]]
 id = "variations.buildHvar"
@@ -2737,6 +2822,7 @@ own = true
 
 [[cli]]
 id = "tables show"
+notes = "Decoded tables: head, hhea, maxp, OS/2, post, name, cmap, hmtx, loca, glyf, GDEF, GSUB, GPOS, fvar, avar, gasp, DSIG (header); others are listed with their length. Glyph names come from post formats 1 and 2; CFF charset names are not read yet. Offsets are given for subtables, not for every field. Lookup subtables show their glyphs and values for single, pair and mark-to-base positioning and single, multiple, alternate and ligature substitution; contextual subtables show formats and coverages."
 usage = "fontcraft-cli tables show FONT [TAG...] [--path PATH] [--depth N] [--offsets] [--format json|text]"
 options = [
   "TAG...: the tables to show (default: every table the reader decodes; the others are listed with their size only)",
@@ -2794,7 +2880,8 @@ summary = "Compares two sources and lists every difference: glyphs added, remove
 ref = "Our design, after the reference vendor's free source-comparison companion tool"
 status = "inferred"
 own = true
-guesses = ["Masters and instances are matched by axis location first and by name second, and glyphs by name; a renamed glyph is reported as a rename when its outlines and code points are unchanged. A comparison with the companion tool on two versions of one font would settle it."]
+guesses = ["Masters and instances are matched by axis location first and by name second, and glyphs by name; a renamed glyph is reported as a rename when its outlines and code points are unchanged. A comparison with the companion tool on two versions of one font would settle it.", "A change id is the part name and a hash of the change's place and both values (`glyphs:3f2a1c9b04de`), so it is stable between runs and changes when either side changes; the companion tool's own way of naming changes would settle it.", "Kerning groups are compared per glyph under the kerning part, and the non-kerning glyph groups of a UFO under the features part; how the companion tool groups them would settle it."]
+notes = "Text output: one line per change with its id, kind, place and short values. --glyphs and --glyph-file take plain glyph names; the shared glyph-list grammar (ranges, code points, patterns) is not applied yet. Values are compared in the native file's form, so data a format keeps unread (extra keys) takes part."
 
 [[cli]]
 id = "sources merge"
@@ -2803,7 +2890,7 @@ options = [
   "BASE: the source the changes are applied to; OTHER: the source they are taken from",
   "--take ID,...: the change ids printed by sources diff",
   "--take-all: every change of the selected parts and glyphs",
-  "--parts LIST, --glyphs LIST: limit --take-all",
+  "--parts LIST, --glyphs LIST, --glyph-file PATH, --tolerance UNITS: limit --take-all, as in sources diff",
   "[global options]: -o/--output, --output-dir, --in-place, --no-clobber, --face, --json, -q/--quiet, -v/--verbose, --log, --log-file, --color, -j/--jobs, --timing, --trace, --backtrace, --options, --save-options, --dry-run, --timestamp, @FILE, -h/--help, --version (behavior rows cli.global.*)",
 ]
 command = "source.merge"
@@ -2814,7 +2901,8 @@ summary = "Applies chosen changes from OTHER to BASE and writes the result in BA
 ref = "Our design, after the reference vendor's free source-comparison companion tool"
 status = "inferred"
 own = true
-guesses = ["Merging is two-way only (base and other), with no common ancestor; a three-way merge needs version history, which FontCraft does not keep. A user workflow that needs three-way merging would settle it."]
+guesses = ["Merging is two-way only (base and other), with no common ancestor; a three-way merge needs version history, which FontCraft does not keep. A user workflow that needs three-way merging would settle it.", "Without -o or --in-place the merge is refused rather than written beside BASE under a derived name; a user who expects a default output name would settle it."]
+notes = "--glyphs and --glyph-file take plain glyph names; the shared glyph-list grammar (ranges, code points, patterns) is not applied yet."
 
 [[command]]
 id = "tables.show"
@@ -2850,10 +2938,11 @@ label = "Merge Sources"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{base: path, other: path, take: [id] | \"all\", parts?: [string], glyphs?: [name], output: path} → {applied: [id], output: path}"
+params = "{base: path, other: path, take: [id] | \"all\", parts?: [string], glyphs?: [name], tolerance?: number, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool} → {applied: [id], output: path, format, losses}"
 area = "cli-tools"
 milestone = "M12"
-summary = "Applies the chosen changes of source.diff from OTHER to BASE and writes the result to output in BASE's format. All or nothing: a change that no longer applies refuses the whole merge."
+summary = "Applies the chosen changes of source.diff from OTHER to BASE and writes the result to output in BASE's format. All or nothing: a change that no longer applies, or a result that is not a consistent font, refuses the whole merge and nothing is written."
+guesses = ["A merged designspace is refused when it would be written beside BASE without inPlace, because its UFOs would replace BASE's; a user workflow that wants that would settle it."]
 ref = "Our design (docs/spec/20-cli.md › sources)"
 status = "inferred"
 own = true

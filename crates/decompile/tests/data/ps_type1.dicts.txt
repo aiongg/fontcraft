@@ -1,0 +1,21 @@
+## Top Dict
+version             "001.002"
+Notice              "Test font for FontCraft."
+FullName            "PS Test"
+FamilyName          "PS Test"
+Weight              "Regular"
+ItalicAngle         -12
+FontBBox            {0,-21,700,750}
+sup.srcFontType     Type 1 (name-keyed)
+sup.nGlyphs         8
+## FontDict[0]
+FontName            "PSTest-Regular"
+## Private
+BlueValues          {-10,0,700,710}
+OtherBlues          {-250,-240}
+BlueShift           8
+BlueFuzz            0
+StdHW               50
+StdVW               60
+StemSnapH           {40,50}
+StemSnapV           {40,60}

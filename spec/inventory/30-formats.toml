@@ -359,6 +359,7 @@ area = "import-export"
 milestone = "M12"
 summary = "Packs several compiled fonts into one collection file and shares byte-identical tables between members. A command-line job modelled on the AFDKO collection tools; the reference app's export dialog has no collection option."
 ref = "OpenType specification › Font Collections; AFDKO otf2otc, otc2otf; fontTools ttLib.ttCollection"
+notes = "Written by collection.pack (plain or WOFF2) with otf2otc's layout; compiling straight to a collection is M12.42."
 status = "docs"
 
 [[format]]
@@ -410,13 +411,19 @@ id = "type1"
 label = "Adobe Type 1 (PFB binary, PFA text)"
 extensions = ["pfb", "pfa"]
 read = true
-write = true
+write = false
 spec = "https://adobe-type-tools.github.io/font-tech-notes/pdfs/T1_SPEC.pdf"
 area = "import-export"
 milestone = "M12"
-summary = "Reads the font dictionary, eexec-encrypted private dictionary and Type 1 charstrings into a one-master document with cubic outlines, stem hints, blue zones and standard stems; `seac` accents become components. Kerning and reliable metrics need the companion AFM or PFM, which are picked up when they sit next to the font. Writing exists for command-line conversion only; multiple-master Type 1 fonts are out of scope."
+summary = "Reads the font dictionary, eexec-encrypted private dictionary and Type 1 charstrings into a one-master document with cubic outlines, stem hints, blue zones and standard stems; `seac` accents become components. Kerning and reliable metrics need the companion AFM or PFM, which are picked up when they sit next to the font. Not written; multiple-master Type 1 fonts are read at their default charstrings."
 ref = "Import & Export › Opening Font Files (.pfb); Adobe Type 1 Font Format; AFDKO tx (-t1)"
 status = "docs"
+notes = "Read in M12.31 (`crates/decompile/src/type1.rs`), opened by `file.open` through `fontcraft_decompile::decompile`. PFA (hex or binary after eexec) and PFB; the decrypted text form that detype1 writes is not read. Read into an abstract font that keeps the dictionaries, hint replacement, flex and seac as tx does; its dump equals `tx -dump -0` and `-6` on a test font built in the tests and on the 4 corpus Type 1 files. Opened document: cubic outlines, flex as two curves, code points from the glyph names (Adobe Glyph List), seac as two components (accent offset adx + sbx - asb), each glyph's distinct stems as numeric layer hints, BlueValues and OtherBlues as metric overshoots or extra zones, StemSnap (else StdHW and StdVW) as stems, BlueScale, BlueShift and BlueFuzz as master parameters. The companion AFM is not picked up yet. Writing is not built: the owner chose read only (M12 plan, § 7 question 5). Limits: 64 MiB, 65,536 subroutines, nesting 10, 48 operands, 200,000 units of work per glyph."
+guesses = [
+  "Vertical metrics are measured on the glyphs d, H, x and p (falling back to the FontBBox), since a Type 1 font has no such fields; the reference app's import of a .pfb would settle it.",
+  "Ghost hints become TopGhost and BottomGhost hints with place (edge, 0), the edge being y for a top ghost and y + dy for a bottom ghost as tx reports them; the reference app's import of a hinted .pfb would settle it.",
+  "Standard stems are named hStem0, hStem1… and vStem0…; the reference app's import of a .pfb would show its names.",
+]
 
 [[format]]
 id = "afm"
@@ -461,6 +468,7 @@ milestone = "M12"
 summary = "A CFF table on its own, without the sfnt wrapper: outlines, hints, glyph names and the top and private dictionaries, but no cmap, metrics tables, kerning or layout. Opened as a one-master document with code points guessed from glyph names; written for command-line conversion."
 ref = "Adobe TN 5176; AFDKO tx (-cff)"
 status = "docs"
+notes = "Read in M12.31 (`crates/decompile/src/bare_cff.rs`), opened by `file.open` through `fontcraft_decompile::decompile`: the first font of the set, name-keyed or CID-keyed (glyphs named cidNNNNN), into the same abstract font and document as Type 1. Its dump equals `tx -dump -0` and `-6` on a test font built in the tests (hint masks, counter masks, all flex forms, seac, local and global subroutines) and on the corpus file TestSupplementEncoding.cff (the other corpus `.CFF` file is TTX text). Writing a bare CFF belongs to `convert` (M12.30)."
 
 [[format]]
 id = "svg-font"
@@ -474,6 +482,11 @@ milestone = "M12"
 summary = "An SVG document with a `font` element: `font-face` metrics, `glyph` elements carrying a path, a unicode string and an advance, a `missing-glyph`, and `hkern`/`vkern` pairs. Paths are in font units with the y axis up; kerning is flat and there are no components, hints or layout features."
 ref = "SVG 1.1 › Fonts; AFDKO tx (-svg)"
 status = "docs"
+notes = "Built in M12.31 (`crates/io-svg/src/svg_font.rs`): `read_svg_font` and `write_svg_font`. tx 5.0.1 refuses to read SVG fonts, its own output included, so reading is tested against values worked out from the SVG 1.1 text, and writing against the glyph elements `tx -svg -sa -gn2 -abs` writes. Quadratic segments and arcs are read as cubic curves; vkern, arabic-form, lang and orientation are not read; group kerning is not written. `file.open` does not route SVG fonts here yet (the engine's open path)."
+guesses = [
+  "An open subpath in a glyph's path data is read as closed, since SVG fonts fill every subpath; no reference reader was available to settle it.",
+  "A glyph without glyph-name is named from its characters through the glyph database (uniXXXX when it cannot be loaded), ligatures joined with underscores; a reference importer of SVG fonts would settle it.",
+]
 
 [[format]]
 id = "bdf"
@@ -707,6 +720,10 @@ milestone = "M12"
 summary = "A single self-contained HTML page that embeds the freshly exported WOFF2 as a data URL and shows sample text, a character set table, feature toggles and, for variable fonts, axis sliders. Produced by the command-line tools and the export command for browser proofing."
 ref = "our design; fontbakery and fontmake leave proofing to external pages"
 status = "inferred"
+notes = "Built in M12.35 (crates/proof/src/html.rs): the font is embedded as WOFF2 (wrapped by the engine when the input is not WOFF2); sections sample (editable), waterfall, character set (every code point of the shown glyphs), feature switches for every GSUB and GPOS feature (the ones browsers apply by default start on) and size stops. The page carries no script."
+guesses = [
+  "The default sample is an English pangram with digits when the font maps all of its characters, else the first 64 characters of the character set. Settled by the owner.",
+]
 
 # ═════════════════════════════ Round-trip rules ═════════════════════════════
 

@@ -2697,7 +2697,7 @@ milestone = "M12"
 summary = "Checking .woff2 (and optionally .woff for old browsers) in the export dialog writes webfonts that can be tested from a small HTML page with an @font-face rule. Reloading shows the new export, and a Shift-reload skips most browsers' font cache."
 ref = "Edit View › Previewing & Testing › Previewing in Web Browsers"
 status = "handbook"
-notes = "In M12 the test page is the HTML proof (format proof-html, `fontcraft-cli proof --format html`), which embeds the exported WOFF2 (package M12.35). Documented, not yet observed."
+notes = "In M12 the test page is the HTML proof (format proof-html, `fontcraft-cli proof --format html`, built in M12.35): one file with the WOFF2 embedded as a data URL, so it needs no separate font file next to it and a reload after a new proof shows the new font. The handbook's page instead loads the exported .woff2 by URL. Documented, not yet observed."
 observe = ["Any font: export WOFF2 alone, then WOFF2 with WOFF; note whether the app writes an HTML test page itself or only the font files."]
 
 [[behavior]]

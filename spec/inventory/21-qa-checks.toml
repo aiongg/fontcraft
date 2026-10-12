@@ -475,6 +475,8 @@ milestone = "M12"
 summary = "A component points at a glyph that itself contains components. Nested composites have rendered and printed wrongly in several environments, especially in variable fonts. The fix flattens the nesting to one level, combining the transforms."
 ref = "fontbakery nested_components"
 status = "docs"
+notes = "On sources a component is nested when its base glyph exports and is made of components only, as the TrueType export keeps such a base as a composite; a base that also has paths is decomposed on export and is reported by mixedWithOutlines instead."
+guesses = ["Only glyphs that export are checked, since the reference check reads the compiled font; checking the exported TrueType font with the reference check would settle it."]
 
 [[check]]
 id = "check.components.transformed"
@@ -486,6 +488,7 @@ milestone = "M12"
 summary = "A component is scaled, rotated, skewed or mirrored. In a hinted TrueType font any non-identity 2x2 transform counts; in an unhinted one only a mirrored component (which reverses the outline direction) does. The fix decomposes the offending components."
 ref = "fontbakery transformed_components"
 status = "docs"
+guesses = ["A source does not say whether its TrueType export will be hinted, so a mirrored component (negative determinant) is a failure and any other transform a warning; the reference check makes both failures on hinted fonts and only mirroring on unhinted ones."]
 
 [[check]]
 id = "check.components.duplicate"
@@ -497,6 +500,7 @@ milestone = "M12"
 summary = "A glyph contains the same component twice with the same offset and no transform, so the copies cover each other (the classic broken double quote). The fix removes the extra copy."
 ref = "fontbakery opentype/glyf_non_transformed_duplicate_components"
 status = "docs"
+notes = "Copies count as duplicates when they name the same glyph, their offsets round to the same integers and their 2x2 transforms are equal; the reference check compares only the glyph and the offset. The finding names the later copy, which the fix deletes."
 
 [[check]]
 id = "check.components.overlap"
@@ -508,6 +512,7 @@ milestone = "M12"
 summary = "Two components of a composite glyph overlap each other. Static exports that promise overlap-free outlines must decompose and merge such glyphs; variable TrueType exports must set the overlap flag instead."
 ref = "fontTools ttLib.removeOverlaps (componentsOverlap)"
 status = "docs"
+notes = "Each component is drawn as its outline (curves flattened into 24 pieces); two components overlap when their edges cross properly or a contour of one lies inside the filled area of the other. Edges that only touch do not count. Only glyphs that export are checked."
 
 [[check]]
 id = "check.components.mixedWithOutlines"
@@ -580,6 +585,7 @@ milestone = "M12"
 summary = "A mark component is not where its anchor pair would put it, or a composite's width differs from its base letter although automatic alignment would apply. The fix re-applies automatic alignment."
 ref = "Editor audit convention (components out of alignment)"
 status = "inferred"
+notes = "Not registered yet: the check needs the alignment routine of the components crate, which the audit crate does not depend on."
 
 [[check]]
 id = "check.components.caronAlternate"
@@ -599,9 +605,10 @@ scope = "binary"
 fixable = false
 area = "qa"
 milestone = "M12"
-summary = "A TrueType font stores only a small share of its accented glyphs as composites, which costs file size and rendering speed."
+summary = "More than half of the glyphs of a TrueType font are stored as outlines rather than composites, which costs file size and rendering speed."
 ref = "fontbakery typenetwork/composite_glyphs"
 status = "docs"
+notes = "As the reference check: the share is of all glyphs, empty glyphs count as outlines, glyphs named with one ASCII character are not counted as outlines, and more than 50 percent (threshold maxOutlinePercent) warns."
 
 # ---------------------------------------------------------------------------
 # anchors: Anchors
@@ -617,6 +624,7 @@ milestone = "M12"
 summary = "A base letter lacks an anchor that its glyph-data entry expects (such as top or bottom) while the font contains marks that attach there. The fix adds the default anchors for the glyph at their computed positions."
 ref = "Editor audit convention (missing anchors)"
 status = "inferred"
+notes = "Not registered yet: the check needs the default-anchor table of the components crate, which the audit crate does not depend on."
 
 [[check]]
 id = "check.anchors.markWithoutAttachment"
@@ -628,6 +636,7 @@ milestone = "M12"
 summary = "A combining mark has no attaching anchor (one whose name starts with an underscore), so it cannot be positioned or used to build composites. The fix adds the default mark anchor."
 ref = "Editor audit convention (mark anchors)"
 status = "inferred"
+notes = "Not registered yet: telling combining marks apart needs the glyph data and the default-anchor table of the components crate, which the audit crate does not depend on."
 
 [[check]]
 id = "check.anchors.duplicateName"
@@ -650,6 +659,8 @@ milestone = "M12"
 summary = "An anchor name matches no mark anchor, caret, entry/exit or other known anchor role in the font, so it has no effect."
 ref = "Editor audit convention (anchor names)"
 status = "inferred"
+notes = "An anchor's role is its name without a leading underscore or asterisk, up to the first underscore (top_1, top_viet and *top are all top). A base anchor is paired when some glyph has the underscore anchor of its role, and a mark anchor when some glyph has the base anchor. origin, entry, exit, caret and vcaret (with prefixes # and *, and suffixes) and smart-glyph property names are always known; corner, cap, segment and brush glyphs are not checked. Backup layers are left out."
+guesses = ["Anchors on corner, cap, segment and brush component glyphs are not checked, because their roles are not documented; observing which anchor names those glyphs use in the reference app would settle it."]
 
 [[check]]
 id = "check.anchors.ligatureCaretsMissing"
@@ -661,6 +672,7 @@ milestone = "M12"
 summary = "The font has ligature glyphs but no, or incomplete, caret positions for them in GDEF, so the text cursor cannot be placed inside a ligature. In sources carets are anchors named caret_N; the fix adds evenly spaced ones."
 ref = "fontbakery ligature_carets"
 status = "docs"
+notes = "As the reference check, the ligatures are the outputs of the ligature substitutions of the liga feature; a font without them is skipped. Findings on a font given as a binary carry no fix."
 
 # ---------------------------------------------------------------------------
 # glyphset: Glyph set, names and encoding
@@ -955,6 +967,7 @@ milestone = "M12"
 summary = "head.unitsPerEm is outside 16-16384 (failure), or is an unusual value: any value that is not a power of two from 16 to 16384, 1000 or 2000 draws a warning."
 ref = "fontbakery opentype/unitsperem; comparefamily single-face test 16 (em square not 1000 or 2048)"
 status = "docs"
+notes = "comparefamily's family-level warning for an em that is neither 1000 nor 2048 is not reported; the FontBakery rule decides."
 
 [[check]]
 id = "check.metrics.italicAngle"
@@ -966,6 +979,7 @@ milestone = "M12"
 summary = "post.italicAngle is implausible: magnitude over 90 degrees (failure), over 30 or over 20 (warnings), positive although the glyphs lean right or negative although they lean left (the lean is measured on a reference glyph), non-zero in an upright style, or zero in an italic style."
 ref = "fontbakery opentype/italic_angle; comparefamily single-face test 12; MS Font Validator E1316/E2308 (afdko MSFontValidatorIssues.md 4.d)"
 status = "docs"
+notes = "The lean is measured on the first of bar, bracketleft, H and I (found through cmap) at 20% and 80% of its height, using the leftmost crossing; FontBakery takes the first crossing in path order. The style comes from the fsSelection italic bit or Italic in name ID 17 or 2, never the file name (guess on audit.familyGrouping)."
 
 [[check]]
 id = "check.metrics.italicBitVsAngle"
@@ -974,7 +988,7 @@ scope = "binary"
 fixable = false
 area = "qa"
 milestone = "M12"
-summary = "The italic style bit and the italic angle disagree: the bit is set while the angle is shallower than -4 degrees, or clear while the angle is steeper than -4. A single-style script face with a real slant is a legitimate exception."
+summary = "The italic bit of head.macStyle and post.italicAngle disagree: the bit is set while the angle is 4 degrees or less either way, or clear while it is more. A single-style script face with a real slant is a legitimate exception."
 ref = "comparefamily single-face test 12; MS Font Validator E1316/E2308 (afdko MSFontValidatorIssues.md 4.d)"
 status = "docs"
 
@@ -1021,6 +1035,7 @@ milestone = "M12"
 summary = "The monospace markers disagree with the advances. A font is taken as monospaced when at least 80% of its ASCII glyphs share one width; then post.isFixedPitch must be non-zero and PANOSE must say monospaced, with numberOfHMetrics 3 recommended and odd-width glyphs listed. Otherwise the markers must be clear. Also covers CFF isFixedPitch against post."
 ref = "fontbakery opentype/monospace; comparefamily single-face test 13; comparefamily family test 10"
 status = "docs"
+notes = "The hhea.advanceWidthMax test of the upstream monospace check is left to check.metrics.maxAdvanceWidth. Outliers are counted against the most common non-zero advance (upstream: the most common advance and side-bearing pair). When fewer than 80% of ASCII is covered, printable characters are approximated by leaving out control, separator, format and private-use code points and GDEF marks."
 guesses = ["One rule decides monospacing: at least 80% of the ASCII glyphs share one width, as the conformance checker of the opentype profile does; comparefamily's all-glyph hint is not reported separately (21-qa.md question 8)."]
 
 [[check]]
@@ -1087,7 +1102,7 @@ scope = "binary"
 fixable = true
 area = "qa"
 milestone = "M12"
-summary = "OS/2.fsSelection bit 7 (USE_TYPO_METRICS) is not set, or it is set while the OS/2 table version is below 4 (a failure). The fix sets the bit and raises the table version to 4."
+summary = "OS/2.fsSelection bit 7 (USE_TYPO_METRICS) is not set (CJK fonts excepted), or it is set while the OS/2 table version is below 4; both are failures. The fix sets the bit and raises the table version to 4."
 ref = "comparefamily single-face test 16 (USE_TYPO_METRICS); fontbakery googlefonts/use_typo_metrics"
 status = "docs"
 observe = ["Tall font (ascender 750, descender -250, Aringacute reaching 1,042): export and read OS/2; note whether the fsSelection use-typo-metrics bit (bit 7) is set."]
@@ -1110,7 +1125,7 @@ scope = "binary"
 fixable = false
 area = "qa"
 milestone = "M12"
-summary = "The capitals are not centred between the typo ascender and descender within a small margin, so text will not sit centred in buttons and list rows without extra layout work. One possible vertical-metrics scheme; ignore when another is intended."
+summary = "The capitals (A B C D E H I M O S T X) are not centred between hhea.ascender and hhea.descender within 18% of 1.2 em, so text will not sit centred in buttons and list rows without extra layout work. Skipped when one of those capitals is missing. One possible vertical-metrics scheme; ignore when another is intended."
 ref = "fontbakery caps_vertically_centered"
 status = "docs"
 
@@ -1121,9 +1136,11 @@ scope = "binary"
 fixable = false
 area = "qa"
 milestone = "M12"
-summary = "The vertical metrics do not follow a chosen house scheme (`scheme` parameter): Google's (typo and hhea equal, win covering the bounding box, total height 120-200% of the em, USE_TYPO_METRICS set), Microsoft's (hhea equal to win and no line gap when USE_TYPO_METRICS is off), Type Network's, or the CJK scheme with the em box as typo metrics."
+summary = "The vertical metrics do not follow the house scheme the `scheme` parameter chooses. 0, Google Fonts: both line gaps 0, hhea total 120-200% of the em (over 150% a warning), ascenders positive, descenders 0 or negative; CJK fonts get its CJK scheme instead (USE_TYPO_METRICS clear, typo 0.88 and -0.12 em, line gaps 0, hhea equal to win, hhea total over 110% and up to 150% as a warning). 1, Microsoft: hhea equal to typo when USE_TYPO_METRICS is set, else equal to win. 2, Type Network: hhea equal to typo with no line gaps when USE_TYPO_METRICS is set; otherwise a warning to set it, and hhea equal to win with the typo total equal to the hhea total; and the space above the cap height and below the baseline within 30% of each other."
 ref = "fontbakery googlefonts/vertical_metrics; fontbakery googlefonts/cjk_vertical_metrics; fontbakery microsoft/vertical_metrics; fontbakery typenetwork/vertical_metrics; fontbakery typenetwork/font_is_centered_vertically"
 status = "docs"
+notes = "Type Network's centring check has an unreachable warning band upstream; only its failure at 30% or more is ported."
+guesses = ["The `scheme` parameter defaults to the Google Fonts scheme (0); no reference names a default, so the owner's choice of house scheme would settle it."]
 
 [[check]]
 id = "check.metrics.baseGlyphWidth"
@@ -1232,7 +1249,7 @@ scope = "binary"
 fixable = true
 area = "qa"
 milestone = "M12"
-summary = "OS/2 strikeout size and position, or the subscript and superscript sizes and offsets, differ from the defaults derived from underline thickness, x-height, em size and italic angle. A strikeout size or underline thickness of zero is a failure because nothing is drawn. The fix writes the derived values."
+summary = "OS/2 strikeout size and position, or the subscript and superscript sizes and offsets, differ by more than 5 units from the defaults derived from underline thickness, x-height, em size and italic angle (a warning). A strikeout size or underline thickness of zero is a failure because nothing is drawn. The fix writes the derived values."
 ref = "comparefamily single-face test 27; fontbakery typenetwork/family/valid_strikeout; fontbakery typenetwork/family/valid_underline"
 status = "docs"
 
@@ -1305,6 +1322,8 @@ milestone = "M12"
 summary = "A name record contains a line break. The fix replaces line breaks with spaces."
 ref = "fontbakery googlefonts/name/line_breaks"
 status = "docs"
+notes = "Carriage returns count as line breaks too; the reference check looks for line feeds only."
+guesses = ["We treat a carriage return as a line break as well as a line feed; a FontBakery run on a name with a lone carriage return would show whether the verdicts differ on purpose."]
 
 [[check]]
 id = "check.names.postScriptNameCharacters"
@@ -1327,6 +1346,7 @@ milestone = "M12"
 summary = "The PostScript name records differ between platforms or languages, or differ from the font name stored in the CFF table. The fix writes the Windows English value everywhere."
 ref = "fontbakery opentype/name/postscript_name_consistency; fontbakery opentype/name/postscript_vs_cff; comparefamily single-face test 5"
 status = "docs"
+notes = "The comparison between platforms runs on CFF fonts too; there every disagreement also differs from the CFF font name, so the verdict is the same as the reference's."
 
 [[check]]
 id = "check.names.fullNameStartsWithFamily"
@@ -1360,6 +1380,7 @@ milestone = "M12"
 summary = "The family name (ID 1, with a trailing Regular/Bold/Italic/Bold Italic removed), or for variable fonts the family name plus any combination of non-elidable STAT style names, or a named instance, is longer than 31 characters. Longer names are truncated or cause fallback fonts in Windows GDI applications."
 ref = "fontbakery name/family_and_style_max_length; fontbakery name_length_req; fontbakery instances_name_length_req; fontbakery glyphs_file/name/family_and_style_max_length"
 status = "docs"
+notes = "With fvar and STAT, the check measures the family name plus the longest non-elidable style name of each axis (Regular and Italic left out) and reports that one combination. Without STAT it measures every named instance against each platform's family name. The STAT name resolution of instances_name_length_req is not ported."
 
 [[check]]
 id = "check.names.menuNameLimits"
@@ -1371,6 +1392,7 @@ milestone = "M12"
 summary = "A menu name breaks the hard limits of old systems: one of IDs 1, 2, 4, 16, 17 or 18 is longer than 63 characters, the Mac compatible full name (ID 18) is not unique among the family's fonts within its first 31 characters, or the full name (ID 4) is not unique within a typographic family."
 ref = "comparefamily single-face test 1; comparefamily single-face test 2"
 status = "docs"
+notes = "The binary check reports the 63-character limits. The two uniqueness rules need several fonts: full names that repeat are check.family.duplicateFullNames; the rule that name ID 18 is unique within its first 31 characters is not built yet."
 
 [[check]]
 id = "check.names.versionString"
@@ -1382,6 +1404,8 @@ milestone = "M12"
 summary = "The version cannot be read from name ID 5, or it differs from head.fontRevision by more than rounding (a tiny difference warns). Stricter house rules: the string starts with 'Version ' followed by digits with three decimals, is above 1.000, and does not contain the word Development. The fix rewrites ID 5 from head.fontRevision."
 ref = "fontbakery opentype/font_version; comparefamily single-face test 4; fontbakery googlefonts/name/version_format; fontbakery microsoft/version"
 status = "docs"
+notes = "The comparison with head.fontRevision follows FontBakery exactly (fail beyond 1/2000, warn beyond 1/65536). The house rules use comparefamily test 4's pattern on the Windows English record."
+guesses = ["The house-rule messages (Version prefix, three decimals, above 1.000, the word Development) are informational by default, so the opentype verdict equals FontBakery's opentype/font_version; a profile can raise them. Comparing verdicts on corpus fonts with short version strings would show whether that suits users."]
 
 [[check]]
 id = "check.names.italicNames"
@@ -1404,6 +1428,8 @@ milestone = "M12"
 summary = "The Windows subfamily name (ID 2) is not the one the bold and italic bits call for: Regular, Bold, Italic or Bold Italic. Any other style word belongs in the family name (ID 1) or in IDs 16/17. The fix rewrites ID 2 from the bits."
 ref = "comparefamily single-face test 8; fontbakery microsoft/office_ribz_req; fontbakery fontwerk/style_linking"
 status = "docs"
+notes = "The bold and italic bits are those of OS/2 fsSelection, or of head.macStyle when the font has no OS/2 table; comparefamily reads macStyle. check.tables.fsSelection reports fonts where the two disagree."
+guesses = ["We read the style bits from OS/2 fsSelection rather than head.macStyle; a comparefamily run on a font whose two bit sets disagree would show the difference."]
 observe = ["Style font (instances Light, Regular, Semibold and Bold, each with an Italic): link Semibold as the bold of Light, export, and note whether name ID 2 of Semibold and its fsSelection bold bit agree."]
 
 [[check]]
@@ -1427,6 +1453,8 @@ milestone = "M12"
 summary = "For fonts that deliberately keep Macintosh name records: one of the Mac records for IDs 1, 2, 4, 6 (errors) or 0, 5, 7, 14 (warnings) is missing. The opposite policy of check.names.noMacRecords; only one of the two is active in a profile."
 ref = "comparefamily name-table loader (Mac platform records)"
 status = "docs"
+notes = "Runs only when the project sets keepMacNames (precondition). It then reports every missing Mac record, also in a font that has none."
+guesses = ["With keepMacNames set, a font with no Macintosh records at all gets every missing record reported, where comparefamily checks Mac records only when the font has some; the project setting says the records are wanted."]
 
 [[check]]
 id = "check.names.copyrightInDescription"
@@ -1449,6 +1477,8 @@ milestone = "M12"
 summary = "Copyright or trademark is absent, the copyright mentions a patent number, the designer note (ID 9) or foundry URL (ID 11) is missing, or URL and OS/2 vendor ID differ from the configured house values (`defaultUrl`, `vendorId`; skipped when unset)."
 ref = "comparefamily single-face test 6 (CF_DEFAULT_URL, CF_DEFAULT_FOUNDRY_CODE)"
 status = "docs"
+notes = "Windows English records are always checked, Macintosh ones only when the font has Mac records; comparefamily asks for Mac records in every font. The comparisons with the house URL and vendor id (defaultUrl, vendorId) wait for project values to reach binary checks; until then they are not made. Missing copyright and trademark are warnings, as in comparefamily."
+guesses = ["We ask for Macintosh designer-note and URL records only in fonts that keep Mac records, since check.names.noMacRecords asks for none; a comparefamily run on a font without Mac records shows the reference's stricter rule."]
 
 [[check]]
 id = "check.names.familyNameStartsWithDigit"
@@ -1969,6 +1999,7 @@ milestone = "M12"
 summary = "A glyph exists in some masters but not in others. Sparse masters can be exempted with `ignoreMissing`."
 ref = "fontTools varLib.interpolatable missing (--ignore-missing)"
 status = "docs"
+notes = "Reported only for a glyph that at least two masters have, as the reference does; the result names the default master first. `ignoreMissing` is a threshold where 1 turns the check off. Read from the compatibility report of the audit services."
 
 [[check]]
 id = "check.variations.openPathInMaster"
@@ -1980,6 +2011,7 @@ milestone = "M12"
 summary = "A contour is open in a master, so the glyph cannot be compared or interpolated; the remaining compatibility tests are skipped for that glyph."
 ref = "fontTools varLib.interpolatable open_path"
 status = "docs"
+notes = "A path whose closed flag is off counts as open; the reference calls a contour open when it ends away from its start. The heuristic tests skip the glyph; the structural tests still run."
 
 [[check]]
 id = "check.variations.pathCount"
@@ -1991,6 +2023,8 @@ milestone = "M12"
 summary = "A glyph has a different number of contours in two masters. Each master is compared with its parent master along the designspace, not with every other master."
 ref = "fontTools varLib.interpolatable path_count"
 status = "docs"
+notes = "Counts paths only. The reference counts components among the contours, so a component added in one master is a path-count result there and check.variations.componentMismatch here. Masters are paired along the minimum spanning tree of their normalised locations, as the reference pairs them when SciPy is installed (without it, it pairs each master with the previous one)."
+guesses = ["An intermediate layer is compared with the nearest master layer of its glyph; running the reference tool on a designspace that holds intermediate layers as sparse sources would settle whether its pairs agree."]
 observe = [
   "Incompatible font (two masters; O has two paths in one master and one in the other; n has a different node count): export a variable font; note the message about O, whether it names the glyph, the path or both, and whether the export stops.",
 ]
@@ -2005,6 +2039,7 @@ milestone = "M12"
 summary = "Matching contours have a different number of nodes in two masters."
 ref = "fontTools varLib.interpolatable node_count"
 status = "docs"
+notes = "Counts nodes, on- and off-curve. The reference counts segments, so a line against a curve at the same place is a node-count result here and a node-type result there."
 observe = [
   "Incompatible font (two masters; O has two paths in one master and one in the other; n has a different node count): export a variable font; note the message about n, whether it names the glyph, the path or the node, and whether the export stops.",
 ]
@@ -2019,6 +2054,7 @@ milestone = "M12"
 summary = "Matching contours have the same number of nodes but a node differs in kind (line, curve or off-curve) between two masters."
 ref = "fontTools varLib.interpolatable node_incompatibility"
 status = "docs"
+notes = "One result per node whose kind (line, curve, quadratic curve, off-curve) differs; the reference compares segment kinds."
 
 [[check]]
 id = "check.variations.contourOrder"
@@ -2030,6 +2066,7 @@ milestone = "M12"
 summary = "The contours of a glyph appear in a different order in two masters: a cheaper matching by shape exists than the stored order, by a margin above `tolerance` (default 0.95). The fix reorders the contours to the proposed matching."
 ref = "fontTools varLib.interpolatable contour_order (--tolerance); fontbakery interpolation_issues"
 status = "docs"
+notes = "Ported from fontTools 4.66.1 varLib.interpolatable: the same contour statistics, matching and score; on our test outlines the score equals the reference's. Components take part with the statistics of their outline. The fix command reorders the shapes."
 
 [[check]]
 id = "check.variations.wrongStartPoint"
@@ -2041,6 +2078,7 @@ milestone = "M12"
 summary = "A contour starts at a different node, or runs in the opposite direction, in two masters; the result carries the proposed start node and whether to reverse. The fix applies both."
 ref = "fontTools varLib.interpolatable wrong_start_point (--tolerance); fontbakery interpolation_issues"
 status = "docs"
+notes = "Ported from fontTools 4.66.1; the proposed node and the score equal the reference's on our test outlines. The fix makes the proposed node first; a result that also needs the path reversed is report-only."
 
 [[check]]
 id = "check.variations.kink"
@@ -2052,6 +2090,7 @@ milestone = "M12"
 summary = "A node that is smooth in both masters turns into a visible corner halfway between them, because the handle length ratios differ. Sensitivity is set by `kinkiness` (default 0.5); deviations under 0.2% of the em are ignored."
 ref = "fontTools varLib.interpolatable kink (--kinkiness); fontbakery interpolation_issues"
 status = "docs"
+notes = "Ported from fontTools 4.66.1, with the reference's defaults (kinkiness 0.5, 0.2% of the em); the node and score equal the reference's on our test outline."
 
 [[check]]
 id = "check.variations.underweight"
@@ -2063,6 +2102,7 @@ milestone = "M12"
 summary = "The contour halfway between two masters encloses clearly less area than the geometric mean of the two masters' areas (by more than `tolerance`), a sign that points are matched to the wrong partners."
 ref = "fontTools varLib.interpolatable underweight"
 status = "docs"
+notes = "Ported from fontTools 4.66.1; the score equals the reference's on our test outlines."
 
 [[check]]
 id = "check.variations.overweight"
@@ -2074,6 +2114,7 @@ milestone = "M12"
 summary = "The contour halfway between two masters encloses more area than either master. Defined in the reference but switched off there; kept as an opt-in check."
 ref = "fontTools varLib.interpolatable overweight (disabled upstream)"
 status = "docs"
+notes = "The reference defines the test but skips it; ours runs in the strict profile with the condition the reference would apply (halfway area above the larger master area divided by `tolerance`)."
 
 [[check]]
 id = "check.variations.componentMismatch"
@@ -2085,6 +2126,7 @@ milestone = "M12"
 summary = "A composite glyph has a different number of components, different base glyphs or a different component order in two masters."
 ref = "Editor audit convention (incompatible masters); fontbakery interpolation_issues rationale"
 status = "inferred"
+notes = "One result per master pair: different component counts, or different base glyphs in the same order."
 
 [[check]]
 id = "check.variations.anchorMismatch"
@@ -2096,6 +2138,7 @@ milestone = "M12"
 summary = "A glyph's anchors differ in name or number between masters, so mark positioning cannot be interpolated."
 ref = "Editor audit convention (incompatible masters)"
 status = "inferred"
+notes = "Compares the sorted anchor names of each master pair; anchor positions may differ."
 
 [[check]]
 id = "check.variations.mastersShareLocation"
@@ -2107,6 +2150,7 @@ milestone = "M12"
 summary = "Two masters, or a master and an intermediate layer of the same glyph, sit at the same designspace location."
 ref = "Editor audit convention (designspace)"
 status = "inferred"
+notes = "Locations are compared in design coordinates; an intermediate layer is compared with the masters its glyph has and with the glyph's other intermediate layers."
 
 [[check]]
 id = "check.variations.instanceOutsideAxisRange"
@@ -2118,6 +2162,8 @@ milestone = "M12"
 summary = "An instance lies outside the range spanned by the masters on some axis and would need extrapolation."
 ref = "Editor audit convention (designspace)"
 status = "inferred"
+notes = "Compares each exported instance's design location with the range of the masters on each axis; variable-font settings are left out."
+guesses = ["Instances that do not export are left out; whether the reference app's own audit counts them would be settled by an inactive instance placed beyond the masters."]
 
 [[check]]
 id = "check.variations.axisRanges"
@@ -2129,6 +2175,7 @@ milestone = "M12"
 summary = "A named instance or axis breaks the registered-axis rules: wght outside 1-1000, wdth below 1 (above 1000 warns), an ital axis whose range is not 0-1, or (warning) a slnt axis whose range does not run from a negative value up to at least 0."
 ref = "fontbakery opentype/fvar/axis_ranges_correct"
 status = "docs"
+notes = "Every instance outside the weight or width range is reported; FontBakery stops at the first."
 
 [[check]]
 id = "check.variations.regularInstanceCoordinates"
@@ -2214,7 +2261,7 @@ scope = "binary"
 fixable = true
 area = "qa"
 milestone = "M12"
-summary = "The fvar instance records are malformed: there are none, they differ in size (some with and some without a PostScript name ID), or (warning) two records repeat the same coordinates or the same name. The fix drops the repeats and makes the records uniform."
+summary = "The fvar instance records are malformed: some have a PostScript name ID and others do not, so they differ in size, or (warning) a record repeats an earlier one's coordinates and name IDs. A font without named instances is skipped. The fix drops the repeats and makes the records uniform."
 ref = "fontbakery opentype/varfont/same_size_instance_records; fontbakery opentype/varfont/distinct_instance_records"
 status = "docs"
 
@@ -2250,6 +2297,7 @@ milestone = "M12"
 summary = "An fvar name reference is invalid: an axis or subfamily name ID outside 256-32767 (subfamily may also be 2 or 17), a PostScript name ID that is not 6, 0xFFFF or in that range, or an ID with no record in the name table."
 ref = "fontbakery opentype/varfont/valid_nameids; fontbakery fvar_name_entries"
 status = "docs"
+notes = "FontBakery checks only that subfamily name IDs have a record; axis and PostScript name IDs are checked the same way here."
 
 [[check]]
 id = "check.variations.defaultInstanceNames"
@@ -2258,7 +2306,7 @@ scope = "binary"
 fixable = true
 area = "qa"
 milestone = "M12"
-summary = "The instance at the default location does not reuse the font's own names: its subfamily name must equal name ID 17 (or ID 2 when 17 is absent) and its PostScript name must equal name ID 6. The fix points the record at those IDs."
+summary = "The instance at the default location does not reuse the font's own names: its subfamily name must equal name ID 17 (or ID 2 when 17 is absent) and, when the records carry PostScript name IDs, its PostScript name must equal name ID 6. The fix points the record at those IDs."
 ref = "fontbakery opentype/varfont/valid_default_instance_nameids; fontbakery fontwerk/names_match_default_fvar"
 status = "docs"
 
@@ -2294,6 +2342,9 @@ milestone = "M12"
 summary = "An italic variable font has no upright sibling carrying an ital axis in STAT (failure), or the STAT ital axis is set up wrongly (warnings): it is not the last axis, its value is not 0 for upright or 1 for italic, the upright value is not marked elidable, or the upright value is not linked to 1."
 ref = "fontbakery opentype/STAT/ital_axis"
 status = "docs"
+guesses = [
+  "One font at a time, an italic variable font fails without an ital axis in STAT and a missing upright sibling is not reported; FontBakery pairs the fonts of a family. Comparing verdicts on corpus families with an upright and an italic variable font would settle whether the family checks must cover the pairing.",
+]
 
 [[check]]
 id = "check.variations.statItalicNaming"
@@ -2305,6 +2356,7 @@ milestone = "M12"
 summary = "A STAT axis value on an axis other than ital is named with the word Italic (the laxer variant also allows it on slnt)."
 ref = "fontbakery STAT_strings; fontbakery adobefonts/STAT_strings"
 status = "docs"
+notes = "The threshold allowOnSlnt (default 0) switches to the laxer rule that also allows Italic on slnt values."
 
 [[check]]
 id = "check.variations.statCoversInstances"
@@ -2316,6 +2368,7 @@ milestone = "M12"
 summary = "The STAT table is missing or cannot describe every named instance: an instance uses an axis value that no STAT axis value covers, or its name record is missing."
 ref = "fontbakery inconsistencies_between_fvar_STAT; fontbakery microsoft/fvar_STAT_axis_ranges"
 status = "docs"
+notes = "A format 4 axis value whose coordinates equal an instance's covers that whole instance; FontBakery's check ignores format 4 values."
 
 [[check]]
 id = "check.variations.statValueQuality"
@@ -2324,9 +2377,12 @@ scope = "binary"
 fixable = false
 area = "qa"
 milestone = "M12"
-summary = "The STAT table is poorly built: a format 1 value repeats within an axis, a value named Regular is not marked elidable, the axis ordering values are not valid, or a value that the naming scheme requires for an axis is absent."
+summary = "The STAT table is poorly built: a format 1 value repeats within an axis, a value named Regular is not marked elidable, the axis ordering is not opsz, wght, wdth, slnt, ital (custom axes first), a weight or width class value inside the fvar range has no STAT value, or (warning) there are no axis values."
 ref = "fontbakery microsoft/STAT_axis_values; fontbakery microsoft/STAT_table_eliding_bit; fontbakery microsoft/STAT_table_axis_order; fontbakery googlefonts/STAT/compulsory_axis_values"
 status = "docs"
+guesses = [
+  "The values an axis must name are the OS/2 weight classes (100 to 900) and width classes (50 to 200) inside the fvar range; the vendor check takes them from its own axis registry, with names and flags. Comparing verdicts with that check on the corpus variable fonts would settle it.",
+]
 
 [[check]]
 id = "check.variations.avarMissing"
@@ -2368,9 +2424,12 @@ scope = "binary"
 fixable = false
 area = "qa"
 milestone = "M12"
-summary = "A static instance cannot be generated from the variable font at its default location; the instancer reports an error."
+summary = "A static instance cannot be made at the middle of every axis: a variation table (avar, gvar, HVAR, VVAR, MVAR, CFF2) cannot be read, or a glyph's outline or advance cannot be computed there."
 ref = "fontbakery googlefonts/varfont/generate_static"
 status = "docs"
+guesses = [
+  "Instancing is tested by computing every glyph's outline and advance at the middle of each axis and reading the variation tables, not by running an instancer; comparing verdicts with FontBakery on fonts whose instancing fails would settle whether this catches the same faults.",
+]
 
 [[check]]
 id = "check.variations.customAxisRange"
@@ -2397,6 +2456,7 @@ milestone = "M12"
 summary = "A TrueType font with instructions does not have head.flags bit 3 set, so scalers may use fractional sizes the hints were not written for. The fix sets the bit."
 ref = "fontbakery integer_ppem_if_hinted"
 status = "docs"
+notes = "Runs when the font has an fpgm table, which is how the reference check decides that a font is hinted. Message code: `bad-flags`."
 
 [[check]]
 id = "check.hinting.smartDropout"
@@ -2405,9 +2465,10 @@ scope = "binary"
 fixable = true
 area = "qa"
 milestone = "M12"
-summary = "The prep program of an instructed TrueType font (not one hinted in VTT) lacks the instructions that switch on dropout control with smart dropout (SCANCTRL with 0x01FF, SCANTYPE 4). The fix appends them."
+summary = "The prep program of a TrueType font (not one hinted in VTT, which leaves a TSI5 table) lacks the instructions that switch on dropout control with smart dropout (SCANCTRL with 0x01FF, SCANTYPE 4). The fix appends them."
 ref = "fontbakery smart_dropout"
 status = "docs"
+notes = "As the reference check, every TrueType font is checked, hinted or not; a font with no prep table fails. The seven bytes may appear anywhere in prep. Message code: `lacks-smart-dropout`."
 
 [[check]]
 id = "check.hinting.sizeImpact"
@@ -2419,6 +2480,7 @@ milestone = "M12"
 summary = "Reports the file size with and without hinting and the difference in bytes and percent."
 ref = "fontbakery hinting_impact"
 status = "docs"
+notes = "The size without hinting is computed, not written: for TrueType, the file size less the fpgm, prep, cvt, hdmx, LTSH, VDMX and TTFA tables (padded, with their directory entries) and every glyph's instructions; for CFF and CFF2, less an estimate of each glyph's hint operators, operands and masks as its charstring runs, so hints shared through subroutines count once per glyph. The reference check saves a dehinted copy, so its numbers differ in the last bytes; the verdict is always information. For WOFF and WOFF2 input the sizes are those of the unwrapped font. Message code: `size-impact`, with data `hinted`, `dehinted`, `increase`, `percent`."
 
 [[check]]
 id = "check.hinting.gasp"
@@ -2427,9 +2489,10 @@ scope = "binary"
 fixable = true
 area = "qa"
 milestone = "M12"
-summary = "A TrueType font has no gasp table or an empty one (failures), has no catch-all range ending at 0xFFFF, has further ranges besides it, or leaves rendering flags unset in the catch-all range (warnings); the ranges and their flags are listed as information. The fix writes a single 0xFFFF range with grid-fitting and smoothing flags all set."
+summary = "A TrueType font has no gasp table or one that cannot be read (failures), has no catch-all range ending at 0xFFFF, has further ranges besides it, or leaves rendering flags unset in the catch-all range (warnings); the ranges and their flags are listed as information. The fix writes a single 0xFFFF range with grid-fitting and smoothing flags all set."
 ref = "fontbakery googlefonts/gasp; MS Font Validator W0022 (afdko MSFontValidatorIssues.md 1.a)"
 status = "docs"
+notes = "Message codes: `lacks-gasp` and `empty` (fail), `lacks-ffff-range`, `non-ffff-range` and `unset-flags` (warn), `ranges` (info, listed only when a 0xFFFF range exists). A table with no ranges warns `lacks-ffff-range`, as the reference check does. The fix is not safe: it replaces the designer's ranges."
 
 [[check]]
 id = "check.hinting.autohinterTraces"
@@ -2441,6 +2504,7 @@ milestone = "M12"
 summary = "A font hinted by an automatic TrueType hinter does not record the hinter's parameters in its version string, or records an outdated hinter version."
 ref = "fontbakery googlefonts/has_ttfautohint_params; fontbakery googlefonts/old_ttfautohint"
 status = "docs"
+notes = "Two reference checks in one. `lacks-version-strings` (fail): no name ID 5 at all. `lacks-ttfa-params` (fail): every version string names the hinter (`ttfautohint (vX) `) with an empty options part; any version string without the mark passes. Then, for TrueType fonts only: `version-not-detected` (info) when no version string names the hinter, `old-ttfa` (warn) when the named version is older than 1.8.4. Versions are compared number by number where the reference compares them as text; the two agree for every released version."
 
 [[check]]
 id = "check.hinting.missingStemHints"
@@ -2452,6 +2516,7 @@ milestone = "M12"
 summary = "A marking glyph of a CFF font has no stem hints at all. Suppressed with `noHints`. The fix runs the autohinter on the listed glyphs."
 ref = "comparefamily single-face test 18 (missing hints, -nohints)"
 status = "docs"
+notes = "Reads `CFF ` only, as the reference test does; CFF2 fonts are skipped. A glyph is marking when its charstring has a moveto; hints called from subroutines count. One result per glyph, collapsed by the result cap when there are many (an unhinted font). A charstring that cannot be run is left out."
 
 [[check]]
 id = "check.hinting.stemHintSanity"
@@ -2463,6 +2528,7 @@ milestone = "M12"
 summary = "A CFF stem hint is nonsensical: negative width, wider than the glyph's bounding box, or lying above or below (left or right of) the bounding box; edge hints are tested against the box as well. Suppressed with `noHints`. The fix re-hints the glyph."
 ref = "comparefamily single-face test 18 (hint width and position, -nohints)"
 status = "docs"
+notes = "Message codes: `negative-width`, `wider-than-glyph`, `above-glyph`, `below-glyph`, `edge-outside-glyph`. The glyph box is the outline's exact box (curve extremes included) rounded outwards to whole units; the reference reads the box from its own metrics dump. Horizontal stems of width -20 and -21 are edge hints (top edge at the stem's first value, bottom edge at its second) and are tested only against the box. The reference's separate message for a width of exactly 1978 (an old tool's bug) is reported as `wider-than-glyph`."
 
 [[check]]
 id = "check.hinting.forceBold"
@@ -2474,6 +2540,7 @@ milestone = "M12"
 summary = "The CFF private dictionary sets ForceBold, which is harmless but obsolete. The fix removes it."
 ref = "comparefamily single-face test 10 (ForceBold)"
 status = "docs"
+notes = "Reported only when ForceBold is true, as the reference test does. Every font dictionary of a CID-keyed font is read. Message code: `force-bold`."
 
 [[check]]
 id = "check.hinting.blueValuesCount"
@@ -2485,6 +2552,7 @@ milestone = "M12"
 summary = "The PostScript alignment zones are malformed: BlueValues is empty, has an odd number of values or more than 7 pairs; OtherBlues has an odd number or more than 5 pairs; the same limits apply to FamilyBlues and FamilyOtherBlues."
 ref = "comparefamily single-face test 30; comparefamily single-face test 31; comparefamily family test 18 (zone counts)"
 status = "docs"
+notes = "Message codes: `no-blue-values` (BlueValues missing, with fewer than 2 values, or exactly 0 0), `too-many-zones`, `odd-count`. Every Private DICT of a CID-keyed font is checked; CFF2 private dictionaries are not read."
 
 [[check]]
 id = "check.hinting.blueValuesOrder"
@@ -2496,6 +2564,7 @@ milestone = "M12"
 summary = "In an alignment-zone pair the first value is larger than the second (BlueValues, OtherBlues and the family variants). The fix sorts each pair."
 ref = "comparefamily single-face test 32"
 status = "docs"
+notes = "Message code: `unordered-pair`, one per pair. The fix waits for the Font Info commands (M7) and reports only until then."
 
 [[check]]
 id = "check.hinting.blueZoneSeparation"
@@ -2507,6 +2576,7 @@ milestone = "M12"
 summary = "Two bottom zones or two top zones are closer together than 2 x BlueFuzz + 1 units, so they overlap for the hinter."
 ref = "comparefamily single-face test 33"
 status = "docs"
+notes = "Bottom zones are the first BlueValues pair and every OtherBlues pair; top zones are the other BlueValues pairs. Two zones are too close when the gap between them is less than 2 x BlueFuzz + 1 (BlueFuzz 1 when unset); zones that overlap or nest have a negative gap and are reported too, which the reference test, comparing end values only, can miss. Message code: `zones-too-close`, one per pair of zones."
 
 [[check]]
 id = "check.hinting.blueZoneHeight"
@@ -2518,6 +2588,7 @@ milestone = "M12"
 summary = "An alignment zone is taller than 1 / BlueScale units, which switches overshoot suppression off at the wrong sizes."
 ref = "comparefamily single-face test 34"
 status = "docs"
+notes = "A zone is too tall when its height times BlueScale (0.039625 when unset) is 1 or more, as the reference test computes it, so a zone of exactly 1 / BlueScale units is reported. All four zone arrays are checked. Message code: `zone-too-tall`."
 
 [[check]]
 id = "check.hinting.blueZonesOutsideBBox"
@@ -2529,6 +2600,7 @@ milestone = "M12"
 summary = "The lowest or highest alignment zone lies outside the font's bounding box, so no glyph can ever reach it."
 ref = "comparefamily family test 18 (zones vs font bounding box)"
 status = "docs"
+notes = "The bounding box is head.yMin and head.yMax. For BlueValues and for OtherBlues, sorted: the lowest zone is outside when its upper value is below yMin, the highest when its lower value is above yMax. Every font dictionary of a CID-keyed font is checked. Message codes: `below-bbox`, `above-bbox`."
 
 [[check]]
 id = "check.hinting.zonesOverlapInSource"
@@ -2540,6 +2612,8 @@ milestone = "M12"
 summary = "In a master's metrics two alignment zones overlap or touch, or a zone has no metric line inside it."
 ref = "Editor audit convention (alignment zones); mirrors comparefamily single-face test 33"
 status = "inferred"
+notes = "The handbook says zones must not overlap and must be at least one unit apart; documented, not yet observed in the reference app. The zones are the metrics' overshoots and the master's other zones. Threshold `minGap` (default 1): zones closer than this are reported as `zones-overlap`. A zone with no metric position of the master (or the baseline) inside it or on its edge is reported as `zone-without-metric`."
+guesses = ["A zone counts as holding a metric line when the master's position of any metric except the italic angle, or 0, lies inside it or on its edge; how the reference app judges zones that serve no metric would settle it."]
 
 [[check]]
 id = "check.hinting.stemsUndefined"
@@ -2551,6 +2625,8 @@ milestone = "M12"
 summary = "A master defines no standard horizontal or vertical stems, so the autohinter has nothing to normalise stem widths to."
 ref = "Editor audit convention (stem values)"
 status = "inferred"
+notes = "Message codes: `no-horizontal-stems`, `no-vertical-stems`, one per master and direction."
+guesses = ["A direction counts as undefined when none of the master's stems of that direction has a positive value; stems of value 0 count as missing. How the reference autohinter treats a zero stem would settle it."]
 
 # ---------------------------------------------------------------------------
 # kerning: Kerning
@@ -2563,9 +2639,13 @@ scope = "binary"
 fixable = true
 area = "qa"
 milestone = "M12"
-summary = "A legacy kern table is present and unusable: it kerns glyphs that have no cmap entry (failure) or has no format 0 subtable (warning). A well-formed kern table is only noted. The fix regenerates it from GPOS for encoded glyphs or removes it."
+summary = "A legacy kern table is present and unusable: it kerns glyphs that have no cmap entry (failure) or has no format 0 subtable (warning). A well-formed kern table is only noted. The fix removes it."
 ref = "fontbakery opentype/kern_table; MS Font Validator W0022 (afdko MSFontValidatorIssues.md 1.a)"
 status = "docs"
+notes = "Follows FontBakery 1.1.0 opentype/kern_table: the glyphs every cmap subtable maps are the encoded ones, format 0 subtables are the usable ones. A kern table that cannot be read is a warning (kern-unreadable)."
+guesses = [
+  "The fix only removes the table (tables.delete); regenerating a format 0 table from GPOS for encoded glyphs is not built, and nothing says which of the two a user expects first.",
+]
 
 [[check]]
 id = "check.kerning.gposKerningMissing"
@@ -2577,6 +2657,7 @@ milestone = "M12"
 summary = "A proportional font has no pair-adjustment lookups in GPOS. Ignore for scripts and designs that need no kerning."
 ref = "fontbakery gpos_kerning_info"
 status = "docs"
+notes = "Follows FontBakery 1.1.0 gpos_kerning_info: nothing is reported when post.isFixedPitch is set; extension lookups count by the type they wrap."
 
 [[check]]
 id = "check.kerning.tabularKerning"
@@ -2585,9 +2666,13 @@ scope = "binary"
 fixable = true
 area = "qa"
 milestone = "M12"
-summary = "Tabular figures, or other glyphs produced by tnum, take part in kerning, which breaks column alignment. The fix removes those pairs."
+summary = "Tabular figures, or other glyphs produced by tnum, take part in kerning, which breaks column alignment. The fix removes those pairs (report-only until a command does)."
 ref = "fontbakery tabular_kerning"
 status = "docs"
+notes = "Follows FontBakery 1.1.0 tabular_kerning without shaping: pair values are read from the kern feature's pair lookups (lookups add up, the first subtable that applies decides), with the tnum single substitutions applied to the default figures. Device and variation deltas, contextual kerning, lookup flags and FontBakery's digraph exception are not read, and excluded code points are matched on the glyph itself, not on the name without its suffix."
+guesses = [
+  "Without a tnum feature every glyph except marks is checked against the figures; FontBakery also adds marks whose Unicode category is a number or a symbol, which a comparison on fonts with such marks would settle.",
+]
 
 [[check]]
 id = "check.kerning.groupsDifferBetweenMasters"
@@ -2599,6 +2684,10 @@ milestone = "M12"
 summary = "The kerning groups of a master differ from those of the default master."
 ref = "fontbakery designspace_has_consistent_groups"
 status = "docs"
+notes = "Reads the groups file each master kept from its own UFO; a source whose kerning groups live on the glyphs has one set for every master and always passes. When the glyphs' groups no longer match the default master's file, saving rewrites every master from the glyphs, so nothing is reported."
+guesses = [
+  "Only kerning groups (public.kern1 and public.kern2) are compared, member order ignored, one result per differing group; FontBakery compares every group of the file and reports once per source.",
+]
 
 [[check]]
 id = "check.kerning.missingGlyphReference"
@@ -2607,10 +2696,14 @@ scope = "source"
 fixable = true
 area = "qa"
 milestone = "M12"
-summary = "A kerning pair or kerning group names a glyph that is not in the font. The fix deletes the dangling entries."
+summary = "A kerning pair names a glyph that is not in the font, or a kerning group that no glyph belongs to on the side facing the pair. The fix deletes the dangling pairs."
 ref = "Editor audit convention (kerning clean-up)"
 status = "inferred"
 observe = ["Kerning font (A and V kerned, then V removed): export; note whether the A V pair is reported, dropped without a message, or exported."]
+notes = "The pairs reported are the ones kerning.cleanUp deletes (codes missing-glyph and empty-group). Group members cannot name a missing glyph: groups are a property of each glyph."
+guesses = [
+  "A group side with no member on the side facing the pair counts as dangling, since it is what removing the group's glyphs leaves; observing the reference app's export would settle whether it treats it the same.",
+]
 
 [[check]]
 id = "check.kerning.glyphInSeveralGroups"
@@ -2622,6 +2715,7 @@ milestone = "M12"
 summary = "A glyph belongs to two kerning groups for the same side."
 ref = "Editor audit convention (kerning groups)"
 status = "inferred"
+notes = "Only a UFO groups file can list a glyph in two groups of one side; the glyph keeps the first group on reading, which the message names. A source whose groups live on the glyphs always passes."
 
 [[check]]
 id = "check.kerning.redundantPairs"
@@ -2630,9 +2724,12 @@ scope = "source"
 fixable = true
 area = "qa"
 milestone = "M12"
-summary = "A kerning pair has the value zero without overriding anything, or an exception repeats the value its group pair already gives. The fix removes such pairs."
+summary = "A kerning pair has the value zero without overriding anything, or an exception repeats the value its group pair already gives. The fix removes such pairs (report-only until a command does)."
 ref = "Editor audit convention (kerning clean-up)"
 status = "inferred"
+guesses = [
+  "A pair's fallback is the next pair that applies without it, in the order glyph-glyph, glyph-group, group-glyph, group-group, as the UFO specification orders them; the reference app's kerning window would settle whether it orders exceptions the same.",
+]
 
 [[check]]
 id = "check.kerning.excessivePair"
@@ -2644,6 +2741,9 @@ milestone = "M12"
 summary = "A negative kerning value is larger than the advance width of one of the two glyphs, so the glyphs swap places or collide."
 ref = "Editor audit convention (kerning sanity)"
 status = "inferred"
+guesses = [
+  "A group side stands for its narrowest glyph in that master, glyphs without width are left out, and vertical kerning is not checked; nothing documents the reference's rule.",
+]
 
 # ---------------------------------------------------------------------------
 # family: Family consistency
@@ -2659,6 +2759,7 @@ milestone = "M12"
 summary = "More than four fonts share one family name (name ID 1). A style-linked group holds at most regular, italic, bold and bold italic."
 ref = "fontbakery opentype/family/max_4_fonts_per_family_name; comparefamily family test 1"
 status = "docs"
+notes = "Counts the fonts per Windows English family name; fonts without that record are not counted."
 
 [[check]]
 id = "check.family.uniqueStyleLinking"
@@ -2670,6 +2771,7 @@ milestone = "M12"
 summary = "Two fonts with the same family name (ID 1) have the same combination of bold and italic bits, so applications cannot tell them apart."
 ref = "fontbakery opentype/family/bold_italic_unique_for_nameid1; comparefamily family test 5"
 status = "docs"
+guesses = ["Bold and italic come from OS/2 fsSelection, or head macStyle without an OS/2 table (the legacy family comparison reads macStyle); comparing the two tools' results on the legacy corpus families would settle it."]
 observe = [
   "Style font (instances Light, Regular, Semibold and Bold, each with an Italic): link Semibold as the bold of Light while Bold is linked to Regular; note whether the app warns about two fonts linked in one role.",
 ]
@@ -2684,6 +2786,8 @@ milestone = "M12"
 summary = "The fonts of one family do not agree on the typographic family name (name ID 16, or ID 1 when 16 is absent); the stricter variant compares ID 16 in every language."
 ref = "fontbakery opentype/family/consistent_family_name; fontbakery typographic_family_name; comparefamily family test 3"
 status = "docs"
+notes = "The basic rule compares every font given; the per-language rule of the legacy family comparison runs within each style-linked group when the `strict` threshold is 1 (the family comparison shortcut sets it)."
+guesses = ["The per-language comparison sits behind a `strict` threshold (default 0) so the opentype profile keeps the basic rule; the measure against the legacy comparison runs with strict 1."]
 
 [[check]]
 id = "check.family.equalVersions"
@@ -2703,9 +2807,11 @@ scope = "family"
 fixable = false
 area = "qa"
 milestone = "M12"
-summary = "The fonts of a family differ in PANOSE family type (first digit); a font without an OS/2 table fails. Stricter: PANOSE is all zero (failure), only the first four digits are set (warning), or the monospace digit contradicts CFF isFixedPitch or the advances."
+summary = "The fonts of a family differ in PANOSE family type (first digit, a warning); a font without an OS/2 table fails. With the `strict` threshold: PANOSE all zero fails and only the first four digits set warns."
 ref = "fontbakery opentype/family/panose_familytype; comparefamily family test 10"
 status = "docs"
+notes = "The monospace part of comparefamily family test 10 (PANOSE proportion against CFF isFixedPitch and the advances) is check.metrics.monospaceFlags's."
+guesses = ["The legacy rules (all zero, first four only) sit behind a `strict` threshold (default 0) because the check's home is the opentype profile; the measure against the legacy comparison runs with strict 1."]
 
 [[check]]
 id = "check.family.underlineConsistency"
@@ -2717,6 +2823,7 @@ milestone = "M12"
 summary = "post.underlineThickness or underlinePosition differs between the fonts of a family, so underlines jump where styles are mixed on a line. The fix copies the regular face's values."
 ref = "fontbakery opentype/family/underline_thickness; comparefamily family test 15"
 status = "docs"
+notes = "Typographic families; each font is compared with the first one that has a post table. The fix is report-only until the Font Info commands exist (M7)."
 
 [[check]]
 id = "check.family.verticalMetrics"
@@ -2728,6 +2835,7 @@ milestone = "M12"
 summary = "The fonts of a family differ in a vertical metric: typo ascender, descender or line gap, win ascent or descent, or hhea ascent, descent or line gap. The fix applies the largest extent to every font."
 ref = "fontbakery family/vertical_metrics"
 status = "docs"
+notes = "Typographic families. A font without OS/2 or hhea is reported and the comparison of its family is skipped. The fix is report-only until the Font Info commands exist (M7)."
 
 [[check]]
 id = "check.family.superfamilyVerticalMetrics"
@@ -2739,6 +2847,7 @@ milestone = "M12"
 summary = "Sibling families (folders given together as one super-family) differ in vertical metrics. A companion report lists the sibling folders found."
 ref = "fontbakery superfamily/vertical_metrics; fontbakery superfamily/list"
 status = "docs"
+guesses = ["The sibling families are the typographic families among the fonts given in one run, since a family check sees fonts, not folders; the folder listing becomes one informational result naming the families."]
 
 [[check]]
 id = "check.family.unitsPerEm"
@@ -2750,6 +2859,7 @@ milestone = "M12"
 summary = "The fonts of a family do not all use the same units per em."
 ref = "fontbakery adobefonts/family/consistent_upm; comparefamily single-face test 16 (different em squares)"
 status = "docs"
+notes = "Typographic families."
 
 [[check]]
 id = "check.family.axisRanges"
@@ -2761,6 +2871,7 @@ milestone = "M12"
 summary = "The variable fonts of a family (for example upright and italic) differ in their set of axes or in an axis's minimum, default or maximum."
 ref = "fontbakery opentype/varfont/family_axis_ranges; fontbakery varfont/consistent_axes"
 status = "docs"
+notes = "Typographic families, variable fonts only: each axis missing from a font is one result, each axis whose minimum, default or maximum differs is another."
 
 [[check]]
 id = "check.family.nameRecordSets"
@@ -2772,6 +2883,7 @@ milestone = "M12"
 summary = "Within a style-linked group the fonts do not carry the same set of name records (platform, encoding, language, name ID); IDs 16, 17, 18, 20, 21 and 22 are exempt."
 ref = "comparefamily family test 2"
 status = "docs"
+notes = "Follows the reference's counting: per style-linked group, each (platform, encoding, language, name ID) is counted over the fonts, and the group is reported when the counts are not all equal. IDs above 255 are exempt too."
 
 [[check]]
 id = "check.family.styleLinkedGroupShape"
@@ -2783,6 +2895,7 @@ milestone = "M12"
 summary = "A style-linked group has no base (regular) font, or its base is not the Regular face although the group has more than two members."
 ref = "comparefamily family test 6 (base font)"
 status = "docs"
+notes = "The base is the last upright font with neither bold nor italic set, else the last upright bold font, in the order the fonts are given (the reference's order)."
 
 [[check]]
 id = "check.family.boldLinkWeights"
@@ -2794,6 +2907,7 @@ milestone = "M12"
 summary = "Style linking will produce synthetic bolding: the regular face's usWeightClass is outside 250-550, the bold face's weight is outside the range allowed for that regular weight, the bold face is not heavier than the regular one, or the group uses more than two weight classes. A bold weight that is not a multiple of 50 warns."
 ref = "comparefamily family test 6 (weight ranges); comparefamily family test 8; fontbakery fontwerk/style_linking"
 status = "docs"
+notes = "The per-font style-linking test of the fontwerk profile (fsSelection, macStyle and name ID 2 against the style) is check.names.subfamilyMatchesStyleBits's; this check keeps comparefamily family tests 6 and 8."
 
 [[check]]
 id = "check.family.widthClass"
@@ -2816,6 +2930,7 @@ milestone = "M12"
 summary = "The copyright or trademark strings differ between the fonts of a family; when only the years differ this is a note."
 ref = "comparefamily family test 7"
 status = "docs"
+notes = "Typographic families; each font is compared with the first. The Macintosh strings are read when a font keeps Macintosh names, the Windows English ones otherwise. Years are four digits starting 19, 18, 10, 29, 28 or 20 (the reference's pattern), with the spaces and commas around them."
 
 [[check]]
 id = "check.family.macWindowsMenuNames"
@@ -2827,6 +2942,7 @@ milestone = "M12"
 summary = "For fonts that keep Macintosh names: the Mac and Windows family names of a bold or italic member of a style-linked group are identical, or those of the regular member differ."
 ref = "comparefamily family test 11"
 status = "docs"
+notes = "Runs only when the project sets keepMacNames, and only on fonts with Macintosh name records; CID-keyed fonts are skipped as in the reference."
 
 [[check]]
 id = "check.family.layoutConsistency"
@@ -2838,6 +2954,8 @@ milestone = "M12"
 summary = "The fonts of a family do not expose the same scripts, languages and features, or a feature maps to a different set of lookups in one font; the result includes a table of features per script and language. Expected when the character sets differ."
 ref = "comparefamily family test 12 (-rf report)"
 status = "docs"
+notes = "Compares, per typographic family, each font's map of (table, script, language, feature) to lookup indices, including the required feature and languages without features. The per-script and per-language feature table of the reference's report is audit.report.featureLanguages's (M12.60)."
+guesses = ["Fonts are compared within typographic families rather than across every font given, which is the same when one family is checked; running both tools on a folder holding two families would show any difference."]
 
 [[check]]
 id = "check.family.sizeFeatureGroups"
@@ -2849,6 +2967,7 @@ milestone = "M12"
 summary = "The optical-size (size feature) data of a family is inconsistent: fonts with the same subfamily ID have different menu names, size groups have different member counts (warning), or the design ranges of a group leave gaps or overlap."
 ref = "comparefamily family test 4"
 status = "docs"
+notes = "Read from the reference's source: its Python 3 code stops with an error when a family has two or more size groups (it sorts font objects and takes the length of a map), so the oracle comparison can only cover families with one size group."
 
 [[check]]
 id = "check.family.wwsBit"
@@ -2860,6 +2979,7 @@ milestone = "M12"
 summary = "OS/2.fsSelection bit 8 (WWS) is set in some fonts of a family but not all, is set with an OS/2 version below 4, or is set while two fonts share the same weight, width and italic values."
 ref = "comparefamily family test 13"
 status = "docs"
+notes = "Typographic families; a family with mixed bits is reported and the next family is still checked (the reference stops at the first such family)."
 
 [[check]]
 id = "check.family.embeddingPermissions"
@@ -2871,6 +2991,7 @@ milestone = "M12"
 summary = "The fonts of a family differ in OS/2.fsType."
 ref = "comparefamily family test 14"
 status = "docs"
+notes = "Each font is compared with the first of its typographic family. The reference's rule that Adobe fonts use fsType 8 is check.tables.fsType's."
 
 [[check]]
 id = "check.family.glyphWidthRatio"
@@ -2882,6 +3003,8 @@ milestone = "M12"
 summary = "A glyph is more than three times as wide in one font of a family as in another; also reports a glyph absent from the width list, which points at a wrong maxp.numGlyphs."
 ref = "comparefamily family test 16"
 status = "docs"
+notes = "A width ratio above 3 is a warning (as in the reference); a glyph of the compared glyph set with no width in a font fails. Fonts with the same glyph set are compared together; a font whose glyph set no other font shares joins the largest shared set, so its missing glyphs are reported as missing widths, as the reference does."
+guesses = ["Glyph names come from the post table or the CFF charset; fonts without names get made-up names per glyph id, which compare by glyph order; checking a post format 3 family against the reference would settle it."]
 
 [[check]]
 id = "check.family.blueValueArraySizes"
@@ -2890,9 +3013,10 @@ scope = "family"
 fixable = false
 area = "qa"
 milestone = "M12"
-summary = "Within the upright or the italic members of a style-linked group, BlueValues or OtherBlues have a different number of entries."
+summary = "Within the fonts of a style-linked group that share a glyph set, BlueValues or OtherBlues have a different number of entries."
 ref = "comparefamily family test 18"
 status = "docs"
+notes = "The reference's comment speaks of upright and italic subgroups, but its code groups by glyph set; this check follows the code. Runs only when the first font has non-CID CFF outlines, as in the reference. The zone and bounding-box tests of the same reference test are the hinting checks'."
 
 [[check]]
 id = "check.family.familyBlues"
@@ -2904,6 +3028,8 @@ milestone = "M12"
 summary = "FamilyBlues or FamilyOtherBlues are unusable: absent from the family (warning), not equal to the BlueValues of any member, unique to one font, or over the zone limits."
 ref = "comparefamily family test 19"
 status = "docs"
+notes = "Typographic families of two or more CFF fonts; runs only when the first font has non-CID CFF outlines. A font without FamilyBlues counts with its own BlueValues, as in the reference."
+guesses = ["The zone limits are those of the CFF specification (14 values for FamilyBlues, 10 for FamilyOtherBlues); the reference allows 14 for both, so a family with 11 to 14 FamilyOtherBlues values would show the difference."]
 
 [[check]]
 id = "check.family.blueScaleAndShift"
@@ -2915,6 +3041,7 @@ milestone = "M12"
 summary = "BlueScale or BlueShift differs between the fonts of a style-linked group."
 ref = "comparefamily family test 20; comparefamily family test 21"
 status = "docs"
+notes = "Style-linked groups; each font is compared with the first. Unset values count as the defaults 0.039625 and 7; BlueScale values within 0.00002 are equal (16.16 fixed point)."
 
 [[check]]
 id = "check.family.codepointCoverage"
@@ -2926,6 +3053,7 @@ milestone = "M12"
 summary = "The fonts of a family do not encode the same set of characters; stricter still, upright and italic differ in glyph count."
 ref = "fontbakery googlefonts/family/equal_codepoint_coverage; fontbakery typenetwork/family/equal_numbers_of_glyphs"
 status = "docs"
+notes = "Typographic families: each font that encodes characters missing from another font is reported with them. Glyph counts are compared among the upright fonts and among the italic ones (a warning), only when the family has both."
 
 [[check]]
 id = "check.family.italicsHaveUprights"
@@ -2937,6 +3065,7 @@ milestone = "M12"
 summary = "An italic style has no upright partner of the same weight in the family."
 ref = "fontbakery googlefonts/family/italics_have_roman_counterparts"
 status = "docs"
+guesses = ["An italic font's partner is an upright font of the same typographic family with the same weight and width classes (any upright variable font for an italic variable font), read from the style bits instead of the file names the reference reads; running both on a family with a missing upright would settle it."]
 
 [[check]]
 id = "check.family.tabularFigureWidths"
@@ -2948,6 +3077,8 @@ milestone = "M12"
 summary = "Tabular figures do not have the same advance in every style of the family, so numeric columns shift when the style changes; half-width tabular sets are reported as information."
 ref = "fontbakery googlefonts/family/tnum_horizontal_metrics; fontbakery typenetwork/family/tnum_horizontal_metrics"
 status = "docs"
+notes = "Typographic families. Tabular glyphs are those whose names contain .tnum, .tf, .tosf, .tsc, .tab or .tabular; the most common width is the reference and a set of half that width is information. Skipped when no font has glyph names."
+guesses = ["Inconsistent widths fail, as in the stricter of the two reference checks, while the suffix rule and the half-width note follow the other; comparing both reference checks on the corpus families would settle it."]
 
 [[check]]
 id = "check.family.duplicateFullNames"
@@ -2959,6 +3090,7 @@ milestone = "M12"
 summary = "Two fonts of a family have the same full name (ID 4) or the same PostScript name (ID 6)."
 ref = "fontbakery typenetwork/family/duplicated_names"
 status = "docs"
+notes = "Compares the Windows English IDs 4 and 6 of every font given. The reference collects duplicate PostScript names into the wrong set and so never reports them; this check does."
 
 # ---------------------------------------------------------------------------
 # files: Files
@@ -2974,6 +3106,7 @@ milestone = "M12"
 summary = "The file's sfnt version tag does not match its outlines: 0x00010000 for TrueType outlines, OTTO for CFF and CFF2. The fix rewrites the header."
 ref = "fontbakery sfnt_version"
 status = "docs"
+notes = "Follows FontBakery's sfnt_version: a font with a 'glyf' table needs 0x00010000 even when it also has CFF data. The fix runs tables.recalculate."
 
 [[check]]
 id = "check.files.fileSize"
@@ -2985,6 +3118,10 @@ milestone = "M12"
 summary = "The font file is larger than `warnSize` (default 1 MB) or, as a failure, larger than `failSize` (default 9 MB)."
 ref = "fontbakery file_size"
 status = "docs"
+notes = "The limits are FontBakery's, 1 MiB and 9 MiB, as the thresholds warnSize and failSize. The size is the file's size on disk; a font compiled in memory is measured by its sfnt bytes."
+guesses = [
+  "A font compiled in memory is measured by its uncompressed sfnt bytes, so a WOFF2 export can warn here and pass in FontBakery; measuring the compressed output would settle it.",
+]
 
 [[check]]
 id = "check.files.singleDirectory"
@@ -2996,6 +3133,7 @@ milestone = "M12"
 summary = "The files given as one family lie in more than one directory, so they may not belong together."
 ref = "fontbakery family/single_directory"
 status = "docs"
+notes = "Compares the directories of the files given as one family, as FontBakery does; fonts compiled in memory have no directory and the check skips."
 
 [[check]]
 id = "check.files.sanitiser"
@@ -3007,6 +3145,10 @@ milestone = "M12"
 summary = "The font is rejected by a browser-style table sanitiser (structural errors that make browsers refuse the file); sanitiser warnings are passed on as warnings. FontCraft needs its own strict parse pass for this."
 ref = "fontbakery ots"
 status = "docs"
+notes = "Our own strict pass: the sfnt version, the table directory (search fields, order, duplicates, bounds, 4-byte alignment, overlaps), the tables every font needs and an outline table, then every table FontCraft reads (head magic, hhea, maxp, hmtx, OS/2, post, name records, cmap subtables, CFF, CFF2, GDEF, GSUB and GPOS lists and lookups, fvar, avar, gvar, HVAR, STAT) and every 'glyf' glyph. An external sanitiser's errors and warnings are added when one is installed and the run asks for it (AuditServices::run_external)."
+guesses = [
+  "Unsorted, duplicated, misaligned, overlapping and out-of-bounds tables are failures and wrong search fields a warning, as we read the sanitiser's published behaviour; running the sanitiser on fonts built with each fault would settle it.",
+]
 
 [[check]]
 id = "check.files.roundTrip"
@@ -3018,6 +3160,10 @@ milestone = "M12"
 summary = "Decompiling every table to the text dump and compiling the dump again fails, which exposes structurally broken tables."
 ref = "fontbakery ttx_roundtrip"
 status = "docs"
+notes = "Runs the TTX round trip service (AuditServices::ttx_round_trip) and skips without it. Only a dump or read that fails is reported, as in FontBakery."
+guesses = [
+  "A table that reads back with different bytes is not reported, because FontBakery reports only errors of the dump and the read; comparing verdicts on the corpus would settle it.",
+]
 
 [[check]]
 id = "check.files.rasterises"
@@ -3029,6 +3175,10 @@ milestone = "M12"
 summary = "Rasterising every glyph at a test size raises an error or crashes the rasteriser."
 ref = "fontbakery freetype_rasterizer"
 status = "docs"
+notes = "Draws every glyph with skrifa at ppem pixels per em (default 48, FontBakery's size), unhinted and, when the font has 'fpgm', 'prep' or CFF hints, hinted with the font's own programs, not pedantically."
+guesses = [
+  "Every glyph is drawn, where FontBakery loads one character with FreeType, so this check can fail where FontBakery passes; the verdict measure on the corpus would show how often.",
+]
 
 [[check]]
 id = "check.files.externalValidator"
@@ -3040,6 +3190,10 @@ milestone = "M12"
 summary = "Passes on the findings of an external validator when one is installed and configured (`validatorPath`), mapped to our severities and filtered through the known-false-positive list."
 ref = "fontbakery fontvalidator; afdko docs/MSFontValidatorIssues.md"
 status = "docs"
+notes = "Runs only when the project sets validatorPath and the engine provides the validator (AuditServices::run_external); otherwise skipped. The validator's errors and warnings are warnings here, anything milder information. Known false positives are dropped by a word list in checks/files.rs until audit.validatorKnownIssues supplies the list."
+guesses = [
+  "The known-issue filter matches words of the message, not validator message ids, because the public notes give no ids; the validator's output on a corpus font would settle it.",
+]
 
 [[check]]
 id = "check.files.canonicalFileName"
@@ -3051,6 +3205,11 @@ milestone = "M12"
 summary = "The file name is not built from the names inside the font: Family-Style.ext for static fonts, Family[axis tags in alphabetical order].ext for variable ones."
 ref = "fontbakery googlefonts/canonical_filename"
 status = "docs"
+notes = "After FontBakery's googlefonts/canonical_filename, which builds the name with axisregistry's build_filename. Fonts not read from a file skip."
+guesses = [
+  "The family comes from name ID 16, else 1, and the style from ID 17, else 2, with spaces removed, and an empty style counts as Regular; axisregistry's build_filename would settle it.",
+  "A .woff or .woff2 file keeps its extension; any other file is expected to end in .otf for CFF outlines and .ttf otherwise.",
+]
 
 [[check]]
 id = "check.files.auditorVersion"
@@ -3078,6 +3237,7 @@ milestone = "M12"
 summary = "A designspace document cannot be parsed, lists no sources, or lists sources that cannot be opened."
 ref = "fontbakery designspace_has_sources"
 status = "docs"
+notes = "A designspace in the model with no masters lists no sources. Parse errors and sources that cannot be opened come from reading the files again (AuditServices::check_source_files); without that service the check skips."
 
 [[check]]
 id = "check.sources.defaultMaster"
@@ -3089,6 +3249,7 @@ milestone = "M12"
 summary = "No source sits at the default location of every axis, so there is no default master."
 ref = "fontbakery designspace_has_default_master"
 status = "docs"
+notes = "Each axis's default in user coordinates goes through the axis map to design coordinates; a master within 0.001 design units of every default is the default master. Sources from the reference app always pass: their axis defaults derive from the origin master."
 
 [[check]]
 id = "check.sources.consistentGlyphSet"
@@ -3100,6 +3261,10 @@ milestone = "M12"
 summary = "A non-default master contains glyphs that the default master lacks."
 ref = "fontbakery designspace_has_consistent_glyphset"
 status = "docs"
+notes = "The default master is the designspace's default source, else the origin master. A glyph with a master layer for another master but none for the default master is reported."
+guesses = [
+  "The check runs on every source with several masters, not only on designspace documents as in FontBakery; for .glyphs sources it can repeat a missing-glyph finding of the variations checks.",
+]
 
 [[check]]
 id = "check.sources.consistentCodepoints"
@@ -3111,6 +3276,7 @@ milestone = "M12"
 summary = "A glyph has different codepoints in different masters. The fix copies the default master's codepoints."
 ref = "fontbakery designspace_has_consistent_codepoints"
 status = "docs"
+notes = "Reads the code points the designspace reader keeps on a master layer where that master's file differs from the default source; they count only while the glyph's code points are still the ones read."
 
 [[check]]
 id = "check.sources.ufoStructure"
@@ -3122,6 +3288,7 @@ milestone = "M12"
 summary = "A UFO fails structural validation: missing or malformed property lists, layer contents that do not match the files on disk, or invalid glyph files."
 ref = "fontbakery ufolint"
 status = "docs"
+notes = "Applies to UFO and designspace sources. The validation is the engine's strict re-reading of the files (AuditServices::check_source_files); without it the check skips."
 
 [[check]]
 id = "check.sources.requiredInfoFields"
@@ -3133,6 +3300,10 @@ milestone = "M12"
 summary = "A font-info value the compiler cannot work without is unset: unitsPerEm, ascender, descender, xHeight, capHeight or familyName."
 ref = "fontbakery ufo_required_fields"
 status = "docs"
+notes = "The model's terms: units per em, the family name, and each master's ascender, descender, x-height and cap height metric values."
+guesses = [
+  "A master's metric counts as unset only when its value list ends before it; a value stated as 0 between others cannot be told from an unset one.",
+]
 
 [[check]]
 id = "check.sources.recommendedInfoFields"
@@ -3144,6 +3315,10 @@ milestone = "M12"
 summary = "A font-info value every release font should set is unset: underline thickness and position, major and minor version, style name, copyright or PANOSE."
 ref = "fontbakery ufo_recommended_fields"
 status = "docs"
+notes = "The model's terms: the copyright property, each master's name as its style name, and a panose parameter on the font or the master."
+guesses = [
+  "Underline thickness and position and the version are never reported: the model gives them the reference's defaults, so they always have a value.",
+]
 
 [[check]]
 id = "check.sources.unnecessaryInfoFields"
@@ -3155,6 +3330,10 @@ milestone = "M12"
 summary = "The font info sets values the compiler generates itself or that are obsolete: openTypeNameUniqueID, openTypeNameVersion, postscriptUniqueID or year. The fix clears them."
 ref = "fontbakery ufo_unnecessary_fields"
 status = "docs"
+notes = "Looks for the properties uniqueID and versionString and the parameters openTypeNameUniqueID, openTypeNameVersion, postscriptUniqueID, year, uniqueID and versionString, on the font and on each master. Report-only until a Font Info command clears them."
+guesses = [
+  "versionString and uniqueID are reported in .glyphs sources too, since they compile to the same name records as the UFO keys FontBakery names.",
+]
 
 # ---------------------------------------------------------------------------
 # color: Colour
@@ -3170,6 +3349,7 @@ milestone = "M12"
 summary = "A COLR version 0 layer uses a fixed palette colour that is very dark or very bright, so it vanishes on a dark or a light background; such layers should use the text foreground colour instead."
 ref = "fontbakery color_cpal_brightness"
 status = "docs"
+notes = "Follows FontBakery 1.1.0 color_cpal_brightness on the first palette, with the threshold minBrightness (default 0.1 of full brightness from black and from white). Brightness weighs red 0.299, green 0.587 and blue 0.114; FontBakery applies those weights to blue, green and red (fontTools stores colours blue first), so verdicts can differ on purpose."
 
 [[check]]
 id = "check.color.emptyGlyphOneForColrV0"
@@ -3181,6 +3361,7 @@ milestone = "M12"
 summary = "A COLR version 0 font has contours in glyph 1. One Windows renderer paints glyph 1 over other glyphs, so an empty glyph must hold that slot. The fix inserts an empty glyph after .notdef."
 ref = "fontbakery empty_glyph_on_gid1_for_colrv0"
 status = "docs"
+notes = "Follows FontBakery 1.1.0 empty_glyph_on_gid1_for_colrv0: glyph 1 fails when its outline has an area (curves measured in 16 straight steps, areas under 0.01 square units count as empty)."
 
 [[check]]
 id = "check.color.colorTableSet"
@@ -3192,6 +3373,7 @@ milestone = "M12"
 summary = "The colour tables do not suit broad delivery: a COLR version 0 font also carries an SVG table it does not need, a COLR version 1 font has no SVG fallback, an SVG table has no COLR companion, or a variable font carries an SVG table (which cannot vary)."
 ref = "fontbakery googlefonts/colorfont_tables"
 status = "docs"
+notes = "Follows FontBakery 1.1.0 googlefonts/colorfont_tables, with its message codes drop-svg, add-svg, variable-svg and add-colr."
 
 # ---------------------------------------------------------------------------
 # vendor: Vendor groups (summarised, not built in)
@@ -3420,6 +3602,7 @@ milestone = "M12"
 summary = "Discards cached results and the per-glyph change hashes of a target, so the next run examines every glyph again."
 ref = "AFDKO checkoutlinesufo --clear-hash-map"
 status = "docs"
+notes = "Built in M12.59. No per-glyph hash cache exists yet (audit.glyphHashCache), so clearing drops the run kept for audit.results and audit.fix; a file target keeps no cache and reports `cleared: false`."
 
 [[command]]
 id = "audit.profile.list"
@@ -3447,6 +3630,7 @@ milestone = "M12"
 summary = "Returns a profile in full: the profiles it includes, the checks it adds and excludes, severity overrides per check or message code, and threshold defaults."
 ref = "fontbakery profile structure (include_profiles, sections, exclude_checks, overrides, configuration_defaults)"
 status = "docs"
+notes = "Built in M12.59 for built-in, user and project profiles; the result also lists the checks the profile runs once resolved and whether it is the effective default."
 
 [[command]]
 id = "audit.profile.save"
@@ -3460,6 +3644,7 @@ milestone = "M12"
 summary = "Creates or replaces a user profile (application settings) or a project profile (stored beside the source). Built-in profiles cannot be overwritten."
 ref = "Our design; cf. fontbakery custom profiles and configuration file"
 status = "inferred"
+notes = "Built in M12.59. Without `store` the profile goes to the user's settings (reserved id `audit.userProfiles`); a project profile goes to the source's font user data under `com.fontcraft.audit`, as one undo step. A project profile may include only built-in and project profiles and a user profile only built-in and user profiles, so a source's rules never depend on one person's settings; an id the other store already holds is refused. Overrides for one message code beat check-wide ones; otherwise later overrides win. Includes nest at most 8 deep, with cycle detection."
 
 [[command]]
 id = "audit.profile.delete"
@@ -3467,12 +3652,13 @@ label = "Delete Audit Profile"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{profile: id}"
+params = "{profile: id, store?: 'user'|'project'}"
 area = "qa"
 milestone = "M12"
-summary = "Deletes a user or project profile. Documents that named it as their default fall back to universal."
+summary = "Deletes a user or project profile. Documents that named it as their default fall back to the application default, else universal."
 ref = "Our design"
 status = "inferred"
+notes = "Built in M12.59. Deleting a profile that another profile of its store includes is refused. A cleared default makes runs use the application default, else universal. `store` is needed only when both stores hold the id."
 
 [[command]]
 id = "audit.profile.setDefault"
@@ -3480,12 +3666,13 @@ label = "Set Default Audit Profile"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{profile: id, target?: 'document'|'application'}"
+params = "{profile: id|null, target?: 'document'|'application'}"
 area = "qa"
 milestone = "M12"
 summary = "Sets the profile used when audit.run is called without one, for the current document (stored in the source) or as the application default."
 ref = "Our design"
 status = "inferred"
+notes = "Built in M12.59. `target` defaults to the document; null clears the default. Order: the document's default, then the application's, then universal; a stored default that no longer exists is skipped with a note. A project profile cannot be the application default."
 
 [[command]]
 id = "audit.config.get"
@@ -3493,12 +3680,13 @@ label = "Get Audit Settings"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{check?: id}"
+params = "{check?: id, profile?: id}"
 area = "qa"
 milestone = "M12"
 summary = "Returns the effective thresholds and options (document values over profile values over built-in defaults), for one check or all, including project values such as vendorId and defaultUrl."
 ref = "fontbakery configuration file; AFDKO comparefamily CF_DEFAULT_URL / CF_DEFAULT_FOUNDRY_CODE"
 status = "docs"
+notes = "Built in M12.59. Thresholds outside a check's range are ignored, as audit.run ignores them. Project values: vendorId, defaultUrl, fsType, allowedTables, glyphSet, keepMacNames, warnSize, failSize (fontcraft_audit::profile::PROJECT_VALUES); unset ones are null."
 
 [[command]]
 id = "audit.config.set"
@@ -3512,6 +3700,7 @@ milestone = "M12"
 summary = "Stores threshold or option overrides in the document; null removes an override. Unknown names are rejected."
 ref = "fontbakery configuration file"
 status = "docs"
+notes = "Built in M12.59 as one undo step. With `check` the names are that check's thresholds; without it they are project values. One bad name or value refuses the whole call."
 
 [[command]]
 id = "audit.ignoreIssue"
@@ -3525,6 +3714,7 @@ milestone = "M12"
 summary = "Adds an entry to the document's ignore list, from a result id or from an explicit check and location, so that matching results are hidden and do not count toward the exit status. An entry without a glyph silences the check for the whole font."
 ref = "Our design; cf. fontbakery exclude_checks"
 status = "inferred"
+notes = "Built in M12.59. An entry made from a result keeps the result's check, glyph, master and table-level location keys (table, field, nameId, platform, encoding, language, feature, script, lookup, axis, instance, pair); outline addresses change with every edit and are not kept. Ignoring the same issue again replaces its reason and date. The date comes from the session clock. At most 100,000 entries. Hiding matching results in audit.run and the exit status is the runner's (M12.44)."
 
 [[command]]
 id = "audit.unignoreIssue"
@@ -3538,6 +3728,7 @@ milestone = "M12"
 summary = "Removes matching entries from the document's ignore list."
 ref = "Our design"
 status = "inferred"
+notes = "Built in M12.59. Keys left out match any entry; a call that matches no entry is refused."
 
 [[command]]
 id = "audit.listIgnored"
@@ -3551,6 +3742,7 @@ milestone = "M12"
 summary = "Returns the document's ignore list with the reason and date of each entry and whether the issue still occurs."
 ref = "Our design"
 status = "inferred"
+notes = "Built in M12.59. Whether an issue still occurs is judged against the run kept from the last audit.run: null when no run is kept or that run did not include the check."
 
 [[command]]
 id = "audit.export"
@@ -3558,12 +3750,18 @@ label = "Export Audit Report"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{path: string, format?: 'json'|'text'|'markdown'|'html', target?: 'document'|path, minSeverity?: 'info'|'warn'|'fail'}"
+params = "{path: string, format?: 'json'|'text'|'markdown'|'html', target?: 'document'|path, results?: result document, minSeverity?: 'info'|'warn'|'fail', noClobber?: bool}"
 area = "qa"
 milestone = "M12"
 summary = "Writes the last results of a target to a file: the JSON result document, a plain-text log, a Markdown report grouped by check, or a self-contained HTML report."
 ref = "fontbakery --json, --ghmarkdown, --html; fontTools varLib.interpolatable --json, --html, --output; AFDKO comparefamily -l"
 status = "docs"
+notes = "The last results come from audit.results, so a path target works once the run on compiled fonts keeps its results; until then the command line passes the document it got from audit.run as `results`."
+guesses = [
+  "Without `format`, the format follows the extension of `path` (.json, .txt, .md, .html) and is JSON for any other; a look at how the command line is used would settle it.",
+  "A result document can be passed in as `results` instead of naming a target, so a run on files can be exported without being kept; settled once the run on compiled fonts keeps its results.",
+  "The Markdown and HTML reports end with the checks that were skipped or failed to run, with their reasons; the reference tools' reports would settle whether to list them.",
+]
 
 [[command]]
 id = "audit.checkOutlines"
@@ -3617,8 +3815,9 @@ params = "{fonts?: [paths], directory?: path}"
 area = "qa"
 milestone = "M12"
 summary = "Returns a table of the menu names of each font: family, subfamily, full, typographic family and subfamily, compatible full and PostScript names."
-ref = "AFDKO comparefamily -rm"
+ref = "AFDKO comparefamily -rn (its help text names -rm; its code prints this report for -rn)"
 status = "docs"
+notes = "Faces are grouped as comparefamily groups them: sorted by the Windows family name, then the italic and bold bits of head.macStyle, and grouped by typographic family (Macintosh records when the font has any, else Windows). The three menu columns are comparefamily's; the named fields come from the Windows English records."
 
 [[command]]
 id = "audit.report.metrics"
@@ -3630,8 +3829,12 @@ params = "{fonts?: [paths], directory?: path}"
 area = "qa"
 milestone = "M12"
 summary = "Returns the global values of each font per typographic family, collapsing a value to one line when every font agrees: glyph count, typo ascender, descender and line gap, cap height and x-height, italic angle, bold and italic bits, font revision, embedding permission, underline position and thickness, weight class, width class, vendor ID, font bounding box, and the copyright and trademark strings of the first face."
-ref = "AFDKO comparefamily -rn"
+ref = "AFDKO comparefamily -rm (its help text names -rn; its code prints this report for -rm)"
 status = "docs"
+notes = "Order and collapsing follow comparefamily's code: a value is given once when every face agrees, the bounding boxes are always listed, and differing values are sorted as comparefamily sorts each one. comparefamily labels the bold and italic bits as hhea; they come from head.macStyle."
+guesses = [
+  "The underline thickness, which comparefamily does not print, is listed after the underline position and sorted the same way; the row's summary asks for it.",
+]
 
 [[command]]
 id = "audit.report.panose"
@@ -3645,6 +3848,10 @@ milestone = "M12"
 summary = "Returns the ten PANOSE digits of each font together with their descriptive labels."
 ref = "AFDKO comparefamily -rp"
 status = "docs"
+notes = "Digit names are comparefamily's PANOSE tables. The base face is chosen as comparefamily chooses it and listed first; comparefamily prints only the differing digits of the other faces, the report gives every digit with a differs flag."
+guesses = [
+  "Two misspelled value names of comparefamily's tables are spelled correctly (Borders, Literals); a reader comparing text output would notice the difference.",
+]
 
 [[command]]
 id = "audit.report.featureLanguages"
@@ -3658,6 +3865,7 @@ milestone = "M12"
 summary = "Returns, for GSUB and GPOS of each font, which features each script and language system exposes and which lookup set each feature maps to, grouping fonts whose tables agree."
 ref = "AFDKO comparefamily -rf"
 status = "docs"
+notes = "comparefamily numbers the lookup sets per table but prints the GSUB numbering under GPOS too, ignores required features, and stops after a table with no features; the report numbers and prints each table on its own, counts a required feature like the others, and always gives both tables."
 
 [[command]]
 id = "audit.showPanel"
@@ -3962,6 +4170,10 @@ milestone = "M12"
 summary = "Findings imported from an external validator are filtered through a list of messages known to be wrong or irrelevant for well-formed fonts: recommended TrueType-only tables missing from CFF fonts, registered feature parameters and stylistic-set tags reported as invalid, OS/2 version 4 reported as corrupt, code-page bits without full coverage, low lowestRecPPEM in CFF fonts, italic angle without the italic bit in single-style faces, line-gap and win-metric recommendations, and a loca range error caused by trailing empty glyphs."
 ref = "AFDKO docs/MSFontValidatorIssues.md"
 status = "docs"
+notes = "The list is fontcraft_audit::export::KNOWN_VALIDATOR_ISSUES, matched by the validator's message code and the font's facts; the importer of the validator's output (files.externalValidator) applies it. The document's private use area warning (W0307) is left in: the audit reports private use code points itself in the strict profile."
+guesses = [
+  "W2106 (OS/2 version below 3) is treated as wrong for OS/2 version 2 and later, and a ssNN tag counts as registered for 01 to 20 and cvNN for 01 to 99; a run of the validator on fonts with those values would settle it.",
+]
 
 [[behavior]]
 id = "audit.liveAudit"
@@ -3988,6 +4200,7 @@ milestone = "M12"
 summary = "Ignored issues are stored in the source as a list of check id, optional glyph, master and location, reason and date; entries whose issue no longer occurs are flagged so they can be pruned."
 ref = "Our design"
 status = "inferred"
+notes = "Built in M12.59: the list lives in the font user data under `com.fontcraft.audit` with the document's default profile, threshold overrides, project values and project profiles, and survives a save and reopen as .fontcraft, .glyphs and UFO. Entries that cannot be read are dropped and reported. audit.listIgnored flags entries whose issue no longer occurs."
 
 [[behavior]]
 id = "audit.exitStatus"

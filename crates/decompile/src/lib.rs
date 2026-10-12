@@ -1,5 +1,5 @@
 //! Compiled fonts read into the source model (L3): `file.open` on a `.ttf`, `.otf`, collection,
-//! WOFF or WOFF2 file.
+//! WOFF or WOFF2 file, and on a Type 1 font or bare CFF font program ([`type1`], [`bare_cff`]).
 //!
 //! Opening a compiled font is a reconstruction, not a load (`open.compiledIsLossy`): the result is
 //! a document with the outlines, advance widths, code points, glyph names, vertical metrics and
@@ -23,9 +23,11 @@ pub use fontcraft_container::woff2::Woff2Directory;
 use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 
+pub mod bare_cff;
 pub mod cff_hints;
 mod gpos_kern;
 pub mod tt_hints;
+pub mod type1;
 pub mod variable;
 pub use gpos_kern::{MAX_CLASS_RECORDS, MAX_KERN_PAIRS};
 
@@ -93,6 +95,12 @@ pub struct Decompiled {
 
 /// The kind of compiled font `bytes` holds, from its first bytes; `None` for anything else.
 pub fn sniff(bytes: &[u8]) -> Option<&'static str> {
+    if type1::is_type1(bytes) {
+        return Some("Type 1");
+    }
+    if bare_cff::is_bare_cff(bytes) {
+        return Some("bare CFF");
+    }
     match bytes.get(..4)? {
         [0, 1, 0, 0] | b"true" => Some("TrueType"),
         b"OTTO" => Some("OpenType (CFF)"),
@@ -103,8 +111,15 @@ pub fn sniff(bytes: &[u8]) -> Option<&'static str> {
     }
 }
 
-/// Reads a compiled font. `face` chooses a member of a collection.
+/// Reads a compiled font (a Type 1 font and a bare CFF font program too). `face` chooses a
+/// member of a collection.
 pub fn decompile(bytes: &[u8], face: Option<u32>) -> Result<Decompiled, DecompileError> {
+    if type1::is_type1(bytes) {
+        return type1::decompile_type1(bytes);
+    }
+    if bare_cff::is_bare_cff(bytes) {
+        return bare_cff::decompile_cff(bytes);
+    }
     let unwrapped = to_sfnt(bytes)?;
     let bytes = unwrapped.as_ref();
     let bad = |e: skrifa::raw::ReadError| DecompileError::Unreadable(e.to_string());

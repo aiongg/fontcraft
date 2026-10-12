@@ -1,0 +1,13 @@
+# Charstring programs of the bare CFF test font, one per line: `subr N:`, `gsubr N:` or
+# `glyph NAME:` and Type 2 operators after their operands (`hintmask:HEX` carries its mask
+# bytes). The font around them is built by `tests/ps_fonts.rs`.
+subr 0: 0 700 rlineto return
+gsubr 0: -100 0 rlineto return
+glyph .notdef: 100 50 0 rmoveto 400 0 rlineto 0 700 rlineto -400 0 rlineto endchar
+glyph space: endchar
+glyph A: 200 0 50 300 40 hstemhm 30 60 hintmask:A0 20 0 rmoveto 100 0 rlineto 0 50 rlineto hintmask:60 200 0 rlineto 0 600 rlineto endchar
+glyph O: 300 40 0 rmoveto 0 300 rlineto 50 0 50 20 50 0 50 0 50 -20 -50 0 50 flex 0 -300 rlineto endchar
+glyph acute: -100 30 600 rmoveto 100 0 rlineto 50 100 rlineto -100 0 rlineto endchar
+glyph Aacute: 200 150 150 65 194 endchar
+glyph E: 150 0 -21 21 50 300 40 310 -20 hstemhm 50 40 160 40 160 40 vstemhm cntrmask:70 cntrmask:0E hintmask:F0 50 0 rmoveto 400 hlineto 700 vlineto -400 hlineto 50 -600 rmoveto 250 0 50 0 0 50 0 100 rlinecurve hintmask:0E 50 -50 50 -50 vhcurveto -50 -50 -50 -50 hhcurveto -50 0 -50 -50 0 -50 0 -50 rcurveline endchar
+glyph one: 100 40 0 rmoveto 100 hlineto -107 callsubr -107 callgsubr endchar

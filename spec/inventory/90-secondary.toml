@@ -2018,17 +2018,18 @@ notes = "M13.37 writes the curve fitting from Raph Levien's published thesis on 
 [[command]]
 id = "font.compareGlyphs"
 label = "Compare Glyphs of Two Fonts…"
-menu = ["Edit"]
+menu = []
 shortcut = ""
 kind = "engine"
-params = "{a: fontRef | path, b: fontRef | path, what?: ['glyphSet', 'outlines', 'bitmaps', 'names', 'substitutions', 'positioning'], outlineMatch?: 'exact' | 'near', tolerance?: number, acceptInlinedComponents?: bool, differencesToBackground?: bool}"
+params = "{a: fontRef | path, b: fontRef | path, what?: ['glyphSet', 'outlines', 'bitmaps', 'names', 'substitutions', 'positioning'], outlineMatch?: 'exact' | 'near', tolerance?: number, acceptInlinedComponents?: bool, differencesToBackground?: bool} → {same, onlyInA: [name], onlyInB: [name], outlines: [{glyph, master}], names: [{glyph, a: [codepoint], b: [codepoint]}], copiedToBackground?: number}"
 area = "cli-tools"
 milestone = "M12"
 summary = "Glyph-level comparison of two fonts, sources or binaries, complementing the table-level font.diff and the master comparison of the primary reference: reports glyphs present in only one, glyphs whose outlines or bitmaps differ, and differences in names, substitutions and positioning. Near matching accepts contours within a tolerance, so a TrueType and a PostScript build of one design can be compared; optionally each differing outline of the second font is copied into the background of the first."
 ref = "FontForge Element menu › Compare Fonts"
 status = "docs"
 origin = "fontforge"
-notes = "Kept in M12 by the M12 planning pass: it is the glyph part of source.diff, behind `fontcraft-cli sources diff` (package M12.37)."
+notes = "Kept in M12 by the M12 planning pass: it is the glyph part of source.diff, behind `fontcraft-cli sources diff` (package M12.37). Built in M12.37 for glyphSet, outlines and names on open documents (by title or path), sources and compiled fonts; bitmaps, substitutions and positioning are refused as not supported yet. The command has no menu item until the comparison window (M13) gives it a dialog; in the secondary reference it sits in the Edit menu (Element menu, Compare Fonts)."
+guesses = ["A fontRef is an open document's title or path; anything else is read as a file path. The secondary reference's documentation of its font selector would settle it.", "Near matching without a tolerance uses 1 unit, and giving a tolerance alone turns near matching on; the secondary reference's default would settle it.", "differencesToBackground replaces the shapes of the background of A's matched master layer with B's shapes and keeps the background's other contents; the secondary reference's behaviour on a glyph with a background would settle it."]
 
 [[command]]
 id = "font.compareLayers"
