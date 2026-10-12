@@ -105,7 +105,7 @@ mod tests {
     use std::sync::Arc;
 
     use fontcraft_model::plist::{Dict, Number, Str, Value};
-    use fontcraft_model::{Axis, Font, Master};
+    use fontcraft_model::{Axis, AxisRange, Font, Master};
     use write_fonts::dump_table;
     use write_fonts::types::Tag;
 
@@ -119,6 +119,10 @@ mod tests {
     /// A weight axis with masters at `masters` (internal), the first or the one `origin` names as
     /// the origin, and the Axis Mappings `map` (user to internal).
     fn designspace(masters: &[f64], origin: Option<usize>, map: &[(i64, i64)]) -> Designspace {
+        Designspace::new(&font(masters, origin, map)).unwrap()
+    }
+
+    fn font(masters: &[f64], origin: Option<usize>, map: &[(i64, i64)]) -> Font {
         let mut f = Font::new("Avar");
         f.axes = Arc::new(vec![Axis { name: "Weight".into(), tag: "wght".into(), ..Axis::default() }]);
         f.masters = Arc::new(
@@ -140,6 +144,15 @@ mod tests {
         }
         if let Some(k) = origin {
             info.params.set(fontcraft_model::axes::ORIGIN, Value::String(Str::new(format!("m{k}"))));
+        }
+        f
+    }
+
+    /// As [`designspace`], with the axis range a designspace source states.
+    fn ranged(masters: &[f64], map: &[(i64, i64)], (minimum, default, maximum): (f64, f64, f64)) -> Designspace {
+        let mut f = font(masters, Some(1), map);
+        if let Some(axis) = Arc::make_mut(&mut f.axes).first_mut() {
+            axis.range = Some(AxisRange { minimum, default, maximum });
         }
         Designspace::new(&f).unwrap()
     }
@@ -192,6 +205,39 @@ mod tests {
         let avar = build_avar(&var).unwrap().unwrap();
         let written = dump_table(&avar).unwrap();
         assert_eq!(hex(&written), "00010000000000010004c000c000000000002000333340004000");
+    }
+
+    // A designspace axis 300–700 (default 400) whose map also has points at 100 and 900, with
+    // masters at 40, 80 and 150. fontmake 3.12.1 writes no `avar` (the map is linear inside the
+    // range) and puts the masters at -1 and 1. fontc 1.0.0 writes from-coordinates of -2 and
+    // nearly 2, outside the range the format allows (`docs/spec/40-compile.md` § 4a).
+    #[test]
+    fn map_points_outside_the_axis_range_are_left_out() {
+        let ds = ranged(&[40.0, 80.0, 150.0], &[(100, 20), (300, 40), (400, 80), (700, 150), (900, 200)], (300.0, 400.0, 700.0));
+        assert!(segment_map(&ds, 0).is_empty());
+        let var = VarAxes::from_designspace(&ds).unwrap();
+        let axis = var.axes.first().unwrap();
+        assert_eq!((axis.min, axis.default, axis.max), (300.0, 400.0, 700.0));
+        assert_eq!(build_avar(&var).unwrap(), None);
+    }
+
+    // A designspace axis 100–900 (default 400) whose map covers only 300–700. fontc 1.0.0 and
+    // fontmake 3.12.1 both refuse it (the map must reach the axis ends). FontCraft reads the map
+    // past its ends as fontTools' `piecewiseLinearMap` does, so the internal ends are -160 and 350,
+    // and writes what fontTools' normalization gives (`docs/spec/40-compile.md` § 4a).
+    #[test]
+    fn an_axis_range_wider_than_the_map_extends_the_map() {
+        let ds = ranged(&[40.0, 80.0, 150.0], &[(300, 40), (400, 80), (700, 150)], (100.0, 400.0, 900.0));
+        let map = segment_map(&ds, 0);
+        let expected = [(-1.0, -1.0), (-1.0 / 3.0, -1.0 / 6.0), (0.0, 0.0), (0.6, 7.0 / 27.0), (1.0, 1.0)];
+        assert_eq!(map.len(), expected.len(), "{map:?}");
+        for ((f, t), (ef, et)) in map.iter().zip(expected) {
+            assert!((f - ef).abs() < 1e-9 && (t - et).abs() < 1e-9, "{map:?}");
+        }
+        let var = VarAxes::from_designspace(&ds).unwrap();
+        let axis = var.axes.first().unwrap();
+        assert_eq!((axis.min, axis.default, axis.max), (100.0, 400.0, 900.0));
+        assert!(build_avar(&var).unwrap().is_some());
     }
 
     #[test]

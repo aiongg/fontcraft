@@ -385,11 +385,18 @@ impl Designspace {
     /// The `avar` segment map of the axis at `axis`: `(external, internal)` pairs in normalized
     /// coordinates, sorted, with −1, 0 and 1 present. `None` for an unknown axis and for a map
     /// that is the identity once normalized (no `avar` entry needed).
+    ///
+    /// Map points outside the external range are left out. An end of the range without a point
+    /// of its own gets the map's value there, read through the map (which extrapolates past its
+    /// own ends), so an axis range wider than the map keeps the map's slope at its ends.
     pub fn avar_map(&self, axis: usize) -> Option<Vec<(f64, f64)>> {
         let a = self.axes.get(axis)?;
         let ext = a.external;
         let mut points: Vec<(f64, f64)> = Vec::new();
         for &(user, design) in a.map.pairs() {
+            if user < ext.minimum || user > ext.maximum {
+                continue;
+            }
             let key = normalize_value(user, ext.minimum, ext.default, ext.maximum, false)?;
             let value = a.normalize(design, false)?;
             match points.iter_mut().find(|p| p.0 == key) {
@@ -397,9 +404,11 @@ impl Designspace {
                 None => points.push((key, value)),
             }
         }
-        for end in [-1.0, 0.0, 1.0] {
+        for (end, user) in [(-1.0, ext.minimum), (0.0, ext.default), (1.0, ext.maximum)] {
             if !points.iter().any(|p| p.0 == end) {
-                points.push((end, end));
+                // A range that stops at the default on one side keeps that end's identity point.
+                let value = if end == 0.0 || user == ext.default { end } else { a.normalize(a.map.to_design(user), false)? };
+                points.push((end, value));
             }
         }
         points.sort_by(|p, q| p.0.total_cmp(&q.0));
