@@ -8,8 +8,10 @@ use fontcraft_model::{Component, Font, Path, Shape};
 
 use super::*;
 
+/// Equal within 1e-6, relative above 1. The expected values are the exact fractions the
+/// statistics pen's rounded output stands for.
 fn close(a: f64, b: f64, what: &str) {
-    assert!((a - b).abs() < 1e-3 * b.abs().max(1.0), "{what}: {a} against {b}");
+    assert!((a - b).abs() < 1e-6 * b.abs().max(1.0), "{what}: {a} against {b}");
 }
 
 /// The bulge of the oracle font: one cubic from (0, 0) to (100, 0), closed by a line.
@@ -38,19 +40,19 @@ fn metrics_curve_bounds_are_exact_and_statistics_match_the_statistics_pen() {
     let s = moment_statistics(&bulge());
     close(s.area, -6000.0, "area (clockwise)");
     close(s.mean[0], 50.0, "meanX");
-    close(s.mean[1], 32.142_857, "meanY");
-    close(s.variance[0], 638.528, "varianceX");
-    close(s.variance[1], 395.408, "varianceY");
+    close(s.mean[1], 225.0 / 7.0, "meanY");
+    close(s.variance[0], 147_500.0 / 231.0, "varianceX");
+    close(s.variance[1], 19_375.0 / 49.0, "varianceY");
     assert_eq!((s.correlation, s.slant), (0.0, 0.0));
 
     let s = moment_statistics(&parallelogram());
     close(s.area, 20000.0, "area");
     close(s.mean[0], 75.0, "meanX");
     close(s.mean[1], 100.0, "meanY");
-    close(s.variance[0], 1041.667, "varianceX");
-    close(s.variance[1], 3333.333, "varianceY");
-    close(s.covariance, 833.333, "covariance");
-    close(s.correlation, 0.447_214, "correlation");
+    close(s.variance[0], 3125.0 / 3.0, "varianceX");
+    close(s.variance[1], 10_000.0 / 3.0, "varianceY");
+    close(s.covariance, 2500.0 / 3.0, "covariance");
+    close(s.correlation, 1.0 / 5f64.sqrt(), "correlation");
     close(s.slant, 0.25, "slant");
 
     // StatisticsControlPen counts the start again when a closing line is drawn.
@@ -63,7 +65,7 @@ fn metrics_curve_bounds_are_exact_and_statistics_match_the_statistics_pen() {
     close(c.area, 20000.0, "control area");
     close(c.mean[0], 60.0, "control meanX");
     close(c.variance[1], 12000.0, "control varianceY");
-    close(c.correlation, 0.560_112, "control correlation");
+    close(c.correlation, 4.0 / 51f64.sqrt(), "control correlation");
     close(c.slant, 1.0 / 3.0, "control slant");
 }
 
