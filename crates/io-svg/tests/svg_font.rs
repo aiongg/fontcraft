@@ -104,3 +104,32 @@ fn damaged_svg_fonts_fail_with_a_message() {
     let huge = format!("<svg><font>{}</font></svg>", "<glyph unicode=\"a\" d=\"M0 0L1 1\"/>".repeat(200_000));
     assert!(read_svg_font(huge.as_bytes()).is_err());
 }
+
+#[test]
+fn hostile_svg_fonts_finish_quickly() {
+    // Repeated names, some at the name length limit: every glyph gets its own name.
+    let long = "a".repeat(255);
+    let glyphs = format!("<glyph glyph-name=\"{long}\"/>").repeat(5_000) + &"<glyph glyph-name=\"a\"/>".repeat(5_000);
+    let font = read_svg_font(format!("<svg><font>{glyphs}</font></svg>").as_bytes()).unwrap().font;
+    let names: std::collections::HashSet<&str> = font.glyphs.iter().map(|g| g.name.as_str()).collect();
+    assert_eq!(names.len(), 10_000);
+    assert!(names.iter().all(|n| n.len() <= 255));
+    assert!(names.contains("a.4999"));
+
+    // Only the first missing-glyph is read.
+    let doc = format!("<svg><font>{}<glyph glyph-name=\"a\"/></font></svg>", "<missing-glyph/>".repeat(30_000));
+    let read = read_svg_font(doc.as_bytes()).unwrap();
+    assert_eq!(read.font.glyphs.iter().map(|g| g.name.as_str()).collect::<Vec<_>>(), vec![".notdef", "a"]);
+    assert!(read.warnings.iter().any(|w| w.contains("29999")), "{:?}", read.warnings);
+
+    // A long first side against a second side that names no glyph.
+    let doc = format!(
+        "<svg><font><glyph glyph-name=\"a\"/><hkern g1=\"{}\" g2=\"{}\" k=\"10\"/></font></svg>",
+        "a,".repeat(1_000_000),
+        "b,".repeat(1_000_000)
+    );
+    assert!(read_svg_font(doc.as_bytes()).is_ok());
+    // Sides naming more glyphs than the limit are refused.
+    let doc = format!("<svg><font><glyph glyph-name=\"a\"/><hkern g1=\"{}\" g2=\"a\" k=\"10\"/></font></svg>", "a,".repeat(2_100_000));
+    assert!(read_svg_font(doc.as_bytes()).is_err());
+}

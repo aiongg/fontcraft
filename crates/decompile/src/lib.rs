@@ -20,7 +20,7 @@ pub use fontcraft_container as container;
 pub use fontcraft_container::woff::WoffTable;
 pub use fontcraft_container::woff2::Woff2Directory;
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
 pub mod bare_cff;
@@ -154,6 +154,48 @@ fn clean_name(s: &str) -> String {
     out
 }
 
+/// Bytes kept free for a `.N` suffix when a long name repeats: a dot and up to seven digits.
+const SUFFIX_ROOM: usize = 8;
+
+/// Makes glyph names unique: a repeated name gets `.1`, `.2`… The number search for one stem
+/// continues where it stopped, so every repeat costs a bounded number of tries, and a stem too
+/// long for its suffix is cut so the name stays within [`MAX_NAME_LEN`].
+#[derive(Default)]
+pub(crate) struct UniqueNames {
+    seen: HashSet<String>,
+    next: HashMap<String, usize>,
+}
+
+impl UniqueNames {
+    /// `base` if it is new, else the first free `{stem}.{n}`.
+    pub fn add(&mut self, base: String) -> String {
+        if self.seen.insert(base.clone()) {
+            return base;
+        }
+        // Long names share one stem, cut at a fixed length, so two names that differ only past
+        // the cut draw numbers from the same counter.
+        let stem = if base.len() + SUFFIX_ROOM > MAX_NAME_LEN { cut(&base, MAX_NAME_LEN - SUFFIX_ROOM).to_string() } else { base };
+        let n = self.next.entry(stem.clone()).or_insert(1);
+        loop {
+            let suffix = format!(".{n}");
+            let name = format!("{}{suffix}", cut(&stem, MAX_NAME_LEN.saturating_sub(suffix.len())));
+            *n += 1;
+            if self.seen.insert(name.clone()) {
+                return name;
+            }
+        }
+    }
+}
+
+/// The longest prefix of `s` of at most `max` bytes that ends on a character boundary.
+fn cut(s: &str, max: usize) -> &str {
+    let mut end = s.len().min(max);
+    while !s.is_char_boundary(end) {
+        end = end.saturating_sub(1);
+    }
+    s.get(..end).unwrap_or_default()
+}
+
 const MASTER: &str = "m01";
 
 fn read(font: &FontRef) -> Result<Decompiled, DecompileError> {
@@ -169,18 +211,12 @@ fn read(font: &FontRef) -> Result<Decompiled, DecompileError> {
 
     // Names, made unique where the font repeats one.
     let names = font.glyph_names();
-    let mut seen = HashSet::new();
+    let mut unique = UniqueNames::default();
     let mut glyph_names = Vec::with_capacity(count as usize);
     for gid in 0..count {
         let base =
             names.get(GlyphId::new(gid)).map(|n| clean_name(n.as_str())).filter(|n| !n.trim().is_empty()).unwrap_or_else(|| format!("glyph{gid:05}"));
-        let mut name = base.clone();
-        let mut n = 1;
-        while !seen.insert(name.clone()) {
-            name = clean_name(&format!("{base}.{n}"));
-            n += 1;
-        }
-        glyph_names.push(name);
+        glyph_names.push(unique.add(base));
     }
 
     let mut unicodes: BTreeMap<u32, Vec<u32>> = BTreeMap::new();

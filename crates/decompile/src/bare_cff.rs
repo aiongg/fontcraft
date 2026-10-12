@@ -12,8 +12,8 @@
 use skrifa::raw::ps::string::STANDARD_STRINGS;
 
 use crate::type1::{
-    Hints, MAX_CHARSTRING_WORK, MAX_GLYPH_OPS, MAX_PS_BYTES, MAX_STACK, MAX_SUBR_DEPTH, PrivateDict, PsFont, PsGlyph, PsKind, PsOp, StemKind,
-    TopDict, be_i32, list, short_number, to_font,
+    FontBudget, Hints, MAX_CHARSTRING_WORK, MAX_GLYPH_OPS, MAX_PS_BYTES, MAX_STACK, MAX_SUBR_DEPTH, PrivateDict, PsFont, PsGlyph, PsKind, PsOp,
+    StemKind, TOO_MANY_OPS, TopDict, be_i32, list, short_number, to_font,
 };
 use crate::{DecompileError, Decompiled};
 use fontcraft_model::MAX_COORDINATE;
@@ -40,9 +40,18 @@ pub fn decompile_cff(bytes: &[u8]) -> Result<Decompiled, DecompileError> {
     to_font(&ps, warnings)
 }
 
+/// An offset read from a DICT, refused when it is negative, not a number or past the end of
+/// `data` (a real operand such as 9E99 would otherwise become a huge `usize`).
+fn offset_in(data: &[u8], v: f64, what: &str) -> Result<usize, DecompileError> {
+    if v >= 0.0 && v <= data.len() as f64 { Ok(v as usize) } else { Err(bad(format!("the {what} offset {v} lies outside the data"))) }
+}
+
 /// An INDEX: its items, and the offset just past it.
 fn index(data: &[u8], pos: usize) -> Result<(Vec<&[u8]>, usize), DecompileError> {
     let short = || bad("a CFF INDEX runs past the end of the data");
+    if pos > data.len() {
+        return Err(short());
+    }
     let count = data
         .get(pos..pos + 2)
         .map(|b| usize::from(u16::from_be_bytes([b.first().copied().unwrap_or(0), b.get(1).copied().unwrap_or(0)])))
@@ -62,13 +71,15 @@ fn index(data: &[u8], pos: usize) -> Result<(Vec<&[u8]>, usize), DecompileError>
     let base = offsets_at + (count + 1) * off_size - 1;
     let mut items = Vec::with_capacity(count);
     let mut prev = offset(0).ok_or_else(short)?;
+    // Offsets of up to four bytes can pass the end of `usize` on 32-bit targets.
+    let at = |o: usize| base.checked_add(o).filter(|&p| p <= data.len()).ok_or_else(short);
     for k in 1..=count {
         let next = offset(k).ok_or_else(short)?;
-        let item = data.get(base + prev..base + next).ok_or_else(short)?;
+        let item = data.get(at(prev)?..at(next)?).ok_or_else(short)?;
         items.push(item);
         prev = next;
     }
-    Ok((items, base + prev))
+    Ok((items, at(prev)?))
 }
 
 /// A DICT as (operator, operands): two-byte operators are 1200 + their second byte.
@@ -180,7 +191,7 @@ fn private<'a>(data: &'a [u8], range: &[f64]) -> Result<Private<'a>, DecompileEr
     if size < 0.0 || offset < 0.0 {
         return Err(bad("the Private dict has a negative offset"));
     }
-    let (start, size) = (offset as usize, size as usize);
+    let (start, size) = (offset_in(data, offset, "Private dict")?, size as usize);
     let body = data.get(start..start.saturating_add(size)).ok_or_else(|| bad("the Private dict runs past the end of the data"))?;
     let p = &mut out.dict;
     for (op, v) in dict(body) {
@@ -203,7 +214,8 @@ fn private<'a>(data: &'a [u8], range: &[f64]) -> Result<Private<'a>, DecompileEr
             21 => out.nominal_width = first(&v).unwrap_or(0.0),
             19 => {
                 if let Some(rel) = first(&v).filter(|r| *r >= 0.0) {
-                    out.subrs = index(data, start.saturating_add(rel as usize))?.0;
+                    let at = offset_in(data, rel, "Subrs")?.checked_add(start).ok_or_else(|| bad("the Subrs offset lies outside the data"))?;
+                    out.subrs = index(data, at)?.0;
                 }
             }
             _ => {}
@@ -214,6 +226,11 @@ fn private<'a>(data: &'a [u8], range: &[f64]) -> Result<Private<'a>, DecompileEr
 
 /// Reads the first font of a bare CFF font set into a [`PsFont`].
 pub fn read_cff(bytes: &[u8], warnings: &mut Vec<String>) -> Result<PsFont, DecompileError> {
+    read_cff_within(bytes, warnings, FontBudget::new())
+}
+
+/// [`read_cff`] under a given font-wide budget.
+fn read_cff_within(bytes: &[u8], warnings: &mut Vec<String>, mut budget: FontBudget) -> Result<PsFont, DecompileError> {
     if bytes.len() > MAX_PS_BYTES {
         return Err(bad(format!("the font is {} bytes; the limit is {MAX_PS_BYTES}", bytes.len())));
     }
@@ -278,8 +295,8 @@ pub fn read_cff(bytes: &[u8], warnings: &mut Vec<String>) -> Result<PsFont, Deco
         }
     }
     font.top = t;
-    let charstrings_at = charstrings_at.filter(|o| *o >= 0.0).ok_or_else(|| bad("the CFF has no CharStrings"))?;
-    let (charstrings, _) = index(bytes, charstrings_at as usize)?;
+    let charstrings_at = charstrings_at.ok_or_else(|| bad("the CFF has no CharStrings"))?;
+    let (charstrings, _) = index(bytes, offset_in(bytes, charstrings_at, "CharStrings")?)?;
     if charstrings.is_empty() {
         return Err(bad("the CFF has no glyphs"));
     }
@@ -290,14 +307,14 @@ pub fn read_cff(bytes: &[u8], warnings: &mut Vec<String>) -> Result<PsFont, Deco
     let mut privates = Vec::new();
     let mut select = vec![0usize; count];
     if cid {
-        let fd_array = fd_array.filter(|o| *o >= 0.0).ok_or_else(|| bad("the CID-keyed CFF has no FDArray"))?;
-        let (fds, _) = index(bytes, fd_array as usize)?;
+        let fd_array = fd_array.ok_or_else(|| bad("the CID-keyed CFF has no FDArray"))?;
+        let (fds, _) = index(bytes, offset_in(bytes, fd_array, "FDArray")?)?;
         for fd in fds.iter().take(MAX_FONT_DICTS) {
             let range = dict(fd).into_iter().find(|(op, _)| *op == 18).map(|(_, v)| v).unwrap_or_default();
             privates.push(private(bytes, &range)?);
         }
         if let Some(at) = fd_select.filter(|o| *o >= 0.0) {
-            read_fd_select(bytes, at as usize, &mut select)?;
+            read_fd_select(bytes, offset_in(bytes, at, "FDSelect")?, &mut select)?;
         }
     } else {
         privates.push(private(bytes, &private_range)?);
@@ -315,10 +332,12 @@ pub fn read_cff(bytes: &[u8], warnings: &mut Vec<String>) -> Result<PsFont, Deco
         let fd = select.get(gid).copied().unwrap_or(0);
         let p = privates.get(fd).or(privates.first()).ok_or_else(|| bad("the CFF has no Private dict"))?;
         let mut run = T2Run::new(&gsubrs, &p.subrs);
-        if let Err(e) = run.run(cs, 0) {
+        let result = run.run(cs, 0).map(|_| ());
+        let finished = run.finish();
+        if let Err(e) = result.and(finished) {
             failed.push(format!("{} ({e})", names.get(gid).map_or("?", String::as_str)));
         }
-        run.finish();
+        budget.charge(run.ops.len(), run.work)?;
         let width = run.width.map_or(p.default_width, |w| p.nominal_width + w);
         font.glyphs.push(PsGlyph {
             name: names.get(gid).cloned().unwrap_or_default(),
@@ -372,7 +391,7 @@ fn glyph_names(data: &[u8], at: f64, count: usize, cid: bool, strings: &Strings)
         // not carried, so their glyphs get numbered names.
         ids = (0..count).map(|g| if at == 0.0 { g } else { usize::MAX }).collect();
     } else {
-        let at = at as usize;
+        let at = offset_in(data, at, "charset")?;
         let format = *data.get(at).ok_or_else(short)?;
         let mut pos = at + 1;
         while ids.len() < count {
@@ -419,7 +438,7 @@ fn encoding(data: &[u8], at: f64, cid: bool, names: &[String], strings: &Strings
         return Ok(codes);
     }
     let short = || bad("the encoding runs past the end of the data");
-    let at = at as usize;
+    let at = offset_in(data, at, "encoding")?;
     let format = *data.get(at).ok_or_else(short)?;
     let mut pos = at + 1;
     let mut gid = 1usize;
@@ -522,10 +541,11 @@ impl<'a> T2Run<'a> {
         }
     }
 
-    fn finish(&mut self) {
+    fn finish(&mut self) -> Result<(), String> {
         if !self.hints.emitted {
-            self.hints.flush(&mut self.ops);
+            self.hints.flush(&mut self.ops)?;
         }
+        Ok(())
     }
 
     fn push(&mut self, v: f64) -> Result<(), String> {
@@ -552,12 +572,12 @@ impl<'a> T2Run<'a> {
 
     fn emit(&mut self, op: PsOp) -> Result<(), String> {
         if self.ops.len() >= MAX_GLYPH_OPS {
-            return Err("too many operations".into());
+            return Err(TOO_MANY_OPS.into());
         }
         if !op.in_range() {
             return Err(format!("a point lies outside the coordinate range of ±{MAX_COORDINATE}"));
         }
-        self.hints.flush(&mut self.ops);
+        self.hints.flush(&mut self.ops)?;
         self.ops.push(op);
         Ok(())
     }
@@ -591,7 +611,7 @@ impl<'a> T2Run<'a> {
         }
     }
 
-    fn mask(&mut self, counter: bool, bytes: &[u8]) {
+    fn mask(&mut self, counter: bool, bytes: &[u8]) -> Result<(), String> {
         let active: Vec<PsOp> = self
             .declared
             .iter()
@@ -600,6 +620,9 @@ impl<'a> T2Run<'a> {
             .map(|(_, op)| op.clone())
             .collect();
         if counter {
+            if self.ops.len().saturating_add(active.len()).saturating_add(1) > MAX_GLYPH_OPS {
+                return Err(TOO_MANY_OPS.into());
+            }
             self.ops.push(PsOp::NewGroup);
             self.ops.extend(active.into_iter().map(|op| match op {
                 PsOp::HStem { y, dy, .. } => PsOp::HStem { y, dy, kind: StemKind::Counter },
@@ -612,6 +635,7 @@ impl<'a> T2Run<'a> {
             }
             self.hints.pending = active;
         }
+        Ok(())
     }
 
     fn run(&mut self, cs: &[u8], depth: usize) -> Result<Flow, String> {
@@ -648,12 +672,18 @@ impl<'a> T2Run<'a> {
                     let n = self.declared.len().div_ceil(8);
                     let bytes = cs.get(i..i + n).ok_or("a hint mask is cut short")?;
                     i += n;
-                    self.mask(b == 20, bytes);
+                    // Each mask byte selects up to eight stems: charge it as work, so a glyph
+                    // cannot repeat a long mask without limit.
+                    self.work = self.work.saturating_add(n);
+                    if self.work > MAX_CHARSTRING_WORK {
+                        return Err("the charstring does too much work".into());
+                    }
+                    self.mask(b == 20, bytes)?;
                     Flow::Next
                 }
                 10 | 29 => {
                     let subrs = if b == 10 { self.subrs } else { self.gsubrs };
-                    let index = self.pop()? as i64 + bias(subrs.len());
+                    let index = (self.pop()? as i64).saturating_add(bias(subrs.len()));
                     let sub = usize::try_from(index).ok().and_then(|k| subrs.get(k)).ok_or("a subroutine is missing")?;
                     match self.run(sub, depth + 1)? {
                         Flow::End => Flow::End,
@@ -880,5 +910,96 @@ fn last2(stack: &[f64]) -> Result<[f64; 2], String> {
     match stack.get(stack.len().saturating_sub(2)..) {
         Some(&[a, b]) => Ok([a, b]),
         _ => Err("too few operands".into()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::type1::{MAX_FONT_OPS, MAX_FONT_WORK};
+
+    fn index_of(items: &[Vec<u8>]) -> Vec<u8> {
+        let mut out = (items.len() as u16).to_be_bytes().to_vec();
+        if items.is_empty() {
+            return out;
+        }
+        out.push(4);
+        let mut off = 1u32;
+        out.extend(off.to_be_bytes());
+        for it in items {
+            off += it.len() as u32;
+            out.extend(off.to_be_bytes());
+        }
+        for it in items {
+            out.extend_from_slice(it);
+        }
+        out
+    }
+
+    fn int5(v: usize) -> Vec<u8> {
+        [vec![29], (v as i32).to_be_bytes().to_vec()].concat()
+    }
+
+    /// A bare CFF font with these charstrings and Private dict, `top_extra` (DICT entries) at
+    /// the end of its Top DICT.
+    fn font(charstrings: &[Vec<u8>], private: &[u8], top_extra: &[u8]) -> Vec<u8> {
+        let header = vec![1, 0, 4, 4];
+        let names = index_of(&[b"T".to_vec()]);
+        let charstrings = index_of(charstrings);
+        let top_len = index_of(&[vec![0; 17 + top_extra.len()]]).len();
+        let cs_at = header.len() + names.len() + top_len + 4;
+        let private_at = cs_at + charstrings.len();
+        let top = [int5(cs_at), vec![17], int5(private.len()), int5(private_at), vec![18], top_extra.to_vec()].concat();
+        [header, names, index_of(&[top]), index_of(&[]), index_of(&[]), charstrings, private.to_vec()].concat()
+    }
+
+    /// `0 0 rmoveto`, `count` times `1 1 rlineto`, `endchar`.
+    fn lines(count: usize) -> Vec<u8> {
+        [vec![139, 139, 21], [140, 140, 5].repeat(count), vec![14]].concat()
+    }
+
+    #[test]
+    fn the_test_font_reads() {
+        let ps = read_cff(&font(&[lines(1), lines(2)], &[], &[]), &mut Vec::new()).unwrap();
+        assert_eq!(ps.glyphs.iter().map(|g| g.ops.len()).collect::<Vec<_>>(), vec![2, 3]);
+    }
+
+    #[test]
+    fn a_font_past_the_font_wide_budget_is_refused() {
+        let bytes = font(&std::iter::repeat_n(lines(100), 50).collect::<Vec<_>>(), &[], &[]);
+        assert_eq!(read_cff_within(&bytes, &mut Vec::new(), FontBudget::new()).unwrap().glyphs.len(), 50);
+        assert!(read_cff_within(&bytes, &mut Vec::new(), FontBudget::with_limits(1_000, MAX_FONT_WORK)).is_err());
+        assert!(read_cff_within(&bytes, &mut Vec::new(), FontBudget::with_limits(MAX_FONT_OPS, 1_000)).is_err());
+    }
+
+    #[test]
+    fn repeated_counter_masks_stop_at_the_glyph_limit() {
+        // 24 stems, then 60,000 counter masks selecting all of them (25 operations each).
+        let mut cs = [vec![139; 48], vec![1]].concat();
+        cs.extend([20, 0xFF, 0xFF, 0xFF].repeat(60_000));
+        cs.push(14);
+        let mut warnings = Vec::new();
+        let ps = read_cff(&font(&[lines(1), cs], &[], &[]), &mut warnings).unwrap();
+        assert!(ps.glyphs[1].ops.len() <= MAX_GLYPH_OPS, "{}", ps.glyphs[1].ops.len());
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+    }
+
+    #[test]
+    fn offsets_past_the_data_are_refused() {
+        // The real 9E99.
+        let huge = vec![30, 0x9B, 0x99, 0xFF];
+        let with = |op: &[u8]| [huge.clone(), op.to_vec()].concat();
+        let cid = vec![139, 139, 139, 12, 30];
+        let cases = [
+            (Vec::new(), with(&[17])),
+            (Vec::new(), with(&[15])),
+            (Vec::new(), with(&[16])),
+            (Vec::new(), [cid, with(&[12, 36])].concat()),
+            // Subrs far past the Private dict.
+            (with(&[19]), Vec::new()),
+        ];
+        for (k, (private, extra)) in cases.iter().enumerate() {
+            assert!(read_cff(&font(&[lines(1)], private, extra), &mut Vec::new()).is_err(), "case {k}");
+        }
     }
 }

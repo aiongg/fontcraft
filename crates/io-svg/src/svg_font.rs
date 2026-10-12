@@ -2,19 +2,19 @@
 //! master written as one.
 //!
 //! Read: `font-face` (family, units per em, ascent, descent, x-height, cap-height), the font's
-//! default advance, `missing-glyph` as `.notdef`, each `glyph` with its path (font units, y up),
-//! advance, code point (a `unicode` of one character; a longer one names a ligature and gives
-//! none) and name (`glyph-name`, else made from the characters), and `hkern` pairs (by `g1`/`g2`
-//! names or `u1`/`u2` characters, the value being minus `k`). Quadratic segments and arcs become
-//! cubic curves; every subpath is closed, as SVG fonts fill them. Vertical kerning and the
-//! glyph-selection attributes (`arabic-form`, `lang`, `orientation`) are not read.
+//! default advance, the first `missing-glyph` as `.notdef`, each `glyph` with its path (font
+//! units, y up), advance, code point (a `unicode` of one character; a longer one names a ligature
+//! and gives none) and name (`glyph-name`, else made from the characters), and `hkern` pairs (by
+//! `g1`/`g2` names or `u1`/`u2` characters, the value being minus `k`). Quadratic segments and
+//! arcs become cubic curves; every subpath is closed, as SVG fonts fill them. Vertical kerning and
+//! the glyph-selection attributes (`arabic-form`, `lang`, `orientation`) are not read.
 //!
 //! Written: what AFDKO tx writes, standalone: `font-face`, `missing-glyph` from `.notdef`, a
 //! `glyph` per other glyph with `glyph-name`, its first code point and its outline with the
 //! components resolved, and `hkern` for pairs between two glyphs (group kerning is not written).
 //!
-//! Input is untrusted: the document size, element count, path elements and coordinates are
-//! checked against the crate's limits.
+//! Input is untrusted: the document size, element count, path elements, coordinates and kerning
+//! pairs are checked against the crate's limits.
 
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
@@ -31,6 +31,8 @@ use crate::{MAX_SVG_BYTES, MAX_SVG_ELEMENTS, MAX_SVG_NODES, SvgError};
 
 /// Most kerning pairs read from one font (each `hkern` may name lists on both sides).
 pub const MAX_SVG_KERN_PAIRS: usize = 1_000_000;
+/// Most glyph names and characters read from the sides of all `hkern` elements together.
+pub const MAX_SVG_KERN_SIDES: usize = 2_000_000;
 
 const MASTER: &str = "m01";
 
@@ -65,6 +67,52 @@ fn clean_name(s: &str) -> String {
     out
 }
 
+/// Bytes kept free for a `.N` suffix when a long name repeats: a dot and up to seven digits.
+const SUFFIX_ROOM: usize = 8;
+
+/// Makes glyph names unique: a repeated name gets `.1`, `.2`… The number search for one stem
+/// continues where it stopped, so every repeat costs a bounded number of tries, and a stem too
+/// long for its suffix is cut so the name stays within [`MAX_NAME_LEN`].
+#[derive(Default)]
+struct UniqueNames {
+    seen: HashSet<String>,
+    next: HashMap<String, usize>,
+}
+
+impl UniqueNames {
+    /// `base` if it is new, else the first free `{stem}.{n}`.
+    fn add(&mut self, base: String) -> String {
+        if self.seen.insert(base.clone()) {
+            return base;
+        }
+        // Long names share one stem, cut at a fixed length, so two names that differ only past
+        // the cut draw numbers from the same counter.
+        let stem = if base.len() + SUFFIX_ROOM > MAX_NAME_LEN { cut(&base, MAX_NAME_LEN - SUFFIX_ROOM).to_string() } else { base };
+        let n = self.next.entry(stem.clone()).or_insert(1);
+        loop {
+            let suffix = format!(".{n}");
+            let name = format!("{}{suffix}", cut(&stem, MAX_NAME_LEN.saturating_sub(suffix.len())));
+            *n += 1;
+            if self.seen.insert(name.clone()) {
+                return name;
+            }
+        }
+    }
+
+    fn contains(&self, name: &str) -> bool {
+        self.seen.contains(name)
+    }
+}
+
+/// The longest prefix of `s` of at most `max` bytes that ends on a character boundary.
+fn cut(s: &str, max: usize) -> &str {
+    let mut end = s.len().min(max);
+    while !s.is_char_boundary(end) {
+        end = end.saturating_sub(1);
+    }
+    s.get(..end).unwrap_or_default()
+}
+
 /// Reads the first `font` element of an SVG document.
 pub fn read_svg_font(data: &[u8]) -> Result<SvgFont, SvgError> {
     if data.len() > MAX_SVG_BYTES {
@@ -95,14 +143,21 @@ pub fn read_svg_font(data: &[u8]) -> Result<SvgFont, SvgError> {
         .unwrap_or_default();
 
     let data_db = fontcraft_model::glyphdata::GlyphData::new().ok();
-    let mut names = HashSet::new();
+    let mut names = UniqueNames::default();
     let mut used = HashSet::new();
     let mut by_char: HashMap<String, String> = HashMap::new();
     let mut glyphs = Vec::new();
     let mut nodes_total = 0usize;
     let mut bad_paths = 0usize;
+    let (mut missing_seen, mut extra_missing) = (false, 0usize);
     for (i, el) in font_el.children().filter(|n| n.has_tag_name("glyph") || n.has_tag_name("missing-glyph")).enumerate() {
         let missing = el.has_tag_name("missing-glyph");
+        // The first `missing-glyph` is the font's `.notdef`; later ones are left out.
+        if missing && missing_seen {
+            extra_missing += 1;
+            continue;
+        }
+        missing_seen |= missing;
         let unicode = attr(&el, "unicode").unwrap_or_default();
         let base = if missing {
             ".notdef".to_string()
@@ -113,12 +168,7 @@ pub fn read_svg_font(data: &[u8]) -> Result<SvgFont, SvgError> {
                 unicode.chars().map(|c| data_db.as_ref().map_or_else(|| format!("uni{:04X}", u32::from(c)), |d| d.nice_name(u32::from(c)))).collect();
             Some(clean_name(&parts.join("_"))).filter(|n| !n.is_empty()).unwrap_or_else(|| format!("glyph{i:05}"))
         };
-        let mut name = base.clone();
-        let mut k = 1;
-        while !names.insert(name.clone()) {
-            name = clean_name(&format!("{base}.{k}"));
-            k += 1;
-        }
+        let name = names.add(base);
         let mut glyph = Glyph::new(name.clone());
         let mut chars = unicode.chars();
         if let (Some(c), None) = (chars.next(), chars.next())
@@ -151,9 +201,12 @@ pub fn read_svg_font(data: &[u8]) -> Result<SvgFont, SvgError> {
     if bad_paths > 0 {
         warnings.push(format!("{bad_paths} glyph outlines could not be read and were left empty"));
     }
+    if extra_missing > 0 {
+        warnings.push(format!("{extra_missing} further missing-glyph elements were not read: the first one is the font's .notdef"));
+    }
 
     let mut kerning = Kerning::default();
-    let mut pairs = 0usize;
+    let (mut pairs, mut sides) = (0usize, 0usize);
     let mut vkern = 0usize;
     for el in font_el.children() {
         if el.has_tag_name("vkern") {
@@ -164,21 +217,25 @@ pub fn read_svg_font(data: &[u8]) -> Result<SvgFont, SvgError> {
             continue;
         }
         let Some(k) = num_attr(&el, "k") else { continue };
-        let side = |g: &str, u: &str| -> Vec<String> {
-            let mut out: Vec<String> =
-                attr(&el, g).map(|v| v.split(',').map(|s| s.trim().to_string()).filter(|s| names.contains(s)).collect()).unwrap_or_default();
+        let side = |g: &str, u: &str| -> Vec<&str> {
+            let mut out: Vec<&str> = attr(&el, g).map(|v| v.split(',').map(str::trim).filter(|s| names.contains(s)).collect()).unwrap_or_default();
             if let Some(v) = attr(&el, u) {
-                out.extend(v.split(',').filter_map(|s| by_char.get(s.trim()).cloned()));
+                out.extend(v.split(',').filter_map(|s| by_char.get(s.trim()).map(String::as_str)));
             }
             out
         };
-        for first in side("g1", "u1") {
-            for second in side("g2", "u2") {
-                pairs += 1;
-                if pairs > MAX_SVG_KERN_PAIRS {
-                    return Err(SvgError::Parse(format!("the font has more than {MAX_SVG_KERN_PAIRS} kerning pairs")));
-                }
-                kerning.ltr.set(MASTER, &first, &second, -k);
+        let (firsts, seconds) = (side("g1", "u1"), side("g2", "u2"));
+        sides = sides.saturating_add(firsts.len()).saturating_add(seconds.len());
+        if sides > MAX_SVG_KERN_SIDES {
+            return Err(SvgError::Parse(format!("the kerning names more than {MAX_SVG_KERN_SIDES} glyphs")));
+        }
+        pairs = pairs.saturating_add(firsts.len().saturating_mul(seconds.len()));
+        if pairs > MAX_SVG_KERN_PAIRS {
+            return Err(SvgError::Parse(format!("the font has more than {MAX_SVG_KERN_PAIRS} kerning pairs")));
+        }
+        for first in &firsts {
+            for second in &seconds {
+                kerning.ltr.set(MASTER, first, second, -k);
             }
         }
     }

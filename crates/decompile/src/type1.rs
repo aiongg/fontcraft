@@ -17,7 +17,8 @@
 //!
 //! Input is untrusted: sizes, counts, subroutine nesting, the operand stack and the work spent
 //! on one glyph are capped by the limits below, and a glyph whose charstring cannot be run is
-//! kept empty with a warning.
+//! kept empty with a warning. The operations and work of the whole font are capped too; a font
+//! past them is refused.
 #![allow(clippy::too_many_lines)]
 
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -32,7 +33,7 @@ use fontcraft_model::{
 use skrifa::outline::OutlinePen;
 use skrifa::raw::ps::encoding::PredefinedEncoding;
 
-use crate::{CubicPen, DecompileError, Decompiled, MASTER, clean_name};
+use crate::{CubicPen, DecompileError, Decompiled, MASTER, UniqueNames, clean_name};
 
 /// Largest Type 1 or bare CFF file read, in bytes.
 pub const MAX_PS_BYTES: usize = 64 << 20;
@@ -46,6 +47,10 @@ pub const MAX_STACK: usize = 48;
 pub const MAX_CHARSTRING_WORK: usize = 200_000;
 /// Most hint and path operations kept for one glyph.
 pub const MAX_GLYPH_OPS: usize = 50_000;
+/// Most hint and path operations kept for a whole font, all glyphs together.
+pub const MAX_FONT_OPS: usize = 20_000_000;
+/// Most charstring work (see [`MAX_CHARSTRING_WORK`]) a whole font may spend, all glyphs together.
+pub const MAX_FONT_WORK: usize = 500_000_000;
 /// Most numbers in one dictionary array (BlueValues, StemSnapH…).
 pub const MAX_DICT_ARRAY: usize = 64;
 
@@ -265,14 +270,16 @@ pub fn read_type1(bytes: &[u8], warnings: &mut Vec<String>) -> Result<PsFont, De
         }
     }
     let mut failed = Vec::new();
+    let mut budget = FontBudget::new();
     for i in order {
         let Some((name, cs)) = charstrings.get(i) else { continue };
         let mut run = T1Run::new(&subrs);
-        let result = run.run(cs, 0);
-        if let Err(e) = result {
+        let result = run.run(cs, 0).map(|_| ());
+        let finished = run.finish();
+        if let Err(e) = result.and(finished) {
             failed.push(format!("{name} ({e})"));
         }
-        run.finish();
+        budget.charge(run.ops.len(), run.work)?;
         font.glyphs.push(PsGlyph {
             name: name.clone(),
             codes: codes.get(name.as_str()).cloned().unwrap_or_default(),
@@ -798,8 +805,12 @@ impl Hints {
         }
     }
 
-    /// Before a path operation.
-    pub fn flush(&mut self, ops: &mut Vec<PsOp>) {
+    /// Before a path operation. Fails, writing nothing, when the glyph would pass
+    /// [`MAX_GLYPH_OPS`].
+    pub fn flush(&mut self, ops: &mut Vec<PsOp>) -> Result<(), String> {
+        if (!self.emitted || self.replacing) && ops.len().saturating_add(self.pending.len()).saturating_add(1) > MAX_GLYPH_OPS {
+            return Err(TOO_MANY_OPS.into());
+        }
         if !self.emitted {
             ops.append(&mut self.pending);
             self.emitted = true;
@@ -808,6 +819,40 @@ impl Hints {
             ops.append(&mut self.pending);
         }
         self.replacing = false;
+        Ok(())
+    }
+}
+
+pub(crate) const TOO_MANY_OPS: &str = "too many operations";
+
+/// What a whole font has spent so far, charged after each glyph: the font is refused once it
+/// passes either limit.
+pub(crate) struct FontBudget {
+    ops: usize,
+    work: usize,
+    max_ops: usize,
+    max_work: usize,
+}
+
+impl FontBudget {
+    pub fn new() -> Self {
+        Self::with_limits(MAX_FONT_OPS, MAX_FONT_WORK)
+    }
+
+    pub fn with_limits(max_ops: usize, max_work: usize) -> Self {
+        Self { ops: 0, work: 0, max_ops, max_work }
+    }
+
+    pub fn charge(&mut self, ops: usize, work: usize) -> Result<(), DecompileError> {
+        self.ops = self.ops.saturating_add(ops);
+        self.work = self.work.saturating_add(work);
+        if self.ops > self.max_ops {
+            return Err(bad(format!("the glyphs hold more than {} hint and path operations, the limit for one font", self.max_ops)));
+        }
+        if self.work > self.max_work {
+            return Err(bad(format!("the charstrings take more than {} steps to run, the limit for one font", self.max_work)));
+        }
+        Ok(())
     }
 }
 
@@ -875,10 +920,11 @@ impl<'a> T1Run<'a> {
         }
     }
 
-    fn finish(&mut self) {
+    fn finish(&mut self) -> Result<(), String> {
         if !self.hints.emitted {
-            self.hints.flush(&mut self.ops);
+            self.hints.flush(&mut self.ops)?;
         }
+        Ok(())
     }
 
     fn push(&mut self, v: f64) -> Result<(), String> {
@@ -909,12 +955,12 @@ impl<'a> T1Run<'a> {
 
     fn emit(&mut self, op: PsOp) -> Result<(), String> {
         if self.ops.len() >= MAX_GLYPH_OPS {
-            return Err("too many operations".into());
+            return Err(TOO_MANY_OPS.into());
         }
         if !op.in_range() {
             return Err(format!("a point lies outside the coordinate range of ±{MAX_COORDINATE}"));
         }
-        self.hints.flush(&mut self.ops);
+        self.hints.flush(&mut self.ops)?;
         self.ops.push(op);
         Ok(())
     }
@@ -1082,7 +1128,8 @@ impl<'a> T1Run<'a> {
             12 => {
                 let b = self.pop()?;
                 let a = self.pop()?;
-                self.push(if b == 0.0 { 0.0 } else { a / b })?;
+                let v = if b == 0.0 { 0.0 } else { a / b };
+                self.push(if v.is_finite() { v } else { 0.0 })?;
             }
             16 => {
                 let other = self.pop()?;
@@ -1405,17 +1452,12 @@ fn draw(ops: &[PsOp]) -> Vec<fontcraft_model::Path> {
 /// Reads a [`PsFont`] into a one-master document (see the module notes).
 pub fn to_font(ps: &PsFont, mut warnings: Vec<String>) -> Result<Decompiled, DecompileError> {
     // Names, made unique where the font repeats one.
-    let mut seen = HashSet::new();
+    let mut unique = UniqueNames::default();
     let mut names = Vec::with_capacity(ps.glyphs.len());
     let mut by_ps_name: HashMap<&str, String> = HashMap::new();
     for (i, g) in ps.glyphs.iter().enumerate() {
         let base = Some(clean_name(&g.name)).filter(|n| !n.trim().is_empty()).unwrap_or_else(|| format!("glyph{i:05}"));
-        let mut name = base.clone();
-        let mut n = 1;
-        while !seen.insert(name.clone()) {
-            name = clean_name(&format!("{base}.{n}"));
-            n += 1;
-        }
+        let name = unique.add(base);
         by_ps_name.entry(g.name.as_str()).or_insert_with(|| name.clone());
         names.push(name);
     }
@@ -1609,4 +1651,43 @@ fn metrics(ps: &PsFont, glyphs: &[Glyph]) -> (Vec<MetricDef>, Vec<MetricValue>, 
         values.push(MetricValue { pos: ps.top.italic_angle, over: 0.0 });
     }
     (defs, values, zones)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_division_past_the_float_range_pushes_zero() {
+        let max = [255, 0x7F, 0xFF, 0xFF, 0xFF];
+        // 2147483647, then 1 divided by 2147483647 thirty-four times: a subnormal quotient.
+        let mut cs = [max.as_slice(), &[140]].concat();
+        for _ in 0..34 {
+            cs.extend(max);
+            cs.extend([12, 12]);
+        }
+        // 2147483647 / that is infinite; then `0 rmoveto` uses it as x.
+        cs.extend([12, 12, 139, 21, 14]);
+        let mut run = T1Run::new(&[]);
+        run.run(&cs, 0).unwrap();
+        assert_eq!(run.ops, vec![PsOp::Move(0.0, 0.0)]);
+    }
+
+    #[test]
+    fn repeated_long_names_stay_unique_and_within_the_name_limit() {
+        let long = "a".repeat(fontcraft_model::MAX_NAME_LEN);
+        // Two long names that differ only in their last byte share one numbering.
+        let other = format!("{}b", "a".repeat(fontcraft_model::MAX_NAME_LEN - 1));
+        let mut glyphs = Vec::new();
+        for name in [long.as_str(), other.as_str(), "a"] {
+            glyphs.extend((0..3_000).map(|_| PsGlyph { name: name.to_string(), ..Default::default() }));
+        }
+        let ps = PsFont { glyphs, ..Default::default() };
+        let font = to_font(&ps, Vec::new()).unwrap().font;
+        assert_eq!(font.glyphs.len(), 9_000);
+        let names: HashSet<&str> = font.glyphs.iter().map(|g| g.name.as_str()).collect();
+        assert_eq!(names.len(), 9_000);
+        assert!(names.iter().all(|n| n.len() <= fontcraft_model::MAX_NAME_LEN));
+        assert!(names.contains("a.2999"));
+    }
 }

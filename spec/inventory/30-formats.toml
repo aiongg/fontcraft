@@ -424,6 +424,8 @@ guesses = [
   "Vertical metrics are measured on the glyphs d, H, x and p (falling back to the FontBBox), since a Type 1 font has no such fields; the reference app's import of a .pfb would settle it.",
   "Ghost hints become TopGhost and BottomGhost hints with place (edge, 0), the edge being y for a top ghost and y + dy for a bottom ghost as tx reports them; the reference app's import of a hinted .pfb would settle it.",
   "Standard stems are named hStem0, hStem1… and vStem0…; the reference app's import of a .pfb would show its names.",
+  "A font whose glyphs together hold more than 20,000,000 hint and path operations, or take more than 500,000,000 charstring steps to run, is refused rather than read in part; no limit of the reference readers is documented, and real fonts stay far below both. A font past them in the reference app would settle it.",
+  "A repeated glyph name gets .1, .2…; when the name is too long for its suffix, it is cut to 247 bytes first so the result stays within 255. Importing a font with repeated long names into the reference app would settle it.",
 ]
 
 [[format]]
@@ -470,6 +472,9 @@ summary = "A CFF table on its own, without the sfnt wrapper: outlines, hints, gl
 ref = "Adobe TN 5176; AFDKO tx (-cff)"
 status = "docs"
 notes = "Read in M12.31 (`crates/decompile/src/bare_cff.rs`), opened by `file.open` through `fontcraft_decompile::decompile`: the first font of the set, name-keyed or CID-keyed (glyphs named cidNNNNN), into the same abstract font and document as Type 1. Its dump equals `tx -dump -0` and `-6` on a test font built in the tests (hint masks, counter masks, all flex forms, seac, local and global subroutines) and on the corpus file TestSupplementEncoding.cff (the other corpus `.CFF` file is TTX text). Writing a bare CFF belongs to `convert` (M12.30)."
+guesses = [
+  "A font whose glyphs together hold more than 20,000,000 hint and path operations, or take more than 500,000,000 charstring steps to run, is refused rather than read in part; no limit of the reference readers is documented, and real fonts stay far below both. A font past them in the reference app would settle it.",
+]
 
 [[format]]
 id = "svg-font"
@@ -487,6 +492,8 @@ notes = "Built in M12.31 (`crates/io-svg/src/svg_font.rs`): `read_svg_font` and 
 guesses = [
   "An open subpath in a glyph's path data is read as closed, since SVG fonts fill every subpath; no reference reader was available to settle it.",
   "A glyph without glyph-name is named from its characters through the glyph database (uniXXXX when it cannot be loaded), ligatures joined with underscores; a reference importer of SVG fonts would settle it.",
+  "Only the first missing-glyph element is read, as .notdef; later ones are left out with a warning. A reference importer of SVG fonts would settle it.",
+  "A repeated glyph name gets .1, .2…; when the name is too long for its suffix, it is cut to 247 bytes first so the result stays within 255. Importing a font with repeated long names into the reference app would settle it.",
 ]
 
 [[format]]
