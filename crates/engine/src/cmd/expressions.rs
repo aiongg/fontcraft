@@ -64,9 +64,9 @@ fn warning(f: &ExprFailure) -> Value {
 // ── anchor.setExpressions ───────────────────────────────────────────────────────────────────────
 
 /// An expression parameter: `None` when absent (keep), `Some(None)` to remove, `Some(Some(text))`
-/// to set. The text must parse.
-fn expression_param(p: &Params, key: &str) -> Result<Option<Option<String>>> {
-    match p.get(key) {
+/// to set. The text must parse. Reads `v` itself because [`Params::get`] treats null as absent.
+fn expression_param(p: &Params, v: &Value, key: &str) -> Result<Option<Option<String>>> {
+    match v.get(key) {
         None => Ok(None),
         Some(Value::Null) => Ok(Some(None)),
         Some(Value::String(s)) if s.trim().is_empty() => Ok(Some(None)),
@@ -85,7 +85,7 @@ fn set_expressions(s: &mut Session, v: &Value) -> Result<Value> {
         return Err(p.bad("names one anchor with `anchor`; takes no target lists and no `side`"));
     }
     let name = p.str("anchor")?.to_string();
-    let (x, y) = (expression_param(&p, "x")?, expression_param(&p, "y")?);
+    let (x, y) = (expression_param(&p, v, "x")?, expression_param(&p, v, "y")?);
     if x.is_none() && y.is_none() {
         return Err(p.bad("give `x`, `y` or both"));
     }
