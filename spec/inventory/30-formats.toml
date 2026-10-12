@@ -463,7 +463,12 @@ milestone = "M13"
 summary = "Binary companion of a Type 1 font holding widths, a few global metrics, Windows naming data and a pair-kerning table indexed by character code. Read only, as a metrics and kerning source when a PFB is opened without an AFM, or through Import Kerning from Metrics File; kerning is limited to the encoded glyphs."
 ref = "Microsoft Windows 3.1 Device Development Kit, Printer Drivers, chapter 2 \"Printer Font Metrics (PFM) Files\" (PFMHEADER, EXTTEXTMETRIC, KERNPAIR), public copy at https://www.pcjs.org/documents/books/mspl13/win/w3ddkprn; Adobe Technical Note 5178 (no reachable copy found)"
 status = "docs"
-notes = "Verified by the M13 planning pass: the layout is described in the Windows 3.1 DDK chapter named in `ref`. No corpus file is a PFM; tests build PFM files in code (docs/plans/M13.md, M13.54)."
+notes = "Verified by the M13 planning pass: the layout is described in the Windows 3.1 DDK chapter named in `ref`. No corpus file is a PFM; tests build PFM files in code (docs/plans/M13.md, M13.54). Built (M13.54) in `crates/spacing/src/pfm.rs`: the header's version, character set, first and last code and face name; the extension block, found after the header or after a width table; `etmMasterUnits` and `etmKernPairs`; the extent table; the pair list. Every offset and count is checked against the file's length; files over 1 MiB are refused. Read by file.importMetricsFile; opening a PFB beside a PFM for its metrics is not built."
+guesses = [
+  "A word before the pair list equal to `etmKernPairs` is a count and is skipped (and gives the count when `etmKernPairs` is 0); the DDK describes no such word, but files made for PostScript printers are said to have it. A PFM file from a font vendor would settle it.",
+  "Character codes of a font whose `dfCharSet` is not 2 (symbol) are read as Windows-1252; a symbol font's code c is looked up as U+F000 + c, then as c. PFM files of symbol fonts from a vendor would settle it.",
+  "Kerning amounts are in `etmMasterUnits` per em (1,000 when the field is 0, as the DDK says PostScript drivers assume) and are scaled to the font's units per em, rounded half up.",
+]
 
 [[format]]
 id = "cff"

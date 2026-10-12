@@ -3037,6 +3037,13 @@ summary = "Reads kerning pairs (and ligature data where present) from a legacy m
 ref = "FontForge File menu › Merge Feature Info"
 status = "docs"
 origin = "fontforge"
+notes = "Built (M13.54) in `crates/engine/src/cmd/metrics_files.rs`: AFM through the M5 reader (`crates/spacing/src/afm.rs`), PFM through `crates/spacing/src/pfm.rs`; the file is told apart by its content. Pairs go into each master's left-to-right kerning as glyph pairs, one undo step for all masters; a refused import changes nothing. AFM values are taken as they are (font units), PFM amounts are scaled to the font's units per em. Ligature (`L`) and track kerning data are not read. The menu item has no dialog yet, so from the menu it needs `path` from a caller."
+guesses = [
+  "`replace` gives a pair the master already has the file's value and keeps every other pair; `addMissing` adds only pairs the master lacks; the reference documentation does not say what happens to existing pairs. Merging a file into a font that already kerns one of its pairs in the reference app would settle it.",
+  "Without `masters`, the pairs go into the first master only, as other import commands do; the reference has one master per font.",
+  "Pairs that name a glyph (AFM) or a character code (PFM) the font lacks are left out and listed, not stored; importing a file with such a pair in the reference app would settle it.",
+  "Ligature data in an AFM file is not imported: ligature features come from glyph names; the reference merges it into its ligature tables.",
+]
 
 # =====================================================================================================
 # RoboFont — Space Center, guidelines, UFO workflow
