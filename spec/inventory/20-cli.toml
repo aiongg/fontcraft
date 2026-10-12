@@ -1752,6 +1752,9 @@ milestone = "M12"
 summary = "Lists, for GSUB and GPOS, every script and language system with its features, and optionally the lookups each feature uses with their types. Shows at a glance whether a feature is registered for all the language systems it should be."
 ref = "AFDKO spot -F, GPOS=5, GSUB=5; comparefamily -rf"
 status = "docs"
+guesses = [
+  "The text layout is ours (one line per table and feature, then an indented script/language line each, lookups after a colon; --by script swaps the two levels), since no reference prints this list in one format; JSON is the stable form. A request for spot's or comparefamily's layout would change it.",
+]
 
 [[cli]]
 id = "features compile"
