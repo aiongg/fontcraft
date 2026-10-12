@@ -50,13 +50,13 @@ fn palette_font() -> Session {
     run(&mut s, "colorPalette.addPalette", json!({}));
     s.edit("glyphs", |font| {
         let master = font.masters[0].id.clone();
-        let mut a = Glyph::new("A");
+        let mut a = Glyph::new("heart");
         a.layers.push(Layer::new(master.as_str(), 500.0));
         a.layers.push(palette_layer(&master, "a0", PaletteEntry::Index(0), None));
         a.layers.push(palette_layer(&master, "a2", PaletteEntry::Index(2), Some(2)));
         a.layers.push(palette_layer(&master, "a*", PaletteEntry::Foreground, None));
         font.glyphs.push(a);
-        let mut b = Glyph::new("B");
+        let mut b = Glyph::new("star");
         b.layers.push(Layer::new(master.as_str(), 500.0));
         b.layers.push(palette_layer(&master, "b1", PaletteEntry::Index(1), None));
         font.glyphs.push(b);
@@ -115,25 +115,25 @@ fn palette_commands_edit_the_font_palettes_and_keep_every_palette_the_same_lengt
 #[test]
 fn removing_a_colour_renumbers_later_rows_and_refuses_a_used_row() {
     let mut s = palette_font();
-    // Row 1 is used by B; row 0 by A.
-    refused(&mut s, "colorPalette.removeColor", json!({"index": 1}), "used by B");
-    refused(&mut s, "colorPalette.removeColor", json!({"index": 0}), "used by A");
-    // Free row 1, then remove it: A's row 2 (layer and fill) becomes row 1, in one undo step.
+    // Row 1 is used by star; row 0 by heart.
+    refused(&mut s, "colorPalette.removeColor", json!({"index": 1}), "used by star");
+    refused(&mut s, "colorPalette.removeColor", json!({"index": 0}), "used by heart");
+    // Free row 1, then remove it: heart's row 2 (layer and fill) becomes row 1, in one undo step.
     s.edit("free row 1", |font| {
-        let mut b = font.glyph_mut("B")?;
+        let mut b = font.glyph_mut("star")?;
         b.layers.retain(|l| l.id != "b1");
         Ok(())
     })
     .unwrap();
     let r = run(&mut s, "colorPalette.removeColor", json!({"index": 1}));
-    assert_eq!(r["renumbered"], json!(["A"]));
+    assert_eq!(r["renumbered"], json!(["heart"]));
     assert_eq!(r["rows"], json!(2));
-    assert_eq!(entry(&s, "A", "a2"), Some(PaletteEntry::Index(1)));
-    assert_eq!(entry(&s, "A", "a0"), Some(PaletteEntry::Index(0)));
-    assert_eq!(entry(&s, "A", "a*"), Some(PaletteEntry::Foreground));
+    assert_eq!(entry(&s, "heart", "a2"), Some(PaletteEntry::Index(1)));
+    assert_eq!(entry(&s, "heart", "a0"), Some(PaletteEntry::Index(0)));
+    assert_eq!(entry(&s, "heart", "a*"), Some(PaletteEntry::Foreground));
     let fill = {
         let font = s.font().unwrap();
-        let layer = font.glyph("A").unwrap().layers.iter().find(|l| l.id == "a2").unwrap().clone();
+        let layer = font.glyph("heart").unwrap().layers.iter().find(|l| l.id == "a2").unwrap().clone();
         let Some(Shape::Path(p)) = layer.shapes.first() else { panic!("no path") };
         p.info.attrs.fill_color
     };
@@ -141,7 +141,7 @@ fn removing_a_colour_renumbers_later_rows_and_refuses_a_used_row() {
     // Every palette lost the row: blue moved to row 1.
     assert_eq!(palettes(&mut s, json!({}))["palettes"], json!([["#FF0000FF", "#0000FFFF"], ["#FF0000FF", "#0000FFFF"]]));
     run(&mut s, "edit.undo", json!({}));
-    assert_eq!(entry(&s, "A", "a2"), Some(PaletteEntry::Index(2)));
+    assert_eq!(entry(&s, "heart", "a2"), Some(PaletteEntry::Index(2)));
     assert_eq!(palettes(&mut s, json!({}))["rows"], json!(3));
 }
 
@@ -156,13 +156,13 @@ fn a_master_s_own_palettes_win_and_are_edited_on_their_own() {
     assert_eq!(own["source"], json!("master"));
     assert_eq!(own["palettes"][0][0], json!("#123456FF"));
     assert_eq!(palettes(&mut s, json!({}))["palettes"][0][0], json!("#FF0000FF"));
-    // The font's palettes no longer apply to that master's layers, so B's use of row 1 does not
-    // hold the font's row 1, and A's layers are not renumbered by an edit of the font's.
+    // The font's palettes no longer apply to that master's layers, so star's use of row 1 does not
+    // hold the font's row 1, and heart's layers are not renumbered by an edit of the font's.
     let r = run(&mut s, "colorPalette.removeColor", json!({"index": 1}));
     assert_eq!(r["renumbered"], json!([]));
-    assert_eq!(entry(&s, "A", "a2"), Some(PaletteEntry::Index(2)));
+    assert_eq!(entry(&s, "heart", "a2"), Some(PaletteEntry::Index(2)));
     // The master's own row 1 is still in use.
-    refused(&mut s, "colorPalette.removeColor", json!({"master": master, "index": 1}), "used by B");
+    refused(&mut s, "colorPalette.removeColor", json!({"master": master, "index": 1}), "used by star");
     refused(&mut s, "colorPalette.list", json!({"master": "nope"}), "no master");
 }
 
