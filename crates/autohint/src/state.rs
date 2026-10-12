@@ -285,6 +285,10 @@ pub struct GlyphHintState {
     pub ghost_compat: Vec<Option<Vec<bool>>>,
     pub good_mask: Vec<bool>,
     pub main_mask: Vec<bool>,
+    /// While set, [`GlyphHintState::add_segment`] appends to the segment lists and
+    /// [`GlyphHintState::sort_segment_lists`] orders them once at the end: inserting each segment
+    /// in place costs the length of the list, and a hostile glyph makes tens of thousands.
+    pub defer_sort: bool,
 }
 
 impl GlyphHintState {
@@ -374,9 +378,25 @@ impl GlyphHintState {
         // bisect.insort: after every segment at the same or a lower location.
         let segments = &self.segments;
         let list = if is_inc { &mut self.increasing_segs } else { &mut self.decreasing_segs };
-        let pos = list.partition_point(|s| segments.get(s.0).is_some_and(|s| s.loc <= loc));
-        list.insert(pos, id);
+        if self.defer_sort {
+            list.push(id);
+        } else {
+            let pos = list.partition_point(|s| segments.get(s.0).is_some_and(|s| s.loc <= loc));
+            list.insert(pos, id);
+        }
         Some(id)
+    }
+
+    /// Ends [`GlyphHintState::defer_sort`]: a stable sort by location gives the order that
+    /// inserting each segment after those at the same or a lower location gives.
+    pub fn sort_segment_lists(&mut self) {
+        self.defer_sort = false;
+        let segments = &self.segments;
+        // `+ 0.0` makes -0 equal to 0, as the comparison in `add_segment` does.
+        let key = |id: &SegId| segments.get(id.0).map_or(f64::INFINITY, |s| s.loc + 0.0);
+        for list in [&mut self.increasing_segs, &mut self.decreasing_segs] {
+            list.sort_by(|a, b| key(a).total_cmp(&key(b)));
+        }
     }
 
     /// Merges segments that coincide in each list (`compactLists`, `compactList`). *Shared*.

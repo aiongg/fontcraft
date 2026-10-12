@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 use crate::Options;
 use crate::fddict::{BlueValue, FdDict};
-use crate::glyph::{Dim, GlyphData, PeRef};
+use crate::glyph::{Dim, GlyphData, PeRef, TinySkip};
 use crate::report::GlyphReport;
 use crate::state::{GlyphHintState, OverlapState};
 
@@ -165,6 +165,9 @@ pub struct DimState {
     pub bottom_pairs: Vec<BlueValue>,
     /// Warnings for [`crate::GlyphHints::warnings`].
     pub warnings: Vec<String>,
+    /// The non-tiny neighbours of the elements of [`DimHinter::seg_glyph`], kept while
+    /// [`DimHinter::gen_segs`] walks it.
+    pub tiny_skip: Option<TinySkip>,
 }
 
 impl DimState {
@@ -185,6 +188,7 @@ impl DimState {
             top_pairs: Vec::new(),
             bottom_pairs: Vec::new(),
             warnings: Vec::new(),
+            tiny_skip: None,
         }
     }
 

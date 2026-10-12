@@ -328,10 +328,17 @@ pub(crate) fn put_if_changed(d: &mut Dict, key: &str, value: Value, same: impl F
     put(d, key, value);
 }
 
-/// Removes every entry called `key`.
+/// Removes every entry called `key`. A single entry goes with its kept whitespace; a key
+/// repeated in the source is removed in one pass, after which the dictionary's kept whitespace no
+/// longer matches its entries and the default layout is written.
 pub(crate) fn remove(d: &mut Dict, key: &str) {
-    while let Some(i) = d.entries.iter().position(|(k, _)| k.as_str() == key) {
-        d.remove_at(i);
+    let mut found = d.entries.iter().enumerate().filter(|(_, (k, _))| k.as_str() == key).map(|(i, _)| i);
+    match (found.next(), found.next()) {
+        (None, _) => {}
+        (Some(i), None) => {
+            d.remove_at(i);
+        }
+        (Some(_), Some(_)) => d.entries.retain(|(k, _)| k.as_str() != key),
     }
 }
 

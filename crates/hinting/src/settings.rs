@@ -35,7 +35,7 @@
 //! `filter` (predicate text) and `deltas` (`{column: {PPM: shift}}`). No source shows a zone or a
 //! delta, so these keys are our choice (guess on `hinting.tt.param.ttfZones`).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::sync::OnceLock;
 
 use fontcraft_model::glyphdata::GlyphData;
@@ -192,6 +192,8 @@ pub struct HintSettings {
     pub fpgm_assembly: Option<String>,
     /// gasp Table: (maximum PPM, flags), sorted by PPM.
     pub gasp: Option<Vec<(u16, u16)>>,
+    /// Parameter entries that could not be read and were left out.
+    pub warnings: Vec<String>,
 }
 
 impl HintSettings {
@@ -242,6 +244,7 @@ impl HintSettings {
         }
 
         let (tt_zones, tt_stems) = tt_definitions(font, m, &main_master)?;
+        let mut warnings = Vec::new();
 
         Ok(Self {
             main_master,
@@ -283,10 +286,8 @@ impl HintSettings {
             },
             prep_assembly: scope.text(PREP_TABLE_ASSEMBLY)?,
             fpgm_assembly: scope.text(FPGM_TABLE_ASSEMBLY)?,
-            gasp: match scope.get(GASP_TABLE) {
-                Some(v) => Some(read_gasp(v)?),
-                None => None,
-            },
+            gasp: scope.get(GASP_TABLE).map(|v| read_gasp(v, &mut warnings)),
+            warnings,
         })
     }
 
@@ -359,15 +360,16 @@ pub fn family_tt_zones(font: &Font) -> Result<Vec<TtZone>, HintingError> {
 /// our choice (guess on `hinting.tt.zones.defaultFromAlignmentZones`).
 pub fn derived_tt_zones(font: &Font, master: &Master) -> Vec<TtZone> {
     let mut out: Vec<TtZone> = Vec::new();
+    let mut taken = HashSet::new();
     for (def, v) in font.metrics.iter().zip(master.metric_values.iter()) {
         if def.kind == metric::ITALIC_ANGLE || v.over == 0.0 {
             continue;
         }
-        let name = unique(&out, zone_name(def), |z| &z.name);
+        let name = unique(&mut taken, zone_name(def));
         out.push(TtZone { name, position: v.pos, size: v.over, filter: def.filter.clone(), ..TtZone::default() });
     }
     for (i, z) in master.zones.iter().enumerate() {
-        let name = unique(&out, format!("zone {}", i + 1), |z| &z.name);
+        let name = unique(&mut taken, format!("zone {}", i + 1));
         out.push(TtZone { name, position: z.pos, size: z.size, ..TtZone::default() });
     }
     out
@@ -377,9 +379,10 @@ pub fn derived_tt_zones(font: &Font, master: &Master) -> Vec<TtZone> {
 /// names (`stem 1`, `stem 2`… for unnamed ones, as format 2 has), directions and filters.
 pub fn derived_tt_stems(font: &Font, master: &Master) -> Vec<TtStem> {
     let mut out: Vec<TtStem> = Vec::new();
+    let mut taken = HashSet::new();
     for (i, (def, size)) in font.stems.iter().zip(master.stem_values.iter()).enumerate() {
         let base = if def.name.is_empty() { format!("stem {}", i + 1) } else { def.name.clone() };
-        let name = unique(&out, base, |s| &s.name);
+        let name = unique(&mut taken, base);
         out.push(TtStem { name, horizontal: def.horizontal, size: *size, filter: def.filter.clone(), ..TtStem::default() });
     }
     out
@@ -396,12 +399,13 @@ fn zone_name(def: &MetricDef) -> String {
     }
 }
 
-/// `base`, or `base 2`, `base 3`… when an earlier entry has that name.
-fn unique<T>(taken: &[T], base: String, name: impl Fn(&T) -> &String) -> String {
-    if !taken.iter().any(|t| *name(t) == base) {
-        return base;
-    }
-    (2..=taken.len() + 1).map(|n| format!("{base} {n}")).find(|c| !taken.iter().any(|t| name(t) == c)).unwrap_or(base)
+/// `base`, or `base 2`, `base 3`… when an earlier entry has that name; the name returned is
+/// added to `taken`.
+fn unique(taken: &mut HashSet<String>, base: String) -> String {
+    let name =
+        if taken.contains(&base) { (2..=taken.len() + 1).map(|n| format!("{base} {n}")).find(|c| !taken.contains(c)).unwrap_or(base) } else { base };
+    taken.insert(name.clone());
+    name
 }
 
 /// A master's TT zones and stems, laid out on the main master's lists.
@@ -409,7 +413,14 @@ fn tt_definitions(font: &Font, m: &Master, main: &str) -> Result<(Vec<TtZone>, V
     let own = |m: &Master| -> Result<(Vec<TtZone>, Vec<TtStem>), HintingError> {
         let zones = match m.params.get(TTF_ZONES) {
             Some(v) => read_tt_zones(v)?,
-            None => derived_tt_zones(font, m),
+            None => {
+                // Checked before the names are made: the main master is not checked by `read`.
+                let count = font.metrics.iter().zip(m.metric_values.iter()).filter(|(d, v)| d.kind != metric::ITALIC_ANGLE && v.over != 0.0).count();
+                if count.saturating_add(m.zones.len()) > MAX_SOURCE_ZONES {
+                    return Err(HintingError::LimitExceeded { what: "alignment zones in a master", limit: MAX_SOURCE_ZONES });
+                }
+                derived_tt_zones(font, m)
+            }
         };
         let stems = match m.params.get(TTF_STEMS) {
             Some(v) => read_tt_stems(v)?,
@@ -648,27 +659,33 @@ fn read_cvt(v: &Value) -> Result<Vec<i16>, HintingError> {
         .ok_or_else(|| bad("an entry is not a whole number from -32768 to 32767"))
 }
 
-/// The gasp Table parameter: {maximum PPM: flags}, sorted by PPM. A range above 65535 is left
-/// out, as fontc does; the compiler reports it from the parameter.
-fn read_gasp(v: &Value) -> Result<Vec<(u16, u16)>, HintingError> {
-    let bad = |m: &str| bad_param(GASP_TABLE, m);
-    let d = v.as_dict().ok_or_else(|| bad("it is not a dictionary from sizes to flags"))?;
-    if d.len() > MAX_GASP_RANGES {
-        return Err(HintingError::LimitExceeded { what: "gasp ranges", limit: MAX_GASP_RANGES });
+/// The gasp Table parameter: {maximum PPM: flags}, sorted by PPM. Entries that cannot be read,
+/// and ranges above 65535 PPM, are left out with a warning, as the compiler does when it writes
+/// the table; a bad entry never stops the other settings from being read.
+fn read_gasp(v: &Value, warnings: &mut Vec<String>) -> Vec<(u16, u16)> {
+    let Some(d) = v.as_dict() else {
+        warnings.push(format!("the {GASP_TABLE} parameter is not a dictionary of sizes to flags, so it was not used"));
+        return Vec::new();
+    };
+    if d.entries.len() > MAX_GASP_RANGES {
+        warnings.push(format!("the {GASP_TABLE} parameter has {} ranges; only the first {MAX_GASP_RANGES} were read", d.entries.len()));
     }
-    let mut out = Vec::new();
-    for (ppm, flags) in &d.entries {
-        let ppm = ppm.as_str().trim().parse::<u64>().map_err(|_| bad("a range size is not a whole number"))?;
-        let flags = crate::noderef::read_int(flags)
-            .filter(|f| (0..=i64::from(u16::MAX)).contains(f))
-            .ok_or_else(|| bad("a range's flags are not a number from 0 to 65535"))?;
-        if let (Ok(ppm), Ok(flags)) = (u16::try_from(ppm), u16::try_from(flags)) {
-            out.push((ppm, flags));
+    // A size given twice keeps its last value, as the compiler reads it.
+    let mut by_size: BTreeMap<u16, u16> = BTreeMap::new();
+    for (key, flags) in d.entries.iter().take(MAX_GASP_RANGES) {
+        let size = key.as_str().trim().parse::<i64>();
+        let flags = crate::noderef::read_int(flags).and_then(|f| u16::try_from(f).ok());
+        match (size, flags) {
+            (Ok(size), Some(flags)) => match u16::try_from(size) {
+                Ok(ppm) => {
+                    by_size.insert(ppm, flags);
+                }
+                Err(_) => warnings.push(format!("the {GASP_TABLE} range up to {size} PPM is outside 0 to 65535, so it was left out")),
+            },
+            _ => warnings.push(format!("the {GASP_TABLE} entry `{}` is not a size with flags from 0 to 65535, so it was left out", key.as_str())),
         }
     }
-    out.sort_unstable();
-    out.dedup_by_key(|r| r.0);
-    Ok(out)
+    by_size.into_iter().collect()
 }
 
 /// The built-in glyph data, read once, for the glyph filters of TT zones and stems.
@@ -813,6 +830,14 @@ mod tests {
         master_mut(&mut font, 0).params.set(CVT_TABLE, value("\"[12, -3, 40]\""));
         let s = HintSettings::for_master(&font, "m01").unwrap();
         assert_eq!(s.gasp, Some(vec![(8, 10), (20, 7), (65535, 15)]), "a size above 65535 is left out, as fontc does");
+        assert_eq!(s.warnings.len(), 1, "{:?}", s.warnings);
+        // Entries that cannot be read are left out with a warning, as the compiler does.
+        font_param(&mut font, GASP_TABLE, value("{abc = 1; \"9\" = 70000; \"12\" = 3;}"));
+        let s = HintSettings::for_master(&font, "m01").unwrap();
+        assert_eq!((s.gasp, s.warnings.len()), (Some(vec![(12, 3)]), 2));
+        font_param(&mut font, GASP_TABLE, value("(1, 2)"));
+        let s = HintSettings::for_master(&font, "m01").unwrap();
+        assert_eq!((s.gasp, s.warnings.len()), (Some(vec![]), 1));
         assert_eq!(s.cvt, Some(vec![12, -3, 40]));
         master_mut(&mut font, 0).params.set(CVT_TABLE, value("(1, 40000)"));
         assert!(matches!(HintSettings::for_master(&font, "m01"), Err(HintingError::BadParameter { .. })));
@@ -820,10 +845,9 @@ mod tests {
 
     #[test]
     fn unreadable_or_oversized_parameters_fail_with_a_message() {
-        let cases: [(&str, &str); 6] = [
+        let cases: [(&str, &str); 5] = [
             (BLUE_SCALE, "abc"),
             (TTF_ZONES, "({name = a; position = x;})"),
-            (GASP_TABLE, "{abc = 1;}"),
             (TTF_OVERSHOOT_SUPPRESSION_BELOW_PPM, "70000"),
             (EXPORT_POSTSCRIPT_HINTS, "(1)"),
             (DISABLE_AUTOHINTING_FOR_GLYPHS, "{a = b;}"),
@@ -839,6 +863,11 @@ mod tests {
         assert!(matches!(HintSettings::for_master(&font, "m01"), Err(HintingError::LimitExceeded { .. })));
         let mut font = Font::new("T");
         master_mut(&mut font, 0).zones = vec![fontcraft_model::AlignmentZone { pos: 1.0, size: 1.0 }; 1_000];
+        assert!(matches!(HintSettings::for_master(&font, "m01"), Err(HintingError::LimitExceeded { .. })));
+        // The main master's zones are counted before TT zones are derived from them.
+        let mut font = two_masters();
+        font_param(&mut font, GET_HINTS_FROM_MASTER, value("m02"));
+        master_mut(&mut font, 1).zones = vec![fontcraft_model::AlignmentZone { pos: 1.0, size: 1.0 }; 200_000];
         assert!(matches!(HintSettings::for_master(&font, "m01"), Err(HintingError::LimitExceeded { .. })));
         let mut font = Font::new("T");
         master_mut(&mut font, 0).zones = vec![fontcraft_model::AlignmentZone { pos: 1.0, size: f64::INFINITY }];

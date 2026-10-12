@@ -9,6 +9,8 @@
 //! `.notdef` left out. Each glyph is analysed as drawn in the master, components resolved, open
 //! contours left out.
 
+use std::collections::HashSet;
+
 use fontcraft_autohint::fontinfo::{self, FontInfo};
 use fontcraft_autohint::report::{self, StemReport, ZoneReport};
 use fontcraft_autohint::{BlueValue, FdDict, HintInput, Options, StemSet, Zone, ZoneSet};
@@ -143,7 +145,7 @@ fn closed_cubic_contours(path: &BezPath) -> Vec<BezPath> {
 /// The glyphs a report covers: those named, else every exporting glyph, in font order, less the
 /// excluded ones.
 fn glyph_list(p: &Params, font: &Font) -> Result<(Vec<String>, bool)> {
-    let excluded: Vec<&str> = p.opt_strings("excludeGlyphs")?.unwrap_or_default();
+    let excluded: HashSet<&str> = p.opt_strings("excludeGlyphs")?.unwrap_or_default().into_iter().collect();
     let named = p.opt_glyphs("glyphs", font)?;
     let explicit = named.is_some();
     let list = named.unwrap_or_else(|| font.glyphs.iter().filter(|g| g.export).map(|g| g.name.clone()).collect());

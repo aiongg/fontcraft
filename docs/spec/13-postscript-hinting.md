@@ -231,6 +231,11 @@ Derived from otfautohint. Commands: `autohint.ps.run`, `autohint.ps.reportStems`
   zone/stem sets plus glyph lists (names or regular expressions). Once any override exists, global
   values are ignored and unmatched glyphs get a set with zones outside the font bounding box.
   Minimum content of a set: baseline pair, one top-zone pair, DominantH, DominantV.
+- **Segment limit** (`autohint.ps.maxSegments`): otfautohint compacts a direction's segments and
+  then skips the direction when more than the limit remain. FontCraft skips a direction without
+  compacting when it has more than 16 times the limit before compaction, assuming that no glyph
+  with that many raw segments compacts to within the limit; only the count in the warning
+  differs.
 
 FontCraft should hold overrides as structured data in the source (named hint sets with glyph
 filters) and may import/export the `fontinfo` text syntax; a CID-keyed or multi-FDDict export maps

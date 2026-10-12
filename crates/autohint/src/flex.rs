@@ -7,7 +7,7 @@
 //! vertical hinter ([`crate::Dim::V`], `a` = y) finds pairs that run horizontally with a shallow
 //! dip in y, the horizontal hinter pairs that run vertically. Both mark the same elements.
 
-use crate::glyph::{FlexPart, PeRef, feq, fne};
+use crate::glyph::{FlexPart, PeRef, TinySkip, feq, fne};
 use crate::hinter::{DimHinter, FLEX_CAND, FLEX_LENGTH_RATIO_CUTOFF, FLEX_STRICT, GlyphPe, MAX_FLEX};
 use crate::segments::diff_sign;
 
@@ -38,8 +38,10 @@ impl DimHinter<'_> {
                 }
             }
         }
+        // Marking flex changes no element's end points, so the tables stay valid in the loop.
+        let skips: Vec<TinySkip> = (0..self.glyphs.len()).map(|i| self.glyphs.get(i).map(|g| g.tiny_skip(false)).unwrap_or_default()).collect();
         for cl in self.masters_elements(None) {
-            if cl.iter().all(|x| self.try_flex(x.glyph, x.pe)) {
+            if cl.iter().all(|x| skips.get(x.glyph).is_some_and(|skip| self.try_flex(x.glyph, x.pe, skip))) {
                 self.mark_flex(&cl);
             }
         }
@@ -47,8 +49,9 @@ impl DimHinter<'_> {
 
     /// Tests the curve pair starting at element `c` of master `glyph` (`tryFlex`): two curves
     /// whose outer ends line up, at most [`MAX_FLEX`] deep, at least three times as long as deep,
-    /// of similar length, bending the same way as the outline around them.
-    pub fn try_flex(&mut self, glyph: usize, c: PeRef) -> bool {
+    /// of similar length, bending the same way as the outline around them. `skip` is
+    /// `tiny_skip(false)` of that master's glyph.
+    pub fn try_flex(&self, glyph: usize, c: PeRef, skip: &TinySkip) -> bool {
         let dim = self.dim();
         let Some(gl) = self.glyphs.get(glyph) else { return false };
         let Some(ce) = gl.element(c) else { return false };
@@ -56,7 +59,7 @@ impl DimHinter<'_> {
         if ce.is_line || ce.flex.is_some() || ce.s.a_dist(ce.e, dim) > MAX_FLEX {
             return false;
         }
-        let Some(nr) = gl.next_in_subpath(c, true, true, false) else { return false };
+        let Some(nr) = gl.next_non_tiny(skip, c) else { return false };
         let Some(n) = gl.element(nr) else { return false };
         if n.is_line || n.flex.is_some() {
             return false;
@@ -85,12 +88,12 @@ impl DimHinter<'_> {
 
         if FLEX_STRICT {
             // The element after the pair must not bend back towards the middle point…
-            let Some(nn) = gl.next_in_subpath(nr, true, true, false).and_then(|r| gl.element(r)) else { return false };
+            let Some(nn) = gl.next_non_tiny(skip, nr).and_then(|r| gl.element(r)) else { return false };
             if diff_sign(nn.e.a(dim) - n.e.a(dim), ce.e.a(dim) - n.e.a(dim)) {
                 return false;
             }
             // …nor the element before it.
-            let Some(p) = gl.prev_in_subpath(c, true, true, false).and_then(|r| gl.element(r)) else { return false };
+            let Some(p) = gl.prev_non_tiny(skip, c).and_then(|r| gl.element(r)) else { return false };
             if diff_sign(p.s.a(dim) - ce.s.a(dim), ce.e.a(dim) - ce.s.a(dim)) {
                 return false;
             }

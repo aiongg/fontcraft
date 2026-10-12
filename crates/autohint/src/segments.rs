@@ -290,6 +290,37 @@ impl DimHinter<'_> {
         d0.x * d1.y >= d1.x * d0.y
     }
 
+    /// The next non-tiny element of `c` in [`DimHinter::seg_glyph`]
+    /// (`nextInSubpath(c, True, True, True)`), from the table [`DimHinter::gen_segs`] keeps.
+    fn next_non_tiny(&self, c: PeRef) -> Option<PeRef> {
+        let g = self.seg_glyph();
+        match &self.st.tiny_skip {
+            Some(skip) => g.next_non_tiny(skip, c),
+            None => g.next_in_subpath(c, true, true, true),
+        }
+    }
+
+    /// The previous non-tiny element of `c` (`prevInSubpath(c, True, True, True)`).
+    fn prev_non_tiny(&self, c: PeRef) -> Option<PeRef> {
+        let g = self.seg_glyph();
+        match &self.st.tiny_skip {
+            Some(skip) => g.prev_non_tiny(skip, c),
+            None => g.prev_in_subpath(c, true, true, true),
+        }
+    }
+
+    /// `nextSlopePoint` on [`DimHinter::seg_glyph`].
+    fn next_slope(&self, c: PeRef) -> Option<Pt> {
+        let n = self.next_non_tiny(c)?;
+        Some(self.seg_glyph().element(n)?.slope_point(0.0))
+    }
+
+    /// `prevSlopePoint` on [`DimHinter::seg_glyph`].
+    fn prev_slope(&self, c: PeRef) -> Option<Pt> {
+        let p = self.prev_non_tiny(c)?;
+        Some(self.seg_glyph().element(p)?.slope_point(1.0))
+    }
+
     /// `relPosition`: some subpath starts above element `c`'s start (below it when `lower`).
     pub fn rel_position(&self, c: PeRef, lower: bool) -> bool {
         let dim = self.dim();
@@ -308,7 +339,7 @@ impl DimHinter<'_> {
         let g = self.seg_glyph();
         let Some(el) = g.element(c) else { return };
         let (p0, p1) = (el.slope_point(1.0), el.e);
-        let Some(p2) = g.next_slope_point(c) else { return };
+        let Some(p2) = self.next_slope(c) else { return };
         if feq(p0.o(dim), p1.o(dim)) {
             return;
         }
@@ -358,7 +389,7 @@ impl DimHinter<'_> {
         let g = self.seg_glyph();
         let Some(el) = g.element(c) else { return };
         let (p0, p1) = (el.s, el.slope_point(0.0));
-        let Some(p2) = g.prev_slope_point(c) else { return };
+        let Some(p2) = self.prev_slope(c) else { return };
         if feq(p0.o(dim), p1.o(dim)) {
             return;
         }
@@ -399,10 +430,10 @@ impl DimHinter<'_> {
         let g = self.seg_glyph();
         let el = g.element(c)?;
         let d = if do_prev {
-            let Some(sp) = g.prev_slope_point(c) else { return Some(false) };
+            let Some(sp) = self.prev_slope(c) else { return Some(false) };
             (sp - el.cs).abs()
         } else {
-            let Some(sp) = g.next_slope_point(c) else { return Some(false) };
+            let Some(sp) = self.next_slope(c) else { return Some(false) };
             (sp - el.ce).abs()
         };
         Some(d.o(dim) <= OPPO_FLAT_MAX && d.a(dim) >= FLAT_MIN)
@@ -414,10 +445,10 @@ impl DimHinter<'_> {
         let g = self.seg_glyph();
         let Some(el) = g.element(c) else { return Some(false) };
         let (p0, p1, p2) = if do_prev {
-            let p = g.prev_in_subpath(c, true, true, true).and_then(|p| g.element(p))?;
+            let p = self.prev_non_tiny(c).and_then(|p| g.element(p))?;
             (el.e, el.s, p.s)
         } else {
-            let n = g.next_in_subpath(c, true, true, true).and_then(|n| g.element(n))?;
+            let n = self.next_non_tiny(c).and_then(|n| g.element(n))?;
             (el.s, el.e, n.e)
         };
         if diff_sign(p0.y - p1.y, p1.y - p2.y) || diff_sign(p0.x - p1.x, p1.x - p2.x) {
@@ -544,10 +575,12 @@ impl DimHinter<'_> {
         }
 
         self.prep_for_segs();
+        self.st.tiny_skip = Some(self.seg_glyph().tiny_skip(true));
         self.st.bonus = 0.0;
         // Each element is visited once, or once per part when split; the bound only guards the
         // walk against a cycle.
         let bound = self.seg_glyph().subpaths.iter().flatten().map(|pe| 1 + part_count(pe)).sum::<usize>();
+        self.st.hs.defer_sort = true;
         let mut c = self.seg_glyph().first(true);
         let mut visited = 0usize;
         while let Some(cur) = c {
@@ -558,6 +591,8 @@ impl DimHinter<'_> {
             self.gen_segs_for_path_element(cur);
             c = self.seg_glyph().next(cur, true);
         }
+        self.st.tiny_skip = None;
+        self.st.hs.sort_segment_lists();
 
         let raw = self.st.hs.increasing_segs.len().max(self.st.hs.decreasing_segs.len());
         if raw > self.st.options.segment_limit().saturating_mul(RAW_SEGMENT_FACTOR) {
@@ -596,7 +631,7 @@ impl DimHinter<'_> {
                     }
                     let adist = self.adjust_dist(e.a(dim) - s.a(dim), q) / 2.0;
                     let aavg = (s.a(dim) + e.a(dim)) / 2.0;
-                    let (ps, ns) = (self.seg_glyph().prev_slope_point(c), self.seg_glyph().next_slope_point(c));
+                    let (ps, ns) = (self.prev_slope(c), self.next_slope(c));
                     let sp = self.pick_spot(s, e, adist, s, e, ps, ns);
                     self.add_segment(aavg - adist, aavg + adist, sp, prv, Some(c), SegType::Line, "line", false);
                 }
@@ -692,7 +727,7 @@ impl DimHinter<'_> {
             }
             let adist = ad2 / 2.0;
             let aavg = (sa + ea) / 2.0;
-            let (ps, ns) = (self.seg_glyph().prev_slope_point(c), self.seg_glyph().next_slope_point(c));
+            let (ps, ns) = (self.prev_slope(c), self.next_slope(c));
             let sp = self.pick_spot(s, e, adist, ccs, cce, ps, ns);
             self.add_segment(aavg - adist, aavg + adist, sp, Some(c), None, SegType::Curve, "curve end 1", false);
         } else {
@@ -900,6 +935,57 @@ pub(crate) mod tests {
         d.limit_segs();
         assert_eq!(d.st.warnings.len(), 1, "{:?}", d.st.warnings);
         assert!(d.st.hs.increasing_segs.is_empty() && d.st.hs.decreasing_segs.is_empty());
+    }
+
+    #[test]
+    fn a_contour_of_tiny_loops_finishes_quickly() {
+        // Loop curves that end within a unit of where they start: every element is tiny, so a
+        // walk past tiny elements from any of them would go round the whole contour.
+        let mut p = BezPath::new();
+        p.move_to((0.0, 0.0));
+        for i in 0..40_000u32 {
+            let (x0, x1) = (f64::from(i % 2), f64::from((i + 1) % 2));
+            p.curve_to((x0 + 100.0, 100.0), (x0 - 100.0, 100.0), (x1, 0.0));
+        }
+        p.close_path();
+        let mut gh = hinter("loops", &[p], no_overlap());
+        for dim in [Dim::H, Dim::V] {
+            let mut d = gh.dim(dim);
+            d.start_hint();
+            d.gen_segs();
+            d.limit_segs();
+            assert!(d.st.hs.increasing_segs.len() <= 100 && d.st.hs.decreasing_segs.len() <= 100);
+        }
+        gh.dim(Dim::H).add_flex(true, false);
+        gh.dim(Dim::V).add_flex(true, true);
+        assert_eq!(gh.glyphs.main.flex_count, 0);
+    }
+
+    #[test]
+    fn many_flat_lines_going_down_finish_quickly() {
+        // A staircase going down: each flat step is lower than the last, so each new segment
+        // goes to the front of its list.
+        let mut p = BezPath::new();
+        p.move_to((0.0, 0.0));
+        let steps = 30_000u32;
+        for i in 0..steps {
+            let (x, y) = (f64::from(i) * 30.0, -f64::from(i) * 30.0);
+            p.line_to((x + 30.0, y));
+            p.line_to((x + 30.0, y - 30.0));
+        }
+        p.line_to((0.0, -f64::from(steps) * 30.0));
+        p.close_path();
+        let mut gh = hinter("stairs", &[p], no_overlap());
+        let mut d = gh.dim(Dim::H);
+        d.start_hint();
+        d.gen_segs();
+        let hs = &d.st.hs;
+        let locs = |ids: &[crate::state::SegId]| ids.iter().filter_map(|id| hs.seg(*id)).map(|s| s.loc).collect::<Vec<_>>();
+        let (inc, dec) = (locs(&hs.increasing_segs), locs(&hs.decreasing_segs));
+        assert!(inc.len().max(dec.len()) >= usize::try_from(steps).unwrap());
+        assert!(inc.is_sorted() && dec.is_sorted());
+        d.limit_segs();
+        assert_eq!(d.st.warnings.len(), 1, "{:?}", d.st.warnings);
     }
 
     #[test]

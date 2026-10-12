@@ -565,6 +565,59 @@ pub struct GlyphData {
     pub bounds_map: BTreeMap<Option<usize>, PathBoundsState>,
 }
 
+/// The non-tiny neighbours of every element of a glyph ([`GlyphData::tiny_skip`]). Walking
+/// past tiny elements one at a time costs the length of the subpath for each element when most
+/// of them are tiny, which makes segment generation and flex detection quadratic.
+#[derive(Clone, Debug, Default)]
+pub struct TinySkip {
+    seg_sub: bool,
+    subpaths: Vec<SubpathSkip>,
+}
+
+/// One subpath of a [`TinySkip`]: its elements in walk order, the parts of a split element in
+/// its place when `seg_sub`.
+#[derive(Clone, Debug, Default)]
+struct SubpathSkip {
+    /// Index in `items` of each element's first item; one more entry than elements.
+    starts: Vec<usize>,
+    items: Vec<PeRef>,
+    /// The nearest non-tiny item after (before) each item going round the subpath, the item
+    /// itself after a full turn.
+    next: Vec<Option<usize>>,
+    prev: Vec<Option<usize>>,
+}
+
+impl TinySkip {
+    /// The walk's answer for `c` (`Some(None)`: the walk ends without one), or `None` when `c`
+    /// is not an item of this table or the table no longer fits the glyph.
+    fn lookup(&self, g: &GlyphData, c: PeRef, forward: bool) -> Option<Option<PeRef>> {
+        let sp = self.subpaths.get(c.subpath)?;
+        if sp.starts.len() != g.subpaths.get(c.subpath)?.len() + 1 {
+            return None;
+        }
+        let start = *sp.starts.get(c.offset)?;
+        let end = *sp.starts.get(c.offset + 1)?;
+        let split = sp.items.get(start)?.sub.is_some();
+        // Where the walk starts in `items`. From an element that is not one of the parts listed
+        // (none, or not split), the walk leaves the element's items at once, so the element's own
+        // items are reached only after a full turn.
+        let i = match c.sub {
+            Some(si) if split && start + si < end => start + si,
+            Some(_) => return None,
+            None if forward => end.checked_sub(1)?,
+            None => start,
+        };
+        let j = if forward { *sp.next.get(i)? } else { *sp.prev.get(i)? };
+        let Some(j) = j else { return Some(None) };
+        // The walk gives up once it comes back to `c`'s element.
+        let wrapped = if forward { start <= j && j <= i } else { i <= j && j < end };
+        if wrapped {
+            return Some(None);
+        }
+        Some(sp.items.get(j).copied())
+    }
+}
+
 /// What [`GlyphData::check_assoc_point`] did.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Assoc {
@@ -984,15 +1037,93 @@ impl GlyphData {
         self.in_subpath(c, -1, skip_tiny, close_wrap_ok, seg_sub)
     }
 
-    /// The slope point at the start of the next non-tiny element (`nextSlopePoint`). *Shared.*
-    pub fn next_slope_point(&self, c: PeRef) -> Option<Pt> {
-        let n = self.next_in_subpath(c, true, true, true)?;
+    /// The next and previous non-tiny element of every element, for
+    /// [`GlyphData::next_non_tiny`] and [`GlyphData::prev_non_tiny`]. Valid while no element is
+    /// added, removed, split or moved.
+    pub fn tiny_skip(&self, seg_sub: bool) -> TinySkip {
+        let subpaths = self
+            .subpaths
+            .iter()
+            .enumerate()
+            .map(|(si, sp)| {
+                let mut starts = Vec::with_capacity(sp.len() + 1);
+                let mut items = Vec::with_capacity(sp.len());
+                let mut tiny = Vec::with_capacity(sp.len());
+                for (offset, pe) in sp.iter().enumerate() {
+                    starts.push(items.len());
+                    match pe.parts() {
+                        Some(parts) if seg_sub && !parts.is_empty() => {
+                            for (i, part) in parts.iter().enumerate() {
+                                items.push(PeRef { subpath: si, offset, sub: Some(i) });
+                                tiny.push(part.is_tiny());
+                            }
+                        }
+                        _ => {
+                            items.push(PeRef::new(si, offset));
+                            tiny.push(pe.is_tiny());
+                        }
+                    }
+                }
+                starts.push(items.len());
+                // Two turns round the subpath, so the last non-tiny items wrap to the first.
+                let m = items.len();
+                let mut next = vec![None; m];
+                let mut last = None;
+                for step in (0..2 * m).rev() {
+                    let i = step % m;
+                    if let Some(slot) = next.get_mut(i) {
+                        *slot = last;
+                    }
+                    if tiny.get(i) == Some(&false) {
+                        last = Some(i);
+                    }
+                }
+                let mut prev = vec![None; m];
+                last = None;
+                for step in 0..2 * m {
+                    let i = step % m;
+                    if let Some(slot) = prev.get_mut(i) {
+                        *slot = last;
+                    }
+                    if tiny.get(i) == Some(&false) {
+                        last = Some(i);
+                    }
+                }
+                SubpathSkip { starts, items, next, prev }
+            })
+            .collect();
+        TinySkip { seg_sub, subpaths }
+    }
+
+    /// `next_in_subpath(c, true, true, skip.seg_sub)`, in constant time from `skip` (made by
+    /// [`GlyphData::tiny_skip`] on this glyph). Falls back to the walk for a reference `skip`
+    /// does not list.
+    pub fn next_non_tiny(&self, skip: &TinySkip, c: PeRef) -> Option<PeRef> {
+        match skip.lookup(self, c, true) {
+            Some(found) => found,
+            None => self.next_in_subpath(c, true, true, skip.seg_sub),
+        }
+    }
+
+    /// `prev_in_subpath(c, true, true, skip.seg_sub)`, in constant time from `skip`.
+    pub fn prev_non_tiny(&self, skip: &TinySkip, c: PeRef) -> Option<PeRef> {
+        match skip.lookup(self, c, false) {
+            Some(found) => found,
+            None => self.prev_in_subpath(c, true, true, skip.seg_sub),
+        }
+    }
+
+    /// The slope point at the start of the next non-tiny element (`nextSlopePoint`); `skip`
+    /// comes from `tiny_skip(true)`. *Shared.*
+    pub fn next_slope_point(&self, skip: &TinySkip, c: PeRef) -> Option<Pt> {
+        let n = self.next_non_tiny(skip, c)?;
         Some(self.element(n)?.slope_point(0.0))
     }
 
-    /// The slope point at the end of the previous non-tiny element (`prevSlopePoint`). *Shared.*
-    pub fn prev_slope_point(&self, c: PeRef) -> Option<Pt> {
-        let p = self.prev_in_subpath(c, true, true, true)?;
+    /// The slope point at the end of the previous non-tiny element (`prevSlopePoint`); `skip`
+    /// comes from `tiny_skip(true)`. *Shared.*
+    pub fn prev_slope_point(&self, skip: &TinySkip, c: PeRef) -> Option<Pt> {
+        let p = self.prev_non_tiny(skip, c)?;
         Some(self.element(p)?.slope_point(1.0))
     }
 
@@ -1429,8 +1560,9 @@ mod tests {
         assert_eq!(g.next_in_subpath(r(0, 4, None), false, true, false), Some(r(0, 0, None)));
         assert_eq!(g.next_in_subpath(r(0, 4, None), false, false, false), Some(r(0, 0, None)));
         assert_eq!(g.prev_in_subpath(r(0, 0, None), false, true, false), Some(r(0, 4, None)));
-        assert_eq!(g.next_slope_point(r(0, 0, None)), Some(pt(101.0, 100.0)));
-        assert_eq!(g.prev_slope_point(r(0, 2, None)), Some(pt(0.0, 0.0)));
+        let skip = g.tiny_skip(true);
+        assert_eq!(g.next_slope_point(&skip, r(0, 0, None)), Some(pt(101.0, 100.0)));
+        assert_eq!(g.prev_slope_point(&skip, r(0, 2, None)), Some(pt(0.0, 0.0)));
 
         let mut g = glyph(&[&[M(0.0, 0.0), C(150.0, 50.0, -50.0, 150.0, 100.0, 200.0), L(0.0, 200.0), Z]]);
         assert!(g.subpaths[0][0].split_at_inflections_for_segs());
@@ -1452,6 +1584,39 @@ mod tests {
         assert_eq!(g.prev_in_subpath(r(0, 0, Some(0)), false, true, true), Some(r(0, 2, None)));
         g.clear_temp_state();
         assert_eq!(g.first(true), Some(r(0, 0, None)));
+    }
+
+    #[test]
+    fn the_tiny_skip_table_gives_the_walks_answers() {
+        let mut g = glyph(&[
+            &[M(0.0, 0.0), L(100.0, 0.0), L(101.0, 1.0), C(150.0, 50.0, -50.0, 150.0, 101.0, 200.0), L(102.0, 201.0), L(0.0, 200.0), L(1.0, 1.0), Z],
+            // Every element tiny.
+            &[M(500.0, 500.0), L(501.0, 500.0), L(501.0, 501.0), Z],
+            &[M(700.0, 0.0), L(800.0, 0.0), Z],
+        ]);
+        assert!(g.subpaths[0][2].split_at_inflections_for_segs());
+        let mut refs = vec![r(0, 99, None), r(5, 0, None), r(0, 0, Some(0)), r(0, 2, Some(7))];
+        for (si, sp) in g.subpaths.iter().enumerate() {
+            for (o, pe) in sp.iter().enumerate() {
+                refs.push(r(si, o, None));
+                for i in 0..pe.parts().map_or(0, <[PathElement]>::len) {
+                    refs.push(r(si, o, Some(i)));
+                }
+            }
+        }
+        let mut found = 0;
+        for seg_sub in [false, true] {
+            let skip = g.tiny_skip(seg_sub);
+            for &c in &refs {
+                let next = g.next_in_subpath(c, true, true, seg_sub);
+                let prev = g.prev_in_subpath(c, true, true, seg_sub);
+                assert_eq!(g.next_non_tiny(&skip, c), next, "next of {c:?}, seg_sub {seg_sub}");
+                assert_eq!(g.prev_non_tiny(&skip, c), prev, "prev of {c:?}, seg_sub {seg_sub}");
+                found += usize::from(next.is_some()) + usize::from(prev.is_some());
+            }
+        }
+        assert!(found > 20, "{found}");
+        assert_eq!(g.next_non_tiny(&g.tiny_skip(true), r(1, 0, None)), None);
     }
 
     #[test]

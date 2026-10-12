@@ -3,7 +3,10 @@
 // Integration tests may unwrap and panic, unlike shipped code (AGENTS.md › Never crash).
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+use std::sync::Arc;
+
 use fontcraft_engine::Session;
+use fontcraft_engine::model::plist::{Str, Value as Plist};
 use fontcraft_engine::model::{Glyph, Layer, Node, NodeKind, Path, Shape};
 use serde_json::{Value, json};
 
@@ -61,6 +64,20 @@ fn autohint_ps_report_zones_lists_the_glyph_extent() {
     let top = row(&r["top"], "height", 700.0).unwrap_or_else(|| panic!("{r}"));
     assert!(top["glyphs"].as_array().unwrap().contains(&json!("l")));
     assert!(row(&r["bottom"], "height", 0.0).is_some(), "{r}");
+}
+
+#[test]
+fn a_gasp_parameter_that_cannot_be_read_does_not_stop_the_reports() {
+    let mut s = session();
+    s.edit("gasp", |font| {
+        Arc::make_mut(&mut font.info).params.set("gasp Table", Plist::String(Str::from("not a table".to_string())));
+        Ok(())
+    })
+    .unwrap();
+    let r = run(&mut s, "autohint.ps.reportZones", json!({"glyphs": ["l"]}));
+    assert!(row(&r["top"], "height", 700.0).is_some(), "{r}");
+    run(&mut s, "autohint.ps.reportStems", json!({"glyphs": ["l"]}));
+    run(&mut s, "autohint.ps.listFdDicts", json!({}));
 }
 
 #[test]

@@ -16,24 +16,34 @@ use crate::glyph::GlyphData;
 use crate::hinter::{GlyphHinter, Glyphs};
 use crate::{AutohintError, HintInput};
 
-/// A location pair as an ordered key: floats are kept as their bits after rounding to 1/1000.
+/// A location pair as a set key: the exact values, as the original's tuples of floats, kept as
+/// [`float_key`]s. Values are rounded once, when the report adds them up.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Pair(pub i64, pub i64);
+pub struct Pair(pub u64, pub u64);
 
 impl Pair {
     pub fn new(l: f64, u: f64) -> Self {
-        let k = |v: f64| if v.is_finite() { (v * 1000.0).round() as i64 } else { 0 };
-        Self(k(l), k(u))
+        Self(float_key(l), float_key(u))
     }
+
+    /// The width `u - l`, as a [`float_key`].
+    pub fn width(self) -> u64 {
+        float_key(f64::from_bits(self.1) - f64::from_bits(self.0))
+    }
+}
+
+/// A float as a map key: its bits, with -0 and 0 the same key as they are in a Python dict.
+pub fn float_key(v: f64) -> u64 {
+    (v + 0.0).to_bits()
 }
 
 /// What one glyph contributes to the reports (`GlyphReport`).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct GlyphReport {
     pub name: String,
-    /// Stem width (thousandths) → count, per direction.
-    pub hstems: BTreeMap<i64, usize>,
-    pub vstems: BTreeMap<i64, usize>,
+    /// Stem width (a [`float_key`]) → count, per direction.
+    pub hstems: BTreeMap<u64, usize>,
+    pub vstems: BTreeMap<u64, usize>,
     pub hstems_pos: BTreeSet<Pair>,
     pub vstems_pos: BTreeSet<Pair>,
     pub char_zones: BTreeSet<Pair>,
@@ -65,7 +75,7 @@ impl GlyphReport {
         let (stems, pos) = if is_v { (&mut self.vstems, &mut self.vstems_pos) } else { (&mut self.hstems, &mut self.hstems_pos) };
         let pair = Pair::new(l, u);
         if pos.insert(pair) {
-            *stems.entry(pair.1 - pair.0).or_insert(0) += 1;
+            *stems.entry(pair.width()).or_insert(0) += 1;
         }
     }
 }
@@ -108,9 +118,9 @@ fn round_value(v: f64) -> i64 {
     if v >= 0.0 { (v + 0.5) as i64 } else { (v - 0.5) as i64 }
 }
 
-/// A thousandths key back in font units, rounded as the report rounds.
-fn units(thousandths: i64) -> i64 {
-    round_value(thousandths as f64 / 1000.0)
+/// A [`float_key`] back in font units, rounded as the report rounds.
+fn units(key: u64) -> i64 {
+    round_value(f64::from_bits(key))
 }
 
 impl GlyphReport {
@@ -122,7 +132,7 @@ impl GlyphReport {
         {
             for pair in from {
                 if pos.insert(pair) {
-                    *stems.entry(pair.1 - pair.0).or_insert(0) += 1;
+                    *stems.entry(pair.width()).or_insert(0) += 1;
                 }
             }
         }
@@ -400,5 +410,23 @@ mod tests {
         let text = write_zone_report(&r);
         assert!(text.starts_with("Top Zone List\ncount   height    glyphs\n    2      700    [l H]\n"), "{text}");
         assert_eq!(write_zone_report(&ZoneReport::default()), "", "empty lists are not written");
+    }
+
+    #[test]
+    fn unrounded_coordinates_are_rounded_once() {
+        // The original keys stems by their exact values and rounds once: 80.4996 reports as 80
+        // and 700.4996 as 700, where rounding to thousandths first would give 81 and 701.
+        let mut p = BezPath::new();
+        p.move_to((100.0, 0.0));
+        for pt in [(180.4996, 0.0), (180.4996, 700.4996), (100.0, 700.4996)] {
+            p.line_to(pt);
+        }
+        p.close_path();
+        let g = vec![("l", vec![p])];
+        let (d, options) = (dict(), Options { round_coords: false, ..Options::default() });
+        let r = report_stems(&inputs(&g, &d, &options)).unwrap();
+        assert_eq!(r.v, vec![stem(80.0, 1, &["l"])]);
+        let r = report_zones(&inputs(&g, &d, &options)).unwrap();
+        assert_eq!(r.top, vec![zone(700.0, 1, &["l"])]);
     }
 }
