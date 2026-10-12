@@ -733,8 +733,13 @@ fn read_subrs(lx: &mut Lexer, len_iv: i64) -> Vec<Option<Vec<u8>>> {
         if t != Tok::Word(b"dup") {
             break;
         }
+        // `dup /CharStrings` can follow the last subroutine: that `dup` is left for the caller.
+        let at = lx.pos;
         lx.next();
-        let (Some(Tok::Num(index)), Some(Tok::Num(len))) = (lx.next(), lx.next()) else { break };
+        let (Some(Tok::Num(index)), Some(Tok::Num(len))) = (lx.next(), lx.next()) else {
+            lx.pos = at;
+            break;
+        };
         if !lx.next().is_some_and(|t| is_rd(&t)) || len < 0.0 {
             break;
         }

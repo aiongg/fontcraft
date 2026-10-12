@@ -189,6 +189,11 @@ const PRIVATE_HEAD: &str = "dup /Private 17 dict dup begin\n\
 
 /// The clear text, the encrypted part and the trailer of the Type 1 test font.
 fn type1_parts() -> (Vec<u8>, Vec<u8>, Vec<u8>) {
+    type1_parts_with("ND\n2 index /CharStrings")
+}
+
+/// [`type1_parts`] with `intro` between the last subroutine and the CharStrings count.
+fn type1_parts_with(intro: &str) -> (Vec<u8>, Vec<u8>, Vec<u8>) {
     let s = spec(T1_SPEC);
     let cs = |toks: &[&str]| encrypt(&[vec![0; 4], assemble(toks, false)].concat(), 4330);
     let mut private = PRIVATE_HEAD.as_bytes().to_vec();
@@ -199,7 +204,7 @@ fn type1_parts() -> (Vec<u8>, Vec<u8>, Vec<u8>) {
         private.extend(c);
         private.extend(b" NP\n");
     }
-    private.extend(format!("ND\n2 index /CharStrings {} dict dup begin\n", s.glyphs.len()).bytes());
+    private.extend(format!("{intro} {} dict dup begin\n", s.glyphs.len()).bytes());
     for (name, toks) in &s.glyphs {
         let c = cs(toks);
         private.extend(format!("/{name} {} RD ", c.len()).bytes());
@@ -219,7 +224,10 @@ fn pfa() -> Vec<u8> {
 }
 
 fn pfb() -> Vec<u8> {
-    let (clear, enc, trailer) = type1_parts();
+    pfb_from(type1_parts())
+}
+
+fn pfb_from((clear, enc, trailer): (Vec<u8>, Vec<u8>, Vec<u8>)) -> Vec<u8> {
     let seg = |t: u8, d: &[u8]| [vec![0x80, t], (d.len() as u32).to_le_bytes().to_vec(), d.to_vec()].concat();
     [seg(1, &clear), seg(2, &enc), seg(1, &trailer), vec![0x80, 3]].concat()
 }
@@ -516,4 +524,12 @@ fn charstring_arithmetic_cannot_put_infinite_points_in_the_model() {
         }
     }
     assert!(d.font.glyph("huge").is_some(), "the glyph stays, without the refused outline");
+}
+
+#[test]
+fn charstrings_after_dup_are_read() {
+    // Some writers end the subroutines with `def put` and open the glyphs with `dup /CharStrings`.
+    let expected = read_type1(&pfb(), &mut Vec::new()).unwrap().glyphs.len();
+    let font = read_type1(&pfb_from(type1_parts_with("def\nput\ndup /CharStrings")), &mut Vec::new()).unwrap();
+    assert_eq!(font.glyphs.len(), expected);
 }
