@@ -114,6 +114,12 @@ fn advance_store(
         .into_iter()
         .map(|id| remap.get(id).ok_or_else(|| CompileError::Table { table, message: "a delta set was lost while building the store".into() }))
         .collect::<Result<Vec<_>, _>>()?;
+    // Glyphs past the end of the map use its last entry, so repeats at the end are dropped, as
+    // fontTools and fontc do.
+    let mut indices = indices;
+    while indices.len() > 1 && indices.get(indices.len() - 2) == indices.last() {
+        indices.pop();
+    }
     let map: DeltaSetIndexMap = indices.into_iter().collect();
 
     if let Some(direct) = direct
@@ -154,11 +160,11 @@ mod tests {
         VarValue { default: 500, deltas: vec![(region(0.0, 1.0, 1.0), d)] }
     }
 
-    // Expected bytes: fontc 1.0.0 on its test source `WghtVar.glyphs` (seven glyphs, only `space`
-    // changes width): the deduplicated store and its map are smaller than one row per glyph.
+    // Expected bytes: fontc 1.0.0 on its test source `WghtVar.glyphs` (seven glyphs, only `space`,
+    // the second, changes width): the deduplicated store and its map are smaller than one row per glyph.
     #[test]
     fn hvar_keeps_the_mapped_store_when_smaller() {
-        let advances = [up(0), up(0), up(0), up(0), up(0), up(0), up(400)];
+        let advances = [up(0), up(400), up(0), up(0), up(0), up(0), up(0)];
         let hvar = build_hvar(1, &advances).unwrap();
         assert_eq!(
             hex(&dump_table(&hvar).unwrap()),
