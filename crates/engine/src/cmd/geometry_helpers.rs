@@ -411,7 +411,8 @@ fn make_parallel(s: &mut Session, v: &Value) -> Result<Value> {
         let r = t.resolve(font)?;
         let at = |(sh, n): (usize, usize)| r.parts.node(sh, n).filter(|n| n.on_curve()).map(Node::point);
         // The nodes, the straight segments between them as (shape, start, end), and the moved node.
-        let (points, lines, moved): (Vec<(usize, usize)>, Vec<(usize, usize, usize)>, (usize, usize)) = match (t.points.len(), t.segments.len()) {
+        type Plan = (Vec<(usize, usize)>, Vec<(usize, usize, usize)>, (usize, usize));
+        let (points, lines, moved): Plan = match (t.points.len(), t.segments.len()) {
             (4, 0) => {
                 let set: BTreeSet<(usize, usize)> = t.points.iter().copied().collect();
                 let mut lines = Vec::new();
@@ -527,7 +528,8 @@ fn space_points(s: &mut Session, v: &Value) -> Result<Value> {
     let step = grid(s.font()?);
     let layer = t.layer_id(s.font()?)?;
     // The new position of each point.
-    let (moves, axis): (Vec<((usize, usize), Point)>, Option<&str>) = {
+    type Moves<'a> = (Vec<((usize, usize), Point)>, Option<&'a str>);
+    let (moves, axis): Moves = {
         let font = s.font()?;
         let r = t.resolve(font)?;
         let at = |(sh, n): (usize, usize)| r.parts.node(sh, n).map(Node::point).ok_or_else(|| p.bad(format!("[{sh}, {n}] is not a node")));

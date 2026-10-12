@@ -266,11 +266,7 @@ fn words(line: &str) -> Vec<(usize, &str)> {
 
 /// Whether `words` start a run-style line.
 fn is_run_line(words: &[(usize, &str)]) -> bool {
-    match words {
-        [(_, "run"), ..] => true,
-        [(_, "fontcraft-cli"), (_, "run"), ..] => true,
-        _ => false,
-    }
+    matches!(words, [(_, "run"), ..] | [(_, "fontcraft-cli"), (_, "run"), ..])
 }
 
 /// Completes the end of `line`: command ids for the first word (or after `--cmd`), glyph names

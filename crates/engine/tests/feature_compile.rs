@@ -83,7 +83,7 @@ fn compile_reports_a_broken_feature_at_its_entry_and_range_and_keeps_the_state()
     assert_eq!(liga["table"], "GSUB");
     let state = s.feature_state().unwrap();
     assert!(state.is_current(s.doc().unwrap()) && !state.has_errors());
-    assert!(state.features.iter().any(|f| f.tag.to_string() == "liga"));
+    assert!(state.features.iter().any(|f| f.tag == "liga"));
 }
 
 #[test]

@@ -342,7 +342,7 @@ pub fn scale_to_size(contour: &Contour, dimension: Dimension, target: f64, propo
         return Err(PathOpError::Invalid(format!("the path has no {what} to scale")));
     }
     let f = target / current;
-    if !f.is_finite() || f > MAX_SCALE_FACTOR || f < 1.0 / MAX_SCALE_FACTOR {
+    if !f.is_finite() || !(1.0 / MAX_SCALE_FACTOR..=MAX_SCALE_FACTOR).contains(&f) {
         return Err(PathOpError::Invalid(format!(
             "scaling the path's {what} from {current} to {target} units goes beyond a factor of {MAX_SCALE_FACTOR}"
         )));

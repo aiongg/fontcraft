@@ -400,7 +400,9 @@ fn pair(a: &Edge, b: &Edge, o: &StemOptions, sin_tol: f64, ink: &mut Ink) -> Res
 /// One stem for pairs of the same direction and width that share an edge on one side (an edge
 /// split by a junction); the edges are joined along the stem.
 fn merge(pairs: Vec<Pair>) -> Vec<Found> {
-    let mut groups: Vec<(Pair, Vec<Side>, Vec<Side>, Vec<Line>, Vec<Line>)> = Vec::new();
+    // Each group: its first pair, the edges of both sides, and the lines along both sides.
+    type Group = (Pair, Vec<Side>, Vec<Side>, Vec<Line>, Vec<Line>);
+    let mut groups: Vec<Group> = Vec::new();
     for p in pairs {
         let [(fa, la), (fb, lb)] = p.sides;
         let joined = groups.iter_mut().find(|(g, s0, s1, ..)| {
@@ -579,7 +581,7 @@ mod tests {
     fn oval(path: &mut BezPath, cx: f64, cy: f64, rx: f64, ry: f64, reverse: bool) {
         let k = 0.5523;
         let quarter = |sx: f64, sy: f64, ex: f64, ey: f64| (Point::new(cx + sx, cy + sy), Point::new(cx + ex, cy + ey));
-        let mut corners = vec![(rx, 0.0), (0.0, ry), (-rx, 0.0), (0.0, -ry), (rx, 0.0)];
+        let mut corners = [(rx, 0.0), (0.0, ry), (-rx, 0.0), (0.0, -ry), (rx, 0.0)];
         if reverse {
             corners.reverse();
         }

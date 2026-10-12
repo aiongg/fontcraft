@@ -401,7 +401,7 @@ pub fn menu_command(app: &mut FontcraftApp, id: &str) -> Option<Result<Value, St
     if !takes_clipboard(app) {
         // A picker is open over the window: Copy and Cmd+Delete do nothing rather than reach
         // the glyphs behind it.
-        return (id == "edit.copy" || id == REMOVE_FIELD).then(|| Ok(Value::Null));
+        return (id == "edit.copy" || id == REMOVE_FIELD).then_some(Ok(Value::Null));
     }
     if id == "edit.copy" {
         return Some(copy(app));

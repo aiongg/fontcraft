@@ -1,6 +1,6 @@
 //! Projects: export instances linked to a font file and kept in a project file of their own. The
 //! font is read from disk (it need not be open) and never written.
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
 
 use std::path::{Path, PathBuf};
 

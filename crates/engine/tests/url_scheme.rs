@@ -1,6 +1,6 @@
 //! The URL scheme (`url.open`): fontcraft://show/ URLs open files and list the glyph layers to
 //! show; every other URL is refused and changes nothing.
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
 
 use std::path::{Path, PathBuf};
 

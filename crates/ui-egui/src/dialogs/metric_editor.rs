@@ -80,7 +80,7 @@ impl MetricEditor {
     /// the first category.
     pub fn new_metric(font: &Font) -> Self {
         let plain = |kind: &str| font.metrics.iter().any(|m| m.kind == kind && m.name.is_none() && m.filter.is_none());
-        let category = CATEGORIES.iter().map(|(k, _)| *k).find(|k| !k.is_empty() && !plain(*k)).unwrap_or(metric::ASCENDER);
+        let category = CATEGORIES.iter().map(|(k, _)| *k).find(|k| !k.is_empty() && !plain(k)).unwrap_or(metric::ASCENDER);
         let mut editor = Self::with(Subject::NewMetric, category.to_string(), String::new(), String::new());
         // A new metric sends everything, so nothing counts as unchanged.
         editor.opened = (String::new(), String::new(), String::new());

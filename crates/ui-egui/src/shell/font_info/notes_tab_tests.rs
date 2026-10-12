@@ -9,7 +9,7 @@ use super::{MAX_HIGHLIGHT_BYTES, Mark, Span, highlight, note_id};
 
 /// The highlighted stretches of `text` as (marked text, mark, syntax at each end).
 fn marks(text: &str) -> Vec<(&str, Mark, usize, usize)> {
-    highlight(text).into_iter().map(|s: Span| (&text[s.start..s.end], s.mark, s.open, s.close)).collect()
+    highlight(text).into_iter().map(|s: Span| (text.get(s.start..s.end).unwrap(), s.mark, s.open, s.close)).collect()
 }
 
 #[test]
