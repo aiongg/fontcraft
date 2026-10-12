@@ -2999,6 +2999,7 @@ notes = "Documented, not yet observed. Renaming is built: lines `0x0041 A`, `U+0
 guesses = [
   "An unencoded glyph named after a renamed glyph plus a suffix is renamed with it (uni0041.sc to A.sc); the reference's documentation does not say, and renaming such a font in it would settle it.",
   "Renamed glyphs keep their code points and their places in the glyph order, and when a code point is named twice in a list the first name counts.",
+  "A glyph with several code points is renamed by its first code point only, and keeps its name when the list does not name that one; renaming such a glyph in the reference would settle it.",
   "With updateReferences (the default) components, metrics keys, kerning, groups and the glyphOrder parameter follow the new names, as Rename Glyph does.",
 ]
 

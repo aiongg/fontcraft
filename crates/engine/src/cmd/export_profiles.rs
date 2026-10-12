@@ -10,7 +10,8 @@
 //!
 //! `file.exportWithProfiles` builds every chosen font through every chosen profile with the same
 //! code as `file.exportAll`, staging all files first and moving them into place only when every
-//! font was built, so a failure writes nothing. A profile's subfolder is a relative path that
+//! font was built. All profiles' files move into place as one step that is undone whole when a
+//! move fails, so a failure leaves the folders as they were. A profile's subfolder is a relative path that
 //! never climbs out of the destination, whoever calls.
 //!
 //! `glyph.exportArtwork` writes one picture per glyph: SVG, PDF or PNG. Every picture spans the
@@ -77,7 +78,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Save Export Profile",
             [],
             None,
-            "{name: string, basedOn?: profile name, settings: {folder?: relative folder, outlines?: \"truetype\"|\"cff\", containers?: [\"plain\"|\"woff\"|\"woff2\"], removeOverlap?: bool, autohint?: bool}} create or update one of the user's export profiles, kept in the application settings. The settings start from basedOn's, else from the profile's own when it exists, else from the defaults (truetype, plain, removeOverlap true, autohint false), and `settings` replaces what it names. folder: the output subfolder, `/`-separated, relative and never climbing out with `..`; empty writes into the destination itself; a new profile's folder defaults to its name. Built-in profiles are read-only: their names are refused; at most 256 profiles → {profile: {name, builtIn, params}, created: bool}",
+            "{name: string, basedOn?: profile name, settings: {folder?: relative folder, outlines?: \"truetype\"|\"cff\", containers?: [\"plain\"|\"woff\"|\"woff2\"], removeOverlap?: bool, autohint?: bool}} create or update one of the user's export profiles, kept in the application settings. The settings start from basedOn's, else from the profile's own when it exists, else from the defaults (truetype, plain, removeOverlap true, autohint false), and `settings` replaces what it names. folder: the output subfolder, `/`-separated, relative and never climbing out with `..`; folder names ending in a space or a dot, and reserved device names (CON, PRN, AUX, NUL, COM1 to COM9, LPT1 to LPT9, with or without an extension), are refused on every system; empty writes into the destination itself; a new profile's folder defaults to its name. Built-in profiles are read-only: their names are refused; at most 256 profiles → {profile: {name, builtIn, params}, created: bool}",
             always,
             save_profile
         ),
@@ -104,7 +105,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Export Artwork…",
             ["File", "Export"],
             None,
-            "{glyphs?: [name] (default: every glyph), layer?: id (default: the first master's layer), format: \"svg\"|\"pdf\"|\"png\", directory?: folder, pixelsPerEm?: number (PNG only, 1 to 16384, default 256)} write one picture per glyph of the chosen layer, named after the glyph (characters a file name cannot hold become `_`; names that differ only in case get a number). A picture spans the advance width and the master's descender to ascender, widened to the outline where it reaches further; components are drawn, open paths are not. SVG and PDF are in font units (one point per unit, a PDF scaled down to at most 14400 points a side); PNG is black on a transparent background. Glyphs without the layer are skipped and listed. Without a directory the pictures are returned as dataBase64. A failing export writes nothing → {format, files: [{glyph, name, bytes, path? | dataBase64?}], skipped: [{glyph, reason}]}",
+            "{glyphs?: [name] (default: every glyph), layer?: id (default: the first master's layer), format: \"svg\"|\"pdf\"|\"png\", directory?: folder, pixelsPerEm?: number (PNG only, 1 to 16384, default 256)} write one picture per glyph of the chosen layer, named after the glyph (characters a file name cannot hold become `_`; a dot-separated part that is a reserved device name such as CON or NUL gets a leading `_`; names that differ only in case get a number). A picture replaces an existing file of the same name. A picture spans the advance width and the master's descender to ascender, widened to the outline where it reaches further; components are drawn, open paths are not. SVG and PDF are in font units (one point per unit, a PDF scaled down to at most 14400 points a side); PNG is black on a transparent background. Glyphs without the layer are skipped and listed. Without a directory the pictures are returned as dataBase64. A failing export writes nothing and leaves replaced files as they were → {format, files: [{glyph, name, bytes, path? | dataBase64?}], skipped: [{glyph, reason}]}",
             has_doc,
             export_artwork
         ).files(const { &[FileParam::write("directory")] }).writes_files()
@@ -159,7 +160,9 @@ fn check_name(name: &str) -> std::result::Result<String, String> {
 }
 
 /// An output subfolder as `/`-separated folder names, or why it cannot be one: absolute paths,
-/// `..` and `.` are refused, so a profile never writes outside the destination.
+/// `..` and `.` are refused, so a profile never writes outside the destination. Names some file
+/// systems cannot hold are refused on every system, so a profile works wherever it is copied:
+/// names ending in a space or a dot, and device names Windows reserves (`CON`, `nul.txt`…).
 fn check_folder(text: &str) -> std::result::Result<String, String> {
     if text.len() > MAX_FOLDER_BYTES {
         return Err(format!("the folder is longer than {MAX_FOLDER_BYTES} bytes"));
@@ -185,6 +188,12 @@ fn check_folder(text: &str) -> std::result::Result<String, String> {
         }
         if let Some(c) = segment.chars().find(|c| c.is_control() || matches!(c, '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|')) {
             return Err(format!("the folder name \"{segment}\" holds {c:?}, which folder names cannot hold"));
+        }
+        if segment.ends_with(' ') || segment.ends_with('.') {
+            return Err(format!("the folder name \"{segment}\" ends in a space or a dot, which some systems drop"));
+        }
+        if fontcraft_io_ufo::names::is_reserved(segment.split('.').next().unwrap_or_default()) {
+            return Err(format!("\"{segment}\" is a device name some systems reserve; choose another folder name"));
         }
     }
     Ok(segments.join("/"))
@@ -533,9 +542,7 @@ fn export_with_profiles(s: &mut Session, v: &Value) -> Result<Value> {
     if file_count == 0 {
         return Err(compile::nothing_built(&Report { skipped: skipped_all, ..Default::default() }));
     }
-    for sink in sinks {
-        sink.commit()?;
-    }
+    compile::commit_all(sinks)?;
     Ok(json!({ "profiles": results, "written": file_count, "warnings": warnings }))
 }
 
@@ -639,8 +646,9 @@ fn export_artwork(s: &mut Session, v: &Value) -> Result<Value> {
     Ok(json!({ "format": format.extension(), "files": files, "skipped": skipped }))
 }
 
-/// File names for pictures: the glyph name with characters a file name cannot hold replaced, and
-/// a number added where names would differ only in case.
+/// File names for pictures: the glyph name with characters a file name cannot hold replaced, a
+/// `_` before a part that is a reserved device name (as the UFO file-name rule does), and a number
+/// added where names would differ only in case.
 #[derive(Default)]
 struct FileNames {
     taken: HashSet<String>,
@@ -654,7 +662,7 @@ impl FileNames {
             .take(MAX_FILE_STEM)
             .map(|c| if c.is_control() || matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|') { '_' } else { c })
             .collect();
-        let stem = if stem.is_empty() { "_".to_string() } else { stem };
+        let stem = if stem.is_empty() { "_".to_string() } else { fontcraft_io_ufo::names::escape_reserved(&stem) };
         let first = format!("{stem}.{ext}");
         if self.taken.insert(first.to_lowercase()) {
             return first;
@@ -793,79 +801,29 @@ fn pdf(outline: &BezPath, frame: Rect) -> Vec<u8> {
 
 // ---------- staging pictures on disk ----------
 
-/// Pictures written under temporary names in the directory and renamed into place by
-/// [`Staged::commit`]. Dropping it uncommitted removes the temporary files and the folders it made.
+/// Pictures written under temporary names in the directory and moved into place by
+/// [`Staged::commit`] as the font export does: all or nothing, replaced files put back on a
+/// failure. Dropping it uncommitted removes the temporary files and the folders it made.
 #[cfg(not(target_arch = "wasm32"))]
 struct Staged {
     dir: PathBuf,
-    made: Vec<PathBuf>,
-    /// (temporary, final) paths.
-    staged: Vec<(PathBuf, PathBuf)>,
+    stage: compile::Stage,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 impl Staged {
     fn new(dir: PathBuf) -> Result<Self> {
-        let mut made = Vec::new();
-        if !dir.is_dir() {
-            let missing: Vec<PathBuf> = dir.ancestors().take_while(|d| !d.as_os_str().is_empty() && !d.exists()).map(Path::to_path_buf).collect();
-            for d in missing.into_iter().rev() {
-                if let Err(e) = std::fs::create_dir(&d) {
-                    let stage = Self { dir: dir.clone(), made, staged: Vec::new() };
-                    drop(stage);
-                    return Err(EngineError::Io(format!("cannot create {}: {e}", d.display())));
-                }
-                made.push(d);
-            }
-        }
-        Ok(Self { dir, made, staged: Vec::new() })
+        Ok(Self { stage: compile::Stage::new(dir.clone(), false, false), dir })
     }
 
+    /// Stages the picture `name`, a single file name; returns its final path.
     fn put(&mut self, name: &str, bytes: &[u8]) -> Result<PathBuf> {
-        use std::io::Write as _;
-        use std::sync::atomic::{AtomicUsize, Ordering};
-        static NEXT: AtomicUsize = AtomicUsize::new(0);
-        let target = self.dir.join(name);
-        let cannot = |e: std::io::Error| EngineError::Io(format!("cannot write {}: {e}", target.display()));
-        let tmp = self.dir.join(format!(".fontcraft-artwork-{}-{}.tmp", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed)));
-        let mut f = std::fs::OpenOptions::new().write(true).create_new(true).open(&tmp).map_err(cannot)?;
-        let written = f.write_all(bytes).and_then(|()| f.sync_all());
-        drop(f);
-        if let Err(e) = written {
-            let _ = std::fs::remove_file(&tmp);
-            return Err(cannot(e));
-        }
-        self.staged.push((tmp, target.clone()));
-        Ok(target)
+        self.stage.put(name, bytes, &mut Vec::new())?;
+        Ok(self.dir.join(name))
     }
 
-    fn commit(mut self) -> Result<()> {
-        if let Some((_, target)) = self.staged.iter().find(|(_, target)| target.is_dir()) {
-            return Err(EngineError::Io(format!("cannot write {}: a folder has that name", target.display())));
-        }
-        let staged = std::mem::take(&mut self.staged);
-        let mut rest = staged.into_iter();
-        for (tmp, target) in rest.by_ref() {
-            if let Err(e) = std::fs::rename(&tmp, &target) {
-                let _ = std::fs::remove_file(&tmp);
-                self.staged = rest.collect();
-                return Err(EngineError::Io(format!("cannot write {}: {e}", target.display())));
-            }
-        }
-        self.made.clear();
-        Ok(())
-    }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-impl Drop for Staged {
-    fn drop(&mut self) {
-        for (tmp, _) in &self.staged {
-            let _ = std::fs::remove_file(tmp);
-        }
-        for d in self.made.iter().rev() {
-            let _ = std::fs::remove_dir(d);
-        }
+    fn commit(self) -> Result<()> {
+        self.stage.commit()
     }
 }
 
@@ -901,6 +859,13 @@ mod tests {
         for bad in ["../up", "a/../../b", "/abs", "\\abs", "a//b", "./a", "a:b"] {
             assert!(check_folder(bad).is_err(), "{bad}");
         }
+        // Names some file systems cannot hold are refused everywhere.
+        for bad in ["con", "Web/NUL", "aux.d", "fonts/Com1.old/x", "LPT9", "prn", "Web./x", "a /b", "dir."] {
+            assert!(check_folder(bad).is_err(), "{bad}");
+        }
+        for good in ["console", "com10", "a.b/c", "nul_d", "Web Fonts"] {
+            assert!(check_folder(good).is_ok(), "{good}");
+        }
     }
 
     #[test]
@@ -910,6 +875,9 @@ mod tests {
         assert_eq!(names.next("a", "svg"), "a_2.svg");
         assert_eq!(names.next("../x", "svg"), ".._x.svg");
         assert_eq!(names.next(".notdef", "svg"), ".notdef.svg");
+        assert_eq!(names.next("CON", "png"), "_CON.png");
+        assert_eq!(names.next("nul.alt", "png"), "_nul.alt.png");
+        assert_eq!(names.next("console", "png"), "console.png");
     }
 
     #[test]

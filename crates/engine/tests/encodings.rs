@@ -136,3 +136,22 @@ fn the_comparison_table_has_a_width_column_per_font() {
     assert!(resolve_documents(&s, Some(&json!([5]))).is_err());
     assert!(compare_documents(&s, &ids, "colour").is_err());
 }
+
+#[test]
+fn renaming_by_name_list_follows_the_first_code_point_only() {
+    let file = namelist("first", "0xE002 Beta\n0xE003 Gamma\n");
+    let mut s = Session::with_document();
+    s.edit("add", |f| {
+        for (name, unicodes) in [("twin", vec![0xE000, 0xE002]), ("second", vec![0xE003, 0xE001])] {
+            let mut g = Glyph::new(name);
+            g.unicodes = unicodes;
+            g.layers.push(Layer::new("m01", 500.0));
+            f.glyphs.push(g);
+        }
+        Ok(())
+    })
+    .unwrap();
+    let r = run(&mut s, "font.renameGlyphsByNamelist", json!({"namelist": file, "glyphs": ["twin", "second"]}));
+    assert_eq!(r["renamed"], json!([{"from": "second", "to": "Gamma"}]), "{r}");
+    let _ = std::fs::remove_file(&file);
+}

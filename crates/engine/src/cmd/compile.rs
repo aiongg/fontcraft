@@ -471,6 +471,38 @@ impl Sink {
     }
 }
 
+/// Moves the staged files of every sink into place as one step: when one file cannot be moved,
+/// the files of every sink are taken back out and the files they replaced are put back.
+pub(super) fn commit_all(sinks: Vec<Sink>) -> Result<()> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let mut stages: Vec<Stage> = sinks
+            .into_iter()
+            .filter_map(|sink| match sink {
+                Sink::Disk(stage) => Some(stage),
+                Sink::Memory { .. } => None,
+            })
+            .collect();
+        let result = stages.iter().try_for_each(Stage::check).and_then(|()| swap(&mut stages));
+        if result.is_ok() {
+            for stage in &mut stages {
+                stage.made.clear();
+            }
+        }
+        // A later stage can only have created folders inside the folders of earlier ones, so the
+        // stages are dropped last first to leave no empty folder behind.
+        while let Some(stage) = stages.pop() {
+            drop(stage);
+        }
+        result
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        drop(sinks);
+        Ok(())
+    }
+}
+
 /// Builds `jobs` of `font` into `sink`, adding to `report`. `source` is the document's title (its
 /// file name without extension), which names the files of a font without a family name. `data` is
 /// the document's glyph data, which gives production names and categories.
@@ -664,7 +696,7 @@ fn set_aside(target: &std::path::Path) -> std::io::Result<std::path::PathBuf> {
 
 #[cfg(not(target_arch = "wasm32"))]
 impl Stage {
-    fn new(root: std::path::PathBuf, single: bool, outside_allowed: bool) -> Self {
+    pub(super) fn new(root: std::path::PathBuf, single: bool, outside_allowed: bool) -> Self {
         Self { root: absolute(&root), single, outside_allowed, staged: Vec::new(), made: Vec::new() }
     }
 
@@ -691,7 +723,7 @@ impl Stage {
         !self.single && !self.target(name).starts_with(&self.root)
     }
 
-    fn put(&mut self, name: &str, bytes: &[u8], warnings: &mut Vec<String>) -> Result<std::path::PathBuf> {
+    pub(super) fn put(&mut self, name: &str, bytes: &[u8], warnings: &mut Vec<String>) -> Result<std::path::PathBuf> {
         use std::io::Write as _;
         let target = self.target(name);
         if !self.outside_allowed && self.outside(name) {
@@ -738,9 +770,9 @@ impl Stage {
         Ok(())
     }
 
-    fn commit(mut self) -> Result<()> {
+    pub(super) fn commit(mut self) -> Result<()> {
         self.check()?;
-        self.swap()?;
+        swap(std::slice::from_mut(&mut self))?;
         self.made.clear();
         Ok(())
     }
@@ -758,14 +790,18 @@ impl Stage {
         }
         Ok(())
     }
+}
 
-    /// Sets every existing final file aside, then moves every staged file into place. On a
-    /// failure it removes what it moved in and puts back what it set aside, so the folder is as
-    /// it was; on success it deletes what it set aside.
-    fn swap(&mut self) -> Result<()> {
-        let mut aside: Vec<(std::path::PathBuf, std::path::PathBuf)> = Vec::new();
-        let mut failure = None;
-        for (_, target) in &self.staged {
+/// Sets every existing final file of `stages` aside, then moves every staged file into place. On
+/// a failure it removes what it moved in and puts back what it set aside, so the folders are as
+/// they were; on success it deletes what it set aside. When a step of that undoing fails too, the
+/// error names each file it could not restore.
+#[cfg(not(target_arch = "wasm32"))]
+fn swap(stages: &mut [Stage]) -> Result<()> {
+    let mut aside: Vec<(std::path::PathBuf, std::path::PathBuf)> = Vec::new();
+    let mut failure = None;
+    'aside: for stage in stages.iter() {
+        for (_, target) in &stage.staged {
             if std::fs::symlink_metadata(target).is_err() {
                 continue;
             }
@@ -773,38 +809,46 @@ impl Stage {
                 Ok(backup) => aside.push((backup, target.clone())),
                 Err(e) => {
                     failure = Some(format!("cannot replace {}: {e}", target.display()));
-                    break;
+                    break 'aside;
                 }
             }
         }
-        let mut moved = 0usize;
-        if failure.is_none() {
-            for (tmp, target) in &self.staged {
+    }
+    let mut moved = vec![0usize; stages.len()];
+    if failure.is_none() {
+        'moving: for (stage, count) in stages.iter().zip(moved.iter_mut()) {
+            for (tmp, target) in &stage.staged {
                 if let Err(e) = std::fs::rename(tmp, target) {
                     failure = Some(format!("cannot write {}: {e}", target.display()));
-                    break;
+                    break 'moving;
                 }
-                moved += 1;
+                *count += 1;
             }
         }
-        let Some(failure) = failure else {
-            for (backup, _) in &aside {
-                let _ = std::fs::remove_file(backup);
-            }
-            self.staged.clear();
-            return Ok(());
-        };
-        for (_, target) in self.staged.drain(..moved) {
-            let _ = std::fs::remove_file(target);
-        }
-        let mut lost = Vec::new();
-        for (backup, target) in aside.iter().rev() {
-            if let Err(e) = std::fs::rename(backup, target) {
-                lost.push(format!("the previous {} could not be put back ({e}) and is kept as {}", target.display(), backup.display()));
-            }
-        }
-        if lost.is_empty() { Err(EngineError::Io(failure)) } else { Err(EngineError::Io(format!("{failure}; {}", lost.join("; ")))) }
     }
+    let Some(failure) = failure else {
+        for (backup, _) in &aside {
+            let _ = std::fs::remove_file(backup);
+        }
+        for stage in stages.iter_mut() {
+            stage.staged.clear();
+        }
+        return Ok(());
+    };
+    let mut lost = Vec::new();
+    for (stage, count) in stages.iter_mut().zip(moved) {
+        for (_, target) in stage.staged.drain(..count) {
+            if let Err(e) = std::fs::remove_file(&target) {
+                lost.push(format!("the new {} could not be removed ({e})", target.display()));
+            }
+        }
+    }
+    for (backup, target) in aside.iter().rev() {
+        if let Err(e) = std::fs::rename(backup, target) {
+            lost.push(format!("the previous {} could not be put back ({e}) and is kept as {}", target.display(), backup.display()));
+        }
+    }
+    if lost.is_empty() { Err(EngineError::Io(failure)) } else { Err(EngineError::Io(format!("{failure}; {}", lost.join("; ")))) }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -822,7 +866,7 @@ impl Drop for Stage {
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod stage_tests {
     #![allow(clippy::unwrap_used)]
-    use super::Stage;
+    use super::{Stage, swap};
 
     #[test]
     fn a_failed_move_puts_back_the_files_it_replaced() {
@@ -837,11 +881,41 @@ mod stage_tests {
         // The second file's folder disappears after staging, so its move fails after `A.ttf`
         // was already replaced.
         std::fs::remove_dir_all(dir.join("sub")).unwrap();
-        assert!(stage.swap().is_err());
+        assert!(swap(std::slice::from_mut(&mut stage)).is_err());
         drop(stage);
         let left: Vec<_> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name()).collect();
         assert_eq!(left, ["A.ttf"]);
         assert_eq!(std::fs::read(dir.join("A.ttf")).unwrap(), b"old");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// Stages committed together are undone together: a move that fails in the second stage takes
+    /// back the files the first one already moved in and puts back the file it replaced.
+    #[test]
+    fn a_failed_move_in_one_stage_undoes_the_stages_before_it() {
+        let dir = std::env::temp_dir().join(format!("fontcraft-stages-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("one")).unwrap();
+        std::fs::write(dir.join("one/A.ttf"), b"old").unwrap();
+        let mut warnings = Vec::new();
+        let mut first = Stage::new(dir.join("one"), false, false);
+        first.put("A.ttf", b"new", &mut warnings).unwrap();
+        first.put("B.ttf", b"new", &mut warnings).unwrap();
+        let mut second = Stage::new(dir.join("two"), false, false);
+        second.put("sub/C.ttf", b"new", &mut warnings).unwrap();
+        std::fs::remove_dir_all(dir.join("two/sub")).unwrap();
+        let mut stages = vec![first, second];
+        let e = swap(&mut stages).unwrap_err().to_string();
+        assert!(e.contains("C.ttf"), "{e}");
+        while let Some(stage) = stages.pop() {
+            drop(stage);
+        }
+        let mut left: Vec<_> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name()).collect();
+        left.sort();
+        assert_eq!(left, ["one"], "the second stage's folder is removed");
+        let left: Vec<_> = std::fs::read_dir(dir.join("one")).unwrap().map(|e| e.unwrap().file_name()).collect();
+        assert_eq!(left, ["A.ttf"]);
+        assert_eq!(std::fs::read(dir.join("one/A.ttf")).unwrap(), b"old");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

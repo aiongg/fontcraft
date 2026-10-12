@@ -116,6 +116,23 @@ fn export_with_profiles_refuses_and_writes_nothing() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
+/// Every profile's files move into place as one step: a file that cannot be written in the last
+/// profile leaves the files of the earlier profiles as they were.
+#[test]
+fn export_with_profiles_that_fails_in_a_later_profile_leaves_the_earlier_ones_untouched() {
+    let dir = temp("partway");
+    let (mut s, titles) = two_fonts();
+    std::fs::create_dir_all(dir.join("OpenType TT")).unwrap();
+    std::fs::write(dir.join("OpenType TT/Untitled-Regular.ttf"), b"old").unwrap();
+    std::fs::create_dir_all(dir.join("Web/Untitled-Regular.woff2")).unwrap();
+    let e =
+        fails(&mut s, "file.exportWithProfiles", json!({"fonts": titles, "profiles": ["OpenType TT", "Web"], "destination": dir, "timestamp": 0}));
+    assert!(e.contains("Untitled-Regular.woff2"), "{e}");
+    assert_eq!(names(&dir), ["OpenType TT/Untitled-Regular.ttf"], "no new files, no temporary files");
+    assert_eq!(std::fs::read(dir.join("OpenType TT/Untitled-Regular.ttf")).unwrap(), b"old");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
 #[test]
 fn save_export_profile_keeps_built_in_profiles_read_only() {
     let mut s = Session::with_document();
@@ -151,6 +168,8 @@ fn save_export_profile_keeps_built_in_profiles_read_only() {
     for (settings, says) in [
         (json!({"folder": "../up"}), ".."),
         (json!({"folder": "/abs"}), "absolute"),
+        (json!({"folder": "Web/con.d"}), "device name"),
+        (json!({"folder": "Web. /x"}), "space or a dot"),
         (json!({"outlines": "type1"}), "outlines"),
         (json!({"containers": ["zip"]}), "containers"),
         (json!({"colour": true}), "colour"),

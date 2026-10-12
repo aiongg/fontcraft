@@ -71,7 +71,7 @@ pub fn specs() -> Vec<CommandSpec> {
         "Rename Glyphs by Name List…",
         ["Font"],
         None,
-        "{namelist: path | \"nice\" | \"production\", glyphs?: [names] (default every glyph), updateReferences?: bool (default true)} renames each glyph to the name the name list gives its first listed code point; an unencoded glyph whose name is a renamed glyph's name plus a suffix follows it (uni0041.sc becomes A.sc). A name list is a text file of lines `0x0041 A`, `U+0041 A` or `A;0041`; nice and production are the glyph data's names. updateReferences renames components, metrics keys, kerning, groups and the glyphOrder parameter too. Glyphs keep their code points and places. Refused whole when a new name breaks the naming rules or is taken → {renamed: [{from, to}], updated: [{name, place}], stillUsed: [{name, place}]}",
+        "{namelist: path | \"nice\" | \"production\", glyphs?: [names] (default every glyph), updateReferences?: bool (default true)} renames each glyph to the name the name list gives the glyph's first code point (a glyph whose first code point the list does not name keeps its name); an unencoded glyph whose name is a renamed glyph's name plus a suffix follows it (uni0041.sc becomes A.sc). A name list is a text file of lines `0x0041 A`, `U+0041 A` or `A;0041`; nice and production are the glyph data's names. updateReferences renames components, metrics keys, kerning, groups and the glyphOrder parameter too. Glyphs keep their code points and places. Refused whole when a new name breaks the naming rules or is taken → {renamed: [{from, to}], updated: [{name, place}], stillUsed: [{name, place}]}",
         has_doc,
         rename_by_namelist
     ).files(const { &[FileParam::read("namelist").keywords(&["nice", "production"])] })
@@ -432,14 +432,15 @@ fn read_namelist(p: &Params, source: &str) -> Result<Names> {
     }
 }
 
-/// The renames a name list asks for among `targets`: encoded glyphs by their first listed code
-/// point, then unencoded glyphs named after a renamed one plus a suffix.
+/// The renames a name list asks for among `targets`: encoded glyphs by their first code point
+/// (a glyph whose first code point the list does not name keeps its name, whatever its other code
+/// points are), then unencoded glyphs named after a renamed one plus a suffix.
 fn planned_renames(font: &Font, data: &GlyphData, names: &Names, targets: &[String]) -> Vec<(String, String)> {
     let mut pairs = Vec::new();
     let mut bases: HashMap<&str, String> = HashMap::new();
     for name in targets {
         let Some(g) = font.glyph(name) else { continue };
-        let Some(new) = g.unicodes.iter().find_map(|cp| names.name_for(data, *cp)) else { continue };
+        let Some(new) = g.unicodes.first().and_then(|cp| names.name_for(data, *cp)) else { continue };
         if new != *name {
             bases.insert(name.as_str(), new.clone());
             pairs.push((name.clone(), new));

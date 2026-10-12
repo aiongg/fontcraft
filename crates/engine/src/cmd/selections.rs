@@ -236,14 +236,10 @@ fn store(s: &mut Session, v: &Value) -> Result<Value> {
     Ok(json!({"glyph": t.glyph, "name": name, "replaced": replaced, "count": count}))
 }
 
-fn dedup<T: Clone + PartialEq>(items: &[T]) -> Vec<T> {
-    let mut out: Vec<T> = Vec::with_capacity(items.len());
-    for item in items {
-        if !out.contains(item) {
-            out.push(item.clone());
-        }
-    }
-    out
+/// `items` in their order, each kept once.
+fn dedup<T: Clone + Eq + std::hash::Hash>(items: &[T]) -> Vec<T> {
+    let mut seen = std::collections::HashSet::with_capacity(items.len());
+    items.iter().filter(|item| seen.insert(*item)).cloned().collect()
 }
 
 fn remove(s: &mut Session, v: &Value) -> Result<Value> {
@@ -295,4 +291,17 @@ fn get(s: &mut Session, v: &Value) -> Result<Value> {
         })
         .collect();
     Ok(json!({"glyph": t.glyph, "layer": r.layer.id, "selections": selections}))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::dedup;
+
+    /// A selection of every target a command takes is kept once each, in order, in linear time.
+    #[test]
+    fn dedup_keeps_the_first_of_each_in_order_and_scales() {
+        assert_eq!(dedup(&[3, 1, 3, 2, 1]), [3, 1, 2]);
+        let many: Vec<(usize, usize)> = (0..crate::params::MAX_TARGETS).map(|i| (i / 7, i % 7)).collect();
+        assert_eq!(dedup(&many).len(), many.len());
+    }
 }

@@ -23,6 +23,17 @@ fn is_illegal(c: char) -> bool {
     c < ' ' || ILLEGAL.contains(&c)
 }
 
+/// Whether `part` (a file name without its extension, or one dot-separated part of a name) is a
+/// device name Windows reserves, in any case.
+pub fn is_reserved(part: &str) -> bool {
+    RESERVED.contains(&part.to_lowercase().as_str())
+}
+
+/// `name` with a `_` before every dot-separated part that is a reserved device name.
+pub fn escape_reserved(name: &str) -> String {
+    name.split('.').map(|part| if is_reserved(part) { format!("_{part}") } else { part.to_string() }).collect::<Vec<_>>().join(".")
+}
+
 /// The file name for `user_name`, given the names already taken, lowercased.
 pub fn user_name_to_file_name(user_name: &str, existing: &HashSet<String>, prefix: &str, suffix: &str) -> Option<String> {
     let mut name = String::with_capacity(user_name.len() + 8);
@@ -38,11 +49,7 @@ pub fn user_name_to_file_name(user_name: &str, existing: &HashSet<String>, prefi
     }
     let room = MAX_LEN.saturating_sub(prefix.chars().count() + suffix.chars().count());
     let name: String = name.chars().take(room).collect();
-    let name = name
-        .split('.')
-        .map(|part| if RESERVED.contains(&part.to_lowercase().as_str()) { format!("_{part}") } else { part.to_string() })
-        .collect::<Vec<_>>()
-        .join(".");
+    let name = escape_reserved(&name);
     let full = format!("{prefix}{name}{suffix}");
     if !existing.contains(&full.to_lowercase()) {
         return Some(full);
