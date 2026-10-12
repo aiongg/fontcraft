@@ -13,7 +13,7 @@
 //! record holds its name. When one instance has a PostScript name, the others get the "no name"
 //! ID 0xFFFF.
 
-use fontcraft_interp::{Designspace, Placement};
+use fontcraft_interp::Designspace;
 use fontcraft_model::Font;
 use write_fonts::tables::fvar::{AxisInstanceArrays, Fvar, InstanceRecord, VariationAxisRecord};
 use write_fonts::types::{Fixed, NameId};
@@ -94,23 +94,17 @@ pub fn build_fvar(axes: &VarAxes, instances: &[VarInstance], names: &mut NameAll
     Ok(Fvar::new(AxisInstanceArrays::new(axis_records, instance_records)))
 }
 
-/// The named instances of the variable font of `designspace`: the font's exported static
-/// instances, in order, at their external coordinates. Instances outside the axis ranges are
-/// left out (`instances.extrapolatedExcludedFromVariable`).
+/// The named instances of the variable font of `designspace`, at their external coordinates,
+/// in the order [`Designspace::named_instances`] picks them.
 pub fn named_instances(font: &Font, designspace: &Designspace) -> Result<Vec<VarInstance>, CompileError> {
-    let mut out = Vec::new();
-    for (index, instance) in font.instances.iter().enumerate() {
-        if !instance.exports || instance.kind.as_deref() == Some("variable") {
-            continue;
-        }
-        let location = designspace.instance_location(font, index)?;
-        if designspace.classify(&location) == Placement::Outside {
-            continue;
-        }
-        let user = designspace.to_external(&location)?;
-        if out.len() >= MAX_NAMED_INSTANCES {
-            return Err(fvar_error(format!("more than {MAX_NAMED_INSTANCES} named instances")));
-        }
+    let picked = designspace.named_instances(font);
+    if picked.len() > MAX_NAMED_INSTANCES {
+        return Err(fvar_error(format!("more than {MAX_NAMED_INSTANCES} named instances")));
+    }
+    let mut out = Vec::with_capacity(picked.len());
+    for index in picked {
+        let Some(instance) = font.instances.get(index) else { continue };
+        let user = designspace.to_external(&designspace.instance_location(font, index)?)?;
         out.push(VarInstance { name: instance_fvar_name(instance), postscript_name: instance_postscript_name(instance), coordinates: user.0 });
     }
     Ok(out)
