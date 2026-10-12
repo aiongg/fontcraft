@@ -17,7 +17,7 @@
 //! cannot read and names each in the problems it returns; decoding one profile or entry fails with
 //! the reason.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
 
 use fontcraft_model::plist::{Array, Dict, Number, Str, Value as PValue};
@@ -1001,9 +1001,40 @@ impl DocumentSettings {
         (out, problems)
     }
 
-    /// Is a result of `check` at this glyph, master and location on the ignore list?
+    /// Is a result of `check` at this glyph, master and location on the ignore list? Scans the
+    /// list; to test many results, build an [`IgnoreIndex`] once.
     pub fn is_ignored(&self, check: &str, glyph: Option<&str>, master: Option<&str>, location: &Location) -> bool {
         self.ignored.iter().any(|e| e.covers(check, glyph, master, location))
+    }
+
+    /// The ignore list indexed by check and glyph.
+    pub fn ignore_index(&self) -> IgnoreIndex<'_> {
+        IgnoreIndex::new(&self.ignored)
+    }
+}
+
+/// An ignore list indexed by check id and glyph, so testing a result reads only the entries of
+/// its check that name its glyph or every glyph.
+pub struct IgnoreIndex<'a> {
+    by_target: HashMap<(&'a str, Option<&'a str>), Vec<&'a IgnoreEntry>>,
+}
+
+impl<'a> IgnoreIndex<'a> {
+    pub fn new(entries: &'a [IgnoreEntry]) -> Self {
+        let mut by_target: HashMap<(&'a str, Option<&'a str>), Vec<&'a IgnoreEntry>> = HashMap::new();
+        for e in entries {
+            by_target.entry((e.check.as_str(), e.glyph.as_deref())).or_default().push(e);
+        }
+        Self { by_target }
+    }
+
+    /// Is a result of `check` at this glyph, master and location on the ignore list?
+    pub fn is_ignored(&self, check: &str, glyph: Option<&str>, master: Option<&str>, location: &Location) -> bool {
+        let mut targets = vec![(check, None)];
+        if glyph.is_some() {
+            targets.push((check, glyph));
+        }
+        targets.into_iter().filter_map(|t| self.by_target.get(&t)).flatten().any(|e| e.covers(check, glyph, master, location))
     }
 }
 

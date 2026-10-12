@@ -7,20 +7,23 @@
 //! A runner whose table is absent or unreadable records itself as skipped with the reason; the
 //! `check.tables.*` checks report missing and malformed tables.
 
-use std::collections::{BTreeSet, HashSet};
+use std::cell::OnceCell;
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use read_fonts::tables::glyf::Glyph as GlyfGlyph;
 use read_fonts::tables::gpos::{PairPos, PositionSubtables, ValueRecord};
 use read_fonts::tables::layout::DeviceOrVariationIndex;
+use read_fonts::tables::post::{DEFAULT_GLYPH_NAMES, Post};
 use read_fonts::tables::stat::AxisValue;
 use read_fonts::tables::variations::ItemVariationStore;
-use read_fonts::types::{GlyphId, GlyphId16, NameId, Tag};
+use read_fonts::types::{GlyphId, GlyphId16, NameId, Tag, Version16Dot16};
 use read_fonts::{FontRef, TableProvider};
 use skrifa::MetadataProvider;
 use skrifa::instance::Size;
 use skrifa::outline::pen::NullPen;
 use skrifa::outline::{DrawSettings, OutlinePen};
 
+use crate::name_records::{self, MAX_NAME_TEXT_BYTES};
 use crate::{BinaryCtx, Hit, Location, Params, Precondition, Sink, Threshold, num};
 
 /// Most fvar axes a check reads; a font with more is skipped.
@@ -194,54 +197,65 @@ fn read_fvar(ctx: &BinaryCtx<'_>, sink: &mut Sink) -> Option<Fvar> {
     }
 }
 
-/// The decoded records of the name table.
+/// The decoded records of the name table, read with the shared byte budget.
 #[derive(Default)]
 pub(crate) struct Names {
-    records: Vec<(u16, u16, u16, u16, String)>,
+    /// Platform, language and text of each record whose string lies in the table, in table
+    /// order; text the reader did not decode is empty.
+    records: Vec<(u16, u16, String)>,
+    /// name id → indices of its records.
+    by_id: BTreeMap<u16, Vec<usize>>,
+    /// name id → index of the record [`Names::debug`] answers.
+    debug: BTreeMap<u16, usize>,
+    /// name id → index of its first Windows Unicode BMP US English record.
+    windows: BTreeMap<u16, usize>,
 }
 
 impl Names {
     pub(crate) fn read(font: &FontRef<'_>) -> Self {
-        let Ok(name) = font.name() else { return Self::default() };
-        let data = name.string_data();
-        let records = name
-            .name_record()
-            .iter()
-            .filter_map(|r| {
-                let text: String = r.string(data).ok()?.chars().collect();
-                Some((r.platform_id(), r.encoding_id(), r.language_id(), r.name_id().to_u16(), text))
-            })
-            .collect();
-        Self { records }
+        let mut budget = MAX_NAME_TEXT_BYTES;
+        let Ok(read) = name_records::read(font, &mut budget, name_records::all) else { return Self::default() };
+        let mut names = Self::default();
+        let mut english: BTreeSet<u16> = BTreeSet::new();
+        for r in read.records.into_iter().filter(|r| r.in_bounds) {
+            let i = names.records.len();
+            names.by_id.entry(r.id).or_default().push(i);
+            if (r.platform, r.language) == (1, 0) || (r.platform, r.language) == (3, 0x409) {
+                if english.insert(r.id) {
+                    names.debug.insert(r.id, i);
+                }
+            } else if !english.contains(&r.id) {
+                names.debug.insert(r.id, i);
+            }
+            if (r.platform, r.encoding, r.language) == (3, 1, 0x409) {
+                names.windows.entry(r.id).or_insert(i);
+            }
+            names.records.push((r.platform, r.language, r.text.unwrap_or_default()));
+        }
+        names
+    }
+
+    fn text(&self, i: usize) -> Option<&str> {
+        self.records.get(i).map(|r| r.2.as_str())
     }
 
     /// The name a person would read: the first English record (Windows US English or Macintosh
     /// English), else the last record with the id, as fontTools' `getDebugName` picks it.
     pub(crate) fn debug(&self, id: u16) -> Option<&str> {
-        let mut some = None;
-        for (platform, _, language, name_id, text) in &self.records {
-            if *name_id != id {
-                continue;
-            }
-            if (*platform, *language) == (1, 0) || (*platform, *language) == (3, 0x409) {
-                return Some(text.as_str());
-            }
-            some = Some(text.as_str());
-        }
-        some
+        self.debug.get(&id).and_then(|&i| self.text(i))
     }
 
     /// The Windows Unicode BMP US English record.
     fn windows_english(&self, id: u16) -> Option<&str> {
-        self.records.iter().find(|(p, e, l, n, _)| (*p, *e, *l, *n) == (3, 1, 0x409, id)).map(|r| r.4.as_str())
+        self.windows.get(&id).and_then(|&i| self.text(i))
     }
 
     fn has(&self, id: u16) -> bool {
-        self.records.iter().any(|r| r.3 == id)
+        self.by_id.contains_key(&id)
     }
 
     fn all(&self, id: u16) -> impl Iterator<Item = &str> {
-        self.records.iter().filter(move |r| r.3 == id).map(|r| r.4.as_str())
+        self.by_id.get(&id).into_iter().flatten().filter_map(|&i| self.text(i))
     }
 
     /// The instance's subfamily name, or its position counted from 1.
@@ -390,16 +404,47 @@ fn at_name(table: &str, id: u16) -> Location {
     Location { name_id: Some(id), ..at(table) }
 }
 
-fn glyph_name(ctx: &BinaryCtx<'_>, gid: u16) -> String {
-    if let Some(name) = ctx.source.and_then(|s| s.glyph(u32::from(gid))) {
-        return name.to_string();
+/// Glyph names for findings: the source glyph, else the `post` name, else `glyph N`. The `post`
+/// strings are indexed on first use, since one lookup in a version 2 table scans the strings
+/// before it.
+struct GlyphNamer<'c, 'a> {
+    ctx: &'c BinaryCtx<'a>,
+    post: OnceCell<Option<(Post<'a>, Vec<&'a str>)>>,
+}
+
+impl<'c, 'a> GlyphNamer<'c, 'a> {
+    fn new(ctx: &'c BinaryCtx<'a>) -> Self {
+        Self { ctx, post: OnceCell::new() }
     }
-    if let Ok(post) = ctx.font.post()
-        && let Some(name) = post.glyph_name(GlyphId16::new(gid))
-    {
-        return name.to_string();
+
+    fn get(&self, gid: u16) -> String {
+        if let Some(name) = self.ctx.source.and_then(|s| s.glyph(u32::from(gid))) {
+            return name.to_string();
+        }
+        let post = self.post.get_or_init(|| {
+            let post = self.ctx.font.post().ok()?;
+            let strings = post.string_data().map(|d| d.iter().map_while(|s| s.ok().map(|s| s.as_str())).collect()).unwrap_or_default();
+            Some((post, strings))
+        });
+        if let Some((post, strings)) = post
+            && let Some(name) = post_glyph_name(post, strings, gid)
+        {
+            return name.to_string();
+        }
+        format!("glyph {gid}")
     }
-    format!("glyph {gid}")
+}
+
+/// `post.glyph_name` with the version 2 strings read in advance.
+fn post_glyph_name<'a>(post: &Post<'a>, strings: &[&'a str], gid: u16) -> Option<&'a str> {
+    if post.version() != Version16Dot16::VERSION_2_0 {
+        return post.glyph_name(GlyphId16::new(gid));
+    }
+    let index = usize::from(post.glyph_name_index()?.get(usize::from(gid))?.get());
+    match index.checked_sub(DEFAULT_GLYPH_NAMES.len()) {
+        None => DEFAULT_GLYPH_NAMES.get(index).copied(),
+        Some(i) => strings.get(i).copied(),
+    }
 }
 
 fn glyph_count(font: &FontRef<'_>) -> u16 {
@@ -1134,6 +1179,7 @@ pub(crate) fn duplexed_axis_reflow(ctx: &BinaryCtx<'_>, _: &Params<'_>, sink: &m
 
 fn glyph_reflow(ctx: &BinaryCtx<'_>, duplexed: &[(usize, &str)], sink: &mut Sink) {
     let (Ok(gvar), Ok(glyf), Ok(loca)) = (ctx.font.gvar(), ctx.font.glyf(), ctx.font.loca(None)) else { return };
+    let namer = GlyphNamer::new(ctx);
     for gid in 0..glyph_count(&ctx.font) {
         let id = GlyphId::new(u32::from(gid));
         let Ok(Some(data)) = gvar.glyph_variation_data(id) else { continue };
@@ -1159,7 +1205,7 @@ fn glyph_reflow(ctx: &BinaryCtx<'_>, duplexed: &[(usize, &str)], sink: &mut Sink
             }
         }
         for tag in reflowing {
-            let name = glyph_name(ctx, gid);
+            let name = namer.get(gid);
             let message = format!("The advance of {name} changes along the {tag} axis, which must leave text length unchanged.");
             sink.push(Hit::new("axis-causes-reflow", message).place(Location { glyph: name, ..at_axis("gvar", tag) }));
         }
@@ -1247,6 +1293,7 @@ fn advance_varies(record: &ValueRecord<'_>, store: &ItemVariationStore<'_>, effe
 /// is not run.
 pub(crate) fn static_instantiation(ctx: &BinaryCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
     let Some(fvar) = read_fvar(ctx, sink) else { return };
+    let namer = GlyphNamer::new(ctx);
     let font = &ctx.font;
     let unreadable: [(&str, bool); 6] = [
         ("avar", has_table(font, b"avar") && font.avar().is_err()),
@@ -1277,7 +1324,7 @@ pub(crate) fn static_instantiation(ctx: &BinaryCtx<'_>, _: &Params<'_>, sink: &m
             _ => None,
         };
         if let Some(problem) = problem {
-            let name = glyph_name(ctx, gid);
+            let name = namer.get(gid);
             let message = format!("{name} cannot be instanced at the middle of every axis: {problem}.");
             sink.push(Hit::new("glyph-fails", message).place(Location { glyph: name, ..Location::default() }));
         }

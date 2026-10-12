@@ -25,6 +25,7 @@ use read_fonts::{FileRef, FontRef, TableProvider};
 use serde::Serialize;
 
 use crate::Severity;
+use crate::name_records::{self, MAX_NAME_TEXT_BYTES};
 
 /// Most results one exported report renders.
 pub const MAX_EXPORT_RESULTS: usize = 100_000;
@@ -552,25 +553,19 @@ impl FaceInfo {
 }
 
 /// The Macintosh Roman English and Windows Unicode English records of [`NAME_IDS`], and whether
-/// the font has any Macintosh record.
+/// the font has any Macintosh record. Text is decoded with the shared byte budget; records past
+/// it are left out.
 fn read_names(font: &FontRef<'_>) -> (BTreeMap<u16, String>, BTreeMap<u16, String>, bool) {
-    let (mut mac, mut win, mut has_mac) = (BTreeMap::new(), BTreeMap::new(), false);
-    let Ok(name) = font.name() else { return (mac, win, has_mac) };
-    let data = name.string_data();
-    for rec in name.name_record() {
-        has_mac |= rec.platform_id() == 1;
-        let id = rec.name_id().to_u16();
-        if !NAME_IDS.contains(&id) {
-            continue;
-        }
-        let target = match (rec.platform_id(), rec.encoding_id(), rec.language_id()) {
-            (1, 0, 0) => &mut mac,
-            (3, 1, 0x409) => &mut win,
-            _ => continue,
-        };
-        if let Ok(s) = rec.string(data) {
-            target.insert(id, s.chars().collect::<String>());
-        }
+    let (mut mac, mut win) = (BTreeMap::new(), BTreeMap::new());
+    let Ok(name) = font.name() else { return (mac, win, false) };
+    let has_mac = name.name_record().iter().any(|r| r.platform_id() == 1);
+    let mut budget = MAX_NAME_TEXT_BYTES;
+    let wanted = |p: u16, e: u16, l: u16, id: u16| NAME_IDS.contains(&id) && matches!((p, e, l), (1, 0, 0) | (3, 1, 0x409));
+    let Ok(read) = name_records::read(font, &mut budget, wanted) else { return (mac, win, has_mac) };
+    for rec in read.records {
+        let Some(text) = rec.text else { continue };
+        let target = if rec.platform == 1 { &mut mac } else { &mut win };
+        target.insert(rec.id, text);
     }
     (mac, win, has_mac)
 }

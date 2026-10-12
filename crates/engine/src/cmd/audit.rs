@@ -1012,7 +1012,7 @@ fn fix_layer(s: &mut Session, run: &Run, group: &Group, how: &How, report: &mut 
 /// An audit context for `font` with the font-wide facts of the run, so a step does not survey the
 /// whole font again.
 fn context(font: &Font, (grid_step, main_curve, variable): Facts) -> AuditContext<'_> {
-    AuditContext { font, grid_step, main_curve, variable }
+    AuditContext::with_facts(font, grid_step, main_curve, variable)
 }
 
 // ── audit.list, audit.describe, audit.profile.list ─────────────────────────────────────────────

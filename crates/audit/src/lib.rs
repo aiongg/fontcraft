@@ -25,6 +25,7 @@ pub mod data;
 pub mod export;
 mod handles;
 mod metrics;
+mod name_records;
 mod points;
 pub mod profile;
 mod registry;
@@ -310,9 +311,21 @@ pub struct AuditContext<'a> {
     pub main_curve: Option<CurveType>,
     /// The source has more than one master.
     pub variable: bool,
+    /// The masters' comparison order for the compatibility checks, built by the first glyph
+    /// that needs it.
+    compat_masters: std::cell::OnceCell<checks::compat::MasterOrder>,
 }
 
 impl<'a> AuditContext<'a> {
+    /// A context with facts the caller already surveyed (see [`AuditContext::new`]).
+    pub fn with_facts(font: &'a Font, grid_step: Option<f64>, main_curve: Option<CurveType>, variable: bool) -> Self {
+        Self { font, grid_step, main_curve, variable, compat_masters: std::cell::OnceCell::new() }
+    }
+
+    pub(crate) fn compat_masters(&self) -> &checks::compat::MasterOrder {
+        self.compat_masters.get_or_init(|| checks::compat::MasterOrder::new(self.font))
+    }
+
     pub fn new(font: &'a Font) -> Self {
         let settings = &font.info.settings;
         let length = settings.grid_length.unwrap_or(1.0);
@@ -343,7 +356,7 @@ impl<'a> AuditContext<'a> {
             (c, q) if q > c => Some(CurveType::Quadratic),
             _ => Some(CurveType::Cubic),
         };
-        Self { font, grid_step, main_curve, variable: font.masters.len() > 1 }
+        Self::with_facts(font, grid_step, main_curve, font.masters.len() > 1)
     }
 }
 

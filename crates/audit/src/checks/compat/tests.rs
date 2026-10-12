@@ -78,7 +78,7 @@ fn glyph(name: &str, a: Vec<Shape>, b: Vec<Shape>) -> Glyph {
 fn run_glyph(font: &Font, name: &str, id: &str, config: &Config) -> LayerReport {
     let ctx = AuditContext::new(font);
     let g = font.glyph(name).unwrap_or_else(|| panic!("no glyph {name}"));
-    let gctx = GlyphCtx { audit: &ctx, glyph: g, services: &NoServices };
+    let gctx = GlyphCtx::new(&ctx, g, &NoServices);
     audit_glyph(&gctx, &[find(id).unwrap_or_else(|| panic!("no check {id}"))], config)
 }
 
@@ -405,4 +405,33 @@ fn the_matching_is_the_cheapest() {
         }
     }
     assert!(min_cost_matching(&[vec![f64::NAN]]).is_none());
+}
+
+#[test]
+fn a_glyph_too_costly_to_compare_is_skipped_with_a_reason() {
+    // 64 masters with 256 contours each: four matchings of 256 contours for each of 63 pairs,
+    // in each of the five tests, before the work budget.
+    let mut font = font();
+    let masters = Arc::make_mut(&mut font.masters);
+    for i in 3..=64 {
+        masters.push(Master { id: format!("m{i:02}"), name: format!("M{i}"), location: vec![400.0 + f64::from(i) * 5.0], ..Default::default() });
+    }
+    let ids: Vec<String> = font.masters.iter().map(|m| m.id.clone()).collect();
+    let mut g = Glyph::new("many");
+    for (k, id) in ids.iter().enumerate() {
+        let shapes = (0..256).map(|i| shape(&rect(f64::from(i) * 20.0 + k as f64, 0.0, f64::from(i) * 20.0 + 10.0, 10.0))).collect();
+        g.layers.push(layer(id, shapes));
+    }
+    font.glyphs.push(g);
+    let ctx = AuditContext::new(&font);
+    let gctx = GlyphCtx::new(&ctx, font.glyph("many").unwrap(), &NoServices);
+    let heuristics = ["contourOrder", "wrongStartPoint", "kink", "underweight", "overweight"];
+    let checks: Vec<_> = heuristics.iter().map(|id| find(&format!("check.variations.{id}")).unwrap_or_else(|| panic!("no check {id}"))).collect();
+    let report = audit_glyph(&gctx, &checks, &Config::default());
+    assert!(report.findings.is_empty(), "{:?}", report.findings);
+    assert_eq!(report.skipped.len(), heuristics.len(), "{:?}", report.skipped);
+    assert!(report.skipped.iter().all(|s| s.reason.contains("steps")), "{:?}", report.skipped);
+    // The open-path test still runs on the same prepared glyph.
+    let open = audit_glyph(&gctx, &[find("check.variations.openPathInMaster").unwrap()], &Config::default());
+    assert!(open.findings.is_empty() && open.skipped.is_empty(), "{open:?}");
 }

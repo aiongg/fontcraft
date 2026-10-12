@@ -13,7 +13,7 @@
 //! a command accepts is a value the file reader accepts. The runner (`audit.run`) reads the same
 //! settings through [`user_store`] and [`default_profile`].
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 
 use fontcraft_audit::profile::{
     self as prof, DocumentSettings, IgnoreEntry, Location, PROJECT_VALUES, ProfileDef, Profiles, ProjectValue, Store, location_from_plist,
@@ -236,6 +236,10 @@ pub(crate) fn user_store(s: &Session) -> (UserStore, Vec<String>) {
     (out, problems)
 }
 
+/// How refusals name the two stores.
+const USER_STORE: &str = "the user's audit profiles (application settings)";
+const DOC_STORE: &str = "the open document's audit settings";
+
 fn save_user_store(s: &mut Session, store: &UserStore) -> Result<()> {
     let profiles: Vec<Value> = store.profiles.iter().map(|d| to_json(&d.to_plist(), 0)).collect();
     let mut o = Map::new();
@@ -245,6 +249,18 @@ fn save_user_store(s: &mut Session, store: &UserStore) -> Result<()> {
     o.insert("profiles".into(), Value::Array(profiles));
     s.settings_mut().set_reserved(Reserved::AuditProfiles, &Value::Object(o))?;
     Ok(())
+}
+
+/// Refuses to write `store` back when part of it could not be read: the write would drop that
+/// part without a word.
+fn refuse_unread(p: &Params, store: &str, problems: &[String]) -> Result<()> {
+    if problems.is_empty() {
+        return Ok(());
+    }
+    Err(p.bad(format!(
+        "{store} could not be read in full ({}); saving would drop what could not be read, so nothing was changed: repair or remove those entries first",
+        problems.join("; ")
+    )))
 }
 
 /// The open document's settings (empty without a document) and what could not be read.
@@ -417,8 +433,8 @@ fn profile_save(s: &mut Session, v: &Value) -> Result<Value> {
     let def = ProfileDef::from_plist(&PValue::Dict(d)).map_err(|e| p.bad(e))?;
     def.check().map_err(|e| p.bad(e))?;
 
-    let (mut user, _) = user_store(s);
-    let (mut doc, _) = doc_settings(s);
+    let (mut user, user_problems) = user_store(s);
+    let (mut doc, doc_problems) = doc_settings(s);
     if store == Store::Project {
         s.doc()?;
     }
@@ -450,8 +466,14 @@ fn profile_save(s: &mut Session, v: &Value) -> Result<Value> {
     }
     let count = resolved.checks.len();
     match store {
-        Store::Project => write_settings(s, "Save Audit Profile", &doc)?,
-        _ => save_user_store(s, &user)?,
+        Store::Project => {
+            refuse_unread(&p, DOC_STORE, &doc_problems)?;
+            write_settings(s, "Save Audit Profile", &doc)?
+        }
+        _ => {
+            refuse_unread(&p, USER_STORE, &user_problems)?;
+            save_user_store(s, &user)?
+        }
     }
     Ok(json!({"profile": profile_json(&def, store), "created": created, "checks": count}))
 }
@@ -462,8 +484,8 @@ fn profile_delete(s: &mut Session, v: &Value) -> Result<Value> {
     if Profile::parse(id).is_some() {
         return Err(p.bad(format!("`{id}` is a built-in profile and cannot be deleted")));
     }
-    let (mut user, _) = user_store(s);
-    let (mut doc, _) = doc_settings(s);
+    let (mut user, user_problems) = user_store(s);
+    let (mut doc, doc_problems) = doc_settings(s);
     let in_doc = doc.profiles.iter().any(|q| q.id == id);
     let in_user = user.profiles.iter().any(|q| q.id == id);
     let store = match (store_param(&p)?, in_doc, in_user) {
@@ -478,6 +500,7 @@ fn profile_delete(s: &mut Session, v: &Value) -> Result<Value> {
     }
     let default_cleared = match store {
         Store::Project => {
+            refuse_unread(&p, DOC_STORE, &doc_problems)?;
             doc.profiles.retain(|q| q.id != id);
             let cleared = doc.default_profile.as_deref() == Some(id);
             if cleared {
@@ -487,6 +510,7 @@ fn profile_delete(s: &mut Session, v: &Value) -> Result<Value> {
             cleared
         }
         _ => {
+            refuse_unread(&p, USER_STORE, &user_problems)?;
             user.profiles.retain(|q| q.id != id);
             let cleared = user.default.as_deref() == Some(id);
             if cleared {
@@ -511,8 +535,8 @@ fn profile_set_default(s: &mut Session, v: &Value) -> Result<Value> {
     if target == "document" {
         s.doc()?;
     }
-    let (mut user, _) = user_store(s);
-    let (mut doc, _) = doc_settings(s);
+    let (mut user, user_problems) = user_store(s);
+    let (mut doc, doc_problems) = doc_settings(s);
     if let Some(id) = id {
         let profiles = Profiles { project: &doc.profiles, user: &user.profiles };
         let store = profiles.store_of(id).ok_or_else(|| p.bad(format!("there is no profile `{id}`")))?;
@@ -524,9 +548,11 @@ fn profile_set_default(s: &mut Session, v: &Value) -> Result<Value> {
         profiles.resolve(id).map_err(|e| p.bad(e))?;
     }
     if target == "document" {
+        refuse_unread(&p, DOC_STORE, &doc_problems)?;
         doc.default_profile = id.map(str::to_string);
         write_settings(s, "Set Default Audit Profile", &doc)?;
     } else {
+        refuse_unread(&p, USER_STORE, &user_problems)?;
         user.default = id.map(str::to_string);
         save_user_store(s, &user)?;
     }
@@ -595,7 +621,8 @@ fn config_set(s: &mut Session, v: &Value) -> Result<Value> {
     if values.len() > MAX_SET_VALUES {
         return Err(p.bad(format!("`values` holds {} names; at most {MAX_SET_VALUES} are allowed", values.len())));
     }
-    let (mut doc, _) = doc_settings(s);
+    let (mut doc, doc_problems) = doc_settings(s);
+    refuse_unread(&p, DOC_STORE, &doc_problems)?;
     let mut echo = Map::new();
     let check = p.opt_str("check")?;
     match check {
@@ -738,7 +765,8 @@ fn ignore_issue(s: &mut Session, v: &Value) -> Result<Value> {
         d.insert("date", PValue::String(Str::new(date)));
     }
     let entry = IgnoreEntry::from_plist(&PValue::Dict(d)).map_err(|e| p.bad(e))?;
-    let (mut doc, _) = doc_settings(s);
+    let (mut doc, doc_problems) = doc_settings(s);
+    refuse_unread(&p, DOC_STORE, &doc_problems)?;
     let added = match doc.ignored.iter_mut().find(|e| e.same_target(&entry)) {
         Some(slot) => {
             *slot = entry.clone();
@@ -765,7 +793,8 @@ fn unignore_issue(s: &mut Session, v: &Value) -> Result<Value> {
         Some(loc) => Some(location_from_plist(&loc).map_err(|e| p.bad(e))?),
         None => None,
     };
-    let (mut doc, _) = doc_settings(s);
+    let (mut doc, doc_problems) = doc_settings(s);
+    refuse_unread(&p, DOC_STORE, &doc_problems)?;
     let before = doc.ignored.len();
     doc.ignored.retain(|e| {
         let hit = e.check == check
@@ -803,6 +832,16 @@ fn list_ignored(s: &mut Session, v: &Value) -> Result<Value> {
         .and_then(Value::as_array)
         .map(|list| list.iter().filter_map(result_target).collect())
         .unwrap_or_default();
+    // Results by check, and by check and glyph, so each entry reads only the results it could
+    // cover.
+    let mut by_check: HashMap<&str, Vec<usize>> = HashMap::new();
+    let mut by_glyph: HashMap<(&str, &str), Vec<usize>> = HashMap::new();
+    for (i, (c, g, _, _)) in found.iter().enumerate() {
+        by_check.entry(c.as_str()).or_default().push(i);
+        if let Some(g) = g {
+            by_glyph.entry((c.as_str(), g.as_str())).or_default().push(i);
+        }
+    }
     let entries: Vec<Value> = doc
         .ignored
         .iter()
@@ -810,7 +849,11 @@ fn list_ignored(s: &mut Session, v: &Value) -> Result<Value> {
             let occurs = if report.is_none() || !ran.contains(&e.check) {
                 Value::Null
             } else {
-                json!(found.iter().any(|(c, g, m, l)| e.covers(c, g.as_deref(), m.as_deref(), l)))
+                let candidates = match &e.glyph {
+                    Some(g) => by_glyph.get(&(e.check.as_str(), g.as_str())),
+                    None => by_check.get(e.check.as_str()),
+                };
+                json!(candidates.into_iter().flatten().filter_map(|&i| found.get(i)).any(|(c, g, m, l)| e.covers(c, g.as_deref(), m.as_deref(), l)))
             };
             let mut j = entry_json(e);
             if let Value::Object(o) = &mut j {

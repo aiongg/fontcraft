@@ -31,7 +31,8 @@ use crate::{GlyphCtx, Hit, Location, MAX_LAYER_NODES, MAX_LAYER_SHAPES, Nth, Par
 pub(crate) const MAX_COMPAT_MASTERS: usize = 256;
 /// Most intermediate layers of one glyph taken into the comparison.
 pub(crate) const MAX_INTERMEDIATE_LAYERS: usize = 256;
-/// Most contours and components the contour-order test matches (the matching takes cubic time).
+/// Most contours and components the contour-order test matches (the matching takes cubic time;
+/// [`MAX_COMPAT_GLYPH_WORK`] bounds the whole glyph).
 pub(crate) const MAX_MATCHED_CONTOURS: usize = 256;
 /// Most points a contour may have for the start-point and weight tests (they take quadratic
 /// time); larger contours are left out of those two tests.
@@ -1144,26 +1145,105 @@ struct Found {
     reverse: bool,
 }
 
-/// The glyph's parts and their items, ready for the heuristic tests; `None` when there is nothing
-/// to compare (the reason, if any, is recorded as a skip).
+/// The masters' normalised locations and comparison tree, built once per font
+/// ([`crate::AuditContext`] keeps it); `None` for a source with fewer than two or more than
+/// [`MAX_COMPAT_MASTERS`] masters.
+pub(crate) struct MasterOrder(Option<(Space, Tree)>);
+
+impl MasterOrder {
+    pub(crate) fn new(font: &Font) -> Self {
+        let n = font.masters.len();
+        if !(2..=MAX_COMPAT_MASTERS).contains(&n) {
+            return Self(None);
+        }
+        let space = Space::new(font);
+        let tree = master_tree(font, &space);
+        Self(Some((space, tree)))
+    }
+}
+
+/// The glyph's parts and their items, ready for the heuristic tests.
 struct Prepared<'a> {
     parts: Vec<Part<'a>>,
     items: Vec<Vec<Item>>,
     open: bool,
+    /// Per part: the contour-order score against its parent part and, when another order is
+    /// cheaper, the matching (see [`contour_order`]); `None` for a part that is not compared.
+    orders: Vec<Option<(f64, Option<Vec<usize>>)>>,
+    /// Set when the comparison would take more than [`MAX_COMPAT_GLYPH_WORK`]: the heuristic
+    /// tests skip the glyph with this reason.
+    too_much: Option<String>,
 }
 
-fn prepare<'a>(font: &'a Font, glyph: &'a Glyph, sink: &mut Sink, with_items: bool) -> Option<Prepared<'a>> {
+/// One glyph as the compatibility tests see it, built once and shared by them
+/// ([`crate::GlyphCtx`] keeps it).
+pub(crate) struct Compared<'a> {
+    /// `Err` holds the reason the glyph is skipped; `Ok(None)` means there is nothing to compare.
+    prep: Result<Option<Prepared<'a>>, String>,
+}
+
+impl<'a> Compared<'a> {
+    pub(crate) fn new(audit: &'a crate::AuditContext<'a>, glyph: &'a Glyph) -> Self {
+        Self { prep: prepare(audit, glyph) }
+    }
+
+    /// The prepared glyph, or `None` after recording the skip reason, if any.
+    fn get(&self, sink: &mut Sink) -> Option<&Prepared<'a>> {
+        match &self.prep {
+            Ok(prep) => prep.as_ref(),
+            Err(reason) => {
+                sink.skip(reason.clone());
+                None
+            }
+        }
+    }
+}
+
+/// Most work units the heuristic tests may spend on one glyph (see [`comparison_work`]); a glyph
+/// over it is skipped with a reason.
+pub(crate) const MAX_COMPAT_GLYPH_WORK: u64 = 250_000_000;
+
+/// An upper estimate of the heuristic tests' work on `parts`: the isomorphisms of every contour
+/// (quadratic in its points), and per compared pair the four contour-order matchings (cubic in
+/// the contours) and the start-point costs (quadratic in the points).
+fn comparison_work(parts: &[Part<'_>]) -> u64 {
+    let items = |layer: &Layer| layer.shapes.iter().filter(|s| matches!(s, Shape::Path(_) | Shape::Component(_))).count() as u64;
+    let squares = |layer: &Layer| {
+        layer
+            .shapes
+            .iter()
+            .map(|s| match s {
+                Shape::Path(p) if p.nodes.len() <= MAX_START_POINT_NODES => (p.nodes.len() as u64).saturating_pow(2),
+                Shape::Path(p) => p.nodes.len() as u64,
+                _ => 1,
+            })
+            .fold(0u64, u64::saturating_add)
+    };
+    let mut work = 0u64;
+    for part in parts {
+        let own = squares(part.layer);
+        work = work.saturating_add(own);
+        let Some(parent) = part.parent.and_then(|a| parts.get(a)) else { continue };
+        let n = items(part.layer);
+        if n > 1 && n == items(parent.layer) && n <= MAX_MATCHED_CONTOURS as u64 {
+            work = work.saturating_add(n.saturating_pow(3).saturating_mul(4)).saturating_add(n.saturating_pow(2).saturating_mul(4));
+        }
+        work = work.saturating_add(own.saturating_mul(8));
+    }
+    work
+}
+
+fn prepare<'a>(audit: &'a crate::AuditContext<'a>, glyph: &'a Glyph) -> Result<Option<Prepared<'a>>, String> {
+    let font = audit.font;
     let masters = font.masters.len();
     if masters < 2 {
-        return None;
+        return Ok(None);
     }
     if masters > MAX_COMPAT_MASTERS {
-        sink.skip(format!("the source has more than {MAX_COMPAT_MASTERS} masters"));
-        return None;
+        return Err(format!("the source has more than {MAX_COMPAT_MASTERS} masters"));
     }
-    let space = Space::new(font);
-    let tree = master_tree(font, &space);
-    let parts = participants(font, glyph, &tree, &space);
+    let Some((space, tree)) = &audit.compat_masters().0 else { return Ok(None) };
+    let parts = participants(font, glyph, tree, space);
     let mut open = false;
     for part in &parts {
         let layer = part.layer;
@@ -1176,39 +1256,55 @@ fn prepare<'a>(font: &'a Font, glyph: &'a Glyph, sink: &mut Sink, with_items: bo
             })
             .fold(0usize, usize::saturating_add);
         if layer.shapes.len() > MAX_LAYER_SHAPES || nodes > MAX_LAYER_NODES {
-            sink.skip(format!("a layer has more than {MAX_LAYER_SHAPES} shapes or {MAX_LAYER_NODES} nodes"));
-            return None;
+            return Err(format!("a layer has more than {MAX_LAYER_SHAPES} shapes or {MAX_LAYER_NODES} nodes"));
         }
         for shape in &layer.shapes {
             if let Shape::Path(p) = shape {
                 if p.nodes.iter().any(|n| !(crate::contour::in_range(n.x) && crate::contour::in_range(n.y))) {
-                    sink.skip("a node's coordinate is not a usable number");
-                    return None;
+                    return Err("a node's coordinate is not a usable number".to_string());
                 }
                 open |= !p.closed;
             }
         }
     }
-    let items = if with_items && !open {
-        parts
-            .iter()
-            .map(|part| {
-                let shapes = part.layer.shapes.iter().enumerate();
-                let paths = shapes.clone().filter_map(|(i, s)| match s {
-                    Shape::Path(p) => Some(path_item(i, p)),
-                    _ => None,
-                });
-                let components = shapes.filter_map(|(i, s)| match s {
-                    Shape::Component(c) => Some(component_item(i, font.component_outline(c, &part.layer.master).ok())),
-                    _ => None,
-                });
-                paths.chain(components).collect()
-            })
-            .collect()
-    } else {
-        Vec::new()
-    };
-    Some(Prepared { parts, items, open })
+    let mut prep = Prepared { parts, items: Vec::new(), open, orders: Vec::new(), too_much: None };
+    if open {
+        return Ok(Some(prep));
+    }
+    if comparison_work(&prep.parts) > MAX_COMPAT_GLYPH_WORK {
+        prep.too_much = Some(format!("comparing the glyph's layers would take more than {MAX_COMPAT_GLYPH_WORK} steps"));
+        return Ok(Some(prep));
+    }
+    prep.items = prep
+        .parts
+        .iter()
+        .map(|part| {
+            let shapes = part.layer.shapes.iter().enumerate();
+            let paths = shapes.clone().filter_map(|(i, s)| match s {
+                Shape::Path(p) => Some(path_item(i, p)),
+                _ => None,
+            });
+            let components = shapes.filter_map(|(i, s)| match s {
+                Shape::Component(c) => Some(component_item(i, font.component_outline(c, &part.layer.master).ok())),
+                _ => None,
+            });
+            paths.chain(components).collect()
+        })
+        .collect();
+    prep.orders = prep
+        .parts
+        .iter()
+        .enumerate()
+        .map(|(b, part)| {
+            let a = part.parent?;
+            let (g0, g1) = (prep.items.get(a)?, prep.items.get(b)?);
+            if g0.is_empty() || g1.is_empty() || g0.len() != g1.len() {
+                return None;
+            }
+            Some(contour_order(g0, g1))
+        })
+        .collect();
+    Ok(Some(prep))
 }
 
 /// Runs `test` on every compared pair of the glyph's parts.
@@ -1217,19 +1313,27 @@ fn compare_pairs(font: &Font, prep: &Prepared<'_>, test: Test, tolerance: f64, k
     let upem = f64::from(font.units_per_em);
     for (b, part) in prep.parts.iter().enumerate() {
         let Some(a) = part.parent else { continue };
+        let Some(Some(order)) = prep.orders.get(b) else { continue };
         let (Some(g0), Some(g1)) = (prep.items.get(a), prep.items.get(b)) else { continue };
-        if g0.is_empty() || g1.is_empty() || g0.len() != g1.len() {
-            continue;
-        }
-        compare_pair(g0, g1, (a, b), upem, test, tolerance, kinkiness, &mut out);
+        compare_pair(g0, g1, (a, b), order, upem, test, tolerance, kinkiness, &mut out);
     }
     out
 }
 
 #[allow(clippy::too_many_arguments)]
-fn compare_pair(g0: &[Item], g1: &[Item], (a, b): (usize, usize), upem: f64, test: Test, tolerance: f64, kinkiness: f64, out: &mut Vec<Found>) {
+fn compare_pair(
+    g0: &[Item],
+    g1: &[Item],
+    (a, b): (usize, usize),
+    (score, proposed): &(f64, Option<Vec<usize>>),
+    upem: f64,
+    test: Test,
+    tolerance: f64,
+    kinkiness: f64,
+    out: &mut Vec<Found>,
+) {
     let found = |test, item, node, score| Found { test, a, b, item, node, score, order: Vec::new(), reverse: false };
-    let (score, proposed) = contour_order(g0, g1);
+    let score = *score;
     let mut matching: Vec<usize> = (0..g0.len()).collect();
     if score < tolerance
         && let Some(m) = proposed
@@ -1237,7 +1341,7 @@ fn compare_pair(g0: &[Item], g1: &[Item], (a, b): (usize, usize), upem: f64, tes
         if test == Test::ContourOrder {
             out.push(Found { order: m.clone(), ..found(Test::ContourOrder, None, None, score) });
         }
-        matching = m;
+        matching = m.clone();
     }
     if matches!(test, Test::StartPoint | Test::Underweight | Test::Overweight) {
         for ix in 0..g0.len() {
@@ -1359,7 +1463,7 @@ fn kinks(p0: &[(Point, bool)], p1: &[(Point, bool)], tolerance: f64, kinkiness: 
 
 pub(crate) fn open_path(ctx: &GlyphCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
     let font = ctx.audit.font;
-    let Some(prep) = prepare(font, ctx.glyph, sink, false) else { return };
+    let Some(prep) = ctx.compat().get(sink) else { return };
     if !prep.open {
         return;
     }
@@ -1379,8 +1483,12 @@ pub(crate) fn open_path(ctx: &GlyphCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
 
 fn heuristic(ctx: &GlyphCtx<'_>, sink: &mut Sink, test: Test, tolerance: f64, kinkiness: f64) {
     let font = ctx.audit.font;
-    let Some(prep) = prepare(font, ctx.glyph, sink, true) else { return };
+    let Some(prep) = ctx.compat().get(sink) else { return };
     if prep.open {
+        return;
+    }
+    if let Some(reason) = &prep.too_much {
+        sink.skip(reason.clone());
         return;
     }
     for f in compare_pairs(font, &prep, test, tolerance, kinkiness) {

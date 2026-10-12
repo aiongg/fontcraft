@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 
 use fontcraft_audit::Severity;
 use fontcraft_audit::export::{self, CheckRow, ExportFormat, FaceInfo, ReportDoc, ReportFont, ReportSummary, ResultRow};
-use fontcraft_tables::limits::MAX_FAMILY_FONTS;
+use fontcraft_tables::limits::{MAX_COLLECTION_FONTS, MAX_FAMILY_FONTS};
 use serde_json::{Map, json};
 
 use super::file_io::{self, OutputRequest};
@@ -340,6 +340,9 @@ fn add_file(p: &Params, path: &Path, explicit: bool, with_layout: bool, faces: &
         Ok(n) => n,
         Err(e) => return fail(e),
     };
+    if !usize::try_from(count).is_ok_and(|n| n <= MAX_COLLECTION_FONTS) {
+        return fail(format!("the collection holds {count} fonts; at most {MAX_COLLECTION_FONTS} are read"));
+    }
     for face in 0..count {
         if faces.len() >= MAX_FAMILY_FONTS {
             return Err(p.bad(format!("more than {MAX_FAMILY_FONTS} fonts to report on")));

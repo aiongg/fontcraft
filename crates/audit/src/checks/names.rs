@@ -14,10 +14,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use read_fonts::TableProvider;
 use read_fonts::ps::cff::dict::{self, Entry};
 
+use crate::name_records::{self, MAX_NAME_TEXT_BYTES};
 use crate::{BinaryCtx, Hit, Location, Params, Sink, Threshold};
 
-/// Most bytes of name strings one check decodes; records past it are not read.
-pub const MAX_NAME_TEXT_BYTES: usize = 4 << 20;
 /// Most family-and-instance name pairs `familyAndStyleLength` builds.
 const MAX_LENGTH_COMPARISONS: usize = 1_000_000;
 
@@ -70,38 +69,22 @@ struct Names {
 impl Names {
     /// Reads the table, or records the skip and returns `None` when it cannot be read.
     fn read(ctx: &BinaryCtx<'_>, sink: &mut Sink) -> Option<Self> {
-        let Ok(name) = ctx.font.name() else {
-            sink.skip("the font has no readable 'name' table");
-            return None;
-        };
-        let data = name.string_data();
-        let records = name.name_record();
-        // read-fonts answers an empty list when the records run past the end of the table.
-        if records.len() != usize::from(name.count()) {
-            sink.skip("the 'name' table is shorter than its record count says");
-            return None;
-        }
-        let mut recs = Vec::with_capacity(records.len());
         let mut budget = MAX_NAME_TEXT_BYTES;
-        let mut over = false;
-        for r in records {
-            let (platform, encoding) = (r.platform_id(), r.encoding_id());
-            let len = usize::from(r.length());
-            let decodable = matches!((platform, encoding), (0, _) | (1, 0) | (3, 0) | (3, 1) | (3, 10));
-            let text = if !decodable {
-                None
-            } else if len > budget {
-                over = true;
-                None
-            } else {
-                budget -= len;
-                r.string(data).ok().map(|s| s.chars().collect::<String>())
-            };
-            recs.push(Rec { platform, encoding, language: r.language_id(), id: r.name_id().to_u16(), text });
+        let read = match name_records::read(&ctx.font, &mut budget, name_records::all) {
+            Ok(read) => read,
+            Err(reason) => {
+                sink.skip(reason);
+                return None;
+            }
+        };
+        if read.over_budget {
+            sink.skip(name_records::over_budget_reason());
         }
-        if over {
-            sink.skip(format!("the name table holds more than {MAX_NAME_TEXT_BYTES} bytes of text; the records past that were not read"));
-        }
+        let recs: Vec<Rec> = read
+            .records
+            .into_iter()
+            .map(|r| Rec { platform: r.platform, encoding: r.encoding, language: r.language, id: r.id, text: r.text })
+            .collect();
         let mut first = BTreeMap::new();
         let mut by_id: BTreeMap<u16, Vec<usize>> = BTreeMap::new();
         for (i, r) in recs.iter().enumerate() {

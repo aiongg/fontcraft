@@ -15,6 +15,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
+use super::components::Names;
 use fontcraft_model::plist::Value;
 use fontcraft_model::{Family, Font, Glyph, KernGroups, KernTable, Master, side_group};
 use read_fonts::tables::cmap::{CmapIterLimits, CmapSubtable};
@@ -23,7 +24,6 @@ use read_fonts::tables::gsub::{SingleSubst, SubstitutionSubtables};
 use read_fonts::tables::kern::SubtableKind;
 use read_fonts::types::{GlyphId, Tag};
 use read_fonts::{FontRef, TableProvider};
-use skrifa::GlyphNames;
 
 use crate::{BinaryCtx, Hit, Location, Params, Sink, SourceCtx, num};
 
@@ -465,11 +465,8 @@ pub(crate) fn excessive_pair(ctx: &SourceCtx<'_>, _: &Params<'_>, sink: &mut Sin
 
 /// The name a finding gives a glyph of a compiled font: the source glyph when the font was
 /// compiled in this run, else the font's own glyph name (or a made-up `gidN`).
-pub(crate) fn glyph_label(ctx: &BinaryCtx<'_>, names: &GlyphNames<'_>, gid: u32) -> String {
-    if let Some(n) = ctx.source.and_then(|m| m.glyph(gid)) {
-        return n.to_string();
-    }
-    names.get(GlyphId::new(gid)).map_or_else(|| format!("gid{gid}"), |n| n.as_str().to_string())
+pub(crate) fn glyph_label(ctx: &BinaryCtx<'_>, names: &Names, gid: u32) -> String {
+    super::components::binary_glyph_name(ctx, names, gid)
 }
 
 /// Some names from a list for a message, with the count of the rest.
@@ -553,7 +550,7 @@ pub(crate) fn kern_table(ctx: &BinaryCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
                 .place(table_place("kern")),
         );
     } else if !stray.is_empty() {
-        let names = GlyphNames::new(font);
+        let names = Names::new(font);
         let listed: Vec<String> = stray.iter().map(|g| glyph_label(ctx, &names, *g)).collect();
         sink.push(
             Hit::new(
@@ -732,7 +729,7 @@ pub(crate) fn tabular_kerning(ctx: &BinaryCtx<'_>, _: &Params<'_>, sink: &mut Si
         return;
     }
     let glyph_count = font.maxp().map_or(0, |m| u32::from(m.num_glyphs()));
-    let names = GlyphNames::new(font);
+    let names = Names::new(font);
     let marks: HashSet<u32> = font
         .gdef()
         .ok()
@@ -761,7 +758,7 @@ pub(crate) fn tabular_kerning(ctx: &BinaryCtx<'_>, _: &Params<'_>, sink: &mut Si
         g != 0
             && !excluded.contains(&g)
             && (!marks.contains(&g) || tabular_glyphs.contains(&g) || numeral_set.contains(&g))
-            && names.get(GlyphId::new(g)).is_none_or(|n| n.as_str() != "NULL")
+            && names.get(g).is_none_or(|n| n != "NULL")
     };
     let mut probes = MAX_KERN_PROBES;
     let mut done: HashSet<u32> = HashSet::new();

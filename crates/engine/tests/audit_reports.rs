@@ -129,6 +129,34 @@ fn family_reports_read_compiled_fonts_from_a_folder() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
+#[test]
+fn a_collection_with_too_many_fonts_is_refused_before_reading_them() {
+    let dir = scratch("collection");
+    let mut s = Session::with_document();
+    let ttf = dir.join("Font.ttf");
+    run(&mut s, "file.exportStatic", json!({"destination": ttf, "timestamp": 0}));
+    // A collection header listing 300 fonts that all start at the same table directory.
+    let font = std::fs::read(&ttf).unwrap();
+    let count: u32 = 300;
+    let mut ttc = b"ttcf".to_vec();
+    ttc.extend(0x0001_0000u32.to_be_bytes());
+    ttc.extend(count.to_be_bytes());
+    let start = 12 + 4 * count;
+    for _ in 0..count {
+        ttc.extend(start.to_be_bytes());
+    }
+    ttc.extend(font);
+    let path = dir.join("Many.ttc");
+    std::fs::write(&path, ttc).unwrap();
+
+    let err = s.execute("audit.report.metrics", &json!({"fonts": [path]})).err().unwrap().to_string();
+    assert!(err.contains("300 fonts"), "{err}");
+    let found = run(&mut s, "audit.report.metrics", json!({"directory": dir}));
+    let skipped = found["skipped"].as_array().unwrap();
+    assert!(skipped.iter().any(|v| v["reason"].as_str().unwrap().contains("300 fonts")), "{found}");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
 /// Measure (M12 plan § 4, M12.60): the four reports on Oswald's static CFF fonts carry the values
 /// the comparison tool (AFDKO 5.0.1 comparefamily `-rn -rm -rp`, and `-rf`) printed for the same
 /// folder. Run with `cargo test -p fontcraft-engine --test audit_reports -- --ignored`.

@@ -5,12 +5,17 @@
 //! The three checks follow FontBakery 1.1.0 (Apache-2.0): `color_cpal_brightness`,
 //! `empty_glyph_on_gid1_for_colrv0` and `googlefonts/colorfont_tables`.
 
+use std::collections::HashMap;
+
+use read_fonts::tables::colr::Layer;
+use read_fonts::tables::cpal::ColorRecord;
 use read_fonts::types::{GlyphId, Tag};
 use read_fonts::{FontRef, TableProvider};
+use skrifa::MetadataProvider;
 use skrifa::instance::{LocationRef, Size};
 use skrifa::outline::{DrawSettings, OutlinePen};
-use skrifa::{GlyphNames, MetadataProvider};
 
+use super::components::Names;
 use super::kerning::glyph_label;
 use crate::{BinaryCtx, Hit, Location, Params, Sink, Threshold, num};
 
@@ -18,6 +23,8 @@ use crate::{BinaryCtx, Hit, Location, Params, Sink, Threshold, num};
 const FOREGROUND: u16 = 0xFFFF;
 /// Most base glyph records read.
 const MAX_BASE_GLYPHS: usize = 65_536;
+/// Most COLR layers `paletteBrightness` measures in one font.
+const MAX_LAYERS_MEASURED: usize = 1_000_000;
 /// Segments each curve is split into when glyph 1's area is measured.
 const CURVE_STEPS: u32 = 16;
 /// Glyph 1 counts as empty below this area, in square units.
@@ -40,6 +47,28 @@ fn colr_version(font: &FontRef<'_>) -> Option<u16> {
     font.colr().ok().map(|c| c.version())
 }
 
+/// The fixed colour of `layers` farthest from mid-grey among those too dark or too bright, with
+/// its palette index.
+fn worst_layer(layers: &[Layer], colors: &[ColorRecord], start: usize, entries: u16, margin: f64) -> Option<(f64, u16)> {
+    let mut worst: Option<(f64, u16)> = None;
+    for layer in layers {
+        let index = layer.palette_index();
+        if index == FOREGROUND || index >= entries {
+            continue;
+        }
+        let Some(c) = colors.get(start.saturating_add(usize::from(index))) else { continue };
+        let brightness = (f64::from(c.red()) * 299.0 + f64::from(c.green()) * 587.0 + f64::from(c.blue()) * 114.0) / 1000.0;
+        if brightness >= margin && brightness <= 256.0 - margin {
+            continue;
+        }
+        // The colour farthest from mid-grey is the one the message names.
+        if worst.is_none_or(|(b, _)| (brightness - 128.0).abs() > (b - 128.0).abs()) {
+            worst = Some((brightness, index));
+        }
+    }
+    worst
+}
+
 /// `check.color.paletteBrightness`: a COLR version 0 layer with a fixed colour of the first
 /// palette whose perceived brightness (0.299 red, 0.587 green, 0.114 blue) is within
 /// `minBrightness` of black or of white. One finding per base glyph.
@@ -55,26 +84,29 @@ pub(crate) fn palette_brightness(ctx: &BinaryCtx<'_>, params: &Params<'_>, sink:
     let entries = cpal.num_palette_entries();
     let (Some(Ok(bases)), Some(Ok(layers))) = (colr.base_glyph_records(), colr.layer_records()) else { return };
     let margin = params.get(&MIN_BRIGHTNESS) * 256.0;
-    let names = GlyphNames::new(font);
+    let names = Names::new(font);
+    // Base glyphs may share a layer range: each range is measured once, and the layers measured
+    // in all are capped.
+    let mut measured: HashMap<(usize, usize), Option<(f64, u16)>> = HashMap::new();
+    let mut budget = MAX_LAYERS_MEASURED;
     for base in bases.iter().take(MAX_BASE_GLYPHS) {
         let first = usize::from(base.first_layer_index());
-        let Some(own) = layers.get(first..first.saturating_add(usize::from(base.num_layers()))) else { continue };
-        let mut worst: Option<(f64, u16)> = None;
-        for layer in own {
-            let index = layer.palette_index();
-            if index == FOREGROUND || index >= entries {
-                continue;
-            }
-            let Some(c) = colors.get(start.saturating_add(usize::from(index))) else { continue };
-            let brightness = (f64::from(c.red()) * 299.0 + f64::from(c.green()) * 587.0 + f64::from(c.blue()) * 114.0) / 1000.0;
-            if brightness >= margin && brightness <= 256.0 - margin {
-                continue;
-            }
-            // The colour farthest from mid-grey is the one the message names.
-            if worst.is_none_or(|(b, _)| (brightness - 128.0).abs() > (b - 128.0).abs()) {
-                worst = Some((brightness, index));
-            }
-        }
+        let range = (first, usize::from(base.num_layers()));
+        let Some(own) = layers.get(first..first.saturating_add(range.1)) else { continue };
+        let worst = if let Some(known) = measured.get(&range) {
+            *known
+        } else {
+            let Some(left) = budget.checked_sub(own.len()) else {
+                sink.skip(format!(
+                    "the COLR table has more than {MAX_LAYERS_MEASURED} layers to measure; the base glyphs past that were not checked"
+                ));
+                break;
+            };
+            budget = left;
+            let worst = worst_layer(own, &colors, start, entries, margin);
+            measured.insert(range, worst);
+            worst
+        };
         let Some((brightness, index)) = worst else { continue };
         let glyph = glyph_label(ctx, &names, base.glyph_id().to_u32());
         let side = if brightness < margin { "dark" } else { "bright" };
@@ -168,7 +200,7 @@ pub(crate) fn empty_glyph_one_for_colr_v0(ctx: &BinaryCtx<'_>, _: &Params<'_>, s
     if !pen.area.is_finite() || pen.area.abs() <= EMPTY_AREA {
         return;
     }
-    let names = GlyphNames::new(font);
+    let names = Names::new(font);
     let glyph = glyph_label(ctx, &names, 1);
     let place = Location { glyph: glyph.clone(), ..Location::default() };
     sink.push(
@@ -336,6 +368,25 @@ mod tests {
             let r = run(&tables(&list), "check.color.colorTableSet");
             assert_eq!(codes(&r), expected, "{:?}", list.iter().map(|(t, _)| String::from_utf8_lossy(*t).to_string()).collect::<Vec<_>>());
         }
+    }
+
+    #[test]
+    fn layers_shared_or_not_are_measured_within_a_budget() {
+        // 65,535 base glyphs over 64 layer ranges of 65,471 layers each: 4 billion layer visits
+        // when every base glyph measures its own range.
+        let (bases, layers) = (0xFFFFu16, 0xFFFFu16);
+        let mut w = W::default();
+        w.u16(0).u16(bases).u32(14).u32(14 + 6 * u32::from(bases)).u16(layers);
+        for i in 0..bases {
+            w.u16(i).u16(i % 64).u16(layers - 64);
+        }
+        for i in 0..layers {
+            w.u16(i).u16(0);
+        }
+        let bytes = sfnt(vec![(b"maxp", maxp(4)), (b"COLR", w.0), (b"CPAL", cpal(&[(0, 0, 0)]))]);
+        let r = run(&bytes, "check.color.paletteBrightness");
+        assert_eq!(r.skipped.len(), 1, "{:?}", r.skipped);
+        assert!(!r.findings.is_empty());
     }
 
     #[test]

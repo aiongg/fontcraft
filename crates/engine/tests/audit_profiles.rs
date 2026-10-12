@@ -297,3 +297,26 @@ fn clearing_the_cache_drops_the_kept_run() {
     assert_eq!(run(&mut s, "audit.clearCache", json!({"target": "document"})), json!({"cleared": false}));
     assert_eq!(run(&mut s, "audit.clearCache", json!({"target": "Some.ttf"})), json!({"cleared": false}));
 }
+
+#[test]
+fn a_user_store_with_an_unreadable_profile_is_not_written_back() {
+    use fontcraft_engine::settings::Reserved;
+    let mut s = Session::with_document();
+    let stored = json!({"default": "kept", "profiles": [{"id": "kept", "include": ["outlines"]}, {"id": "not an id"}]});
+    s.settings_mut().set_reserved(Reserved::AuditProfiles, &stored).unwrap();
+    let shown = run(&mut s, "audit.profile.show", json!({"profile": "kept"}));
+    assert!(shown["problems"][0].as_str().unwrap().contains("not an id"), "{shown}");
+
+    for (id, p) in [
+        ("audit.profile.save", json!({"profile": "house", "include": ["outlines"]})),
+        ("audit.profile.delete", json!({"profile": "kept"})),
+        ("audit.profile.setDefault", json!({"profile": null, "target": "application"})),
+    ] {
+        let err = refused(&mut s, id, p);
+        assert!(err.contains("could not be read in full") && err.contains("not an id"), "{id}: {err}");
+    }
+    let after: Option<Value> = s.settings().reserved(Reserved::AuditProfiles).unwrap();
+    assert_eq!(after, Some(stored));
+    // The document's own store reads cleanly, so project profiles can still be saved.
+    run(&mut s, "audit.profile.save", json!({"profile": "repo", "include": ["outlines"], "store": "project"}));
+}

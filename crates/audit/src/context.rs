@@ -1,12 +1,16 @@
 //! The contexts the runners of the glyph, source, binary and family scopes receive. The layer
 //! scope keeps [`crate::AuditContext`] with its per-layer input.
 
+use std::cell::OnceCell;
 use std::collections::BTreeMap;
 
 use fontcraft_model::Glyph;
 use read_fonts::FontRef;
 
 use crate::AuditContext;
+use crate::checks::compat::Compared;
+use crate::checks::family::Faces;
+use crate::checks::hinting::{GlyphHints, read_cff_glyphs};
 use crate::services::AuditServices;
 
 /// One glyph with all its masters (its layers), for checks that compare masters.
@@ -14,6 +18,19 @@ pub struct GlyphCtx<'a> {
     pub audit: &'a AuditContext<'a>,
     pub glyph: &'a Glyph,
     pub services: &'a dyn AuditServices,
+    /// The glyph's layers and contours as the compatibility tests compare them, built by the
+    /// first of those tests and shared by the others.
+    compat: OnceCell<Compared<'a>>,
+}
+
+impl<'a> GlyphCtx<'a> {
+    pub fn new(audit: &'a AuditContext<'a>, glyph: &'a Glyph, services: &'a dyn AuditServices) -> Self {
+        Self { audit, glyph, services, compat: OnceCell::new() }
+    }
+
+    pub(crate) fn compat(&self) -> &Compared<'a> {
+        self.compat.get_or_init(|| Compared::new(self.audit, self.glyph))
+    }
 }
 
 /// The whole source.
@@ -84,6 +101,8 @@ pub struct BinaryCtx<'a> {
     /// Set when the font was read from a file; `None` for a font compiled in memory.
     pub file: Option<FontFile>,
     pub services: &'a dyn AuditServices,
+    /// The CFF glyphs' hints, read by the first hinting check that needs them.
+    cff_hints: OnceCell<Result<Vec<GlyphHints>, String>>,
 }
 
 impl<'a> BinaryCtx<'a> {
@@ -91,7 +110,11 @@ impl<'a> BinaryCtx<'a> {
     /// directory.
     pub fn new(id: &'a str, bytes: &'a [u8], face: u32, services: &'a dyn AuditServices) -> Result<Self, String> {
         let font = FontRef::from_index(bytes, face).map_err(|e| format!("cannot read the font: {e}"))?;
-        Ok(Self { id, bytes, font, source: None, file: None, services })
+        Ok(Self { id, bytes, font, source: None, file: None, services, cff_hints: OnceCell::new() })
+    }
+
+    pub(crate) fn cff_hints(&self) -> &Result<Vec<GlyphHints>, String> {
+        self.cff_hints.get_or_init(|| read_cff_glyphs(self))
     }
 
     /// Records the file the font was read from.
@@ -106,4 +129,16 @@ impl<'a> BinaryCtx<'a> {
 pub struct FamilyCtx<'a> {
     pub fonts: &'a [BinaryCtx<'a>],
     pub services: &'a dyn AuditServices,
+    /// What the family checks read from each font, built by the first check that needs it.
+    faces: OnceCell<Faces<'a>>,
+}
+
+impl<'a> FamilyCtx<'a> {
+    pub fn new(fonts: &'a [BinaryCtx<'a>], services: &'a dyn AuditServices) -> Self {
+        Self { fonts, services, faces: OnceCell::new() }
+    }
+
+    pub(crate) fn faces(&self) -> &Faces<'a> {
+        self.faces.get_or_init(|| Faces::build(self.fonts))
+    }
 }

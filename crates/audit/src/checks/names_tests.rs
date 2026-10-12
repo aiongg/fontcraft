@@ -348,3 +348,35 @@ fn hostile_name_tables_are_bounded() {
         assert_eq!(report.skipped.len(), names.len());
     }
 }
+
+#[test]
+fn every_name_reader_keeps_to_the_text_budget() {
+    let services = crate::NoServices;
+    // 65,535 records that all point at one 65,534-byte string, with name IDs 0 to 31 so every
+    // reader finds the records it looks for: 4 GB of text per font if decoded naively.
+    let mut table = Vec::new();
+    be16(&mut table, 0);
+    be16(&mut table, u16::MAX);
+    be16(&mut table, 6);
+    for i in 0..u16::MAX {
+        for v in [3, 1, 0x409, i % 32, 65_534, 0] {
+            be16(&mut table, v);
+        }
+    }
+    let mut maxp = Vec::new();
+    be32(&mut maxp, 0x0000_5000);
+    be16(&mut maxp, 1);
+    let bytes = sfnt(vec![(b"name", table), (b"head", head(1.0, 0)), (b"maxp", maxp), (b"fvar", fvar())]);
+    let fonts: Vec<BinaryCtx<'_>> = ["f0", "f1", "f2", "f3"].iter().map(|id| BinaryCtx::new(id, &bytes, 0, &services).unwrap()).collect();
+
+    let binary = select(None, &["check.variations.*", "check.hinting.autohinterTraces"], &[]);
+    let report = audit_binary(&fonts[0], &binary, &Config::default());
+    assert!(report.skipped.iter().any(|s| s.check == "check.hinting.autohinterTraces"), "{:?}", report.skipped);
+
+    let family = select(None, &["check.family.*"], &[]);
+    let report = crate::audit_family(&crate::FamilyCtx::new(&fonts, &services), &family, &Config::default());
+    assert!(report.skipped.iter().any(|s| s.check == "check.family.nameRecordSets"), "{:?}", report.skipped);
+
+    let info = crate::export::FaceInfo::read("f0.ttf", &bytes, 0, false).unwrap();
+    assert!(info.family_win.len() <= crate::name_records::MAX_NAME_TEXT_BYTES);
+}

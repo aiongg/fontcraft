@@ -23,6 +23,7 @@ use read_fonts::tables::glyf::Glyph as TtGlyph;
 use read_fonts::tables::loca::LocaGlyph;
 use read_fonts::types::{Fixed, GlyphId, GlyphId16, NameId, Tag};
 
+use crate::name_records::{self, MAX_NAME_TEXT_BYTES};
 use crate::{BinaryCtx, Hit, Location, MAX_FINDINGS_PER_CHECK, Params, Sink, SourceCtx, Threshold, num};
 
 /// Font dictionaries read from a CID-keyed CFF table: FDSelect names them with one byte.
@@ -250,7 +251,7 @@ fn gasp_meaning(bits: u16) -> String {
 
 /// `check.hinting.autohinterTraces`.
 pub(crate) fn autohinter_traces(ctx: &BinaryCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
-    let versions = version_strings(ctx);
+    let versions = version_strings(ctx, sink);
     let place = || Location { table: Some("name".into()), name_id: Some(5), ..Location::default() };
     if versions.is_empty() {
         sink.push(Hit::new("lacks-version-strings", "The 'name' table has no version string (name ID 5).").place(place()));
@@ -289,15 +290,15 @@ pub(crate) fn autohinter_traces(ctx: &BinaryCtx<'_>, _: &Params<'_>, sink: &mut 
     }
 }
 
-/// Every version string (name ID 5) the font has, on any platform.
-fn version_strings(ctx: &BinaryCtx<'_>) -> Vec<String> {
-    let Ok(name) = ctx.font.name() else { return Vec::new() };
-    name.name_record()
-        .iter()
-        .filter(|r| r.name_id() == NameId::VERSION_STRING)
-        .filter_map(|r| r.string(name.string_data()).ok())
-        .map(|s| s.chars().collect())
-        .collect()
+/// Every version string (name ID 5) the font has, on any platform, read with the shared byte
+/// budget; a skip says so when the budget ran out.
+fn version_strings(ctx: &BinaryCtx<'_>, sink: &mut Sink) -> Vec<String> {
+    let mut budget = MAX_NAME_TEXT_BYTES;
+    let Ok(read) = name_records::read(&ctx.font, &mut budget, |_, _, _, id| id == NameId::VERSION_STRING.to_u16()) else { return Vec::new() };
+    if read.over_budget {
+        sink.skip(name_records::over_budget_reason());
+    }
+    read.records.into_iter().filter(|r| r.in_bounds).map(|r| r.text.unwrap_or_default()).collect()
 }
 
 const AUTOHINTER_MARK: &str = "ttfautohint (v";
@@ -339,7 +340,7 @@ fn older(v: &str, latest: &str) -> bool {
 // ---------------------------------------------------------------------------------------------
 
 /// What one glyph's charstring draws and hints, in charstring units.
-struct GlyphHints {
+pub(crate) struct GlyphHints {
     gid: u32,
     /// The charstring draws something.
     marking: bool,
@@ -496,7 +497,13 @@ fn cff_table<'a>(ctx: &BinaryCtx<'a>) -> Option<&'a [u8]> {
 
 /// Every glyph's drawing and hints, at the default location of a variable font. Glyphs whose
 /// charstring cannot be run are left out.
-fn cff_glyphs(ctx: &BinaryCtx<'_>) -> Result<Vec<GlyphHints>, String> {
+/// The hints of every CFF glyph, read once per font ([`BinaryCtx`] keeps them) and shared by the
+/// hinting checks.
+fn cff_glyphs<'c>(ctx: &'c BinaryCtx<'_>) -> Result<&'c [GlyphHints], String> {
+    ctx.cff_hints().as_deref().map_err(Clone::clone)
+}
+
+pub(crate) fn read_cff_glyphs(ctx: &BinaryCtx<'_>) -> Result<Vec<GlyphHints>, String> {
     let bytes = cff_table(ctx).ok_or("the font has no CFF table")?;
     let upem = ctx.font.head().ok().map(|h| i32::from(h.units_per_em()));
     let cff = CffFontRef::new(bytes, 0, upem).map_err(|e| format!("the CFF table cannot be read: {e}"))?;

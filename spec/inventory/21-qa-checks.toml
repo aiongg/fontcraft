@@ -2919,6 +2919,7 @@ milestone = "M12"
 summary = "The fonts of a style-linked group differ in OS/2.usWidthClass."
 ref = "comparefamily family test 9"
 status = "docs"
+notes = "Style-linked groups; each font is compared with the first. When the first font of a group has no OS/2 table the check stops for every group, as the reference does."
 
 [[check]]
 id = "check.family.copyrightAndTrademark"

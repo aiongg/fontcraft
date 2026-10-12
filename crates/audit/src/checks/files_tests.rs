@@ -286,17 +286,17 @@ fn single_directory_compares_the_directories_of_the_files() {
     let font = |path: &str| BinaryCtx::new("f", &bytes, 0, &services).unwrap().with_file(path, 100);
 
     let together = [font("fonts/A-Regular.ttf"), font("fonts/A-Bold.ttf")];
-    let r = audit_family(&FamilyCtx { fonts: &together, services: &services }, &check, &Config::default());
+    let r = audit_family(&FamilyCtx::new(&together, &services), &check, &Config::default());
     assert!(r.findings.is_empty());
 
     let apart = [font("fonts/A-Regular.ttf"), font("other/A-Bold.ttf"), font("A-Italic.ttf")];
-    let r = audit_family(&FamilyCtx { fonts: &apart, services: &services }, &check, &Config::default());
+    let r = audit_family(&FamilyCtx::new(&apart, &services), &check, &Config::default());
     assert_eq!(codes(&r), ["single-directory"]);
     assert_eq!(r.findings[0].data.get("directories"), Some(&3.0));
     assert!(r.findings[0].message.contains("`fonts`") && r.findings[0].message.contains("`other`"), "{}", r.findings[0].message);
 
     let in_memory = [BinaryCtx::new("f0", &bytes, 0, &services).unwrap(), BinaryCtx::new("f1", &bytes, 0, &services).unwrap()];
-    let r = audit_family(&FamilyCtx { fonts: &in_memory, services: &services }, &check, &Config::default());
+    let r = audit_family(&FamilyCtx::new(&in_memory, &services), &check, &Config::default());
     assert!(r.findings.is_empty());
     assert_eq!(r.skipped.len(), 1, "fonts compiled in memory have no directory");
 }

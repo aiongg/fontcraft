@@ -555,7 +555,7 @@ fn binary_and_family_checks_run_through_their_runners() {
     assert_eq!(json["font"], "f0", "table-level keys serialise under their result-format names");
 
     let fonts = [a, b];
-    let family = FamilyCtx { fonts: &fonts, services: &services };
+    let family = FamilyCtx::new(&fonts, &services);
     let r = audit_family(&family, &checks, &Config::default());
     assert_eq!(r.findings.len(), 1);
     assert_eq!(r.findings[0].location.fonts, vec!["f0".to_string(), "f1".to_string()]);
