@@ -1097,7 +1097,7 @@ label = "Run Action Set"
 menu = ["Script"]
 shortcut = ""
 kind = "engine"
-params = "{set: path | [{command: id, params: object}], glyphs?, layers?: 'active' | 'visible' | 'masters' | [id]}"
+params = "{set: name | path | [{command: id, params?: object}], args?: object, glyphs?: [name], layers?: [id] | 'active' | 'visible' | 'masters', dryRun?: bool}"
 area = "automation"
 milestone = "M13"
 summary = "Runs an ordered list of commands with stored parameters over a glyph and layer scope as one undoable step. FontCraft: an action set is a macro (the same `.fcmacro` file, open decision D8), so this command is an alias of script.run; the dialog, the CLI and agents pass a file or the steps inline."
@@ -1114,13 +1114,16 @@ label = "Save Action Set"
 menu = ["Script"]
 shortcut = ""
 kind = "engine"
-params = "{name: string, steps: [{command: id, params: object}], path?: path}"
+params = "{name: string, steps: [{command: id, params?: object}], title?: string, description?: string, args?: object, requires?: [module id], path?: path, replace?: bool}"
 area = "automation"
 milestone = "M13"
 summary = "Writes an action set as JSON into the user's action-set folder, or to a given path. FontCraft: writes the steps as a macro file in the macros folder, or to the given path, and returns its path; a step naming an unknown command is refused before anything is written."
 ref = "FontLab 8 What's new › Test & adjust › Actions (Save/Open sets)"
 status = "docs"
 origin = "fontlab"
+guesses = [
+  "An existing file is replaced only when `replace` is true, otherwise the save is refused; FontLab's documentation does not say what saving over an existing set does.",
+]
 
 [[command]]
 id = "script.repeatLastAction"
@@ -1128,7 +1131,7 @@ label = "Repeat Actions"
 menu = ["Script"]
 shortcut = ""
 kind = "engine"
-params = "{glyphs?, layers?}"
+params = "{glyphs?: [name], layers?: [id]}"
 area = "automation"
 milestone = "M13"
 summary = "Runs the most recent action or action set again with the same parameters on the current scope. FontCraft: an alias of script.rerunLast."

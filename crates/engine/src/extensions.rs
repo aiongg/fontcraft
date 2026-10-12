@@ -14,6 +14,8 @@
 //! hook [`ExtensionState::after_command`] is complete: it hands each command to the log and the
 //! recorder, whose bodies those packages write.
 
+use std::cmp::Ordering;
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use fontcraft_plugins::Registry;
@@ -22,7 +24,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::log::CommandLog;
-use crate::macros::{Macro, Recording};
+use crate::macros::{FolderFile, MAX_MACRO_TEXT, Macro, Recording, file_stem, natural_cmp};
 
 /// Most files listed from one extension folder (subfolders included).
 pub const MAX_FOLDER_FILES: usize = 10_000;
@@ -83,6 +85,12 @@ pub struct ExtensionState {
     pub last_macro: Option<(Option<String>, Macro, Value)>,
     /// The macro being recorded (`script.recordMacro`).
     pub recording: Option<Recording>,
+    /// The macros of the Macros folder that could be read, by their path in `macros`.
+    pub macro_files: BTreeMap<String, Macro>,
+    /// The macros running now, outermost first: their folder path or file (empty for one given
+    /// inline). `script.run` refuses a macro already on it, and more than
+    /// [`MAX_MACRO_NESTING`](crate::macros::MAX_MACRO_NESTING) of them.
+    pub running_macros: Vec<String>,
     /// Modules are listed but none runs (`app.launchWithoutPlugins`).
     pub safe_mode: bool,
     /// The Modules folder; `None` in the web app and in headless sessions without one.
@@ -123,7 +131,95 @@ impl ExtensionState {
             && !matches!(command, "edit.undo" | "edit.redo")
             && let Some(recording) = &mut self.recording
         {
-            recording.record(command, params);
+            // A re-run is recorded as the macro it ran, so the recording does not depend on
+            // which macro ran last.
+            if matches!(command, "script.rerunLast" | "script.repeatLastAction") {
+                if let Some((_, m, args)) = &self.last_macro {
+                    recording.record("script.run", &serde_json::json!({ "macro": m.to_json(), "args": args }));
+                }
+            } else {
+                recording.record(command, params);
+            }
         }
     }
+}
+
+/// The macro half: the Macros folder's listing.
+impl ExtensionState {
+    /// Replaces the macro listing with the files read from the Macros folder (paths relative to
+    /// it, `/`-separated) and keeps `stamps` for the next poll. Files that cannot be read or
+    /// parsed are listed with their error. Returns whether the listing changed.
+    pub fn sync_macros(&mut self, files: Vec<FolderFile>, stamps: FolderStamps) -> bool {
+        let mut entries = Vec::new();
+        let mut bodies = BTreeMap::new();
+        for (path, bytes) in files.into_iter().take(MAX_FOLDER_FILES) {
+            if path.is_empty() || path.len() > MAX_MACRO_TEXT || bodies.contains_key(&path) || entries.iter().any(|e: &MacroEntry| e.path == path) {
+                continue;
+            }
+            let stem = file_stem(&path).to_string();
+            match bytes.and_then(|b| Macro::parse(&b).map_err(|e| e.to_string())) {
+                Ok(m) => {
+                    let title = if m.title.trim().is_empty() { stem } else { m.title.trim().to_string() };
+                    entries.push(MacroEntry { path: path.clone(), title, description: m.description.clone(), error: None });
+                    bodies.insert(path, m);
+                }
+                Err(error) => entries.push(MacroEntry { path, title: stem, description: String::new(), error: Some(error) }),
+            }
+        }
+        entries.sort_by(menu_order);
+        self.macros_stamps = stamps;
+        let changed = entries != self.macros || bodies != self.macro_files;
+        if changed {
+            self.macros = entries;
+            self.macro_files = bodies;
+            self.macros_revision = self.macros_revision.wrapping_add(1);
+        }
+        changed
+    }
+
+    /// Adds or replaces one macro of the Macros folder, as saving it there does; the next poll
+    /// reads the folder again anyway.
+    pub fn put_macro(&mut self, path: String, m: Macro) {
+        let stem = file_stem(&path).to_string();
+        let title = if m.title.trim().is_empty() { stem } else { m.title.trim().to_string() };
+        self.macros.retain(|e| e.path != path);
+        self.macros.push(MacroEntry { path: path.clone(), title, description: m.description.clone(), error: None });
+        self.macros.sort_by(menu_order);
+        self.macro_files.insert(path, m);
+        self.macros_revision = self.macros_revision.wrapping_add(1);
+    }
+
+    /// The macro of the Macros folder that `name` names: its path (`Tools/Tighten.fcmacro`), its
+    /// path without the extension, or its menu title (the first in menu order).
+    pub fn find_macro(&self, name: &str) -> Option<(&str, &Macro)> {
+        let by_path = |p: &str| self.macro_files.get_key_value(p).map(|(k, m)| (k.as_str(), m));
+        by_path(name)
+            .or_else(|| by_path(&format!("{name}.{}", crate::macros::MACRO_EXTENSION)))
+            .or_else(|| self.macros.iter().filter(|e| e.error.is_none() && e.title == name).find_map(|e| by_path(&e.path)))
+    }
+}
+
+/// The Script menu's order: folders (submenus) before items at each level, then folder names and
+/// item titles in [`natural_cmp`] order.
+pub fn menu_order(a: &MacroEntry, b: &MacroEntry) -> Ordering {
+    let folders = |e: &MacroEntry| -> Vec<String> {
+        let mut parts: Vec<String> = e.path.split('/').map(str::to_string).collect();
+        parts.pop();
+        parts
+    };
+    let (fa, fb) = (folders(a), folders(b));
+    for i in 0..=fa.len().max(fb.len()) {
+        match (fa.get(i), fb.get(i)) {
+            (Some(x), Some(y)) => {
+                let order = natural_cmp(x, y);
+                if order != Ordering::Equal {
+                    return order;
+                }
+            }
+            (Some(_), None) => return Ordering::Less,
+            (None, Some(_)) => return Ordering::Greater,
+            (None, None) => break,
+        }
+    }
+    natural_cmp(&a.title, &b.title).then_with(|| a.path.cmp(&b.path))
 }

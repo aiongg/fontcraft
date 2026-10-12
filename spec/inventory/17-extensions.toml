@@ -247,15 +247,16 @@ status = "inferred"
 [[command]]
 id = "script.run"
 label = "(script name)"
-menu = ["Script"]
+menu = []
 shortcut = ""
 kind = "engine"
-params = "{macro: name | path | {steps: [{command: id, params?: object}], title?: string}, args?: object, glyphs?: [name], layers?: [id], dryRun?: bool}"
+params = "{macro: name | path | {title?, description?, args?, requires?, steps: [{command: id, params?: object}]}, args?: object, glyphs?: [name], layers?: [id] | \"active\" | \"visible\" | \"masters\", dryRun?: bool}"
 area = "extensions"
 milestone = "M13"
 summary = "Each installed script is a Script menu item; choosing it runs the script. FontCraft: each macro in the macros folder is a Script menu item; script.run checks every step's command id and placeholders first, then runs the steps in order as one transaction and one undo step, and on the first failing step changes nothing and names the step. Arguments fill the macro's placeholders; the shell passes the Font View or Edit View selection as `glyphs`."
 ref = "Extensions › Scripts › Run Scripts"
 status = "inferred"
+notes = "The command has no static menu item: the Script menu lists each macro of the Macros folder as an item that runs script.run with its path. Arguments the macro does not declare are refused, and steps are counted from 1 in error messages."
 guesses = [
   "A macro runs as one undo step that is undone as a whole, like command.batch; the reference undoes script edits per glyph and does not say how a script's changes group.",
 ]
@@ -266,7 +267,7 @@ label = "Re-run Last Script"
 menu = ["Script"]
 shortcut = "Cmd+Alt+R"
 kind = "engine"
-params = "{}"
+params = "{glyphs?: [name], layers?: [id]}"
 area = "extensions"
 milestone = "M13"
 summary = "Runs the most recently run script again; also offered as the last item of the Script menu (its exact label is not stated). FontCraft: runs the last macro or action set again with the same arguments on the current selection."
@@ -284,13 +285,14 @@ id = "script.openScriptsFolder"
 label = "Open Scripts Folder"
 menu = ["Script"]
 shortcut = "Cmd+Shift+Y"
-kind = "ui"
+kind = "engine"
 params = "{}"
 area = "extensions"
 milestone = "M13"
 summary = "Shows the Scripts folder in the file manager. FontCraft: opens the macros folder in the file manager, creating it when missing; the engine part returns the folder's path so headless callers can use it."
 ref = "Extensions › Scripts › The Scripts Folder"
 status = "inferred"
+notes = "An engine command: it creates the Macros folder when missing and returns its path, and the desktop app shows that path in the file manager. Disabled in sessions without a Macros folder (headless runs, the web app)."
 observe = [
   "Choose Script › Open Scripts Folder and note the folder's full path, and whether a Plugins folder sits beside it.",
 ]
@@ -300,13 +302,14 @@ id = "script.reloadScripts"
 label = "Reload Scripts"
 menu = ["Script"]
 shortcut = "Cmd+Alt+Shift+Y"
-kind = "ui"
+kind = "engine"
 params = "{}"
 area = "extensions"
 milestone = "M13"
-summary = "Rebuilds the Script menu from the Scripts folder; the item is shown in the menu only while Option is held. FontCraft: rescans the macros folder and re-registers the macro commands; normally unnecessary because the folder is watched."
+summary = "Rebuilds the Script menu from the Scripts folder; the item is shown in the menu only while Option is held. FontCraft: reads the macros folder again and rebuilds the list the Script menu shows; normally unnecessary because the folder is watched."
 ref = "Extensions › Scripts › The Scripts Folder"
 status = "inferred"
+notes = "An engine command, so agents and the CLI can force a re-read too; it returns the new list. Files that cannot be read stay listed with their error."
 observe = [
   "Open the Script menu without and then with Option held: note whether Reload Scripts replaces Open Scripts Folder or is added below it, and where it sits in the menu.",
 ]
@@ -627,11 +630,11 @@ label = "Record Macro"
 menu = ["Script"]
 shortcut = ""
 kind = "engine"
-params = "{action: \"start\" | \"stop\" | \"cancel\", name?: string, title?: string, description?: string}"
+params = "{action: \"start\" | \"stop\" | \"cancel\", name?: string, title?: string, description?: string, replace?: bool}"
 area = "extensions"
 milestone = "M13"
 summary = "The reference has no recorder; scripts are written by hand. FontCraft: start records every font-changing engine command that succeeds, from any surface, with its parameters; stop writes the steps as a macro in the macros folder and returns it; cancel drops them. Queries, interface commands and undo are not recorded."
 ref = "Extensions › Scripts"
 status = "inferred"
 own = true
-notes = "Decision 0005 names recorded actions among the scripting surfaces."
+notes = "Decision 0005 names recorded actions among the scripting surfaces. Saving, reloading and opening the macros folder and starting or stopping a recording are not recorded; a re-run of the last macro is recorded as script.run with that macro inline. Edits committed from a drag or a live-preview dialog are not recorded yet: they are journalled by the interaction commit, which does not pass through the recording hook."
