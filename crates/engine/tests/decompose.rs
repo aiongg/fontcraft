@@ -329,3 +329,24 @@ fn decompose_for_all_masters_decomposes_every_master_layer() {
     }
     assert_eq!(corner_shapes(layer(f, "B", "m01")), [0, 2], "one path per component: no hint moves");
 }
+
+/// A fan-out of components that draw nothing: `top` uses `mid` 1,000 times and `mid` uses the
+/// empty `leaf` 1,000 times, a million visits for no shape. Each visit counts, so the command is
+/// refused at once and the font is left as it was.
+#[test]
+fn nested_components_that_draw_nothing_still_count_and_are_refused_quickly() {
+    let mut s = Session::with_document();
+    s.edit("fan-out", |f| {
+        new_glyph(f, "leaf", master_layer(0.0, vec![]));
+        new_glyph(f, "mid", master_layer(0.0, (0..1_000).map(|_| Shape::Component(Component::new("leaf", 0.0, 0.0))).collect()));
+        new_glyph(f, "top", master_layer(0.0, (0..1_000).map(|_| Shape::Component(Component::new("mid", 0.0, 0.0))).collect()));
+        Ok(())
+    })
+    .unwrap();
+    let before = s.doc().unwrap().font.clone();
+    let started = std::time::Instant::now();
+    let e = s.execute("glyph.decomposeGlyph", &json!({"glyph": "top"})).unwrap_err().to_string();
+    assert!(started.elapsed() < std::time::Duration::from_secs(20), "took {:?}", started.elapsed());
+    assert!(e.contains("visits more than"), "{e}");
+    assert!(Arc::ptr_eq(&s.doc().unwrap().font, &before));
+}

@@ -10,6 +10,12 @@
 //! mirroring transform is reversed, as export decomposition reverses it. Decomposed shapes take
 //! the component's place in the layer's shape order, and the layer's hints are renumbered so they
 //! keep pointing at the same nodes.
+//!
+//! Limits: one layer holds at most [`MAX_LAYER_SHAPES`] shapes and [`MAX_OUTLINE_ELEMENTS`] nodes,
+//! and decomposing it visits at most [`MAX_LAYER_SHAPES`] components, nested ones included, so a
+//! fan-out of components that draw nothing is refused too. One command holds at most
+//! [`MAX_CALL_NODES`] nodes and [`MAX_CALL_SHAPES`] shapes over all its layers, and visits at most
+//! [`MAX_CALL_VISITS`] components; past these the command is refused and nothing changes.
 
 use std::collections::BTreeSet;
 
@@ -30,7 +36,17 @@ use crate::EngineError;
 use crate::params::{MAX_TARGETS, Params, TargetKind, Targets, kind};
 
 /// Most shapes one decomposed layer may hold (the compiler's limit on components per glyph).
+/// Also the most components decomposing one layer may visit, nested ones included.
 pub(crate) const MAX_LAYER_SHAPES: usize = 65_535;
+
+/// Most nodes one command may hold in the layers it decomposes, over all of them: the new layers
+/// are kept until the edit lands, so this bounds their memory. Each layer has its own
+/// [`MAX_OUTLINE_ELEMENTS`] too.
+const MAX_CALL_NODES: usize = 10_000_000;
+/// Most shapes one command may hold in the layers it decomposes, over all of them.
+const MAX_CALL_SHAPES: usize = 1_000_000;
+/// Most components one command may visit over all the layers it decomposes.
+const MAX_CALL_VISITS: usize = 20_000_000;
 
 /// The hint keys that hold node references: `(path, node)`, or `(path, node, path, node)` for an
 /// intersection.
@@ -95,34 +111,81 @@ pub fn specs() -> Vec<CommandSpec> {
 
 // ── Drawing components as shapes ────────────────────────────────────────────────────────────────
 
-/// Turns components into the shapes they draw, within the work limits of one layer.
-struct Expander<'f> {
+/// What one command may still spend over every layer it decomposes ([`MAX_CALL_NODES`],
+/// [`MAX_CALL_SHAPES`], [`MAX_CALL_VISITS`]).
+struct CallBudget {
+    nodes_left: usize,
+    shapes_left: usize,
+    visits_left: usize,
+    /// A limit of the whole command ran out: decomposing more layers would fail too.
+    spent: bool,
+}
+
+impl CallBudget {
+    fn new() -> Self {
+        Self { nodes_left: MAX_CALL_NODES, shapes_left: MAX_CALL_SHAPES, visits_left: MAX_CALL_VISITS, spent: false }
+    }
+}
+
+/// Takes `n` from `left`, one of the command's budgets; marks the command `spent` when it runs
+/// out.
+fn take(left: &mut usize, spent: &mut bool, n: usize, what: &str, limit: usize) -> std::result::Result<(), String> {
+    match left.checked_sub(n) {
+        Some(rest) => {
+            *left = rest;
+            Ok(())
+        }
+        None => {
+            *spent = true;
+            Err(format!("decomposing would take more than {limit} {what} over all the layers; decompose fewer glyphs at a time"))
+        }
+    }
+}
+
+/// Turns components into the shapes they draw, within the work limits of one layer and of the
+/// command.
+struct Expander<'f, 'b> {
     font: &'f Font,
     /// Descend through nested components (Decompose Glyph) instead of keeping them (Decompose).
     nested: bool,
     nodes_left: usize,
     shapes_left: usize,
+    visits_left: usize,
     smart_draws: usize,
+    call: &'b mut CallBudget,
     warnings: Vec<String>,
 }
 
-impl<'f> Expander<'f> {
-    fn new(font: &'f Font, nested: bool) -> Self {
+impl<'f, 'b> Expander<'f, 'b> {
+    fn new(font: &'f Font, nested: bool, call: &'b mut CallBudget) -> Self {
         Self {
             font,
             nested,
             nodes_left: MAX_OUTLINE_ELEMENTS,
             shapes_left: MAX_LAYER_SHAPES,
+            visits_left: MAX_LAYER_SHAPES,
             smart_draws: smart::MAX_SMART_DRAWS_PER_LAYER,
+            call,
             warnings: Vec::new(),
         }
     }
 
-    /// Takes one shape with `nodes` nodes from the layer's budget.
+    /// Takes one shape with `nodes` nodes from the layer's budget and the command's.
     fn charge(&mut self, nodes: usize) -> std::result::Result<(), String> {
         self.shapes_left = self.shapes_left.checked_sub(1).ok_or_else(|| format!("the layer would hold more than {MAX_LAYER_SHAPES} shapes"))?;
         self.nodes_left = self.nodes_left.checked_sub(nodes).ok_or_else(|| format!("the layer would hold more than {MAX_OUTLINE_ELEMENTS} nodes"))?;
-        Ok(())
+        let call = &mut *self.call;
+        take(&mut call.shapes_left, &mut call.spent, 1, "shapes", MAX_CALL_SHAPES)?;
+        take(&mut call.nodes_left, &mut call.spent, nodes, "nodes", MAX_CALL_NODES)
+    }
+
+    /// Counts one component, or one shape that draws nothing, looked at: a component whose base
+    /// draws nothing still costs the time to reach it, and nesting multiplies that.
+    fn visit(&mut self) -> std::result::Result<(), String> {
+        self.visits_left =
+            self.visits_left.checked_sub(1).ok_or_else(|| format!("decomposing the layer visits more than {MAX_LAYER_SHAPES} components"))?;
+        let call = &mut *self.call;
+        take(&mut call.visits_left, &mut call.spent, 1, "component visits", MAX_CALL_VISITS)
     }
 
     /// Appends to `out` the shapes the component `c` of `layer` draws, in `layer`'s coordinates.
@@ -131,6 +194,7 @@ impl<'f> Expander<'f> {
         if depth > MAX_COMPONENT_DEPTH {
             return Err(format!("components nest more than {MAX_COMPONENT_DEPTH} deep below `{}`, or a glyph uses itself", c.glyph));
         }
+        self.visit()?;
         if c.transform.numbers().iter().any(|v| !v.is_finite()) {
             return Err(format!("the transform of the component `{}` is not a number", c.glyph));
         }
@@ -194,7 +258,7 @@ impl<'f> Expander<'f> {
                 }
             }
             // Outlines leave images and unreadable shapes out; so does decomposition.
-            Shape::Image(_) | Shape::Raw(_) => {}
+            Shape::Image(_) | Shape::Raw(_) => self.visit()?,
         }
         Ok(())
     }
@@ -212,8 +276,14 @@ struct Decomposed {
 }
 
 /// Decomposes the components of `layer` at `which` (every component when `None`).
-fn decompose_shapes(font: &Font, layer: &Layer, which: Option<&BTreeSet<usize>>, nested: bool) -> std::result::Result<Decomposed, String> {
-    let mut ex = Expander::new(font, nested);
+fn decompose_shapes(
+    font: &Font,
+    layer: &Layer,
+    which: Option<&BTreeSet<usize>>,
+    nested: bool,
+    call: &mut CallBudget,
+) -> std::result::Result<Decomposed, String> {
+    let mut ex = Expander::new(font, nested, call);
     let mut shapes = Vec::with_capacity(layer.shapes.len());
     let mut map = Vec::with_capacity(layer.shapes.len());
     let mut added = Vec::new();
@@ -248,6 +318,7 @@ pub(crate) fn decompose_where(
 ) -> std::result::Result<Vec<Shape>, String> {
     let mut side = layer.clone();
     side.shapes = shapes.to_vec();
+    let mut call = CallBudget::new();
     // Each pass descends one level of nesting.
     for _ in 0..=MAX_COMPONENT_DEPTH {
         let which: BTreeSet<usize> =
@@ -255,7 +326,7 @@ pub(crate) fn decompose_where(
         if which.is_empty() {
             return Ok(side.shapes);
         }
-        side.shapes = decompose_shapes(font, &side, Some(&which), false)?.shapes;
+        side.shapes = decompose_shapes(font, &side, Some(&which), false, &mut call)?.shapes;
     }
     Err(format!("components nest more than {MAX_COMPONENT_DEPTH} deep, or a glyph uses itself"))
 }
@@ -281,7 +352,13 @@ struct FullDecomposition {
 
 /// `layer` of `glyph` with every component decomposed down to paths, plus the anchors its
 /// components passed on that it lacks.
-fn full_decomposition(font: &Font, data: &GlyphData, glyph: &str, layer: &Layer) -> std::result::Result<FullDecomposition, String> {
+fn full_decomposition(
+    font: &Font,
+    data: &GlyphData,
+    glyph: &str,
+    layer: &Layer,
+    call: &mut CallBudget,
+) -> std::result::Result<FullDecomposition, String> {
     let mut warnings = Vec::new();
     let passed: Vec<Anchor> = match effective_anchors_with(font, Some(data), glyph, &layer.id) {
         Ok(list) => list
@@ -294,7 +371,7 @@ fn full_decomposition(font: &Font, data: &GlyphData, glyph: &str, layer: &Layer)
             Vec::new()
         }
     };
-    let d = decompose_shapes(font, layer, None, true)?;
+    let d = decompose_shapes(font, layer, None, true, call)?;
     warnings.extend(d.warnings.iter().map(|w| format!("glyph `{glyph}`: {w}")));
     let mut out = with_shapes(layer, d);
     let anchors_added = passed.len();
@@ -437,6 +514,8 @@ fn decompose_in_scope(s: &mut Session, p: &Params, sc: &Scope, label: &str, stri
         let mut anchors_added = 0usize;
         let mut warnings = Vec::new();
         let mut changes: Vec<(String, Layer)> = Vec::new();
+        // One budget for every layer: the new layers are all held until the edit lands.
+        let mut call = CallBudget::new();
         for name in &sc.glyphs {
             let glyph = font.glyph(name).ok_or_else(|| p.bad(format!("there is no glyph `{name}`")))?;
             if glyph.info.locked {
@@ -459,13 +538,13 @@ fn decompose_in_scope(s: &mut Session, p: &Params, sc: &Scope, label: &str, stri
                     out.skip(name, Some(id.as_str()), "the layer has no components");
                     continue;
                 }
-                match full_decomposition(font, &data, name, layer) {
+                match full_decomposition(font, &data, name, layer, &mut call) {
                     Ok(done) => {
                         anchors_added += done.anchors_added;
                         warnings.extend(done.warnings);
                         changes.push((name.clone(), done.layer));
                     }
-                    Err(reason) if sc.single => return Err(p.bad(format!("glyph `{name}` layer `{id}`: {reason}"))),
+                    Err(reason) if sc.single || call.spent => return Err(p.bad(format!("glyph `{name}` layer `{id}`: {reason}"))),
                     Err(reason) => out.skip(name, Some(id.as_str()), reason),
                 }
             }
@@ -519,7 +598,7 @@ fn decompose_components(s: &mut Session, value: &Value) -> Result<Value> {
             if which.is_empty() {
                 return Err(p.bad("the layer has no components"));
             }
-            let d = decompose_shapes(font, layer, Some(&which), false).map_err(|m| p.bad(m))?;
+            let d = decompose_shapes(font, layer, Some(&which), false, &mut CallBudget::new()).map_err(|m| p.bad(m))?;
             let summary = (d.added.clone(), d.components, d.warnings.clone());
             (with_shapes(layer, d), summary)
         };
@@ -746,4 +825,36 @@ fn component_from_selection(s: &mut Session, value: &Value) -> Result<Value> {
         "warnings": warnings,
         "selection": t.to_json(),
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
+    use fontcraft_model::Path;
+
+    use super::*;
+
+    /// The command's budget runs across layers: layers that each fit their own limits are refused
+    /// once together they pass the command's, and the budget says it is spent.
+    #[test]
+    fn one_budget_covers_every_layer_of_a_command() {
+        let mut font = Font::new("Budget");
+        let master = font.masters.first().unwrap().id.clone();
+        let mut base = Glyph::new("box");
+        let mut l = Layer::new(master.as_str(), 500.0);
+        l.shapes.push(Shape::Path(Path::rect(0.0, 0.0, 100.0, 100.0)));
+        base.layers.push(l);
+        font.glyphs.push(base);
+        let mut user = Layer::new(master.as_str(), 500.0);
+        user.shapes.push(Shape::Component(Component::new("box", 0.0, 0.0)));
+
+        let mut call = CallBudget { nodes_left: MAX_CALL_NODES, shapes_left: 3, visits_left: MAX_CALL_VISITS, spent: false };
+        for _ in 0..3 {
+            decompose_shapes(&font, &user, None, true, &mut call).unwrap();
+        }
+        let e = decompose_shapes(&font, &user, None, true, &mut call).err().unwrap();
+        assert!(e.contains("over all the layers"), "{e}");
+        assert!(call.spent);
+    }
 }
