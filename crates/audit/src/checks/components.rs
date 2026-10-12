@@ -253,14 +253,16 @@ fn contact(a: &Part, b: &Part, tests: &mut usize) -> Contact {
     Contact::None
 }
 
-/// Is a contour that crosses no edge of `outer` inside its filled area? The first sample point
-/// clearly off `outer`'s edges decides.
+/// Does a contour that crosses no edge of `outer` reach into its filled area? Any sample point
+/// clearly inside decides. One sample does not settle it: contours that share an edge (two
+/// components on the same baseline) touch without a proper crossing, so a point outside does
+/// not mean the rest is outside.
 fn inside(contour: &[Point], outer: &Part, tests: &mut usize) -> Contact {
     let mids = contour.windows(2).filter_map(|w| if let [a, b] = w { Some(a.midpoint(*b)) } else { None });
     for p in contour.iter().copied().chain(mids) {
         let b = outer.bbox;
         if p.x < b.x0 - EDGE_MARGIN || p.x > b.x1 + EDGE_MARGIN || p.y < b.y0 - EDGE_MARGIN || p.y > b.y1 + EDGE_MARGIN {
-            return Contact::None;
+            continue;
         }
         let mut near = false;
         for (a, b) in edges(&outer.contours) {
@@ -273,8 +275,8 @@ fn inside(contour: &[Point], outer: &Part, tests: &mut usize) -> Contact {
                 break;
             }
         }
-        if !near {
-            return if outer.outline.winding(p) != 0 { Contact::At(p) } else { Contact::None };
+        if !near && outer.outline.winding(p) != 0 {
+            return Contact::At(p);
         }
     }
     Contact::None

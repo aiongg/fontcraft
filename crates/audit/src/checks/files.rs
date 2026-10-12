@@ -5,8 +5,9 @@
 //! `fontvalidator` and `googlefonts/canonical_filename`; the sanitiser, the round trip and the
 //! rasteriser are our own parser, text dump and outline drawing rather than external programs.
 
+use read_fonts::tables::glyf::{Glyph, PointFlags, SimpleGlyph};
 use read_fonts::tables::name::Name;
-use read_fonts::types::{GlyphId, Tag};
+use read_fonts::types::{GlyphId, Point, Tag};
 use read_fonts::{FontRef, ReadError, TableProvider};
 use skrifa::MetadataProvider;
 use skrifa::instance::{LocationRef, Size};
@@ -344,13 +345,34 @@ fn check_glyphs(ctx: &BinaryCtx<'_>, sink: &mut Sink) {
         // A 'maxp' that cannot be read is reported with the tables.
         (_, _, Err(_)) => return,
     };
+    let (mut points, mut flags) = (Vec::new(), Vec::new());
     for gid in 0..u32::from(maxp.num_glyphs()) {
-        if let Err(e) = loca.get_glyf(GlyphId::new(gid), &glyf) {
+        let read = loca.get_glyf(GlyphId::new(gid), &glyf).and_then(|g| match g {
+            Some(Glyph::Simple(g)) => simple_glyph_reads(&g, &mut points, &mut flags),
+            _ => Ok(()),
+        });
+        if let Err(e) = read {
             let name = ctx.source.and_then(|m| m.glyph(gid)).unwrap_or_default().to_string();
             let place = Location { glyph: name, ..table_place("glyf") };
             sink.push(Hit::new("bad-glyph", format!("Glyph {gid} cannot be read from 'glyf': {e}.")).data("glyphId", f64::from(gid)).place(place));
         }
     }
+}
+
+/// The glyph's contour ends, flags and coordinates lie inside its data. The parser reads a
+/// glyph's fields lazily, so a glyph cut short passes `get_glyf` and fails only when drawn.
+fn simple_glyph_reads(g: &SimpleGlyph<'_>, points: &mut Vec<Point<i32>>, flags: &mut Vec<PointFlags>) -> Result<(), ReadError> {
+    let contours = usize::try_from(g.number_of_contours()).unwrap_or(0);
+    if g.end_pts_of_contours().len() != contours {
+        return Err(ReadError::OutOfBounds);
+    }
+    // At most 65,536 points: the count comes from a 16-bit contour end.
+    let n = g.num_points();
+    points.clear();
+    points.resize(n, Point::default());
+    flags.clear();
+    flags.resize(n, PointFlags::default());
+    g.read_points_fast(points, flags)
 }
 
 /// `check.files.roundTrip`: the font dumps to the text format and reads back.
