@@ -21,6 +21,7 @@ pub mod canvas;
 pub mod control;
 pub mod dialogs;
 pub mod icons;
+pub mod master_icons;
 pub mod panels;
 pub mod shell;
 pub mod state;

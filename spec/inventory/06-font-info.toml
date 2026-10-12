@@ -853,7 +853,12 @@ milestone = "M7"
 summary = "Second tab of Font Info: the list of masters on the left and the properties of the selected master or masters on the right."
 ref = "Font Info › Masters"
 status = "handbook"
-notes = "Documented, not yet observed. Axes Coordinates (font.master.setAxisLocation) are M9's and Number Values (font.numbers.*) M8's; until then the tab shows them read-only. M7 plan § 4: M7.17."
+notes = "Documented, not yet observed. Axes Coordinates (font.master.setAxisLocation) are M9's and Number Values (font.numbers.*) M8's; until then the tab shows them read-only. Add Other Font is shown disabled until its dialog exists (M9). M7 plan § 4: M7.17 (`ui-egui/src/shell/font_info/masters_tab.rs`)."
+guesses = [
+  "A master made with Add Master becomes the selection, and a dragged master stays selected at its new place; the list's selection in the reference app after each action settles it.",
+  "The minus button is disabled while every master is selected, because a font keeps at least one master; whether the reference app disables it or refuses with a message settles it.",
+  "The General section has the name and icon only, without a plus button, because masters take no added General fields; the masters tab of the reference app settles it.",
+]
 
 [[command]]
 id = "font.master.list"
@@ -1037,8 +1042,9 @@ milestone = "M7"
 summary = "Popover opened by clicking the master icon. Clicking a drawing picks it; typing a glyph name in the field uses that glyph of the font as the icon."
 ref = "Font Info › Masters › General"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft draws its own 25 icons in code, a lowercase n at each weight and width; no reference asset is used (ASSETS.md row added with the code). Corpus files store iconName values Bold, Light, SemiBold, Medium, Light_Condensed and Light_Extended."
+notes = "Documented, not yet observed. FontCraft draws its own 25 icons in code (`ui-egui/src/master_icons.rs`), a lowercase n at each weight and width, in a grid with weights down and widths across; no reference asset is used (ASSETS.md row). A glyph icon is drawn from the glyph's outline in that master. Corpus files store iconName values Bold, Light, SemiBold, Medium, Light_Condensed and Light_Extended."
 guesses = [
+  "A click on a built-in icon applies it to the selected masters and closes the picker; the glyph field applies on Use Glyph or Enter; how the reference app's popover closes settles it.",
   "The 25 built-in icons are five weights (Light, Regular, Medium, SemiBold, Bold) by five widths (Condensed, SemiCondensed, normal, SemiExtended, Extended), named `Weight` or `Weight_Width` as the corpus files spell them; the names the reference app writes for each icon of its picker settle the set.",
 ]
 observe = [
@@ -1194,7 +1200,7 @@ milestone = "M7"
 summary = "With several masters selected, name, metrics, stems, numbers and custom parameters are edited for all of them at once. A field whose values differ shows a gray Multiple Values placeholder until a new value is typed."
 ref = "Font Info › Masters › Managing Masters"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.5 (font.master.get with several masters returns `null` for a value that differs), M7.17 (placeholder)."
+notes = "Documented, not yet observed. M7 plan § 4: M7.5 (font.master.get with several masters returns `null` for a value that differs), M7.17 (placeholder: the name, icon, metric positions and zones, stem widths, custom parameters, and the read-only axes coordinates and number values)."
 observe = [
   "In font B (m7-two), select both masters on the Masters tab: note which fields show Multiple Values, then edit a metric and check whether both masters get it.",
 ]
@@ -1325,7 +1331,10 @@ ref = "Font Info › Masters › Metrics & Alignment Zones"
 status = "handbook"
 notes = "Documented, not yet observed. Categories are the metric types of the file format (GlyphsSDK `metrics[].type`)."
 guesses = [
-  "The category menu offers the file format's metric types (ascender, cap height, slant height, x-height, midHeight, bodyHeight, descender, baseline, italic angle) with readable labels, and the scope uses the smart-filter rule editor of M4; the menu of the reference app settles the list and the labels.",
+  "The category menu offers the file format's metric types (ascender, cap height, slant height, x-height, midHeight, bodyHeight, descender, baseline, italic angle) with readable labels, plus an empty category for a metric known only by its name; the menu of the reference app settles the list and the labels.",
+  "The scope is typed as a glyph predicate in a text field rather than built with the smart-filter rule editor; the scope editor of the reference app settles whether it shows rules.",
+  "The plus beside the Metrics heading opens this editor to add a metric, starting at the first category the font has no plain metric of; what the reference app's plus adds settles it.",
+  "A stem's actions button opens the same editor with only the scope field; the reference app's stem scope popover settles its fields.",
 ]
 observe = [
   "In font B (m7-two), click the name of x-Height on the Masters tab: write down the items and labels of the category menu.",
