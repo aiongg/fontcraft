@@ -1,7 +1,7 @@
 //! FontCraft, the desktop app.
 //!
 //! ```text
-//! fontcraft [FILE.fontcraft] [--control PORT]
+//! fontcraft [FILE.fontcraft | fontcraft://show/?…] [--control PORT]
 //! ```
 //! `--control PORT` listens on `127.0.0.1:PORT` for the JSON control protocol
 //! (`docs/control-protocol.md`), so agents can drive the window.
@@ -30,10 +30,12 @@ const USAGE: &str = "\
 FontCraft, the font editor
 
 USAGE:
-  fontcraft [FILE] [--control PORT]
+  fontcraft [FILE | URL] [--control PORT]
 
   FILE             a font file to open (default: the Start Window, or a new font when the
                    Start Window is turned off)
+  URL              a fontcraft://show/?path=…&glyph=… URL: open its files and show its glyphs
+                   in a new tab
   --control PORT   listen on 127.0.0.1:PORT for the JSON control protocol (no authentication:
                    enable it only while you use it)
   -h, --help       this text
@@ -69,6 +71,7 @@ impl eframe::App for Shell {
 
 fn run() -> Result<(), String> {
     let mut file = None;
+    let mut url = None;
     let mut port = None;
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -86,6 +89,7 @@ fn run() -> Result<(), String> {
                 port = Some(value.parse::<u16>().map_err(|_| format!("--control: `{value}` is not a port number"))?);
             }
             other if other.starts_with('-') => return Err(format!("unknown option `{other}`\n\n{USAGE}")),
+            other if other.get(..10).is_some_and(|s| s.eq_ignore_ascii_case("fontcraft:")) => url = Some(other.to_string()),
             other => file = Some(other.to_string()),
         }
     }
@@ -101,13 +105,13 @@ fn run() -> Result<(), String> {
     }
     // With no file to open, the Start Window takes the place of a new document while its Show
     // window on startup setting is on.
-    let show_start = file.is_none() && session.settings().get_bool(start_window::SHOW_AT_LAUNCH).unwrap_or(true);
+    let show_start = file.is_none() && url.is_none() && session.settings().get_bool(start_window::SHOW_AT_LAUNCH).unwrap_or(true);
     let opened = file.is_some();
     match file {
         Some(path) => {
             session.execute("file.open", &json!({"path": path})).map_err(|e| e.to_string())?;
         }
-        None if show_start => {}
+        None if show_start || url.is_some() => {}
         None => session.execute("file.new", &json!({})).map(|_| ()).map_err(|e| e.to_string())?,
     }
     let mut app = FontcraftApp::new(session);
@@ -115,6 +119,21 @@ fn run() -> Result<(), String> {
     if opened {
         for warning in app.open_display_strings() {
             eprintln!("fontcraft: {warning}");
+        }
+    }
+    // A URL opens its files and shows its glyphs; when it opens nothing, the Start Window shows.
+    if let Some(url) = url {
+        match app.run("url.show", &json!({"url": url})) {
+            Ok(reply) => reply
+                .get("warnings")
+                .and_then(|w| w.as_array())
+                .into_iter()
+                .flatten()
+                .for_each(|w| eprintln!("fontcraft: {}", w.as_str().unwrap_or_default())),
+            Err(e) => eprintln!("fontcraft: {e}"),
+        }
+        if app.session.documents().is_empty() {
+            app.run("window.startWindow", &json!({}))?;
         }
     }
     app.picker = Some(Box::new(pickers::SystemPicker));

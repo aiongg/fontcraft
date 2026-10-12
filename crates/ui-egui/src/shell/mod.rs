@@ -42,6 +42,7 @@ pub mod text;
 pub mod text_preview;
 pub mod toolbar;
 pub mod transform;
+pub mod url;
 pub mod view;
 
 use std::sync::LazyLock;
@@ -93,6 +94,7 @@ pub const MODULES: &[(&[UiCommand], Handler)] = &[
     (attach::COMMANDS, attach::run),
     (crate::panels::reference_font::COMMANDS, crate::panels::reference_font::run),
     (crate::panels::selections::COMMANDS, crate::panels::selections::run),
+    (url::COMMANDS, url::run),
 ];
 
 /// Every shell command, in module order.
