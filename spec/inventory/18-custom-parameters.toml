@@ -1005,6 +1005,8 @@ notes = "Documented, not yet observed. Neither oracle reads it (fontmake 3.12.1 
 guesses = [
   "The path is relative to the host file's folder unless absolute; the imported glyphs are read when the host opens and before each export, shown locked, never saved into the host; a missing or unreadable file is a warning on opening and at export, not an error; the reference app settles the path form and the missing-file case.",
   "A linked glyph's layers go to the host master with the same id, else the one at the same position, and layers of other masters are left out; the linked file's kerning, features and groups are not imported; the reference app settles both with font B (m7-two) linked into font A (m7-one).",
+  "A linked file with other units per em than the host is used unscaled, with a warning; linking a 2048-unit file into a 1000-unit font in the reference app settles it.",
+  "The linked glyphs are locked, so Scale Font to Units per Em and adding, duplicating or removing a master are refused while any are present, naming the locked glyph; the reference app settles whether it scales or extends linked glyphs instead.",
 ]
 observe = [
   "Add Import Font naming font B (m7-two) by relative path, then by absolute path, then rename font B (m7-two)'s file: note which glyphs are shown, whether they are locked, and the message for the missing file.",
