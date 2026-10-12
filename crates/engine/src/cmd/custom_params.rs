@@ -164,7 +164,7 @@ fn where_(scope: Scope, font: &Font, i: usize) -> String {
 
 /// Whether a row called `row` is the parameter `name`: the same spelling, or two spellings of one
 /// known parameter.
-fn same(row: &str, name: &str) -> bool {
+pub(super) fn same(row: &str, name: &str) -> bool {
     row == name || catalog::canonical(row).is_some_and(|c| Some(c) == catalog::canonical(name))
 }
 

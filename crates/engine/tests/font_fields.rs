@@ -262,3 +262,28 @@ fn settings_and_note_round_trip_through_glyphs() {
     assert_eq!(run(&mut s, "font.settings.get", json!({})), defaults);
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// Pasted parameters match the rows the target holds under any spelling of the same parameter,
+/// and a name parameter lands in the name property, as the custom-parameter commands do.
+#[test]
+fn pasted_parameters_match_other_spellings_and_name_parameters_become_properties() {
+    let mut s = session();
+    s.edit("An alias spelling", |f| {
+        Arc::make_mut(&mut f.info).params.0.push(Param::new("postscriptBlueFuzz", PlistValue::Number(fontcraft_model::plist::Number::int(1))));
+        Ok(())
+    })
+    .unwrap();
+    let rows = json!([
+        {"kind": "param", "key": "blueFuzz", "value": 2},
+        {"kind": "param", "key": "designerURL", "value": "https://example.com"},
+    ]);
+    let r = run(&mut s, "font.info.pasteRows", json!({"rows": rows}));
+    assert_eq!((r["added"].as_u64(), r["replaced"].as_u64()), (Some(1), Some(1)), "{r}");
+    let info = &s.font().unwrap().info;
+    assert_eq!(info.params.0.len(), 1, "the alias row takes the value: {:?}", info.params);
+    assert!(matches!(&info.params.0[0].value, PlistValue::Number(n) if n.value().as_f64() == 2.0), "{:?}", info.params);
+    assert_eq!(info.properties.value("designerURL"), Some("https://example.com"));
+
+    let r = run(&mut s, "font.info.pasteRows", json!({"scope": "master", "targets": ["m01"], "rows": [{"kind": "param", "key": "designerURL", "value": "x"}]}));
+    assert_eq!(r["skipped"].as_array().unwrap().len(), 1, "{r}");
+}

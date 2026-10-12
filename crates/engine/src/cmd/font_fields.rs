@@ -742,6 +742,34 @@ fn paste_row(font: &mut Font, scope: Scope, i: usize, row: &Row, mode: PasteMode
         }
         RowKind::Param => {
             let spec = catalog::lookup(&row.key);
+            // A name parameter the target holds no row of is its name property, as
+            // font.customParameters.add and .set store it.
+            if let Some((spec, localized)) = spec.and_then(|spec| catalog::property(spec).map(|l| (spec, l))) {
+                let has_row = params_of(font, scope, i).is_some_and(|list| list.0.iter().any(|q| super::custom_params::same(&q.name, spec.name)));
+                if !has_row {
+                    if scope == Scope::Master {
+                        report.skip(scope, i, &row.key, "a name property, which masters do not hold".into());
+                        return Ok(());
+                    }
+                    let value = rows::property_from_value(spec.name, &row.value, localized).map_err(|e| e.to_string())?;
+                    let props = properties(font, scope, i).ok_or_else(|| format!("there is no {} #{i}", scope.name()))?;
+                    let present = props.get(spec.name).is_some();
+                    if present && mode == PasteMode::Skip {
+                        report.skip(scope, i, &row.key, "already there".into());
+                        return Ok(());
+                    }
+                    if !present && props.0.len() >= fontcraft_fontinfo::MAX_PROPERTIES_PER_SCOPE {
+                        return Err(format!("the {} already has {} fields", scope.name(), fontcraft_fontinfo::MAX_PROPERTIES_PER_SCOPE));
+                    }
+                    write_property(font, scope, i, spec.name, value)?;
+                    if present {
+                        report.replaced += 1;
+                    } else {
+                        report.added += 1;
+                    }
+                    return Ok(());
+                }
+            }
             let (name, value, repeatable) = match spec {
                 Some(spec) => {
                     if param_value::check_scope(spec, scope).is_err() {
@@ -756,7 +784,7 @@ fn paste_row(font: &mut Font, scope: Scope, i: usize, row: &Row, mode: PasteMode
                 }
             };
             let list = params_mut(font, scope, i).ok_or_else(|| format!("there is no {} #{i}", scope.name()))?;
-            let existing = list.0.iter().position(|q| q.name == name);
+            let existing = list.0.iter().position(|q| super::custom_params::same(&q.name, &name));
             match (existing, mode) {
                 (Some(_), PasteMode::Skip) => report.skip(scope, i, &row.key, "already there".into()),
                 (Some(at), PasteMode::Replace) if !repeatable => {
