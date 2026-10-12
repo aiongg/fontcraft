@@ -37,6 +37,8 @@ fn run(font: &Font, glyph: &str, id: &str) -> LayerReport {
 /// A small font of clean composites, plus one glyph per fault.
 fn font() -> Font {
     let mut font = Font::new("Test");
+    // The fixture's own glyphs only: the new font's alphabet would shadow them.
+    font.glyphs.retain(|_| false);
     let mut part = glyph("_part", vec![rect(0.0, 0.0, 50.0, 50.0)]);
     part.export = false;
     for g in [
@@ -334,9 +336,9 @@ fn caron_letters_are_checked_for_their_accent() {
 
 #[test]
 fn few_composites_counts_outlines_as_the_reference_check_does() {
-    // .notdef, A (one character: not counted), b, c, d as outlines, e as a composite: 4 of 6.
+    // .notdef, A (one character: not counted), b.sc, c.sc, d.sc as outlines, e as a composite: 4 of 6.
     let mut tables = outlines(&[Tt::Empty, Tt::Simple, Tt::Simple, Tt::Simple, Tt::Simple, Tt::Composite(vec![2])]);
-    tables.push(post(&[".notdef", "A", "b", "c", "d", "e"]));
+    tables.push(post(&[".notdef", "A", "b.sc", "c.sc", "d.sc", "e"]));
     let bytes = sfnt(tables);
     let r = binary(&bytes, "check.components.fewComposites", &Config::default());
     assert_eq!(r.findings.len(), 1, "{:#?}", r.findings);

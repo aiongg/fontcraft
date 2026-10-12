@@ -53,6 +53,8 @@ fn kinky(prev: (f64, f64), next: (f64, f64)) -> Pts {
 /// Regular (wght 400, the origin) and Bold (wght 700).
 fn font() -> Font {
     let mut font = Font::new("Test");
+    // The fixture's own glyphs only: the new font's alphabet would shadow them.
+    font.glyphs.retain(|_| false);
     font.axes = Arc::new(vec![Axis { name: "Weight".into(), tag: "wght".into(), ..Default::default() }]);
     let masters = Arc::make_mut(&mut font.masters);
     if let Some(m) = masters.first_mut() {
