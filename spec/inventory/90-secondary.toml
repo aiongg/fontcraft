@@ -2044,6 +2044,11 @@ summary = "Reports which of the given glyphs differ between two layers of the sa
 ref = "FontForge Element menu › Compare Layer To Layer"
 status = "docs"
 origin = "fontforge"
+notes = "Documented in the secondary reference's manual, not yet observed. The engine command returns the differing glyphs and the first of them; selecting them and scrolling is the shell's part."
+guesses = [
+  "Two layers match when their advance widths, their paths (closed or open, node count, each node's kind and position) and their components (glyph and placement) agree in order; anchors, hints and images are not compared. Watching the secondary reference compare layers with different anchors would settle it.",
+  "The tolerance applies on each axis to node positions, advance widths and component offsets, and defaults to 0; component scale, rotation and slant must match exactly. The secondary reference's dialog would settle it.",
+]
 
 [[command]]
 id = "font.interpolateFonts"
@@ -2087,6 +2092,11 @@ summary = "Restores the selected glyphs to their state in the saved source file,
 ref = "FontForge File menu › Revert Glyph"
 status = "docs"
 origin = "fontforge"
+notes = "Documented in the secondary reference's manual, not yet observed. FontCraft restores from the copy of the file it last read or wrote, not from a fresh read of the disk; changes made on disk by another program are file.reviewExternalChanges' work."
+guesses = [
+  "Without glyphs, every glyph that differs from the saved file is reverted; glyphs added since the save are left alone and naming one is refused. Reverting a glyph added since the save in the secondary reference would settle it.",
+  "With layers, a layer added since the save is removed and a deleted one is put back. The secondary reference reverts whole glyphs only, so nothing there settles it.",
+]
 
 [[command]]
 id = "edit.copyMetrics"
@@ -2116,6 +2126,11 @@ summary = "Copies the paths and components of one layer into another for all sel
 ref = "FontForge Edit menu › Copy Layer To Layer"
 status = "docs"
 origin = "fontforge"
+notes = "Documented in the secondary reference's manual, not yet observed."
+guesses = [
+  "The mode defaults to replace, and replace keeps the target's images; widths, anchors and the background are not copied. The secondary reference's dialog defaults would settle it.",
+  "A glyph without one of the two layers is skipped and listed rather than refusing the command. The secondary reference has font-wide layers, so nothing there settles it.",
+]
 
 [[command]]
 id = "edit.pasteAfter"
@@ -2123,13 +2138,19 @@ label = "Paste After"
 menu = ["Edit"]
 shortcut = ""
 kind = "engine"
-params = "{glyph?, layer?}"
+params = "{glyph, layer?, json?, text?}"
 area = "font-view"
 milestone = "M13"
 summary = "Pastes the copied glyph into the target glyph to the right of its existing content, at the current advance width, then extends the advance by the pasted glyph's width. Repeating it assembles a word or logotype glyph from letters."
 ref = "FontForge Edit menu › Paste After"
 status = "docs"
 origin = "fontforge"
+notes = "Documented in the secondary reference's manual, not yet observed. The engine never reads the system clipboard: the shell passes the copied glyphs text in json or text, as for edit.paste."
+guesses = [
+  "Only whole copied glyphs paste after; a drawing fragment copied from a layer has no advance width and is refused. Pasting a selection from an outline window in the secondary reference would settle it.",
+  "Paths and components are pasted; anchors are not, so a word glyph does not get several anchors of one name. The secondary reference's result with anchored glyphs would settle it.",
+  "Each copied glyph gives its layer of the target's master (by id, else by name, else the master shown when copying), as edit.paste matches masters.",
+]
 
 [[command]]
 id = "file.print"
