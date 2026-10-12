@@ -275,3 +275,27 @@ fn encoded_glyphs_read_back() {
     let stripped = strip_instructions(&g).unwrap();
     assert!(matches!(parse(&stripped), Parsed::Composite { instructions, .. } if instructions.is_empty()));
 }
+
+#[test]
+fn deeply_shared_components_stop_at_the_font_wide_budget() {
+    // Each composite uses the one before it four times, 30 levels deep, over an empty glyph:
+    // the deepest would visit 4^29 components.
+    let names: Vec<String> = (0..32).map(|i| format!("g{i}")).collect();
+    let mut glyphs: Vec<(&str, Vec<u8>)> = vec![(".notdef", Vec::new()), ("g1", Vec::new())];
+    for k in 2..32u16 {
+        let prev = k - 1;
+        glyphs.push((
+            names[usize::from(k)].as_str(),
+            composite(&[offset(prev, 0.0, 0.0), offset(prev, 1.0, 0.0), offset(prev, 2.0, 0.0), offset(prev, 3.0, 0.0)], [0; 4]),
+        ));
+    }
+    // An overlapping glyph for the repair to change, so that maxp is recomputed.
+    glyphs.push(("A", encode_simple(&[square(0.0, 0.0, 100.0), square(50.0, 50.0, 100.0)], &[]).unwrap()));
+    let font = font_with(glyphs);
+    let started = std::time::Instant::now();
+    let options = OutlineOptions { glyphs: vec!["A".into()], ..OutlineOptions::new(OutlineAction::RemoveOverlaps) };
+    let result = repair_report(&font, &options);
+    assert!(started.elapsed().as_secs() < 60);
+    let Err(e) = result else { panic!("maxp cannot be recomputed within the budget") };
+    assert!(e.to_string().contains("20,000,000"), "{e}");
+}

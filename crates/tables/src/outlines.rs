@@ -22,6 +22,7 @@
 //! CFF-flavoured fonts are refused for now, and so are variable TrueType fonts for every action
 //! but rounding: `gvar` would need its deltas rewritten.
 
+use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet};
 
 use fontcraft_geom::{BezPath, Point};
@@ -38,6 +39,10 @@ use crate::{Result, TablesError};
 pub const MAX_COMPONENT_DEPTH: usize = 32;
 /// Most component references visited while drawing one glyph.
 pub const MAX_COMPONENT_VISITS: usize = 1_000_000;
+/// Most component references visited in all while working on one font: drawing every composite
+/// of a font for `maxp`, or finding nesting depths, stops there.
+pub const MAX_FONT_COMPONENT_VISITS: usize = 20_000_000;
+const FONT_VISITS_MESSAGE: &str = "the font's composites refer to components more than 20,000,000 times in all";
 /// Most points in one glyph, the `glyf` format's limit.
 pub const MAX_GLYPH_POINTS: usize = 65_535;
 /// Composites with more components skip the pairwise overlap test and are merged whole, the
@@ -700,6 +705,8 @@ struct Work {
     number_of_h_metrics: usize,
     advances_changed: bool,
     bytes_changed: bool,
+    /// Component references visited so far, against [`MAX_FONT_COMPONENT_VISITS`].
+    font_visits: Cell<usize>,
 }
 
 impl Work {
@@ -751,7 +758,7 @@ impl Work {
             };
             metrics.push(m);
         }
-        Ok(Self { glyphs, names, metrics, number_of_h_metrics, advances_changed: false, bytes_changed: false })
+        Ok(Self { glyphs, names, metrics, number_of_h_metrics, advances_changed: false, bytes_changed: false, font_visits: Cell::new(0) })
     }
 
     /// The glyph ids `options` names, in glyph order.
@@ -850,6 +857,9 @@ impl Work {
             if *visits > MAX_COMPONENT_VISITS {
                 return Err(format!("drawing the glyph visits more than {MAX_COMPONENT_VISITS} components"));
             }
+            if !self.visit() {
+                return Err(FONT_VISITS_MESSAGE.to_string());
+            }
             let child = self.draw_at(usize::from(c.gid), depth + 1, visits)?;
             let [xx, yx, xy, yy] = c.m;
             let mut placed: Outline =
@@ -878,7 +888,19 @@ impl Work {
     }
 
     /// Component nesting depth: 0 for a simple glyph, 1 for a composite of simple glyphs.
+    /// Counts one component reference against the font-wide budget; false once it is spent.
+    fn visit(&self) -> bool {
+        let n = self.font_visits.get().saturating_add(1);
+        self.font_visits.set(n);
+        n <= MAX_FONT_COMPONENT_VISITS
+    }
+
+    /// The nesting depth of `gid`; once the font-wide visit budget is spent, the depth reached so
+    /// far.
     fn depth(&self, gid: usize, level: usize) -> usize {
+        if !self.visit() {
+            return level;
+        }
         match self.glyphs.get(gid).map(|g| &g.parsed) {
             Some(Parsed::Composite { comps, .. }) if level < MAX_COMPONENT_DEPTH => {
                 1 + comps.iter().map(|c| self.depth(usize::from(c.gid), level + 1)).max().unwrap_or(0)
@@ -1103,6 +1125,7 @@ impl Work {
             number_of_h_metrics: 0,
             advances_changed: false,
             bytes_changed: false,
+            font_visits: Cell::new(0),
         };
         for &gid in selected {
             let Some(Parsed::Composite { comps, .. }) = self.glyphs.get(gid).map(|g| &g.parsed) else { continue };
@@ -1257,7 +1280,7 @@ impl Work {
             out.insert(*b"hhea", hhea);
         }
         if let Some(maxp) = font.get(*b"maxp").filter(|m| u32_at(m, 0) == Some(0x0001_0000) && m.len() >= 32) {
-            out.insert(*b"maxp", self.maxp(maxp));
+            out.insert(*b"maxp", self.maxp(maxp)?);
         }
         Ok(out)
     }
@@ -1277,7 +1300,8 @@ impl Work {
         out
     }
 
-    fn maxp(&self, old: &[u8]) -> Vec<u8> {
+    fn maxp(&self, old: &[u8]) -> Result<Vec<u8>> {
+        self.font_visits.set(0);
         let mut out = old.to_vec();
         let (mut points, mut contours, mut comp_points, mut comp_contours, mut elements, mut depth) =
             (0usize, 0usize, 0usize, 0usize, 0usize, 0usize);
@@ -1298,11 +1322,14 @@ impl Work {
                 _ => {}
             }
         }
+        if self.font_visits.get() > MAX_FONT_COMPONENT_VISITS {
+            return Err(TablesError::invalid(format!("cannot recompute maxp: {FONT_VISITS_MESSAGE}")));
+        }
         let clamp = |v: usize| v.min(usize::from(u16::MAX)) as u16;
         for (at, v) in [(6, points), (8, contours), (10, comp_points), (12, comp_contours), (28, elements), (30, depth)] {
             put_u16(&mut out, at, clamp(v));
         }
-        out
+        Ok(out)
     }
 }
 
