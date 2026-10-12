@@ -421,7 +421,7 @@ fn hint_shapes(hint: &Hint) -> Vec<usize> {
 
 /// `hint` with each shape index it points at replaced by what `map` gives; `None` when `map`
 /// drops one of them. A hint without node references comes back unchanged.
-pub(super) fn remap_hint(hint: &Hint, map: &impl Fn(usize) -> Option<usize>) -> Option<Hint> {
+pub(crate) fn remap_hint(hint: &Hint, map: &impl Fn(usize) -> Option<usize>) -> Option<Hint> {
     let mut out = hint.clone();
     let Plist::Dict(d) = &mut out.value else { return Some(out) };
     for key in NODE_REF_KEYS {

@@ -768,16 +768,20 @@ label = "Detect Composites"
 menu = ["Font"]
 shortcut = ""
 kind = "engine"
-params = "{glyphs?, layer?, tolerance?: number}"
+params = "{glyphs?, layer? | layers?, tolerance?: number, flips?: bool}"
 area = "components"
 milestone = "M13"
 summary = "Scans the glyphs for outlines that repeat the complete outline of another glyph and replaces each match with a component. Useful after opening a compiled font whose composites were flattened; FontForge documents the same job as Edit › Replace with Reference."
 ref = "FontLab 8 What's new › Build & assemble › Components (Detect Composites); FontForge Edit menu › Replace With Reference"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M6 to M13 by the M6 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3 and M5 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
+notes = "Moved from M6 to M13 by the M6 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3 and M5 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5). Documented, not yet observed. Built on the outline matcher (`pathops::matcher`): base outlines are indexed by the signature of their largest contour, so a font is searched without comparing every glyph with every other, and one run's work is capped."
 guesses = [
-  "A match needs every point of the other glyph's outline within 0.5 unit after the best translation, or after a translation and flip when allowTransformed is on; FontLab gives no tolerance.",
+  "A match needs every point of the other glyph's outline within 0.5 unit after the best translation, or after a translation and flip when `flips` is on; FontLab gives no tolerance.",
+  "Only glyphs whose layer has closed paths and no components serve as bases; running it in the reference app on a font whose base glyphs are themselves composites would settle it.",
+  "Bases are tried from the most nodes down, a base must have fewer nodes than the target or as many and come earlier in the glyph order (no cycles), and among bases of equal size one whose name (without suffix and 'comb') appears in the target's name goes first; comparing the reference app's choice between identical outlines (period and dotaccentcomb) would settle it.",
+  "Without `layer` or `layers` every master layer is searched, each on its own, and a glyph whose masters got different components is warned about; the reference app's behaviour on a multi-master font would settle it.",
+  "A mirrored match is a mirrored copy drawn in the opposite direction, as a mirrored component draws once decomposed; the offset is rounded to the font's grid when the match still holds.",
 ]
 
 [[command]]
@@ -786,14 +790,22 @@ label = "Detect Component"
 menu = ["Path", "Convert"]
 shortcut = ""
 kind = "engine"
-params = "{glyph?, layer?, paths?: [pathRef]}"
+params = "{glyph, layer?, shapes?: [indices], tolerance?: number, flips?: bool}"
 area = "components"
 milestone = "M13"
 summary = "Looks for a glyph whose whole outline equals the selected paths and, when found, replaces the selection with a component of it."
 ref = "FontLab 8 What's new › Build & assemble › Components (Detect Component)"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M6 to M13 by the M6 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3 and M5 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
+notes = "Moved from M6 to M13 by the M6 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3 and M5 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5). Documented, not yet observed. The selection is given as shape indices (`paths` is accepted as another name for `shapes`); without one, every path of the layer is the outline searched for."
+guesses = [
+  "The first glyph in font order whose same-id layer has only closed paths equal to the selection wins, within 0.5 unit after a translation (and a flip with `flips`); selecting an outline shared by two glyphs in the reference app would settle which one it picks.",
+  "No matching glyph is an error that changes nothing; the reference app's message or silence when nothing matches would settle it.",
+]
+observe = [
+  "Draw a copy of a glyph's outline in another glyph, select it and run Detect Component: note which glyph the component names and where it sits.",
+  "Select an outline no glyph has and run Detect Component: note the message, if any.",
+]
 
 [[command]]
 id = "glyph.setAutoLayerRecipe"
