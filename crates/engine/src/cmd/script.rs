@@ -73,7 +73,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Record Macro",
             ["Script"],
             None,
-            "{action: \"start\" | \"stop\" | \"cancel\", name?: string, title?: string, description?: string, replace?: bool} start: record every font-changing command that succeeds from now on, from any surface (queries, undo and redo are left out); stop: end the recording and return it as a macro, written as `name`.fcmacro in the Macros folder when `name` is given; cancel: drop it. A recording keeps at most 100,000 steps → {recording: bool, macro?, steps?: count, full?: bool, path?: path}",
+            "{action: \"start\" | \"stop\" | \"cancel\", name?: string, title?: string, description?: string, replace?: bool} start: record every font-changing command that succeeds from now on, from any surface (queries, undo and redo are left out); stop: end the recording and return it as a macro, written as `name`.fcmacro in the Macros folder when `name` is given; cancel: drop it. A recording keeps at most 100,000 steps and 64 MiB of step parameters; past either limit it stops taking steps and stop reports full: true with a message → {recording: bool, macro?, steps?: count, full?: bool, message?: string, path?: path}",
             always,
             record_macro
         ).writes_files(),
