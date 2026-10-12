@@ -31,8 +31,10 @@ pub enum AssetError {
     NotYetImplemented(&'static str),
 }
 
-/// Stored path → bytes. Implementations cap every read at [`MAX_ASSET_BYTES`] and never panic
-/// on a path: an empty, absolute, `..`-climbing or non-UTF-8 path is a [`AssetError`].
+/// Stored path → bytes. A stored path is relative to the document's folder and may climb out
+/// of it with `..`; an unsaved document stores absolute paths. Implementations cap every read at
+/// [`MAX_ASSET_BYTES`] and never panic on a path: a path they cannot resolve (an empty one,
+/// one holding a NUL, or a relative one with no document folder) is an [`AssetError`].
 pub trait AssetStore: Send + Sync {
     /// The bytes of the file at `path`, shared so a cache can hand out the same buffer.
     fn read(&self, path: &str) -> Result<Arc<[u8]>, AssetError>;
