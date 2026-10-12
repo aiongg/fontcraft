@@ -26,6 +26,10 @@ use crate::params::Params;
 
 const LAYER_TARGETS: &[TargetKind] = &[TargetKind::Glyphs, TargetKind::Layer];
 
+/// Most stem-detection work (segment visits of ink tests) one filter command does across all its
+/// glyphs and layers. Past it the command fails and changes nothing.
+pub const MAX_STEM_FILTER_WORK: usize = 1_000_000_000;
+
 pub fn specs() -> Vec<CommandSpec> {
     vec![
         cmd!(
@@ -98,8 +102,9 @@ impl Change {
 }
 
 /// Runs `op` on the unlocked paths of every layer the parameters name, as one edit. `op` returns
-/// `None` when it leaves a layer as it is.
-fn run_layers(s: &mut Session, p: &Params, label: &str, mut op: impl FnMut(&Cx, &[Contour]) -> Result<Option<Change>>) -> Result<Value> {
+/// `None` when it leaves a layer as it is. All layers share one work budget, which `op` draws
+/// from; when it runs out the command fails, naming where it stopped, and changes nothing.
+fn run_layers(s: &mut Session, p: &Params, label: &str, mut op: impl FnMut(&Cx, &[Contour], &mut usize) -> Result<Option<Change>>) -> Result<Value> {
     let font = s.font()?;
     let scope = scope(p, font)?;
     let metrics: HashMap<String, Metrics> = font.masters.iter().map(|m| (m.id.clone(), master_metrics(font, m))).collect();
@@ -108,8 +113,16 @@ fn run_layers(s: &mut Session, p: &Params, label: &str, mut op: impl FnMut(&Cx, 
         scope.glyphs.iter().map(|g| (g.clone(), font.glyph(g).and_then(|g| g.unicodes.first().copied()))).collect();
     let step = grid(font);
     let mut stems = 0usize;
+    let mut work = MAX_STEM_FILTER_WORK;
+    let (mut done, mut current) = (0usize, String::new());
     let out = s.edit(label, |font| {
         each_layer(font, &scope, p.command(), |name, layer| {
+            if current != name {
+                if !current.is_empty() {
+                    done += 1;
+                }
+                name.clone_into(&mut current);
+            }
             let cx = Cx {
                 glyph: name,
                 metrics: metrics.get(&layer.master).copied().unwrap_or(fallback),
@@ -121,7 +134,14 @@ fn run_layers(s: &mut Session, p: &Params, label: &str, mut op: impl FnMut(&Cx, 
             if contours.is_empty() {
                 return Ok(Some("the layer has no unlocked paths".into()));
             }
-            let Some(change) = op(&cx, &contours)? else { return Ok(Some("no stem matched".into())) };
+            let change = op(&cx, &contours, &mut work)?;
+            if work == 0 {
+                return Err(p.bad(format!(
+                    "the filter reached its work limit at glyph `{name}` (layer `{}`) after {done} whole glyphs; nothing was changed: run it on fewer glyphs at a time",
+                    layer.id
+                )));
+            }
+            let Some(change) = change else { return Ok(Some("no stem matched".into())) };
             if change.contours == contours && change.width_change == 0.0 {
                 return Ok(Some("nothing changed".into()));
             }
@@ -306,10 +326,10 @@ fn adjust(s: &mut Session, v: &Value) -> Result<Value> {
     }
     let base = AdjustStems { vertical, horizontal, ..AdjustStems::default() };
     validate(&p, sf::adjust_stems(&[], &base))?;
-    run_layers(s, &p, "Adjust Stems", |cx, contours| {
+    run_layers(s, &p, "Adjust Stems", |cx, contours, work| {
         let m = &cx.metrics;
         let options = AdjustStems { fixed_heights: vec![0.0, m.x_height, m.cap_height, m.ascender, m.descender], grid: cx.grid, ..base.clone() };
-        let out = sf::adjust_stems(contours, &options).map_err(|e| p.bad(format!("glyph `{}`: {e}", cx.glyph)))?;
+        let out = sf::adjust_stems_within(contours, &options, work).map_err(|e| p.bad(format!("glyph `{}`: {e}", cx.glyph)))?;
         Ok((out.stems > 0).then(|| Change { stems: out.stems, ..Change::moved(out.contours) }))
     })
 }
@@ -368,8 +388,8 @@ fn change_weight(s: &mut Session, v: &Value) -> Result<Value> {
     };
     let first = Cx { glyph: "", metrics: Metrics { x_height: 500.0, cap_height: 700.0, ..Metrics::default() }, unicode: None, width: 0.0, grid: 0.0 };
     validate(&p, sf::change_weight(&[], &options(&first)))?;
-    run_layers(s, &p, "Change Weight", |cx, contours| {
-        let out = sf::change_weight(contours, &options(cx)).map_err(|e| p.bad(format!("glyph `{}`: {e}", cx.glyph)))?;
+    run_layers(s, &p, "Change Weight", |cx, contours, work| {
+        let out = sf::change_weight_within(contours, &options(cx), work).map_err(|e| p.bad(format!("glyph `{}`: {e}", cx.glyph)))?;
         Ok(Some(Change { contours: out.contours, width_change: out.width_change, rebuilt: out.rebuilt, stems: 0 }))
     })
 }
@@ -404,8 +424,8 @@ fn condense_extend(s: &mut Session, v: &Value) -> Result<Value> {
     };
     let first = Cx { glyph: "", metrics: Metrics::default(), unicode: None, width: 0.0, grid: 0.0 };
     validate(&p, sf::condense_extend(&[], &options(&first)))?;
-    run_layers(s, &p, "Condense / Extend", |cx, contours| {
-        let out = sf::condense_extend(contours, &options(cx)).map_err(|e| p.bad(format!("glyph `{}`: {e}", cx.glyph)))?;
+    run_layers(s, &p, "Condense / Extend", |cx, contours, work| {
+        let out = sf::condense_extend_within(contours, &options(cx), work).map_err(|e| p.bad(format!("glyph `{}`: {e}", cx.glyph)))?;
         Ok(Some(Change { contours: out.contours, width_change: out.width_change, rebuilt: out.rebuilt, stems: 0 }))
     })
 }
@@ -423,7 +443,7 @@ fn change_x_height(s: &mut Session, v: &Value) -> Result<Value> {
     let metrics = font.masters.first().map(|m| master_metrics(font, m)).unwrap_or_default();
     let first = Cx { glyph: "", metrics, unicode: None, width: 0.0, grid: 0.0 };
     validate(&p, sf::change_x_height(&[], &options(&first)))?;
-    run_layers(s, &p, "Change x-Height", |cx, contours| {
+    run_layers(s, &p, "Change x-Height", |cx, contours, _| {
         let out = sf::change_x_height(contours, &options(cx)).map_err(|e| p.bad(format!("glyph `{}`: {e}", cx.glyph)))?;
         Ok(Some(Change::moved(out)))
     })

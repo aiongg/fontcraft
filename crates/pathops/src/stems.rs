@@ -22,7 +22,9 @@
 //!
 //! Ink is the nonzero fill of the closed contours. Open contours have no inside, so they take no
 //! part. The work is bounded: at most [`MAX_EDGES`] edges are paired (the longest), and the ink
-//! tests stop after [`MAX_WORK`] segment visits, returning the stems found so far.
+//! tests stop after [`MAX_WORK`] segment visits, returning the stems found so far. A caller that
+//! runs many detections (a filter over many glyphs) also passes its own budget, which every
+//! detection draws from.
 
 use std::collections::{HashMap, HashSet};
 
@@ -185,6 +187,8 @@ struct Ink<'a> {
     path: &'a BezPath,
     cost: usize,
     left: usize,
+    /// A spend was refused: the budget ran out.
+    short: bool,
 }
 
 impl Ink<'_> {
@@ -195,7 +199,9 @@ impl Ink<'_> {
     }
 
     fn spend(&mut self, n: usize) -> Option<()> {
-        self.left = self.left.checked_sub(n)?;
+        let left = self.left.checked_sub(n);
+        self.short |= left.is_none();
+        self.left = left?;
         Some(())
     }
 }
@@ -224,8 +230,22 @@ struct Pair {
 
 /// The stems of the outline made of `parts`, whose ink is the nonzero fill of `ink`.
 pub(crate) fn find(parts: &[Part], ink: &BezPath, options: &StemOptions) -> Vec<Found> {
+    let mut work = usize::MAX;
+    find_within(parts, ink, options, &mut work)
+}
+
+/// [`find`] drawing its segment visits from `work` as well (at most [`MAX_WORK`] of them). When
+/// `work` runs out it is left at 0 and the stems found so far are returned.
+pub(crate) fn find_within(parts: &[Part], ink: &BezPath, options: &StemOptions, work: &mut usize) -> Vec<Found> {
+    let start = (*work).min(MAX_WORK);
+    let mut ink = Ink { path: ink, cost: ink.elements().len().max(1), left: start, short: false };
+    let found = find_with(parts, &mut ink, options);
+    *work = if ink.short && start == *work { 0 } else { work.saturating_sub(start.saturating_sub(ink.left)) };
+    found
+}
+
+fn find_with(parts: &[Part], ink: &mut Ink, options: &StemOptions) -> Vec<Found> {
     let Some(o) = sane(options) else { return Vec::new() };
-    let mut ink = Ink { path: ink, cost: ink.elements().len().max(1), left: MAX_WORK };
     let sin_tol = o.angle_tolerance.to_radians().sin();
 
     let mut edges: Vec<Edge> = parts
@@ -245,7 +265,7 @@ pub(crate) fn find(parts: &[Part], ink: &BezPath, options: &StemOptions) -> Vec<
     let mut pairs = Vec::new();
     'outer: for (i, a) in edges.iter().enumerate() {
         for b in edges.iter().skip(i + 1) {
-            match pair(a, b, &o, sin_tol, &mut ink) {
+            match pair(a, b, &o, sin_tol, ink) {
                 Ok(Some(p)) => pairs.push(p),
                 Ok(None) => {}
                 Err(()) => break 'outer,
@@ -258,7 +278,7 @@ pub(crate) fn find(parts: &[Part], ink: &BezPath, options: &StemOptions) -> Vec<
     let mut found = merge(pairs);
     found.sort_by(|x, y| y.overlap.total_cmp(&x.overlap));
 
-    let mut round = round_stems(parts, &edges, &o, sin_tol, &mut ink);
+    let mut round = round_stems(parts, &edges, &o, sin_tol, ink);
     round.sort_by(|x, y| y.stem.width.total_cmp(&x.stem.width));
     found.extend(dedupe_round(round));
     found.truncate(MAX_STEMS);

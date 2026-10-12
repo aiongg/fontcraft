@@ -182,3 +182,39 @@ fn change_x_height_keeps_serifs_below_the_serif_height() {
     assert!(s.execute("filter.changeXHeight", &json!({"glyph": "H", "to": 500})).is_err());
     assert!(s.execute("filter.changeXHeight", &json!({"glyph": "x", "to": 30, "serifHeight": 20})).is_err());
 }
+
+#[test]
+fn a_stem_filter_over_many_heavy_glyphs_stops_at_one_budget_and_changes_nothing() {
+    use fontcraft_engine::model::{Glyph, Layer, Path, Shape};
+    // Each glyph: a 20 × 20 grid of small squares, so every layer pairs thousands of edges and
+    // tests the ink of the whole grid each time.
+    let mut s = Session::with_document();
+    let names: Vec<String> = (0..200).map(|i| format!("grid{i}")).collect();
+    s.edit("fixture", |f| {
+        for name in &names {
+            let mut l = Layer::new("m01", 600.0);
+            for row in 0..20u32 {
+                for col in 0..20u32 {
+                    l.shapes.push(Shape::Path(Path::rect(f64::from(col) * 20.0, f64::from(row) * 20.0, 10.0, 10.0)));
+                }
+            }
+            let mut g = Glyph::new(name);
+            g.layers.push(l);
+            f.glyphs.push(g);
+        }
+        Ok(())
+    })
+    .unwrap();
+    let before = font(&s);
+    let start = std::time::Instant::now();
+    let err = s
+        .execute(
+            "filter.adjustStems",
+            &json!({"glyphs": names, "vertical": [{"from": 1, "to": 2000, "offset": 1}], "horizontal": [{"from": 1, "to": 2000, "offset": 1}]}),
+        )
+        .unwrap_err()
+        .to_string();
+    assert!(start.elapsed() < std::time::Duration::from_secs(120), "{:?}", start.elapsed());
+    assert!(err.contains("work limit"), "{err}");
+    assert_eq!(font(&s), before);
+}

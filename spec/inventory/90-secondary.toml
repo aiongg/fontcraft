@@ -1158,6 +1158,7 @@ guesses = [
   "A horizontal stem's edge on the baseline, x-height, cap height, ascender or descender stays and the other edge takes the whole change; the secondary reference on a serif sitting on the baseline would settle it.",
   "A round stem (the sides of o) is adjusted by moving the extreme nodes on both sides with their handles; one without a node at either measured point is left alone.",
   "A rule that would make a stem narrower than 1 unit makes the whole command fail; the secondary reference with an offset larger than a stem would settle it.",
+  "One work budget covers the whole command across all glyphs and layers; past it the command fails, names the glyph where it stopped and changes nothing. Our own limit; the secondary reference on a very large selection would show whether it stops or runs on.",
 ]
 
 [[command]]
@@ -2226,6 +2227,7 @@ guesses = [
   "Counters auto means retain with lcg and squish with cjk; retain moves each vertical stem right by the amount times its index so the counters keep their widths, and the advance width grows by the amount times (stems − 1).",
   "Squish keeps the advance width, so the outline grows into both sidebearings by half the amount each.",
   "Cleanup (Remove Overlap after the change) is off by default.",
+  "One work budget covers the whole command across all glyphs and layers; past it the command fails, names the glyph where it stopped and changes nothing. Our own limit; the secondary reference on a very large selection would show whether it stops or runs on.",
 ]
 
 [[command]]
@@ -2246,6 +2248,7 @@ guesses = [
   "The counter add applies only to counters between two stems; the parts of the outline left of the first stem and right of the last (arms, serifs) only scale. The secondary reference on a T would settle it.",
   "A glyph with no vertical stem scales as one piece by the counter scale.",
   "Counters scaled below zero width become zero width.",
+  "One work budget covers the whole command across all glyphs and layers; past it the command fails, names the glyph where it stopped and changes nothing. Our own limit; the secondary reference on a very large selection would show whether it stops or runs on.",
 ]
 
 [[command]]

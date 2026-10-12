@@ -345,6 +345,13 @@ fn side_nodes(side: &Side, parts: &[Part], direction: StemDirection) -> Vec<(usi
 
 /// Changes the widths of the horizontal and vertical stems that `options`' rules name.
 pub fn adjust_stems(contours: &[Contour], options: &AdjustStems) -> Result<Adjusted, PathOpError> {
+    let mut work = usize::MAX;
+    adjust_stems_within(contours, options, &mut work)
+}
+
+/// [`adjust_stems`] drawing its stem detection from `work`, a budget shared by every layer a
+/// filter runs on; it is left at 0 when it ran out.
+pub fn adjust_stems_within(contours: &[Contour], options: &AdjustStems, work: &mut usize) -> Result<Adjusted, PathOpError> {
     check_rules(&options.vertical, "vertical")?;
     check_rules(&options.horizontal, "horizontal")?;
     let all = || options.vertical.iter().chain(&options.horizontal);
@@ -353,10 +360,11 @@ pub fn adjust_stems(contours: &[Contour], options: &AdjustStems) -> Result<Adjus
     };
     let narrowest = all().map(|r| r.from).fold(f64::INFINITY, f64::min);
     let loaded = load(contours)?;
-    let found = stems::find(
+    let found = stems::find_within(
         &loaded.parts,
         &loaded.ink,
         &StemOptions { min_width: narrowest.max(0.0), max_width: widest.min(MAX_FILTER_STEM) + 1e-6, ..StemOptions::default() },
+        work,
     );
     let mut acc: Vec<Vec<Sums>> = loaded.rings.iter().map(|r| vec![Sums::default(); r.as_ref().map_or(0, Ring::len)]).collect();
     let mut changed = 0;
@@ -438,6 +446,12 @@ fn round2(v: f64) -> f64 {
 
 /// Makes every stem `amount` thicker (see the module table).
 pub fn change_weight(contours: &[Contour], options: &ChangeWeight) -> Result<Reshaped, PathOpError> {
+    let mut work = usize::MAX;
+    change_weight_within(contours, options, &mut work)
+}
+
+/// [`change_weight`] drawing its ink tests from `work`, as [`adjust_stems_within`] does.
+pub fn change_weight_within(contours: &[Contour], options: &ChangeWeight, work: &mut usize) -> Result<Reshaped, PathOpError> {
     let o = options;
     finite(&[("amount", o.amount), ("bottom", o.bottom), ("top", o.top), ("serif height", o.serif_height)])?;
     if o.amount.abs() > MAX_WEIGHT_CHANGE {
@@ -451,15 +465,25 @@ pub fn change_weight(contours: &[Contour], options: &ChangeWeight) -> Result<Res
     }
     let loaded = load(contours)?;
     let h = o.amount / 2.0;
-    let mut budget = SIDE_WORK;
+    let side_start = SIDE_WORK.min(*work);
+    let mut budget = side_start;
     let cost = loaded.ink.elements().len().max(1);
+    // The pieces each contour's side tests look at, gathered once.
+    let mut samples: Vec<Vec<&Part>> = vec![Vec::new(); loaded.rings.len()];
+    for part in &loaded.parts {
+        if let Some(list) = samples.get_mut(part.contour)
+            && list.len() < SIDE_SAMPLES
+        {
+            list.push(part);
+        }
+    }
     let mut moves = Vec::with_capacity(loaded.rings.len());
-    for (ci, ring) in loaded.rings.iter().enumerate() {
+    for (ring, parts) in loaded.rings.iter().zip(&samples) {
         let Some(ring) = ring else {
             moves.push(Vec::new());
             continue;
         };
-        let ink_left = ink_on_left(ci, ring, &loaded, &mut budget, cost);
+        let ink_left = ink_on_left(ring, parts, &loaded, &mut budget, cost);
         let outward = |t: Vec2| if ink_left { Vec2::new(t.y, -t.x) } else { Vec2::new(-t.y, t.x) };
         let by = (0..ring.len())
             .map(|j| {
@@ -477,13 +501,16 @@ pub fn change_weight(contours: &[Contour], options: &ChangeWeight) -> Result<Res
             .collect();
         moves.push(by);
     }
+    // Side tests cut short by the caller's budget, not this call's own, use it all up.
+    *work = if budget < cost.saturating_mul(2) && side_start == *work { 0 } else { work.saturating_sub(side_start.saturating_sub(budget)) };
     let offset = apply_moves(contours, &loaded.rings, &moves, 0.0);
 
     let extents = if o.counters == CounterMode::Retain {
-        let found = stems::find(
+        let found = stems::find_within(
             &loaded.parts,
             &loaded.ink,
             &StemOptions { direction: Some(StemDirection::Vertical), max_width: MAX_FILTER_STEM, ..StemOptions::default() },
+            work,
         );
         vertical_extents(&found)
     } else {
@@ -530,9 +557,9 @@ pub fn change_weight(contours: &[Contour], options: &ChangeWeight) -> Result<Res
 
 /// Whether the ink lies left of the direction of travel of ring `ci`: tested beside a few of its
 /// pieces, else read from its direction (counter-clockwise outer contours).
-fn ink_on_left(ci: usize, ring: &Ring, loaded: &Loaded, budget: &mut usize, cost: usize) -> bool {
+fn ink_on_left(ring: &Ring, parts: &[&Part], loaded: &Loaded, budget: &mut usize, cost: usize) -> bool {
     let mut votes = 0i32;
-    for part in loaded.parts.iter().filter(|p| p.contour == ci).take(SIDE_SAMPLES) {
+    for part in parts {
         let Some(after) = budget.checked_sub(2 * cost) else { break };
         *budget = after;
         let Some(t) = stems::tangent(&part.seg, 0.5) else { continue };
@@ -551,6 +578,12 @@ fn ink_on_left(ci: usize, ring: &Ring, loaded: &Loaded, budget: &mut usize, cost
 
 /// Narrows or widens the outline, holding the vertical stems' widths (see the module table).
 pub fn condense_extend(contours: &[Contour], options: &CondenseExtend) -> Result<Reshaped, PathOpError> {
+    let mut work = usize::MAX;
+    condense_extend_within(contours, options, &mut work)
+}
+
+/// [`condense_extend`] drawing its stem detection from `work`, as [`adjust_stems_within`] does.
+pub fn condense_extend_within(contours: &[Contour], options: &CondenseExtend, work: &mut usize) -> Result<Reshaped, PathOpError> {
     let o = options;
     finite(&[
         ("counter scale", o.counter_scale),
@@ -589,10 +622,11 @@ pub fn condense_extend(contours: &[Contour], options: &CondenseExtend) -> Result
         return Ok(Reshaped { contours: contours.to_vec(), width_change: 0.0, rebuilt: false });
     };
     let (xmin, xmax) = (bounds.x0, bounds.x1);
-    let found = stems::find(
+    let found = stems::find_within(
         &loaded.parts,
         &loaded.ink,
         &StemOptions { direction: Some(StemDirection::Vertical), max_width: MAX_FILTER_STEM, ..StemOptions::default() },
+        work,
     );
     let stems: Vec<(f64, f64)> = vertical_extents(&found).into_iter().map(|(l, r)| (l.max(xmin), r.min(xmax))).filter(|(l, r)| r > l).collect();
 
