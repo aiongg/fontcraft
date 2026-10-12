@@ -140,7 +140,7 @@ fn a_recorded_macro_replays_to_the_same_font() {
     let mut s = Session::with_document();
     run(&mut s, "script.recordMacro", json!({"action": "start"}));
     run(&mut s, "glyph.newGlyph", json!({"name": "a.alt"}));
-    run(&mut s, "font.customParameters.list", json!({}));
+    run(&mut s, "font.customParameters.list", json!({"scope": "font"}));
     run(&mut s, "path.addPath", json!({"glyph": "a.alt", "nodes": rect(50.0, 0.0, 450.0, 500.0)}));
     run(&mut s, "spacing.setWidth", json!({"glyphs": ["a.alt"], "value": 520}));
     let out = run(&mut s, "script.recordMacro", json!({"action": "stop", "title": "Make a.alt"}));

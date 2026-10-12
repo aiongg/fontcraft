@@ -413,15 +413,21 @@ fn many_named_instances_read_their_names_from_one_pass_over_the_name_table() {
 
 #[test]
 fn many_instances_naming_one_id_with_many_records_choose_the_record_once() {
-    // 5,000 Korean records and one English record all under name ID 256, and 5,000 instances
+    // 5,000 records in other languages and one English record all under name ID 256, and 5,000 instances
     // naming it: choosing the record per lookup would make 25 million record checks. The name
     // table's 16-bit storage offset caps the record count near 5,400.
     let (_, compiled) = source();
     let base = FontRef::new(&compiled.bytes).unwrap();
     let count = 5_000u16;
-    let mut records = vec![NameRecord::new(3, 1, 0x409, NameId::new(1), write_fonts::OffsetMarker::new("Var Test".to_string()))];
-    records.extend((0..count).map(|k| NameRecord::new(3, 1, 0x412, NameId::new(256), write_fonts::OffsetMarker::new(format!("k{}", k % 10)))));
-    records.push(NameRecord::new(3, 1, 0x409, NameId::new(256), write_fonts::OffsetMarker::new("Book".to_string())));
+    // In the table's sort order: platform, encoding, language, then name ID.
+    let mut records = vec![
+        NameRecord::new(3, 1, 0x409, NameId::new(1), write_fonts::OffsetMarker::new("Var Test".to_string())),
+        NameRecord::new(3, 1, 0x409, NameId::new(256), write_fonts::OffsetMarker::new("Book".to_string())),
+    ];
+    // A name table holds one record per platform, encoding, language and name ID, so each of
+    // the other records has a language of its own.
+    records.extend((0..count).map(|k| NameRecord::new(3, 1, 0x412 + k, NameId::new(256), write_fonts::OffsetMarker::new(format!("k{}", k % 10)))));
+    records.sort();
     let instances: Vec<InstanceRecord> = (0..count)
         .map(|_| InstanceRecord {
             subfamily_name_id: NameId::new(256),

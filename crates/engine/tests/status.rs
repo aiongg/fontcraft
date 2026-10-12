@@ -47,15 +47,20 @@ fn font_set_status_definitions_and_glyph_set_status_survive_glyphs_and_ufo() {
     let dir = std::env::temp_dir().join(format!("fontcraft-status-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    let mut s = session();
-    let r = run(&mut s, "glyph.setStatus", json!({"glyphs": ["A", "B"], "status": 7}));
-    assert_eq!(r, json!({"glyphs": ["A", "B"], "status": 7}));
-    run(&mut s, "glyph.setStatus", json!({"glyphs": ["a"], "status": "in progress"}));
-    let expected = saved_state(&s);
+    let with_statuses = || {
+        let mut s = session();
+        let r = run(&mut s, "glyph.setStatus", json!({"glyphs": ["A", "B"], "status": 7}));
+        assert_eq!(r, json!({"glyphs": ["A", "B"], "status": 7}));
+        run(&mut s, "glyph.setStatus", json!({"glyphs": ["a"], "status": "in progress"}));
+        s
+    };
+    let expected = saved_state(&with_statuses());
     assert_eq!(expected.0.len(), 3);
     assert_eq!(expected.0[1], StatusDef { code: 1, name: "Review".into(), color: [1.0, 0.75, 0.0, 1.0], is_default: true });
     assert_eq!(expected.1, vec![Some(7), Some(7), Some(0), None]);
     for (file, params) in [("Status2.glyphs", json!({"version": 2})), ("Status3.glyphs", json!({"version": 3})), ("Status.ufo", json!({}))] {
+        // Each save starts from the unsaved font: a font saved in one version refuses another.
+        let mut s = with_statuses();
         let path = dir.join(file);
         let mut p = params.clone();
         p["path"] = json!(path);

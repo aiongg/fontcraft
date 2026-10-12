@@ -293,7 +293,12 @@ fn drawing(shapes: &[Shape], anchors: &[Anchor]) -> String {
                     .collect();
                 format!("{:?}", (p.closed, nodes, &p.info.identifier))
             }
-            Shape::Component(c) => format!("{:?}", (&c.glyph, c.affine().as_coeffs(), &c.info.identifier)),
+            Shape::Component(c) => {
+                // `.glyphs` files store a placement as position, scale and angle; rebuilding the
+                // matrix from those moves its last bits.
+                let m = c.affine().as_coeffs().map(|v| (v * 1e9).round() / 1e9 + 0.0);
+                format!("{:?}", (&c.glyph, m, &c.info.identifier))
+            }
             Shape::Image(_) => String::new(),
             Shape::Raw(_) => "raw".into(),
         })

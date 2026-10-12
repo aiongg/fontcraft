@@ -887,7 +887,9 @@ mod tests {
         path.quad_to((50.0, 100.0), (100.0, 0.0));
         path.close_path();
         let bytes = pdf(&path, Rect::new(0.0, -200.0, 500.0, 800.0));
-        let text = String::from_utf8_lossy(&bytes).into_owned();
+        // One character per byte, so string offsets are file offsets (the header's second line
+        // holds bytes above 127).
+        let text: String = bytes.iter().map(|&b| if b.is_ascii() { b as char } else { '?' }).collect();
         assert!(text.starts_with("%PDF-1.4"));
         assert!(text.contains("/MediaBox [0 0 500 1000]"));
         assert!(text.contains(" c\nh\nf\n"));

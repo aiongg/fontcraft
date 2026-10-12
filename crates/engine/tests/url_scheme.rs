@@ -147,9 +147,10 @@ fn url_show_skips_unknown_glyphs_and_layers_with_warnings() {
     assert_eq!(s.documents().len(), 1);
     assert_eq!(layers(&reply), [vec![pair("A", &master), pair("B", &master)]]);
     let warnings: Vec<String> = reply["warnings"].as_array().unwrap().iter().map(|w| w.as_str().unwrap().to_string()).collect();
-    for expected in ["before any `path`", "follows no glyph", "nosuch", "`layer=x` follows no glyph", "nolayer", "colour", "not an absolute path"] {
+    for expected in ["before any `path`", "follows no glyph", "nosuch", "nolayer", "colour", "not an absolute path"] {
         assert!(warnings.iter().any(|w| w.contains(expected)), "{expected} not in {warnings:?}");
     }
+    assert!(!warnings.iter().any(|w| w.contains("layer=x")), "a layer of an unknown glyph is skipped with it: {warnings:?}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
