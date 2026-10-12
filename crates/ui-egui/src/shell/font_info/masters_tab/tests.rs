@@ -186,9 +186,7 @@ fn the_icon_picker_sets_what_set_icon_sets_and_cancel_changes_nothing() {
     t.click(&mut app, master_icon_picker::cancel_id(), Modifiers::NONE);
     assert!(open_icon_picker(&t.ctx).is_none());
     assert_eq!(masters(&app), masters(&direct), "Cancel changes nothing");
-    // A glyph of the font typed into the field.
-    run(&mut app, "glyph.newGlyph", json!({"name": "n"}));
-    run(&mut direct, "glyph.newGlyph", json!({"name": "n"}));
+    // A glyph of the font (a new font has `n`) typed into the field.
     t.click(&mut app, icon_id(), Modifiers::NONE);
     t.click(&mut app, master_icon_picker::glyph_id(), Modifiers::NONE);
     t.step(&mut app, vec![Event::Text("n".into())]);

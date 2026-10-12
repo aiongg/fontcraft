@@ -48,15 +48,15 @@ fn window_macro_panel_runs_a_typed_command_and_logs_it() {
     let r = exec(&mut app, "window.macroPanel", json!({}));
     assert_eq!(r["open"], true);
 
-    let r = console_line(&mut app, r#"glyph.newGlyph {"name": "x"}"#);
-    assert_eq!(r["result"]["name"], "x");
+    let r = console_line(&mut app, r#"glyph.newGlyph {"name": "x.alt"}"#);
+    assert_eq!(r["result"]["name"], "x.alt");
     assert_eq!(r["history"], 1);
-    assert!(has_glyph(&app, "x"));
+    assert!(has_glyph(&app, "x.alt"));
     let LogKind::Command { command, result: Some(result), error: None, .. } = last_entry(&app) else { panic!("a command entry") };
     assert_eq!(command, "glyph.newGlyph");
-    assert_eq!(result["name"], "x");
+    assert_eq!(result["name"], "x.alt");
     let pane = command_console::pane_text(&app.state.panels.command_console, &app.session.extensions().log);
-    assert!(pane.contains(r#"glyph.newGlyph {"name":"x"} → "#), "{pane}");
+    assert!(pane.contains(r#"glyph.newGlyph {"name":"x.alt"} → "#), "{pane}");
 
     // A window command run from the console is logged by the console.
     console_line(&mut app, r#"window.textPreview {"open": false}"#);
@@ -69,10 +69,10 @@ fn window_macro_panel_runs_a_typed_command_and_logs_it() {
     assert_eq!(r["shown"], 0);
     assert_eq!(r["open"], true);
     assert_eq!(app.session.extensions().log.len(), kept);
-    exec(&mut app, "glyph.newGlyph", json!({"name": "y"}));
+    exec(&mut app, "glyph.newGlyph", json!({"name": "y.alt"}));
     let r = exec(&mut app, "window.macroPanel", json!({"copy": true}));
     assert_eq!(r["shown"], 1, "a command from another surface shows in the pane");
-    assert!(app.clipboard_out.as_deref().is_some_and(|t| t.starts_with("glyph.newGlyph {\"name\":\"y\"}")));
+    assert!(app.clipboard_out.as_deref().is_some_and(|t| t.starts_with("glyph.newGlyph {\"name\":\"y.alt\"}")));
 
     let r = exec(&mut app, "window.macroPanel", json!({"open": false}));
     assert_eq!(r["open"], false);
@@ -81,22 +81,23 @@ fn window_macro_panel_runs_a_typed_command_and_logs_it() {
 #[test]
 fn window_macro_panel_runs_a_run_style_line_as_one_step() {
     let mut app = FontcraftApp::default();
-    let line = r#"run --cmd glyph.newGlyph --params '{"name": "y"}' --cmd glyph.newGlyph --params "{\"name\": \"z\"}""#;
+    let line = r#"run --cmd glyph.newGlyph --params '{"name": "y.alt"}' --cmd glyph.newGlyph --params "{\"name\": \"z.alt\"}""#;
     let r = console_line(&mut app, line);
     assert_eq!(r["result"].as_array().map(Vec::len), Some(2), "{r}");
-    assert!(has_glyph(&app, "y") && has_glyph(&app, "z"));
-    console_line(&mut app, r#"fontcraft-cli run --cmd glyph.newGlyph --params '{"name":"w"}'"#);
-    assert!(has_glyph(&app, "w"));
+    assert!(has_glyph(&app, "y.alt") && has_glyph(&app, "z.alt"));
+    console_line(&mut app, r#"fontcraft-cli run --cmd glyph.newGlyph --params '{"name":"w.alt"}'"#);
+    assert!(has_glyph(&app, "w.alt"));
 
     // One failing command: none of the line's commands takes effect.
     let count = glyph_count(&app);
-    let e = refused(&mut app, "window.macroPanel", json!({"line": r#"run --cmd glyph.newGlyph --params '{"name":"q"}' --cmd glyph.noSuchCommand"#}));
+    let e =
+        refused(&mut app, "window.macroPanel", json!({"line": r#"run --cmd glyph.newGlyph --params '{"name":"q.alt"}' --cmd glyph.noSuchCommand"#}));
     assert!(e.contains("noSuchCommand"), "{e}");
     assert_eq!(glyph_count(&app), count);
-    assert!(!has_glyph(&app, "q"));
+    assert!(!has_glyph(&app, "q.alt"));
 
     // File options and window commands in a line of several commands are refused before anything runs.
-    let e = refused(&mut app, "window.macroPanel", json!({"line": r#"run --cmd glyph.newGlyph --params '{"name":"v"}' --export out.ttf"#}));
+    let e = refused(&mut app, "window.macroPanel", json!({"line": r#"run --cmd glyph.newGlyph --params '{"name":"v.alt"}' --export out.ttf"#}));
     assert!(e.contains("--export"), "{e}");
     let e = refused(&mut app, "window.macroPanel", json!({"line": "run --cmd glyph.newGlyph --cmd window.textPreview"}));
     assert!(e.contains("window.textPreview"), "{e}");

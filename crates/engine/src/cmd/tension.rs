@@ -532,6 +532,8 @@ mod tests {
                 let mut l = Layer::new(master.clone(), 600.0);
                 l.shapes.extend(paths.iter().cloned().map(Shape::Path));
                 g.layers.push(l);
+                // A new document seeds `g` and `h`; the fixture replaces them.
+                f.glyphs.remove(name);
                 f.glyphs.push(g);
             }
             Ok(())

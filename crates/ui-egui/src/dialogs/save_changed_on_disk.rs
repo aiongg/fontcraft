@@ -53,7 +53,7 @@ mod tests {
         app.run("file.saveAs", &json!({"path": path.to_string_lossy()})).unwrap();
         let other = "written by another program";
         std::fs::write(&path, other).unwrap();
-        app.run("glyph.newGlyph", &json!({"name": "x"})).unwrap();
+        app.run("glyph.newGlyph", &json!({"name": "x.alt"})).unwrap();
         assert!(app.run_from_shell("file.save", &json!({})).is_err());
         assert_eq!(app.dialog.as_ref().map(|d| d.id.as_str()), Some(DIALOG.id), "the question is asked");
 
