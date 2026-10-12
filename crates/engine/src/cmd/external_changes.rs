@@ -174,6 +174,7 @@ fn target(s: &Session, p: &Params) -> Result<usize> {
 /// The file as `file.open` would give it now.
 #[cfg(not(target_arch = "wasm32"))]
 fn read_disk(s: &Session, path: &std::path::Path) -> Result<Font> {
+    crate::file_access::check_read(path).map_err(EngineError::Io)?;
     let (font, mut warnings) = crate::io::open(path, None)?;
     let font = crate::linked::resolve(&font, Some(path), &mut warnings)?.unwrap_or(font);
     let (font, _) = super::file::align_imported(s, font, &mut warnings);

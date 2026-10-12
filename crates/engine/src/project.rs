@@ -338,6 +338,7 @@ pub fn from_stored(stored: StoredProject, path: Option<&Path>) -> ProjectData {
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn read_font(path: &Path) -> Result<(Font, Vec<String>)> {
     let broken = |e: EngineError| EngineError::Io(format!("the linked font {} cannot be read ({e}); choose the font again", path.display()));
+    crate::file_access::check_read(path).map_err(|e| EngineError::Io(format!("the linked font {} cannot be read: {e}", path.display())))?;
     let (font, mut warnings) = crate::io::open(path, None).map_err(broken)?;
     let font = crate::linked::resolve(&font, Some(path), &mut warnings).map_err(broken)?.unwrap_or(font);
     Ok((font, warnings))

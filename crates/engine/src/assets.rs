@@ -17,7 +17,8 @@
 //!   and in the CLI, the files uploaded to the session in the web build.
 //! - A path that is empty, holds a NUL, names a network share or a device, is relative in an
 //!   unsaved document or cannot be read is an [`AssetError`], never a panic. Absolute paths and
-//!   paths that climb out of the folder with `..` are read.
+//!   paths that climb out of the folder with `..` are read, except outside the automation read
+//!   root while one is in force ([`crate::file_access`]): such an image is missing.
 
 use std::collections::HashMap;
 use std::path::{Component, Path, PathBuf};
@@ -154,6 +155,10 @@ impl FsAssets {
     /// The file `path` names and its metadata, refused as [`AssetStore::read`] refuses.
     fn checked(&self, path: &str) -> Result<(PathBuf, std::fs::Metadata), AssetError> {
         let file = self.resolve(path).ok_or_else(|| self.unusable(path))?;
+        // An image outside the automation read root shows as missing.
+        if crate::file_access::check_read(&file).is_err() {
+            return Err(AssetError::Missing(path.to_string()));
+        }
         let meta = std::fs::metadata(&file).map_err(|e| unreadable(path, e))?;
         if !meta.is_file() {
             return Err(AssetError::Unreadable { path: path.to_string(), message: "it is not a file".into() });
@@ -208,7 +213,7 @@ impl AssetStore for FsAssets {
     }
 
     fn exists(&self, path: &str) -> bool {
-        self.resolve(path).and_then(|f| std::fs::metadata(f).ok()).is_some_and(|m| m.is_file())
+        self.resolve(path).filter(|f| crate::file_access::check_read(f).is_ok()).and_then(|f| std::fs::metadata(f).ok()).is_some_and(|m| m.is_file())
     }
 }
 

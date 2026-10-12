@@ -318,8 +318,8 @@ pub const MAX_REFERENCES: usize = 1_024;
 /// Passes every file that opening the source at `path` reads besides `path` itself to `admit`,
 /// each before any of them is read: the UFOs a designspace names, then the files of the font's
 /// Import Font and Import Master parameters, and the UFOs of a linked designspace. Stops at the
-/// first refusal. A file that does not open as a source refers to nothing. Surfaces that restrict
-/// file access (the MCP server's `--root`) call it on every path a command reads.
+/// first refusal. A file that does not open as a source refers to nothing. The automation roots
+/// ([`crate::file_access`]) call it on every path a command reads.
 pub fn check_references(path: &Path, admit: &mut dyn FnMut(&Path) -> std::result::Result<(), String>) -> std::result::Result<(), String> {
     let mut left = MAX_REFERENCES;
     follow_references(path, true, admit, &mut left)

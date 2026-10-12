@@ -1,7 +1,7 @@
 //! What a command declares about the files it touches: the parameters that hold paths, and
-//! whether it writes to disk. Surfaces that restrict file access (the MCP server's `--root` and
-//! `--read-only`) read these declarations from the command catalogue, so every parameter a
-//! command reads a path from must be declared here.
+//! whether it writes to disk. The automation roots (`crate::file_access`) and the MCP server's
+//! `--read-only` read these declarations, so every parameter a command reads a path from must be
+//! declared here.
 
 use serde::Serialize;
 

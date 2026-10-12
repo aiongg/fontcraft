@@ -225,6 +225,11 @@ fn load(param: &str, rel: &str, host: Option<&Path>, warnings: &mut Vec<String>)
         };
         dir.join(written)
     };
+    // A link out of the automation read root is a file that isn't there.
+    if let Err(e) = crate::file_access::check_read(&full) {
+        warnings.push(format!("{param} `{rel}`: treated as missing: {e}"));
+        return None;
+    }
     // The document linking to itself would add nothing; say so instead of reading it again.
     if let (Some(h), Ok(target)) = (host, std::fs::canonicalize(&full))
         && std::fs::canonicalize(h).is_ok_and(|h| h == target)

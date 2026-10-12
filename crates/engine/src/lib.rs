@@ -30,6 +30,7 @@ pub(crate) mod export_steps;
 pub mod extension_index;
 pub mod extensions;
 pub mod feature_state;
+pub mod file_access;
 pub mod glyph_data;
 pub mod guard;
 pub mod interp_cache;
@@ -634,6 +635,12 @@ impl Session {
         if self.depth >= MAX_DEPTH {
             return Err(EngineError::Internal(format!("commands nested more than {MAX_DEPTH} deep at `{id}`")));
         }
+        // Steps a command runs itself are its own business; what a request names is checked.
+        let checked = match (self.depth, file_access::current()) {
+            (0, Some(roots)) => Some(file_access::command::check(self, spec, params, &roots)?),
+            _ => None,
+        };
+        let params = checked.as_ref().unwrap_or(params);
         if self.depth > 0 {
             // A step of another command: the outer call owns the snapshot and the journal.
             self.depth += 1;

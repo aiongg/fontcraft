@@ -108,6 +108,10 @@ pub(crate) fn source_files(path: &std::path::Path, problems: &mut Vec<String>) -
         names.sort();
         for name in names {
             let file = folder.join(&name);
+            if let Err(e) = crate::file_access::check_read(&file) {
+                problems.push(format!("glyph data file {} is not read: {e}", file.display()));
+                continue;
+            }
             if !std::fs::metadata(&file).is_ok_and(|m| m.is_file()) {
                 continue;
             }
