@@ -19,7 +19,7 @@ use std::collections::HashMap;
 
 use fontcraft_components::align::{self, AlignMode};
 use fontcraft_components::compose;
-use fontcraft_components::propagate::effective_anchors_with;
+use fontcraft_components::propagate::{base_layer, effective_anchors_with};
 use fontcraft_components::{ComponentIndex, MAX_ANCHOR_NAME_LEN, MAX_LAYER_COMPONENTS};
 use fontcraft_geom::round_to_grid;
 use fontcraft_model::{Alignment, Component, Font, Layer, MAX_COORDINATE, Shape, Transform};
@@ -726,7 +726,10 @@ fn set_anchor(s: &mut Session, v: &Value) -> Result<Value> {
             return Err(p.bad(format!("`anchor` must be at most {MAX_ANCHOR_NAME_LEN} bytes without control characters")));
         }
         let data = s.glyph_data()?;
-        let own = effective_anchors_with(&font, Some(&*data), &c.glyph, &r.layer.master).map_err(|e| components_error(&p, e))?;
+        // The base layer the component draws and attaches by, as propagation picks it.
+        let base = font.glyph(&c.glyph).ok_or_else(|| p.bad(format!("the component's glyph `{}` does not exist", c.glyph)))?;
+        let from = base_layer(base, r.layer, c).ok_or_else(|| p.bad(format!("glyph `{}` has no layer for master `{}`", c.glyph, r.layer.master)))?;
+        let own = effective_anchors_with(&font, Some(&*data), &c.glyph, &from.id).map_err(|e| components_error(&p, e))?;
         let plain: Vec<&str> = own.iter().filter_map(|a| a.name.strip_prefix('_')).filter(|n| !n.is_empty()).collect();
         let fits = plain.iter().any(|base| name == *base || name.strip_prefix(base).is_some_and(|rest| rest.len() > 1 && rest.starts_with('_')));
         if !fits {
@@ -1169,6 +1172,33 @@ mod tests {
         refused(&mut s, "component.setAnchor", json!({"glyph": "Acomp", "component": 1, "anchor": "topx"}));
         run(&mut s, "component.setAnchor", json!({"glyph": "Acomp", "component": 1, "anchor": ""}));
         assert_eq!(comp(&s, "Acomp", 1).info.anchor, None);
+    }
+
+    /// The anchors offered are those of the base layer the component draws: on a special layer,
+    /// the base glyph's layer with the same id, not its master layer.
+    #[test]
+    fn set_anchor_reads_the_base_layer_the_component_draws() {
+        let mut s = session();
+        s.edit("special layers", |f| {
+            f.glyph_mut("A")?.layers[0].anchors.push(Anchor::new("bottom", 300.0, 0.0));
+            {
+                let mut acute = f.glyph_mut("acutecomb")?;
+                let mut l = acute.layers[0].clone();
+                l.id = "x1".into();
+                l.info.name = Some("Alt".into());
+                l.anchors.push(Anchor::new("_bottom", 0.0, 0.0));
+                acute.layers.push(l);
+            }
+            let mut comp = f.glyph_mut("Acomp")?;
+            let mut l = comp.layers[0].clone();
+            l.id = "x1".into();
+            l.info.name = Some("Alt".into());
+            comp.layers.push(l);
+            Ok(())
+        })
+        .unwrap();
+        run(&mut s, "component.setAnchor", json!({"glyph": "Acomp", "layer": "x1", "component": 1, "anchor": "bottom"}));
+        refused(&mut s, "component.setAnchor", json!({"glyph": "Acomp", "component": 1, "anchor": "bottom"}));
     }
 
     #[test]
