@@ -11,7 +11,6 @@
 //! out (comments carry no data), and `name` records in a legacy encoding other than Mac Roman,
 //! Latin-1 and ASCII are written as escaped bytes when they hold non-ASCII bytes.
 
-mod aglfn;
 mod cmap;
 mod glyf;
 mod name;
@@ -545,10 +544,10 @@ fn post(data: &[u8], font: &SfntFont, w: &mut XmlWriter) -> Result<()> {
 
 /// The name fontTools gives a code point: its AGLFN name, else `uniXXXX` or `uXXXXX`.
 pub(crate) fn agl_name(code: u32) -> String {
-    match aglfn::UV2AGL.binary_search_by_key(&code, |(c, _)| *c) {
-        Ok(i) => aglfn::UV2AGL.get(i).map(|(_, n)| (*n).to_string()).unwrap_or_default(),
-        Err(_) if code <= 0xFFFF => format!("uni{code:04X}"),
-        Err(_) => format!("u{code:X}"),
+    match fontcraft_model::glyphdata::GlyphData::new().ok().and_then(|d| d.aglfn_name(code)) {
+        Some(name) => name.to_string(),
+        None if code <= 0xFFFF => format!("uni{code:04X}"),
+        None => format!("u{code:X}"),
     }
 }
 

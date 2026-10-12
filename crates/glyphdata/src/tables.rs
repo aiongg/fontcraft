@@ -103,6 +103,8 @@ pub struct Tables {
     code_point_index: Vec<(u32, u32)>,
     /// (legacy code point, record) by legacy code point.
     legacy_index: Vec<(u32, u32)>,
+    /// (code point, AGLFN entry) by code point.
+    aglfn_index: Vec<(u32, u32)>,
     hanr: Range<usize>,
     scrv: Range<usize>,
     rtls: Range<usize>,
@@ -228,6 +230,7 @@ impl Tables {
             production_index: Vec::new(),
             code_point_index: Vec::new(),
             legacy_index: Vec::new(),
+            aglfn_index: Vec::new(),
             hanr: range(b"HANR"),
             scrv: range(b"SCRV"),
             rtls: range(b"RTLS"),
@@ -251,6 +254,10 @@ impl Tables {
         t.legacy_index = (0..count).filter_map(|i| Some((t.record_legacy(i)?, i as u32))).collect();
         t.legacy_index.sort_unstable();
         t.legacy_index.dedup_by_key(|(cp, _)| *cp);
+        let aglf = t.bytes(&t.aglf);
+        t.aglfn_index = (0..aglf.len() / AGLF_SIZE).filter_map(|i| Some((u24_at(aglf, i * AGLF_SIZE + 4)?, i as u32))).collect();
+        t.aglfn_index.sort_unstable();
+        t.aglfn_index.dedup_by_key(|(cp, _)| *cp);
         let mut production_index: Vec<u32> =
             (0..count as u32).filter(|i| !t.has_code_point_production(*i as usize) && t.column_str(&t.prod, *i as usize).is_some()).collect();
         production_index.sort_by(|a, b| t.column_str(&t.prod, *a as usize).cmp(&t.column_str(&t.prod, *b as usize)).then(a.cmp(b)));
@@ -554,6 +561,13 @@ impl Tables {
         let count = usize::from(u8_at(agln, i * AGLN_SIZE + 6)?);
         let aglc = self.bytes(&self.aglc);
         (first..first + count).map(|c| u24_at(aglc, c * 3)).collect()
+    }
+
+    /// The AGLFN name of `cp`, when AGLFN lists it.
+    pub fn aglfn_name(&self, cp: u32) -> Option<&str> {
+        let i = self.aglfn_index.binary_search_by_key(&cp, |(c, _)| *c).ok()?;
+        let (_, entry) = self.aglfn_index.get(i)?;
+        self.str_ref(self.bytes(&self.aglf), *entry as usize * AGLF_SIZE)
     }
 
     /// The code point AGLFN gives `name`, when it is an AGLFN name.

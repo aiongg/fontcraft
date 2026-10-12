@@ -21,9 +21,6 @@ use crate::{Result, TablesError};
 /// to.
 const STANDARD_NAMES: usize = 258;
 
-/// AGLFN names whose glyph data record carries another name (AGLFN, Adobe, BSD-3-Clause).
-const AGLFN_EXTRA: [(u32, &str); 3] = [(0x00B5, "mu"), (0x2126, "Omega"), (0x2206, "Delta")];
-
 /// A name for every glyph of the font.
 pub(super) struct NameMap {
     names: Vec<String>,
@@ -71,18 +68,7 @@ fn numbered(gid: GlyphId16) -> String {
 
 /// The AGLFN name of `c`, when it has one.
 fn aglfn_name(data: Option<&GlyphData>, c: char) -> Option<String> {
-    let cp = u32::from(c);
-    if let Some((_, name)) = AGLFN_EXTRA.iter().find(|(p, _)| *p == cp) {
-        return Some((*name).to_string());
-    }
-    let data = data?;
-    let record = data.by_code_point(cp)?;
-    let want = c.to_string();
-    std::iter::once(record.name.as_str())
-        .chain(record.production.as_deref())
-        .chain(record.alt_names.iter().map(String::as_str))
-        .find(|name| data.is_aglfn_name(name) && data.name_to_text(name) == want)
-        .map(str::to_string)
+    data?.aglfn_name(u32::from(c)).map(str::to_string)
 }
 
 /// Glyph id to the lowest code point mapped to it by the Unicode-platform subtables.

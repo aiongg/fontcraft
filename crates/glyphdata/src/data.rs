@@ -694,6 +694,11 @@ impl GlyphData {
         agl::to_unicode(self.tables, name).into_iter().collect()
     }
 
+    /// The AGLFN name of `cp`, the name fontTools gives a glyph it names from `cmap`.
+    pub fn aglfn_name(&self, cp: u32) -> Option<&'static str> {
+        self.tables.aglfn_name(cp)
+    }
+
     /// Whether `name` is in AGLFN, the glyph list recommended for new fonts.
     pub fn is_aglfn_name(&self, name: &str) -> bool {
         self.tables.aglfn(name).is_some()
