@@ -25,7 +25,7 @@ Other clients take the same command in their configuration:
 {"mcpServers": {"fontcraft": {"command": "/abs/path/target/release/fontcraft-cli", "args": ["mcp"]}}}
 ```
 
-## Tools today
+## Tools
 
 | Tool | Arguments | Returns |
 |---|---|---|
@@ -39,19 +39,101 @@ An agent's first call is `list_commands`; every command documents its own parame
 printf '%s\n' \
   '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}' \
   '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"run_command","arguments":{"command":"path.addPath","params":{"glyph":"A","nodes":[{"x":60,"y":0},{"x":560,"y":0},{"x":310,"y":700}]}}}}' \
-  '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"run_command","arguments":{"command":"file.exportStatic","params":{"destination":"/tmp/demo.ttf"}}}}' \
+  '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"run_command","arguments":{"command":"file.exportStatic","params":{"destination":"demo.ttf"}}}}' \
   | fontcraft-cli mcp --headless
 ```
 
+## Permissions
+
+| Option | Effect |
+|---|---|
+| `--root DIR` | File parameters must lie inside DIR. Repeatable. Default: the working directory; `--root /` admits every path |
+| `--read-only` | Only commands that read (`query: true` in the catalogue) run |
+| `--allow PATTERN` | Only commands whose id matches a pattern run. Repeatable |
+| `--deny PATTERN` | Commands whose id matches are refused, even when an allow pattern matches. Repeatable |
+
+- Patterns are shell-style over the whole id: `*` is any run of characters, `?` one character
+  (`glyph.*`, `kerning.set*`).
+- A refused command is a tool result with `isError: true` and the reason. It changes nothing.
+- `list_commands` lists only the commands the server admits. Resource reads and completions run
+  query commands, so the same rules apply to them.
+- `command.batch` is checked step by step: one refused step refuses the whole batch. It must
+  itself be admitted.
+- File parameters are the text values (or lists of texts) of the parameters `path`, `paths`,
+  `file`, `files`, `folder`, `folders`, `destination`, `directory`, `font`, `fonts`, `input`,
+  `inputs`, `output` and `outputDir`, at any depth. Each is resolved (relative to the working
+  directory, symbolic links followed) and replaced by its absolute path before the command runs.
+  A missing part of a path may not contain `..`.
+- `file.save` without `path` writes the document's own file: under `--root`, every open
+  document's file must lie inside the roots.
+- Commands that run steps or open files the server cannot see in their parameters (`script.run`
+  and the other macro commands, `file.openRecent`, `url.open`, `url.show`) are refused whenever
+  any restriction is set, which with the default root is always. Run the steps with
+  `command.batch` instead.
+- `initialize` describes the restrictions in its `instructions`.
+
+## Prompts
+
+`prompts/list` and `prompts/get` offer workflows. Each prompt's text names the commands that do
+the task, in order; when the server refuses some of them, the text says which.
+
+| Prompt | Arguments |
+|---|---|
+| `start_family` | `family_name`, `glyphs?`, `file?` |
+| `add_master` | `name`, `axes?`, `from_master?` |
+| `build_accented_glyphs` | `glyphs` |
+| `kern_pair_list` | `pairs` (one pair per line: left, right, optional value), `master?` |
+| `prepare_release` | `destination?`, `version?` |
+
+## Resources
+
+| URI | Contents (JSON) |
+|---|---|
+| `fontcraft://document` | the open documents, as `inspect_document` returns them |
+| `fontcraft://glyph/{name}` | the glyph's properties (`glyph.getInfo`) and, for each master (at most 64), its layer as `layer.inspect` returns it |
+| `fontcraft://command/{id}` | the command's catalogue entry: label, menu, shortcut, parameters, `query` |
+| `fontcraft://parameter/{name}` | the custom parameter's catalogue entry (name or another spelling, any case) |
+| `fontcraft://feature/{tag}` | the feature's code, notes and labels (`font.features.get`) |
+
+`resources/list` lists `fontcraft://document`; the others are templates in
+`resources/templates/list`. Names in URIs are percent-encoded. A resource that does not exist,
+or that the server's rules refuse, is error `-32002`.
+
+## Completion
+
+`completion/complete` completes the variables of the resource templates (glyph names, command
+ids, custom parameter names, feature tags) and the prompt arguments that name glyphs or masters.
+Matches start with the typed text, ignoring case, in font or catalogue order, at most 100. A value
+with spaces completes its last word. With no document open, or when the needed query is refused,
+the list is empty.
+
+## Logging
+
+`logging/setLevel {level}` turns on `notifications/message` at that level and above (`debug`,
+`info`, `notice`, `warning`, `error`, `critical`, `alert`, `emergency`). No notifications are sent
+before the client sets a level.
+
+| Level | Sent when |
+|---|---|
+| `debug` | a prompt or resource is read; a completion found nothing to offer |
+| `info` | a command ran: `{command, ok: true}` |
+| `warning` | a command failed (`{command, error}`) or was refused (`{command, refused}`) |
+| `error` | a bug inside the server was caught |
+
+Notifications go out before the reply to the request that caused them; at most 1,000 per request.
+
 ## Protocol behaviour
 
-- `initialize`, `ping`, `tools/list`, `tools/call`. Notifications are accepted and never answered.
+- `initialize`, `ping`, `tools/list`, `tools/call`, `prompts/list`, `prompts/get`, `resources/list`,
+  `resources/templates/list`, `resources/read`, `completion/complete`, `logging/setLevel`.
+  Notifications from the client are accepted and never answered. Lists come whole: a `cursor` is
+  refused.
 - Malformed JSON is `-32700`; a request that is not an object, lacks `method`, or exceeds 4 MiB is
-  `-32600`; an unknown method is `-32601`; an unknown tool or missing tool name is `-32602`; a bug
+  `-32600`; an unknown method is `-32601`; an unknown tool, prompt or log level, a missing tool name, or wrong prompt arguments are `-32602`; a bug
   inside a tool is `-32603` and the server keeps serving.
 - A line that is not UTF-8 gets a parse error and the session continues.
 - One line in, one reply out: while a tool call runs the server reads nothing. Progress,
-  cancellation, subscriptions and server-to-client requests therefore do not exist yet (the
+  cancellation, resource subscriptions and server-to-client requests therefore do not exist yet (the
   sibling apps have the same limit, for the same reason).
 
 ## Planned
@@ -59,8 +141,4 @@ printf '%s\n' \
 | What | Milestone |
 |---|---|
 | Task-level tools over common command sequences: `open_font`, `draw_path`, `set_metrics`, `export_font`, `render_glyphs` (returns an image), `screenshot` | M3 |
-| Resources: `fontcraft://document` (summary), `fontcraft://glyph/{name}`, `fontcraft://command/{id}`, `fontcraft://parameter/{name}`, so an agent reads one thing instead of the whole font | M4 |
-| `completion/complete` for glyph names, command ids, feature tags, parameter names | M4 |
-| Prompts for whole workflows (start a family, add a master, build accented glyphs, kern a pair list, prepare a release) | M13 |
-| `logging/setLevel` | M13 |
-| Options from `spec/inventory/20-cli.toml`: `--read-only`, `--allow`, `--deny`, `--root`, HTTP transport | M13 |
+| HTTP transport: `--transport http --listen ADDR` | M13 |

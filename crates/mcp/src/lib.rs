@@ -6,16 +6,26 @@
 //! - [`Remote`]: a running FontCraft app, reached over its control port (`fontcraft --control`),
 //!   so the agent's changes appear in the window.
 //!
-//! The server reads one line and writes one reply. It never panics on input: malformed JSON, wrong
-//! types and unknown methods get JSON-RPC errors, and a bug inside a tool becomes an error result.
+//! Besides the tools the server offers workflow prompts ([`prompts`]), resources and argument
+//! completion ([`resources`]) and log notifications. A [`Policy`] decides which commands and file
+//! paths a client may use; everything it cannot place is refused.
+//!
+//! The server reads one line and writes one reply, preceded by the log notifications the request
+//! produced. It never panics on input: malformed JSON, wrong types and unknown methods get
+//! JSON-RPC errors, and a bug inside a tool becomes an error result.
 #![forbid(unsafe_code)]
 
 mod backend;
+pub mod policy;
+mod prompts;
+mod resources;
 
+use std::collections::HashMap;
 use std::io::{BufRead, Write};
 
 pub use backend::{Backend, DEFAULT_ADDR, Headless, Remote};
 use fontcraft_engine::guard;
+pub use policy::Policy;
 use serde_json::{Value, json};
 
 /// Protocol revisions this server speaks, newest first. `2025-03-26` is left out on purpose: that
@@ -23,14 +33,69 @@ use serde_json::{Value, json};
 pub const PROTOCOL_VERSIONS: &[&str] = &["2025-06-18", "2024-11-05"];
 /// Longest request line accepted.
 pub const MAX_LINE: usize = 4 << 20;
+/// Most log notifications held for one reply; later ones are dropped.
+pub const MAX_PENDING_NOTIFICATIONS: usize = 1_000;
+/// Most entries read from the backend's command catalogue.
+pub const MAX_CATALOGUE: usize = 100_000;
 
 const PARSE_ERROR: i64 = -32700;
 const INVALID_REQUEST: i64 = -32600;
 const METHOD_NOT_FOUND: i64 = -32601;
 const INVALID_PARAMS: i64 = -32602;
+const RESOURCE_NOT_FOUND: i64 = -32002;
+
+/// The protocol's log levels (RFC 5424 severities), least severe first.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum LogLevel {
+    Debug,
+    Info,
+    Notice,
+    Warning,
+    Error,
+    Critical,
+    Alert,
+    Emergency,
+}
+
+impl LogLevel {
+    const ALL: [LogLevel; 8] = [
+        LogLevel::Debug,
+        LogLevel::Info,
+        LogLevel::Notice,
+        LogLevel::Warning,
+        LogLevel::Error,
+        LogLevel::Critical,
+        LogLevel::Alert,
+        LogLevel::Emergency,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            LogLevel::Debug => "debug",
+            LogLevel::Info => "info",
+            LogLevel::Notice => "notice",
+            LogLevel::Warning => "warning",
+            LogLevel::Error => "error",
+            LogLevel::Critical => "critical",
+            LogLevel::Alert => "alert",
+            LogLevel::Emergency => "emergency",
+        }
+    }
+
+    pub fn parse(text: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|l| l.as_str() == text)
+    }
+}
 
 pub struct Server {
     backend: Box<dyn Backend>,
+    policy: Policy,
+    /// Command id → whether it is a query, read from the backend when the policy first needs it.
+    catalogue: Option<HashMap<String, bool>>,
+    /// Least severe level sent as a notification; `None` until the client sets one.
+    log_level: Option<LogLevel>,
+    /// Notifications produced while answering the current request.
+    pending: Vec<Value>,
 }
 
 /// The tools offered to agents. `run_command` reaches every command; the others save a round trip.
@@ -58,9 +123,38 @@ fn error(id: &Value, code: i64, message: impl Into<String>) -> Value {
     json!({"jsonrpc": "2.0", "id": id, "error": {"code": code, "message": message.into()}})
 }
 
+/// List methods take a cursor only to continue a list; this server returns every list whole.
+fn no_cursor(params: &Value) -> Result<(), (i64, String)> {
+    match params.get("cursor") {
+        None | Some(Value::Null) => Ok(()),
+        Some(_) => Err((INVALID_PARAMS, "unknown cursor: this server returns whole lists".into())),
+    }
+}
+
 impl Server {
+    /// A server that admits every command and path.
     pub fn new(backend: Box<dyn Backend>) -> Self {
-        Self { backend }
+        Self::with_policy(backend, Policy::unrestricted())
+    }
+
+    pub fn with_policy(backend: Box<dyn Backend>, policy: Policy) -> Self {
+        Self { backend, policy, catalogue: None, log_level: None, pending: Vec::new() }
+    }
+
+    /// The log notifications produced since the last call, as JSON-RPC lines. A transport sends
+    /// them before the reply to the request that produced them.
+    pub fn take_notifications(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.pending).into_iter().map(|n| n.to_string()).collect()
+    }
+
+    fn log(&mut self, level: LogLevel, data: Value) {
+        if self.log_level.is_some_and(|min| level >= min) && self.pending.len() < MAX_PENDING_NOTIFICATIONS {
+            self.pending.push(json!({
+                "jsonrpc": "2.0",
+                "method": "notifications/message",
+                "params": {"level": level.as_str(), "logger": "fontcraft", "data": data},
+            }));
+        }
     }
 
     /// Answers one line. `None`: the line was a notification (or blank) and gets no reply.
@@ -101,7 +195,10 @@ impl Server {
         Some(match outcome {
             Ok(Ok(result)) => json!({"jsonrpc": "2.0", "id": id, "result": result}),
             Ok(Err((code, message))) => error(&id, code, message),
-            Err(panic) => error(&id, -32603, format!("internal error (please report it): {panic}")),
+            Err(panic) => {
+                self.log(LogLevel::Error, json!({"method": method, "internalError": panic}));
+                error(&id, -32603, format!("internal error (please report it): {panic}"))
+            }
         })
     }
 
@@ -110,11 +207,19 @@ impl Server {
             "initialize" => {
                 let asked = params.get("protocolVersion").and_then(Value::as_str).unwrap_or("");
                 let version = PROTOCOL_VERSIONS.iter().find(|v| **v == asked).or(PROTOCOL_VERSIONS.first()).copied().unwrap_or("2025-06-18");
+                let mut instructions = format!(
+                    "FontCraft font editor ({}). Every action is a command: call list_commands, then run_command. Prompts walk through common workflows; resources read one glyph, command, custom parameter or feature.",
+                    self.backend.describe()
+                );
+                if let Some(restricted) = self.policy.describe() {
+                    instructions.push(' ');
+                    instructions.push_str(&restricted);
+                }
                 Ok(json!({
                     "protocolVersion": version,
-                    "capabilities": {"tools": {}},
+                    "capabilities": {"tools": {}, "prompts": {}, "resources": {}, "logging": {}, "completions": {}},
                     "serverInfo": {"name": "fontcraft", "version": env!("CARGO_PKG_VERSION")},
-                    "instructions": format!("FontCraft font editor ({}). Every action is a command: call list_commands, then run_command.", self.backend.describe()),
+                    "instructions": instructions,
                 }))
             }
             "ping" => Ok(json!({})),
@@ -123,12 +228,12 @@ impl Server {
                 let name = params.get("name").and_then(Value::as_str).ok_or((INVALID_PARAMS, "`name` (a tool name) is required".to_string()))?;
                 let args = params.get("arguments").cloned().unwrap_or(Value::Null);
                 let result = match name {
-                    "list_commands" => self.backend.commands(args.get("pattern").and_then(Value::as_str)),
+                    "list_commands" => self.list_commands(args.get("pattern").and_then(Value::as_str)),
                     "run_command" => match args.get("command").and_then(Value::as_str) {
-                        Some(command) => self.backend.execute(command, args.get("params").unwrap_or(&Value::Null)),
+                        Some(command) => self.run_command(command, args.get("params").unwrap_or(&Value::Null)),
                         None => Err("`command` (a command id) is required".to_string()),
                     },
-                    "inspect_document" => self.backend.inspect(),
+                    "inspect_document" => resources::Reader::document(self),
                     other => return Err((INVALID_PARAMS, format!("unknown tool `{other}`"))),
                 };
                 // A failed tool is a result the agent reads, not a protocol error.
@@ -137,8 +242,174 @@ impl Server {
                     Err(message) => json!({"content": [{"type": "text", "text": message}], "isError": true}),
                 })
             }
+            "logging/setLevel" => {
+                let level = params
+                    .get("level")
+                    .and_then(Value::as_str)
+                    .and_then(LogLevel::parse)
+                    .ok_or((INVALID_PARAMS, "`level` is one of debug, info, notice, warning, error, critical, alert, emergency".to_string()))?;
+                self.log_level = Some(level);
+                Ok(json!({}))
+            }
+            "prompts/list" => {
+                no_cursor(params)?;
+                Ok(prompts::list())
+            }
+            "prompts/get" => {
+                let name = params.get("name").and_then(Value::as_str).ok_or((INVALID_PARAMS, "`name` (a prompt name) is required".to_string()))?;
+                let prompt = prompts::find(name).ok_or_else(|| (INVALID_PARAMS, format!("unknown prompt `{name}`")))?;
+                let refused: Vec<&str> = prompt.commands.iter().copied().filter(|c| self.admit(c).is_err()).collect();
+                self.log(LogLevel::Debug, json!({"prompt": name}));
+                prompts::get(prompt, params.get("arguments").unwrap_or(&Value::Null), &refused).map_err(|e| (INVALID_PARAMS, e))
+            }
+            "resources/list" => {
+                no_cursor(params)?;
+                Ok(resources::list())
+            }
+            "resources/templates/list" => {
+                no_cursor(params)?;
+                Ok(resources::templates())
+            }
+            "resources/read" => {
+                let uri = params.get("uri").and_then(Value::as_str).ok_or((INVALID_PARAMS, "`uri` (a resource URI) is required".to_string()))?;
+                if uri.len() > resources::MAX_URI_LEN {
+                    return Err((INVALID_PARAMS, format!("a resource URI may be at most {} bytes", resources::MAX_URI_LEN)));
+                }
+                let resource = resources::parse_uri(uri).map_err(|e| (RESOURCE_NOT_FOUND, e))?;
+                self.log(LogLevel::Debug, json!({"resource": uri}));
+                resources::read(uri, &resource, self).map_err(|e| (RESOURCE_NOT_FOUND, e))
+            }
+            "completion/complete" => self.complete(params),
             other => Err((METHOD_NOT_FOUND, format!("method `{other}` is not supported"))),
         }
+    }
+
+    fn complete(&mut self, params: &Value) -> Result<Value, (i64, String)> {
+        let bad = |m: &str| (INVALID_PARAMS, m.to_string());
+        let reference = params.get("ref").ok_or_else(|| bad("`ref` is required"))?;
+        let argument = params.get("argument").ok_or_else(|| bad("`argument` ({name, value}) is required"))?;
+        let arg_name = argument.get("name").and_then(Value::as_str).ok_or_else(|| bad("`argument.name` is required"))?;
+        let value = argument.get("value").and_then(Value::as_str).ok_or_else(|| bad("`argument.value` is required"))?;
+        if value.len() > resources::MAX_COMPLETION_INPUT {
+            return Err(bad("the value to complete is too long"));
+        }
+        let source = match reference.get("type").and_then(Value::as_str) {
+            Some("ref/resource") => {
+                let uri = reference.get("uri").and_then(Value::as_str).ok_or_else(|| bad("`ref.uri` is required"))?;
+                Some(
+                    resources::template_source(uri, arg_name)
+                        .ok_or_else(|| (INVALID_PARAMS, format!("no resource template {uri} with the variable `{arg_name}`")))?,
+                )
+            }
+            Some("ref/prompt") => {
+                let name = reference.get("name").and_then(Value::as_str).ok_or_else(|| bad("`ref.name` is required"))?;
+                let prompt = prompts::find(name).ok_or_else(|| (INVALID_PARAMS, format!("unknown prompt `{name}`")))?;
+                let arg = prompt
+                    .arguments
+                    .iter()
+                    .find(|a| a.name == arg_name)
+                    .ok_or_else(|| (INVALID_PARAMS, format!("prompt `{name}` has no argument `{arg_name}`")))?;
+                arg.completion
+            }
+            _ => return Err(bad("`ref.type` is ref/resource or ref/prompt")),
+        };
+        let empty = json!({"completion": {"values": [], "total": 0, "hasMore": false}});
+        let Some(source) = source else { return Ok(empty) };
+        // Nothing to offer (no document open, or the query is refused) is an empty list.
+        Ok(resources::complete(source, value, self).unwrap_or_else(|e| {
+            self.log(LogLevel::Debug, json!({"completion": e}));
+            empty
+        }))
+    }
+
+    /// Whether the policy admits a command by id, reading the catalogue when it needs to know
+    /// whether the command is a query.
+    fn admit(&mut self, id: &str) -> Result<(), String> {
+        if !self.policy.is_restricted() {
+            return Ok(());
+        }
+        let query = if self.policy.needs_catalogue() { self.query_flag(id)? } else { None };
+        self.policy.admit(id, query)
+    }
+
+    fn query_flag(&mut self, id: &str) -> Result<Option<bool>, String> {
+        if self.catalogue.is_none() {
+            let all = self.backend.commands(None)?;
+            let list = all.get("commands").and_then(Value::as_array).ok_or("the command catalogue has no `commands` list")?;
+            if list.len() > MAX_CATALOGUE {
+                return Err(format!("the command catalogue has more than {MAX_CATALOGUE} entries"));
+            }
+            let map = list
+                .iter()
+                .filter_map(|c| Some((c.get("id")?.as_str()?.to_string(), c.get("query").and_then(Value::as_bool).unwrap_or(false))))
+                .collect();
+            self.catalogue = Some(map);
+        }
+        Ok(self.catalogue.as_ref().and_then(|c| c.get(id).copied()))
+    }
+
+    /// Checks a command and, for `command.batch`, each of its steps; `depth` counts batches.
+    fn check_command(&mut self, id: &str, params: &Value, depth: usize, documents_checked: &mut bool) -> Result<(), String> {
+        if depth > policy::MAX_BATCH_NESTING {
+            return Err(format!("command.batch nests deeper than {} levels", policy::MAX_BATCH_NESTING));
+        }
+        self.admit(id)?;
+        let names_path = params.get("path").is_some_and(|p| !p.is_null());
+        if self.policy.has_roots() && policy::IMPLICIT_FILE_COMMANDS.contains(&id) && !names_path && !*documents_checked {
+            // Which document a step saves can change inside a batch, so every open document's
+            // file must be inside the roots.
+            let documents = self.backend.inspect()?;
+            let list = documents.get("documents").and_then(Value::as_array).ok_or("cannot list the open documents")?;
+            for path in list.iter().filter_map(|d| d.get("path").and_then(Value::as_str)) {
+                self.policy.check_implicit_path(path)?;
+            }
+            *documents_checked = true;
+        }
+        if id == policy::BATCH_COMMAND && self.policy.is_restricted() {
+            for step in params.get("steps").and_then(Value::as_array).into_iter().flatten() {
+                // A step without a command id is refused by the batch itself.
+                let Some(command) = step.get("command").and_then(Value::as_str) else { continue };
+                self.check_command(command, step.get("params").unwrap_or(&Value::Null), depth + 1, documents_checked)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// The parameters to run a command with, once the policy admits it and its paths.
+    fn checked(&mut self, id: &str, params: &Value) -> Result<Value, String> {
+        self.check_command(id, params, 0, &mut false)?;
+        let mut params = params.clone();
+        self.policy.check_paths(&mut params)?;
+        Ok(params)
+    }
+
+    fn run_command(&mut self, id: &str, params: &Value) -> Result<Value, String> {
+        let params = match self.checked(id, params) {
+            Ok(p) => p,
+            Err(reason) => {
+                self.log(LogLevel::Warning, json!({"command": id, "refused": reason}));
+                return Err(reason);
+            }
+        };
+        let result = self.backend.execute(id, &params);
+        match &result {
+            Ok(_) => self.log(LogLevel::Info, json!({"command": id, "ok": true})),
+            Err(e) => self.log(LogLevel::Warning, json!({"command": id, "error": e})),
+        }
+        result
+    }
+
+    fn list_commands(&mut self, pattern: Option<&str>) -> Result<Value, String> {
+        let mut all = self.backend.commands(pattern)?;
+        if self.policy.is_restricted() {
+            let list = all.get_mut("commands").and_then(Value::as_array_mut).ok_or("the command catalogue has no `commands` list")?;
+            let policy = &self.policy;
+            list.retain(|c| {
+                let id = c.get("id").and_then(Value::as_str).unwrap_or("");
+                policy.admit(id, Some(c.get("query").and_then(Value::as_bool).unwrap_or(false))).is_ok()
+            });
+        }
+        Ok(all)
     }
 
     /// Serves until `input` ends. Only protocol messages go to `output`.
@@ -162,11 +433,29 @@ impl Server {
                     Err(_) => Some(error(&Value::Null, PARSE_ERROR, "the request is not valid UTF-8").to_string()),
                 }
             };
+            for notification in self.take_notifications() {
+                writeln!(output, "{notification}")?;
+            }
             if let Some(reply) = reply {
                 writeln!(output, "{reply}")?;
-                output.flush()?;
             }
+            output.flush()?;
         }
+    }
+}
+
+impl resources::Reader for Server {
+    fn query(&mut self, command: &str, params: Value) -> Result<Value, String> {
+        let params = self.checked(command, &params)?;
+        self.backend.execute(command, &params)
+    }
+    fn document(&mut self) -> Result<Value, String> {
+        self.admit("document.inspect")?;
+        self.backend.inspect()
+    }
+    fn admitted_commands(&mut self) -> Result<Vec<Value>, String> {
+        let all = self.list_commands(None)?;
+        Ok(all.get("commands").and_then(Value::as_array).cloned().unwrap_or_default())
     }
 }
 
@@ -297,5 +586,172 @@ mod tests {
         let lines: Vec<Value> = String::from_utf8(output).unwrap().lines().map(|l| serde_json::from_str(l).unwrap()).collect();
         assert_eq!(lines.len(), 3);
         assert_eq!((lines[0]["id"].as_i64(), lines[1]["error"]["code"].as_i64(), lines[2]["id"].as_i64()), (Some(1), Some(PARSE_ERROR), Some(2)));
+    }
+
+    fn restricted(policy: Policy) -> Server {
+        Server::with_policy(Box::new(Headless::with_document()), policy)
+    }
+
+    fn listed(s: &mut Server) -> Vec<String> {
+        let (_, text) = tool(s, "list_commands", json!({}));
+        let all: Value = serde_json::from_str(&text).unwrap();
+        all["commands"].as_array().unwrap().iter().map(|c| c["id"].as_str().unwrap().to_string()).collect()
+    }
+
+    #[test]
+    fn read_only_refuses_changes_with_is_error() {
+        let mut s = restricted(Policy::unrestricted().read_only(true));
+        let (is_error, text) = tool(&mut s, "run_command", json!({"command": "glyph.newGlyph", "params": {"name": "x"}}));
+        assert!(is_error && text.contains("read-only"), "{text}");
+        let (is_error, text) = tool(&mut s, "run_command", json!({"command": "glyph.getInfo", "params": {}}));
+        assert!(!is_error, "{text}");
+        let ids = listed(&mut s);
+        assert!(ids.iter().any(|i| i == "glyph.getInfo") && !ids.iter().any(|i| i == "glyph.newGlyph"));
+        let (_, text) = tool(&mut s, "inspect_document", json!({}));
+        assert_eq!(serde_json::from_str::<Value>(&text).unwrap()["documents"][0]["undo"], json!([]), "nothing ran");
+        let r = ask(&mut s, json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}));
+        assert!(r["result"]["instructions"].as_str().unwrap().contains("restricted"));
+    }
+
+    #[test]
+    fn deny_beats_allow_in_tools_and_batches() {
+        let policy = Policy::unrestricted().allow("glyph.*").unwrap().allow("command.batch").unwrap().deny("glyph.remove*").unwrap();
+        let mut s = restricted(policy);
+        let (is_error, text) = tool(&mut s, "run_command", json!({"command": "glyph.newGlyph", "params": {"name": "kept"}}));
+        assert!(!is_error, "{text}");
+        let (is_error, text) = tool(&mut s, "run_command", json!({"command": "glyph.removeGlyph", "params": {"glyphs": ["kept"]}}));
+        assert!(is_error && text.contains("--deny"), "{text}");
+        let (is_error, _) = tool(&mut s, "run_command", json!({"command": "font.info.set", "params": {"values": {"familyName": "X"}}}));
+        assert!(is_error);
+        // A batch is refused as a whole when one step is.
+        let batch = json!({"command": "command.batch", "params": {"steps": [
+            {"command": "glyph.newGlyph", "params": {"name": "b"}},
+            {"command": "glyph.removeGlyph", "params": {"glyphs": ["kept"]}},
+        ]}});
+        let (is_error, text) = tool(&mut s, "run_command", batch);
+        assert!(is_error && text.contains("glyph.removeGlyph"), "{text}");
+        let ids = listed(&mut s);
+        assert!(ids.iter().any(|i| i == "glyph.newGlyph") && !ids.iter().any(|i| i == "glyph.removeGlyph" || i == "font.info.set"));
+        // Macros run steps the server cannot see.
+        let (is_error, _) = tool(&mut s, "run_command", json!({"command": "script.run", "params": {}}));
+        assert!(is_error);
+    }
+
+    #[test]
+    fn file_parameters_outside_the_roots_are_refused() {
+        let dir = std::env::temp_dir().join(format!("fontcraft-mcp-roots-{}", std::process::id()));
+        let root = dir.join("root");
+        std::fs::create_dir_all(&root).unwrap();
+        let mut s = restricted(Policy::unrestricted().root(&root).unwrap().base_dir(&root));
+        let (is_error, text) = tool(&mut s, "run_command", json!({"command": "file.saveAs", "params": {"path": "../outside.fontcraft"}}));
+        assert!(is_error && text.contains("--root"), "{text}");
+        assert!(!dir.join("outside.fontcraft").exists());
+        let (is_error, text) = tool(&mut s, "run_command", json!({"command": "file.saveAs", "params": {"path": "inside.fontcraft"}}));
+        assert!(!is_error, "{text}");
+        assert!(root.join("inside.fontcraft").exists(), "a relative path resolves inside the root");
+        let (is_error, text) = tool(&mut s, "run_command", json!({"command": "file.save", "params": {"force": true}}));
+        assert!(!is_error, "the document's own file is inside the root: {text}");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn set_level_filters_log_notifications() {
+        let mut s = server();
+        tool(&mut s, "run_command", json!({"command": "glyph.newGlyph", "params": {"name": "a1"}}));
+        assert!(s.take_notifications().is_empty(), "no notifications before logging/setLevel");
+        let r = ask(&mut s, json!({"jsonrpc": "2.0", "id": 1, "method": "logging/setLevel", "params": {"level": "warning"}}));
+        assert_eq!(r["result"], json!({}));
+        tool(&mut s, "run_command", json!({"command": "glyph.newGlyph", "params": {"name": "a2"}}));
+        assert!(s.take_notifications().is_empty(), "a success is info, below warning");
+        tool(&mut s, "run_command", json!({"command": "glyph.newGlyph", "params": {"name": "a2"}}));
+        let notes: Vec<Value> = s.take_notifications().iter().map(|n| serde_json::from_str(n).unwrap()).collect();
+        assert_eq!(notes.len(), 1);
+        assert_eq!((notes[0]["method"].as_str(), notes[0]["params"]["level"].as_str()), (Some("notifications/message"), Some("warning")));
+        ask(&mut s, json!({"jsonrpc": "2.0", "id": 2, "method": "logging/setLevel", "params": {"level": "debug"}}));
+        tool(&mut s, "run_command", json!({"command": "glyph.newGlyph", "params": {"name": "a3"}}));
+        assert_eq!(s.take_notifications().len(), 1);
+        let r = ask(&mut s, json!({"jsonrpc": "2.0", "id": 3, "method": "logging/setLevel", "params": {"level": "loud"}}));
+        assert_eq!(r["error"]["code"].as_i64(), Some(INVALID_PARAMS));
+        // serve writes a request's notifications before its reply.
+        let mut output = Vec::new();
+        s.serve(&b"{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\":{\"name\":\"run_command\",\"arguments\":{\"command\":\"glyph.newGlyph\",\"params\":{\"name\":\"a4\"}}}}\n"[..], &mut output).unwrap();
+        let lines: Vec<Value> = String::from_utf8(output).unwrap().lines().map(|l| serde_json::from_str(l).unwrap()).collect();
+        assert_eq!((lines.len(), lines[0]["method"].as_str(), lines[1]["id"].as_i64()), (2, Some("notifications/message"), Some(9)));
+    }
+
+    #[test]
+    fn every_prompt_names_commands_that_exist() {
+        let mut s = server();
+        let ids = listed(&mut s);
+        for prompt in prompts::PROMPTS {
+            for command in prompt.commands {
+                assert!(ids.iter().any(|i| i == command), "prompt {} names {command}, which does not exist", prompt.name);
+            }
+        }
+        let list = ask(&mut s, json!({"jsonrpc": "2.0", "id": 1, "method": "prompts/list"}));
+        assert_eq!(list["result"]["prompts"].as_array().unwrap().len(), 5);
+        let r = ask(
+            &mut s,
+            json!({"jsonrpc": "2.0", "id": 2, "method": "prompts/get", "params": {"name": "start_family", "arguments": {"family_name": "Fieldstone"}}}),
+        );
+        assert!(r["result"]["messages"][0]["content"]["text"].as_str().unwrap().contains("Fieldstone"));
+        let r = ask(&mut s, json!({"jsonrpc": "2.0", "id": 3, "method": "prompts/get", "params": {"name": "nope"}}));
+        assert_eq!(r["error"]["code"].as_i64(), Some(INVALID_PARAMS));
+    }
+
+    #[test]
+    fn resources_read_a_glyph() {
+        let mut s = server();
+        tool(&mut s, "run_command", json!({"command": "glyph.newGlyph", "params": {"name": "agent"}}));
+        tool(
+            &mut s,
+            "run_command",
+            json!({"command": "path.addPath", "params": {"glyph": "agent", "nodes": [{"x": 0, "y": 0}, {"x": 100, "y": 0}, {"x": 50, "y": 80}]}}),
+        );
+        let r = ask(&mut s, json!({"jsonrpc": "2.0", "id": 1, "method": "resources/read", "params": {"uri": "fontcraft://glyph/agent"}}));
+        let content = &r["result"]["contents"][0];
+        assert_eq!(content["uri"], "fontcraft://glyph/agent");
+        let body: Value = serde_json::from_str(content["text"].as_str().unwrap()).unwrap();
+        assert_eq!(body["glyph"]["name"], "agent");
+        assert_eq!(body["layers"][0]["shapes"].as_array().map(Vec::len), Some(1));
+
+        let r = ask(&mut s, json!({"jsonrpc": "2.0", "id": 2, "method": "resources/read", "params": {"uri": "fontcraft://glyph/missing"}}));
+        assert_eq!(r["error"]["code"].as_i64(), Some(RESOURCE_NOT_FOUND));
+        let r = ask(&mut s, json!({"jsonrpc": "2.0", "id": 3, "method": "resources/read", "params": {"uri": "fontcraft://command/glyph.newGlyph"}}));
+        assert!(r["result"]["contents"][0]["text"].as_str().unwrap().contains("glyph.newGlyph"));
+        let r = ask(&mut s, json!({"jsonrpc": "2.0", "id": 4, "method": "resources/read", "params": {"uri": "fontcraft://document"}}));
+        assert!(r["result"]["contents"][0]["text"].as_str().unwrap().contains("documents"));
+        let r = ask(&mut s, json!({"jsonrpc": "2.0", "id": 5, "method": "resources/templates/list"}));
+        assert_eq!(r["result"]["resourceTemplates"].as_array().map(Vec::len), Some(4));
+
+        // A refused query refuses the resource too.
+        let mut s = restricted(Policy::unrestricted().deny("glyph.*").unwrap());
+        let r = ask(&mut s, json!({"jsonrpc": "2.0", "id": 6, "method": "resources/read", "params": {"uri": "fontcraft://glyph/A"}}));
+        assert_eq!(r["error"]["code"].as_i64(), Some(RESOURCE_NOT_FOUND));
+    }
+
+    #[test]
+    fn completion_offers_glyph_names() {
+        let mut s = server();
+        for name in ["agent", "agent.alt", "other"] {
+            tool(&mut s, "run_command", json!({"command": "glyph.newGlyph", "params": {"name": name}}));
+        }
+        let complete = |s: &mut Server, reference: Value, name: &str, value: &str| {
+            ask(
+                s,
+                json!({"jsonrpc": "2.0", "id": 1, "method": "completion/complete", "params": {"ref": reference, "argument": {"name": name, "value": value}}}),
+            )
+        };
+        let r = complete(&mut s, json!({"type": "ref/resource", "uri": "fontcraft://glyph/{name}"}), "name", "AG");
+        assert_eq!(r["result"]["completion"]["values"], json!(["agent", "agent.alt"]));
+        assert_eq!(r["result"]["completion"]["hasMore"], false);
+        let r = complete(&mut s, json!({"type": "ref/prompt", "name": "build_accented_glyphs"}), "glyphs", "aacute agent.");
+        assert_eq!(r["result"]["completion"]["values"], json!(["aacute agent.alt"]));
+        let r = complete(&mut s, json!({"type": "ref/resource", "uri": "fontcraft://command/{id}"}), "id", "glyph.newG");
+        assert_eq!(r["result"]["completion"]["values"], json!(["glyph.newGlyph"]));
+        let r = complete(&mut s, json!({"type": "ref/prompt", "name": "kern_pair_list"}), "pairs", "A");
+        assert_eq!(r["result"]["completion"]["total"], 0);
+        let r = complete(&mut s, json!({"type": "ref/resource", "uri": "fontcraft://nope/{x}"}), "x", "");
+        assert_eq!(r["error"]["code"].as_i64(), Some(INVALID_PARAMS));
     }
 }

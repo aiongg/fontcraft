@@ -2077,9 +2077,12 @@ milestone = "M13"
 summary = "Runs a Model Context Protocol server that exposes the command registry as tools, one tool per engine command with its parameter schema, plus resources for open documents. Agents then drive FontCraft headless exactly as the CLI does."
 ref = "brief.md › MCP server dispatches the same commands"
 status = "inferred"
-notes = "Built so far: stdio transport, `--connect` and `--headless`, tools list_commands, run_command and inspect_document. M13 adds (docs/plans/M13.md, M13.11 and M13.12): `--read-only`, `--allow` and `--deny` command patterns, `--root` folders for file parameters, logging/setLevel, workflow prompts, the resources and completions docs/mcp.md planned for M4, and the HTTP transport with `--listen`."
+notes = "Built: stdio transport, `--connect` and `--headless`; tools list_commands, run_command and inspect_document; `--read-only`, `--allow` and `--deny` command patterns and `--root` folders for file parameters (docs/mcp.md, Permissions); logging/setLevel with notifications/message; five workflow prompts; resources for the document, glyphs, commands, custom parameters and features; completion/complete for glyph names, command ids, parameter names, feature tags and master names. Still to come (docs/plans/M13.md, M13.12): the HTTP transport with `--listen`. The summary's one tool per command is not how it works: run_command reaches every command, and list_commands describes them."
 guesses = [
   "`--read-only` admits only commands that declare themselves queries; `--allow` and `--deny` take shell-style patterns over command ids, deny winning; `--root` refuses any file parameter outside the named folders. No reference has such options; settled by the sibling apps' conventions.",
+  "File parameters are recognised by name (path, file, files, folder, destination, font, input, output, outputDir and their plurals) at any depth, and macro, recent-document and URL commands are refused under any restriction because their files and steps are not in their parameters; a per-command declaration of file parameters in the registry would settle it more precisely.",
+  "No log notifications are sent until the client calls logging/setLevel; the protocol leaves the default to the server, and client feedback would settle it.",
+  "The five prompts are start_family, add_master, build_accented_glyphs, kern_pair_list and prepare_release, with the steps of docs/mcp.md; agents' use of them would settle the wording.",
 ]
 
 [[cli]]
