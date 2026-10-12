@@ -773,7 +773,7 @@ effect = "naming"
 summary = "Overrides the Family Name on the Font tab. It goes into name IDs 1 and 4 and is an input to the computed IDs 3, 4 and 6. Stored as a localizable property, a list of language and text (GlyphsSDK `infoProperty`); files of format version 2 hold it as the parameter `familyName`, which is read as the same field."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Font level: the compiler writes it since M2 (both oracles). Instance level: fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) renames the instance's family, fontc builds no static instance, and FontCraft's compiler ignores it today; M7.8 applies it as fontmake and the handbook do. M7 plan § 4: M7.8."
+notes = "Font level: the compiler writes it since M2 (both oracles). Instance level: fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) renames the instance's family, fontc builds no static instance, and FontCraft applies its default-language value as fontmake and the handbook do (M7.8). M7 plan § 4: M7.8."
 
 [[parameter]]
 name = "Feature for Feature Variations"
@@ -1376,7 +1376,7 @@ effect = "naming"
 summary = "Value is `nameID; text`, `nameID platformID; text` or `nameID platformID encID langID; text`. Missing parts default to platform 3, encoding 1 and the language the source prints as 0x0049 (Windows English), or to encoding 0 and language 0 when only platform 1 is given; IDs 1, 2, 3, 5 and 6 cannot be set. Platform is 1 or 3, and encoding and language may be decimal, octal (leading 0) or hexadecimal (0x)."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Read since M2. fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) adds the entries of font, master and instance together; fontc reads the font's only; FontCraft's compiler lets a master's or instance's entries replace the font's. M7.8 adds them together as fontmake does, a later entry for the same ID, platform, encoding and language replacing an earlier one. M7 plan § 4: M7.8. The source's language 0x0049 is read as a misprint for 0x0409 (Windows English)."
+notes = "Read since M2. fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) adds the entries of font, master and instance together; fontc reads the font's only; FontCraft adds them together as fontmake does (M7.8), a later entry for the same ID, platform, encoding and language replacing an earlier one. M7 plan § 4: M7.8. The source's language 0x0049 is read as a misprint for 0x0409 (Windows English)."
 
 [[parameter]]
 name = "note"
@@ -1483,7 +1483,7 @@ effect = "naming"
 summary = "Sets name ID 4 and the CFF FullName: the complete display name, spaces allowed, starting with the family name followed by style words in the order weight, width, slope, optical size. Stored as a localizable property, a list of language and text (GlyphsSDK `infoProperty`); files of format version 2 hold it as the parameter `postscriptFullName`, which is read as the same field."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed. fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) reads only the singular property or parameter postscriptFullName and writes it to the CFF FullName, never to name ID 4; fontc reads neither. FontCraft follows the handbook: either spelling sets name ID 4 and the CFF FullName, a difference from fontmake written down in docs/spec/40-compile.md § 4a (M7 plan § 7, question 2 (a), decided by the orchestrator on the owner's behalf). M7 plan § 4: M7.8."
+notes = "Documented, not yet observed. fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) reads only the singular property or parameter postscriptFullName and writes it to the CFF FullName, never to name ID 4; fontc reads neither. FontCraft follows the handbook on a static instance: either spelling sets name ID 4 and the CFF FullName, a difference from fontmake written down in docs/spec/40-compile.md § 4a (M7 plan § 7, question 2 (a), decided by the orchestrator on the owner's behalf). M7 plan § 4: M7.8."
 
 [[parameter]]
 name = "preferredFamilyNames"
@@ -1551,6 +1551,7 @@ status = "handbook"
 notes = "Documented, not yet observed. Neither oracle reads it (fontmake 3.12.1 with glyphsLib 6.15.0, fontc 1.0.0; probe of the M7 planning pass), so FontCraft follows the handbook and nothing is compared. M7 plan § 4: M7.8."
 guesses = [
   "Name IDs 1, 2, 3, 5 and 6 can be prevented like any other, with a warning that the font may not install; preventing ID 1 in the reference app settles whether it refuses.",
+  "The parameters of the font, the master and the instance add up, as Name Table Entry does; an instance with one ID and a font with another, exported from the reference app, settles it.",
 ]
 observe = [
   "In font C (m7-export), export with Prevent Name ID 16, then with Prevent Name ID 1; read the exported TTF with ttx: note whether ID 16 is missing, and whether ID 1 is refused or left out.",
@@ -1875,7 +1876,7 @@ effect = "naming"
 summary = "Family name used for regular/italic/bold/bold-italic style linking, letting a large family be split into groups of up to four linked fonts; linking itself follows each instance's style name and style-linking settings. Stored as a localizable property, a list of language and text (GlyphsSDK `infoProperty`); files of format version 2 hold it as the parameter `styleMapFamilyName`, which is read as the same field."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed. fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) ignores this property but honours the format 2 parameter styleMapFamilyName on instances (name ID 1, overriding the family derived from style linking); fontc reads neither. FontCraft reads both spellings at any level into name ID 1 of style-linked fonts. M7 plan § 4: M7.8."
+notes = "Documented, not yet observed. fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) ignores this property but honours the format 2 parameter styleMapFamilyName on instances (name ID 1, overriding the family derived from style linking); fontc reads neither. FontCraft reads both spellings, at any level, into name ID 1 of a static instance; a master keeps fontc's name ID 1. M7 plan § 4: M7.8."
 
 [[parameter]]
 name = "styleMapStyleNames"
@@ -1887,7 +1888,7 @@ effect = "naming"
 summary = "Described only as the localised font subfamily name, name ID 2. Stored as a localizable property, a list of language and text (GlyphsSDK `infoProperty`); files of format version 2 hold it as the parameter `styleMapStyleName`, which is read as the same field."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed. fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) ignores this property but honours the parameter styleMapStyleName on instances (name ID 2 and the bold and italic bits); fontc reads neither. FontCraft reads both spellings. M7 plan § 4: M7.8."
+notes = "Documented, not yet observed. fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) ignores this property but honours the parameter styleMapStyleName on instances (name ID 2 and the bold and italic bits); fontc reads neither. FontCraft reads both spellings on a static instance. M7 plan § 4: M7.8."
 guesses = [
   "The value must be regular, italic, bold or bold italic in any case, as the UFO key it comes from; another value is ignored with a warning; the reference app settles it.",
 ]
@@ -2413,9 +2414,10 @@ effect = "naming"
 summary = "Sets name ID 6 and the PostScript name of the named instance in fvar. ASCII without spaces; must differ from the static font's PostScript name, ideally the name ID 25 prefix, a hyphen and the style name. The source gives no value type."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed. On a variable font setting (property or parameter) M9.6 makes it name ID 6; on a static instance it is that instance's PostScript name in `fvar`, as fontc reads it (else the instance's PostScript Font Name). Characters a PostScript name may not hold are dropped; at most 63 are kept."
+notes = "Documented, not yet observed. On a variable font setting (property or parameter) M9.6 makes it name ID 6; on a static instance it is that instance's PostScript name in `fvar`, as fontc reads it (else the instance's PostScript Font Name), and the static export's name ID 6, ahead of postscriptFontName, as fontmake reads it (M7.8). Characters a PostScript name may not hold are dropped; at most 63 are kept."
 guesses = [
   "On a setting without it, the setting's PostScript Font Name property is used next; settle by exporting a setting with only that property set.",
+  "A static export of an instance that has it takes it as name ID 6, ahead of postscriptFontName, as fontmake reads it; exporting such an instance as a static font in the reference app settles it.",
 ]
 
 [[parameter]]
@@ -2641,7 +2643,7 @@ effect = "naming"
 summary = "Sets name ID 22, used with ID 21 to give a subfamily name that reflects only weight, width and slope."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) writes name ID 22 and fontc does not; FontCraft's compiler follows fontc today. M7.8 writes it, as the handbook and fontmake do. M7 plan § 4: M7.8."
+notes = "fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) writes name ID 22 and fontc does not; FontCraft writes it, as the handbook and fontmake do (M7.8). M7 plan § 4: M7.8."
 
 [[behavior]]
 id = "customParameters.unknownKept"

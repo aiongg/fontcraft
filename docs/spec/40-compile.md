@@ -516,9 +516,10 @@ all five.
 | Production names | map + uniXXXX + ligature naming | the source's map only (front ends fill it) | GOADB aliases, only with `-r`/`-ga` | map + uniXXXX |
 | Unicode assignment | from source glyphs | from source glyphs | GOADB, then AGLFN, then uniXXXX names | from source glyphs |
 | cmap subtables | (0,3)+(3,1) format 4; (0,4)+(3,10) format 12 if needed | same (uses write-fonts) | adds a Mac subtable; UVS from a file | fontc rule |
-| name platforms | Windows only | Windows only | Windows + Mac unless `-omitMacNames` | Windows only, Mac optional |
-| Version string | `Version M.mmm` | same plus `;fontc <ver>` | `Version x.xxx;addfeatures <ver>`, "Development" unless `-r` | fontc style, stamp optional |
+| name platforms | Windows only | Windows only | Windows + Mac unless `-omitMacNames` | Windows only; Mac records with Export Mac Name Table Entries or Compatible name Table |
+| Version string | `Version M.mmm` | same plus `;fontc <ver>` | `Version x.xxx;addfeatures <ver>`, "Development" unless `-r` | `Version M.mmm;FontCraft <ver>` from exports (the `versionStamp` option); a stated version string as written, `%d` forms filled |
 | Unique id | `ver;vendor;psname` | same | `x.xxx;vendor;FontName[;license]` | fontc style |
+| Static instance names and classes | glyphsLib's style-linked names (the instance's bold and italic flags and base style), its familyNames and style-map parameters; `usWeightClass` and `usWidthClass` from the location on a weight or width axis | no static instances | fontmake's, plus the keys only the handbook describes (§ 4a); without a weight or width axis, the instance's Weight Class and Width Class |
 | Vendor id default | four spaces (fontTools) | `NONE`, also for four spaces | from notice string, else `UKWN` | `NONE`, as fontc |
 | fsType default | not checked | bit 2 for UFO, bit 3 for Glyphs | from source font | explicit in source |
 | OS/2 version | 4 (per a write-fonts comment) | 4 | 3, or 4 when bits 7 to 9 used | 4 |
@@ -589,6 +590,19 @@ comparison allow-lists each difference for the corpus sources it shows in.
 
 Macintosh name records stay off unless Export Mac Name Table Entries is on, as both oracles
 write them and against the handbook's default (the M2 decision, kept by M7 question 2).
+
+**Static instances against fontmake.** fontc builds no static instance, so fontmake is the oracle
+for their names. Over the corpus, the 135 instances that sit at a master and both compilers build (64 sources) give 1,678
+equal values and 120 different ones (name IDs 0–25 without FontCraft's version stamp, `usWeightClass`,
+`usWidthClass`, `fsSelection`, `head.macStyle`; M7 plan § 5). Each difference has one of these
+causes; none comes from the handbook's keys, which no corpus instance at a master uses:
+
+| What | fontmake | FontCraft | Values | Sources |
+|---|---|---|---|---|
+| A source without a family name | `Unnamed font`, glyphsLib's default | no family name, as fontc (and as FontCraft's masters) | 108 (IDs 1, 3, 4, 6, 16) | 11 |
+| A source without a version | 1.000 | 0.000, as fontc | 8 (IDs 3, 5) | 2 |
+| A weight axis whose masters state no user location (no Axis Location, no weight class) | every location at 400, so `usWeightClass` 400 | the location through the axis mapping FontCraft derives for the font | 4 (`usWeightClass`) | 3 |
+
 
 **Against the handbook.** TrueType composites with overlapping or transformed components stay
 composites by default, as fontc and fontmake keep them. The texts of the Keep Overlapping

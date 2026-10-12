@@ -301,7 +301,7 @@ ref = "Font Info › Font; Font Info › Exports; Font Info › Features › Nam
 status = "handbook"
 
 # ───────────────────────────── Font tab ─────────────────────────────
-notes = "Documented, not yet observed. glyphsLib expands `{{{key}}}` in font properties and in instance names and properties by looking the key up on its font or instance object; fontc 1.0.0 expands no tokens. FontCraft expands them through `fontinfo::tokens::expand`, which the name table calls at export (M7.8) and `font.expandTextTokens` previews. M7 plan § 4: M7.13."
+notes = "Documented, not yet observed. glyphsLib expands `{{{key}}}` in font properties and in instance names and properties by looking the key up on its font or instance object; fontc 1.0.0 expands no tokens. FontCraft expands them through `fontinfo::tokens::expand`, which the compiler calls on the names of each export (M7.8) and `font.expandTextTokens` previews. M7 plan § 4: M7.13."
 
 [[panel]]
 id = "fontInfo.font"
@@ -463,7 +463,7 @@ milestone = "M7"
 summary = "Export derives the file name and name IDs 1, 3, 4 and 6 from the Family Name, and for CFF-flavoured fonts also the CFF FontName and FullName. The postscriptFontName and postscriptFullName fields, when present, set those two values independently."
 ref = "Font Info › Font › Family Name"
 status = "handbook"
-notes = "The compiler derives these names as fontc does (M2, crates/compile/src/info.rs); the postscriptFullNames property also sets the CFF FullName (M7 plan § 4: M7.8)."
+notes = "The compiler derives these names as fontc does (M2, crates/compile/src/info.rs); a static instance's postscriptFullNames property also sets name ID 4 and the CFF FullName (M7.8)."
 
 [[behavior]]
 id = "fontInfo.familyName.instanceOverride"
@@ -472,7 +472,7 @@ milestone = "M7"
 summary = "An export that carries its own familyNames field uses that family name instead of the one on the Font tab."
 ref = "Font Info › Font › Family Name; Font Info › Exports › Style Linking"
 status = "handbook"
-notes = "The compiler applies an instance's familyNames already (M2: properties are overlaid font, master, instance). M7 plan § 4: M7.8 (test)."
+notes = "A static instance's default-language familyNames is its family in name IDs 1, 4, 6 and 16 and in the file name (M7.8; tests in crates/compile/src/instance_names_tests.rs, and against fontmake's output for Inter in crates/engine/tests/corpus_instance_names.rs)."
 
 [[behavior]]
 id = "fontInfo.unitsPerEm.limits"
@@ -557,7 +557,7 @@ milestone = "M7"
 summary = "Export writes major.minor to head.fontRevision and builds name ID 5 as 'Version <major>.<minor>' followed by a semicolon and the exporting application's own name and build. A versionString parameter replaces the generated string; some applications require it to start with 'Version <major>.<minor>'."
 ref = "Font Info › Font › Version"
 status = "handbook"
-notes = "fontc 1.0.0 writes name ID 5 as `Version <major>.<minor, three digits>;fontc 1.0.0`, which matches the handbook's form; fontmake writes no suffix; FontCraft's compiler writes none today (docs/spec/40-compile.md: fontc style, stamp optional). M7.8 appends `;FontCraft <version>` as the handbook and fontc do, with an export option to leave it out, and the oracle comparisons ignore the suffix. A versionString parameter or property replaces the whole string, with `%d` templates filled."
+notes = "fontc 1.0.0 writes name ID 5 as `Version <major>.<minor, three digits>;fontc 1.0.0`, which matches the handbook's form; fontmake writes no suffix; Exports append `;FontCraft <version>` as the handbook and fontc do; the export commands' versionStamp option (default on) leaves it out, and the compiler library leaves it out unless asked. A stated version string gets no stamp. The oracle comparisons ignore both compilers' stamps (M7.8). A versionString parameter or property replaces the whole string, with `%d` templates filled."
 guesses = [
   "The suffix is `;FontCraft <version>`, without a build number while FontCraft has none; an export from the reference app shows only its own form.",
 ]
@@ -1805,7 +1805,7 @@ milestone = "M7"
 summary = "Declares an instance to be the bold, the italic or the bold italic of another instance by setting the two checkboxes and the style name of the base instance. The link only works between fonts that share a family name."
 ref = "Font Info › Exports › Style Linking"
 status = "handbook"
-notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 0:24–0:50: under Style Linking the Italic checkbox is ticked with Regular as the base style. Not shown: Bold, the shared-family-name condition. M7 plan § 4: M7.7. The compiler uses the Bold and Italic flags since M2; fontmake also reads the base style name for name IDs 1 and 2, which M7.8 adds (fontc builds no static instance)."
+notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 0:24–0:50: under Style Linking the Italic checkbox is ticked with Regular as the base style. Not shown: Bold, the shared-family-name condition. M7 plan § 4: M7.7. The compiler uses the Bold and Italic flags since M2; A static instance's name IDs 1 and 2 also follow the base style name, as fontmake reads it (M7.8; fontc builds no static instance)."
 guesses = [
   "An empty base field with Bold or Italic checked links to Regular; exporting such an instance from the reference app settles it.",
 ]
@@ -1881,7 +1881,7 @@ milestone = "M7"
 summary = "Weight Class, an integer from 1 to 1000 with 100 to 900 as the standard steps, following the OS/2 table definition. Used by other applications and by CSS to order and select weights; independent of the weight axis coordinate. Glyphs source key: instances[].weightClass (default 400)."
 ref = "Font Info › Exports › Weight & Width; GlyphsSDK GlyphsFileFormatv3.md"
 status = "handbook"
-notes = "Stored by the model and kept by every source format since M1. Edited with font.instance.setWeightClass (M7.7). M7.8 writes it to OS/2 usWeightClass for a static instance, as fontmake does; the compiler takes the weight from a variable axis only today."
+notes = "Stored by the model and kept by every source format since M1. Edited with font.instance.setWeightClass (M7.7). A static export writes the instance's location on the weight axis to OS/2 usWeightClass, truncated, as fontmake does; without a weight axis it writes the Weight Class, as the handbook says (M7.8)."
 
 [[parameter]]
 name = "instance.widthClass"
@@ -1892,7 +1892,7 @@ milestone = "M7"
 summary = "Width Class, 1 to 9 following the OS/2 table definition. Used by other applications to categorise fonts; independent of the width axis coordinate. Glyphs source key: instances[].widthClass (default 5)."
 ref = "Font Info › Exports › Weight & Width; GlyphsSDK GlyphsFileFormatv3.md"
 status = "handbook"
-notes = "Stored by the model and kept by every source format since M1. Edited with font.instance.setWidthClass (M7.7). M7.8 writes it to OS/2 usWidthClass for a static instance, as the handbook says; fontmake keeps 5 without a width axis (M7 plan § 7, question 2 (a), decided by the orchestrator on the owner's behalf; docs/spec/40-compile.md § 4a)."
+notes = "Stored by the model and kept by every source format since M1. Edited with font.instance.setWidthClass (M7.7). A static export writes the width class nearest the instance's location on the width axis to OS/2 usWidthClass, as fontmake does; without a width axis it writes the Width Class, as the handbook says, where fontmake keeps 5 (M7 plan § 7, question 2 (a), decided by the orchestrator on the owner's behalf; docs/spec/40-compile.md § 4a)."
 
 [[parameter]]
 name = "instance.axesValues"
@@ -1935,7 +1935,7 @@ milestone = "M7"
 summary = "Text field of Style Linking: the style name of the base instance this one is the bold and/or italic of, for example Regular on a Bold Italic instance. Glyphs source key: instances[].linkStyle."
 ref = "Font Info › Exports › Style Linking; GlyphsSDK GlyphsFileFormatv3.md"
 status = "handbook"
-notes = "Stored by the model and kept by every source format since M1. Edited with font.instance.setStyleLinking (M7.7). M7.8 uses it for name IDs 1 and 2 as fontmake does."
+notes = "Stored by the model and kept by every source format since M1. Edited with font.instance.setStyleLinking (M7.7). A static instance's name IDs 1 and 2 follow it as fontmake's do (M7.8)."
 
 [[parameter]]
 name = "instance.type"
@@ -1956,7 +1956,7 @@ milestone = "M7"
 summary = "Optional General fields added to an export, such as a familyNames override of the font's family name. Glyphs source key: instances[].properties."
 ref = "Font Info › Exports › Style Linking; GlyphsSDK GlyphsFileFormatv3.md"
 status = "handbook"
-notes = "Stored by the model and kept by every source format since M1. Edited with the field commands at instance scope (M7.3); M7.8 compiles familyNames and styleNames from them."
+notes = "Stored by the model and kept by every source format since M1. Edited with the field commands at instance scope (M7.3); A static instance's default-language familyNames and styleNames are its family and style in the name table, other languages records of their own (M7.8)."
 
 [[parameter]]
 name = "instance.customParameters"

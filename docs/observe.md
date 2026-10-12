@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1098 rows to check: 1526 guesses and 399 observe steps.**
+**1098 rows to check: 1528 guesses and 399 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -1939,6 +1939,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: In font C (m7-export), put PreFilter `RemoveOverlap` on a variable font setting and export the variable font: note whether it is refused, ignored or applied.
 - [ ] `Prevent Name ID` (parameter, M7, handbook): The value is a name ID that must not be written
   - Guess: Name IDs 1, 2, 3, 5 and 6 can be prevented like any other, with a warning that the font may not install; preventing ID 1 in the reference app settles whether it refuses.
+  - Guess: The parameters of the font, the master and the instance add up, as Name Table Entry does; an instance with one ID and a font with another, exported from the reference app, settles it.
   - Observe: In font C (m7-export), export with Prevent Name ID 16, then with Prevent Name ID 1; read the exported TTF with ttx: note whether ID 16 is missing, and whether ID 1 is refused or left out.
 - [ ] `Reencode Glyphs` (parameter, M7, handbook): List of `glyphname=hex` entries; several code points are comma-separated (`space=0020,00A0`) and an…
   - Guess: Reencode Glyphs applies after Rename Glyphs, to the names glyphs are exported under, and when two lines give the same code point the later line wins; the reference app settles both.
@@ -2389,6 +2390,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Without it the variable font's default style name is the origin master's name, as the oracles build it from the default master; settle by exporting F4 (three named masters) without the parameter and reading name IDs 2 and 17.
 - [ ] `variablePostscriptFontName` (parameter, M9, handbook): Sets name ID 6 and the PostScript name of the named instance…
   - Guess: On a setting without it, the setting's PostScript Font Name property is used next; settle by exporting a setting with only that property set.
+  - Guess: A static export of an instance that has it takes it as name ID 6, ahead of postscriptFontName, as fontmake reads it; exporting such an instance as a static font in the reference app settles it.
 - [ ] `variableStyleName` (parameter, M9, handbook): By its key a style name for the variable font, but the…
   - Guess: Read as a style name, not a family name as its description says: on a setting or the font the variable font's default style, on a static instance its `fvar` name; settle by exporting with it set in each place.
 - [ ] `variableStyleNames` (parameter, M9, handbook): Alternative style name for the variable export, needed when the same static…

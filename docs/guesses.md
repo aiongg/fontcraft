@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**1670 guesses on 1082 rows (395 of them live commands).**
+**1672 guesses on 1082 rows (395 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -1395,6 +1395,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `Point To Unit Ratio` (parameter) | M7 | handbook | – | Only the SVG flavour is scaled: the clipboard fragment that edit.paste reads keeps font units, so copy and paste inside the app keeps the size; pasting a drawing copied from the reference app back into it settles what its own paste does. |
 | `PreFilter` (parameter) | M7 | handbook | – | On a variable font setting PreFilter is skipped with a warning, not an error; the reference app settles it. |
 | `Prevent Name ID` (parameter) | M7 | handbook | – | Name IDs 1, 2, 3, 5 and 6 can be prevented like any other, with a warning that the font may not install; preventing ID 1 in the reference app settles whether it refuses. |
+| `Prevent Name ID` (parameter) | M7 | handbook | – | The parameters of the font, the master and the instance add up, as Name Table Entry does; an instance with one ID and a font with another, exported from the reference app, settles it. |
 | `Preview Descender` (parameter) | M5 | handbook | – | The default reads winDescent, not the winAscent the handbook names, because that text reads as a misprint; the reference app with a font whose winAscent and winDescent differ settles it. |
 | `Preview Descender` (parameter) | M5 | handbook | – | A value of either sign is a distance below the baseline; the reference app with a positive and a negative value settles it. |
 | `Reencode Glyphs` (parameter) | M7 | handbook | – | Reencode Glyphs applies after Rename Glyphs, to the names glyphs are exported under, and when two lines give the same code point the later line wins; the reference app settles both. |
@@ -1417,6 +1418,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `Variable Font Style Name` (parameter) | M9 | handbook | – | Read as a style name, not a family name as its description says: on a setting or the font the variable font's default style, on a static instance its `fvar` name; settle by exporting with it set in each place. |
 | `Variable SubfamilyName` (parameter) | M9 | handbook | – | Without it the variable font's default style name is the origin master's name, as the oracles build it from the default master; settle by exporting F4 (three named masters) without the parameter and reading name IDs 2 and 17. |
 | `variablePostscriptFontName` (parameter) | M9 | handbook | – | On a setting without it, the setting's PostScript Font Name property is used next; settle by exporting a setting with only that property set. |
+| `variablePostscriptFontName` (parameter) | M9 | handbook | – | A static export of an instance that has it takes it as name ID 6, ahead of postscriptFontName, as fontmake reads it; exporting such an instance as a static font in the reference app settles it. |
 | `variableStyleName` (parameter) | M9 | handbook | – | Read as a style name, not a family name as its description says: on a setting or the font the variable font's default style, on a static instance its `fvar` name; settle by exporting with it set in each place. |
 | `variableStyleNames` (parameter) | M9 | handbook | – | Only the default-language text is written to `fvar`; settle by exporting an instance with two languages and reading the name records of its `fvar` entry. |
 | `Variation Font Origin` (parameter) | M9 | handbook | – | Treated as an older name of Variable Font Origin naming the master by name, as glyphsLib reads it; settle in the reference app. |

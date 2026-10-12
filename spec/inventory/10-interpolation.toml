@@ -254,7 +254,7 @@ milestone = "M7"
 summary = "The Weight Class and Width Class of an instance are stored separately from its axis coordinates; changing one never changes the other."
 ref = "Interpolation › Setting up Instances › Static Instances"
 status = "handbook"
-notes = "Documented, not yet observed. fontmake writes an instance's Weight Class to usWeightClass (350 in the planning probe); FontCraft's compiler takes it from a variable weight axis only, and fontc builds no static instance. M7.8 writes the instance's Weight Class and Width Class to OS/2, as the handbook and, for the weight, fontmake do. M7 plan § 4: M7.7 (test that editing one leaves the other)."
+notes = "Documented, not yet observed. fontmake writes an instance's Weight Class to usWeightClass (350 in the planning probe); fontc builds no static instance. FontCraft writes a static instance's location on the weight axis to usWeightClass, as fontmake does, and without a weight axis its Weight Class, as the handbook says; the width the same way (M7.8). M7 plan § 4: M7.7 (test that editing one leaves the other)."
 
 [[behavior]]
 id = "variableFontSetting.wholeFontParameters"
@@ -307,7 +307,7 @@ status = "handbook"
 # ───────────────────────────────────────────────────────────────────────────────
 # Outline compatibility
 # ───────────────────────────────────────────────────────────────────────────────
-notes = "Documented, not yet observed. M7 plan § 4: M7.8 (test: only the default-language family name reaches name ID 1)."
+notes = "Documented, not yet observed. Only the default-language family name reaches name ID 1; a family name in another language gets a record in that language (M7.8, tested in crates/compile/src/instance_names_tests.rs)."
 
 [[behavior]]
 id = "compatibility.rules"
