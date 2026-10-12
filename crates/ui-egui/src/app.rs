@@ -51,7 +51,11 @@ impl Default for FontcraftApp {
 }
 
 impl FontcraftApp {
-    pub fn new(session: Session) -> Self {
+    /// The app around `session`. What the user runs here may export where an Export Folder
+    /// parameter climbs out of the destination ([`Session::set_export_outside`]); the control
+    /// channel turns that off for its requests.
+    pub fn new(mut session: Session) -> Self {
+        session.set_export_outside(true);
         Self {
             session,
             state: UiState::default(),

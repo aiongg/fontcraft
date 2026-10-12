@@ -216,6 +216,16 @@ fn ui_render_draws_glyph_pixels_and_screenshots_need_a_window() {
     }
 }
 
+/// What the user runs in the app may export outside the destination; a control request runs
+/// with that off and leaves the app's setting as it was.
+#[test]
+fn the_app_allows_exports_outside_the_destination_and_keeps_it_across_control_requests() {
+    let mut app = FontcraftApp::new(fontcraft_engine::Session::with_document());
+    assert!(app.session.export_outside());
+    let _ = control::handle_request(&mut app, &json!({"id": 1, "method": "engine.execute", "params": {"command": "glyph.getInfo", "params": {}}}));
+    assert!(app.session.export_outside());
+}
+
 /// The shapes of the last of `n` frames, with nested lists flattened.
 fn drawn(app: &mut FontcraftApp, n: usize) -> Vec<egui::Shape> {
     let ctx = egui::Context::default();
