@@ -14,7 +14,7 @@ use fontcraft_geom::{BezPath, Point, Vec2, round_point};
 use fontcraft_model::plist::{Str, Value as Plist};
 use fontcraft_model::{Dimension, Family, Node, NodeKind, Path, Shape, ShapeAttrs};
 use fontcraft_pathops::{
-    Cap, CapAxis, Join, MAX_STROKE_WIDTH, MaskMode, SMOOTH_MAX_DEGREES, contours_from_bez, position_from_stored, position_to_stored, stroke_outline,
+    Cap, CapAxis, Join, MAX_STROKE_WIDTH, MaskMode, SMOOTH_MAX_DEGREES, contours_from_bez, position_from_stored, position_to_stored,
 };
 use serde_json::{Value, json};
 
@@ -354,7 +354,7 @@ fn expand_shapes(shapes: &mut Vec<Shape>, only: Option<&[usize]>, version: u32, 
             continue;
         }
         let Some(style) = stroke_style(&path.info.attrs, version)? else { continue };
-        let outline = stroke_outline(&path.to_bez()?, &style).map_err(|e| format!("shape {i}: {e}"))?;
+        let outline = fontcraft_compile::thickness::stroke_path(path, &style).map_err(|e| format!("shape {i}: {e}"))?;
         expanded.insert(i, to_paths(&outline, path, grid));
     }
     if expanded.is_empty() {

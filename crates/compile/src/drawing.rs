@@ -175,7 +175,10 @@ impl Composer<'_> {
         let mut list = Vec::with_capacity(shapes.len());
         for shape in shapes {
             let (outline, attrs, stroke) = match shape {
-                Shape::Path(p) => (vec![p.to_bez()?], &p.info.attrs, stroke_style(&p.info.attrs, version)?),
+                Shape::Path(p) => {
+                    let (outline, stroke) = crate::thickness::path_shape(p, stroke_style(&p.info.attrs, version)?)?;
+                    (outline, &p.info.attrs, stroke)
+                }
                 Shape::Component(c) => (self.component(c, depth)?, &c.info.attrs, None),
                 Shape::Image(_) | Shape::Raw(_) => continue,
             };

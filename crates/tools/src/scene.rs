@@ -61,6 +61,8 @@ pub struct Scene<'a> {
     /// a dragged point snaps only to what is showing.
     pub background_shown: bool,
     pub guides_shown: bool,
+    /// The `.glyphs` format version whose conventions the stroke positions follow (3 unless the font came from a version 4 file).
+    pub glyphs_version: u32,
     components: Vec<ComponentGeom>,
     component_points: usize,
 }
@@ -80,6 +82,7 @@ impl<'a> Scene<'a> {
             focus: None,
             background_shown: true,
             guides_shown: true,
+            glyphs_version: 3,
             components: Vec::new(),
             component_points: 0,
         }
@@ -102,6 +105,7 @@ impl<'a> Scene<'a> {
         scene.side = side;
         scene.layer = side_view(layer, side);
         scene.locked = g.info.locked;
+        scene.glyphs_version = font.source.glyphs_version.unwrap_or(3);
         if let Ok(master) = font.master(&layer.master) {
             scene.global_guides = &master.guides;
             let mut lines = vec![0.0];

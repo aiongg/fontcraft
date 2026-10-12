@@ -26,6 +26,7 @@ mod glyph_props;
 mod info;
 mod kerning;
 mod layer_info;
+pub mod node_width;
 mod order;
 pub mod paint;
 mod props_cache;

@@ -146,6 +146,7 @@ pub fn make_tool(id: &str) -> Option<Box<dyn Tool>> {
         "rotate" => Box::new(RotateTool::default()),
         "scale" => Box::new(ScaleTool::default()),
         "measurement" => Box::new(MeasureTool::default()),
+        "thickness" => Box::new(crate::thickness::ThicknessTool::default()),
         _ if id.starts_with("annotation") => Box::new(AnnotateTool::new(id)?),
         _ => return None,
     };

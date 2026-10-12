@@ -150,6 +150,7 @@ mod selections;
 pub mod status;
 mod stem_filters;
 mod tension;
+mod thickness;
 mod tt_assembly;
 mod tt_debug;
 mod url;
@@ -394,6 +395,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(pair_list::specs());
         v.extend(stem_filters::specs());
         v.extend(tension::specs());
+        v.extend(thickness::specs());
         v.extend(corner_helpers::specs());
         v.extend(geometry_helpers::specs());
         v.extend(find_outline::specs());

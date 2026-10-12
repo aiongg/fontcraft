@@ -255,6 +255,29 @@ summary = "Edits the width of a live stroke on canvas, per path and per node, so
 ref = "FontLab 8 What's new › Draft & draw › Thickness tool"
 status = "docs"
 origin = "fontlab"
+notes = "Documented in the secondary reference's release notes, not yet observed. FontCraft: each on-curve node of a stroked path shows two control points, one on each edge of the stroke, perpendicular to the path. Per-node widths are stored as `[left, right]` in the node's user data (`com.fontcraft.nodeWidth`), written by `path.setNodeWidths`; whole-path gestures run `path.setStroke`. The stroke outline (canvas, Expand Outline, export) reads the widths. The tool is reached with `tool.select`; its toolbar button waits for an icon."
+guesses = [
+  "A drag with no modifier changes the width on the dragged side only, at the dragged node or at every picked control point; the release notes list only the modified drags, and watching the tool would settle it.",
+  "Shift+drag changes the path's stroke width by twice the drag distance and adds the drag distance to both sides of every node with its own widths, so the modulation is kept; the release notes do not say what happens to nodes with their own widths.",
+  "Shift+Alt+drag acts on the whole path: it changes the stroke position and moves the per-node widths of that path sideways by the same amount, each side kept at 0 or more.",
+  "Between two nodes the left and right widths change linearly with the curve parameter; the release notes do not describe the interpolation.",
+  "Once any node has its own widths the pen is round (the stroke height is not used), and round-inset and axis-aligned caps end the stroke as butt caps.",
+  "Delete clears the picked control points' per-node widths as Backspace does.",
+]
+
+[[command]]
+id = "path.setNodeWidths"
+label = "Set Node Widths"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph, layer?, side?, points: [[shape, node]], left?: units | [units], right?: units | [units], clear?: bool} → {glyph, layer, points, widths: [[left, right] | null]}"
+area = "path-ops"
+milestone = "M13"
+summary = "Our command behind the Thickness tool's per-node gestures: gives on-curve nodes of stroked paths their own left and right stroke widths, or removes them so the nodes take the path's stroke width again."
+ref = "FontLab 8 What's new › Draft & draw › Thickness tool"
+status = "inferred"
+own = true
 
 [[command]]
 id = "path.makeInkTrap"

@@ -43,6 +43,7 @@ pub mod stems;
 mod stroke;
 mod stroker;
 pub mod tension;
+pub mod thickness;
 mod tidy;
 pub mod trace;
 
