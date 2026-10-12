@@ -472,7 +472,7 @@ milestone = "M7"
 summary = "An export that carries its own familyNames field uses that family name instead of the one on the Font tab."
 ref = "Font Info › Font › Family Name; Font Info › Exports › Style Linking"
 status = "handbook"
-notes = "A static instance's default-language familyNames is its family in name IDs 1, 4, 6 and 16 and in the file name (M7.8; tests in crates/compile/src/instance_names_tests.rs, and against fontmake's output for Inter in crates/engine/tests/corpus_instance_names.rs)."
+notes = "A static instance's default-language familyNames is its family in name IDs 1, 4, 6 and 16 and in the file name (M7.8; tests in crates/compile/src/instance_names_tests.rs, and against fontmake's output for Inter in crates/engine/tests/engine/corpus_instance_names.rs)."
 
 [[behavior]]
 id = "fontInfo.unitsPerEm.limits"

@@ -132,7 +132,7 @@ else. A test in `crates/engine/src/cmd/file_params.rs`
 fails when a params doc names a path-like parameter that is not declared.
 
 What `Session::execute` guarantees for every command, checked for the whole registry by
-`crates/engine/tests/command_sweep.rs`:
+`crates/engine/tests/engine/command_sweep.rs`:
 
 1. **It never panics.** Parameters are read through `params::Params`, whose accessors return
    errors naming the command and the key. A panic from a bug or a dependency is caught by

@@ -5,6 +5,8 @@
 ```sh
 cargo xtask ci                                   # the gate (see below)
 cargo test -p fontcraft-engine                   # one crate
+cargo test -p fontcraft-engine --test engine kerning_pairs::   # one module of the crate's integration tests
+cargo test --profile measure -p fontcraft-oracle --features oracle --test kern -- --ignored   # speed measures and oracle runs
 cargo run -p fontcraft                           # the desktop app, with a new font
 cargo run -p fontcraft -- file.fontcraft --control 7985   # + the JSON control channel
 cargo run -p fontcraft-cli -- commands           # the command catalogue as JSON
@@ -12,6 +14,10 @@ cargo run -p fontcraft-cli -- run --cmd glyph.newGlyph --params '{"name":"A.alt"
 cargo run -p fontcraft-cli -- mcp --headless     # the MCP server on stdio
 cargo xtask testfonts [--out DIR]                # synthetic test fonts as .glyphs files for the reference-app checks (default plan/local/testfonts/)
 ```
+
+Speed measures and oracle runs use `--profile measure` (release optimisation, no link-time
+optimisation, 16 codegen units, incremental), which rebuilds in a fraction of the release time.
+Shipping builds use `--release`.
 
 Rust 1.95 or newer (edition 2024), as in the sibling apps. `rustup target add
 wasm32-unknown-unknown` once, for `cargo xtask wasm`. Nothing else is needed: no system

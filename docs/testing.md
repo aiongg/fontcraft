@@ -13,8 +13,8 @@ into tests without getting into the repository.
 | Read-back | `crates/compile` | the compiled font parses with skrifa and has the outlines, metrics, names and mapping we put in |
 | Determinism | `crates/compile` | the same font and options give the same bytes; the timestamp is an input |
 | Hostile values | `crates/compile`, `crates/format` | extreme coordinates, surrogates, truncated and corrupted files are errors or warnings, never panics |
-| Engine behaviour | `crates/engine/tests/engine.rs` | undo restores exactly; snapshots share untouched glyphs; a failed command changes nothing; the vertical slice (new → draw → save → open → export → read back) |
-| **Command sweep** | `crates/engine/tests/command_sweep.rs` | every engine command × three fixture states × 45 to 200 junk parameter objects each (about 5,600 calls): no panic, no change on error, invariants hold on success. A new command is swept without further work |
+| Engine behaviour | `crates/engine/tests/engine/engine.rs` | undo restores exactly; snapshots share untouched glyphs; a failed command changes nothing; the vertical slice (new → draw → save → open → export → read back) |
+| **Command sweep** | `crates/engine/tests/engine/command_sweep.rs` | every engine command × three fixture states × 45 to 200 junk parameter objects each (about 5,600 calls): no panic, no change on error, invariants hold on success. A new command is swept without further work |
 | Headless UI | `crates/ui-egui/src/tests.rs` | frames draw without a window; every menu item is a command; the control protocol drives the app and answers malformed requests |
 | Protocol | `crates/mcp` | MCP negotiation, tools, JSON-RPC errors for malformed input, bad bytes on the wire |
 | Oracle comparison | `crates/oracle` | the normalised comparison on fonts built in code (identical builds, keyed differences, start points, reversed contours, glyph set and order, cmap, the allow-list, broken input); the tool runner with stand-in tools (output, failure, time limit). Opt-in (`--features oracle`): fontc and fontmake builds of a fixture compare as expected |
@@ -38,6 +38,11 @@ can be built to a provable standard.
 | fontbakery | `pip install fontbakery` | check results on the same binaries |
 | skrifa | already a dev-dependency | outlines, metrics and names of our own output |
 | harfrust | planned with text mode (M5) | shaping results of our own output |
+
+A crate with many integration-test areas has one test binary, `tests/<name>/main.rs`, with
+each area as a module (`engine`, `decompile`, `io_glyphs`, `io_ufo`, `plist`):
+`cargo test -p fontcraft-engine --test engine <module>::` runs one. Speed measures and oracle
+runs use `--profile measure`; shipping builds use release.
 
 None of these is needed to build or to run the ordinary tests. Oracle tests are opt-in
 (`cargo test -p fontcraft-oracle --features oracle`), skip with a message when a tool is missing,
