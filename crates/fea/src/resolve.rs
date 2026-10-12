@@ -117,13 +117,18 @@ impl Loader<'_> {
         if !dir.is_some_and(|d| real.starts_with(d)) {
             return Err(format!("`{path}` is outside the source's folder"));
         }
-        let len = real.metadata().map(|m| m.len()).map_err(|e| format!("`{path}` could not be read: {e}"))?;
         let budget = self.limits.text_bytes.saturating_sub(self.files.total_bytes()).saturating_sub(self.disk_bytes);
-        if usize::try_from(len).map_or(true, |len| len > budget) {
+        // The length on record can be wrong (special files report zero, a file can grow), so the
+        // read itself stops one byte past the budget, and what was read is what counts.
+        let mut bytes = Vec::new();
+        let limit = u64::try_from(budget).unwrap_or(u64::MAX).saturating_add(1);
+        std::fs::File::open(&real)
+            .and_then(|f| std::io::Read::read_to_end(&mut std::io::Read::take(f, limit), &mut bytes))
+            .map_err(|e| format!("`{path}` could not be read: {e}"))?;
+        self.disk_bytes = self.disk_bytes.saturating_add(bytes.len());
+        if bytes.len() > budget {
             return Err(format!("the feature code with its includes comes to more than {} bytes", self.limits.text_bytes));
         }
-        let bytes = std::fs::read(&real).map_err(|e| format!("`{path}` could not be read: {e}"))?;
-        self.disk_bytes = self.disk_bytes.saturating_add(bytes.len());
         let text = String::from_utf8(bytes).map_err(|_| format!("`{path}` is not UTF-8 text"))?;
         Ok(Arc::from(text))
     }
