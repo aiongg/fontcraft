@@ -78,6 +78,7 @@ fn t2_op(name: &str) -> Option<&'static [u8]> {
         "flex" => &[12, 35],
         "hflex1" => &[12, 36],
         "flex1" => &[12, 37],
+        "mul" => &[12, 24],
         _ => return None,
     })
 }
@@ -279,7 +280,11 @@ fn dreal(text: &str) -> Vec<u8> {
 }
 
 fn cff() -> Vec<u8> {
-    let s = spec(CFF_SPEC);
+    cff_from(CFF_SPEC)
+}
+
+fn cff_from(text: &str) -> Vec<u8> {
+    let s = spec(text);
     let mut strings: Vec<String> = ["001.002", "Test font for FontCraft.", "PS Test", "PS Test", "Regular"].map(String::from).to_vec();
     let sid = |i: usize| 391 + i as i32;
     let names: Vec<&str> = s.glyphs.iter().skip(1).map(|(n, _)| *n).collect();
@@ -492,4 +497,23 @@ fn damaged_type1_and_cff_fonts_fail_with_a_message() {
     let mut warnings = Vec::new();
     read_type1(&font, &mut warnings).unwrap();
     assert_eq!(warnings.len(), 1, "{warnings:?}");
+}
+
+#[test]
+fn charstring_arithmetic_cannot_put_infinite_points_in_the_model() {
+    // 30000^68 * 5000 is about 1.3e308, still finite; two of them added overflow to infinity.
+    let huge = format!("30000{} 5000 mul", " 30000 mul".repeat(67));
+    let text = format!("{CFF_SPEC}\nglyph huge: 0 0 rmoveto {huge} 0 rlineto {huge} 0 rlineto 0 {huge} rlineto endchar\n");
+    let d = decompile(&cff_from(&text), None).unwrap();
+    for glyph in d.font.glyphs.iter() {
+        for layer in &glyph.layers {
+            for shape in &layer.shapes {
+                let Shape::Path(path) = shape else { continue };
+                for node in &path.nodes {
+                    assert!(node.x.is_finite() && node.y.is_finite() && node.x.abs() <= 1e6 && node.y.abs() <= 1e6, "{}: {node:?}", glyph.name);
+                }
+            }
+        }
+    }
+    assert!(d.font.glyph("huge").is_some(), "the glyph stays, without the refused outline");
 }

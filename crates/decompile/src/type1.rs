@@ -26,8 +26,8 @@ use std::sync::Arc;
 
 use fontcraft_model::plist::{Array, Dict, Layout, Number, Str, Value};
 use fontcraft_model::{
-    AlignmentZone, Component, Family, Font, FontInfo, Glyph, GlyphTable, Hint, Layer, MAX_GLYPHS, Master, MetricDef, MetricValue, Shape, Source,
-    SourceFormat, StemDef, Transform, UPM_RANGE, metric,
+    AlignmentZone, Component, Family, Font, FontInfo, Glyph, GlyphTable, Hint, Layer, MAX_COORDINATE, MAX_GLYPHS, Master, MetricDef, MetricValue,
+    Shape, Source, SourceFormat, StemDef, Transform, UPM_RANGE, metric,
 };
 use skrifa::outline::OutlinePen;
 use skrifa::raw::ps::encoding::PredefinedEncoding;
@@ -171,6 +171,22 @@ pub enum PsOp {
         base: u8,
         accent: u8,
     },
+}
+
+impl PsOp {
+    /// Whether every number of the operation is finite and within the model's coordinate range.
+    /// Charstring arithmetic can build huge values whose sums overflow; such an operation is
+    /// refused before it reaches the model.
+    pub(crate) fn in_range(&self) -> bool {
+        let ok = |v: &f64| v.abs() <= MAX_COORDINATE;
+        match self {
+            PsOp::HStem { y: a, dy: b, .. } | PsOp::VStem { x: a, dx: b, .. } | PsOp::Move(a, b) | PsOp::Line(a, b) => ok(a) && ok(b),
+            PsOp::Seac { adx, ady, .. } => ok(adx) && ok(ady),
+            PsOp::Curve(v) => v.iter().all(ok),
+            PsOp::Flex(v, depth) => v.iter().all(ok) && depth.is_finite(),
+            PsOp::NewHints | PsOp::NewGroup => true,
+        }
+    }
 }
 
 /// One glyph of a [`PsFont`].
@@ -771,6 +787,9 @@ pub(crate) struct Hints {
 
 impl Hints {
     pub fn stem(&mut self, op: PsOp) {
+        if !op.in_range() {
+            return;
+        }
         if self.emitted {
             self.replacing = true;
         }
@@ -891,6 +910,9 @@ impl<'a> T1Run<'a> {
     fn emit(&mut self, op: PsOp) -> Result<(), String> {
         if self.ops.len() >= MAX_GLYPH_OPS {
             return Err("too many operations".into());
+        }
+        if !op.in_range() {
+            return Err(format!("a point lies outside the coordinate range of ±{MAX_COORDINATE}"));
         }
         self.hints.flush(&mut self.ops);
         self.ops.push(op);
@@ -1406,7 +1428,7 @@ pub fn to_font(ps: &PsFont, mut warnings: Vec<String>) -> Result<Decompiled, Dec
     let mut seac_missing = 0usize;
     let mut glyphs = Vec::with_capacity(ps.glyphs.len());
     for (g, name) in ps.glyphs.iter().zip(&names) {
-        let mut layer = Layer::new(MASTER, g.width);
+        let mut layer = Layer::new(MASTER, if g.width.abs() <= MAX_COORDINATE { g.width } else { 0.0 });
         layer.shapes.extend(draw(&g.ops).into_iter().map(Shape::Path));
         for op in &g.ops {
             if let PsOp::Seac { adx, ady, base, accent } = op {

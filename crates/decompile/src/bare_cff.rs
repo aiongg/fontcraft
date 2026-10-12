@@ -16,6 +16,7 @@ use crate::type1::{
     TopDict, be_i32, list, short_number, to_font,
 };
 use crate::{DecompileError, Decompiled};
+use fontcraft_model::MAX_COORDINATE;
 
 /// Most operands one DICT entry may have.
 const MAX_DICT_OPERANDS: usize = 64;
@@ -553,6 +554,9 @@ impl<'a> T2Run<'a> {
         if self.ops.len() >= MAX_GLYPH_OPS {
             return Err("too many operations".into());
         }
+        if !op.in_range() {
+            return Err(format!("a point lies outside the coordinate range of ±{MAX_COORDINATE}"));
+        }
         self.hints.flush(&mut self.ops);
         self.ops.push(op);
         Ok(())
@@ -580,7 +584,7 @@ impl<'a> T2Run<'a> {
             edge = pos + d;
             let op =
                 if horizontal { PsOp::HStem { y: pos, dy: d, kind: StemKind::Stem } } else { PsOp::VStem { x: pos, dx: d, kind: StemKind::Stem } };
-            if self.declared.len() < MAX_GLYPH_OPS {
+            if self.declared.len() < MAX_GLYPH_OPS && op.in_range() {
                 self.declared.push(op.clone());
                 self.hints.stem(op);
             }
