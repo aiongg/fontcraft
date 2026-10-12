@@ -10,7 +10,7 @@
 //! when reading the output. The most frequent patterns are listed with an example each.
 //! The built-in glyph database is used, without the sources' custom glyph data files.
 //!
-//! `cargo test -p fontcraft-engine --test corpus_composition -- --ignored --nocapture`.
+//! `cargo test -p fontcraft-engine --test engine corpus_composition:: -- --ignored --nocapture`.
 //! `FONTCRAFT_CORPUS` names the corpus folder (default: the repository's `corpus/`);
 //! `COMPOSITION_LIST=<n>` lists more than 30 patterns and differing glyphs.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]

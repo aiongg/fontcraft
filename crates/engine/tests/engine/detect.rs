@@ -195,7 +195,7 @@ fn read_tree(dir: &std::path::Path, root: &std::path::Path, out: &mut fontcraft_
 /// `docs/plans/M13.md` § 5: Inter Roman's Regular exported as OTF (which flattens every
 /// composite) and opened again; Detect Composites at tolerance 0.5 and 1 rebuilds the source's
 /// composites made only of unscaled, unrotated components, with the same base glyphs.
-/// `cargo test --release -p fontcraft-engine --test detect -- --ignored --nocapture`.
+/// `cargo test --release -p fontcraft-engine --test engine detect:: -- --ignored --nocapture`.
 #[test]
 #[ignore = "corpus measure"]
 fn composite_recovery_on_inter() {

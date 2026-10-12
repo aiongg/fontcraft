@@ -249,7 +249,7 @@ fn read_tree(dir: &std::path::Path, root: &std::path::Path, out: &mut fontcraft_
 }
 
 /// `docs/plans/M5.md` § 5: Update Metrics on every glyph and master of Inter Roman.
-/// `cargo test --release -p fontcraft-engine --test metrics_keys -- --ignored --nocapture`.
+/// `cargo test --release -p fontcraft-engine --test engine metrics_keys:: -- --ignored --nocapture`.
 #[test]
 #[ignore = "speed measure"]
 fn update_metrics_on_inter() {

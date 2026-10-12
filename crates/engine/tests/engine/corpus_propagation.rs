@@ -9,7 +9,7 @@
 //! {glyph: {master id: [[name, x, y], ...]}}}`, with `{"error": message}` for a source it could
 //! not load. The library is only run, never read: propagation is written from observed outputs.
 //!
-//! `cargo test -p fontcraft-engine --test corpus_propagation -- --ignored --nocapture`.
+//! `cargo test -p fontcraft-engine --test engine corpus_propagation:: -- --ignored --nocapture`.
 //! `GLYPHSLIB_ANCHORS` names the JSON file (default: `plan/local/m6/glyphslib_anchors.json`, which
 //! git ignores); `FONTCRAFT_CORPUS` the corpus folder (default: the repository's `corpus/`);
 //! `PROPAGATION_LIST=<n>` lists more than 40 differing layers.

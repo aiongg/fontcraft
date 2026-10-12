@@ -464,7 +464,7 @@ fn afmlib(afm_path: &FsPath, out: &FsPath, dir: &FsPath) -> (std::collections::B
 /// `docs/plans/M5.md` § 5, AFM: an AFM exported from Inter Roman's Regular master reads back
 /// with afmLib with FontCraft's widths and every expanded pair; the AFM afmLib writes from it
 /// imports into the master with the same values.
-/// `cargo test --release -p fontcraft-engine --test metrics_io -- --ignored --nocapture`
+/// `cargo test --release -p fontcraft-engine --test engine metrics_io:: -- --ignored --nocapture`
 #[test]
 #[ignore = "needs corpus/ (cargo xtask corpus --fetch) and fontTools (the fontmake tool's Python)"]
 fn afm_from_inter_regular_reads_back_with_afmlib_both_ways() {

@@ -159,7 +159,7 @@ fn a_collection_with_too_many_fonts_is_refused_before_reading_them() {
 
 /// Measure (M12 plan § 4, M12.60): the four reports on Oswald's static CFF fonts carry the values
 /// the comparison tool (AFDKO 5.0.1 comparefamily `-rn -rm -rp`, and `-rf`) printed for the same
-/// folder. Run with `cargo test -p fontcraft-engine --test audit_reports -- --ignored`.
+/// folder. Run with `cargo test -p fontcraft-engine --test engine audit_reports:: -- --ignored`.
 #[test]
 #[ignore = "measure"]
 fn comparefamily_reports_on_oswald() {

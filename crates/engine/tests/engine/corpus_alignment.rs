@@ -2,7 +2,7 @@
 //! `.glyphs` and `.glyphspackage` source, every master layer FontCraft aligns is re-aligned from
 //! its base glyphs as stored, and each component's offset and the layer's width are compared
 //! with the stored ones (within 0.5 unit). Differing layers are counted by setup and listed.
-//! `cargo test -p fontcraft-engine --test corpus_alignment -- --ignored --nocapture`; set
+//! `cargo test -p fontcraft-engine --test engine corpus_alignment:: -- --ignored --nocapture`; set
 //! `ALIGN_LIST=<n>` to list more than 40 differing layers.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
 

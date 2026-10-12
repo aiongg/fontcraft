@@ -3,7 +3,7 @@
 //! the control channel and the MCP server all call [`Session::execute`] with a command id and JSON
 //! parameters, and get JSON back.
 //!
-//! Three properties hold for every command, and `tests/command_sweep.rs` checks them:
+//! Three properties hold for every command, and `tests/engine/command_sweep.rs` checks them:
 //! - it never panics, whatever the parameters and the document state;
 //! - when it returns `Err`, the session is exactly as it was before the call;
 //! - when it returns `Ok`, every open font still passes [`fontcraft_model::Font::check`].

@@ -307,7 +307,7 @@ fn kerning_paste_refuses_hostile_kerning_text() {
 /// Kerning-text written from Inter Roman's Regular master reads back equal, and copying all its
 /// pairs and pasting them into the master emptied again rebuilds its table exactly. Also times
 /// `kerning.listPairs` with a search and a sort (target: under 10 ms in a release build).
-/// `cargo test -p fontcraft-engine --test kerning_window -- --ignored --nocapture`
+/// `cargo test -p fontcraft-engine --test engine kerning_window:: -- --ignored --nocapture`
 #[test]
 #[ignore = "needs corpus/ (cargo xtask corpus --fetch)"]
 fn kerning_text_round_trip_on_inter_regular() {

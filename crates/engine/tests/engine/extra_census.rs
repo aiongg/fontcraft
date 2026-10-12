@@ -1,7 +1,7 @@
 //! Diagnostic: what the model still carries untyped. Reads every corpus source (`.glyphs`,
 //! packages, UFOs, designspace files with their UFOs) and counts the `Extra` keys per kind of
 //! object and format family, with how many sources use each.
-//! `cargo test -p fontcraft-engine --test extra_census -- --ignored --nocapture`. With
+//! `cargo test -p fontcraft-engine --test engine extra_census:: -- --ignored --nocapture`. With
 //! `CENSUS_WHERE=<key>` set, it also names the sources of each row with that key.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 

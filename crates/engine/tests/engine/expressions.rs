@@ -133,7 +133,7 @@ fn read_tree(dir: &std::path::Path, root: &std::path::Path, out: &mut fontcraft_
 
 /// The cost of the engine's follow-up hook after a one-glyph edit on Inter Roman (no anchor
 /// expressions or automatic layers): the hook alone, and the whole command around it.
-/// `cargo test --release -p fontcraft-engine --test expressions -- --ignored --nocapture`.
+/// `cargo test --release -p fontcraft-engine --test engine expressions:: -- --ignored --nocapture`.
 #[test]
 #[ignore = "speed measure"]
 fn follow_changes_per_edit_on_inter() {
