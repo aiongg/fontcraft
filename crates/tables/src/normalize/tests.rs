@@ -68,11 +68,8 @@ fn layout_font() -> SfntFont {
         ClassDef::format_2(vec![ClassRangeRecord::new(g(1), g(1), 1), ClassRangeRecord::new(g(3), g(3), 1)]),
         ClassDef::format_2(vec![ClassRangeRecord::new(g(4), g(4), 1)]),
         vec![
-            Class1Record::new(vec![
-                Class2Record::new(ValueRecord::new(), ValueRecord::new()),
-                Class2Record::new(ValueRecord::new(), ValueRecord::new()),
-            ]),
-            Class1Record::new(vec![Class2Record::new(ValueRecord::new(), ValueRecord::new()), Class2Record::new(adv(-10), ValueRecord::new())]),
+            Class1Record::new(vec![Class2Record::new(adv(0), ValueRecord::new()), Class2Record::new(adv(0), ValueRecord::new())]),
+            Class1Record::new(vec![Class2Record::new(adv(0), ValueRecord::new()), Class2Record::new(adv(-10), ValueRecord::new())]),
         ],
     );
     let mark_base = MarkBasePosFormat1::new(
@@ -205,7 +202,7 @@ fn class_kerning_that_describes_too_many_pairs_is_refused() {
         all,
         ClassDef::format_2(vec![]),
         ClassDef::format_2(vec![ClassRangeRecord::new(g(1), g(65534), 1)]),
-        vec![Class1Record::new(vec![Class2Record::new(ValueRecord::new(), ValueRecord::new()), Class2Record::new(adv(-5), ValueRecord::new())])],
+        vec![Class1Record::new(vec![Class2Record::new(adv(0), ValueRecord::new()), Class2Record::new(adv(-5), ValueRecord::new())])],
     );
     let lookups = PositionLookupList::new(vec![PositionLookup::Pair(Lookup::new(LookupFlag::empty(), vec![classes]))]);
     let features = FeatureList::new(vec![feature(b"kern", vec![0])]);

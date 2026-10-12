@@ -257,10 +257,10 @@ mod tests {
 
     #[test]
     fn axis_stops_include_the_ends_and_the_default() {
-        let stops = axis_stops(100.0, 400.0, 900.0);
+        let stops = axis_stops(100.0, 450.0, 900.0);
         assert_eq!(stops.first(), Some(&100.0));
         assert_eq!(stops.last(), Some(&900.0));
-        assert!(stops.contains(&400.0));
+        assert!(stops.contains(&450.0));
         assert_eq!(stops.len(), 10, "nine even stops plus the default between them");
         assert_eq!(axis_stops(0.0, 0.0, 0.0), vec![0.0]);
         assert_eq!(nearest(&stops, 420.0), stops.iter().position(|v| *v == 400.0).unwrap());

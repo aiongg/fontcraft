@@ -17,7 +17,7 @@ const USAGE: &str = "\
 
 /// The options, as data (M12.16).
 const OPTIONS: &[OptSpec] = &[
-    OptSpec::value("format", "FORMAT", "text", "text (the default), json, csv or afm (an Adobe Font Metrics file)"),
+    OptSpec::value("format", "FORMAT", "text", "text (the default), json, csv or afm (a font metrics file)"),
     OptSpec::value("precision", "integer|real", "integer", "round values to integers, or print exact values"),
     OptSpec::switch("aggregate-bbox", false, "add the font bounding box and the glyphs that set its edges"),
     OptSpec::switch("sidebearings", false, "add the left and right side bearings"),

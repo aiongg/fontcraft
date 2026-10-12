@@ -1742,7 +1742,7 @@ mod tests {
             assert!(!head.decoded && head.error.is_some(), "a short head is reported, not decoded");
         }
         assert_eq!(date(0), "1904-01-01 00:00:00");
-        assert_eq!(date(3_786_825_600), "2024-01-01 00:00:00");
+        assert_eq!(date(3_786_912_000), "2024-01-01 00:00:00");
         let (name, indices) = split_indices("lookups[3][12]").unwrap();
         assert_eq!((name, indices), ("lookups", vec![3, 12]));
         assert!(split_indices("lookups[x]").is_err() && split_indices("[3]").is_err());
