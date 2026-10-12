@@ -1251,6 +1251,39 @@ fn includes_that_double_at_each_level_are_refused() {
     assert!(d.iter().any(|d| d.message.contains("more than")), "{d:#?}");
 }
 
+/// fea-rs follows an include after any byte (error recovery) and trims the path. Each level
+/// includes the next once plainly, so the file is loaded, and once in the other spelling: a
+/// pre-pass that missed the second would let fea-rs expand the chain 2^40 times.
+#[test]
+fn doubling_includes_after_any_byte_are_refused() {
+    for (before, pad) in [("-", ""), ("1", ""), ("$", ""), (".", ""), ("x", ""), ("", " ")] {
+        let stmts = |n: &str| format!("include({n}); {before}include({pad}{n}{pad});");
+        let mut f = files(&stmts("l0.fea"));
+        for i in 0..40 {
+            let next = format!("l{}.fea", i + 1);
+            f.insert(&format!("l{i}.fea"), &format!("{} # padding to make each copy count\n", stmts(&next))).unwrap();
+        }
+        f.insert("l40.fea", "@x = [a];").unwrap();
+        let d = run_files(&f).unwrap_err();
+        assert!(d.iter().any(|d| d.message.contains("more than")), "{before:?} {pad:?}: {d:#?}");
+    }
+}
+
+#[test]
+fn doubling_includes_read_from_disk_are_refused() {
+    let dir = std::env::temp_dir().join(format!("fontcraft-fea-disk-bomb-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    for i in 0..40 {
+        let next = i + 1;
+        std::fs::write(dir.join(format!("l{i}.fea")), format!("include(l{next}.fea); $include(l{next}.fea); # padding\n")).unwrap();
+    }
+    std::fs::write(dir.join("l40.fea"), "@x = [a];").unwrap();
+    let f = files("include(l0.fea); $include(l0.fea);").with_include_dir(dir.clone());
+    let d = run_files(&f).unwrap_err();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(d.iter().any(|d| d.message.contains("more than")), "{d:#?}");
+}
+
 #[cfg(unix)]
 #[test]
 fn includes_that_make_new_paths_through_a_folder_link_stop() {

@@ -168,9 +168,11 @@ pub(crate) fn normalize(dir: &str, raw: &str) -> Option<String> {
     (!path.is_empty() && path.len() <= MAX_PATH_BYTES).then_some(path)
 }
 
-/// The include statements of `text`: the path as written and the statement's byte range.
-/// Comments and strings are skipped. Statements inside anonymous blocks are found too, which
-/// only makes the checks stricter.
+/// The include statements of `text`: the path with surrounding whitespace trimmed, and the
+/// statement's byte range. Comments and strings are skipped. `include` counts whatever byte
+/// precedes it: fea-rs's error recovery follows `-include(…)`, `1include(…)` and the like, and
+/// every statement it follows must be counted here. Statements inside anonymous blocks or
+/// identifiers are found too, which only makes the checks stricter.
 fn include_statements(text: &str) -> Vec<(&str, std::ops::Range<usize>)> {
     let bytes = text.as_bytes();
     let mut out = Vec::new();
@@ -179,7 +181,7 @@ fn include_statements(text: &str) -> Vec<(&str, std::ops::Range<usize>)> {
         match b {
             b'#' => i = skip_comment(bytes, i),
             b'"' => i = skip_string(bytes, i),
-            b'i' if bytes.get(i..i + 7) == Some(b"include") && (i == 0 || bytes.get(i - 1).is_none_or(|p| !is_ident(*p))) => {
+            b'i' if bytes.get(i..i + 7) == Some(b"include") => {
                 let mut j = i + 7;
                 while bytes.get(j).is_some_and(u8::is_ascii_whitespace) {
                     j += 1;
@@ -193,7 +195,8 @@ fn include_statements(text: &str) -> Vec<(&str, std::ops::Range<usize>)> {
                     break;
                 };
                 if let Some(path) = text.get(open..open + len) {
-                    out.push((path, i..open + len + 1));
+                    let trimmed = path.trim_matches(|c: char| c.is_ascii_whitespace());
+                    out.push((if trimmed.is_empty() { path } else { trimmed }, i..open + len + 1));
                 }
                 i = open + len + 1;
             }
@@ -201,10 +204,6 @@ fn include_statements(text: &str) -> Vec<(&str, std::ops::Range<usize>)> {
         }
     }
     out
-}
-
-fn is_ident(b: u8) -> bool {
-    b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'-' | b'\\' | b'@' | b'$')
 }
 
 fn skip_comment(bytes: &[u8], i: usize) -> usize {
@@ -283,8 +282,8 @@ mod tests {
 
     #[test]
     fn include_statements_skip_comments_and_strings() {
-        let text = "# include(a.fea)\ninclude(b.fea);\nname \"include(c)\"; myinclude(d); include (e f.fea)";
+        let text = "# include(a.fea)\ninclude(b.fea);\nname \"include(c)\"; -include(d); include ( e f.fea )";
         let paths: Vec<&str> = include_statements(text).into_iter().map(|(p, _)| p).collect();
-        assert_eq!(paths, ["b.fea", "e f.fea"]);
+        assert_eq!(paths, ["b.fea", "d", "e f.fea"]);
     }
 }
