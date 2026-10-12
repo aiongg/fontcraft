@@ -122,6 +122,7 @@ bundled, the file says so in its header and the project is listed here with its 
   designspace writer follows the element order of designspaceLib. crates/io-ufo/src/designspace/rules.rs
   ports varLib's overlayFeatureVariations, overlayBox and cleanupBox (featureVars.py), and
   crates/io-glyphs/src/lib.rs (quadratic_roots) the quadratic solver of misc/bezierTools.py.
+  crates/interp/src/overlay.rs ports the same three functions, and crates/compile/src/var/featvar.rs the GSUB of addFeatureVariations, with the alternate glyph names and order of fontc's glyphs2fontir/src/source.rs and glyphsLib's builder/bracket_layers.py (Apache License 2.0).
   crates/geom/src/variation.rs ports varLib's normalizeValue, supportScalar and VariationModel
   (models.py). The CFF writer (crates/cff) ports cffLib: the table layout and offset passes, INDEX, charset
   and DICT compilers, the standard strings and predefined charsets (data from Adobe Technical
@@ -202,13 +203,23 @@ bundled, the file says so in its header and the project is listed here with its 
   gdefFeatureWriter.py (MIT License).
   The glyph range size estimate of the feature compiler's checks (crates/fea/src/check.rs, M8.2)
   follows fea-rs's fea-rs/src/compile/glyph_range.rs (MIT OR Apache-2.0) at version 1.0.0.
+  The axis ranges and normalization of the designspace (crates/interp/src/designspace.rs, M9.2)
+  follow fontc's glyphs2fontir/src/toir.rs (to_ir_axis) and fontdrasil/src/coords.rs
+  (CoordConverter).
+  The variable font tables fvar, avar, HVAR, VVAR and MVAR and their name ID allocation (crates/compile/src/var/fvar.rs, avar.rs, hvar.rs, mvar.rs and names.rs, M9.6) follow fontc 1.0.0's fontbe/src/fvar.rs, avar.rs, hvar.rs, vvar.rs, metric_variations.rs and mvar.rs and fontir/src/ir/static_metadata.rs.
+  The STAT table of variable fonts (crates/compile/src/var/stat.rs, M9.7) is ported from fontc at
+  commit 4504578c3f74c2739f7e55cae133bbfe773f6d8c (glyphs2fontir/src/stat.rs, which follows
+  glyphsLib's builder/stat.py, Apache License 2.0; fontir/src/ir/static_metadata.rs;
+  fontbe/src/stat.rs), with designspace axis labels read as fontTools' varLib/stat.py reads them
+  (MIT License).
 
   The PostScript autohinter (crates/autohint, M10) is ported from otfautohint in AFDKO 5.0.1
   (https://github.com/adobe-type-tools/afdko), Apache License 2.0, Copyright 2021 Adobe: its
   glyph representation (glyphData.py), hinter (hinter.py), hint state (hintstate.py), overlap
   handling (overlap.py), font dictionaries and override sets (fdTools.py, splitpsdicts.py),
   reports (report.py) and options (autohint.py). otfautohint uses fontTools' bezierTools (MIT
-  License) for its curve maths, which crates/autohint/src/bezier.rs ports with it.
+  License) for its curve maths, which crates/autohint/src/bezier.rs ports with it;
+  crates/autohint/src/glyph.rs also ports the quadratic-to-cubic step of fontTools' BasePen.
 
 Product names mentioned in the documentation are trademarks of their owners and are used only to
 identify the products FontCraft is compared with or interoperates with.

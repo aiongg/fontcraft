@@ -88,8 +88,19 @@ impl VarAxes {
     /// The axes of `designspace`: tags, names, external ranges and normalized maps.
     pub fn from_designspace(designspace: &fontcraft_interp::Designspace) -> Result<VarAxes, CompileError> {
         // M9.6
-        let _ = designspace;
-        Err(CompileError::NotYetImplemented("variable font axes"))
+        let axes = designspace
+            .axes()
+            .iter()
+            .map(|a| {
+                let tag = Tag::new_checked(a.tag.as_bytes()).map_err(|_| fontcraft_interp::InterpError::BadAxisTag(a.tag.clone()))?;
+                let (min, default, max) = (a.external.minimum, a.external.default, a.external.maximum);
+                if !(min.is_finite() && default.is_finite() && max.is_finite() && min <= default && default <= max) {
+                    return Err(CompileError::Table { table: "fvar", message: format!("axis `{}` has no usable range", a.tag) });
+                }
+                Ok(VarAxis { tag, name: a.name.clone(), min, default, max, hidden: a.hidden, avar: avar::segment_map(a) })
+            })
+            .collect::<Result<Vec<_>, CompileError>>()?;
+        Ok(VarAxes { axes })
     }
 }
 

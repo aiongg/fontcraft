@@ -3215,6 +3215,7 @@ milestone = "M11"
 summary = "Run from Font View with one file chosen, glyph.addImage (Glyph → Add Image…) places the image on the selected glyph's active layer."
 ref = "Font View › Images"
 status = "handbook"
+notes = "Documented, not yet observed. Commands take no UI state, so the caller names the glyphs (`glyphs`) and the layer; without `layer` the first master's layer is used."
 
 [[behavior]]
 id = "fontView.image.dropOnCell"
@@ -3231,6 +3232,7 @@ milestone = "M11"
 summary = "When Add Image is given several files, each is matched to a glyph by file name without extension and placed on that glyph's current-master layer. Files with no matching glyph are listed in the command's result and change nothing."
 ref = "Font View › Images"
 status = "handbook"
+notes = "Documented, not yet observed. A glyph name is the file name without its folder and last extension (`A.alt.png` names `A.alt`). The placed and unmatched files are listed in the result; when no file matches, the call is refused."
 guesses = [
   "Files with no glyph of their name are skipped and listed in the result; no glyph is created. Settled by Add Image with an unmatched file in the reference.",
 ]
@@ -3243,6 +3245,7 @@ milestone = "M11"
 summary = "Glyph names are case-sensitive but many file systems are not, so A.png and a.png cannot share a folder there. The documented workaround is to keep uppercase and lowercase images in separate folders; on case-sensitive systems we match exactly."
 ref = "Font View › Images"
 status = "handbook"
+notes = "Documented, not yet observed. Images for upper- and lower-case glyphs can be kept in separate folders and added in one call."
 guesses = [
   "File names are matched to glyph names exactly, case included, on every platform. Settled by Add Image with `a.png` in a font with `A` and `a` in the reference.",
 ]

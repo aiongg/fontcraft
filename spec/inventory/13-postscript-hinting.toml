@@ -100,6 +100,9 @@ milestone = "M10"
 summary = "Validity rules for a master's zones: at most 6 top zones, at most 5 bottom zones, plus the baseline zone; the baseline zone sits at position 0; zones never overlap and keep at least one unit between them; no zone is larger than 25 units, and none is larger than 240 / (240 x blueScale - 0.98). A font-info check should report each violated rule."
 ref = "PostScript Hinting › Alignment Zones"
 status = "handbook"
+notes = "hint.ps.validateFontHints reports each rule (crates/hinting/src/validate.rs): overlap, a gap below 2 × blueFuzz + 1 (at least one unit), more than 6 top or 5 bottom zones besides the baseline zone, no zone at 0, a zone above 25 units or above 240 ÷ (240 × blueScale − 0.98), blueScale not positive. Documented, not yet observed."
+guesses = ["Overlapping zones and values that are not positive are errors and every other broken rule a warning, and the export still writes what fits the CFF limits; the reference app's font-info check would show how it ranks them."]
+observe = ["T5: give master 1 two overlapping zones and a 30-unit zone, open Font Info and export as CFF; note every warning or error shown and whether the export goes ahead."]
 
 [[behavior]]
 id = "hinting.ps.alignmentZones.gridCompensation"
@@ -108,6 +111,8 @@ milestone = "M10"
 summary = "When the font uses a non-default grid (grid spacing or subdivision), zones should be widened by one unit at each end to absorb coordinate rounding: move the position one unit away from the zone and grow the size by two units. The baseline zone is the exception: its position stays 0 and only its size grows by one unit."
 ref = "PostScript Hinting › Alignment Zones"
 status = "handbook"
+guesses = ["The check flags a zone whose size is a whole number of grid steps when the grid is coarser than one unit (it was not widened), and says nothing for finer or fractional grids, where a widened zone cannot be told apart; whether the reference app checks this at all would settle it."]
+observe = ["T1 with a grid spacing of 10 and a zone of size 20: open Font Info and export as CFF; note any warning about the zone."]
 
 [[behavior]]
 id = "hinting.ps.alignmentZones.blueValuesMapping"
@@ -149,6 +154,9 @@ milestone = "M10"
 summary = "blueShift is an optional custom parameter (set in Font Info › Font) written to the Private dict as BlueShift. For flex hints to work it must be at least the depth of the shallow curve plus one unit, e.g. 6 or more for serifs cupped 5 units deep. The CFF default of 7 is recalled, not confirmed here."
 ref = "PostScript Hinting › Custom Parameters; Flex Hints"
 status = "handbook"
+notes = "The default 7 is documented in the parameter description (Appendix › Custom Parameters) and not yet observed."
+guesses = ["blueShift, blueScale, blueFuzz and the other hinting parameters whose scope the handbook does not give are read from the instance, else the master, else the font, as FontCraft reads every other parameter; a reference export with a master-level and a font-level blueShift that differ would settle it."]
+observe = ["T5: set blueShift 9 on the font and 11 on master 1, export master 1 as CFF and note the BlueShift in the Private dict."]
 
 [[behavior]]
 id = "hinting.ps.blueFuzz"
@@ -289,7 +297,7 @@ label = "Render Hinted Preview"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{instance: id, text: string, ppem: [number], hinted?: bool, format?: 'png'|'json'}"
+params = "{instance?: name (default: the first master), text: string, ppem: number or [numbers], hinted?: bool, format?: 'png'|'json', autohint?: bool}"
 area = "hinting-ps"
 milestone = "M10"
 summary = "Compiles the given instance in memory with its PostScript hints and rasterizes a text at the listed pixel sizes with a hint-applying rasterizer, returning bitmaps (and optionally the unhinted rendering for comparison). Our design, replacing the reference's export-and-look-in-another-app loop for people and agents."
@@ -297,6 +305,7 @@ ref = "PostScript Hinting › Autohinting"
 status = "inferred"
 guesses = ["The preview rasterizes with skrifa's PostScript hinter (a port of FreeType's), not with an Adobe rasterizer; comparing with the Adobe application preview the handbook suggests would show how far they differ."]
 own = true
+notes = "`hinted: false` renders the same text without hints, for comparison; `format: 'json'` returns each glyph's outline in pixels instead of the line's PNG."
 
 # ---------------------------------------------------------------------------------------------
 # Manual hinting: commands
@@ -507,6 +516,9 @@ milestone = "M10"
 summary = "A glyph-level hint is either a stem hint, which brackets a horizontal or vertical stroke-like feature (stem, serif, crossbar) with an origin and a size, or a ghost hint, which marks only a top or a bottom edge where no horizontal stem exists (top and bottom of a sans-serif I, top of a sans L, bottom of a sans P). Ghost hints exist only in the horizontal-hint direction."
 ref = "PostScript Hinting › Manual hinting; Ghost Hints"
 status = "handbook"
+notes = "M10.2 reads every stored form of the format samples and the corpus: node-linked edges (origin, target), numeric edges in place = (position, width), ghosts with target down or up in both forms, format 2 brace strings, and glyphsLib's dictionaries in a UFO glyph's lib; an unchanged hint is written back byte for byte (crates/hinting/src/ps.rs). Documented, not yet observed in the reference app."
+guesses = ["A stem with one edge on a node and the other a number (left when a linked node is deleted) is stored with the number as place = (number, 0); a file saved by the reference app after deleting one linked node of a stem hint would show its form."]
+observe = ["T1: link a stem hint of I to two nodes, delete one of the nodes, save as .glyphs and note the keys the hint is stored with (origin, target, place)."]
 
 [[behavior]]
 id = "hinting.ps.manual.horizontalHintsNeedExactY"
@@ -589,6 +601,7 @@ milestone = "M10"
 summary = "Glyph-level hints are read from one master only, the main master, which is the first master in the list unless the font has a Get Hints From Master custom parameter (Font Info › Font) naming another. The same rule and the same parameter govern TrueType hints."
 ref = "PostScript Hinting › Hinting Multiple Masters"
 status = "handbook"
+notes = "Get Hints From Master is read from the font and matched to a master id, else a master name (the corpus's Inter stores an id); an unknown value falls back to the first master. Documented, not yet observed."
 
 [[behavior]]
 id = "hinting.ps.masters.transferByNodeLink"
@@ -617,6 +630,7 @@ milestone = "M10"
 summary = "Where a glyph uses Alternate or Intermediate layers, hints must also be put on the special layer that stands in for the hint-carrying master layer; the master layer's own hints do not apply to the part of the design space where the special layer takes over."
 ref = "PostScript Hinting › Hinting Multiple Masters"
 status = "handbook"
+notes = "A special layer that is exported uses its own hints and, without any, is left to the autohinter (ps_hint_layer in crates/hinting/src/ps.rs). Documented, not yet observed."
 
 [[behavior]]
 id = "hinting.ps.cff2.sharedHintStructure"
@@ -669,6 +683,7 @@ milestone = "M10"
 summary = "Read-only stem histogram (AFDKO stemhist): runs the hinter's stem detection without writing hints and returns the horizontal and vertical stem widths found with their glyph counts, for choosing standard stems. By default only stems bounded by straight segments are counted; includeCurved adds stems formed by curves."
 ref = "AFDKO otfautohint __main__.py › stemhist; docs/AFDKO-Overview.md"
 status = "docs"
+notes = "Rows are rounded to whole units and sorted as otfautohint's report files are: most stems first, then widest first; `.notdef` is left out. The text form joins the horizontal and vertical lists that otfautohint writes to two files, without the file path and time in their titles. Overlaps are not removed before the analysis."
 
 [[command]]
 id = "autohint.ps.reportZones"
@@ -682,6 +697,7 @@ milestone = "M10"
 summary = "Read-only alignment-zone report (AFDKO stemhist -z): returns the top and bottom extreme heights found across the glyphs with their counts, for choosing zone positions and sizes. Like the stem report it runs with flex off and without requiring existing zones."
 ref = "AFDKO otfautohint __main__.py › stemhist"
 status = "docs"
+notes = "A zone row is one edge: the top and bottom of each glyph's extent and of each horizontal stem, rounded to whole units; top edges highest first, bottom edges lowest first, as otfautohint's .top.txt and .bot.txt files sort them."
 
 [[command]]
 id = "autohint.ps.listFdDicts"
@@ -689,12 +705,13 @@ label = "List Hint Dictionaries"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{allInstances?: bool}"
+params = "{fontinfo?: text, master?: id, allInstances?: bool}"
 area = "hinting-ps"
 milestone = "M10"
 summary = "Read-only query listing every zone-and-stem set in effect (from the font or from overrides) together with the glyphs assigned to each, including the catch-all set for glyphs that matched no override. With allInstances it lists them for every master or instance instead of only the default one (otfautohint --print-list-fddict / --print-all-fddict)."
 ref = "AFDKO otfautohint --help"
 status = "docs"
+notes = "The override sets are passed as fontinfo text in `fontinfo` (the reference reads a file beside the font). allInstances lists every master; instances between masters wait for M9. The font's own set is read with zones and stems not required, so a master without them is listed with inactive zones; otfautohint refuses such a font unless --no-zones-stems is given. The font's vertical extremes used for the catch-all set are those otfautohint takes for a source font: one em below the baseline and two above."
 
 [[behavior]]
 id = "autohint.ps.inputs"
@@ -720,6 +737,8 @@ milestone = "M10"
 summary = "The hinter can hint glyphs that still contain overlapping contours roughly as if the overlap had been removed. Which glyphs get this treatment is set by a list (-m, --overlaps-file), by --force-overlap (all glyphs) or --force-no-overlap (none); without any of these it is on for variable fonts and for runs with a reference font, and off for single static fonts."
 ref = "AFDKO otfautohint --help; docs/otfautohint_Notes.md"
 status = "docs"
+notes = "Ported in crates/autohint/src/overlap.rs and segments.rs: segments are generated on the overlap-free outline and each is recorded for the element of the original outline it was matched to. The autohinter cannot remove overlaps itself (it sits below the path operations), so the caller passes the overlap-free contours; when they draw the same outline, nothing is matched."
+guesses = ["FontCraft treats a glyph as overlapping when its path operations change the outline, where otfautohint asks whether any point of its flattened outline disappeared; the two differ on a cross of two bars whose corners all lie outside the other bar (overlapping here, not there), and comparing both autohinters on such glyphs would settle which to follow."]
 
 [[behavior]]
 id = "autohint.ps.looseOverlapMapping"
@@ -768,6 +787,7 @@ milestone = "M10"
 summary = "With -c (--allow-changes) the hinter may alter outlines to hint better: it reorders contours to need fewer hint switches and turns nearly straight curves into lines. It is off by default, so hinting normally leaves every coordinate untouched."
 ref = "AFDKO otfautohint --help"
 status = "docs"
+notes = "FontCraft's port (crates/autohint, driver.rs and masters.rs) follows otfautohint: with changes allowed, glyphs of 4 to 100 contours may have their contours reordered, and when several masters are hinted together a segment that is a line in some masters and a curve in others becomes a curve in all; without changes allowed such masters are not hinted."
 
 [[behavior]]
 id = "autohint.ps.decimalCoordinates"
@@ -789,9 +809,10 @@ status = "docs"
 id = "autohint.ps.flexDetection"
 area = "hinting-ps"
 milestone = "M10"
-summary = "The hinter marks a pair of adjoining curves as flex when the pair's endpoints line up in one direction, the bulge is no deeper than 20 units, the pair is long relative to its depth, and the two halves are not too unequal in length (ratio of about 1:3 or better). A glyph that already carries flex is left as it is."
+summary = "The hinter marks a pair of adjoining curves as flex when the pair's endpoints line up in one direction, the bulge is no deeper than 20 units, the pair is at least three times as long as it is deep, and the two halves are not too unequal in length (ratio of about 1:3 or better). The bulge must be convex, the elements before and after the pair must not bend back towards its middle, no tiny element may sit between the curves, and the pair may not straddle the start of its contour. Flex the glyph already carries is cleared and found again."
 ref = "AFDKO otfautohint hinter.py (MaxFlex, FlexLengthRatioCutoff)"
 status = "docs"
+notes = "Ported in crates/autohint/src/flex.rs (addFlex, tryFlex, markFlex). The second curve of a flex pair adds a segment along the pair's chord, so the flat edge is hinted; a curve split at an inflection for segment generation loses its flex mark for that purpose, as in otfautohint."
 
 [[behavior]]
 id = "autohint.ps.hintSubstitution"
@@ -800,6 +821,7 @@ milestone = "M10"
 summary = "When a glyph needs stems that conflict (overlap) in one direction, the hinter distributes them over hint masks that switch the active set along the outline; this mask distribution is what older documentation calls hint substitution. --no-hint-sub disables it, leaving one non-conflicting set for the whole glyph."
 ref = "AFDKO otfautohint --help; docs/otfautohint_Notes.md"
 status = "docs"
+notes = "FontCraft's port (crates/autohint/src/driver.rs, distributeMasks) places each new mask on the element where it takes over; a mask placed on a contour's closing element is written before that contour's moveto, as otfautohint writes it."
 
 [[behavior]]
 id = "autohint.ps.noZonesStems"
@@ -824,6 +846,7 @@ milestone = "M10"
 summary = "Stems are found by pairing opposing outline segments in each direction and scoring the pairs; pairs whose width matches a known stem width are preferred, and pairs wider than an initial limit of 150 units are not considered at first. Curves with an inflection are split there for analysis and the result is mapped back to the original curve."
 ref = "AFDKO otfautohint hinter.py; docs/otfautohint_Notes.md"
 status = "docs"
+notes = "crates/autohint/src/stems.rs ports the scoring, pruning, main-value choice and the 22-position limit from hinter.py. The widest stem considered is the larger of 150 and the widest dominant stem, times 1.15; a wider pair keeps a reduced score up to twice that width. Two quirks are kept because otfautohint is the oracle: stems sharing a position are grouped only when their upper edge equals the lower one, so each stem is its own best, and stems are merged only while reporting zones. The reference app's own autohinter is not documented."
 
 [[behavior]]
 id = "autohint.ps.ghostStems"
@@ -832,6 +855,7 @@ milestone = "M10"
 summary = "A horizontal segment that lies inside an alignment zone but has no opposing segment to form a stem with gets a synthetic ghost stem so that the edge can still be aligned; internally the ghost partner sits 20 units away. In the charstring a ghost hint is written with the reserved widths (-20 for a top edge, -21 for a bottom edge; these two numbers are from the Type 2 charstring convention, recalled rather than read here)."
 ref = "AFDKO otfautohint hinter.py (GhostWidth); docs/otfautohint_Notes.md › Stem ordering"
 status = "docs"
+notes = "Ported in crates/autohint/src/stems.rs: an edge inside a zone gets a ghost value of score 20 whose partner sits 20 units away, above a bottom edge and below a top edge; a real stem on the same edge with a higher score suppresses it. As in otfautohint, every ghost value refers to one shared ghost segment."
 
 [[behavior]]
 id = "autohint.ps.zoneMembership"
@@ -840,6 +864,7 @@ milestone = "M10"
 summary = "An edge counts as inside a zone when it lies between the zone's two edges widened by BlueFuzz on each side. A built-in list of symbol glyphs (at, bullet, copyright, currency, registered) is always treated as being in no zone."
 ref = "AFDKO otfautohint hinter.py (inBand); autohint.py (ACOptions.noBlues)"
 status = "docs"
+notes = "Ported in crates/autohint/src/dimension.rs (inBand): BlueValues and OtherBlues of the main dictionary, top zones for upper edges and bottom zones for lower edges, widened by that dictionary's BlueFuzz. Vertical stems never use zones."
 
 [[behavior]]
 id = "autohint.ps.counterHints"
@@ -848,6 +873,7 @@ milestone = "M10"
 summary = "Counter hints keep the gaps between three or more stems open and equal. The hinter only tries them on a short built-in list: vertical counters for m, M, T and ellipsis, horizontal counters for element, equivalence, notelement and divide. VCounterChars and HCounterChars extend the lists by at most 64 glyph names each, and LanguageGroup 1 marks a zone set whose (ideographic) glyphs should all get counter hints."
 ref = "AFDKO otfautohint --doc-fontinfo"
 status = "docs"
+notes = "Ported in crates/autohint/src/stems.rs (tryCounterHinting): the three highest main stems are kept as counter hints when their widths and both gaps agree within 0.05 units and the fourth stem, if any, scores at most a tenth of the first and no more than 1000. Without such stems the bounding boxes of the subpaths are added and the test is repeated; then the glyph is hinted normally. otfautohint reads LanguageGroup but its hinter does not use it, so neither does the port. The fontinfo lists reach the hinter through the glyph's dictionary."
 
 [[behavior]]
 id = "autohint.ps.fontinfoOverrides"
@@ -856,6 +882,7 @@ milestone = "M10"
 summary = "Groups of glyphs can be hinted with their own zones and stems instead of the font's global ones. The reference reads them from a text file named fontinfo beside the font (or --fontinfo-file PATH; --ignore-fontinfo disables the lookup) containing named 'begin FDDict NAME … end FDDict NAME' blocks of key/value lines and 'begin GlyphSet NAME … end GlyphSet NAME' blocks listing glyph names or regular expressions; '#' starts a comment."
 ref = "AFDKO otfautohint --doc-fontinfo"
 status = "docs"
+notes = "FontCraft reads the text, not a file: the `fontinfo` parameter of autohint.ps.listFdDicts takes it, and `include` lines are not followed. Glyph patterns are matched by our own engine for the regular-expression features the format's documentation lists (anchors, classes, `.`, `*`, `+`, `?`, `{m,n}`, escapes such as `\\S`); groups and alternation are refused with the line number."
 
 [[behavior]]
 id = "autohint.ps.fontinfoOverrides.rules"
@@ -888,6 +915,7 @@ milestone = "M10"
 summary = "An override set must provide at least two zone pairs (the baseline bottom zone and one top zone) and both DominantH and DominantV; everything else is optional. Non-zone keys are FontName, OrigEmSqUnits and LanguageGroup (used when building CID fonts), DominantV, DominantH, FlexOK, VCounterChars, HCounterChars and BlueFuzz."
 ref = "AFDKO otfautohint --doc-fontinfo; fdTools.py"
 status = "docs"
+notes = "A set without DominantH or DominantV is refused with the line of its `begin`; otfautohint only warns, then fails when it hints a glyph of that set. A FinalFont set is not held to these rules, as otfautohint does not check it. When the final font's zones and stems are merged from the sets, FontCraft keeps the vertical stems of sets that have no OtherBlues zones, which otfautohint 5.0.1 drops."
 
 [[behavior]]
 id = "autohint.ps.dominantStems"
@@ -912,6 +940,7 @@ milestone = "M10"
 summary = "Option -k (--keep-conflicts) keeps a stem whose order inverts against another stem somewhere in the design space instead of removing it. Default is removal."
 ref = "AFDKO otfautohint --help"
 status = "docs"
+guesses = ["The search that picks which conflicting stems to remove tries both choices for each conflict, as otfautohint does, but only for its first 4,096 steps; after that it keeps the first choice, so a glyph with that many order conflicts across masters can lose different stems than otfautohint would. Hinting such a glyph with otfautohint would show whether the limit is ever reached in practice."]
 
 [[behavior]]
 id = "autohint.ps.variable.stemOverlap"
@@ -928,6 +957,7 @@ milestone = "M10"
 summary = "The hinter can hint a variable CFF-based font, including an already built CFF2 font, in one pass: the default master decides the hint structure and the other masters supply the varying coordinates. Glyphs that still contain overlaps (normal in variable fonts) are hinted close to how their overlap-removed form would be."
 ref = "AFDKO docs/otfautohint_Notes.md › Changes Summary"
 status = "docs"
+notes = "FontCraft's port hints the masters of a glyph together (crates/autohint/src/masters.rs, hint_masters): the main master decides the stems and masks, every other master gets the same stems in the same order and the same masks, a master without the glyph is skipped, and masters whose contours differ are an error. Only the main master's overlap-free outline is used for segments."
 
 [[behavior]]
 id = "autohint.ps.parallelism"

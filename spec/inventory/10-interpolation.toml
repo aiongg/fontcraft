@@ -60,6 +60,9 @@ milestone = "M9"
 summary = "Axis tags are four characters. Registered axes use their registered tag; a private axis takes any name and a tag of four capital letters so it cannot clash with a tag registered later."
 ref = "Interpolation › Setting up Axes"
 status = "handbook"
+guesses = [
+  "A tag of fewer than four printable ASCII characters is padded with spaces and a longer one exports its first four; settle by typing a three- and a five-character tag in the reference app's axis dialog and exporting.",
+]
 
 [[behavior]]
 id = "axes.coordinatesAreFreeNumbers"
@@ -92,6 +95,10 @@ milestone = "M9"
 summary = "When masters are disabled for a variable-font export, any axis on which the remaining masters all share one coordinate is left out of the exported font."
 ref = "Interpolation › Setting up Instances › Subsetting the Designspace"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "An axis is dropped only when Disable Masters removes a master, and an axis a virtual master still varies is kept; settle by exporting F1 with a third axis all masters share, without Disable Masters, and again with a virtual master on that axis.",
+]
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Masters (Font Info › Masters)
@@ -227,6 +234,10 @@ milestone = "M9"
 summary = "A variable font lists the document's static instances as predefined axis settings, so a font menu can offer style names instead of raw axis values."
 ref = "Interpolation › Interpolation Applications; Setting up Instances › Static Instances"
 status = "handbook"
+notes = "Documented, not yet observed. `var::fvar::named_instances` (M9.6) writes every exported static instance inside the axis ranges as an `fvar` named instance, named by `variableStyleNames` when set, else by its name, with its `variablePostscriptFontName` (else PostScript Font Name) as PostScript name, as fontc does."
+guesses = [
+  "Instances that do not export are left out of `fvar`, as the oracles do; settle by exporting F1 with one instance's export switch off and reading `fvar`.",
+]
 
 [[behavior]]
 id = "instances.parametersStaticOnly"
@@ -268,9 +279,12 @@ milestone = "M9"
 summary = "A Disable Masters parameter on a variable font setting lists master names separated by a comma and a space; those masters contribute nothing to that export, giving a variable font over a subset of the designspace."
 ref = "Interpolation › Setting up Instances › Subsetting the Designspace"
 status = "handbook"
-notes = "Neither oracle reads Disable Masters (fontc 1.0.0, glyphsLib 6.15.0); the measure builds the oracle from a copy of the source without those masters (docs/plans/M9.md § 5)."
+notes = "Neither oracle reads Disable Masters (fontc 1.0.0, glyphsLib 6.15.0); the measure builds the oracle from a copy of the source without those masters (docs/plans/M9.md § 5). The value is read as a list of names or as one text of names separated by commas."
 observe = [
   "In F1 (two masters), add Disable Masters naming Black on a variable font setting and export it: read `fvar` and note the axis range and named instances.",
+]
+guesses = [
+  "A name that is not a master is ignored and reported as a warning instead of refusing the export; settle by naming a missing master in the reference app and exporting.",
 ]
 
 [[behavior]]
@@ -302,6 +316,10 @@ milestone = "M9"
 summary = "Two layers of a glyph can interpolate only when they match in: the number of paths and, per path, the order of nodes (which we read as node count plus the sequence of line and curve segments); anchors, by count and by name; components, by count and by the glyph each one references; and the order of shapes, paths and components counted together."
 ref = "Interpolation › Outline Compatibility"
 status = "handbook"
+guesses = [
+  "An open path against a closed one with the same nodes is incompatible, images are left out of the shape order, and shapes the model keeps unread match each other. Settle by opening the Master Compatibility view on such layers in the reference app.",
+  "Anchors match by their set of names, in any order. Settle by giving two masters the same anchors in a different order and looking for the red indicator.",
+]
 
 [[behavior]]
 id = "compatibility.editViewRedBar"
@@ -328,6 +346,7 @@ ref = "Interpolation › Outline Compatibility › Identifying Incompatible Outl
 status = "handbook"
 guesses = [
   "Masters needed by an instance are those with a non-zero scalar at the instance's location in the variation model; variable font settings count as needing every master they do not disable. Settle by observing the indicators with an instance between two of three masters.",
+  "The scope is the union of the masters of every instance that needs two or more masters, rather than the pairs each instance needs; as compatibility is an equivalence the two differ only when two groups of masters share no instance. Settle with two instances, each between a different pair of four masters, and one pair incompatible with the other.",
 ]
 observe = [
   "In F1 (two masters) with a third master at 400 and only a Thin instance, give Black an incompatible glyph: note whether that glyph shows the red indicators.",
@@ -641,6 +660,9 @@ milestone = "M9"
 summary = "A virtual master is a designspace location declared at font level that behaves as a master but has no master layers and no kerning of its own. Only glyphs that carry an intermediate layer at that location change there; all other glyphs and all kerning are unaffected."
 ref = "Interpolation › Intermediate Layers › Virtual Masters"
 status = "handbook"
+guesses = [
+  "On an axis a virtual master does not name, it sits at the origin's coordinate; settle by adding a virtual master that names one of two axes in the reference app and reading the exported `gvar` regions.",
+]
 
 [[behavior]]
 id = "virtualMaster.setupSteps"
@@ -757,6 +779,7 @@ milestone = "M9"
 summary = "Alternate layers are per glyph, and one must be added under each master so the alternate shape can itself interpolate across the whole designspace; all carry the same range."
 ref = "Interpolation › Switching Shapes › Alternate Layers"
 status = "handbook"
+notes = "The handbook asks for one alternate layer under every master and does not say what happens without one. Both oracles (fontc `glyphs2fontir/src/source.rs`, glyphsLib `builder/bracket_layers.py`) take the master layer where a range set has no layer under a master, and `fontcraft_interp::sources` does the same."
 
 [[behavior]]
 id = "alternateLayer.bracketLabel"
@@ -797,6 +820,11 @@ milestone = "M9"
 summary = "A master layer can itself be given an axis range. Its counterpart is an extra layer under the same master marked Alternate with both bounds empty, shown as []; in that case the master layer holds the alternate outline while the [] layer holds the normal one. Which arrangement is used changes nothing in exported fonts."
 ref = "Interpolation › Switching Shapes › Alternate Layers"
 status = "handbook"
+notes = "fontc reads no range on a master layer (glyphs-reader 1.0.0 clears it), so in its builds the master layer stays the normal shape and the `[]` layer becomes an alternate that covers every axis."
+guesses = [
+  "A master layer with a range and no `[]` partner is both the master's normal shape and its alternate shape. Settle by exporting such a font from the reference app at a location inside the range.",
+  "A `[]` layer whose master layer has no range is not a source. Settle by exporting such a font from the reference app and comparing the glyph with and without the `[]` layer.",
+]
 
 [[behavior]]
 id = "alternateLayer.rangeSemantics"
@@ -1152,6 +1180,10 @@ milestone = "M9"
 summary = "A variable font needs the origin master and at least one further master per variation axis, arranged as in the minimal setup rule; the compiler must report a designspace that the chosen origin cannot span."
 ref = "Interpolation › Variable Font Options › Variable Font Origin"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "The check asks, for each side of the origin an axis range reaches, for a master or virtual master that differs from the origin on that axis alone, and virtual masters count; settle by exporting the handbook's three-master example with Black as the origin.",
+]
 
 [[behavior]]
 id = "variable.alwaysTrueTypeFlavour"
@@ -1176,6 +1208,7 @@ milestone = "M9"
 summary = "The external range of each exported axis is the span of the masters' Axis Location values, while the internal range is the span of their Axes Coordinates. Between masters the internal-to-external relation is piecewise linear through the master pairs unless Axis Mappings says otherwise."
 ref = "Interpolation › Variable Font Options › Axis Location; Appendix › Custom Parameters › Axis Mappings"
 status = "handbook"
+notes = "Observed with fontmake 3.12.1 on fontc's `glyphs2/AxisMappingsBeyondMasters.glyphs`: an Axis Mappings parameter that reaches beyond the masters widens `fvar` to its ends (wght 300 to 900); fontc 1.0.0 keeps the masters' span (400 to 700), and fontc's later source follows fontmake. FontCraft follows fontmake."
 
 [[panel]]
 id = "dialog.axisLocation"
@@ -1207,6 +1240,9 @@ summary = "A mapping is, per axis, a list of control points pairing an internal 
 ref = "Interpolation › Variable Font Options › Axis Mappings"
 status = "handbook"
 notes = "Checked in the M9 planning pass: a `.glyphs` file stores the parameter per axis tag as a dictionary from external to internal value (Oswald: 700 to 710), and both oracles write `avar` from normalised external to normalised internal coordinates with `fvar` in external coordinates (Oswald: wght 200 to 700)."
+guesses = [
+  "A mapping read from a file whose internal values neither rise nor fall throughout is ignored (identity) and reported as a warning; settle by giving the reference app such a mapping and exporting.",
+]
 
 [[behavior]]
 id = "axisMappings.perAxisOnly"
@@ -1223,6 +1259,10 @@ milestone = "M9"
 summary = "An Axis Mappings parameter in Font Info › Font applies to every variable font exported from the document; the same parameter on a variable font setting overrides it for that export."
 ref = "Interpolation › Variable Font Options › Axis Mappings"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "A setting's Axis Mappings replaces the font's whole value, not axis by axis; settle by giving a setting a mapping for one axis of a two-axis font and reading `avar`.",
+]
 
 [[behavior]]
 id = "axisMappings.externalIncludesAxisLocation"
@@ -1409,14 +1449,17 @@ label = "Use Left"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{left: {document, master}, right: {document, master}, row: {category: fontInfo|masterMetrics|glyph|kerning, key: string}}"
+params = "{left?: {document?: index|title|path, master?: id|name}, right?: {document?, master?}, row: {category: fontInfo|masterMetrics|glyph|kerning, key: string}}"
 area = "interpolation"
 milestone = "M9"
 summary = "Writes the selected row's value from the left master to the right one (a font-info field, a metric, a glyph's outline, or a kerning pair), removing that difference."
 ref = "Interpolation › Working with Multiple Fonts › Compare Fonts"
 status = "handbook"
+notes = "Documented, not yet observed. The row key is the one compareFonts.diff returns."
 guesses = [
   "For a glyph row, Use Left copies the master layer's shapes, anchors and width; the copy is one undo step in the receiving document only. Settle in the reference app's Compare Fonts window.",
+  "A glyph the receiving font lacks is added with the giving glyph's code points that are still free; a glyph or metric the giving side lacks is refused rather than deleted on the other side. Settle with Use Left on a glyph present in one font only.",
+  "A font-info or kerning row the giving side has no value for removes the value on the receiving side. Settle with Use Left on a kerning pair present in one master only.",
 ]
 observe = [
   "In F7 (two documents), open Compare Fonts, select a glyph row and choose Use Left: note what changed (outline, width, anchors) and what Undo reverts in each document.",
@@ -1428,12 +1471,13 @@ label = "Use Right"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{left: {document, master}, right: {document, master}, row: {category: fontInfo|masterMetrics|glyph|kerning, key: string}}"
+params = "{left?: {document?: index|title|path, master?: id|name}, right?: {document?, master?}, row: {category: fontInfo|masterMetrics|glyph|kerning, key: string}}"
 area = "interpolation"
 milestone = "M9"
 summary = "Writes the selected row's value from the right master to the left one."
 ref = "Interpolation › Working with Multiple Fonts › Compare Fonts"
 status = "handbook"
+notes = "Documented, not yet observed. Copies as compareFonts.useLeft does, in the other direction."
 
 [[command]]
 id = "compareFonts.diff"
@@ -1441,12 +1485,17 @@ label = "Diff Two Masters"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{left: {document, master}, right: {document, master}, categories?: [fontInfo|masterMetrics|glyph|kerning]}"
+params = "{left?: {document?: index|title|path, master?: id|name}, right?: {document?, master?}, categories?: [fontInfo|masterMetrics|glyph|kerning]}"
 area = "interpolation"
 milestone = "M9"
 summary = "Query: returns the rows the Compare Fonts window would show, as structured data, so agents and the CLI can compare masters without the window."
 ref = "Interpolation › Working with Multiple Fonts › Compare Fonts"
 status = "inferred"
+notes = "Our own query. Font info rows: family name, units per em, version, date, each property and each custom parameter (all entries of one name as one row). Master metrics rows: each metric, stem and number value. Glyph rows: the master layer's width, shapes and anchors. Kerning rows: the master's left-to-right pairs."
+guesses = [
+  "Only rows whose values differ are listed. Settle by opening Compare Fonts on two masters that share most values.",
+  "Kerning rows cover the left-to-right pairs only, not right-to-left or vertical kerning. Settle by comparing two fonts that differ only in right-to-left kerning.",
+]
 
 [[command]]
 id = "edit.compareFamily"
@@ -1556,12 +1605,16 @@ label = "Family Comparison Report"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{documents?: [path|documentId], attribute: componentNames|anchors|leftKerningGroup|rightKerningGroup|glyphs, filter?: all|missingInOne|ignoreIfMissingInOne}"
+params = "{documents?: [index|title|path], attribute: componentNames|anchors|leftKerningGroup|rightKerningGroup|glyphs, filter?: all|missingInOne|ignoreIfMissingInOne, offset?: number, limit?: number}"
 area = "interpolation"
 milestone = "M9"
 summary = "Query: returns the Compare Family table as data, with null for empty values and a missing marker for absent glyphs."
 ref = "Interpolation › Working with Multiple Fonts › Compare Family"
 status = "inferred"
+notes = "Our own query. Columns are the documents in the order they were opened (or as listed), each read from its first master; rows are glyph names in the first document's order, then the names later documents add. `offset` and `limit` page the rows; `total` counts them all."
+guesses = [
+  "All lists a glyph with a non-empty value in any document; Ignore If Missing in One also requires such a value, Missing in One does not. Settle by filtering a family where a glyph absent from one document has no value in the others.",
+]
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Parameters introduced by this chapter (may duplicate the appendix inventory)

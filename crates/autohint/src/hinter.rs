@@ -224,10 +224,17 @@ impl DimHinter<'_> {
 
     /// The same element in every master, main first, for each element of the main glyph
     /// (`glIter`); with `glidx`, the main master and master `glidx` only.
+    /// Iteration stops at the end of the shortest glyph; a `glidx` that names no other master
+    /// gives nothing.
     pub fn masters_elements(&self, glidx: Option<usize>) -> Vec<Vec<GlyphPe>> {
-        // M10.9: glIter.
-        let _ = glidx;
-        Vec::new()
+        let masters: Vec<usize> = match glidx {
+            None => (0..self.glyphs.len()).collect(),
+            Some(i) if i > 0 && i < self.glyphs.len() => vec![0, i],
+            Some(_) => return Vec::new(),
+        };
+        let lists: Vec<Vec<PeRef>> = masters.iter().map(|&i| self.glyphs.get(i).map(|g| g.elements().collect()).unwrap_or_default()).collect();
+        let len = lists.iter().map(Vec::len).min().unwrap_or(0);
+        (0..len).map(|k| masters.iter().zip(&lists).filter_map(|(&glyph, l)| l.get(k).map(|&pe| GlyphPe { glyph, pe })).collect()).collect()
     }
 }
 

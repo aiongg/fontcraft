@@ -283,8 +283,12 @@ effect = "table-value"
 summary = "List of colour palettes exported as the CPAL table of a COLR/CPAL colour font. The same palettes are used to preview colour glyphs in Font View and Edit View."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "A master may carry its own Color Palettes, which wins over the font's for that master (`color.palette.perMaster`); both oracles read it so. Values are stored as `\"r,g,b,a\"` strings in version 2, integer lists in version 3 and floats in version 4."
-observe = ["Palette font: edit a colour in the Color Palettes editor, press OK and save; note how the stored value is written in the file (version 3 integers or version 4 floats)."]
+notes = "A master may carry its own Color Palettes, which wins over the font's for that master (`color.palette.perMaster`); both oracles read it so. Values are stored as lists of `\"r,g,b,a\"` strings in version 2, lists of integer lists (0 to 255) in version 3, and in version 4 as a dictionary whose `palettes` list holds `{colors; name; backgroundStyle}` with components from 0 to 1 and whose `names` map names colour rows (GlyphsFileFormatv4.md). A colour has two (grey), four (RGB) or five (CMYK) components plus alpha; components out of range are refused."
+guesses = [
+  "An edited Color Palettes keeps the form it was stored in; a new one is written as version 3 integer lists, or as the version 4 dictionary in a document read from version 4. Settled by editing the palettes in the reference and reading the saved file.",
+  "A CMYK palette colour is converted to RGB without a colour profile, as (1 − c)(1 − k) and so on. Settled by exporting a CMYK palette from the reference and reading CPAL.",
+]
+observe = ["Palette font: edit a colour in the Color Palettes editor, press OK and save; note how the stored value is written in the file (version 3 integer lists or the version 4 dictionary)."]
 
 [[parameter]]
 name = "Compatible name Table"
@@ -553,6 +557,7 @@ effect = "interpolation"
 summary = "The value is a four-letter axis tag; the instance's style name is then flagged in STAT as elidable for that axis, meaning it is dropped when combined with other names (as with Regular). Typically added to the regular instance once per axis for which its name is the default."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. The value is matched against the axis tags; the derivation (crates/compile/src/var/stat.rs, M9.7) follows fontc's, which also marks a default name elidable without the parameter."
 
 [[parameter]]
 name = "Enforce Compatibility Check"
@@ -708,6 +713,10 @@ effect = "other"
 summary = "A STAT table is written by default; setting this off suppresses it."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. Off on the variable font setting being exported means that font has no STAT (crates/compile/src/var/stat.rs, M9.7); fontc instead writes the axes without values when every setting turns it off, which the oracle comparison allows."
+guesses = [
+  "The parameter is read from the variable font setting first and from the font when the setting has none; exporting a font with it only in Font Info settles whether the reference reads it there.",
+]
 
 [[parameter]]
 name = "Export SVG Table"
@@ -777,6 +786,9 @@ summary = "Feature tag into which the conditional glyph substitutions generated 
 ref = "Appendix › Custom Parameters"
 status = "handbook"
 notes = "The Switching Shapes page gives `rlig` as the default and the appendix `rvrn`; both oracles use `rvrn`. FontCraft's default is `rvrn`, as the appendix and both oracles (docs/plans/M9.md § 7, question 2 (a), decided by the orchestrator on the owner's behalf); it departs from the Switching Shapes page."
+guesses = [
+  "A value that is not a feature tag puts the substitutions in `rvrn` with a warning, as fontc does; exporting with such a value from the reference app would settle it.",
+]
 
 [[parameter]]
 name = "fileName"
@@ -853,6 +865,7 @@ effect = "hinting"
 summary = "Writes the gasp table for TrueType fonts from two PPM thresholds, default 8 and 20. Up to the first: no grid-fitting, symmetric smoothing; between them: grid-fitting with asymmetric (ClearType) rendering; above: grid-fitting with symmetric smoothing. The source gives no value type."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. Sources store the value as a dictionary from the largest PPM of each range to its flag bits, under this name or as GASP Table; M10.20 writes those records (crates/compile/src/gasp.rs, the gasp row in 40-tables.toml)."
 
 [[parameter]]
 name = "Get Hints From Master"
@@ -1072,6 +1085,10 @@ effect = "interpolation"
 summary = "Controls whether a variable font's STAT table gets a format 3 axis value on the ital axis linking ital=0 to ital=1, overriding the automatic choice. Should not be added to a font that is only italic."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. Neither oracle reads it."
+guesses = [
+  "On links the value at 0 on the ital axis (the font's own or the table-only one) to 1 when it has no link; off removes every link on that axis; read from the variable font setting, else from the font. Exporting an upright and an italic family with the parameter on and off and reading STAT settles it.",
+]
 
 [[parameter]]
 name = "italicAngle"
@@ -1844,6 +1861,7 @@ effect = "interpolation"
 summary = "Value is a four-letter axis tag: the instance's style name becomes the combinable display name for that axis in STAT. Only for instances that are non-default on exactly that axis and default on all others (for example Light for wght)."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. As in fontc, one instance with the parameter switches the whole font to these entries: axes no instance lists get no values (crates/compile/src/var/stat.rs, M9.7)."
 
 [[parameter]]
 name = "styleMapFamilyNames"
@@ -2295,6 +2313,13 @@ effect = "naming"
 summary = "Family name for the variable font, so static and variable versions installed side by side do not share a name."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. Read by `var::names::variable_names` (M9.6): the variable font setting's value, else the font's; without either, the setting's family name, else the font's."
+guesses = [
+  "Looked up on the variable font setting first and on the font second; an export from the reference app with the parameter on each would settle it.",
+]
+observe = [
+  "In F1 (two masters), set Variable Font Family Name on the font and a different one on a variable font setting; export the variable font and read name IDs 1 and 16.",
+]
 
 [[parameter]]
 name = "Variable Font File Name"
@@ -2306,6 +2331,13 @@ effect = "other"
 summary = "Replaces the default variable-font file name, which ends in `VF.ttf`."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. Read by `var::names::variable_names` (M9.6) on the setting (also under the key `fileName`, which glyphsLib reads), then on the font. Path separators and characters file systems refuse become hyphens."
+guesses = [
+  "Without it the file is named as glyphsLib names it: the font's family name, a hyphen and the setting's name unless that is Regular, then `VF`, spaces removed (the default font of a source without settings: family name and `VF`); an export from the reference app would settle it.",
+]
+observe = [
+  "In F1 (two masters), export the variable font with no settings, then with settings named Regular and Italic: note each file name.",
+]
 
 [[parameter]]
 name = "Variable Font Optimize Deltas"
@@ -2346,6 +2378,10 @@ effect = "naming"
 summary = "By its key a style name for the variable font, but the source repeats the description of Variable Font Family Name word for word, so its exact role is unconfirmed."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. M9.6 reads it as `variableStyleName`: on a variable font setting or the font, the default style name after Variable SubfamilyName; on a static instance, the instance's name in `fvar`."
+guesses = [
+  "Read as a style name, not a family name as its description says: on a setting or the font the variable font's default style, on a static instance its `fvar` name; settle by exporting with it set in each place.",
+]
 
 [[parameter]]
 name = "Variable SubfamilyName"
@@ -2357,6 +2393,10 @@ effect = "naming"
 summary = "Style name given to the default outlines of the exported variable font, i.e. the origin master."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. Read by `var::names::variable_names` (M9.6) on the setting, then on the font."
+guesses = [
+  "Without it the variable font's default style name is the origin master's name, as the oracles build it from the default master; settle by exporting F4 (three named masters) without the parameter and reading name IDs 2 and 17.",
+]
 
 [[parameter]]
 name = "variablePostscriptFontName"
@@ -2368,6 +2408,10 @@ effect = "naming"
 summary = "Sets name ID 6 and the PostScript name of the named instance in fvar. ASCII without spaces; must differ from the static font's PostScript name, ideally the name ID 25 prefix, a hyphen and the style name. The source gives no value type."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. On a variable font setting (property or parameter) M9.6 makes it name ID 6; on a static instance it is that instance's PostScript name in `fvar`, as fontc reads it (else the instance's PostScript Font Name). Characters a PostScript name may not hold are dropped; at most 63 are kept."
+guesses = [
+  "On a setting without it, the setting's PostScript Font Name property is used next; settle by exporting a setting with only that property set.",
+]
 
 [[parameter]]
 name = "variableStyleName"
@@ -2379,6 +2423,10 @@ effect = "naming"
 summary = "By its key a style name for the variable font, but the source repeats the description of Variable Font Family Name word for word, so its exact role is unconfirmed."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. M9.6 reads it like Variable Font Style Name (property or parameter)."
+guesses = [
+  "Read as a style name, not a family name as its description says: on a setting or the font the variable font's default style, on a static instance its `fvar` name; settle by exporting with it set in each place.",
+]
 
 [[parameter]]
 name = "variableStyleNames"
@@ -2390,6 +2438,10 @@ effect = "naming"
 summary = "Alternative style name for the variable export, needed when the same static style name occurs under several static family names and would otherwise produce duplicate fvar instance names. The source gives no value type; the plural key suggests one text per language (inferred)."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. M9.6 reads it as a localised property of a static instance and uses the default-language text as the instance's `fvar` subfamily name."
+guesses = [
+  "Only the default-language text is written to `fvar`; settle by exporting an instance with two languages and reading the name records of its `fvar` entry.",
+]
 
 [[parameter]]
 name = "Variation Font Origin"
@@ -2418,6 +2470,10 @@ effect = "naming"
 summary = "Sets name ID 25, the family prefix used when PostScript names of arbitrary variable instances are generated (limit 127 characters); only ASCII letters and digits. Without it, the typographic family name stripped to those characters is used."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. Read by `var::names::variable_names` (M9.6) on the setting, then the font (parameter or font property, as fontc reads it); characters other than ASCII letters and digits are dropped and at most 63 are kept, as name ID 25 allows."
+guesses = [
+  "Without it no name ID 25 is written, as both oracles do; the typographic family fallback the description names is what a consumer computes. Settle by exporting without it and listing the name records.",
+]
 
 [[parameter]]
 name = "vendorID"

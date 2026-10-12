@@ -88,6 +88,7 @@ mod tokens;
 pub mod transform;
 mod transform_metrics;
 mod widths;
+pub(crate) use widths::color_layers_follow_master;
 // M12: whole-file tools and the audit services; file plumbing in `file_io`.
 mod audit_fix_binary;
 mod audit_fix_glyph;

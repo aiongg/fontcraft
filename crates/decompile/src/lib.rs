@@ -115,7 +115,7 @@ pub fn decompile(bytes: &[u8], face: Option<u32>) -> Result<Decompiled, Decompil
             c.get(face).map_err(|_| DecompileError::NoSuchFace { face })?
         }
     };
-    read(&font)
+    variable::read_any(&font)
 }
 
 fn english(font: &FontRef, ids: &[StringId]) -> Option<String> {
