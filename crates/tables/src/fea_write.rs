@@ -481,7 +481,7 @@ struct Writer<'a> {
     unsupported: Vec<String>,
     gdef: Option<Gdef<'a>>,
     lookup_names: HashMap<Tag, Vec<String>>,
-    used_lookup_names: HashSet<String>,
+    used_lookup_names: Taken,
     mark_class_names: HashSet<String>,
     bad_names_noted: bool,
 }
@@ -498,7 +498,7 @@ impl<'a> Writer<'a> {
             unsupported: Vec::new(),
             gdef: None,
             lookup_names: HashMap::new(),
-            used_lookup_names: HashSet::new(),
+            used_lookup_names: Taken::new(HashSet::new()),
             mark_class_names: HashSet::new(),
             bad_names_noted: false,
         }
@@ -511,13 +511,7 @@ impl<'a> Writer<'a> {
     }
 
     fn unique_lookup_name(&mut self, name: String) -> String {
-        let mut candidate = name.clone();
-        let mut n = 2;
-        while !self.used_lookup_names.insert(candidate.clone()) {
-            candidate = format!("{name}_{n}");
-            n += 1;
-        }
-        candidate
+        self.used_lookup_names.claim(name)
     }
 
     fn lookup_name(&self, table: Tag, li: u16) -> String {
@@ -1207,6 +1201,7 @@ impl<'a> Writer<'a> {
                     let first: Vec<u16> = cov.iter().copied().filter(|g| firsts.contains(g)).collect();
                     for rule in set.map_err(|e| read_err(what, e))?.class_seq_rules().iter() {
                         let rule = rule.map_err(|e| read_err(what, e))?;
+                        self.budget.charge(first.len().max(1))?;
                         let mut input = vec![first.clone()];
                         for k in rule.input_sequence() {
                             self.budget.charge(self.count)?;
@@ -1263,7 +1258,7 @@ impl<'a> Writer<'a> {
                     for rule in set.map_err(|e| read_err(what, e))?.chained_class_seq_rules().iter() {
                         let rule = rule.map_err(|e| read_err(what, e))?;
                         let n = rule.backtrack_sequence().len() + rule.input_sequence().len() + rule.lookahead_sequence().len();
-                        self.budget.charge(n.saturating_mul(self.count.max(1)))?;
+                        self.budget.charge(n.saturating_mul(self.count.max(1)).saturating_add(first.len().max(1)))?;
                         let mut back: Vec<Vec<u16>> = rule.backtrack_sequence().iter().map(|k| bcd.glyphs(k.get())).collect();
                         back.reverse();
                         let mut input = vec![first.clone()];
@@ -1525,7 +1520,7 @@ impl<'a> Writer<'a> {
                 }
             }
         }
-        let mut taken: HashSet<String> = self.mark_class_names.clone();
+        let mut taken = Taken::new(self.mark_class_names.clone());
         let mut class_names: HashMap<usize, String> = HashMap::new();
         let mut defs: Vec<String> = Vec::new();
         if named {
@@ -1626,8 +1621,42 @@ impl<'a> Writer<'a> {
     }
 }
 
+/// Names in use, with the next number to try after each base name, so a run of names on one
+/// base costs one step each instead of a scan from 2.
+struct Taken {
+    names: HashSet<String>,
+    next: HashMap<String, usize>,
+}
+
+impl Taken {
+    fn new(names: HashSet<String>) -> Self {
+        Taken { names, next: HashMap::new() }
+    }
+
+    fn contains(&self, name: &str) -> bool {
+        self.names.contains(name)
+    }
+
+    /// `base` when it is free, otherwise `base_N` with the smallest free N from 2 on; the name
+    /// returned is taken from then on.
+    fn claim(&mut self, base: String) -> String {
+        if self.names.insert(base.clone()) {
+            return base;
+        }
+        // Names are only ever added, so every number below the stored one is still taken.
+        let mut n = self.next.get(&base).copied().unwrap_or(2);
+        let mut candidate = format!("{base}_{n}");
+        while !self.names.insert(candidate.clone()) {
+            n += 1;
+            candidate = format!("{base}_{n}");
+        }
+        self.next.insert(base, n + 1);
+        candidate
+    }
+}
+
 /// `@first_last`, members added from the second one on while the name is taken, then a number.
-fn class_name(glyphs: &[u16], raw: &[String], taken: &mut HashSet<String>) -> String {
+fn class_name(glyphs: &[u16], raw: &[String], taken: &mut Taken) -> String {
     let part = |g: &u16| sanitize(raw.get(usize::from(*g)).map(String::as_str).unwrap_or("glyph"));
     let first = glyphs.first().map(part).unwrap_or_default();
     let last = glyphs.last().map(part).unwrap_or_default();
@@ -1645,13 +1674,7 @@ fn class_name(glyphs: &[u16], raw: &[String], taken: &mut HashSet<String>) -> St
     if candidate.len() > 60 {
         candidate = "class".into();
     }
-    let base = candidate.clone();
-    let mut n = 2;
-    while !taken.insert(candidate.clone()) {
-        candidate = format!("{base}_{n}");
-        n += 1;
-    }
-    candidate
+    taken.claim(candidate)
 }
 
 fn is_zero(vr: &ValueRecord) -> bool {

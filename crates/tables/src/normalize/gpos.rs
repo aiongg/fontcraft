@@ -350,6 +350,7 @@ fn append_pairpos_f1_rules(
             if !seen.insert((gid1, gid2)) {
                 continue;
             }
+            budget.keep_pair_rule()?;
             let record1 = ResolvedValueRecord::new(record.value_record1(), resolver, budget)?;
             let record2 = ResolvedValueRecord::new(record.value_record2(), resolver, budget)?;
             result.push(PairPosRule { first: gid1, second: gid2.into(), record1, record2 });
@@ -402,6 +403,7 @@ fn append_pairpos_f2_rules(
                 if !seen.insert((gid1, gid2)) {
                     continue;
                 }
+                budget.keep_pair_rule()?;
                 let (record1, record2) = match &resolved {
                     Some(r) => r.clone(),
                     None => {

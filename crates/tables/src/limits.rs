@@ -39,6 +39,9 @@ pub const MAX_SUBSET_TEXT: usize = 16 << 20;
 pub const MAX_CODE_POINTS: usize = 1_114_112;
 /// Deepest nesting of contextual lookups followed by the layout closure.
 pub const MAX_LOOKUP_NESTING: usize = 64;
+/// Most records, offsets and glyphs a `GSUB`, `GPOS` or `GDEF` table may expand to when a tool
+/// rewrites it, counting a shared subtable once per offset to it.
+pub const MAX_LAYOUT_ITEMS: usize = 10_000_000;
 
 /// Deepest subroutine nesting in a charstring (the CFF specification's limit).
 pub const MAX_SUBR_NESTING: usize = 10;

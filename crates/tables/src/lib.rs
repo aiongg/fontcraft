@@ -54,6 +54,7 @@ pub mod features;
 pub mod fontdame;
 pub mod goadb;
 pub mod instance;
+mod layout_budget;
 pub mod limits;
 pub mod merge;
 pub mod metrics;

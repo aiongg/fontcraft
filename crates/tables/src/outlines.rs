@@ -887,7 +887,6 @@ impl Work {
         Ok(parts)
     }
 
-    /// Component nesting depth: 0 for a simple glyph, 1 for a composite of simple glyphs.
     /// Counts one component reference against the font-wide budget; false once it is spent.
     fn visit(&self) -> bool {
         let n = self.font_visits.get().saturating_add(1);
@@ -895,25 +894,78 @@ impl Work {
         n <= MAX_FONT_COMPONENT_VISITS
     }
 
-    /// The nesting depth of `gid`; once the font-wide visit budget is spent, the depth reached so
-    /// far.
-    fn depth(&self, gid: usize, level: usize) -> usize {
-        if !self.visit() {
-            return level;
-        }
-        match self.glyphs.get(gid).map(|g| &g.parsed) {
-            Some(Parsed::Composite { comps, .. }) if level < MAX_COMPONENT_DEPTH => {
-                1 + comps.iter().map(|c| self.depth(usize::from(c.gid), level + 1)).max().unwrap_or(0)
+    /// Component nesting depth of every glyph: 0 for a simple glyph, 1 for a composite of simple
+    /// glyphs. A chain deeper than [`MAX_COMPONENT_DEPTH`], or one that loops, gives twice that
+    /// limit. Each glyph is worked out once, without recursion, so shared components cost
+    /// nothing extra and a long chain cannot exhaust the stack.
+    fn depths(&self) -> Vec<usize> {
+        const UNSEEN: usize = usize::MAX;
+        const ACTIVE: usize = usize::MAX - 1;
+        // Depths past the limit all count as one value, `cap`.
+        let cap = MAX_COMPONENT_DEPTH + 1;
+        let children = |gid: usize| -> &[Comp] {
+            match self.glyphs.get(gid).map(|g| &g.parsed) {
+                Some(Parsed::Composite { comps, .. }) => comps,
+                _ => &[],
             }
-            Some(Parsed::Composite { .. }) => level,
-            _ => 0,
+        };
+        let is_composite = |gid: usize| matches!(self.glyphs.get(gid).map(|g| &g.parsed), Some(Parsed::Composite { .. }));
+        let n = self.glyphs.len();
+        let mut depth = vec![UNSEEN; n];
+        // (glyph, index of the next component to look at, deepest component so far)
+        let mut stack: Vec<(usize, usize, usize)> = Vec::new();
+        for root in 0..n {
+            if depth.get(root) != Some(&UNSEEN) {
+                continue;
+            }
+            if let Some(d) = depth.get_mut(root) {
+                *d = ACTIVE;
+            }
+            stack.push((root, 0, 0));
+            while let Some((gid, next, deepest)) = stack.last().copied() {
+                let Some(comp) = children(gid).get(next) else {
+                    stack.pop();
+                    let d = if is_composite(gid) { (1 + deepest).min(cap) } else { 0 };
+                    if let Some(slot) = depth.get_mut(gid) {
+                        *slot = d;
+                    }
+                    if let Some(parent) = stack.last_mut() {
+                        parent.1 += 1;
+                        parent.2 = parent.2.max(d);
+                    }
+                    continue;
+                };
+                let child = usize::from(comp.gid);
+                let child_depth = match depth.get(child).copied() {
+                    None => Some(0),
+                    Some(ACTIVE) => Some(cap),
+                    Some(UNSEEN) => None,
+                    Some(d) => Some(d),
+                };
+                match child_depth {
+                    Some(d) => {
+                        if let Some(top) = stack.last_mut() {
+                            top.1 += 1;
+                            top.2 = top.2.max(d);
+                        }
+                    }
+                    None => {
+                        if let Some(slot) = depth.get_mut(child) {
+                            *slot = ACTIVE;
+                        }
+                        stack.push((child, 0, 0));
+                    }
+                }
+            }
         }
+        depth.into_iter().map(|d| if d > MAX_COMPONENT_DEPTH { 2 * MAX_COMPONENT_DEPTH } else { d }).collect()
     }
 
     // ── The actions ─────────────────────────────────────────────────────────────────────────────
 
     fn remove_overlaps(&mut self, selected: &[usize], options: &OutlineOptions, report: &mut Report) -> Result<()> {
-        let mut order: Vec<(usize, usize)> = selected.iter().map(|&gid| (self.depth(gid, 0), gid)).collect();
+        let depths = self.depths();
+        let mut order: Vec<(usize, usize)> = selected.iter().map(|&gid| (depths.get(gid).copied().unwrap_or(0), gid)).collect();
         order.sort_unstable();
         for (_, gid) in order {
             let take_part = match self.glyphs.get(gid).map(|g| &g.parsed) {
@@ -1305,6 +1357,7 @@ impl Work {
         let mut out = old.to_vec();
         let (mut points, mut contours, mut comp_points, mut comp_contours, mut elements, mut depth) =
             (0usize, 0usize, 0usize, 0usize, 0usize, 0usize);
+        let depths = self.depths();
         for (gid, g) in self.glyphs.iter().enumerate() {
             match &g.parsed {
                 Parsed::Simple { outline, .. } if !outline.is_empty() => {
@@ -1317,7 +1370,7 @@ impl Work {
                         comp_contours = comp_contours.max(outline.len());
                     }
                     elements = elements.max(comps.len());
-                    depth = depth.max(self.depth(gid, 0));
+                    depth = depth.max(depths.get(gid).copied().unwrap_or(0));
                 }
                 _ => {}
             }

@@ -198,3 +198,15 @@ fn hostile_tables_fail_with_a_message() {
         let _ = apply_order(bad, &order);
     }
 }
+
+#[test]
+fn shared_layout_subtables_are_refused_before_they_are_copied() {
+    use crate::layout_budget::tests::{MAX_SHARED, shared_gpos};
+    let mut font = built(CompileFlavour::TrueType);
+    let n = names::num_glyphs(&font).unwrap();
+    let mut order: Vec<u16> = (0..n as u16).collect();
+    order.swap(1, 2);
+    font.insert(*b"GPOS", shared_gpos(MAX_SHARED, MAX_SHARED, 2));
+    let e = apply_order(font, &order).unwrap_err();
+    assert!(e.to_string().contains("too large"), "{e}");
+}

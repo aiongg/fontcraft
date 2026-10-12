@@ -15,6 +15,8 @@ use crate::{Result, TablesError};
 
 /// Most operators one glyph may run, subroutine calls followed.
 const MAX_OPS_PER_GLYPH: usize = 1 << 20;
+/// Most operators all glyphs of one table may run together, subroutine calls followed.
+const MAX_OPS_PER_FONT: usize = 200_000_000;
 /// Most entries one DICT may hold.
 const MAX_DICT_ENTRIES: usize = 4_096;
 /// Most Font DICTs (an FDSelect index of CFF is one byte; CFF2 allows more but no font needs it).
@@ -41,11 +43,18 @@ const PRIVATE_HINT_OPS: [u16; 14] = [6, 7, 8, 9, 10, 11, 1209, 1210, 1211, 1212,
 /// The CFF or CFF2 table without hints, and the number of glyphs that lost some; `None` when
 /// nothing would change.
 pub(super) fn dehint(data: &[u8], cff2: bool, options: &DehintOptions) -> Result<Option<(Vec<u8>, usize)>> {
+    dehint_within(data, cff2, options, MAX_OPS_PER_FONT, MAX_SFNT)
+}
+
+/// [`dehint`] with the font-wide operator and output budgets given.
+pub(super) fn dehint_within(data: &[u8], cff2: bool, options: &DehintOptions, max_ops: usize, max_bytes: usize) -> Result<Option<(Vec<u8>, usize)>> {
     let table = Table::read(data, cff2)?;
     let strip_private = options.font_wide() && !options.keep_font_hints;
 
     let mut charstrings = Vec::with_capacity(table.charstrings.len());
     let mut glyphs_changed = 0usize;
+    let mut ops = 0usize;
+    let mut out_bytes = 0usize;
     for (gid, code) in table.charstrings.iter().enumerate() {
         let fd = table.fd_select.as_ref().and_then(|s| s.get(gid).copied()).unwrap_or(0);
         let private =
@@ -55,6 +64,14 @@ pub(super) fn dehint(data: &[u8], cff2: bool, options: &DehintOptions) -> Result
         flat.finish().map_err(|e| in_glyph(e, gid))?;
         if flat.removed {
             glyphs_changed += 1;
+        }
+        ops = ops.saturating_add(flat.ops);
+        if ops > max_ops {
+            return Err(TablesError::TooLarge { what: "the operators all glyphs run", limit: max_ops });
+        }
+        out_bytes = out_bytes.saturating_add(flat.out.len());
+        if out_bytes > max_bytes {
+            return Err(TablesError::TooLarge { what: "the charstrings without subroutines", limit: max_bytes });
         }
         charstrings.push(flat.out);
     }

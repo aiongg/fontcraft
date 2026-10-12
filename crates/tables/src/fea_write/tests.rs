@@ -236,3 +236,35 @@ fn damaged_layout_tables_fail_with_a_message() {
     let bad = DecompileOptions { tables: vec![*b"kern"], ..DecompileOptions::default() };
     assert!(matches!(decompile(&gpos_font(), &bad), Err(TablesError::BadOptions(_))));
 }
+
+#[test]
+fn class_contexts_charge_their_first_glyphs_per_rule() {
+    // 20,000 rules share one record, each starting with a class of 65,000 glyphs: copying the
+    // class for every rule would take gigabytes.
+    let names: Vec<String> = std::iter::once(".notdef".to_string()).chain((1..=65_000).map(|i| format!("g{i}"))).collect();
+    let names: Vec<&str> = names.iter().map(String::as_str).collect();
+    let all = wl::CoverageTable::format_2(vec![wl::RangeRecord::new(g(1), g(65_000), 0)]);
+    let class = |c: u16| wl::ClassDef::format_2(vec![wl::ClassRangeRecord::new(g(1), g(65_000), c)]);
+    let rules = vec![wl::ChainedClassSequenceRule::new(vec![], vec![], vec![], vec![]); 20_000];
+    let chain =
+        wl::ChainedSequenceContext::format_2(all, class(0), class(1), class(0), vec![None, Some(wl::ChainedClassSequenceRuleSet::new(rules))]);
+    let lookup = wsub::SubstitutionLookup::ChainContextual(wl::Lookup::new(wl::LookupFlag::empty(), vec![chain.into()]));
+    let scripts = wl::ScriptList::new(vec![wl::ScriptRecord::new(WTag::new(b"DFLT"), wl::Script::new(Some(wl::LangSys::new(vec![0])), vec![]))]);
+    let gsub = wsub::Gsub::new(scripts, wl::FeatureList::new(vec![feature(b"calt", vec![0])]), wl::LookupList::new(vec![lookup]));
+    let f = font(&names, vec![(*b"GSUB", dump_table(&gsub).unwrap())]);
+    assert!(matches!(decompile(&f, &DecompileOptions::default()), Err(TablesError::TooLarge { .. })));
+}
+
+#[test]
+fn taken_names_get_the_next_free_number() {
+    let mut taken = Taken::new(["a_3".to_string()].into_iter().collect());
+    let got: Vec<String> = (0..4).map(|_| taken.claim("a".into())).collect();
+    assert_eq!(got, ["a", "a_2", "a_4", "a_5"]);
+    assert_eq!(taken.claim("b".into()), "b");
+    // Many names on one base cost one step each.
+    let mut many = Taken::new(Default::default());
+    for _ in 0..100_000 {
+        many.claim("class".into());
+    }
+    assert_eq!(many.claim("class".into()), "class_100001");
+}

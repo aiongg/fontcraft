@@ -215,6 +215,9 @@ fn class_kerning_that_describes_too_many_pairs_is_refused() {
     font.insert(*b"GPOS", dump(&Gpos::new(scripts, features, lookups)));
     let result = run(&font, &NormalizeOptions::default(), 100_000);
     assert!(matches!(result, Err(TablesError::TooLarge { .. })), "{result:?}");
+    // Within the work limit, the rules kept are capped on their own.
+    let result = run_within(&font, &NormalizeOptions::default(), MAX_WORK, 1_000);
+    assert!(matches!(result, Err(TablesError::TooLarge { what: "the flattened pair positioning rules", .. })), "{result:?}");
 }
 
 #[test]

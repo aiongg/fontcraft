@@ -17,6 +17,7 @@ use crate::{Result, TablesError};
 
 /// The table without hinting leftovers; `None` when it has none.
 pub(super) fn prune(data: &[u8]) -> Result<Option<Vec<u8>>> {
+    crate::layout_budget::check_gpos(data)?;
     let read = read_fonts::tables::gpos::Gpos::read(FontData::new(data)).map_err(|e| TablesError::Invalid(format!("the GPOS table: {e}")))?;
     let mut gpos: Gpos = read.to_owned_table();
     let mut changed = false;

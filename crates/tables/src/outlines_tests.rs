@@ -299,3 +299,29 @@ fn deeply_shared_components_stop_at_the_font_wide_budget() {
     let Err(e) = result else { panic!("maxp cannot be recomputed within the budget") };
     assert!(e.to_string().contains("20,000,000"), "{e}");
 }
+
+#[test]
+fn component_depth_is_worked_out_once_per_glyph() {
+    // Glyph k uses glyph k + 1 twice, 40 levels down to a square: walking every path would
+    // take 2^40 steps.
+    let mut glyphs: Vec<(&str, Vec<u8>)> = vec![(".notdef", Vec::new())];
+    for k in 1..=40u16 {
+        let name: &str = Box::leak(format!("c{k}").into_boxed_str());
+        glyphs.push((name, composite(&[offset(k + 1, 0.0, 0.0), offset(k + 1, 10.0, 0.0)], [0; 4])));
+    }
+    glyphs.push(("s", encode_simple(&[square(0.0, 0.0, 100.0)], &[]).unwrap()));
+    let w = read_back(&font_with(glyphs));
+    let depths = w.depths();
+    assert_eq!(depths[41], 0);
+    assert_eq!(depths[40], 1);
+    assert_eq!(depths[9], 32, "32 levels is within the limit");
+    assert_eq!(depths[8], 2 * MAX_COMPONENT_DEPTH, "past the limit");
+    assert_eq!(depths[1], 2 * MAX_COMPONENT_DEPTH);
+
+    let cycle = read_back(&font_with(vec![
+        (".notdef", Vec::new()),
+        ("P", composite(&[offset(2, 0.0, 0.0)], [0; 4])),
+        ("Q", composite(&[offset(1, 0.0, 0.0)], [0; 4])),
+    ]));
+    assert_eq!(cycle.depths(), vec![0, 2 * MAX_COMPONENT_DEPTH, 2 * MAX_COMPONENT_DEPTH]);
+}

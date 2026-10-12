@@ -99,10 +99,13 @@ fn remap_parallel<T: Clone>(c: &mut CoverageTable, list: &mut Vec<T>, order: &Or
     permute(list, &perm)
 }
 
-/// Maps a class definition, keeping every class number.
+/// Maps a class definition, keeping every class number. Work and memory follow the glyphs the
+/// definition lists, not the glyph count, because one definition can be shared by many
+/// subtables.
 fn remap_classes(cd: &mut ClassDef, order: &Order) -> Result<()> {
     let n = order.len();
-    let mut classes = vec![0u16; n];
+    // (new glyph, class) in the order the definition assigns them; a later range wins.
+    let mut entries: Vec<(usize, u16)> = Vec::new();
     let mut work = 0usize;
     let budget = 16 * n + 65_536;
     let mut set = |g: usize, class: u16| -> Result<()> {
@@ -110,10 +113,11 @@ fn remap_classes(cd: &mut ClassDef, order: &Order) -> Result<()> {
         if work > budget {
             return Err(TablesError::invalid("a class definition has too many overlapping ranges"));
         }
-        if let Some(new) = order.old_to_new.get(g)
-            && let Some(slot) = classes.get_mut(usize::from(*new))
-        {
-            *slot = class;
+        if let Some(new) = order.old_to_new.get(g) {
+            let new = usize::from(*new);
+            if new < n {
+                entries.push((new, class));
+            }
         }
         Ok(())
     };
@@ -133,7 +137,15 @@ fn remap_classes(cd: &mut ClassDef, order: &Order) -> Result<()> {
             }
         }
     }
-    let used: Vec<(usize, u16)> = classes.iter().copied().enumerate().filter(|(_, c)| *c != 0).collect();
+    entries.sort_by_key(|e| e.0);
+    let mut used: Vec<(usize, u16)> = Vec::with_capacity(entries.len());
+    for (g, class) in entries {
+        match used.last_mut() {
+            Some(last) if last.0 == g => last.1 = class,
+            _ => used.push((g, class)),
+        }
+    }
+    used.retain(|u| u.1 != 0);
     let mut ranges: Vec<ClassRangeRecord> = Vec::new();
     for (g, class) in &used {
         match ranges.last_mut() {
@@ -144,7 +156,13 @@ fn remap_classes(cd: &mut ClassDef, order: &Order) -> Result<()> {
     let (first, last) = (used.first().map_or(0, |u| u.0), used.last().map_or(0, |u| u.0));
     let span = if used.is_empty() { 0 } else { last - first + 1 };
     *cd = if !used.is_empty() && 2 * span + 2 <= 6 * ranges.len() {
-        ClassDef::Format1(ClassDefFormat1::new(G::new(first as u16), classes.get(first..=last).unwrap_or_default().to_vec()))
+        let mut dense = vec![0u16; span];
+        for (g, class) in &used {
+            if let Some(slot) = g.checked_sub(first).and_then(|i| dense.get_mut(i)) {
+                *slot = *class;
+            }
+        }
+        ClassDef::Format1(ClassDefFormat1::new(G::new(first as u16), dense))
     } else {
         ClassDef::Format2(ClassDefFormat2::new(ranges))
     };
@@ -351,6 +369,7 @@ fn mark_mark(s: &mut gpos::MarkMarkPosFormat1, order: &Order) -> Result<()> {
 
 pub(crate) fn gsub(bytes: &[u8], order: &Order) -> Result<Vec<u8>> {
     let tag = *b"GSUB";
+    crate::layout_budget::check_gsub(bytes)?;
     let table = read_fonts::tables::gsub::Gsub::read(FontData::new(bytes)).map_err(|e| read_err(tag, e))?;
     let mut owned: Gsub = table.to_owned_table();
     for lookup in &mut owned.lookup_list.lookups {
@@ -361,6 +380,7 @@ pub(crate) fn gsub(bytes: &[u8], order: &Order) -> Result<Vec<u8>> {
 
 pub(crate) fn gpos(bytes: &[u8], order: &Order) -> Result<Vec<u8>> {
     let tag = *b"GPOS";
+    crate::layout_budget::check_gpos(bytes)?;
     let table = read_fonts::tables::gpos::Gpos::read(FontData::new(bytes)).map_err(|e| read_err(tag, e))?;
     let mut owned: Gpos = table.to_owned_table();
     for lookup in &mut owned.lookup_list.lookups {
@@ -371,6 +391,7 @@ pub(crate) fn gpos(bytes: &[u8], order: &Order) -> Result<Vec<u8>> {
 
 pub(crate) fn gdef(bytes: &[u8], order: &Order) -> Result<Vec<u8>> {
     let tag = *b"GDEF";
+    crate::layout_budget::check_gdef(bytes)?;
     let table = read_fonts::tables::gdef::Gdef::read(FontData::new(bytes)).map_err(|e| read_err(tag, e))?;
     let mut owned: Gdef = table.to_owned_table();
     if let Some(cd) = owned.glyph_class_def.as_mut() {
@@ -412,5 +433,16 @@ mod tests {
         remap_classes(&mut cd, &order).unwrap();
         let ClassDef::Format1(f) = cd else { panic!("{cd:?}") };
         assert_eq!((f.start_glyph_id, f.class_value_array), (G::new(1), vec![5, 0, 5]), "format 1 is the smaller one here");
+
+        // A later range wins over an earlier one; class 0 drops the glyph.
+        let identity = Order::new(vec![0, 1, 2, 3, 4]);
+        let mut cd = ClassDef::Format2(ClassDefFormat2::new(vec![
+            ClassRangeRecord::new(G::new(1), G::new(3), 5),
+            ClassRangeRecord::new(G::new(2), G::new(2), 0),
+            ClassRangeRecord::new(G::new(4), G::new(4), 7),
+        ]));
+        remap_classes(&mut cd, &identity).unwrap();
+        let ClassDef::Format1(f) = cd else { panic!("{cd:?}") };
+        assert_eq!((f.start_glyph_id, f.class_value_array), (G::new(1), vec![5, 0, 5, 7]));
     }
 }

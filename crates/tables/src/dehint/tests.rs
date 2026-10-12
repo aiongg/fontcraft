@@ -150,6 +150,33 @@ fn hostile_cff_is_refused() {
     assert!(dehint(&font, &DehintOptions::default()).is_err(), "a cut header");
 }
 
+#[test]
+fn font_wide_cff_budgets_refuse_before_the_table_is_built() {
+    // A local subroutine of 2,000 path operators, called by one glyph.
+    let subr = format!("0 50 hstemhm{} return", " 0 0 rlineto".repeat(2_000));
+    let table = cff_table_with_subr(&subr);
+    let options = DehintOptions::default();
+    assert!(cff::dehint_within(&table, false, &options, 1 << 20, 1 << 20).unwrap().is_some());
+
+    let e = cff::dehint_within(&table, false, &options, 5_000, 1 << 20).unwrap_err();
+    assert!(e.to_string().contains("operators all glyphs run"), "{e}");
+    let e = cff::dehint_within(&table, false, &options, 1 << 20, 4_000).unwrap_err();
+    assert!(e.to_string().contains("charstrings without subroutines"), "{e}");
+}
+
+#[test]
+fn shared_gpos_subtables_are_refused_before_they_are_copied() {
+    use crate::layout_budget::tests::{MAX_SHARED, shared_gpos};
+    let mut font = cff_font();
+    font.insert(*b"GPOS", shared_gpos(2, 2, 3));
+    let (out, _) = dehint_with_report(&font, &DehintOptions::default()).unwrap();
+    assert_eq!(out.get(*b"GPOS"), font.get(*b"GPOS"), "a GPOS table without device tables stays as it is");
+
+    font.insert(*b"GPOS", shared_gpos(MAX_SHARED, MAX_SHARED, 3));
+    let e = dehint(&font, &DehintOptions::default()).unwrap_err();
+    assert!(e.to_string().contains("too large"), "{e}");
+}
+
 // ---------- TrueType ----------
 
 fn be16(v: i32) -> [u8; 2] {

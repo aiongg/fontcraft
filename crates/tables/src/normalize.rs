@@ -39,6 +39,9 @@ mod tests;
 pub const MAX_WORK: usize = 500_000_000;
 /// Largest normalised text one run produces, in bytes.
 pub const MAX_OUTPUT: usize = 512 << 20;
+/// Most flattened pair-positioning rules one run keeps in memory at once, over every pair lookup
+/// of the table. Each costs a few hundred bytes, so this is separate from [`MAX_WORK`].
+pub const MAX_PAIR_RULES: usize = 10_000_000;
 
 /// What [`normalize`] prints.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -61,6 +64,11 @@ pub fn normalize(font: &SfntFont, options: &NormalizeOptions) -> Result<String> 
 
 /// [`normalize`] with a work limit of `max_work` units.
 fn run(font: &SfntFont, options: &NormalizeOptions, max_work: usize) -> Result<String> {
+    run_within(font, options, max_work, MAX_PAIR_RULES)
+}
+
+/// [`normalize`] with a work limit of `max_work` units and at most `max_pair_rules` pair rules kept.
+fn run_within(font: &SfntFont, options: &NormalizeOptions, max_work: usize, max_pair_rules: usize) -> Result<String> {
     let wanted = Wanted::from_options(&options.tables)?;
     let provider = Provider { font };
     let coords = location_coords(&provider, &options.location)?;
@@ -78,7 +86,7 @@ fn run(font: &SfntFont, options: &NormalizeOptions, max_work: usize) -> Result<S
 
     let names = names::NameMap::from_font(&provider)?;
     let mut out = Out::default();
-    let mut budget = Budget { left: max_work };
+    let mut budget = Budget { left: max_work, pair_rules_left: max_pair_rules };
 
     if (wanted.all || wanted.gdef)
         && has_carets
@@ -184,12 +192,25 @@ impl Out {
     }
 }
 
-/// The work left for this run ([`MAX_WORK`]).
+/// The work left for this run ([`MAX_WORK`]), and the pair rules it may still keep
+/// ([`MAX_PAIR_RULES`]).
 pub(crate) struct Budget {
     left: usize,
+    pair_rules_left: usize,
 }
 
 impl Budget {
+    /// Counts one more pair rule kept; fails past the limit.
+    pub(crate) fn keep_pair_rule(&mut self) -> Result<()> {
+        match self.pair_rules_left.checked_sub(1) {
+            Some(left) => {
+                self.pair_rules_left = left;
+                Ok(())
+            }
+            None => Err(TablesError::TooLarge { what: "the flattened pair positioning rules", limit: MAX_PAIR_RULES }),
+        }
+    }
+
     pub(crate) fn charge(&mut self, units: usize) -> Result<()> {
         match self.left.checked_sub(units) {
             Some(left) => {
