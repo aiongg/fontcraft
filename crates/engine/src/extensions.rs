@@ -163,7 +163,8 @@ impl ExtensionState {
     /// logs it, and hands a successful font-changing command (`journal`) other than undo and redo
     /// to the recording.
     pub fn after_command(&mut self, command: &str, params: &Value, journal: bool, result: &crate::Result<Value>) {
-        self.log.push_command(command, params, result.as_ref().map_err(ToString::to_string));
+        let logged = without_session_params(command, params);
+        self.log.push_command(command, logged.as_ref(), result.as_ref().map_err(ToString::to_string));
         if journal
             && result.is_ok()
             && !matches!(command, "edit.undo" | "edit.redo")
@@ -180,6 +181,25 @@ impl ExtensionState {
             }
         }
     }
+}
+
+/// Parameters that name something by its id in this session only, as the app passes them: left
+/// out of the log, whose lines can be copied and run again in another session.
+const SESSION_PARAMS: &[(&str, &str)] = &[("file.save", "document")];
+
+/// `params` without the [`SESSION_PARAMS`] of `command`.
+fn without_session_params<'a>(command: &str, params: &'a Value) -> std::borrow::Cow<'a, Value> {
+    let keys: Vec<&str> = SESSION_PARAMS.iter().filter(|(c, k)| *c == command && params.get(k).is_some()).map(|(_, k)| *k).collect();
+    if keys.is_empty() {
+        return std::borrow::Cow::Borrowed(params);
+    }
+    let mut kept = params.clone();
+    if let Some(map) = kept.as_object_mut() {
+        for k in keys {
+            map.remove(k);
+        }
+    }
+    std::borrow::Cow::Owned(kept)
 }
 
 /// The macro half: the Macros folder's listing.

@@ -656,3 +656,20 @@ fn smart_components_are_written_as_outlines_when_asked() {
     assert!(err.to_string().contains("smartComponents"), "{err}");
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// The document id the app passes to Save is this session's only, so the log line, which can be
+/// copied and run again elsewhere, leaves it out.
+#[test]
+fn save_logs_its_parameters_without_the_session_document_id() {
+    let dir = temp("save-log");
+    let mut s = Session::with_document();
+    let path = dir.join("Logged.fontcraft");
+    run(&mut s, "file.saveAs", json!({"path": path.to_string_lossy()}));
+    let id = s.doc().unwrap().id;
+    run(&mut s, "file.save", json!({"document": id, "force": true}));
+    let log = &s.extensions().log;
+    let last = log.get(log.len() - 1).unwrap();
+    let fontcraft_engine::log::LogKind::Command { command, params, error: None, .. } = &last.kind else { panic!("{last:?}") };
+    assert_eq!((command.as_str(), params), ("file.save", &json!({"force": true})));
+    let _ = std::fs::remove_dir_all(&dir);
+}

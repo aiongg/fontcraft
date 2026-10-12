@@ -43,7 +43,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Save",
             ["File"],
             Some("Cmd+S"),
-            "{path?: string, force?: bool, document?: number} write the document to its file in the format it was opened in (or to `path`, choosing the format from its extension). document: the session id of the document meant, as the app records it when it asks to overwrite; refused when another document is active. Refuses when the file changed on disk since it was read (for a designspace: the document or any of its UFOs), unless force is true. Single files are written atomically; a package or UFO rewrites only changed files; a designspace writes its UFOs, then the document → {path, format, version?, bytes, filesWritten, filesRemoved, losses}",
+            "{path?: string, force?: bool, document?: number} write the document to its file in the format it was opened in (or to `path`, choosing the format from its extension). document: the session id of the document meant, which the app passes when it asks to overwrite; refused when another document is active, and left out of the command log. Refuses when the file changed on disk since it was read (for a designspace: the document or any of its UFOs), unless force is true. Single files are written atomically; a package or UFO rewrites only changed files; a designspace writes its UFOs, then the document → {path, format, version?, bytes, filesWritten, filesRemoved, losses}",
             has_doc,
             save
         ).files(const { &[FileParam::write("path")] }).writes_files(),
