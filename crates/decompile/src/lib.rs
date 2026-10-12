@@ -2,8 +2,9 @@
 //! WOFF or WOFF2 file.
 //!
 //! Opening a compiled font is a reconstruction, not a load (`open.compiledIsLossy`): the result is
-//! a one-master document with the outlines, advance widths, code points, glyph names, vertical
-//! metrics and names of the font. TrueType outlines stay quadratic and composite glyphs stay
+//! a document with the outlines, advance widths, code points, glyph names, vertical metrics and
+//! names of the font. A static font opens with one master; a variable font (one with `fvar`)
+//! opens with its axes, masters, intermediate layers and named instances ([`variable`]). TrueType outlines stay quadratic and composite glyphs stay
 //! components (`open.truetypeKeepsQuadratic`, `open.truetypeKeepsComponents`); CFF outlines come
 //! back cubic. Pair kerning and kerning groups come back from the GPOS `kern` feature
 //! (`gpos_kern`); the rest of the layout, hinting and every other table are not read, and
