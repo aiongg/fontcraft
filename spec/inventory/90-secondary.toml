@@ -262,13 +262,21 @@ label = "Make Ink Trap"
 menu = ["Path", "Nodes"]
 shortcut = ""
 kind = "engine"
-params = "{nodes?: [nodeRef], width?: number}"
+params = "{glyph, layer?, side?, points: [[shape, node]], width?: number}"
 area = "path-ops"
 milestone = "M13"
 summary = "Turns each selected corner node into a simple ink trap by duplicating the node and separating the two copies by the ink trap width, which defaults to a per-master font dimension."
 ref = "FontLab 8 What's new › Edit & refine › Scissors tool; Ink traps and rounded corners"
 status = "docs"
 origin = "fontlab"
+notes = "The reference's help documents duplicating the node and moving the two copies apart by the ink trap width from Font Info; not yet observed. Smooth nodes, handles, open path ends and nearly straight corners are left alone."
+guesses = [
+  "The two copies move half the width each, perpendicular to the corner's bisector, with the copy ending the incoming segment on that segment's side, and their neighbouring handles move with them; the reference only says the nodes move apart 'intelligently', so watching it trap an inside and an outside corner would settle it.",
+  "Without an inkTrapWidth parameter the width is 2% of the em; the reference's default for a new font would settle it.",
+]
+observe = [
+  "Make Ink Trap on the inside corner of an L with ink trap width 20: record where the two nodes land.",
+]
 
 [[parameter]]
 name = "inkTrapWidth"
@@ -288,13 +296,20 @@ label = "Loop Corner"
 menu = ["Path", "Nodes"]
 shortcut = ""
 kind = "engine"
-params = "{nodes?: [nodeRef]}"
+params = "{glyph, layer?, side?, points: [[shape, node]], size?: number}"
 area = "path-ops"
 milestone = "M13"
 summary = "Replaces each selected corner node with a small loop that extends both adjoining segments past the corner and crosses them, which keeps corners sharp under offsetting and interpolation. A font-level option decides whether the loop area counts as filled."
 ref = "FontLab 8 What's new › Edit & refine › Scissors tool (Loop Corner)"
 status = "docs"
 origin = "fontlab"
+notes = "Geometry as Open Corner with the same reach in every direction. The reference's font-level option that renders a loop outside the filled area as unfilled is a display and export matter not covered here. Documented in the reference's help; not yet observed."
+guesses = [
+  "Each segment goes on past the corner by `size`, which defaults to half the master's first vertical stem (4% of the em without stems); the reference does not say how far its loops reach, so measuring one would settle it.",
+]
+observe = [
+  "Loop Corner on a rectangle corner in a master with a 100-unit vertical stem: measure how far each segment goes past the corner.",
+]
 
 [[command]]
 id = "path.replaceWithCorner"
@@ -302,13 +317,17 @@ label = "Replace with Corner"
 menu = ["Path"]
 shortcut = ""
 kind = "engine"
-params = "{segments?: [segmentRef]}"
+params = "{glyph, layer?, side?, segments?: [[shape, node]], shapes?: [index] (open paths: their gap)}"
 area = "path-ops"
 milestone = "M13"
 summary = "Deletes the selected segment, or the gap of an open contour, and joins its two neighbours in a sharp corner at the point where their extensions intersect."
 ref = "FontLab 8 What's new › Edit & refine › Other contour operations"
 status = "docs"
 origin = "fontlab"
+notes = "The gap of an open path is addressed by giving the path in `shapes`. Refused when the neighbours are within 5° of parallel (the reference says the angle must be large enough) or when their extensions meet behind them. Documented in the reference's help; not yet observed."
+guesses = [
+  "One segment or gap per path per call, and neighbours whose extensions meet behind them are refused rather than shortened; trying both in the reference would settle it.",
+]
 
 [[command]]
 id = "path.alignToMask"
@@ -316,13 +335,17 @@ label = "Align Points to Background"
 menu = ["Path", "Align Points"]
 shortcut = ""
 kind = "engine"
-params = "{nodes?: [nodeRef], tolerance?: number}"
+params = "{glyph, layer?, points: [[shape, node]], tolerance?: number (default 50)}"
 area = "path-ops"
 milestone = "M13"
 summary = "Moves each selected point onto the nearest point of the background (mask) layer when one lies within the tolerance; the reference uses 50 units."
 ref = "FontLab 8 What's new › Edit & refine › Nodes and handles (Align Points › To Mask)"
 status = "docs"
 origin = "fontlab"
+notes = "The mask is the layer's background. The 50-unit reach is from the reference's help; not yet observed."
+guesses = [
+  "Points snap to background nodes and handles alike, and a moved on-curve node takes its unselected handles along; aligning a curve's node to a background node in the reference would settle it.",
+]
 
 [[command]]
 id = "path.collapsePoints"
@@ -330,13 +353,17 @@ label = "Collapse Points"
 menu = ["Path", "Align Points"]
 shortcut = ""
 kind = "engine"
-params = "{nodes?: [nodeRef]}"
+params = "{glyph, layer?, side?, points: [[shape, node]]}"
 area = "path-ops"
 milestone = "M13"
 summary = "Moves the selected nodes to their common centre and retracts their handles to zero length."
 ref = "FontLab 8 What's new › Edit & refine › Nodes and handles (Align Points › Collapse)"
 status = "docs"
 origin = "fontlab"
+notes = "Documented in the reference's help (nodes to the centre of the selection, handles to zero length); not yet observed."
+guesses = [
+  "The centre is the middle of the selected nodes' bounding box, rounded to the grid, and at least two on-curve nodes are needed; collapsing three uneven nodes in the reference would settle it.",
+]
 
 [[command]]
 id = "path.scaleToSameSize"
@@ -344,13 +371,17 @@ label = "Same Width / Same Height"
 menu = ["Path", "Align Points"]
 shortcut = ""
 kind = "engine"
-params = "{paths?: [pathRef], dimension: 'width' | 'height', proportional?: bool}"
+params = "{glyph, layer?, side?, shapes: [index], dimension: 'width' | 'height', proportional?: bool (default true)}"
 area = "path-ops"
 milestone = "M13"
 summary = "Scales several selected paths about their own centres so they share one width or height, either proportionally or along that dimension only. With one path selected the target is the advance width, x-height or cap height."
 ref = "FontLab 8 What's new › Edit & refine › Node names (Scale paths to same width or height)"
 status = "docs"
 origin = "fontlab"
+notes = "Several paths match the largest among them; one path matches the advance width, or for height the x-height (the cap height for an uppercase glyph), each scaled about its own centre, as the reference's help documents; not yet observed."
+guesses = [
+  "A glyph counts as uppercase when its case says so or one of its code points is an uppercase letter; trying a glyph without code points in the reference would settle it.",
+]
 
 [[panel]]
 id = "palette.selections"
