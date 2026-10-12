@@ -255,7 +255,7 @@ summary = "Edits the width of a live stroke on canvas, per path and per node, so
 ref = "FontLab 8 What's new › Draft & draw › Thickness tool"
 status = "docs"
 origin = "fontlab"
-notes = "Documented in the secondary reference's release notes, not yet observed. FontCraft: each on-curve node of a stroked path shows two control points, one on each edge of the stroke, perpendicular to the path. Per-node widths are stored as `[left, right]` in the node's user data (`com.fontcraft.nodeWidth`), written by `path.setNodeWidths`; whole-path gestures run `path.setStroke`. The stroke outline (canvas, Expand Outline, export) reads the widths. The tool is reached with `tool.select`; its toolbar button waits for an icon."
+notes = "Documented in the secondary reference's release notes, not yet observed. FontCraft: each on-curve node of a stroked path shows two control points, one on each edge of the stroke, perpendicular to the path. Per-node widths are stored as `[left, right]` in the node's user data (`com.fontcraft.nodeWidth`), written by `path.setNodeWidths`; whole-path gestures run `path.setStroke`. The stroke outline (canvas, Expand Outline, export) reads the widths. The tool has a toolbar button with an icon drawn in code and no shortcut letter, and `tool.select` reaches it too."
 guesses = [
   "A drag with no modifier changes the width on the dragged side only, at the dragged node or at every picked control point; the release notes list only the modified drags, and watching the tool would settle it.",
   "Shift+drag changes the path's stroke width by twice the drag distance and adds the drag distance to both sides of every node with its own widths, so the modulation is kept; the release notes do not say what happens to nodes with their own widths.",

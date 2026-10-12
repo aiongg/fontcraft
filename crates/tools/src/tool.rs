@@ -122,6 +122,7 @@ pub const TOOLS: &[ToolInfo] = &[
     ToolInfo { id: "rotate", label: "Rotate", shortcut: "R", group: "" },
     ToolInfo { id: "scale", label: "Scale", shortcut: "S", group: "" },
     ToolInfo { id: "measurement", label: "Measurement", shortcut: "L", group: "" },
+    ToolInfo { id: "thickness", label: "Thickness", shortcut: "", group: "" },
     ToolInfo { id: "annotationSelect", label: "Annotation Selection", shortcut: "A", group: "annotation" },
     ToolInfo { id: "annotationText", label: "Text Annotation", shortcut: "A", group: "annotation" },
     ToolInfo { id: "annotationArrow", label: "Arrow Annotation", shortcut: "A", group: "annotation" },

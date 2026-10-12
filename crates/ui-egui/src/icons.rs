@@ -25,6 +25,7 @@ pub enum Icon {
     Rotate,
     Scale,
     Measure,
+    Thickness,
     Text,
     AnnotationSelect,
     AnnotationText,
@@ -96,6 +97,7 @@ pub const ALL: &[Icon] = &[
     Icon::Rotate,
     Icon::Scale,
     Icon::Measure,
+    Icon::Thickness,
     Icon::Text,
     Icon::AnnotationSelect,
     Icon::AnnotationText,
@@ -162,6 +164,7 @@ pub fn for_tool(id: &str) -> Option<Icon> {
         "rotate" => Icon::Rotate,
         "scale" => Icon::Scale,
         "measurement" => Icon::Measure,
+        "thickness" => Icon::Thickness,
         "text" => Icon::Text,
         "annotationSelect" => Icon::AnnotationSelect,
         "annotationText" => Icon::AnnotationText,
@@ -440,6 +443,11 @@ fn draw(pen: &mut Pen, icon: Icon) {
                 let depth = if i % 2 == 0 { 0.46 } else { 0.52 };
                 pen.line(&[(x, 0.36), (x, depth)]);
             }
+        }
+        // A stroke that widens from a thin end to a thick one, with the node at the thin end.
+        Icon::Thickness => {
+            pen.fill(&[(0.15, 0.79), (0.19, 0.83), (0.90, 0.31), (0.71, 0.12)]);
+            pen.dot((0.17, 0.81), 0.06);
         }
         Icon::Text => {
             pen.line(&[(0.22, 0.3), (0.22, 0.18), (0.78, 0.18), (0.78, 0.3)]);
