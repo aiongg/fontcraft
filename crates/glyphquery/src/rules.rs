@@ -76,8 +76,15 @@ pub enum Property {
     Case,
     ExportGlyph,
     HasUnicode,
+    /// The rules from Has Components to Is Auto-Aligned read the layer of the shown master.
+    HasComponents,
+    HasCorners,
+    HasAnchors,
+    /// A component of the glyph named by the rule's value.
+    ContainsComponent,
     HasCustomGlyphInfo,
     HasAnnotations,
+    IsAutoAligned,
     HasMetricsKeys,
     /// Read from the set the caller gives `Env::with_out_of_sync`.
     MetricsKeysOutOfSync,
@@ -96,6 +103,8 @@ enum Kind {
     Number,
     Bool,
     Color,
+    /// A glyph name, compared whole.
+    Glyph,
     Custom,
 }
 
@@ -109,7 +118,7 @@ impl Kind {
         match self {
             Kind::Text => TEXT_OPS,
             Kind::Number => NUMBER_OPS,
-            Kind::Category | Kind::Case | Kind::Bool | Kind::Color | Kind::Custom => CHOICE_OPS,
+            Kind::Category | Kind::Case | Kind::Bool | Kind::Color | Kind::Glyph | Kind::Custom => CHOICE_OPS,
         }
     }
 }
@@ -125,8 +134,13 @@ impl Property {
         Property::Case,
         Property::ExportGlyph,
         Property::HasUnicode,
+        Property::HasComponents,
+        Property::HasCorners,
+        Property::HasAnchors,
+        Property::ContainsComponent,
         Property::HasCustomGlyphInfo,
         Property::HasAnnotations,
+        Property::IsAutoAligned,
         Property::HasMetricsKeys,
         Property::MetricsKeysOutOfSync,
         Property::HasKerningGroups,
@@ -146,6 +160,11 @@ impl Property {
             Property::Case => "case",
             Property::ExportGlyph => "exportGlyph",
             Property::HasUnicode => "hasUnicode",
+            Property::HasComponents => "hasComponents",
+            Property::HasCorners => "hasCorners",
+            Property::HasAnchors => "hasAnchors",
+            Property::ContainsComponent => "containsComponent",
+            Property::IsAutoAligned => "isAutoAligned",
             Property::HasCustomGlyphInfo => "hasCustomGlyphInfo",
             Property::HasAnnotations => "hasAnnotations",
             Property::HasMetricsKeys => "hasMetricsKeys",
@@ -169,12 +188,17 @@ impl Property {
             Property::CountOfPaths | Property::CountOfComponents => Kind::Number,
             Property::ExportGlyph
             | Property::HasUnicode
+            | Property::HasComponents
+            | Property::HasCorners
+            | Property::HasAnchors
             | Property::HasCustomGlyphInfo
             | Property::HasAnnotations
+            | Property::IsAutoAligned
             | Property::HasMetricsKeys
             | Property::MetricsKeysOutOfSync
             | Property::HasKerningGroups => Kind::Bool,
             Property::ColorLabel | Property::LayerColorLabel => Kind::Color,
+            Property::ContainsComponent => Kind::Glyph,
             Property::Custom => Kind::Custom,
         }
     }
@@ -386,6 +410,7 @@ fn value_from(property: Property, kind: Kind, v: Option<&Value>) -> Result<RuleV
     Ok(match kind {
         Kind::Text => RuleValue::Text(text_value(property, v)?),
         Kind::Custom => RuleValue::Text(text_value(property, v)?),
+        Kind::Glyph => RuleValue::Text(text_value(property, v)?.trim().to_string()),
         Kind::Category => {
             let s = text_value(property, v)?;
             let (cat, sub) = match s.split_once('/') {
@@ -531,6 +556,10 @@ impl Rule {
                     Property::HasMetricsKeys => Attr::HasMetricsKeys,
                     Property::MetricsKeysOutOfSync => Attr::MetricsKeysOutOfSync,
                     Property::HasKerningGroups => Attr::HasKerningGroups,
+                    Property::HasComponents => Attr::Layer(LayerAttr::HasComponents),
+                    Property::HasCorners => Attr::Layer(LayerAttr::HasCorners),
+                    Property::HasAnchors => Attr::Layer(LayerAttr::HasAnchors),
+                    Property::IsAutoAligned => Attr::Layer(LayerAttr::IsAligned),
                     _ => Attr::Layer(LayerAttr::HasAnnotations),
                 };
                 Ok(polar(test(attr, Op::Eq, Literal::Bool(*b))?))
@@ -543,6 +572,7 @@ impl Rule {
                 };
                 Ok(polar(test(attr, Op::Eq, lit)?))
             }
+            (Kind::Glyph, RuleValue::Text(s)) => Ok(polar(test(Attr::Layer(LayerAttr::HasComponent(s.clone())), Op::Eq, Literal::Bool(true))?)),
             (Kind::Custom, RuleValue::Text(s)) => Ok(polar(parse_predicate(s)?)),
             _ => fail(format!("the rule `{}` has a value of the wrong kind", p.as_str())),
         }

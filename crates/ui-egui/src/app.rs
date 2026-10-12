@@ -174,6 +174,9 @@ impl FontcraftApp {
         if empty && let Some(dialog) = crate::dialogs::for_command(id) {
             return crate::dialogs::open(self, &dialog, &serde_json::Map::new());
         }
+        if let Some(batch) = shell::font_view::per_glyph_batch(self, id, &params) {
+            return self.run_from_shell("command.batch", &batch);
+        }
         let params = tools_glue::with_targets(self, id, shell::clipboard::font_view_params(self, id, params));
         self.run_from_shell(id, &params)
     }

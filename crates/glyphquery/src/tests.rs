@@ -492,3 +492,46 @@ fn spacing_rules() {
     let custom = with_expr(&font, &data, None, &parse_predicate("hasMetricsKeys AND NOT hasKerningGroups").unwrap());
     assert_eq!(custom, vec!["A".to_string(), "B".to_string()]);
 }
+
+/// Has Components, Contains Component, Has Anchors, Has Corners and Is Auto-Aligned read the
+/// layer of the shown master (`smartFilter.rule.hasComponents` and the four after it).
+#[test]
+fn component_rules_read_the_shown_masters_layer() {
+    let (mut font, data) = (font(), data());
+    {
+        let mut c = font.glyph_mut("C").unwrap();
+        c.layers[1].anchors.push(fontcraft_model::Anchor::new("top", 100.0, 700.0));
+    }
+    {
+        let mut d = font.glyph_mut("D").unwrap();
+        let mut dict = fontcraft_plist::Dict::new();
+        dict.insert("type", fontcraft_plist::Value::String("Corner".into()));
+        d.layers[0].info.hints.push(fontcraft_model::Hint { family: fontcraft_model::Family::Glyphs, value: fontcraft_plist::Value::Dict(dict) });
+    }
+    {
+        let mut e = font.glyph_mut("E").unwrap();
+        e.layers[0].shapes = vec![Shape::Component(Component::new("A", 0.0, 0.0)), Shape::Component(Component::new("B", 0.0, 0.0))];
+    }
+    let names = |list: &[&str]| list.iter().map(|s| s.to_string()).collect::<Vec<String>>();
+    let total = font.glyphs.len();
+    let m01 = Some("m01");
+    assert_eq!(with_rules(&font, &data, m01, one("hasComponents", "is", json!(true))), names(&["B", "E"]));
+    assert_eq!(with_rules(&font, &data, m01, one("hasComponents", "is", json!(false))).len(), total - 2);
+    assert!(with_rules(&font, &data, Some("m02"), one("hasComponents", "is", json!(true))).is_empty(), "m02 of B holds a path only");
+    assert_eq!(with_rules(&font, &data, m01, one("containsComponent", "is", json!("A"))), names(&["B", "E"]));
+    assert_eq!(with_rules(&font, &data, m01, one("containsComponent", "is", json!("B"))), names(&["E"]));
+    assert_eq!(with_rules(&font, &data, m01, one("containsComponent", "isNot", json!("A"))).len(), total - 2);
+    assert!(with_rules(&font, &data, m01, one("containsComponent", "is", json!("Z"))).is_empty());
+    assert_eq!(with_rules(&font, &data, Some("m02"), one("hasAnchors", "is", json!(true))), names(&["C"]));
+    assert!(with_rules(&font, &data, m01, one("hasAnchors", "is", json!(true))).is_empty());
+    assert_eq!(with_rules(&font, &data, m01, one("hasCorners", "is", json!(true))), names(&["D"]));
+    assert!(with_rules(&font, &data, Some("m02"), one("hasCorners", "is", json!(true))).is_empty());
+    assert_eq!(with_rules(&font, &data, m01, one("isAutoAligned", "is", json!(true))), names(&["B", "E"]));
+    assert!(with_rules(&font, &data, Some("m02"), one("isAutoAligned", "is", json!(true))).is_empty());
+    // The rule and its predicate spelling select the same glyphs.
+    let spelled = parse_predicate("layer.hasComponent.B AND layer.hasComponents").unwrap();
+    assert_eq!(with_expr(&font, &data, m01, &spelled), names(&["E"]));
+    let compiled = RuleTree::from_json(&one("containsComponent", "is", json!("B"))).unwrap().compile().unwrap();
+    let reread = parse_predicate(&compiled.to_string()).unwrap();
+    assert_eq!(with_expr(&font, &data, m01, &reread), names(&["E"]));
+}

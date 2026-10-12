@@ -174,8 +174,7 @@ impl Column {
     }
 
     /// Whether and how a cell of the column is edited in place: the columns of properties that
-    /// have a set command. Metrics and kerning groups follow with their commands (M5),
-    /// components with `glyph.setComponents` (M6).
+    /// have a set command. The metric and kerning-group columns are edited in the inspector.
     pub fn editing(self) -> Editing {
         match self {
             Column::Name
@@ -189,7 +188,8 @@ impl Column {
             | Column::Color
             | Column::Tags
             | Column::SortName
-            | Column::Note => Editing::Text,
+            | Column::Note
+            | Column::Components => Editing::Text,
             Column::Export => Editing::Toggle,
             _ => Editing::No,
         }
@@ -230,7 +230,7 @@ impl Column {
             Column::Color => glyph.info.color.map(color_name).unwrap_or_default(),
             Column::Tags => glyph.info.tags.join(", "),
             Column::Note => glyph.info.note.lines().next().unwrap_or_default().to_string(),
-            Column::Components => components(glyph, cx.master).join(" "),
+            Column::Components => components(glyph, cx.master).join(", "),
             Column::LastChanged => glyph.info.last_change.clone().unwrap_or_default(),
             Column::Lsb | Column::Rsb | Column::Width => self.number(cx, row).map(|n| format!("{}", n.round())).unwrap_or_default(),
             Column::LeftGroup => glyph.kern_groups.left.clone().unwrap_or_default(),
@@ -293,7 +293,15 @@ impl Column {
     }
 
     /// The command that sets the cell of `glyph` to `text` (for a toggle, `text` is ignored).
+    /// The Components cell edits the first master's layer; [`Self::edit_command_in`] names the
+    /// shown master's.
     pub fn edit_command(self, row: &Row, text: &str) -> Option<(&'static str, Value)> {
+        self.edit_command_in(None, row, text)
+    }
+
+    /// [`Self::edit_command`] with the master Font View shows: the Components cell edits that
+    /// master's layer (`fontView.column.components`). Names are separated by commas or spaces.
+    pub fn edit_command_in(self, master: Option<&str>, row: &Row, text: &str) -> Option<(&'static str, Value)> {
         let glyph = row.glyph.name.as_str();
         let text = text.trim();
         let or_null = |t: &str| if t.is_empty() { Value::Null } else { json!(t) };
@@ -323,6 +331,14 @@ impl Column {
                 ("glyph.setColorLabel", json!({"glyphs": [glyph], "color": color}))
             }
             Column::Export => ("glyph.setExport", json!({"glyphs": [glyph], "export": !row.glyph.export})),
+            Column::Components => {
+                let names: Vec<&str> = text.split(|c: char| c.is_whitespace() || c == ',').filter(|s| !s.is_empty()).collect();
+                let mut params = json!({"glyph": glyph, "components": names});
+                if let (Some(m), Some(master)) = (params.as_object_mut(), master) {
+                    m.insert("layer".into(), json!(master));
+                }
+                ("glyph.setComponents", params)
+            }
             _ => return None,
         })
     }

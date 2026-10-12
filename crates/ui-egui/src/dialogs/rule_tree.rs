@@ -32,7 +32,7 @@ const VALUE_CHARS: usize = 1024;
 pub const MATCH: [(&str, &str); 3] = [("all", "All"), ("any", "Any"), ("none", "None")];
 
 /// The rule properties with their labels, in the pop-up's order.
-pub const PROPERTIES: [(&str, &str); 17] = [
+pub const PROPERTIES: [(&str, &str); 22] = [
     ("glyphName", "Glyph Name"),
     ("countOfPaths", "Count of Paths"),
     ("countOfComponents", "Count of Components"),
@@ -42,8 +42,13 @@ pub const PROPERTIES: [(&str, &str); 17] = [
     ("case", "Case"),
     ("exportGlyph", "Export Glyph"),
     ("hasUnicode", "Has Unicode"),
+    ("hasComponents", "Has Components"),
+    ("hasCorners", "Has Corners"),
+    ("hasAnchors", "Has Anchors"),
+    ("containsComponent", "Contains Component"),
     ("hasCustomGlyphInfo", "Has Custom Glyph Info"),
     ("hasAnnotations", "Has Annotations"),
+    ("isAutoAligned", "Is Auto-Aligned"),
     ("hasMetricsKeys", "Has Metrics Keys"),
     ("metricsKeysOutOfSync", "Metrics Keys Out of Sync"),
     ("hasKerningGroups", "Has Kerning Groups"),
@@ -93,9 +98,17 @@ enum ValueKind {
 fn value_kind(property: &str) -> ValueKind {
     match property {
         "countOfPaths" | "countOfComponents" => ValueKind::Number,
-        "exportGlyph" | "hasUnicode" | "hasCustomGlyphInfo" | "hasAnnotations" | "hasMetricsKeys" | "metricsKeysOutOfSync" | "hasKerningGroups" => {
-            ValueKind::Bool
-        }
+        "exportGlyph"
+        | "hasUnicode"
+        | "hasComponents"
+        | "hasCorners"
+        | "hasAnchors"
+        | "hasCustomGlyphInfo"
+        | "hasAnnotations"
+        | "isAutoAligned"
+        | "hasMetricsKeys"
+        | "metricsKeysOutOfSync"
+        | "hasKerningGroups" => ValueKind::Bool,
         "case" => ValueKind::Case,
         "colorLabel" | "layerColorLabel" => ValueKind::Color,
         _ => ValueKind::Text,

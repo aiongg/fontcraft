@@ -91,7 +91,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
                         let cell = Rect::from_min_size(pos2(rect.min.x + x, rect.min.y), vec2(w, height));
                         if let Some(e) = edit.as_mut().filter(|e| e.glyph == row.glyph.name && e.column == column) {
                             edit_shown = true;
-                            if let Some(command) = cell_field(ui, e, cell, row) {
+                            if let Some(command) = cell_field(ui, e, cell, row, cx.master) {
                                 pending.push(command);
                             }
                             continue;
@@ -241,7 +241,7 @@ fn row_pointer(
 }
 
 /// The field over a cell being edited. Returns the command to run when the edit is committed.
-fn cell_field(ui: &mut egui::Ui, edit: &mut InlineEdit, rect: Rect, row: &Row) -> Option<(&'static str, Value)> {
+fn cell_field(ui: &mut egui::Ui, edit: &mut InlineEdit, rect: Rect, row: &Row, master: &str) -> Option<(&'static str, Value)> {
     let id = egui::Id::new(("fontView.listEdit", &edit.glyph, edit.column.id()));
     let response = ui.put(rect, egui::TextEdit::singleline(&mut edit.text).id(id).font(egui::TextStyle::Small));
     if edit.fresh {
@@ -259,7 +259,7 @@ fn cell_field(ui: &mut egui::Ui, edit: &mut InlineEdit, rect: Rect, row: &Row) -
     if cancelled || (column == Column::Name && (text.trim().is_empty() || text.trim() == row.glyph.name)) {
         return None;
     }
-    column.edit_command(row, &text)
+    column.edit_command_in(Some(master), row, &text)
 }
 
 /// Draws one cell.

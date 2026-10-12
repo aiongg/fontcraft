@@ -258,7 +258,7 @@ pub fn commands(app: &FontcraftApp, glyphs: &[String], edit: &Edit) -> Vec<(&'st
             if *column == Column::Name && (text.trim().is_empty() || text.trim() == row.glyph.name) {
                 return Vec::new();
             }
-            let Some((id, mut params)) = column.edit_command(row, text) else { return Vec::new() };
+            let Some((id, mut params)) = column.edit_command_in(Some(&app.font_view.cache.master), row, text) else { return Vec::new() };
             if let Some(m) = params.as_object_mut()
                 && m.contains_key("glyphs")
             {

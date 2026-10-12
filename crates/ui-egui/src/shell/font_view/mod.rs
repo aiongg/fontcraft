@@ -426,6 +426,41 @@ pub fn batch_targets(app: &FontcraftApp, spec: &fontcraft_engine::CommandSpec) -
     Some(m)
 }
 
+/// Commands that address one glyph and that Font View runs once per selected glyph, as one
+/// undo step (`fontView.batch.addComponent`).
+const PER_GLYPH: [&str; 2] = ["glyph.addComponent", "glyph.addComponentAllMasters"];
+
+/// The `command.batch` parameters that run `id` on every glyph of the Font View selection, for
+/// the [`PER_GLYPH`] commands given without a `glyph`: each step gets one selected glyph, and the
+/// layer of Font View's master when the command takes `layer` and was given none. `None` in
+/// Edit View, without a selection, and for every other command.
+pub fn per_glyph_batch(app: &FontcraftApp, id: &str, params: &Value) -> Option<Value> {
+    if app.state.tab().is_some() || app.state.selected_glyphs.is_empty() || !PER_GLYPH.contains(&id) {
+        return None;
+    }
+    let given = match params {
+        Value::Null => Map::new(),
+        Value::Object(m) if !m.contains_key("glyph") => m.clone(),
+        _ => return None,
+    };
+    let spec = fontcraft_engine::find_command(id)?;
+    let layer = (crate::tools_glue::takes_param(spec, "layer?") && !given.contains_key("layer")).then(|| master(app)).flatten();
+    let steps: Vec<Value> = app
+        .state
+        .selected_glyphs
+        .iter()
+        .map(|glyph| {
+            let mut m = given.clone();
+            m.insert("glyph".into(), json!(glyph));
+            if let Some(layer) = &layer {
+                m.insert("layer".into(), json!(layer));
+            }
+            json!({"command": id, "params": m})
+        })
+        .collect();
+    Some(json!({"label": spec.label, "steps": steps}))
+}
+
 /// Remembers the showing tab's node selection for its edited glyph, for the Palette's Fit
 /// Curve in Font View. An empty selection forgets the glyph.
 pub fn remember_node_selection(app: &mut FontcraftApp) {

@@ -255,6 +255,12 @@ pub enum LayerAttr {
     HasAnnotations,
     /// The layer has automatically aligned components.
     IsAligned,
+    HasComponents,
+    /// Corner components on the layer.
+    HasCorners,
+    HasAnchors,
+    /// A component of the named glyph is on the layer.
+    HasComponent(String),
     CountOfPaths,
     CountOfComponents,
     CountOfAnchors,
@@ -271,6 +277,9 @@ pub enum LayerAttr {
     AnchorX(String),
     AnchorY(String),
 }
+
+/// The key path prefix of [`LayerAttr::HasComponent`]: `layer.hasComponent.<glyph name>`.
+const HAS_COMPONENT: &str = "layer.hasComponent.";
 
 /// The case values `case` compares with.
 pub const CASE_VALUES: &[&str] = &["noCase", "upper", "lower", "smallCaps", "minor", "other"];
@@ -354,6 +363,9 @@ const PATHS: &[(&str, Attr)] = &[
     ("layer.colorIndex", Attr::Layer(LayerAttr::ColorIndex)),
     ("layer.hasAnnotations", Attr::Layer(LayerAttr::HasAnnotations)),
     ("layer.isAligned", Attr::Layer(LayerAttr::IsAligned)),
+    ("layer.hasComponents", Attr::Layer(LayerAttr::HasComponents)),
+    ("layer.hasCorners", Attr::Layer(LayerAttr::HasCorners)),
+    ("layer.hasAnchors", Attr::Layer(LayerAttr::HasAnchors)),
     ("layer.countOfPaths", Attr::Layer(LayerAttr::CountOfPaths)),
     ("layer.countOfComponents", Attr::Layer(LayerAttr::CountOfComponents)),
     ("layer.countOfAnchors", Attr::Layer(LayerAttr::CountOfAnchors)),
@@ -383,6 +395,11 @@ impl Attr {
         if NOT_YET.contains(&path) {
             return fail(format!("the attribute `{path}` is not supported yet"));
         }
+        if let Some(name) = path.strip_prefix(HAS_COMPONENT)
+            && !name.is_empty()
+        {
+            return Ok(Attr::Layer(LayerAttr::HasComponent(name.to_string())));
+        }
         let anchor = path.strip_prefix("layer.anchors.");
         match (anchor.and_then(|a| a.strip_suffix(".x")), anchor.and_then(|a| a.strip_suffix(".y"))) {
             (Some(name), _) if !name.is_empty() => Ok(Attr::Layer(LayerAttr::AnchorX(name.to_string()))),
@@ -396,6 +413,7 @@ impl Attr {
         match self {
             Attr::Layer(LayerAttr::AnchorX(n)) => format!("layer.anchors.{n}.x"),
             Attr::Layer(LayerAttr::AnchorY(n)) => format!("layer.anchors.{n}.y"),
+            Attr::Layer(LayerAttr::HasComponent(n)) => format!("{HAS_COMPONENT}{n}"),
             // The first spelling in `PATHS` is the one written.
             attr => PATHS.iter().find(|(_, a)| a == attr).map_or_else(String::new, |(p, _)| (*p).to_string()),
         }
@@ -425,7 +443,14 @@ impl Attr {
             | Attr::MetricsKeysOutOfSync
             | Attr::HasKerningGroups
             | Attr::Flag(_)
-            | Attr::Layer(LayerAttr::HasAnnotations | LayerAttr::IsAligned) => Kind::Bool,
+            | Attr::Layer(
+                LayerAttr::HasAnnotations
+                | LayerAttr::IsAligned
+                | LayerAttr::HasComponents
+                | LayerAttr::HasCorners
+                | LayerAttr::HasAnchors
+                | LayerAttr::HasComponent(_),
+            ) => Kind::Bool,
             Attr::ColorIndex
             | Attr::CountOfUnicodes
             | Attr::CountOfLayers
@@ -785,6 +810,12 @@ impl Test {
                     L::ColorIndex => Val::Num(layer.and_then(|l| colour(l.info.color))),
                     L::HasAnnotations => Val::Bool(layer.is_some_and(|l| !l.info.annotations.is_empty())),
                     L::IsAligned => Val::Bool(layer.is_some_and(|l| layer_aligned(env.font, l))),
+                    L::HasComponents => Val::Bool(layer.is_some_and(|l| components(l) > 0)),
+                    L::HasCorners => Val::Bool(layer.is_some_and(|l| l.info.hints.iter().any(|h| h.kind() == Some("Corner")))),
+                    L::HasAnchors => Val::Bool(layer.is_some_and(|l| !l.anchors.is_empty())),
+                    L::HasComponent(n) => {
+                        Val::Bool(layer.is_some_and(|l| l.shapes.iter().any(|s| matches!(s, Shape::Component(c) if &c.glyph == n))))
+                    }
                     L::CountOfPaths => count(layer.map_or(0, paths)),
                     L::CountOfComponents => count(layer.map_or(0, components)),
                     L::CountOfAnchors => count(layer.map_or(0, |l| l.anchors.len())),

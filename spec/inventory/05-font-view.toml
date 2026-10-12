@@ -1597,7 +1597,10 @@ milestone = "M6"
 summary = "The Components column lists the names of the components used by the glyph; editing the cell adds or removes components to match."
 ref = "Font View › Glyph Properties › Components"
 status = "handbook"
-notes = "Documented, not yet observed. The column exists since M4, read only; editing runs glyph.setComponents."
+notes = "Documented, not yet observed. The cell lists the component names of the layer of the master Font View shows, separated by commas. Editing it runs glyph.setComponents on that layer: names may be separated by commas or spaces, a name typed more often than the layer has it appends a component, one typed less often loses its last components, and paths stay."
+guesses = [
+  "The cell shows and edits the layer of the master Font View shows, not the first master's; editing the cell with a second master selected in the reference app settles it.",
+]
 
 [[behavior]]
 id = "fontView.column.lastChanged"
@@ -1889,7 +1892,12 @@ milestone = "M6"
 summary = "The Add Glyphs text field also accepts glyph recipes. The three forms are those of the Components page: component=glyph, base+mark=glyph and base+base=glyph (components.recipeSingleComponent, components.recipeBasePlusMarks, components.recipeMultipleBases). A recipe item builds the glyph named after the equals sign from the listed components."
 ref = "Font View › Adding New Glyphs › Adding Multiple Glyphs; Reusing Shapes › Components › Recipes"
 status = "handbook"
-notes = "Verified by the M6 planning pass against the handbook pages Glyph Set (the field accepts recipes) and Components › Recipes (the three forms); the recalled forms were right, the examples differ. Documented, not yet observed. The M4 parser already splits recipe items (`glyphdata` `Item::Recipe`) and skips them with a message until M6. M6.3 parses recipes and classifies their parts (`components::recipe`); a recipe longer than 4,096 bytes or with more than 64 parts is refused with a message."
+notes = "Verified by the M6 planning pass against the handbook pages Glyph Set (the field accepts recipes) and Components › Recipes (the three forms); the recalled forms were right, the examples differ. Documented, not yet observed. glyph.addGlyphs parses each recipe item with `components::recipe` (at most 4,096 bytes and 64 parts) and builds the glyph with `components::compose::composite_glyph`: the parts in the written order, marks aligned to their base by anchors, bases side by side. The plain items of the same text are added first, so a recipe may use them, and a recipe may use an earlier recipe's glyph."
+guesses = [
+  "A recipe that names a glyph the font does not have adds nothing and is listed in `skipped` with the missing names; trying a recipe with a missing part in the reference app settles it.",
+  "A recipe for a glyph the font already has follows the same Keep, Replace and Cancel answers as a plain name, and Replace rebuilds the glyph from the recipe, keeping its code points; a recipe for an existing glyph in the reference app settles it.",
+  "The name after `=` is kept as typed, without turning a legacy name into a nice name, and gets the code point the glyph data gives it unless another glyph has it; a recipe ending in `=uni00E9` in the reference app settles it.",
+]
 
 [[behavior]]
 id = "addGlyphs.existingNotDuplicated"
@@ -1959,6 +1967,7 @@ milestone = "M6"
 summary = "Components in pasted glyphs are re-pointed by name at glyphs of the target font. A component whose base glyph does not exist there stays unresolved and is drawn as the triangle placeholder used for components without a base glyph."
 ref = "Font View › Copying Glyphs Between Files"
 status = "handbook"
+notes = "Documented. Components name their base glyph, so a pasted composite draws the target font's glyph of that name; a name the target lacks stays on the component, which draws as the missing-base placeholder until the glyph is added (`pasted_composites_draw_the_target_fonts_glyphs`)."
 
 [[behavior]]
 id = "pasteSpecial.modeSameName"
@@ -2373,6 +2382,7 @@ milestone = "M6"
 summary = "A leading underscore marks a helper glyph that does not export by default. The prefixes _part., _smart., _cap. and _corner. are used for the reusable-shape glyphs described in the components chapter."
 ref = "Font View › Names & Unicode › Glyph Naming Rules"
 status = "handbook"
+notes = "Documented, not yet observed. Glyphs that Add Glyphs, a recipe and Add to Font create with a leading underscore do not export; see components.underscoreNameNotExported."
 
 [[behavior]]
 id = "glyphName.scriptSuffix"
@@ -2548,6 +2558,10 @@ milestone = "M6"
 summary = "Glyph → Add Component (Cmd+Shift+C) adds the chosen component to all selected glyphs; with Option on all masters."
 ref = "Font View › Batch-Processing › Batch Commands"
 status = "handbook"
+notes = "Documented, not yet observed. In Font View, glyph.addComponent and glyph.addComponentAllMasters given a `component` and no `glyph` run once per selected glyph as one command.batch, on the layer of Font View's master (`shell::font_view::per_glyph_batch`). The component picker that asks for the component belongs to the Info box and picker package."
+guesses = [
+  "When the component cannot go into one selected glyph (it would contain itself), the whole batch is refused and no glyph changes; adding a glyph to a selection that includes it in the reference app settles it.",
+]
 
 [[behavior]]
 id = "fontView.batch.createComposite"
@@ -2556,6 +2570,7 @@ milestone = "M6"
 summary = "Glyph → Create Composite (Cmd+Ctrl+C) rebuilds all selected glyphs from their database recipes; with Option on all masters."
 ref = "Font View › Batch-Processing › Batch Commands"
 status = "handbook"
+notes = "Documented, not yet observed. The command takes `glyphs`; from Font View the shell fills it with the selection and `layer` with Font View's master (`fontView.batch.appliesToSelection`). The ForAllMasters command is the Option form."
 
 [[behavior]]
 id = "fontView.batch.decomposeComponents"
@@ -2564,6 +2579,7 @@ milestone = "M6"
 summary = "Glyph → Decompose Components (Cmd+Shift+D) turns the components of all selected glyphs into outlines; with Option on all masters."
 ref = "Font View › Batch-Processing › Batch Commands"
 status = "handbook"
+notes = "Documented, not yet observed. The command takes `glyphs`; from Font View the shell fills it with the selection and `layer` with Font View's master (`fontView.batch.appliesToSelection`). The ForAllMasters command is the Option form."
 
 [[behavior]]
 id = "fontView.batch.setAnchors"
@@ -2572,6 +2588,7 @@ milestone = "M6"
 summary = "Glyph → Set Anchors (Cmd+U) adds the default anchors to all selected glyphs; with Option on all masters."
 ref = "Font View › Batch-Processing › Batch Commands"
 status = "handbook"
+notes = "Documented, not yet observed. The command takes `glyphs`; from Font View the shell fills it with the selection and `layer` with Font View's master (`fontView.batch.appliesToSelection`). The ForAllMasters command is the Option form."
 
 [[behavior]]
 id = "fontView.batch.resetAnchors"
@@ -2580,6 +2597,7 @@ milestone = "M6"
 summary = "Glyph → Reset Anchors (Cmd+Shift+U) replaces the anchors of all selected glyphs with the defaults; with Option on all masters."
 ref = "Font View › Batch-Processing › Batch Commands"
 status = "handbook"
+notes = "Documented, not yet observed. The command takes `glyphs`; from Font View the shell fills it with the selection and `layer` with Font View's master (`fontView.batch.appliesToSelection`). The ForAllMasters command is the Option form."
 
 [[behavior]]
 id = "fontView.batch.reverseContours"
@@ -2959,6 +2977,7 @@ milestone = "M6"
 summary = "Rule Has Components is true when the glyph's layer for the selected master contains any component."
 ref = "Font View › Filtering Font View › Smart Filters"
 status = "handbook"
+notes = "Documented, not yet observed. The rule reads the layer of the master Font View shows and is true when it has any component. Property `hasComponents` in the rule JSON; operators is and is not, value true or false."
 
 [[behavior]]
 id = "smartFilter.rule.hasHints"
@@ -2991,6 +3010,7 @@ milestone = "M6"
 summary = "Rule Has Corners is true when the layer of the selected master uses corner components."
 ref = "Font View › Filtering Font View › Smart Filters"
 status = "handbook"
+notes = "Documented, not yet observed. The rule reads the layer of the master Font View shows and is true when it has a corner component (a layer hint of type Corner). Property `hasCorners` in the rule JSON; operators is and is not, value true or false."
 
 [[behavior]]
 id = "smartFilter.rule.hasAnchors"
@@ -2999,6 +3019,10 @@ milestone = "M6"
 summary = "Rule Has Anchors is true when the layer of the selected master has at least one anchor."
 ref = "Font View › Filtering Font View › Smart Filters"
 status = "handbook"
+notes = "Documented, not yet observed. The rule reads the layer of the master Font View shows and is true when it has an anchor of its own (propagated anchors do not count). Property `hasAnchors` in the rule JSON; operators is and is not, value true or false."
+guesses = [
+  "Only the layer's own anchors count, not those it gets from its components; filtering a composite without anchors of its own in the reference app settles it.",
+]
 
 [[behavior]]
 id = "smartFilter.rule.containsComponent"
@@ -3007,6 +3031,10 @@ milestone = "M6"
 summary = "Rule Contains Component takes a glyph name and is true when the layer of the selected master has a component pointing at that glyph."
 ref = "Font View › Filtering Font View › Smart Filters"
 status = "handbook"
+notes = "Documented, not yet observed. Property `containsComponent` in the rule JSON, operators is and is not, value a glyph name; the predicate spelling is `layer.hasComponent.<name>`. It reads the layer of the master Font View shows."
+guesses = [
+  "The glyph name is compared whole, not as a substring; trying a partial name in the reference app settles it.",
+]
 
 [[behavior]]
 id = "smartFilter.rule.hasSpecialLayers"
@@ -3039,6 +3067,7 @@ milestone = "M6"
 summary = "Rule Is Auto-Aligned is true when the layer of the selected master has automatic component alignment active."
 ref = "Font View › Filtering Font View › Smart Filters"
 status = "handbook"
+notes = "Documented, not yet observed. The rule reads the layer of the master Font View shows and is true when it has a component that automatic alignment places, as `layer.isAligned` decides it. Property `isAutoAligned` in the rule JSON; operators is and is not, value true or false."
 
 [[behavior]]
 id = "smartFilter.rule.hasMetricsKeys"

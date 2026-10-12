@@ -7,6 +7,8 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+use fontcraft_components::compose;
+use fontcraft_components::recipe::{self, Recipe};
 use fontcraft_geom::{Rect, Shape as _};
 use fontcraft_model::glyphdata::{GlyphData, items, validate};
 use fontcraft_model::{
@@ -37,7 +39,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Add Glyphs…",
             ["Glyph"],
             Some("Cmd+Shift+G"),
-            "{text: string, onExisting?: \"ask\" | \"replace\" | \"keep\" | \"cancel\" (default keep)} adds a glyph for every item of the text, items separated by spaces, tabs or line breaks: a glyph name (a legacy or production name becomes the nice name, unless the font uses custom naming), a single character, uniXXXX or uXXXXX, or a range first:last of two such items (code points Unicode does not assign are left out; at most 65,536 code points per range). Recipes (base+mark=name) and invalid names are listed in `skipped`. New glyphs get the code points the glyph data gives their names and their place in the default sort order. Names already in the font: keep leaves them; replace makes each a fresh empty glyph in its place; ask and cancel change nothing when there are any. Text at most 512 KB, 65,535 items → {added: [names], replaced: [names], existing: [names], skipped: [{item, reason}]}",
+            "{text: string, onExisting?: \"ask\" | \"replace\" | \"keep\" | \"cancel\" (default keep)} adds a glyph for every item of the text, items separated by spaces, tabs or line breaks: a glyph name (a legacy or production name becomes the nice name, unless the font uses custom naming), a single character, uniXXXX or uXXXXX, or a range first:last of two such items (code points Unicode does not assign are left out; at most 65,536 code points per range), or a recipe: component=glyph, base+mark=glyph or base+base=glyph builds the glyph after `=` from the components named before it, marks aligned to their base by anchors (at most 4,096 bytes and 64 components; the components may be glyphs the same text adds). New glyphs get the code points the glyph data gives their names and their place in the default sort order; a new glyph the glyph data describes as a composite is built from its components when the font has all of them, and stays empty otherwise. Names already in the font: keep leaves them; replace makes each a fresh empty glyph in its place (a recipe's glyph is rebuilt from the recipe); ask and cancel change nothing when there are any. Invalid names and recipes that cannot be built are listed in `skipped`. Text at most 512 KB, 65,535 items → {added: [names], replaced: [names], existing: [names], skipped: [{item, reason}], composed: [names built from components], notComposed: [{glyph, reason}]}",
             has_doc,
             add_glyphs
         ),
@@ -56,7 +58,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Add to Font",
             [],
             None,
-            "{names: [names]} adds a glyph for each glyph-data name that the font does not have yet, with the code point the glyph data gives it, at its place in the default sort order; names already in the font are listed in `existing` and left as they are → {added: [names], existing: [names]}",
+            "{names: [names]} adds a glyph for each glyph-data name that the font does not have yet, with the code point the glyph data gives it, at its place in the default sort order; a composite is built from its components when the font has all of them, as in Add Glyphs. Names already in the font are listed in `existing` and left as they are → {added: [names], existing: [names], composed: [names], notComposed: [{glyph, reason}]}",
             has_doc,
             add_to_font
         ),
@@ -72,9 +74,11 @@ pub fn specs() -> Vec<CommandSpec> {
     ]
 }
 
-/// An empty glyph with a layer for every master of `font`.
+/// An empty glyph with a layer for every master of `font`. A name that starts with an
+/// underscore makes a helper glyph that does not export (`components.underscoreNameNotExported`).
 fn fresh_glyph(font: &Font, data: &GlyphData, name: &str, code_points: &[u32]) -> Glyph {
     let mut g = Glyph::new(name);
+    g.export = !name.starts_with('_');
     g.unicodes = code_points.to_vec();
     g.layers = new_glyph_layers(font, Some(data), name, code_points);
     g
@@ -107,37 +111,164 @@ fn add_glyphs(s: &mut Session, v: &Value) -> Result<Value> {
     }
     let list = items::parse(text).map_err(|e| p.bad(e.to_string()))?;
     if list.is_empty() {
-        return Err(p.bad("`text` holds no items: give glyph names, characters, uniXXXX names or ranges, separated by spaces"));
+        return Err(p.bad("`text` holds no items: give glyph names, characters, uniXXXX names, ranges or recipes, separated by spaces"));
     }
+    let (recipe_items, plain): (Vec<items::Item>, Vec<items::Item>) = list.into_iter().partition(|i| matches!(i, items::Item::Recipe(_)));
     let data = s.glyph_data()?;
     let font = s.font()?;
-    let resolved = items::resolve(&data, &list, custom_naming(font)).map_err(|e| p.bad(e.to_string()))?;
-    let skipped: Vec<Value> = resolved.skipped.iter().map(|k| json!({"item": k.item, "reason": k.reason})).collect();
-    let (existing, new): (Vec<items::Wanted>, Vec<items::Wanted>) = resolved.glyphs.into_iter().partition(|w| font.glyph(&w.name).is_some());
-    let existing_names: Vec<String> = existing.iter().map(|w| w.name.clone()).collect();
-    if !existing.is_empty() && matches!(on_existing, "ask" | "cancel") {
-        return Ok(json!({"added": [], "replaced": [], "existing": existing_names, "skipped": skipped}));
+    let custom = custom_naming(font);
+    let resolved = items::resolve(&data, &plain, custom).map_err(|e| p.bad(e.to_string()))?;
+    let mut skipped: Vec<Value> = resolved.skipped.iter().map(|k| json!({"item": k.item, "reason": k.reason})).collect();
+    // Each recipe target once; a name a recipe builds is not also added empty.
+    let mut recipes: Vec<(String, Recipe)> = Vec::new();
+    let mut targets: HashSet<String> = HashSet::new();
+    for item in &recipe_items {
+        let text = item.text();
+        match recipe::parse_recipe(&text) {
+            Ok(r) if targets.contains(&r.target) => {
+                skipped.push(json!({"item": text, "reason": format!("an earlier recipe already builds `{}`", r.target)}));
+            }
+            Ok(r) => {
+                targets.insert(r.target.clone());
+                recipes.push((text, r));
+            }
+            Err(e) => skipped.push(json!({"item": text, "reason": e.to_string()})),
+        }
     }
-    let replace = if on_existing == "replace" { existing } else { Vec::new() };
-    let mut replacements = Vec::with_capacity(replace.len());
-    for w in &replace {
-        if let Some(g) = font.glyph(&w.name) {
+    let wanted: Vec<items::Wanted> = resolved.glyphs.into_iter().filter(|w| !targets.contains(&w.name)).collect();
+    let (existing, new): (Vec<items::Wanted>, Vec<items::Wanted>) = wanted.into_iter().partition(|w| font.glyph(&w.name).is_some());
+    let mut existing_names: Vec<String> = existing.iter().map(|w| w.name.clone()).collect();
+    existing_names.extend(recipes.iter().filter(|(_, r)| font.glyph(&r.target).is_some()).map(|(_, r)| r.target.clone()));
+    if !existing_names.is_empty() && matches!(on_existing, "ask" | "cancel") {
+        return Ok(json!({"added": [], "replaced": [], "existing": existing_names, "skipped": skipped, "composed": [], "notComposed": []}));
+    }
+    let replace = on_existing == "replace";
+    let replace_plain = if replace { existing } else { Vec::new() };
+    // Recipes whose target the font has run only with replace; the others are listed as existing.
+    recipes.retain(|(_, r)| replace || font.glyph(&r.target).is_none());
+    for name in replace_plain.iter().map(|w| w.name.as_str()).chain(recipes.iter().map(|(_, r)| r.target.as_str())) {
+        if let Some(g) = font.glyph(name) {
             crate::check_unlocked(g)?;
         }
-        replacements.push(fresh_glyph(font, &data, &w.name, &w.code_points));
     }
-    let new_glyphs: Vec<Glyph> = new.iter().map(|w| fresh_glyph(font, &data, &w.name, &w.code_points)).collect();
-    let added: Vec<String> = new.iter().map(|w| w.name.clone()).collect();
-    let replaced: Vec<String> = replace.iter().map(|w| w.name.clone()).collect();
-    s.edit("Add Glyphs", |font| {
-        for g in replacements {
-            let name = g.name.clone();
-            let mut slot = font.glyph_mut(&name)?;
-            *slot = g;
+
+    let mut next = Font::clone(font);
+    for w in &replace_plain {
+        let mut slot = next.glyph_mut(&w.name)?;
+        *slot = fresh_glyph(font, &data, &w.name, &w.code_points);
+    }
+    // New recipe targets go in with the new glyphs, empty, so the table is rebuilt once and a
+    // later recipe can use an earlier one's glyph; those that cannot be built are taken out.
+    let used: HashSet<u32> = if custom { HashSet::new() } else { font.glyphs.iter().flat_map(|g| g.unicodes.iter().copied()).collect() };
+    let mut new_glyphs: Vec<Glyph> = new.iter().map(|w| fresh_glyph(font, &data, &w.name, &w.code_points)).collect();
+    for (_, r) in recipes.iter().filter(|(_, r)| font.glyph(&r.target).is_none()) {
+        let code_points: Vec<u32> = if custom {
+            Vec::new()
+        } else {
+            data.lookup(&r.target, &[]).unicode.map(|u| u.value).filter(|cp| !used.contains(cp)).into_iter().collect()
+        };
+        new_glyphs.push(fresh_glyph(font, &data, &r.target, &code_points));
+    }
+    insert_by_sort_key(&mut next, &data, new_glyphs)?;
+
+    let mut composed = Vec::new();
+    let (mut added_by_recipe, mut replaced_by_recipe, mut failed) = (Vec::new(), Vec::new(), HashSet::new());
+    // Glyphs a recipe part may name: the font's own, the new ones, and earlier recipes' targets.
+    let mut ready: HashSet<String> = new.iter().map(|w| w.name.clone()).collect();
+    for (text, r) in &recipes {
+        let original = font.glyph(&r.target);
+        match build_recipe(&mut next, font, &data, r, &ready) {
+            Ok(()) => {
+                ready.insert(r.target.clone());
+                composed.push(r.target.clone());
+                if original.is_some() { replaced_by_recipe.push(r.target.clone()) } else { added_by_recipe.push(r.target.clone()) }
+            }
+            Err(reason) => {
+                skipped.push(json!({"item": text, "reason": reason}));
+                match original {
+                    Some(g) => {
+                        let mut slot = next.glyph_mut(&r.target)?;
+                        *slot = Glyph::clone(g);
+                    }
+                    None => {
+                        failed.insert(r.target.clone());
+                    }
+                }
+            }
         }
-        Ok(insert_by_sort_key(font, &data, new_glyphs)?)
+    }
+    if !failed.is_empty() {
+        let kept: Vec<Arc<Glyph>> = next.glyphs.as_arcs().iter().filter(|g| !failed.contains(&g.name)).cloned().collect();
+        next.glyphs = GlyphTable::from_glyphs(kept);
+    }
+    let mut added: Vec<String> = new.iter().map(|w| w.name.clone()).collect();
+    let (auto, not_composed) = auto_compose(&mut next, &data, &added);
+    composed.extend(auto);
+    added.extend(added_by_recipe);
+    let mut replaced: Vec<String> = replace_plain.iter().map(|w| w.name.clone()).collect();
+    replaced.extend(replaced_by_recipe);
+    s.edit("Add Glyphs", |f| {
+        *f = next;
+        Ok(())
     })?;
-    Ok(json!({"added": added, "replaced": replaced, "existing": existing_names, "skipped": skipped}))
+    Ok(json!({
+        "added": added,
+        "replaced": replaced,
+        "existing": existing_names,
+        "skipped": skipped,
+        "composed": composed,
+        "notComposed": not_composed,
+    }))
+}
+
+/// Fills the recipe's target in `next` with the recipe's parts as components, aligned
+/// (`addGlyphs.recipe`). The target is already in `next`: a new, empty glyph, or the glyph of
+/// `font` it replaces, which becomes a fresh glyph with the same code points. Every part must be
+/// a glyph of `font` or one of `ready`. On failure the reason is returned, and a replaced glyph
+/// may be left fresh in `next` (the caller puts the original back).
+fn build_recipe(next: &mut Font, font: &Font, data: &GlyphData, r: &Recipe, ready: &HashSet<String>) -> std::result::Result<(), String> {
+    let mut missing: Vec<&str> = Vec::new();
+    for part in &r.parts {
+        if font.glyph(part).is_none() && !ready.contains(part) && !missing.contains(&part.as_str()) {
+            missing.push(part);
+        }
+    }
+    if !missing.is_empty() {
+        return Err(format!("`{}` needs glyphs the font does not have: {}", r.target, missing.join(", ")));
+    }
+    if let Some(original) = font.glyph(&r.target) {
+        let mut slot = next.glyph_mut(&r.target).map_err(|e| e.to_string())?;
+        *slot = fresh_glyph(font, data, &r.target, &original.unicodes);
+    }
+    let glyph = compose::composite_glyph(next, data, &r.target, &r.parts).map_err(|e| e.to_string())?;
+    let mut slot = next.glyph_mut(&r.target).map_err(|e| e.to_string())?;
+    *slot = glyph;
+    Ok(())
+}
+
+/// Fills each of the new, empty glyphs `names` in `font` with the components the glyph data
+/// names for it (`components.autoComposeOnAddGlyph`). A glyph whose parts the font lacks stays
+/// empty. Returns the glyphs filled, and those the glyph data decomposes that could not be
+/// built, with the reason.
+fn auto_compose(font: &mut Font, data: &GlyphData, names: &[String]) -> (Vec<String>, Vec<Value>) {
+    let (mut composed, mut not_composed) = (Vec::new(), Vec::new());
+    for name in names {
+        let built = match compose::components_for(font, data, name) {
+            Ok(None) => continue,
+            Ok(Some(parts)) => compose::composite_glyph(font, data, name, &parts),
+            Err(e) => Err(e),
+        };
+        let result = built.map_err(|e| e.to_string()).and_then(|g| {
+            let mut slot = font.glyph_mut(name).map_err(|e| e.to_string())?;
+            *slot = g;
+            Ok(())
+        });
+        match result {
+            Ok(()) => composed.push(name.clone()),
+            Err(reason) => not_composed.push(json!({"glyph": name, "reason": reason})),
+        }
+    }
+    (composed, not_composed)
 }
 
 // ── Duplicate Glyph ─────────────────────────────────────────────────────────────────────────────
@@ -233,8 +364,14 @@ fn add_to_font(s: &mut Session, v: &Value) -> Result<Value> {
         glyphs.push(fresh_glyph(font, &data, name, &code_points));
         added.push(name.to_string());
     }
-    s.edit("Add to Font", |font| Ok(insert_by_sort_key(font, &data, glyphs)?))?;
-    Ok(json!({"added": added, "existing": existing}))
+    let mut next = Font::clone(font);
+    insert_by_sort_key(&mut next, &data, glyphs)?;
+    let (composed, not_composed) = auto_compose(&mut next, &data, &added);
+    s.edit("Add to Font", |f| {
+        *f = next;
+        Ok(())
+    })?;
+    Ok(json!({"added": added, "existing": existing, "composed": composed, "notComposed": not_composed}))
 }
 
 // ── Whole glyphs on the clipboard ───────────────────────────────────────────────────────────────

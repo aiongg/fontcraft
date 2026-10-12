@@ -160,12 +160,14 @@ milestone = "M6"
 summary = "When a glyph that the glyph info database describes as a composite is added to the font, it is created already filled with its components (adding eacute yields e plus acutecomb). The database is the only source for which components go into which glyph."
 ref = "Reusing Shapes › Components › Building Composites"
 status = "handbook"
-notes = "Documented, not yet observed. The published glyph database has no composition column; `components::compose` (M6.3) takes a custom GlyphData.xml `decompose` list first, then our table for i and j, then the Unicode canonical decomposition mapped to glyph names (U+0301 to acutecomb), then a ligature's name parts (open decision D6, answered (a) in the M6 plan § 7 question 3). Rules in `crates/components/src/compose.rs`."
+notes = "Documented, not yet observed. The published glyph database has no composition column; `components::compose` (M6.3) takes a custom GlyphData.xml `decompose` list first, then our table for i and j, then the Unicode canonical decomposition mapped to glyph names (U+0301 to acutecomb), then a ligature's name parts (open decision D6, answered (a) in the M6 plan § 7 question 3). Rules in `crates/components/src/compose.rs`. glyph.addGlyphs and glyphInfo.addToFont build each new glyph this way when the font has every part, counting the glyphs the same text adds; otherwise the glyph is added empty and listed in `notComposed`. Glyphs that Replace empties stay empty, as the Add Glyphs dialog's Replace answer says."
 guesses = [
   "The Unicode decomposition is expanded fully (Aringacute is A, ringcomb, acutecomb), except that a letter with a horn stays whole when the font has it (Ohornacute is Ohorn, acutecomb); the composites stored in corpus sources saved by the reference app measure it (M6 plan § 5).",
   "Our exceptions to Unicode: a name containing commaaccent takes commaaccentcomb where Unicode has the cedilla, gcommaaccent takes commaturnedabovecomb, and dcaron, lcaron, Lcaron and tcaron prefer caroncomb.alt; composing these in the reference app settles it.",
   "Two marks in a row become their mark ligature (circumflexcomb_gravecomb, with the same suffix preferences) when the font has it; composing Acircumflexgrave in the reference app with the mark ligature present settles it.",
   "A base of a decomposition takes the composite's suffix and is required (agrave.sc needs a.sc), while a ligature part takes the suffix only when the font has the suffixed glyph (f_f_l.ss01 from f.ss01 and l); composing suffixed glyphs in the reference app settles it.",
+  "A glyph whose parts are added by the same Add Glyphs text is built from them; adding eacute and acutecomb together in the reference app settles it.",
+  "Add to Font in the Glyph Info window composes as Add Glyphs does; adding a composite from that window in the reference app settles it.",
 ]
 
 [[behavior]]
@@ -263,6 +265,10 @@ milestone = "M6"
 summary = "A glyph whose name begins with an underscore defaults to non-exporting, so it can serve purely as a part inside other glyphs (an _f.connect shared by fl and f_f). The default comes from the name; the glyph's exports property remains the actual switch."
 ref = "Reusing Shapes › Components › Underscore Components"
 status = "handbook"
+notes = "Documented, not yet observed. A glyph created by Add Glyphs, a recipe or Add to Font with a name that starts with an underscore gets exports off; the flag stays the switch afterwards, and renaming does not change it."
+guesses = [
+  "Renaming a glyph to or from an underscore name leaves its exports flag alone; renaming in the reference app settles it.",
+]
 
 # =====================================================================================
 # Components: selecting and editing

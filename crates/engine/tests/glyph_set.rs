@@ -46,7 +46,7 @@ fn add_glyphs_takes_every_item_kind() {
     let added = ["Ccedilla", "adieresis", "idotless", "Scommaaccent", "scommaaccent", "Tcommaaccent", "tcommaaccent", "myGlyph"];
     assert_eq!(strings(&r["added"]), added);
     let skipped: Vec<&str> = r["skipped"].as_array().unwrap().iter().map(|k| k["item"].as_str().unwrap()).collect();
-    assert_eq!(skipped, ["x+acutecomb=xacute", "1abc"], "the recipe waits for components; the name is invalid");
+    assert_eq!(skipped, ["1abc", "x+acutecomb=xacute"], "the name is invalid; the font has no acutecomb for the recipe");
     // Code points come from the glyph data; a name it does not know gets none.
     assert_eq!(glyph(&s, "Ccedilla").unicodes, [0xC7]);
     assert_eq!(glyph(&s, "idotless").unicodes, [0x131]);
@@ -68,6 +68,87 @@ fn add_glyphs_takes_every_item_kind() {
     let r = run(&mut s, "glyph.addGlyphs", json!({"text": "uni00E4 dotlessi"}));
     assert_eq!(strings(&r["added"]), ["uni00E4", "dotlessi"]);
     assert_eq!(glyph(&s, "uni00E4").unicodes, [0xE4]);
+}
+
+/// The component names on the glyph's first layer, in order.
+fn components(s: &Session, name: &str) -> Vec<String> {
+    glyph(s, name).layers[0].shapes.iter().filter_map(|sh| if let Shape::Component(c) = sh { Some(c.glyph.clone()) } else { None }).collect()
+}
+
+#[test]
+fn add_glyphs_builds_recipes_and_composes_database_composites() {
+    let mut s = Session::with_document();
+    let text = "acutecomb eacute Eth Adieresis x+acutecomb=xacute Eth=Dtail d+e=de q+nothing=qnothing a=b";
+    let r = run(&mut s, "glyph.addGlyphs", json!({"text": text}));
+    assert_eq!(strings(&r["added"]), ["acutecomb", "eacute", "Eth", "Adieresis", "xacute", "Dtail", "de"]);
+    assert_eq!(strings(&r["existing"]), ["b"], "a recipe for a glyph the font has is kept by default");
+    let mut composed = strings(&r["composed"]);
+    composed.sort();
+    assert_eq!(composed, ["Dtail", "de", "eacute", "xacute"]);
+    // The parts may be glyphs the same text adds; marks and bases keep the recipe's order.
+    assert_eq!(components(&s, "eacute"), ["e", "acutecomb"], "built from the database's decomposition");
+    assert_eq!(components(&s, "xacute"), ["x", "acutecomb"]);
+    assert_eq!(components(&s, "Dtail"), ["Eth"]);
+    assert_eq!(components(&s, "de"), ["d", "e"]);
+    // Two bases stand side by side and the composite is as wide as both.
+    let de = glyph(&s, "de");
+    let d_width = glyph(&s, "d").layers[0].width;
+    let Shape::Component(e) = &de.layers[0].shapes[1] else { panic!("de holds a component of e") };
+    assert_eq!(e.transform.affine().as_coeffs()[4], d_width);
+    assert_eq!(de.layers[0].width, d_width + glyph(&s, "e").layers[0].width);
+    // A composite whose parts the font lacks is added empty and listed.
+    assert!(glyph(&s, "Adieresis").layers.iter().all(|l| l.shapes.is_empty()));
+    let not_composed = r["notComposed"].as_array().unwrap();
+    assert_eq!(not_composed.len(), 1, "{not_composed:?}");
+    assert_eq!(not_composed[0]["glyph"], "Adieresis");
+    assert!(not_composed[0]["reason"].as_str().unwrap().contains("dieresiscomb"));
+    // A recipe with a missing part adds nothing.
+    let skipped = r["skipped"].as_array().unwrap();
+    assert_eq!(skipped.len(), 1, "{skipped:?}");
+    assert_eq!(skipped[0]["item"], "q+nothing=qnothing");
+    assert!(skipped[0]["reason"].as_str().unwrap().contains("nothing"));
+    assert!(s.font().unwrap().glyph("qnothing").is_none());
+    // Code points come from the glyph data; one undo step for everything.
+    assert_eq!(glyph(&s, "eacute").unicodes, [0xE9]);
+    run(&mut s, "edit.undo", json!({}));
+    assert!(["acutecomb", "eacute", "xacute", "de"].iter().all(|n| s.font().unwrap().glyph(n).is_none()));
+    run(&mut s, "edit.redo", json!({}));
+
+    // Replace rebuilds a glyph from its recipe; keep leaves it.
+    let before = glyph(&s, "xacute");
+    let r = run(&mut s, "glyph.addGlyphs", json!({"text": "e+acutecomb=xacute"}));
+    assert_eq!(strings(&r["existing"]), ["xacute"]);
+    assert!(Arc::ptr_eq(&before, &glyph(&s, "xacute")));
+    let r = run(&mut s, "glyph.addGlyphs", json!({"text": "e+acutecomb=xacute", "onExisting": "replace"}));
+    assert_eq!(strings(&r["replaced"]), ["xacute"]);
+    assert_eq!(components(&s, "xacute"), ["e", "acutecomb"]);
+    // Bad recipes are listed with a reason and change nothing.
+    let font = s.doc().unwrap().font.clone();
+    let r = run(&mut s, "glyph.addGlyphs", json!({"text": "a+b=a +=x a+=y a+b=c=d"}));
+    assert_eq!(r["skipped"].as_array().unwrap().len(), 4, "{r}");
+    assert!(Arc::ptr_eq(&s.doc().unwrap().font, &font));
+    // A helper glyph, named with a leading underscore, does not export.
+    run(&mut s, "glyph.addGlyphs", json!({"text": "_part.stem x=_part.x"}));
+    assert!(!glyph(&s, "_part.stem").export && !glyph(&s, "_part.x").export);
+    assert!(glyph(&s, "xacute").export);
+}
+
+/// `fontView.paste.componentsRelink`: components of pasted glyphs name glyphs, so they draw the
+/// target font's glyphs; a name the target lacks stays as it is until the glyph is added.
+#[test]
+fn pasted_composites_draw_the_target_fonts_glyphs() {
+    let mut source = Session::with_document();
+    run(&mut source, "glyph.addGlyphs", json!({"text": "acutecomb x+acutecomb=xacute"}));
+    run(&mut source, "path.addRectangle", json!({"glyph": "x", "x": 0, "y": 0, "width": 100, "height": 100}));
+    let copied = run(&mut source, "edit.copy", json!({"glyphs": ["xacute"]}));
+    let mut target = Session::with_document();
+    run(&mut target, "path.addRectangle", json!({"glyph": "x", "x": 50, "y": 0, "width": 300, "height": 500}));
+    run(&mut target, "edit.paste", json!({"json": copied["json"]}));
+    assert_eq!(components(&target, "xacute"), ["x", "acutecomb"]);
+    assert!(target.font().unwrap().outline("xacute", "m01").is_err(), "acutecomb is not in the target yet");
+    run(&mut target, "glyph.addGlyphs", json!({"text": "acutecomb"}));
+    let font = target.font().unwrap();
+    assert_eq!(font.outline("xacute", "m01").unwrap(), font.outline("x", "m01").unwrap(), "the target's x");
 }
 
 #[test]
@@ -281,6 +362,11 @@ fn add_to_font_adds_database_names() {
     assert_eq!((strings(&r["added"]), strings(&r["existing"])), (vec!["Ccedilla".to_string()], vec!["A".to_string()]));
     assert_eq!(glyph(&s, "Ccedilla").unicodes, [0xC7]);
     assert!(s.execute("glyphInfo.addToFont", &json!({"names": ["bad name"]})).is_err());
+    // A composite whose parts the font has is built from them.
+    run(&mut s, "glyphInfo.addToFont", json!({"names": ["acutecomb"]}));
+    let r = run(&mut s, "glyphInfo.addToFont", json!({"names": ["aacute"]}));
+    assert_eq!(strings(&r["composed"]), ["aacute"]);
+    assert_eq!(components(&s, "aacute"), ["a", "acutecomb"]);
 }
 
 #[test]
