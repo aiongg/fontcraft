@@ -71,7 +71,7 @@ bundled, the file says so in its header and the project is listed here with its 
   instance attributes and instance lib keys, style-map names and instance file names from its
   axis, instance and name builders (crates/io-ufo/src/designspace/axes.rs and instances.rs).
   The rules that give a UFO written from another format its public.openTypeCategories are
-  ported from its feature builder (crates/io-ufo/src/gdef.rs, from builder/features.py). The
+  ported from its feature builder (crates/model/src/ufo_classes.rs, from builder/features.py). The
   conversion between a glyph's colour label and the UFO mark colour, with its table of label
   colours, is ported from its glyph builder (crates/io-ufo/src/glif.rs), and the key order of a
   format 2 smart-glyph property from its format 2 writer (crates/io-glyphs/src/glyph.rs). The

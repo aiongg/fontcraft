@@ -35,6 +35,7 @@ mod rename;
 mod resolve;
 mod shape_info;
 pub mod smart;
+pub mod ufo_classes;
 
 pub use address::{LayerParts, LayerPartsMut, LayerSide};
 pub use extra::{Extra, ExtraEntry, Family};

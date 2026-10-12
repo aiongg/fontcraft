@@ -2463,6 +2463,13 @@ mod tests {
         let stored: Vec<(&str, &str)> = back.glyphs.iter().filter_map(|g| Some((g.name.as_str(), g.info.opentype_category.as_deref()?))).collect();
         assert_eq!(stored, [("B", "component")]);
         assert!(s(&write(&back).unwrap()["lib.plist"]).contains(classes));
+        // The compiler still sees every class the map states.
+        let data = fontcraft_model::glyphdata::GlyphData::new().unwrap();
+        let rules = fontcraft_model::ufo_classes::rule_classes(&back, &m, &data);
+        let mut effective: Vec<(String, String)> = fontcraft_model::ufo_classes::stated(&back, &m, &rules).into_iter().collect();
+        effective.sort();
+        let want = [("A", "base"), ("Aacute", "base"), ("B", "component"), ("acutecomb", "mark"), ("f_f", "ligature")];
+        assert_eq!(effective, want.map(|(g, c)| (g.to_string(), c.to_string())));
         font.source.format = SourceFormat::Ufo;
         let lib = s(&write(&font).unwrap()["lib.plist"]).to_string();
         assert!(

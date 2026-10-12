@@ -9,15 +9,18 @@
 //!   only for the glyphs the entry reaches, as both reference compilers decide. Every other glyph
 //!   gives its own anchors.
 //! - Classes: worked out from the categories and anchors for the reference's format; for a UFO,
-//!   the stated `public.openTypeCategories`.
+//!   the stated `public.openTypeCategories` (`fontcraft_model::ufo_classes::stated`), those the
+//!   reader left off the glyphs included.
 //! - Which features: the feature-writer setting (as for the kerning), less the features the code
 //!   declares without an `# Automatic Code` marker (`implicit.markerMissing`).
+
+use std::collections::HashMap;
 
 use fontcraft_components::propagate::effective_anchors_for_master_with;
 use fontcraft_features::FEATURE_WRITERS_KEY;
 use fontcraft_features::marks::{MarkAnchor, MarkGlyph, MarkInput, MarkTags, MasterAnchors, mark_tags};
 use fontcraft_model::glyphdata::GlyphData;
-use fontcraft_model::{Font, Resolved, ResolvedGlyph, is_ufo_family};
+use fontcraft_model::{Font, Resolved, ResolvedGlyph, is_ufo_family, ufo_classes};
 
 use crate::components_opt::{Scope, listed_filter, reaches};
 
@@ -64,6 +67,13 @@ pub(crate) fn input(
         },
         _ => None,
     };
+    // The built-in glyph database, as when the UFO was read (`ufo_classes`).
+    let stated = match font {
+        Some(font) if ufo => GlyphData::new()
+            .map(|data| ufo_classes::stated(font, &resolved.master, &ufo_classes::rule_classes(font, &resolved.master, &data)))
+            .unwrap_or_default(),
+        _ => HashMap::new(),
+    };
     let glyphs = order
         .iter()
         .map(|g| {
@@ -71,8 +81,7 @@ pub(crate) fn input(
                 Some(list) => list.iter().map(|a| MarkAnchor { name: a.name.clone(), x: a.x, y: a.y }).collect(),
                 None => g.anchors.iter().map(|(name, p)| MarkAnchor { name: name.clone(), x: p.x, y: p.y }).collect(),
             };
-            let opentype_category =
-                if ufo { font.and_then(|f| f.glyph(&g.name)).and_then(|source| source.info.opentype_category.clone()) } else { None };
+            let opentype_category = if ufo { stated.get(&g.name).cloned() } else { None };
             MarkGlyph {
                 name: g.name.clone(),
                 codepoints: g.unicodes.clone(),
