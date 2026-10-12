@@ -383,13 +383,14 @@ fn an_avar_map_with_too_many_points_falls_back_to_the_default() {
 
 #[test]
 fn many_named_instances_read_their_names_from_one_pass_over_the_name_table() {
-    // 20,000 instances, each with a name record of its own: looking each one up by scanning the
-    // whole name table would make hundreds of millions of record checks.
+    // 3,000 instances, each with a name record of its own: looking each one up by scanning the
+    // whole name table would make millions of record checks. The name table's 16-bit
+    // offsets reach 64 KB, records and text together, so the names are short numbers.
     let (_, compiled) = source();
     let base = FontRef::new(&compiled.bytes).unwrap();
-    let count = 20_000u16;
+    let count = 3_000u16;
     let mut records = vec![NameRecord::new(3, 1, 0x409, NameId::new(1), write_fonts::OffsetMarker::new("Var Test".to_string()))];
-    records.extend((0..count).map(|k| NameRecord::new(3, 1, 0x409, NameId::new(256 + k), write_fonts::OffsetMarker::new(format!("Style {k}")))));
+    records.extend((0..count).map(|k| NameRecord::new(3, 1, 0x409, NameId::new(256 + k), write_fonts::OffsetMarker::new(k.to_string()))));
     let instances: Vec<InstanceRecord> = (0..count)
         .map(|k| InstanceRecord {
             subfamily_name_id: NameId::new(256 + k),
@@ -407,5 +408,5 @@ fn many_named_instances_read_their_names_from_one_pass_over_the_name_table() {
     builder.copy_missing_tables(base);
     let opened = open_variable(&builder.build(), None).unwrap();
     assert_eq!(opened.font.instances.len(), usize::from(count));
-    assert_eq!(opened.font.instances.last().unwrap().name, format!("Style {}", count - 1));
+    assert_eq!(opened.font.instances.last().unwrap().name, (count - 1).to_string());
 }
