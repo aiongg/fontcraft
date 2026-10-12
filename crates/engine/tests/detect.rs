@@ -145,3 +145,99 @@ fn detect_composites_on_many_glyphs_that_almost_match_stops_at_the_work_limit() 
     assert_eq!(out["components"], 0);
     assert!(out["stopped"].is_string(), "{out}");
 }
+
+fn read_tree(dir: &std::path::Path, root: &std::path::Path, out: &mut fontcraft_io_glyphs::Files) {
+    for e in std::fs::read_dir(dir).unwrap().flatten() {
+        let p = e.path();
+        if p.is_dir() {
+            read_tree(&p, root, out);
+        } else {
+            out.insert(p.strip_prefix(root).unwrap().to_string_lossy().replace('\\', "/"), std::fs::read(&p).unwrap());
+        }
+    }
+}
+
+/// `docs/plans/M13.md` § 5: Inter Roman's Regular exported as OTF (which flattens every
+/// composite) and opened again; Detect Composites at tolerance 0.5 and 1 rebuilds the source's
+/// composites made only of unscaled, unrotated components, with the same base glyphs.
+/// `cargo test --release -p fontcraft-engine --test detect -- --ignored --nocapture`.
+#[test]
+#[ignore = "corpus measure"]
+fn composite_recovery_on_inter() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus/inter/src/Inter-Roman.glyphspackage");
+    if !dir.is_dir() {
+        return;
+    }
+    let mut files = fontcraft_io_glyphs::Files::new();
+    read_tree(&dir, &dir, &mut files);
+    let source = fontcraft_io_glyphs::read_package(&files).unwrap();
+    let master = source.masters.iter().find(|m| m.name == "Regular").unwrap().id.clone();
+    // Each composite of the source to look for: its name and its base glyphs, sorted.
+    let mut wanted: Vec<(String, Vec<String>)> = Vec::new();
+    for g in source.glyphs.iter().filter(|g| g.export) {
+        let Some(l) = g.layers.iter().find(|l| l.id == master) else { continue };
+        let mut bases = Vec::new();
+        let all_plain = !l.shapes.is_empty()
+            && l.shapes.iter().all(|s| match s {
+                Shape::Component(c) => {
+                    let [a, b, c2, d, _, _] = c.affine().as_coeffs();
+                    bases.push(c.glyph.clone());
+                    (a, b, c2, d) == (1.0, 0.0, 0.0, 1.0)
+                }
+                _ => false,
+            });
+        if all_plain {
+            bases.sort();
+            wanted.push((g.name.clone(), bases));
+        }
+    }
+    let out = std::env::temp_dir().join(format!("fontcraft-recovery-{}", std::process::id()));
+    std::fs::create_dir_all(&out).unwrap();
+    let otf = out.join("Inter-Regular.otf");
+    let mut s = Session::new();
+    s.add_document(source, None).unwrap();
+    run(&mut s, "font.customParameters.add", json!({"scope": "font", "name": "Don't use Production Names", "value": true}));
+    run(&mut s, "file.exportStatic", json!({"instances": ["Regular"], "outlines": "cff", "destination": otf, "timestamp": 0}));
+    for tolerance in [0.5, 1.0] {
+        let mut flat = Session::new();
+        run(&mut flat, "file.open", json!({"path": otf}));
+        let t = std::time::Instant::now();
+        let r = run(&mut flat, "font.detectComposites", json!({"tolerance": tolerance}));
+        let took = t.elapsed();
+        let font = flat.font().unwrap();
+        let (mut found, mut other_bases, mut missed) = (0, 0, Vec::new());
+        for (name, bases) in &wanted {
+            let got = font.glyph(name).and_then(|g| g.layers.first()).map(|l| {
+                let mut b: Vec<String> = l
+                    .shapes
+                    .iter()
+                    .filter_map(|s| match s {
+                        Shape::Component(c) => Some(c.glyph.clone()),
+                        _ => None,
+                    })
+                    .collect();
+                b.sort();
+                (b, l.shapes.iter().all(|s| matches!(s, Shape::Component(_))))
+            });
+            match got {
+                Some((b, true)) if &b == bases => found += 1,
+                Some((b, true)) => {
+                    if other_bases < 25 {
+                        println!("  {name}: source {bases:?}, rebuilt {b:?}");
+                    }
+                    other_bases += 1
+                }
+                _ => missed.push(name.as_str()),
+            }
+        }
+        let share = 100.0 * f64::from(found) / wanted.len() as f64;
+        println!(
+            "tolerance {tolerance}: {found} of {} composites rebuilt with their bases ({share:.1}%), {other_bases} with other bases, {} missed; {} glyphs changed in {took:?}",
+            wanted.len(),
+            missed.len(),
+            r["glyphs"].as_array().map_or(0, Vec::len)
+        );
+        println!("  missed (first 30): {:?}", missed.iter().take(30).collect::<Vec<_>>());
+    }
+    let _ = std::fs::remove_dir_all(&out);
+}
