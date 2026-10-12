@@ -294,6 +294,9 @@ summary = "Shows the Scripts folder in the file manager. FontCraft: opens the ma
 ref = "Extensions › Scripts › The Scripts Folder"
 status = "inferred"
 notes = "An engine command: it creates the Macros folder when missing and returns its path, and the desktop app shows that path in the file manager. Disabled in sessions without a Macros folder (headless runs, the web app)."
+guesses = [
+  "The macros folder is created when missing and its path returned, and sessions without one (headless runs, the web app) have the command disabled; the reference app's behaviour when the Scripts folder is missing would settle the first part.",
+]
 observe = [
   "Choose Script › Open Scripts Folder and note the folder's full path, and whether a Plugins folder sits beside it.",
 ]
@@ -311,6 +314,9 @@ summary = "Rebuilds the Script menu from the Scripts folder; the item is shown i
 ref = "Extensions › Scripts › The Scripts Folder"
 status = "inferred"
 notes = "An engine command, so agents and the CLI can force a re-read too; it returns the new list. Files that cannot be read stay listed with their error."
+guesses = [
+  "It is always shown in the Script menu and returns the new list, since the folder is also watched; files that cannot be read stay listed with their error. Holding Option over the reference app's Script menu settles only where the item shows.",
+]
 observe = [
   "Open the Script menu without and then with Option held: note whether Reload Scripts replaces Open Scripts Folder or is added below it, and where it sits in the menu.",
 ]

@@ -32,40 +32,40 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1017 rows to check: 1268 guesses and 385 observe steps.**
+**1097 rows to check: 1515 guesses and 399 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
-| **Built milestones (M0 to M6)** | all | **454** |
+| **Built milestones (M0 to M6)** | all | **460** |
 | Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 98 |
 | Built milestones (M0 to M6) | Edit View: text mode and preview | 32 |
-| Built milestones (M0 to M6) | Components and anchors | 61 |
+| Built milestones (M0 to M6) | Components and anchors | 62 |
 | Built milestones (M0 to M6) | Filters | 36 |
 | Built milestones (M0 to M6) | Spacing and metrics keys | 23 |
 | Built milestones (M0 to M6) | Kerning and the Kerning window | 42 |
-| Built milestones (M0 to M6) | Font View | 103 |
+| Built milestones (M0 to M6) | Font View | 108 |
 | Built milestones (M0 to M6) | Font Info and features | 9 |
 | Built milestones (M0 to M6) | Files: open, import, export | 39 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 3 |
-| **Later milestones (after M6)** | all | **563** |
-| Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 13 |
+| **Later milestones (after M6)** | all | **637** |
+| Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 39 |
 | Later milestones (after M6) | Edit View: text mode and preview | 14 |
-| Later milestones (after M6) | Components and anchors | 27 |
-| Later milestones (after M6) | Filters | 1 |
+| Later milestones (after M6) | Components and anchors | 33 |
+| Later milestones (after M6) | Filters | 5 |
 | Later milestones (after M6) | Spacing and metrics keys | 3 |
 | Later milestones (after M6) | Kerning and the Kerning window | 4 |
-| Later milestones (after M6) | Font View | 7 |
-| Later milestones (after M6) | Font Info and features | 237 |
+| Later milestones (after M6) | Font View | 13 |
+| Later milestones (after M6) | Font Info and features | 246 |
 | Later milestones (after M6) | Interpolation | 41 |
 | Later milestones (after M6) | Hinting | 67 |
 | Later milestones (after M6) | Colour fonts | 44 |
-| Later milestones (after M6) | Files: open, import, export | 19 |
-| Later milestones (after M6) | Settings and the window | 11 |
-| Later milestones (after M6) | Scripts, plug-ins and URLs | 60 |
+| Later milestones (after M6) | Files: open, import, export | 40 |
+| Later milestones (after M6) | Settings and the window | 12 |
+| Later milestones (after M6) | Scripts, plug-ins and URLs | 61 |
 | Later milestones (after M6) | Elsewhere | 15 |
 
-## Built milestones (M0 to M6) (454)
+## Built milestones (M0 to M6) (460)
 
 ### Edit View: drawing, guides, layers and the Palette (98)
 
@@ -392,7 +392,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Up and Down move to the nearest place on the line above or below, and to the start or the end of the text from the first or the last line; in right-to-left text Left steps forward in the text; in top-to-bottom text Up and Down step along the column and Left and Right move between columns. Moving the cursor in such texts in the reference app settles it.
   - Guess: Backspace and Delete with Alt or Cmd do nothing (no word or line deletion); no source names them.
 
-### Components and anchors (61)
+### Components and anchors (62)
 
 - [ ] `export.underscoreGlyphsOmitted` (behavior, M2, inferred): Non-exporting glyphs, which underscore-named part glyphs are by default, are left out…
   - Guess: Components that use non-exporting glyphs are decomposed at export; our inference from the non-export rule.
@@ -418,6 +418,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Our exceptions to Unicode: a name containing commaaccent takes commaaccentcomb where Unicode has the cedilla, gcommaaccent takes commaturnedabovecomb, and dcaron, lcaron, Lcaron and tcaron prefer caroncomb.alt; composing these in the reference app settles it.
   - Guess: Two marks in a row become their mark ligature (circumflexcomb_gravecomb, with the same suffix preferences) when the font has it; composing Acircumflexgrave in the reference app with the mark ligature present settles it.
   - Guess: A base of a decomposition takes the composite's suffix and is required (agrave.sc needs a.sc), while a ligature part takes the suffix only when the font has the suffixed glyph (f_f_l.ss01 from f.ss01 and l); composing suffixed glyphs in the reference app settles it.
+  - Guess: A glyph whose parts are added by the same Add Glyphs text is built from them; adding eacute and acutecomb together in the reference app settles it.
+  - Guess: Add to Font in the Glyph Info window composes as Add Glyphs does; adding a composite from that window in the reference app settles it.
 - [ ] `components.autoComposeNeedsAllParts` (behavior, M6, handbook): Automatic composition is all-or-nothing: if any one of the components the database…
   - Guess: The refusal names every missing part once: a mark by its plain name, a base by the name it needed (a.sc for agrave.sc); the message of the reference app settles it.
 - [ ] `components.preferMarkWithSameSuffix` (behavior, M6, handbook): While composing a glyph automatically, a mark glyph carrying the same dot…
@@ -429,6 +431,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `components.recipeBasePlusMarks` (behavior, M6, handbook): Add Glyphs accepts the recipe form base+mark=glyph: names joined by plus signs…
   - Guess: A part whose glyph has category Mark is a mark and attaches to the base before it; any other part is a base; a recipe holds only glyph names, no spaces (spaces separate items in Add Glyphs) and any number of plus signs; typing recipes with code points or spaces into the reference app settles it.
   - Guess: The first part of a recipe is a base even when its glyph is a mark (dotaccentcomb+dotaccentcomb=dieresiscomb sets the second on the first), and the category stored in the font wins over the database's; typing such a recipe in the reference app settles it.
+- [ ] `components.underscoreNameNotExported` (behavior, M6, handbook): A glyph whose name begins with an underscore defaults to non-exporting, so…
+  - Guess: Renaming a glyph to or from an underscore name leaves its exports flag alone; renaming in the reference app settles it.
 - [ ] `components.tabCyclesComponents` (behavior, M6, handbook): With a component selected, Tab moves the selection to the next component…
   - Guess: Tab steps through the layer's nodes in path order, then the components in shape order, then the anchors, then the guides; Tab on a layer with components and anchors in the reference app settles it.
 - [ ] `components.infoBoxExtraControls` (behavior, M6, handbook): Beyond the fields listed for the component Info box in the Edit…
@@ -834,7 +838,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Overwrite is the default button that Return presses; the warning in the reference app settles it.
   - Guess: The warning lists the conflicting pairs with the pasted and the current value; the handbook names no list, and a screenshot of the warning settles it.
 
-### Font View (103)
+### Font View (108)
 
 - [ ] `path.convertToCubic` (M3, handbook, live): Convert to Cubic
   - Guess: New handles are not rounded to the grid, so the outline stays exact; the handbook does not say whether the reference rounds them.
@@ -1111,6 +1115,18 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `fontView.toggleMetricsOrientation` (M5, handbook, live): Horizontal / Vertical Metrics
   - Guess: The orientation is a panel setting kept across documents and sessions, not stored per font; watching the reference app reopen a file would settle it.
   - Guess: The switch shows the icon of the set on show (left to right, or top to bottom); a screenshot of the reference inspector would settle it.
+- [ ] `fontView.column.components` (behavior, M6, handbook): The Components column lists the names of the components used by the…
+  - Guess: The cell shows and edits the layer of the master Font View shows, not the first master's; editing the cell with a second master selected in the reference app settles it.
+- [ ] `addGlyphs.recipe` (behavior, M6, handbook): The Add Glyphs text field also accepts glyph recipes
+  - Guess: A recipe that names a glyph the font does not have adds nothing and is listed in `skipped` with the missing names; trying a recipe with a missing part in the reference app settles it.
+  - Guess: A recipe for a glyph the font already has follows the same Keep, Replace and Cancel answers as a plain name, and Replace rebuilds the glyph from the recipe, keeping its code points; a recipe for an existing glyph in the reference app settles it.
+  - Guess: The name after `=` is kept as typed, without turning a legacy name into a nice name, and gets the code point the glyph data gives it unless another glyph has it; a recipe ending in `=uni00E9` in the reference app settles it.
+- [ ] `fontView.batch.addComponent` (behavior, M6, handbook): Glyph → Add Component (Cmd+Shift+C) adds the chosen component to all selected…
+  - Guess: When the component cannot go into one selected glyph (it would contain itself), the whole batch is refused and no glyph changes; adding a glyph to a selection that includes it in the reference app settles it.
+- [ ] `smartFilter.rule.hasAnchors` (behavior, M6, handbook): Rule Has Anchors is true when the layer of the selected master…
+  - Guess: Only the layer's own anchors count, not those it gets from its components; filtering a composite without anchors of its own in the reference app settles it.
+- [ ] `smartFilter.rule.containsComponent` (behavior, M6, handbook): Rule Contains Component takes a glyph name and is true when the…
+  - Guess: The glyph name is compared whole, not as a substring; trying a partial name in the reference app settles it.
 - [ ] `glyph.setComponents` (M6, handbook, live): Edit Components List
   - Guess: The cell lists component names separated by a comma and a space; a name added to the list appends a component at offset zero (aligned automatically when the layer allows it), a name removed deletes the last component with that name, and only the layer of the master shown in Font View changes; editing the cell in the reference app settles it.
   - Guess: Removing a locked component through the list is refused with a message naming it, and nothing changes; the layer's hints follow their shapes to their new places and a hint on a removed component goes with it; removing a locked component's name from the cell in the reference app settles it.
@@ -1285,9 +1301,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (563)
+## Later milestones (after M6) (637)
 
-### Edit View: drawing, guides, layers and the Palette (13)
+### Edit View: drawing, guides, layers and the Palette (39)
 
 - [ ] `anchors.ccmpAlongsideMark` (behavior, M8, handbook): When the mark feature is generated and glyphs such as idotless and…
   - Guess: ccmp follows from the glyph names alone, whether or not the marks carry anchors for the mark feature; Update in the reference app on a font with idotless and an anchorless acutecomb would settle it.
@@ -1304,6 +1320,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The image's size in points comes from the resolution stored in the file (PNG pHYs, JPEG JFIF or Exif, TIFF resolution tags); a file without one counts as 72 pixels per inch, one pixel per unit. Settled by adding a 144 dpi PNG in the reference.
   - Observe: Image font: choose Glyph › Add Image with H.png, then with a 144 dpi copy; note the position and scale of each, and the pos and scale values stored in the file.
 - [ ] `glyph.addImage` (M11, handbook, live): Add Image…
+  - Guess: A stored image path that starts with two separators (`//host/share`, `\\host\share`) is refused on every platform, not only on Windows: a document comes from anywhere, and on other systems such a path is either a network share or one whose meaning the system decides. Settled by opening, in the reference app on a Mac, a file whose image path starts with `//`.
   - Guess: Two files that name the same glyph (A.png and A.jpg) refuse the call instead of one winning. Settled by Add Image with both files in the reference.
   - Guess: A layer holds one placed image, as the version 3 format stores one: Add Image on a layer that has an image replaces it. Image shapes of the version 4 format are read, drawn and written back but not created. Settled by adding a second image to a glyph in the reference and reading the saved file.
   - Observe: Image font: add a second image to H; note whether it replaces the first or both stay, and how the file stores them.
@@ -1321,12 +1338,92 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: Image font: choose Set Crop to Layer Bounds on H's image; note the rectangle used (advance width by the vertical metrics, or the outline bounds).
 - [ ] `palette.pluginSections` (behavior, M13, handbook): Plug-ins can register their own Palette sections, which appear alongside the built-in…
   - Observe: Install a palette plug-in from the Plugin Manager, relaunch and note where its section appears among the built-in Palette sections and whether it collapses like them.
-- [ ] `path.setCurveTension` (M13, docs): Set Curve Tension
+- [ ] `path.selectTunniLines` (M13, docs, live): Edit Tunni Lines
+  - Guess: A segment counts as inside the selection when one of its handles is selected, both its end nodes are, or the segment itself is, as for Fit Curve; FontLab does not define it, and selecting nodes in FontLab with Tunni lines on would settle it.
+- [ ] `path.setCurveTension` (M13, docs, live): Set Curve Tension
   - Guess: Where a segment's handles are parallel or diverge, so they have no intersection, tension is shown as a dash and Set Curve Tension leaves the segment unchanged with a warning; FontLab does not say (open question 9 in docs/spec/90-secondary-references.md).
+  - Guess: A zero-length handle has no direction, so its segment counts as having no Tunni point and is left unchanged too; running the command on such a segment in FontLab would settle it.
+  - Guess: With no segments named the command acts on every curve segment of the layer, and it also takes a list of glyphs; FontLab documents only the selection.
+  - Guess: An absolute tension must be 1 to 100 percent and a relative step keeps each handle within 1 to 100; FontLab gives no range, and entering larger values in its Node panel would settle it.
+  - Guess: A relative step is added to each handle's own tension, so unequal handles stay unequal; FontLab does not say whether it balances them first.
+- [ ] `path.harmonizeNodes` (M13, docs, live): Harmonize Nodes
+  - Guess: At an inflection (the far handles on opposite sides of the tangent) the two curvatures are made equal in size, since equal signed curvature is impossible there; running Harmonize on an S-curve in FontLab would settle it.
+  - Guess: A smooth node with a straight side, or a selected node that is not between two curve segments, is left unchanged and listed in the result; FontLab does not say.
+- [ ] `path.harmonizeHandles` (M13, docs, live): Harmonize Handles
+  - Guess: G2 keeps the sum of the two handle lengths at the node and only divides it differently; FontLab does not say which lengths it keeps, and comparing handle lengths before and after Harmonize Handles in FontLab would settle it.
+  - Guess: G3 changes the lengths of the two neighbouring handles along their own directions, by the smallest change found, so the neighbouring nodes keep their tangents; FontLab does not describe Superharmonize's method.
+  - Guess: With no node selected both orders act on every smooth node of the layer, as Harmonize Nodes does; FontLab documents only the selection.
+- [ ] `path.makeInkTrap` (M13, docs, live): Make Ink Trap
+  - Guess: The two copies move half the width each, perpendicular to the corner's bisector, with the copy ending the incoming segment on that segment's side, and their neighbouring handles move with them; the reference only says the nodes move apart 'intelligently', so watching it trap an inside and an outside corner would settle it.
+  - Guess: Without an inkTrapWidth parameter the width is 2% of the em; the reference's default for a new font would settle it.
+  - Observe: Make Ink Trap on the inside corner of an L with ink trap width 20: record where the two nodes land.
+- [ ] `path.loopCorner` (M13, docs, live): Loop Corner
+  - Guess: Each segment goes on past the corner by `size`, which defaults to half the master's first vertical stem (4% of the em without stems); the reference does not say how far its loops reach, so measuring one would settle it.
+  - Observe: Loop Corner on a rectangle corner in a master with a 100-unit vertical stem: measure how far each segment goes past the corner.
+- [ ] `path.replaceWithCorner` (M13, docs, live): Replace with Corner
+  - Guess: One segment or gap per path per call, and neighbours whose extensions meet behind them are refused rather than shortened; trying both in the reference would settle it.
+- [ ] `path.alignToMask` (M13, docs, live): Align Points to Background
+  - Guess: Points snap to background nodes and handles alike, and a moved on-curve node takes its unselected handles along; aligning a curve's node to a background node in the reference would settle it.
+- [ ] `path.collapsePoints` (M13, docs, live): Collapse Points
+  - Guess: The centre is the middle of the selected nodes' bounding box, rounded to the grid, and at least two on-curve nodes are needed; collapsing three uneven nodes in the reference would settle it.
+- [ ] `path.scaleToSameSize` (M13, docs, live): Same Width / Same Height
+  - Guess: A glyph counts as uppercase when its case says so or one of its code points is an uppercase letter; trying a glyph without code points in the reference would settle it.
+- [ ] `edit.storeSelection` (M13, docs, live): Store Selection
+  - Guess: Selected anchors and components are stored with the nodes, by anchor name and shape index; FontLab documents node selections only, and its panel on a selection with a component would settle it.
+  - Guess: Storing an empty selection is refused; FontLab's Add button with nothing selected would settle it.
+- [ ] `edit.getStoredSelections` (M13, inferred, live): Get Stored Selections
+  - Guess: A query that maps stored selections onto any layer is our addition for agents and scripts; FontLab has no such command.
+- [ ] `edit.recallSelection` (M13, docs, live): Recall Selection
+  - Guess: On a layer where only part of a stored selection resolves (an incompatible master), the parts that resolve are selected and the reply counts the rest as missing; recalling where nothing resolves is refused. FontLab's panel on an incompatible master would settle it.
 - [ ] `guide.makePowerGuide` (M13, docs): Make Power Guide
   - Guess: Moving a power guide is one undo step for every glyph it reshapes, and locked glyphs keep their outline while the rest move, with a warning naming them (open question 3).
 - [ ] `path.findOutlinePattern` (M13, docs): Find Outline…
   - Guess: Matching is point for point only, as FontForge documents; shapes that are equal with another point structure do not match (open question 12).
+- [ ] `path.findIntersections` (M13, docs, live): Add Nodes at Intersections
+  - Guess: Crossings of a path with itself count too, and touching curves get a node like crossing ones; the manual speaks only of overlapping contours.
+  - Guess: Locked paths get no nodes but still cross the others; the manual does not mention locks.
+- [ ] `path.makeParallel` (M13, docs, live): Make Parallel
+  - Guess: With two lines, the moved line keeps its length and turns about its fixed end to the nearer of the two parallel directions; the manual only says the lines become parallel.
+- [ ] `path.spacePoints` (M13, docs, live): Space Points Evenly
+  - Guess: The lowest and highest points stay and the others keep their order; the manual only says the points are spaced regularly.
+  - Guess: Regions join points whose coordinates along the spacing axis are at most `within` apart (default 100 units), and the centres of the regions' extents are spaced evenly; the manual gives no distance and no reference point.
+  - Guess: An on-curve node's handles move with it unless they are selected too.
+- [ ] `path.roundToCluster` (M13, docs, live): Round to Cluster
+  - Guess: x and y are clustered on their own, every node and handle included; a cluster grows while values are at most `within` (default 1 unit) above its lowest, and takes the value most of its members have (ties: nearest the mean, then the lower). The manual gives no distance and no rule for the shared value.
+- [ ] `path.makeArc` (M13, docs, live): Make Arc
+  - Guess: Of the many ellipses through the two nodes with the path's directions there, FontCraft takes the quarter ellipse framed by the two tangent lines (a quarter circle when they meet square at equal distances), and half an ellipse when the directions are opposite; the manual does not say which ellipse it picks beyond preferring one with a node on an axis.
+  - Guess: At an open end without a neighbouring segment the segment's own direction is used, and the result is always a cubic segment.
+- [ ] `path.insertNodeAt` (M13, docs, live): Insert Node at Coordinate…
+  - Guess: A node goes in at every place the segment crosses the coordinate, and a segment that does not reach it is refused; the manual does not cover several or no crossings.
+- [ ] `path.nameContour` (M13, docs, live): Name Contour…
+  - Guess: An empty name removes the name; the manual does not say how a name is cleared.
+- [ ] `font.compareLayers` (M13, docs, live): Compare Layers…
+  - Guess: Two layers match when their advance widths, their paths (closed or open, node count, each node's kind and position) and their components (glyph and placement) agree in order; anchors, hints and images are not compared. Watching the secondary reference compare layers with different anchors would settle it.
+  - Guess: The tolerance applies on each axis to node positions, advance widths and component offsets, and defaults to 0; component scale, rotation and slant must match exactly. The secondary reference's dialog would settle it.
+- [ ] `edit.copyLayerToLayer` (M13, docs, live): Copy Layer to Layer…
+  - Guess: The mode defaults to replace, and replace keeps the target's images; widths, anchors and the background are not copied. The secondary reference's dialog defaults would settle it.
+  - Guess: A glyph without one of the two layers is skipped and listed rather than refusing the command. The secondary reference has font-wide layers, so nothing there settles it.
+- [ ] `view.setReferenceFont` (M13, docs, live): Set Reference Font
+  - Guess: The language code picks a glyph named like the found one plus .locl and the code in capitals (A.loclTRK for TRK); applying the reference font's own locl substitutions through the shaper would settle what the reference app does.
+  - Guess: Adding a path selects that font and turns the display on; the reference app's panel would settle whether adding also shows it.
+  - Guess: Any font the open path reads (sources too, not only compiled fonts) can be a reference, drawn from its first master.
+  - Observe: In Fontra, drop a compiled font on the Reference font panel, type a character in the custom character field and a language code such as 'tr', and note which glyph is drawn behind the edited one and in what colour.
+- [ ] `palette.selections` (panel, M13, docs): Selections
+  - Guess: The section sits after Transformations in the Palette and shows only the edited glyph's entries; FontLab's panel placement would settle it.
+  - Guess: Add with a name that already exists replaces that entry rather than refusing; observing the panel's Add on a duplicate name would settle it.
+  - Observe: In FontLab 8, store a selection named 'stem' in one master, switch to another master and click the entry: check whether the same node indexes are selected and whether a mismatched master selects part or nothing.
+- [ ] `palette.referenceFont` (panel, M13, docs): Reference Font
+  - Guess: Fonts are added by typing or pasting a path; dropping files onto the section is not built. The reference app's drop behaviour would settle whether anything else happens on drop.
+  - Guess: The list keeps at most 16 fonts and loads only the selected one; the reference app does not document a limit.
+- [ ] `curveTension` (parameter, M13, docs): Default curve tension (percent) used by tension-driven drawing tools such as the…
+  - Guess: A master without the parameter, or with a value outside 1 to 100, uses 55 percent, close to a circle's tension; FontLab's default value is not documented and a new FontLab font would show it.
+- [ ] `thickness` (tool, M13, docs): Thickness
+  - Guess: A drag with no modifier changes the width on the dragged side only, at the dragged node or at every picked control point; the release notes list only the modified drags, and watching the tool would settle it.
+  - Guess: Shift+drag changes the path's stroke width by twice the drag distance and adds the drag distance to both sides of every node with its own widths, so the modulation is kept; the release notes do not say what happens to nodes with their own widths.
+  - Guess: Shift+Alt+drag acts on the whole path: it changes the stroke position and moves the per-node widths of that path sideways by the same amount, each side kept at 0 or more.
+  - Guess: Between two nodes the left and right widths change linearly with the curve parameter; the release notes do not describe the interpolation.
+  - Guess: Once any node has its own widths the pen is round (the stroke height is not used), and round-inset and axis-aligned caps end the stroke as butt caps.
+  - Guess: Delete clears the picked control points' per-node widths as Backspace does.
 - [ ] `path.setPenPoint` (fidelity, inferred): Set Pen Point
   - Open (our design, not confirmed): Writes or clears the pen-point data of a node or of a free pen point, the action behind the pen-point fields of the Info box. Clearing the data is how a pen point on a node is removed. The reference exposes this only as Info box fields.
 
@@ -1375,7 +1472,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `proofing.webfontPreview` (behavior, M12, handbook): Checking .woff2 (and optionally .woff for old browsers) in the export dialog…
   - Observe: Any font: export WOFF2 alone, then WOFF2 with WOFF; note whether the app writes an HTML test page itself or only the font files.
 
-### Components and anchors (27)
+### Components and anchors (33)
 
 - [ ] `anchor.setContext` (M8, inferred): Set Context
   - Open (our design, not confirmed): Stores the context code of a contextual anchor, the action behind the Anchor Context field. The reference exposes it only as that field.
@@ -1439,14 +1536,68 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: Screenshot the Info box of a selected cap, segment component and brush with View › Show Info on; list each control and its default.
 - [ ] `dialog.capPicker` (panel, M13, handbook): Cap glyph picker
   - Observe: Open Add Cap Component on a font with three cap glyphs and two corner glyphs: confirm only cap glyphs are listed and note the sort order and what the search field matches.
+- [ ] `recipe.directives` (behavior, M13, docs): Recipe text accepts directives beside glyph names: a comment marker for ignored…
+  - Guess: A recipe has one line of components; directives may follow it on that line or stand on lines of their own, several `#!` lines are joined with line breaks, and the note is written when the recipe is set, not at every rebuild.
+  - Guess: An unknown `#?` keyword is refused, and `noanchors` is matched without regard to case; the reference's handling is not documented.
 - [ ] `anchor.positionExpressions` (behavior, M13, docs): An anchor's x and y may each be an expression instead of…
   - Guess: FontCraft's variable names are ascender, descender, xHeight, capHeight, baseline and width, plus `anchor:<name>.x`, `guide:<name>`, `zone:<name>` and `param:<name>` references; the reference's spellings (x_height, caps_height) are read as aliases. Nothing settles it in the primary reference, which has no anchor expressions.
   - Guess: An expression that names something missing, divides by zero or gives a value that is not finite leaves the anchor where it was and is reported in the command's warnings; the reference's handling is not documented.
-- [ ] `font.detectComposites` (M13, docs): Detect Composites
-  - Guess: A match needs every point of the other glyph's outline within 0.5 unit after the best translation, or after a translation and flip when allowTransformed is on; FontLab gives no tolerance.
+  - Guess: When expressions are worked out again after other commands, failures leave the anchors in place without a warning; `anchor.setExpressions` reports them.
+  - Guess: Results are rounded to the font's grid, as typed anchor positions are.
+  - Guess: An anchor with expressions that is moved by hand goes back to its expressions' values at once; removing the expressions frees it.
+  - Guess: Anchors are worked out once per change, in layer order, so `anchor:NAME` sees the new position of an anchor before it and the old position of one after it.
+  - Guess: `guide:NAME` is the y of a horizontal guide and the x of a vertical one (`.x` and `.y` pick either), looked up on the layer and then on the master; `zone:NAME` is a master metric by name, then by kind; `param:NAME` is a master number value, then a numeric font custom parameter.
+- [ ] `component.copyTransformation` (M13, docs, live): Copy Component Transformation
+  - Guess: A target entry without `glyph` or `layer` means the source glyph and the source layer's id; the reference copies to whatever is selected, so it has no such default.
+  - Guess: An automatically aligned target takes the scale, rotation and slant but keeps the position alignment gives it on the aligned axes; the reference has no automatic alignment, so nothing settles this but use.
+- [ ] `font.detectComposites` (M13, docs, live): Detect Composites
+  - Guess: A match needs every point of the other glyph's outline within 0.5 unit after the best translation, or after a translation and flip when `flips` is on; FontLab gives no tolerance.
+  - Guess: Only glyphs whose layer has closed paths and no components serve as bases; running it in the reference app on a font whose base glyphs are themselves composites would settle it.
+  - Guess: Bases are tried from the most nodes down, a base must have fewer nodes than the target or as many and come earlier in the glyph order (no cycles), and among bases of equal size one whose name (without suffix and 'comb') appears in the target's name goes first; comparing the reference app's choice between identical outlines (period and dotaccentcomb) would settle it.
+  - Guess: Without `layer` or `layers` every master layer is searched, each on its own, and a glyph whose masters got different components is warned about; the reference app's behaviour on a multi-master font would settle it.
+  - Guess: A mirrored match is a mirrored copy drawn in the opposite direction, as a mirrored component draws once decomposed; the offset is rounded to the font's grid when the match still holds.
+  - Guess: Detected components have automatic alignment turned off so they stay where the outline was; checking the alignment setting of a component the reference app detected would settle it.
+- [ ] `path.detectComponent` (M13, docs, live): Detect Component
+  - Guess: The first glyph in font order whose same-id layer has only closed paths equal to the selection wins, within 0.5 unit after a translation (and a flip with `flips`); selecting an outline shared by two glyphs in the reference app would settle which one it picks.
+  - Guess: No matching glyph is an error that changes nothing; the reference app's message or silence when nothing matches would settle it.
+  - Observe: Draw a copy of a glyph's outline in another glyph, select it and run Detect Component: note which glyph the component names and where it sits.
+  - Observe: Select an outline no glyph has and run Detect Component: note the message, if any.
+- [ ] `glyph.setAutoLayerRecipe` (M13, docs, live): Set Auto Layer Recipe
+  - Guess: `masters` defaults to every master, which covers the reference's companion action that copies the recipe to all masters; seeing whether that action is a command of its own would settle it.
+  - Guess: Without `recipe`, a glyph keeps the recipe one of its layers has, else takes the components its name decomposes into by Create Composite's rules; the reference's default recipe is not documented.
+  - Guess: An automatic layer holds only the recipe's components: paths or components added by hand are replaced at the next rebuild; whether the reference lets one draw on an automatic layer would settle it.
+  - Guess: A recipe whose components contain the glyph is refused, and a layer whose recipe becomes circular later stays empty.
+  - Guess: Recipe parts are glyph names only, without placement suffixes such as `@anchor`.
+- [ ] `anchor.removeExpressions` (M13, docs, live): Remove Anchor Expressions
+  - Guess: Without `glyph` or `glyphs` it acts on every glyph, and locked glyphs are skipped and listed; the reference acts on the selection.
+- [ ] `anchor.setExpressions` (M13, docs, live): Set Anchor Expressions
+  - Guess: Expressions are set by a command of their own, where the reference types them into the anchor's coordinate fields; a syntax error refuses the command.
 
-### Filters (1)
+### Filters (5)
 
+- [ ] `filter.adjustStems` (M13, docs, live): Adjust Stems
+  - Guess: Both edges of a stem move by half the change, so the stem keeps its centre line; the secondary reference running a rule on a stem away from the sidebearings would settle it.
+  - Guess: A horizontal stem's edge on the baseline, x-height, cap height, ascender or descender stays and the other edge takes the whole change; the secondary reference on a serif sitting on the baseline would settle it.
+  - Guess: A round stem (the sides of o) is adjusted by moving the extreme nodes on both sides with their handles; one without a node at either measured point is left alone.
+  - Guess: A rule that would make a stem narrower than 1 unit makes the whole command fail; the secondary reference with an offset larger than a stem would settle it.
+  - Guess: One work budget covers the whole command across all glyphs and layers; past it the command fails, names the glyph where it stopped and changes nothing. Our own limit; the secondary reference on a very large selection would show whether it stops or runs on.
+- [ ] `filter.changeWeight` (M13, docs, live): Change Weight…
+  - Guess: The offset moves nodes and handles without adding nodes, so curves are only approximately parallel to the original; an outline comparison against the secondary reference would settle how close it must be.
+  - Guess: Method auto picks cjk for CJK ideographs, Hangul and kana and lcg for everything else; the secondary reference's documentation on auto would settle it.
+  - Guess: Default zones: bottom at the baseline, top at the x-height for lowercase glyphs (by code point, else by the first letter of the name) and the cap height for the rest, serif height 0; the secondary reference's dialog defaults would settle them.
+  - Guess: Counters auto means retain with lcg and squish with cjk; retain moves each vertical stem right by the amount times its index so the counters keep their widths, and the advance width grows by the amount times (stems − 1).
+  - Guess: Squish keeps the advance width, so the outline grows into both sidebearings by half the amount each.
+  - Guess: Cleanup (Remove Overlap after the change) is off by default.
+  - Guess: One work budget covers the whole command across all glyphs and layers; past it the command fails, names the glyph where it stopped and changes nothing. Our own limit; the secondary reference on a very large selection would show whether it stops or runs on.
+- [ ] `filter.condenseExtend` (M13, docs, live): Condense / Extend…
+  - Guess: The counter add applies only to counters between two stems; the parts of the outline left of the first stem and right of the last (arms, serifs) only scale. The secondary reference on a T would settle it.
+  - Guess: A glyph with no vertical stem scales as one piece by the counter scale.
+  - Guess: Counters scaled below zero width become zero width.
+  - Guess: One work budget covers the whole command across all glyphs and layers; past it the command fails, names the glyph where it stopped and changes nothing. Our own limit; the secondary reference on a very large selection would show whether it stops or runs on.
+- [ ] `filter.changeXHeight` (M13, docs, live): Change x-Height…
+  - Guess: Above the x-height band the outline stretches so the master's ascender stays where it is, and nothing above the ascender moves; the secondary reference on b or h would settle whether ascenders move instead.
+  - Guess: Below the serif height nothing moves (descenders included) and the band within the serif height of the x-height shifts rigidly.
+  - Guess: The master's x-height metric is not changed; the command changes outlines only.
 - [ ] `filter.nonLinearTransform` (M13, docs): Non-Linear Transform…
   - Guess: The expressions use anchor expressions' grammar (M13.16) with the variables x and y and the functions sin, cos, tan, sqrt, abs, min and max; segments are split so no segment covers more than 1/32 of the glyph's height before mapping. FontForge's grammar is not followed.
 
@@ -1470,7 +1621,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `kerning.buildGroups` (M13, docs): Build Kerning Groups…
   - Guess: Two glyphs fall in one group while the root mean square of their side profiles' differences over the band stays under maxDifference; FontForge does not describe its grouping rule.
 
-### Font View (7)
+### Font View (13)
 
 - [ ] `smartFilter.rule.custom` (behavior, M8, handbook): Rule Custom holds a free-form glyph predicate written in the same expression…
   - Guess: The language adds matches (a regular expression over the whole value), which fea-rs refuses, because the Glyph Name rule offers matches and compiles to this language; && and || stand for AND and OR, and a yes-or-no attribute alone means == true. A comparison on tags holds when it holds for one tag. Settled by trying these forms in the reference's Custom rule.
@@ -1485,13 +1636,49 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: Image font: in Font View, Add Image with H.png, I.png, J.png and a.png; note whether a.png goes to a only or also to A.
 - [ ] `fontView.image.showImageOption` (behavior, M11, handbook): View → Show Image controls whether placed images are drawn in Font…
   - Observe: Image font: in Font View turn Show Image off; note whether H (which has paths) is drawn without its image and I (empty) with its image.
-- [ ] `font.setStatusDefinitions` (M13, docs): Status Definitions…
+- [ ] `view.filterByEncodingFile` (M13, docs, live): Filter by Encoding File
+  - Guess: Encoding files are read in three line forms (`name slot`, `0xSlot 0xCodePoint`, and one name or code point for the next slot) with `%%FONTLAB ENCODING:` and `%%FONTLAB CODEPAGE:` titles; FontLab's own encoding and code page files would settle the forms it accepts.
+  - Guess: Without `path`, `name` picks a built-in code page (ASCII, Latin 1, Windows 1252, Mac OS Roman); with `path` it names the filter. FontLab's list of bundled encodings would settle which ones ship.
+  - Guess: A code-point slot the font has no glyph for lists the glyph data's name for that code point, and running the command again with the same name replaces the list filter instead of adding a second one.
+  - Observe: Open an encoding file with gaps in FontLab 8 and check whether the Font window draws a cell for each empty slot and for each slot whose glyph the font lacks.
+- [ ] `font.compareInTable` (M13, docs, live): Compare Fonts in List
+  - Guess: Each font is read in its first master, and without `fonts` every open document is compared; FontLab's Font window comparison mode would settle which master and fonts it uses.
+  - Guess: Measured values are rounded to hundredths of a unit before rows are marked as differing; the reference's own comparison display would settle the precision.
+  - Observe: In FontLab 8, turn on font comparison in the Font window with two fonts of a family and note the properties offered, which master each column reads and how differing values are marked.
+- [ ] `glyph.listDependencies` (M13, docs, live): Show Dependencies
+  - Guess: Glyphs that use the glyph through other composites are listed too, with their depth and the glyph they reach it through, nearest first; the reference's documentation does not say whether nested references are shown.
+- [ ] `edit.pasteAfter` (M13, docs, live): Paste After
+  - Guess: Only whole copied glyphs paste after; a drawing fragment copied from a layer has no advance width and is refused. Pasting a selection from an outline window in the secondary reference would settle it.
+  - Guess: Paths and components are pasted; anchors are not, so a word glyph does not get several anchors of one name. The secondary reference's result with anchored glyphs would settle it.
+  - Guess: Each copied glyph gives its layer of the target's master (by id, else by name, else the master shown when copying), as edit.paste matches masters.
+- [ ] `font.renameGlyphsByNamelist` (M13, docs, live): Rename Glyphs by Name List…
+  - Guess: An unencoded glyph named after a renamed glyph plus a suffix is renamed with it (uni0041.sc to A.sc); the reference's documentation does not say, and renaming such a font in it would settle it.
+  - Guess: Renamed glyphs keep their code points and their places in the glyph order, and when a code point is named twice in a list the first name counts.
+  - Guess: A glyph with several code points is renamed by its first code point only, and keeps its name when the list does not name that one; renaming such a glyph in the reference would settle it.
+  - Guess: With updateReferences (the default) components, metrics keys, kerning, groups and the glyphOrder parameter follow the new names, as Rename Glyph does.
+- [ ] `font.setStatusDefinitions` (M13, docs, live): Status Definitions…
   - Guess: The definitions are stored in the font's user data as a list of code, name, colour and default flag; Fontra's storage is not documented.
-- [ ] `glyph.setStatus` (M13, docs): Set Status
+  - Guess: Two definitions with the same code or the same name, or more than one default, are refused; checking the reference's Status definitions panel would settle it.
+  - Guess: Redefining the list keeps every glyph's stored code, even one the new list lacks (such glyphs show no tint); renaming or deleting a status in the reference app would settle it.
+- [ ] `glyph.setStatus` (M13, docs, live): Set Status
   - Guess: FontCraft stores the status per glyph, in the glyph's user data, so `.glyphs` and UFO keep it; per-source statuses would move it to layer user data. The reference documentation does not say.
+  - Guess: A glyph without a stored status is shown in the default status; setting a status on a new glyph in the reference app would settle it.
+  - Guess: The tint fills the advance box from the descender to the ascender at a quarter of the status colour's opacity, and shows whenever the glyph is in a defined status (no display toggle yet); the reference's Development status color option would settle the look and the default.
+- [ ] `palette.relatedGlyphs` (panel, M13, docs): Related Glyphs & Characters
+  - Guess: A glyph's base name is the part of its name before the first dot, and alternates are the other glyphs with the same base name; the reference's documentation does not define the suffix rule.
+  - Guess: The used-as-component section lists direct users only; Show Dependencies lists the nested ones.
+  - Guess: The decomposition sections use Unicode's canonical decompositions, one level and full together, so U+1EA4 lists both U+00C2 and U+0041, and characters the font has no glyph for are listed dimmed.
+  - Guess: Clicking an entry opens the glyph in a new tab; the reference's documentation does not say whether it replaces the current glyph instead.
 
-### Font Info and features (237)
+### Font Info and features (246)
 
+- [ ] `fontInfo.rows.selection` (behavior, M7, handbook): Clicking a row selects it and Cmd+click builds a selection of several…
+  - Guess: Shift-click adds every row between the last row clicked and the clicked one; Shift-clicking in the reference app settles it.
+  - Guess: Copy puts the rows' JSON on the system clipboard, and a selected row of a parameter whose name repeats copies every row of that name; pasting copied rows into a text editor from the reference app settles the format.
+  - Guess: Paste replaces the rows with the same key in the shown font, masters or exports and appends repeatable parameters; pasting a row the target has in the reference app settles it.
+  - Guess: Cmd+Delete removes the selected fields in one undo step and each selected parameter in one of its own, and leaves built-in fields; undoing after Cmd+Delete in the reference app settles the steps.
+- [ ] `fontInfo.rows.localizable` (behavior, M7, handbook): A localizable field shows a language menu and a plus button; each…
+  - Guess: The plus button adds the first language the field lacks, in the name table's tag order after the default language, with empty text; picking another language in a row's menu moves its text there; clicking the plus in the reference app settles both.
 - [ ] `fontInfo.familyName.allowedCharacters` (behavior, M7, handbook): The Family Name should contain only A-Z, a-z, 0-9 and spaces; other…
   - Guess: Other characters are accepted with a warning, not refused; typing an ampersand or an accented letter in the reference app settles whether it warns, refuses or neither.
   - Observe: In font A (m7-one), type the family name `Café & Co`: note any warning, refusal or nothing.
@@ -1510,6 +1697,11 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `fontInfo.metrics.scopeHidesLine` (behavior, M7, handbook): A metric with a glyph scope is drawn only in glyphs matching…
   - Guess: A hidden metric hides its alignment zone too, and in text mode the glyph being edited decides for the whole line of text; scoping x-height to Greek and typing A and alpha side by side in the reference app settles it.
   - Observe: In font B (m7-two), scope x-Height to the script greek and look at A in Edit View: note whether the x-height line is hidden.
+- [ ] `fontInfo.exports.selection` (behavior, M7, handbook): In the export list Cmd+click toggles single entries and Shift+click selects a…
+  - Guess: With nothing selected the tab acts on the first entry, and Cmd-click on the only selected entry leaves the first entry shown; the reference app settles what an empty selection shows.
+  - Guess: Dropping a dragged entry onto another moves it to that entry's place, and the moved entry becomes the selection; dragging in the reference app settles it.
+- [ ] `fontInfo.exports.inactiveGrayIcon` (behavior, M7, handbook): An export entry with Active off is drawn with a gray icon…
+  - Guess: Entries are drawn with a square icon in the accent colour, a variable font setting with an outlined square; inactive ones grey; the reference app's sidebar settles the icons.
 - [ ] `fontInfo.styleName.limits` (behavior, M7, handbook): Style names outside ASCII letters, digits, spaces and simple punctuation are not…
   - Guess: font.instance.set and the Exports tab warn, without refusing, when the style name has characters outside ASCII letters, digits, spaces and hyphens, or when family and style name together exceed 20 characters without a postscriptFontName; the reference app settles whether it warns.
   - Guess: An empty or all-space style name is refused by font.instance.set and font.instance.add; clearing the Style Name field in the reference app settles it.
@@ -1517,12 +1709,16 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `fontInfo.styleLinking.sameFamily` (behavior, M7, handbook): Style linking connects only fonts with an identical family name
   - Guess: font.instance.setStyleLinking and font.instance.set link anyway but warn when the base instance named in the same file exports under another family name (its familyNames field); a base in another file is not checked. Linking two instances with different familyNames in the reference app settles whether it warns.
 - [ ] `fontInfo.notes.markdownHighlighting` (behavior, M7, handbook): The note field highlights Markdown as plain text styling: italic with single…
+  - Guess: Headings of every level take the section heading size and the strong text colour, bold takes the strong text colour, italic slants, links take the accent colour, and the Markdown syntax itself is dimmed; the reference app's Notes tab settles the styles.
+  - Guess: Underscore emphasis needs a word boundary on both sides and asterisk emphasis does not, emphasis and links stay within one line, and an autolink needs an http, https or mailto address; typing the edge cases in the reference app settles them.
+  - Guess: A note longer than 256 KiB is shown without highlighting so typing stays fast; a long note in the reference app settles whether it stops highlighting.
   - Observe: In font A (m7-one), type `# Head`, `*it*`, `**bold**` and `<https://example.org>` in the Notes tab: note how each is highlighted.
 - [ ] `fontInfo.exports.instancePreview` (behavior, M7, handbook): The Exports tab shows a short preview of the selected instance drawn…
-  - Guess: The preview sits above the instance's fields, one line high, and an instance between masters is drawn with its nearest master until M9 interpolates; the Exports tab of the reference app settles placement.
+  - Guess: The preview sits above the instance's fields, one line high, and draws the first selected instance; an instance between masters shows a message until M9 interpolates, and a variable font setting shows none; the Exports tab of the reference app settles placement.
+  - Guess: The default `Aang126` is read as characters and drawn with the glyphs mapped to them, skipping characters the font lacks; the reference app settles whether it names glyphs instead.
   - Observe: In font B (m7-two), look at an instance's preview on the Exports tab: note where it is and what it shows.
-- [ ] `font.info.selectTab` (M7, inferred): Select Font Info Tab
-  - Open (our design, not confirmed): Switches the open Font Info window to one of its six tabs. The handbook only describes clicking the tabs; no shortcut is given.
+- [ ] `font.info.selectTab` (M7, inferred, live): Select Font Info Tab
+  - Guess: Our own command for scripts; with the window closed it opens Font Info on that tab. Nothing to observe: the reference app switches tabs only by clicking them.
 - [ ] `font.info.listFields` (M7, inferred, live): List Available Fields
   - Guess: The Font tab offers familyNames, designers, designerURL, manufacturers, manufacturerURL, copyrights, versionString, vendorID, uniqueID, licenses, licenseURL, trademarks, descriptions, sampleTexts, postscriptFontName, postscriptFullNames, compatibleFullNames, WWSFamilyName, WWSSubfamilyName and variationsPostScriptNamePrefix; the Exports tab the same plus styleNames, styleMapFamilyNames, styleMapStyleNames, preferredFamilyNames, preferredSubfamilyNames and variableStyleNames; the Masters tab offers none and keeps master properties as read. The pickers of the reference app settle the three lists.
   - Observe: In font A (m7-one), click the plus button beside General on the Font tab: write down the fields offered, in their order.
@@ -1637,20 +1833,48 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Setting the note replaces it whole in one undo step; editing the Notes tab in the running app would settle how undo groups typing.
 - [ ] `fontInfo` (panel, M7, handbook): Font Info
   - Guess: Font Info opens on the tab it last showed for that document, and on the Font tab the first time; opening it twice in the reference app settles it.
+  - Guess: One Font Info window shows the active document, and switching documents shows the other document's information in it; opening Font Info in two documents of the reference app settles whether each keeps a window of its own.
   - Observe: In font A (m7-one), open Font Info, switch to the Exports tab, close the window and open it again: note which tab it opens on.
+- [ ] `fontInfo.font` (panel, M7, handbook): Font
+  - Guess: The double-arrow button opens a prompt under the field that asks for the new units per em, starting at the current value, with Scale and Cancel buttons; clicking the button in the reference app settles the prompt's form.
+  - Guess: The minor version shows three digits, and its stepper is a plus and a minus button after the field; the reference app's Version field settles the look.
+  - Guess: The Creation Date is shown and typed as the file stores it (`2026-10-11 12:00:00 +0000`), next to an Update button; the reference app's date field settles the display.
+  - Guess: The Version row stands for both version parts, so selecting it selects and copies versionMajor and versionMinor together; copying the Version row in the reference app settles it.
+  - Guess: Until axes can be edited (M9), the Axes section lists the stored axes without a plus button, their names, tags and Hidden boxes read-only.
+  - Observe: In font A (m7-one), look at the Version and Creation Date rows: note how the minor version and the date are shown and what the stepper and the update button look like.
+  - Observe: In font A (m7-one), click the double arrow beside Units per Em: note what asks for the new value and which buttons it has.
 - [ ] `fontInfo.fieldPicker` (panel, M7, handbook): Add Field
   - Guess: The picker lists only the fields not yet present on the selected font, masters or exports, in the order of font.info.listFields, and allows several to be selected; the picker of each tab in the reference app settles it.
+  - Guess: A click selects one field and Cmd-click or Shift-click adds or removes one more; Add adds them in list order, each as an undo step of its own; using the picker in the reference app settles both.
   - Observe: In font A (m7-one), click the plus button beside General on the Font tab: note the fields offered in order, and which of them get a language menu once added.
 - [ ] `fontInfo.customParameterPicker` (panel, M7, handbook): Add Custom Parameter
   - Guess: The list shows every catalogue parameter allowed in the tab's scope, in alphabetical order, including those already present; the search matches any part of the name, ignoring case; the picker in the reference app settles order and matching.
   - Guess: A parameter whose appendix entry names no scope is offered in all three tabs; the picker of each tab in the reference app settles it.
+  - Guess: The search also matches the descriptions and the other spellings of a name, and Add gives each parameter its kind's empty value; searching for a word of a description in the reference app settles the first, adding Filter there the second.
   - Observe: In font A (m7-one), click the plus button beside Custom Parameters on the Font, Masters and Exports tabs: note which of typoAscender, Remove Glyphs, Filter, glyphOrder, versionString, familyNames and copyrights each tab offers, the order of the list, and whether the search matches inside names.
+- [ ] `fontInfo.masters` (panel, M7, handbook): Masters
+  - Guess: A master made with Add Master becomes the selection, and a dragged master stays selected at its new place; the list's selection in the reference app after each action settles it.
+  - Guess: The minus button is disabled while every master is selected, because a font keeps at least one master; whether the reference app disables it or refuses with a message settles it.
+  - Guess: The General section has the name and icon only, without a plus button, because masters take no added General fields; the masters tab of the reference app settles it.
 - [ ] `fontInfo.masterIconPicker` (panel, M7, handbook): Master Icon
+  - Guess: A click on a built-in icon applies it to the selected masters and closes the picker; the glyph field applies on Use Glyph or Enter; how the reference app's popover closes settles it.
   - Guess: The 25 built-in icons are five weights (Light, Regular, Medium, SemiBold, Bold) by five widths (Condensed, SemiCondensed, normal, SemiExtended, Extended), named `Weight` or `Weight_Width` as the corpus files spell them; the names the reference app writes for each icon of its picker settle the set.
   - Observe: In font B (m7-two), open the master icon picker, pick each icon in turn and save each time: write down the 25 saved iconName values.
 - [ ] `fontInfo.metricEditor` (panel, M7, handbook): Metric
-  - Guess: The category menu offers the file format's metric types (ascender, cap height, slant height, x-height, midHeight, bodyHeight, descender, baseline, italic angle) with readable labels, and the scope uses the smart-filter rule editor of M4; the menu of the reference app settles the list and the labels.
+  - Guess: The category menu offers the file format's metric types (ascender, cap height, slant height, x-height, midHeight, bodyHeight, descender, baseline, italic angle) with readable labels, plus an empty category for a metric known only by its name; the menu of the reference app settles the list and the labels.
+  - Guess: The scope is typed as a glyph predicate in a text field rather than built with the smart-filter rule editor; the scope editor of the reference app settles whether it shows rules.
+  - Guess: The plus beside the Metrics heading opens this editor to add a metric, starting at the first category the font has no plain metric of; what the reference app's plus adds settles it.
+  - Guess: A stem's actions button opens the same editor with only the scope field; the reference app's stem scope popover settles its fields.
   - Observe: In font B (m7-two), click the name of x-Height on the Masters tab: write down the items and labels of the category menu.
+- [ ] `fontInfo.exports` (panel, M7, handbook): Exports
+  - Guess: Active, Style Name, Weight Class, Width Class, the read-only Axes Coordinates and Style Linking sit under the General heading, above the added fields; the Exports tab of the reference app settles the order.
+  - Guess: A variable font setting shows Active, its name and its custom parameters, without classes, axes or style linking; selecting a variable font setting in the reference app settles it.
+  - Guess: The class menus list each standard value with its OpenType name (400 Regular, 5 Medium (normal)); the disclosure menus of the reference app settle the labels.
+  - Observe: In font B (m7-two), select two instances with Cmd-click and look at a field where they differ: note what it shows.
+- [ ] `fontInfo.other` (panel, M7, handbook): Other Settings
+  - Guess: Each setting is written when its field loses the keyboard or its box or menu changes, as one undo step per change; changing a setting and choosing Undo in the reference app settles whether settings are undoable.
+- [ ] `fontInfo.notes` (panel, M7, handbook): Notes
+  - Guess: The note is written when the text box loses the keyboard, as one undo step for everything typed meanwhile; typing in the Notes tab and choosing Undo in the reference app settles the undo steps.
 - [ ] `filter.customParameter.filter` (behavior, M7, handbook): A Filter custom parameter on an instance (export) holds one filter string;…
   - Observe: In font C (m7-export), put Filter `Transformations;Slant:10` on an instance and export a TTF; read the exported TTF with ttx: note whether Aacute stays a composite and whether the slant reaches its outlines.
 - [ ] `filter.customParameter.extrudeUndocumented` (behavior, M7, inferred): No export string is documented for Extrude or for Interpolate with Background;…
@@ -1698,7 +1922,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The linked master keeps its id unless the host uses it (then it gets a fresh one), takes its axis values by axis tag, its metric and stem values by definition, its layers for every glyph the host has and its kerning; its layers can be edited but are not saved into the host; the reference app settles whether it is read-only.
   - Observe: Add Import Master naming font B (m7-two)'s Bold master: note the master added and what is saved in the host file.
 - [ ] `Instance Preview` (parameter, M7, handbook): List of glyph names replacing the default `Aang126` preview string shown for…
-  - Guess: The value lists glyph names separated by spaces or line breaks; names the font lacks are skipped; an instance between masters shows its nearest master until M9 interpolates; the reference app settles separators and missing names.
+  - Guess: The value lists glyph names separated by spaces or line breaks, at most 64 drawn; names the font lacks are skipped; a disabled parameter is ignored; the reference app settles separators and missing names.
   - Observe: In font B (m7-two), add the parameter Instance Preview with `A a n` to an instance: note what the preview shows afterwards.
 - [ ] `Keep Glyphs` (parameter, M7, handbook): List of glyphs to keep; all others are dropped and kerning and…
   - Guess: When both Keep Glyphs and Remove Glyphs are present, Keep Glyphs applies first and Remove Glyphs then removes from what is kept, with a warning; the reference app settles it.
@@ -1771,12 +1995,14 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: In F1 (Latin features), select an automatic feature and type into the editor: note whether the code is read-only or the entry switches to manual.
 - [ ] `font.features.update` (M8, handbook, live): Update
   - Observe: In any font, look for a shortcut or menu item for Update in Font Info › Features: note both.
-- [ ] `font.features.compile` (M8, handbook): Compile
+- [ ] `font.features.compile` (M8, handbook, live): Compile
+  - Guess: Compile reads the master the Features tab passes (the active Edit View tab's), else the first master; compiling in a two-master font whose masters differ in a number value used by the code, with the second master showing, would settle it.
+  - Guess: Compile checks the code without the generated kerning and mark features; an error the reference app reports only when the generated code is added would show the difference.
   - Observe: In any font, look for a shortcut or menu item for Compile in Font Info › Features: note both.
-- [ ] `font.features.listErrors` (M8, inferred): List Feature Errors
-  - Open (our design, not confirmed): Returns the current compile errors with entry, text range, message, expanded description and, where one exists, the suggested fix. The UI shows the same data as inline markers and sidebar icons.
-- [ ] `font.features.applyFix` (M8, handbook): Fix
-  - Guess: Three fixes of ours carry a wrench: a glyph name that matches an existing one apart from case, a missing semicolon at the end of a statement, and a class used before its entry (moving the class entry up); the reference app's error list on a font with these mistakes would settle its own set.
+- [ ] `font.features.listErrors` (M8, inferred, live): List Feature Errors
+  - Guess: The error list is the one of the last Compile and is marked out of date after an edit rather than recomputed; editing code after a compile in the reference app and watching whether the error markers move or vanish would settle it.
+- [ ] `font.features.applyFix` (M8, handbook, live): Fix
+  - Guess: Four fixes of ours carry a wrench: a glyph name that matches an existing one apart from case, a class name that matches a defined one apart from case, a missing semicolon at the end of a statement (inserted before any comment), and a class used before its entry (moving the class entry up); the reference app's error list on a font with these mistakes would settle its own set.
   - Observe: In F1 (Latin features), write a misspelt glyph name, drop a semicolon, and use a class before its entry: note which errors show a wrench and what Fix does for each.
 - [ ] `font.features.listSnippets` (M8, inferred, live): List Code Snippets
   - Guess: The built-in snippets come before the user's groups, and the groups follow file-name order; opening the snippets menu with two snippet files in the folder would settle the order.
@@ -1784,8 +2010,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A title without a group finds the built-in snippet first, then the first user snippet of that title in menu order; only the menu names snippets in the reference app, so nothing there settles it.
 - [ ] `font.features.setLabel` (M8, handbook, live): Set Stylistic Set Name
   - Guess: The language of a name is `dflt` or one of the OpenType language tags the name table can hold, and an empty name is refused; the language picker of the reference app would settle the list.
-- [ ] `font.features.complete` (M8, inferred): Complete Feature Code
-  - Open (our design, not confirmed): Returns the glyph names, class names and lookup names that fit at a position in the code, the data behind the editor's autocomplete menu.
+- [ ] `font.features.complete` (M8, inferred, live): Complete Feature Code
+  - Guess: Completion offers glyphs in rules, classes after @, lookups after `lookup`, number values after $ and inside ${…}, registered feature tags after `feature` and statement keywords (then glyphs) at the start of a statement, exact-case matches first; typing in each of these places in the reference app would settle its lists.
 - [ ] `file.exportFeatures` (M8, inferred, live): Export Features
   - Guess: The reference app documents no feature-file export; the command exists for the command line and automation.
   - Guess: The fea export assembles the stored entries without running Update first, so automatic entries are written as they were last updated; running Update before the export gives the regenerated code.
@@ -2630,22 +2856,48 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The chooser and the Edit View preview always use palette 0. Settled by opening the chooser in a font with two palettes in the reference.
   - Observe: Palette font (two palettes): click the swatch of a palette layer in the Layers palette; note which palette's colours the chooser lists.
 
-### Files: open, import, export (19)
+### Files: open, import, export (40)
 
 - [ ] `export.instanceExportFolder` (behavior, M7, handbook): An instance carrying the Export Folder custom parameter is written to that…
   - Guess: The sub-path is used as written, `..` segments included, as the handbook says; an absolute path, an empty segment, a folder name with a character such as `:` or `\`, or a path of more than 32 segments makes export skip that instance with the reason, one trailing `/` is ignored, and the warnings name every file written outside the export destination; an Export Folder of `../x` and one of `/tmp/x` in the reference app settle it.
   - Guess: Exports from the command line, MCP and the control channel skip an instance whose Export Folder resolves outside the destination folder; the reference app has no such callers, so nothing there settles it.
   - Observe: In font C (m7-export), export with Export Folder `../trial`, then `/tmp/x`: note where the files go.
-- [ ] `file.newProject` (M7, handbook): New Project
+- [ ] `file.newProject` (M7, handbook, live): New Project
   - Guess: A new project is saved as a native FontCraft project file (`.fontcraftproject`, JSON: the linked font's path relative to the project, the instances in the native format, the export destination); reading and writing `.glyphsproject` waits for a sample file from the reference app.
+  - Guess: Project edits are not undo steps: Edit › Undo acts on font documents only; undoing in a project window of the reference app settles it.
+  - Guess: An unsaved project is called Untitled Project (then Untitled Project 2, …); the reference app's window title settles it.
   - Observe: Choose File › New Project, link font B (m7-two) and save: keep the `.glyphsproject` file and hand it over (our own font, so it may be read); it is the sample the project reader and writer wait for.
-- [ ] `project.linkFont` (M7, handbook): Choose
+- [ ] `project.linkFont` (M7, handbook, live): Choose
   - Guess: The link is stored relative to the project file when both share a folder tree, else absolute; linking copies the font's instances into the project only when the project has none; saving a project in the reference app settles the path form.
+  - Guess: A link that no longer resolves is kept when the project opens and reported as a warning; only export and revert refuse it; opening a project whose font was moved in the reference app settles it.
   - Observe: Choose File › New Project, link font B (m7-two) and save: note in the saved file whether the link is a relative or an absolute path.
-- [ ] `project.addInstance` (M7, handbook): Add Instance
+- [ ] `project.addInstance` (M7, handbook, live): Add Instance
   - Guess: A new project instance has the defaults of font.instance.add; a variable font setting waits for M9 and is refused until then.
-- [ ] `project.duplicateInstances` (M7, handbook): Duplicate Instances
+  - Guess: `at` places the new instance in the list (default: the end); the plus button in the reference app adds at the end or after the selection, which observing it settles.
+- [ ] `project.revertInstances` (M7, handbook, live): Revert to Font Instances
+  - Guess: Reverting reads the font file on disk, not an open copy with unsaved changes; reverting with the font open and edited in the reference app settles it.
+- [ ] `project.moveInstances` (M7, handbook, live): Move Instances
+  - Guess: Several moved instances keep their order and land together, the first at `to` of the list without them; dragging several rows in the reference app settles it.
+- [ ] `project.duplicateInstances` (M7, handbook, live): Duplicate Instances
   - Guess: A duplicate keeps the original's name and goes right after it unless `to` is given.
+  - Guess: With `to`, the copies go together at that position; a copy gets no id of its own.
+- [ ] `project.editInstance` (M7, handbook, live): Edit Instance
+  - Guess: Edits are checked as Font Info › Exports checks an export of the linked font (its axes and masters), or of a new empty font while no font is linked.
+- [ ] `project.setExportDestination` (M7, handbook, live): Export Destination
+  - Guess: The destination is stored relative to the project file like the font link, need not exist, and is created by export; saving a project in the reference app settles the stored form.
+- [ ] `project.export` (M7, handbook, live): Export
+  - Guess: Export refuses a project with unsaved changes as well as one never saved; exporting in the reference app with an unsaved change settles it.
+  - Guess: Export reads the font file on disk even when the font is open with unsaved changes; exporting with the font open and edited settles it.
+  - Guess: Export builds TrueType outlines in plain files unless asked otherwise, and a project without an active static instance is refused rather than exporting the font's first master; the reference app's export from a project settles both.
+  - Guess: Export is refused, writing nothing, when one of its files would replace the linked font (a compiled font in the destination folder); exporting such a project in the reference app settles it.
+- [ ] `project.open` (M7, inferred, live): Open Project
+  - Guess: A project already open is made active rather than opened twice, as for fonts; a font link that no longer resolves is kept and reported; opening one in the reference app settles both.
+- [ ] `project.save` (M7, handbook, live): Save Project
+  - Guess: Saving writes only the project file, atomically, and refuses a path that is the linked font; File › Save in a project window runs this command.
+- [ ] `project.close` (M7, inferred, live): Close Project
+  - Guess: Closing a project with unsaved changes refuses unless `discard` is true, as closing a font does; closing a changed project window in the reference app would settle what it asks.
+- [ ] `project.list` (M7, inferred, live): List Projects
+  - Guess: A query of ours listing each open project's font link, destination, instances and saved state; the reference app shows the same facts only in each project window.
 - [ ] `open.reconstructsFeatures` (behavior, M8, handbook): OpenType layout from a compiled font is turned back into feature code…
   - Observe: Open a compiled OTF exported from F1 (Latin features) with a lookup used by two features and contextual kerning: note whether a prefix named Prefix holds the shared lookup, and what happens to the contextual kerning.
 - [ ] `file.importFeatures` (M8, handbook, live): Features…
@@ -2687,21 +2939,92 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The default sample is an English pangram with digits when the font maps all of its characters, else the first 64 characters of the character set. Settled by the owner.
 - [ ] `glyphsproject` (format, M13, handbook): Glyphs project
   - Observe: Make a Project from the instances test font (two masters, three instances, one with a custom parameter), set an export destination, save it, and send back the `.glyphsproject` file: its keys show where the instances, the link to the source and the destination are stored.
-- [ ] `glyph.exportArtwork` (M13, docs): Export Artwork…
+- [ ] `ufo1` (format, M13, docs): Unified Font Object 1
+  - Guess: A font-info value that ufoLib cannot convert (an unknown `fontStyle`, `widthName` or `msCharSet`, or a value of the wrong type) is dropped and the file opens; ufoLib and norad refuse the file instead. A UFO 1 from the tools of that time with such a value would settle whether refusing is better.
+  - Guess: The feature code is joined as defcon joins it (a line break between the classes and each feature, tags sorted when the lib has no order); norad leaves out the line breaks between features. Both texts compile the same; a UFO 1 whose features only work with one of the two joins would settle it.
+  - Guess: A tag the feature order lists twice is written once, so a crafted order cannot multiply the feature code; defcon writes it each time.
+  - Guess: Font-info keys a UFO 1 does not define are dropped, as ufoLib drops them, so the saved UFO 3 holds only valid keys.
+- [ ] `pfm` (format, M13, docs): Printer Font Metrics (Windows)
+  - Guess: A word before the pair list equal to `etmKernPairs` is a count and is skipped (and gives the count when `etmKernPairs` is 0); the DDK describes no such word, but files made for PostScript printers are said to have it. A PFM file from a font vendor would settle it.
+  - Guess: Character codes of a font whose `dfCharSet` is not 2 (symbol) are read as Windows-1252; a symbol font's code c is looked up as U+F000 + c, then as c. PFM files of symbol fonts from a vendor would settle it.
+  - Guess: Kerning amounts are in `etmMasterUnits` per em (1,000 when the field is 0, as the DDK says PostScript drivers assume) and are scaled to the font's units per em, rounded half up.
+- [ ] `sfd` (format, M13, docs): FontForge Spline Font Database
+  - Guess: A contour is closed when its last point equals its first and open otherwise; the page does not say how an open contour is written. A file from the originating editor with an open path would settle it.
+  - Guess: In a quadratic layer a `c` line is read as a quadratic segment when both controls are the same point or are exactly two thirds of the way to one point; the page does not say how quadratic splines are written. A quadratic file from the editor would settle it.
+  - Guess: An on-curve point flagged 0x80 that lies halfway between two control points is dropped, so runs of quadratic control points come back. A TrueType-derived file from the editor would settle it.
+  - Guess: The point flags of a closed contour's start come from its `m` line, not from the line that returns to it. A file with a smooth start point would settle it.
+  - Guess: `Refer` and `Kerns2` glyph numbers are the third number of a glyph's `Encoding` line (its original position), or its position in the file when that is missing; a reference that matches no glyph falls back to its code point. Files with reordered glyphs would settle it.
+  - Guess: A glyph without a `Width` line is as wide as the em. A file with such a glyph would settle it.
+  - Guess: Anchor names follow the reference's convention: the class name for base and base-mark anchors, `_` before it for marks, `_1`, `_2`… after it for ligature components, `entry` and `exit` for cursive anchors. The page names only the classes.
+  - Guess: Pair positioning is lookup type 258 (0x102), read from the page's example; subtables no lookup declares count as kerning. A file with several lookup types would settle it.
+  - Guess: Glyph pairs take precedence over class pairs, and an earlier class table over a later one, as in the model; in OpenType the order of subtables decides. A file with overlapping subtables would settle it.
+  - Guess: A kerning class becomes a group named after its first glyph; a glyph already in a group on that side kerns by name instead. Files with a glyph in classes of two tables would settle it.
+  - Guess: Cap height and x-height, which the format does not store, are the tops of H and x, or 70% and 50% of the em; overshoots are zero.
+  - Guess: Hhea, typo and win values marked as offsets from a computed value are not kept, because the page does not say how the value is computed.
+  - Guess: The digits after the point in `Version` are thousandths (`1.5` is version 1.500).
+  - Guess: A TrueType instruction block (`TtTable`, `TtInstrs`) ends at a line starting `EndTt` or at the first line that is neither a mnemonic nor numbers; the page names no end line.
+  - Guess: A glyph layer the font does not declare (the multi-layered Type 3 form) is merged into the master layer.
+  - Guess: A glyph listed in more than one class on one side of a class kerning table belongs to the first of them; the later listings are skipped and reported. A table from the originating editor with such a repeat would settle which class it keeps.
+- [ ] `eps-outline` (format, M13, handbook): Encapsulated PostScript artwork (glyph outline import)
+  - Guess: Unscaled placement keeps one point per unit and puts the top edge of the bounding box (else of the drawing) at the given top, matching how SVG files are placed; importing an EPS of known geometry in the reference app would settle it.
+  - Guess: Paths that are only used to clip, or ended without painting, are left out and counted as dropped; the reference may import every path, which importing a file with a clipping path and an unpainted path would settle.
+  - Guess: Arcs (arc, arcn, arct), text and images make the file fail with a message rather than being skipped; an EPS with an arc or a text object imported in the reference app would show whether it skips them or converts them.
+  - Guess: A path filled inside gsave/grestore and stroked again afterwards is imported once; a reference import of such a file would settle it.
+  - Observe: Import Outlines with an EPS of our own that draws a 100 × 100 point square at (50, 50) in a 0 0 200 200 bounding box: note where the square lands relative to the baseline and whether it is scaled.
+  - Observe: Import Outlines with an EPS that clips a filled triangle by a rectangle and also has an unpainted path: note which of the three paths arrive.
+  - Observe: Import Outlines with an EPS that uses `arc` and one that contains text: note whether each is refused, skipped or converted.
+- [ ] `io.watchSourceOnDisk` (behavior, M13, docs): While a file-per-glyph source is open, the application watches it for modification…
+  - Guess: Every source with a file is watched, single-file sources (.glyphs, .fontcraft, .designspace) and compiled fonts included, not only file-per-glyph sources; the manual names UFOs only.
+  - Guess: A file that is only touched (same content) refreshes the stamp without a prompt; touching an open UFO in the reference settles it.
+  - Guess: A document whose file was deleted on disk raises no prompt; the next save writes the file again. Deleting an open UFO in the reference settles it.
+- [ ] `file.exportWithProfiles` (M13, docs, live): Export Fonts As…
+  - Guess: Without `fonts` the active document is exported, not every open one; the reference's Export Fonts As dialog would settle the default.
+  - Guess: A profile's subfolder may not climb out of the destination with `..`, for any caller; the reference's profile settings would settle whether it can.
+  - Guess: Two profiles that would write the same file refuse the whole export instead of keeping one; the reference's behaviour with two profiles sharing a folder would settle it.
+- [ ] `file.saveExportProfile` (M13, docs, live): Save Export Profile
+  - Guess: A copy made with basedOn writes into a subfolder named after the copy unless `settings` names a folder; the reference's Duplicate would settle it.
+- [ ] `glyph.exportArtwork` (M13, docs, live): Export Artwork…
   - Guess: SVG uses the io-svg writer, PNG the render crate and PDF a minimal writer of our own; FontLab's options beyond the three formats are not followed.
+  - Guess: A picture spans the advance width and the master's descender to ascender, widened to the outline where it reaches further, so pictures of one font line up; exporting a few glyphs in the reference would settle the frame.
+  - Guess: SVG and PDF use one user unit or point per font unit (a PDF is scaled down to at most 14400 points a side); PNG is black on a transparent background at 256 pixels per em by default.
+  - Guess: Characters a file name cannot hold become `_`, and names that differ only in case get `_2`, `_3`; the reference's file names for such glyphs would settle it.
+  - Guess: Without `glyphs` every glyph of the font is exported; the shell passes the selection.
+- [ ] `file.revertGlyph` (M13, docs, live): Revert Glyph
+  - Guess: Without glyphs, every glyph that differs from the saved file is reverted; glyphs added since the save are left alone and naming one is refused. Reverting a glyph added since the save in the secondary reference would settle it.
+  - Guess: With layers, a layer added since the save is removed and a deleted one is put back. The secondary reference reverts whole glyphs only, so nothing there settles it.
+- [ ] `file.importMetricsFile` (M13, docs, live): Import Kerning from Metrics File…
+  - Guess: `replace` gives a pair the master already has the file's value and keeps every other pair; `addMissing` adds only pairs the master lacks; the reference documentation does not say what happens to existing pairs. Merging a file into a font that already kerns one of its pairs in the reference app would settle it.
+  - Guess: Without `masters`, the pairs go into the first master only, as other import commands do; the reference has one master per font.
+  - Guess: Pairs that name a glyph (AFM) or a character code (PFM) the font lacks are left out and listed, not stored; importing a file with such a pair in the reference app would settle it.
+  - Guess: Ligature data in an AFM file is not imported: ligature features come from glyph names; the reference merges it into its ligature tables.
+- [ ] `file.reviewExternalChanges` (M13, docs, live): Review External Changes
+  - Guess: The document's own unsaved edits are kept and never listed, so Update All merges rather than reloads; the manual speaks of taking the incoming change, and a document with unsaved edits in the reference settles whether it keeps them.
+  - Guess: Font-level data is grouped into nine parts (info, axes, masters, instances, kerning, features, groups, glyph order, other), each accepted whole; the manual mentions font-level data without saying how finely it is split.
+  - Guess: Glyph data apart from the layers (code points, export, kerning groups, metadata) is one item per glyph, beside one item per changed layer; changing a glyph's code point in a UFO while it is open in the reference settles how it is listed.
+- [ ] `dialog.exportProfiles` (panel, M13, docs): Export Profiles
+  - Guess: The built-in profiles are OpenType PS (CFF, plain), OpenType TT (TrueType, plain) and Web (TrueType, WOFF2 and WOFF), each writing into a subfolder named after it; the reference's full built-in list would settle it.
+  - Guess: There is no tick for which profiles the export dialog shows: Export Fonts As lists every profile; the reference's dialog would settle whether hidden profiles are needed.
+- [ ] `dialog.externalChanges` (panel, M13, docs): External Changes
+  - Guess: Every item starts ticked, so Accept Selected with no change of the ticks takes everything; the reference's manual does not say which state the ticks start in, and opening the window there settles it.
+  - Guess: The stored-text view on double-click shows the glyph in FontCraft's native JSON form rather than as a .glif file, since the comparison is between models; the reference shows the file text, and a file-per-glyph text view would follow it more closely.
 
-### Settings and the window (11)
+### Settings and the window (12)
 
 - [ ] `addons.repo.httpBasicAuth` (behavior, M13, handbook): An alternate repository URL may require a user name and password, sent…
   - Guess: Credentials are taken from the URL itself and stored with the setting, not in the operating system's keychain; the reference's storage is not described.
 - [ ] `settings.addons` (panel, M13, handbook): Addons
   - Guess: The section is called Extensions, because FontCraft has no add-on kinds that need Python; the reference calls it Addons.
   - Observe: Screenshot Settings › Addons in the trial and list its controls in order, with defaults.
-- [ ] `window.macroPanel` (M13, inferred): Macro Panel
-  - Open (our design, not confirmed): Opens the Macro Panel, whose console receives the log output of scripts and plug-ins unless output is redirected to the system console; this chapter and the Settings chapter say nothing more about it. FontCraft: opens the Command Console, where a command is typed as an id followed by JSON parameters, or as a `fontcraft-cli run` style line, with the log of commands and module output below.
+- [ ] `addons.useSystemConsoleForScriptOutput` (setting, M13, handbook): Use system console for script output
+  - Guess: With the setting on, the log still shows in the Command Console as well as on standard error, where the handbook says the reference sends it to the system console instead; keeping both loses nothing and the switch stays off by default.
+- [ ] `window.macroPanel` (M13, inferred, live): Macro Panel
+  - Guess: A run-style line with several commands runs them as one transaction and one undo step, and may name engine commands only, so a failing line changes nothing; the command-line tool runs them one by one and simply does not save after a failure.
+  - Guess: Clear empties the console's pane but keeps the session's command log, which other readers use; the reference's clear behaviour is not described.
+  - Guess: The history lives for the session only and is not saved between launches; watching whether the reference keeps typed text after a relaunch would settle it.
   - Observe: Open Window › Macro Panel: screenshot it, note how code is run (a button, a shortcut, both), whether it has tabs, and whether the typed text is still there after closing and reopening the panel and after relaunching.
 - [ ] `window.macroPanel` (panel, M13, inferred): Macro Panel
   - Guess: The console's input is one line with a history, not a multi-line editor, because commands are one line of JSON; the reference's panel layout is not described (open question).
+  - Guess: Tab takes the first completion suggestion and Up and Down stay with the history, because the history is the row's documented use of those keys; nothing describes completion keys in the reference.
 - [ ] `app.quit` (M14, memory): Quit FontCraft
   - Open (recalled, not confirmed): Quits after asking about each document with unsaved changes. Background saves and exports finish first.
 - [ ] `sharing.fontcraftEquivalent` (behavior, M14, inferred): FontCraft has no companion app planned; the same need can be met…
@@ -2717,7 +3040,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `settings.listShortcuts` (M14, inferred): List Shortcuts
   - Open (our design, not confirmed): Read-only query returning each action with its section, default shortcut and current shortcut. Proposed for agents; equals the content of the list.
 
-### Scripts, plug-ins and URLs (60)
+### Scripts, plug-ins and URLs (61)
 
 - [ ] `app.launchWithoutPlugins` (behavior, M13, handbook): Holding Option and Shift while the application starts launches it with every…
   - Observe: Hold Option and Shift while launching: note any dialog or message, and whether plug-ins can be turned back on without relaunching.
@@ -2729,30 +3052,34 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Open (our design, not confirmed): `fontcraft://show/?...` opens files and adds a new tab listing given glyph layers; it mirrors the reference's show path and takes the query parameters path, glyph, production and layer.
   - Observe: In the trial, open `glyphsapp://show/?path=<test font>&glyph=A&glyph=B` from a browser or Terminal (`open '…'`): note whether a new tab opens with A and B on the main master, and whether the window comes to the front.
 - [ ] `url.show.path` (behavior, M13, inferred): `path` is an absolute file path and comes first
-  - Open (our design, not confirmed): `path` is an absolute file path and comes first. It may be repeated; each occurrence starts a new file with its own glyph list.
+  - Guess: A path that is empty, relative, a network share, not a file or folder, or that cannot be opened is skipped with a warning together with its glyphs, and the rest of the URL is still handled; the observe step below settles it.
   - Observe: Open a show URL whose path names a file that does not exist, and one whose path is not absolute: note any message and whether the rest of the URL is still processed.
 - [ ] `url.show.glyph` (behavior, M13, inferred): `glyph` adds a glyph to the current file's list by its glyph…
   - Open (our design, not confirmed): `glyph` adds a glyph to the current file's list by its glyph name; glyphs appear in the tab in URL order.
   - Observe: Open a show URL naming a glyph the font lacks between two that exist: note whether the tab shows the two, shows a placeholder, or nothing opens.
 - [ ] `url.show.production` (behavior, M13, inferred): `production` adds a glyph by its production name (e.g
-  - Open (our design, not confirmed): `production` adds a glyph by its production name (e.g. uni01F4) instead of its source name.
+  - Guess: A glyph without a production name of its own is found by its glyph name; a show URL with production=A in the reference app would settle it.
 - [ ] `url.show.layer` (behavior, M13, inferred): `layer` follows a glyph and selects one of its layers by layer…
   - Open (our design, not confirmed): `layer` follows a glyph and selects one of its layers by layer ID; repeating it shows several layers of the same glyph. A master layer's ID equals the master ID.
   - Observe: Open a show URL with a layer id that does not belong to the glyph: note what the tab shows for that glyph.
 - [ ] `url.show.defaultLayer` (behavior, M13, inferred): A glyph with no layer parameter is shown on the layer of…
-  - Open (our design, not confirmed): A glyph with no layer parameter is shown on the layer of the main master.
+  - Guess: The main master is the font's first master; a font whose main master is not the first, opened by a show URL in the reference app, would settle it.
 - [ ] `url.show.alreadyOpen` (behavior, M13, inferred): A file that is already open is not opened a second time;…
   - Open (our design, not confirmed): A file that is already open is not opened a second time; it only gets the new tab.
   - Observe: With the test font open and edited but unsaved, open a show URL naming it: confirm no second window opens and the edits are kept.
 - [ ] `url.show.encoding` (behavior, M13, inferred): Query values are percent-decoded as UTF-8, and unknown glyphs or layer IDs…
   - Guess: Query values are percent-decoded as UTF-8 and unknown glyphs or layer ids are skipped with a warning; the reference does not say.
+  - Guess: A `+` stays a plus sign rather than a space, and a URL holding raw spaces, control characters or non-ASCII characters is refused; a show URL with `+` in a glyph name in the reference app would settle the first.
+  - Guess: A `%` not followed by two hexadecimal digits, bytes that are not UTF-8 and encoded control characters refuse the whole URL; unknown parameters are skipped with a warning.
   - Observe: Open a show URL whose path contains a space written as %20 and a glyph name with a non-ASCII character percent-encoded: note whether both work.
 - [ ] `url.safety` (behavior, M13, inferred): URL handling is limited to opening and showing; it never runs arbitrary…
   - Guess: URLs only open and show; any other path after `fontcraft://` is refused, so a web page cannot run commands; the reference documents only `show`.
-- [ ] `url.open` (M13, inferred): Open URL
-  - Open (our design, not confirmed): Parses a `fontcraft://` URL and runs the action it names; the entry point registered with the operating system. Proposed counterpart of the reference's URL scheme handler.
-- [ ] `url.show` (M13, inferred): Show Glyphs in New Tab
-  - Open (our design, not confirmed): Opens each listed file unless it is already open and adds a new Edit tab to it containing the listed glyph layers in order. Proposed target of `fontcraft://show/`.
+  - Guess: A URL with a fragment, user information or anything after `show/` other than the query is refused; device files and network shares are not opened.
+- [ ] `url.open` (M13, inferred, live): Open URL
+  - Guess: The command fails, changing nothing, only when the URL is malformed, over a limit or opens no file at all; a file that cannot be opened is skipped with a warning and the rest still open. Opening a show URL with one missing file and one existing file in the reference app would settle it.
+- [ ] `url.show` (M13, inferred, live): Show Glyphs in New Tab
+  - Guess: A tab holds one layer per glyph, so a glyph listed in several layers appears once per listing but every copy draws in the first layer given, with a warning; the reference shows each listed layer. Per-item layers in tabs would remove the difference.
+  - Guess: The new tab draws in the master of its first listed layer. Opening a show URL whose first glyph names a second master's layer in the reference app would settle it.
 - [ ] `extensions.twoFamilies` (behavior, M13, inferred): The reference is extended by scripts (run on demand from a menu)…
   - Open (our design, not confirmed): The reference is extended by scripts (run on demand from a menu) and plug-ins (loaded at launch, adding menu entries, drawing, tools, palettes or formats); many are free through the Plugin Manager, others are sold elsewhere, and users can write their own. FontCraft: two layers replace both: the command registry driven from outside (CLI, JSON control channel, MCP) for automation, and sandboxed WebAssembly modules for code that must run inside the app.
 - [ ] `pluginManager.relaunchForPluginsAndModules` (behavior, M13, inferred): A plug-in or module installed during a session is usable only once…
@@ -2834,16 +3161,17 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Open (our design, not confirmed): The grey link under an entry's description opens the extension's website. FontCraft: same, opening the URL from the registry entry in the system browser.
 - [ ] `pluginManager.openDonationPage` (M13, inferred): Donate
   - Open (our design, not confirmed): Entries whose vendor accepts donations show PayPal or Ko-fi icons that open the donation page. FontCraft: one generic `funding` link per index entry, shown as a Donate button and opened in the system browser.
-- [ ] `script.run` (M13, inferred): (script name)
+- [ ] `script.run` (M13, inferred, live): (script name)
   - Guess: A macro runs as one undo step that is undone as a whole, like command.batch; the reference undoes script edits per glyph and does not say how a script's changes group.
-- [ ] `script.rerunLast` (M13, inferred): Re-run Last Script
+  - Guess: One top-level macro run executes at most 1,000,000 steps, the steps of the macros it runs included, and reads at most 256 MiB of macro files; past either it fails as a whole. Our own limit; no source describes one for scripts in the reference.
+- [ ] `script.rerunLast` (M13, inferred, live): Re-run Last Script
   - Guess: The label of the item at the foot of the Script menu is Re-run Last Script followed by the script's title; the handbook gives no label.
   - Observe: Run any script from the Script menu, then open the Script menu again: copy the exact label of the last item and confirm Cmd+Alt+R runs it.
-- [ ] `script.openScriptsFolder` (M13, inferred): Open Scripts Folder
-  - Open (our design, not confirmed): Shows the Scripts folder in the file manager. FontCraft: opens the macros folder in the file manager, creating it when missing; the engine part returns the folder's path so headless callers can use it.
+- [ ] `script.openScriptsFolder` (M13, inferred, live): Open Scripts Folder
+  - Guess: The macros folder is created when missing and its path returned, and sessions without one (headless runs, the web app) have the command disabled; the reference app's behaviour when the Scripts folder is missing would settle the first part.
   - Observe: Choose Script › Open Scripts Folder and note the folder's full path, and whether a Plugins folder sits beside it.
-- [ ] `script.reloadScripts` (M13, inferred): Reload Scripts
-  - Open (our design, not confirmed): Rebuilds the Script menu from the Scripts folder; the item is shown in the menu only while Option is held. FontCraft: rescans the macros folder and re-registers the macro commands; normally unnecessary because the folder is watched.
+- [ ] `script.reloadScripts` (M13, inferred, live): Reload Scripts
+  - Guess: It is always shown in the Script menu and returns the new list, since the folder is also watched; files that cannot be read stay listed with their error. Holding Option over the reference app's Script menu settles only where the item shows.
   - Observe: Open the Script menu without and then with Option held: note whether Reload Scripts replaces Open Scripts Folder or is added below it, and where it sits in the menu.
 - [ ] `plugin.installFromFile` (M13, inferred): Install Plug-in from File
   - Open (our design, not confirmed): A plug-in outside the catalogue is installed by dropping its bundle on the app's Dock icon; the app moves it into the Plugins folder. FontCraft: dropping a `.wasm` or `.fcmacro` file on the window, opening it with File › Open, or calling this command with a path validates it (manifest, ABI version, no imports, limits) and copies it into its folder; on the web the file's bytes are stored in the browser.
@@ -2853,8 +3181,10 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `window.pluginManager` (panel, M13, inferred): Plugin Manager
   - Guess: The type buttons are Filters, Reporters, Checks and Macros in place of Plugins, Scripts and Modules, because FontCraft has no Python modules; settled by nothing in the reference (our own extension model, decision 0005).
   - Observe: Screenshot the Plugin Manager with All and Plugins selected and an entry that has a preview image and donation icons: record the order of title, description, link, image and buttons in an entry.
-- [ ] `script.runActionSet` (M13, docs): Run Action Set
+- [ ] `script.runActionSet` (M13, docs, live): Run Action Set
   - Guess: Action sets and macros are one file format and one command; FontLab keeps action sets in its Actions folder apart from scripts, a split FontCraft does not copy.
+- [ ] `script.saveActionSet` (M13, docs, live): Save Action Set
+  - Guess: An existing file is replaced only when `replace` is true, otherwise the save is refused; FontLab's documentation does not say what saving over an existing set does.
 - [ ] `dialog.actions` (panel, M13, docs): Actions
   - Guess: Each action's parameter form is the command's own dialog when it has one, and otherwise a JSON editor checked against the command's params doc; FontLab's dialog lists only its own actions, each with a form.
 

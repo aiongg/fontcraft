@@ -70,6 +70,9 @@ summary = "Switches the open Font Info window to one of its six tabs. The handbo
 ref = "Font Info"
 status = "inferred"
 notes = "Our own command so a script can switch tabs; the reference app has only the tab clicks. M7 plan § 4: M7.15. When the window is closed the command opens it on the tab."
+guesses = [
+  "Our own command for scripts; with the window closed it opens Font Info on that tab. Nothing to observe: the reference app switches tabs only by clicking them.",
+]
 
 [[command]]
 id = "font.info.get"

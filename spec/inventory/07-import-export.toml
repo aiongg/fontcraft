@@ -1251,6 +1251,9 @@ summary = "Closes a project window; a project with unsaved changes needs confirm
 ref = "Import & Export › Projects"
 status = "inferred"
 notes = "Not described in the handbook; follows File › Close for fonts. M7 plan § 4: M7.14."
+guesses = [
+  "Closing a project with unsaved changes refuses unless `discard` is true, as closing a font does; closing a changed project window in the reference app would settle what it asks.",
+]
 
 [[command]]
 id = "project.list"
@@ -1265,6 +1268,9 @@ summary = "Lists the open projects with their font link, destination, instances 
 ref = "Import & Export › Projects"
 status = "inferred"
 notes = "A query of ours: the reference app shows this in each project window. M7 plan § 4: M7.14."
+guesses = [
+  "A query of ours listing each open project's font link, destination, instances and saved state; the reference app shows the same facts only in each project window.",
+]
 
 [[panel]]
 id = "window.project"
