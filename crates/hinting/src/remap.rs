@@ -9,8 +9,13 @@
 //! | Step | Finds the node when |
 //! |---|---|
 //! | 1 | the node at the same (path, node) index has the same place and class (on or off curve) |
-//! | 2 | a node of the same class lies at its place, or within [`NEAR`] of it (grid rounding); among several, the one in the same path, then with the same neighbours, then the closest index |
-//! | 3 | its path has the same number of nodes, of the same classes, in the same order: the node moved |
+//! | 2 | its path's nodes lie, after the edit, at the same places with the same classes in another order (reversal, new start node, path order): the node of its class at its place |
+//! | 3 | its path has the same number of nodes, of the same classes, in the same order: the node moved, and keeps its index |
+//! | 4 | otherwise (nodes inserted, deleted or merged): a node of the same class lies at its place, or within [`NEAR`] of it (grid rounding); among several, the one in the same path, then with the same neighbours, then the closest index |
+//!
+//! Step 2 comes before step 3 only for whole-path permutations, so a path moved by exactly the gap
+//! between two of its nodes keeps its links on the nodes that moved rather than on the nodes that
+//! landed on their old places.
 //!
 //! A node not found is gone. A PostScript end on a gone node becomes a number, the node's last y
 //! (horizontal hints) or x (vertical hints). A TrueType instruction on a gone node is removed and
@@ -37,7 +42,7 @@ use crate::{
     Edge, HintingError, NodeOrder, NodeRef, PsHint, TtInstruction, TtKind, TtPoint, ps_hints, set_ps_hints, set_tt_instructions, tt_instructions,
 };
 
-/// How far (font units, each axis) step 2 looks for a node that an edit rounded to the grid.
+/// How far (font units, each axis) steps 2 and 4 look for a node that an edit rounded to the grid.
 pub const NEAR: f64 = 0.5;
 /// Places closer than this are the same place.
 const SAME: f64 = 1e-6;
@@ -150,7 +155,7 @@ pub fn remap_layer(old: &Layer, new: &Layer, glyph: &str, mode: RemapMode, repor
     if refs.is_empty() {
         return None;
     }
-    let mut m = Matcher { old: old_paths, new: new_paths, grid: None, created: None };
+    let mut m = Matcher { old: old_paths, new: new_paths, grid: None, created: None, sorted: None, path_match: HashMap::new() };
     // `None`: the node is gone. References that dangled before the edit are not in the map.
     let map: BTreeMap<NodeRef, Option<NodeRef>> = refs.iter().filter_map(|r| m.locate(*r).map(|found| (*r, found))).collect();
     let overlap = mode == RemapMode::OverlapRemoval;
@@ -347,6 +352,32 @@ struct Matcher<'a> {
     grid: Option<HashMap<(i64, i64), Vec<NodeRef>>>,
     /// On-curve nodes of the new layer at places no old node had, built on first use.
     created: Option<Vec<NodeRef>>,
+    /// The new layer's paths as sorted node places, built on first use.
+    sorted: Option<Vec<Vec<Place>>>,
+    /// How references into each old path are found (module doc, steps 2 to 4).
+    path_match: HashMap<usize, PathMatch>,
+}
+
+/// How references into one old path are found after step 1.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PathMatch {
+    /// Step 2: the path's nodes were permuted; find each by its place.
+    Permuted,
+    /// Step 3: same classes in the same order; the node keeps its index.
+    KeepIndex,
+    /// Step 4: the structure changed; find the node by its place or treat it as gone.
+    Changed,
+}
+
+/// The nodes of `p` as places, sorted so that two permutations of the same nodes compare equal.
+fn sorted_places(p: &Path) -> Vec<Place> {
+    let mut v: Vec<Place> = p.nodes.iter().map(Place::of).collect();
+    v.sort_by(|a, b| a.on.cmp(&b.on).then(a.x.total_cmp(&b.x)).then(a.y.total_cmp(&b.y)));
+    v
+}
+
+fn same_places(a: &[Place], b: &[Place]) -> bool {
+    a.len() == b.len() && a.iter().zip(b).all(|(m, n)| m.on == n.on && (m.x - n.x).abs() <= SAME && (m.y - n.y).abs() <= SAME)
 }
 
 impl Matcher<'_> {
@@ -365,14 +396,37 @@ impl Matcher<'_> {
         if self.new_node(r).is_some_and(|n| on_curve(n) == o.on && (n.x - o.x).abs() <= SAME && (n.y - o.y).abs() <= SAME) {
             return Some(Some(r));
         }
-        if let Some(found) = self.by_place(r, o) {
-            return Some(Some(found));
+        match self.path_match(r.path) {
+            PathMatch::KeepIndex => Some(Some(r)),
+            PathMatch::Permuted | PathMatch::Changed => Some(self.by_place(r, o)),
         }
-        let same_structure = match (self.old.get(r.path), self.new.get(r.path)) {
-            (Some(a), Some(b)) => a.nodes.len() == b.nodes.len() && a.nodes.iter().zip(&b.nodes).all(|(m, n)| on_curve(m) == on_curve(n)),
-            _ => false,
-        };
-        Some(same_structure.then_some(r))
+    }
+
+    fn path_match(&mut self, path: usize) -> PathMatch {
+        if let Some(m) = self.path_match.get(&path) {
+            return *m;
+        }
+        let m = self.decide(path);
+        self.path_match.insert(path, m);
+        m
+    }
+
+    fn decide(&mut self, path: usize) -> PathMatch {
+        let Some(old) = self.old.get(path).copied() else { return PathMatch::Changed };
+        let new = &self.new;
+        let sorted = self.sorted.get_or_insert_with(|| new.iter().map(|p| sorted_places(p)).collect());
+        let mine = sorted_places(old);
+        // Any path, not only the one at the same index: a path that moved in shape order is
+        // permuted too.
+        if sorted.iter().any(|n| same_places(&mine, n)) {
+            return PathMatch::Permuted;
+        }
+        match self.new.get(path) {
+            Some(b) if old.nodes.len() == b.nodes.len() && old.nodes.iter().zip(&b.nodes).all(|(m, n)| on_curve(m) == on_curve(n)) => {
+                PathMatch::KeepIndex
+            }
+            _ => PathMatch::Changed,
+        }
     }
 
     fn grid(&mut self) -> &HashMap<(i64, i64), Vec<NodeRef>> {
@@ -388,7 +442,7 @@ impl Matcher<'_> {
         })
     }
 
-    /// Step 2 of the module doc.
+    /// Steps 2 and 4 of the module doc.
     fn by_place(&mut self, r: NodeRef, o: Place) -> Option<NodeRef> {
         let (cx, cy) = cell(o.x, o.y);
         let mut near: Vec<NodeRef> = Vec::new();

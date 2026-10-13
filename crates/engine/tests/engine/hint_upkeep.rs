@@ -205,6 +205,18 @@ fn moving_nodes_keeps_the_references_as_they_are() {
     assert_eq!(ps(&s)[0].edges(&layer(&s)).unwrap(), (0.0, 750.0));
 }
 
+/// Moving the stem up by its own height puts its new bottom nodes on the old top places; the
+/// links stay on the nodes that moved.
+#[test]
+fn moving_a_contour_by_the_gap_between_its_nodes_keeps_every_link_on_its_node() {
+    let mut s = stem();
+    let before = layer(&s).info.hints.clone();
+    s.execute("selection.move", &json!({"glyph": "I", "points": [[0, 0], [0, 1], [0, 2], [0, 3]], "dx": 0, "dy": 700})).unwrap();
+    assert_eq!(layer(&s).info.hints, before);
+    assert_eq!(ps(&s)[0].edges(&layer(&s)).unwrap(), (700.0, 1400.0));
+    assert_eq!(tt_place(&s, tt(&s)[0].target), (200.0, 1400.0));
+}
+
 fn read_tree(dir: &std::path::Path, root: &std::path::Path, out: &mut fontcraft_io_glyphs::Files) {
     for e in std::fs::read_dir(dir).unwrap().flatten() {
         let p = e.path();
