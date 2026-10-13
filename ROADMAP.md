@@ -395,7 +395,7 @@ handbook and is not compared with the reference app.
 Measures: skrifa runs every exported glyph of the instructed corpus samples at 8 to 72 PPM in three
 intents with 0 errors. The static oracle summary against fontmake is unchanged (2,360 compared,
 2,202 the same), and so are the variable summary against fontc (101 equal, 37 different, 20 failed)
-and the round trips. The gate passes all eleven steps with TESTCOUNT tests.
+and the round trips. The gate passes all eleven steps with 3,043 tests.
 
 Left: `cvar` and instruction deltas in variable fonts; the TrueType autohinter at export (M10.21);
 drawing of point indexes (`showPointIndexes`); special layers' own instructions.

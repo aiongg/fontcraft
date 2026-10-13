@@ -6,7 +6,7 @@ _Updated: 2026-10-13, the first waves of M6 to M12, seven second-wave packages, 
 
 ## State of the tree
 
-- `cargo xtask ci` passes all eleven steps (TESTCOUNT tests pass, none fail, 36 ignored). The
+- `cargo xtask ci` passes all eleven steps (3,043 tests pass, none fail, 36 ignored). The
   test step runs on cargo nextest; a full gate on a warm build takes about 5 minutes.
   Built and run on Linux x86-64 with Rust 1.97.
 - `master` holds everything described here, merged and green; the latest commits are not pushed.
@@ -1017,7 +1017,7 @@ Append one terse entry per session: what landed, numbers, what is still open.
   `.glyphspackage` 22/0/7/0, UFO 125/2/13, designspace 59/53), the static oracle summary
   against fontmake (2,360 compared, 2,202 the same), the variable summary against fontc
   (101/37/20) and the instances (169/41/0/24) are unchanged. All eleven gate steps pass;
-  TESTCOUNT tests pass, none fail, 36 ignored; 680 of 960 commands live; 1,755 guesses on 1,132
+  3,043 tests pass, none fail, 36 ignored; 680 of 960 commands live; 1,755 guesses on 1,132
   rows; 1,146 observe rows. Packages built: 143 of 277 (M6 16/20, M7 18/21, M8 16/25, M9 15/27,
   M10 18/33, M11 7/21, M12 28/68, M13 25/62). Open: the builder packages M10.15, M10.21,
   M11.5b, M12.18, M12.19 and M13.3 to M13.6, then X.suite2 (`craft-quit`) and X.suite3
