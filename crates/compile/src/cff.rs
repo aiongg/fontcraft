@@ -16,7 +16,7 @@
 //! | `isFixedPitch`, `ItalicAngle`, `UnderlinePosition`, `UnderlineThickness` | as `post` writes them; the angle always as a real number |
 //! | `FontMatrix` | `1/upem` (left out at 1000 units per em, where it is the default) |
 //! | blue zones | the master's alignment zones as blue values, rounded; Family Alignment Zones (a UFO's family blues) as family blues by the same rule; with any of them, and only then, `BlueFuzz` (1 by default), `BlueShift` (7), `BlueScale` (0.037) and `ForceBold`. The two defaults are the handbook's; the reference compiler writes BlueFuzz 0 and `3 / (4 × tallest zone)` (`docs/spec/40-compile.md` § 4a) |
-//! | hints | each glyph's manual PostScript hints ([`cff_hints`]), unless Export PostScript Hints is off |
+//! | hints | each glyph's manual PostScript hints, else with Autohint on the autohinter's ([`cff_hints`]), unless Export PostScript Hints is off |
 //! | stems | `StemSnapH`/`StemSnapV` sorted and `StdHW`/`StdVW` the first of each list, only when both directions have stems |
 //! | widths | `defaultWidthX` and `nominalWidthX` from the source when it sets either, else optimised |
 //!
@@ -35,7 +35,7 @@ use unicode_normalization::UnicodeNormalization;
 
 use crate::info::{Info, boolean, float, param, text};
 use crate::outline::Prepared;
-use crate::{CompileError, cff_hints, ot_round};
+use crate::{CompileError, HintingOptions, cff_hints, ot_round};
 
 /// The rounding tolerance of charstring coordinates: every coordinate becomes an integer, as the
 /// reference compiles by default (`compile.cffRoundTolerance`).
@@ -53,6 +53,7 @@ fn table_error(e: cff::Error) -> CompileError {
 /// would hold); `synthesised_notdef` says glyph 0 was drawn by the compiler, whose box keeps its
 /// explicit closing lines as the reference draws it. `source` is the font `font` was resolved
 /// from, which holds the hints and the hint settings; without it the glyphs are unhinted.
+/// `hinting` holds the export's Autohint option and whether every hint is left out.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn build(
     source: Option<&Font>,
@@ -62,9 +63,22 @@ pub(crate) fn build(
     outlines: &[Prepared],
     names: &[String],
     synthesised_notdef: bool,
+    hinting: &HintingOptions,
     warnings: &mut Vec<String>,
 ) -> Result<cff::Built, CompileError> {
     let settings = source.and_then(|s| hint_settings(s, font, warnings));
+    let private = private_dict(font, settings.as_ref(), warnings);
+    // The instance's Autohint parameter, else the export option. Without autohinting the
+    // autohinter still finds flex for hand-hinted glyphs, so its zone warnings are dropped.
+    let autohint = settings.as_ref().is_some_and(|s| s.autohint.unwrap_or(hinting.autohint));
+    let mut dict_warnings = Vec::new();
+    let dict = settings
+        .as_ref()
+        .filter(|s| !hinting.strip && s.export_ps_hints)
+        .and_then(|_| cff_hints::autohint_dict(&private, &font.master, &mut dict_warnings));
+    if autohint {
+        warnings.append(&mut dict_warnings);
+    }
     let mut glyphs = Vec::with_capacity(order.len());
     for (gid, ((g, prepared), name)) in order.iter().zip(outlines).zip(names).enumerate() {
         let path = match prepared {
@@ -75,7 +89,9 @@ pub(crate) fn build(
             }
         };
         let hints = match (source, &settings) {
-            (Some(source), Some(settings)) => cff_hints::glyph_hints(source, settings, g, &path, None, warnings)?,
+            (Some(source), Some(settings)) if !hinting.strip => {
+                cff_hints::glyph_hints(source, settings, g, &path, dict.as_ref(), autohint, warnings)?
+            }
             _ => None,
         };
         glyphs.push(cff::Glyph { name: name.clone(), advance: g.width, path, hints });
@@ -83,7 +99,7 @@ pub(crate) fn build(
     let cff_font = cff::Font {
         name: font_name(info, warnings),
         top: top_dict(font, info, warnings),
-        private: private_dict(font, settings.as_ref(), warnings),
+        private,
         glyphs,
         widths: widths(font),
         round_tolerance: ROUND_TOLERANCE,

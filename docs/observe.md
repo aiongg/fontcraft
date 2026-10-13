@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1146 rows to check: 1608 guesses and 422 observe steps.**
+**1147 rows to check: 1611 guesses and 422 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,7 +48,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 40 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 4 |
-| **Later milestones (after M6)** | all | **675** |
+| **Later milestones (after M6)** | all | **676** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 39 |
 | Later milestones (after M6) | Edit View: text mode and preview | 14 |
 | Later milestones (after M6) | Components and anchors | 33 |
@@ -60,7 +60,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Interpolation | 44 |
 | Later milestones (after M6) | Hinting | 84 |
 | Later milestones (after M6) | Colour fonts | 46 |
-| Later milestones (after M6) | Files: open, import, export | 45 |
+| Later milestones (after M6) | Files: open, import, export | 46 |
 | Later milestones (after M6) | Settings and the window | 12 |
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 61 |
 | Later milestones (after M6) | Elsewhere | 19 |
@@ -1338,7 +1338,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (675)
+## Later milestones (after M6) (676)
 
 ### Edit View: drawing, guides, layers and the Palette (39)
 
@@ -2628,7 +2628,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Family Alignment Zones is read where it is most specific (instance, then master, then font) and written as FamilyBlues and FamilyOtherBlues with the same rule as the master zones (a zone at 0 or of positive size to FamilyBlues); an export from the reference app would confirm the scope and the split.
   - Observe: T1: add a Family Alignment Zones parameter with one top zone and two bottom zones, export as CFF and read the Private dict; note which zones go to FamilyBlues and which to FamilyOtherBlues.
 - [ ] `hinting.ps.export.autohintParameter` (behavior, M10, handbook): An Autohint custom parameter forces the autohint setting for an export regardless…
-  - Guess: The Autohint parameter is read on the instance first, then the font; when neither has it the export dialog's checkbox (default off) decides; a reference export would show whether a font-level parameter counts.
+  - Guess: The Autohint parameter is read on the instance only, and covers both outline flavours; when the instance has none the export dialog's checkbox (default off) decides; a reference export would show whether a font-level parameter counts.
   - Observe: T1: add the Autohint parameter to the font only (not to an instance), export as CFF with the Export dialog's Autohint off, and read the charstrings; note whether the glyphs carry hints.
 - [ ] `hinting.ps.export.hintReplacement` (behavior, M10, handbook): Stem hints of one direction may overlap in the source (the two…
   - Guess: Manual hints that overlap get masks from FontCraft's own rule: the first mask applies from the start, a new one starts at the first node on an edge of a stem that overlaps a stem the current mask holds, the first of two overlapping stems at one node wins, and a stem no node touches joins every mask it fits; the reference's masks for a hand-hinted 8 would settle it.
@@ -2669,8 +2669,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: FontCraft treats a glyph as overlapping when its path operations change the outline, where otfautohint asks whether any point of its flattened outline disappeared; the two differ on a cross of two bars whose corners all lie outside the other bar (overlapping here, not there), and comparing both autohinters on such glyphs would settle which to follow.
 - [ ] `autohint.ps.variable.keepConflicts` (behavior, M10, docs): Option -k (--keep-conflicts) keeps a stem whose order inverts against another stem…
   - Guess: The search that picks which conflicting stems to remove tries both choices for each conflict, as otfautohint does, but only for its first 4,096 steps; after that it keeps the first choice, so a glyph with that many order conflicts across masters can lose different stems than otfautohint would. Hinting such a glyph with otfautohint would show whether the limit is ever reached in practice.
-- [ ] `hint.ps.autohintGlyph` (M10, handbook): Autohint
+- [ ] `hint.ps.autohintGlyph` (M10, handbook, live): Autohint
   - Guess: Autohint replaces any hints the layer already has and acts on every glyph selected in Edit View or Font View; the reference app would settle both.
+  - Guess: Only the stems are stored (an export rebuilds the hint masks from them; counter masks and flex stay export-only), each edge linked to the layer's first on-curve node at that position, else stored as a number; a reference glyph autohinted from the context menu and read back would show which nodes it links.
   - Observe: T1: give n two manual hints and choose Autohint from the context menu; note whether the old hints are replaced or kept. Then select n, m and o and choose Autohint again; note whether only one glyph or all three get hints.
 - [ ] `hint.ps.addHorizontalHint` (M10, handbook): Add Horizontal Hint
   - Guess: With no node selected the new hint sits at the vertical centre of the glyph's bounding box with the master's first horizontal stem as its size (50 units without stems); doing it in the reference app would settle it.
@@ -2690,8 +2691,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `hint.ps.selectNextHint` (M10, handbook): Select Next Hint
   - Guess: Tab wraps from the last hint to the first; the reference app would settle it.
   - Observe: T1: in n, select the last hint and press Tab; note whether the selection wraps to the first hint. Then select two hints and press Tab; note which hint is selected next.
-- [ ] `autohint.ps.run` (M10, docs): Autohint PostScript
+- [ ] `autohint.ps.run` (M10, docs, live): Autohint PostScript
   - Guess: The autohinter is a port of otfautohint with its defaults; which autohinter the reference app runs is not documented, and a reference export compared with otfautohint's output on the same font would show whether they agree.
+  - Guess: The masters of one glyph are hinted together so their stems match, and one by one when their outlines are not compatible; a reference export of a two-master font would show whether its instances' hints come from one master.
   - Observe: T1: export as CFF with Autohint on; export it again unhinted and run otfautohint on that file; compare the hstem and vstem lists and the hint masks glyph by glyph and note every glyph where they differ.
 - [ ] `hinting.tt.cubicSourceQuadraticOutput` (behavior, M10, handbook): Sources keep cubic outlines; TrueType export converts them to quadratic outlines on…
   - Guess: An instruction on a cubic handle moves the off-curve point of the converted segment nearest to the handle, and an on-curve node that the conversion could leave implied is written as a point; exporting a glyph instructed on a handle from the reference app and reading its glyf would settle both.
@@ -3000,7 +3002,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The chooser and the Edit View preview always use palette 0. Settled by opening the chooser in a font with two palettes in the reference.
   - Observe: Palette font (two palettes): click the swatch of a palette layer in the Layers palette; note which palette's colours the chooser lists.
 
-### Files: open, import, export (45)
+### Files: open, import, export (46)
 
 - [ ] `export.instanceExportFolder` (behavior, M7, handbook): An instance carrying the Export Folder custom parameter is written to that…
   - Guess: The sub-path is used as written, `..` segments included, as the handbook says; an absolute path, an empty segment, a folder name with a character such as `:` or `\`, or a path of more than 32 segments makes export skip that instance with the reason, one trailing `/` is ignored, and the warnings name every file written outside the export destination; an Export Folder of `../x` and one of `/tmp/x` in the reference app settle it.
@@ -3073,6 +3075,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `compile.bracketLayerGlyphs` (behavior, M9, docs): Each alternate (bracket) layer set becomes an extra glyph named after its…
   - Guess: When the font already has a glyph named like an alternate glyph (`a.BRACKET.varAlt01`), the alternate takes the next free number instead of replacing or clashing with it; settle by exporting such a font from the reference app and reading the glyph order.
   - Guess: A kern pair on a glyph with alternate layers is copied to its alternate glyphs the way glyphsLib copies it, not to every combination of alternates as fontc does; settle by exporting a variable font with a pair between two glyphs that both have alternate layers and reading its kerning at a location inside both ranges.
+- [ ] `export.autohintCff` (behavior, M10, handbook): With Autohint on and the CFF flavour, the PostScript autohinter runs only…
+  - Guess: Zones or stems the autohinter cannot use (overlapping zones, fewer than two BlueValues zones, a direction without stems) make the export autohint without them, with a warning, where otfautohint refuses the font; a reference export of a font with overlapping zones would show what it does.
 - [ ] `color.export.fullColorToColrV1` (behavior, M11, docs): Full-colour layers are compiled to COLR version 1 when any of them…
   - Guess: A full-colour Color layer exports as COLR version 1 without any parameter, as both oracles do; the handbook names only SVG for these layers. Settled by exporting the full-colour test font from the reference with no parameters.
   - Observe: Full-colour font: export with no colour parameters and read it with fontTools; note whether COLR version 1, an SVG table or neither is written.

@@ -980,6 +980,7 @@ milestone = "M10"
 summary = "Export string: Autohinting (no arguments) runs the autohinter as if it were a filter; it is an app function rather than a Filter menu entry."
 ref = "Appendix › Custom Parameters › Filter"
 status = "handbook"
+notes = "The function the filter calls is the export's autohint stage (`fontcraft_compile::cff_hints::autohinted`); the filter chain entry comes with the export filters."
 
 [[behavior]]
 id = "filter.customParameter.hatchOutline"

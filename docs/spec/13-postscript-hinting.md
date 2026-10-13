@@ -96,7 +96,8 @@ How FontCraft writes manual hints (`crates/compile/src/cff_hints.rs`, `crates/cf
 | edges | node references read on the glyph's layer in the master being built; a node that layer lacks takes its position on the layer the hint is stored on, with a warning |
 | stems | made positive; top ghost width −20, bottom ghost −21; duplicates dropped; at most 96 per glyph |
 | masks | only when two stems of one direction overlap. The first mask applies from the start; a new one starts at the first node lying on an edge of a stem that overlaps a stem the current mask holds. Where one node lies on two overlapping stems, the first in source order wins; a stem no node touches goes into every mask it fits (our rule, guess on `hinting.ps.export.hintReplacement`) |
-| flex | none yet for hand-hinted glyphs: the flex test comes with the autohinter's export stage (M10.15) |
+| flex | what the autohinter finds on the outline, unless one of the glyph's own masks falls between the two curves (our rule: flex is the exporter's, never stored) |
+| autohint | with Autohint on (the export option, else an instance's Autohint parameter), every glyph without manual hints and not in Disable autohinting for glyphs gets the otfautohint port's stems, masks, counter masks and flex, computed on the outline as the charstring draws it against the Private dict being written (identical zones merged first); zones or stems it cannot use leave it running without them, with a warning |
 | Export PostScript Hints off | no glyph gets hints; the Private DICT is written as usual |
 
 ## 6. Flex

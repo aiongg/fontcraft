@@ -306,7 +306,17 @@ fn truetype(order: &[ResolvedGlyph], outlines: &[Prepared], builder: &mut FontBu
 /// box is the table's `FontBBox`, as fontTools recomputes `hmtx`, `hhea` and `head` from a CFF
 /// table when it writes a font.
 fn postscript(input: &CffInput, builder: &mut FontBuilder, warnings: &mut Vec<String>) -> Result<(Boxes, Maxp), CompileError> {
-    let built = cff::build(input.source, input.font, input.info, input.order, input.outlines, input.names, input.synthesised_notdef, warnings)?;
+    let built = cff::build(
+        input.source,
+        input.font,
+        input.info,
+        input.order,
+        input.outlines,
+        input.names,
+        input.synthesised_notdef,
+        input.hinting,
+        warnings,
+    )?;
     let clamp = |v: i64| i16::try_from(v.clamp(i64::from(i16::MIN), i64::from(i16::MAX))).unwrap_or(0);
     let bbox = |[x_min, y_min, x_max, y_max]: [i64; 4]| Bbox { x_min: clamp(x_min), y_min: clamp(y_min), x_max: clamp(x_max), y_max: clamp(y_max) };
     let boxes = Boxes {
@@ -377,6 +387,7 @@ struct CffInput<'a> {
     outlines: &'a [Prepared],
     names: &'a [String],
     synthesised_notdef: bool,
+    hinting: &'a crate::HintingOptions,
 }
 
 /// Builds every table and the font file. `synthesised_notdef`: glyph 0 is the compiler's own
@@ -434,7 +445,7 @@ pub fn assemble(
         Flavour::Cff => match &extra.cff2 {
             Some(built) => cff2_table(built, order.len(), &mut builder)?,
             None => {
-                let input = CffInput { source, font, info: &info, order, outlines, names: &names, synthesised_notdef };
+                let input = CffInput { source, font, info: &info, order, outlines, names: &names, synthesised_notdef, hinting: &options.hinting };
                 postscript(&input, &mut builder, warnings)?
             }
         },

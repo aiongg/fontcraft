@@ -1,7 +1,7 @@
 //! PostScript hints at export: per glyph, manual hints when the hint-source layer has any,
 //! resolved through node links in the master being built; else the autohinter, unless Autohint
 //! is off, the glyph is in Disable autohinting for glyphs, or Export PostScript Hints is off
-//! (`docs/plans/M10.md` § 3 › PostScript export). M10.15 adds the autohint stage.
+//! (`docs/plans/M10.md` § 3 › PostScript export).
 //!
 //! Manual hints:
 //!
@@ -12,6 +12,15 @@
 //! | stems | made positive (lower edge first) and rounded as the charstring stores them; a top ghost written with width −20, a bottom ghost with −21; duplicates dropped; beyond [`MAX_STEM_HINTS`] the first are kept, with a warning; then a stem whose numbers a charstring cannot hold ([`writable_stems`]) left out with a warning |
 //! | hint replacement | only when two stems of one direction overlap: masks are built along the outline (see [`masks`]) |
 //! | autohinting | skipped for a glyph whose hint-source layer has any PostScript hint, even when none of them can be written |
+//! | flex | what the autohinter finds on the outline, unless one of the glyph's masks falls between the two curves |
+//!
+//! The autohinter ([`autohinted`]) runs on the outline as the charstring draws it, against the
+//! zones and stems of the Private dict being written ([`autohint_dict`]), with otfautohint's
+//! defaults: what otfautohint gives on the unhinted font. Its stems, hint masks, counter masks
+//! and flex are written as it gives them; a result the charstring cannot hold leaves the glyph
+//! unhinted, with a warning.
+//! Where its masks go in the charstring follows otfautohint's charstring writer (AFDKO 5.0.1
+//! `otfautohint/glyphData.py`, Apache-2.0, Copyright 2021 Adobe; see `NOTICE`).
 //!
 //! A hint whose node the built master's layer lacks takes the node's position on the layer the
 //! hint is stored on, with a warning (guess on `hinting.ps.masters.transferByNodeLink`); one that
@@ -19,11 +28,12 @@
 //! `hinting.ps.export.*`, `hinting.ps.masters.*` (export), `export.autohintCff`,
 //! `hinting.ps.export.autohintOption`, `hinting.ps.export.autohintParameter`.
 
-use fontcraft_autohint::FdDict;
-use fontcraft_cff::{CharstringHints, MAX_STEM_HINTS, Mask, PathOp, StemHint, writable_stems};
+use fontcraft_autohint::{ElementPos, FdDict, GlyphHints, HintInput, HintMask, Options, StemSet, Zone, ZoneSet, hint_glyph};
+use fontcraft_cff::{CharstringHints, MAX_STEM_HINTS, Mask, Number, PathOp, PrivateDict, StemHint, writable_stems};
+use fontcraft_geom::{BezPath, PathEl, Point};
 use fontcraft_hinting::ps::ps_hint_layer;
 use fontcraft_hinting::{HintSettings, PsHintKind, ps_hints};
-use fontcraft_model::{Font, ResolvedGlyph};
+use fontcraft_model::{Font, ResolvedGlyph, Target};
 
 use crate::CompileError;
 use crate::cff::ROUND_TOLERANCE;
@@ -32,33 +42,193 @@ use crate::cff::ROUND_TOLERANCE;
 /// coordinates are rounded to whole units.
 const EDGE_TOLERANCE: f64 = 0.5;
 
-/// The zones and stems of `settings` in the autohinter's validated form.
-pub fn autohint_dict(settings: &HintSettings) -> Result<FdDict, CompileError> {
-    // M10.15: ZoneSet and StemSet from the settings, then FdDict::new.
-    let _ = settings;
-    Ok(FdDict::default())
+/// The zones and stems of the Private dict `private` in the autohinter's validated form, read
+/// as otfautohint reads them from a compiled font (StemSnap first, then StdHW/StdVW). Identical
+/// zones are merged first: the Private dict keeps the duplicates the source has, which the
+/// autohinter would reject as overlapping. Zones or stems the autohinter cannot use leave it
+/// running without them, with a warning; `None` (with a warning) only when even that fails.
+pub fn autohint_dict(private: &PrivateDict, name: &str, warnings: &mut Vec<String>) -> Option<FdDict> {
+    let value = |n: &Number| match *n {
+        Number::Int(i) => i as f64,
+        Number::Real(r) => r,
+    };
+    let zones = |list: &[Number]| -> Vec<Zone> {
+        let mut out: Vec<Zone> = Vec::new();
+        for [a, b] in list.as_chunks::<2>().0 {
+            let zone = Zone { bottom: value(a), top: value(b), is_bottom: false, name: String::new() };
+            if !out.iter().any(|z| z.bottom == zone.bottom && z.top == zone.top) {
+                out.push(zone);
+            }
+        }
+        out
+    };
+    let set = ZoneSet {
+        blue_values: zones(&private.blue_values),
+        other_blues: zones(&private.other_blues),
+        family_blues: zones(&private.family_blues),
+        family_other_blues: zones(&private.family_other_blues),
+        blue_fuzz: value(&private.blue_fuzz),
+    };
+    let stems = |snap: &[Number], std: Option<&Number>| -> Vec<f64> {
+        if snap.is_empty() { std.map(value).into_iter().collect() } else { snap.iter().map(value).collect() }
+    };
+    let stems = StemSet { h: stems(&private.stem_snap_h, private.std_hw.as_ref()), v: stems(&private.stem_snap_v, private.std_vw.as_ref()) };
+    match FdDict::new(name, &set, &stems, false) {
+        Ok(d) => Some(d),
+        Err(e) => {
+            warnings.push(format!("PostScript autohinting: {e}; the glyphs were autohinted without alignment zones and standard stems"));
+            match FdDict::new(name, &ZoneSet::default(), &StemSet::default(), true) {
+                Ok(d) => Some(d),
+                Err(e) => {
+                    warnings.push(format!("PostScript autohinting is not possible: {e}"));
+                    None
+                }
+            }
+        }
+    }
+}
+
+/// The autohinter's zones and stems for master `master` of `font`: those of the Private dict an
+/// export of the master writes ([`autohint_dict`]). Warnings go to `warnings`; the error says why
+/// the master's settings cannot be read.
+pub fn master_autohint_dict(font: &Font, master: &str, warnings: &mut Vec<String>) -> Result<Option<FdDict>, String> {
+    let resolved = font.resolve(&Target::Master(master.to_string())).map_err(|e| e.to_string())?;
+    let settings = HintSettings::for_master(font, master).map_err(|e| e.to_string())?;
+    let private = crate::cff::private_dict(&resolved, Some(&settings), warnings);
+    Ok(autohint_dict(&private, master, warnings))
 }
 
 /// The charstring hints of `glyph`, whose outline as prepared for CFF is `path`, or `None` for
 /// an unhinted charstring. `font` is the source the glyph was resolved from and `settings` the
-/// hint settings of the master or instance being built. Warnings go to `warnings`.
+/// hint settings of the master or instance being built; `dict` is the autohinter's zones and
+/// stems, and `autohint` says whether autohinting is on. A hand-hinted glyph gets the flex the
+/// autohinter finds on its outline, where no mask of its own falls inside one. Warnings go to
+/// `warnings`.
 pub fn glyph_hints(
     font: &Font,
     settings: &HintSettings,
     glyph: &ResolvedGlyph,
     path: &[PathOp],
-    autohint: Option<&FdDict>,
+    dict: Option<&FdDict>,
+    autohint: bool,
     warnings: &mut Vec<String>,
 ) -> Result<Option<CharstringHints>, CompileError> {
     if !settings.export_ps_hints {
         return Ok(None);
     }
-    if let Some(manual) = manual_hints(font, settings, &glyph.name, path, warnings) {
-        return Ok(Some(manual).filter(|h| !h.is_empty()));
+    if let Some(mut manual) = manual_hints(font, settings, &glyph.name, path, warnings) {
+        if manual.is_empty() {
+            return Ok(None);
+        }
+        if let Some(dict) = dict {
+            let found = autohinted(&glyph.name, path, dict, &Options::default(), &mut Vec::new()).map(|h| h.flex).unwrap_or_default();
+            manual.flex = found.into_iter().filter(|f| !manual.masks.iter().any(|(op, _)| *op == f + 1)).collect();
+            if manual.validate(&glyph.name, path).is_err() {
+                manual.flex.clear();
+            }
+        }
+        return Ok(Some(manual));
     }
-    // M10.15: the autohinter when `autohint` is given.
-    let _ = autohint;
-    Ok(None)
+    let Some(dict) = dict.filter(|_| autohint) else { return Ok(None) };
+    if settings.disable_autohint_glyphs.contains(&glyph.name) {
+        return Ok(None);
+    }
+    Ok(autohinted(&glyph.name, path, dict, &Options::default(), warnings))
+}
+
+/// The autohinter's hints for the outline `path` of glyph `name`, as charstring hints, or `None`
+/// (with a warning when the autohinter failed or its result cannot be written).
+pub fn autohinted(name: &str, path: &[PathOp], dict: &FdDict, options: &Options, warnings: &mut Vec<String>) -> Option<CharstringHints> {
+    let (contours, starts) = contours(path);
+    let input = HintInput { name, contours: &contours, without_overlap: None, dict, options };
+    let hints = match hint_glyph(&input) {
+        Ok(h) => h,
+        Err(e) => {
+            warnings.push(format!("glyph `{name}`: the PostScript autohinter failed ({e}); it was exported without hints"));
+            return None;
+        }
+    };
+    if hints.is_empty() {
+        return None;
+    }
+    let out = charstring_hints(&hints, &starts, path.len());
+    let only = |s: &[StemHint]| writable_stems(s, ROUND_TOLERANCE).into_iter().all(|ok| ok);
+    if let Err(e) = out.validate(name, path).map_err(|e| e.to_string()).and_then(|()| {
+        if only(&out.h_stems) && only(&out.v_stems) { Ok(()) } else { Err("a stem lies beyond the numbers a charstring can hold".into()) }
+    }) {
+        warnings.push(format!("glyph `{name}`: the PostScript autohinter's hints cannot be written ({e}); it was exported without hints"));
+        return None;
+    }
+    Some(out)
+}
+
+/// The closed contours `path` draws, as the autohinter reads a charstring, and the index in
+/// `path` of each contour's moveto. A moveto with nothing drawn after it starts no contour.
+pub fn contours(path: &[PathOp]) -> (Vec<BezPath>, Vec<usize>) {
+    let (mut out, mut starts) = (Vec::new(), Vec::new());
+    let mut current: Vec<PathEl> = Vec::new();
+    let mut at = 0;
+    let mut finish = |current: &mut Vec<PathEl>, at: usize| {
+        if current.len() > 1 {
+            current.push(PathEl::ClosePath);
+            out.push(BezPath::from_vec(std::mem::take(current)));
+            starts.push(at);
+        }
+        current.clear();
+    };
+    let pt = |(x, y): (f64, f64)| Point::new(x, y);
+    for (i, op) in path.iter().enumerate() {
+        match *op {
+            PathOp::MoveTo(p) => {
+                finish(&mut current, at);
+                current.push(PathEl::MoveTo(pt(p)));
+                at = i;
+            }
+            PathOp::LineTo(p) => current.push(PathEl::LineTo(pt(p))),
+            PathOp::CurveTo(a, b, p) => current.push(PathEl::CurveTo(pt(a), pt(b), pt(p))),
+        }
+    }
+    finish(&mut current, at);
+    (out, starts)
+}
+
+/// The autohinter's result as charstring hints for a path of `ops` operations whose contours
+/// start at `starts`. An element names the operation after its contour's moveto; a contour's
+/// implicit closing line names the next contour's moveto, before which a charstring writes a
+/// mask meant for it (and a mask on the last one is dropped). The mask on the second curve of
+/// a flex is dropped, as the reference does.
+fn charstring_hints(hints: &GlyphHints, starts: &[usize], ops: usize) -> CharstringHints {
+    let stem = |s: &fontcraft_autohint::Stem| StemHint { edge: s.lb, width: s.rt - s.lb };
+    let mask = |m: &HintMask| Mask { h: m.h.clone(), v: m.v.clone() };
+    let op_of = |pos: &ElementPos| -> Option<usize> {
+        let start = *starts.get(pos.subpath)?;
+        let end = starts.get(pos.subpath + 1).copied().unwrap_or(ops);
+        let op = start.checked_add(1)?.checked_add(pos.element)?;
+        if op < end { Some(op) } else { starts.get(pos.subpath + 1).copied() }
+    };
+    let mut out = CharstringHints {
+        h_stems: hints.h.iter().map(stem).collect(),
+        v_stems: hints.v.iter().map(stem).collect(),
+        counters: hints.counters.iter().map(mask).collect(),
+        flex: hints.flex.iter().filter_map(op_of).collect(),
+        masks: Vec::new(),
+    };
+    if !hints.masks.is_empty() || hints.start_mask.is_some() {
+        let all = Mask { h: vec![true; out.h_stems.len()], v: vec![true; out.v_stems.len()] };
+        out.masks.push((0, hints.start_mask.as_ref().map(mask).unwrap_or(all)));
+        for (pos, m) in &hints.masks {
+            let Some(op) = op_of(pos) else { continue };
+            if out.flex.iter().any(|f| f + 1 == op) {
+                continue;
+            }
+            match out.masks.last_mut() {
+                Some((last, slot)) if *last == op => *slot = mask(m),
+                Some((last, _)) if *last > op => {}
+                _ => out.masks.push((op, mask(m))),
+            }
+        }
+    }
+    out
 }
 
 /// The glyph's manual hints resolved in the master being built, or `None` when its hint-source

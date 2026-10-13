@@ -1912,6 +1912,82 @@ mod ps_hints_export {
         assert_eq!((family, family_other), (Some(vec![(-12, 0), (700, 712)]), Some(vec![(-212, -200)])));
     }
 
+    /// [`hinted`] with zones and standard stems on both masters, and `I`: a stem from 100 to 180.
+    fn to_autohint() -> Font {
+        let mut f = hinted();
+        let list = |text: &str| fontcraft_model::plist::openstep::parse_value(text).unwrap();
+        for m in 0..2 {
+            Arc::make_mut(&mut f.masters)[m].zones =
+                vec![fontcraft_model::AlignmentZone { pos: 0.0, size: -10.0 }, fontcraft_model::AlignmentZone { pos: 700.0, size: 10.0 }];
+            master_param(&mut f, m, "postscriptStemSnapH", list("(80)"));
+            master_param(&mut f, m, "postscriptStemSnapV", list("(80)"));
+        }
+        let mut i = f.glyph_mut("I").unwrap();
+        for layer in i.layers.iter_mut() {
+            layer.shapes = vec![Shape::Path(Path::rect(100.0, 0.0, 180.0, 700.0))];
+        }
+        drop(i);
+        f
+    }
+
+    #[test]
+    fn autohint_hints_glyphs_without_manual_hints_and_keeps_the_manual_ones() {
+        let autohint = Options { hinting: crate::HintingOptions { autohint: true, strip: false }, ..Options::default() };
+        let f = to_autohint();
+        let out = compile(&f, &Target::Master("m01".into()), Flavour::Cff, &autohint).unwrap();
+        let s = stems(&out, "I");
+        assert_eq!(s.v, vec![(100, 180)], "the autohinter's stem");
+        assert!(!s.h.is_empty(), "ghosts at the zones");
+        let a = stems(&out, "A");
+        assert_eq!((a.h, a.v), (vec![(0, 80), (700, 680)], vec![(60, 560)]), "manual hints win");
+        let off = compile(&f, &Target::Master("m01".into()), Flavour::Cff, &Options::default()).unwrap();
+        assert!(stems(&off, "I").v.is_empty(), "autohinting is off by default");
+
+        // Disable autohinting for glyphs, and an instance whose Autohint parameter is off.
+        let mut f = to_autohint();
+        param(&mut f, "Disable autohinting for glyphs", fontcraft_model::plist::openstep::parse_value("(I)").unwrap());
+        let out = compile(&f, &Target::Master("m01".into()), Flavour::Cff, &autohint).unwrap();
+        assert!(stems(&out, "I").v.is_empty() && !stems(&out, "O").h.is_empty());
+        let mut f = to_autohint();
+        Arc::make_mut(&mut f.instances)[0]
+            .params
+            .0
+            .push(fontcraft_model::Param::new("Autohint", fontcraft_model::plist::openstep::parse_value("0").unwrap()));
+        let out = compile(&f, &Target::Instance(0), Flavour::Cff, &autohint).unwrap();
+        assert!(stems(&out, "I").v.is_empty(), "the instance's Autohint parameter wins");
+        let out = compile(&f, &Target::Instance(1), Flavour::Cff, &autohint).unwrap();
+        assert_eq!(stems(&out, "I").v, vec![(100, 180)]);
+    }
+
+    #[test]
+    fn the_autohinter_s_flex_reaches_the_charstring_hints() {
+        // A box whose top is a shallow dip of two curves (the port's flex sample).
+        use fontcraft_cff::PathOp::{CurveTo, LineTo, MoveTo};
+        let path = [
+            MoveTo((0.0, 0.0)),
+            LineTo((600.0, 0.0)),
+            LineTo((600.0, 100.0)),
+            CurveTo((500.0, 95.0), (400.0, 95.0), (300.0, 95.0)),
+            CurveTo((200.0, 95.0), (100.0, 95.0), (0.0, 100.0)),
+        ];
+        let zones = fontcraft_autohint::ZoneSet {
+            blue_values: vec![
+                fontcraft_autohint::Zone { bottom: -10.0, top: 0.0, ..Default::default() },
+                fontcraft_autohint::Zone { bottom: 700.0, top: 710.0, ..Default::default() },
+            ],
+            blue_fuzz: 1.0,
+            ..Default::default()
+        };
+        let stems = fontcraft_autohint::StemSet { h: vec![80.0], v: vec![80.0] };
+        let dict = fontcraft_autohint::FdDict::new("t", &zones, &stems, false).unwrap();
+        let mut warnings = Vec::new();
+        let hints = crate::cff_hints::autohinted("flexdip", &path, &dict, &fontcraft_autohint::Options::default(), &mut warnings).unwrap();
+        assert_eq!(hints.flex, vec![3], "{hints:?} {warnings:?}");
+        let no_flex = fontcraft_autohint::Options { no_flex: true, ..Default::default() };
+        let hints = crate::cff_hints::autohinted("flexdip", &path, &dict, &no_flex, &mut warnings);
+        assert!(hints.is_none_or(|h| h.flex.is_empty()));
+    }
+
     #[test]
     fn get_hints_from_master_and_export_postscript_hints() {
         let mut f = hinted();

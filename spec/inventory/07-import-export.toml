@@ -335,7 +335,8 @@ milestone = "M10"
 summary = "With Autohint on and the CFF flavour, the PostScript autohinter runs only on glyphs that carry no manual PostScript hints; manually hinted glyphs keep their hints."
 ref = "Import & Export › Exporting Font Files › OpenType Export › Options"
 status = "handbook"
-notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 4:28–4:39: the export dialog has an Autohint checkbox, left on, with CFF outlines. Its handling of manual hints is not shown."
+notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 4:28–4:39: the export dialog has an Autohint checkbox, left on, with CFF outlines. Its handling of manual hints is not shown. FontCraft: `file.exportStatic {autohint: true}` (and an instance's Autohint parameter) runs the otfautohint port on each glyph whose hint-source layer has no PostScript hints, except the glyphs Disable autohinting for glyphs lists, against the zones and stems of the Private dict being written, on the outline as the charstring draws it; identical zones are merged first."
+guesses = ["Zones or stems the autohinter cannot use (overlapping zones, fewer than two BlueValues zones, a direction without stems) make the export autohint without them, with a warning, where otfautohint refuses the font; a reference export of a font with overlapping zones would show what it does."]
 
 [[behavior]]
 id = "export.autohintTrueType"
