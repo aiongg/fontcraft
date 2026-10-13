@@ -349,6 +349,7 @@ fn glyph_param(p: &Params, font: &Font, warnings: &mut Vec<String>) -> Result<Op
 }
 
 /// Largest glyph list file read, in bytes.
+#[cfg(not(target_arch = "wasm32"))]
 const MAX_GLYPH_FILE: u64 = 16 << 20;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -599,8 +600,10 @@ struct Target {
     document: Option<Value>,
     notes: Vec<String>,
     /// Bytes of the compiled font files read so far, as read and unwrapped.
+    #[cfg(not(target_arch = "wasm32"))]
     bytes_read: u64,
     /// Glyphs decoded from compiled fonts so far.
+    #[cfg(not(target_arch = "wasm32"))]
     glyphs_decoded: usize,
 }
 
@@ -770,13 +773,17 @@ fn load_one(path: &std::path::Path, t: &mut Target) -> Result<()> {
 }
 
 /// Most decoding warnings kept per font.
+#[cfg(not(target_arch = "wasm32"))]
 const MAX_NOTES_PER_FONT: usize = 5;
 /// Most entries of a folder target looked at.
+#[cfg(not(target_arch = "wasm32"))]
 const MAX_FOLDER_ENTRIES: usize = 4096;
 /// Most bytes the files of one path target hold in memory, compiled fonts counted as read and
 /// again unwrapped from WOFF.
+#[cfg(not(target_arch = "wasm32"))]
 const MAX_RUN_BYTES: u64 = 1 << 30;
 /// Most glyphs decoded from the compiled fonts of one path target.
+#[cfg(not(target_arch = "wasm32"))]
 const MAX_RUN_GLYPHS: usize = 1 << 19;
 
 /// Counts `len` more bytes read for `t`, refused past [`MAX_RUN_BYTES`].
