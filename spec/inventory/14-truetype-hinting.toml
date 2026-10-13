@@ -1026,12 +1026,14 @@ label = "Remove Hints"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyphs?: [names], layer?: id}"
+params = "{glyphs: [names] | glyph: name, layer?: id}"
 area = "hinting-tt"
 milestone = "M10"
 summary = "Context-menu item of the TrueType Instructor that deletes every glyph-level TrueType instruction from the current glyph, in both directions."
 ref = "TrueType Hinting › Instructions"
 status = "handbook"
+guesses = ["Remove Hints in the TrueType Instructor removes TrueType instructions only and leaves PostScript hints, since the handbook names it in the TrueType section; running it on a glyph with both in the reference app would settle it."]
+notes = "M10.7, crates/engine/src/cmd/hint_tt_more.rs: deletes every TrueType instruction of the layer (default the main master's) of each named glyph, in one undo step, and reports the glyphs that had some; PostScript hints and other stored hints stay. Documented, not yet observed."
 
 [[command]]
 id = "hint.tt.deleteInstructions"
@@ -1039,14 +1041,15 @@ label = "Delete Instructions"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, instructions?: [index]}"
+params = "{glyph: name, layer?: id, instructions: [index]}"
 area = "hinting-tt"
 milestone = "M10"
 summary = "Removes only the selected instructions. The handbook does not describe deleting single TT instructions (the Delete key is the likely gesture, as for PostScript hints); verify before binding a key."
 ref = "TrueType Hinting › Instructions"
 status = "inferred"
-guesses = ["The Delete key removes the selected instructions, as for PostScript hints; the reference app would settle it."]
-observe = ["T3: with the TrueType Instructor, select an instruction badge and press Delete; note whether the instruction is removed."]
+notes = "M10.7, crates/engine/src/cmd/hint_tt_more.rs: deletes the instructions named by list position in one undo step. Later instructions whose needs the deleted ones met stay and are reported under `unmet` (fontcraft_hinting::unmet_needs, new failures only); deleting a member of a triple hint dissolves that triple hint. Not documented; inferred."
+guesses = ["The Delete key removes the selected instructions, as for PostScript hints; the reference app would settle it.", "Deleting an instruction that later ones build on deletes it and reports those later ones, which stay in the list; the reference app would settle whether it refuses, deletes them too or keeps them silently.", "Deleting one member of a triple hint dissolves the triple hint and keeps the other two Stem instructions; the reference app would settle it."]
+observe = ["T3: with the TrueType Instructor, select an instruction badge and press Delete; note whether the instruction is removed.", "T3: with the TrueType Instructor, add a Snap and a Shift from the snapped point, delete the Snap and note what happens to the Shift."]
 
 [[command]]
 id = "hint.tt.listInstructions"
@@ -1060,6 +1063,7 @@ milestone = "M10"
 summary = "Read-only query returning the layer's instruction list in execution order: type, direction, the nodes involved (origin, target, references), zone or stem reference, rounding mode, triple-hint membership and delta cells. Our design, for agents and tests."
 ref = "TrueType Hinting › Instructions"
 status = "inferred"
+notes = "M10.7, crates/engine/src/cmd/hint_tt_more.rs: returns each instruction with index, type, direction, target, origin or references, rounding, zone or stem by name (or auto, none), triple group and delta cells with the instances and masters at each column's location, plus the instructions whose needs are not met."
 own = true
 
 [[command]]
@@ -1287,12 +1291,13 @@ menu = []
 shortcut = "F"
 when = "tool:trueTypeInstructor"
 kind = "engine"
-params = "{glyph?: name, layer?: id, origin?: nodeRef, targets?: [nodeRef], direction?: 'vertical'|'horizontal', rounding?: 'round'|'up'|'down'|'none'|'gdiOnly'}"
+params = "{glyph: name, layer?: id, nodes?: [point], origin?: point, targets?: [point], direction?: 'vertical'|'horizontal', rounding?: 'round'|'up'|'down'|'none'|'gdiOnly'}"
 area = "hinting-tt"
 milestone = "M10"
 summary = "Adds a Shift instruction: an untouched target point is displaced by the same amount as its touched origin point, and the target counts as touched afterwards. The selection must contain exactly one touched point; every other selected point must be untouched and gets its own Shift instruction from that origin. Default rounding: No rounding (the recommended mode)."
 ref = "TrueType Hinting › Shift (F)"
 status = "handbook"
+notes = "M10.7, crates/engine/src/cmd/hint_tt_more.rs: `nodes` is the selection (exactly one touched point, the origin; every other point an untouched target), or `origin` and `targets` name the parts; one Shift per target at the end of the list, each checked against the touched state, so a refused target adds nothing. Default rounding No rounding. Documented, not yet observed."
 
 [[behavior]]
 id = "hinting.tt.shift.rounding"
@@ -1321,12 +1326,13 @@ menu = []
 shortcut = "G"
 when = "tool:trueTypeInstructor"
 kind = "engine"
-params = "{glyph?: name, layer?: id, references?: [nodeRef, nodeRef], target?: nodeRef, direction?: 'vertical'|'horizontal', rounding?: 'round'|'up'|'down'|'none'|'gdiOnly'}"
+params = "{glyph: name, layer?: id, nodes?: [point, point, point], references?: [point, point], target?: point, direction?: 'vertical'|'horizontal', rounding?: 'round'|'up'|'down'|'none'|'gdiOnly'}"
 area = "hinting-tt"
 milestone = "M10"
 summary = "Adds an Interpolate instruction: with two touched points and one untouched point selected, the untouched point is placed so that its position relative to the two touched points stays as it was in the unhinted outline, and it becomes touched. Default rounding: No rounding (the recommended mode)."
 ref = "TrueType Hinting › Interpolate (G)"
 status = "handbook"
+notes = "M10.7, crates/engine/src/cmd/hint_tt_more.rs: `nodes` is the selection of three points (the two touched ones are the references, in the order given; the untouched one the target), or `references` and `target` name them; checked against the touched state before it is added. Default rounding No rounding. Documented, not yet observed."
 
 [[behavior]]
 id = "hinting.tt.interpolate.rounding"
@@ -1355,12 +1361,15 @@ menu = []
 shortcut = "E"
 when = "tool:trueTypeInstructor"
 kind = "engine"
-params = "{glyph?: name, layer?: id, nodes?: [nodeRef], cells?: {instanceOrMasterId: {ppm: 'up'|'down'|'none'}}}"
+params = "{glyph: name, layer?: id, nodes: [point], direction?: 'vertical', cells?: {column: {ppm: 'up'|'down'|'none'}}}"
 area = "hinting-tt"
 milestone = "M10"
 summary = "Adds a Delta instruction to each selected point (any number, touched or not). A Delta nudges its point a single pixel, upwards or downwards, at one pixel size in one static instance, as a last correction after all other instructions. Only available in vertical hinting direction."
 ref = "TrueType Hinting › Delta (E)"
 status = "handbook"
+observe = ["T3: select a Delta instruction, open its Delta table from the Info box and note whether the columns are masters or instances."]
+guesses = ["Delta columns accept masters as well as static instances, both stored as the location key; the reference app's Delta table for an instruction would show which columns it offers."]
+notes = "M10.7, crates/engine/src/cmd/hint_tt_more.rs: one Delta per point, touched or not, at the end of the list. A column is an instance or master by name or id, stored as the key of its location (fontcraft_hinting::tt::delta_column_key), or a stored key in braces; a PPM key is a size from 1 to 255 or a range such as 12-14. A horizontal direction and a layer outside the main master are refused. Documented, not yet observed."
 
 [[command]]
 id = "hint.tt.setDeltas"
@@ -1368,12 +1377,14 @@ label = "Set Delta Cells"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, instructions?: [index], cells: {instanceOrMasterId: {ppm: 'up'|'down'|'none'}}}"
+params = "{glyph: name, layer?: id, instructions: [index], cells: {column: {ppm: 'up'|'down'|'none'}}}"
 area = "hinting-tt"
 milestone = "M10"
 summary = "Sets at which sizes, and in which column, the selected Delta instructions move their point up or down; in the UI this is the Delta icon in the Info box, which opens the same table as zone deltas. The zone table's columns are masters while the Delta text speaks of static instances; which of the two the columns are here must be checked."
 ref = "TrueType Hinting › Delta (E)"
 status = "handbook"
+guesses = ["Set Delta Cells changes only the cells it names and keeps the rest, as clicking single cells of the table does; the reference app's table would settle it."]
+notes = "M10.7, crates/engine/src/cmd/hint_tt_more.rs: sets the named cells of Delta instructions, keeping the others; none clears a cell and an emptied column is dropped. Columns and PPMs as for hint.tt.addDelta; other instruction types and layers outside the main master are refused. Documented, not yet observed."
 
 [[behavior]]
 id = "hinting.tt.delta.restrictions"
@@ -1382,6 +1393,7 @@ milestone = "M10"
 summary = "Delta instructions exist only for vertical hinting, are left out of variable-font exports entirely, and should be added last and sparingly. Pressing E in horizontal direction should do nothing (or report why)."
 ref = "TrueType Hinting › Delta (E)"
 status = "handbook"
+notes = "M10.7: hint.tt.addDelta refuses the horizontal direction with a message, and both Delta commands refuse a layer outside the main master (hinting.tt.mainMasterOnly). Leaving deltas out of variable exports waits for the export packages. Documented, not yet observed."
 
 # ---------------------------------------------------------------------------------------------
 # Export behaviour and variable fonts

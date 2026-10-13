@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**1736 guesses on 1122 rows (405 of them live commands).**
+**1741 guesses on 1125 rows (409 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -1234,6 +1234,10 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 
 | Row | Milestone | Status | Live | Guess |
 |---|---|---|---|---|
+| `hint.tt.removeHints` | M10 | handbook | yes | Remove Hints in the TrueType Instructor removes TrueType instructions only and leaves PostScript hints, since the handbook names it in the TrueType section; running it on a glyph with both in the reference app would settle it. |
+| `hint.tt.deleteInstructions` | M10 | inferred | yes | The Delete key removes the selected instructions, as for PostScript hints; the reference app would settle it. |
+| `hint.tt.deleteInstructions` | M10 | inferred | yes | Deleting an instruction that later ones build on deletes it and reports those later ones, which stay in the list; the reference app would settle whether it refuses, deletes them too or keeps them silently. |
+| `hint.tt.deleteInstructions` | M10 | inferred | yes | Deleting one member of a triple hint dissolves the triple hint and keeps the other two Stem instructions; the reference app would settle it. |
 | `hint.tt.setSnapZone` | M10 | handbook | yes | A named zone on a horizontal Snap instruction is refused, since zones are vertical; the reference app would show whether its pop-up offers zone names in horizontal mode. |
 | `hint.tt.addStemHint` | M10 | handbook | yes | The context-menu label of the Stem instruction is Stem, as the key list names it; the reference app would settle it. |
 | `hint.tt.addStemHint` | M10 | handbook | yes | With four or more points selected, the points pair in the order given (first with second, third with fourth); the reference app would settle how a larger selection pairs. |
@@ -1241,6 +1245,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `hint.tt.setStemReference` | M10 | handbook | yes | A named stem whose orientation does not suit the instruction (a vertical stem on a vertical instruction) is refused; the reference app would show whether its pop-up lists stems of both orientations. |
 | `hint.tt.makeTripleHint` | M10 | handbook | yes | Deleting or reversing one member of a triple hint dissolves the group and the other two become plain Stem instructions; the reference app would settle it. |
 | `hint.tt.makeTripleHint` | M10 | handbook | yes | Three instructions that would interleave with another triple hint in list order are refused, since the stored form keeps one flag per instruction and groups the flagged ones by threes; a reference file with two interleaved triple hints would settle how groups are stored. |
+| `hint.tt.addDelta` | M10 | handbook | yes | Delta columns accept masters as well as static instances, both stored as the location key; the reference app's Delta table for an instruction would show which columns it offers. |
+| `hint.tt.setDeltas` | M10 | handbook | yes | Set Delta Cells changes only the cells it names and keeps the rest, as clicking single cells of the table does; the reference app's table would settle it. |
 | `hinting.tt.mainMasterOnly` (behavior) | M10 | handbook | – | Rounding only in GDI ClearType is stored as options 3, which no source shows; a file saved by the reference app with that rounding mode would show the value. |
 | `hinting.tt.mainMasterOnly` (behavior) | M10 | handbook | – | A Snap stores its zone in the stem key (−2 automatic, −1 none, else the index), as a Stem stores its stem; a file with a Snap set to a named zone would show the key. |
 | `hinting.tt.mainMasterOnly` (behavior) | M10 | handbook | – | Stem instructions flagged as triple form groups of three in list order; a file with two triple hints in one glyph would show how they are kept apart. |
@@ -1285,7 +1291,6 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `hint.tt.setRenderingIntent` | M10 | inferred | no | The rendering intent is a pop-up in the TrueType Instructor's Info box beside the pixel size; Grayscale maps to skrifa's smooth normal target, ClearType to its LCD target without symmetric rendering (no vertical oversampling), DirectWrite to LCD with symmetric rendering; the reference app would settle the control and the comparison of outlines. |
 | `hint.tt.setPixelSize` | M10 | handbook | no | The pixel size field accepts whole numbers from 4 to 400 PPM; the reference app would settle the limits. |
 | `hint.tt.showPreviewAddress` | M10 | handbook | no | The server listens on a free port of the local network interfaces, serves only the preview page and the font, and stops when the dialog closes (decided in M10 § 7, question 5); the reference app would settle lifetime and port. |
-| `hint.tt.deleteInstructions` | M10 | inferred | no | The Delete key removes the selected instructions, as for PostScript hints; the reference app would settle it. |
 | `dialog.ttDeltas` (panel) | M10 | handbook | – | The table has one row per PPM from 8 to 80, the waterfall's range; its columns are the masters for zone and stem deltas and the static instances for Delta instructions; the reference app would settle both. |
 | `preview.ttHintingWaterfall` (panel) | M10 | handbook | – | Each waterfall row is one PPM from 8 to 80 with the tab's text set in the current instance at that size; the reference app would settle spacing and labels. |
 | `dialog.ttPreviewAddress` (panel) | M10 | handbook | – | Closing the dialog stops the server; the reference app would settle it. |

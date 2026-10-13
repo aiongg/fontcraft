@@ -60,6 +60,7 @@ mod guides;
 mod hint_node_order;
 mod hint_preview;
 mod hint_tt;
+mod hint_tt_more;
 mod hint_upkeep;
 mod image;
 mod instances;

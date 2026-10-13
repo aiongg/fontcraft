@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1136 rows to check: 1589 guesses and 420 observe steps.**
+**1139 rows to check: 1594 guesses and 422 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,7 +48,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 40 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 4 |
-| **Later milestones (after M6)** | all | **665** |
+| **Later milestones (after M6)** | all | **668** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 39 |
 | Later milestones (after M6) | Edit View: text mode and preview | 14 |
 | Later milestones (after M6) | Components and anchors | 33 |
@@ -58,7 +58,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Font View | 13 |
 | Later milestones (after M6) | Font Info and features | 251 |
 | Later milestones (after M6) | Interpolation | 44 |
-| Later milestones (after M6) | Hinting | 76 |
+| Later milestones (after M6) | Hinting | 79 |
 | Later milestones (after M6) | Colour fonts | 46 |
 | Later milestones (after M6) | Files: open, import, export | 45 |
 | Later milestones (after M6) | Settings and the window | 12 |
@@ -1338,7 +1338,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (665)
+## Later milestones (after M6) (668)
 
 ### Edit View: drawing, guides, layers and the Palette (39)
 
@@ -2594,7 +2594,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `hoi.setControlPoints` (M13, inferred): Set Interpolation Control Points
   - Open (our design, not confirmed): Headless form of dragging a knob or handle: sets the intermediate point (one point), the two handles (two points) or the rotation centre (one point) of a node's interpolation curve.
 
-### Hinting (76)
+### Hinting (79)
 
 - [ ] `hinting.ps.standardStems.privateDictMapping` (behavior, M10, docs): At export the first horizontal stem becomes StdHW and the first vertical…
   - Guess: More than twelve stems in one direction: the export writes the first twelve in list order and warns, and hint.ps.validateFontHints reports it; an export from the reference app with thirteen stems would settle it.
@@ -2799,9 +2799,14 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `hint.tt.showPreviewAddress` (M10, handbook): Show Preview Address…
   - Guess: The server listens on a free port of the local network interfaces, serves only the preview page and the font, and stops when the dialog closes (decided in M10 § 7, question 5); the reference app would settle lifetime and port.
   - Observe: T3: choose Show Preview Address…, open the address from another device on the same network, close the dialog, then quit the app; note the port, whether the page was reachable, and at which of these moments the server stopped.
-- [ ] `hint.tt.deleteInstructions` (M10, inferred): Delete Instructions
+- [ ] `hint.tt.removeHints` (M10, handbook, live): Remove Hints
+  - Guess: Remove Hints in the TrueType Instructor removes TrueType instructions only and leaves PostScript hints, since the handbook names it in the TrueType section; running it on a glyph with both in the reference app would settle it.
+- [ ] `hint.tt.deleteInstructions` (M10, inferred, live): Delete Instructions
   - Guess: The Delete key removes the selected instructions, as for PostScript hints; the reference app would settle it.
+  - Guess: Deleting an instruction that later ones build on deletes it and reports those later ones, which stay in the list; the reference app would settle whether it refuses, deletes them too or keeps them silently.
+  - Guess: Deleting one member of a triple hint dissolves the triple hint and keeps the other two Stem instructions; the reference app would settle it.
   - Observe: T3: with the TrueType Instructor, select an instruction badge and press Delete; note whether the instruction is removed.
+  - Observe: T3: with the TrueType Instructor, add a Snap and a Shift from the snapped point, delete the Snap and note what happens to the Shift.
 - [ ] `hint.tt.setSnapZone` (M10, handbook, live): Set Snap Zone
   - Guess: A named zone on a horizontal Snap instruction is refused, since zones are vertical; the reference app would show whether its pop-up offers zone names in horizontal mode.
   - Observe: T3: in horizontal mode, select a Snap instruction and open the zone pop-up of the Info box; note whether zone names are listed.
@@ -2818,6 +2823,11 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Deleting or reversing one member of a triple hint dissolves the group and the other two become plain Stem instructions; the reference app would settle it.
   - Guess: Three instructions that would interleave with another triple hint in list order are refused, since the stored form keeps one flag per instruction and groups the flagged ones by threes; a reference file with two interleaved triple hints would settle how groups are stored.
   - Observe: T3: make a triple hint, delete one of its members and note whether the group dissolves; make it again, reverse one member and note whether the group dissolves.
+- [ ] `hint.tt.addDelta` (M10, handbook, live): Delta
+  - Guess: Delta columns accept masters as well as static instances, both stored as the location key; the reference app's Delta table for an instruction would show which columns it offers.
+  - Observe: T3: select a Delta instruction, open its Delta table from the Info box and note whether the columns are masters or instances.
+- [ ] `hint.tt.setDeltas` (M10, handbook, live): Set Delta Cells
+  - Guess: Set Delta Cells changes only the cells it names and keeps the rest, as clicking single cells of the table does; the reference app's table would settle it.
 - [ ] `dialog.ttDeltas` (panel, M10, handbook): Delta table
   - Guess: The table has one row per PPM from 8 to 80, the waterfall's range; its columns are the masters for zone and stem deltas and the static instances for Delta instructions; the reference app would settle both.
   - Observe: T3: open the Delta table of a zone and of a Delta instruction; note which PPM rows it offers and whether its columns are masters or instances.

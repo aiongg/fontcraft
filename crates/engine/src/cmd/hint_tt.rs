@@ -111,12 +111,12 @@ pub fn specs() -> Vec<CommandSpec> {
 // ── shared ──────────────────────────────────────────────────────────────────────────────────────
 
 /// The addressed layer's instruction list, read from the font.
-struct Read {
-    target: Targets,
-    list: Vec<TtInstruction>,
+pub(super) struct Read {
+    pub(super) target: Targets,
+    pub(super) list: Vec<TtInstruction>,
 }
 
-fn read(p: &Params, font: &Font) -> Result<Read> {
+pub(super) fn read(p: &Params, font: &Font) -> Result<Read> {
     let layer = match p.opt_str("layer")? {
         Some(id) => id.to_string(),
         None => main_master(font),
@@ -128,7 +128,7 @@ fn read(p: &Params, font: &Font) -> Result<Read> {
 }
 
 /// Writes `list` back to the addressed layer as one undo step and returns the command's result.
-fn write(s: &mut Session, p: &Params, label: &str, r: &Read, list: &[TtInstruction], mut out: Value) -> Result<Value> {
+pub(super) fn write(s: &mut Session, p: &Params, label: &str, r: &Read, list: &[TtInstruction], mut out: Value) -> Result<Value> {
     s.edit(label, |font| r.target.edit_layer(font, |l| set_tt_instructions(l, list).map_err(|e| p.bad(e.to_string()))))?;
     if let Some(m) = out.as_object_mut() {
         m.insert("selection".into(), r.target.to_json());
@@ -136,7 +136,7 @@ fn write(s: &mut Session, p: &Params, label: &str, r: &Read, list: &[TtInstructi
     Ok(out)
 }
 
-fn direction(p: &Params) -> Result<Direction> {
+pub(super) fn direction(p: &Params) -> Result<Direction> {
     match p.opt_str("direction")? {
         None | Some("vertical") => Ok(Direction::Vertical),
         Some("horizontal") => Ok(Direction::Horizontal),
@@ -144,7 +144,7 @@ fn direction(p: &Params) -> Result<Direction> {
     }
 }
 
-fn rounding_named(p: &Params, text: &str) -> Result<Rounding> {
+pub(super) fn rounding_named(p: &Params, text: &str) -> Result<Rounding> {
     match text {
         "round" => Ok(Rounding::Round),
         "up" => Ok(Rounding::Up),
@@ -156,7 +156,7 @@ fn rounding_named(p: &Params, text: &str) -> Result<Rounding> {
 }
 
 /// The main master's settings, for zone and stem names.
-fn settings(p: &Params, font: &Font) -> Result<HintSettings> {
+pub(super) fn settings(p: &Params, font: &Font) -> Result<HintSettings> {
     HintSettings::for_master(font, &main_master(font)).map_err(|e| p.bad(e.to_string()))
 }
 
@@ -202,19 +202,25 @@ fn stem_suits(p: &Params, horizontal: Option<bool>, direction: Direction, text: 
 }
 
 /// The `nodes` list as points of `layer`; every node must exist.
-fn points(p: &Params, layer: &Layer) -> Result<Vec<TtPoint>> {
-    let values = p.array("nodes")?;
-    if values.is_empty() {
-        return Err(p.bad("`nodes` lists no point"));
-    }
-    if values.len() > MAX_LAYER_HINTS {
-        return Err(p.bad(format!("`nodes` lists more than {MAX_LAYER_HINTS} points")));
-    }
-    values.iter().map(|v| point(p, v, layer)).collect()
+pub(super) fn points(p: &Params, layer: &Layer) -> Result<Vec<TtPoint>> {
+    points_in(p, "nodes", layer)
 }
 
-fn point(p: &Params, v: &Value, layer: &Layer) -> Result<TtPoint> {
-    let shape = || p.bad(format!("`nodes`: each point is [path, node], [path, node, path, node], \"lsb\" or \"rsb\", found {v}"));
+/// The list under `key` as points of `layer`; every node must exist.
+pub(super) fn points_in(p: &Params, key: &str, layer: &Layer) -> Result<Vec<TtPoint>> {
+    let values = p.array(key)?;
+    if values.is_empty() {
+        return Err(p.bad(format!("`{key}` lists no point")));
+    }
+    if values.len() > MAX_LAYER_HINTS {
+        return Err(p.bad(format!("`{key}` lists more than {MAX_LAYER_HINTS} points")));
+    }
+    values.iter().map(|v| point(p, key, v, layer)).collect()
+}
+
+/// One point given as `v` under `key`; its nodes must exist.
+pub(super) fn point(p: &Params, key: &str, v: &Value, layer: &Layer) -> Result<TtPoint> {
+    let shape = || p.bad(format!("`{key}`: each point is [path, node], [path, node, path, node], \"lsb\" or \"rsb\", found {v}"));
     let point = match v {
         Value::String(s) if s == "lsb" => TtPoint::Lsb,
         Value::String(s) if s == "rsb" => TtPoint::Rsb,
@@ -234,13 +240,13 @@ fn point(p: &Params, v: &Value, layer: &Layer) -> Result<TtPoint> {
         TtPoint::Lsb | TtPoint::Rsb => Vec::new(),
     };
     for r in refs {
-        r.check(layer).map_err(|_| p.bad(format!("`nodes`: {} does not resolve on the layer", describe(&TtPoint::Node(r)))))?;
+        r.check(layer).map_err(|_| p.bad(format!("`{key}`: {} does not resolve on the layer", describe(&TtPoint::Node(r)))))?;
     }
     Ok(point)
 }
 
 /// The `instructions` list: positions in `list`, repeats dropped, in the order given.
-fn indexes(p: &Params, list: &[TtInstruction]) -> Result<Vec<usize>> {
+pub(super) fn indexes(p: &Params, list: &[TtInstruction]) -> Result<Vec<usize>> {
     let values = p.array("instructions")?;
     if values.is_empty() {
         return Err(p.bad("`instructions` lists no instruction"));
@@ -263,7 +269,7 @@ fn indexes(p: &Params, list: &[TtInstruction]) -> Result<Vec<usize>> {
     Ok(out)
 }
 
-fn type_name(t: &TtInstruction) -> &'static str {
+pub(super) fn type_name(t: &TtInstruction) -> &'static str {
     match t.kind {
         TtKind::Snap { .. } => "a Snap",
         TtKind::Stem { .. } => "a Stem",
@@ -274,7 +280,7 @@ fn type_name(t: &TtInstruction) -> &'static str {
 }
 
 /// Refuses unless every listed instruction is of the type `is` accepts.
-fn all_of(p: &Params, list: &[TtInstruction], ix: &[usize], wanted: &str, is: impl Fn(&TtKind) -> bool) -> Result<()> {
+pub(super) fn all_of(p: &Params, list: &[TtInstruction], ix: &[usize], wanted: &str, is: impl Fn(&TtKind) -> bool) -> Result<()> {
     for &i in ix {
         let t = list.get(i).ok_or_else(|| p.bad(format!("`instructions`: {i} does not resolve")))?;
         if !is(&t.kind) {
@@ -287,7 +293,7 @@ fn all_of(p: &Params, list: &[TtInstruction], ix: &[usize], wanted: &str, is: im
 // ── adding ──────────────────────────────────────────────────────────────────────────────────────
 
 /// Appends `new` to the list, each checked against the touched state after everything before it.
-fn append(p: &Params, list: &mut Vec<TtInstruction>, new: Vec<TtInstruction>) -> Result<Vec<usize>> {
+pub(super) fn append(p: &Params, list: &mut Vec<TtInstruction>, new: Vec<TtInstruction>) -> Result<Vec<usize>> {
     let mut state = TouchedState::replay(list, usize::MAX);
     let first = list.len();
     for t in new {
@@ -419,7 +425,7 @@ fn set_rounding(s: &mut Session, v: &Value) -> Result<Value> {
 }
 
 /// The triple group of each Stem instruction, by list position.
-fn triple_of(t: &TtInstruction) -> Option<u32> {
+pub(super) fn triple_of(t: &TtInstruction) -> Option<u32> {
     match t.kind {
         TtKind::Stem { triple, .. } => triple,
         _ => None,
