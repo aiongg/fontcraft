@@ -375,7 +375,7 @@ commands follows the handbook and is not compared with the reference app.
 | X.fix24 | review fixes: the component closure of decomposed CFF2 composites is linear; PPM parameters past 32767 are clamped; `prep` sizes are capped to signed words; CFF2 Private DICT deltas are checked against the region list, and region lists past one blend are refused up front; a glyph whose outline and location counts differ is an error; the dropped-hints note counts PostScript hints only; delta column keys in braces are normalised |
 
 Measures: the round trips and the static oracle summary are unchanged. The command sweep passes
-with the 14 new commands. The gate passes all eleven steps with TESTCOUNT tests.
+with the 14 new commands. The gate passes all eleven steps with 3,015 tests.
 
 Left: hints, subroutines and specialisation in CFF2; the glyph programs (M10.18) and TrueType
 export (M10.19), so exports still carry no instructions; the variation of TrueType composites
