@@ -962,7 +962,17 @@ fn sync_v4_family_name(props: &fontcraft_model::Properties, family: &str) -> fon
 
 fn write_font(font: &Font, version: u32) -> Result<Dict> {
     let mut e: Vec<(Str, Value)> = vec![(".formatVersion".into(), int(version))];
-    let extra = without_deleted_v2_names(&font.info.properties, &font.extra);
+    let mut extra = without_deleted_v2_names(&font.info.properties, &font.extra);
+    // Left-to-right kerning read from the version 2 key is written back as kept while the table
+    // is unchanged. A changed table, empty included, goes under the version 3 key, and the stale
+    // version 2 table is dropped so that reopening the file does not bring it back.
+    let ltr_key = match extra.get(Family::Glyphs, V2_KERNING) {
+        Some(kept) if kern_table(kept).as_ref() == Some(&font.kerning.ltr) => None,
+        _ => Some("kerningLTR"),
+    };
+    if ltr_key.is_some() && extra.get(Family::Glyphs, V2_KERNING).is_some() {
+        extra.to_mut().remove(Family::Glyphs, V2_KERNING);
+    }
     let extra: &Extra = &extra;
     if version < 4 && !font.family_name.is_empty() {
         e.push(("familyName".into(), string(&font.family_name)));
@@ -992,12 +1002,6 @@ fn write_font(font: &Font, version: u32) -> Result<Dict> {
     }
     e.push(("fontMaster".into(), list(font.masters.iter().map(write_master).collect::<Result<_>>()?)));
     e.push(("glyphs".into(), list(font.glyphs.iter().map(|g| write_glyph(g, version).map(Value::Dict)).collect::<Result<_>>()?)));
-    // Left-to-right kerning read from the version 2 key is written back as kept while the table
-    // is unchanged. A changed table goes under the version 3 key, which a reader takes first.
-    let ltr_key = match extra.get(Family::Glyphs, V2_KERNING) {
-        Some(kept) if kern_table(kept).as_ref() == Some(&font.kerning.ltr) => None,
-        _ => Some("kerningLTR"),
-    };
     let tables = [(ltr_key, &font.kerning.ltr), (Some("kerningRTL"), &font.kerning.rtl), (Some("kerningVertical"), &font.kerning.vertical)];
     for (key, table) in tables {
         if let Some(key) = key

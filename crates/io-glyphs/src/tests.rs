@@ -366,8 +366,15 @@ fn a_version_3_file_with_the_version_2_kerning_key_reads_its_kerning() {
     assert_eq!(write(&font).unwrap(), text);
     // A changed table is written under the version 3 key, which is read first.
     std::sync::Arc::make_mut(&mut font.kerning).ltr.set("m01", "A", "V", -40.0);
-    let back = read(&write(&font).unwrap()).unwrap();
+    let written = write(&font).unwrap();
+    assert!(!written.contains("\nkerning = {"), "the stale version 2 table is dropped: {written}");
+    let back = read(&written).unwrap();
     assert_eq!(back.kerning.ltr.get("m01", "A", "V"), Some(-40.0));
+    // Deleting all the kerning and saving leaves no kerning to reopen.
+    let mut font = read(&text).unwrap();
+    std::sync::Arc::make_mut(&mut font.kerning).ltr = Default::default();
+    let back = read(&write(&font).unwrap()).unwrap();
+    assert!(back.kerning.ltr.is_empty(), "the deleted kerning came back");
 }
 
 #[test]
