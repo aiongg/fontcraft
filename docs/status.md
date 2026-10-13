@@ -2,20 +2,39 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-12, the first waves of M6 to M12, seven second-wave packages and all 22 first-wave packages of M13 integrated and gated on `master`, with the automation file roots._
+_Updated: 2026-10-13, the first waves of M6 to M12, seven second-wave packages, all 22 first-wave packages of M13, and the builder packages M8.9, M8.7, M7.8 and M6.10 integrated and gated on `master`, with the automation file roots._
 
 ## State of the tree
 
-- `cargo xtask ci` passes all eleven steps (2,781 or more tests pass, none fail).
+- `cargo xtask ci` passes all eleven steps (2,835 tests pass, none fail, 34 ignored).
   Built and run on Linux x86-64 with Rust 1.97.
 - `master` holds everything described here, merged and green; the latest commits are not pushed.
   It has the first waves of M6 to M12, the second-wave packages M6.14, M7.14, M7.15 to M7.18
   (the Font Info window with all its tabs) and M8.15, all 22 first-wave packages of M13, the
-  fix passes that followed, and the automation file roots.
-- 658 of the 960 inventory commands exist (`docs/parity.md`); M3's, M4's and M5's are all live,
-  M6 has 38 of 46, M7 66 of 66, M8 36 of 41, M9 4 of 48, M10 5 of 56, M11 37 of 41, M12 46 of
-  81, M13 63 of 180. Feature parity is about 24% (ROADMAP.md › Parity estimate). 1,658 guesses
-  on 1,079 rows are listed in `docs/guesses.md`; `docs/observe.md` lists 1,097 rows.
+  builder packages M8.9 (automatic feature code), M8.7 and M8.7b (layout tables at export), M7.8
+  (the name table and OS/2 of static instances) and M6.10 (Edit View display and selection of
+  components and anchors), the test-layout change X.build1, the fix passes that followed, and
+  the automation file roots.
+- 660 of the 960 inventory commands exist (`docs/parity.md`); M3's, M4's and M5's are all live,
+  M6 has 40 of 46, M7 66 of 66, M8 36 of 41, M9 4 of 48, M10 5 of 56, M11 37 of 41, M12 46 of
+  81, M13 63 of 180. Feature parity is about 25% (ROADMAP.md › Parity estimate). 1,683 guesses
+  on 1,089 rows are listed in `docs/guesses.md`; `docs/observe.md` lists 1,107 rows.
+- Packages built (done of total, counted from commit subjects, M8.7b with M8.7): M6 16 of 20, M7
+  18 of 21, M8 16 of 25, M9 8 of 27, M10 11 of 33, M11 6 of 21, M12 26 of 68, M13 24 of 62; 125
+  of 277 in all.
+- Test layout: the engine's integration tests are modules of one binary
+  (`crates/engine/tests/engine/`; `cargo test -p fontcraft-engine --test engine <filter>`), and
+  the decompile, io-glyphs, io-ufo and plist tests are one binary each. Speed measures and oracle
+  runs use `--profile measure` (release without link-time optimisation); see
+  `docs/development.md`.
+- Exports carry compiled feature code. Against fontmake, `GSUB` is equal in 25 of 26 sources,
+  `GPOS` in 82 of 88 and `GDEF` in 47 of 55; against fontc, 29 of 46, 80 of 91 and 42 of 68. The
+  rest are variable fonts (M9) and bracket and colour glyphs (M9, M11). The name table and OS/2
+  of static instances equal fontmake's in 1,678 compared values and differ in 120 (three
+  allow-listed causes). Automatic entries regenerated over the corpus: 69 equal, 23 different
+  (stale sources, older reference forms, samples), 3 removed
+  (`cargo test --release -p fontcraft-features --test corpus_auto -- --ignored --nocapture`).
+- An Edit View text-mode frame with 200 composites takes 5.9 ms (target 16 ms).
 - Round trips: `.glyphs` 122/1/118/4, `.glyphspackage` 22/0/7/0, designspace 59 identical and 53
   failed, UFO 125 identical, 2 different and 13 failed (two UFO 1 files now open).
 - Measures: console completion takes 2.28 ms at worst (target 5 ms, met). The follow-up hook
@@ -27,7 +46,7 @@ _Updated: 2026-10-12, the first waves of M6 to M12, seven second-wave packages a
   turns it off only where alignment would move a component (a guess on the row).
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
   Edit View were looked at, and the screenshots of each M3, M4 and M5 UI package were reviewed.
-  The Font Info window and the M13 dialogs have frame tests and no screenshot review yet. macOS
+  The Font Info window, the M13 dialogs and M6.10's component display have frame tests and no screenshot review yet. macOS
   and Windows have **not** been built.
 - The repository is private at `github.com/aiongg/fontcraft`. There is no hosted CI (the gate
   runs locally) and no release.
@@ -47,20 +66,23 @@ linked file is checked against it, and a linked file outside the read root reads
 1. **The skeleton pass for waves 2 to 5**: fix the interfaces the later packages of each plan
    share, as M6.1a and M7.1 to M13.1 did, so they can be written in parallel. A skeleton file
    marks each placeholder with the package that fills it (`// M8.5`).
-2. **The builder packages**, one at a time in the main checkout: M8.9 (the automatic feature
-   framework), M8.7 (layout tables at export), M7.8 (the name table at export), M6.10 (Edit View
-   display and selection), M9.4 (static instances), M9.5 (the variable compile), M10.14 and
-   M10.19 (hints at export), M11.5 (paint attributes in the formats), M12.44 (the audit runner),
-   then the rest each plan's § 6 lists. The requests the integrations left for them are below.
+2. **The builder packages**, one at a time in the main checkout: M9.4 (static instances), M9.5
+   (the variable compile), M9.9, M9.10, M10.3, M10.14 and M10.19 (hints at export), M11.5 (paint
+   attributes in the formats), M12.44 (the audit runner), M12.17, M13.2, then the rest each
+   plan's § 6 lists. The requests the integrations left for them are below.
 3. **The M13.15 base-choice follow-up**: among bases with identical outlines prefer the
    combining-mark form (`acutecomb` over `acute`), and never use a detected composite as a base;
    then rerun the recovery measure on Inter (target 95%). Also reduce the per-edit alignment
    pass (`metrics::realign`) below the 2 ms hook target.
+   Other follow-ups: M8.11 (the ligature, fraction, ordinal, ornament and aalt generators; the
+   automatic framework has no entries for them yet), text-token expansion in
+   `plan::postscript_name` and `plan::file_stem`, and selecting and deleting corner components in
+   Edit View (needs a hint selection kind).
 4. **The measures**: the corpus measures of the M9 to M12 packages (each package's row in its
    plan's § 5; most were tested only against small oracle outputs), and the M6 measures
    (`docs/plans/M6.md` § 5): mark attachment against both oracles
    (`cargo test -p fontcraft-oracle --features oracle --test marks -- --ignored`), propagation
-   against glyphsLib (`crates/engine/tests/corpus_propagation.rs`, which reads a JSON file of
+   against glyphsLib (`crates/engine/tests/engine/corpus_propagation.rs`, which reads a JSON file of
    glyphsLib's results made outside the repository), composition and alignment over the corpus
    (`corpus_composition.rs`, `corpus_alignment.rs`).
 
@@ -90,6 +112,17 @@ recorded):
   list projects; project edits are not undo steps; `.glyphsproject` waits for a reference sample.
 - M6.14: each automatic composite copies the glyph list, so composing very many glyphs at once is
   quadratic; compose without the per-glyph copy.
+- M8.7: variable-font layout tables wait for M9; bracket and colour glyphs wait for M9 and M11
+  (the layout oracle lists them as known differences). Feature includes may climb out of the
+  source folder, as the reference compilers read them; the check-then-open window of the include
+  check is documented as accepted.
+- M8.9: `salt` sits beside `ss01` and Uppercase, Lowercase and AllLetters are optional (guesses on
+  the rows); the ligature, fraction and aalt generators are M8.11.
+- M7.8: `plan::postscript_name` and `plan::file_stem` do not expand text tokens; the `.glyphs` 2
+  `InstancePostscript` metric 2^63 fails the instance build. Mac name records drop unsupported
+  encodings with a warning; Prevent Name ID adds up across levels (a guess).
+- M6.10: corner components cannot be selected or deleted in Edit View (needs a hint selection
+  kind); clicking a missing-base placeholder does nothing.
 - M13: `Session::commit` does not record interaction commits in the macro recorder. Command Console lines from filters wait for
   M13.3. A URL tab shows one layer per glyph. SFD sources are read by `crates/io-sfd` but not
   yet opened by File › Open or the CLI. Contour names persist only in the native format. The
@@ -181,8 +214,8 @@ M5, spacing, kerning and text mode (`docs/plans/M5.md`), as built:
 | M5.16, M5.17 | linked metrics and Default Layer Width at export; `crates/features`, the generated pair kerning of exported fonts, ported from fontc |
 | M5.18 | the § 5 measures (all met but the two out-of-sync speed targets); the kerning lookup measured against both oracles; the spacing and kerning undo sweep; the end-to-end test to the second master |
 
-Left for later milestones: automatically aligned glyphs (M6), shaping and kerning with a
-hand-written `kern` feature (M8), vertical kerning at export.
+Left for later milestones: automatically aligned glyphs (M6), shaping (M8), vertical kerning at
+export.
 
 
 M4, Font View and glyph management (`docs/plans/M4.md`), as built:
@@ -436,7 +469,7 @@ Append one terse entry per session: what landed, numbers, what is still open.
   buildable comparison sources give 551 TTF and 551 OTF (masters and instances), all read back by
   skrifa and fontTools without error, all 1,102 round trip through WOFF2 (default and `hmtx`) to
   the same tables, and the 1,102 WOFF2 files `compile` wrote decode to the plain fonts' tables.
-  New `crates/engine/tests/determinism.rs`: two sessions, 12 files (TTF and OTF, plain, WOFF,
+  New `crates/engine/tests/engine/determinism.rs`: two sessions, 12 files (TTF and OTF, plain, WOFF,
   WOFF2), byte-identical. Next: M3's planning pass.
 - **2026-10-09, M2.7.** Owner decision: a font with no family name (42 corpus sources) is
   exported as `<source file name>-<style>.ttf` instead of fontc's `-<style>.ttf`; only the file
@@ -643,3 +676,21 @@ Append one terse entry per session: what landed, numbers, what is still open.
   guesses on 1,079 rows; 1,097 observe rows. Open: the Lows listed under Where to start, the
   Detect Composites base choice (45.4% against 95%), the per-edit alignment pass (2.4 ms against
   2 ms), the skeleton pass for waves 2 to 5, and the builder packages.
+- **2026-10-13, batch 5: M8.9, M8.7 and M8.7b, M7.8, X.build1, M6.10 and the fixes.** Integrated:
+  automatic feature code (framework, Update, regeneration at export; 69 equal, 23 different, 3
+  removed over the corpus); layout tables at export with the oracle comparing `GSUB`, `GPOS` and
+  `GDEF` lookup by lookup (fontmake 25 of 26, 82 of 88, 47 of 55; fontc 29 of 46, 80 of 91, 42 of
+  68), the mark writer, UFO `GDEF` classes, feature includes that may climb out of the source
+  folder; the name table and OS/2 of static instances as fontmake builds them (1,678 equal, 120
+  different), the `;FontCraft <version>` stamp; one engine test binary, one binary each for
+  decompile, io-glyphs, io-ufo and plist, and the `measure` profile; Edit View's component and
+  anchor display and gestures (200-composite frame 5.9 ms). Fixes: the web build compiles; every
+  export path and the code editor read includes from the source's include folder; `.glyphs` 3
+  files keep deleted kerning deleted and keep a version 2 kerning key the reader did not use; a
+  refused include candidate does not hide an allowed one. All eleven gate steps pass; 2,835
+  tests pass, none fail, 34 ignored; 660 of 960 commands live; 1,683 guesses on 1,089 rows; 1,107
+  observe rows; round trips unchanged (`.glyphs` 122/1/118/4, `.glyphspackage` 22/0/7/0, UFO 125
+  identical, 2 different, 13 failed; designspace 59 identical, 53 failed). Packages built: 125 of
+  277. Open: the builder packages M9.4, M9.5, M9.9, M9.10, M10.3, M10.14, M10.19, M11.5, M12.44,
+  M12.17, M13.2; the follow-ups M13.15, M8.11, token expansion in `plan::postscript_name` and
+  `plan::file_stem`, corner-component selection; the skeleton pass for waves 2 to 5.
