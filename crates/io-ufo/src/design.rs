@@ -156,12 +156,10 @@ pub(crate) fn zones_of(blues: &[f64], other: &[f64]) -> Option<Vec<AlignmentZone
         return None;
     }
     let mut zones = Vec::with_capacity((blues.len() + other.len()) / 2);
-    for pair in blues.chunks_exact(2) {
-        let [y1, y2] = [pair.first()?, pair.get(1)?].map(|v| *v);
+    for &[y1, y2] in blues.as_chunks::<2>().0 {
         zones.push(if y2 == 0.0 { AlignmentZone { pos: 0.0, size: y1 - y2 } } else { AlignmentZone { pos: y1, size: y2 - y1 } });
     }
-    for pair in other.chunks_exact(2) {
-        let [y1, y2] = [pair.first()?, pair.get(1)?].map(|v| *v);
+    for &[y1, y2] in other.as_chunks::<2>().0 {
         zones.push(AlignmentZone { pos: y2, size: y1 - y2 });
     }
     // A stable sort, as Python's.

@@ -230,9 +230,8 @@ pub fn tag_str(tag: Tag) -> String {
 
 /// The sum of `data` as big-endian 32-bit words, padded with zeros to a multiple of four.
 pub fn checksum(data: &[u8]) -> u32 {
-    let mut chunks = data.chunks_exact(4);
-    let mut sum = (&mut chunks).fold(0u32, |sum, w| sum.wrapping_add(u32::from_be_bytes(w.try_into().unwrap_or([0; 4]))));
-    let rest = chunks.remainder();
+    let (words, rest) = data.as_chunks::<4>();
+    let mut sum = words.iter().fold(0u32, |sum, w| sum.wrapping_add(u32::from_be_bytes(*w)));
     if !rest.is_empty() {
         let mut last = [0u8; 4];
         for (slot, b) in last.iter_mut().zip(rest) {

@@ -1384,7 +1384,6 @@ fn round_coordinates_for_all_masters(s: &mut Session, v: &Value) -> Result<Value
 
 #[cfg(test)]
 mod tests {
-    use fontcraft_geom::Shape as _;
     use fontcraft_model::NodeKind::{Curve, Line, OffCurve};
 
     use super::*;

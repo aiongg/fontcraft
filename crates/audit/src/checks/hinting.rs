@@ -862,10 +862,7 @@ fn list(values: &[f64]) -> String {
 
 /// The value pairs of a zone array, each as `(first, second)`; an odd last value is left out.
 fn pairs(values: &[f64]) -> impl Iterator<Item = (f64, f64)> + '_ {
-    values.chunks_exact(2).filter_map(|c| match c {
-        [a, b] => Some((*a, *b)),
-        _ => None,
-    })
+    values.as_chunks::<2>().0.iter().map(|&[a, b]| (a, b))
 }
 
 /// `check.hinting.forceBold`.

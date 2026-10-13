@@ -259,7 +259,7 @@ fn glyph_variations(glyph: &SourceOutlines, axis_count: u16, options: &GvarOptio
         for v in &flat {
             delta_i16(name, *v)?;
         }
-        let pairs: Vec<(f64, f64)> = flat.chunks_exact(2).map(|c| (c.first().copied().unwrap_or(0.0), c.get(1).copied().unwrap_or(0.0))).collect();
+        let pairs: Vec<(f64, f64)> = flat.as_chunks::<2>().0.iter().map(|&[x, y]| (x, y)).collect();
         let deltas: Vec<GlyphDelta> = if simple && options.optimize {
             let vecs: Vec<Vec2> = pairs.iter().map(|&(x, y)| Vec2::new(x, y)).collect();
             iup_delta_optimize(vecs, origin.clone(), IUP_TOLERANCE, &glyph.contour_ends).map_err(|e| gvar_error(name, format!("{e:?}")))?

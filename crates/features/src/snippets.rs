@@ -186,11 +186,7 @@ fn decode(bytes: &[u8]) -> Result<String, String> {
         if !body.len().is_multiple_of(2) {
             return Err("not valid UTF-16 text: an odd number of bytes".to_string());
         }
-        let units = body.chunks_exact(2).map(|p| match p {
-            [a, b] if big => u16::from_be_bytes([*a, *b]),
-            [a, b] => u16::from_le_bytes([*a, *b]),
-            _ => 0,
-        });
+        let units = body.as_chunks::<2>().0.iter().map(|&p| if big { u16::from_be_bytes(p) } else { u16::from_le_bytes(p) });
         char::decode_utf16(units).collect::<Result<String, _>>().map_err(|_| "not valid UTF-16 text: a lone surrogate".to_string())
     };
     if let Some(body) = bytes.strip_prefix(&[0xFF, 0xFE]) {

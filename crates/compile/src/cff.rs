@@ -331,11 +331,8 @@ fn blue_scale_check(p: &PrivateDict, warnings: &mut Vec<String>) {
     };
     let largest = [&p.blue_values, &p.other_blues, &p.family_blues, &p.family_other_blues]
         .into_iter()
-        .flat_map(|list| list.chunks_exact(2))
-        .filter_map(|pair| match pair {
-            [a, b] => Some((value(b) - value(a)).abs()),
-            _ => None,
-        })
+        .flat_map(|list| list.as_chunks::<2>().0.iter())
+        .map(|[a, b]| (value(b) - value(a)).abs())
         .fold(0.0, f64::max);
     let scale = value(&p.blue_scale);
     if scale * largest >= 1.0 {

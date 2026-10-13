@@ -189,8 +189,7 @@ pub fn postscript_name(name: &[u8]) -> Option<String> {
         let Some(raw) = name.get(start..start.saturating_add(usize::from(length))) else { continue };
         let text = match platform {
             0 | 3 => {
-                let units: Vec<u16> =
-                    raw.chunks_exact(2).map(|w| u16::from_be_bytes([w.first().copied().unwrap_or(0), w.get(1).copied().unwrap_or(0)])).collect();
+                let units: Vec<u16> = raw.as_chunks::<2>().0.iter().map(|w| u16::from_be_bytes(*w)).collect();
                 String::from_utf16_lossy(&units)
             }
             // PostScript names are printable ASCII; other Macintosh Roman bytes are not kept.

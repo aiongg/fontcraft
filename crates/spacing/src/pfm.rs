@@ -163,7 +163,7 @@ pub fn read(data: &[u8]) -> Result<Pfm, ReadError> {
     if extent_at != 0 && last_char >= first_char {
         let n = usize::from(last_char - first_char) + 1;
         let table = span(data, "extent table", extent_at, 2 * n)?;
-        widths = table.chunks_exact(2).filter_map(|w| Some(u16::from_le_bytes([*w.first()?, *w.get(1)?]))).collect();
+        widths = table.as_chunks::<2>().0.iter().map(|w| u16::from_le_bytes(*w)).collect();
     }
 
     // Where the pair list must end: the next part the file places after it, or the file's end.
@@ -188,10 +188,7 @@ fn kern_pairs(data: &[u8], at: usize, count: usize, list_end: usize) -> Result<V
     };
     let count = count.min(MAX_PAIRS);
     let list = span(data, "kerning pair table", start, 4 * count)?;
-    Ok(list
-        .chunks_exact(4)
-        .filter_map(|p| Some(KernPair { first: *p.first()?, second: *p.get(1)?, value: i16::from_le_bytes([*p.get(2)?, *p.get(3)?]) }))
-        .collect())
+    Ok(list.as_chunks::<4>().0.iter().map(|&[first, second, lo, hi]| KernPair { first, second, value: i16::from_le_bytes([lo, hi]) }).collect())
 }
 
 /// The zero-terminated name at `at`, cut at [`MAX_FACE_BYTES`]; `None` for offset 0, a name

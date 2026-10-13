@@ -598,8 +598,7 @@ impl<'a> T2Run<'a> {
     fn stems(&mut self, horizontal: bool) {
         let args = std::mem::take(&mut self.stack);
         let mut edge = 0.0;
-        for pair in args.chunks_exact(2) {
-            let &[a, d] = pair else { continue };
+        for &[a, d] in args.as_chunks::<2>().0 {
             let pos = edge + a;
             edge = pos + d;
             let op =
@@ -734,10 +733,8 @@ impl<'a> T2Run<'a> {
                 self.emit(PsOp::Move(self.x, self.y))?;
             }
             5 => {
-                for pair in args(self).chunks_exact(2) {
-                    if let &[dx, dy] = pair {
-                        self.line(dx, dy)?;
-                    }
+                for &[dx, dy] in args(self).as_chunks::<2>().0 {
+                    self.line(dx, dy)?;
                 }
                 self.stack.clear();
             }
@@ -762,16 +759,12 @@ impl<'a> T2Run<'a> {
                     _ => (true, a.get(a.len().saturating_sub(6)..).unwrap_or_default()),
                 };
                 if lines_first {
-                    for pair in a.get(..a.len().saturating_sub(6)).unwrap_or_default().chunks_exact(2) {
-                        if let &[dx, dy] = pair {
-                            self.line(dx, dy)?;
-                        }
+                    for &[dx, dy] in a.get(..a.len().saturating_sub(6)).unwrap_or_default().as_chunks::<2>().0 {
+                        self.line(dx, dy)?;
                     }
                 }
-                for c in curves.chunks_exact(6) {
-                    if let &[a0, a1, a2, a3, a4, a5] = c {
-                        self.curve([a0, a1, a2, a3, a4, a5])?;
-                    }
+                for &c in curves.as_chunks::<6>().0 {
+                    self.curve(c)?;
                 }
                 if b == 24
                     && let Some(&[dx, dy]) = a.get(a.len().saturating_sub(2)..)
@@ -783,8 +776,7 @@ impl<'a> T2Run<'a> {
                 let mut a = args(self);
                 self.stack.clear();
                 let mut extra = if a.len() % 2 == 1 && !a.is_empty() { a.remove(0) } else { 0.0 };
-                for c in a.chunks_exact(4) {
-                    let &[p, q, r, s] = c else { continue };
+                for &[p, q, r, s] in a.as_chunks::<4>().0 {
                     if b == 26 {
                         self.curve([extra, p, q, r, 0.0, s])?;
                     } else {
@@ -889,13 +881,11 @@ impl<'a> T2Run<'a> {
                     _ => return Err("bad flex operands".into()),
                 };
                 let (mut x, mut y) = (x0, y0);
-                for (slot, (dx, dy)) in pts.chunks_exact_mut(2).zip(rel) {
+                for ([px, py], (dx, dy)) in pts.as_chunks_mut::<2>().0.iter_mut().zip(rel) {
                     x += dx;
                     y += dy;
-                    if let [px, py] = slot {
-                        *px = x;
-                        *py = y;
-                    }
+                    *px = x;
+                    *py = y;
                 }
                 (self.x, self.y) = (x, y);
                 self.emit(PsOp::Flex(pts, depth))?;

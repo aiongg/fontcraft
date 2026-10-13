@@ -186,7 +186,7 @@ impl<'a> Ctx<'a> {
         let affine = c.affine();
         let flip = affine.determinant() < 0.0;
         let mut shapes = drawn_poles.into_iter().next().unwrap_or_default();
-        let mut next = values.chunks_exact(2);
+        let mut next = values.as_chunks::<2>().0.iter();
         for shape in &mut shapes {
             match shape {
                 Shape::Path(p) => {
@@ -334,8 +334,8 @@ pub fn interpolate_anchors<'a, 's>(
     }
     let values = model.interpolate(&at, &coordinates).map_err(|e| format!("its pole layers' anchors cannot be interpolated ({e})"))?;
     let mut out = Vec::with_capacity(default.len());
-    for (a, xy) in default.iter().zip(values.chunks_exact(2)) {
-        let &[x, y] = xy else { continue };
+    for (a, xy) in default.iter().zip(values.as_chunks::<2>().0) {
+        let &[x, y] = xy;
         if !(crate::in_range(x) && crate::in_range(y)) {
             return Err("an interpolated anchor lies beyond the coordinate limit".into());
         }

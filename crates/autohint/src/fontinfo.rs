@@ -219,8 +219,8 @@ impl RawDict {
         ];
         let mut built: Vec<Vec<BlueValue>> = Vec::with_capacity(4);
         for (list, family, other) in lists {
-            let keys = self.zone_keys(family, other).map_err(&fail)?;
-            built.push(build_pairs(list, &keys, fuzz, &dict_name).map_err(&fail)?);
+            let keys = self.zone_keys(family, other).map_err(fail)?;
+            built.push(build_pairs(list, &keys, fuzz, &dict_name).map_err(fail)?);
         }
         let mut built = built.into_iter();
         let mut next = || built.next().unwrap_or_default();

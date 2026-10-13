@@ -148,10 +148,8 @@ impl Tables {
         if count > MAX_RECORDS {
             return Err(Error::Blob("too many records".into()));
         }
-        for tag in [b"LEGC"] {
-            if need(tag, 3)? != count {
-                return Err(Error::Blob("columns of different lengths".into()));
-            }
+        if need(b"LEGC", 3)? != count {
+            return Err(Error::Blob("columns of different lengths".into()));
         }
         for tag in [b"CATG", b"SUBC", b"CASE", b"DIRN", b"SCRP", b"FLAG"] {
             if need(tag, 1)? != count {

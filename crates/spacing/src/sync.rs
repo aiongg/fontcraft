@@ -266,7 +266,7 @@ impl SyncCache {
             let mut findings = Vec::new();
             scan_into(&mut ctx, g, &mut findings, &mut own);
             let measured = own.measured;
-            let mut names: HashSet<String> = ctx.deps.drain().collect();
+            let mut names: HashSet<String> = std::mem::take(&mut ctx.deps);
             // A reused measurement read the glyph and what it shows without telling `ctx`.
             let shown = if measured.is_empty() { Vec::new() } else { shows(font, g) };
             if !measured.is_empty() {

@@ -154,7 +154,9 @@ pub fn decode(bytes: &[u8]) -> Result<Vec<Instruction>, AsmError> {
             let width = if form.words { 2 } else { 1 };
             let raw = bytes.get(pos..pos + count * width).ok_or(AsmError::Truncated { offset })?;
             data = if form.words {
-                raw.chunks_exact(2)
+                raw.as_chunks::<2>()
+                    .0
+                    .iter()
                     .map(|w| i32::from(i16::from_be_bytes([w.first().copied().unwrap_or(0), w.get(1).copied().unwrap_or(0)])))
                     .collect()
             } else {

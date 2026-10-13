@@ -435,7 +435,7 @@ pub fn picture(p: &Picture, outlines: &mut CompositeCache) -> Option<ColorImage>
     let image = render_path(&filled, to_pixels, width, height, &style).ok()?;
     let mut pixels = image.pixels;
     if p.options.flip {
-        pixels = pixels.chunks_exact(4).rev().flatten().copied().collect();
+        pixels = pixels.as_chunks::<4>().0.iter().rev().flatten().copied().collect();
     }
     let radius = (p.options.blur() * f64::from(ppp) / BLUR_PASSES as f64).ceil();
     if radius >= 1.0 {

@@ -1111,8 +1111,8 @@ impl<'a> T1Run<'a> {
             0 => self.stack.clear(),
             1 | 2 => {
                 let v = self.take::<6>()?;
-                for pair in v.chunks_exact(2) {
-                    let (&[a, d], horizontal) = (pair, b == 2) else { continue };
+                for &[a, d] in v.as_chunks::<2>().0 {
+                    let horizontal = b == 2;
                     self.hints.stem(if horizontal {
                         PsOp::HStem { y: a + self.sby, dy: d, kind: StemKind::Stem3 }
                     } else {
@@ -1630,8 +1630,7 @@ fn metrics(ps: &PsFont, glyphs: &[Glyph]) -> (Vec<MetricDef>, Vec<MetricValue>, 
     let mut values: Vec<MetricValue> = [ascender, cap, x_height, 0.0, descender].map(|pos| MetricValue { pos, over: 0.0 }).to_vec();
     let mut zones = Vec::new();
     let p = &ps.private;
-    for (i, pair) in p.blue_values.chunks_exact(2).enumerate() {
-        let &[lo, hi] = pair else { continue };
+    for (i, &[lo, hi]) in p.blue_values.as_chunks::<2>().0.iter().enumerate() {
         if i == 0 && lo <= 0.0 && hi >= 0.0 {
             if let Some(v) = values.get_mut(3) {
                 v.over = lo;
@@ -1644,8 +1643,7 @@ fn metrics(ps: &PsFont, glyphs: &[Glyph]) -> (Vec<MetricDef>, Vec<MetricValue>, 
             None => zones.push(AlignmentZone { pos: lo, size: hi - lo }),
         }
     }
-    for pair in p.other_blues.chunks_exact(2) {
-        let &[lo, hi] = pair else { continue };
+    for &[lo, hi] in p.other_blues.as_chunks::<2>().0 {
         match values.get_mut(4).filter(|v| v.pos == hi && v.over == 0.0) {
             Some(v) => v.over = lo - hi,
             None => zones.push(AlignmentZone { pos: hi, size: lo - hi }),

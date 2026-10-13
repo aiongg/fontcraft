@@ -103,10 +103,8 @@ pub fn cut_with_line(contours: &[Contour], from: Point, to: Point, grid: f64) ->
         } else if in_run {
             run.push(*x);
             if winding == 0 {
-                for pair in run.chunks_exact(2) {
-                    if let [a, b] = pair {
-                        pairs.push((*a, *b));
-                    }
+                for &[a, b] in run.as_chunks::<2>().0 {
+                    pairs.push((a, b));
                 }
                 in_run = false;
             }
