@@ -1828,6 +1828,35 @@ mod ps_hints_export {
         assert!(s.h.is_empty() && s.v.is_empty());
     }
 
+    /// `A` on master `m01` with `hints` (numbers only) and one box from 0 to 300 by 0 to 200.
+    fn valued(hints: &[PsHint]) -> Compiled {
+        let mut f = sample();
+        let mut a = f.glyph_mut("A").unwrap();
+        a.layers[0].shapes = vec![Shape::Path(Path::rect(0.0, 0.0, 300.0, 200.0))];
+        set_ps_hints(&mut a.layers[0], hints).unwrap();
+        drop(a);
+        compile(&f, &Target::Master("m01".into()), Flavour::Cff, &Options::default()).unwrap()
+    }
+
+    #[test]
+    fn a_hint_beyond_the_charstring_number_range_is_left_out_and_the_others_are_written() {
+        let value = |a: f64, b: f64| PsHint::stem(true, Edge::Value(a), Edge::Value(b));
+        let out = valued(&[value(0.0, 80.0), value(50_000.0, 50_020.0), value(-20_000.0, 20_000.0), value(1e300, -1e300), value(120.0, 200.0)]);
+        let s = stems(&out, "A");
+        assert_eq!(s.h, vec![(0, 80), (120, 200)]);
+        let dropped = out.warnings.iter().filter(|w| w.contains("glyph `A`") && w.contains("left out")).count();
+        assert_eq!(dropped, 3, "{:?}", out.warnings);
+    }
+
+    #[test]
+    fn stems_that_overlap_once_rounded_get_hint_masks() {
+        // 0..100.3 and 100.4..200 share the edge 100 once the charstring rounds them.
+        let out = valued(&[PsHint::stem(true, Edge::Value(0.0), Edge::Value(100.3)), PsHint::stem(true, Edge::Value(100.4), Edge::Value(200.0))]);
+        let s = stems(&out, "A");
+        assert_eq!(s.h, vec![(0, 100), (100, 200)]);
+        assert!(s.masks >= 2, "one mask per stem along the outline, got {}", s.masks);
+    }
+
     #[test]
     fn family_alignment_zones_become_family_blues() {
         let mut f = sample();

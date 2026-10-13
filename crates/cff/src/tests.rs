@@ -504,6 +504,12 @@ mod hinted {
             CharstringHints { h_stems: two.clone(), flex: vec![1], ..Default::default() },
             CharstringHints { h_stems: two, masks: vec![(0, mask(&[true], &[]))], ..Default::default() },
             CharstringHints { h_stems: vec![StemHint::between(0.0, 1.0); MAX_STEM_HINTS + 1], ..Default::default() },
+            // Apart as given, sharing the edge 100 once rounded.
+            CharstringHints {
+                h_stems: vec![StemHint::between(0.0, 100.3), StemHint::between(100.4, 200.0)],
+                masks: vec![(0, mask(&[true, true], &[]))],
+                ..Default::default()
+            },
         ];
         for hints in cases {
             let font = Font {

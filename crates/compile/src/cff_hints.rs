@@ -9,7 +9,7 @@
 //! |---|---|
 //! | source layer | [`fontcraft_hinting::ps::ps_hint_layer`]: the main master's layer (Get Hints From Master, else the first master), else the first other master's layer with hints; a special layer that replaces the master layer uses its own |
 //! | edges | a node reference is read on the glyph's layer in the master being built, so hints follow the outline into every master; a number is used as it is |
-//! | stems | made positive (lower edge first); a top ghost written with width −20, a bottom ghost with −21; duplicates dropped; beyond [`MAX_STEM_HINTS`] the first are kept, with a warning |
+//! | stems | made positive (lower edge first) and rounded as the charstring stores them; a top ghost written with width −20, a bottom ghost with −21; duplicates dropped; a stem whose numbers a charstring cannot hold ([`writable_stems`]) left out with a warning; beyond [`MAX_STEM_HINTS`] the first are kept, with a warning |
 //! | hint replacement | only when two stems of one direction overlap: masks are built along the outline (see [`masks`]) |
 //! | autohinting | skipped for a glyph whose hint-source layer has any PostScript hint, even when none of them can be written |
 //!
@@ -20,12 +20,13 @@
 //! `hinting.ps.export.autohintOption`, `hinting.ps.export.autohintParameter`.
 
 use fontcraft_autohint::FdDict;
-use fontcraft_cff::{CharstringHints, MAX_STEM_HINTS, Mask, PathOp, StemHint};
+use fontcraft_cff::{CharstringHints, MAX_STEM_HINTS, Mask, PathOp, StemHint, writable_stems};
 use fontcraft_hinting::ps::ps_hint_layer;
 use fontcraft_hinting::{HintSettings, PsHintKind, ps_hints};
 use fontcraft_model::{Font, ResolvedGlyph};
 
 use crate::CompileError;
+use crate::cff::ROUND_TOLERANCE;
 
 /// How far a node may lie from a stem edge and still count as on it, in font units: charstring
 /// coordinates are rounded to whole units.
@@ -73,7 +74,8 @@ pub fn manual_hints(font: &Font, settings: &HintSettings, name: &str, path: &[Pa
             return Some(CharstringHints::default());
         }
     };
-    let mut out = CharstringHints::default();
+    // Each stem with the index of the hint it comes from, for warnings.
+    let (mut h, mut v): (Vec<(usize, StemHint)>, Vec<(usize, StemHint)>) = (Vec::new(), Vec::new());
     for (index, hint) in hints {
         let (a, b) = match hint.edges(built) {
             Ok(e) => e,
@@ -88,14 +90,28 @@ pub fn manual_hints(font: &Font, settings: &HintSettings, name: &str, path: &[Pa
                 }
             },
         };
+        // Rounded as the encoder writes it, so duplicates and the overlaps that decide the masks
+        // are those of the charstring.
         let stem = match hint.kind {
             PsHintKind::Stem => StemHint::between(a, b),
             PsHintKind::GhostTop => StemHint::top_ghost(a),
             PsHintKind::GhostBottom => StemHint::bottom_ghost(a),
-        };
-        let list = if hint.horizontal { &mut out.h_stems } else { &mut out.v_stems };
-        if !list.contains(&stem) {
-            list.push(stem);
+        }
+        .normalised(ROUND_TOLERANCE);
+        let list = if hint.horizontal { &mut h } else { &mut v };
+        if !list.iter().any(|(_, s)| *s == stem) {
+            list.push((index, stem));
+        }
+    }
+    let mut out = CharstringHints::default();
+    for (list, stems) in [(h, &mut out.h_stems), (v, &mut out.v_stems)] {
+        let only: Vec<StemHint> = list.iter().map(|(_, s)| *s).collect();
+        for ((index, stem), ok) in list.into_iter().zip(writable_stems(&only, ROUND_TOLERANCE)) {
+            if ok {
+                stems.push(stem);
+            } else {
+                warnings.push(format!("glyph `{name}`: PostScript hint {index} lies beyond the numbers a charstring can hold; it was left out"));
+            }
         }
     }
     let total = out.h_stems.len() + out.v_stems.len();

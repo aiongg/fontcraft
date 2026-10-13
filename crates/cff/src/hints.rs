@@ -18,7 +18,7 @@
 //! `hinting.ps.flex.*`.
 
 use crate::number::round_with_tolerance;
-use crate::{Error, PathOp};
+use crate::{Error, MAX_COORDINATE, PathOp};
 
 /// Most stem hints in one charstring, both directions together (Type 2 limit).
 pub const MAX_STEM_HINTS: usize = 96;
@@ -86,8 +86,9 @@ impl StemHint {
         a0 <= b1 && b0 <= a1
     }
 
-    /// The hint as written: edges rounded with `tolerance`, a negative stem width made positive.
-    fn normalised(&self, tolerance: f64) -> Self {
+    /// The hint as the encoder writes it: edges rounded with `tolerance` (the font's
+    /// [`crate::Font::round_tolerance`]), a negative stem width made positive.
+    pub fn normalised(&self, tolerance: f64) -> Self {
         if self.is_ghost() {
             return Self { edge: round_with_tolerance(self.edge, tolerance), width: self.width };
         }
@@ -228,6 +229,34 @@ fn sorted(stems: &[StemHint], tolerance: f64) -> (Vec<StemHint>, Vec<usize>) {
     (v.into_iter().map(|(_, s)| s).collect(), order)
 }
 
+/// Which of `stems`, the hints of one direction, the stem operators can write once rounded with
+/// `tolerance`; parallel to `stems`. A stem is not writable when a number is not finite, an edge
+/// lies beyond [`MAX_COORDINATE`], or its width or its offset from the stem written before it
+/// leaves the range of a Type 2 integer. Stems are taken in the encoder's order, so a stem left
+/// out does not count as the one written before the next.
+pub fn writable_stems(stems: &[StemHint], tolerance: f64) -> Vec<bool> {
+    let fits = |v: f64| (-32_768.0..=32_767.0).contains(&v);
+    let (sorted_stems, order) = sorted(stems, tolerance);
+    let mut ok = vec![false; stems.len()];
+    let (mut written, mut last) = (0usize, 0.0);
+    for (s, i) in sorted_stems.iter().zip(order) {
+        let (a, b) = s.edges();
+        if !(s.edge.is_finite() && s.width.is_finite() && a.abs() <= MAX_COORDINATE && b.abs() <= MAX_COORDINATE) {
+            continue;
+        }
+        let base = if written % STEMS_PER_OPERATOR == 0 { 0.0 } else { last };
+        if !fits(s.edge - base) || !fits(s.width) {
+            continue;
+        }
+        if let Some(o) = ok.get_mut(i) {
+            *o = true;
+        }
+        written += 1;
+        last = s.edge + s.width;
+    }
+    ok
+}
+
 /// The arguments of the stem operators for `stems` (sorted), split so each operator's fit the
 /// stack: each list is relative from 0, a stem's edge after the previous stem's `edge + width`.
 pub(crate) fn stem_args(stems: &[StemHint]) -> Vec<Vec<f64>> {
@@ -294,5 +323,21 @@ mod tests {
             vec![StemHint { edge: 21.0, width: -21.0 }, StemHint { edge: 620.0, width: 80.0 }, StemHint { edge: 700.0, width: -20.0 }]
         );
         assert_eq!(stem_args(&n.h_stems), vec![vec![21.0, -21.0, 620.0, 80.0, 0.0, -20.0]]);
+    }
+
+    #[test]
+    fn writable_stems_are_judged_in_the_encoders_order() {
+        let stems = [
+            StemHint::between(100.0, 200.0),
+            // More than 32 767 above the end of 32 968..32 980.
+            StemHint::between(70_000.0, 70_020.0),
+            StemHint::between(-20_000.0, 20_000.0),
+            StemHint::between(0.0, 80.0),
+            // 32 767 above the end of 100..200, the last stem written before it.
+            StemHint::between(32_967.0, 32_970.0),
+            StemHint::between(32_968.4, 32_980.0),
+            StemHint { edge: f64::NAN, width: 1.0 },
+        ];
+        assert_eq!(writable_stems(&stems, 0.5), vec![true, false, false, true, true, true, false]);
     }
 }

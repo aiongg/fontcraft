@@ -47,7 +47,7 @@ use std::collections::HashSet;
 
 pub use bounds::Bounds;
 pub use error::Error;
-pub use hints::{BOTTOM_GHOST, CharstringHints, MAX_COUNTER_MASKS, MAX_STEM_HINTS, Mask, StemHint, TOP_GHOST};
+pub use hints::{BOTTOM_GHOST, CharstringHints, MAX_COUNTER_MASKS, MAX_STEM_HINTS, Mask, StemHint, TOP_GHOST, writable_stems};
 pub use number::Number;
 
 use charset::Charset;
@@ -396,6 +396,8 @@ fn validate(font: &Font) -> Result<(), Error> {
     for g in &font.glyphs {
         if let Some(h) = &g.hints {
             h.validate(&g.name, &g.path)?;
+            // Overlaps that only rounding creates show in the hints as written.
+            h.normalised(font.round_tolerance).validate(&g.name, &g.path)?;
         }
     }
     check_string(&font.name, "font name", false, false)?;
