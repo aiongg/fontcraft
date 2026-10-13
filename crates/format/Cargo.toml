@@ -16,3 +16,7 @@ fontcraft-model.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+
+# Saving touches the file system, which the browser build does not have.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+craft-atomic.workspace = true

@@ -1,44 +1,25 @@
-//! Atomic file writes: a crash or a full disk never leaves a half-written document.
+//! Atomic file writes: a crash or a full disk never leaves a half-written document. The work is
+//! done by the suite's shared `craft-atomic` crate.
 
-use std::io::Write as _;
 use std::path::Path;
 
 use crate::FormatError;
 
 /// Writes `bytes` to a temporary file next to `path`, flushes it to disk and renames it over
 /// `path`. The old file stays intact until the new one is complete. A symlink is followed, so the
-/// file it points to is replaced and the link stays; the replaced file's permissions are kept.
+/// file it points to is replaced and the link stays; the replaced file's permissions are kept. A
+/// file the user cannot write is refused rather than replaced.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), FormatError> {
-    let resolved;
-    let path = match std::fs::symlink_metadata(path) {
-        Ok(m) if m.file_type().is_symlink() => {
-            resolved = std::fs::canonicalize(path).map_err(|e| FormatError::Io(format!("cannot follow the link {}: {e}", path.display())))?;
-            resolved.as_path()
-        }
-        _ => path,
-    };
-    let old_permissions = std::fs::metadata(path).ok().map(|m| m.permissions());
-    let io = |what: &str, e: std::io::Error| FormatError::Io(format!("{what} {}: {e}", path.display()));
-    let dir = path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
-    let name = path.file_name().ok_or_else(|| FormatError::Io(format!("{} is not a file path", path.display())))?;
-    let mut tmp_name = std::ffi::OsString::from(".");
-    tmp_name.push(name);
-    tmp_name.push(format!(".{}.tmp", std::process::id()));
-    let tmp = dir.join(tmp_name);
-    let result = (|| {
-        let mut f = std::fs::File::create(&tmp).map_err(|e| io("cannot create a temporary file for", e))?;
-        f.write_all(bytes).map_err(|e| io("cannot write", e))?;
-        f.sync_all().map_err(|e| io("cannot flush", e))?;
-        if let Some(perm) = &old_permissions {
-            std::fs::set_permissions(&tmp, perm.clone()).map_err(|e| io("cannot keep the permissions of", e))?;
-        }
-        std::fs::rename(&tmp, path).map_err(|e| io("cannot replace", e))
-    })();
-    if result.is_err() {
-        // Best effort: the error we report is the write failure, not the clean-up.
-        let _ = std::fs::remove_file(&tmp);
-    }
-    result
+    // craft-atomic's errors already name the file and say whether the original was kept.
+    craft_atomic::atomic_write(path, bytes).map_err(|e| FormatError::Io(e.to_string()))
+}
+
+/// The browser has no file system to save to. Commands refuse before they get here; this keeps a
+/// stray call from reaching `std`, whose process id panics on this target.
+#[cfg(target_arch = "wasm32")]
+pub fn write_atomic(path: &Path, _bytes: &[u8]) -> Result<(), FormatError> {
+    Err(FormatError::Io(format!("cannot save {}: the browser has no file system", path.display())))
 }
 
 #[cfg(test)]
@@ -73,6 +54,25 @@ mod tests {
         assert!(std::fs::symlink_metadata(&link).unwrap().file_type().is_symlink());
         assert_eq!(std::fs::read(&target).unwrap(), b"new");
         assert_eq!(std::fs::metadata(&target).unwrap().permissions().mode() & 0o777, 0o640);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_read_only_file_is_refused_and_kept() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let dir = std::env::temp_dir().join(format!("fontcraft-atomic-ro-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("locked.fontcraft");
+        std::fs::write(&path, b"old").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o444)).unwrap();
+        // Root may write any file; the refusal only applies to users the mode binds.
+        if std::fs::OpenOptions::new().write(true).open(&path).is_err() {
+            let err = write_atomic(&path, b"new").unwrap_err().to_string();
+            assert!(err.contains("read-only"), "{err}");
+            assert_eq!(std::fs::read(&path).unwrap(), b"old");
+            assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1, "no temporary file is left behind");
+        }
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

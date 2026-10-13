@@ -498,6 +498,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "craft-atomic"
+version = "0.1.0"
+source = "git+https://github.com/storytold/craft-libs?rev=e9546e191dd62f2bc1d61eca45dbdc2f1b3c1d8e#e9546e191dd62f2bc1d61eca45dbdc2f1b3c1d8e"
+dependencies = [
+ "rustix 1.1.5",
+]
+
+[[package]]
 name = "crc32fast"
 version = "1.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1079,6 +1087,7 @@ dependencies = [
 name = "fontcraft-format"
 version = "0.0.1"
 dependencies = [
+ "craft-atomic",
  "fontcraft-model",
  "miniz_oxide 0.8.9",
  "serde",

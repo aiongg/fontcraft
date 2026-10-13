@@ -52,6 +52,10 @@ fontcraft-tables = { path = "crates/tables" }
 fontcraft-proof = { path = "crates/proof" }
 fontcraft-plugins = { path = "crates/plugins" }
 
+# The Craft suite's shared libraries (MIT OR Apache-2.0), pinned to one commit of craft-libs.
+# Bump the rev in its own commit, with the gate (docs/decisions/0008-shared-suite-libraries.md).
+craft-atomic = { git = "https://github.com/storytold/craft-libs", rev = "e9546e191dd62f2bc1d61eca45dbdc2f1b3c1d8e" }
+
 # foundation (all MIT OR Apache-2.0 unless noted)
 kurbo = { version = "0.13", features = ["serde"] }
 thiserror = "2"

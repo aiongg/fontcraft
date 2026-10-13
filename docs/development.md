@@ -22,7 +22,13 @@ Shipping builds use `--release`.
 
 Rust 1.95 or newer (edition 2024), as in the sibling apps. `rustup target add
 wasm32-unknown-unknown` once, for `cargo xtask wasm`. Nothing else is needed: no system
-libraries, no Python, no network at build time beyond crates.io.
+libraries, no Python, no network at build time beyond crates.io and github.com.
+
+The Craft suite's shared libraries come from git, pinned to one commit of craft-libs
+(`craft-*` in the root `Cargo.toml`; decision 0008). To bump a pin, read the upstream changes
+since the old commit, set `rev` to the new full commit hash for every `craft-*` entry, run
+`cargo update -p craft-atomic` (and each other `craft-*` crate), then the gate. The bump is its
+own commit.
 
 The first build of the desktop app compiles the windowing and GPU stack and takes several minutes
 (over ten on a two-core machine). The libraries and the CLI do not depend on that stack.
