@@ -10,7 +10,8 @@
 //! instructions are vertical and belong to the main master: a horizontal direction, or a layer of
 //! another master, is refused. Their cells are keyed by column: an instance or master, named by
 //! name or id, becomes the stored key for its location ([`delta_column_key`]); a stored key in
-//! braces, as `hint.tt.listInstructions` reports it, is taken as given.
+//! braces, as `hint.tt.listInstructions` reports it, is read as axis values and stored in the
+//! same form, so `{100}` and `{100, 0, 0, 0, 0, 0}` name one column.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -227,10 +228,19 @@ fn main_master_only(p: &Params, font: &Font, r: &Read) -> Result<()> {
 /// The stored column key `key` names.
 fn column(p: &Params, font: &Font, key: &str) -> Result<String> {
     if key.starts_with('{') {
-        if key.len() > MAX_COLUMN_KEY || !key.ends_with('}') {
+        let inner = key.strip_prefix('{').and_then(|k| k.strip_suffix('}')).filter(|_| key.len() <= MAX_COLUMN_KEY);
+        let Some(inner) = inner else {
             return Err(p.bad(format!("`cells`: a column key in braces is at most {MAX_COLUMN_KEY} bytes and ends with `}}`")));
-        }
-        return Ok(key.to_string());
+        };
+        let values: Option<Vec<f64>> = if inner.trim().is_empty() {
+            Some(Vec::new())
+        } else {
+            inner.split(',').map(|v| v.trim().parse::<f64>().ok().filter(|v| v.is_finite())).collect()
+        };
+        let Some(values) = values else {
+            return Err(p.bad(format!("`cells`: the column key `{key}` is not a list of axis values")));
+        };
+        return Ok(delta_column_key(&values));
     }
     if let Some(i) = font.instances.iter().find(|i| i.name == key || i.id.as_deref() == Some(key)) {
         return Ok(delta_column_key(&i.location));

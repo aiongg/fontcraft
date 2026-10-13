@@ -1369,7 +1369,7 @@ ref = "TrueType Hinting › Delta (E)"
 status = "handbook"
 observe = ["T3: select a Delta instruction, open its Delta table from the Info box and note whether the columns are masters or instances."]
 guesses = ["Delta columns accept masters as well as static instances, both stored as the location key; the reference app's Delta table for an instruction would show which columns it offers."]
-notes = "M10.7, crates/engine/src/cmd/hint_tt_more.rs: one Delta per point, touched or not, at the end of the list. A column is an instance or master by name or id, stored as the key of its location (fontcraft_hinting::tt::delta_column_key), or a stored key in braces; a PPM key is a size from 1 to 255 or a range such as 12-14. A horizontal direction and a layer outside the main master are refused. Documented, not yet observed."
+notes = "M10.7, crates/engine/src/cmd/hint_tt_more.rs: one Delta per point, touched or not, at the end of the list. A column is an instance or master by name or id, stored as the key of its location (fontcraft_hinting::tt::delta_column_key), or a key in braces, read as axis values and stored in the same form (so {100} and {100, 0, 0, 0, 0, 0} are one column); a PPM key is a size from 1 to 255 or a range such as 12-14. A horizontal direction and a layer outside the main master are refused. Documented, not yet observed."
 
 [[command]]
 id = "hint.tt.setDeltas"

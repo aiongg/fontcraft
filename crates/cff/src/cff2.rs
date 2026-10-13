@@ -42,6 +42,8 @@ pub const MAX_AXES: usize = 64;
 /// Most operands the charstring interpreter's stack holds (CFF2's `maxstack` default): a `blend`
 /// of `n` values with `k` regions needs `n * (k + 1) + 1`.
 pub const MAX_STACK: usize = 513;
+/// Most regions a region list may have: one varying value blended over them fills the stack.
+pub const MAX_BLEND_REGIONS: usize = MAX_STACK - 2;
 /// Most values one Private DICT list (BlueValues and the like) may have.
 pub const MAX_PRIVATE_LIST: usize = 14;
 
@@ -160,6 +162,8 @@ pub enum Cff2Error {
     TooManyRegions(usize),
     /// A blend that needs more operands than [`MAX_STACK`].
     StackOverflow { glyph: String },
+    /// A region list with more regions than one blend can hold ([`MAX_BLEND_REGIONS`]).
+    TooManyBlendRegions(usize),
 }
 
 impl fmt::Display for Cff2Error {
@@ -169,6 +173,9 @@ impl fmt::Display for Cff2Error {
             Cff2Error::BadBlend { glyph, reason } => write!(f, "glyph `{glyph}`: {reason}"),
             Cff2Error::TooManyRegions(n) => write!(f, "{n} variation regions is more than a CFF2 table can hold ({MAX_REGIONS})"),
             Cff2Error::StackOverflow { glyph } => write!(f, "glyph `{glyph}` varies more values at once than a CFF2 charstring can hold"),
+            Cff2Error::TooManyBlendRegions(n) => {
+                write!(f, "a region list has {n} variation regions; a CFF2 value blends over at most {MAX_BLEND_REGIONS}")
+            }
         }
     }
 }
@@ -443,6 +450,12 @@ fn private_dict(p: &Cff2Private, regions: usize) -> Result<Vec<u8>, Cff2Error> {
         if values.len() > MAX_PRIVATE_LIST {
             return Err(Error::TooManyOperands { what: what.into(), count: values.len() }.into());
         }
+        if let Some(v) = values.iter().find(|v| !v.deltas.is_empty() && v.deltas.len() != regions) {
+            return Err(Cff2Error::BadBlend {
+                glyph: what.into(),
+                reason: format!("a list value has {} deltas; region list 0 has {regions}", v.deltas.len()),
+            });
+        }
         // Each value is stored as the difference from the one before it. When any varies, every
         // value goes into one blend: readers take a list's operands as a single blend.
         let blended = values.iter().any(Blend::varies);
@@ -521,7 +534,10 @@ fn validate(font: &Cff2Font) -> Result<(), Cff2Error> {
         return Err(Cff2Error::BadBlend { glyph: String::new(), reason: format!("a region has {} axes; the font has {}", r.len(), font.axis_count) });
     }
     for list in &font.region_lists {
-        if list.len() > MAX_REGIONS || list.iter().any(|&r| usize::from(r) >= font.regions.len()) {
+        if list.len() > MAX_BLEND_REGIONS {
+            return Err(Cff2Error::TooManyBlendRegions(list.len()));
+        }
+        if list.iter().any(|&r| usize::from(r) >= font.regions.len()) {
             return Err(Cff2Error::BadBlend { glyph: String::new(), reason: "a region list names a region that does not exist".into() });
         }
     }
@@ -619,6 +635,10 @@ mod tests {
         // A list that cannot be one blend within the stack is refused.
         let many = Cff2Private { blue_values: vec![Blend { default: 1.0, deltas: vec![1.0; 40] }; 14], ..Cff2Private::default() };
         assert!(matches!(private_dict(&many, 40), Err(Cff2Error::StackOverflow { .. })));
+        // A value with more deltas than the region list has regions is refused, not cut short.
+        let extra =
+            Cff2Private { blue_values: vec![Blend { default: 500.0, deltas: vec![20.0, 5.0] }, Blend::fixed(515.0)], ..Cff2Private::default() };
+        assert!(matches!(private_dict(&extra, 1), Err(Cff2Error::BadBlend { .. })));
     }
 
     #[test]

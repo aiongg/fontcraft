@@ -259,10 +259,13 @@ pub fn cff2_font(
     for g in glyphs {
         let ops = source_ops(g)?;
         let shape = ops.first().map_or(&[][..], Vec::as_slice);
-        if g.locations.len() < 2 || g.locations.len() != ops.len() {
+        if g.locations.len() < 2 {
             let values = flat(shape);
             out.push(Cff2Glyph { name: g.glyph.clone(), vsindex: 0, path: blend_ops(shape, &values, &[]) });
             continue;
+        }
+        if g.locations.len() != ops.len() {
+            return Err(bad(&g.glyph, format!("it has {} source locations but {} source outlines", g.locations.len(), ops.len())));
         }
         let model = models.get(&g.locations).map_err(|e| bad(&g.glyph, e))?;
         let values: Vec<Vec<f64>> = ops.iter().map(|o| flat(o)).collect();

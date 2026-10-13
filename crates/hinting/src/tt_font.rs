@@ -456,6 +456,9 @@ ENDF[ ]
 }
 
 /// The `prep` program; see the module documentation for what it does in which order.
+/// Largest size a `prep` comparison pushes.
+const MAX_PPM_WORD: u16 = 32_767;
+
 fn prep_text(settings: &HintSettings, layout: &CvtLayout, column: &str, warnings: &mut Vec<String>) -> Result<String, HintingError> {
     use std::fmt::Write;
     let mut t = String::new();
@@ -467,7 +470,10 @@ fn prep_text(settings: &HintSettings, layout: &CvtLayout, column: &str, warnings
 
     line(&mut t, format_args!("; GDI ClearType: ClearType on and symmetric smoothing off"));
     line(&mut t, format_args!("PUSH {S_GDI} 64\nGETINFO[ ]\nPUSH 0\nGT[ ]\nPUSH 2048\nGETINFO[ ]\nPUSH 0\nEQ[ ]\nAND[ ]\nWS[ ]"));
-    match settings.tt_overshoot_suppression_below_ppm {
+    // The settings take sizes up to 65535 PPM; PUSH takes signed words, and no device reaches
+    // 32767 PPM.
+    let ppm_word = |ppm: u16| ppm.min(MAX_PPM_WORD);
+    match settings.tt_overshoot_suppression_below_ppm.map(ppm_word) {
         Some(ppm) => line(&mut t, format_args!("PUSH {S_SHOW_OVERSHOOTS}\nMPPEM[ ]\nPUSH {ppm}\nGTEQ[ ]\nWS[ ]")),
         None => line(&mut t, format_args!("PUSH {S_SHOW_OVERSHOOTS} 0\nWS[ ]")),
     }
@@ -499,7 +505,7 @@ fn prep_text(settings: &HintSettings, layout: &CvtLayout, column: &str, warnings
             None => {
                 let times = if z.name == "xHeight" { 2.0 } else { 1.0 };
                 let thr = if z.size > 0.0 { f26dot6(threshold * times) } else { 0 };
-                match (settings.tt_family_zones_threshold, layout.family.get(k)) {
+                match (settings.tt_family_zones_threshold.map(ppm_word), layout.family.get(k)) {
                     (Some(until), Some(family)) => line(
                         &mut t,
                         format_args!(
@@ -739,6 +745,17 @@ mod tests {
         let s = settings(vec![], vec![stem(130.0)]);
         assert_eq!(stem_target(&s, STEM_GDI_ONLY, true, gdi()), 2.0);
         assert!((stem_target(&s, STEM_GDI_ONLY, true, grayscale()) - 2.3).abs() < 1.5 / 64.0);
+    }
+
+    #[test]
+    fn sizes_past_the_signed_word_range_still_build() {
+        let mut s = settings(vec![zone("xHeight", 500.0, 20.0)], vec![]);
+        s.tt_overshoot_suppression_below_ppm = Some(40_000);
+        s.tt_family_zones_threshold = Some(40_000);
+        let p = font_programs(&s, &[zone("xHeight", 500.0, 20.0)], COLUMN).unwrap();
+        let points = [(0, 516), (100, 0), (200, 0)];
+        let f = font(&p, &points, &snaps(&p, &[(0, 0)]));
+        assert_eq!(hinted_y(&f, 60, mono())[0], 30.0, "overshoots stay suppressed at every size");
     }
 
     #[test]

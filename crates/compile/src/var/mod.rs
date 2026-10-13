@@ -36,7 +36,7 @@ pub mod mvar;
 pub mod names;
 pub mod stat;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use fontcraft_geom::BezPath;
 use fontcraft_model::{Font, ResolvedGlyph, Target};
@@ -329,8 +329,7 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
         return Err(CompileError::Table { table: "fvar", message: "a variable font needs two masters and an axis with a range".into() });
     }
     designspace.check_variable_origin()?;
-    let postscript_hint = |h: &fontcraft_model::Hint| matches!(h.kind(), None | Some("Stem" | "TopGhost" | "BottomGhost" | "Flex"));
-    if flavour == Flavour::Cff && font.glyphs.iter().any(|g| g.export && g.layers.iter().any(|l| l.info.hints.iter().any(postscript_hint))) {
+    if flavour == Flavour::Cff && font.glyphs.iter().any(|g| g.export && g.layers.iter().any(fontcraft_hinting::ps::has_ps_hints)) {
         notes.push(cff2::HINTS_DROPPED.to_string());
     }
     let origin = designspace.origin().cloned().ok_or(CompileError::NotYetImplemented("a designspace without an origin"))?;
@@ -574,15 +573,23 @@ impl Outlines<'_> {
 
     /// The intermediate sources (indices into `sources`) at the locations of the intermediate
     /// layers of the glyphs `g` reaches through its components, nested ones included.
-    fn component_sources(&self, g: &ResolvedGlyph, glyphs: &[ResolvedGlyph], index: &HashMap<&str, usize>) -> Vec<usize> {
-        let mut seen: Vec<&str> = Vec::new();
-        let mut todo: Vec<&str> = g.components.iter().map(|c| c.base.as_str()).collect();
+    fn component_sources<'a>(&self, g: &'a ResolvedGlyph, glyphs: &'a [ResolvedGlyph], index: &HashMap<&str, usize>) -> Vec<usize> {
+        // Each name enters `todo` once, so the walk is linear in the components it reads.
+        let mut seen: HashSet<&str> = HashSet::new();
+        let mut todo: Vec<&str> = Vec::new();
+        let visit = |components: &'a [fontcraft_model::ResolvedComponent], seen: &mut HashSet<&'a str>, todo: &mut Vec<&'a str>| {
+            for c in components {
+                if seen.len() >= MAX_COMPONENT_CLOSURE {
+                    return;
+                }
+                if seen.insert(c.base.as_str()) {
+                    todo.push(c.base.as_str());
+                }
+            }
+        };
+        visit(&g.components, &mut seen, &mut todo);
         let mut out = Vec::new();
         while let Some(name) = todo.pop() {
-            if seen.contains(&name) || seen.len() >= MAX_COMPONENT_CLOSURE {
-                continue;
-            }
-            seen.push(name);
             if let Some(gs) = self.glyph_sources.get(name) {
                 for s in gs.main.iter().filter(|s| !s.is_master) {
                     if let Some(k) = self.sources.iter().position(|o| o.master.is_none() && o.location == s.location)
@@ -593,7 +600,7 @@ impl Outlines<'_> {
                 }
             }
             if let Some(r) = index.get(name).and_then(|&j| glyphs.get(j)) {
-                todo.extend(r.components.iter().map(|c| c.base.as_str()));
+                visit(&r.components, &mut seen, &mut todo);
             }
         }
         out.sort_unstable();

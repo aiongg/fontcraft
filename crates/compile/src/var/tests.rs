@@ -556,7 +556,55 @@ fn cff2_blends_past_the_stack_limit_are_split() {
     glyph.draw(DrawSettings::unhinted(Size::unscaled(), LocationRef::new(&coords)), &mut pen).unwrap();
     // At a peak one region applies: every coordinate moves by 1.
     assert_eq!(pen.0.unwrap(), (1.0, 1.0, 101.0, 101.0));
-    // One value with more regions than the stack holds cannot be written.
+    // A region list with more regions than one blend can hold is refused before any glyph is
+    // encoded.
     let err = fontcraft_cff::cff2::write_cff2(&many_regions(600)).unwrap_err();
-    assert!(matches!(err, fontcraft_cff::cff2::Cff2Error::StackOverflow { .. }), "{err}");
+    assert!(matches!(err, fontcraft_cff::cff2::Cff2Error::TooManyBlendRegions(600)), "{err}");
+}
+
+#[test]
+fn cff2_sources_without_an_outline_each_are_refused() {
+    let master = |l: f64| (vec![l], fontcraft_cff::PrivateDict::default());
+    let glyph = cff2::CubicSources { glyph: "a".into(), locations: vec![vec![0.0], vec![1.0]], paths: vec![vec![fontcraft_geom::BezPath::new()]] };
+    let err = cff2::cff2_font(1, &[glyph], &[master(0.0), master(1.0)], 1000, &mut Vec::new()).unwrap_err();
+    assert!(matches!(&err, CompileError::Glyph { glyph, .. } if glyph == "a"), "{err}");
+}
+
+#[test]
+fn cff2_composites_of_many_repeated_components_export_quickly() {
+    // `m` holds 60000 components cycling over 1000 empty glyphs, and 400 glyphs hold `m`: the
+    // walk over each composite's components must not compare every name with every other.
+    let mut f = two_masters();
+    let mut glyphs: Vec<Glyph> = f.glyphs.iter().map(|g| (**g).clone()).collect();
+    let both = |shapes: Vec<Shape>| vec![layer("thin", 300.0, shapes.clone()), layer("black", 500.0, shapes)];
+    for i in 0..1000 {
+        glyphs.push(glyph(&format!("e{i}"), 0xE000 + i, both(Vec::new())));
+    }
+    let parts: Vec<Shape> = (0..60_000).map(|i| Shape::Component(Component::new(format!("e{}", i % 1000), 0.0, 0.0))).collect();
+    glyphs.push(glyph("m", 0xF000, both(parts)));
+    for i in 0..400 {
+        glyphs.push(glyph(&format!("t{i}"), 0xF100 + i, both(vec![Shape::Component(Component::new("m", 0.0, 0.0))])));
+    }
+    f.glyphs = GlyphTable::from_glyphs(glyphs.into_iter().map(Arc::new).collect());
+    let started = std::time::Instant::now();
+    let v = build_cff2(&f, None);
+    assert!(started.elapsed() < std::time::Duration::from_secs(20), "took {:?}", started.elapsed());
+    assert!(v.compiled.glyph_order.iter().any(|g| g == "t399"));
+}
+
+#[test]
+fn cff2_notes_dropped_postscript_hints_only() {
+    let with_hint = |text: &str| {
+        let mut f = two_masters();
+        let value = fontcraft_model::plist::openstep::parse_value(text).unwrap();
+        let hint = fontcraft_model::Hint { family: fontcraft_model::Family::Glyphs, value };
+        f.glyph_mut("a").unwrap().layers[0].info.hints.push(hint);
+        build_cff2(&f, None).compiled.warnings
+    };
+    let dropped = |w: &[String]| w.iter().any(|w| w == cff2::HINTS_DROPPED);
+    // A TrueType stem stored with its numeric type code, as older files do.
+    let tt = with_hint("{horizontal = 1; origin = (0, 0); target = (0, 1); type = 4;}");
+    assert!(!dropped(&tt), "{tt:?}");
+    let ps = with_hint("{horizontal = 1; origin = (0, 0); target = (0, 1); type = Stem;}");
+    assert!(dropped(&ps), "{ps:?}");
 }

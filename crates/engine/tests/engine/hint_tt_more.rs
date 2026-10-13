@@ -139,6 +139,10 @@ fn delta_is_vertical_main_master_only_with_bounded_cells() {
     run(&mut s, "hint.tt.setDeltas", json!({"instructions": [1], "cells": {"{900, 0, 0, 0, 0, 0}": {"9": "none"}}}));
     let TtKind::Delta { cells } = &tt(&s)[1].kind else { panic!("not a Delta") };
     assert_eq!(cells.len(), 1);
+    // A short key in braces names the same column as the stored form.
+    run(&mut s, "hint.tt.setDeltas", json!({"instructions": [1], "cells": {"{700}": {"12": "up"}}}));
+    let TtKind::Delta { cells } = &tt(&s)[1].kind else { panic!("not a Delta") };
+    assert_eq!((cells.len(), cells["{700, 0, 0, 0, 0, 0}"][&12]), (1, DeltaDir::Up));
 
     let e = refused(&mut s, "hint.tt.addDelta", json!({"nodes": [[0, 1]], "direction": "horizontal"}));
     assert!(e.contains("vertical"), "{e}");
@@ -153,6 +157,7 @@ fn delta_is_vertical_main_master_only_with_bounded_cells() {
         json!({"Bold": {"12": "left"}}),
         json!({"Nope": {"12": "up"}}),
         json!({"Bold": 3}),
+        json!({"{700, x}": {"12": "up"}}),
     ] {
         refused(&mut s, "hint.tt.addDelta", json!({"nodes": [[0, 1]], "cells": cells}));
     }
