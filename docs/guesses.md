@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**1705 guesses on 1103 rows (397 of them live commands).**
+**1706 guesses on 1103 rows (397 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -1197,6 +1197,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `hinting.ps.alignmentZones.gridCompensation` (behavior) | M10 | handbook | – | The check flags a zone whose size is a whole number of grid steps when the grid is coarser than one unit (it was not widened), and says nothing for finer or fractional grids, where a widened zone cannot be told apart; whether the reference app checks this at all would settle it. |
 | `hinting.ps.alignmentZones.blueValuesMapping` (behavior) | M10 | docs | – | Too many zones (more than seven BlueValues pairs or five OtherBlues pairs): the export keeps the first pairs in ascending order and warns, and hint.ps.validateFontHints reports it; an export from the reference app with eight top zones would settle it. |
 | `hinting.ps.blueScale` (behavior) | M10 | handbook | – | As in fontmake, BlueScale, BlueFuzz and BlueShift are written only when the master has alignment zones; a reference export of a font with no zone settings would settle it. |
+| `hinting.ps.blueScale` (behavior) | M10 | handbook | – | When BlueScale times the tallest zone reaches 1, the export keeps the BlueScale and warns rather than lowering it; a reference export of a font with a 30-unit zone and no blueScale parameter would settle it. |
 | `hinting.ps.blueShift` (behavior) | M10 | handbook | – | blueShift, blueScale, blueFuzz and the other hinting parameters whose scope the handbook does not give are read from the instance, else the master, else the font, as FontCraft reads every other parameter; a reference export with a master-level and a font-level blueShift that differ would settle it. |
 | `hinting.ps.familyAlignmentZones` (behavior) | M10 | handbook | – | Family Alignment Zones is read where it is most specific (instance, then master, then font) and written as FamilyBlues and FamilyOtherBlues with the same rule as the master zones (a zone at 0 or of positive size to FamilyBlues); an export from the reference app would confirm the scope and the split. |
 | `hinting.ps.export.autohintParameter` (behavior) | M10 | handbook | – | The Autohint parameter is read on the instance first, then the font; when neither has it the export dialog's checkbox (default off) decides; a reference export would show whether a font-level parameter counts. |

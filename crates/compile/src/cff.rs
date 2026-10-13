@@ -83,7 +83,7 @@ pub(crate) fn build(
     let cff_font = cff::Font {
         name: font_name(info, warnings),
         top: top_dict(font, info, warnings),
-        private: private_dict(font, settings.as_ref()),
+        private: private_dict(font, settings.as_ref(), warnings),
         glyphs,
         widths: widths(font),
         round_tolerance: ROUND_TOLERANCE,
@@ -283,7 +283,7 @@ fn rounded(v: &[f64]) -> Vec<Number> {
     v.iter().map(|x| Number::Int(ot_round(*x) as i64)).collect()
 }
 
-fn private_dict(font: &Resolved, settings: Option<&HintSettings>) -> PrivateDict {
+fn private_dict(font: &Resolved, settings: Option<&HintSettings>, warnings: &mut Vec<String>) -> PrivateDict {
     let params = &font.params;
     let ufo = is_ufo_family(font.format);
     // A UFO's blue values that its reader could not turn into zones are kept as written.
@@ -306,6 +306,7 @@ fn private_dict(font: &Resolved, settings: Option<&HintSettings>) -> PrivateDict
         p.other_blues = rounded(&other);
         p.family_blues = rounded(&family);
         p.family_other_blues = rounded(&family_other);
+        blue_scale_check(&p, warnings);
     }
     let stems_h = param(params, &["postscriptStemSnapH"], numbers).unwrap_or_else(|| font.stems_h.clone());
     let stems_v = param(params, &["postscriptStemSnapV"], numbers).unwrap_or_else(|| font.stems_v.clone());
@@ -318,6 +319,32 @@ fn private_dict(font: &Resolved, settings: Option<&HintSettings>) -> PrivateDict
         p.stem_snap_v = sorted(v);
     }
     p
+}
+
+/// Warns when BlueScale is too large for the tallest alignment zone: the handbook requires
+/// (largest point size at 300 dpi − 0.49) × largest zone < 240, and BlueScale is that point size
+/// less 0.49, over 240, so BlueScale × largest zone must stay below 1.
+fn blue_scale_check(p: &PrivateDict, warnings: &mut Vec<String>) {
+    let value = |n: &Number| match *n {
+        Number::Int(i) => i as f64,
+        Number::Real(r) => r,
+    };
+    let largest = [&p.blue_values, &p.other_blues, &p.family_blues, &p.family_other_blues]
+        .into_iter()
+        .flat_map(|list| list.chunks_exact(2))
+        .filter_map(|pair| match pair {
+            [a, b] => Some((value(b) - value(a)).abs()),
+            _ => None,
+        })
+        .fold(0.0, f64::max);
+    let scale = value(&p.blue_scale);
+    if scale * largest >= 1.0 {
+        warnings.push(format!(
+            "BlueScale {scale} is too large for the largest alignment zone ({largest} units): BlueScale times the zone must stay below 1, so \
+             BlueScale below {:.6}; overshoots in that zone may not be suppressed as intended",
+            1.0 / largest
+        ));
+    }
 }
 
 fn sorted(mut v: Vec<i64>) -> Vec<Number> {

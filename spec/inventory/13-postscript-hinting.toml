@@ -140,11 +140,15 @@ milestone = "M10"
 summary = "blueScale is an optional custom parameter written to the Private dict as BlueScale. It fixes the size below which overshoots are suppressed and thereby caps the zone size (see hinting.ps.alignmentZones.limits). When the source sets none, the export writes 0.037, the default the parameter's description gives (overshoots show from 40 pixels per em)."
 ref = "PostScript Hinting › Custom Parameters"
 status = "handbook"
-guesses = ["As in fontmake, BlueScale, BlueFuzz and BlueShift are written only when the master has alignment zones; a reference export of a font with no zone settings would settle it."]
-notes = "The default is documented in the parameter description (Appendix › Custom Parameters) and not yet observed. fontmake computes BlueScale as 3 / (4 × the tallest zone) instead; FontCraft follows the handbook (docs/plans/M10.md § 7, question 6) and docs/spec/40-compile.md § 4a records the difference."
+guesses = [
+  "As in fontmake, BlueScale, BlueFuzz and BlueShift are written only when the master has alignment zones; a reference export of a font with no zone settings would settle it.",
+  "When BlueScale times the tallest zone reaches 1, the export keeps the BlueScale and warns rather than lowering it; a reference export of a font with a 30-unit zone and no blueScale parameter would settle it.",
+]
+notes = "The default is documented in the parameter description (Appendix › Custom Parameters) and not yet observed. The same description limits BlueScale × tallest zone to below 1; the export warns when the written value breaks it. fontmake computes BlueScale as 3 / (4 × the tallest zone) instead; FontCraft follows the handbook (docs/plans/M10.md § 7, question 6), also for UFO sources, and docs/spec/40-compile.md § 4a records the difference."
 observe = [
   "T5 (no blueScale, blueFuzz or blueShift parameter): export as CFF and read the Private dict with fontTools; note the BlueScale, BlueFuzz and BlueShift values (FontCraft writes 0.037, 1 and 7).",
   "T1 with every alignment zone removed from the master and no blue parameters: export as CFF and read the Private dict; note whether BlueScale, BlueFuzz and BlueShift are written at all, and with which values.",
+  "T5 with one alignment zone 30 units deep and no blueScale parameter: export as CFF, read BlueScale from the Private dict and note any export message; it shows whether the app lowers BlueScale below 1 / 30 or keeps 0.037 (FontCraft keeps it and warns).",
 ]
 
 [[behavior]]

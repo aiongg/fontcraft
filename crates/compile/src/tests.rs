@@ -1278,6 +1278,22 @@ fn cff_dicts_hold_the_names_numbers_zones_and_stems() {
 }
 
 #[test]
+fn a_blue_scale_too_large_for_the_tallest_zone_is_reported() {
+    let warned = |f: &Font| compile_otf(f).warnings.iter().any(|w| w.contains("BlueScale"));
+    // 16-unit zones: 0.037 × 16 stays below 1.
+    assert!(!warned(&sample()));
+    // A 30-unit zone: 0.037 × 30 does not; the default is still written.
+    let mut f = sample();
+    Arc::make_mut(&mut f.masters)[0].zones.push(fontcraft_model::AlignmentZone { pos: 600.0, size: 30.0 });
+    let out = compile_otf(&f);
+    assert!(out.warnings.iter().any(|w| w.contains("BlueScale 0.037") && w.contains("30 units")), "{:?}", out.warnings);
+    assert!(dicts(&out.bytes).private.contains(&Entry::BlueScale(fixed(0.037))));
+    // A BlueScale the source sets small enough clears it.
+    param(&mut f, "blueScale", real(0.03));
+    assert!(!warned(&f));
+}
+
+#[test]
 fn cff_widths_come_from_the_source_when_it_sets_them() {
     let mut f = sample();
     int_param(&mut f, "postscriptNominalWidthX", 600);

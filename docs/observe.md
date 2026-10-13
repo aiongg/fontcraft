@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1119 rows to check: 1561 guesses and 414 observe steps.**
+**1119 rows to check: 1562 guesses and 415 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -2597,8 +2597,10 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: T5 (8 top zones): export as CFF and read the Private dict; count the BlueValues pairs, note which zones are left out, and note any warning in the export results.
 - [ ] `hinting.ps.blueScale` (behavior, M10, handbook): blueScale is an optional custom parameter written to the Private dict as…
   - Guess: As in fontmake, BlueScale, BlueFuzz and BlueShift are written only when the master has alignment zones; a reference export of a font with no zone settings would settle it.
+  - Guess: When BlueScale times the tallest zone reaches 1, the export keeps the BlueScale and warns rather than lowering it; a reference export of a font with a 30-unit zone and no blueScale parameter would settle it.
   - Observe: T5 (no blueScale, blueFuzz or blueShift parameter): export as CFF and read the Private dict with fontTools; note the BlueScale, BlueFuzz and BlueShift values (FontCraft writes 0.037, 1 and 7).
   - Observe: T1 with every alignment zone removed from the master and no blue parameters: export as CFF and read the Private dict; note whether BlueScale, BlueFuzz and BlueShift are written at all, and with which values.
+  - Observe: T5 with one alignment zone 30 units deep and no blueScale parameter: export as CFF, read BlueScale from the Private dict and note any export message; it shows whether the app lowers BlueScale below 1 / 30 or keeps 0.037 (FontCraft keeps it and warns).
 - [ ] `hinting.ps.blueShift` (behavior, M10, handbook): blueShift is an optional custom parameter (set in Font Info › Font)…
   - Guess: blueShift, blueScale, blueFuzz and the other hinting parameters whose scope the handbook does not give are read from the instance, else the master, else the font, as FontCraft reads every other parameter; a reference export with a master-level and a font-level blueShift that differ would settle it.
   - Observe: T5: set blueShift 9 on the font and 11 on master 1, export master 1 as CFF and note the BlueShift in the Private dict.

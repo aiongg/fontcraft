@@ -676,6 +676,15 @@ and FamilyOtherBlues), and fontmake ignores both. The oracle compares the decode
 `CFF ` table, not its Private DICT, so these differences need no allow-list entry. The
 reference app's own export is not yet observed (`hinting.ps.blueScale`, `hinting.ps.blueFuzz`).
 
+UFO sources get the same defaults: a UFO without `postscriptBlueScale` or `postscriptBlueFuzz`
+is written with BlueScale 0.037 and BlueFuzz 1, where ufo2ft computes BlueScale from the zones
+and writes BlueFuzz 0.
+
+The handbook limits BlueScale by the tallest zone: (largest point size at 300 dpi − 0.49) ×
+tallest zone < 240, that is BlueScale × tallest zone < 1. The default 0.037 breaks this for a
+zone of 28 units or more. FontCraft keeps the BlueScale it writes (the default or the source's
+value) and adds an export warning naming the zone size and the largest BlueScale it allows.
+
 **Manual PostScript hints.** No reference compiler writes a `.glyphs` source's manual hints:
 glyphsLib passes them through as lib keys and ufo2ft drops them. FontCraft writes them into the
 charstrings (`crates/compile/src/cff_hints.rs`), so a hinted glyph's charstring differs from
