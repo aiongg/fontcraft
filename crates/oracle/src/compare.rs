@@ -45,7 +45,7 @@ pub const CORE: &[&str] = &["head", "hhea", "maxp", "OS/2", "hmtx", "cmap", "nam
 pub const LAYOUT: &[&str] = &["GSUB", "GPOS", "GDEF", "kern", "BASE", "JSTF", "MATH"];
 /// The layout tables compared lookup by lookup ([`crate::layout`]); the others are skipped.
 pub const COMPARED_LAYOUT: &[&str] = &["GSUB", "GPOS", "GDEF"];
-/// Variation tables, compared from M9.
+/// Variation tables: the static comparison skips them; `variable` compares them at locations.
 pub const VARIATION: &[&str] = &["fvar", "gvar", "avar", "HVAR", "VVAR", "MVAR", "STAT", "cvar", "CFF2"];
 
 /// How outlines are compared.
@@ -265,7 +265,7 @@ fn table(
         return skipped(tag, "layout table: not compared");
     }
     if VARIATION.contains(&tag) {
-        return skipped(tag, "variation table: compared from M9");
+        return skipped(tag, "variation table: compared by the variable run (--variable)");
     }
     if tag == "DSIG" {
         return skipped(tag, "signature: not compared");

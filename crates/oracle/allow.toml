@@ -609,3 +609,30 @@ oracle = "fontc"
 sources = ["/TheBestNames.glyphs", "/TheBestV2NamesInAV3File.glyphs"]
 theirs = "absent"
 reason = "The compatible full name of a `.glyphs` source: fontc writes no name ID 18; FontCraft writes it from the compatibleFullNames property or the compatibleFullName parameter, as the handbook says and fontmake does (`docs/plans/M7.md` › M7.8)."
+
+# --- Variable fonts and static instances (M9) ----------------------------------------------------
+# The variable run (`--variable`) reports one row per check: `fvar`, `avar`, `STAT`, `outlines`,
+# `advances`, `phantom`, `MVAR`, `GSUB variations`, `GPOS kerning`, `GPOS marks`. An entry for it
+# names the check as its `table`; its keys end in `at <location>` (`* at midpoint *` for every
+# midpoint). The instance run (`--instances`) labels each instance `<source> › <instance>`, so a
+# `sources` part ending in ` › ` limits an entry to the instances of a source, and every entry for
+# the source also applies to them.
+# Static instances outside the axes: FontCraft extrapolates them as the handbook says and fontmake
+# clamps them to the axis range (docs/spec/40-compile.md § 4a). Their entries come with the
+# instances, which M9.4 builds.
+
+[[allow]]
+table = "GDEF"
+key = "outside lookups"
+oracle = "fontmake"
+sources = ["/AlumniSans-wononly.glyphs › ", "/LibreFranklin-bracketlayer.glyphs › ", "/glyph-with-bracket-component.glyphs › ", "/BlankAlternateLayers.glyphs › ", "/bracket-glyph-order.glyphs › ", "/bracket-rules-processed-in-glyph-order.glyphs › ", "/WorkSans-minimal-bracketlayer.glyphs › "]
+theirs = "*BRACKET*"
+reason = "Source reading in a static instance: fontmake's instance keeps a glyph for each alternate (bracket) layer (`*.BRACKET.*`), swapped in where its range covers the instance, so its glyph classes list them. FontCraft's instance holds only the glyphs it exports, with the layer in effect at the instance's location (M9.4)."
+
+[[allow]]
+table = "GPOS"
+key = "lookup *"
+oracle = "fontmake"
+sources = ["/AlumniSans-wononly.glyphs › ", "/BracketTestFontKerning.glyphs › ", "/LibreFranklin-bracketlayer.glyphs › ", "/glyph-with-bracket-component.glyphs › ", "/bracket-glyph-order.glyphs › ", "/bracket-rules-processed-in-glyph-order.glyphs › "]
+theirs = "*BRACKET*"
+reason = "Follows from the alternate glyphs fontmake keeps in a static instance (see GDEF): its kerning and mark attachment rules name them as well."

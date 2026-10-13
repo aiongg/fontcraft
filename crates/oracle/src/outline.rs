@@ -107,17 +107,23 @@ impl OutlinePen for Pen {
 /// Draws glyph `gid` of `font`: `Ok(None)` when it has no outline, an error when drawing fails or
 /// the glyph is too large to compare.
 pub fn draw(font: &FontRef, gid: GlyphId) -> Result<Option<Outline>, String> {
+    draw_at(font, gid, LocationRef::default()).map(|(o, _)| o)
+}
+
+/// Draws glyph `gid` of a variable font at `location`, as [`draw`] does, with the advance width
+/// the scaler gives (from the phantom points, where the font has them).
+pub fn draw_at(font: &FontRef, gid: GlyphId, location: LocationRef) -> Result<(Option<Outline>, Option<f32>), String> {
     let glyphs = font.outline_glyphs();
-    let Some(glyph) = glyphs.get(gid) else { return Ok(None) };
+    let Some(glyph) = glyphs.get(gid) else { return Ok((None, None)) };
     let mut pen = Pen::default();
-    glyph.draw(DrawSettings::unhinted(Size::unscaled(), LocationRef::default()), &mut pen).map_err(|e| e.to_string())?;
+    let metrics = glyph.draw(DrawSettings::unhinted(Size::unscaled(), location), &mut pen).map_err(|e| e.to_string())?;
     pen.finish_contour();
     if pen.count > MAX_SEGMENTS {
         return Err(format!("more than {MAX_SEGMENTS} segments"));
     }
     // A contour of one point draws nothing.
     pen.contours.retain(|c| !c.is_empty());
-    Ok(Some(Outline { contours: pen.contours }))
+    Ok((Some(Outline { contours: pen.contours }), metrics.advance_width))
 }
 
 /// How two outlines relate.

@@ -6,9 +6,11 @@
 //! fonts back and compares them normalised ([`compare`]). Each table comes out identical,
 //! equivalent (it differs only where normalisation allows), coverage-equal (outline tables only:
 //! some glyphs differ in their points but cover the same pixels), allowed (every difference is on
-//! the allow-list, [`allow`]), different, or skipped (outside the comparison for now: the layout
-//! tables other than `GSUB`, `GPOS` and `GDEF`, variation tables until M9). `GSUB`, `GPOS` and
-//! `GDEF` are compared lookup by lookup (`layout`). Differences in how the two programs read the source, such
+//! the allow-list, [`allow`]), different, or skipped (outside the comparison: the layout tables
+//! other than `GSUB`, `GPOS` and `GDEF`, and the variation tables, which [`variable`] compares
+//! at locations). `GSUB`, `GPOS` and `GDEF` are compared lookup by lookup (`layout`). Variable
+//! fonts and static instances have runs of their own ([`variable::check_variable`],
+//! [`variable::check_instances`]). Differences in how the two programs read the source, such
 //! as a different glyph set or order, are reported apart as source-reading findings.
 //!
 //! The reference compilers are optional: when one is missing, [`tools::locate`] says so and the
@@ -19,9 +21,11 @@
 pub mod allow;
 pub mod compare;
 pub mod corpus;
+pub mod evaluate;
 mod layout;
 pub mod outline;
 pub mod tools;
+pub mod variable;
 
 #[cfg(test)]
 mod tests;
@@ -351,7 +355,7 @@ pub fn apply_allow(tables: &mut [TableResult], allow: &AllowList, oracle: &str, 
 }
 
 /// A work folder, removed on drop unless it is kept.
-struct Work {
+pub(crate) struct Work {
     path: PathBuf,
     remove: bool,
 }
@@ -365,7 +369,7 @@ impl Drop for Work {
     }
 }
 
-fn work_dir(settings: &Settings, label: &str) -> Result<Work, String> {
+pub(crate) fn work_dir(settings: &Settings, label: &str) -> Result<Work, String> {
     use std::sync::atomic::{AtomicUsize, Ordering};
     static NEXT: AtomicUsize = AtomicUsize::new(0);
     let (path, remove) = match &settings.keep {
@@ -381,7 +385,7 @@ fn work_dir(settings: &Settings, label: &str) -> Result<Work, String> {
 }
 
 /// A folder name for a source label.
-fn slug(label: &str) -> String {
+pub(crate) fn slug(label: &str) -> String {
     let s: String = label.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '.' { c } else { '_' }).take(150).collect();
     if s.trim_matches(['.', '_']).is_empty() { "source".into() } else { s }
 }

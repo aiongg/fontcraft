@@ -9,7 +9,7 @@
 //! fontcraft-cli tables list FONT [--sort file|tag|size] [--face N|all]
 //! fontcraft-cli glyphs list FONT [--face N]
 //! fontcraft-cli mcp [--connect ADDR | --headless] [--automation-read-root DIR] [--automation-write-root DIR] [--read-only] [--allow P]... [--deny P]...
-//! fontcraft-cli oracle (SOURCE... | --corpus [DIR]) [--against fontc|fontmake] [--format ttf|otf] [--json] …
+//! fontcraft-cli oracle (SOURCE... | --corpus [DIR]) [--against fontc|fontmake] [--format ttf|otf] [--variable | --instances] [--json] …
 //! ```
 //! Every subcommand is a thin shell over engine commands (`spec/inventory/20-cli.toml` lists the
 //! full planned set and the reference tools each one replaces). Results are JSON on stdout and
@@ -75,11 +75,12 @@ USAGE:
 
   fontcraft-cli oracle (SOURCE... | --corpus [DIR]) [--against fontc|fontmake] [--format ttf|otf]
                       [--reference-bin PATH] [--output-dir DIR] [--timestamp SECS] [--timeout SECS]
-                      [--differences N] [--match TEXT] [--json]
+                      [--differences N] [--match TEXT] [--variable | --instances] [--json]
       Development aid: compile each source with FontCraft and with a reference compiler (fontc
       for .ttf, fontmake for .otf), read both fonts back and report per table whether they are
       identical, equivalent, allowed or different. --corpus runs over the comparison set in DIR
-      (default ./corpus). Exit status 1 when a table differs or a build fails.
+      (default ./corpus). Exit status 1 when a table differs or a build fails. --variable
+      compares variable fonts at locations, --instances static instances against fontmake -i.
 
   fontcraft-cli help | --version
 ";

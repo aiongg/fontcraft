@@ -286,6 +286,109 @@ fn build_fontmake(req: &Request, kind: SourceKind, source: &Path) -> Result<Buil
     Ok(Built { path, command, notes, alternatives })
 }
 
+/// Builds `req.source`'s variable font with the reference compiler (M9.10): fontc from the
+/// source itself, fontmake with `-o variable`. Of several fontmake outputs (one per variable font
+/// setting), the one whose file stem is `req.hint.style` when it names one, else the first.
+pub fn build_variable(req: &Request) -> Result<Built, String> {
+    let kind = SourceKind::of(req.source).ok_or_else(|| format!("{} is not a source the reference compilers read", req.source.display()))?;
+    let source = std::fs::canonicalize(req.source).map_err(|e| format!("{}: {e}", req.source.display()))?;
+    match req.oracle {
+        Oracle::Fontc => {
+            let out = req.work_dir.join("reference-variable.ttf");
+            let mut cmd = Command::new(req.tool);
+            cmd.arg("-b").arg(req.work_dir.join("fontc-build")).arg("-o").arg(&out).arg(&source);
+            run(req, cmd)?;
+            if !out.is_file() {
+                return Err(format!("fontc finished but wrote no {}", out.display()));
+            }
+            Ok(Built { path: out, command: format!("fontc -o OUT {}", source.display()), notes: Vec::new(), alternatives: Vec::new() })
+        }
+        Oracle::Fontmake => {
+            let out_dir = req.work_dir.join("fontmake");
+            let (args, command) = fontmake_args(req, kind, &source, &["-o", "variable"]);
+            let mut cmd = Command::new(req.tool);
+            cmd.args(&args).arg("--output-dir").arg(&out_dir);
+            run(req, cmd)?;
+            let files = crate::variable::ttf_files(&out_dir, MAX_OUTPUT_FILES);
+            let stem_of = |p: &PathBuf| p.file_stem().and_then(|s| s.to_str()).map(str::to_string).unwrap_or_default();
+            let chosen = files.iter().find(|p| !req.hint.style.is_empty() && stem_of(p) == req.hint.style).or(files.first());
+            let Some(path) = chosen.cloned() else { return Err("fontmake finished but wrote no variable font".into()) };
+            let mut notes = Vec::new();
+            if files.len() > 1 {
+                notes.push(format!("one of {} variable fonts: {}", files.len(), path.file_name().map(|n| n.to_string_lossy()).unwrap_or_default()));
+            }
+            Ok(Built { path, command, notes, alternatives: Vec::new() })
+        }
+    }
+}
+
+/// fontmake's arguments for `source` with `outputs` (`-o variable`, `-i -o ttf`), up to the
+/// output folder, and the command line to report.
+fn fontmake_args(req: &Request, kind: SourceKind, source: &Path, outputs: &[&str]) -> (Vec<String>, String) {
+    let input_flag = match kind {
+        SourceKind::Glyphs | SourceKind::GlyphsPackage => "-g",
+        SourceKind::Designspace => "-m",
+        SourceKind::Ufo => "-u",
+    };
+    let mut args: Vec<String> = vec![input_flag.into(), source.to_string_lossy().into_owned()];
+    args.extend(outputs.iter().map(|s| s.to_string()));
+    // fontc and FontCraft leave out an on-curve point exactly between two off-curve points.
+    args.push("--drop-implied-oncurves".into());
+    if matches!(kind, SourceKind::Glyphs | SourceKind::GlyphsPackage) {
+        // glyphsLib writes master and instance UFOs; keep them in the work folder.
+        for (flag, dir) in [("--master-dir", "fontmake-masters"), ("--instance-dir", "fontmake-instances")] {
+            args.extend([flag.into(), req.work_dir.join(dir).to_string_lossy().into_owned()]);
+        }
+    }
+    let command = format!("fontmake {} --output-dir OUT", args.join(" "));
+    (args, command)
+}
+
+/// A reference build of every static instance.
+#[derive(Clone, Debug, PartialEq)]
+pub struct InstanceBuild {
+    /// The instance fonts, sorted.
+    pub files: Vec<PathBuf>,
+    pub command: String,
+}
+
+/// Builds every static instance of `req.source` with fontmake `-i` (M9.10). fontc builds no
+/// static instance between masters.
+pub fn build_instances(req: &Request) -> Result<InstanceBuild, String> {
+    if req.oracle != Oracle::Fontmake {
+        return Err(format!("{} builds no static instances; compare them with fontmake", req.oracle.name()));
+    }
+    let kind = SourceKind::of(req.source).ok_or_else(|| format!("{} is not a source the reference compilers read", req.source.display()))?;
+    let source = std::fs::canonicalize(req.source).map_err(|e| format!("{}: {e}", req.source.display()))?;
+    let out_dir = req.work_dir.join("fontmake");
+    let (args, command) = fontmake_args(req, kind, &source, &["-i", "-o", "ttf"]);
+    let mut cmd = Command::new(req.tool);
+    cmd.args(&args).arg("--output-dir").arg(&out_dir);
+    run(req, cmd)?;
+    let files = crate::variable::ttf_files(&out_dir, MAX_OUTPUT_FILES);
+    if files.is_empty() {
+        return Err("fontmake finished but wrote no instance".into());
+    }
+    Ok(InstanceBuild { files, command })
+}
+
+/// The file of the instance named `style` among fontmake's instance files: `<family>-<style>`
+/// with spaces removed, else the only file whose stem ends in `-<style>`.
+pub fn instance_file<'a>(files: &'a [PathBuf], family: &str, style: &str) -> Option<&'a PathBuf> {
+    let squash = |s: &str| s.chars().filter(|c| !c.is_whitespace()).collect::<String>();
+    let stem_of = |p: &PathBuf| p.file_stem().and_then(|s| s.to_str()).map(str::to_string).unwrap_or_default();
+    let exact = format!("{}-{}", squash(family), squash(style));
+    if let Some(f) = files.iter().find(|p| stem_of(p) == exact) {
+        return Some(f);
+    }
+    let suffix = format!("-{}", squash(style));
+    let by_style: Vec<&PathBuf> = files.iter().filter(|p| stem_of(p).ends_with(&suffix)).collect();
+    match by_style.as_slice() {
+        [one] => Some(*one),
+        _ => None,
+    }
+}
+
 /// The file of the master FontCraft compiles out of fontmake's output files (sorted), with the
 /// files of other masters of the same name and a note when there are several files.
 /// `first_source` is a designspace's first source, which names its master's file.

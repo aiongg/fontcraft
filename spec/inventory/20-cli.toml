@@ -395,7 +395,7 @@ status = "docs"
 
 [[cli]]
 id = "oracle"
-usage = "fontcraft-cli oracle (SOURCE... | --corpus [DIR]) [--against fontc|fontmake] [--format ttf|otf] [--reference-bin PATH] [--output-dir DIR] [--timestamp SECS] [--timeout SECS] [--differences N] [--match TEXT] [--json]"
+usage = "fontcraft-cli oracle (SOURCE... | --corpus [DIR]) [--against fontc|fontmake] [--format ttf|otf] [--reference-bin PATH] [--output-dir DIR] [--timestamp SECS] [--timeout SECS] [--differences N] [--match TEXT] [--variable | --instances] [--json]"
 options = [
   "SOURCE...: sources to compile both ways (.glyphs, .glyphspackage, .designspace, .ufo)",
   "--corpus [DIR]: the comparison set in the fetched corpus folder DIR (default ./corpus): every source under fontc/resources/testdata, and Oswald",
@@ -407,6 +407,8 @@ options = [
   "--timeout SECS: time limit for one reference build; default 300",
   "--differences N: how many differences to show per table; default 5",
   "--match TEXT: compare only the sources whose path contains TEXT",
+  "--variable: compare variable fonts (TrueType) of the sources with two masters or more, against fontc's or fontmake's, at the masters, virtual masters, instances inside the axes and midpoints between neighbouring masters (M9.10)",
+  "--instances: compare each exported static instance with fontmake's -i build by the static comparison; implies --against fontmake (M9.10)",
   "--json: one JSON document with every source's report and the summary, instead of text",
 ]
 command = ""
@@ -416,7 +418,7 @@ equivalents = [
 ]
 area = "compile"
 milestone = "M2"
-summary = "Development aid for differential testing: compiles each source with FontCraft and with a reference compiler run as a subprocess (fontc for TrueType, fontmake for CFF), both static and with the same timestamp, reads both fonts back and reports per table whether they are identical, equivalent once normalised, allowed (every difference on the allow-list with its reason) or different, with the first differences, and apart from that the differences in how the two programs read the source (glyph set, glyph order). A missing tool is reported and nothing is compared. Exit status 1 when a table differs or a build fails. Not built yet: a prebuilt reference font, the gftools builder mode, rebuild control, an expected hash, an off-by-one budget, extension unwrapping, shared build options, a repository cache and an HTML report."
+summary = "Development aid for differential testing: compiles each source with FontCraft and with a reference compiler run as a subprocess (fontc for TrueType, fontmake for CFF), both static and with the same timestamp, reads both fonts back and reports per table whether they are identical, equivalent once normalised, allowed (every difference on the allow-list with its reason) or different, with the first differences, and apart from that the differences in how the two programs read the source (glyph set, glyph order). A missing tool is reported and nothing is compared. Exit status 1 when a table differs or a build fails. With --variable or --instances, a font FontCraft does not build yet counts as not built and does not set the exit status; the summary ends with the counts equal, different, not built and failed. Not built yet: a prebuilt reference font, the gftools builder mode, rebuild control, an expected hash, an off-by-one budget, extension unwrapping, shared build options, a repository cache and an HTML report."
 ref = "fontc ttx_diff README and core.py; fontc_crater README and args.rs; fontc --help and fontmake --help (1.0.0, 3.12.1)"
 status = "observed"
 

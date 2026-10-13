@@ -493,3 +493,66 @@ fn outlines_with_different_points_but_the_same_coverage_are_coverage_equal() {
     assert_eq!(glyf.status, Status::Different);
     assert!(glyf.differences.iter().any(|d| d.key == "glyf A outline" && d.ours.contains("coverage differs")), "{glyf:?}");
 }
+
+#[test]
+fn variable_locations_are_masters_instances_and_midpoints_and_each_is_compared() {
+    use crate::variable::{Axis, Space, compare_variable};
+    let axis = |tag: &str, minimum, default, maximum| Axis { tag: tag.into(), minimum, default, maximum };
+    let space = Space {
+        axes: vec![axis("wght", 100.0, 400.0, 900.0), axis("wdth", 75.0, 100.0, 125.0)],
+        masters: vec![
+            ("Regular".into(), vec![400.0, 100.0]),
+            ("Thin".into(), vec![100.0, 100.0]),
+            ("Black".into(), vec![900.0, 100.0]),
+            ("Condensed".into(), vec![400.0, 75.0]),
+        ],
+        virtual_masters: vec![("Wide".into(), vec![400.0, 125.0])],
+        // A repeat of a master is evaluated once; one outside the axes is left out.
+        instances: vec![("Bold".into(), vec![700.0, 100.0]), ("Book".into(), vec![400.0, 100.0]), ("Heavy".into(), vec![1000.0, 100.0])],
+    };
+    let (places, dropped) = space.locations();
+    let labels: Vec<String> = places.iter().map(|p| p.label()).collect();
+    assert_eq!(
+        labels,
+        [
+            "master Regular (wght=400,wdth=100)",
+            "master Thin (wght=100,wdth=100)",
+            "master Black (wght=900,wdth=100)",
+            "master Condensed (wght=400,wdth=75)",
+            "virtual master Wide (wght=400,wdth=125)",
+            "instance Bold (wght=700,wdth=100)",
+            "midpoint (wght=250,wdth=100)",
+            "midpoint (wght=650,wdth=100)",
+            "midpoint (wght=400,wdth=87.5)",
+            "midpoint (wght=400,wdth=112.5)",
+        ]
+    );
+    assert_eq!(dropped, 1);
+
+    let kerned = |value: f64| {
+        let mut f = sample();
+        let master = f.masters[0].id.clone();
+        std::sync::Arc::make_mut(&mut f.kerning).ltr.set(&master, "A", "B", value);
+        f
+    };
+    let same = compare_variable(&build(&kerned(-40.0), 0), &build(&kerned(-40.0), 0), Some(&space)).unwrap();
+    assert_eq!(same.locations, 10);
+    for t in &same.tables {
+        assert!(matches!(t.status, Status::Identical | Status::Skipped), "{t:?}");
+    }
+    assert_eq!(same.tables.iter().find(|t| t.tag == "fvar").map(|t| t.status), Some(Status::Skipped));
+
+    let mut taller = kerned(-50.0);
+    taller.glyph_mut("B").unwrap().layers[0].shapes = vec![Shape::Path(Contour::rect(80.0, 0.0, 500.0, 720.0))];
+    let c = compare_variable(&build(&taller, 0), &build(&kerned(-40.0), 0), Some(&space)).unwrap();
+    let check = |tag: &str| c.tables.iter().find(|t| t.tag == tag).unwrap();
+    assert_eq!(check("outlines").count, 10, "one difference per location");
+    assert_eq!(check("outlines").differences[0].key, "B outline at master Regular (wght=400,wdth=100)");
+    let kerning = check("GPOS kerning");
+    assert_eq!(kerning.count, 10);
+    assert_eq!(
+        kerning.differences[0],
+        Difference { key: "A B kerning at master Regular (wght=400,wdth=100)".into(), ours: "-50".into(), theirs: "-40".into() }
+    );
+    assert_eq!(check("advances").status, Status::Identical);
+}

@@ -56,6 +56,7 @@ pub use fontcraft_container as container;
 pub use fontcraft_fontinfo as fontinfo;
 pub use fontcraft_format as format;
 pub use fontcraft_imagery as imagery;
+pub use fontcraft_interp as interp;
 pub use fontcraft_model as model;
 use fontcraft_model::glyphdata::GlyphData;
 use fontcraft_model::{Font, Glyph, PropsCache};

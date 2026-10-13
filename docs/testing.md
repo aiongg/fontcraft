@@ -17,7 +17,7 @@ into tests without getting into the repository.
 | **Command sweep** | `crates/engine/tests/engine/command_sweep.rs` | every engine command × three fixture states × 45 to 200 junk parameter objects each (about 5,600 calls): no panic, no change on error, invariants hold on success. A new command is swept without further work |
 | Headless UI | `crates/ui-egui/src/tests.rs` | frames draw without a window; every menu item is a command; the control protocol drives the app and answers malformed requests |
 | Protocol | `crates/mcp` | MCP negotiation, tools, JSON-RPC errors for malformed input, bad bytes on the wire |
-| Oracle comparison | `crates/oracle` | the normalised comparison on fonts built in code (identical builds, keyed differences, start points, reversed contours, glyph set and order, cmap, the allow-list, broken input); the tool runner with stand-in tools (output, failure, time limit). Opt-in (`--features oracle`): fontc and fontmake builds of a fixture compare as expected |
+| Oracle comparison | `crates/oracle` | the normalised comparison on fonts built in code (identical builds, keyed differences, start points, reversed contours, glyph set and order, cmap, the allow-list, broken input; the location set of a variable comparison and its checks at each location); the tool runner with stand-in tools (output, failure, time limit). Opt-in (`--features oracle`): fontc and fontmake builds of a fixture compare as expected |
 | Repository checks | `xtask` tests | the inventory loads; the layering rules catch each kind of violation; the vendor-names scanner; the asset rules; the corpus pins |
 
 The desktop app was also run on a virtual display during the skeleton's verification and driven
@@ -98,7 +98,7 @@ Each table comes out as one of:
 | coverage-equal | `glyf` or `CFF ` against fontmake: some glyphs have different points but cover the same pixels (below) |
 | allowed | every difference is on `crates/oracle/allow.toml`, which gives the reason |
 | different | the first differences are listed, keyed by field, record or glyph |
-| skipped | not compared, and the report says why: layout tables until M8, variation tables until M9, tables FontCraft does not write yet |
+| skipped | not compared, and the report says why: variation tables (compared by `--variable`), tables FontCraft does not write yet |
 
 What normalisation removes or canonicalises:
 
@@ -141,6 +141,47 @@ two values as the report prints them (`ours`, `theirs`, with `*` as in keys), an
 entry with values accepts a cause wherever it shows (a source without a version: `ours = "0"`,
 `theirs = "1"`) without listing every source. A difference FontCraft is meant to fix does not go
 there.
+
+### Variable fonts and static instances
+
+Two more runs of the harness, each with its own report per source and the same summary table:
+
+```sh
+fontcraft-cli oracle --corpus --variable                    # variable fonts against fontc
+fontcraft-cli oracle --corpus --variable --against fontmake # against fontmake -o variable
+fontcraft-cli oracle --corpus --instances                   # static instances against fontmake -i
+```
+
+`--variable` takes the sources with two masters or more. It builds FontCraft's variable font
+(the first variable font setting, else the whole designspace) and the reference's, and reads
+both at a set of locations made from FontCraft's reading of the source, in user coordinates:
+
+| Locations | Rule |
+|---|---|
+| masters, virtual masters | every one |
+| instances | the exported static instances inside the axis ranges |
+| midpoints | between each two neighbouring master coordinates on each axis, the other axes at their defaults |
+
+A location equal to an earlier one is read once; at most 64 per source, and at most 6,000 glyphs
+per location (`MAX_LOCATIONS`, `MAX_GLYPHS` in `crates/oracle/src/variable.rs`). The report has
+one row per check: `fvar`, `avar` and `STAT` as structures (records keyed by axis tag, instance
+name or axis value, names resolved), then `outlines` (drawn by skrifa at the location, as for
+`glyf`), `advances` (`HVAR`, or the phantom points without it), `phantom` (the scaler's advance
+from the phantom points), `MVAR` (each tag's delta), `GSUB variations` (the single substitutions
+the matching feature variation record puts in place), `GPOS kerning` (pair values with device
+deltas, keyed by glyph pair) and `GPOS marks` (anchor offsets per base and mark). Difference keys
+end in `at <location>`, such as `A outline at midpoint (wght=550)`; an allow-list entry names
+the check as its table.
+
+`--instances` takes the sources with an exported static instance and builds every one with
+fontmake `-i` (fontc builds none between masters). Each instance is compared with FontCraft's
+build of it by the static comparison above, labelled `<source> › <instance>`, so allow-list
+entries for the source also apply to its instances.
+
+Both runs end with the measure line: equal, different, not built by FontCraft, failed. A font
+FontCraft does not build yet (the variable compile, or an instance between masters) counts as
+not built and does not set the exit status. For such a source `--variable` still reads the
+reference at every location and compares it with itself, which checks the harness on it.
 
 Reading our own output back: every corpus run with `--output-dir` keeps FontCraft's font
 (`fontcraft.ttf` or `fontcraft.otf`) in each source's folder, also when the reference fails, so

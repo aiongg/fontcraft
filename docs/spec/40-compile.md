@@ -546,6 +546,24 @@ all five.
 Cells for fontmake marked "per fontc" restate what fontc's comments say ufo2ft does; they were not
 read in ufo2ft itself.
 
+**Variable fonts: fontc against fontmake.** The variable comparison (`fontcraft-cli oracle
+--variable`, M9.10) was run with fontc 1.0.0's variable font on one side and fontmake 3.12.1's
+on the other, at each font's default, axis ends and named instances. Of the 133 corpus sources
+both build, 112 agree in every check. The 21 others differ in these ways, which M9.5 to M9.9
+decide when FontCraft's variable font is compared with each:
+
+| What | fontc | fontmake | Sources |
+|---|---|---|---|
+| `STAT` of a source with italic instances | no `ital` axis | an `ital` axis with a Roman value (format 3, linked to Italic) or an Italic value | 7 (`StatLabels`, `IntermediateLayer`, …); `StatLabels` also has an instance Black in fontc's `fvar` only |
+| An Axis Location or Axis Mapping beyond the masters | `wght` 400–700 | `wght` 400–900 and 300–900; `avar` and the advances at the axis end differ with it | 2 (`AxisLocationBeyondMasters`, `AxisMappingsBeyondMasters`) |
+| The `fvar` default of `UnnamedMaster` (both files) | 100 | 400 | 2 |
+| Instances without an Axis Location (`AxisLocationInstanceWithout`) | at `opsz` 1 and 2, with an `avar` | at `opsz` 16 and 36, no `avar` | 1 |
+| A generated `.notdef`, and `MVAR` where masters' metrics differ | `.notdef` the same at every location; `MVAR` deltas 0 | `.notdef` and the `cpht`, `hasc`, `hcla` deltas vary with the masters (up to 800 units) | 3 (`MasterNames`, `MasterNames-Italic`, `TheBestV2NamesInAV3File`) |
+| A generated `.notdef` at a midpoint | rounded one way | one unit off | 2 (`wght_var`, `wght_var_wide_axis`) |
+| Pairs with alternate (bracket) glyphs (`BracketTestFontKerning`) | `x x.BRACKET.varAlt01` −50 | no pair | 1 |
+| Colour layer glyphs | marks attach to `A.color0`; `B.color0` advance 500 | no attachment; advance 600 | 2 (`COLRv0-component-anchors`, `color-and-bracket-glyph-order`) |
+| Kerning of a linked master at the midpoint (`KerningLinkedMaster`) | `A B` −3.333 | −40 | 1 |
+
 ---
 
 ## 4a. Where FontCraft differs from fontc
