@@ -8,8 +8,9 @@
 //!
 //! - **Charstrings** (Type 2): coordinates rounded with the reference's tolerance rule, then
 //!   specialised into the short operators (`hlineto`, `hvcurveto`, `rcurveline` …) within the
-//!   48-operand stack ([`specialize`] is a port of fontTools' specialiser). No hints, no
-//!   subroutines.
+//!   48-operand stack ([`specialize`] is a port of fontTools' specialiser). No subroutines.
+//! - **Hints**: a glyph's stem hints, hint masks, counter masks and flex ([`hints`]); a glyph
+//!   without them gets an unhinted charstring.
 //! - **Widths**: `defaultWidthX` and `nominalWidthX` chosen by the reference's method unless the
 //!   caller fixes them; a charstring stores its width only when it differs from the default.
 //! - **FontBBox**: the union of the glyphs' drawn bounds (curve extremes included), rounded
@@ -21,7 +22,7 @@
 //!   layout until no position changes.
 //!
 //! Out of scope: CID-keyed fonts (ROS, FDArray, FDSelect), custom encodings (the standard
-//! encoding is implied), hints (stems, hint masks), subroutinisation, and the seldom-used Top
+//! encoding is implied), subroutinisation, and the seldom-used Top
 //! DICT entries (UniqueID, XUID, PostScript, BaseFontName, SyntheticBase). The `CFF2` table of a
 //! variable font, with blends, is [`cff2`]'s.
 //!
@@ -46,7 +47,7 @@ use std::collections::HashSet;
 
 pub use bounds::Bounds;
 pub use error::Error;
-pub use hints::{CharstringHints, MAX_STEM_HINTS, Mask, StemHint};
+pub use hints::{BOTTOM_GHOST, CharstringHints, MAX_COUNTER_MASKS, MAX_STEM_HINTS, Mask, StemHint, TOP_GHOST};
 pub use number::Number;
 
 use charset::Charset;
@@ -252,7 +253,7 @@ pub fn build(font: &Font) -> Result<Built, Error> {
     let mut font_box: Option<Bounds> = None;
     for g in &font.glyphs {
         let width = if g.advance == default_width_x as f64 { None } else { Some(ot_round(g.advance - nominal_width_x as f64)) };
-        let built = charstring::build(&g.name, &g.path, width, font.round_tolerance, font.specialise)?;
+        let built = charstring::build(&g.name, &g.path, g.hints.as_ref(), width, font.round_tolerance, font.specialise)?;
         if let Some(b) = built.bounds {
             font_box = Some(font_box.map_or(b, |f| f.union(b)));
         }
@@ -394,7 +395,7 @@ fn validate(font: &Font) -> Result<(), Error> {
     }
     for g in &font.glyphs {
         if let Some(h) = &g.hints {
-            h.validate(&g.name, g.path.len())?;
+            h.validate(&g.name, &g.path)?;
         }
     }
     check_string(&font.name, "font name", false, false)?;

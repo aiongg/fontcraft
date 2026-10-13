@@ -7,9 +7,10 @@
 //! finished operators back the way fontTools' `T2OutlineExtractor` draws them.
 
 use crate::bounds::{Bounds, BoundsPen};
+use crate::hints::{flex_args, stem_args};
 use crate::number::{encode_t2_number, round_with_tolerance};
 use crate::specialize::{Cat, Cmd, Op, RLINETO, RMOVETO, RRCURVETO, specialize};
-use crate::{Error, PathOp};
+use crate::{CharstringHints, Error, PathOp};
 
 /// The Type 2 operand stack limit.
 pub(crate) const MAX_STACK: usize = 48;
@@ -20,24 +21,100 @@ pub(crate) struct Built {
     pub bounds: Option<Bounds>,
 }
 
-/// Encode `path` with an optional width argument already relative to `nominalWidthX`.
-pub(crate) fn build(glyph: &str, path: &[PathOp], width: Option<f64>, tolerance: f64, specialise: bool) -> Result<Built, Error> {
+/// Encode `path` with an optional width argument already relative to `nominalWidthX`, and its
+/// hints when it has any (validated by [`CharstringHints::validate`]).
+pub(crate) fn build(
+    glyph: &str,
+    path: &[PathOp],
+    hints: Option<&CharstringHints>,
+    width: Option<f64>,
+    tolerance: f64,
+    specialise: bool,
+) -> Result<Built, Error> {
     let commands = pen_commands(path, tolerance);
-    let commands = if specialise { specialize(commands, MAX_STACK) } else { commands };
-    let bounds = bounds(&commands);
     let what = format!("glyph `{glyph}`");
     let mut bytes = Vec::new();
     if let Some(w) = width {
         encode_t2_number(w, &what, &mut bytes)?;
     }
-    for c in &commands {
-        for &a in &c.args {
-            encode_t2_number(a, &what, &mut bytes)?;
+    let Some(hints) = hints.filter(|h| !h.is_empty()) else {
+        let commands = if specialise { specialize(commands, MAX_STACK) } else { commands };
+        let bounds = bounds(&commands);
+        write_commands(&commands, &what, &mut bytes)?;
+        bytes.push(14); // endchar
+        return Ok(Built { bytes, bounds });
+    };
+    let hints = hints.normalised(tolerance);
+    let replacement = !hints.masks.is_empty() || !hints.counters.is_empty();
+    for (stems, plain, hm) in [(&hints.h_stems, 1u8, 18u8), (&hints.v_stems, 3, 23)] {
+        for args in stem_args(stems) {
+            for a in args {
+                encode_t2_number(a, &what, &mut bytes)?;
+            }
+            bytes.push(if replacement { hm } else { plain });
         }
-        bytes.push(opcode(c.op).ok_or_else(|| Error::OutOfRange { what: what.clone(), value: f64::NAN })?);
     }
+    for m in &hints.counters {
+        bytes.push(20); // cntrmask
+        bytes.extend(m.bytes());
+    }
+    // The outline is specialised in runs between masks and flex pairs, which stay where they are.
+    let mut drawn: Vec<Cmd> = Vec::with_capacity(commands.len());
+    let mut run: Vec<Cmd> = Vec::new();
+    let flush = |run: &mut Vec<Cmd>, drawn: &mut Vec<Cmd>, bytes: &mut Vec<u8>| -> Result<(), Error> {
+        let taken = std::mem::take(run);
+        let cmds = if specialise { specialize(taken, MAX_STACK) } else { taken };
+        write_commands(&cmds, &what, bytes)?;
+        drawn.extend(cmds);
+        Ok(())
+    };
+    let mut masks = hints.masks.iter().peekable();
+    let mut flex = hints.flex.iter().peekable();
+    let mut i = 0;
+    while let Some(c) = commands.get(i) {
+        if let Some((_, m)) = masks.next_if(|(op, _)| *op <= i) {
+            flush(&mut run, &mut drawn, &mut bytes)?;
+            bytes.push(19); // hintmask
+            bytes.extend(m.bytes());
+        }
+        if flex.next_if(|f| **f <= i).is_some_and(|f| *f == i)
+            && let Some(next) = commands.get(i + 1)
+            && c.op == RRCURVETO
+            && next.op == RRCURVETO
+        {
+            flush(&mut run, &mut drawn, &mut bytes)?;
+            let (op, args) = flex_args(vectors(&c.args), vectors(&next.args));
+            for a in args {
+                encode_t2_number(a, &what, &mut bytes)?;
+            }
+            bytes.extend([12, op]);
+            drawn.push(c.clone());
+            drawn.push(next.clone());
+            i += 2;
+            continue;
+        }
+        run.push(c.clone());
+        i += 1;
+    }
+    flush(&mut run, &mut drawn, &mut bytes)?;
     bytes.push(14); // endchar
-    Ok(Built { bytes, bounds })
+    Ok(Built { bytes, bounds: bounds(&drawn) })
+}
+
+/// The three relative vectors of a generic curve's six arguments.
+fn vectors(args: &[f64]) -> [(f64, f64); 3] {
+    let a = |i: usize| args.get(i).copied().unwrap_or(0.0);
+    [(a(0), a(1)), (a(2), a(3)), (a(4), a(5))]
+}
+
+fn write_commands(commands: &[Cmd], what: &str, bytes: &mut Vec<u8>) -> Result<(), Error> {
+    for c in commands {
+        for &a in &c.args {
+            encode_t2_number(a, what, bytes)?;
+        }
+        bytes.push(opcode(c.op).ok_or_else(|| Error::OutOfRange { what: what.to_string(), value: f64::NAN })?);
+    }
+    Ok(())
 }
 
 /// The generic commands a pen records: relative moves, lines and curves between rounded points.
@@ -223,17 +300,17 @@ mod tests {
 
     #[test]
     fn a_square_with_and_without_width() {
-        let b = build("a", &square(), None, 0.5, true).unwrap();
+        let b = build("a", &square(), None, None, 0.5, true).unwrap();
         // 100 hmoveto 300 700 -300 hlineto endchar
         assert_eq!(b.bytes, vec![239, 22, 247, 192, 249, 80, 251, 192, 6, 14]);
         assert_eq!(b.bounds.unwrap().round_out(), [100, 0, 400, 700]);
-        let b = build("a", &square(), Some(-20.0), 0.5, true).unwrap();
+        let b = build("a", &square(), None, Some(-20.0), 0.5, true).unwrap();
         assert_eq!(&b.bytes[..2], &[119, 239]);
     }
 
     #[test]
     fn unspecialised_output_keeps_generic_operators() {
-        let b = build("a", &square(), None, 0.5, false).unwrap();
+        let b = build("a", &square(), None, None, 0.5, false).unwrap();
         // 100 0 rmoveto 300 0 rlineto 0 700 rlineto -300 0 rlineto endchar
         assert_eq!(b.bytes, vec![239, 139, 21, 247, 192, 139, 5, 139, 249, 80, 5, 251, 192, 139, 5, 14]);
     }
@@ -241,17 +318,17 @@ mod tests {
     #[test]
     fn coordinates_round_half_up_before_differencing() {
         let path = [PathOp::MoveTo((10.5, -0.5)), PathOp::LineTo((20.4, -0.5))];
-        let b = build("a", &path, None, 0.5, false).unwrap();
+        let b = build("a", &path, None, None, 0.5, false).unwrap();
         // (11, 0) then (20, 0): 11 0 rmoveto 9 0 rlineto
         assert_eq!(b.bytes, vec![150, 139, 21, 148, 139, 5, 14]);
         // With rounding off the fractions survive as 16.16 numbers.
-        let b = build("a", &path, None, 0.0, false).unwrap();
+        let b = build("a", &path, None, None, 0.0, false).unwrap();
         assert_eq!(&b.bytes[..5], &[255, 0, 10, 0x80, 0]);
     }
 
     #[test]
     fn an_empty_glyph_is_endchar_alone() {
-        let b = build("space", &[], Some(100.0), 0.5, true).unwrap();
+        let b = build("space", &[], None, Some(100.0), 0.5, true).unwrap();
         assert_eq!(b.bytes, vec![239, 14]);
         assert_eq!(b.bounds, None);
     }
@@ -274,8 +351,8 @@ mod tests {
             PathOp::LineTo((395.0, 380.0)),
             PathOp::CurveTo((400.0, 390.0), (410.0, 395.0), (420.0, 397.0)),
         ];
-        let generic = build("g", &path, None, 0.5, false).unwrap();
-        let special = build("g", &path, None, 0.5, true).unwrap();
+        let generic = build("g", &path, None, None, 0.5, false).unwrap();
+        let special = build("g", &path, None, None, 0.5, true).unwrap();
         assert_eq!(generic.bounds, special.bounds);
         assert!(special.bytes.len() < generic.bytes.len());
     }

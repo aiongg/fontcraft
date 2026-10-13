@@ -357,3 +357,161 @@ fn hostile_numbers_never_panic() {
         }
     }
 }
+
+mod hinted {
+    use super::*;
+    use crate::charstring;
+
+    /// Everything a charstring tells a hinter, in order.
+    #[derive(Clone, Debug, PartialEq)]
+    enum Ev {
+        H(i32, i32),
+        V(i32, i32),
+        Mask(Vec<u8>),
+        Cntr(Vec<u8>),
+        Seg(Seg),
+    }
+
+    #[derive(Default)]
+    struct Events(Vec<Ev>);
+
+    impl CommandSink for Events {
+        fn move_to(&mut self, x: Fixed, y: Fixed) {
+            self.0.push(Ev::Seg(Seg::M(i(x), i(y))));
+        }
+        fn line_to(&mut self, x: Fixed, y: Fixed) {
+            self.0.push(Ev::Seg(Seg::L(i(x), i(y))));
+        }
+        fn curve_to(&mut self, a: Fixed, b: Fixed, c: Fixed, d: Fixed, e: Fixed, f: Fixed) {
+            self.0.push(Ev::Seg(Seg::C(i(a), i(b), i(c), i(d), i(e), i(f))));
+        }
+        fn close(&mut self) {
+            self.0.push(Ev::Seg(Seg::Z));
+        }
+        fn hstem(&mut self, y: Fixed, dy: Fixed) {
+            self.0.push(Ev::H(i(y), i(dy)));
+        }
+        fn vstem(&mut self, x: Fixed, dx: Fixed) {
+            self.0.push(Ev::V(i(x), i(dx)));
+        }
+        fn hint_mask(&mut self, mask: &[u8]) {
+            self.0.push(Ev::Mask(mask.to_vec()));
+        }
+        fn counter_mask(&mut self, mask: &[u8]) {
+            self.0.push(Ev::Cntr(mask.to_vec()));
+        }
+    }
+
+    /// Builds a font of `.notdef` and `g` and reads `g` back.
+    fn read_back(g: Glyph) -> Vec<Ev> {
+        let font = Font { name: "T".into(), glyphs: vec![glyph(".notdef", 500.0, vec![]), g], ..Font::default() };
+        let built = build(&font).unwrap();
+        let cff = CffFontRef::new_cff(&built.table, 0, None).unwrap();
+        let subfont = cff.subfont(0, &[]).unwrap();
+        let mut sink = Events::default();
+        cff.evaluate_charstring(&subfont, GlyphId::new(1), &[], &mut sink).unwrap();
+        sink.0
+    }
+
+    fn mask(h: &[bool], v: &[bool]) -> Mask {
+        Mask { h: h.to_vec(), v: v.to_vec() }
+    }
+
+    #[test]
+    fn stems_masks_and_counters_read_back_sorted_and_positive() {
+        let mut path = rect(0.0, 0.0, 100.0, 700.0);
+        path.extend(rect(200.0, 300.0, 300.0, 400.0));
+        let hints = CharstringHints {
+            // 40..120 stored with a negative width, 0..80, a top ghost at 700.
+            h_stems: vec![StemHint { edge: 120.0, width: -80.0 }, StemHint::between(0.0, 80.0), StemHint::top_ghost(700.0)],
+            v_stems: vec![StemHint { edge: 300.0, width: -100.0 }, StemHint::between(0.0, 100.0)],
+            masks: vec![(0, mask(&[false, true, true], &[false, true])), (4, mask(&[true, false, false], &[true, false]))],
+            counters: vec![mask(&[true, false, true], &[true, true])],
+            flex: vec![],
+        };
+        let events = read_back(Glyph { hints: Some(hints), ..glyph("g", 500.0, path.clone()) });
+        let mut want =
+            vec![Ev::H(0, 80), Ev::H(40, 120), Ev::H(700, 680), Ev::V(0, 100), Ev::V(200, 300), Ev::Cntr(vec![0x78]), Ev::Mask(vec![0xB0])];
+        let segs = expected(&path);
+        // The reader closes a contour when the next moveto comes, after the mask before it.
+        let (first, second) = segs.split_at(4);
+        want.extend(first.iter().cloned().map(Ev::Seg));
+        want.push(Ev::Mask(vec![0x48]));
+        want.extend(second.iter().cloned().map(Ev::Seg));
+        assert_eq!(events, want);
+
+        // Without masks the plain operators: hstem (1) and vstem (3), no hintmask (19).
+        let plain =
+            CharstringHints { h_stems: vec![StemHint::bottom_ghost(0.0)], v_stems: vec![StemHint::between(10.0, 90.0)], ..Default::default() };
+        let b = charstring::build("g", &path, Some(&plain), None, 0.5, true).unwrap();
+        // 21 -21 hstem 10 80 vstem 0 hmoveto
+        assert_eq!(&b.bytes[..8], &[160, 118, 1, 149, 219, 3, 139, 22]);
+        let events = read_back(Glyph { hints: Some(plain), ..glyph("g", 500.0, path) });
+        assert_eq!(&events[..2], &[Ev::H(21, 0), Ev::V(10, 90)]);
+    }
+
+    #[test]
+    fn more_stems_than_one_operator_holds_are_split() {
+        let path = rect(0.0, 0.0, 100.0, 4000.0);
+        let h: Vec<StemHint> = (0..60).rev().map(|k| StemHint::between(f64::from(k) * 50.0, f64::from(k) * 50.0 + 20.0)).collect();
+        let hints = CharstringHints { h_stems: h, ..Default::default() };
+        let b = charstring::build("g", &path, Some(&hints), Some(-20.0), 0.5, true).unwrap();
+        assert_eq!(b.bytes.iter().filter(|&&x| x == 1).count(), 3, "23 + 23 + 14 stems");
+        let events = read_back(Glyph { hints: Some(hints), ..glyph("g", 480.0, path) });
+        let stems: Vec<Ev> = events.into_iter().filter(|e| matches!(e, Ev::H(..))).collect();
+        assert_eq!(stems, (0..60).map(|k| Ev::H(k * 50, k * 50 + 20)).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn each_flex_form_draws_the_two_curves() {
+        // (second curve's second control, its end) chosen to need each form in turn.
+        let cases: [(&[(f64, f64)], u8); 4] = [
+            (&[(10.0, 0.0), (20.0, -5.0), (30.0, -5.0), (40.0, -5.0), (50.0, 0.0), (60.0, 0.0)], 34),
+            (&[(10.0, 2.0), (20.0, -5.0), (30.0, -5.0), (40.0, -5.0), (50.0, -2.0), (60.0, 0.0)], 36),
+            (&[(10.0, 2.0), (20.0, -5.0), (30.0, -6.0), (40.0, -5.0), (50.0, -2.0), (60.0, 0.0)], 37),
+            (&[(10.0, 2.0), (20.0, -5.0), (30.0, -6.0), (40.0, -5.0), (50.0, -2.0), (60.0, 3.0)], 35),
+        ];
+        for (p, op) in cases {
+            let at = |i: usize| p.get(i).copied().unwrap();
+            let path = vec![
+                PathOp::MoveTo((0.0, 0.0)),
+                PathOp::CurveTo(at(0), at(1), at(2)),
+                PathOp::CurveTo(at(3), at(4), at(5)),
+                PathOp::LineTo((60.0, 100.0)),
+                PathOp::LineTo((0.0, 100.0)),
+            ];
+            let hints = CharstringHints { h_stems: vec![StemHint::between(-6.0, 0.0)], flex: vec![1], ..Default::default() };
+            let b = charstring::build("g", &path, Some(&hints), None, 0.5, true).unwrap();
+            assert!(b.bytes.windows(2).any(|w| w == [12, op]), "flex operator 12 {op}");
+            let events = read_back(Glyph { hints: Some(hints), ..glyph("g", 500.0, path.clone()) });
+            let segs: Vec<Seg> = events.into_iter().filter_map(|e| if let Ev::Seg(s) = e { Some(s) } else { None }).collect();
+            assert_eq!(segs, expected(&path), "flex 12 {op}");
+        }
+    }
+
+    #[test]
+    fn hints_the_format_cannot_hold_are_refused() {
+        let path = rect(0.0, 0.0, 100.0, 700.0);
+        let two = vec![StemHint::between(0.0, 80.0), StemHint::between(40.0, 120.0)];
+        let cases = [
+            CharstringHints { h_stems: two.clone(), masks: vec![(0, mask(&[true, true], &[]))], ..Default::default() },
+            CharstringHints { h_stems: two.clone(), masks: vec![(1, mask(&[true, false], &[]))], ..Default::default() },
+            CharstringHints {
+                h_stems: two.clone(),
+                masks: vec![(0, mask(&[true, false], &[])), (0, mask(&[false, true], &[]))],
+                ..Default::default()
+            },
+            CharstringHints { h_stems: two.clone(), flex: vec![1], ..Default::default() },
+            CharstringHints { h_stems: two, masks: vec![(0, mask(&[true], &[]))], ..Default::default() },
+            CharstringHints { h_stems: vec![StemHint::between(0.0, 1.0); MAX_STEM_HINTS + 1], ..Default::default() },
+        ];
+        for hints in cases {
+            let font = Font {
+                name: "T".into(),
+                glyphs: vec![glyph(".notdef", 500.0, vec![]), Glyph { hints: Some(hints), ..glyph("g", 500.0, path.clone()) }],
+                ..Font::default()
+            };
+            assert!(matches!(build(&font), Err(Error::BadHints { .. })));
+        }
+    }
+}
