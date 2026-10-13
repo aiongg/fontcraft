@@ -235,12 +235,13 @@ label = "Edit Base Glyph"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{glyph?: name, component?: index}"
+params = "{tab?: id, component?: index, glyph?: name} → {glyph}"
 area = "components"
 milestone = "M6"
 summary = "Arrow button of the component Info box: inserts the referenced glyph into the Edit View text immediately left of the current glyph and makes it the glyph being edited."
 ref = "Edit View › Measuring › Measuring with the Info box"
 status = "handbook"
+notes = "M6.10: a shell command; the Select tool's double-click on a component runs it with that component. `glyph` names the base glyph directly, else `component` is a shape index of the edited layer, else the one selected component is used; the base glyph goes in just before the edited glyph and becomes the edited glyph."
 
 [[behavior]]
 id = "infoBox.currentGlyphDefinition"
@@ -595,6 +596,10 @@ milestone = "M6"
 summary = "Toggles the display of the current glyph's anchors."
 ref = "Edit View › Glyph Display › View Options"
 status = "handbook"
+notes = "Documented, not yet observed. M6.10: a View menu toggle of the shell (`DisplayOptions::anchors`)."
+guesses = [
+  "Show Anchors is on by default; the View menu of a fresh install of the reference app settles it.",
+]
 
 [[command]]
 id = "view.showInfo"

@@ -1,6 +1,6 @@
 //! The Lasso tool (`V`, `Shift+V` from Select): drag a free-form outline; the nodes, handles and
 //! anchors inside it become the selection. `Shift` toggles them in the selection, `Alt` takes
-//! on-curve nodes only. A click without a drag selects like the Select tool's click.
+//! on-curve nodes only and components too. A click without a drag selects like the Select tool's click.
 
 use fontcraft_geom::Point;
 
@@ -39,7 +39,7 @@ impl LassoTool {
         };
         let mut selection = if d.extend { cx.selection.clone() } else { Selection::new() };
         if d.dragged && d.points.len() >= 3 {
-            for item in in_region(cx.scene, &d.points, d.nodes_only).items() {
+            for item in in_region(cx.scene, &d.points, d.nodes_only, d.nodes_only).items() {
                 if d.extend {
                     selection.toggle(item);
                 } else {

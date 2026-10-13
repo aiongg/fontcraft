@@ -77,6 +77,7 @@ pub const COMMANDS: &[UiCommand] = &[
         "{on?: bool} show the selection's bounding box with its knobs (omitted: toggle)",
     ),
     ("view.showAnnotations", "Show Annotations", &["View"], "", "{on?: bool} show annotations (omitted: toggle)"),
+    ("view.showAnchors", "Show Anchors", &["View"], "", "{on?: bool} show the edited layer's anchors (omitted: toggle)"),
     (
         "view.fillPreview",
         "Fill Preview",
@@ -106,6 +107,7 @@ fn flag<'a>(display: &'a mut DisplayOptions, id: &str) -> Option<&'a mut bool> {
         "view.showGuides" => &mut display.guides,
         "view.showBoundingBox" => &mut display.bounding_box,
         "view.showAnnotations" => &mut display.annotations,
+        "view.showAnchors" => &mut display.anchors,
         "view.fillPreview" => &mut display.fill_preview,
         _ => return None,
     })

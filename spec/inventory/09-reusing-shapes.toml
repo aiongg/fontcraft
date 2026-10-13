@@ -147,7 +147,7 @@ milestone = "M6"
 summary = "A component is a live reference to its base glyph: editing the base glyph changes every component that points to it, and in Edit View the composites redraw while the base glyph is being edited."
 ref = "Reusing Shapes › Components"
 status = "handbook"
-notes = "Positions and widths follow through alignment: after every font-changing command the engine re-aligns the composites that depend on the changed glyphs, in dependency order and in the same undo step (`fontcraft_components::metrics::realign`, M6.2). Documented, not yet observed. M6.1: the reverse component index (crates/components/src/index.rs) gives the glyphs that follow an edit of a base glyph, directly and through nesting, in dependency order; the engine's re-alignment and the canvas read it."
+notes = "Positions and widths follow through alignment: after every font-changing command the engine re-aligns the composites that depend on the changed glyphs, in dependency order and in the same undo step (`fontcraft_components::metrics::realign`, M6.2). Documented, not yet observed. M6.1: the reverse component index (crates/components/src/index.rs) gives the glyphs that follow an edit of a base glyph, directly and through nesting, in dependency order; the engine's re-alignment and the canvas read it. M6.10: Edit View resolves component outlines from the font every frame, and the composite cache drops an entry holding a component whenever the document changes, so the composites in the tab text follow a base-glyph drag before the button comes up."
 guesses = [
   "Re-alignment after an edit touches only the masters whose layers the edit changed, and on other masters only the layers whose components are pinned to one of them (and the composites built on those layers), so stale stored positions on other masters stay as the file has them; editing a base on one master in the reference app and reading the other masters' composites settles it.",
   "A locked composite is not re-aligned when its base changes, because a lock keeps the glyph's drawing; locking a composite in the reference app and editing its base settles it.",
@@ -451,7 +451,7 @@ milestone = "M6"
 summary = "With a component selected, Tab moves the selection to the next component on the layer and Shift+Tab to the previous one. This is the generic next/previous-object selection (selection.selectNext in the Edit View inventory) applied to components."
 ref = "Reusing Shapes › Components › Editing Components"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. M6.10: components join `fontcraft_tools::selection::tab_order` after the points."
 guesses = [
   "Tab steps through the layer's nodes in path order, then the components in shape order, then the anchors, then the guides; Tab on a layer with components and anchors in the reference app settles it.",
 ]
@@ -499,6 +499,7 @@ milestone = "M6"
 summary = "Clicking a component with the Select tool selects it; one or more selected components bring up the component Info box next to the glyph Info box."
 ref = "Reusing Shapes › Components › Editing Components"
 status = "handbook"
+notes = "Documented, not yet observed. M6.10: a click inside a component's outline selects it (`fontcraft_tools::hit`) and a Shift-click toggles it; the component Info box is M6.11."
 
 [[behavior]]
 id = "components.rubberBandIgnoresComponents"
@@ -507,6 +508,14 @@ milestone = "M6"
 summary = "A selection rectangle dragged with the Select tool skips components; holding Option while dragging includes them."
 ref = "Reusing Shapes › Components › Editing Components"
 status = "handbook"
+notes = "Documented, not yet observed. M6.10: the marquee and the lasso skip components; with Option they take them, and also leave handles out as the Editing Paths page documents for Option. `selection.selectInRegion` takes `components: true`."
+guesses = [
+  "A rubber band with Option takes a component when an on-curve point of its outline lies inside, not only when the whole component does; dragging across half a component with Option in the reference app settles it.",
+  "Option in a rubber band both includes components and leaves handles out, since the handbook gives Option both meanings; dragging with Option over a path with handles and a component in the reference app settles it.",
+]
+observe = [
+  "With Option held, drag a selection rectangle over a path with handles and half of a component, and note what is selected.",
+]
 
 [[behavior]]
 id = "components.selectAllTwoStage"
@@ -515,6 +524,7 @@ milestone = "M6"
 summary = "On a layer that has paths, the first Select All (Cmd+A) takes only the paths; a second Select All adds all components (and, per the Edit View chapter, anchors)."
 ref = "Reusing Shapes › Components › Editing Components"
 status = "handbook"
+notes = "Documented, not yet observed. M6.10: edit.selectAll takes every point first; when they are all selected already, or the layer has no paths, it takes the components and anchors too."
 
 [[behavior]]
 id = "components.transformVia"
@@ -523,6 +533,7 @@ milestone = "M6"
 summary = "Components can be transformed three ways: by the fields of their Info box, by dragging the bounding box, and by the Transformations section of the Palette."
 ref = "Reusing Shapes › Components › Editing Components"
 status = "handbook"
+notes = "Documented, not yet observed. M6.10: the bounding box acts on selected components through the transform commands (`crates/tools/src/bbox.rs`); the Info box fields are M6.11."
 
 [[behavior]]
 id = "components.verticalFlipSwapsTopBottomAnchors"
@@ -549,6 +560,7 @@ milestone = "M6"
 summary = "Dragging a component with Option held leaves the original in place and drags a copy."
 ref = "Reusing Shapes › Components › Editing Components"
 status = "handbook"
+notes = "Documented, not yet observed. M6.10: an Option-drag of a component is selection.move with `duplicate: true`, as for paths."
 
 [[behavior]]
 id = "components.deleteKeyRemoves"
@@ -557,6 +569,7 @@ milestone = "M6"
 summary = "Pressing Delete removes all selected components from the layer."
 ref = "Reusing Shapes › Components › Editing Components"
 status = "handbook"
+notes = "Documented, not yet observed. M6.10: Delete runs edit.delete with the selected components."
 
 [[behavior]]
 id = "components.doubleClickOpensBase"
@@ -565,7 +578,7 @@ milestone = "M6"
 summary = "Double-clicking a component places its base glyph next to the composite in the Edit View text and activates it for editing."
 ref = "Reusing Shapes › Components › Moving between Base Glyphs and Composites"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. M6.10: the Select tool's double-click on a component runs component.editBaseGlyph with that component."
 guesses = [
   "The base glyph goes into the tab text to the left of the composite, as the Info box section of the Measuring page says; the Components page says only next to it. Double-clicking a component in the reference app settles it.",
 ]
@@ -589,6 +602,13 @@ milestone = "M6"
 summary = "A component whose base glyph exists but has an empty layer is drawn as an empty-base placeholder. The remedies are to delete the component or to draw something on that layer."
 ref = "Reusing Shapes › Components › Component Placeholders"
 status = "handbook"
+notes = "Documented, not yet observed. M6.10: the three placeholders are drawn as a crossed box as wide as the base glyph's advance (half an em when it has none) and half an em tall, placed by the component's transform and labelled with the base glyph's name and the problem (`canvas/components.rs`)."
+guesses = [
+  "A placeholder is a crossed box the width of the base glyph's advance and half an em tall, labelled with the problem; seeing the three placeholders in the reference app settles their look.",
+]
+observe = [
+  "Add a component of a glyph whose layer is empty and note how the placeholder looks.",
+]
 
 [[behavior]]
 id = "components.placeholderMissingBase"
@@ -597,6 +617,10 @@ milestone = "M6"
 summary = "A component that names a glyph absent from the font is drawn as a no-base-glyph placeholder. Clicking it still shows the referenced name in the Info box, and it resolves when the component is removed or a glyph of that name is added."
 ref = "Reusing Shapes › Components › Component Placeholders"
 status = "handbook"
+notes = "Documented, not yet observed. M6.10: drawn as the crossed box of `components.placeholderEmptyBase`, labelled `no such glyph`. It has no outline to click, so Tab and Select All select it until the Info box lands (M6.11)."
+observe = [
+  "Add a component, delete its base glyph, and note the placeholder and whether a click selects it.",
+]
 
 [[behavior]]
 id = "components.placeholderCircularReference"
@@ -605,9 +629,12 @@ milestone = "M6"
 summary = "A component whose base glyph, directly or through nesting, contains the glyph it sits in is flagged as a bad reference and drawn as a placeholder rather than expanded."
 ref = "Reusing Shapes › Components › Component Placeholders"
 status = "handbook"
-notes = "Documented, not yet observed. M6.1: the component index lists each cycle (the glyph names along it, from the one earliest in the font) and leaves the glyphs on or above a cycle out of the dependency order; anchor propagation reports a cycle as an error."
+notes = "Documented, not yet observed. M6.1: the component index lists each cycle (the glyph names along it, from the one earliest in the font) and leaves the glyphs on or above a cycle out of the dependency order; anchor propagation reports a cycle as an error. M6.10: drawn as the crossed box of `components.placeholderEmptyBase`, labelled `circular reference`, when the base glyph reaches the glyph the component is in or its outline cannot be resolved."
 guesses = [
   "Anchor propagation reports a glyph on or above a component cycle as an error, where glyphsLib gives glyphs on the cycle their own anchors and glyphs above it none; a cycle in the reference app settles what it shows.",
+]
+observe = [
+  "Make glyph A contain B and B contain A (through a file edit if the app refuses) and note the placeholder.",
 ]
 
 [[behavior]]
@@ -617,6 +644,13 @@ milestone = "M6"
 summary = "While a node, anchor or other element is being dragged, the nodes inside components on the layer are revealed as snap targets, and the dragged element snaps to one when it comes close."
 ref = "Reusing Shapes › Components › Combining Paths and Components"
 status = "handbook"
+notes = "Documented, not yet observed. M6.10: while a pointer tool drags, Edit View draws the on-curve points of every component as small rings, and `fontcraft_tools::snap` snaps the dragged point to the nodes and handles of components."
+guesses = [
+  "The nodes inside components show for as long as any drag of a pointer tool lasts, and not while the pointer only hovers; dragging a node next to a component in the reference app settles it.",
+]
+observe = [
+  "Drag a node next to a component and note when the component's nodes appear and which of them the node snaps to.",
+]
 
 [[behavior]]
 id = "components.alignOriginToNode"
@@ -779,6 +813,15 @@ milestone = "M6"
 summary = "Component fill colour signals alignment state in Edit View: green for auto-aligned, gray for manually placed, blue for the vertically shiftable single-number case."
 ref = "Reusing Shapes › Components › Automatic Alignment"
 status = "handbook"
+notes = "Documented, not yet observed. M6.10: Edit View draws each component's outline over the glyph in green, grey or blue by `fontcraft_components::align::component_alignment` (`crates/ui-egui/src/canvas/components.rs`); a selected component is drawn in the selection colour."
+guesses = [
+  "Components are shown by their outline drawn in the state colour, not filled; a composite in the reference app's Edit View settles it.",
+  "Every component aligned horizontally only is blue, the single Number component and a component set to horizontal alignment alike; a component set to horizontal alignment in the reference app settles it.",
+]
+observe = [
+  "Open a glyph built from components only, then add a path to it, and note the colour of the components before and after.",
+  "Build `one.sups` or another glyph from a single figure component and note its colour.",
+]
 
 [[behavior]]
 id = "components.autoAlignedCannotMove"
@@ -1389,6 +1432,13 @@ milestone = "M6"
 summary = "In Edit View a corner component is tinted with a faint blue background. A click selects it, Shift-click extends the selection to several corners, and Delete removes the selected ones."
 ref = "Reusing Shapes › Corner Components › Using Corner Components"
 status = "handbook"
+notes = "Documented, not yet observed. M6.10: Edit View tints each corner component on a node with a faint disc (`corner_highlight`); a corner on an extra node is not tinted. Selecting corners by click and deleting them need a selection kind for hints and are not built yet."
+guesses = [
+  "The tint is a disc around the corner's node rather than a fill of the corner's own outline; a corner component in the reference app settles it.",
+]
+observe = [
+  "Attach a corner component and note the shape and extent of its blue tint.",
+]
 
 [[behavior]]
 id = "corner.copyPasteOntoNodes"

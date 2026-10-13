@@ -875,7 +875,7 @@ label = "Select in Region"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{glyph?: name (the edited glyph), layer?: id, rect?: [x, y, width, height], angle?: degrees, polygon?: [[x, y]], nodesOnly?: bool, mode?: replace|add|remove|toggle} → {selection}"
+params = "{glyph?: name (the edited glyph), layer?: id, rect?: [x, y, width, height], angle?: degrees, polygon?: [[x, y]], nodesOnly?: bool, components?: bool, mode?: replace|add|remove|toggle} → {selection}"
 area = "drawing"
 milestone = "M3"
 summary = "Headless equivalent of the marquee (optionally slanted) and of the lasso: selects the points inside a rectangle or polygon given in font units, with the same nodes-only and extend options as the pointer gestures. Our own command."
@@ -2222,6 +2222,7 @@ milestone = "M6"
 summary = "An anchor is selected by clicking its orange dot, several by Shift-clicking, the next or previous one with Tab or Shift+Tab. Only selected anchors show their name."
 ref = "Edit View › Adding, Editing, & Removing Anchors"
 status = "handbook"
+notes = "Documented, not yet observed. M6.10: a click and a Shift-click select through the Select tool's hit test, Tab and Shift+Tab are selection.selectNext and selection.selectPrevious, and only selected anchors are drawn with their name."
 
 [[behavior]]
 id = "anchors.moveLikeNodes"
@@ -2230,6 +2231,7 @@ milestone = "M6"
 summary = "A selected anchor moves the same way a node does: by dragging with the Select tool, with the arrow keys and their increments, or by typing coordinates in the Info box."
 ref = "Edit View › Adding, Editing, & Removing Anchors"
 status = "handbook"
+notes = "Documented, not yet observed. M6.10: a drag is selection.move with the anchor, and the arrow keys nudge it as they nudge nodes; the Info box fields come with M6.11."
 
 [[behavior]]
 id = "anchors.shapeShowsMetricPosition"
@@ -2238,7 +2240,10 @@ milestone = "M6"
 summary = "The anchor marker is a diamond when the anchor sits precisely on a metric line (baseline or x-height, for instance), a square when it is inside an alignment zone, and a circle otherwise. Anchors whose name starts with an underscore are drawn with a hole in the same three shapes."
 ref = "Edit View › Adding, Editing, & Removing Anchors"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. M6.10: drawn as documented (`crates/ui-egui/src/canvas/anchors.rs`), against the metric lines and zones the node highlights use."
+observe = [
+  "Put an anchor on the x-height, one inside the baseline zone and one elsewhere, and note the three shapes; repeat with names that start with an underscore.",
+]
 
 [[behavior]]
 id = "anchors.uniqueNamesPerLayer"

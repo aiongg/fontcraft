@@ -51,6 +51,7 @@ pub use clock::Clock;
 pub use cmd::{CommandInfo, CommandSpec, command_specs, find_command};
 pub use fontcraft_color as color;
 pub use fontcraft_compile as compile;
+pub use fontcraft_components as components;
 pub use fontcraft_container as container;
 pub use fontcraft_fontinfo as fontinfo;
 pub use fontcraft_format as format;

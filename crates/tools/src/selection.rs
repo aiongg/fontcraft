@@ -281,12 +281,17 @@ pub fn invert(scene: &Scene, current: &Selection) -> Selection {
     s
 }
 
-/// The order `Tab` walks: the points of each path in path order, then the anchors, then the local
-/// guides, then the global guides.
+/// The order `Tab` walks: the points of each path in path order, then the components that can be
+/// selected, in shape order, then the anchors, then the local guides, then the global guides.
 pub fn tab_order(scene: &Scene) -> Vec<Item> {
     let mut out = Vec::new();
     for (i, path) in scene.paths() {
         out.extend((0..path.nodes.len()).map(|n| Item::Point(i, n)));
+    }
+    for (i, shape) in scene.layer.shapes.iter().enumerate() {
+        if matches!(shape, Shape::Component(_)) && scene.shape_editable(i) {
+            out.push(Item::Shape(i));
+        }
     }
     out.extend(scene.layer.anchors.iter().map(|a| Item::Anchor(a.name.clone())));
     out.extend((0..scene.local_guides().len()).map(|index| Item::Guide(GuideRef { scope: GuideScope::Local, index })));
@@ -308,8 +313,9 @@ pub fn step(scene: &Scene, current: &Selection, forward: bool) -> Option<Selecti
 }
 
 /// `selection.selectInRegion`: the points and anchors inside `polygon` (a marquee's four corners
-/// or a lasso's outline). `nodes_only` leaves the handles out.
-pub fn in_region(scene: &Scene, polygon: &[Point], nodes_only: bool) -> Selection {
+/// or a lasso's outline). `nodes_only` leaves the handles out. `components` also takes each
+/// component that can be selected and has an on-curve point of its outline inside.
+pub fn in_region(scene: &Scene, polygon: &[Point], nodes_only: bool, components: bool) -> Selection {
     let mut s = Selection::new();
     if polygon.len() < 3 {
         return s;
@@ -327,6 +333,13 @@ pub fn in_region(scene: &Scene, polygon: &[Point], nodes_only: bool) -> Selectio
     for a in &scene.layer.anchors {
         if point_in_polygon(Point::new(a.x, a.y), polygon) {
             s.anchors.insert(a.name.clone());
+        }
+    }
+    if components {
+        for c in scene.components() {
+            if scene.shape_editable(c.shape) && c.nodes.iter().any(|p| point_in_polygon(*p, polygon)) {
+                s.shapes.insert(c.shape);
+            }
         }
     }
     s

@@ -624,7 +624,7 @@ fn hostile_input_never_panics() {
                     let _ = snap(&scene, &view, p, &Moving::from_selection(&scene, &h.selection), 4.0);
                     let _ = snap(&scene, &view, p, &Moving::default(), huge);
                 }
-                let _ = in_region(&scene, &[Point::new(nan, 0.0), Point::new(huge, huge), Point::new(-huge, 0.0)], false);
+                let _ = in_region(&scene, &[Point::new(nan, 0.0), Point::new(huge, huge), Point::new(-huge, 0.0)], false, true);
                 let _ = select_all(&scene, &h.selection);
                 let _ = step(&scene, &h.selection, true);
                 let _ = h.selection.targets(&scene);

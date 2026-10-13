@@ -32,14 +32,14 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1098 rows to check: 1528 guesses and 399 observe steps.**
+**1106 rows to check: 1536 guesses and 408 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
-| **Built milestones (M0 to M6)** | all | **460** |
-| Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 98 |
+| **Built milestones (M0 to M6)** | all | **468** |
+| Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 99 |
 | Built milestones (M0 to M6) | Edit View: text mode and preview | 32 |
-| Built milestones (M0 to M6) | Components and anchors | 62 |
+| Built milestones (M0 to M6) | Components and anchors | 69 |
 | Built milestones (M0 to M6) | Filters | 36 |
 | Built milestones (M0 to M6) | Spacing and metrics keys | 23 |
 | Built milestones (M0 to M6) | Kerning and the Kerning window | 42 |
@@ -65,9 +65,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 61 |
 | Later milestones (after M6) | Elsewhere | 15 |
 
-## Built milestones (M0 to M6) (460)
+## Built milestones (M0 to M6) (468)
 
-### Edit View: drawing, guides, layers and the Palette (98)
+### Edit View: drawing, guides, layers and the Palette (99)
 
 - [ ] `dialog.fieldKeys` (behavior, M3, inferred): In a dialog's number field, Return takes the typed value, Escape drops…
   - Guess: Dialog number fields follow the Info box's editing and arrow-key rules (infoBox.fieldEditing, infoBox.arrowKeyStepping); the handbook documents them for the Info box only.
@@ -300,6 +300,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The left sidebearing line is x = 0 of the base glyph, and on a slanted master it is slanted about half the x-height, so without an origin anchor the origin point is the base glyph's (0, 0) on every master; aligning a component on an italic master in the reference app settles it.
 - [ ] `component.setTransform` (M6, handbook, live): Set Component Transform
   - Guess: The command refuses a position edit on an aligned component (only `y` on one aligned horizontally) and any edit on a locked component, and accepts slants within ±89°, rotations within ±360° and scales from −10,000 % to 10,000 % except 0; typing such values into the Info box of the reference app settles it.
+- [ ] `view.showAnchors` (M6, handbook, live): Show Anchors
+  - Guess: Show Anchors is on by default; the View menu of a fresh install of the reference app settles it.
 - [ ] `components.swapBaseKeepsPlacement` (behavior, M6, inferred): Changing the glyph a component points to (component.setBaseGlyph, defined in the Edit…
   - Guess: Swapping the base glyph keeps the component's slot in the shape order, its transform, its alignment setting and its stored attachment anchor; swapping a component in the reference app settles it.
 
@@ -392,12 +394,14 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Up and Down move to the nearest place on the line above or below, and to the start or the end of the text from the first or the last line; in right-to-left text Left steps forward in the text; in top-to-bottom text Up and Down step along the column and Left and Right move between columns. Moving the cursor in such texts in the reference app settles it.
   - Guess: Backspace and Delete with Alt or Cmd do nothing (no word or line deletion); no source names them.
 
-### Components and anchors (62)
+### Components and anchors (69)
 
 - [ ] `export.underscoreGlyphsOmitted` (behavior, M2, inferred): Non-exporting glyphs, which underscore-named part glyphs are by default, are left out…
   - Guess: Components that use non-exporting glyphs are decomposed at export; our inference from the non-export rule.
 - [ ] `edit.selectAll` (M3, handbook, live): Select All
   - Guess: In Font View it selects every glyph; the handbook describes edit mode only.
+- [ ] `anchors.shapeShowsMetricPosition` (behavior, M6, handbook): The anchor marker is a diamond when the anchor sits precisely on…
+  - Observe: Put an anchor on the x-height, one inside the baseline zone and one elsewhere, and note the three shapes; repeat with names that start with an underscore.
 - [ ] `anchor.add` (M6, handbook, live): Add Anchor
   - Guess: When `name` is omitted the anchor is named new anchor, and a name already on the layer, given or not, gets underscores appended until it is unique, as Option-drag duplication does (anchors.uniqueNamesPerLayer); adding two anchors without renaming in the reference app settles it.
 - [ ] `anchor.rename` (M6, handbook, live): Rename
@@ -439,12 +443,25 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The arrow button sits at the top right of the component Info box, as the Measuring page says; the Components page says top left. A screenshot of the reference app settles it.
 - [ ] `components.flipViaNegativeScaleOrMirror` (behavior, M6, inferred): A component is flipped with the Palette mirror buttons or by transforming…
   - Guess: The mirror buttons and a negative scale in the Info box give the same stored transform; mirroring a component in the reference app and saving settles it.
+- [ ] `components.rubberBandIgnoresComponents` (behavior, M6, handbook): A selection rectangle dragged with the Select tool skips components; holding Option…
+  - Guess: A rubber band with Option takes a component when an on-curve point of its outline lies inside, not only when the whole component does; dragging across half a component with Option in the reference app settles it.
+  - Guess: Option in a rubber band both includes components and leaves handles out, since the handbook gives Option both meanings; dragging with Option over a path with handles and a component in the reference app settles it.
+  - Observe: With Option held, drag a selection rectangle over a path with handles and half of a component, and note what is selected.
 - [ ] `components.doubleClickOpensBase` (behavior, M6, handbook): Double-clicking a component places its base glyph next to the composite in…
   - Guess: The base glyph goes into the tab text to the left of the composite, as the Info box section of the Measuring page says; the Components page says only next to it. Double-clicking a component in the reference app settles it.
 - [ ] `components.lockedCannotMove` (behavior, M6, handbook): A locked component rejects every move, from mouse, arrow keys or Info…
   - Guess: A lock blocks Info box position edits and the Palette's transformations as well as moves, and leaves the component's other settings editable; a locked component in the reference app settles it.
+- [ ] `components.placeholderEmptyBase` (behavior, M6, handbook): A component whose base glyph exists but has an empty layer is…
+  - Guess: A placeholder is a crossed box the width of the base glyph's advance and half an em tall, labelled with the problem; seeing the three placeholders in the reference app settles their look.
+  - Observe: Add a component of a glyph whose layer is empty and note how the placeholder looks.
+- [ ] `components.placeholderMissingBase` (behavior, M6, handbook): A component that names a glyph absent from the font is drawn…
+  - Observe: Add a component, delete its base glyph, and note the placeholder and whether a click selects it.
 - [ ] `components.placeholderCircularReference` (behavior, M6, handbook): A component whose base glyph, directly or through nesting, contains the glyph…
   - Guess: Anchor propagation reports a glyph on or above a component cycle as an error, where glyphsLib gives glyphs on the cycle their own anchors and glyphs above it none; a cycle in the reference app settles what it shows.
+  - Observe: Make glyph A contain B and B contain A (through a file edit if the app refuses) and note the placeholder.
+- [ ] `components.nodesInsideComponentsSnap` (behavior, M6, handbook): While a node, anchor or other element is being dragged, the nodes…
+  - Guess: The nodes inside components show for as long as any drag of a pointer tool lasts, and not while the pointer only hovers; dragging a node next to a component in the reference app settles it.
+  - Observe: Drag a node next to a component and note when the component's nodes appear and which of them the node snaps to.
 - [ ] `components.topBottomAnchorsPropagate` (behavior, M6, handbook): Anchors named top and bottom on a component's base glyph count as…
   - Guess: The editor and the compiler propagate anchors exactly as fontc does, every name included, since its algorithm gives top and bottom as the handbook says and also the other names both reference compilers export; a composite that inherits an ogonek or a cedilla anchor in the reference app settles it.
   - Guess: A non-master layer whose base glyph has no layer with the same id reads the base's master layer of the same master, where glyphsLib interpolates the base's anchors at the layer's axis location; a brace layer in the reference app whose base lacks it settles it.
@@ -459,6 +476,11 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A component that is not aligned keeps its stored position but still counts: its anchors serve the marks after it and, as a base, it moves the next base to follow its stored place; a composite with one disabled base among aligned ones in the reference app settles it.
 - [ ] `components.fontWideDisableAutoAlign` (behavior, M6, handbook): The Font Info › Other option Disable Automatic Alignment turns off automatic…
   - Guess: The font-wide option also overrides components whose alignment is forced (1); a forced component in a font with the option on, in the reference app, settles it.
+- [ ] `components.autoAlignColors` (behavior, M6, handbook): Component fill colour signals alignment state in Edit View: green for auto-aligned,…
+  - Guess: Components are shown by their outline drawn in the state colour, not filled; a composite in the reference app's Edit View settles it.
+  - Guess: Every component aligned horizontally only is blue, the single Number component and a component set to horizontal alignment alike; a component set to horizontal alignment in the reference app settles it.
+  - Observe: Open a glyph built from components only, then add a path to it, and note the colour of the components before and after.
+  - Observe: Build `one.sups` or another glyph from a single figure component and note its colour.
 - [ ] `components.singleNumberComponentShiftsVertically` (behavior, M6, handbook): When a composite's only component has the glyph category Number (zero to…
   - Guess: A Number-category single component with alignment 0 behaves as alignment 3, and alignment 3 gives the same horizontal-only alignment to any component; the corpus alignment measure (M6 plan § 5) checks the stored positions of both.
 - [ ] `components.autoAlignMetricsFromBase` (behavior, M6, handbook): The sidebearings of an auto-aligned composite are derived from its base components,…
@@ -483,6 +505,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `corner.glyphNaming` (behavior, M6, handbook): A glyph is a corner glyph when its name starts with _corner
   - Guess: A layer with a corner that cannot be fitted (its path deleted, a zero-length segment next to it) is drawn in the editor without any of its corners, as the export leaves it; a hint whose path was deleted in the reference app shows what it draws.
   - Guess: Corners are fitted on the layer's stored shapes, whose indices the hints name, before its smart components are drawn; fontc draws smart components first and then reads the indices against the shapes that result, which differs only in a layer that has both. A layer with a smart component before a path with a corner, built in the reference app, settles it.
+- [ ] `corner.highlightAndSelection` (behavior, M6, handbook): In Edit View a corner component is tinted with a faint blue…
+  - Guess: The tint is a disc around the corner's node rather than a fill of the corner's own outline; a corner component in the reference app settles it.
+  - Observe: Attach a corner component and note the shape and extent of its blue tint.
 - [ ] `corner.copyPasteOntoNodes` (behavior, M6, handbook): A selected corner component can be copied with Edit › Copy and,…
   - Guess: Pasting a corner, cap, segment or brush onto a selection of the wrong kind (a corner with a segment selected, a cap on nodes that are not neighbours) is refused with a message and nothing changes; the reference app settles it.
   - Guess: One copied corner goes onto every selected node; several copied corners go onto as many selected nodes, in order, and any other count is refused. Copying two corners and pasting them onto three nodes in the reference app settles it.

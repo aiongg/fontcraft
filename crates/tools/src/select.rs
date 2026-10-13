@@ -6,7 +6,7 @@
 //! |---|---|
 //! | click an object | select it; a segment selects its two end nodes |
 //! | `Shift`+click | toggle it in the selection |
-//! | drag on empty canvas | marquee: nodes, handles and anchors inside; `Shift` toggles them, `Alt` takes on-curve nodes only, `Ctrl` turns the marquee |
+//! | drag on empty canvas | marquee: nodes, handles and anchors inside; `Shift` toggles them, `Alt` takes on-curve nodes only and components too, `Ctrl` turns the marquee |
 //! | drag an object | `selection.move` in one interaction; snapping unless `Ctrl` is held |
 //! | `Alt` held at mouse-down | the drag moves a copy (`duplicate: true`) |
 //! | `Ctrl+Alt` at mouse-down, or `Alt` pressed during the drag | nudge (`mode: nudge`) |
@@ -14,6 +14,7 @@
 //! | `Alt`+click a line segment | `path.convertSegmentToCurve` |
 //! | double-click a node | `path.toggleNodeType` (`Alt`: `path.toggleNodeTypeKeepingOutline`) |
 //! | double-click a segment | select its whole path |
+//! | double-click a component | `component.editBaseGlyph`: its base glyph joins the tab text, edited |
 //! | drag a guide's knob, or the guide elsewhere; double-click it | see [`crate::guide_drag`] |
 //! | `Escape` during a gesture | cancel it |
 //!
@@ -145,7 +146,7 @@ impl Marquee {
     }
 
     fn selection(&self, scene: &Scene) -> Selection {
-        let region = in_region(scene, &self.polygon(), self.nodes_only);
+        let region = in_region(scene, &self.polygon(), self.nodes_only, self.nodes_only);
         if self.extend {
             let mut s = self.base.clone();
             for item in region.items() {
@@ -372,6 +373,9 @@ impl SelectTool {
                 out.push(Action::Run { invocation: Invocation::new(id, Value::Object(params)) });
             }
             Hit::Segment { shape, .. } => out.push(Action::Select { selection: path_points(cx.scene, shape) }),
+            Hit::Component { shape } if !ev.mods.shift => {
+                out.push(Action::Run { invocation: Invocation::new("component.editBaseGlyph", json!({"component": shape})) });
+            }
             Hit::Guide { guide } => {
                 if let Some(invocation) = crate::guide_drag::double_click(cx, guide, ev.pos) {
                     out.push(Action::Run { invocation });

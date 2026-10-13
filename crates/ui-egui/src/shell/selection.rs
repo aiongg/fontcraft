@@ -50,14 +50,14 @@ pub const COMMANDS: &[UiCommand] = &[
         "Select Next",
         &[],
         "Tab",
-        "{} with exactly one point, anchor or guide selected: select the next one (points in path order, then anchors, then local and global guides), wrapping around → {selection}",
+        "{} with exactly one point, component, anchor or guide selected: select the next one (points in path order, then components, then anchors, then local and global guides), wrapping around → {selection}",
     ),
     (
         "selection.selectPrevious",
         "Select Previous",
         &[],
         "Shift+Tab",
-        "{} with exactly one point, anchor or guide selected: select the one before it, wrapping around → {selection}",
+        "{} with exactly one point, component, anchor or guide selected: select the one before it, wrapping around → {selection}",
     ),
     (
         "selection.set",
@@ -71,7 +71,7 @@ pub const COMMANDS: &[UiCommand] = &[
         "Select in Region",
         &[],
         "",
-        "{glyph?: name (the edited glyph), layer?: id, rect?: [x, y, width, height], angle?: degrees (turns the rectangle about (x, y)), polygon?: [[x, y]] (3 or more points), nodesOnly?: bool, mode?: \"replace\" | \"add\" | \"remove\" | \"toggle\" (default replace)} the points and anchors inside the rectangle (a marquee) or the polygon (a lasso); nodesOnly leaves the handles out → {selection}",
+        "{glyph?: name (the edited glyph), layer?: id, rect?: [x, y, width, height], angle?: degrees (turns the rectangle about (x, y)), polygon?: [[x, y]] (3 or more points), nodesOnly?: bool, components?: bool, mode?: \"replace\" | \"add\" | \"remove\" | \"toggle\" (default replace)} the points and anchors inside the rectangle (a marquee) or the polygon (a lasso); nodesOnly leaves the handles out; components also takes each unlocked component with an on-curve point of its outline inside → {selection}",
     ),
     (
         "path.focusOnSelectedPath",
@@ -168,7 +168,7 @@ fn change(id: &str, args: &Args, scene: &Scene, current: &Selection) -> Result<C
         "edit.invertSelection" => Ok(Change::Select(invert(scene, current))),
         "selection.selectNext" | "selection.selectPrevious" => step(scene, current, id == "selection.selectNext")
             .map(Change::Select)
-            .ok_or_else(|| args.err("select exactly one point, anchor or guide first")),
+            .ok_or_else(|| args.err("select exactly one point, component, anchor or guide first")),
         "selection.set" => {
             let given = Selection::from_value(&args.value()).map_err(|e| args.err(e))?;
             let mut valid = given.clone();
@@ -182,7 +182,8 @@ fn change(id: &str, args: &Args, scene: &Scene, current: &Selection) -> Result<C
         "selection.selectInRegion" => {
             let polygon = region(args)?;
             let nodes_only = args.flag("nodesOnly")?.unwrap_or(false);
-            applied(in_region(scene, &polygon, nodes_only))
+            let components = args.flag("components")?.unwrap_or(false);
+            applied(in_region(scene, &polygon, nodes_only, components))
         }
         "path.focusOnSelectedPath" => {
             let shapes: Vec<usize> = match args.get("shapes") {

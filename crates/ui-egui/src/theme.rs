@@ -42,6 +42,19 @@ pub struct Tokens {
     pub duplicate_node: Color32,
     /// Behind a node on a metric line (diamond) or in an alignment zone (circle).
     pub metric_highlight: Color32,
+    /// Component outlines by alignment state (`components.autoAlignColors`): aligned
+    /// automatically, placed by hand, and the single Number component that shifts vertically.
+    pub component_aligned: Color32,
+    pub component_manual: Color32,
+    pub component_shiftable: Color32,
+    /// Component placeholders: an empty base layer, a missing base glyph, a circular reference.
+    pub component_placeholder: Color32,
+    /// The nodes inside components, shown as snap targets while something is dragged.
+    pub component_node: Color32,
+    /// Anchor markers; underscore anchors are drawn hollow.
+    pub anchor: Color32,
+    /// The faint background of a corner component on its node.
+    pub corner_highlight: Color32,
     /// Alignment zones, as bands along their metric lines.
     pub zone_fill: Color32,
     /// Names on the metric lines.
@@ -95,6 +108,10 @@ pub struct Tokens {
     pub duplicate_node_radius: f32,
     /// Size of the highlight behind a node on a metric line or in a zone.
     pub metric_highlight_size: f32,
+    pub component_outline_width: f32,
+    /// Width and height of an anchor marker.
+    pub anchor_size: f32,
+    pub corner_highlight_radius: f32,
     pub metric_name_size: f32,
     /// Ring around a selected node or handle.
     pub selection_ring_radius: f32,
@@ -332,6 +349,13 @@ impl Tokens {
             open_end_start: Color32::from_rgb(0x8c, 0xc4, 0xf5),
             duplicate_node: Color32::from_rgb(0xe0, 0x30, 0x30),
             metric_highlight: Color32::from_rgb(0xdc, 0xc4, 0x8c),
+            component_aligned: Color32::from_rgb(0x3c, 0xa0, 0x50),
+            component_manual: Color32::from_rgb(0x8c, 0x8c, 0x8c),
+            component_shiftable: Color32::from_rgb(0x3c, 0x78, 0xd8),
+            component_placeholder: Color32::from_rgb(0xd0, 0x40, 0x40),
+            component_node: Color32::from_rgb(0x9c, 0x9c, 0xa8),
+            anchor: Color32::from_rgb(0xe8, 0x8a, 0x1a),
+            corner_highlight: Color32::from_rgba_unmultiplied(0x50, 0x96, 0xf0, 0x40),
             zone_fill: Color32::from_rgba_unmultiplied(0x9a, 0xb8, 0xdc, 0x38),
             metric_name: Color32::from_rgb(0x80, 0x88, 0x94),
             selection: Color32::from_rgb(0xf0, 0x8c, 0x1e),
@@ -362,6 +386,9 @@ impl Tokens {
             open_end_length: 16.0,
             duplicate_node_radius: 7.5,
             metric_highlight_size: 18.0,
+            component_outline_width: 2.0,
+            anchor_size: 9.0,
+            corner_highlight_radius: 14.0,
             metric_name_size: 10.0,
             selection_ring_radius: 6.5,
             selection_width: 2.0,

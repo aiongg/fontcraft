@@ -530,6 +530,8 @@ pub struct DisplayOptions {
     pub bounding_box: bool,
     pub annotations: bool,
     pub fill_preview: bool,
+    /// The edited layer's anchors (`view.showAnchors`).
+    pub anchors: bool,
     /// The other members of the edited pair's kerning groups (`view.showGroupMembers`).
     pub group_members: bool,
 }
@@ -548,6 +550,7 @@ impl Default for DisplayOptions {
             bounding_box: false,
             annotations: true,
             fill_preview: true,
+            anchors: true,
             group_members: false,
         }
     }

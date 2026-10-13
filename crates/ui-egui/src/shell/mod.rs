@@ -13,6 +13,7 @@ pub mod clipboard;
 pub mod command_console;
 pub mod compare_family;
 pub mod compare_fonts;
+pub mod components;
 pub mod context_menu;
 pub mod drawing;
 pub mod edit_aids;
@@ -92,6 +93,7 @@ pub const MODULES: &[(&[UiCommand], Handler)] = &[
     (kerning_review::COMMANDS, kerning_review::run),
     (edit_aids::COMMANDS, edit_aids::run),
     (attach::COMMANDS, attach::run),
+    (components::COMMANDS, components::run),
     (crate::panels::reference_font::COMMANDS, crate::panels::reference_font::run),
     (crate::panels::selections::COMMANDS, crate::panels::selections::run),
     (url::COMMANDS, url::run),

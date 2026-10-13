@@ -10,7 +10,9 @@
 //! | [`images`] | placed images, through a cache of decoded textures |
 //! | [`fill`] | filled glyphs, rasterised by the `render` crate into a texture |
 //! | [`composite`] | (no drawing) each glyph's outline with strokes expanded and masks applied, cached |
+//! | [`components`] | components by alignment state, placeholders, corner components, the nodes inside components while dragging |
 //! | [`nodes`] | nodes and handles with the display conventions of `docs/spec/03a` § 4 |
+//! | [`anchors`] | anchors by metric position, the selected ones named |
 //! | [`selection`] | the selection, and the active tool's overlays (marquee, snapping lines…) |
 //! | [`bbox`] | the selection's bounding box and knobs, and the transformation origin |
 //! | [`annotations`] | notes and correction marks |
@@ -26,6 +28,7 @@
 //! and `view.setZoom`, like every other input. Primary-button input goes to the pointer tools
 //! ([`crate::tools_glue`]) after the frame is drawn.
 
+pub mod anchors;
 pub mod annotations;
 pub mod attach;
 pub mod audit_markers;
@@ -33,6 +36,7 @@ pub mod autometer;
 pub mod background;
 pub mod bbox;
 pub mod compatibility;
+pub mod components;
 pub mod composite;
 pub mod edit_aids;
 pub mod fill;
@@ -199,6 +203,13 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'stat
                 painter.add(egui::Shape::line(contour, Stroke::new(tokens.outline_width, tokens.outline)));
             }
         }
+        // Drawn even when the outline cannot be built: a missing or circular base glyph shows
+        // its placeholder.
+        if !tab.edit_background
+            && let Some(glyph) = tab.edited_glyph()
+        {
+            components::draw(&c, font, glyph, layer, &tab.selection, tools.toolbox.busy());
+        }
         if let Some(s) = &scene {
             attach::draw(ui, &c, s, pending);
             edit_aids::draw(ui, &c, s, pending);
@@ -213,6 +224,9 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'stat
             painter.extend(selection::segment_shapes(layer, &tab.selection, v, tokens, focus));
             painter.extend(nodes::shapes(layer, v, tokens, &marks, focus));
             painter.extend(selection::point_shapes(layer, &tab.selection, v, tokens, focus));
+        }
+        if state.display.anchors {
+            anchors::draw(&c, layer, &tab.selection, &marks);
         }
         if let Some(s) = &scene {
             autometer::draw(ui, &c, s, pending);
