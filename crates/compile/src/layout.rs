@@ -117,6 +117,9 @@ pub struct LayoutInput<'a> {
     /// The variable font's masters (`resolved` is the origin's): the generated kerning and mark
     /// positions vary with them. `None` for a static font.
     pub variable: Option<&'a VariableLayout<'a>>,
+    /// The source's axes and the target's internal location for the variable feature syntax,
+    /// when `font` is an interpolated instance font that no longer holds them.
+    pub feature_axes: Option<&'a (fontcraft_features::fea_variable::FeatureAxes, Vec<f64>)>,
 }
 
 /// The entries compiled for `input`'s target: the automatic ones regenerated (unless off), then
@@ -195,7 +198,10 @@ pub fn build(input: &LayoutInput, opts: &LayoutOptions, warnings: &mut Vec<Strin
         match input.data {
             Some(data) => {
                 entries = self::entries(input, font, opts, warnings)?;
-                let values = MasterValues::new(font, data, &resolved.master).map_err(|e| request_error(e.to_string()))?;
+                let mut values = MasterValues::new(font, data, &resolved.master).map_err(|e| request_error(e.to_string()))?;
+                if let Some((axes, location)) = input.feature_axes {
+                    values = values.with_feature_axes(axes.clone(), location.clone());
+                }
                 let assembled = match fontcraft_features::assemble(font, &entries, &Target::Master(resolved.master.clone()), &values) {
                     Ok(a) => a,
                     Err(fontcraft_features::FeatureError::Code(found)) => return Err(CompileError::Features(found)),

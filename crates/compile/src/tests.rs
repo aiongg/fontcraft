@@ -1917,3 +1917,23 @@ mod ps_hints_export {
         assert_eq!((s.h, s.v), (vec![], vec![(0, 10)]), "the second master's hints");
     }
 }
+
+#[test]
+fn variable_pos_values_are_resolved_at_a_static_instance() {
+    // featureCode.mm.staticVersusVariable, featureCode.variablePosLowering (static half)
+    use fontcraft_features::evaluate::PairEvaluator;
+    use fontcraft_model::Snippet;
+    let mut f = two_masters();
+    let code = "pos A V -40 (wght:200) -80;\n#ifndef VARIABLE\npos A T 10 (wght:200) 30;\n#endif";
+    Arc::make_mut(&mut f.features).features.push(Snippet { name: "kern".into(), code: code.into(), ..Default::default() });
+    Arc::make_mut(&mut f.instances).push(fontcraft_model::Instance { name: "Semibold".into(), location: vec![150.0], ..Default::default() });
+    Arc::make_mut(&mut f.instances).push(fontcraft_model::Instance { name: "Heavy".into(), location: vec![200.0], ..Default::default() });
+    for (target, av, at) in [(Target::Master("m01".into()), -40, 10), (Target::Instance(0), -60, 20), (Target::Instance(1), -80, 30)] {
+        let out = compile(&f, &target, Flavour::TrueType, &Options::default()).unwrap();
+        let eval = PairEvaluator::new(&out.bytes).unwrap();
+        let gid = |name: &str| out.glyph_order.iter().position(|n| n == name).unwrap() as u16;
+        let dflt = skrifa::raw::types::Tag::new(b"DFLT");
+        assert_eq!(eval.value(dflt, gid("A"), gid("V")), av, "{target:?}");
+        assert_eq!(eval.value(dflt, gid("A"), gid("T")), at, "{target:?}");
+    }
+}

@@ -1,0 +1,4 @@
+# font: mapped
+feature kern {
+pos a b -20 (wght:220, wdth:60) -35 (wght:20,opsz:72) -12;
+} kern;

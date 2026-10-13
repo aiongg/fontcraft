@@ -1,0 +1,15 @@
+# font: mapped
+feature calt {
+sub a by a.first;
+
+sub c by c.always;
+} calt;
+
+conditionset conditionset_1 {
+    wght 650.0 900.0;
+} conditionset_1;
+
+variation calt conditionset_1 {
+sub b by b.bold;
+} calt;
+

@@ -1051,6 +1051,7 @@ dependencies = [
  "fontcraft-fea",
  "fontcraft-geom",
  "fontcraft-glyphquery",
+ "fontcraft-interp",
  "fontcraft-io-glyphs",
  "fontcraft-model",
  "fontcraft-plist",

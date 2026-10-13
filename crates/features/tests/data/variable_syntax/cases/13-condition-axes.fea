@@ -1,0 +1,5 @@
+# font: mapped
+feature rvrn {
+condition 150 < wght < 220, 60 < wdth < 80;
+sub won by won.boldcondensed;
+} rvrn;

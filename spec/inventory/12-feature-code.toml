@@ -714,6 +714,7 @@ milestone = "M9"
 summary = "Although both sides are written with `<`, the lower limit is inclusive (min <= value); the upper limit stays strict as written."
 ref = "Feature Code › Conditional Feature Code"
 status = "handbook"
+notes = "Documented, not yet observed. A feature-file `conditionset` range includes both ends, so the variable font (like glyphsLib's conversion) also applies the rules exactly at the upper limit; static targets keep it strict (M9.11)."
 
 [[behavior]]
 id = "featureCode.conditionMultipleAxes"
@@ -730,9 +731,10 @@ milestone = "M9"
 summary = "A condition applies to the rules that follow it up to the next `condition` statement, a bare `condition;` (which returns to unconditional rules) or the end of the feature; a condition inside a lookup block is an error. Its limits are internal (design) coordinates, mapped to external ones before compiling."
 ref = "Feature Code › Conditional Feature Code"
 status = "docs"
-notes = "Taken in the M9 planning pass from glyphsLib 6.15.0 `builder/variable_features.py` (Apache-2.0), which converts this syntax for fontmake; the handbook does not say. No corpus source uses it."
+notes = "Taken in the M9 planning pass from glyphsLib 6.15.0 `builder/variable_features.py` (Apache-2.0), which converts this syntax for fontmake; the handbook does not say. No corpus source uses it. Built in M9.11 (`features/src/fea_variable.rs`): a condition outside a feature block is refused too. For a static target the rules after a condition are kept when the location satisfies it and dropped otherwise."
 guesses = [
   "The scope and coordinate rules follow glyphsLib's converter; settle with a feature holding two conditions and a bare `condition;` in the reference app.",
+  "A static export keeps the rules of a condition that holds at its location (lower limit inclusive, upper strict) instead of refusing the statement; the handbook places conditions only in variable-only blocks. Settle with a condition outside `#ifdef VARIABLE` exported as a static instance.",
 ]
 observe = [
   "In F1 (two masters), write a `calt` feature with two `condition` lines and a bare `condition;`, export the variable font and read its FeatureVariations: note the condition sets and which rules each covers.",
@@ -745,7 +747,7 @@ milestone = "M9"
 summary = "A condition and its rules are lowered to a `conditionset` plus a `variation <tag> <set> { ... }` block for the compiler; fea-rs supports that pair."
 ref = "fea-rs src/parse/grammar/variations.rs"
 status = "docs"
-notes = "glyphsLib 6.15.0 lowers it the same way, with overlapping regions split into non-overlapping ones most specific first (fontTools `overlayFeatureVariations`); an inverted range is dropped with a warning."
+notes = "glyphsLib 6.15.0 lowers it the same way, with overlapping regions split into non-overlapping ones most specific first (fontTools `overlayFeatureVariations`); an inverted range is dropped with a warning. Built in M9.11: the output equals glyphsLib's on 32 synthetic feature texts (`crates/features/tests/data/variable_syntax`), after white space, `.0` endings and condition-set names are normalised. Sets are named `conditionset_1`, `conditionset_2`… across all entries of one assembly, each defined once before its first use. The warning for an inverted range is not shown yet."
 
 [[behavior]]
 id = "featureCode.variablePos"
@@ -786,7 +788,11 @@ milestone = "M9"
 summary = "The syntax is lowered to the standard variable value form `(default tag=coord:value ...)`; for a static instance the value is interpolated to one number."
 ref = "AFDKO OpenTypeFeatureFileSpecification.md §2.e.iv; Feature Code › Variable GPOS"
 status = "docs"
-notes = "glyphsLib 6.15.0 lowers it to feaLib's variable scalar with user coordinates and rounds each value to a whole number."
+notes = "glyphsLib 6.15.0 lowers it to feaLib's variable scalar with user coordinates and rounds each value to a whole number. Built in M9.11 the same way; a component of a value record or anchor that is equal at every location stays a plain number. For a static target the rounded values are interpolated at the location with the variation model the variable font would use (locations normalised over the axis's internal range), then rounded again."
+guesses = [
+  "A static instance gets the value the variable font has at its location; a reference export of `pos a a 8 (wght:700) 14;` as an instance between the default and 700 would settle it.",
+  "A number that ends a glyph name (`a1 (wght:700) 5`) is not read as a value, where glyphsLib reads it; a reference export would settle which the reference does.",
+]
 
 [[behavior]]
 id = "featureCode.delete"
@@ -935,6 +941,7 @@ milestone = "M9"
 summary = "Static instances receive the `#ifndef VARIABLE` branches, interpolated token values and single-number positions; the variable font receives the `#ifdef VARIABLE` branches, feature variations and variable values."
 ref = "Feature Code › Conditional Feature Code; Feature Code › Variable GPOS"
 status = "handbook"
+notes = "Documented, not yet observed. M9.11 lowers the text for both: a static export (a master, or an instance through its interpolated font) compiles with the positions resolved at its location; the variable font's text is compiled by M9.12, and number tokens per location are M9.12's too."
 
 # ----------------------------------------------------------------------------
 # Behaviours: Automatic classes

@@ -211,7 +211,12 @@ sub yen by yen.heavynarrow;
 - Lowering (`featureCode.conditionLowering`): one `conditionset` per distinct condition and a
   `variation <feature tag> <set> { rules } <feature tag>;` block. Both are fea-rs / feaLib syntax,
   not part of AFDKO spec 1.27 (`fea.var.conditionset`, `fea.var.variation`).
-- Scope and coordinate scale are undocumented (`featureCode.conditionScope`, open question).
+- Scope and coordinate scale are not in the handbook. FontCraft follows glyphsLib's converter
+  (`featureCode.conditionScope`): a condition covers the rules after it up to the next
+  `condition`, a bare `condition;` or the end of the feature block; it must stand in a feature
+  block, outside any lookup block; its limits are internal coordinates, mapped to external ones,
+  and a missing limit is the axis's end. A static target keeps the rules of a condition that
+  holds at its location and drops the others.
 
 ### Variable GPOS
 
@@ -228,7 +233,12 @@ pos @Figure period' <12 0 24 0 (wght:700) 18 0 36 0 (wght:300 opsz:10) 6 0 12 0>
   records, either a variable value per metric or the per-location form (`fea.var.scalar`,
   `fea.var.valueRecordPerMetric`). fea-rs takes the unit suffix as optional; check which scale it
   assumes without one before relying on it.
-- Static instance: interpolate to plain numbers.
+- Static instance: interpolate to plain numbers, with the variation model the variable font uses
+  at that location.
+- Lowered by `features/src/fea_variable.rs` (M9.11) after the `#ifdef` pass of
+  `features/src/lower.rs`; the output equals glyphsLib's converted text on the synthetic cases in
+  `crates/features/tests/data/variable_syntax` (`crates/features/tests/oracle/convert.py`
+  regenerates the expected texts).
 
 ## 6. Feature code across masters and instances
 
@@ -773,10 +783,14 @@ Tokens
 Extensions
 11. Scope of a `condition`: until the next condition, the end of the feature, or `#endif`? Is
     there a way to return to unconditional rules inside the same block?
-   **M9** (the `condition` rows are M9's).
+   **Decision (M9.11):** glyphsLib's rule: up to the next `condition`, a bare `condition;`
+   (which returns to unconditional rules) or the end of the feature block.
 12. Coordinate scale of `condition` limits and of `(axis:coord)` locations (internal versus
     external), and whether the upper limit is inclusive.
-   **M9.**
+   **Decision (M9.11):** internal, as the handbook says, mapped to external for the compiler.
+   The handbook makes the upper limit strict; a feature-file condition set includes both ends,
+   so the variable font applies the rules at the upper limit too (as glyphsLib's conversion
+   does) and static targets keep it strict.
 13. Are `#else`, nesting or symbols other than VARIABLE accepted?
    **Decision for the static half built in M8:** no; another symbol or `#else` is an error at the
    directive. The rows stay M9 (`featureCode.ifdefOtherSymbols`).

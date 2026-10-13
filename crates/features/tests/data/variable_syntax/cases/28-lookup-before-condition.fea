@@ -1,0 +1,11 @@
+# font: mapped
+feature rvrn {
+lookup first {
+sub a by a.one;
+} first;
+condition 150 < wght;
+sub dollar by dollar.bold;
+lookup second {
+sub b by b.two;
+} second;
+} rvrn;

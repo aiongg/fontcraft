@@ -1,0 +1,5 @@
+# font: mapped
+feature cpsp {
+pos @Uppercase 10 (wdth:60) 20 (wdth:60 opsz:28) 30;
+pos @Lowercase 8 (wght:220) 14 (wght:20 opsz:10) 22;
+} cpsp;

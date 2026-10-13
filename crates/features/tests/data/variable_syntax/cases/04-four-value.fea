@@ -1,0 +1,4 @@
+# font: mapped
+feature kern {
+pos @Figure period' <12 0 24 0 (wght:220) 18 0 36 0 (wght:20 opsz:72) 6 0 12 0> @Figure;
+} kern;

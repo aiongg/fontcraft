@@ -16,6 +16,7 @@ use fontcraft_model::{Font, Layer, Master};
 use fontcraft_spacing::Field;
 
 use crate::FeatureError;
+use crate::fea_variable::FeatureAxes;
 
 /// The build feature code is assembled, expanded and compiled for. Not the same as
 /// `fontcraft_model::Target`, which names what the outline compiler resolves: feature code also
@@ -82,6 +83,18 @@ pub trait TargetValues {
     /// The glyphs `predicate` selects for the target, in the font's order (`$[…]` tokens). An
     /// error is a message for the user.
     fn select(&self, predicate: &Predicate) -> Result<Vec<String>, String>;
+
+    /// The axes and masters the variable feature syntax reads (`(wght:700) 14`, `condition`).
+    /// Default: none, so any axis the code names is unknown.
+    fn feature_axes(&self) -> FeatureAxes {
+        FeatureAxes::default()
+    }
+
+    /// The target's internal location, parallel to [`TargetValues::feature_axes`]; empty for
+    /// the variable font. A missing value is the axis origin.
+    fn location(&self) -> Vec<f64> {
+        Vec::new()
+    }
 }
 
 /// Where [`MasterValues`] reads anchor positions from: `(glyph, anchor)` to the position on the
@@ -102,6 +115,8 @@ pub struct MasterValues<'a> {
     /// The feature classes `class(…)` reads, resolved once for every predicate token, with
     /// one work cap for all of them.
     classes: RefCell<ClassResolver<'a>>,
+    /// The axes and location the variable feature syntax reads, when they are not the font's.
+    feature_axes: Option<(FeatureAxes, Vec<f64>)>,
 }
 
 impl<'a> MasterValues<'a> {
@@ -112,12 +127,20 @@ impl<'a> MasterValues<'a> {
         };
         let glyphs = font.glyphs.as_arcs().iter().filter(|g| g.export).map(|g| g.name.clone()).collect();
         let classes = RefCell::new(ClassResolver::new(font, data, Some(found.id.as_str())));
-        Ok(Self { target: Target::Master(master.to_string()), font, data, master: found, glyphs, anchors: None, classes })
+        Ok(Self { target: Target::Master(master.to_string()), font, data, master: found, glyphs, anchors: None, classes, feature_axes: None })
     }
 
     /// Reads anchors from `source` (propagated anchors) instead of the layers' stored ones.
     pub fn with_anchors(mut self, source: AnchorSource<'a>) -> Self {
         self.anchors = Some(source);
+        self
+    }
+
+    /// Reads the variable feature syntax against `axes` at internal `location` instead of the
+    /// font's own axes and the master's location: for an interpolated instance font, whose
+    /// single master is not the source's origin.
+    pub fn with_feature_axes(mut self, axes: FeatureAxes, location: Vec<f64>) -> Self {
+        self.feature_axes = Some((axes, location));
         self
     }
 
@@ -184,5 +207,19 @@ impl TargetValues for MasterValues<'_> {
         let env = fontcraft_glyphquery::Env::new(self.font, self.data, master).map_err(|e| e.to_string())?.with_classes(classes);
         let names = fontcraft_glyphquery::predicate::evaluate(predicate, &env).map_err(|e| e.to_string())?;
         Ok(names.into_iter().filter(|n| self.font.glyph(n).is_some_and(|g| g.export)).collect())
+    }
+
+    fn feature_axes(&self) -> FeatureAxes {
+        match &self.feature_axes {
+            Some((axes, _)) => axes.clone(),
+            None => FeatureAxes::from_font(self.font),
+        }
+    }
+
+    fn location(&self) -> Vec<f64> {
+        if let Some((_, location)) = &self.feature_axes {
+            return location.clone();
+        }
+        (0..self.font.axes.len()).map(|i| fontcraft_model::axes::design_value(&self.master.location, i)).collect()
     }
 }

@@ -1,0 +1,6 @@
+# font: mapped
+feature rvrn useExtension {
+sub a by a.base;
+condition 150 < wght;
+sub dollar by dollar.bold;
+} rvrn;

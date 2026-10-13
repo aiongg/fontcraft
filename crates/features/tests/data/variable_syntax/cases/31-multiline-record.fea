@@ -1,0 +1,6 @@
+# font: mapped
+feature cpsp {
+pos @Digit colon' <10 50 20 0
+	(wdth:80) 30 40 60 0
+	(wdth:60 opsz:28) 5 10 10 0> @Digit;
+} cpsp;

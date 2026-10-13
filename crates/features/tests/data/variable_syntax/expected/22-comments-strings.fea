@@ -1,0 +1,15 @@
+# font: mapped
+# condition 150 < wght; and pos a 10 (wght:220) 20; in a comment
+feature ss01 {
+featureNames { name "Alt { condition 1 < wght; }"; };
+sub a by a.alt; # a } brace and (wght:220) in a comment
+} ss01;
+
+conditionset conditionset_1 {
+    wght 650.0 900.0;
+} conditionset_1;
+
+variation ss01 conditionset_1 {
+sub b by b.bold; # condition wght < 50;
+} ss01;
+

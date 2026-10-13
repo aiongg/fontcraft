@@ -1,0 +1,13 @@
+# font: mapped
+feature ss02 {
+sub a.condition by condition.alt;
+} ss02;
+
+conditionset conditionset_1 {
+    wght 650.0 900.0;
+} conditionset_1;
+
+variation ss02 conditionset_1 {
+sub conditional by conditional.bold;
+} ss02;
+

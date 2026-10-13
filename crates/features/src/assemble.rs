@@ -7,7 +7,8 @@
 //!
 //! The pipeline for one entry, each pass returning its [`OffsetMap`]:
 //! [`crate::tokens::expand`] → [`crate::lower::lower`] (`#ifdef VARIABLE` and the syntax
-//! extensions) → [`crate::variable::lower`] (variable target only). Each entry becomes one
+//! extensions) → [`crate::variable::lower`] (conditions and variable values; the condition
+//! sets are numbered across the entries). Each entry becomes one
 //! virtual file holding its full statement (`@Name = [ … ];`, `feature tag { … } tag;`,
 //! a prefix's code as it is), and the root file includes them in the oracles' order: classes,
 //! prefixes, features, each group in sidebar order. Disabled entries are left out. Kerning
@@ -31,6 +32,7 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use fontcraft_fea::{Diagnostic, Limits, MAX_DIAGNOSTICS, MAX_INCLUDE_FILES, Severity, VirtualFiles};
 use fontcraft_model::{DEFAULT_LANGUAGE, Features, Font, Localized, Snippet, language_id};
 
+use crate::fea_variable::{LowerTarget, VariableSyntax};
 use crate::source_map::{EntryDiagnostic, EntryKind, EntryRange, EntryRef, OffsetMap, SourceMap};
 use crate::{FeatureError, MAX_ENTRIES, MAX_ENTRY_BYTES, Target, TargetValues};
 
@@ -84,6 +86,8 @@ pub fn assemble(font: &Font, entries: &Features, target: &Target, values: &dyn T
         return Err(FeatureError::Limit { what: "prefixes, classes and features", limit: MAX_ENTRIES });
     }
     let groups = [(EntryKind::Class, &entries.classes), (EntryKind::Prefix, &entries.prefixes), (EntryKind::Feature, &entries.features)];
+    let lower_target = if target.is_variable() { LowerTarget::Variable } else { LowerTarget::Static(values.location()) };
+    let mut syntax = VariableSyntax::new(values.feature_axes(), lower_target);
     let mut pieces: Vec<(EntryRef, String, OffsetMap)> = Vec::new();
     let mut diagnostics: Vec<EntryDiagnostic> = Vec::new();
     for (kind, list) in groups {
@@ -95,7 +99,7 @@ pub fn assemble(font: &Font, entries: &Features, target: &Target, values: &dyn T
                 return Err(FeatureError::Limit { what: "bytes of code in one entry", limit: MAX_ENTRY_BYTES });
             }
             let entry_ref = EntryRef { kind, index };
-            match run_passes(kind, entry, target, values) {
+            match run_passes(kind, entry, target, values, &mut syntax) {
                 Ok((text, map)) => pieces.push((entry_ref, text, map)),
                 Err((found, map)) => {
                     for diagnostic in found {
@@ -146,8 +150,8 @@ pub fn assemble(font: &Font, entries: &Features, target: &Target, values: &dyn T
     Ok(Assembly { files, map })
 }
 
-/// Token expansion, the entry's wrapper, the syntax extensions and (variable target) the
-/// variable syntax over one entry: the text and the map back to the stored code, or the
+/// Token expansion, the entry's wrapper, the syntax extensions and the variable syntax over one
+/// entry: the text and the map back to the stored code, or the
 /// diagnostics of the pass that failed with the map from that pass's input to the stored code.
 /// The syntax extensions see the wrapper: a `standalone` lookup closes and reopens the
 /// `feature tag { … } tag;` block, so it needs the tag.
@@ -156,16 +160,13 @@ fn run_passes(
     entry: &Snippet,
     target: &Target,
     values: &dyn TargetValues,
+    syntax: &mut VariableSyntax,
 ) -> Result<(String, OffsetMap), (Vec<Diagnostic>, OffsetMap)> {
     let (expanded, tokens_map) = crate::tokens::expand(&entry.code, values, kind).map_err(|d| (non_empty(d), OffsetMap::identity()))?;
     let (wrapped, wrapped_map) = wrap(kind, entry, &expanded, &tokens_map);
     let (lowered, lower_map) = crate::lower::lower(&wrapped, target.is_variable()).map_err(|d| (non_empty(d), wrapped_map.clone()))?;
     let map = OffsetMap::compose(&wrapped_map, &lower_map);
-    if !target.is_variable() {
-        return Ok((lowered, map));
-    }
-    // M9.11 supplies the axes.
-    let (text, variable_map) = crate::variable::lower(&lowered, &[]).map_err(|d| (non_empty(d), map.clone()))?;
+    let (text, variable_map) = crate::variable::lower(&lowered, syntax).map_err(|d| (non_empty(d), map.clone()))?;
     Ok((text, OffsetMap::compose(&map, &variable_map)))
 }
 

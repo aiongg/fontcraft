@@ -1,0 +1,14 @@
+# font: mapped
+feature rvrn {
+
+} rvrn;
+
+conditionset conditionset_1 {
+    wdth 75.0 87.5;
+    wght 650.0 900.0;
+} conditionset_1;
+
+variation rvrn conditionset_1 {
+sub won by won.boldcondensed;
+} rvrn;
+

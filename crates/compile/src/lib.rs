@@ -198,6 +198,11 @@ pub struct Options {
     /// app appends its own name; a versionString parameter is written as it is
     /// (`fontInfo.version.headAndNameId5`). Exports turn it on; the default leaves it off.
     pub version_stamp: bool,
+    /// For a static instance compiled from its interpolated font ([`instance_feature_axes`]):
+    /// the source's axes and masters and the instance's internal location, which the variable
+    /// feature syntax (`(wght:700) 14`, `condition`) reads. The interpolated font has one
+    /// master, so it no longer holds them. `None` reads them from the compiled font.
+    pub feature_axes: Option<(fontcraft_features::fea_variable::FeatureAxes, Vec<f64>)>,
 }
 
 /// The asset store a compile reads ([`Options::assets`]). Two are equal when they are the same
@@ -272,6 +277,7 @@ impl Default for Options {
             feature_dir: None,
             include_check: None,
             version_stamp: false,
+            feature_axes: None,
         }
     }
 }
@@ -292,7 +298,8 @@ pub fn compile(font: &Font, target: &Target, flavour: Flavour, options: &Options
     let mut notes = Vec::new();
     let (source, prepared) = sources_at(font, target, &mut notes)?;
     let resolved = drawing::resolve(&prepared, target)?;
-    let mut compiled = compile_resolved_from(&source, resolved, flavour, options)?;
+    let options = with_instance_feature_axes(options, font, target);
+    let mut compiled = compile_resolved_from(&source, resolved, flavour, &options)?;
     notes.append(&mut compiled.warnings);
     compiled.warnings = notes;
     Ok(compiled)
@@ -364,6 +371,24 @@ pub fn needs_instance_font(font: &Font, target: &Target) -> Option<usize> {
             })
         })
         .then_some(index)
+}
+
+/// [`Options::feature_axes`] for compiling `target` of `font` from its interpolated instance
+/// font ([`needs_instance_font`]); `None` for any other target.
+pub fn instance_feature_axes(font: &Font, target: &Target) -> Option<(fontcraft_features::fea_variable::FeatureAxes, Vec<f64>)> {
+    let index = needs_instance_font(font, target)?;
+    let inst = font.instances.get(index)?;
+    let location = (0..font.axes.len()).map(|i| fontcraft_model::axes::design_value(&inst.location, i)).collect();
+    Some((fontcraft_features::fea_variable::FeatureAxes::from_font(font), location))
+}
+
+/// `options` with [`Options::feature_axes`] set for `target` of `font` when it is compiled from
+/// its interpolated instance font.
+pub fn with_instance_feature_axes<'a>(options: &'a Options, font: &Font, target: &Target) -> Cow<'a, Options> {
+    match instance_feature_axes(font, target) {
+        Some(axes) => Cow::Owned(Options { feature_axes: Some(axes), ..options.clone() }),
+        None => Cow::Borrowed(options),
+    }
 }
 
 /// The instance font of the static instance at `index`, its notes added to `warnings`.
@@ -514,6 +539,7 @@ pub(crate) fn layout_tables(
         include_dir: options.feature_dir.as_deref(),
         include_check: options.include_check.as_ref(),
         variable,
+        feature_axes: options.feature_axes.as_ref(),
     };
     layout::build(&input, &layout::LayoutOptions::default(), warnings)
 }

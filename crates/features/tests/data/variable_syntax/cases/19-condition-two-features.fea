@@ -1,0 +1,10 @@
+# font: mapped
+feature rvrn {
+condition 150 < wght;
+sub dollar by dollar.bold;
+} rvrn;
+
+feature salt {
+condition wdth < 80;
+sub a by a.narrow;
+} salt;

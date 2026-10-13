@@ -1,0 +1,19 @@
+# font: mapped
+@Upper = [A B C];
+
+lookup shared {
+sub a by a.sc;
+} shared;
+
+feature smcp {
+lookup shared;
+} smcp;
+
+feature rvrn {
+condition 150 < wght;
+sub dollar by dollar.bold;
+} rvrn;
+
+feature cpsp {
+pos @Upper 5 (wght:220) 10;
+} cpsp;

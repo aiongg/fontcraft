@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**1714 guesses on 1109 rows (401 of them live commands).**
+**1717 guesses on 1110 rows (401 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -1064,6 +1064,9 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `token.predicate.resultOrder` (behavior) | M8 | inferred | – | The Edit View preview target also leaves out non-exporting glyphs, as export targets do; Option-clicking a predicate token in a font with a non-exporting match would settle it. |
 | `featureCode.ifdefOtherSymbols` (behavior) | M9 | inferred | – | Only `#ifdef VARIABLE` and `#ifndef VARIABLE` blocks are read, without nesting or `#else`; an unterminated `#ifndef VARIABLE` runs to the end of the code, as glyphsLib reads it. Settle with nested blocks in the reference app. |
 | `featureCode.conditionScope` (behavior) | M9 | docs | – | The scope and coordinate rules follow glyphsLib's converter; settle with a feature holding two conditions and a bare `condition;` in the reference app. |
+| `featureCode.conditionScope` (behavior) | M9 | docs | – | A static export keeps the rules of a condition that holds at its location (lower limit inclusive, upper strict) instead of refusing the statement; the handbook places conditions only in variable-only blocks. Settle with a condition outside `#ifdef VARIABLE` exported as a static instance. |
+| `featureCode.variablePosLowering` (behavior) | M9 | docs | – | A static instance gets the value the variable font has at its location; a reference export of `pos a a 8 (wght:700) 14;` as an instance between the default and 700 would settle it. |
+| `featureCode.variablePosLowering` (behavior) | M9 | docs | – | A number that ends a glyph name (`a1 (wght:700) 5`) is not read as a value, where glyphsLib reads it; a reference export would settle which the reference does. |
 | `featureCode.standaloneLowering` (behavior) | M8 | inferred | – | The split-block lowering keeps the lookup's place in lookup order and leaves it out of the feature; a reference export of a feature with a standalone lookup, read back with a font tool, would settle it. |
 | `featureCode.standaloneLowering` (behavior) | M8 | inferred | – | A standalone lookup starts with the lookup flags in effect in its feature, as a named lookup inside a feature does in fea-rs, so the split lookup states them; a reference export of a standalone lookup after `lookupflag IgnoreMarks;` would settle it. |
 | `featureCode.multipleSubstitutionSingletons` (behavior) | M8 | handbook | – | A single glyph or one-member class as the target of a rule whose replacements are larger classes is passed to the compiler, which refuses it: repeating the target gives several rules for one glyph. A reference export of `sub a by @B @C;` would settle what the reference does. |

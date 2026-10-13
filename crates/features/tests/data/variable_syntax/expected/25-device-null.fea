@@ -1,0 +1,6 @@
+# font: mapped
+feature kern {
+pos a b <10 0 10 0 <device 11 1> <device NULL> <device NULL> <device NULL>>;
+pos cursive a <anchor NULL> <anchor (wght=400.0,wdth=100.0,opsz=12.0:500 wght=900.0:520) 0>;
+pos c d (wght=400.0,wdth=100.0,opsz=12.0:4 wght=100.0:2);
+} kern;

@@ -1,0 +1,18 @@
+# font: mapped
+feature rvrn {
+lookup first {
+sub a by a.one;
+} first;
+} rvrn;
+
+conditionset conditionset_1 {
+    wght 650.0 900.0;
+} conditionset_1;
+
+variation rvrn conditionset_1 {
+sub dollar by dollar.bold;
+lookup second {
+sub b by b.two;
+} second;
+} rvrn;
+

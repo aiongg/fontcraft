@@ -1,0 +1,9 @@
+# font: mapped
+feature rvrn {
+condition 40 < opsz, 150 < wght < 220, wdth < 90;
+sub a by a.displayboldnarrow;
+} rvrn;
+
+feature cpsp {
+pos @Upper 4 (opsz:72) 1 (opsz:72 wght:220 wdth:60) 2;
+} cpsp;

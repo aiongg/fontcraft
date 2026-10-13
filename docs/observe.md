@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1124 rows to check: 1568 guesses and 415 observe steps.**
+**1125 rows to check: 1571 guesses and 415 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,7 +48,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 40 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 4 |
-| **Later milestones (after M6)** | all | **653** |
+| **Later milestones (after M6)** | all | **654** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 39 |
 | Later milestones (after M6) | Edit View: text mode and preview | 14 |
 | Later milestones (after M6) | Components and anchors | 33 |
@@ -56,7 +56,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Spacing and metrics keys | 3 |
 | Later milestones (after M6) | Kerning and the Kerning window | 4 |
 | Later milestones (after M6) | Font View | 13 |
-| Later milestones (after M6) | Font Info and features | 248 |
+| Later milestones (after M6) | Font Info and features | 249 |
 | Later milestones (after M6) | Interpolation | 44 |
 | Later milestones (after M6) | Hinting | 68 |
 | Later milestones (after M6) | Colour fonts | 46 |
@@ -1338,7 +1338,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (653)
+## Later milestones (after M6) (654)
 
 ### Edit View: drawing, guides, layers and the Palette (39)
 
@@ -1708,7 +1708,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The decomposition sections use Unicode's canonical decompositions, one level and full together, so U+1EA4 lists both U+00C2 and U+0041, and characters the font has no glyph for are listed dimmed.
   - Guess: Clicking an entry opens the glyph in a new tab; the reference's documentation does not say whether it replaces the current glyph instead.
 
-### Font Info and features (248)
+### Font Info and features (249)
 
 - [ ] `fontInfo.rows.selection` (behavior, M7, handbook): Clicking a row selects it and Cmd+click builds a selection of several…
   - Guess: Shift-click adds every row between the last row clicked and the clicked one; Shift-clicking in the reference app settles it.
@@ -2398,7 +2398,11 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: In F1 (two masters), write a feature with `#ifdef VARIABLE` nested inside `#ifndef VARIABLE`, and one with `#else`; export a static and a variable font: read GSUB and note which branches each kept.
 - [ ] `featureCode.conditionScope` (behavior, M9, docs): A condition applies to the rules that follow it up to the…
   - Guess: The scope and coordinate rules follow glyphsLib's converter; settle with a feature holding two conditions and a bare `condition;` in the reference app.
+  - Guess: A static export keeps the rules of a condition that holds at its location (lower limit inclusive, upper strict) instead of refusing the statement; the handbook places conditions only in variable-only blocks. Settle with a condition outside `#ifdef VARIABLE` exported as a static instance.
   - Observe: In F1 (two masters), write a `calt` feature with two `condition` lines and a bare `condition;`, export the variable font and read its FeatureVariations: note the condition sets and which rules each covers.
+- [ ] `featureCode.variablePosLowering` (behavior, M9, docs): The syntax is lowered to the standard variable value form `(default tag=coord:value…
+  - Guess: A static instance gets the value the variable font has at its location; a reference export of `pos a a 8 (wght:700) 14;` as an instance between the default and 700 would settle it.
+  - Guess: A number that ends a glyph name (`a1 (wght:700) 5`) is not read as a value, where glyphsLib reads it; a reference export would settle which the reference does.
 - [ ] `Decompose Brace Layers` (parameter, M9, handbook): For variable-font export: components whose base glyph has intermediate (brace) layers are…
   - Observe: In F2 (special layers), export the variable font with no Decompose Brace Layers parameter and read `glyf`: note whether `Hcomp` is a composite or contours.
 - [ ] `Export STAT Table` (parameter, M9, handbook): A STAT table is written by default; setting this off suppresses it

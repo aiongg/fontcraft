@@ -1,0 +1,56 @@
+{
+.formatVersion = 3;
+axes = (
+{
+name = Weight;
+tag = wght;
+}
+);
+familyName = "Oracle Plain";
+fontMaster = (
+{
+axesValues = (
+400
+);
+id = m1;
+name = Regular;
+},
+{
+axesValues = (
+100
+);
+id = m2;
+name = Thin;
+},
+{
+axesValues = (
+900
+);
+id = m3;
+name = Black;
+}
+);
+glyphs = (
+{
+glyphname = a;
+layers = (
+{
+layerId = m1;
+width = 500;
+},
+{
+layerId = m2;
+width = 500;
+},
+{
+layerId = m3;
+width = 500;
+}
+);
+unicode = 97;
+}
+);
+unitsPerEm = 1000;
+versionMajor = 1;
+versionMinor = 0;
+}

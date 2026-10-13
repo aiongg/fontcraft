@@ -1,0 +1,8 @@
+# font: plain
+feature ss01 {
+sub b by b.alt;
+} ss01;
+
+feature ss02 {
+pos a (wght=400:1 wght=100.0:2);
+} ss02;

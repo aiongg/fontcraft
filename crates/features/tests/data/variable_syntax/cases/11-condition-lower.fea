@@ -1,0 +1,5 @@
+# font: mapped
+feature rvrn {
+condition 150 < wght;
+sub dollar by dollar.alt;
+} rvrn;

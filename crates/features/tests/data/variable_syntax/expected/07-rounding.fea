@@ -1,0 +1,5 @@
+# font: plain
+feature kern {
+pos a a (wght=400:11 wght=700.0:-10);
+pos a b (wght=400:0 wght=250.5:3 wght=900.0:7);
+} kern;

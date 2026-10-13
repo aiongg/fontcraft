@@ -85,7 +85,10 @@ bundled, the file says so in its header and the project is listed here with its 
   its path builder (crates/io-ufo/src/glif.rs). The form of features.fea (comment markers for
   prefixes, automatic, disabled and notes, featureNames records from feature labels) and the way
   it is split back into prefixes, classes and features are ported from its feature builder
-  (crates/io-ufo/src/features.rs); groups that are not kerning groups are kept as classes named
+  (crates/io-ufo/src/features.rs). The lowering of the variable feature syntax (`condition`
+  statements to condition sets and variation blocks, `(tag:coord) value` positions to variable
+  scalars in user coordinates, with its scope rules and output order) is ported from its variable
+  feature converter, builder/variable_features.py (crates/features/src/fea_variable.rs); groups that are not kerning groups are kept as classes named
   in font user data as its group builder keeps them (crates/io-glyphs/src/groups.rs). The UFO
   lib keys for the font's settings, app version, edit-tab texts, user data and custom parameters
   and for a master's icon, name parts, parameters, position and axis values, with the colour

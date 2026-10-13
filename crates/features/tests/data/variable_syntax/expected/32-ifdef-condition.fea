@@ -1,0 +1,14 @@
+# font: mapped
+feature rvrn {
+#ifdef VARIABLE
+} rvrn;
+
+conditionset conditionset_1 {
+    wght 650.0 900.0;
+} conditionset_1;
+
+variation rvrn conditionset_1 {
+sub dollar by dollar.alt;
+#endif
+} rvrn;
+

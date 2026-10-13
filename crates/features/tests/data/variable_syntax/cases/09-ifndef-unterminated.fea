@@ -1,0 +1,10 @@
+# font: plain
+feature ss01 {
+sub b by b.alt;
+#ifndef VARIABLE
+sub a by a.static;
+} ss01;
+
+feature ss02 {
+pos a 1 (wght:100) 2;
+} ss02;

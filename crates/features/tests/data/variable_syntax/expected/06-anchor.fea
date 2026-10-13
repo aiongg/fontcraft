@@ -1,0 +1,5 @@
+# font: mapped
+feature mark {
+markClass acutecomb <anchor 0 500> @top;
+pos base a <anchor (wght=400.0,wdth=100.0,opsz=12.0:250 wght=900.0:280 wdth=75.0:200) (wght=400.0,wdth=100.0,opsz=12.0:500 wght=900.0:520 wdth=75.0:500)> mark @top;
+} mark;

@@ -1,0 +1,116 @@
+{
+.formatVersion = 3;
+axes = (
+{
+name = Weight;
+tag = wght;
+},
+{
+name = Width;
+tag = wdth;
+},
+{
+name = "Optical size";
+tag = opsz;
+}
+);
+customParameters = (
+{
+name = "Axis Mappings";
+value = {
+opsz = {
+12 = 12;
+72 = 72;
+};
+wdth = {
+75 = 60;
+100 = 100;
+};
+wght = {
+100 = 20;
+400 = 80;
+900 = 220;
+};
+};
+}
+);
+familyName = "Oracle Mapped";
+fontMaster = (
+{
+axesValues = (
+80,
+100,
+12
+);
+id = m1;
+name = Regular;
+},
+{
+axesValues = (
+20,
+100,
+12
+);
+id = m2;
+name = Light;
+},
+{
+axesValues = (
+220,
+100,
+12
+);
+id = m3;
+name = Bold;
+},
+{
+axesValues = (
+80,
+60,
+12
+);
+id = m4;
+name = Condensed;
+},
+{
+axesValues = (
+80,
+100,
+72
+);
+id = m5;
+name = Display;
+}
+);
+glyphs = (
+{
+glyphname = a;
+layers = (
+{
+layerId = m1;
+width = 500;
+},
+{
+layerId = m2;
+width = 500;
+},
+{
+layerId = m3;
+width = 500;
+},
+{
+layerId = m4;
+width = 500;
+},
+{
+layerId = m5;
+width = 500;
+}
+);
+unicode = 97;
+}
+);
+unitsPerEm = 1000;
+versionMajor = 1;
+versionMinor = 0;
+}

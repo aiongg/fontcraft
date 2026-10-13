@@ -1,0 +1,7 @@
+# font: plain
+feature ss01 {
+#ifdef VARIABLE
+sub a by a.var;
+#endif
+pos b (wght=400:5 wght=900.0:9);
+} ss01;

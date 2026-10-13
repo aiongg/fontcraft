@@ -1,0 +1,4 @@
+# font: plain
+feature kern {
+pos a a 8 (wght:700) 14;
+} kern;

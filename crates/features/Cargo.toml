@@ -14,6 +14,7 @@ workspace = true
 fontcraft-fea.workspace = true
 fontcraft-glyphquery.workspace = true
 fontcraft-geom.workspace = true
+fontcraft-interp.workspace = true
 fontcraft-model.workspace = true
 fontcraft-plist.workspace = true
 fontcraft-spacing.workspace = true

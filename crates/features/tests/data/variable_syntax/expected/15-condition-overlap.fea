@@ -1,0 +1,34 @@
+# font: mapped
+feature rvrn {
+
+} rvrn;
+
+conditionset conditionset_1 {
+    wdth 75.0 87.5;
+    wght 471.42857 900.0;
+} conditionset_1;
+
+variation rvrn conditionset_1 {
+sub dollar by dollar.bold;
+} rvrn;
+
+variation rvrn conditionset_1 {
+sub cent by cent.narrow;
+} rvrn;
+
+conditionset conditionset_2 {
+    wdth 75.0 87.5;
+} conditionset_2;
+
+variation rvrn conditionset_2 {
+sub cent by cent.narrow;
+} rvrn;
+
+conditionset conditionset_3 {
+    wght 471.42857 900.0;
+} conditionset_3;
+
+variation rvrn conditionset_3 {
+sub dollar by dollar.bold;
+} rvrn;
+

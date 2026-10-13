@@ -1,0 +1,6 @@
+# font: mapped
+feature ss02 {
+sub a.condition by condition.alt;
+condition 150 < wght;
+sub conditional by conditional.bold;
+} ss02;

@@ -1,0 +1,8 @@
+# font: mapped
+feature calt {
+sub a by a.first;
+condition 150 < wght;
+sub b by b.bold;
+condition;
+sub c by c.always;
+} calt;

@@ -1,0 +1,4 @@
+# font: mapped
+feature cpsp {
+pos @Digit colon' <(wght=400.0,wdth=100.0,opsz=12.0:10 wdth=87.5:30 wdth=75.0,opsz=28.0:5) (wght=400.0,wdth=100.0,opsz=12.0:50 wdth=87.5:40 wdth=75.0,opsz=28.0:10) (wght=400.0,wdth=100.0,opsz=12.0:20 wdth=87.5:60 wdth=75.0,opsz=28.0:10) 0> @Digit;
+} cpsp;

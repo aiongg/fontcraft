@@ -1,0 +1,10 @@
+# font: mapped
+feature rvrn {
+#ifdef VARIABLE
+condition 150 < wght;
+sub dollar by dollar.alt;
+#endif
+#ifndef VARIABLE
+sub dollar by dollar.static;
+#endif
+} rvrn;

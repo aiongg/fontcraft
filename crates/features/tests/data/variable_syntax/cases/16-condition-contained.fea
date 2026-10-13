@@ -1,0 +1,7 @@
+# font: mapped
+feature rvrn {
+condition 100 < wght;
+sub dollar by dollar.bold;
+condition 180 < wght < 220;
+sub dollar.bold by dollar.black;
+} rvrn;

@@ -1,0 +1,19 @@
+# font: mapped
+feature rvrn {
+
+} rvrn;
+
+conditionset conditionset_1 {
+    opsz 40.0 72.0;
+    wdth 75.0 93.75;
+    wght 650.0 900.0;
+} conditionset_1;
+
+variation rvrn conditionset_1 {
+sub a by a.displayboldnarrow;
+} rvrn;
+
+
+feature cpsp {
+pos @Upper (wght=400.0,wdth=100.0,opsz=12.0:4 opsz=72.0:1 opsz=72.0,wght=900.0,wdth=75.0:2);
+} cpsp;
