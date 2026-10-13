@@ -2,25 +2,28 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-13, the first waves of M6 to M12, seven second-wave packages, all 22 first-wave packages of M13, and the builder packages M8.9, M8.7, M7.8 and M6.10 integrated and gated on `master`, with the automation file roots._
+_Updated: 2026-10-13, the first waves of M6 to M12, seven second-wave packages, all 22 first-wave packages of M13, and the builder packages M8.9, M8.7, M7.8, M6.10, M9.10, M9.4, M9.5, M9.9 and M9.8b integrated and gated on `master`, with the automation file roots._
 
 ## State of the tree
 
-- `cargo xtask ci` passes all eleven steps (2,835 tests pass, none fail, 34 ignored).
+- `cargo xtask ci` passes all eleven steps (2,861 tests pass, none fail, 34 ignored).
   Built and run on Linux x86-64 with Rust 1.97.
 - `master` holds everything described here, merged and green; the latest commits are not pushed.
   It has the first waves of M6 to M12, the second-wave packages M6.14, M7.14, M7.15 to M7.18
   (the Font Info window with all its tabs) and M8.15, all 22 first-wave packages of M13, the
   builder packages M8.9 (automatic feature code), M8.7 and M8.7b (layout tables at export), M7.8
   (the name table and OS/2 of static instances) and M6.10 (Edit View display and selection of
-  components and anchors), the test-layout change X.build1, the fix passes that followed, and
-  the automation file roots.
-- 660 of the 960 inventory commands exist (`docs/parity.md`); M3's, M4's and M5's are all live,
-  M6 has 40 of 46, M7 66 of 66, M8 36 of 41, M9 4 of 48, M10 5 of 56, M11 37 of 41, M12 46 of
-  81, M13 63 of 180. Feature parity is about 25% (ROADMAP.md › Parity estimate). 1,683 guesses
-  on 1,089 rows are listed in `docs/guesses.md`; `docs/observe.md` lists 1,107 rows.
+  components and anchors), M9.10 (the oracle harness for variable fonts and instances), M9.4
+  (static instances between and beyond masters), M9.5 (the variable TrueType compile), M9.9
+  (variable kerning and marks) and M9.8b (alternate layers in variable fonts), the test-layout
+  change X.build1, the fix passes that followed (X.fix19 among them), and the automation file
+  roots.
+- 661 of the 960 inventory commands exist (`docs/parity.md`); M3's, M4's and M5's are all live,
+  M6 has 40 of 46, M7 66 of 66, M8 36 of 41, M9 5 of 48, M10 5 of 56, M11 37 of 41, M12 46 of
+  81, M13 63 of 180. Feature parity is about 26% (ROADMAP.md › Parity estimate). 1,695 guesses
+  on 1,097 rows are listed in `docs/guesses.md`; `docs/observe.md` lists 1,115 rows.
 - Packages built (done of total, counted from commit subjects, M8.7b with M8.7): M6 16 of 20, M7
-  18 of 21, M8 16 of 25, M9 8 of 27, M10 11 of 33, M11 6 of 21, M12 26 of 68, M13 24 of 62; 125
+  18 of 21, M8 16 of 25, M9 12 of 27 (M9.8b is a follow-up of M9.8 and not counted), M10 11 of 33, M11 6 of 21, M12 26 of 68, M13 24 of 62; 129
   of 277 in all.
 - Test layout: the engine's integration tests are modules of one binary
   (`crates/engine/tests/engine/`; `cargo test -p fontcraft-engine --test engine <filter>`), and
@@ -29,11 +32,24 @@ _Updated: 2026-10-13, the first waves of M6 to M12, seven second-wave packages, 
   `docs/development.md`.
 - Exports carry compiled feature code. Against fontmake, `GSUB` is equal in 25 of 26 sources,
   `GPOS` in 82 of 88 and `GDEF` in 47 of 55; against fontc, 29 of 46, 80 of 91 and 42 of 68. The
-  rest are variable fonts (M9) and bracket and colour glyphs (M9, M11). The name table and OS/2
+  rest are bracket glyphs and colour glyphs (M11). The name table and OS/2
   of static instances equal fontmake's in 1,678 compared values and differ in 120 (three
   allow-listed causes). Automatic entries regenerated over the corpus: 69 equal, 23 different
   (stale sources, older reference forms, samples), 3 removed
   (`cargo test --release -p fontcraft-features --test corpus_auto -- --ignored --nocapture`).
+- Variable fonts (`fontcraft-cli oracle --corpus --variable`; `--instances` for static instances)
+  are compared with fontc's or fontmake's at masters, virtual masters, instances and midpoints
+  between masters. Over 158 sources: against fontc 100 equal, 37 different, 21 failed; against
+  fontmake 103, 38, 17 (before the variable compile all 158 were not built). Per check, against
+  fontc / fontmake (equal and different): outlines 127 and 8 / 128 and 11; `GSUB` variations 129
+  and 8 / 135 and 6; `GPOS` kerning 135 and 1 / 141 and 0; marks 134 and 2 / 139 and 2. fontc and
+  fontmake agree with each other on 112 of 133 sources (`docs/spec/40-compile.md` § 4). Static
+  instances against `fontmake -i`: 169 equal, 41 different, 0 not built, 24 failed (all 24 are
+  fontmake's own failures); before M9.4: 111, 25, 83, 15. Speed: Oswald compiles in 0.19 s (fontc
+  0.16 s, target 0.5 s); Inter Roman in about 1.3 to 1.6 s (fontc 1.66 s, target 3 s).
+- Oswald's variable origin: the oracles choose the master named "Regular" (glyphsLib's rule);
+  the handbook says the first master unless Variable Font Origin is set. FontCraft follows the
+  handbook, and Oswald is allow-listed.
 - An Edit View text-mode frame with 200 composites takes 5.9 ms (target 16 ms).
 - Round trips: `.glyphs` 122/1/118/4, `.glyphspackage` 22/0/7/0, designspace 59 identical and 53
   failed, UFO 125 identical, 2 different and 13 failed (two UFO 1 files now open).
@@ -66,10 +82,9 @@ linked file is checked against it, and a linked file outside the read root reads
 1. **The skeleton pass for waves 2 to 5**: fix the interfaces the later packages of each plan
    share, as M6.1a and M7.1 to M13.1 did, so they can be written in parallel. A skeleton file
    marks each placeholder with the package that fills it (`// M8.5`).
-2. **The builder packages**, one at a time in the main checkout: M9.4 (static instances), M9.5
-   (the variable compile), M9.9, M9.10, M10.3, M10.14 and M10.19 (hints at export), M11.5 (paint
-   attributes in the formats), M12.44 (the audit runner), M12.17, M13.2, then the rest each
-   plan's § 6 lists. The requests the integrations left for them are below.
+2. **The builder packages**, one at a time in the main checkout: M10.3, M10.14 and M10.19 (hints
+   at export), M11.5 (paint attributes in the formats), M12.44 (the audit runner), M12.17, M13.2,
+   M9.11 and M9.12 (variable feature syntax), M9.13 (CFF2), then the rest each plan's § 6 lists. The requests the integrations left for them are below.
 3. **The M13.15 base-choice follow-up**: among bases with identical outlines prefer the
    combining-mark form (`acutecomb` over `acute`), and never use a detected composite as a base;
    then rerun the recovery measure on Inter (target 95%). Also reduce the per-edit alignment
@@ -78,8 +93,15 @@ linked file is checked against it, and a linked file outside the read root reads
    automatic framework has no entries for them yet), text-token expansion in
    `plan::postscript_name` and `plan::file_stem`, and selecting and deleting corner components in
    Edit View (needs a hint selection kind).
-4. **The measures**: the corpus measures of the M9 to M12 packages (each package's row in its
-   plan's § 5; most were tested only against small oracle outputs), and the M6 measures
+   Variable-font follow-ups: a designspace `<instance>` should supply the instance's names,
+   `usWeightClass` and font info (the main cause of the remaining instance differences);
+   designspace `<rules>` (3 sources); alternate layers with all bounds empty, where the handbook
+   disagrees with both oracles (3 sources); fontc's combinatorial bracket kerning and
+   decreasing-axis tables; brace sources for composites of non-exported brace glyphs; vertical
+   phantom points and `VVAR`; `OVERLAP_COMPOUND`.
+4. **The measures**: the corpus measures of the M10 to M12 packages (each package's row in its
+   plan's § 5; most were tested only against small oracle outputs; M9's are run by
+   `oracle --variable` and `--instances`), and the M6 measures
    (`docs/plans/M6.md` § 5): mark attachment against both oracles
    (`cargo test -p fontcraft-oracle --features oracle --test marks -- --ignored`), propagation
    against glyphsLib (`crates/engine/tests/engine/corpus_propagation.rs`, which reads a JSON file of
@@ -102,8 +124,8 @@ What the second-wave and M13 packages left for later packages (the hooks and gap
 recorded):
 
 - Font Info: the Features tab stays read-only until M8.17; the Exports tab shows a message for
-  instances between masters until M9.4 and M9.20 draw interpolated instances (then the
-  `fontInfo.exports.instancePreview` row changes); Add Other Font on the Masters tab waits for
+  instances between masters until M9.20 draws interpolated instances from `interp::instance_font`
+  (then the `fontInfo.exports.instancePreview` row changes); Add Other Font on the Masters tab waits for
   M9.23.
 - M8.15: prefix-defined classes cannot be previewed, and `markClass` shows only through
   definitions; M8.19 should reuse the compiled tables in `layout_font` instead of compiling twice.
@@ -112,8 +134,8 @@ recorded):
   list projects; project edits are not undo steps; `.glyphsproject` waits for a reference sample.
 - M6.14: each automatic composite copies the glyph list, so composing very many glyphs at once is
   quadratic; compose without the per-glyph copy.
-- M8.7: variable-font layout tables wait for M9; bracket and colour glyphs wait for M9 and M11
-  (the layout oracle lists them as known differences). Feature includes may climb out of the
+- M8.7: variable-font layout tables come from M9.9 and bracket glyphs from M9.8b; colour glyphs
+  wait for M11 (the layout oracle lists them as known differences). Feature includes may climb out of the
   source folder, as the reference compilers read them; the check-then-open window of the include
   check is documented as accepted.
 - M8.9: `salt` sits beside `ss01` and Uppercase, Lowercase and AllLetters are optional (guesses on
@@ -133,7 +155,7 @@ The first waves of M9 to M12, as built (ROADMAP.md › What is real: the first w
 
 | Milestone | Built | Not yet |
 |---|---|---|
-| M9 | M9.2, M9.3, M9.6, M9.7, M9.8, M9.14, M9.19: axes and mappings, glyph sources and compatibility, the variable tables and `STAT` (byte-equal to fontc's on test sources), feature variations, opening variable fonts, the compare commands | the variable tables in exports (M9.5); static instances between masters (M9.4) |
+| M9 | M9.2, M9.3, M9.4, M9.5, M9.6, M9.7, M9.8, M9.8b, M9.9, M9.10, M9.14, M9.19: axes and mappings, glyph sources and compatibility, the variable tables and `STAT`, feature variations, opening variable fonts, the compare commands, static instances between and beyond masters, the variable TrueType compile, variable kerning and marks, alternate layers in variable fonts, the oracle harness for variable fonts | CFF2 (M9.13), variable feature syntax (M9.11, M9.12), designspace instance info and `<rules>`, the axis, instance and master commands and the UI |
 | M10 | M10.2, M10.8 to M10.13, M10.16, M10.20, M10.23: typed hints and settings, the otfautohint port (agrees with the AFDKO 5.0.1 oracle scripts; each master gets an overlap-free outline), the TrueType assembler, `gasp`, hinted previews | hints in exports (M10.14, M10.19) |
 | M11 | M11.2, M11.3, M11.4, M11.9, M11.12: palettes, colour layers, path attributes, the `SVG ` table at export, images | `COLR`, `CPAL`, `sbix`, `CBDT` |
 | M12 | M12.2, 3, 4, 11, 12, 15, 16, 27, 28, 31, 33, 35, 37, 43, 45, 46, 48, 50, 53 to 60: the table tools, 157 checks, profiles and report export | `audit.run` applying profiles, the ignore list, thresholds and project values (M12.44); the corpus measures |
@@ -145,11 +167,11 @@ Requests the integrations left for the builder packages:
 
 | Package | Request |
 |---|---|
-| M9.5 | Write `STAT` after the `fvar` names through the shared name allocator (static IDs 2 and 17, the variable-origin check); a feature-variation `GSUB` builder with bracket production names and axes in designspace order; keep `.notdef` and zero deltas; name ID 25. M9.14's variable measure test and the avar version 2 build (M12.33) are ignored until then. M9.10: allow-list `STAT` when Export STAT Table is off |
 | M9.3 | a `checkCompatibility` command and its measure (9 incompatible corpus glyphs; Inter under 50 ms) |
-| M9.8 | composites of bracket glyphs (a port exists in `io-ufo`); M11 sorts alternate and colour glyphs together |
-| M9.4, M9.20 | the Exports tab preview draws interpolated instances; update the `fontInfo.exports.instancePreview` row |
+| M9.8 | M11 sorts alternate and colour glyphs together; brace sources for composites of non-exported brace glyphs |
+| M9.20 | the Exports tab preview draws interpolated instances; update the `fontInfo.exports.instancePreview` row |
 | M9.14 | kerning and mark variations are not read from variable fonts |
+| M9.4, M9.5 | a designspace instance takes its names, `usWeightClass` and font info from `<instance>`; designspace `<rules>`; vertical phantom points and `VVAR`; `OVERLAP_COMPOUND`; the avar version 2 build (M12.33) |
 | M10.2 | the Alignment Zones master parameter is not read |
 | M10.14, M10.19 | the charstring encoder must write a hint mask that the autohinter puts on a subpath's closing element before that subpath's moveto; the hinted-preview measures wait for these packages |
 | M10.10, M10.16 | the counter-hint summary against LanguageGroup; `FunctionInfo` consumes and uncertain fields for M10.17 and M10.22 |
@@ -274,8 +296,7 @@ Decisions that hold:
   deletes open paths and stray nodes.
 - Points a command creates or moves round to the font's grid (`path.addPath` included).
 
-M1 and M2 are done (`docs/plans/M1.md`, `docs/plans/M2.md`). M2 left on purpose: instances
-between masters (M9), CFF subroutines (before M12), the compile plan's `features` section, the CLI's `--name-by`, `--output-layout` and pattern
+M1 and M2 are done (`docs/plans/M1.md`, `docs/plans/M2.md`). M2 left on purpose: CFF subroutines (before M12), the compile plan's `features` section, the CLI's `--name-by`, `--output-layout` and pattern
 instance selection, and one reader case (a designspace master missing a metric before one it
 states reads it as 0). `fontcraft-cli oracle --corpus` (fontc, or fontmake with `--format otf`)
 measures the compiler; `crates/oracle/allow.toml` holds every accepted difference with its reason.
@@ -316,14 +337,14 @@ atomic failure; WebAssembly plug-ins and no Python; no compiled fonts in the rep
   out of time stays as it was (at export, it keeps its overlaps, with a warning), and its worker
   cannot be stopped and runs on detached. The 10,000-case random-path test in `crates/pathops`
   is ignored in the gate.
-- **The compiler writes static fonts only.** TrueType and CFF, plain, WOFF and WOFF2; the core
-  tables match fontc and fontmake over the corpus (with allow-listed causes: variable references,
-  bracket and colour glyphs, the glyph database, smart components); overlaps are removed, strokes
-  expanded and masks applied at export; `gasp`, `GDEF`, the mark features and the `SVG ` table
-  are written. The variable tables and feature variations are built but not exported (M9.5);
-  no compiled feature code, hinting or CFF subroutines yet (`docs/plans/M2.md` § 5,
-  `docs/plans/M3.md` § 5).
-- **The M9 to M12 corpus measures have not been run.** Their packages were tested against small
+- **The compiler writes static fonts of both flavours and variable TrueType fonts.** TrueType and
+  CFF, plain, WOFF and WOFF2; the core tables match fontc and fontmake over the corpus (with
+  allow-listed causes: bracket and colour glyphs, the glyph database, smart components); overlaps
+  are removed, strokes expanded and masks applied at export; `gasp`, `GDEF`, the mark features,
+  compiled feature code and the `SVG ` table are written. Variable fonts match fontc's in 100 of
+  158 sources and fontmake's in 103. No CFF2 variable fonts, hinting or CFF subroutines yet
+  (`docs/plans/M2.md` § 5, `docs/plans/M3.md` § 5, `docs/spec/40-compile.md` § 4).
+- **The M10 to M12 corpus measures have not been run.** Their packages were tested against small
   outputs of the oracles; each plan's § 5 lists the corpus runs still owed.
 - **`docs/spec/20-cli.md` is very long** (about 26,000 words). Read the section for the subcommand
   you are building, not the whole file.
@@ -694,3 +715,23 @@ Append one terse entry per session: what landed, numbers, what is still open.
   277. Open: the builder packages M9.4, M9.5, M9.9, M9.10, M10.3, M10.14, M10.19, M11.5, M12.44,
   M12.17, M13.2; the follow-ups M13.15, M8.11, token expansion in `plan::postscript_name` and
   `plan::file_stem`, corner-component selection; the skeleton pass for waves 2 to 5.
+- **2026-10-13, batch 6: M9.10, M9.4, M9.5, M9.9, M9.8b and X.fix19.** Integrated: the oracle
+  harness for variable fonts (`fontcraft-cli oracle --corpus --variable`, and `--instances`
+  against `fontmake -i`); static instances between and beyond masters (`interp::instance_font`;
+  extrapolated instances named in the export report and allow-listed against fontmake, which
+  clamps); the variable TrueType compile (`compile_variable`, `file.exportVariable`,
+  `fontcraft-cli compile --variable`; Oswald 0.19 s, Inter Roman about 1.3 to 1.6 s); variable
+  kerning and mark positions (new dependency `fontdrasil` in `crates/fea`); alternate layers in
+  variable fonts (`.BRACKET.varAltNN` glyphs, feature variations merged into the feature code's
+  `GSUB`). Review fixes (X.fix19): oversized `gvar` tuples and deltas past 16 bits are refused
+  with a message, kerning copied to alternate glyphs is indexed, and an instance at a master's
+  location is interpolated when it sets manual weights, InterpolationWeightY or Local
+  Interpolation. Variable fonts against fontc: 100 equal, 37 different, 21 failed; against
+  fontmake 103, 38, 17 (before: all 158 not built). Instances against `fontmake -i`: 169, 41, 0,
+  24 (before: 111, 25, 83, 15). Static comparison summaries and round trips unchanged. 2,861
+  tests pass, none fail, 34 ignored; 661 of 960 commands live; 1,695 guesses on 1,097 rows; 1,115
+  observe rows. Packages built: 129 of 277. Open: the builder packages M10.3, M10.14, M10.19,
+  M11.5, M12.44, M12.17, M13.2, M9.11, M9.12, M9.13; the follow-ups designspace instance info
+  from `<instance>`, designspace `<rules>`, M13.15, M8.11, token expansion in
+  `plan::postscript_name` and `plan::file_stem`, corner-component selection; the skeleton pass for
+  waves 2 to 5.
