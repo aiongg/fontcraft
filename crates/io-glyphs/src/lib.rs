@@ -373,9 +373,9 @@ fn read_font(mut root: Dict) -> Result<Font> {
     // A version 3 file may spell its left-to-right kerning with the version 2 key, which
     // glyphsLib reads as the same table. The key stays in the font's extra and is written back
     // as read while the table is unchanged.
-    let ltr = match (root.get("kerningLTR"), root.get(V2_KERNING).and_then(kern_table)) {
-        (None, Some(table)) => table,
-        _ => take_kern_table(&mut root, "kerningLTR"),
+    let (ltr, v2_kerning) = match (root.get("kerningLTR"), root.get(V2_KERNING).and_then(kern_table)) {
+        (None, Some(table)) => (table, true),
+        _ => (take_kern_table(&mut root, "kerningLTR"), false),
     };
     let kerning = Kerning {
         ltr,
@@ -384,7 +384,13 @@ fn read_font(mut root: Dict) -> Result<Font> {
         context: if version >= 4 { take_kern_context(&mut root) } else { Vec::new() },
     };
     Ok(Font {
-        source: Source { format: SourceFormat::Glyphs, glyphs_version: u32::try_from(version).ok(), app_version, ..Default::default() },
+        source: Source {
+            format: SourceFormat::Glyphs,
+            glyphs_version: u32::try_from(version).ok(),
+            app_version,
+            glyphs_v2_kerning: v2_kerning,
+            ..Default::default()
+        },
         info: Arc::new(font_info),
         family_name,
         units_per_em,
@@ -965,12 +971,15 @@ fn write_font(font: &Font, version: u32) -> Result<Dict> {
     let mut extra = without_deleted_v2_names(&font.info.properties, &font.extra);
     // Left-to-right kerning read from the version 2 key is written back as kept while the table
     // is unchanged. A changed table, empty included, goes under the version 3 key, and the stale
-    // version 2 table is dropped so that reopening the file does not bring it back.
-    let ltr_key = match extra.get(Family::Glyphs, V2_KERNING) {
-        Some(kept) if kern_table(kept).as_ref() == Some(&font.kerning.ltr) => None,
+    // version 2 table is dropped so that reopening the file does not bring it back. A version 2
+    // key the reader did not take the kerning from (the file had `kerningLTR`, or the table did
+    // not parse) is written back as read.
+    let kept = extra.get(Family::Glyphs, V2_KERNING).filter(|_| font.source.glyphs_v2_kerning).and_then(kern_table);
+    let ltr_key = match &kept {
+        Some(table) if *table == font.kerning.ltr => None,
         _ => Some("kerningLTR"),
     };
-    if ltr_key.is_some() && extra.get(Family::Glyphs, V2_KERNING).is_some() {
+    if kept.is_some() && ltr_key.is_some() {
         extra.to_mut().remove(Family::Glyphs, V2_KERNING);
     }
     let extra: &Extra = &extra;

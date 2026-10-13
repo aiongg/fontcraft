@@ -377,6 +377,23 @@ fn a_version_3_file_with_the_version_2_kerning_key_reads_its_kerning() {
     assert!(back.kerning.ltr.is_empty(), "the deleted kerning came back");
 }
 
+/// A version 2 key the reader did not take the kerning from is written back as read: one whose
+/// table does not parse, and one beside `kerningLTR`, also when the kerning changes.
+#[test]
+fn a_version_2_kerning_key_the_reader_ignored_is_kept() {
+    let odd = V3.replace("metrics = (", "kerning = {\nm01 = {\nA = {\nV = \"odd\";\n};\n};\n};\nmetrics = (");
+    let font = read(&odd).unwrap();
+    assert!(font.kerning.ltr.is_empty());
+    assert_eq!(write(&font).unwrap(), odd);
+    let both =
+        V3.replace("metrics = (", "kerning = {\nm01 = {\nA = {\nV = 7;\n};\n};\n};\nkerningLTR = {\nm01 = {\nA = {\nV = 4;\n};\n};\n};\nmetrics = (");
+    let mut font = read(&both).unwrap();
+    assert_eq!(font.kerning.ltr.get("m01", "A", "V"), Some(4.0));
+    assert_eq!(write(&font).unwrap(), both);
+    std::sync::Arc::make_mut(&mut font.kerning).ltr.set("m01", "A", "V", -40.0);
+    assert!(write(&font).unwrap().contains("\nkerning = {"), "the key beside kerningLTR is kept");
+}
+
 #[test]
 fn a_kerning_table_with_other_values_is_kept_as_written() {
     let text = V3.replace("metrics = (", "kerningLTR = {\nm01 = {\nA = {\nV = \"odd\";\n};\n};\n};\nmetrics = (");

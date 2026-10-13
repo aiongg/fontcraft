@@ -39,6 +39,10 @@ pub struct Source {
     /// the reader sets it from the file's first bytes.
     #[serde(skip)]
     pub compressed: bool,
+    /// A version 3 or 4 `.glyphs` file whose left-to-right kerning was read from the version 2
+    /// `kerning` key, having no `kerningLTR`. Not stored in the file: the reader sets it.
+    #[serde(skip)]
+    pub glyphs_v2_kerning: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
