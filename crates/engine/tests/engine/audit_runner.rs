@@ -189,3 +189,29 @@ fn compare_family_maps_the_reference_test_numbers() {
     }
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn audit_folder_and_glyph_limits_refuse_the_run() {
+    let dir = scratch("limits");
+    let (mut s, ttf) = exported(&dir, "Font.ttf");
+    // A face whose maxp claims 65,535 glyphs, listed nine times: past the run's 524,288
+    // decoded glyphs before any of them is decoded.
+    let mut font = fontcraft_tables::read(&std::fs::read(&ttf).unwrap(), 0).unwrap();
+    let mut maxp = font.get(*b"maxp").unwrap().to_vec();
+    maxp[4..6].copy_from_slice(&u16::MAX.to_be_bytes());
+    font.insert(*b"maxp", maxp);
+    let big = dir.join("Big.ttf");
+    std::fs::write(&big, fontcraft_tables::write(&font, &fontcraft_tables::WriteOptions::default()).unwrap()).unwrap();
+    let e = s.execute("audit.run", &json!({"target": vec![&big; 9]})).unwrap_err().to_string();
+    assert!(e.contains("glyphs; audit fewer fonts"), "{e}");
+
+    // A folder with more than 4,096 entries is refused before any file is read.
+    let many = dir.join("many");
+    std::fs::create_dir_all(&many).unwrap();
+    for i in 0..4097 {
+        std::fs::write(many.join(format!("{i}.txt")), "").unwrap();
+    }
+    let e = s.execute("audit.run", &json!({"target": many})).unwrap_err().to_string();
+    assert!(e.contains("more than 4096 entries"), "{e}");
+    std::fs::remove_dir_all(&dir).unwrap();
+}

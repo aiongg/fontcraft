@@ -566,8 +566,9 @@ fn examine(font: &Font, run: &Run, cap: bool) -> Examined {
 struct Bin {
     /// Index in the target's font list.
     font: usize,
-    /// The sfnt (after any WOFF unwrapping), or the whole collection.
-    bytes: Vec<u8>,
+    /// The sfnt (after any WOFF unwrapping), or the whole collection; the faces of one
+    /// collection share it.
+    bytes: Arc<[u8]>,
     face: u32,
     path: Option<String>,
     size: u64,
@@ -597,6 +598,10 @@ struct Target {
     /// The open document's title and revision, for a document target.
     document: Option<Value>,
     notes: Vec<String>,
+    /// Bytes of the compiled font files read so far, as read and unwrapped.
+    bytes_read: u64,
+    /// Glyphs decoded from compiled fonts so far.
+    glyphs_decoded: usize,
 }
 
 impl Target {
@@ -646,17 +651,22 @@ fn load_paths(paths: &[String]) -> Result<Target> {
         let path = Path::new(raw);
         let package = ["metainfo.plist", "fontinfo.plist", "font.props"].iter().any(|f| path.join(f).is_file());
         if path.is_dir() && !package {
-            let mut entries: Vec<std::path::PathBuf> = std::fs::read_dir(path)
-                .map_err(|e| EngineError::Io(format!("cannot read the folder {raw}: {e}")))?
-                .filter_map(|e| e.ok().map(|e| e.path()))
-                .filter(|p| p.is_file())
-                .collect();
+            let mut entries: Vec<std::path::PathBuf> = Vec::new();
+            for e in std::fs::read_dir(path).map_err(|e| EngineError::Io(format!("cannot read the folder {raw}: {e}")))? {
+                let Ok(e) = e else { continue };
+                if entries.len() >= MAX_FOLDER_ENTRIES {
+                    return Err(EngineError::Io(format!("the folder {raw} holds more than {MAX_FOLDER_ENTRIES} entries")));
+                }
+                entries.push(e.path());
+            }
             entries.sort();
             let before = files.len();
             for e in entries {
-                match super::file_io::read_input(&e) {
-                    Ok(input) if input.kind.is_font() => files.push(e),
-                    _ => {}
+                // The entry itself, links followed, must lie in the read root: the check on the
+                // folder does not cover a link inside it.
+                crate::file_access::check_read(&e).map_err(|err| EngineError::Io(format!("cannot read {}: {err}", e.display())))?;
+                if std::fs::metadata(&e).is_ok_and(|m| m.is_file()) && starts_as_font(&e) {
+                    files.push(e);
                 }
                 if files.len() > audit::run::MAX_TARGET_FONTS {
                     return Err(EngineError::Io(format!("{raw} holds more than {} fonts", audit::run::MAX_TARGET_FONTS)));
@@ -691,6 +701,15 @@ fn load_paths(paths: &[String]) -> Result<Target> {
     Ok(t)
 }
 
+/// Whether the file at `path` starts with the signature of a compiled font; only its first
+/// bytes are read.
+#[cfg(not(target_arch = "wasm32"))]
+fn starts_as_font(path: &std::path::Path) -> bool {
+    use std::io::Read as _;
+    let mut head = [0u8; 4];
+    std::fs::File::open(path).and_then(|mut f| f.read_exact(&mut head)).is_ok() && fontcraft_container::sniff(&head).is_some()
+}
+
 #[cfg(target_arch = "wasm32")]
 fn load_paths(_: &[String]) -> Result<Target> {
     Err(EngineError::Unsupported("auditing files by path in the browser; audit the open document".into()))
@@ -700,16 +719,37 @@ fn load_paths(_: &[String]) -> Result<Target> {
 #[cfg(not(target_arch = "wasm32"))]
 fn load_one(path: &std::path::Path, t: &mut Target) -> Result<()> {
     let text = path.to_string_lossy().into_owned();
-    if path.is_file() {
+    if let Ok(meta) = std::fs::metadata(path)
+        && meta.is_file()
+    {
+        charge_bytes(t, meta.len(), &text)?;
         let input = super::file_io::read_input(path)?;
         if input.kind.is_font() {
             let size = input.bytes.len() as u64;
-            let sfnt = fontcraft_container::to_sfnt(&input.bytes).map_err(|e| EngineError::Io(format!("cannot read {text}: {e}")))?.into_owned();
+            let unwrapped = match fontcraft_container::to_sfnt(&input.bytes).map_err(|e| EngineError::Io(format!("cannot read {text}: {e}")))? {
+                std::borrow::Cow::Borrowed(_) => None,
+                std::borrow::Cow::Owned(sfnt) => Some(sfnt),
+            };
+            let (sfnt, original): (Arc<[u8]>, Option<Vec<u8>>) = match unwrapped {
+                Some(sfnt) => {
+                    charge_bytes(t, sfnt.len() as u64, &text)?;
+                    (sfnt.into(), Some(input.bytes))
+                }
+                None => (input.bytes.into(), None),
+            };
             let faces = audit::export::face_count(&sfnt).map_err(|e| EngineError::Io(format!("cannot read {text}: {e}")))?;
             let faces = faces.min(u32::try_from(audit::run::MAX_TARGET_FONTS).unwrap_or(u32::MAX));
             for face in 0..faces {
-                let (model, warnings) = match crate::io::open(path, Some(face)) {
-                    Ok((m, w)) => (Some(m), w),
+                let glyphs = face_glyph_count(&sfnt, face);
+                t.glyphs_decoded = t.glyphs_decoded.saturating_add(glyphs);
+                if t.glyphs_decoded > MAX_RUN_GLYPHS {
+                    return Err(EngineError::Io(format!(
+                        "{text}: the target's compiled fonts hold more than {MAX_RUN_GLYPHS} glyphs; audit fewer fonts at a time"
+                    )));
+                }
+                let decoded = fontcraft_decompile::decompile(original.as_deref().unwrap_or(&sfnt), Some(face));
+                let (model, warnings) = match decoded {
+                    Ok(d) => (Some(d.font), d.warnings),
                     Err(e) => (None, vec![format!("its outlines cannot be decoded, so the outline checks skip it: {e}")]),
                 };
                 let name = model.as_ref().map_or_else(|| file_stem(path), |m| m.family_name.clone());
@@ -718,7 +758,7 @@ fn load_one(path: &std::path::Path, t: &mut Target) -> Result<()> {
                 if let Some(model) = model {
                     t.srcs.push(Src { font: i, model: Arc::new(model), source: false });
                 }
-                t.bins.push(Bin { font: i, bytes: sfnt.clone(), face, path: Some(text.clone()), size, map: None });
+                t.bins.push(Bin { font: i, bytes: Arc::clone(&sfnt), face, path: Some(text.clone()), size, map: None });
             }
             return Ok(());
         }
@@ -731,6 +771,30 @@ fn load_one(path: &std::path::Path, t: &mut Target) -> Result<()> {
 
 /// Most decoding warnings kept per font.
 const MAX_NOTES_PER_FONT: usize = 5;
+/// Most entries of a folder target looked at.
+const MAX_FOLDER_ENTRIES: usize = 4096;
+/// Most bytes the files of one path target hold in memory, compiled fonts counted as read and
+/// again unwrapped from WOFF.
+const MAX_RUN_BYTES: u64 = 1 << 30;
+/// Most glyphs decoded from the compiled fonts of one path target.
+const MAX_RUN_GLYPHS: usize = 1 << 19;
+
+/// Counts `len` more bytes read for `t`, refused past [`MAX_RUN_BYTES`].
+#[cfg(not(target_arch = "wasm32"))]
+fn charge_bytes(t: &mut Target, len: u64, text: &str) -> Result<()> {
+    t.bytes_read = t.bytes_read.saturating_add(len);
+    if t.bytes_read > MAX_RUN_BYTES {
+        return Err(EngineError::Io(format!("{text}: the target's files hold more than {MAX_RUN_BYTES} bytes; audit fewer fonts at a time")));
+    }
+    Ok(())
+}
+
+/// The glyph count of face `face` of `sfnt` (0 when it cannot be read).
+#[cfg(not(target_arch = "wasm32"))]
+fn face_glyph_count(sfnt: &[u8], face: u32) -> usize {
+    use skrifa::raw::TableProvider as _;
+    skrifa::FontRef::from_index(sfnt, face).ok().and_then(|f| f.maxp().ok()).map_or(0, |m| usize::from(m.num_glyphs()))
+}
 
 #[cfg(not(target_arch = "wasm32"))]
 fn file_stem(path: &std::path::Path) -> String {
@@ -761,7 +825,7 @@ fn compile_sources(t: &mut Target, run: &Run, ex: &mut Examined) {
             let instance = inst.map.instance.clone();
             let i = t.add_font(&inst.name, None, Some(instance.as_deref().unwrap_or(&inst.name)), inst.format);
             let size = inst.bytes.len() as u64;
-            t.bins.push(Bin { font: i, bytes: inst.bytes, face: 0, path: None, size, map: Some(inst.map) });
+            t.bins.push(Bin { font: i, bytes: inst.bytes.into(), face: 0, path: None, size, map: Some(inst.map) });
         }
     }
 }
