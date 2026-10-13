@@ -458,12 +458,15 @@ fn paint_keys_are_typed_and_written_back_the_same() {
 
 #[test]
 fn stroke_positions_convert_between_versions_3_and_4() {
-    for (v3, v4) in [("0", "1"), ("0.5", "0"), ("1", "-1"), ("0.25", "0.5"), ("\"1\"", "\"-1\"")] {
+    let cases =
+        [("0", "1"), ("0.5", "0"), ("1", "-1"), ("0.25", "0.5"), ("0.3", "0.4"), ("0.15", "0.7"), ("\"1\"", "\"-1\""), ("\"0.3\"", "\"0.4\"")];
+    for (v3, v4) in cases {
         let shape = |pos: &str, end: &str| {
             format!("{{\nattr = {{\nstrokePos = {pos};\nstrokeWidth = 10;\n}};\nclosed = 0;\nnodes = (\n(0,0,l),\n(10,0,l){end}\n);\n}}")
         };
         let (text3, text4) = (with_shapes(&shape(v3, "")), with_shapes4(&shape(v4, ",")));
         let l = round_trip(&text3, 3);
+        assert!(path(&l, 0).info.attrs.stroke_pos.is_some(), "version 3 {v3} is read as a stroke position");
         assert_eq!(write(&l, 4), text4, "version 3 {v3} is version 4 {v4}");
         let l = round_trip(&text4, 4);
         assert_eq!(write(&l, 3), text3, "version 4 {v4} is version 3 {v3}");
@@ -480,4 +483,16 @@ fn version_3_reports_the_paint_it_cannot_hold() {
     assert!(lost.iter().any(|l| l.starts_with("the paths' conic gradients")), "{lost:?}");
     let written = write(glyphs[0].layers.first().unwrap(), 3);
     assert!(!written.contains("gradient"), "version 3 has no conic gradient");
+}
+
+#[test]
+fn version_3_writes_a_stroke_position_expression_as_it_is_and_reports_it() {
+    let shape = "{\nattr = {\nstrokePos = \"width/2\";\nstrokeWidth = 10;\n};\nclosed = 0;\nnodes = (\n(0,0,l),\n(10,0,l),\n);\n}";
+    let l = read(&with_shapes4(shape), 4);
+    assert_eq!(path(&l, 0).info.attrs.stroke_pos, Some(Dimension::Expression("width/2".into())));
+    assert!(write(&l, 3).contains("strokePos = \"width/2\";"));
+    let glyph = fontcraft_model::Glyph { layers: vec![l], ..fontcraft_model::Glyph::new("a") };
+    let glyphs = [std::sync::Arc::new(glyph)];
+    assert!(losses(&glyphs, 3).iter().any(|l| l.starts_with("stroke positions given as expressions")), "{:?}", losses(&glyphs, 3));
+    assert!(losses(&glyphs, 4).is_empty());
 }

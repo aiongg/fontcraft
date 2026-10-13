@@ -302,12 +302,25 @@ pub(crate) fn write_shadow(s: &Shadow, f: Form, at: &str) -> Option<Value> {
 
 /// The version 4 stroke position for a version 3 one (0 outside, 0.5 centred, 1 inside).
 fn from_v3(p: f64) -> f64 {
-    1.0 - 2.0 * p
+    tidy(1.0 - 2.0 * p)
 }
 
 /// The version 3 stroke position for a version 4 one (−1 inside, 0 centred, 1 outside).
 fn to_v3(p: f64) -> f64 {
-    (1.0 - p) / 2.0
+    tidy((1.0 - p) / 2.0)
+}
+
+/// `p` to nine decimals, so a converted position written back reads as the text it came from
+/// (0.3 stays 0.3, not 0.29999999999999993); `p` itself when that is not finite.
+fn tidy(p: f64) -> f64 {
+    let r = (p * 1e9).round() / 1e9;
+    if r.is_finite() { r } else { p }
+}
+
+/// A stroke position given as an expression that is not a plain number: version 3 cannot convert
+/// it, so it is written as it is.
+pub(crate) fn stroke_pos_unconvertible(d: &Dimension) -> bool {
+    matches!(d, Dimension::Expression(e) if !e.trim().parse::<f64>().is_ok_and(f64::is_finite))
 }
 
 /// `strokePos` in the model's convention. A version 3 expression is converted when it is a plain
@@ -330,10 +343,10 @@ pub(crate) fn write_stroke_pos(d: &Dimension, version: u32) -> Option<Value> {
     let v3 = version < 4;
     match d {
         Dimension::Number(p) => num(if v3 { to_v3(*p) } else { *p }, "strokePos").ok(),
-        Dimension::Expression(e) if v3 => {
-            let p = e.trim().parse::<f64>().ok().filter(|f| f.is_finite())?;
-            Some(string(&format!("{}", to_v3(p))))
-        }
+        Dimension::Expression(e) if v3 => match e.trim().parse::<f64>().ok().filter(|f| f.is_finite()) {
+            Some(p) => Some(string(&format!("{}", to_v3(p)))),
+            None => Some(string(e)),
+        },
         Dimension::Expression(e) => Some(string(e)),
     }
 }

@@ -608,10 +608,6 @@ pub(crate) fn write_shape(s: &Shape, at: &str, version: u32) -> Result<Value> {
     }
 }
 
-/// What a format version cannot hold of the shapes' data, one line per kind with the number of
-/// objects that have it: the identifiers and anchor colours UFO sources give, tangent joins before
-/// version 4 (written as smooth), and node locks and orientations and path drawing attributes in
-/// version 2.
 /// Whether the attributes hold nothing but a gradient the version cannot write.
 fn only_unwritable_gradient(a: &ShapeAttrs, version: u32) -> bool {
     let rest = ShapeAttrs { gradient: None, extra: fontcraft_model::Extra::new(), ..a.clone() };
@@ -625,8 +621,12 @@ fn paint_needs_v4(a: &ShapeAttrs) -> bool {
     a.gradient.as_ref().is_some_and(paint::gradient_needs_v4) || colors.into_iter().any(paint::color_needs_v4)
 }
 
+/// What a format version cannot hold of the shapes' data, one line per kind with the number of
+/// objects that have it: the identifiers and anchor colours UFO sources give, tangent joins before
+/// version 4 (written as smooth), node locks and orientations and path drawing attributes in
+/// version 2, and the version 4 paint attributes version 3 lacks.
 pub(crate) fn losses(glyphs: &[std::sync::Arc<fontcraft_model::Glyph>], version: u32) -> Vec<String> {
-    let mut counts = [0usize; 7];
+    let mut counts = [0usize; 8];
     let shapes =
         glyphs.iter().flat_map(|g| g.layers.iter()).flat_map(|l| l.shapes.iter().chain(l.info.background.iter().flat_map(|b| b.shapes.iter())));
     for s in shapes {
@@ -637,6 +637,7 @@ pub(crate) fn losses(glyphs: &[std::sync::Arc<fontcraft_model::Glyph>], version:
                 counts[4] += p.nodes.iter().filter(|n| n.locked || !n.orientation.is_left()).count();
                 counts[5] += usize::from(!p.info.attrs.is_empty());
                 counts[6] += usize::from(paint_needs_v4(&p.info.attrs));
+                counts[7] += usize::from(p.info.attrs.stroke_pos.as_ref().is_some_and(paint::stroke_pos_unconvertible));
             }
             Shape::Component(c) => counts[1] += usize::from(c.info.identifier.is_some()),
             Shape::Image(_) | Shape::Raw(_) => {}
@@ -656,6 +657,7 @@ pub(crate) fn losses(glyphs: &[std::sync::Arc<fontcraft_model::Glyph>], version:
     }
     if version != 3 {
         counts[6] = 0;
+        counts[7] = 0;
     }
     let what = [
         "the identifiers of paths and nodes",
@@ -665,6 +667,7 @@ pub(crate) fn losses(glyphs: &[std::sync::Arc<fontcraft_model::Glyph>], version:
         "node locks and orientations",
         "the paths' drawing attributes",
         "the paths' conic gradients, extend modes, gradient radii and colours finer than 8 bits",
+        "stroke positions given as expressions, written without conversion to the version 3 convention",
     ];
     what.iter().zip(counts).filter(|(_, n)| *n > 0).map(|(w, n)| format!("{w} ({n})")).collect()
 }
