@@ -11,7 +11,9 @@
 //! Ported from glyphsLib 6.15.0 `builder/variable_features.py` (Apache-2.0, see `NOTICE`): the
 //! value-record, anchor and scalar forms it recognises, its scope rules for `condition`, the
 //! user-coordinate mapping, the overlay order and the text it writes. The overlay itself is
-//! `fontcraft_interp::overlay`, a port of fontTools' `overlayFeatureVariations`.
+//! `fontcraft_interp::overlay`, a port of fontTools' `overlayFeatureVariations`;
+//! `fixed_shortest` ports fontTools' `nearestMultipleShortestRepr` (misc/fixedTools.py, MIT
+//! License, see `NOTICE`).
 //!
 //! Contract:
 //! - Runs after [`crate::lower::lower`], which keeps or drops the `#ifdef VARIABLE` and
@@ -58,6 +60,8 @@ pub const MAX_CONDITIONS: usize = 64;
 pub const MAX_CODE_BYTES: usize = 16 * 1024 * 1024;
 /// Deepest brace nesting read.
 pub const MAX_NESTING_DEPTH: usize = fontcraft_fea::MAX_NESTING_DEPTH;
+/// Longest value record or anchor (`<` to `>`) read for variable values, in bytes.
+pub const MAX_VALUE_RECORD_BYTES: usize = 4_096;
 /// Most refusals reported for one text.
 pub const MAX_ERRORS: usize = 100;
 /// Largest value or coordinate read, in either direction.
@@ -132,10 +136,38 @@ impl FeatureAxes {
             .map(|m| FeatureMaster {
                 name: m.name.clone(),
                 location: (0..axes.len()).map(|i| fontcraft_model::axes::design_value(&m.location, i)).collect(),
-                numbers: font.numbers.iter().zip(m.number_values.iter()).map(|(n, v)| (n.name.clone(), *v)).collect(),
+                numbers: font
+                    .numbers
+                    .iter()
+                    .enumerate()
+                    .map(|(i, n)| (n.name.clone(), m.number_values.get(i).copied().filter(|v| v.is_finite()).unwrap_or(0.0)))
+                    .collect(),
             })
             .collect();
         FeatureAxes { axes, masters }
+    }
+
+    /// A variable value with `values` (parallel to [`FeatureAxes::masters`]) at the masters,
+    /// in user coordinates: `(wght=100:10 wght=900:30)`. `None` without axes.
+    pub fn master_scalar(&self, values: &[i32]) -> Option<String> {
+        if self.axes.is_empty() {
+            return None;
+        }
+        let mut seen = BTreeSet::new();
+        let mut entries = Vec::new();
+        for (master, value) in self.masters.iter().zip(values) {
+            let location = self
+                .axes
+                .iter()
+                .enumerate()
+                .map(|(i, a)| format!("{}={}", a.tag, number_text(user_coordinate(a, master.location.get(i).copied().unwrap_or(a.internal.default)))))
+                .collect::<Vec<_>>()
+                .join(",");
+            if seen.insert(location.clone()) {
+                entries.push(format!("{location}:{value}"));
+            }
+        }
+        Some(format!("({})", entries.join(" ")))
     }
 
     fn axis(&self, tag: &str) -> Option<(usize, &FeatureAxis)> {
@@ -332,6 +364,9 @@ impl VariableSyntax {
     /// The scalars of a record whose tokens (`tokens(text)`) are `count` default values, then a
     /// location and `count` values per alternative.
     fn scalars(&self, text: &str, count: usize, record: &str, kind: &str, range: &Range<usize>) -> Result<Vec<String>, VariableSyntaxError> {
+        if text.len() > MAX_VALUE_RECORD_BYTES {
+            return Err(refusal(range.clone(), format!("a variable {kind} is longer than {MAX_VALUE_RECORD_BYTES} bytes")));
+        }
         let invalid = || refusal(range.clone(), format!("invalid variable {kind}: <{record}>"));
         let tokens = tokens(text);
         let group = count.saturating_add(1);
@@ -396,8 +431,20 @@ impl VariableSyntax {
                 let mut locations = vec![normalized(&[])];
                 let mut masters = vec![defaults.to_vec()];
                 for (location, vals) in alternatives {
-                    locations.push(normalized(location));
-                    masters.push(vals.clone());
+                    // Two values at one normalised location: the later one wins, as in the
+                    // variable font, where the feature compiler keys the values by location.
+                    let location = normalized(location);
+                    match locations.iter().position(|l| *l == location) {
+                        Some(at) => {
+                            if let Some(m) = masters.get_mut(at) {
+                                *m = vals.clone();
+                            }
+                        }
+                        None => {
+                            locations.push(location);
+                            masters.push(vals.clone());
+                        }
+                    }
                 }
                 let here: Vec<(usize, f64)> = at.iter().copied().enumerate().collect();
                 let fail =
@@ -603,6 +650,7 @@ impl VariableSyntax {
                                 format!("the rules after condition `{ranges}` in feature `{tag}` are dropped: the condition can never match"),
                             ));
                         }
+                        Some(l) if l.iter().all(|x| self.whole_axis(x)) => base.push(range),
                         Some(l) => conditional.push((l, statement, range)),
                     }
                 }
@@ -624,13 +672,31 @@ impl VariableSyntax {
         whole: &Range<usize>,
         out: &mut Out,
     ) -> Result<(), VariableSyntaxError> {
+        let boxes: Vec<Vec<AxisSpan>> = conditional
+            .iter()
+            .map(|(limits, _, _)| {
+                let mut spans: Vec<AxisSpan> =
+                    limits.iter().filter(|l| !self.whole_axis(l)).map(|l| AxisSpan { axis: l.axis, min: l.user_min, max: l.user_max }).collect();
+                spans.sort_by_key(|s| s.axis);
+                spans
+            })
+            .collect();
+        // The overlay only compares bounds, and drops spans of exactly (−1, 1) as normalised
+        // coordinates that constrain nothing. Its input is user coordinates, so each bound goes
+        // in as its rank among the bounds of its axis, past 1, and comes back after.
+        let mut bounds: Vec<(usize, f64)> = boxes.iter().flatten().flat_map(|s| [(s.axis, s.min), (s.axis, s.max)]).collect();
+        bounds.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.total_cmp(&b.1)));
+        bounds.dedup();
+        let encode = |axis: usize, v: f64| bounds.iter().position(|b| *b == (axis, v)).map_or(v, |rank| rank as f64 + 2.0);
+        let decode = |axis: usize, v: f64| {
+            let rank = v - 2.0;
+            bounds.get(rank as usize).filter(|b| rank >= 0.0 && b.0 == axis).map_or(v, |b| b.1)
+        };
+
         // fontTools merges rules with the same region first, keeping the last one's place.
         let mut rules: Vec<(RegionBox, Vec<usize>)> = Vec::new();
-        for (index, (limits, _, _)) in conditional.iter().enumerate().rev() {
-            let mut spans: Vec<AxisSpan> = limits.iter().map(|l| AxisSpan { axis: l.axis, min: l.user_min, max: l.user_max }).collect();
-            spans.sort_by_key(|s| s.axis);
-            spans.retain(|s| (s.min, s.max) != (-1.0, 1.0));
-            let region = RegionBox(spans);
+        for (index, spans) in boxes.iter().enumerate().rev() {
+            let region = RegionBox(spans.iter().map(|s| AxisSpan { axis: s.axis, min: encode(s.axis, s.min), max: encode(s.axis, s.max) }).collect());
             match rules.iter_mut().find(|(r, _)| *r == region) {
                 Some((_, indices)) => indices.push(index),
                 None => rules.push((region, vec![index])),
@@ -645,8 +711,11 @@ impl VariableSyntax {
         let mut ordered: Vec<(RegionBox, Vec<usize>)> = Vec::new();
         for record in records {
             let indices = record.payloads.into_iter().flatten().collect();
-            let at = ordered.iter().position(|(other, _)| box_within(&record.region, other)).unwrap_or(ordered.len());
-            ordered.insert(at, (record.region, indices));
+            let region = RegionBox(
+                record.region.0.iter().map(|s| AxisSpan { axis: s.axis, min: decode(s.axis, s.min), max: decode(s.axis, s.max) }).collect(),
+            );
+            let at = ordered.iter().position(|(other, _)| box_within(&region, other)).unwrap_or(ordered.len());
+            ordered.insert(at, (region, indices));
         }
         for (i, (region, _)) in ordered.iter().enumerate() {
             let mut conditions: Vec<(String, f64, f64)> =
@@ -686,6 +755,11 @@ impl VariableSyntax {
             }
         }
         Ok(())
+    }
+
+    /// Whether `limit` spans its axis's whole user range, so constrains nothing.
+    fn whole_axis(&self, limit: &Limit) -> bool {
+        self.axes.axes.get(limit.axis).is_some_and(|a| (limit.user_min, limit.user_max) == (a.external.minimum, a.external.maximum))
     }
 
     /// The limits of a condition's parameters, or `None` for a bare `condition;`.
@@ -979,13 +1053,20 @@ fn tokens(text: &str) -> Vec<&str> {
     let b = text.as_bytes();
     let mut out = Vec::new();
     let mut i = 0;
+    // Once no `)` follows, no later `(` opens a group: searching again would be quadratic.
+    let mut closed = true;
     while let Some(&c) = b.get(i) {
         if c == b'(' {
-            if let Some(n) = b.get(i..).and_then(|rest| rest.iter().position(|c| *c == b')')) {
-                let end = i.saturating_add(n).saturating_add(1);
-                out.extend(text.get(i..end));
-                i = end;
-                continue;
+            if closed {
+                match b.get(i..).and_then(|rest| rest.iter().position(|c| *c == b')')) {
+                    Some(n) => {
+                        let end = i.saturating_add(n).saturating_add(1);
+                        out.extend(text.get(i..end));
+                        i = end;
+                        continue;
+                    }
+                    None => closed = false,
+                }
             }
         } else if let Some(end) = number_end(b, i) {
             out.extend(text.get(i..end));
@@ -1038,16 +1119,22 @@ fn has_variable_syntax(masked: &str) -> bool {
 }
 
 /// The `condition …;` statements in `range` of the masked text: the word `condition` on its own
-/// (not part of a name), up to the next `;`.
+/// (not part of a name) as the first word of a statement, up to the next `;`. A glyph named
+/// `condition` inside a rule is no statement.
 fn conditions(m: &[u8], range: Range<usize>) -> Vec<Condition> {
     const WORD: &[u8] = b"condition";
+    let starts_statement = |i: usize| {
+        let before = m.get(..i).and_then(|head| head.iter().rposition(|c| !c.is_ascii_whitespace()));
+        before.and_then(|p| m.get(p)).is_none_or(|c| matches!(c, b';' | b'{' | b'}'))
+    };
     let mut out = Vec::new();
     let mut i = range.start;
     while i.saturating_add(WORD.len()) <= range.end {
         let end = i.saturating_add(WORD.len());
         let is_word = m.get(i..end) == Some(WORD)
             && !i.checked_sub(1).and_then(|p| m.get(p)).is_some_and(|c| is_name_byte(*c))
-            && !m.get(end).is_some_and(|c| is_name_byte(*c));
+            && !m.get(end).is_some_and(|c| is_name_byte(*c))
+            && starts_statement(i);
         if !is_word {
             i = i.saturating_add(1);
             continue;

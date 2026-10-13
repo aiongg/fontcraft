@@ -233,3 +233,67 @@ fn many_overlapping_conditions_stay_within_the_limits() {
     over.push_str("} rvrn;");
     assert!(refused(&over, &axes("mapped")).message.contains("more than"));
 }
+
+#[test]
+fn an_unclosed_group_in_a_long_value_record_is_refused_quickly() {
+    // Each `(` used to search the rest of the record for `)` again: quadratic in its length.
+    let code = format!("feature kern {{\npos a b <{}wght:1>;\n}} kern;", "(".repeat(4 << 20));
+    let errors = lower_variable_syntax(&code, &axes("plain"), &LowerTarget::Variable).unwrap_err();
+    assert!(errors[0].message.contains("longer than"), "{}", errors[0].message);
+    let text = format!("1 {}wght:1", "(".repeat(1 << 20));
+    assert_eq!(tokens(&text).len(), 2);
+}
+
+#[test]
+fn a_condition_over_part_of_a_wide_axis_stays_a_condition() {
+    let axis = FeatureAxis {
+        tag: "XXXX".into(),
+        name: "Wide".into(),
+        internal: AxisRange { minimum: -10.0, default: 0.0, maximum: 10.0 },
+        external: AxisRange { minimum: -10.0, default: 0.0, maximum: 10.0 },
+        map: Vec::new(),
+    };
+    let wide = FeatureAxes { axes: vec![axis], masters: Vec::new() };
+    let text = variable("feature rvrn {\ncondition -1 < XXXX < 1;\nsub a by b;\n} rvrn;", &wide).unwrap();
+    assert!(text.contains("XXXX -1 1;") && text.contains("variation rvrn conditionset_1"), "{text}");
+    // A condition over the whole axis constrains nothing: its rules join the feature.
+    let text = variable("feature rvrn {\ncondition -10 < XXXX < 10;\nsub a by b;\n} rvrn;", &wide).unwrap();
+    assert!(!text.contains("variation") && text.contains("sub a by b;"), "{text}");
+}
+
+#[test]
+fn static_values_with_two_values_at_one_location_take_the_later() {
+    let plain = axes("plain");
+    // At the origin, and twice past the axis's end (both normalise to 1).
+    assert!(at("pos a a 5 (wght:400) 6;", &plain, &[400.0]).contains("pos a a 6;"));
+    assert!(at("pos a a 5 (wght:950) 7 (wght:990) 9;", &plain, &[900.0]).contains("pos a a 9;"));
+}
+
+#[test]
+fn a_glyph_named_condition_is_no_statement() {
+    let plain = axes("plain");
+    let code = "feature liga {\nsub condition by a;\nsub \\condition by b;\n} liga;";
+    assert_eq!(at(code, &plain, &[400.0]), code);
+    assert_eq!(variable(code, &plain).unwrap(), code);
+    let mixed = "feature liga {\nsub condition by a;\ncondition 600 < wght;\nsub b by c;\n} liga;";
+    assert!(!at(mixed, &plain, &[400.0]).contains("sub b by c"));
+    assert!(at(mixed, &plain, &[700.0]).contains("sub condition by a;"));
+}
+
+#[test]
+fn masters_missing_number_values_read_zero() {
+    use std::sync::Arc;
+
+    use fontcraft_model::{Axis, Master, NumberDef};
+    let mut font = Font::new("Numbers");
+    font.axes = Arc::new(vec![Axis { name: "Weight".into(), tag: "wght".into(), ..Axis::default() }]);
+    font.numbers =
+        Arc::new(vec![NumberDef { name: "gap".into(), extra: Default::default() }, NumberDef { name: "kern".into(), extra: Default::default() }]);
+    font.masters = Arc::new(vec![
+        Master { id: "a".into(), name: "A".into(), location: vec![100.0], number_values: vec![10.0], ..Master::default() },
+        Master { id: "b".into(), name: "B".into(), location: vec![900.0], number_values: vec![30.0, 4.0], ..Master::default() },
+    ]);
+    let axes = FeatureAxes::from_font(&font);
+    assert_eq!(axes.masters[0].numbers, vec![("gap".to_string(), 10.0), ("kern".to_string(), 0.0)]);
+    assert_eq!(axes.masters[1].numbers, vec![("gap".to_string(), 30.0), ("kern".to_string(), 4.0)]);
+}

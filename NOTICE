@@ -85,11 +85,12 @@ bundled, the file says so in its header and the project is listed here with its 
   its path builder (crates/io-ufo/src/glif.rs). The form of features.fea (comment markers for
   prefixes, automatic, disabled and notes, featureNames records from feature labels) and the way
   it is split back into prefixes, classes and features are ported from its feature builder
-  (crates/io-ufo/src/features.rs). The lowering of the variable feature syntax (`condition`
-  statements to condition sets and variation blocks, `(tag:coord) value` positions to variable
-  scalars in user coordinates, with its scope rules and output order) is ported from its variable
-  feature converter, builder/variable_features.py (crates/features/src/fea_variable.rs); groups that are not kerning groups are kept as classes named
-  in font user data as its group builder keeps them (crates/io-glyphs/src/groups.rs). The UFO
+  (crates/io-ufo/src/features.rs); groups that are not kerning groups are kept as classes named
+  in font user data as its group builder keeps them (crates/io-glyphs/src/groups.rs). The
+  lowering of the variable feature syntax (`condition` statements to condition sets and
+  variation blocks, `(tag:coord) value` positions to variable scalars in user coordinates, with
+  its scope rules and output order) is ported from its variable feature converter,
+  builder/variable_features.py (crates/features/src/fea_variable.rs). The UFO
   lib keys for the font's settings, app version, edit-tab texts, user data and custom parameters
   and for a master's icon, name parts, parameters, position and axis values, with the colour
   palette and meta table conversions, are ported from its custom-parameter, font, master, name
@@ -131,6 +132,8 @@ bundled, the file says so in its header and the project is listed here with its 
   crates/interp/src/overlay.rs ports the same three functions, and crates/compile/src/var/featvar.rs the GSUB of addFeatureVariations, with the alternate glyph names and order of fontc's glyphs2fontir/src/source.rs and glyphsLib's builder/bracket_layers.py (the bracket glyphs, their component renaming and the copying of kerning to them) and builder/transformations/align_alternate_layers.py, and the merging of the feature variations into the feature code's GSUB of fontc's fontbe/src/features/feature_variations.rs (crates/fea/src/provider.rs) (Apache License 2.0).
   crates/tables/src/ttx (mod.rs, core.rs, core/) ports ttLib's TTX writer for the core tables and ttProgram's opcode table and disassembly.
   crates/tables/src/variations.rs ports varLib.avar.map, the avar table's renormalizeLocation, VarStoreInstancer, _add_avar and designspaceLib's get_validated_map.
+  crates/features/src/fea_variable.rs ports misc/fixedTools.py's nearestMultipleShortestRepr,
+  which writes a user coordinate with the fewest decimals a 16.16 fixed-point number keeps.
   crates/geom/src/variation.rs ports varLib's normalizeValue, supportScalar and VariationModel
   with getDeltas (models.py). The CFF writer (crates/cff) ports cffLib: the table layout and offset passes, INDEX, charset
   and DICT compilers, the standard strings and predefined charsets (data from Adobe Technical
