@@ -9,7 +9,7 @@
 //! loaded.
 //!
 //! A relative path is looked up against the root file's folder first, then against the
-//! including file's folder; the first that names a file wins. Paths are `/`-separated; an
+//! including file's folder; the first that names a file the [`crate::IncludeCheck`] allows wins. Paths are `/`-separated; an
 //! absolute path is refused. A path may climb above the top of the file set: it then names a
 //! file on disk outside the include folder, which is read when the [`crate::IncludeCheck`]
 //! allows it (every file, without one).
@@ -65,7 +65,12 @@ impl Loader<'_> {
         self.stack.push(path.to_string());
         let mut size = text.len();
         for (raw, span) in include_statements(text) {
-            let Some(target) = resolve(&self.root_dir, path, raw, |p| self.exists(p)) else {
+            // A candidate the include check refuses does not hide a later one it allows; when
+            // every candidate is refused, the first that exists is taken so that reading it
+            // reports the refusal.
+            let target = resolve(&self.root_dir, path, raw, |p| self.exists(p, true))
+                .or_else(|| resolve(&self.root_dir, path, raw, |p| self.exists(p, false)));
+            let Some(target) = target else {
                 // fea-rs reports the missing file at the statement.
                 continue;
             };
@@ -99,8 +104,19 @@ impl Loader<'_> {
         Ok(size)
     }
 
-    fn exists(&self, path: &str) -> bool {
-        self.files.get(path).is_some() || self.disk_path(path).is_some_and(|p| p.is_file())
+    /// Whether `path` names a file in the set or on disk; with `checked`, a file on disk counts
+    /// only when the include check allows it.
+    fn exists(&self, path: &str, checked: bool) -> bool {
+        if self.files.get(path).is_some() {
+            return true;
+        }
+        let Some(file) = self.disk_path(path).filter(|p| p.is_file()) else {
+            return false;
+        };
+        match self.files.include_check().filter(|_| checked) {
+            Some(check) => file.canonicalize().is_ok_and(|real| check.check(&real).is_ok()),
+            None => true,
+        }
     }
 
     fn read(&mut self, path: &str) -> Result<Arc<str>, String> {

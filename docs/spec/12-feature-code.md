@@ -47,6 +47,13 @@ for step 8 because steps 3-5 change line and column positions.
 Edit View uses the same pipeline for the current master after `font.features.compile`
 (`features.menuNeedsCompile`, `features.previewScope` in the Edit View inventory).
 
+Every export command and the code editor's compile read `include` files from the same folder: the
+folder that holds the UFO (for a designspace, its first UFO), else the source file's folder. Under
+an automation read root, an include is resolved to its real path and checked before it is opened.
+A local user who swaps a folder for a symbolic link between the check and the open can make that
+one read land outside the root; we accept this window, since closing it needs a no-follow open of
+every path component, which the standard library does not provide.
+
 ## 2. Editor additions
 
 Beyond the rows in `06-font-info`:

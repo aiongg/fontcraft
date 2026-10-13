@@ -382,6 +382,30 @@ fn a_reused_compile_follows_includes_outside_the_folder_and_caps_what_it_reads()
     let _ = std::fs::remove_dir_all(&root);
 }
 
+/// Under a read root, an include whose first candidate (from the root file's folder) is outside
+/// the root and whose second (from the including file's folder) is inside reads the second.
+#[test]
+fn a_confined_compile_reads_the_allowed_candidate_of_an_include() {
+    use fontcraft_engine::file_access::{AutomationRoots, confine};
+    let root = std::env::temp_dir().join(format!("fontcraft-feature-candidates-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let dir = root.join("source");
+    std::fs::create_dir_all(dir.join("inc/deep")).unwrap();
+    std::fs::write(root.join("x.fea"), "# outside\n").unwrap();
+    std::fs::write(dir.join("inc/x.fea"), "# inside\n").unwrap();
+    std::fs::write(dir.join("inc/deep/a.fea"), "sub a by b;\ninclude(../x.fea);\n").unwrap();
+    let roots = AutomationRoots::new(Some(&dir), None).unwrap().unwrap();
+    let font = Session::with_document().font().unwrap().clone();
+    let mut s = Session::new();
+    s.add_document(font, Some(dir.join("Font.fontcraft"))).unwrap();
+    run(&mut s, "font.features.addFeature", json!({"tag": "liga", "code": "include(inc/deep/a.fea);"}));
+    let r = confine(Some(&roots), || run(&mut s, "font.features.compile", json!({})));
+    assert_eq!(r["ok"], json!(true), "{r}");
+    let r = confine(Some(&roots), || run(&mut s, "font.features.compile", json!({})));
+    assert_eq!(r["cached"], json!(true), "{r}");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 /// With automation roots in force, an include that climbs out of the read root is refused with a
 /// message; one inside it is read.
 #[test]

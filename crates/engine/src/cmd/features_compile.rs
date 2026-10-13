@@ -304,7 +304,10 @@ fn hash_included_files(files: &fontcraft_fea::VirtualFiles, dir: &std::path::Pat
                 candidate.hash(hasher);
                 let allowed = |real: &std::path::Path| files.include_check().is_none_or(|check| (check.0)(real).is_ok());
                 let Some(real) = candidate.canonicalize().ok().filter(|real| allowed(real)) else {
+                    // A refused file is skipped for a later candidate, but when it is the only
+                    // one, whether it exists decides the compiler's message.
                     false.hash(hasher);
+                    candidate.is_file().hash(hasher);
                     continue;
                 };
                 let Ok(meta) = std::fs::metadata(&real) else {
