@@ -1801,8 +1801,8 @@ mod ps_hints_export {
         a.layers[1].shapes = vec![Shape::Path(Path::rect(40.0, -10.0, 580.0, 720.0))];
         let node = |p, n| Edge::Node(NodeRef::new(p, n));
         let main = [PsHint::stem(true, node(0, 0), Edge::Value(80.0)), PsHint::stem(false, node(0, 1), node(0, 0)), PsHint::ghost(true, node(0, 3))];
-        set_ps_hints(&mut a.layers[0].info, &main).unwrap();
-        set_ps_hints(&mut a.layers[1].info, &[PsHint::stem(false, Edge::Value(0.0), Edge::Value(10.0))]).unwrap();
+        set_ps_hints(&mut a.layers[0], &main).unwrap();
+        set_ps_hints(&mut a.layers[1], &[PsHint::stem(false, Edge::Value(0.0), Edge::Value(10.0))]).unwrap();
         drop(a);
         for (name, at) in [("Regular", 100.0), ("Bold", 200.0)] {
             Arc::make_mut(&mut f.instances).push(fontcraft_model::Instance { name: name.into(), location: vec![at], ..Default::default() });

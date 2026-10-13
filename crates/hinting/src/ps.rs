@@ -29,7 +29,7 @@ use fontcraft_model::plist::{Dict, Value};
 use fontcraft_model::{Family, Font, Glyph, Hint, Layer, LayerInfo};
 
 use crate::noderef::{Syntax, number, put, put_if_changed, read_flag, read_numbers, remove, type_is};
-use crate::{Edge, HintSettings, HintingError, MAX_LAYER_HINTS, NodeRef};
+use crate::{Edge, HintSettings, HintingError, MAX_LAYER_HINTS, NodeOrder, NodeRef};
 
 /// Width the format stores for a numeric top ghost hint.
 pub const TOP_GHOST_WIDTH: f64 = -20.0;
@@ -84,24 +84,26 @@ impl PsHint {
         Self { horizontal: true, kind, origin: edge, other: None, source: None }
     }
 
-    /// Reads one stored hint; `None` when it is not a PostScript hint.
-    pub fn from_hint(index: usize, hint: &Hint) -> Option<Result<Self, HintingError>> {
+    /// Reads one stored hint of a layer whose node order is `order`; `None` when it is not a
+    /// PostScript hint.
+    pub fn from_hint(index: usize, hint: &Hint, order: &NodeOrder) -> Option<Result<Self, HintingError>> {
         let d = hint.value.as_dict()?;
         let kind = ps_kind(d)?;
-        Some(read(index, d, kind).map(|mut h| {
+        Some(read(index, d, kind, order).map(|mut h| {
             h.source = Some(hint.value.clone());
             h
         }))
     }
 
-    /// The stored value of this hint, over [`PsHint::source`].
-    pub fn to_hint(&self, family: Family) -> Hint {
+    /// The stored value of this hint on a layer whose node order is `order`, over
+    /// [`PsHint::source`].
+    pub fn to_hint(&self, family: Family, order: &NodeOrder) -> Hint {
         let syntax = match &self.source {
             Some(v) => Syntax::of_hint(family, v),
             None if family == Family::Ufo => Syntax::Ufo,
             None => Syntax::Glyphs3,
         };
-        self.to_hint_in(family, syntax)
+        self.to_hint_in(family, syntax, order)
     }
 
     /// Whether `self` and `other` say the same thing, their stored values aside.
@@ -109,11 +111,11 @@ impl PsHint {
         self.horizontal == other.horizontal && self.kind == other.kind && self.origin == other.origin && self.other == other.other
     }
 
-    pub(crate) fn to_hint_in(&self, family: Family, syntax: Syntax) -> Hint {
+    pub(crate) fn to_hint_in(&self, family: Family, syntax: Syntax, order: &NodeOrder) -> Hint {
         let old = self.source.as_ref().and_then(|v| {
             let d = v.as_dict()?;
             let kind = ps_kind(d)?;
-            read(0, d, kind).ok()
+            read(0, d, kind, order).ok()
         });
         if let (Some(v), Some(old)) = (&self.source, &old)
             && old.same_as(self)
@@ -121,11 +123,11 @@ impl PsHint {
             return Hint { family, value: v.clone() };
         }
         let mut d = self.source.as_ref().and_then(|v| v.as_dict().cloned()).unwrap_or_default();
-        self.write(&mut d, old.as_ref(), syntax);
+        self.write(&mut d, old.as_ref(), syntax, order);
         Hint { family, value: Value::Dict(d) }
     }
 
-    fn write(&self, d: &mut Dict, old: Option<&PsHint>, syntax: Syntax) {
+    fn write(&self, d: &mut Dict, old: Option<&PsHint>, syntax: Syntax, order: &NodeOrder) {
         // A UFO dictionary carries every key glyphsLib's reader looks up.
         if syntax == Syntax::Ufo {
             for (k, v) in [("name", Value::String("".into())), ("options", number(0.0)), ("stem", number(-2.0))] {
@@ -149,16 +151,16 @@ impl PsHint {
         let like = |d: &Dict, key: &str| d.get(key).cloned().or_else(|| syntax.example());
         match self.origin {
             Edge::Node(r) => {
-                let v = r.to_value(like(d, "origin").as_ref());
-                put_if_changed(d, "origin", v, |x| NodeRef::from_value(x) == Some(r));
+                let v = r.to_value(order, like(d, "origin").as_ref());
+                put_if_changed(d, "origin", v, |x| NodeRef::from_value(x, order) == Some(r));
             }
             Edge::Value(_) => remove(d, "origin"),
         }
         match self.kind {
             PsHintKind::Stem => match self.other {
                 Some(Edge::Node(r)) => {
-                    let v = r.to_value(like(d, "target").as_ref());
-                    put_if_changed(d, "target", v, |x| NodeRef::from_value(x) == Some(r));
+                    let v = r.to_value(order, like(d, "target").as_ref());
+                    put_if_changed(d, "target", v, |x| NodeRef::from_value(x, order) == Some(r));
                 }
                 _ => remove(d, "target"),
             },
@@ -207,7 +209,7 @@ pub(crate) fn is_ps(hint: &Hint) -> bool {
     hint.value.as_dict().and_then(ps_kind).is_some()
 }
 
-fn read(index: usize, d: &Dict, kind: PsHintKind) -> Result<PsHint, HintingError> {
+fn read(index: usize, d: &Dict, kind: PsHintKind, order: &NodeOrder) -> Result<PsHint, HintingError> {
     let bad = |message: &str| HintingError::BadHint { index, message: message.to_string() };
     let horizontal = match d.get("horizontal") {
         Some(v) => read_flag(v).ok_or_else(|| bad("`horizontal` is not a flag"))?,
@@ -221,12 +223,12 @@ fn read(index: usize, d: &Dict, kind: PsHintKind) -> Result<PsHint, HintingError
         None => None,
     };
     let origin = match d.get("origin") {
-        Some(v) => Edge::Node(NodeRef::from_value(v).ok_or_else(|| bad("`origin` is not a node reference"))?),
+        Some(v) => Edge::Node(NodeRef::from_value(v, order).ok_or_else(|| bad("`origin` is not a node reference"))?),
         None => Edge::Value(place.map(|p| p.0).ok_or_else(|| bad("the hint has neither `origin` nor `place`"))?),
     };
     let other = match kind {
         PsHintKind::Stem => Some(match d.get("target") {
-            Some(v) => Edge::Node(NodeRef::from_value(v).ok_or_else(|| bad("`target` is not a node reference"))?),
+            Some(v) => Edge::Node(NodeRef::from_value(v, order).ok_or_else(|| bad("`target` is not a node reference"))?),
             None => {
                 let (p, w) = place.ok_or_else(|| bad("the stem hint has neither `target` nor `place`"))?;
                 let edge = p + w;
@@ -242,12 +244,14 @@ fn read(index: usize, d: &Dict, kind: PsHintKind) -> Result<PsHint, HintingError
 }
 
 /// The layer's PostScript hints in stored order, each with its index in
-/// [`LayerInfo::hints`].
-pub fn ps_hints(info: &LayerInfo) -> Result<Vec<(usize, PsHint)>, HintingError> {
+/// [`LayerInfo::hints`]. Node references count in the model's order (`noderef` module doc).
+pub fn ps_hints(layer: &Layer) -> Result<Vec<(usize, PsHint)>, HintingError> {
+    let info = &layer.info;
     if info.hints.len() > MAX_LAYER_HINTS {
         return Err(HintingError::LimitExceeded { what: "hints on a layer", limit: MAX_LAYER_HINTS });
     }
-    info.hints.iter().enumerate().filter_map(|(i, h)| PsHint::from_hint(i, h).map(|r| r.map(|p| (i, p)))).collect()
+    let order = NodeOrder::of(layer);
+    info.hints.iter().enumerate().filter_map(|(i, h)| PsHint::from_hint(i, h, &order).map(|r| r.map(|p| (i, p)))).collect()
 }
 
 /// Replaces the layer's PostScript hints by `hints`, in order, at the place of the first old one
@@ -255,8 +259,11 @@ pub fn ps_hints(info: &LayerInfo) -> Result<Vec<(usize, PsHint)>, HintingError> 
 /// order. More than [`MAX_LAYER_HINTS`] in all is an error and changes nothing.
 ///
 /// New hints (no [`PsHint::source`]) take the family and syntax of the layer's stored hints, else
-/// format 3. Edges that are numbers must be finite; a ghost must be horizontal.
-pub fn set_ps_hints(info: &mut LayerInfo, hints: &[PsHint]) -> Result<(), HintingError> {
+/// format 3. Edges that are numbers must be finite; a ghost must be horizontal. Node references
+/// count in the model's order on `layer`'s paths as they are.
+pub fn set_ps_hints(layer: &mut Layer, hints: &[PsHint]) -> Result<(), HintingError> {
+    let order = NodeOrder::of(layer);
+    let info = &mut layer.info;
     for (i, h) in hints.iter().enumerate() {
         let edges = [Some(h.origin), h.other];
         if edges.iter().flatten().any(|e| matches!(e, Edge::Value(v) if !v.is_finite())) {
@@ -271,7 +278,7 @@ pub fn set_ps_hints(info: &mut LayerInfo, hints: &[PsHint]) -> Result<(), Hintin
     }
     let (family, syntax) = Syntax::of_layer(info);
     let new: Vec<Hint> =
-        hints.iter().map(|h| h.to_hint_in(family, h.source.as_ref().map(|v| Syntax::of_hint(family, v)).unwrap_or(syntax))).collect();
+        hints.iter().map(|h| h.to_hint_in(family, h.source.as_ref().map(|v| Syntax::of_hint(family, v)).unwrap_or(syntax), &order)).collect();
     splice(info, is_ps, new)
 }
 
@@ -328,7 +335,7 @@ mod tests {
     use std::sync::Arc;
 
     use fontcraft_model::plist::openstep::{self, Dialect};
-    use fontcraft_model::{Family, Font, Glyph, Hint, Layer, LayerInfo, Master};
+    use fontcraft_model::{Family, Font, Glyph, Hint, Layer, Master};
 
     use super::*;
     use crate::HintSettings;
@@ -344,8 +351,10 @@ mod tests {
         out
     }
 
-    fn info(hints: Vec<Hint>) -> LayerInfo {
-        LayerInfo { hints, ..LayerInfo::default() }
+    fn info(hints: Vec<Hint>) -> Layer {
+        let mut layer = Layer::new("m01", 500.0);
+        layer.info.hints = hints;
+        layer
     }
 
     // The ghost and stem forms of the format 3 sample (`alef-ar`, `A`), plus a non-hint.
@@ -398,14 +407,56 @@ type = Corner;
         assert_eq!((h[3].horizontal, h[3].origin, h[3].other), (false, Edge::Value(165.0), Some(Edge::Value(266.0))));
         assert_eq!(h[4].other, Some(Edge::Node(NodeRef::new(0, 7))));
         for (i, hint) in &typed {
-            let back = hint.to_hint(Family::Glyphs);
+            let back = hint.to_hint(Family::Glyphs, &NodeOrder::default());
             assert_eq!(text(&back.value), text(&stored[*i].value), "hint {i} is written back byte for byte");
         }
         // Writing the whole list back leaves the layer as it was.
         let mut layer = info(stored.clone());
         let list: Vec<PsHint> = typed.into_iter().map(|(_, h)| h).collect();
         set_ps_hints(&mut layer, &list).unwrap();
-        assert_eq!(layer.hints, stored);
+        assert_eq!(layer.info.hints, stored);
+    }
+
+    /// The format 3 sample's `A`: the file writes the closed path's start node (10, 608) last,
+    /// the model keeps it first.
+    #[test]
+    fn stored_indexes_count_in_file_order_and_typed_ones_in_model_order() {
+        use fontcraft_model::{Node, NodeKind, Path, Shape};
+
+        use crate::TtPoint;
+
+        let (l, o, c) = (NodeKind::Line, NodeKind::OffCurve, NodeKind::Curve);
+        let file =
+            [(10., 66., l), (92., -21., o), (338., -35., o), (439., 66., c), (578., 205., o), (522., 462., o), (439., 608., c), (10., 608., l)];
+        let mut nodes: Vec<Node> = file.iter().map(|&(x, y, k)| Node::new(x, y, k)).collect();
+        nodes.rotate_right(1);
+        let closed = Path::new(true, nodes);
+        let open = Path::new(false, vec![Node::new(100.0, 0.0, l), Node::new(200.0, 0.0, l)]);
+        let mut layer =
+            info(hints("({horizontal = 1; origin = (0,0); target = (0,7); type = Stem;}, {origin = (1,0); target = (1,1); type = Stem;})"));
+        layer.shapes = vec![Shape::Path(closed), Shape::Path(open)];
+        let stored = layer.info.hints.clone();
+
+        let typed = ps_hints(&layer).unwrap();
+        assert_eq!((typed[0].1.origin, typed[0].1.other), (Edge::Node(NodeRef::new(0, 1)), Some(Edge::Node(NodeRef::new(0, 0)))));
+        assert_eq!(typed[0].1.edges(&layer).unwrap(), (66.0, 608.0));
+        assert_eq!(typed[1].1.origin, Edge::Node(NodeRef::new(1, 0)), "an open path's indexes agree");
+        assert_eq!(typed[1].1.edges(&layer).unwrap(), (100.0, 200.0));
+
+        // Written afresh, the hints store the file's indexes again.
+        let fresh: Vec<PsHint> = typed.iter().map(|(_, h)| PsHint { source: None, ..h.clone() }).collect();
+        set_ps_hints(&mut layer, &fresh).unwrap();
+        let texts = |hints: &[Hint]| hints.iter().map(|h| text(&h.value).replace(char::is_whitespace, "")).collect::<Vec<_>>();
+        assert_eq!(texts(&layer.info.hints), texts(&stored));
+
+        // TrueType points, intersections included, convert alike; an index past the path's end
+        // stays as stored.
+        let order = NodeOrder::of(&layer);
+        let v = openstep::parse_value("(0,7,1,1)").unwrap();
+        let p = TtPoint::from_value(&v, &order).unwrap();
+        assert_eq!(p, TtPoint::Intersection { a: NodeRef::new(0, 0), b: NodeRef::new(1, 1) });
+        assert_eq!(text(&p.to_value(&order, None)), "(0,7,1,1)");
+        assert_eq!(NodeRef::from_value(&openstep::parse_value("(0,8)").unwrap(), &order), Some(NodeRef::new(0, 8)));
     }
 
     #[test]
@@ -417,10 +468,10 @@ type = Corner;
         list.push(PsHint::ghost(true, Edge::Value(778.0)));
         list.push(PsHint::stem(true, Edge::Node(NodeRef::new(1, 2)), Edge::Node(NodeRef::new(1, 5))));
         set_ps_hints(&mut layer, &list).unwrap();
-        let ghost = layer.hints[1].value.as_dict().unwrap();
+        let ghost = layer.info.hints[1].value.as_dict().unwrap();
         assert_eq!(ghost.get("place").and_then(Value::as_str), Some("{778, -20}"));
         assert_eq!(ghost.get("target").and_then(Value::as_str), Some("down"));
-        let stem = layer.hints[2].value.as_dict().unwrap();
+        let stem = layer.info.hints[2].value.as_dict().unwrap();
         assert_eq!(stem.get("origin").and_then(Value::as_str), Some("{1, 2}"));
         let keys: Vec<&str> = stem.entries.iter().map(|(k, _)| k.as_str()).collect();
         assert_eq!(keys, ["horizontal", "origin", "target", "type"], "keys in the reference's sorted order");
@@ -431,17 +482,17 @@ type = Corner;
     #[test]
     fn editing_one_edge_rewrites_only_what_changed() {
         let stored = hints("({horizontal = 1; place = (-46,58); type = Stem; zzz = kept;})");
-        let mut h = PsHint::from_hint(0, &stored[0]).unwrap().unwrap();
+        let mut h = PsHint::from_hint(0, &stored[0], &NodeOrder::default()).unwrap().unwrap();
         h.other = Some(Edge::Value(20.0));
-        let d = h.to_hint(Family::Glyphs).value.as_dict().cloned().unwrap();
+        let d = h.to_hint(Family::Glyphs, &NodeOrder::default()).value.as_dict().cloned().unwrap();
         assert_eq!(text(d.get("place").unwrap()), "(-46,66)");
         assert_eq!(d.get("zzz").and_then(Value::as_str), Some("kept"));
         // A linked edge whose node is gone becomes a number; the other edge stays linked.
         let stored = hints("({horizontal = 1; origin = (0,0); target = (0,7); type = Stem;})");
-        let mut h = PsHint::from_hint(0, &stored[0]).unwrap().unwrap();
+        let mut h = PsHint::from_hint(0, &stored[0], &NodeOrder::default()).unwrap().unwrap();
         h.other = Some(Edge::Value(120.0));
-        let back = h.to_hint(Family::Glyphs);
-        let again = PsHint::from_hint(0, &back).unwrap().unwrap();
+        let back = h.to_hint(Family::Glyphs, &NodeOrder::default());
+        let again = PsHint::from_hint(0, &back, &NodeOrder::default()).unwrap().unwrap();
         assert!(again.same_as(&h), "a stem with one linked and one numeric edge reads back the same");
         assert!(back.value.as_dict().unwrap().get("target").is_none());
     }
@@ -454,7 +505,7 @@ type = Corner;
         let mut layer = info(stored.clone());
         let two = [PsHint::stem(true, Edge::Value(0.0), Edge::Value(10.0)), PsHint::stem(false, Edge::Value(50.0), Edge::Value(90.0))];
         set_ps_hints(&mut layer, &two).unwrap();
-        let kinds: Vec<Option<&str>> = layer.hints.iter().map(Hint::kind).collect();
+        let kinds: Vec<Option<&str>> = layer.info.hints.iter().map(Hint::kind).collect();
         assert_eq!(kinds, [Some("Corner"), Some("Stem"), Some("Stem"), Some("TTSnap")]);
 
         let before = layer.clone();
@@ -465,7 +516,7 @@ type = Corner;
         assert_eq!(layer, before, "a refused write changes nothing");
 
         set_ps_hints(&mut layer, &[]).unwrap();
-        let kinds: Vec<Option<&str>> = layer.hints.iter().map(Hint::kind).collect();
+        let kinds: Vec<Option<&str>> = layer.info.hints.iter().map(Hint::kind).collect();
         assert_eq!(kinds, [Some("Corner"), Some("TTSnap")]);
     }
 
@@ -483,7 +534,7 @@ type = Corner;
     fn ufo_family_hints_carry_every_key_glyphslib_reads() {
         let mut layer = info(vec![Hint { family: Family::Ufo, value: openstep::parse_value("{type = Corner; name = x;}").unwrap() }]);
         set_ps_hints(&mut layer, &[PsHint::ghost(false, Edge::Node(NodeRef::new(0, 2)))]).unwrap();
-        let h = &layer.hints[1];
+        let h = &layer.info.hints[1];
         assert_eq!(h.family, Family::Ufo);
         let d = h.value.as_dict().unwrap();
         assert_eq!(d.get("horizontal"), Some(&Value::Bool(true)));

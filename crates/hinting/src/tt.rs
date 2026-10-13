@@ -26,12 +26,12 @@
 //! source's spellings survive a read and write of an unchanged instruction byte for byte.
 
 use fontcraft_model::plist::{Dict, Str, Value};
-use fontcraft_model::{Family, Glyph, Hint, Layer, LayerInfo};
+use fontcraft_model::{Family, Glyph, Hint, Layer};
 
 use crate::noderef::{Syntax, number, put, put_if_changed, read_flag, read_int, read_number, remove, type_is};
 use crate::ps::splice;
 use crate::settings::{DeltaDir, Deltas};
-use crate::{HintSettings, HintingError, MAX_DELTA_COLUMNS, MAX_DELTA_PPM, MAX_LAYER_HINTS, TtPoint};
+use crate::{HintSettings, HintingError, MAX_DELTA_COLUMNS, MAX_DELTA_PPM, MAX_LAYER_HINTS, NodeOrder, TtPoint};
 
 /// The `options` bit of a Stem instruction that belongs to a triple hint.
 pub const TRIPLE_FLAG: i64 = 128;
@@ -150,23 +150,24 @@ impl TtInstruction {
     /// Reads one stored hint; `None` when it is not a TrueType instruction or is detached from
     /// its points (see `attached_kind`). A Stem instruction
     /// of a triple hint reads with group 0 here; [`tt_instructions`] numbers the groups.
-    pub fn from_hint(index: usize, hint: &Hint) -> Option<Result<Self, HintingError>> {
+    pub fn from_hint(index: usize, hint: &Hint, order: &NodeOrder) -> Option<Result<Self, HintingError>> {
         let d = hint.value.as_dict()?;
         let kind = attached_kind(d)?;
-        Some(read(index, d, kind).map(|mut t| {
+        Some(read(index, d, kind, order).map(|mut t| {
             t.source = Some(hint.value.clone());
             t
         }))
     }
 
-    /// The stored value of this instruction, over [`TtInstruction::source`].
-    pub fn to_hint(&self, family: Family) -> Hint {
+    /// The stored value of this instruction on a layer whose node order is `order`, over
+    /// [`TtInstruction::source`].
+    pub fn to_hint(&self, family: Family, order: &NodeOrder) -> Hint {
         let syntax = match &self.source {
             Some(v) => Syntax::of_hint(family, v),
             None if family == Family::Ufo => Syntax::Ufo,
             None => Syntax::Glyphs3,
         };
-        self.to_hint_in(family, syntax)
+        self.to_hint_in(family, syntax, order)
     }
 
     /// Whether `self` and `other` say the same thing, their stored values aside. Triple groups
@@ -194,10 +195,10 @@ impl TtInstruction {
         }
     }
 
-    pub(crate) fn to_hint_in(&self, family: Family, syntax: Syntax) -> Hint {
+    pub(crate) fn to_hint_in(&self, family: Family, syntax: Syntax, order: &NodeOrder) -> Hint {
         let old = self.source.as_ref().and_then(|v| {
             let d = v.as_dict()?;
-            read(0, d, attached_kind(d)?).ok()
+            read(0, d, attached_kind(d)?, order).ok()
         });
         if let (Some(v), Some(old)) = (&self.source, &old)
             && old.same_as(self)
@@ -205,11 +206,11 @@ impl TtInstruction {
             return Hint { family, value: v.clone() };
         }
         let mut d = self.source.as_ref().and_then(|v| v.as_dict().cloned()).unwrap_or_default();
-        self.write(&mut d, old.as_ref(), syntax);
+        self.write(&mut d, old.as_ref(), syntax, order);
         Hint { family, value: Value::Dict(d) }
     }
 
-    fn write(&self, d: &mut Dict, old: Option<&TtInstruction>, syntax: Syntax) {
+    fn write(&self, d: &mut Dict, old: Option<&TtInstruction>, syntax: Syntax, order: &NodeOrder) {
         let ufo = syntax == Syntax::Ufo;
         if ufo && d.get("name").is_none() {
             put(d, "name", Value::String("".into()));
@@ -276,8 +277,8 @@ impl TtInstruction {
         let point = |d: &mut Dict, key: &str, p: Option<TtPoint>| match p {
             Some(p) => {
                 let like = d.get(key).cloned().or_else(|| syntax.example());
-                let v = p.to_value(like.as_ref());
-                put_if_changed(d, key, v, |x| TtPoint::from_value(x) == Some(p));
+                let v = p.to_value(order, like.as_ref());
+                put_if_changed(d, key, v, |x| TtPoint::from_value(x, order) == Some(p));
             }
             None => remove(d, key),
         };
@@ -368,7 +369,7 @@ pub(crate) fn is_tt(hint: &Hint) -> bool {
     hint.value.as_dict().and_then(attached_kind).is_some()
 }
 
-fn read(index: usize, d: &Dict, kind: TtKind) -> Result<TtInstruction, HintingError> {
+fn read(index: usize, d: &Dict, kind: TtKind, order: &NodeOrder) -> Result<TtInstruction, HintingError> {
     let bad = |message: String| HintingError::BadHint { index, message };
     let vertical = match d.get("horizontal") {
         Some(v) => read_flag(v).ok_or_else(|| bad("`horizontal` is not a flag".into()))?,
@@ -386,7 +387,7 @@ fn read(index: usize, d: &Dict, kind: TtKind) -> Result<TtInstruction, HintingEr
     };
     let point = |key: &str| -> Result<Option<TtPoint>, HintingError> {
         match d.get(key) {
-            Some(v) => TtPoint::from_value(v).map(Some).ok_or_else(|| bad(format!("`{key}` is not a point"))),
+            Some(v) => TtPoint::from_value(v, order).map(Some).ok_or_else(|| bad(format!("`{key}` is not a point"))),
             None => Ok(None),
         }
     };
@@ -493,16 +494,22 @@ pub fn delta_column_key(location: &[f64]) -> String {
 }
 
 /// The layer's TrueType instructions in execution order, each with its index in
-/// [`LayerInfo::hints`].
+/// [`fontcraft_model::LayerInfo::hints`].
 ///
 /// Stem instructions flagged as part of a triple hint get group ids 0, 1, 2… by threes in list
-/// order.
-pub fn tt_instructions(info: &LayerInfo) -> Result<Vec<(usize, TtInstruction)>, HintingError> {
+/// order. Node references count in the model's order (`noderef` module doc).
+pub fn tt_instructions(layer: &Layer) -> Result<Vec<(usize, TtInstruction)>, HintingError> {
+    let info = &layer.info;
     if info.hints.len() > MAX_LAYER_HINTS {
         return Err(HintingError::LimitExceeded { what: "hints on a layer", limit: MAX_LAYER_HINTS });
     }
-    let mut out: Vec<(usize, TtInstruction)> =
-        info.hints.iter().enumerate().filter_map(|(i, h)| TtInstruction::from_hint(i, h).map(|r| r.map(|t| (i, t)))).collect::<Result<_, _>>()?;
+    let order = NodeOrder::of(layer);
+    let mut out: Vec<(usize, TtInstruction)> = info
+        .hints
+        .iter()
+        .enumerate()
+        .filter_map(|(i, h)| TtInstruction::from_hint(i, h, &order).map(|r| r.map(|t| (i, t))))
+        .collect::<Result<_, _>>()?;
     let mut flagged = 0u32;
     for (_, t) in &mut out {
         if let TtKind::Stem { triple: Some(group), .. } = &mut t.kind {
@@ -519,8 +526,9 @@ pub fn tt_instructions(info: &LayerInfo) -> Result<Vec<(usize, TtInstruction)>, 
 ///
 /// Checked first: the reference points each type needs, delta cells at PPM 1 to
 /// [`MAX_DELTA_PPM`] in at most [`MAX_DELTA_COLUMNS`] columns. New instructions take the family and
-/// syntax of the layer's stored hints, else format 3.
-pub fn set_tt_instructions(info: &mut LayerInfo, instructions: &[TtInstruction]) -> Result<(), HintingError> {
+/// syntax of the layer's stored hints, else format 3. Node references count in the model's order
+/// on `layer`'s paths as they are.
+pub fn set_tt_instructions(layer: &mut Layer, instructions: &[TtInstruction]) -> Result<(), HintingError> {
     for (i, t) in instructions.iter().enumerate() {
         t.check_points(i)?;
         if let TtKind::Delta { cells } = &t.kind {
@@ -532,9 +540,11 @@ pub fn set_tt_instructions(info: &mut LayerInfo, instructions: &[TtInstruction])
             }
         }
     }
+    let order = NodeOrder::of(layer);
+    let info = &mut layer.info;
     let (family, syntax) = Syntax::of_layer(info);
     let new: Vec<Hint> =
-        instructions.iter().map(|t| t.to_hint_in(family, t.source.as_ref().map(|v| Syntax::of_hint(family, v)).unwrap_or(syntax))).collect();
+        instructions.iter().map(|t| t.to_hint_in(family, t.source.as_ref().map(|v| Syntax::of_hint(family, v)).unwrap_or(syntax), &order)).collect();
     splice(info, is_tt, new)
 }
 
@@ -550,7 +560,7 @@ pub fn tt_hint_layer<'a>(glyph: &'a Glyph, settings: &HintSettings, built: &'a L
 #[cfg(test)]
 mod tests {
     use fontcraft_model::plist::openstep::{self, Dialect};
-    use fontcraft_model::{Family, Hint, LayerInfo};
+    use fontcraft_model::{Family, Hint, Layer};
 
     use super::*;
     use crate::NodeRef;
@@ -566,8 +576,10 @@ mod tests {
         out
     }
 
-    fn info(hints: Vec<Hint>) -> LayerInfo {
-        LayerInfo { hints, ..LayerInfo::default() }
+    fn info(hints: Vec<Hint>) -> Layer {
+        let mut layer = Layer::new("m01", 500.0);
+        layer.info.hints = hints;
+        layer
     }
 
     fn node(p: usize, n: usize) -> TtPoint {
@@ -671,12 +683,16 @@ type = TopGhost;
         assert_eq!((t[7].origin, t[7].direction), (Some(TtPoint::Lsb), Direction::Horizontal));
 
         for (i, inst) in &typed {
-            assert_eq!(text(&inst.to_hint(Family::Glyphs).value), text(&stored[*i].value), "instruction {i} is written back byte for byte");
+            assert_eq!(
+                text(&inst.to_hint(Family::Glyphs, &NodeOrder::default()).value),
+                text(&stored[*i].value),
+                "instruction {i} is written back byte for byte"
+            );
         }
         let mut layer = info(stored.clone());
         let list: Vec<TtInstruction> = typed.into_iter().map(|(_, t)| t).collect();
         set_tt_instructions(&mut layer, &list).unwrap();
-        assert_eq!(layer.hints, stored);
+        assert_eq!(layer.info.hints, stored);
     }
 
     #[test]
@@ -692,18 +708,18 @@ type = TopGhost;
         cells.insert("{100, 0, 0, 0, 0, 0}".to_string(), [(12, DeltaDir::Down), (13, DeltaDir::Up)].into_iter().collect());
         let delta = TtInstruction::new(TtKind::Delta { cells }, Direction::Vertical, node(0, 3));
         let list = [snap, stem, interp, delta];
-        let mut layer = LayerInfo::default();
+        let mut layer = Layer::new("m01", 500.0);
         set_tt_instructions(&mut layer, &list).unwrap();
 
-        let snap = layer.hints[0].value.as_dict().unwrap();
+        let snap = layer.info.hints[0].value.as_dict().unwrap();
         assert_eq!(snap.get("options").and_then(read_int), Some(3));
         assert_eq!(snap.get("stem").and_then(read_int), Some(2));
         assert_eq!(text(snap.get("origin").unwrap()), "(0,4)");
-        let stem = layer.hints[1].value.as_dict().unwrap();
+        let stem = layer.info.hints[1].value.as_dict().unwrap();
         assert_eq!(stem.get("options").and_then(read_int), Some(4 | TRIPLE_FLAG));
         assert_eq!(stem.get("target").and_then(Value::as_str), Some("rsb"));
         assert!(stem.get("horizontal").is_none() && stem.get("stem").is_none());
-        let delta = layer.hints[3].value.as_dict().unwrap();
+        let delta = layer.info.hints[3].value.as_dict().unwrap();
         assert_eq!(text(delta.get("settings").unwrap()), "{\ndeltaV = {\n\"{100, 0, 0, 0, 0, 0}\" = {\n\"12\" = -8;\n\"13\" = 8;\n};\n};\n}");
 
         let reread: Vec<TtInstruction> = tt_instructions(&layer).unwrap().into_iter().map(|(_, t)| t).collect();
@@ -714,10 +730,10 @@ type = TopGhost;
     #[test]
     fn changing_the_rounding_keeps_other_option_bits_and_other_keys() {
         let stored = hints("({horizontal = 1; options = 132; origin = (0,1); target = (0,2); type = TTStem; zzz = 1;})");
-        let mut t = TtInstruction::from_hint(0, &stored[0]).unwrap().unwrap();
+        let mut t = TtInstruction::from_hint(0, &stored[0], &NodeOrder::default()).unwrap().unwrap();
         assert_eq!((t.rounding, &t.kind), (Rounding::NoRounding, &TtKind::Stem { stem: StemRef::Auto, triple: Some(0) }));
         t.rounding = Rounding::Up;
-        let d = t.to_hint(Family::Glyphs).value.as_dict().cloned().unwrap();
+        let d = t.to_hint(Family::Glyphs, &NodeOrder::default()).value.as_dict().cloned().unwrap();
         assert_eq!(d.get("options").and_then(read_int), Some(129));
         assert!(d.get("zzz").is_some());
     }
@@ -748,7 +764,7 @@ type = TopGhost;
         cells.insert("x".to_string(), [(300, DeltaDir::Up)].into_iter().collect());
         let delta = TtInstruction::new(TtKind::Delta { cells }, Direction::Vertical, node(0, 2));
         assert!(set_tt_instructions(&mut layer, &[delta]).is_err());
-        assert_eq!(layer.hints, stored);
+        assert_eq!(layer.info.hints, stored);
 
         let bad = hints("({origin = (0,1); options = 5; type = TTSnap;})");
         assert!(matches!(tt_instructions(&info(bad)), Err(HintingError::BadHint { .. })));
@@ -764,7 +780,7 @@ type = TopGhost;
         let mut list: Vec<TtInstruction> = typed.into_iter().map(|(_, t)| t).collect();
         list.push(TtInstruction::new(TtKind::Snap { zone: ZoneRef::Auto }, Direction::Vertical, node(1, 1)));
         set_tt_instructions(&mut layer, &list).unwrap();
-        let new = layer.hints[2].value.as_dict().unwrap();
+        let new = layer.info.hints[2].value.as_dict().unwrap();
         assert_eq!((new.get("type").and_then(Value::as_str), new.get("origin").and_then(Value::as_str)), (Some("Anchor"), Some("{1, 1}")));
     }
 
@@ -778,7 +794,7 @@ type = TopGhost;
         let typed = tt_instructions(&layer).unwrap();
         assert_eq!(typed.iter().map(|(i, _)| *i).collect::<Vec<_>>(), [2]);
         set_tt_instructions(&mut layer, &[]).unwrap();
-        assert_eq!(layer.hints, stored[..2].to_vec(), "only the attached instruction is replaced");
+        assert_eq!(layer.info.hints, stored[..2].to_vec(), "only the attached instruction is replaced");
     }
 
     #[test]

@@ -33,7 +33,9 @@ use std::sync::Arc;
 
 use fontcraft_model::{Font, Layer, Node, NodeKind, Path, Shape};
 
-use crate::{Edge, HintingError, NodeRef, PsHint, TtInstruction, TtKind, TtPoint, ps_hints, set_ps_hints, set_tt_instructions, tt_instructions};
+use crate::{
+    Edge, HintingError, NodeOrder, NodeRef, PsHint, TtInstruction, TtKind, TtPoint, ps_hints, set_ps_hints, set_tt_instructions, tt_instructions,
+};
 
 /// How far (font units, each axis) step 2 looks for a node that an edit rounded to the grid.
 pub const NEAR: f64 = 0.5;
@@ -123,8 +125,8 @@ pub fn remap_layer(old: &Layer, new: &Layer, glyph: &str, mode: RemapMode, repor
     if old_paths.len() == new_paths.len() && old_paths.iter().zip(&new_paths).all(|(a, b)| same_nodes(a, b)) {
         return None;
     }
-    let ps = ps_hints(&old.info).ok()?;
-    let tt = tt_instructions(&old.info).ok()?;
+    let ps = ps_hints(old).ok()?;
+    let tt = tt_instructions(old).ok()?;
     let mut refs = BTreeSet::new();
     for (_, h) in &ps {
         refs.extend([Some(h.origin), h.other].into_iter().flatten().filter_map(|e| match e {
@@ -153,7 +155,11 @@ pub fn remap_layer(old: &Layer, new: &Layer, glyph: &str, mode: RemapMode, repor
     let map: BTreeMap<NodeRef, Option<NodeRef>> = refs.iter().filter_map(|r| m.locate(*r).map(|found| (*r, found))).collect();
     let overlap = mode == RemapMode::OverlapRemoval;
     let has_intersections = tt.iter().any(|(_, t)| t.points().iter().any(|p| matches!(p, TtPoint::Intersection { .. })));
-    if map.iter().all(|(k, v)| *v == Some(*k)) && !(overlap && has_intersections) {
+    // The stored values count in file order: a reference to the start node of a closed path whose
+    // node count changed is stored differently although its model index stayed.
+    let (old_order, new_order) = (NodeOrder::of(old), NodeOrder::of(new));
+    let reordered = refs.iter().any(|r| old_order.closed_len(r.path) != new_order.closed_len(r.path));
+    if map.iter().all(|(k, v)| *v == Some(*k)) && !(overlap && has_intersections) && !reordered {
         return None;
     }
 
@@ -226,15 +232,18 @@ pub fn remap_layer(old: &Layer, new: &Layer, glyph: &str, mode: RemapMode, repor
         }
     }
 
-    if !ps_changed && !tt_changed {
+    if !ps_changed && !tt_changed && !reordered {
         return None;
     }
     let mut out = new.clone();
-    if ps_changed {
-        set_ps_hints(&mut out.info, &ps_new).ok()?;
+    if ps_changed || reordered {
+        set_ps_hints(&mut out, &ps_new).ok()?;
     }
-    if tt_changed {
-        set_tt_instructions(&mut out.info, &kept).ok()?;
+    if tt_changed || reordered {
+        set_tt_instructions(&mut out, &kept).ok()?;
+    }
+    if out.info.hints == new.info.hints {
+        return None;
     }
     report.removed.extend(local.removed);
     report.unlinked += local.unlinked;

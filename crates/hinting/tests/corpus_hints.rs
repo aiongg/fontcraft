@@ -6,7 +6,7 @@
 
 use std::path::{Path, PathBuf};
 
-use fontcraft_hinting::{PsHint, TtInstruction};
+use fontcraft_hinting::{NodeOrder, PsHint, TtInstruction};
 use fontcraft_model::plist::Value;
 use fontcraft_model::plist::openstep::{self, Dialect};
 use fontcraft_model::{Family, Hint};
@@ -73,32 +73,34 @@ fn corpus_hints_parse_and_write_back_unchanged() {
         let Ok(doc) = openstep::parse(&source) else { continue };
         let mut found = Vec::new();
         stored_hints(&doc.root, &mut found);
+        // Values alone, without their layers: the read and write convert node indexes alike.
+        let order = NodeOrder::default();
         for value in found {
             let hint = Hint { family: Family::Glyphs, value: value.clone() };
             let at = format!("{}: {}", path.display(), text(value).replace('\n', " "));
-            if let Some(r) = PsHint::from_hint(0, &hint) {
+            if let Some(r) = PsHint::from_hint(0, &hint, &order) {
                 ps += 1;
                 match r {
                     Ok(h) => {
-                        if text(&h.to_hint(Family::Glyphs).value) != text(value) {
+                        if text(&h.to_hint(Family::Glyphs, &order).value) != text(value) {
                             failures.push(format!("{at}: written back differently"));
                         }
-                        let fresh = PsHint { source: None, ..h.clone() }.to_hint(Family::Glyphs);
-                        if !PsHint::from_hint(0, &fresh).and_then(Result::ok).is_some_and(|again| again.same_as(&h)) {
+                        let fresh = PsHint { source: None, ..h.clone() }.to_hint(Family::Glyphs, &order);
+                        if !PsHint::from_hint(0, &fresh, &order).and_then(Result::ok).is_some_and(|again| again.same_as(&h)) {
                             failures.push(format!("{at}: written afresh, it reads back differently"));
                         }
                     }
                     Err(e) => failures.push(format!("{at}: {e}")),
                 }
-            } else if let Some(r) = TtInstruction::from_hint(0, &hint) {
+            } else if let Some(r) = TtInstruction::from_hint(0, &hint, &order) {
                 tt += 1;
                 match r {
                     Ok(t) => {
-                        if text(&t.to_hint(Family::Glyphs).value) != text(value) {
+                        if text(&t.to_hint(Family::Glyphs, &order).value) != text(value) {
                             failures.push(format!("{at}: written back differently"));
                         }
-                        let fresh = TtInstruction { source: None, ..t.clone() }.to_hint(Family::Glyphs);
-                        if !TtInstruction::from_hint(0, &fresh).and_then(Result::ok).is_some_and(|again| again.same_as(&t)) {
+                        let fresh = TtInstruction { source: None, ..t.clone() }.to_hint(Family::Glyphs, &order);
+                        if !TtInstruction::from_hint(0, &fresh, &order).and_then(Result::ok).is_some_and(|again| again.same_as(&t)) {
                             failures.push(format!("{at}: written afresh, it reads back differently"));
                         }
                     }

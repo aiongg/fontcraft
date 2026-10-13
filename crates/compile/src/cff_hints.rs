@@ -66,7 +66,7 @@ pub fn manual_hints(font: &Font, settings: &HintSettings, name: &str, path: &[Pa
     let glyph = font.glyph(name)?;
     let built = glyph.layer(&settings.master)?;
     let source = ps_hint_layer(font, glyph, settings, built)?;
-    let hints = match ps_hints(&source.info) {
+    let hints = match ps_hints(source) {
         Ok(h) => h,
         Err(e) => {
             warnings.push(format!("glyph `{name}`: its PostScript hints cannot be read ({e}); it was exported without hints"));

@@ -8,7 +8,8 @@ use std::sync::Arc;
 use fontcraft_engine::Session;
 use fontcraft_engine::model::{Layer, Node, NodeKind, Path, Shape};
 use fontcraft_hinting::{
-    Direction, Edge, NodeRef, PsHint, StemRef, TtInstruction, TtKind, TtPoint, ZoneRef, ps_hints, set_ps_hints, set_tt_instructions, tt_instructions,
+    Direction, Edge, NodeOrder, NodeRef, PsHint, StemRef, TtInstruction, TtKind, TtPoint, ZoneRef, ps_hints, set_ps_hints, set_tt_instructions,
+    tt_instructions,
 };
 use serde_json::{Value, json};
 
@@ -31,8 +32,8 @@ fn session(paths: Vec<Path>, ps: &[PsHint], tt: &[TtInstruction]) -> Session {
         let mut g = font.glyph_mut("I")?;
         let layer = g.layer_mut("m01").unwrap();
         layer.shapes = paths.into_iter().map(Shape::Path).collect();
-        set_ps_hints(&mut layer.info, ps).unwrap();
-        set_tt_instructions(&mut layer.info, tt).unwrap();
+        set_ps_hints(layer, ps).unwrap();
+        set_tt_instructions(layer, tt).unwrap();
         Ok(())
     })
     .unwrap();
@@ -44,11 +45,11 @@ fn layer(s: &Session) -> Layer {
 }
 
 fn ps(s: &Session) -> Vec<PsHint> {
-    ps_hints(&layer(s).info).unwrap().into_iter().map(|(_, h)| h).collect()
+    ps_hints(&layer(s)).unwrap().into_iter().map(|(_, h)| h).collect()
 }
 
 fn tt(s: &Session) -> Vec<TtInstruction> {
-    tt_instructions(&layer(s).info).unwrap().into_iter().map(|(_, t)| t).collect()
+    tt_instructions(&layer(s)).unwrap().into_iter().map(|(_, t)| t).collect()
 }
 
 /// Where a TrueType node point lies on the current outline.
@@ -88,6 +89,19 @@ fn inserting_a_node_before_a_linked_one_shifts_the_reference() {
     assert_eq!((h.origin, h.other), (node(0, 0), Some(node(0, 4))));
     assert_eq!(tt(&s)[0].target, tt_node(0, 3));
     assert_eq!(tt_place(&s, tt(&s)[0].target), (200.0, 700.0));
+}
+
+/// Stored values count a closed path's start node last, so a reference to it is stored anew when
+/// the path gains a node, although it stays on the same node.
+#[test]
+fn a_reference_to_the_start_node_follows_the_node_count_of_its_closed_path() {
+    let mut s = session(vec![Path::rect(100.0, 0.0, 200.0, 700.0)], &[PsHint::stem(false, node(0, 0), node(0, 1))], &[]);
+    run_undoable(&mut s, "path.insertNode", json!({"glyph": "I", "segment": [0, 2]}));
+    let h = &ps(&s)[0];
+    assert_eq!((h.origin, h.other), (node(0, 0), Some(node(0, 1))));
+    assert_eq!(h.edges(&layer(&s)).unwrap(), (100.0, 200.0));
+    let stored = layer(&s).info.hints[0].value.as_dict().unwrap().get("origin").cloned().unwrap();
+    assert_eq!(NodeRef::from_value(&stored, &NodeOrder::default()), Some(NodeRef::new(0, 4)), "the start node is stored last");
 }
 
 #[test]
@@ -237,9 +251,8 @@ fn upkeep_per_edit_on_inter() {
         let mut f = plain.clone();
         let mut g = f.glyphs.get_mut("n").unwrap();
         let layer = &mut g.layers[0];
-        set_ps_hints(&mut layer.info, &[PsHint::stem(true, node(0, 2), node(0, 5))]).unwrap();
-        set_tt_instructions(&mut layer.info, &[TtInstruction::new(TtKind::Snap { zone: ZoneRef::Auto }, Direction::Vertical, tt_node(0, 3))])
-            .unwrap();
+        set_ps_hints(layer, &[PsHint::stem(true, node(0, 2), node(0, 5))]).unwrap();
+        set_tt_instructions(layer, &[TtInstruction::new(TtKind::Snap { zone: ZoneRef::Auto }, Direction::Vertical, tt_node(0, 3))]).unwrap();
         drop(g);
         f
     };

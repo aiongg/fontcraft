@@ -52,8 +52,8 @@ fn hinted() -> Session {
             let mut g = font.glyph_mut(name)?;
             let master = g.layers.first().map(|l| l.id.clone()).unwrap();
             let layer = g.layer_mut(&master).unwrap();
-            set_ps_hints(&mut layer.info, &ps).unwrap();
-            set_tt_instructions(&mut layer.info, &tt).unwrap();
+            set_ps_hints(layer, &ps).unwrap();
+            set_tt_instructions(layer, &tt).unwrap();
         }
         Ok(())
     })
@@ -70,13 +70,13 @@ fn dangling(s: &Session) -> Option<String> {
                     continue;
                 }
                 let mut refs: Vec<NodeRef> = Vec::new();
-                for (_, h) in ps_hints(&layer.info).unwrap_or_default() {
+                for (_, h) in ps_hints(layer).unwrap_or_default() {
                     refs.extend([Some(h.origin), h.other].into_iter().flatten().filter_map(|e| match e {
                         Edge::Node(r) => Some(r),
                         Edge::Value(_) => None,
                     }));
                 }
-                for (_, t) in tt_instructions(&layer.info).unwrap_or_default() {
+                for (_, t) in tt_instructions(layer).unwrap_or_default() {
                     for p in t.points() {
                         match p {
                             TtPoint::Node(r) => refs.push(r),

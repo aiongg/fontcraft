@@ -1,11 +1,19 @@
 //! Node references: how hints and instructions point at nodes of a layer.
 //!
-//! The source's form is kept: a (path, node) pair of indexes. `path` counts the layer's paths in
-//! shape order, components and other shapes skipped, as glyphsLib's `_find_node_by_indices`
-//! reads them (`layer.paths`); every node reference of the format samples resolves this way. A
-//! reference is checked against the layer before use; a dangling one is
-//! [`HintingError::DanglingNode`], never an index panic. Rows: `hinting.ps.manual.linkOnDrop`,
-//! `hinting.tt.instructions.addFromSelection`.
+//! A reference is a (path, node) pair of indexes. `path` counts the layer's paths in shape order,
+//! components and other shapes skipped, as glyphsLib's `_find_node_by_indices` reads them
+//! (`layer.paths`); every node reference of the format samples resolves this way. A reference is
+//! checked against the layer before use; a dangling one is [`HintingError::DanglingNode`], never
+//! an index panic. Rows: `hinting.ps.manual.linkOnDrop`, `hinting.tt.instructions.addFromSelection`.
+//!
+//! Two node orders meet here. Stored hint values count nodes in the file's order: a closed path's
+//! start node comes last, as `.glyphs` files write it and as glyphsLib copies the indexes into a
+//! UFO glyph's lib. The model keeps a closed path's start node first, so stored node `k` of a
+//! closed path of `n` nodes is the model's node `(k + 1) % n`; on an open path the orders agree.
+//! The stored values stay in file order in every format (so they travel between formats
+//! unchanged, as corner hints do); a [`NodeRef`] always counts in the model's order. [`NodeOrder`]
+//! converts when a hint is read from or written to its stored value. A stored index past the end
+//! of its path is kept as it is, so it still dangles.
 //!
 //! Stored forms (the format specifications of the GlyphsSDK and the format samples):
 //!
@@ -57,17 +65,68 @@ impl NodeRef {
         self.resolve(layer).ok_or(HintingError::DanglingNode { path: self.path, node: self.node })
     }
 
-    /// Reads the stored form (`"{0, 3}"` in format 2, `(0, 3)` in format 3).
-    pub fn from_value(v: &Value) -> Option<Self> {
+    /// Reads the stored form (`"{0, 3}"` in format 2, `(0, 3)` in format 3), in file order on the
+    /// layer whose node order is `order`.
+    pub fn from_value(v: &Value, order: &NodeOrder) -> Option<Self> {
         match index_list(v)?.as_slice() {
-            [path, node] => Some(Self::new(*path, *node)),
+            [path, node] => Some(order.to_model(Self::new(*path, *node))),
             _ => None,
         }
     }
 
-    /// The stored form, in the syntax of `like` (the value it replaces) when given.
-    pub fn to_value(&self, like: Option<&Value>) -> Value {
-        Syntax::of(like).indexes(&[self.path, self.node])
+    /// The stored form, in file order on the layer whose node order is `order`, in the syntax of
+    /// `like` (the value it replaces) when given.
+    pub fn to_value(&self, order: &NodeOrder, like: Option<&Value>) -> Value {
+        let r = order.to_file(*self);
+        Syntax::of(like).indexes(&[r.path, r.node])
+    }
+}
+
+/// A layer's node order, to convert node references between the stored (file) order and the
+/// model's (module doc). The default converts nothing: a layer without closed paths.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct NodeOrder {
+    /// Per path (paths only, in shape order): its node count when it is closed, else 0.
+    closed: Vec<usize>,
+}
+
+impl NodeOrder {
+    /// The node order of a layer's paths.
+    pub fn of(layer: &Layer) -> Self {
+        Self::of_shapes(&layer.shapes)
+    }
+
+    /// The node order of a list of shapes (a layer's or its background's).
+    pub fn of_shapes(shapes: &[Shape]) -> Self {
+        let closed = shapes
+            .iter()
+            .filter_map(|s| match s {
+                Shape::Path(p) => Some(if p.closed { p.nodes.len() } else { 0 }),
+                _ => None,
+            })
+            .collect();
+        Self { closed }
+    }
+
+    /// The node count of closed path `path`; `None` for an open path or one that does not exist.
+    pub fn closed_len(&self, path: usize) -> Option<usize> {
+        self.closed.get(path).copied().filter(|n| *n > 0)
+    }
+
+    /// A reference read in file order, in the model's order.
+    pub fn to_model(&self, r: NodeRef) -> NodeRef {
+        match self.closed_len(r.path) {
+            Some(n) if r.node < n => NodeRef::new(r.path, (r.node + 1) % n),
+            _ => r,
+        }
+    }
+
+    /// A reference in the model's order, in file order.
+    pub fn to_file(&self, r: NodeRef) -> NodeRef {
+        match self.closed_len(r.path) {
+            Some(n) if r.node < n => NodeRef::new(r.path, (r.node + n - 1) % n),
+            _ => r,
+        }
     }
 }
 
@@ -106,24 +165,33 @@ pub enum TtPoint {
 }
 
 impl TtPoint {
-    /// Reads the stored form: `(path, node)`, a 4-tuple, `lsb` or `rsb`.
-    pub fn from_value(v: &Value) -> Option<Self> {
+    /// Reads the stored form: `(path, node)`, a 4-tuple, `lsb` or `rsb`; node indexes in file
+    /// order on the layer whose node order is `order`.
+    pub fn from_value(v: &Value, order: &NodeOrder) -> Option<Self> {
         if let Some(side) = side_bearing(v) {
             return Some(side);
         }
+        let at = |path: usize, node: usize| order.to_model(NodeRef::new(path, node));
         match index_list(v)?.as_slice() {
-            [path, node] => Some(TtPoint::Node(NodeRef::new(*path, *node))),
-            [p1, n1, p2, n2] => Some(TtPoint::Intersection { a: NodeRef::new(*p1, *n1), b: NodeRef::new(*p2, *n2) }),
+            [path, node] => Some(TtPoint::Node(at(*path, *node))),
+            [p1, n1, p2, n2] => Some(TtPoint::Intersection { a: at(*p1, *n1), b: at(*p2, *n2) }),
             _ => None,
         }
     }
 
-    /// The stored form, in the syntax of `like` when given.
-    pub fn to_value(&self, like: Option<&Value>) -> Value {
+    /// The stored form, node indexes in file order on the layer whose node order is `order`, in
+    /// the syntax of `like` when given.
+    pub fn to_value(&self, order: &NodeOrder, like: Option<&Value>) -> Value {
         let syntax = Syntax::of(like);
         match self {
-            TtPoint::Node(r) => syntax.indexes(&[r.path, r.node]),
-            TtPoint::Intersection { a, b } => syntax.indexes(&[a.path, a.node, b.path, b.node]),
+            TtPoint::Node(r) => {
+                let r = order.to_file(*r);
+                syntax.indexes(&[r.path, r.node])
+            }
+            TtPoint::Intersection { a, b } => {
+                let (a, b) = (order.to_file(*a), order.to_file(*b));
+                syntax.indexes(&[a.path, a.node, b.path, b.node])
+            }
             TtPoint::Lsb => syntax.word("lsb"),
             TtPoint::Rsb => syntax.word("rsb"),
         }

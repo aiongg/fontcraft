@@ -54,7 +54,7 @@ pub use error::{
     HintingError, MAX_CONTROL_LINES, MAX_CONTROL_TEXT, MAX_CVT_ENTRIES, MAX_DELTA_COLUMNS, MAX_DELTA_PPM, MAX_INSTRUCTOR_PPM, MAX_LAYER_HINTS,
     MAX_PS_STEMS_WRITTEN, MAX_SOURCE_STEMS, MAX_SOURCE_ZONES, MAX_TT_STEMS, MAX_TT_ZONES, MIN_INSTRUCTOR_PPM,
 };
-pub use noderef::{Edge, NodeRef, TtPoint};
+pub use noderef::{Edge, NodeOrder, NodeRef, TtPoint};
 pub use point_map::{PointMap, VecPointMap};
 pub use ps::{PsHint, PsHintKind, ps_hints, set_ps_hints};
 pub use remap::{RemapMode, RemapReport, remap_after_edit};
@@ -68,14 +68,14 @@ pub use validate::{HintFinding, Severity, validate_font_hints};
 
 #[cfg(test)]
 mod tests {
-    use fontcraft_model::LayerInfo;
+    use fontcraft_model::Layer;
 
     use crate::{ps_hints, tt_instructions};
 
     #[test]
     fn a_layer_without_hints_has_no_typed_hints() {
-        let info = LayerInfo::default();
-        assert!(ps_hints(&info).map(|h| h.is_empty()).unwrap_or(false));
-        assert!(tt_instructions(&info).map(|h| h.is_empty()).unwrap_or(false));
+        let layer = Layer::new("m01", 500.0);
+        assert!(ps_hints(&layer).map(|h| h.is_empty()).unwrap_or(false));
+        assert!(tt_instructions(&layer).map(|h| h.is_empty()).unwrap_or(false));
     }
 }
