@@ -990,6 +990,8 @@ effect = "hinting"
 summary = "In TrueType export, leaves out every manual stem hint linked to a vertical stem defined in TTFStems. Suits subpixel-rendering targets and small web fonts; no effect on the TrueType autohinter or on PostScript hinting."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "M10.18, crates/hinting/src/tt_glyph.rs: horizontal Stem instructions whose TT stem (named, or chosen by Auto) is a vertical stem are left out of the glyph program; horizontal Stems set to No Stem and the other horizontal instructions stay. Documented, not yet observed."
+guesses = ["A horizontal Stem instruction set to No Stem stays under Ignore Vertical Hints, since it is linked to no stem definition; the reference app would settle it."]
 
 [[parameter]]
 name = "Import Font"
@@ -2086,6 +2088,8 @@ effect = "hinting"
 summary = "Normally manual hinting keeps the angle of a slanted stem intact where a hinted stem crosses it. Setting this drops that protection (no projection onto freedom vectors), giving smaller hinting code."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "M10.18, crates/hinting/src/tt_glyph.rs: without the parameter, a point an instruction moves whose contour neighbours are one flat line and one slanted straight line moves along the slanted line (SFVTL), and the freedom vector returns to the axis afterwards; with it, every point moves along the axis. Documented, not yet observed."
+guesses = ["Diagonals are preserved for a moved point with exactly one flat neighbour and one straight slanted neighbour that runs at least a quarter of its length along the hinting direction; the reference app would settle which points it applies to, by comparing an exported A's crossbar points at small sizes."]
 
 [[parameter]]
 name = "TTFFamilyZonesThreshold"

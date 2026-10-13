@@ -34,6 +34,9 @@
 //! | [`FN_ZONE_SNAP`] | point, zone position, zone fit | the point to the zone's row, plus its own rounded overshoot when overshoots show |
 //! | [`FN_STEM`] | origin, target, stem width (−1: none), stem fit (−1: none), mode | the target at the stem's distance from the origin's current position |
 //! | [`FN_POINT_DELTA`] | point, ppm, amount | at that size, the point moved by the amount |
+//! | [`FN_POINT_ROUND`] | point, mode | the point rounded by the mode: nearest, up, down, kept (touched only) or nearest under GDI ClearType only |
+//! | [`FN_ZONE_DISTANCE`] | point, zone position, zone fit | the point at its rounded original distance from the zone's row |
+//! | [`FN_TRIPLE`] | hi1, lo2, hi2, lo3, hi3 | a triple hint: the middle stem (lo2, hi2), then the upper one (lo3, hi3), pushed up until at least a pixel separates each from the one below; `hi1` is the lower stem's upper edge |
 //!
 //! Amounts and positions on the stack are 26.6 pixels (64 = one pixel). Stem modes are
 //! [`STEM_ROUND`] (the fitted width, or the rounded distance without a stem), [`STEM_UP`],
@@ -53,8 +56,11 @@ pub const FN_CVT_DELTA: u8 = 3;
 pub const FN_ZONE_SNAP: u8 = 4;
 pub const FN_STEM: u8 = 5;
 pub const FN_POINT_DELTA: u8 = 6;
+pub const FN_POINT_ROUND: u8 = 7;
+pub const FN_ZONE_DISTANCE: u8 = 8;
+pub const FN_TRIPLE: u8 = 9;
 /// Functions `fpgm` defines.
-pub const FUNCTION_COUNT: u16 = 7;
+pub const FUNCTION_COUNT: u16 = 10;
 
 /// Storage set by `prep`: 1 when overshoots show at this size.
 pub const S_SHOW_OVERSHOOTS: u8 = 0;
@@ -67,6 +73,11 @@ const S_WIDTH: u8 = 3;
 const S_FIT: u8 = 4;
 const S_MODE: u8 = 5;
 const S_NEGATIVE: u8 = 6;
+// Locals of `FN_TRIPLE`.
+const S_LO2: u8 = 7;
+const S_HI2: u8 = 8;
+const S_LO3: u8 = 9;
+const S_HI3: u8 = 10;
 
 /// `FN_STEM` modes.
 pub const STEM_ROUND: u8 = 0;
@@ -451,6 +462,135 @@ POP[ ]
 POP[ ]
 EIF[ ]
 ENDF[ ]
+
+; {FN_POINT_ROUND}: point mode
+PUSH {FN_POINT_ROUND}
+FDEF[ ]
+DUP[ ]
+PUSH {STEM_GDI_ONLY}
+EQ[ ]
+IF[ ]
+POP[ ]
+PUSH {S_GDI}
+RS[ ]
+IF[ ]
+PUSH {STEM_ROUND}
+ELSE[ ]
+PUSH {STEM_NO_ROUNDING}
+EIF[ ]
+EIF[ ]
+DUP[ ]
+PUSH {STEM_NO_ROUNDING}
+EQ[ ]
+IF[ ]
+POP[ ]
+MDAP[0]
+ELSE[ ]
+SWAP[ ]
+DUP[ ]
+GC[0]
+ROLL[ ]
+DUP[ ]
+PUSH {STEM_UP}
+EQ[ ]
+IF[ ]
+POP[ ]
+CEILING[ ]
+ELSE[ ]
+PUSH {STEM_DOWN}
+EQ[ ]
+IF[ ]
+FLOOR[ ]
+ELSE[ ]
+PUSH {FN_ROUND}
+CALL[ ]
+EIF[ ]
+EIF[ ]
+SCFS[ ]
+EIF[ ]
+ENDF[ ]
+
+; {FN_ZONE_DISTANCE}: point position fit
+PUSH {FN_ZONE_DISTANCE}
+FDEF[ ]
+RCVT[ ]
+SWAP[ ]
+RCVT[ ]
+PUSH 3
+CINDEX[ ]
+GC[1]
+SWAP[ ]
+SUB[ ]
+PUSH {FN_ROUND}
+CALL[ ]
+ADD[ ]
+SCFS[ ]
+ENDF[ ]
+
+; {FN_TRIPLE}: hi1 lo2 hi2 lo3 hi3
+PUSH {FN_TRIPLE}
+FDEF[ ]
+PUSH {S_HI3}
+SWAP[ ]
+WS[ ]
+PUSH {S_LO3}
+SWAP[ ]
+WS[ ]
+PUSH {S_HI2}
+SWAP[ ]
+WS[ ]
+PUSH {S_LO2}
+SWAP[ ]
+WS[ ]
+; what the middle stem must rise: one pixel less the gap above the lower stem
+GC[0]
+PUSH {S_LO2}
+RS[ ]
+GC[0]
+SUB[ ]
+PUSH 64
+ADD[ ]
+DUP[ ]
+PUSH 0
+GT[ ]
+IF[ ]
+PUSH {S_LO2}
+RS[ ]
+PUSH {S_HI2}
+RS[ ]
+ROLL[ ]
+PUSH 2
+SLOOP[ ]
+SHPIX[ ]
+ELSE[ ]
+POP[ ]
+EIF[ ]
+; the same for the upper stem over the middle one
+PUSH {S_HI2}
+RS[ ]
+GC[0]
+PUSH {S_LO3}
+RS[ ]
+GC[0]
+SUB[ ]
+PUSH 64
+ADD[ ]
+DUP[ ]
+PUSH 0
+GT[ ]
+IF[ ]
+PUSH {S_LO3}
+RS[ ]
+PUSH {S_HI3}
+RS[ ]
+ROLL[ ]
+PUSH 2
+SLOOP[ ]
+SHPIX[ ]
+ELSE[ ]
+POP[ ]
+EIF[ ]
+ENDF[ ]
 "
     )
 }
@@ -796,7 +936,7 @@ mod tests {
         let family: Vec<_> = s.tt_zones.iter().map(|z| zone(&z.name, z.position + 10.0, z.size)).collect();
         let p = font_programs(&s, &family, COLUMN).unwrap();
         assert_eq!(p.warnings.len(), 2, "{:?}", p.warnings);
-        assert_eq!((p.limits.max_function_defs, p.limits.max_storage, p.limits.max_twilight_points), (FUNCTION_COUNT, 7, 0));
+        assert_eq!((p.limits.max_function_defs, p.limits.max_storage, p.limits.max_twilight_points), (FUNCTION_COUNT, 11, 0));
         assert_eq!(usize::from(p.layout.len), p.cvt.len());
         assert_eq!(p.layout.zone_at(-16.0), Some(0), "TTFBlueFuzz widens the span by 1");
         assert_eq!(p.layout.zone_at(-17.0), None);

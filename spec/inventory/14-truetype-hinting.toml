@@ -874,6 +874,7 @@ milestone = "M10"
 summary = "After the last instruction of a direction, every point still untouched is repositioned by interpolating between the nearest touched points before and after it in point-index order along its contour (the IUP step). Snap with No rounding, and Interpolate, exist partly to stop this step from moving a point undesirably."
 ref = "TrueType Hinting › Hint Order"
 status = "handbook"
+notes = "M10.18, crates/hinting/src/tt_glyph.rs: each glyph program ends with IUP for every direction that has instructions. Documented, not yet observed."
 
 [[command]]
 id = "hint.tt.showPointIndexes"
@@ -1091,6 +1092,7 @@ status = "handbook"
 # ---------------------------------------------------------------------------------------------
 # Instructions: Snap
 # ---------------------------------------------------------------------------------------------
+notes = "M10.18, crates/hinting/src/tt_glyph.rs and the fpgm function FN_POINT_ROUND: Snap, Shift and Interpolate round to the nearest pixel (halves away from zero), CEILING for up, FLOOR for down, and under GDI ClearType only through the flag prep stores; Stem uses FN_STEM's modes. Up and down follow the axis (up, right) whatever the sign of the coordinate. Documented, not yet observed."
 
 [[command]]
 id = "hint.tt.snapPoint"
@@ -1130,8 +1132,9 @@ milestone = "M10"
 summary = "Snap with zone Auto, in vertical mode: if the point lies inside a TT zone it goes to the pixel edge that zone rounds to (so zone alignment, deltas and the rounding threshold all apply); otherwise it goes to the nearest pixel edge. Auto is the recommended setting."
 ref = "TrueType Hinting › Snap (A)"
 status = "handbook"
-guesses = ["In horizontal mode Auto ignores zones and rounds to the nearest pixel edge, since zones are vertical; the reference app would settle it."]
+guesses = ["In horizontal mode Auto ignores zones and rounds to the nearest pixel edge, since zones are vertical; the reference app would settle it.", "Round up and Round down on a Snap inside a zone take the zone's row like Round, since the handbook ties zone snapping to the zone choice only; the reference app would settle it."]
 observe = ["T3: in horizontal mode, Snap a node that lies vertically inside a zone, with the zone choice left at Auto; note whether the zone changes the instruction or its effect."]
+notes = "M10.18, crates/hinting/src/tt_glyph.rs: a vertical Snap whose point lies in the span of a TT zone that applies to the glyph (widened by TTFBlueFuzz) calls the zone-snap function, so the point takes the zone's fitted row; otherwise it is rounded by its mode. Documented, not yet observed."
 
 [[behavior]]
 id = "hinting.tt.snap.zoneNone"
@@ -1140,6 +1143,7 @@ milestone = "M10"
 summary = "Snap with No Zone ignores all zones and only looks for the nearest pixel edge according to the rounding mode, even when the point lies inside a zone."
 ref = "TrueType Hinting › Snap (A)"
 status = "handbook"
+notes = "M10.18, crates/hinting/src/tt_glyph.rs: the zones are skipped and the point is rounded by its mode (FN_POINT_ROUND). Documented, not yet observed."
 
 [[behavior]]
 id = "hinting.tt.snap.zoneNamed"
@@ -1148,6 +1152,8 @@ milestone = "M10"
 summary = "Snap with a named zone does not snap the point onto that zone. It keeps the point at a constant rounded distance from the zone and guarantees that it can never cross over the zone, in the same way one zone can be aligned to another in TTFZones."
 ref = "TrueType Hinting › Snap (A)"
 status = "handbook"
+notes = "M10.18, crates/hinting/src/tt_glyph.rs: a point outside the named zone keeps its rounded original distance to the zone's fitted row (FN_ZONE_DISTANCE, as zone alignment does); a point inside it takes the zone's row. A zone index the master lacks falls back to Auto with a warning. Documented, not yet observed."
+guesses = ["A point that lies inside its named zone is snapped to the zone's row instead of being kept at a rounded distance; the reference app would settle it by snapping an overshoot point with that zone named."]
 
 [[behavior]]
 id = "hinting.tt.snap.noRoundingUse"
@@ -1160,6 +1166,7 @@ status = "handbook"
 # ---------------------------------------------------------------------------------------------
 # Instructions: Stem
 # ---------------------------------------------------------------------------------------------
+notes = "M10.18, crates/hinting/src/tt_glyph.rs: No rounding compiles to MDAP[0], in a zone or not: the point stays where it is and counts as touched. Documented, not yet observed."
 
 [[command]]
 id = "hint.tt.addStemHint"
@@ -1220,9 +1227,9 @@ milestone = "M10"
 summary = "Context-menu item available when three Stem instructions on three horizontal stems are selected (Shift+click each badge). It links them into a group that keeps at least one pixel of distance between the stems at every size; the linked instructions are drawn purple. How to dissolve a triple hint is not stated."
 ref = "TrueType Hinting › Stem (S)"
 status = "handbook"
-guesses = ["Deleting or reversing one member of a triple hint dissolves the group and the other two become plain Stem instructions; the reference app would settle it.", "Three instructions that would interleave with another triple hint in list order are refused, since the stored form keeps one flag per instruction and groups the flagged ones by threes; a reference file with two interleaved triple hints would settle how groups are stored."]
+guesses = ["Deleting or reversing one member of a triple hint dissolves the group and the other two become plain Stem instructions; the reference app would settle it.", "Three instructions that would interleave with another triple hint in list order are refused, since the stored form keeps one flag per instruction and groups the flagged ones by threes; a reference file with two interleaved triple hints would settle how groups are stored.", "A triple hint keeps its pixel gaps by moving the middle and then the upper stem, never the lower one; the reference app would settle it on an E with crowded bars at 8 or 9 PPM."]
 observe = ["T3: make a triple hint, delete one of its members and note whether the group dissolves; make it again, reverse one member and note whether the group dissolves."]
-notes = "M10.6, crates/engine/src/cmd/hint_tt.rs: exactly three vertical Stem instructions (on horizontal stems), none in a triple hint already. Documented, not yet observed."
+notes = "M10.6, crates/engine/src/cmd/hint_tt.rs: exactly three vertical Stem instructions (on horizontal stems), none in a triple hint already. Documented, not yet observed. M10.18, crates/hinting/src/tt_glyph.rs: once the third Stem of a group has run, the fpgm function FN_TRIPLE takes the three stems sorted by position and pushes the middle one, then the upper one, away from the stem below until at least a pixel separates them."
 
 [[behavior]]
 id = "hinting.tt.stem.originInZoneSnaps"
@@ -1231,6 +1238,8 @@ milestone = "M10"
 summary = "When the originating point of a Stem instruction lies inside a zone, the instruction itself snaps that point to the zone's pixel edge, so no separate Snap instruction is needed on it."
 ref = "TrueType Hinting › Stem (S)"
 status = "handbook"
+notes = "M10.18, crates/hinting/src/tt_glyph.rs: an untouched origin in a zone's span is zone-snapped before the Stem runs; an untouched origin outside every zone is rounded to the nearest pixel. Documented, not yet observed."
+guesses = ["An untouched Stem origin outside every zone is rounded to the nearest pixel, since the handbook says a Stem rounds both untouched points; the reference app would settle whether it follows the instruction's rounding mode instead."]
 
 [[behavior]]
 id = "hinting.tt.stem.optionAuto"
@@ -1239,6 +1248,7 @@ milestone = "M10"
 summary = "Stem option Auto: the instruction uses the TT stem of matching orientation whose size is closest to the measured distance between the two points. It is the recommended mode as long as the stem values are clearly distinct from each other."
 ref = "TrueType Hinting › Stem (S)"
 status = "handbook"
+notes = "M10.18, crates/hinting/src/tt_glyph.rs: among the TT stems of the instruction's direction (horizontal stems for vertical hinting) that apply to the glyph, the one whose size is closest to the original distance between the points; with none, the instruction acts as No Stem. Documented, not yet observed."
 
 [[behavior]]
 id = "hinting.tt.stem.optionNoStem"
@@ -1247,6 +1257,7 @@ milestone = "M10"
 summary = "Stem option No Stem: the target is not fitted to the grid; it only keeps its original distance to the origin, so it moves exactly when the origin moves. Suited to mid-range sizes and to shapes where grid distortion would be too strong."
 ref = "TrueType Hinting › Stem (S)"
 status = "handbook"
+notes = "M10.18, crates/hinting/src/tt_glyph.rs: FN_STEM without a stem: the original distance, rounded by the mode (the default No rounding keeps it), never under the minimum distance. Documented, not yet observed."
 
 [[behavior]]
 id = "hinting.tt.stem.optionNamed"
@@ -1255,6 +1266,7 @@ milestone = "M10"
 summary = "Stem option naming a specific TT stem forces that stem's width instead of the automatic choice; meant only for cases where Auto picks the wrong stem."
 ref = "TrueType Hinting › Stem (S)"
 status = "handbook"
+notes = "M10.18, crates/hinting/src/tt_glyph.rs: the named stem's cvt entries; a stem index the master lacks falls back to Auto with a warning. Documented, not yet observed."
 
 [[behavior]]
 id = "hinting.tt.stem.rounding"
@@ -1263,6 +1275,7 @@ milestone = "M10"
 summary = "Rounding of a Stem instruction applies to the stem's size. Round puts the target on the nearest pixel edge; Round up on the edge farther from the origin (below it when the instruction points downward); Round down on the edge nearer the origin. No rounding (default) uses the TT stem width, which is already rounded to the oversampling grid of the rendering intent, so one stem edge may show a gray border but shapes distort less and counters collapse less often. Round only in GDI ClearType rounds in that intent alone."
 ref = "TrueType Hinting › Stem (S)"
 status = "handbook"
+notes = "M10.18, crates/hinting/src/tt_glyph.rs: FN_STEM with the mode of the instruction's rounding; a test checks the rounded width at several sizes and up and down in both directions. Documented, not yet observed."
 
 [[behavior]]
 id = "hinting.tt.stem.gdiOnlyForMiddleBars"
@@ -1306,6 +1319,7 @@ milestone = "M10"
 summary = "Shift rounding modes act on the target after the movement has been copied: Round to the nearest pixel edge, Round up to the edge above, Round down to the edge below, No rounding keeps the copied movement exactly, GDI-only rounds in the ClearType intent alone."
 ref = "TrueType Hinting › Shift (F)"
 status = "handbook"
+notes = "M10.18, crates/hinting/src/tt_glyph.rs: SRP1 and SHP[1] copy the origin's movement, then FN_POINT_ROUND rounds the target unless the mode is No rounding. Documented, not yet observed."
 
 [[behavior]]
 id = "hinting.tt.shift.useCase"
@@ -1341,6 +1355,7 @@ milestone = "M10"
 summary = "Interpolate rounding modes act on the interpolated position: Round to the nearest pixel edge (the mode to use when a Stem instruction is then started from the target), Round up to the next edge above, Round down to the next edge below, No rounding, and GDI-only which rounds in the ClearType intent alone."
 ref = "TrueType Hinting › Interpolate (G)"
 status = "handbook"
+notes = "M10.18, crates/hinting/src/tt_glyph.rs: SRP1, SRP2 and IP place the target, then FN_POINT_ROUND rounds it unless the mode is No rounding. Documented, not yet observed."
 
 [[behavior]]
 id = "hinting.tt.interpolate.useCase"
@@ -1393,11 +1408,12 @@ milestone = "M10"
 summary = "Delta instructions exist only for vertical hinting, are left out of variable-font exports entirely, and should be added last and sparingly. Pressing E in horizontal direction should do nothing (or report why)."
 ref = "TrueType Hinting › Delta (E)"
 status = "handbook"
-notes = "M10.7: hint.tt.addDelta refuses the horizontal direction with a message, and both Delta commands refuse a layer outside the main master (hinting.tt.mainMasterOnly). Leaving deltas out of variable exports waits for the export packages. Documented, not yet observed."
+notes = "M10.7: hint.tt.addDelta refuses the horizontal direction with a message, and both Delta commands refuse a layer outside the main master (hinting.tt.mainMasterOnly). Leaving deltas out of variable exports waits for the export packages. Documented, not yet observed. M10.18, crates/hinting/src/tt_glyph.rs: a Delta compiles to one FN_POINT_DELTA call per cell of the build's delta column, at its place in the list and so before IUP (a rasterizer in backward-compatibility mode drops moves made after IUP); a horizontal Delta, or a cell outside 1 to 255 PPM, is left out with a warning."
 
 # ---------------------------------------------------------------------------------------------
 # Export behaviour and variable fonts
 # ---------------------------------------------------------------------------------------------
+guesses = ["Deltas run at their place in the list, before the final interpolation, so on an untouched point a Delta moves it from its unhinted position at that size; the reference app would settle it by adding a Delta to an untouched point and comparing that size with its neighbours."]
 
 [[behavior]]
 id = "hinting.tt.export.overlapRemovalMovesHints"

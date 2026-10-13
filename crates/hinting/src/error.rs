@@ -51,6 +51,10 @@ pub enum HintingError {
     /// An instruction that cannot be compiled (a point without an exported number…).
     #[error("`{glyph}`: instruction {index} cannot be compiled: {message}")]
     Compile { glyph: String, index: usize, message: String },
+    /// A glyph whose outline or program cannot be used as a whole (an outline that does not
+    /// match its point map, a program past the `glyf` limit…).
+    #[error("`{glyph}`: {message}")]
+    Glyph { glyph: String, message: String },
     /// TTFAutohint control instructions that cannot be read; `line` counts from 1.
     #[error("line {line} of the control instructions: {message}")]
     Control { line: usize, message: String },

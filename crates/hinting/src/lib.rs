@@ -18,7 +18,7 @@
 //! | [`replay`] | M10.6 | [`TouchedState::replay`]: which points are touched after n instructions; [`unmet_needs`] |
 //! | [`point_map`] | M10.1 | the [`PointMap`] trait the compiler implements |
 //! | [`tt_font`] | M10.17 | [`CvtLayout`], [`FontPrograms`], [`font_programs`] |
-//! | [`tt_glyph`] | M10.18 | [`glyph_program`]: instructions to bytecode |
+//! | [`tt_glyph`] | M10.18 | [`glyph_program`]: instructions plus point map to bytecode, with its `maxp` needs |
 //! | [`tt_auto`] | M10.21 | [`autohint_tt`] and the TTFAutohint options |
 //! | [`control`] | M10.21 | [`control::parse`]: TTFAutohint control instructions |
 //!
@@ -65,7 +65,7 @@ pub use settings::{DeltaDir, Deltas, HintSettings, PsZone, TtStem, TtZone};
 pub use tt::{Direction, Rounding, StemRef, TtInstruction, TtKind, ZoneRef, set_tt_instructions, tt_instructions};
 pub use tt_auto::{TtAutohintOptions, autohint_tt};
 pub use tt_font::{CvtLayout, FontPrograms, font_programs};
-pub use tt_glyph::glyph_program;
+pub use tt_glyph::{GlyphContext, GlyphOutline, GlyphProgram, OutlinePoint, glyph_program};
 pub use validate::{HintFinding, Severity, validate_font_hints};
 
 #[cfg(test)]

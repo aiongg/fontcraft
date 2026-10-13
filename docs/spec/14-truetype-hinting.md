@@ -414,7 +414,21 @@ positions; `prep` rounds the zones (threshold, family zones up to TTFFamilyZones
 aligns them, applies zone deltas, rounds the stems and applies stem deltas under GDI ClearType;
 `fpgm` holds the functions glyph programs call to snap a point to a zone (overshoots shown from
 TTFOvershootSuppressionBelowPPM up), place a stem (five rounding modes, TTMinimumDistance) and
-move a point at one size. The module documentation lists the function numbers and arguments.
+move a point at one size, round a point by a mode, keep a point at a rounded distance from a
+zone, and keep a pixel between the stems of a triple hint. The module documentation lists the
+function numbers and arguments.
+
+Glyph programs (M10.18, `crates/hinting/src/tt_glyph.rs`) run the main master's instructions in
+list order against the exported point numbers: Snap through the zone functions or point
+rounding, Stem through the stem function (an untouched origin zone-snapped or rounded first),
+Shift and Interpolate through `SHP` and `IP` followed by point rounding, Delta through the point
+delta function at its place in the list, the triple-hint function after a group's third Stem,
+then `IUP` for each direction used. Deltas run before `IUP` because a rasterizer in
+backward-compatibility mode ignores moves after it. Unless TTFDontPreserveDiagonals is set, a
+moved point with one flat and one slanted straight neighbour moves along the slanted line.
+Ignore Vertical Hints leaves out the horizontal Stem instructions on vertical TT stems. An
+instruction naming a point the outline lacks is left out with a warning; a program past 65,535
+bytes is an error.
 
 Unhinted export (no instructions, autohint off): no `cvt `, `fpgm`, glyph programs; a minimal `prep`
 and a `gasp` suited to unhinted rendering are a separate export decision (see the compile spec).

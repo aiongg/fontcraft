@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1139 rows to check: 1594 guesses and 422 observe steps.**
+**1144 rows to check: 1601 guesses and 422 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,7 +48,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 40 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 4 |
-| **Later milestones (after M6)** | all | **668** |
+| **Later milestones (after M6)** | all | **673** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 39 |
 | Later milestones (after M6) | Edit View: text mode and preview | 14 |
 | Later milestones (after M6) | Components and anchors | 33 |
@@ -56,9 +56,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Spacing and metrics keys | 3 |
 | Later milestones (after M6) | Kerning and the Kerning window | 4 |
 | Later milestones (after M6) | Font View | 13 |
-| Later milestones (after M6) | Font Info and features | 251 |
+| Later milestones (after M6) | Font Info and features | 253 |
 | Later milestones (after M6) | Interpolation | 44 |
-| Later milestones (after M6) | Hinting | 79 |
+| Later milestones (after M6) | Hinting | 82 |
 | Later milestones (after M6) | Colour fonts | 46 |
 | Later milestones (after M6) | Files: open, import, export | 45 |
 | Later milestones (after M6) | Settings and the window | 12 |
@@ -1338,7 +1338,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (668)
+## Later milestones (after M6) (673)
 
 ### Edit View: drawing, guides, layers and the Palette (39)
 
@@ -1708,7 +1708,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The decomposition sections use Unicode's canonical decompositions, one level and full together, so U+1EA4 lists both U+00C2 and U+0041, and characters the font has no glyph for are listed dimmed.
   - Guess: Clicking an entry opens the glyph in a new tab; the reference's documentation does not say whether it replaces the current glyph instead.
 
-### Font Info and features (251)
+### Font Info and features (253)
 
 - [ ] `fontInfo.rows.selection` (behavior, M7, handbook): Clicking a row selects it and Cmd+click builds a selection of several…
   - Guess: Shift-click adds every row between the last row clicked and the clicked one; Shift-clicking in the reference app settles it.
@@ -2451,9 +2451,13 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `autohint.tt.option.info` (behavior, M10, handbook): By default the autohinter appends its name and version to the version…
   - Guess: With FontCraft's own TrueType autohinter (decided in M10 § 7, question 2) the name strings are left alone unless detailed or plain info is asked for; the reference app's choice between its default and No Autohint Info would settle it.
   - Observe: T3: export as TTF with Autohint and the default TTFAutohint options; read name ID 5 and note whether autohinter version information was added to it.
+- [ ] `Ignore Vertical Hints` (parameter, M10, handbook): In TrueType export, leaves out every manual stem hint linked to a…
+  - Guess: A horizontal Stem instruction set to No Stem stays under Ignore Vertical Hints, since it is linked to no stem definition; the reference app would settle it.
 - [ ] `TTFAutohint options` (parameter, M10, handbook): Option string for ttfautohint, edited through a dialog: hint set range, default…
   - Guess: No corpus source holds the parameter; FontCraft stores and reads it as ttfautohint command-line options in one string, which is how fontmake reads it from an instance (split on spaces); a file saved by the reference app with the options sheet filled in would show the real form.
   - Observe: T3: fill in the TTFAutohint options sheet on an instance and save; note how the parameter's value is stored in the .glyphs file (one string, long or short options, or a dictionary).
+- [ ] `TTFDontPreserveDiagonals` (parameter, M10, handbook): Normally manual hinting keeps the angle of a slanted stem intact where…
+  - Guess: Diagonals are preserved for a moved point with exactly one flat neighbour and one straight slanted neighbour that runs at least a quarter of its length along the hinting direction; the reference app would settle which points it applies to, by comparing an exported A's crossbar points at small sizes.
 - [ ] `TTFFamilyZonesThreshold` (parameter, M10, handbook): Integer PPM limit for applying family zones in TrueType hinting
   - Guess: Family zones apply up to and including the threshold PPM, are matched to the master's zones by index, are left out with a warning when the counts differ, and are not applied without the parameter; a reference export with family zones at the threshold size would settle it.
 - [ ] `color.preview.paletteDrivesFontView` (behavior, M11, handbook): Once the Color Palettes parameter exists, glyphs with palette layers are previewed…
@@ -2594,7 +2598,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `hoi.setControlPoints` (M13, inferred): Set Interpolation Control Points
   - Open (our design, not confirmed): Headless form of dragging a knob or handle: sets the intermediate point (one point), the two handles (two points) or the rotation centre (one point) of a node's interpolation curve.
 
-### Hinting (79)
+### Hinting (82)
 
 - [ ] `hinting.ps.standardStems.privateDictMapping` (behavior, M10, docs): At export the first horizontal stem becomes StdHW and the first vertical…
   - Guess: More than twelve stems in one direction: the export writes the first twelve in list order and warns, and hint.ps.validateFontHints reports it; an export from the reference app with thirteen stems would settle it.
@@ -2750,7 +2754,14 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: T3: add a Delta instruction; note its badge colour and the icons of the rounding modes, next to the badges of the other instruction types.
 - [ ] `hinting.tt.snap.zoneAuto` (behavior, M10, handbook): Snap with zone Auto, in vertical mode: if the point lies inside…
   - Guess: In horizontal mode Auto ignores zones and rounds to the nearest pixel edge, since zones are vertical; the reference app would settle it.
+  - Guess: Round up and Round down on a Snap inside a zone take the zone's row like Round, since the handbook ties zone snapping to the zone choice only; the reference app would settle it.
   - Observe: T3: in horizontal mode, Snap a node that lies vertically inside a zone, with the zone choice left at Auto; note whether the zone changes the instruction or its effect.
+- [ ] `hinting.tt.snap.zoneNamed` (behavior, M10, handbook): Snap with a named zone does not snap the point onto that…
+  - Guess: A point that lies inside its named zone is snapped to the zone's row instead of being kept at a rounded distance; the reference app would settle it by snapping an overshoot point with that zone named.
+- [ ] `hinting.tt.stem.originInZoneSnaps` (behavior, M10, handbook): When the originating point of a Stem instruction lies inside a zone,…
+  - Guess: An untouched Stem origin outside every zone is rounded to the nearest pixel, since the handbook says a Stem rounds both untouched points; the reference app would settle whether it follows the instruction's rounding mode instead.
+- [ ] `hinting.tt.delta.restrictions` (behavior, M10, handbook): Delta instructions exist only for vertical hinting, are left out of variable-font…
+  - Guess: Deltas run at their place in the list, before the final interpolation, so on an untouched point a Delta moves it from its unhinted position at that size; the reference app would settle it by adding a Delta to an untouched point and comparing that size with its neighbours.
 - [ ] `hinting.tt.export.overlapRemovalMovesHints` (behavior, M10, handbook): When a static font is exported with Remove Overlaps, points inside overlaps…
   - Guess: Path > Remove Overlap in the editor applies the documented export rule to instructions on removed nodes and on intersections, and PostScript ends on removed nodes become numbers; running Remove Overlap on an instructed glyph in the reference app would settle it.
   - Guess: An outline edit other than Remove Overlap removes an instruction whose node is gone instead of moving it; deleting an instructed node in the reference app would settle it.
@@ -2822,6 +2833,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `hint.tt.makeTripleHint` (M10, handbook, live): Make Triple Hint
   - Guess: Deleting or reversing one member of a triple hint dissolves the group and the other two become plain Stem instructions; the reference app would settle it.
   - Guess: Three instructions that would interleave with another triple hint in list order are refused, since the stored form keeps one flag per instruction and groups the flagged ones by threes; a reference file with two interleaved triple hints would settle how groups are stored.
+  - Guess: A triple hint keeps its pixel gaps by moving the middle and then the upper stem, never the lower one; the reference app would settle it on an E with crowded bars at 8 or 9 PPM.
   - Observe: T3: make a triple hint, delete one of its members and note whether the group dissolves; make it again, reverse one member and note whether the group dissolves.
 - [ ] `hint.tt.addDelta` (M10, handbook, live): Delta
   - Guess: Delta columns accept masters as well as static instances, both stored as the location key; the reference app's Delta table for an instruction would show which columns it offers.
