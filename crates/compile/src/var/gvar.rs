@@ -15,6 +15,10 @@
 //! ones (fontTools' `getDeltas` with rounding, as fontmake builds `gvar`), so the font gives each
 //! source's coordinates exactly. Composites and empty glyphs are not optimized: a tuple whose
 //! deltas are all zero is left out, the others are written whole, as fontc writes them.
+//!
+//! The sizes of packed deltas and point numbers ([`check_tuple_size`]) follow the packing rules
+//! of write-fonts' `PackedDeltas` and `PackedPointNumbers` (fontations, MIT OR Apache-2.0), so a
+//! tuple too big for the table is refused before the writer is handed it.
 
 use std::collections::HashMap;
 
@@ -111,12 +115,117 @@ fn tents(region: &Region, axis_count: u16) -> Result<Vec<Tent>, String> {
         .collect()
 }
 
+/// Whether `v` is a finite delta within 16 bits, as every variation table here writes them.
+pub(crate) fn fits_i16(v: f64) -> bool {
+    v.is_finite() && (f64::from(i16::MIN)..=f64::from(i16::MAX)).contains(&v)
+}
+
 fn delta_i16(glyph: &str, v: f64) -> Result<i16, CompileError> {
-    if v.is_finite() && (f64::from(i16::MIN)..=f64::from(i16::MAX)).contains(&v) {
-        Ok(v as i16)
-    } else {
-        Err(gvar_error(glyph, format!("a delta of {v} units does not fit the table")))
+    if fits_i16(v) { Ok(v as i16) } else { Err(gvar_error(glyph, format!("a delta of {v} units does not fit the table"))) }
+}
+
+/// Most bytes of one tuple variation's data: the table stores its size in 16 bits.
+pub const MAX_TUPLE_DATA: usize = u16::MAX as usize;
+
+#[derive(Clone, Copy, PartialEq)]
+enum RunKind {
+    Zero,
+    Byte,
+    Word,
+}
+
+fn run_kind(v: i32) -> RunKind {
+    match v {
+        0 => RunKind::Zero,
+        -128..=127 => RunKind::Byte,
+        _ => RunKind::Word,
     }
+}
+
+/// Bytes of `values` (each within i16) packed as the table writer packs deltas: runs of at most
+/// 64, a lone zero kept inside a byte run, a lone byte value kept inside a word run between word
+/// values.
+fn packed_deltas_size(values: &[i32]) -> usize {
+    const MAX_RUN: usize = 64;
+    let mut size = 0;
+    let mut rest = values;
+    while let Some(&first) = rest.first() {
+        let kind = run_kind(first);
+        let len = if kind == RunKind::Zero {
+            rest.iter().take(MAX_RUN).take_while(|v| **v == 0).count()
+        } else {
+            let mut len = 1;
+            while len < MAX_RUN && len < rest.len() {
+                let cur = rest.get(len).map_or(RunKind::Zero, |v| run_kind(*v));
+                let next = rest.get(len + 1).map(|v| run_kind(*v));
+                let stop = match kind {
+                    RunKind::Byte => cur == RunKind::Word || (cur == RunKind::Zero && next == Some(RunKind::Zero)),
+                    _ => cur == RunKind::Zero || (cur == RunKind::Byte && matches!(next, Some(RunKind::Zero | RunKind::Byte))),
+                };
+                if stop {
+                    break;
+                }
+                len += 1;
+            }
+            len
+        };
+        size += 1 + match kind {
+            RunKind::Zero => 0,
+            RunKind::Byte => len,
+            RunKind::Word => 2 * len,
+        };
+        rest = rest.get(len.max(1)..).unwrap_or_default();
+    }
+    size
+}
+
+/// Bytes of the ascending point numbers `points` packed as the table writer packs them: a count
+/// of one or two bytes, then runs of at most 128 that are all bytes or all words (a word when a
+/// point is more than 255 past the one before).
+fn packed_points_size(points: &[usize]) -> usize {
+    const MAX_RUN: usize = 128;
+    let mut size = if points.len() < 128 { 1 } else { 2 };
+    let mut prev = 0;
+    let mut rest = points;
+    while let Some(&first) = rest.first() {
+        let words = first.saturating_sub(prev) > 255;
+        let mut last = prev;
+        let len = rest
+            .iter()
+            .take(MAX_RUN)
+            .take_while(|&&p| {
+                let take = (p.saturating_sub(last) > 255) == words;
+                last = p;
+                take
+            })
+            .count()
+            .max(1);
+        size += 1 + if words { 2 * len } else { len };
+        prev = rest.get(len - 1).copied().unwrap_or(prev);
+        rest = rest.get(len..).unwrap_or_default();
+    }
+    size
+}
+
+/// Refuses a tuple variation whose data would not fit the table's 16-bit size field. The writer
+/// sizes the data both with every point and with only the required ones, so both must fit.
+fn check_tuple_size(glyph: &str, deltas: &[GlyphDelta]) -> Result<(), CompileError> {
+    let packed = |ds: &mut dyn Iterator<Item = &GlyphDelta>| {
+        let (xs, ys): (Vec<i32>, Vec<i32>) = ds.map(|d| (i32::from(d.x), i32::from(d.y))).unzip();
+        packed_deltas_size(&xs) + packed_deltas_size(&ys)
+    };
+    let mut size = 1 + packed(&mut deltas.iter());
+    if deltas.iter().any(|d| !d.required) {
+        let points: Vec<usize> = deltas.iter().enumerate().filter(|(_, d)| d.required).map(|(i, _)| i).collect();
+        if points.last().is_some_and(|&p| p > usize::from(u16::MAX)) {
+            return Err(gvar_error(glyph, "a delta is needed on a point past number 65,535"));
+        }
+        size = size.max(packed_points_size(&points) + packed(&mut deltas.iter().filter(|d| d.required)));
+    }
+    if size > MAX_TUPLE_DATA {
+        return Err(gvar_error(glyph, format!("one tuple variation needs {size} bytes; the table holds at most {MAX_TUPLE_DATA}")));
+    }
+    Ok(())
 }
 
 /// The tuple variations of one glyph.
@@ -145,6 +254,11 @@ fn glyph_variations(glyph: &SourceOutlines, axis_count: u16, options: &GvarOptio
         if flat.iter().all(|d| *d == 0.0) {
             continue;
         }
+        // The optimizer rounds and saturates out-of-range deltas without a word, so every value
+        // is checked here, whichever path writes it.
+        for v in &flat {
+            delta_i16(name, *v)?;
+        }
         let pairs: Vec<(f64, f64)> = flat.chunks_exact(2).map(|c| (c.first().copied().unwrap_or(0.0), c.get(1).copied().unwrap_or(0.0))).collect();
         let deltas: Vec<GlyphDelta> = if simple && options.optimize {
             let vecs: Vec<Vec2> = pairs.iter().map(|&(x, y)| Vec2::new(x, y)).collect();
@@ -152,6 +266,7 @@ fn glyph_variations(glyph: &SourceOutlines, axis_count: u16, options: &GvarOptio
         } else {
             pairs.iter().map(|&(x, y)| Ok(GlyphDelta::required(delta_i16(name, x)?, delta_i16(name, y)?))).collect::<Result<_, CompileError>>()?
         };
+        check_tuple_size(name, &deltas)?;
         let tents = tents(&region, axis_count).map_err(|e| gvar_error(name, e))?;
         out.push(GlyphDeltas::new(tents, deltas));
     }
@@ -206,6 +321,42 @@ mod tests {
         // The advance (phantom point 1) varies by 60.
         let deltas: Vec<_> = tuple.deltas().collect();
         assert!(deltas.iter().any(|d| d.position == 5 && d.x_delta == 60));
+    }
+
+    /// A glyph of `count` points (phantoms included) whose second source moves point `i` by
+    /// `delta(i)` on both axes.
+    fn many_points(count: usize, delta: impl Fn(usize) -> f64) -> SourceOutlines {
+        let origin: Vec<(f64, f64)> = (0..count).map(|i| ((i % 1000) as f64, (i / 1000) as f64)).collect();
+        let moved = origin.iter().enumerate().map(|(i, &(x, y))| (x + delta(i), y + delta(i))).collect();
+        SourceOutlines { glyph: "big".into(), locations: vec![vec![0.0], vec![1.0]], points: vec![origin, moved], contour_ends: vec![count - 5] }
+    }
+
+    #[test]
+    fn tuples_too_big_for_the_size_field_are_refused() {
+        // Word deltas on every point: 16,256 points pack into 65,533 bytes, one more into 65,539.
+        let plain = GvarOptions { optimize: false };
+        let fits = build_gvar(1, &[many_points(16_256, |_| 200.0)], &plain).unwrap();
+        assert!(write_fonts::dump_table(&fits).is_ok());
+        let err = build_gvar(1, &[many_points(16_257, |_| 200.0)], &plain).unwrap_err().to_string();
+        assert!(err.contains("`big`") && err.contains("65539 bytes"), "{err}");
+        // With optimization, deltas IUP cannot infer are kept and the glyph is still refused.
+        let zigzag = |i: usize| if i % 2 == 0 { 300.0 } else { -300.0 };
+        let err = build_gvar(1, &[many_points(20_000, zigzag)], &GvarOptions::default()).unwrap_err().to_string();
+        assert!(err.contains("`big`"), "{err}");
+    }
+
+    #[test]
+    fn deltas_past_16_bits_are_refused_with_or_without_optimization() {
+        for optimize in [true, false] {
+            let wide = SourceOutlines {
+                glyph: "wide".into(),
+                locations: vec![vec![0.0], vec![1.0]],
+                points: vec![square(0.0, 500.0), square(0.0, 50_000.0)],
+                contour_ends: vec![3],
+            };
+            let err = build_gvar(1, &[wide], &GvarOptions { optimize }).unwrap_err().to_string();
+            assert!(err.contains("`wide`") && err.contains("49500"), "{err}");
+        }
     }
 
     #[test]

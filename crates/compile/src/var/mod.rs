@@ -261,11 +261,16 @@ fn mvar_values(origin: &crate::info::GlobalMetrics, sources: &[Source]) -> Resul
     for (tag, get) in MVAR_TAGS {
         let mut values = vec![vec![ot_round(get(origin))]];
         values.extend(masters.iter().map(|m| vec![ot_round(get(m.1))]));
-        let deltas = gvar::region_deltas(model, &values)
-            .map_err(bad)?
-            .into_iter()
-            .filter_map(|(region, d)| d.first().copied().filter(|d| *d != 0.0).map(|d| (region, d as i32)))
-            .collect();
+        let mut deltas = Vec::new();
+        for (region, d) in gvar::region_deltas(model, &values).map_err(bad)? {
+            let d = d.first().copied().unwrap_or(0.0);
+            if !gvar::fits_i16(d) {
+                return Err(bad(format!("a delta of {d} units for `{}` does not fit the table", String::from_utf8_lossy(tag))));
+            }
+            if d != 0.0 {
+                deltas.push((region, d as i32));
+            }
+        }
         out.push((Tag::new(tag), VarValue { default: ot_round(get(origin)) as i32, deltas }));
     }
     Ok(out)
@@ -725,14 +730,16 @@ impl Outlines<'_> {
                 }
                 let bad = |e: String| CompileError::Table { table: "HVAR", message: format!("glyph `{}`: {e}", g.glyph) };
                 let model = models.get(&g.locations).map_err(bad)?;
-                let deltas = gvar::region_deltas(model, &values)
-                    .map_err(bad)?
-                    .into_iter()
-                    .filter_map(|(region, d)| {
-                        let d = d.first().copied().unwrap_or(0.0);
-                        (d != 0.0).then_some((region, d as i32))
-                    })
-                    .collect();
+                let mut deltas = Vec::new();
+                for (region, d) in gvar::region_deltas(model, &values).map_err(bad)? {
+                    let d = d.first().copied().unwrap_or(0.0);
+                    if !gvar::fits_i16(d) {
+                        return Err(bad(format!("an advance delta of {d} units does not fit the table")));
+                    }
+                    if d != 0.0 {
+                        deltas.push((region, d as i32));
+                    }
+                }
                 Ok(VarValue { default, deltas })
             })
             .collect()

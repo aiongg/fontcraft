@@ -188,6 +188,14 @@ fn incompatible_glyphs_block_the_export() {
     assert!(err.to_string().contains("not compatible") && err.to_string().contains('a'), "{err}");
 }
 
+#[test]
+fn advance_deltas_past_16_bits_are_refused() {
+    let mut f = two_masters();
+    f.glyph_mut("a").unwrap().layers[1].width = 50_000.0;
+    let err = compile_variable(&f, None, &Options::default(), &VariableOptions::default()).unwrap_err().to_string();
+    assert!(err.contains("`a`") && err.contains("does not fit"), "{err}");
+}
+
 /// [`two_masters`] with a third master Regular at 400 and two variable font settings, the second
 /// disabling Black.
 fn with_settings() -> Font {
