@@ -9,6 +9,10 @@
 //! `compile.kernGroupReconciliation`, `intermediateLayer.sparseInExport` (static half),
 //! parameters `Local Interpolation`, `InterpolationWeightY`.
 //!
+//! The kerning of an instance ([`interpolate_kerning`]) follows fontMath's kerning math
+//! (mathKerning.py, MIT License, https://github.com/robotools/fontMath): the group fallback for
+//! a pair a master lacks and the cleanup of pairs that come out zero.
+//!
 //! Contract:
 //! - [`interpolate_layer`] interpolates paths, component transforms, anchors, the width and
 //!   smart-component values at an internal location, through the glyph's own sub-model (its
@@ -105,6 +109,17 @@ pub fn options_for(font: &Font, instance: usize) -> Result<InterpOptions, Interp
         None => None,
     };
     Ok(InterpOptions { extrapolate: true, model, weight_y })
+}
+
+/// Whether static instance `instance` sets something only interpolation applies: manual master
+/// weights, InterpolationWeightY, or Local Interpolation (on the instance or the font). Such an
+/// instance goes through [`instance_font`] even at a master's location.
+pub fn adjusts_interpolation(font: &Font, instance: usize) -> bool {
+    let Some(inst) = font.instances.get(instance) else { return false };
+    let named = |p: &fontcraft_model::Param, names: &[&str]| !p.disabled && names.contains(&p.name.as_str());
+    (inst.manual_interpolation && !inst.interpolation.is_empty())
+        || inst.params.0.iter().any(|p| named(p, &[WEIGHT_Y, LOCAL_INTERPOLATION]))
+        || font.info.params.0.iter().any(|p| named(p, &[LOCAL_INTERPOLATION]))
 }
 
 /// The weight of each master (by id, in the designspace's order) at `location`, through the
@@ -797,9 +812,10 @@ fn groups_of(font: &Font, master: Option<&Master>) -> Groups {
 
 /// Kerning interpolated over the weighted masters, stored for `target`.
 ///
-/// Left-to-right pairs: a pair one master lacks takes the value its groups give it there, as
-/// fontMath's kerning lookup does: the pair itself, then the second side's group, the first
-/// side's group, and both groups; otherwise zero. Right-to-left and vertical pairs, and kerning
+/// Left-to-right pairs: a pair one master lacks takes the value its groups give it there, as in
+/// fontMath's kerning math: the pair itself, then the second side's group, the first side's
+/// group, and both groups; otherwise zero. The order is the compiled kern lookup's
+/// (`compile.kernValueLookup`); fontMath tries the first side's group before the second. Right-to-left and vertical pairs, and kerning
 /// contexts, take the pair itself or zero.
 fn interpolate_kerning(font: &Font, weights: &[(String, f64)], target: &str) -> Result<Kerning, InterpError> {
     let instance_groups = groups_of(font, None);

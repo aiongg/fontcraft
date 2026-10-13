@@ -283,5 +283,15 @@ bundled, the file says so in its header and the project is listed here with its 
   defcon (https://github.com/robotools/defcon), MIT License. crates/io-ufo/src/ufo1.rs ports how
   its font object moves a UFO 1's feature code and PostScript hint data out of the lib.
 
+  fontMath (https://github.com/robotools/fontMath), MIT License. The kerning of a static
+  instance (crates/interp/src/instance.rs, interpolate_kerning) follows its kerning math
+  (mathKerning.py): a pair one master lacks takes the value that master's groups give it, and a
+  pair that comes out zero is dropped unless one side is a glyph in a group.
+
+  write-fonts (https://github.com/googlefonts/fontations), MIT OR Apache-2.0. The sizes of a
+  gvar tuple's packed deltas and point numbers (crates/compile/src/var/gvar.rs,
+  check_tuple_size) follow the packing rules of its PackedDeltas and PackedPointNumbers
+  (src/tables/variations.rs, 0.54.0).
+
 Product names mentioned in the documentation are trademarks of their owners and are used only to
 identify the products FontCraft is compared with or interoperates with.

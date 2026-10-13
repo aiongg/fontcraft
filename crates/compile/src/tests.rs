@@ -552,6 +552,19 @@ fn a_target_compiles_its_own_master_and_an_instance_at_a_master() {
     let metrics = font.glyph_metrics(Size::unscaled(), LocationRef::default());
     assert_eq!(metrics.advance_width(font.charmap().map('A').unwrap()), Some(670.0), "halfway between the masters");
     assert_eq!(names(&font, StringId::TYPOGRAPHIC_SUBFAMILY_NAME), ["Semibold"]);
+    // At a master with manual weights: the weights decide, not the master's layer.
+    let mut manual = f.clone();
+    Arc::make_mut(&mut manual.instances).push(fontcraft_model::Instance {
+        name: "Even".into(),
+        location: vec![200.0],
+        manual_interpolation: true,
+        interpolation: vec![("m01".into(), 0.5), ("m02".into(), 0.5)],
+        ..Default::default()
+    });
+    let even = compile(&manual, &Target::Instance(2), Flavour::TrueType, &Options::default()).unwrap();
+    let font = FontRef::new(&even.bytes).unwrap();
+    let metrics = font.glyph_metrics(Size::unscaled(), LocationRef::default());
+    assert_eq!(metrics.advance_width(font.charmap().map('A').unwrap()), Some(670.0), "the manual weights");
     let mut beyond = f.clone();
     Arc::make_mut(&mut beyond.instances).push(fontcraft_model::Instance { name: "Black".into(), location: vec![300.0], ..Default::default() });
     let black = compile(&beyond, &Target::Instance(2), Flavour::TrueType, &Options::default()).unwrap();
