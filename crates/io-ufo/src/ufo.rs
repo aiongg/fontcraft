@@ -1790,12 +1790,19 @@ pub(crate) fn layer_losses(font: &Font, designspace: bool) -> Vec<String> {
     use fontcraft_model::{Background, Image, LayerInfo};
     let unfiled = |i: &Option<Image>| i.as_ref().is_some_and(|i| i.path.is_none());
     // A GLIF image names a PNG file in the UFO's `images/` folder; only a UFO's own image files
-    // travel, and other formats are not converted.
-    let not_in_images = |i: &Option<Image>| {
+    // travel, and other formats are not converted. A single UFO's files are kept from its root, a
+    // designspace master's under its UFO's file name (the prefixes the writer strips).
+    let ufo_prefix = |master: &str| -> String {
+        let file = font.masters.iter().find(|m| m.id == master).and_then(|m| m.extra.get(Family::Designspace, "filename")).and_then(Value::as_str);
+        match file {
+            Some(f) if designspace => format!("{f}/"),
+            _ => String::new(),
+        }
+    };
+    let not_in_images = |i: &Option<Image>, prefix: &str| {
         i.as_ref().and_then(|i| i.path.as_deref()).is_some_and(|p| {
             let png = std::path::Path::new(p).extension().is_some_and(|e| e.eq_ignore_ascii_case("png"));
-            let suffix = format!("images/{p}");
-            !png || !font.files.0.keys().any(|k| k.ends_with(&suffix))
+            !png || !font.files.0.contains_key(&format!("{prefix}images/{p}"))
         })
     };
     let guide_extras = |guides: &[fontcraft_model::Guide]| {
@@ -1872,7 +1879,10 @@ pub(crate) fn layer_losses(font: &Font, designspace: bool) -> Vec<String> {
             guide_extras(&i.guides) || bg(i, &|b| guide_extras(&b.guides)),
             ufo2 && (!i.guides.is_empty() || i.image.is_some() || bg(i, &|b| !b.guides.is_empty() || b.image.is_some())),
             !l.is_master_layer() && id_lost,
-            not_in_images(&i.image) || bg(i, &|b| not_in_images(&b.image)),
+            {
+                let prefix = ufo_prefix(&l.master);
+                not_in_images(&i.image, &prefix) || bg(i, &|b| not_in_images(&b.image, &prefix))
+            },
         ];
         for ((_, n), on) in counts.iter_mut().zip(has) {
             *n += usize::from(on);
@@ -2760,9 +2770,25 @@ mod tests {
         let mut font = layered();
         assert!(info_losses(&font).iter().any(|l| l == LOST), "a file the font does not hold");
         let mut files = fontcraft_model::FileStore::default();
-        files.0.insert("Layered.ufo/images/a.png".into(), std::sync::Arc::from(&b"png"[..]));
+        // Another UFO's images folder, or a folder whose name only ends in `images`, is not the
+        // UFO's own.
+        for other in ["Other.ufo/images/a.png", "fooimages/a.png"] {
+            let mut files = fontcraft_model::FileStore::default();
+            files.0.insert(other.into(), std::sync::Arc::from(&b"png"[..]));
+            font.files = std::sync::Arc::new(files);
+            assert!(info_losses(&font).iter().any(|l| l == LOST), "{other}");
+        }
+        files.0.insert("images/a.png".into(), std::sync::Arc::from(&b"png"[..]));
         font.files = std::sync::Arc::new(files);
         assert!(!info_losses(&font).iter().any(|l| l.starts_with("the layers' image files")));
+        // In a designspace the master's UFO keeps its files under its file name.
+        let mut ds = font.clone();
+        std::sync::Arc::make_mut(&mut ds.masters)[0].extra.insert(Family::Designspace, "filename", Value::String("Layered.ufo".into()));
+        assert!(crate::designspace::info_losses(&ds).iter().any(|l| l == LOST), "a file at the root is not in the UFO's folder");
+        let mut files = fontcraft_model::FileStore::default();
+        files.0.insert("Layered.ufo/images/a.png".into(), std::sync::Arc::from(&b"png"[..]));
+        ds.files = std::sync::Arc::new(files);
+        assert!(!crate::designspace::info_losses(&ds).iter().any(|l| l.starts_with("the layers' image files")));
         {
             let mut a = font.glyph_mut("A").unwrap();
             a.layer_mut("m01").unwrap().info.image.as_mut().unwrap().path = Some("a.jpg".into());
