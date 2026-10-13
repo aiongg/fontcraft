@@ -66,6 +66,11 @@ milestone = "M1"
 summary = "The reference app's default source format: a single UTF-8 OpenStep-style property list holding axes, masters, instances, glyphs with all their layers, three kerning tables (LTR, RTL, vertical), features, classes, prefixes, custom parameters and user data. Everything in the documented schema is modelled; keys outside the schema are kept verbatim in `extra` and written back. This is the format the model is closest to, so an unedited file must come back byte-identical."
 ref = "GlyphsSDK GlyphsFileFormat/GlyphsFileFormatv3.md; Schemas/glyphs-3.schema.json; Import & Export › Glyphs File"
 status = "docs"
+notes = "Paint attributes are typed (M11.5): `fillColor`, `strokeColor`, `gradient`, `shadow`, `shadowIn` and palette references `(p, index, alpha)`; `strokePos` is converted to the version 4 convention on reading and back on writing. Writing a font as version 3 reports conic gradients, extend modes, gradient radii and colours finer than 8 bits as losses."
+guesses = [
+  "A gray colour `(gray, alpha)` is read as an RGBA colour with equal components, and the shape remembers which of its colours the file wrote as gray so that they are written as gray again. Settled by watching whether the reference app writes a colour picked from the gray swatches as gray.",
+  "A version 3 `strokePos` stored as text that is not a plain number stays a stored value, because it cannot be converted to the version 4 convention. Settled by finding a file whose stroke position is an expression.",
+]
 
 [[format]]
 id = "glyphs4"

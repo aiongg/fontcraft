@@ -21,7 +21,7 @@ use fontcraft_model::{
     Component, Dimension, Family, Font, Glyph, Layer, LayerSide, MAX_COMPONENT_DEPTH, MAX_COORDINATE, MAX_OUTLINE_ELEMENTS, ModelError, Resolved,
     Shape, ShapeAttrs, Target,
 };
-use fontcraft_pathops::{Cap, CapAxis, Join, LayerShape, MaskMode, StrokeStyle, composite, position_from_stored};
+use fontcraft_pathops::{Cap, CapAxis, Join, LayerShape, MaskMode, StrokeStyle, composite};
 
 /// The native extra key that holds the axis a path's axis-aligned caps are forced to (`x` or
 /// `y`); without it the cap picks the nearer axis.
@@ -40,7 +40,7 @@ fn number(d: &Option<Dimension>, what: &str) -> Result<Option<f64>, String> {
     }
 }
 
-/// The `.glyphs` format version whose conventions the font's stroke positions and mask values
+/// The `.glyphs` format version whose conventions the font's mask values
 /// follow. A font that did not come from a `.glyphs` file is written as version 3, so it follows
 /// version 3.
 pub fn format_version(font: &Font) -> u32 {
@@ -52,17 +52,17 @@ pub fn cap_axis(attrs: &ShapeAttrs) -> CapAxis {
     attrs.extra.get(Family::Native, CAP_AXIS_KEY).and_then(Plist::as_str).and_then(CapAxis::from_name).unwrap_or_default()
 }
 
-/// The stroke that `attrs` describe in a font of [`format_version`] `glyphs_version`, or `None`
+/// The stroke that `attrs` describe, or `None`
 /// when there is no stroke width or it is 0 or less. Unknown join and cap codes read as miter
 /// and butt.
-pub fn stroke_style(attrs: &ShapeAttrs, glyphs_version: u32) -> Result<Option<StrokeStyle>, String> {
+pub fn stroke_style(attrs: &ShapeAttrs) -> Result<Option<StrokeStyle>, String> {
     let Some(width) = number(&attrs.stroke_width, "stroke width")? else { return Ok(None) };
     if width <= 0.0 {
         return Ok(None);
     }
     let height = number(&attrs.stroke_height, "stroke height")?.unwrap_or(width);
     // No stored position is a centred stroke in every format version.
-    let position = number(&attrs.stroke_pos, "stroke position")?.map_or(0.0, |v| position_from_stored(v, glyphs_version));
+    let position = number(&attrs.stroke_pos, "stroke position")?.unwrap_or(0.0);
     let cap = |code: Option<u8>| code.and_then(Cap::from_code).unwrap_or_default();
     Ok(Some(StrokeStyle {
         width,
@@ -85,7 +85,7 @@ pub fn mask_mode(attrs: &ShapeAttrs, glyphs_version: u32) -> Option<MaskMode> {
 /// composite reports it.
 pub fn has_strokes_or_masks(shapes: &[Shape], glyphs_version: u32) -> bool {
     shapes.iter().any(|s| match s {
-        Shape::Path(p) => mask_mode(&p.info.attrs, glyphs_version).is_some() || !matches!(stroke_style(&p.info.attrs, glyphs_version), Ok(None)),
+        Shape::Path(p) => mask_mode(&p.info.attrs, glyphs_version).is_some() || !matches!(stroke_style(&p.info.attrs), Ok(None)),
         Shape::Component(c) => mask_mode(&c.info.attrs, glyphs_version).is_some(),
         Shape::Image(_) | Shape::Raw(_) => false,
     })
@@ -176,7 +176,7 @@ impl Composer<'_> {
         for shape in shapes {
             let (outline, attrs, stroke) = match shape {
                 Shape::Path(p) => {
-                    let (outline, stroke) = crate::thickness::path_shape(p, stroke_style(&p.info.attrs, version)?)?;
+                    let (outline, stroke) = crate::thickness::path_shape(p, stroke_style(&p.info.attrs)?)?;
                     (outline, &p.info.attrs, stroke)
                 }
                 Shape::Component(c) => (self.component(c, depth)?, &c.info.attrs, None),

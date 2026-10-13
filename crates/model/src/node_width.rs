@@ -72,11 +72,10 @@ pub fn path_sides(width: f64, position: f64) -> [f64; 2] {
     [half * (1.0 - p), half * (1.0 + p)]
 }
 
-/// The stroke width and position (−1 to 1) of `path` in a font of `.glyphs` format version
-/// `glyphs_version`, or `None` when the path has no stroke (no width, a width of 0 or less, or
-/// one that is not a plain number). Versions before 4 store the position as 0 right, 0.5
-/// centred, 1 left; version 4 stores it as −1 left to 1 right. No stored position is centred.
-pub fn path_stroke(path: &Path, glyphs_version: u32) -> Option<(f64, f64)> {
+/// The stroke width and position (−1 left to 1 right) of `path`, or `None` when the path has no
+/// stroke (no width, a width of 0 or less, or one that is not a plain number). No stored position
+/// is centred.
+pub fn path_stroke(path: &Path) -> Option<(f64, f64)> {
     let number = |d: &Option<Dimension>| match d {
         Some(Dimension::Number(n)) => Some(*n),
         Some(Dimension::Expression(e)) => e.trim().parse::<f64>().ok(),
@@ -84,11 +83,7 @@ pub fn path_stroke(path: &Path, glyphs_version: u32) -> Option<(f64, f64)> {
     };
     let attrs = &path.info.attrs;
     let width = number(&attrs.stroke_width).filter(|w| w.is_finite() && *w > 0.0)?;
-    let position = match number(&attrs.stroke_pos).filter(|p| p.is_finite()) {
-        None => 0.0,
-        Some(s) if glyphs_version < 4 => 1.0 - 2.0 * s,
-        Some(p) => p,
-    };
+    let position = number(&attrs.stroke_pos).filter(|p| p.is_finite()).unwrap_or(0.0);
     Some((width, position.clamp(-1.0, 1.0)))
 }
 

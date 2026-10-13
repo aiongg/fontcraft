@@ -3,10 +3,9 @@
 //! `docs/plans/M11.md` § 3 › Paint attributes in the model).
 //!
 //! These are the fields of [`crate::ShapeAttrs`] that `fontcraft-color` reads to build the paint
-//! graph. The `.glyphs` readers fill [`ShapeAttrs::fill_color`](crate::ShapeAttrs::fill_color)
-//! and [`ShapeAttrs::stroke_color`](crate::ShapeAttrs::stroke_color) with RGBA colours and keep
-//! gradients, shadows and palette references in the shape's `extra` until M11.5 reads them into
-//! the typed fields.
+//! graph. The `.glyphs` readers fill them from the `attr` keys `fillColor`, `strokeColor`,
+//! `gradient`, `shadow` and `shadowIn`; gray colours become RGBA colours with equal components.
+//! A radial gradient from a version 3 file, which stores no radii, has both radii 0.
 //!
 //! Gradient geometry is stored as the file format stores it: positions as fractions of the
 //! shape's bounding box (0,0 its bottom left, 1,1 its top right), so a gradient follows its path

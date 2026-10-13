@@ -81,7 +81,7 @@ pub fn plain_outline(font: &Font, glyph: &str, layer: &Layer) -> Option<BezPath>
 /// Whether `layer` has a stroked path or a mask shape.
 fn styled(layer: &Layer, version: u32) -> bool {
     layer.shapes.iter().any(|shape| match shape {
-        Shape::Path(p) => mask_mode(&p.info.attrs, version).is_some() || !matches!(stroke_style(&p.info.attrs, version), Ok(None)),
+        Shape::Path(p) => mask_mode(&p.info.attrs, version).is_some() || !matches!(stroke_style(&p.info.attrs), Ok(None)),
         Shape::Component(c) => mask_mode(&c.info.attrs, version).is_some(),
         Shape::Image(_) | Shape::Raw(_) => false,
     })

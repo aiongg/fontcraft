@@ -64,9 +64,9 @@ pub enum Dimension {
     Expression(String),
 }
 
-/// How a path or component is drawn in the editor and in colour fonts. The values are as the
-/// source's format version states them: `stroke_pos` and `mask` count differently in `.glyphs`
-/// versions 3 and 4 (see `docs/spec/30-source-formats.md` § 2.7).
+/// How a path or component is drawn in the editor and in colour fonts. `mask` is as the source's
+/// format version states it (`.glyphs` versions 3 and 4 count it differently, see
+/// `docs/spec/30-source-formats.md` § 2.7); `stroke_pos` is always in the version 4 convention.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct ShapeAttrs {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -74,10 +74,8 @@ pub struct ShapeAttrs {
     /// The vertical stroke size; the width when `None`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stroke_height: Option<Dimension>,
-    /// Where the stroke sits on the path. Today the source's format version states it
-    /// (`.glyphs` version 3: 0 outside, 0.5 centred, 1 inside; version 4: −1 inside, 0 centred, 1
-    /// outside). M11.5 stores it in the version 4 convention and converts version 3 files when
-    /// they are read and written.
+    /// Where the stroke sits on the path: −1 inside, 0 centred, 1 outside (the `.glyphs` version 4
+    /// convention; the reader and writer convert version 3's 0 outside, 0.5 centred, 1 inside).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stroke_pos: Option<Dimension>,
     /// 0 butt, 1 round, 2 square, 3 round inset.
@@ -119,8 +117,8 @@ pub struct ShapeAttrs {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub opacity: Option<f64>,
     /// Attributes kept as stored values: compositing, shape-group membership, keys the model
-    /// does not know, and (until M11.5) the gradients, shadows and palette colours the readers
-    /// do not yet type.
+    /// does not know, and paint values a reader could not write back the same (CMYK colours,
+    /// for example).
     #[serde(default, skip_serializing_if = "Extra::is_empty")]
     pub extra: Extra,
 }

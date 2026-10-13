@@ -32,11 +32,11 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1116 rows to check: 1556 guesses and 414 observe steps.**
+**1119 rows to check: 1561 guesses and 414 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
-| **Built milestones (M0 to M6)** | all | **469** |
+| **Built milestones (M0 to M6)** | all | **470** |
 | Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 99 |
 | Built milestones (M0 to M6) | Edit View: text mode and preview | 32 |
 | Built milestones (M0 to M6) | Components and anchors | 70 |
@@ -45,10 +45,10 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Kerning and the Kerning window | 42 |
 | Built milestones (M0 to M6) | Font View | 108 |
 | Built milestones (M0 to M6) | Font Info and features | 9 |
-| Built milestones (M0 to M6) | Files: open, import, export | 39 |
+| Built milestones (M0 to M6) | Files: open, import, export | 40 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 3 |
-| **Later milestones (after M6)** | all | **647** |
+| **Later milestones (after M6)** | all | **649** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 39 |
 | Later milestones (after M6) | Edit View: text mode and preview | 14 |
 | Later milestones (after M6) | Components and anchors | 33 |
@@ -59,13 +59,13 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Font Info and features | 248 |
 | Later milestones (after M6) | Interpolation | 44 |
 | Later milestones (after M6) | Hinting | 68 |
-| Later milestones (after M6) | Colour fonts | 44 |
+| Later milestones (after M6) | Colour fonts | 46 |
 | Later milestones (after M6) | Files: open, import, export | 44 |
 | Later milestones (after M6) | Settings and the window | 12 |
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 61 |
 | Later milestones (after M6) | Elsewhere | 15 |
 
-## Built milestones (M0 to M6) (469)
+## Built milestones (M0 to M6) (470)
 
 ### Edit View: drawing, guides, layers and the Palette (99)
 
@@ -1192,12 +1192,15 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `Decompose Glyphs` (parameter, M6, handbook): List of glyph names whose components are turned into outlines at export
   - Guess: A text value is read as glyph names separated by commas or spaces, besides the documented list; the reference app with a text value would settle it.
 
-### Files: open, import, export (39)
+### Files: open, import, export (40)
 
 - [ ] `file.open` (M1, handbook, live): Open…
   - Guess: The menu label and place are our assumption, and the shortcut is the platform convention; the chapter states neither.
 - [ ] `roundtrip.lossReport` (behavior, M1, inferred): Every save or export to a format that cannot hold part of…
   - Open (our design, not confirmed): Every save or export to a format that cannot hold part of the document returns a structured list of losses (object path, concept, what was done: dropped, decomposed, moved to lib). The UI shows it as a warning before the write is committed and the command line prints it; with `strict` set the write fails instead.
+- [ ] `glyphs3` (format, M1, docs): Glyphs file, format version 3
+  - Guess: A gray colour `(gray, alpha)` is read as an RGBA colour with equal components, and the shape remembers which of its colours the file wrote as gray so that they are written as gray again. Settled by watching whether the reference app writes a colour picked from the gray swatches as gray.
+  - Guess: A version 3 `strokePos` stored as text that is not a plain number stays a stored value, because it cannot be converted to the version 4 convention. Settled by finding a file whose stroke position is an expression.
 - [ ] `io.stableSourceSerialization` (behavior, M1, memory): Saving writes source files in a normalised form, with fixed key order,…
   - Open (recalled, not confirmed): Saving writes source files in a normalised form, with fixed key order, number formatting and indentation, and rewrites only the glyph files that changed, so version-control differences show real edits only. RoboFont bundles a UFO normaliser; the exact save behaviour is recalled rather than read.
 - [ ] `export.fileNaming` (behavior, M2, memory): Each exported file is named by the font's PostScript name (family and…
@@ -1332,7 +1335,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (647)
+## Later milestones (after M6) (649)
 
 ### Edit View: drawing, guides, layers and the Palette (39)
 
@@ -2789,7 +2792,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `dialog.stemHistogram` (panel, M13, memory): Stem Histogram
   - Open (recalled, not confirmed): Charts the distribution returned by the stem report (autohint.ps.reportStems) so standard stems and alignment zones can be picked from its peaks and written to Font Info in one step. The pages read confirm the three histogram kinds; the chart controls listed are recalled.
 
-### Colour fonts (44)
+### Colour fonts (46)
 
 - [ ] `color.fourKinds` (behavior, M11, handbook): Four colour workflows are supported: layered fonts (one font file per colour),…
   - Guess: A glyph may mix kinds: its palette and full-colour layers feed COLR, its iColor layers sbix and its svg layer the SVG table, each written by its own rule; an svg layer wins over a conversion by Color Layers to SVG for that glyph. Settled by exporting a glyph with a palette layer and an svg layer from the reference.
@@ -2814,10 +2817,13 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `color.export.colorPaletteForCpal` (behavior, M11, handbook): Color Palette for CPAL on an instance holds a palette number (0-based)…
   - Guess: Every palette is written, with the chosen palette moved to position 0, so the font keeps its alternatives and renders the chosen one by default. Settled by exporting the palette test font with Color Palette for CPAL = 1 from the reference.
   - Observe: Palette font: export an instance with Color Palette for CPAL set to 1 and read CPAL; note whether one palette or both are written, and in which order.
+- [ ] `color.fullColor.layerNaming` (behavior, M11, handbook): A full-colour layer is labelled simply Color (no index) and shows a…
+  - Guess: Glyphs 2 files mark full-colour and svg layers by the names `Color` and `svg` alone, as the labels read. Settled by saving a colour font from the reference app as a Glyphs 2 file.
 - [ ] `color.fullColor.defaultGrayFill` (behavior, M11, handbook): Paths on a full-colour layer are drawn and edited with the normal…
   - Guess: The gray is 50 % gray, opaque (#808080FF), written to the path's fill colour when the path is made. Settled by reading the colour picker of a new shape in the reference.
   - Observe: Full-colour font: draw a rectangle on a Color layer; read its fill in the colour picker and note the exact gray value.
 - [ ] `color.fullColor.gradientTypes` (behavior, M11, handbook): The chapter describes two gradient types, linear and radial, each with at…
+  - Guess: A radial gradient with an end radius of 0 reaches from its centre to the farthest corner of the shape's bounds, which is how both oracles draw a version 3 `circle` gradient; a version 4 file writes such a gradient without `endRadius`. Settled by saving a version 3 radial gradient from the reference app as version 4.
   - Observe: Full-colour font: look in the Attributes inspector for conic gradients and for extend modes (pad, repeat, reflect); note whether any UI offers them.
 - [ ] `color.export.fullColorToSvg` (behavior, M11, handbook): With Color Layers to SVG checked on an instance, the paths of…
   - Guess: One uncompressed SVG document per glyph whose group has the id `glyph<ID>` and a transform that flips y at the baseline; centred strokes are SVG strokes, inside and outside strokes are expanded to outlines. Settled by exporting the full-colour test font with Color Layers to SVG from the reference and reading the documents.
@@ -2832,6 +2838,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: sbix font: export and read sbix; note what happens to the non-square PNG (written, scaled, refused) and any message.
 - [ ] `color.sbix.masterLayerBounds` (behavior, M11, handbook): The master layer of an sbix glyph has no real outline, but…
   - Observe: sbix font: drop E 64.png on the iColor 64 layer of E; note whether the image is fitted to the box of the corner paths at (50, -100) and (550, 700).
+- [ ] `color.sbix.iColorNaming` (behavior, M11, handbook): sbix layers are labelled iColor followed by their pixel size (iColor 256,…
+  - Guess: Glyphs 2 files mark sbix layers by the name `iColor n` alone, as the label reads. Settled by opening a Glyphs 2 sbix file from the reference app.
 - [ ] `color.sbix.sizeScalesImage` (behavior, M11, handbook): The image on an iColor layer is drawn at image pixels divided…
   - Observe: sbix font: double-click an iColor layer entry and type 256; note whether the image is drawn half as large as at 128.
 - [ ] `color.layers.widthFollowsMaster` (behavior, M11, handbook): iColor and svg layers have no advance width of their own: a…

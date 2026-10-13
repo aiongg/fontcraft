@@ -13,9 +13,7 @@ use std::collections::HashMap;
 use fontcraft_geom::{BezPath, Point, Vec2, round_point};
 use fontcraft_model::plist::{Str, Value as Plist};
 use fontcraft_model::{Dimension, Family, Node, NodeKind, Path, Shape, ShapeAttrs};
-use fontcraft_pathops::{
-    Cap, CapAxis, Join, MAX_STROKE_WIDTH, MaskMode, SMOOTH_MAX_DEGREES, contours_from_bez, position_from_stored, position_to_stored,
-};
+use fontcraft_pathops::{Cap, CapAxis, Join, MAX_STROKE_WIDTH, MaskMode, SMOOTH_MAX_DEGREES, contours_from_bez};
 use serde_json::{Value, json};
 
 use super::common::{Scope, each_layer, grid, scope};
@@ -85,8 +83,8 @@ pub fn specs() -> Vec<CommandSpec> {
     ]
 }
 
-fn is_stroked(path: &Path, version: u32) -> bool {
-    stroke_style(&path.info.attrs, version).is_ok_and(|s| s.is_some())
+fn is_stroked(path: &Path) -> bool {
+    stroke_style(&path.info.attrs).is_ok_and(|s| s.is_some())
 }
 
 // ── Set Stroke ──────────────────────────────────────────────────────────────────────────────────
@@ -149,7 +147,7 @@ impl StrokeEdit {
         })
     }
 
-    fn apply(&self, attrs: &mut ShapeAttrs, version: u32) {
+    fn apply(&self, attrs: &mut ShapeAttrs) {
         if self.remove {
             clear_stroke(attrs);
             return;
@@ -164,7 +162,7 @@ impl StrokeEdit {
             attrs.fill = f;
         }
         if let Some(pos) = self.position {
-            attrs.stroke_pos = Some(Dimension::Number(position_to_stored(pos, version)));
+            attrs.stroke_pos = Some(Dimension::Number(pos));
         }
         if let Some(j) = self.join {
             attrs.line_join = Some(j.code());
@@ -198,7 +196,7 @@ fn clear_stroke(attrs: &mut ShapeAttrs) {
 }
 
 /// The stroke attributes of a path as `path.setStroke` names them.
-fn describe(index: usize, attrs: &ShapeAttrs, version: u32) -> Value {
+fn describe(index: usize, attrs: &ShapeAttrs) -> Value {
     let dim = |d: &Option<Dimension>| match d {
         None => Value::Null,
         Some(Dimension::Number(n)) => json!(n),
@@ -206,7 +204,7 @@ fn describe(index: usize, attrs: &ShapeAttrs, version: u32) -> Value {
     };
     let position = match &attrs.stroke_pos {
         None => json!(0.0),
-        Some(Dimension::Number(n)) => json!(position_from_stored(*n, version) * 100.0),
+        Some(Dimension::Number(n)) => json!(n * 100.0),
         Some(Dimension::Expression(e)) => json!(e),
     };
     let cap = |code: Option<u8>| code.and_then(Cap::from_code).unwrap_or_default().name();
@@ -243,19 +241,18 @@ fn set_stroke(s: &mut Session, value: &Value) -> Result<Value> {
     let p = Params::new("path.setStroke", value)?;
     let edit = StrokeEdit::read(&p, value)?;
     let t = path_targets(&p, s)?;
-    let version = format_version(s.font()?);
     let strokes = s.edit("Set Stroke", |font| {
         t.edit_layer(font, |layer| {
             let mut parts = layer.parts_mut(t.side);
             let mut out = Vec::with_capacity(t.shapes.len());
             for &i in &t.shapes {
                 let path = parts.path_mut(i).ok_or_else(|| p.bad(format!("shape {i} is not a path")))?;
-                edit.apply(&mut path.info.attrs, version);
-                if let Ok(Some(style)) = stroke_style(&path.info.attrs, version) {
+                edit.apply(&mut path.info.attrs);
+                if let Ok(Some(style)) = stroke_style(&path.info.attrs) {
                     style.check().map_err(|e| p.bad(e.to_string()))?;
                 }
                 path.info.tidy();
-                out.push(describe(i, &path.info.attrs, version));
+                out.push(describe(i, &path.info.attrs));
             }
             Ok(out)
         })
@@ -337,11 +334,11 @@ fn shape_order(s: &mut Session, value: &Value) -> Result<Value> {
 /// Replaces the stroked paths of `shapes` (every one, or those at `only`) by the outlines of their
 /// strokes, rounded to `grid`. Returns the indices of the new paths. Nothing changes when it
 /// fails; with `only`, an index that is not a stroked path fails.
-fn expand_shapes(shapes: &mut Vec<Shape>, only: Option<&[usize]>, version: u32, grid: f64) -> std::result::Result<Vec<usize>, String> {
+fn expand_shapes(shapes: &mut Vec<Shape>, only: Option<&[usize]>, grid: f64) -> std::result::Result<Vec<usize>, String> {
     if let Some(only) = only {
         for &i in only {
             match shapes.get(i) {
-                Some(Shape::Path(path)) if is_stroked(path, version) => {}
+                Some(Shape::Path(path)) if is_stroked(path) => {}
                 Some(_) => return Err(format!("shape {i} is not a stroked path")),
                 None => return Err(format!("shape {i} does not resolve: the layer has {} shapes", shapes.len())),
             }
@@ -353,7 +350,7 @@ fn expand_shapes(shapes: &mut Vec<Shape>, only: Option<&[usize]>, version: u32, 
         if only.is_some_and(|o| !o.contains(&i)) {
             continue;
         }
-        let Some(style) = stroke_style(&path.info.attrs, version)? else { continue };
+        let Some(style) = stroke_style(&path.info.attrs)? else { continue };
         let outline = fontcraft_compile::thickness::stroke_path(path, &style).map_err(|e| format!("shape {i}: {e}"))?;
         expanded.insert(i, to_paths(&outline, path, grid));
     }
@@ -456,7 +453,7 @@ fn expand_outline(s: &mut Session, value: &Value) -> Result<Value> {
     const ID: &str = "path.expandOutline";
     let p = Params::new(ID, value)?;
     let font = s.font()?;
-    let (version, step) = (format_version(font), grid(font));
+    let step = grid(font);
     if p.get("glyphs").is_some() {
         if let Some(k) = ["shapes", "side"].iter().find(|k| p.get(k).is_some()) {
             return Err(p.bad(format!("`{k}` goes with one `glyph`; with `glyphs` every stroked path is expanded")));
@@ -464,7 +461,7 @@ fn expand_outline(s: &mut Session, value: &Value) -> Result<Value> {
         let sc = scope(&p, font)?;
         let out = s.edit("Expand Outline", |font| {
             each_layer(font, &sc, ID, |_, layer| {
-                Ok(match expand_shapes(&mut layer.shapes, None, version, step) {
+                Ok(match expand_shapes(&mut layer.shapes, None, step) {
                     Ok(v) if v.is_empty() => Some("the layer has no stroked path".into()),
                     Ok(_) => None,
                     Err(e) => Some(e),
@@ -481,7 +478,7 @@ fn expand_outline(s: &mut Session, value: &Value) -> Result<Value> {
     let bad = bad_for(ID);
     let new = s.edit("Expand Outline", |font| {
         t.edit_layer(font, |layer| {
-            let new = expand_shapes(layer.parts_mut(t.side).shapes, only.as_deref(), version, step).map_err(&bad)?;
+            let new = expand_shapes(layer.parts_mut(t.side).shapes, only.as_deref(), step).map_err(&bad)?;
             if new.is_empty() {
                 return Err(bad("the layer has no stroked path".into()));
             }
@@ -501,7 +498,7 @@ fn expand_outline_all_masters(s: &mut Session, value: &Value) -> Result<Value> {
         return Err(p.bad(format!("`{k}` is not taken: every master layer is expanded")));
     }
     let font = s.font()?;
-    let (version, step) = (format_version(font), grid(font));
+    let step = grid(font);
     let mut sc: Scope = scope(&p, font)?;
     sc.layers = font.masters.iter().map(|m| m.id.clone()).collect();
     let only: Option<Vec<usize>> = match p.opt_array("shapes")? {
@@ -511,7 +508,7 @@ fn expand_outline_all_masters(s: &mut Session, value: &Value) -> Result<Value> {
     };
     let out = s.edit("Expand Outline for All Masters", |font| {
         each_layer(font, &sc, ID, |_, layer| {
-            Ok(match expand_shapes(&mut layer.shapes, only.as_deref(), version, step) {
+            Ok(match expand_shapes(&mut layer.shapes, only.as_deref(), step) {
                 Ok(v) if v.is_empty() => Some("the layer has no stroked path".into()),
                 Ok(_) => None,
                 Err(e) => Some(e),

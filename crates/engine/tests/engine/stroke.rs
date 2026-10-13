@@ -71,8 +71,8 @@ fn set_stroke_writes_the_attributes_and_width_null_removes_them() {
     assert_eq!((st["capStart"].as_str(), st["capEnd"].as_str(), st["capAxis"].as_str()), (Some("round"), Some("axisAligned"), Some("y")));
     let a = attrs(&s, "A", 0);
     assert_eq!(a.stroke_width, Some(Dimension::Number(20.0)));
-    // A document that is not from a `.glyphs` file follows version 3: 0.5 is centred, 0 right.
-    assert_eq!(a.stroke_pos, Some(Dimension::Number(0.25)));
+    // The model stores the position from −1 (left) to 1 (right), whatever the source format.
+    assert_eq!(a.stroke_pos, Some(Dimension::Number(0.5)));
     assert_eq!((a.line_join, a.line_cap_start, a.line_cap_end, a.fill), (Some(1), Some(1), Some(4), true));
     assert_eq!(a.extra.get(Family::Native, CAP_AXIS_KEY).and_then(|v| v.as_str()), Some("y"));
 

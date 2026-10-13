@@ -398,3 +398,11 @@ fn hints_read_from_a_ufo_are_written_in_the_versions_form() {
     odd.insert("settings", Value::Dict(Dict::new()));
     assert!(hint_from_ufo(&Value::Dict(odd), 3).is_none(), "a key the format's hint has no form for");
 }
+
+#[test]
+fn version_2_colour_layer_names_give_their_attributes() {
+    assert!(v2_attrs("Color").full_color);
+    assert!(v2_attrs(" svg ").svg);
+    assert_eq!(v2_attrs("iColor 128").sbix_size, Some(128));
+    assert!(v2_attrs("iColor").is_empty() && v2_attrs("iColor x").is_empty() && v2_attrs("Colorful").is_empty());
+}

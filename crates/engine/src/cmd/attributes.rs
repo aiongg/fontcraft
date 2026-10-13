@@ -19,10 +19,9 @@ use fontcraft_color::Rgba;
 use fontcraft_geom::{Point, Shape as _};
 use fontcraft_model::plist::{Str, Value as Plist};
 use fontcraft_model::{Color, ColorStop, Dimension, Extend, Family, Gradient, GradientKind, Layer, MAX_GRADIENT_STOPS, Path, Shadow, ShapeAttrs};
-use fontcraft_pathops::{MAX_STROKE_WIDTH, position_from_stored, position_to_stored};
+use fontcraft_pathops::MAX_STROKE_WIDTH;
 use serde_json::{Map, Value, json};
 
-use super::stroke::format_version;
 use super::*;
 use crate::params::{MAX_TARGETS, Params, TargetKind, Targets, kind};
 
@@ -221,7 +220,7 @@ pub fn color_json(color: &Color) -> Value {
 }
 
 /// The attributes of one path as the commands report them.
-pub fn describe(index: usize, attrs: &ShapeAttrs, glyphs_version: u32) -> Value {
+pub fn describe(index: usize, attrs: &ShapeAttrs) -> Value {
     let dimension = |d: &Option<Dimension>| match d {
         None => Value::Null,
         Some(Dimension::Number(n)) => json!(n),
@@ -229,7 +228,7 @@ pub fn describe(index: usize, attrs: &ShapeAttrs, glyphs_version: u32) -> Value 
     };
     let alignment = match &attrs.stroke_pos {
         None => json!("center"),
-        Some(Dimension::Number(n)) => json!(alignment_name(position_from_stored(*n, glyphs_version))),
+        Some(Dimension::Number(n)) => json!(alignment_name(*n)),
         Some(Dimension::Expression(e)) => json!(e),
     };
     let shadow = |s: &Option<Shadow>| match s {
@@ -375,9 +374,8 @@ fn edit_paths<T>(s: &mut Session, p: &Params, t: &Targets, label: &str, mut f: i
 /// The command's result: the target and the attributes of every target path afterwards.
 fn report(s: &Session, t: &Targets) -> Result<Value> {
     let font = s.font()?;
-    let version = format_version(font);
     let r = t.resolve(font)?;
-    let attributes: Vec<Value> = t.shapes.iter().filter_map(|&i| r.parts.path(i).map(|path| describe(i, &path.info.attrs, version))).collect();
+    let attributes: Vec<Value> = t.shapes.iter().filter_map(|&i| r.parts.path(i).map(|path| describe(i, &path.info.attrs))).collect();
     Ok(json!({"glyph": t.glyph, "layer": t.layer, "shapes": t.shapes, "attributes": attributes}))
 }
 
@@ -537,9 +535,8 @@ fn set_stroke_alignment(s: &mut Session, value: &Value) -> Result<Value> {
         other => return Err(p.bad(format!("`alignment` must be center, inside or outside, got \"{other}\""))),
     };
     let t = targets(&p, s)?;
-    let version = format_version(s.font()?);
     edit_paths(s, &p, &t, "Set Stroke Alignment", |_, path| {
-        path.info.attrs.stroke_pos = position.map(|pos| Dimension::Number(position_to_stored(pos, version)));
+        path.info.attrs.stroke_pos = position.map(Dimension::Number);
         Ok(())
     })?;
     report(s, &t)

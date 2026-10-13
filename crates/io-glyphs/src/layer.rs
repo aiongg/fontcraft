@@ -279,7 +279,9 @@ fn write_poles(poles: &[SmartPole]) -> Value {
 /// The attributes a version 2 layer name says, as glyphsLib 6.15.0 reads them
 /// (`GSLayer._is_brace_layer`, `_bracket_axis_rules`, `_color_palette_index`): coordinates between
 /// the first `{` and `}` (not in a background's name); a bracket rule `[n]` (from n) or `]n]` (up
-/// to n), the last one in the name, on the first axis; `Color n` or `Color *`.
+/// to n), the last one in the name, on the first axis; `Color n` or `Color *`. The reference app's
+/// other colour layer names, which glyphsLib does not read, give the other colour attributes:
+/// `Color` a full-colour layer, `iColor n` an sbix layer of n pixels per em, `svg` an svg layer.
 pub(crate) fn v2_attrs(name: &str) -> LayerAttrs {
     let mut a = LayerAttrs::default();
     if !name.contains(".background")
@@ -293,7 +295,19 @@ pub(crate) fn v2_attrs(name: &str) -> LayerAttrs {
     if let Some((reverse, value)) = v2_bracket(name) {
         a.axis_rules = vec![if reverse { AxisRule { min: None, max: Some(value) } } else { AxisRule { min: Some(value), max: None } }];
     }
-    if let Some(rest) = name.trim().strip_prefix("Color ") {
+    let trimmed = name.trim();
+    match trimmed {
+        "Color" => a.full_color = true,
+        "svg" => a.svg = true,
+        _ => {}
+    }
+    if let Some(rest) = trimmed.strip_prefix("iColor ")
+        && !rest.is_empty()
+        && rest.bytes().all(|b| b.is_ascii_digit())
+    {
+        a.sbix_size = rest.parse::<u16>().ok();
+    }
+    if let Some(rest) = trimmed.strip_prefix("Color ") {
         if rest == "*" {
             a.color_palette = Some(PaletteEntry::Foreground);
         } else if !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit()) {

@@ -27,7 +27,7 @@ use serde::Deserialize;
 pub use atomic::write_atomic;
 
 /// The version this build writes. Older versions are upgraded on load, one step at a time.
-pub const VERSION: u32 = 2;
+pub const VERSION: u32 = 3;
 pub const FORMAT: &str = "fontcraft";
 pub const EXTENSION: &str = "fontcraft";
 /// Largest file [`load`] accepts (a guard against hostile input).
@@ -100,9 +100,59 @@ pub fn load(bytes: &[u8]) -> Result<Font, FormatError> {
         _ => serde_json::from_str::<Font>(raw).map_err(bad)?,
     };
     let mut font = font;
+    if file.version <= 2 && font.source.glyphs_version != Some(4) {
+        upgrade_stroke_positions(&mut font);
+    }
     font.source.compressed = compressed;
     font.check()?;
     Ok(font)
+}
+
+/// Version 3 stores every stroke position from −1 (inside) to 1 (outside). Earlier versions stored
+/// it as the font's `.glyphs` format version counts it, which for anything but version 4 is 0
+/// outside, 0.5 centred, 1 inside. An expression that is not a plain number is kept.
+fn upgrade_stroke_positions(font: &mut Font) {
+    use fontcraft_model::{Dimension, Shape};
+    let convert = |d: &mut Option<Dimension>| match d {
+        Some(Dimension::Number(p)) => *p = 1.0 - 2.0 * *p,
+        Some(Dimension::Expression(e)) => {
+            if let Some(p) = e.trim().parse::<f64>().ok().filter(|p| p.is_finite()) {
+                *e = format!("{}", 1.0 - 2.0 * p);
+            }
+        }
+        None => {}
+    };
+    let has = |s: &Shape| match s {
+        Shape::Path(p) => p.info.attrs.stroke_pos.is_some(),
+        Shape::Component(c) => c.info.attrs.stroke_pos.is_some(),
+        _ => false,
+    };
+    let fix = |shapes: &mut Vec<Shape>| {
+        for s in shapes.iter_mut().filter(|s| has(s)) {
+            match s {
+                Shape::Path(p) => convert(&mut p.info.attrs.stroke_pos),
+                Shape::Component(c) => convert(&mut c.info.attrs.stroke_pos),
+                _ => {}
+            }
+        }
+    };
+    let glyphs = font.glyphs.as_arcs().iter().map(|g| {
+        let touched = g.layers.iter().any(|l| l.shapes.iter().chain(l.info.background.iter().flat_map(|b| b.shapes.iter())).any(has));
+        if !touched {
+            return g.clone();
+        }
+        let mut g = (**g).clone();
+        for l in &mut g.layers {
+            fix(&mut l.shapes);
+            if l.info.background.as_ref().is_some_and(|b| b.shapes.iter().any(has))
+                && let Some(b) = l.info.background.as_mut()
+            {
+                fix(&mut b.shapes);
+            }
+        }
+        std::sync::Arc::new(g)
+    });
+    font.glyphs = fontcraft_model::GlyphTable::from_glyphs(glyphs.collect());
 }
 
 /// Whether `bytes` are a gzip-compressed file (a compressed native file starts this way).
@@ -121,6 +171,32 @@ mod tests {
         assert_eq!(load(&bytes).unwrap(), font);
         // Saving what was loaded gives the same bytes: the format is stable.
         assert_eq!(save(&load(&bytes).unwrap()).unwrap(), bytes);
+    }
+
+    #[test]
+    fn a_version_2_file_has_its_stroke_positions_converted() {
+        use fontcraft_model::{Dimension, Glyph, Layer, Node, NodeKind, Path, Shape};
+        let mut font = Font::new("Strokes");
+        let master = font.masters.first().map(|m| m.id.clone()).unwrap();
+        let mut path = Path::new(false, vec![Node::new(0.0, 0.0, NodeKind::Line), Node::new(100.0, 0.0, NodeKind::Line)]);
+        path.info.attrs.stroke_pos = Some(Dimension::Number(0.0));
+        let mut layer = Layer::new(master, 500.0);
+        layer.shapes.push(Shape::Path(path));
+        let mut glyph = Glyph::new("stroked");
+        glyph.layers.push(layer);
+        font.glyphs.push(glyph);
+        let pos = |f: &Font| match f.glyphs.get("stroked").and_then(|g| g.layers.first()).and_then(|l| l.shapes.first()) {
+            Some(Shape::Path(p)) => p.info.attrs.stroke_pos.clone(),
+            _ => None,
+        };
+        let text = String::from_utf8(save(&font).unwrap()).unwrap();
+        assert_eq!(pos(&load(text.as_bytes()).unwrap()), Some(Dimension::Number(0.0)), "version 3 keeps the value");
+        let old = text.replacen("\"version\": 3", "\"version\": 2", 1);
+        // Version 2 stored 0 for outside in a font not from a version 4 file.
+        assert_eq!(pos(&load(old.as_bytes()).unwrap()), Some(Dimension::Number(1.0)));
+        font.source.glyphs_version = Some(4);
+        let v4 = String::from_utf8(save(&font).unwrap()).unwrap().replacen("\"version\": 3", "\"version\": 2", 1);
+        assert_eq!(pos(&load(v4.as_bytes()).unwrap()), Some(Dimension::Number(0.0)));
     }
 
     #[test]
@@ -356,9 +432,9 @@ mod tests {
         let fontcraft_model::Shape::Component(c) = &b.layers[0].shapes[0] else { panic!() };
         assert_eq!(c.transform, fontcraft_model::Transform::Matrix([1.0, 0.0, 0.0, 1.0, 10.0, 0.0]));
         assert!(font.extra.get(fontcraft_model::Family::Native, "fromTheFuture").is_some());
-        // Saved again, it is a version 2 file that loads to the same font.
+        // Saved again, it is a current file that loads to the same font.
         let again = save(&font).unwrap();
-        assert!(String::from_utf8_lossy(&again).contains("\"version\": 2"));
+        assert!(String::from_utf8_lossy(&again).contains(&format!("\"version\": {VERSION}")));
         assert_eq!(load(&again).unwrap(), font);
     }
 

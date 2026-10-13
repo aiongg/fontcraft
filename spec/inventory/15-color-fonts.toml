@@ -882,6 +882,7 @@ milestone = "M11"
 summary = "A Color Palette layer is labelled with the word Color followed by its colour index (Color 0, Color 1, …). In the Glyphs file format the index is the layer attribute colorPalette, an integer or \"*\"."
 ref = "Color Fonts › COLR/CPAL Fonts › Color Palette Layers; GlyphsSDK GlyphsFileFormatv3.md › layerAttr"
 status = "handbook"
+notes = "Glyphs 2 files have no layer attribute: a layer named `Color n` or `Color *` is a palette layer (glyphsLib reads the same names), and the name is what is written back."
 
 [[behavior]]
 id = "color.paletteLayer.foregroundColor"
@@ -987,6 +988,10 @@ milestone = "M11"
 summary = "A full-colour layer is labelled simply Color (no index) and shows a colour-spectrum disc in the Layers palette. In the Glyphs file format it is the boolean layer attribute color."
 ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs; GlyphsSDK GlyphsFileFormatv3.md › layerAttr"
 status = "handbook"
+notes = "In a Glyphs 2 file a layer named `Color` is a full-colour layer and a layer named `svg` an svg layer; the name is what is written back."
+guesses = [
+  "Glyphs 2 files mark full-colour and svg layers by the names `Color` and `svg` alone, as the labels read. Settled by saving a colour font from the reference app as a Glyphs 2 file.",
+]
 
 [[behavior]]
 id = "color.fullColor.defaultGrayFill"
@@ -1041,6 +1046,10 @@ summary = "The chapter describes two gradient types, linear and radial, each wit
 ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs › Gradient; GlyphsSDK GlyphsFileFormatv4.md › gradient"
 status = "handbook"
 observe = ["Full-colour font: look in the Attributes inspector for conic gradients and for extend modes (pad, repeat, reflect); note whether any UI offers them."]
+notes = "A version 3 file stores radial gradients as `type = circle` without radii; they are read with both radii 0 and written back the same way."
+guesses = [
+  "A radial gradient with an end radius of 0 reaches from its centre to the farthest corner of the shape's bounds, which is how both oracles draw a version 3 `circle` gradient; a version 4 file writes such a gradient without `endRadius`. Settled by saving a version 3 radial gradient from the reference app as version 4.",
+]
 
 [[behavior]]
 id = "color.fullColor.gradientCanvasKnobs"
@@ -1211,6 +1220,10 @@ milestone = "M11"
 summary = "sbix layers are labelled iColor followed by their pixel size (iColor 256, iColor 20). One iColor layer is added per image resolution; in the Glyphs file format the size is the layer attribute sbixSize."
 ref = "Color Fonts › sbix Fonts › Adding Images to Glyphs; GlyphsSDK GlyphsFileFormatv3.md › layerAttr"
 status = "handbook"
+notes = "In a Glyphs 2 file a layer named `iColor n` is an sbix layer of n pixels per em; the name is what is written back."
+guesses = [
+  "Glyphs 2 files mark sbix layers by the name `iColor n` alone, as the label reads. Settled by opening a Glyphs 2 sbix file from the reference app.",
+]
 
 [[behavior]]
 id = "color.sbix.sizeScalesImage"

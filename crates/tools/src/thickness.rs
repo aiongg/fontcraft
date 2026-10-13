@@ -74,7 +74,7 @@ pub fn control_points(scene: &Scene<'_>) -> Vec<Placed> {
         if path.info.locked {
             continue;
         }
-        let Some((width, position)) = node_width::path_stroke(path, scene.glyphs_version) else { continue };
+        let Some((width, position)) = node_width::path_stroke(path) else { continue };
         for (i, node) in path.nodes.iter().enumerate() {
             if !node.on_curve() || node.locked {
                 continue;
@@ -415,7 +415,7 @@ fn capture(scene: &Scene<'_>, group: &[ControlPoint]) -> BTreeMap<usize, PathBas
             continue;
         }
         let Some(path) = scene.path(cp.shape) else { continue };
-        let Some((width, position)) = node_width::path_stroke(path, scene.glyphs_version) else { continue };
+        let Some((width, position)) = node_width::path_stroke(path) else { continue };
         let nodes = path
             .nodes
             .iter()

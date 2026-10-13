@@ -24,11 +24,12 @@
 //! Written from the GlyphsSDK format documents (Apache-2.0).
 
 use fontcraft_model::{
-    Alignment, Anchor, AnchorInfo, Color, ColorLabel, Component, ComponentInfo, Dimension, Family, MAX_PART_PROPERTIES, Node, NodeInfo, NodeKind,
-    Orientation, Path, PathInfo, Rare, Shape, ShapeAttrs, SmartValue, Transform, UserData,
+    Alignment, Anchor, AnchorInfo, Component, ComponentInfo, Dimension, Family, MAX_PART_PROPERTIES, Node, NodeInfo, NodeKind, Orientation, Path,
+    PathInfo, Rare, Shape, ShapeAttrs, SmartValue, Transform, UserData,
 };
 use fontcraft_plist::{Array, Dict, Layout, Num, Str, Value};
 
+use self::paint::Form;
 use crate::layer::{number, same_text, take_flag, take_same, take_text};
 use crate::{GlyphsError, Result, as_items, as_pair, bad, finish, int, into_extra, list, num, pair, raw, string, take};
 
@@ -199,27 +200,6 @@ fn read_byte(v: &Value) -> Option<u8> {
     }
 }
 
-fn read_rgba(v: &Value, version: u32) -> Option<[f64; 4]> {
-    match crate::glyph::read_color(v, version)? {
-        ColorLabel::Rgba(c) => Some(c),
-        ColorLabel::Index(_) => None,
-    }
-}
-
-fn write_rgba(c: &[f64; 4], version: u32) -> Value {
-    crate::glyph::write_color(&ColorLabel::Rgba(*c), version)
-}
-
-/// A fill or stroke colour as the file writes it; `None` for what this writer cannot write yet.
-fn write_paint_color(c: &Color, version: u32) -> Option<Value> {
-    match c {
-        Color::Rgba(c) => Some(write_rgba(c, version)),
-        // M11.5: palette references (`("p", index, alpha)` in version 4). The readers keep them in
-        // `extra` until then, so only a command can make one.
-        Color::Palette { .. } => None,
-    }
-}
-
 /// A shape's `attr` dictionary: the drawing attributes, and with `user_data` (version 4 components
 /// and anchors) the user data. `None` when the dictionary would not be written back the same.
 fn read_attrs(v: &Value, version: u32, user_data: bool) -> Option<(ShapeAttrs, UserData)> {
@@ -227,11 +207,13 @@ fn read_attrs(v: &Value, version: u32, user_data: bool) -> Option<(ShapeAttrs, U
     if d.is_empty() {
         return None;
     }
+    let gray = paint::gray_colors(&d);
+    let f = Form { version, gray: &gray };
     let mut a = ShapeAttrs::default();
     let dim = |d: &mut Dict, k: &str| take_same(d, k, version, read_dimension, write_dimension);
     a.stroke_width = dim(&mut d, "strokeWidth");
     a.stroke_height = dim(&mut d, "strokeHeight");
-    a.stroke_pos = dim(&mut d, "strokePos");
+    a.stroke_pos = take_same(&mut d, "strokePos", version, |v| paint::read_stroke_pos(v, version), |p| paint::write_stroke_pos(p, version));
     let byte = |d: &mut Dict, k: &str| take_same(d, k, version, read_byte, |b| Some(int(*b)));
     a.line_cap_start = byte(&mut d, "lineCapStart");
     a.line_cap_end = byte(&mut d, "lineCapEnd");
@@ -240,13 +222,20 @@ fn read_attrs(v: &Value, version: u32, user_data: bool) -> Option<(ShapeAttrs, U
     a.fill = take_flag(&mut d, "fill", version);
     a.reverse_paths = take_flag(&mut d, "reversePaths", version);
     a.hidden = take_flag(&mut d, "hidden", version);
-    let rgba = |d: &mut Dict, k: &str| take_same(d, k, version, |v| read_rgba(v, version).map(Color::Rgba), |c| write_paint_color(c, version));
-    a.fill_color = rgba(&mut d, "fillColor");
-    a.stroke_color = rgba(&mut d, "strokeColor");
+    let color = |d: &mut Dict, k: &str| take_same(d, k, version, |v| paint::read_color(v, version), |c| paint::write_color(c, f, k));
+    a.fill_color = color(&mut d, "fillColor");
+    a.stroke_color = color(&mut d, "strokeColor");
+    a.gradient = take_same(&mut d, "gradient", version, |v| paint::read_gradient(v, version), |g| paint::write_gradient(g, f));
+    let shadow = |d: &mut Dict, k: &str| take_same(d, k, version, |v| paint::read_shadow(v, version), |s| paint::write_shadow(s, f, k));
+    a.shadow = shadow(&mut d, "shadow");
+    a.shadow_in = shadow(&mut d, "shadowIn");
     a.color = take_same(&mut d, "color", version, |v| crate::glyph::read_color(v, version), |c| Some(crate::glyph::write_color(c, version)));
     a.opacity = take_same(&mut d, "opacity", version, number, |f| num(*f, "opacity").ok());
     let user = if user_data { crate::info::take_user_data(&mut d) } else { UserData::default() };
     a.extra = into_extra(d);
+    if !gray.is_empty() {
+        a.extra.push(Family::Native, paint::GRAY_KEY, paint::gray_value(&gray));
+    }
     write_attrs(&a, &user, version).filter(|w| same_text(w, v, version)).map(|_| (a, user))
 }
 
@@ -261,7 +250,9 @@ fn write_attrs(a: &ShapeAttrs, user: &UserData, version: u32) -> Option<Value> {
     };
     dim("strokeWidth", &a.stroke_width)?;
     dim("strokeHeight", &a.stroke_height)?;
-    dim("strokePos", &a.stroke_pos)?;
+    if let Some(p) = &a.stroke_pos {
+        e.push(("strokePos".into(), paint::write_stroke_pos(p, version)?));
+    }
     for (k, b) in [("lineCapStart", a.line_cap_start), ("lineCapEnd", a.line_cap_end), ("lineJoin", a.line_join), ("mask", a.mask)] {
         if let Some(b) = b {
             e.push((k.into(), int(b)));
@@ -272,9 +263,20 @@ fn write_attrs(a: &ShapeAttrs, user: &UserData, version: u32) -> Option<Value> {
             e.push((k.into(), int(1)));
         }
     }
+    let gray = paint::stored_gray(a.extra.get(Family::Native, paint::GRAY_KEY));
+    let f = Form { version, gray: &gray };
     for (k, c) in [("fillColor", &a.fill_color), ("strokeColor", &a.stroke_color)] {
-        if let Some(v) = c.as_ref().and_then(|c| write_paint_color(c, version)) {
-            e.push((k.into(), v));
+        if let Some(c) = c {
+            e.push((k.into(), paint::write_color(c, f, k)?));
+        }
+    }
+    // Version 3 has no conic gradient; `losses` reports it.
+    if let Some(v) = a.gradient.as_ref().and_then(|g| paint::write_gradient(g, f)) {
+        e.push(("gradient".into(), v));
+    }
+    for (k, s) in [("shadow", &a.shadow), ("shadowIn", &a.shadow_in)] {
+        if let Some(s) = s {
+            e.push((k.into(), paint::write_shadow(s, f, k)?));
         }
     }
     if let Some(c) = &a.color {
@@ -325,7 +327,12 @@ fn push_path_info(e: &mut Entries, i: &PathInfo, version: u32, at: &str) -> Resu
         e.push(("locked".into(), int(1)));
     }
     if !i.attrs.is_empty() {
-        e.push(("attr".into(), write_attrs(&i.attrs, &UserData::default(), version).ok_or_else(|| attrs_error(at))?));
+        match write_attrs(&i.attrs, &UserData::default(), version) {
+            Some(v) => e.push(("attr".into(), v)),
+            // Only a gradient that version 3 cannot write; `losses` reports it.
+            None if only_unwritable_gradient(&i.attrs, version) => {}
+            None => return Err(attrs_error(at)),
+        }
     }
     Ok(())
 }
@@ -605,8 +612,21 @@ pub(crate) fn write_shape(s: &Shape, at: &str, version: u32) -> Result<Value> {
 /// objects that have it: the identifiers and anchor colours UFO sources give, tangent joins before
 /// version 4 (written as smooth), and node locks and orientations and path drawing attributes in
 /// version 2.
+/// Whether the attributes hold nothing but a gradient the version cannot write.
+fn only_unwritable_gradient(a: &ShapeAttrs, version: u32) -> bool {
+    let rest = ShapeAttrs { gradient: None, extra: fontcraft_model::Extra::new(), ..a.clone() };
+    let f = Form { version, gray: &[] };
+    rest.is_empty() && a.extra.of(Family::Glyphs).next().is_none() && a.gradient.as_ref().is_some_and(|g| paint::write_gradient(g, f).is_none())
+}
+
+/// Whether version 3 cannot hold all of a path's paint attributes.
+fn paint_needs_v4(a: &ShapeAttrs) -> bool {
+    let colors = a.fill_color.iter().chain(&a.stroke_color).chain(a.shadow.iter().chain(&a.shadow_in).map(|s| &s.color));
+    a.gradient.as_ref().is_some_and(paint::gradient_needs_v4) || colors.into_iter().any(paint::color_needs_v4)
+}
+
 pub(crate) fn losses(glyphs: &[std::sync::Arc<fontcraft_model::Glyph>], version: u32) -> Vec<String> {
-    let mut counts = [0usize; 6];
+    let mut counts = [0usize; 7];
     let shapes =
         glyphs.iter().flat_map(|g| g.layers.iter()).flat_map(|l| l.shapes.iter().chain(l.info.background.iter().flat_map(|b| b.shapes.iter())));
     for s in shapes {
@@ -616,6 +636,7 @@ pub(crate) fn losses(glyphs: &[std::sync::Arc<fontcraft_model::Glyph>], version:
                 counts[3] += p.nodes.iter().filter(|n| n.tangent).count();
                 counts[4] += p.nodes.iter().filter(|n| n.locked || !n.orientation.is_left()).count();
                 counts[5] += usize::from(!p.info.attrs.is_empty());
+                counts[6] += usize::from(paint_needs_v4(&p.info.attrs));
             }
             Shape::Component(c) => counts[1] += usize::from(c.info.identifier.is_some()),
             Shape::Image(_) | Shape::Raw(_) => {}
@@ -633,6 +654,9 @@ pub(crate) fn losses(glyphs: &[std::sync::Arc<fontcraft_model::Glyph>], version:
         counts[4] = 0;
         counts[5] = 0;
     }
+    if version != 3 {
+        counts[6] = 0;
+    }
     let what = [
         "the identifiers of paths and nodes",
         "the identifiers of components",
@@ -640,9 +664,11 @@ pub(crate) fn losses(glyphs: &[std::sync::Arc<fontcraft_model::Glyph>], version:
         "tangent nodes, written as smooth",
         "node locks and orientations",
         "the paths' drawing attributes",
+        "the paths' conic gradients, extend modes, gradient radii and colours finer than 8 bits",
     ];
     what.iter().zip(counts).filter(|(_, n)| *n > 0).map(|(w, n)| format!("{w} ({n})")).collect()
 }
 
+mod paint;
 #[cfg(test)]
 mod tests;

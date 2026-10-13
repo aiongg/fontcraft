@@ -87,7 +87,7 @@ fn version_3_paths_and_nodes_are_fields() {
     assert!(p.info.locked);
     let a = &p.info.attrs;
     assert_eq!(a.stroke_width, Some(Dimension::Number(46.0)));
-    assert_eq!(a.stroke_pos, Some(Dimension::Expression("1".into())), "text stays text");
+    assert_eq!(a.stroke_pos, Some(Dimension::Expression("-1".into())), "text stays text, counted as version 4 counts it");
     assert_eq!(a.line_cap_start, Some(3));
     assert_eq!(a.line_cap_end, None, "a number written as text stays as written");
     assert!(a.extra.get(Family::Glyphs, "lineCapEnd").is_some() && a.extra.get(Family::Glyphs, "gradient").is_some());
@@ -317,4 +317,167 @@ fn losses_name_what_a_version_cannot_hold() {
     let v2 = losses(std::slice::from_ref(&g), 2);
     assert!(v2.iter().any(|l| l.starts_with("node locks and orientations (2)")), "{v2:?}");
     assert!(!losses(&[g], 4).iter().any(|l| l.starts_with("tangent")));
+}
+
+const V3_PAINT: &str = "{
+attr = {
+gradient = {
+colors = (
+(
+(64,255),
+0
+),
+(
+(p,2,128),
+1
+)
+);
+end = (0.9,0.9);
+start = (0.1,0.1);
+type = circle;
+};
+shadow = {
+blur = \"10\";
+color = (255,0,0,255);
+offsetX = \"4\";
+offsetY = \"-8.5\";
+};
+shadowIn = {
+blur = \"2\";
+color = (0,0,0,128);
+offsetX = \"0\";
+offsetY = \"1\";
+};
+strokeColor = (64,255);
+strokePos = 0;
+strokeWidth = 20;
+};
+closed = 1;
+nodes = (
+(0,0,l),
+(100,0,l),
+(100,100,l)
+);
+}";
+
+const V4_PAINT: &str = "{
+attr = {
+fillColor = (p,1,0.5);
+gradient = {
+angle = 30;
+colors = (
+(
+(1,0,0,1),
+0,
+),
+(
+(0.25,0.5,0.75,1),
+0.5,
+),
+(
+(p,65535,1),
+1,
+),
+);
+end = (0.5,0.5);
+endRadius = 0.75;
+extend = reflect;
+start = (0.5,0.5);
+startRadius = 0.1;
+type = radial;
+};
+strokePos = -1;
+strokeWidth = 20;
+};
+closed = 1;
+nodes = (
+(0,0,l),
+(100,0,l),
+(100,100,l),
+);
+}";
+
+const V4_CONIC: &str = "{
+attr = {
+gradient = {
+angle = 270;
+center = (0.5,0.4);
+colors = (
+(
+(0,0,0,1),
+0,
+),
+(
+(1,1,1,1),
+1,
+),
+);
+controlRadius = 0.5;
+extend = repeat;
+startAngle = 45;
+type = conic;
+};
+};
+closed = 1;
+nodes = (
+(0,0,l),
+(100,0,l),
+(100,100,l),
+);
+}";
+
+#[test]
+fn paint_keys_are_typed_and_written_back_the_same() {
+    use fontcraft_model::{Color, Extend, GradientKind};
+    let l = round_trip(&with_shapes(V3_PAINT), 3);
+    let a = &path(&l, 0).info.attrs;
+    let gray = 64.0 / 255.0;
+    assert_eq!(a.stroke_color, Some(Color::Rgba([gray, gray, gray, 1.0])), "gray becomes RGBA");
+    assert_eq!(a.stroke_pos, Some(Dimension::Number(1.0)), "version 3's 0 is outside");
+    let g = a.gradient.as_ref().unwrap();
+    assert!(matches!(g.kind, GradientKind::Radial { start_radius: 0.0, end_radius: 0.0, .. }));
+    assert_eq!(g.stops[1].color, Color::Palette { index: 2, alpha: 128.0 / 255.0 });
+    assert_eq!(a.shadow.unwrap().offset, [4.0, -8.5]);
+    assert_eq!(a.shadow_in.unwrap().blur, 2.0);
+    assert!(a.extra.of(Family::Glyphs).next().is_none(), "nothing stays a stored value");
+
+    let l = round_trip(&with_shapes4(V4_PAINT), 4);
+    let a = &path(&l, 0).info.attrs;
+    assert_eq!(a.fill_color, Some(Color::Palette { index: 1, alpha: 0.5 }));
+    assert_eq!(a.stroke_pos, Some(Dimension::Number(-1.0)));
+    let g = a.gradient.as_ref().unwrap();
+    assert_eq!((g.extend, g.stops.len()), (Extend::Reflect, 3));
+    assert!(matches!(g.kind, GradientKind::Radial { start_radius: 0.1, end_radius: 0.75, angle: 30.0, .. }));
+    assert_eq!(g.stops[2].color, Color::Palette { index: 65535, alpha: 1.0 });
+
+    let l = round_trip(&with_shapes4(V4_CONIC), 4);
+    let g = path(&l, 0).info.attrs.gradient.clone().unwrap();
+    assert!(matches!(g.kind, GradientKind::Conic { start_angle: 45.0, angle: 270.0, control_radius: 0.5, .. }));
+    assert_eq!(g.extend, Extend::Repeat);
+}
+
+#[test]
+fn stroke_positions_convert_between_versions_3_and_4() {
+    for (v3, v4) in [("0", "1"), ("0.5", "0"), ("1", "-1"), ("0.25", "0.5"), ("\"1\"", "\"-1\"")] {
+        let shape = |pos: &str, end: &str| {
+            format!("{{\nattr = {{\nstrokePos = {pos};\nstrokeWidth = 10;\n}};\nclosed = 0;\nnodes = (\n(0,0,l),\n(10,0,l){end}\n);\n}}")
+        };
+        let (text3, text4) = (with_shapes(&shape(v3, "")), with_shapes4(&shape(v4, ",")));
+        let l = round_trip(&text3, 3);
+        assert_eq!(write(&l, 4), text4, "version 3 {v3} is version 4 {v4}");
+        let l = round_trip(&text4, 4);
+        assert_eq!(write(&l, 3), text3, "version 4 {v4} is version 3 {v3}");
+    }
+}
+
+#[test]
+fn version_3_reports_the_paint_it_cannot_hold() {
+    let l = read(&with_shapes4(V4_CONIC), 4);
+    let glyph = fontcraft_model::Glyph { layers: vec![l], ..fontcraft_model::Glyph::new("a") };
+    let glyphs = [std::sync::Arc::new(glyph)];
+    assert!(losses(&glyphs, 4).is_empty());
+    let lost = losses(&glyphs, 3);
+    assert!(lost.iter().any(|l| l.starts_with("the paths' conic gradients")), "{lost:?}");
+    let written = write(glyphs[0].layers.first().unwrap(), 3);
+    assert!(!written.contains("gradient"), "version 3 has no conic gradient");
 }

@@ -7,7 +7,7 @@ use fontcraft_model::node_width::{self, MAX_NODE_WIDTH, valid_side};
 use fontcraft_model::{Node, Path};
 use serde_json::{Value, json};
 
-use super::stroke::{format_version, stroke_style};
+use super::stroke::stroke_style;
 use super::*;
 use crate::params::{Params, TargetKind, Targets};
 
@@ -46,8 +46,8 @@ fn side_values(p: &Params, key: &str, count: usize) -> Result<Option<Vec<f64>>> 
 }
 
 /// The `[left, right]` widths `node` of `path` is drawn with, or why it takes none.
-fn drawn_widths(path: &Path, node: &Node, version: u32) -> std::result::Result<[f64; 2], String> {
-    let style = stroke_style(&path.info.attrs, version)?.ok_or("the path has no stroke")?;
+fn drawn_widths(path: &Path, node: &Node) -> std::result::Result<[f64; 2], String> {
+    let style = stroke_style(&path.info.attrs)?.ok_or("the path has no stroke")?;
     Ok(node_width::resolved(node, style.width, style.position))
 }
 
@@ -69,7 +69,6 @@ fn set_node_widths(s: &mut Session, value: &Value) -> Result<Value> {
     if !clear && left.is_none() && right.is_none() {
         return Err(p.bad("give `left`, `right` or both, or `clear: true`"));
     }
-    let version = format_version(s.font()?);
     let widths = s.edit(if clear { "Clear Node Widths" } else { "Set Node Widths" }, |font| {
         t.edit_layer(font, |layer| {
             let mut parts = layer.parts_mut(t.side);
@@ -82,7 +81,7 @@ fn set_node_widths(s: &mut Session, value: &Value) -> Result<Value> {
                     if !node.on_curve() {
                         return Err(what("is not an on-curve node".into()));
                     }
-                    drawn_widths(path, node, version).map_err(what)?
+                    drawn_widths(path, node).map_err(what)?
                 };
                 let new = if clear {
                     None

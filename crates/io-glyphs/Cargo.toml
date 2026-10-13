@@ -11,6 +11,7 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+fontcraft-geom.workspace = true
 fontcraft-model.workspace = true
 fontcraft-plist.workspace = true
 thiserror.workspace = true

@@ -106,12 +106,12 @@ fn set_stroke_width_gives_a_black_stroke_and_null_is_zero() {
 #[test]
 fn set_stroke_alignment_stores_inside_and_outside_as_the_stroke_position() {
     let mut s = colour_session();
-    // A document that is not from a `.glyphs` file follows version 3: 1 is inside, 0 outside.
+    // The model stores the position from −1 (inside) to 1 (outside), whatever the source format.
     let r = run(&mut s, "attributes.setStrokeAlignment", on(&[0], json!({"alignment": "inside"})));
     assert_eq!(r["attributes"][0]["stroke"]["alignment"], "inside");
-    assert_eq!(attrs(&s, 0).stroke_pos, Some(Dimension::Number(1.0)));
+    assert_eq!(attrs(&s, 0).stroke_pos, Some(Dimension::Number(-1.0)));
     run(&mut s, "attributes.setStrokeAlignment", on(&[0], json!({"alignment": "outside"})));
-    assert_eq!(attrs(&s, 0).stroke_pos, Some(Dimension::Number(0.0)));
+    assert_eq!(attrs(&s, 0).stroke_pos, Some(Dimension::Number(1.0)));
     run(&mut s, "attributes.setStrokeAlignment", on(&[0], json!({"alignment": "center"})));
     assert_eq!(attrs(&s, 0).stroke_pos, None);
     refused(&mut s, "attributes.setStrokeAlignment", on(&[0], json!({"alignment": "left"})));

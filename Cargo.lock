@@ -1145,6 +1145,7 @@ dependencies = [
 name = "fontcraft-io-glyphs"
 version = "0.0.1"
 dependencies = [
+ "fontcraft-geom",
  "fontcraft-model",
  "fontcraft-plist",
  "fontcraft-spacing",

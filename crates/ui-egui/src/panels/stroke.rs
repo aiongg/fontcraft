@@ -19,7 +19,7 @@
 use std::collections::BTreeSet;
 use std::time::Duration;
 
-use fontcraft_engine::cmd::stroke::{format_version, stroke_style};
+use fontcraft_engine::cmd::stroke::stroke_style;
 use fontcraft_model::{Dimension, Path, Shape};
 use serde_json::{Map, Value, json};
 
@@ -76,10 +76,10 @@ struct One {
     fill: bool,
 }
 
-fn read_one(path: &Path, version: u32) -> Option<One> {
+fn read_one(path: &Path) -> Option<One> {
     let attrs = &path.info.attrs;
     // A size stored as an expression cannot be shown or edited here.
-    let style = stroke_style(attrs, version).ok()??;
+    let style = stroke_style(attrs).ok()??;
     let height = match &attrs.stroke_height {
         Some(Dimension::Number(n)) => Some(*n),
         _ => None,
@@ -121,13 +121,12 @@ fn read(app: &FontcraftApp, paths: &[usize]) -> Option<Values> {
     let font = app.session.font().ok()?;
     let tab = app.state.tab()?;
     let scene = tools_glue::scene(font, tab)?;
-    let version = format_version(font);
     let mut values = Values { strokes: Vec::with_capacity(paths.len()), any_open: false, any_closed: false };
     for &i in paths {
         let Some(Shape::Path(path)) = scene.layer.shapes.get(i) else { continue };
         values.any_open |= !path.closed;
         values.any_closed |= path.closed;
-        values.strokes.push(read_one(path, version));
+        values.strokes.push(read_one(path));
     }
     Some(values)
 }

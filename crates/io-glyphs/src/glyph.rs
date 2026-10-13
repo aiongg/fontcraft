@@ -108,7 +108,7 @@ pub(crate) fn read_color(v: &Value, version: u32) -> Option<ColorLabel> {
 }
 
 /// An 8-bit colour component for a component from 0 to 1.
-fn to_byte(c: f64) -> i64 {
+pub(crate) fn to_byte(c: f64) -> i64 {
     // In range after clamping, so the conversion is exact.
     #[allow(clippy::cast_possible_truncation)]
     let b = (c.clamp(0.0, 1.0) * 255.0).round() as i64;
