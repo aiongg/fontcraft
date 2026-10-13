@@ -1044,6 +1044,18 @@ fn outline_options(p: &Params, options: &mut Options) -> Result<()> {
     Ok(())
 }
 
+/// The folder includes are read from: the source's folder, when automation may read it.
+#[cfg(not(target_arch = "wasm32"))]
+fn source_feature_dir(path: &std::path::Path) -> Option<std::path::PathBuf> {
+    crate::io::feature_dir(path).filter(|d| crate::file_access::check_read(d).is_ok())
+}
+
+/// The web build has no file system to read includes from.
+#[cfg(target_arch = "wasm32")]
+fn source_feature_dir(_path: &std::path::Path) -> Option<std::path::PathBuf> {
+    None
+}
+
 /// The parts of a `font.compile` request shared with `font.compilePlan`.
 fn compile_request(s: &Session, p: &Params) -> Result<(Vec<Job>, Request)> {
     let font = s.font()?;
@@ -1054,8 +1066,7 @@ fn compile_request(s: &Session, p: &Params) -> Result<(Vec<Job>, Request)> {
     outline_options(p, &mut options)?;
     options.skip_features = p.bool_or("skipFeatures", false)?;
     options.version_stamp = p.bool_or("versionStamp", true)?;
-    // Includes are read from the source's folder, when automation may read it.
-    options.feature_dir = s.doc()?.path.as_deref().and_then(crate::io::feature_dir).filter(|d| crate::file_access::check_read(d).is_ok());
+    options.feature_dir = s.doc()?.path.as_deref().and_then(source_feature_dir);
     options.include_check = crate::file_access::include_check();
     let pick = Pick::read(p, "instances")?;
     let jobs = jobs(font, &pick, p.bool_or("mastersAsInstances", false)?, p)?;
