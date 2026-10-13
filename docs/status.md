@@ -2,11 +2,12 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-13, the first waves of M6 to M12, seven second-wave packages, all 22 first-wave packages of M13, and the builder packages M8.9, M8.7, M7.8, M6.10, M9.10, M9.4, M9.5, M9.9, M9.8b, M10.3, M10.14 and M11.5 (part 1), and M12.44, M12.17 and M13.2 integrated and gated on `master`, with the automation file roots._
+_Updated: 2026-10-13, the first waves of M6 to M12, seven second-wave packages, all 22 first-wave packages of M13, and the builder packages M8.9, M8.7, M7.8, M6.10, M9.10, M9.4, M9.5, M9.9, M9.8b, M10.3, M10.14 and M11.5 (part 1), and M12.44, M12.17 and M13.2, M9.11 and M9.12 integrated and gated on `master`, with the gate on nextest and the automation file roots._
 
 ## State of the tree
 
-- `cargo xtask ci` passes all eleven steps (2,941 tests pass, none fail, 36 ignored).
+- `cargo xtask ci` passes all eleven steps (TESTCOUNT tests pass, none fail, 36 ignored). The
+  test step runs on cargo nextest; a full gate on a warm build takes about 5 minutes.
   Built and run on Linux x86-64 with Rust 1.97.
 - `master` holds everything described here, merged and green; the latest commits are not pushed.
   It has the first waves of M6 to M12, the second-wave packages M6.14, M7.14, M7.15 to M7.18
@@ -18,16 +19,20 @@ _Updated: 2026-10-13, the first waves of M6 to M12, seven second-wave packages, 
   (variable kerning and marks) and M9.8b (alternate layers in variable fonts), M10.3 (hint and
   instruction references follow their nodes through edits), M10.14 (CFF hints at export) and
   M11.5 part 1 (typed paint attributes in `.glyphs` files), M12.44 (the audit runner), M12.17
-  (subset) and M13.2 (the plug-in module runtime), the test-layout change X.build1, the fix
-  passes that followed (X.fix19 to X.fix22 among them), and the automation file roots.
+  (subset) and M13.2 (the plug-in module runtime), M9.11 and M9.12 (the reference's variable
+  feature syntax, lowered and compiled), the test-layout change X.build1, the nextest gate X.build2,
+  the fix passes that followed (X.fix19 to X.fix23 among them), and the automation file roots.
 - 665 of the 960 inventory commands exist (`docs/parity.md`); M3's, M4's and M5's are all live,
   M6 has 40 of 46, M7 66 of 66, M8 36 of 41, M9 5 of 48, M10 5 of 56, M11 37 of 41, M12 50 of
-  81, M13 63 of 180. Feature parity is about 26% (ROADMAP.md › Parity estimate). 1,714 guesses
-  on 1,109 rows are listed in `docs/guesses.md`; `docs/observe.md` lists 1,124 rows.
+  81, M13 63 of 180. Feature parity is about 26% (ROADMAP.md › Parity estimate). 1,720 guesses
+  on 1,111 rows are listed in `docs/guesses.md`; `docs/observe.md` lists 1,126 rows.
 - Packages built (done of total, counted from commit subjects, M8.7b with M8.7): M6 16 of 20, M7
-  18 of 21, M8 16 of 25, M9 12 of 27 (M9.8b is a follow-up of M9.8 and not counted), M10 13 of 33, M11 7 of 21, M12 28 of 68, M13 25 of 62; 135
+  18 of 21, M8 16 of 25, M9 14 of 27 (M9.8b is a follow-up of M9.8 and not counted), M10 13 of 33, M11 7 of 21, M12 28 of 68, M13 25 of 62; 137
   of 277 in all.
-- Test layout: the engine's integration tests are modules of one binary
+- Test layout: the gate runs the tests with cargo nextest (all test binaries in parallel,
+  doctests apart). The command sweep is 16 tests (4 states times 4 chunks, chunked by a stable
+  hash of the command id), and one randomised pathops test reserves 8 threads
+  (`.config/nextest.toml`). The engine's integration tests are modules of one binary
   (`crates/engine/tests/engine/`; `cargo test -p fontcraft-engine --test engine <filter>`), and
   the decompile, io-glyphs, io-ufo and plist tests are one binary each. Speed measures and oracle
   runs use `--profile measure` (release without link-time optimisation); see
@@ -41,14 +46,29 @@ _Updated: 2026-10-13, the first waves of M6 to M12, seven second-wave packages, 
   (`cargo test --release -p fontcraft-features --test corpus_auto -- --ignored --nocapture`).
 - Variable fonts (`fontcraft-cli oracle --corpus --variable`; `--instances` for static instances)
   are compared with fontc's or fontmake's at masters, virtual masters, instances and midpoints
-  between masters. Over 158 sources: against fontc 100 equal, 37 different, 21 failed; against
-  fontmake 103, 38, 17 (before the variable compile all 158 were not built). Per check, against
+  between masters. Over 158 sources: against fontc 101 equal, 37 different, 20 failed; against
+  fontmake 104, 38, 16 (before M9.12: 100/37/21 and 103/38/17; before the variable compile all
+  158 were not built). Per check, against
   fontc / fontmake (equal and different): outlines 127 and 8 / 128 and 11; `GSUB` variations 129
   and 8 / 135 and 6; `GPOS` kerning 135 and 1 / 141 and 0; marks 134 and 2 / 139 and 2. fontc and
   fontmake agree with each other on 112 of 133 sources (`docs/spec/40-compile.md` § 4). Static
   instances against `fontmake -i`: 169 equal, 41 different, 0 not built, 24 failed (all 24 are
   fontmake's own failures); before M9.4: 111, 25, 83, 15. Speed: Oswald compiles in 0.19 s (fontc
   0.16 s, target 0.5 s); Inter Roman in about 1.3 to 1.6 s (fontc 1.66 s, target 3 s).
+- Variable feature syntax (M9.11, M9.12): `condition` statements become `conditionset` and
+  `variation` blocks, with internal limits mapped to user coordinates and overlapping regions
+  overlaid; `(tag:coord) value` positions become variable scalars, also in value records and
+  anchors. The lowering is ported in part from glyphsLib (credit in the file header and
+  `NOTICE`) and equals its converter on 32 synthetic texts. Variable exports compile the feature
+  code on fea-rs with a real variation info (axes with their maps, the masters, number values):
+  `condition` and `#ifdef VARIABLE` become `GSUB` feature variations merged with the alternate
+  layers' records, and variable `pos` values and per-master number tokens resolve through the
+  same model as the generated kerning, into one `GDEF` store. Inverted conditions are export
+  warnings. Equal to fontmake on variable `pos` plus alternate layers and to fontc on condition
+  sets plus number tokens. Static exports resolve values and conditional rules at their
+  location, instances between masters included. A number token varies only in metric statements
+  and takes the origin value elsewhere; two masters at one location with different token values
+  are an error. Variable values in table blocks (`fea.var.tableValues`) are not built.
 - Oswald's variable origin: the oracles choose the master named "Regular" (glyphsLib's rule);
   the handbook says the first master unless Variable Font Origin is set. FontCraft follows the
   handbook, and Oswald is allow-listed.
@@ -101,9 +121,8 @@ linked file is checked against it, and a linked file outside the read root reads
 1. **The skeleton pass for waves 2 to 5**: fix the interfaces the later packages of each plan
    share, as M6.1a and M7.1 to M13.1 did, so they can be written in parallel. A skeleton file
    marks each placeholder with the package that fills it (`// M8.5`).
-2. **The builder packages**, one at a time in the main checkout: M9.11 and M9.12 (variable
-   feature syntax), M9.13 (CFF2), M10.17 and M10.18, then M10.19 (TrueType hints at export),
-   M10.15 (flex for hand-hinted glyphs), M11.5b (UFO full-colour layers as ufo2ft
+2. **The builder packages**, one at a time in the main checkout: M9.13 (CFF2), M10.17 and
+   M10.18, then M10.19 (TrueType hints at export), M10.15 (flex for hand-hinted glyphs), M11.5b (UFO full-colour layers as ufo2ft
    `colorLayers`, JPEG and TIFF to PNG for UFO images), M12.18 and M12.19 (subset: layout,
    variation and colour tables), and M13.3 to M13.6 (module commands, filters in export, checks
    in the audit), then the rest each plan's § 6 lists. The requests the integrations left for them are below.
@@ -121,6 +140,9 @@ linked file is checked against it, and a linked file outside the read root reads
    automatic framework has no entries for them yet), text-token expansion in
    `plan::postscript_name` and `plan::file_stem`, and selecting and deleting corner components in
    Edit View (needs a hint selection kind).
+   Feature-code follow-ups: variable values in table blocks (`fea.var.tableValues`: `BASE`,
+   `GDEF` carets, `hhea`, `OS/2`, `vmtx`; fea-rs rejects them). `.glyphs` follow-up: the extras a
+   kept layout carries going stale after an edit (stale kept-layout extras).
    Variable-font follow-ups: a designspace `<instance>` should supply the instance's names,
    `usWeightClass` and font info (the main cause of the remaining instance differences);
    designspace `<rules>` (3 sources); alternate layers with all bounds empty, where the handbook
@@ -183,7 +205,7 @@ The first waves of M9 to M12, as built (ROADMAP.md › What is real: the first w
 
 | Milestone | Built | Not yet |
 |---|---|---|
-| M9 | M9.2, M9.3, M9.4, M9.5, M9.6, M9.7, M9.8, M9.8b, M9.9, M9.10, M9.14, M9.19: axes and mappings, glyph sources and compatibility, the variable tables and `STAT`, feature variations, opening variable fonts, the compare commands, static instances between and beyond masters, the variable TrueType compile, variable kerning and marks, alternate layers in variable fonts, the oracle harness for variable fonts | CFF2 (M9.13), variable feature syntax (M9.11, M9.12), designspace instance info and `<rules>`, the axis, instance and master commands and the UI |
+| M9 | M9.2, M9.3, M9.4, M9.5, M9.6, M9.7, M9.8, M9.8b, M9.9, M9.10, M9.11, M9.12, M9.14, M9.19: axes and mappings, glyph sources and compatibility, the variable tables and `STAT`, feature variations, opening variable fonts, the compare commands, static instances between and beyond masters, the variable TrueType compile, variable kerning and marks, alternate layers in variable fonts, the oracle harness for variable fonts, variable feature syntax lowered and compiled (M9.11, M9.12) | CFF2 (M9.13), variable values in table blocks, designspace instance info and `<rules>`, the axis, instance and master commands and the UI |
 | M10 | M10.2, M10.3, M10.8 to M10.14, M10.16, M10.20, M10.23: typed hints and settings, the otfautohint port (agrees with the AFDKO 5.0.1 oracle scripts; each master gets an overlap-free outline), the TrueType assembler, `gasp`, hinted previews, node-reference upkeep, CFF hints at export | flex for hand-hinted glyphs (M10.15), TrueType instructions in exports (M10.19), M10.17, M10.18, M10.21; upkeep on background layers and for corner and cap hints |
 | M11 | M11.2 to M11.5 (part 1), M11.9, M11.12: palettes, colour layers, path attributes, typed paint attributes in `.glyphs` files, the `SVG ` table at export, images | M11.5b (UFO colour layers, image conversion), `COLR`, `CPAL`, `sbix`, `CBDT` |
 | M12 | M12.2, 3, 4, 11, 12, 15, 16, 17, 27, 28, 31, 33, 35, 37, 43, 44, 45, 46, 48, 50, 53 to 60: the table tools, 157 checks, profiles and report export, the audit runner over sources, compiled fonts and families (`fontcraft-cli check`), subset by pyftsubset's options | subset's layout, variation and colour tables (M12.18, M12.19) and CFF2, the audit runner's follow-ups above; the other corpus measures |
@@ -372,8 +394,8 @@ atomic failure; WebAssembly plug-ins and no Python; no compiled fonts in the rep
   CFF, plain, WOFF and WOFF2; the core tables match fontc and fontmake over the corpus (with
   allow-listed causes: bracket and colour glyphs, the glyph database, smart components); overlaps
   are removed, strokes expanded and masks applied at export; `gasp`, `GDEF`, the mark features,
-  compiled feature code and the `SVG ` table are written. Variable fonts match fontc's in 100 of
-  158 sources and fontmake's in 103. No CFF2 variable fonts, TrueType instructions, flex for hand-hinted glyphs or CFF subroutines yet
+  compiled feature code and the `SVG ` table are written. Variable fonts match fontc's in 101 of
+  158 sources and fontmake's in 104. No CFF2 variable fonts, TrueType instructions, flex for hand-hinted glyphs or CFF subroutines yet
   (`docs/plans/M2.md` § 5, `docs/plans/M3.md` § 5, `docs/spec/40-compile.md` § 4).
 - **Most M10 to M12 corpus measures have not been run.** The audit runner (M12.44) and subset
   (M12.17) have; the other packages were tested against small outputs of the oracles, and each
@@ -824,6 +846,41 @@ Append one terse entry per session: what landed, numbers, what is still open.
   (M6 16/20, M7 18/21, M8 16/25, M9 12/27, M10 13/33, M11 7/21, M12 28/68, M13 25/62). Open: the
   builder packages M9.11, M9.12, M9.13, M10.17, M10.18, M10.19, M10.15, M11.5b, M12.18, M12.19
   and M13.3 to M13.6; the follow-ups for the audit runner (hash cache, options, width checks,
+  `summary.errors`, source-field names, the outline warnings on decoded fonts) and subset (CFF2,
+  subroutine pruning, `--desubroutinize`, sources), hint upkeep on background layers and for
+  corner and cap hints, designspace instance info from `<instance>`, designspace `<rules>`,
+  M13.15, M8.11, token expansion in `plan::postscript_name` and `plan::file_stem`,
+  corner-component selection; the skeleton pass for waves 2 to 5.
+- **2026-10-13, batch 9: M9.11, M9.12, X.build2 and X.fix23.** Integrated: the reference's
+  variable feature syntax lowered as glyphsLib does (`condition` statements to `conditionset` and
+  `variation` blocks with limits mapped to user coordinates and overlapping regions overlaid;
+  `(tag:coord) value` positions to variable scalars, also in value records and anchors; equal to
+  glyphsLib's converter on 32 synthetic texts; ported in part, credited); variable exports
+  compile their feature code on fea-rs with a real variation info (axes with maps, masters,
+  number values), with conditions and `#ifdef VARIABLE` as `GSUB` feature variations merged with
+  the alternate layers' records and variable `pos` values and number tokens resolved through the
+  model of the generated kerning, in one `GDEF` store (inverted conditions are export warnings;
+  equal to fontmake on variable `pos` plus alternate layers and to fontc on condition sets plus
+  number tokens); static exports resolve values and conditional rules at their location,
+  instances between masters included. Variable measure: fontc 101 equal, 37 different, 20 failed
+  (was 100/37/21), fontmake 104/38/16 (was 103/38/17); VarFeaOneShot builds and is equal.
+  X.build2: the gate runs its tests on cargo nextest (all test binaries in parallel, doctests
+  apart), the command sweep is 16 tests (4 states times 4 chunks by a stable hash of the command
+  id), and one randomised pathops test reserves 8 threads (`.config/nextest.toml`); a full gate
+  on a warm build takes about 5 minutes. X.fix23 (review fixes): the variable-syntax scanner is
+  linear with a value-record size limit; conditions on axes wider than ±1 keep their ranges; a
+  glyph named `condition` compiles; number-token expressions in metric statements become
+  per-master variable values (tokens elsewhere take the origin value); two masters at one
+  location with different token values are an error; one-line `.glyphs` dictionaries and lists
+  (for example `numbers = ({name = gap;})`, `axisRules = ({min = 600;})`) reach the model and
+  keep their layout on write, matched by position in linear time. Round trips (`.glyphs`
+  122/1/118/4, `.glyphspackage` 22/0/7/0, UFO 125/2/13, designspace 59/53), the static oracle
+  summary and the instances (169/41/0/24) are unchanged. All eleven gate steps pass; TESTCOUNT
+  tests pass, none fail, 36 ignored; 665 of 960 commands live; 1,720 guesses on 1,111 rows; 1,126
+  observe rows. Packages built: 137 of 277 (M6 16/20, M7 18/21, M8 16/25, M9 14/27, M10 13/33,
+  M11 7/21, M12 28/68, M13 25/62). Open: the builder packages M9.13, M10.17, M10.18, M10.19,
+  M10.15, M11.5b, M12.18, M12.19 and M13.3 to M13.6; the follow-ups variable values in table
+  blocks, stale kept-layout extras, the audit runner (hash cache, options, width checks,
   `summary.errors`, source-field names, the outline warnings on decoded fonts) and subset (CFF2,
   subroutine pruning, `--desubroutinize`, sources), hint upkeep on background layers and for
   corner and cap hints, designspace instance info from `<instance>`, designspace `<rules>`,
