@@ -91,10 +91,11 @@ pub struct OtherMaster<'a> {
 }
 
 /// What a variable font's layout stage reads beyond the origin: the masters and their model,
-/// and the other masters' glyphs for their anchors.
+/// the other masters' glyphs for their anchors, and the alternate layers' feature variations.
 pub struct VariableLayout<'a> {
     pub layout: &'a fontcraft_features::var_layout::VarLayout,
     pub masters: Vec<OtherMaster<'a>>,
+    pub alternates: Option<&'a crate::var::featvar::AlternateRules>,
 }
 
 /// What the layout stage reads.
@@ -185,7 +186,7 @@ fn describe(entries: &Features, d: &EntryDiagnostic) -> String {
 pub fn build(input: &LayoutInput, opts: &LayoutOptions, warnings: &mut Vec<String>) -> Result<LayoutTables, CompileError> {
     let resolved = input.resolved;
     let names: Vec<String> = input.order.iter().map(|g| g.name.clone()).collect();
-    let glyph_order = GlyphOrder::new(names).map_err(|d| CompileError::Features(vec![EntryDiagnostic { place: None, diagnostic: d }]))?;
+    let glyph_order = GlyphOrder::new(names.clone()).map_err(|d| CompileError::Features(vec![EntryDiagnostic { place: None, diagnostic: d }]))?;
 
     // Steps 1 and 2: the assembled code, when the source has any.
     let mut entries = Features::default();
@@ -283,6 +284,23 @@ pub fn build(input: &LayoutInput, opts: &LayoutOptions, warnings: &mut Vec<Strin
         generated_lookups = implicit.lookups;
         generated_lookups.axes = input.variable.map(|v| v.layout.axes().to_vec()).unwrap_or_default();
         generated_lookups.append = append.iter().map(|t| fontcraft_fea::Tag::new(&tag_bytes(t))).collect();
+    }
+    // The alternate layers' substitutions, merged into the code's `GSUB` by fea-rs.
+    if let Some(variable) = input.variable {
+        if let Some(alternates) = variable.alternates {
+            generated_lookups.feature_variations = alternates
+                .variations(&names)?
+                .into_iter()
+                .map(|v| fontcraft_fea::FeatureVariation {
+                    tag: v.tag,
+                    conditions: v.conditions.into_iter().map(|(axis, min, max)| fontcraft_fea::Condition { axis, min, max }).collect(),
+                    substitutions: v.substitutions,
+                })
+                .collect();
+        }
+        if generated_lookups.axes.is_empty() {
+            generated_lookups.axes = variable.layout.axes().to_vec();
+        }
     }
     if assembly.is_none() && generated_lookups.is_empty() {
         return Ok(LayoutTables::default());

@@ -147,6 +147,9 @@ impl Job<'_> {
         if !self.gpos {
             c.gpos = None;
         }
+        if let (Some(generated), Some(gsub)) = (self.generated.filter(|g| !g.feature_variations.is_empty()), c.gsub.as_mut()) {
+            crate::provider::order_feature_variations(gsub, generated);
+        }
         let mut errors = Vec::new();
         let mut dump = |name: &str, bytes: Option<Result<Vec<u8>, write_fonts_052::error::Error>>| match bytes {
             Some(Ok(b)) => Some(b),

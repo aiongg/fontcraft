@@ -15,12 +15,14 @@ use fea_rs::compile::{FeatureBuilder, FeatureKey as FeaKey, FeatureProvider, Loo
 use write_fonts_052::tables::gpos::builders::{
     AnchorBuilder, CursivePosBuilder, MarkToBaseBuilder, MarkToLigBuilder, MarkToMarkBuilder, PairPosBuilder, ValueRecordBuilder,
 };
-use write_fonts_052::tables::layout::LookupFlag;
+use write_fonts_052::tables::gsub::Gsub;
+use write_fonts_052::tables::gsub::builders::SingleSubBuilder;
 use write_fonts_052::tables::layout::builders::{CaretValueBuilder, DeviceOrDeltas};
+use write_fonts_052::tables::layout::{Condition as RawCondition, ConditionFormat1, ConditionSet, FeatureVariationRecord, LookupFlag};
 use write_fonts_052::tables::variations::{RegionAxisCoordinates, VariationRegion};
 use write_fonts_052::types::F2Dot14;
 
-use crate::{Anchor, Diagnostic, GeneratedLookup, GeneratedLookups, GeneratedRules, GlyphId16, LookupFlags, Metric, Severity, Tag, Value};
+use crate::{Anchor, Condition, Diagnostic, GeneratedLookup, GeneratedLookups, GeneratedRules, GlyphId16, LookupFlags, Metric, Severity, Tag, Value};
 
 /// Most distinct mark filtering sets the generated lookups may use; the code's own sets and
 /// these share one 16-bit index space.
@@ -52,8 +54,8 @@ pub(crate) fn check(generated: &GeneratedLookups, glyph_count: usize, rules_limi
     if generated.rule_count() > rules_limit {
         return refuse(format!("the generated lookups have more than {rules_limit} rules"));
     }
-    if !generated.feature_variations.is_empty() {
-        return refuse("feature variations need a variable font".into());
+    if let Some(problem) = feature_variation_problem(generated, glyph_count) {
+        return refuse(problem);
     }
     let mut owner: BTreeMap<usize, &'static str> = BTreeMap::new();
     for (key, indices) in &generated.features {
@@ -96,6 +98,113 @@ pub(crate) fn check(generated: &GeneratedLookups, glyph_count: usize, rules_limi
         return refuse("the generated glyph classes or carets name a glyph the font does not have, or carets need a variable font".into());
     }
     Ok(())
+}
+
+/// Why fea-rs cannot take the feature variations of `generated`, or `None` when it can: they
+/// need a variable font, conditions on its axes with finite ranges within -1 to 1 and at most
+/// one per axis, glyphs of the font, and at most [`crate::MAX_FEATURE_VARIATIONS`] records.
+fn feature_variation_problem(generated: &GeneratedLookups, glyph_count: usize) -> Option<String> {
+    let variations = &generated.feature_variations;
+    if variations.is_empty() {
+        return None;
+    }
+    if generated.axes.is_empty() {
+        return Some("feature variations need a variable font".into());
+    }
+    if variations.len() > crate::MAX_FEATURE_VARIATIONS {
+        return Some(format!("at most {} feature variations are allowed", crate::MAX_FEATURE_VARIATIONS));
+    }
+    for v in variations {
+        let mut seen: Vec<Tag> = Vec::with_capacity(v.conditions.len());
+        for c in &v.conditions {
+            if !generated.axes.contains(&c.axis) || seen.contains(&c.axis) {
+                return Some(format!("a feature variation names the axis `{}` twice or one the font does not have", c.axis));
+            }
+            seen.push(c.axis);
+            let ok = c.min.is_finite() && c.max.is_finite() && (-1.0..=1.0).contains(&c.min) && (-1.0..=1.0).contains(&c.max) && c.min <= c.max;
+            if !ok {
+                return Some("a feature variation condition is not a range within -1 to 1".into());
+            }
+        }
+        if v.substitutions.iter().any(|(a, b)| usize::from(a.to_u16()) >= glyph_count || usize::from(b.to_u16()) >= glyph_count) {
+            return Some("a feature variation substitutes a glyph the font does not have".into());
+        }
+    }
+    None
+}
+
+/// The condition set of `conditions`, axes as indices into `axes` (in `fvar` order), sorted by
+/// axis index. [`feature_variation_problem`] has checked every axis is one of `axes`.
+fn condition_set(conditions: &[Condition], axes: &[Tag]) -> ConditionSet {
+    let mut indexed: Vec<(u16, F2Dot14, F2Dot14)> = conditions
+        .iter()
+        .filter_map(|c| {
+            let axis = u16::try_from(axes.iter().position(|a| *a == c.axis)?).ok()?;
+            Some((axis, F2Dot14::from_f64(c.min), F2Dot14::from_f64(c.max)))
+        })
+        .collect();
+    indexed.sort_by_key(|c| c.0);
+    ConditionSet::new(indexed.into_iter().map(|(axis, min, max)| ConditionFormat1::new(axis, min, max).into()).collect())
+}
+
+/// What orders feature variation records: each condition's axis index and range.
+fn condition_key(set: &ConditionSet) -> Vec<(u16, i16, i16)> {
+    set.conditions
+        .iter()
+        .map(|c| match &**c {
+            RawCondition::Format1AxisRange(r) => (r.axis_index, r.filter_range_min_value.to_bits(), r.filter_range_max_value.to_bits()),
+            _ => (u16::MAX, 0, 0),
+        })
+        .collect()
+}
+
+/// Adds the feature variations: one single-substitution lookup per distinct substitution list,
+/// at the front of the lookup list when the feature is `rvrn` alone (it runs before every other
+/// feature), and the records under every tag the variations name.
+fn add_feature_variations(builder: &mut FeatureBuilder, generated: &GeneratedLookups) {
+    let mut tags: Vec<Tag> = generated.feature_variations.iter().map(|v| v.tag).collect();
+    tags.sort();
+    tags.dedup();
+    let front = tags == [Tag::new(b"rvrn")];
+    let mut lookups: BTreeMap<Vec<(GlyphId16, GlyphId16)>, LookupId> = BTreeMap::new();
+    let mut conditions: Vec<(ConditionSet, Vec<LookupId>)> = Vec::with_capacity(generated.feature_variations.len());
+    for v in &generated.feature_variations {
+        let mut subs = v.substitutions.clone();
+        subs.sort();
+        subs.dedup_by_key(|s| s.0);
+        let mut ids = Vec::new();
+        if !subs.is_empty() {
+            let id = match lookups.get(&subs) {
+                Some(id) => *id,
+                None => {
+                    let mut sub = SingleSubBuilder::default();
+                    for (from, to) in &subs {
+                        sub.insert(*from, *to);
+                    }
+                    let id = builder.add_lookup(PendingLookup::new(vec![sub], LookupFlag::empty(), None).at_front_of_list(front));
+                    lookups.insert(subs, id);
+                    id
+                }
+            };
+            ids.push(id);
+        }
+        conditions.push((condition_set(&v.conditions, &generated.axes), ids));
+    }
+    builder.add_feature_variations(tags, conditions);
+}
+
+/// Puts the records of `gsub`'s feature variations in the order of `generated`'s: the first record
+/// whose conditions hold is the one applied, and fea-rs keeps its records unordered. Records the
+/// code made go after.
+pub(crate) fn order_feature_variations(gsub: &mut Gsub, generated: &GeneratedLookups) {
+    let Some(fv) = gsub.feature_variations.as_mut() else { return };
+    let order: Vec<Vec<(u16, i16, i16)>> =
+        generated.feature_variations.iter().map(|v| condition_key(&condition_set(&v.conditions, &generated.axes))).collect();
+    let rank = |r: &FeatureVariationRecord| {
+        let key = r.condition_set.as_ref().map(condition_key).unwrap_or_default();
+        order.iter().position(|k| *k == key).unwrap_or(usize::MAX)
+    };
+    fv.feature_variation_records.sort_by_cached_key(rank);
 }
 
 fn lookup_glyphs(lookup: &GeneratedLookup) -> Box<dyn Iterator<Item = GlyphId16> + '_> {
@@ -179,6 +288,9 @@ impl FeatureProvider for Provider<'_> {
         }
         for &tag in &generated.append {
             builder.force_append(tag);
+        }
+        if !generated.feature_variations.is_empty() {
+            add_feature_variations(builder, generated);
         }
         if builder.gdef().is_none() && !generated.carets.is_empty() {
             let carets = generated

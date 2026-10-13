@@ -250,3 +250,145 @@ fn a_virtual_master_extends_an_axis_for_intermediate_layers() {
     assert_eq!(at(&v, "b", &[("wght", 100.0), ("CPHT", 800.0)]).0, (0.0, 0.0, 100.0, 800.0));
     assert_eq!(at(&v, "a", &[("wght", 100.0), ("CPHT", 800.0)]).0, (0.0, 0.0, 100.0, 700.0));
 }
+
+/// `two_masters` with an alternate layer of `a` in each master for wght 600 and up (a wider
+/// rectangle); `c` and `d`, made of `a`, get alternate layers through their components.
+fn with_alternates() -> Font {
+    let mut f = two_masters();
+    let mut glyphs: Vec<Glyph> = f.glyphs.iter().map(|g| (**g).clone()).collect();
+    let a = glyphs.iter_mut().find(|g| g.name == "a").unwrap();
+    for (master, w) in [("thin", 150.0), ("black", 350.0)] {
+        let mut alt = layer(master, if master == "thin" { 300.0 } else { 500.0 }, vec![rect(w)]);
+        alt.id = format!("{master}-alt");
+        alt.info.attrs.axis_rules = vec![fontcraft_model::AxisRule { min: Some(600.0), max: None }];
+        a.layers.push(alt);
+    }
+    f.glyphs = GlyphTable::from_glyphs(glyphs.into_iter().map(Arc::new).collect());
+    f
+}
+
+/// The single substitutions `GSUB`'s feature variations put in place at normalized `wght`, by
+/// name, with the tag of the feature they go under.
+fn variation_subs(v: &VariableFont, wght: f32) -> Vec<(String, String, String)> {
+    use skrifa::raw::tables::gsub::{SingleSubst, SubstitutionSubtables};
+    use skrifa::raw::tables::layout::Condition;
+    let font = FontRef::new(&v.compiled.bytes).unwrap();
+    let gsub = font.gsub().unwrap();
+    let fv = gsub.feature_variations().unwrap().unwrap();
+    let names = &v.compiled.glyph_order;
+    let mut out = Vec::new();
+    for record in fv.feature_variation_records() {
+        let holds = match record.condition_set(fv.offset_data()).transpose().unwrap() {
+            None => true,
+            Some(set) => set.conditions().iter().all(|c| match c.unwrap() {
+                Condition::Format1AxisRange(r) => {
+                    r.axis_index() == 0 && r.filter_range_min_value().to_f32() <= wght && wght <= r.filter_range_max_value().to_f32()
+                }
+                _ => false,
+            }),
+        };
+        if !holds {
+            continue;
+        }
+        let subst = record.feature_table_substitution(fv.offset_data()).unwrap().unwrap();
+        for s in subst.substitutions() {
+            let tag = gsub.feature_list().unwrap().feature_records()[usize::from(s.feature_index())].feature_tag().to_string();
+            for index in s.alternate_feature(subst.offset_data()).unwrap().lookup_list_indices() {
+                let lookup = gsub.lookup_list().unwrap().lookups().get(usize::from(index.get())).unwrap();
+                let SubstitutionSubtables::Single(subtables) = lookup.subtables().unwrap() else { panic!("a single substitution") };
+                let name = |g: u16| names[usize::from(g)].clone();
+                for sub in subtables.iter() {
+                    match sub.unwrap() {
+                        SingleSubst::Format1(sub) => {
+                            for gid in sub.coverage().unwrap().iter() {
+                                let to = (i32::from(gid.to_u16()) + i32::from(sub.delta_glyph_id())) as u16;
+                                out.push((tag.clone(), name(gid.to_u16()), name(to)));
+                            }
+                        }
+                        SingleSubst::Format2(sub) => {
+                            for (gid, to) in sub.coverage().unwrap().iter().zip(sub.substitute_glyph_ids()) {
+                                out.push((tag.clone(), name(gid.to_u16()), name(to.get().to_u16())));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // The first record whose conditions hold is the one applied.
+        break;
+    }
+    out
+}
+
+#[test]
+fn alternate_layers_become_glyphs_switched_by_rvrn() {
+    let v = build(&with_alternates(), None);
+    let order = &v.compiled.glyph_order;
+    // The alternate glyphs follow the font's glyphs, in name order.
+    assert_eq!(&order[order.len() - 3..], ["a.BRACKET.varAlt01", "c.BRACKET.varAlt01", "d.BRACKET.varAlt01"]);
+    assert!(!v.compiled.warnings.iter().any(|w| w.contains("alternate")), "{:?}", v.compiled.warnings);
+    // Each alternate glyph varies between its own layers: 150 wide in Thin, 350 in Black.
+    assert_eq!(at(&v, "a.BRACKET.varAlt01", &[("wght", 100.0)]).0.2, 150.0);
+    assert_eq!(at(&v, "a.BRACKET.varAlt01", &[("wght", 900.0)]).0.2, 350.0);
+    assert_eq!(at(&v, "a", &[("wght", 900.0)]).0.2, 300.0);
+    // A composite's alternate glyph uses the component's alternate glyph (moved by 50 in Black).
+    assert_eq!(at(&v, "d.BRACKET.varAlt01", &[("wght", 900.0)]).0.2, 400.0);
+
+    // wght 600 is 0.625 normalized: below it nothing is substituted, from it on both glyphs are.
+    assert!(variation_subs(&v, 0.5).is_empty());
+    let want = |p: &str| ("rvrn".to_string(), p.to_string(), format!("{p}.BRACKET.varAlt01"));
+    assert_eq!(variation_subs(&v, 0.625), vec![want("a"), want("c"), want("d")]);
+    assert_eq!(variation_subs(&v, 1.0), vec![want("a"), want("c"), want("d")]);
+
+    // The Feature for Feature Variations parameter picks the feature.
+    let mut f = with_alternates();
+    Arc::make_mut(&mut f.info).params.0.push(Param::new(featvar::FEATURE_PARAMETER, fontcraft_model::plist::Value::String("rclt".into())));
+    assert_eq!(variation_subs(&build(&f, None), 1.0)[0].0, "rclt");
+}
+
+#[test]
+fn alternate_glyphs_join_feature_code_and_kerning() {
+    use fontcraft_features::evaluate::PairEvaluator;
+    use fontcraft_model::Snippet;
+    let mut f = with_alternates();
+    Arc::make_mut(&mut f.features).features.push(Snippet { name: "ss01".into(), code: "sub o by b;".into(), ..Default::default() });
+    let kerning = Arc::make_mut(&mut f.kerning);
+    for master in ["thin", "black"] {
+        kerning.ltr.set(master, "a", "o", -40.0);
+    }
+    let v = build(&f, None);
+    let font = FontRef::new(&v.compiled.bytes).unwrap();
+    let gsub = font.gsub().unwrap();
+    let tags: Vec<String> = gsub.feature_list().unwrap().feature_records().iter().map(|r| r.feature_tag().to_string()).collect();
+    assert!(tags.contains(&"ss01".to_string()) && tags.contains(&"rvrn".to_string()), "{tags:?}");
+    // The code's lookup and the variation lookup share the lookup list, rvrn's first.
+    assert_eq!(gsub.lookup_list().unwrap().lookup_count(), 2);
+    assert_eq!(variation_subs(&v, 1.0).len(), 3);
+
+    let gid = |n: &str| v.compiled.glyph_order.iter().position(|g| g == n).unwrap() as u16;
+    let eval = PairEvaluator::new(&v.compiled.bytes).unwrap();
+    let dflt = skrifa::raw::types::Tag::new(b"DFLT");
+    assert_eq!(eval.value(dflt, gid("a"), gid("o")), -40);
+    assert_eq!(eval.value(dflt, gid("a.BRACKET.varAlt01"), gid("o")), -40);
+}
+
+#[test]
+fn touching_alternate_ranges_switch_as_the_oracles_do() {
+    // `o` switches from wght 300 to 600 and `a` from 600 on. At 600 both ranges hold; the
+    // oracles' records give `o` there, and the first record that holds is the one applied.
+    let mut f = with_alternates();
+    let mut glyphs: Vec<Glyph> = f.glyphs.iter().map(|g| (**g).clone()).collect();
+    let o = glyphs.iter_mut().find(|g| g.name == "o").unwrap();
+    for (master, w) in [("thin", 300.0), ("black", 700.0)] {
+        let mut alt = layer(master, w, vec![bowl(w - 50.0)]);
+        alt.id = format!("{master}-alt");
+        alt.info.attrs.axis_rules = vec![fontcraft_model::AxisRule { min: Some(300.0), max: Some(600.0) }];
+        o.layers.push(alt);
+    }
+    f.glyphs = GlyphTable::from_glyphs(glyphs.into_iter().map(Arc::new).collect());
+    let v = build(&f, None);
+    let names = |subs: Vec<(String, String, String)>| subs.into_iter().map(|s| s.1).collect::<Vec<_>>();
+    assert_eq!(names(variation_subs(&v, 0.4)), ["o"]);
+    assert_eq!(names(variation_subs(&v, 0.625)), ["o"]);
+    assert_eq!(names(variation_subs(&v, 0.75)), ["a", "c", "d"]);
+}

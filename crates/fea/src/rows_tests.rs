@@ -1540,3 +1540,25 @@ fn number_value_and_predicate_syntax_left_in_the_code_fails_with_messages() {
         fails(code);
     }
 }
+
+#[test]
+fn feature_variations_need_a_variable_font_and_ranges_on_its_axes() {
+    let wght = Tag::new(b"wght");
+    let variation = |min: f64, max: f64| FeatureVariation {
+        tag: Tag::new(b"rvrn"),
+        conditions: vec![Condition { axis: wght, min, max }],
+        substitutions: vec![(gid("a"), gid("b"))],
+    };
+    let mut g = GeneratedLookups { feature_variations: vec![variation(0.5, 1.0)], ..GeneratedLookups::default() };
+    assert!(compile_with("", &g).is_err(), "a static font has no feature variations");
+    g.axes = vec![wght];
+    let c = compile_with("feature liga { sub f i by f_i; } liga;", &g).unwrap();
+    assert_eq!(tags(&c), ["liga", "rvrn"]);
+    for bad in [variation(0.5, 2.0), variation(1.0, 0.5), variation(f64::NAN, 1.0)] {
+        g.feature_variations = vec![bad];
+        assert!(compile_with("", &g).is_err());
+    }
+    g.feature_variations =
+        vec![FeatureVariation { conditions: vec![Condition { axis: Tag::new(b"wdth"), min: 0.0, max: 1.0 }], ..variation(0.0, 1.0) }];
+    assert!(compile_with("", &g).is_err(), "an axis the font does not have");
+}

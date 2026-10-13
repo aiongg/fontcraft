@@ -17,9 +17,8 @@
 //! | an instance between or beyond masters | none: an error; the compiler resolves the font `fontcraft_interp` interpolates at the instance instead |
 //!
 //! Alternate layers (the ones with axis rules) and intermediate layers are not used: at a
-//! master's location the master layer is the drawing, and alternate layers become separate
-//! glyphs with feature variations, which compiling does not do yet. The result's notes say when
-//! a font has any.
+//! master's location the master layer is the drawing; a variable font makes alternate layers
+//! separate glyphs with feature variations. The result's notes say when a font has any.
 //!
 //! The master's alignment zones and stems come along for PostScript hinting values; the
 //! zones as blue values follow glyphsLib's `to_ufo_blue_values` (Apache-2.0, see `NOTICE`).
@@ -389,7 +388,7 @@ impl Font {
         }
         if alternates > 0 {
             notes.push(format!(
-                "{alternates} glyphs have alternate layers for master `{}`; their master layers were used (alternate layers become glyphs of their own with feature variations, which compiling does not do yet)",
+                "{alternates} glyphs have alternate layers for master `{}`; their master layers were used (a variable font makes alternate layers glyphs of their own with feature variations)",
                 master.name
             ));
         }

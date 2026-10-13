@@ -6,13 +6,13 @@
 //! | Stage | Where | Package |
 //! |---|---|---|
 //! | Designspace and preflight | `fontcraft_interp::Designspace::for_setting`, the compatibility check (`compatibility.exportBlocked`) | M9.5 |
-//! | Glyph order | the static order plus the alternate-layer glyphs ([`crate::order::MadeGlyph`]) | M9.5, M9.8 |
+//! | Glyph order | the static order plus the alternate-layer glyphs ([`featvar::with_bracket_glyphs`]) | M9.5, M9.8 |
 //! | Decomposition | [`decompose`]: inconsistent component transforms, the decomposition parameters | M9.5 |
 //! | Outlines | [`glyf`]: cubic to quadratic across sources, `glyf` from the origin; [`gvar`] with phantom points, IUP and shared tuples | M9.5 |
 //! | Axes and names | [`fvar`], [`avar`], [`names`] | M9.6 |
 //! | Metrics variations | [`hvar`] (`HVAR`, `VVAR`), [`mvar`] | M9.6 |
 //! | Style attributes | [`stat`] | M9.7 |
-//! | Feature variations | [`featvar`]: alternate layers as `GSUB` feature variations | M9.8 |
+//! | Feature variations | [`featvar`]: alternate layers as `GSUB` feature variations, merged into the feature code's `GSUB` by the layout stage | M9.8 |
 //! | Variable layout | `fontcraft_features::var_layout`: kerning and marks with deltas | M9.9 |
 //! | CFF2 | [`cff2`] | M9.13 |
 //!
@@ -350,14 +350,19 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
     let vnames = names::variable_names(font, setting)?;
     options.style_name.clone_from(&vnames.style);
 
+    // Alternate layers: their glyphs join the font as glyphs of their own, and their ranges
+    // become feature variations of the layout stage.
+    let aligned = featvar::align_alternate_layers(font, &mut notes)?;
+    let font: &Font = aligned.as_ref().unwrap_or(font);
+    let alternates = featvar::AlternateRules::of(font, &designspace, &mut notes)?;
+    let with_brackets = featvar::with_bracket_glyphs(font, &designspace)?;
+    let font: &Font = with_brackets.as_ref().unwrap_or(font);
+
     let prepared = crate::prepare_source(font, &mut notes);
     let prepared: &Font = &prepared;
     let mut glyph_sources: HashMap<String, fontcraft_interp::GlyphSources> = HashMap::new();
     for g in prepared.glyphs.iter() {
         glyph_sources.insert(g.name.clone(), fontcraft_interp::GlyphSources::of(prepared, &designspace, &g.name)?);
-    }
-    if glyph_sources.values().any(|s| !s.alternates.is_empty()) {
-        notes.push("alternate layers are not in variable fonts yet; their glyphs keep the master layers".into());
     }
 
     // The sources besides the origin: the other masters, then each intermediate location.
@@ -414,6 +419,7 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
                 Some(crate::layout::OtherMaster { id: s.master.as_deref()?, glyphs: s.glyphs.iter().map(|g| (g.name.as_str(), g)).collect() })
             })
             .collect(),
+        alternates: alternates.as_ref(),
     };
 
     let mut resolved = crate::drawing::resolve(prepared, &Target::Master(origin.id.clone()))?;

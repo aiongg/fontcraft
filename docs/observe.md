@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1115 rows to check: 1550 guesses and 410 observe steps.**
+**1115 rows to check: 1551 guesses and 410 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -2980,6 +2980,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A static instance interpolates kerning as fontmake's instancer does (fontMath): a pair one master lacks takes the value that master's groups give it (the pair, the second side's group, the first side's group, both groups, else zero); a master read from its own UFO uses that file's groups; a pair that comes out zero is dropped unless one side is a glyph in a group; values are rounded half up. The common refinement of the groups is for variable fonts (M9.9); settle by comparing an instance of a source whose masters group glyphs differently with fontmake.
 - [ ] `compile.bracketLayerGlyphs` (behavior, M9, docs): Each alternate (bracket) layer set becomes an extra glyph named after its…
   - Guess: When the font already has a glyph named like an alternate glyph (`a.BRACKET.varAlt01`), the alternate takes the next free number instead of replacing or clashing with it; settle by exporting such a font from the reference app and reading the glyph order.
+  - Guess: A kern pair on a glyph with alternate layers is copied to its alternate glyphs the way glyphsLib copies it, not to every combination of alternates as fontc does; settle by exporting a variable font with a pair between two glyphs that both have alternate layers and reading its kerning at a location inside both ranges.
 - [ ] `color.export.fullColorToColrV1` (behavior, M11, docs): Full-colour layers are compiled to COLR version 1 when any of them…
   - Guess: A full-colour Color layer exports as COLR version 1 without any parameter, as both oracles do; the handbook names only SVG for these layers. Settled by exporting the full-colour test font from the reference with no parameters.
   - Observe: Full-colour font: export with no colour parameters and read it with fontTools; note whether COLR version 1, an SVG table or neither is written.

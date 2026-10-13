@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**1694 guesses on 1097 rows (397 of them live commands).**
+**1695 guesses on 1097 rows (397 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -1649,6 +1649,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `compile.gdefClasses` (behavior) | M6 | docs | – | A static master's classes are worked out from that master's anchors only, as fontmake does for each master's UFO, where fontc looks at the anchors of every master; a source whose masters differ in anchor names would settle it. |
 | `compile.gdefLigatureCarets` (behavior) | M6 | docs | – | Carets at the same position are all kept, as fontc keeps them, where ufo2ft keeps one; a ligature with two carets at one position in the reference app's export would settle it. |
 | `compile.bracketLayerGlyphs` (behavior) | M9 | docs | – | When the font already has a glyph named like an alternate glyph (`a.BRACKET.varAlt01`), the alternate takes the next free number instead of replacing or clashing with it; settle by exporting such a font from the reference app and reading the glyph order. |
+| `compile.bracketLayerGlyphs` (behavior) | M9 | docs | – | A kern pair on a glyph with alternate layers is copied to its alternate glyphs the way glyphsLib copies it, not to every combination of alternates as fontc does; settle by exporting a variable font with a pair between two glyphs that both have alternate layers and reading its kerning at a location inside both ranges. |
 | `gasp` (table) | M10 | docs | – | A CFF export gets no gasp table even with the parameter, as ufo2ft writes gasp for TrueType output only and the handbook describes the parameter for TrueType fonts; a CFF export from the reference app with the parameter would settle it. |
 | `gasp` (table) | M10 | docs | – | A gasp Table parameter with no usable range counts as no source, so a hinted font gets the default ranges; an export from the reference app with an empty parameter would settle it. |
 

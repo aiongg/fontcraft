@@ -4,40 +4,45 @@
 //! `compile.bracketLayerGlyphs`, `switching.threeMethods` (alternate half), parameter
 //! `Feature for Feature Variations`.
 //!
-//! Follows glyphsLib 6.15.0 (`builder/bracket_layers.py`, Apache-2.0), fontTools 4.66.1
+//! Follows glyphsLib 6.15.0 (`builder/bracket_layers.py`,
+//! `builder/transformations/align_alternate_layers.py`, Apache-2.0), fontTools 4.66.1
 //! (`varLib/featureVars.py`, MIT) and fontc (`glyphs2fontir/src/source.rs`,
 //! `fontbe/src/features/feature_variations.rs`, Apache-2.0); see `NOTICE`.
 //!
 //! Contract:
+//! - Before anything else, composites get the alternate ranges of their components
+//!   ([`align_alternate_layers`]): a copy of the master layer per missing range, as glyphsLib
+//!   does, so a composite switches with its components.
 //! - Each alternate set of a glyph becomes a glyph of its own, named
 //!   `<glyph>.BRACKET.varAltNN` ([`bracket_glyph_name`]), numbered from 01 in the order of
 //!   `fontcraft_interp::GlyphSources::alternates`; a number whose name a glyph of the font already
-//!   has is skipped. [`bracket_glyphs`] lists them as
-//!   [`MadeGlyph`]s sorted by name, the order both oracles append them to the glyph order in;
+//!   has is skipped. [`bracket_glyphs`] lists those of exported glyphs as [`MadeGlyph`]s sorted
+//!   by name, the order both oracles append them to the glyph order in;
 //!   [`bracket_production_name`] gives each the parent's production name with the same suffix.
-//!   Glyphs that do not export get none.
-//! - The sets' boxes go through `fontcraft_interp::overlay` ([`alternate_rules`], [`from_font`]);
-//!   each record becomes a [`FeatureVariation`] of single substitutions under the feature the
+//! - [`with_bracket_glyphs`] makes them real glyphs of the font the variable compile builds from:
+//!   the set's layers as master and intermediate layers, components switched to the alternate
+//!   glyph of the component with the same box, the parent's kerning groups, and the parent's
+//!   pairs copied as glyphsLib copies them. Outlines, metrics, kerning and mark attachment then
+//!   treat them like any glyph. The parents keep their main sources only.
+//! - The sets' boxes go through `fontcraft_interp::overlay` twice ([`AlternateRules`]), as both
+//!   oracles overlay the rules once when they read the source and again when they build `GSUB`.
+//!   Each record becomes a [`FeatureVariation`] of single substitutions under the feature the
 //!   Feature for Feature Variations parameter names, [`DEFAULT_FEATURE`] when it names none or a
-//!   tag that is not one (`docs/plans/M9.md` § 7 question 2, decided). Where two sets of a glyph
-//!   overlap, the later set's glyph is substituted, as both oracles do.
+//!   tag that is not one (`docs/plans/M9.md` § 7 question 2, decided).
 //! - Conditions are in normalized coordinates after `avar`, as `GSUB` stores them.
-//! - Until M8's compile merges them into the feature code's `GSUB`, [`build_gsub`] writes a
-//!   `GSUB` holding only these lookups, as fontTools' `addFeatureVariations` does for a font
-//!   without one: the records overlaid a second time (as fontmake's `varLib` reads them from the
-//!   designspace rules), one lookup per distinct substitution map in name order, one empty
-//!   feature in a `DFLT` script, and a feature variation record per region.
-//!
-//! Where this meets M8: [`FeatureVariation`] has the fields of
-//! `fea::GeneratedLookups::feature_variations`' entries; when M8 is in, the records are handed to
-//! `fea` and [`build_gsub`] is no longer called. When the feature is `rvrn` alone, its lookups
-//! then go before the feature code's; for any other feature after them.
+//! - The layout stage hands the variations to `fontcraft_fea`, which merges them into the feature
+//!   code's `GSUB`: their lookups go first when the feature is `rvrn` alone and after the code's
+//!   for any other feature, and the records keep the overlay's order (the first that holds
+//!   applies). [`build_gsub`] writes a `GSUB` holding only these lookups, as fontTools'
+//!   `addFeatureVariations` does for a font without one.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use fontcraft_interp::overlay::{Substitutions, overlay_substitutions};
 use fontcraft_interp::{AxisSpan, Designspace, GlyphSources, MAX_OVERLAY_RECORDS, MAX_OVERLAY_WORK, OverlayRecord, OverlayRule, RegionBox};
-use fontcraft_model::Font;
+use std::sync::Arc;
+
+use fontcraft_model::{Font, Glyph, GlyphTable, KernFirst, MasterKerning, Shape};
 use write_fonts::tables::gsub::builders::SingleSubBuilder;
 use write_fonts::tables::gsub::{Gsub, SubstitutionLookup, SubstitutionLookupList};
 use write_fonts::tables::layout::builders::{Builder, LookupBuilder};
@@ -94,9 +99,15 @@ fn has_alternate_layers(glyph: &fontcraft_model::Glyph) -> bool {
 
 /// The exported glyphs with alternate layers and their sources, in the font's glyph order.
 fn alternate_sources(font: &Font, designspace: &Designspace) -> Result<Vec<GlyphSources>, CompileError> {
+    sources_with_alternates(font, designspace, false)
+}
+
+/// The glyphs with alternate layers and their sources, in the font's glyph order; glyphs that do
+/// not export only when `hidden`.
+fn sources_with_alternates(font: &Font, designspace: &Designspace, hidden: bool) -> Result<Vec<GlyphSources>, CompileError> {
     let mut out = Vec::new();
     for glyph in font.glyphs.iter() {
-        if !glyph.export || !has_alternate_layers(glyph) {
+        if !(glyph.export || hidden) || !has_alternate_layers(glyph) {
             continue;
         }
         let sources = GlyphSources::of(font, designspace, &glyph.name)?;
@@ -134,6 +145,301 @@ pub fn bracket_glyphs(font: &Font, designspace: &Designspace) -> Result<Vec<Made
     }
     made.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(made)
+}
+
+/// Most rounds [`align_alternate_layers`] makes; each reaches one more level of nested
+/// components.
+pub const MAX_ALIGN_ROUNDS: usize = 32;
+
+/// `font` with the alternate layers of components copied to the composites that use them, as
+/// glyphsLib's `align_alternate_layers` does before a variable build: for each master layer whose
+/// components have alternate ranges under that master that the glyph lacks, the glyph gets a copy
+/// of the master layer with each missing range, so that the composite switches with its
+/// components. A master layer with a range counts as one of the glyph's alternate layers, and a
+/// layer whose bounds are all empty does not, as `fontcraft_interp::GlyphSources` groups them.
+/// `None` when nothing changes. A glyph that has alternate layers of its own but not
+/// the components' gets a warning.
+pub fn align_alternate_layers(font: &Font, warnings: &mut Vec<String>) -> Result<Option<Font>, CompileError> {
+    type Rules = Vec<fontcraft_model::AxisRule>;
+    // The range lists of a glyph's layers under one master, a master layer with a range among
+    // them; a list with every bound empty is the `[]` partner, not a range (`GlyphSources`).
+    let ranges_of = |g: &Glyph, master: &str| -> Vec<Rules> {
+        g.layers
+            .iter()
+            .filter(|l| l.master == master && l.info.attrs.axis_rules.iter().any(|r| r.min.is_some() || r.max.is_some()))
+            .map(|l| l.info.attrs.axis_rules.clone())
+            .collect()
+    };
+    if !font.glyphs.iter().any(|g| has_alternate_layers(g)) {
+        return Ok(None);
+    }
+    let mut glyphs: Vec<Glyph> = font.glyphs.iter().map(|g| (**g).clone()).collect();
+    let index: HashMap<String, usize> = glyphs.iter().enumerate().map(|(i, g)| (g.name.clone(), i)).collect();
+    let mut changed = false;
+    for _ in 0..MAX_ALIGN_ROUNDS {
+        // (glyph, master, ranges needed), in master then glyph order.
+        let mut needed: Vec<(usize, String, Vec<Rules>)> = Vec::new();
+        for master in font.masters.iter() {
+            for (i, g) in glyphs.iter().enumerate() {
+                let Some(layer) = g.layers.iter().find(|l| l.id == master.id) else { continue };
+                let mine = ranges_of(g, &master.id);
+                let mut want: Vec<Rules> = Vec::new();
+                for shape in &layer.shapes {
+                    let Shape::Component(c) = shape else { continue };
+                    let Some(base) = index.get(&c.glyph).and_then(|&j| glyphs.get(j)) else { continue };
+                    for rules in ranges_of(base, &master.id) {
+                        if !mine.contains(&rules) && !want.contains(&rules) {
+                            want.push(rules);
+                        }
+                    }
+                }
+                if !want.is_empty() {
+                    if !mine.is_empty() {
+                        warnings.push(format!(
+                            "glyph `{}` has alternate layers in master `{}` that differ from those of its components; some of the components' alternate layers will not apply",
+                            g.name, master.name
+                        ));
+                    }
+                    needed.push((i, master.id.clone(), want));
+                }
+            }
+        }
+        if needed.is_empty() {
+            break;
+        }
+        changed = true;
+        let bound = |v: Option<f64>, open: f64| v.unwrap_or(open);
+        for (i, master, mut want) in needed {
+            want.sort_by(|a, b| {
+                let key = |r: &Rules| r.iter().map(|x| (bound(x.min, f64::NEG_INFINITY), bound(x.max, f64::INFINITY))).collect::<Vec<_>>();
+                key(a).partial_cmp(&key(b)).unwrap_or(std::cmp::Ordering::Equal)
+            });
+            let Some(g) = glyphs.get_mut(i) else { continue };
+            let Some(base) = g.layers.iter().find(|l| l.id == master).cloned() else { continue };
+            for rules in want {
+                let mut layer = base.clone();
+                let mut n = g.layers.len();
+                layer.id = format!("{master}.alternate{n}");
+                while g.layers.iter().any(|l| l.id == layer.id) {
+                    n = n.saturating_add(1);
+                    layer.id = format!("{master}.alternate{n}");
+                }
+                layer.info.attrs.axis_rules = rules;
+                g.layers.push(layer);
+            }
+        }
+    }
+    if !changed {
+        return Ok(None);
+    }
+    let mut out = font.clone();
+    out.glyphs = GlyphTable::from_glyphs(glyphs.into_iter().map(Arc::new).collect());
+    Ok(Some(out))
+}
+
+/// Most kerning pair visits [`with_bracket_glyphs`] makes copying pairs to alternate glyphs.
+pub const MAX_BRACKET_KERN_WORK: usize = 20_000_000;
+
+/// `font` with each alternate glyph of [`bracket_glyphs`] made a glyph of its own (and one for
+/// each alternate set of a glyph that does not export, which does not export either), after the
+/// font's glyphs in name order, and the parents left with their main sources only; `None` when no
+/// exported glyph has alternate layers.
+///
+/// An alternate glyph is its parent with no Unicode values, the set's layers as its master and
+/// intermediate layers, and the parent's production name with the alternate's suffix. A component
+/// whose glyph has an alternate set with the same box points at that set's glyph. The alternate
+/// glyph keeps its parent's kerning groups, and each pair naming the parent is copied for it
+/// ([`copy_kerning`]), so kerning and mark attachment treat it as the parent.
+pub fn with_bracket_glyphs(font: &Font, designspace: &Designspace) -> Result<Option<Font>, CompileError> {
+    // Glyphs that do not export get alternate glyphs too, for the components that use them.
+    let all = sources_with_alternates(font, designspace, true)?;
+    if all.is_empty() {
+        return Ok(None);
+    }
+    // Per parent: each set's box and alternate glyph name, for components.
+    let mut boxes: HashMap<&str, Vec<(RegionBox, String)>> = HashMap::with_capacity(all.len());
+    for sources in &all {
+        let mut sets = Vec::with_capacity(sources.alternates.len());
+        for (alternate, name) in sources.alternates.iter().zip(bracket_names(font, sources)) {
+            sets.push((alternate.ranges.to_box(designspace)?, name));
+        }
+        boxes.insert(sources.glyph.as_str(), sets);
+    }
+    let mut made: Vec<Glyph> = Vec::new();
+    let mut parents: HashMap<&str, Glyph> = HashMap::with_capacity(all.len());
+    let mut renames: Vec<(String, String)> = Vec::new();
+    for sources in &all {
+        let Some(parent) = font.glyph(&sources.glyph) else { continue };
+        let sets = boxes.get(sources.glyph.as_str()).map_or(&[][..], Vec::as_slice);
+        for (alternate, (region, name)) in sources.alternates.iter().zip(sets) {
+            let mut glyph: Glyph = (**parent).clone();
+            glyph.name.clone_from(name);
+            glyph.unicodes.clear();
+            if let Some(production) = parent.info.production.as_deref() {
+                glyph.info.production = bracket_production_name(&parent.name, production, name);
+            }
+            glyph.layers = alternate
+                .sources
+                .iter()
+                .filter_map(|source| {
+                    let mut layer = parent.layers.iter().find(|l| l.id == source.layer_id)?.clone();
+                    layer.info.attrs.axis_rules.clear();
+                    if source.is_master {
+                        layer.id.clone_from(&source.master);
+                        layer.info.attrs.coordinates.clear();
+                    }
+                    for shape in &mut layer.shapes {
+                        if let Shape::Component(c) = shape
+                            && let Some((_, target)) = boxes.get(c.glyph.as_str()).and_then(|b| b.iter().find(|(r, _)| r == region))
+                        {
+                            c.glyph.clone_from(target);
+                        }
+                    }
+                    Some(layer)
+                })
+                .collect();
+            renames.push((parent.name.clone(), name.clone()));
+            made.push(glyph);
+        }
+        // The parent keeps its layers without ranges, and each master's main source as the
+        // master layer where a ranged layer stood.
+        let mut glyph: Glyph = (**parent).clone();
+        glyph.layers.retain(|l| l.info.attrs.axis_rules.is_empty());
+        for source in sources.main.iter().filter(|s| s.is_master) {
+            if glyph.layers.iter().any(|l| l.id == source.master) {
+                continue;
+            }
+            if let Some(mut layer) = parent.layers.iter().find(|l| l.id == source.layer_id).cloned() {
+                layer.info.attrs.axis_rules.clear();
+                layer.id.clone_from(&source.master);
+                glyph.layers.push(layer);
+            }
+        }
+        parents.insert(sources.glyph.as_str(), glyph);
+    }
+    made.sort_by(|a, b| a.name.cmp(&b.name));
+
+    let mut out = font.clone();
+    let mut list: Vec<Arc<Glyph>> = Vec::with_capacity(font.glyphs.len().saturating_add(made.len()));
+    for g in font.glyphs.iter() {
+        match parents.remove(g.name.as_str()) {
+            Some(parent) => list.push(Arc::new(parent)),
+            None => list.push(g.clone()),
+        }
+    }
+    list.extend(made.into_iter().map(Arc::new));
+    out.glyphs = GlyphTable::from_glyphs(list);
+    let kerning = Arc::make_mut(&mut out.kerning);
+    let mut work = 0usize;
+    for table in [&mut kerning.ltr, &mut kerning.rtl, &mut kerning.vertical] {
+        for master in &mut table.0 {
+            copy_kerning(master, &renames, &mut work)?;
+        }
+    }
+    Ok(Some(out))
+}
+
+/// Copies the pairs of one master that name a parent glyph for its alternate glyph, one
+/// (parent, alternate) of `renames` at a time and each seeing the pairs the earlier ones added:
+/// (parent, x) gives (alternate, x), (x, parent) gives (x, alternate), and (parent, parent) gives
+/// (alternate, alternate) only. A copied pair replaces one already there.
+fn copy_kerning(master: &mut MasterKerning, renames: &[(String, String)], work: &mut usize) -> Result<(), CompileError> {
+    for (parent, alternate) in renames {
+        let mut added: Vec<(String, String, f64)> = Vec::new();
+        for first in &master.firsts {
+            *work = work.saturating_add(first.seconds.len().max(1));
+            if *work > MAX_BRACKET_KERN_WORK {
+                return Err(CompileError::Table {
+                    table: "GPOS",
+                    message: format!("copying kerning to alternate glyphs needs more than {MAX_BRACKET_KERN_WORK} steps"),
+                });
+            }
+            let first_is = first.first == *parent;
+            for (second, value) in &first.seconds {
+                match (first_is, second == parent) {
+                    (true, true) => added.push((alternate.clone(), alternate.clone(), *value)),
+                    (true, false) => added.push((alternate.clone(), second.clone(), *value)),
+                    (false, true) => added.push((first.first.clone(), alternate.clone(), *value)),
+                    (false, false) => {}
+                }
+            }
+        }
+        for (first, second, value) in added {
+            let at = match master.firsts.iter().position(|f| f.first == first) {
+                Some(i) => i,
+                None => {
+                    master.firsts.push(KernFirst { first, seconds: Vec::new() });
+                    master.firsts.len() - 1
+                }
+            };
+            let Some(entry) = master.firsts.get_mut(at) else { continue };
+            match entry.seconds.iter_mut().find(|(s, _)| *s == second) {
+                Some(pair) => pair.1 = value,
+                None => entry.seconds.push((second, value)),
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The feature variations of a variable compile before its glyph order exists: the overlaid
+/// alternate rules and the feature they go under.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AlternateRules {
+    pub feature: Tag,
+    pub axes: VarAxes,
+    pub records: Vec<OverlayRecord<Substitutions>>,
+}
+
+impl AlternateRules {
+    /// The rules of `font` in `designspace` overlaid twice, as both oracles do (the first
+    /// overlay's records read back as rules and overlaid again); `None` when no exported glyph has
+    /// alternate layers. Each record has one substitution list: within a record of the first
+    /// overlay the later rule wins a glyph several substitute; within one of the second, the
+    /// list that sorts first wins, as its lookup comes first in the lookup list.
+    pub fn of(font: &Font, designspace: &Designspace, warnings: &mut Vec<String>) -> Result<Option<AlternateRules>, CompileError> {
+        let rules = alternate_rules(font, designspace)?;
+        if rules.is_empty() {
+            return Ok(None);
+        }
+        let first = overlay_substitutions(&rules, MAX_OVERLAY_WORK)?;
+        let reread: Vec<OverlayRule<Substitutions>> = first
+            .into_iter()
+            .map(|r| {
+                let mut map: BTreeMap<String, String> = BTreeMap::new();
+                for (glyph, alternate) in r.payloads.into_iter().flatten() {
+                    map.insert(glyph, alternate);
+                }
+                OverlayRule { boxes: vec![r.region], payload: map.into_iter().collect() }
+            })
+            .collect();
+        let second = overlay_substitutions(&reread, MAX_OVERLAY_WORK)?;
+        let records = second
+            .into_iter()
+            .map(|r| {
+                let mut lists: Vec<Substitutions> = r
+                    .payloads
+                    .into_iter()
+                    .map(|mut p| {
+                        p.sort();
+                        p
+                    })
+                    .collect();
+                lists.sort();
+                let mut map: BTreeMap<String, String> = BTreeMap::new();
+                for (glyph, alternate) in lists.into_iter().flatten() {
+                    map.entry(glyph).or_insert(alternate);
+                }
+                OverlayRecord { region: r.region, payloads: vec![map.into_iter().collect()] }
+            })
+            .collect();
+        Ok(Some(AlternateRules { feature: feature_tag(font, warnings), axes: VarAxes::from_designspace(designspace)?, records }))
+    }
+
+    /// The feature variations with glyph ids from `glyph_order`.
+    pub fn variations(&self, glyph_order: &[String]) -> Result<Vec<FeatureVariation>, CompileError> {
+        feature_variations(&self.records, &self.axes, self.feature, glyph_order)
+    }
 }
 
 /// The overlay's input: one rule per alternate set of every exported glyph, in glyph order then
