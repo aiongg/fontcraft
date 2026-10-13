@@ -665,3 +665,80 @@ fn a_master_without_kerning_takes_the_interpolated_value() {
     let (k, _) = evaluate::kerning(&f, &[F2Dot14::from_f32(0.5)], &names);
     assert_eq!(k.get("A V").map(|v| v[2]), Some(-70.0));
 }
+
+/// The Light/Bold layout font with feature code in the reference's variable syntax: an
+/// `#ifdef VARIABLE` condition, variable `pos` values, number tokens (`gap` 10 and 30, `fixed` 5
+/// in both masters), and `T` with alternate layers from wght 600, the condition's range.
+fn variable_feature_font() -> Font {
+    use std::sync::Arc;
+
+    use fontcraft_model::{AxisRule, Features, Glyph, GlyphTable, Layer, NumberDef, Snippet};
+    let mut f = variable_layout_font();
+    f.numbers =
+        Arc::new(vec![NumberDef { name: "gap".into(), extra: Default::default() }, NumberDef { name: "fixed".into(), extra: Default::default() }]);
+    let mut masters = (*f.masters).clone();
+    masters[0].number_values = vec![10.0, 5.0];
+    masters[1].number_values = vec![30.0, 5.0];
+    f.masters = Arc::new(masters);
+    let glyphs: Vec<Arc<Glyph>> = f
+        .glyphs
+        .iter()
+        .map(|g| {
+            let mut g = (**g).clone();
+            if g.name == "T" {
+                for (master, width) in [("light", 300.0), ("bold", 500.0)] {
+                    let mut alt = Layer::new(master, width);
+                    alt.id = format!("{master}-alt");
+                    alt.shapes = vec![Shape::Path(Contour::rect(0.0, 0.0, width / 3.0, 600.0))];
+                    alt.info.attrs.axis_rules = vec![AxisRule { min: Some(600.0), max: None }];
+                    g.layers.push(alt);
+                }
+            }
+            Arc::new(g)
+        })
+        .collect();
+    f.glyphs = GlyphTable::from_glyphs(glyphs);
+    let feature = |name: &str, code: &str| Snippet { name: name.into(), code: code.into(), ..Default::default() };
+    f.features = Arc::new(Features {
+        features: vec![
+            feature("calt", "#ifdef VARIABLE\ncondition 600 < wght;\nsub A by V;\n#endif\n#ifndef VARIABLE\nsub A by T;\n#endif"),
+            feature("kern", "pos A A -10 (wght:900) -50;\npos o T $gap;\npos o o ${fixed * 2};"),
+            feature("ss01", "condition 800 < wght < 700;\nsub o by A;"),
+        ],
+        ..Features::default()
+    });
+    f
+}
+
+#[test]
+fn variable_feature_code_compiles_to_feature_variations_and_deltas() {
+    use skrifa::raw::TableProvider;
+    use skrifa::raw::types::F2Dot14;
+    let font = variable_feature_font();
+    let v = fontcraft_compile::var::compile_variable(&font, None, &Options::default(), &fontcraft_compile::var::VariableOptions::default()).unwrap();
+    let f = skrifa::FontRef::new(&v.compiled.bytes).unwrap();
+    let names: evaluate::Names = v.compiled.glyph_order.iter().enumerate().map(|(i, n)| (i as u32, n.clone())).collect();
+    // A condition that can never match drops its rules with a warning that names the feature.
+    assert!(v.compiled.warnings.iter().any(|w| w.contains("can never match") && w.contains("ss01")), "{:?}", v.compiled.warnings);
+
+    // The code's condition and the alternate layers share one range, so one record holds both.
+    let gsub = f.gsub().unwrap();
+    assert_eq!(gsub.feature_variations().unwrap().unwrap().feature_variation_records().len(), 1);
+    // rvrn's lookup and the condition's; the `#ifndef VARIABLE` rule is left out.
+    assert_eq!(gsub.lookup_list().unwrap().lookup_count(), 2);
+    let subs = |t: f32| evaluate::substitutions(&f, &[F2Dot14::from_f32(t)], &names).into_iter().collect::<Vec<_>>();
+    assert!(subs(0.5).is_empty());
+    let both = ["calt: A -> V", "rvrn: T -> T.BRACKET.varAlt01"];
+    assert_eq!(subs(0.625), both);
+    assert_eq!(subs(1.0), both);
+
+    // Variable values, number tokens per master and the generated kerning in one store.
+    let kern_at = |t: f32| {
+        let (k, _) = evaluate::kerning(&f, &[F2Dot14::from_f32(t)], &names);
+        let x = |pair: &str| k.get(pair).map_or(f64::NAN, |v| v[2]);
+        [x("A A"), x("o T"), x("o o"), x("A V")]
+    };
+    assert_eq!(kern_at(0.0), [-10.0, 10.0, 10.0, -40.0]);
+    assert_eq!(kern_at(1.0), [-50.0, 30.0, 10.0, -100.0]);
+    assert_eq!(kern_at(0.5), [-30.0, 20.0, 10.0, -70.0]);
+}

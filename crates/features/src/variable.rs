@@ -6,16 +6,19 @@
 
 use fontcraft_fea::{Diagnostic, Severity};
 
-use crate::fea_variable::VariableSyntax;
+use crate::fea_variable::{VariableSyntax, VariableSyntaxError};
 use crate::source_map::OffsetMap;
 
-/// `code` with the variable syntax lowered by `syntax`, and the map back to `code`.
-/// Diagnostics have no file; their spans are in `code`.
-pub fn lower(code: &str, syntax: &mut VariableSyntax) -> Result<(String, OffsetMap), Vec<Diagnostic>> {
+/// `code` with the variable syntax lowered by `syntax`, the map back to `code`, and warnings
+/// about rules left out (an inverted condition range). Diagnostics have no file; their spans are
+/// in `code`.
+pub fn lower(code: &str, syntax: &mut VariableSyntax) -> Result<(String, OffsetMap, Vec<Diagnostic>), Vec<Diagnostic>> {
+    let diagnostic = |e: VariableSyntaxError, severity| Diagnostic::at("", e.offset..e.offset.saturating_add(e.len), severity, e.message);
     match syntax.lower(code) {
-        Ok(lowered) => Ok((lowered.text, lowered.map)),
-        Err(errors) => {
-            Err(errors.into_iter().map(|e| Diagnostic::at("", e.offset..e.offset.saturating_add(e.len), Severity::Error, e.message)).collect())
+        Ok(lowered) => {
+            let warnings = lowered.warnings.into_iter().map(|w| diagnostic(w, Severity::Warning)).collect();
+            Ok((lowered.text, lowered.map, warnings))
         }
+        Err(errors) => Err(errors.into_iter().map(|e| diagnostic(e, Severity::Error)).collect()),
     }
 }

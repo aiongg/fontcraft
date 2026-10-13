@@ -28,7 +28,9 @@ use std::ops::Range;
 use fontcraft_fea::{Diagnostic, Severity};
 
 use crate::source_map::{EntryKind, OffsetMap};
-use crate::target::GlyphMetric;
+use fontcraft_glyphquery::predicate::Predicate;
+
+use crate::target::{GlyphMetric, Target};
 use crate::{MAX_ENTRY_BYTES, TargetValues};
 
 /// Most tokens in one entry.
@@ -316,11 +318,46 @@ struct Evaluator<'v> {
     /// The kind of entry the code is from, for where predicate tokens may stand; `None` for a
     /// token evaluated on its own.
     kind: Option<EntryKind>,
+    /// For the variable font, each master's number values.
+    masters: Option<Vec<Vec<(String, f64)>>>,
+}
+
+/// A target's values with the number values of one master.
+struct AtMaster<'a> {
+    inner: &'a dyn TargetValues,
+    numbers: &'a [(String, f64)],
+}
+
+impl TargetValues for AtMaster<'_> {
+    fn target(&self) -> &Target {
+        self.inner.target()
+    }
+
+    fn number_value(&self, name: &str) -> Option<f64> {
+        self.numbers.iter().find(|(n, _)| n == name).map(|(_, v)| if v.is_finite() { *v } else { 0.0 })
+    }
+
+    fn glyph_metric(&self, glyph: &str, metric: GlyphMetric) -> Option<f64> {
+        self.inner.glyph_metric(glyph, metric)
+    }
+
+    fn anchor(&self, glyph: &str, anchor: &str) -> Option<(f64, f64)> {
+        self.inner.anchor(glyph, anchor)
+    }
+
+    fn glyphs(&self) -> &[String] {
+        self.inner.glyphs()
+    }
+
+    fn select(&self, predicate: &Predicate) -> Result<Vec<String>, String> {
+        self.inner.select(predicate)
+    }
 }
 
 impl<'v> Evaluator<'v> {
     fn new(values: &'v dyn TargetValues, kind: Option<EntryKind>) -> Self {
-        Self { values, predicates: HashMap::new(), work: 0, kind }
+        let masters = values.target().is_variable().then(|| values.feature_axes().masters.into_iter().map(|m| m.numbers).collect());
+        Self { values, predicates: HashMap::new(), work: 0, kind, masters }
     }
 
     /// The text `token` of `code` is replaced by.
@@ -338,8 +375,37 @@ impl<'v> Evaluator<'v> {
                 self.predicates.insert(key.to_string(), result.clone());
                 result
             }
-            _ => self.number(code, token).map(|v| v.to_string()),
+            _ => {
+                if let Some(text) = self.variable_text(code, token)? {
+                    return Ok(text);
+                }
+                self.number(code, token).map(|v| v.to_string())
+            }
         }
+    }
+
+    /// For the variable font: a number token that reads number values and gives different
+    /// values at the masters stays as it is written, for the feature compiler to resolve at
+    /// every master (`token.numberValue.variable`). `None`: expand it to its one value. Glyph
+    /// property tokens read the origin master.
+    fn variable_text(&self, code: &str, token: &Token) -> Result<Option<String>, String> {
+        let Some(masters) = self.masters.as_ref().filter(|m| m.len() > 1) else { return Ok(None) };
+        match &token.body {
+            Body::Name(_) => {}
+            Body::Expression(inner) if !code.get(inner.clone()).unwrap_or_default().contains(':') => {}
+            _ => return Ok(None),
+        }
+        let mut first = None;
+        for numbers in masters {
+            let at = AtMaster { inner: self.values, numbers };
+            let value = Evaluator::new(&at, self.kind).number(code, token)?;
+            match first {
+                None => first = Some(value),
+                Some(v) if v == value => {}
+                Some(_) => return Ok(Some(code.get(token.range.clone()).unwrap_or_default().to_string())),
+            }
+        }
+        Ok(None)
     }
 
     fn predicate(&mut self, code: &str, inner: Range<usize>) -> Result<Vec<String>, String> {

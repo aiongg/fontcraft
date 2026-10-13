@@ -113,9 +113,13 @@ AND/OR without parentheses, and refuses NOT and parentheses altogether.
   Following fea-rs: several operators per expression, `*` and `/` bind tighter, decimal and negative
   literals allowed, spaces allowed, result rounded to an integer
   (`token.numberValue.expressionDetails`).
-- Variable font: the token becomes a variable value with one entry per master location
-  (`token.numberValue.variable`). fea-rs can do this itself when given the number values per
-  location; otherwise FontCraft emits the `(default loc:value ...)` form.
+- Variable font: a token that reads only number values and gives different values at the
+  masters stays in the code as written; fea-rs asks for the number values at every master
+  location and builds a variable value (`token.numberValue.variable`, as fontc). A token with the
+  same value at every master is expanded to that number. Glyph property tokens read the origin
+  master. fontmake cannot build such a source: glyphsLib expands the token per master, so the
+  masters' feature texts differ, and ufo2ft then compiles each master's features on its own,
+  which fails on any variable syntax.
 - Unknown name: compile error at the token (`token.numberValue.unknownName`, inferred).
 - Typical use: `pos @Uppercase <$tracking 0 ${tracking*2} 0>;` in cpsp.
 
@@ -235,6 +239,14 @@ pos @Figure period' <12 0 24 0 (wght:700) 18 0 36 0 (wght:300 opsz:10) 6 0 12 0>
   assumes without one before relying on it.
 - Static instance: interpolate to plain numbers, with the variation model the variable font uses
   at that location.
+- Compiled (M9.12) by fea-rs with `fontcraft_features::var_info::VariableFeatures` as its
+  variation info: axes in user coordinates with their maps, so a scalar's or condition set's
+  user values normalise through the axis mapping; values over the masters' locations resolve
+  through the variable layout's model, so they share one `GDEF` variation store and one rounding
+  with the generated kerning and marks; a value over other locations gets a model of its own.
+  Condition sets become `GSUB` feature variation records; a record whose condition set equals
+  one from alternate layers is one record holding both substitutions. Rules that can never
+  apply (an inverted condition) are export warnings.
 - Lowered by `features/src/fea_variable.rs` (M9.11) after the `#ifdef` pass of
   `features/src/lower.rs`; the output equals glyphsLib's converted text on the synthetic cases in
   `crates/features/tests/data/variable_syntax` (`crates/features/tests/oracle/convert.py`

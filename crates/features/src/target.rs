@@ -130,6 +130,14 @@ impl<'a> MasterValues<'a> {
         Ok(Self { target: Target::Master(master.to_string()), font, data, master: found, glyphs, anchors: None, classes, feature_axes: None })
     }
 
+    /// The values of the variable font whose origin is this master: the variable feature syntax
+    /// becomes condition sets and variable values, and number tokens that differ between the
+    /// masters stay for the feature compiler to resolve at each master.
+    pub fn for_variable_font(mut self) -> Self {
+        self.target = Target::Variable;
+        self
+    }
+
     /// Reads anchors from `source` (propagated anchors) instead of the layers' stored ones.
     pub fn with_anchors(mut self, source: AnchorSource<'a>) -> Self {
         self.anchors = Some(source);

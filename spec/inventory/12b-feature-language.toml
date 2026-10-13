@@ -1365,6 +1365,7 @@ milestone = "M9"
 summary = "A designspace location is a comma-separated list of `tag=value` entries, at most one per axis; axes left out sit at their default. fea-rs: yes (variable_metrics tests)."
 ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.e.iia; AFDKO Variable_Feature_Guide.md"
 status = "docs"
+notes = "FontCraft (M9.12): compiled by fea-rs in the variable font export, with the variation info of `fontcraft_features::var_info`; a static export refuses it, as fea-rs does outside a variable font."
 
 [[behavior]]
 id = "fea.var.locationUnits"
@@ -1373,6 +1374,7 @@ milestone = "M9"
 summary = "Each axis value carries a unit letter: `u` for user coordinates, `d` for design coordinates, `n` for normalised coordinates between -1 and 1. The guide requires a unit, while one example in the spec omits it. fea-rs: partial (the unit suffix is optional and described as experimental; how a value without unit is read is for the caller's variation info to decide)."
 ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.e.iia; AFDKO Variable_Feature_Guide.md"
 status = "docs"
+notes = "FontCraft (M9.12): compiled by fea-rs in the variable font export, with the variation info of `fontcraft_features::var_info`; a static export refuses it, as fea-rs does outside a variable font. A value without a unit is read as a user coordinate, as fea-rs reads it; the reference's variable syntax is lowered to that form (M9.11)."
 
 [[behavior]]
 id = "fea.var.locationNudge"
@@ -1381,6 +1383,7 @@ milestone = "M9"
 summary = "A `+` or `-` after the unit letter moves the normalised position by one F2Dot14 step up or down, to place two locations right next to each other. fea-rs: unknown."
 ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.e.iia; AFDKO Variable_Feature_Guide.md"
 status = "docs"
+notes = "FontCraft (M9.12): compiled by fea-rs in the variable font export, with the variation info of `fontcraft_features::var_info`; a static export refuses it, as fea-rs does outside a variable font."
 
 [[behavior]]
 id = "fea.var.locationDef"
@@ -1389,6 +1392,7 @@ milestone = "M9"
 summary = "`locationDef <location> @name;` names a location; the name starts with `@`, then a letter or underscore, then letters, digits, underscores or periods, never a hyphen. It can then replace a literal location. fea-rs: no (keyword not present)."
 ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.e.iib; AFDKO Variable_Feature_Guide.md"
 status = "docs"
+notes = "FontCraft (M9.12): compiled by fea-rs in the variable font export, with the variation info of `fontcraft_features::var_info`; a static export refuses it, as fea-rs does outside a variable font."
 
 [[behavior]]
 id = "fea.var.scalar"
@@ -1397,6 +1401,7 @@ milestone = "M9"
 summary = "`(default loc:value loc:value ...)` in parentheses is a number that varies; pairs are separated by white space, and at most one value may omit its location, which makes it the value at the default location. fea-rs: yes in positioning rules and anchors (variable_scalar tests from fontTools); a second default and unknown axes are errors."
 ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.e.iv format B; AFDKO Variable_Feature_Guide.md"
 status = "docs"
+notes = "FontCraft (M9.12): compiled by fea-rs in the variable font export, with the variation info of `fontcraft_features::var_info`; a static export refuses it, as fea-rs does outside a variable font. Values at the masters' locations share the variation model and rounding of the generated kerning; other locations get a model of their own, and a value without one at the default location is an error."
 
 [[behavior]]
 id = "fea.var.valueRecordPerMetric"
@@ -1405,6 +1410,7 @@ milestone = "M9"
 summary = "Inside angle brackets any of the four metrics may be a parenthesised variable value: `<0 0 (20 loc:30) 0>`. Best when only some metrics vary or they use different locations. fea-rs: yes (variable_value_record tests)."
 ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.e.iv format C; AFDKO Variable_Feature_Guide.md"
 status = "docs"
+notes = "FontCraft (M9.12): compiled by fea-rs in the variable font export, with the variation info of `fontcraft_features::var_info`; a static export refuses it, as fea-rs does outside a variable font."
 
 [[behavior]]
 id = "fea.var.valueRecordPerLocation"
@@ -1413,6 +1419,7 @@ milestone = "M9"
 summary = "`(<a b c d> loc:<a b c d> ...)` gives a full four-value record per location inside one pair of parentheses. Best when all metrics use the same locations. fea-rs: unknown."
 ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.e.iv format D; AFDKO Variable_Feature_Guide.md"
 status = "docs"
+notes = "FontCraft (M9.12): compiled by fea-rs in the variable font export, with the variation info of `fontcraft_features::var_info`; a static export refuses it, as fea-rs does outside a variable font."
 
 [[behavior]]
 id = "fea.var.valueRecordDef"
@@ -1421,6 +1428,7 @@ milestone = "M9"
 summary = "valueRecordDef accepts the variable forms, so a named record can vary. fea-rs: yes (variable_value_record parse test)."
 ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.e.v; AFDKO Variable_Feature_Guide.md"
 status = "docs"
+notes = "FontCraft (M9.12): compiled by fea-rs in the variable font export, with the variation info of `fontcraft_features::var_info`; a static export refuses it, as fea-rs does outside a variable font."
 
 [[behavior]]
 id = "fea.var.anchorPerMetric"
@@ -1429,6 +1437,7 @@ milestone = "M9"
 summary = "Either or both anchor coordinates may be parenthesised variable values. fea-rs: yes (variable_anchor, variable_mark_anchor tests)."
 ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.e.vii; AFDKO Variable_Feature_Guide.md"
 status = "docs"
+notes = "FontCraft (M9.12): compiled by fea-rs in the variable font export, with the variation info of `fontcraft_features::var_info`; a static export refuses it, as fea-rs does outside a variable font."
 
 [[behavior]]
 id = "fea.var.anchorPerLocation"
@@ -1437,6 +1446,7 @@ milestone = "M9"
 summary = "`<anchor (<x y> loc:<x y> ...)>` gives a coordinate pair per location inside one pair of parentheses. fea-rs: unknown."
 ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.e.vii; AFDKO Variable_Feature_Guide.md"
 status = "docs"
+notes = "FontCraft (M9.12): compiled by fea-rs in the variable font export, with the variation info of `fontcraft_features::var_info`; a static export refuses it, as fea-rs does outside a variable font."
 
 [[behavior]]
 id = "fea.var.anchorDef"
@@ -1445,6 +1455,7 @@ milestone = "M9"
 summary = "anchorDef accepts both variable anchor forms. fea-rs: yes for per-coordinate values (variable_anchor parse test); per-location pairs unknown."
 ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.e.viii"
 status = "docs"
+notes = "FontCraft (M9.12): compiled by fea-rs in the variable font export, with the variation info of `fontcraft_features::var_info`; a static export refuses it, as fea-rs does outside a variable font."
 
 [[behavior]]
 id = "fea.var.tableValues"
@@ -1453,6 +1464,7 @@ milestone = "M9"
 summary = "Variable values are allowed for BASE coordinates, GDEF LigatureCaretByPos positions, the hhea and vhea caret fields, the OS/2 metric fields and the vmtx overrides; they are meant to end up in the matching variation tables (MVAR, VVAR, item variation stores). fea-rs: partial (parsed; the validator rejects variable metrics in several table blocks as not yet supported)."
 ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9.a, §9.b, §9.d, §9.f, §9.g, §9.h"
 status = "docs"
+notes = "FontCraft (M9.12): compiled by fea-rs in the variable font export, with the variation info of `fontcraft_features::var_info`; a static export refuses it, as fea-rs does outside a variable font."
 
 [[behavior]]
 id = "fea.var.conditionset"
@@ -1461,6 +1473,7 @@ milestone = "M9"
 summary = "`conditionset NAME { tag min max; ... } NAME;` names a set of axis ranges that must all hold. This is not in AFDKO spec 1.27, which leaves feature variations unspecified; it comes from the syntax proposed in afdko pull request 1350 and implemented by fontTools feaLib. fea-rs: yes (variable_conditionset tests; fractional bounds allowed; unknown axis and out-of-range bounds are errors)."
 ref = "fea-rs (fontc/fea-rs) parse grammar and tests; afdko PR 1350"
 status = "docs"
+notes = "FontCraft (M9.12): compiled by fea-rs in the variable font export, with the variation info of `fontcraft_features::var_info`; a static export refuses it, as fea-rs does outside a variable font. Bounds are user coordinates, normalised through the axis mapping; a condition set equal to one of the alternate layers' gives one record holding both."
 
 [[behavior]]
 id = "fea.var.variation"
@@ -1469,6 +1482,7 @@ milestone = "M9"
 summary = "`variation TAG CONDSET { ... } TAG;` gives the lookups that replace the feature's normal lookups while the condition set matches, producing a FeatureVariations record. The lookups of the ordinary feature block of the same tag are included as well. fea-rs: yes (variation_block, variable_feature_include_base tests)."
 ref = "fea-rs (fontc/fea-rs) parse grammar and tests; afdko PR 1350"
 status = "docs"
+notes = "FontCraft (M9.12): compiled by fea-rs in the variable font export, with the variation info of `fontcraft_features::var_info`; a static export refuses it, as fea-rs does outside a variable font."
 
 [[behavior]]
 id = "fea.var.variationNull"
@@ -1477,3 +1491,4 @@ milestone = "M9"
 summary = "`variation TAG NULL { ... } TAG;` writes a feature variation record with no condition set, which therefore always applies. fea-rs: yes (variable_feature_null_conditionset test)."
 ref = "fea-rs (fontc/fea-rs) compile tests"
 status = "docs"
+notes = "FontCraft (M9.12): compiled by fea-rs in the variable font export, with the variation info of `fontcraft_features::var_info`; a static export refuses it, as fea-rs does outside a variable font."

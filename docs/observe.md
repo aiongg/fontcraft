@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1125 rows to check: 1571 guesses and 415 observe steps.**
+**1126 rows to check: 1573 guesses and 415 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,7 +48,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 40 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 4 |
-| **Later milestones (after M6)** | all | **654** |
+| **Later milestones (after M6)** | all | **655** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 39 |
 | Later milestones (after M6) | Edit View: text mode and preview | 14 |
 | Later milestones (after M6) | Components and anchors | 33 |
@@ -56,7 +56,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Spacing and metrics keys | 3 |
 | Later milestones (after M6) | Kerning and the Kerning window | 4 |
 | Later milestones (after M6) | Font View | 13 |
-| Later milestones (after M6) | Font Info and features | 249 |
+| Later milestones (after M6) | Font Info and features | 250 |
 | Later milestones (after M6) | Interpolation | 44 |
 | Later milestones (after M6) | Hinting | 68 |
 | Later milestones (after M6) | Colour fonts | 46 |
@@ -1338,7 +1338,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (654)
+## Later milestones (after M6) (655)
 
 ### Edit View: drawing, guides, layers and the Palette (39)
 
@@ -1708,7 +1708,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The decomposition sections use Unicode's canonical decompositions, one level and full together, so U+1EA4 lists both U+00C2 and U+0041, and characters the font has no glyph for are listed dimmed.
   - Guess: Clicking an entry opens the glyph in a new tab; the reference's documentation does not say whether it replaces the current glyph instead.
 
-### Font Info and features (249)
+### Font Info and features (250)
 
 - [ ] `fontInfo.rows.selection` (behavior, M7, handbook): Clicking a row selects it and Cmd+click builds a selection of several…
   - Guess: Shift-click adds every row between the last row clicked and the clicked one; Shift-clicking in the reference app settles it.
@@ -2393,6 +2393,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: In F1 (two masters), choose Add Instance for each Master: note the names the new instances get.
 - [ ] `font.instance.toMaster` (M9, handbook): Instance as Master
   - Observe: In F1 (two masters), select the Regular instance and choose Instance as Master: note the new master's name and position, and which instances now use it.
+- [ ] `token.numberValue.variable` (behavior, M9, docs): For a variable font a number token becomes a value that varies…
+  - Guess: A number token with the same value at every master is expanded to that number rather than left to the compiler; a variable export from the reference app with such a token would show whether it writes a variation there.
+  - Guess: A glyph property token (`${a:width}`) in the variable font reads the origin master instead of varying; a variable export from the reference app with a property token in a `pos` rule would settle it.
 - [ ] `featureCode.ifdefOtherSymbols` (behavior, M9, inferred): VARIABLE is the only symbol the handbook documents; nesting, `#else` and other…
   - Guess: Only `#ifdef VARIABLE` and `#ifndef VARIABLE` blocks are read, without nesting or `#else`; an unterminated `#ifndef VARIABLE` runs to the end of the code, as glyphsLib reads it. Settle with nested blocks in the reference app.
   - Observe: In F1 (two masters), write a feature with `#ifdef VARIABLE` nested inside `#ifndef VARIABLE`, and one with `#else`; export a static and a variable font: read GSUB and note which branches each kept.

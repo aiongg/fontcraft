@@ -197,6 +197,11 @@ bundled, the file says so in its header and the project is listed here with its 
   (fea-rs/src/compile/lookups.rs). fontc's kern writer follows ufo2ft's kernFeatureWriter.py (MIT
   License).
 
+  The variation info handed to fea-rs (crates/fea/src/variations.rs, M9.12) follows fontc's
+  FeaVariationInfo (fontbe/src/features.rs, 1.0.0): axes with a user-to-design converter, values
+  resolved to a default plus deltas, number values asked for at every master location
+  (Apache License 2.0).
+
   The layout normaliser (crates/tables/src/normalize.rs and normalize/, M12.11) is ported from
   fontc's otl-normalizer 1.0.0 (MIT OR Apache-2.0), with its text format kept.
 

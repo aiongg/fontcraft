@@ -39,9 +39,11 @@
 //!   [`CompileRequest::first_name_id`], everywhere they are referenced, so they cannot collide
 //!   with the source's own names.
 //!
-//! What M9 plugs in here: [`FeaVariations`] (M9.12), [`GeneratedLookups::feature_variations`]
-//! (M9.8's bracket-layer substitutions) and the deltas of [`Metric`] (M9.9's variable kerning
-//! and marks).
+//! - A variable font: [`FeaVariations`] gives fea-rs the axes, masters and number values, and
+//!   resolves the code's variable values (`fontcraft_features::var_info`, M9.12);
+//!   [`GeneratedLookups::feature_variations`] holds the alternate layers' substitutions (M9.8)
+//!   and [`Metric`] deltas the variable kerning and marks (M9.9). One variation store holds the
+//!   code's and the generated deltas.
 #![forbid(unsafe_code)]
 
 mod check;

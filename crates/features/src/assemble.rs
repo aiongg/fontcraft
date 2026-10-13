@@ -28,6 +28,7 @@
 //! Apache-2.0).
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::ops::Range;
 
 use fontcraft_fea::{Diagnostic, Limits, MAX_DIAGNOSTICS, MAX_INCLUDE_FILES, Severity, VirtualFiles};
 use fontcraft_model::{DEFAULT_LANGUAGE, Features, Font, Localized, Snippet, language_id};
@@ -50,6 +51,8 @@ const ANONYMOUS_PREFIX: &str = "<anonymous>";
 pub struct Assembly {
     pub files: VirtualFiles,
     pub map: SourceMap,
+    /// Rules the lowering left out because they can never apply, placed in their entries.
+    pub warnings: Vec<EntryDiagnostic>,
 }
 
 impl Assembly {
@@ -90,6 +93,7 @@ pub fn assemble(font: &Font, entries: &Features, target: &Target, values: &dyn T
     let mut syntax = VariableSyntax::new(values.feature_axes(), lower_target);
     let mut pieces: Vec<(EntryRef, String, OffsetMap)> = Vec::new();
     let mut diagnostics: Vec<EntryDiagnostic> = Vec::new();
+    let mut warnings: Vec<EntryDiagnostic> = Vec::new();
     for (kind, list) in groups {
         for (index, entry) in list.iter().enumerate() {
             if entry.disabled {
@@ -100,7 +104,12 @@ pub fn assemble(font: &Font, entries: &Features, target: &Target, values: &dyn T
             }
             let entry_ref = EntryRef { kind, index };
             match run_passes(kind, entry, target, values, &mut syntax) {
-                Ok((text, map)) => pieces.push((entry_ref, text, map)),
+                Ok((text, map, found)) => {
+                    for (range, diagnostic) in found.into_iter().take(MAX_DIAGNOSTICS.saturating_sub(warnings.len())) {
+                        warnings.push(EntryDiagnostic { place: range.map(|range| EntryRange { entry: entry_ref, range }), diagnostic });
+                    }
+                    pieces.push((entry_ref, text, map));
+                }
                 Err((found, map)) => {
                     for diagnostic in found {
                         if diagnostics.len() >= MAX_DIAGNOSTICS {
@@ -147,8 +156,12 @@ pub fn assemble(font: &Font, entries: &Features, target: &Target, values: &dyn T
         files.insert(&path, &text).map_err(unusable)?;
         map.add(path, entry, offsets);
     }
-    Ok(Assembly { files, map })
+    Ok(Assembly { files, map, warnings })
 }
+
+/// An entry's text after the passes, the map back to its stored code, and its warnings, each
+/// with its range in the stored code when it has one there.
+type Passed = (String, OffsetMap, Vec<(Option<Range<usize>>, Diagnostic)>);
 
 /// Token expansion, the entry's wrapper, the syntax extensions and the variable syntax over one
 /// entry: the text and the map back to the stored code, or the
@@ -161,13 +174,15 @@ fn run_passes(
     target: &Target,
     values: &dyn TargetValues,
     syntax: &mut VariableSyntax,
-) -> Result<(String, OffsetMap), (Vec<Diagnostic>, OffsetMap)> {
+) -> Result<Passed, (Vec<Diagnostic>, OffsetMap)> {
     let (expanded, tokens_map) = crate::tokens::expand(&entry.code, values, kind).map_err(|d| (non_empty(d), OffsetMap::identity()))?;
     let (wrapped, wrapped_map) = wrap(kind, entry, &expanded, &tokens_map);
     let (lowered, lower_map) = crate::lower::lower(&wrapped, target.is_variable()).map_err(|d| (non_empty(d), wrapped_map.clone()))?;
     let map = OffsetMap::compose(&wrapped_map, &lower_map);
-    let (text, variable_map) = crate::variable::lower(&lowered, syntax).map_err(|d| (non_empty(d), map.clone()))?;
-    Ok((text, OffsetMap::compose(&map, &variable_map)))
+    let (text, variable_map, warnings) = crate::variable::lower(&lowered, syntax).map_err(|d| (non_empty(d), map.clone()))?;
+    // The warnings' spans are in the lowering's input; `map` takes them to the stored code.
+    let warnings = warnings.into_iter().map(|w| (map.try_source_range(w.span.clone()), w)).collect();
+    Ok((text, OffsetMap::compose(&map, &variable_map), warnings))
 }
 
 /// A failed pass always says why.

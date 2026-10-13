@@ -391,6 +391,11 @@ milestone = "M9"
 summary = "For a variable font a number token becomes a value that varies with the master locations instead of a single number; fea-rs resolves the token to a per-location map for this purpose."
 ref = "fea-rs src/compile/glyphsapp_syntax_ext.rs; Feature Code › Number Value Tokens"
 status = "docs"
+notes = "FontCraft (M9.12): a token that gives different values at the masters stays in the code for fea-rs, which asks for the number values at every master location, as fontc does. fontmake cannot build such a source (glyphsLib expands the token per master and ufo2ft then compiles each master's features on its own, which fails on variable syntax)."
+guesses = [
+  "A number token with the same value at every master is expanded to that number rather than left to the compiler; a variable export from the reference app with such a token would show whether it writes a variation there.",
+  "A glyph property token (`${a:width}`) in the variable font reads the origin master instead of varying; a variable export from the reference app with a property token in a `pos` rule would settle it.",
+]
 
 [[behavior]]
 id = "token.numberValue.unknownName"
@@ -941,7 +946,7 @@ milestone = "M9"
 summary = "Static instances receive the `#ifndef VARIABLE` branches, interpolated token values and single-number positions; the variable font receives the `#ifdef VARIABLE` branches, feature variations and variable values."
 ref = "Feature Code › Conditional Feature Code; Feature Code › Variable GPOS"
 status = "handbook"
-notes = "Documented, not yet observed. M9.11 lowers the text for both: a static export (a master, or an instance through its interpolated font) compiles with the positions resolved at its location; the variable font's text is compiled by M9.12, and number tokens per location are M9.12's too."
+notes = "Documented, not yet observed. M9.11 lowers the text for both: a static export (a master, or an instance through its interpolated font) compiles with the positions resolved at its location; the variable font compiles its text with fea-rs, condition sets as feature variations and variable values and number tokens per master location (M9.12)."
 
 # ----------------------------------------------------------------------------
 # Behaviours: Automatic classes

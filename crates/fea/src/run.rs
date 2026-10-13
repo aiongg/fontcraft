@@ -3,7 +3,7 @@
 
 use std::path::PathBuf;
 
-use fea_rs::compile::{Compilation, NopVariationInfo};
+use fea_rs::compile::Compilation;
 use fea_rs::typed::{self, AstNode};
 use fea_rs::{DiagnosticSet, GlyphMap, Kind, Node, Opts, ParseTree};
 use write_fonts_052::tables::gdef::GlyphClassDef;
@@ -11,17 +11,19 @@ use write_fonts_052::tables::layout::{ClassDef, FeatureList, ScriptList};
 
 use crate::provider::{self, Provider};
 use crate::resolve::{self, Loaded, MapResolver};
+use crate::variations::Info;
 use crate::{
-    CompileRequest, Compiled, Diagnostic, FeatureSummary, FirstPass, GeneratedLookups, GlyphClass, HeadValues, LayoutTable, Limits, MetricsValues,
-    Os2Values, STACK_SIZE, Severity,
+    CompileRequest, Compiled, Diagnostic, FeaVariations, FeatureSummary, FirstPass, GeneratedLookups, GlyphClass, HeadValues, LayoutTable, Limits,
+    MetricsValues, Os2Values, STACK_SIZE, Severity,
 };
 
-/// What fea-rs needs, without the variation interface (which is not `Sync`).
+/// What fea-rs needs.
 struct Job<'a> {
     root: String,
     files: Loaded,
     names: &'a [String],
     generated: Option<&'a GeneratedLookups>,
+    variations: Option<&'a dyn FeaVariations>,
     first_name_id: u16,
     gpos: bool,
     limits: Limits,
@@ -49,9 +51,6 @@ pub(crate) enum Output {
 pub(crate) fn run(req: &CompileRequest, mode: Mode) -> Result<Output, Vec<Diagnostic>> {
     let build = mode == Mode::Build;
     let refuse = |m: &str| Err(vec![Diagnostic::request(Severity::Error, m)]);
-    if req.variations.is_some() {
-        return refuse("compiling feature code for a variable font is not available yet");
-    }
     if req.glyph_order.is_empty() {
         return refuse("the font has no glyphs");
     }
@@ -63,8 +62,17 @@ pub(crate) fn run(req: &CompileRequest, mode: Mode) -> Result<Output, Vec<Diagno
         provider::check(generated, req.glyph_order.len(), limits.rules, limits.ligature_components).map_err(|d| vec![d])?;
     }
     let (root, files) = resolve::load(req.files, &limits)?;
-    let job =
-        Job { root, files, names: req.glyph_order.names(), generated: req.generated, first_name_id: req.first_name_id, gpos: req.gpos, limits, mode };
+    let job = Job {
+        root,
+        files,
+        names: req.glyph_order.names(),
+        generated: req.generated,
+        variations: req.variations,
+        first_name_id: req.first_name_id,
+        gpos: req.gpos,
+        limits,
+        mode,
+    };
     on_big_stack(|| job.run())
 }
 
@@ -105,7 +113,15 @@ impl Job<'_> {
         if !refusals.is_empty() {
             return Err(refusals);
         }
-        let validated = fea_rs::compile::validate::<NopVariationInfo>(&tree, &glyph_map, None);
+        let generated_axes = self.generated.map_or(&[][..], |g| g.axes.as_slice());
+        let info = Info::new(self.variations, generated_axes).map_err(|d| vec![d])?;
+        if let Some(info) = &info
+            && !generated_axes.is_empty()
+            && info.tags() != generated_axes
+        {
+            return Err(vec![Diagnostic::request(Severity::Error, "the generated values' axes are not the font's axes")]);
+        }
+        let validated = fea_rs::compile::validate(&tree, &glyph_map, info.as_ref());
         messages.extend(convert(&tree, &validated, max));
         messages.truncate(max);
         if validated.has_errors() {
@@ -113,15 +129,13 @@ impl Job<'_> {
         }
         match self.mode {
             Mode::Validate => return Ok(Output::Compiled(Box::new(Compiled { warnings: messages, ..Compiled::default() }))),
-            Mode::FirstPass => return first_pass(&tree, &glyph_map, max, messages).map(|f| Output::FirstPass(Box::new(f))),
+            Mode::FirstPass => return first_pass(&tree, &glyph_map, info.as_ref(), max, messages).map(|f| Output::FirstPass(Box::new(f))),
             Mode::Build => {}
         }
         let opts = Opts::new().compile_gpos(self.gpos).max_error_messages(max);
         let provider = self.generated.map(|generated| Provider { generated });
-        // Generated values with deltas need fea-rs to build a variation store over the font's
-        // axes; the code's own variable syntax waits for `variations` (M9.12).
-        let axes = self.generated.and_then(|g| u16::try_from(g.axes.len()).ok()).filter(|n| *n > 0).map(GeneratedAxes);
-        match fea_rs::compile::compile::<GeneratedAxes, Provider>(&tree, &glyph_map, axes.as_ref(), provider.as_ref(), opts) {
+        // One variation store for the code's variable values and the generated deltas.
+        match fea_rs::compile::compile::<Info, Provider>(&tree, &glyph_map, info.as_ref(), provider.as_ref(), opts) {
             Ok((compilation, warnings)) => {
                 messages.extend(convert(&tree, &warnings, max));
                 messages.truncate(max);
@@ -228,9 +242,15 @@ impl Job<'_> {
 /// The first pass fontc makes over the code before the feature writers run: `GSUB` alone, and
 /// what the writers read from the code (its language systems, its top-level features and their
 /// `# Automatic Code` markers, the classes of a `table GDEF` block).
-fn first_pass(tree: &ParseTree, glyph_map: &GlyphMap, max: usize, mut messages: Vec<Diagnostic>) -> Result<FirstPass, Vec<Diagnostic>> {
+fn first_pass(
+    tree: &ParseTree,
+    glyph_map: &GlyphMap,
+    info: Option<&Info>,
+    max: usize,
+    mut messages: Vec<Diagnostic>,
+) -> Result<FirstPass, Vec<Diagnostic>> {
     let opts = Opts::new().compile_gpos(false).max_error_messages(max);
-    let compilation = match fea_rs::compile::compile::<NopVariationInfo, Provider>(tree, glyph_map, None, None, opts) {
+    let compilation = match fea_rs::compile::compile::<Info, Provider>(tree, glyph_map, info, None, opts) {
         Ok((compilation, warnings)) => {
             messages.extend(convert(tree, &warnings, max));
             messages.truncate(max);
@@ -342,45 +362,4 @@ fn convert(tree: &ParseTree, set: &DiagnosticSet, max: usize) -> Vec<Diagnostic>
             Diagnostic::at(file, d.span(), severity, d.text())
         })
         .collect()
-}
-
-/// The variation info of a variable font whose feature code has no variable syntax: the axis
-/// count, so fea-rs builds the generated values' deltas into the `GDEF` variation store.
-struct GeneratedAxes(u16);
-
-#[derive(Debug)]
-struct NoVariableSyntax;
-
-impl std::fmt::Display for NoVariableSyntax {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("variable values in feature code are not available yet")
-    }
-}
-
-impl std::error::Error for NoVariableSyntax {}
-
-impl fea_rs::compile::VariationInfo for GeneratedAxes {
-    type Error = NoVariableSyntax;
-
-    fn axis_count(&self) -> u16 {
-        self.0
-    }
-
-    fn axis(&self, _: write_fonts_052::types::Tag) -> Option<(usize, &fontdrasil::types::Axis)> {
-        None
-    }
-
-    fn resolve_variable_metric(
-        &self,
-        _: &std::collections::HashMap<fontdrasil::coords::NormalizedLocation, i16>,
-    ) -> Result<(i16, Vec<(write_fonts_052::tables::variations::VariationRegion, i16)>), NoVariableSyntax> {
-        Err(NoVariableSyntax)
-    }
-
-    fn resolve_glyphs_number_value(
-        &self,
-        _: &str,
-    ) -> Result<std::collections::HashMap<fontdrasil::coords::NormalizedLocation, f64>, NoVariableSyntax> {
-        Err(NoVariableSyntax)
-    }
 }

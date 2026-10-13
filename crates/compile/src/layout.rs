@@ -202,7 +202,14 @@ pub fn build(input: &LayoutInput, opts: &LayoutOptions, warnings: &mut Vec<Strin
                 if let Some((axes, location)) = input.feature_axes {
                     values = values.with_feature_axes(axes.clone(), location.clone());
                 }
-                let assembled = match fontcraft_features::assemble(font, &entries, &Target::Master(resolved.master.clone()), &values) {
+                let target = match input.variable {
+                    Some(_) => {
+                        values = values.for_variable_font();
+                        Target::Variable
+                    }
+                    None => Target::Master(resolved.master.clone()),
+                };
+                let assembled = match fontcraft_features::assemble(font, &entries, &target, &values) {
                     Ok(a) => a,
                     Err(fontcraft_features::FeatureError::Code(found)) => return Err(CompileError::Features(found)),
                     Err(e) => return Err(request_error(e.to_string())),
@@ -230,9 +237,21 @@ pub fn build(input: &LayoutInput, opts: &LayoutOptions, warnings: &mut Vec<Strin
         files = files.with_include_check(check.clone());
     }
 
+    // The variable font's axes, masters and number values, for the code's variable syntax.
+    let variable_features = match (input.variable, input.font) {
+        (Some(variable), Some(font)) => {
+            Some(fontcraft_features::var_info::VariableFeatures::new(font, variable.layout).map_err(|e| request_error(e.to_string()))?)
+        }
+        _ => None,
+    };
+    if let Some(assembly) = &assembly {
+        warnings.extend(assembly.warnings.iter().map(|d| describe(&entries, d)));
+    }
+
     // Step 3: what the writers read from the code.
     let mut request = CompileRequest::new(&files, &glyph_order);
     request.gpos = opts.gpos;
+    request.variations = variable_features.as_ref().map(|v| v as &dyn fontcraft_fea::FeaVariations);
     let first = match &assembly {
         Some(_) => fontcraft_fea::first_pass(&request).map_err(mapped)?,
         None => fontcraft_fea::FirstPass::default(),

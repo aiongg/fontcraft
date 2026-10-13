@@ -74,6 +74,7 @@ pub mod target;
 pub mod tokens;
 pub mod tokens_predicate;
 mod unicode18;
+pub mod var_info;
 pub mod var_layout;
 pub mod variable;
 mod writers;

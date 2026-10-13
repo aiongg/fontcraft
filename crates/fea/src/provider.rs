@@ -418,7 +418,7 @@ fn anchor(a: &Anchor, axes: &[Tag]) -> AnchorBuilder {
 
 /// `m`'s deltas with full regions over `axes` (axes a region does not list are unconstrained),
 /// for fea-rs to add to the font's variation store; `None` for a value without deltas.
-fn deltas(m: &Metric, axes: &[Tag]) -> Option<DeviceOrDeltas> {
+pub(crate) fn deltas(m: &Metric, axes: &[Tag]) -> Option<DeviceOrDeltas> {
     if !m.is_variable() {
         return None;
     }
