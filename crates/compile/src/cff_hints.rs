@@ -75,7 +75,7 @@ pub fn manual_hints(font: &Font, settings: &HintSettings, name: &str, path: &[Pa
         }
     };
     // Each stem with the index of the hint it comes from, for warnings.
-    let (mut h, mut v): (Vec<(usize, StemHint)>, Vec<(usize, StemHint)>) = (Vec::new(), Vec::new());
+    let (mut h, mut v) = (Vec::<(usize, StemHint)>::new(), Vec::<(usize, StemHint)>::new());
     for (index, hint) in hints {
         let (a, b) = match hint.edges(built) {
             Ok(e) => e,
