@@ -522,7 +522,8 @@ pub(super) fn build(
     let linked = crate::export_steps::linked(font, path, &mut report.warnings)?;
     let font: &Font = &linked;
     let ctx = crate::export_steps::StepContext { data: &data };
-    let options = Options { glyph_data: DataRef(Some(data.clone())), ..req.options.clone() };
+    let mut options = Options { glyph_data: DataRef(Some(data.clone())), ..req.options.clone() };
+    source_includes(&mut options, path);
     let prepared = fontcraft_compile::prepare_source(font, &mut report.warnings);
     for job in jobs {
         if req.first_only && !report.fonts.is_empty() {
@@ -1044,15 +1045,23 @@ fn outline_options(p: &Params, options: &mut Options) -> Result<()> {
     Ok(())
 }
 
+/// Sets where the feature code of the source at `path` reads its `include` files from, and which
+/// of them may be read. Every compile and export path calls this, so a source's includes resolve
+/// the same way whichever command builds it.
+pub(super) fn source_includes(options: &mut Options, path: Option<&std::path::Path>) {
+    options.feature_dir = path.and_then(source_feature_dir);
+    options.include_check = crate::file_access::include_check();
+}
+
 /// The folder includes are read from: the source's folder, when automation may read it.
 #[cfg(not(target_arch = "wasm32"))]
-fn source_feature_dir(path: &std::path::Path) -> Option<std::path::PathBuf> {
+pub(super) fn source_feature_dir(path: &std::path::Path) -> Option<std::path::PathBuf> {
     crate::io::feature_dir(path).filter(|d| crate::file_access::check_read(d).is_ok())
 }
 
 /// The web build has no file system to read includes from.
 #[cfg(target_arch = "wasm32")]
-fn source_feature_dir(_path: &std::path::Path) -> Option<std::path::PathBuf> {
+pub(super) fn source_feature_dir(_path: &std::path::Path) -> Option<std::path::PathBuf> {
     None
 }
 
@@ -1066,8 +1075,7 @@ fn compile_request(s: &Session, p: &Params) -> Result<(Vec<Job>, Request)> {
     outline_options(p, &mut options)?;
     options.skip_features = p.bool_or("skipFeatures", false)?;
     options.version_stamp = p.bool_or("versionStamp", true)?;
-    options.feature_dir = s.doc()?.path.as_deref().and_then(source_feature_dir);
-    options.include_check = crate::file_access::include_check();
+    source_includes(&mut options, s.doc()?.path.as_deref());
     let pick = Pick::read(p, "instances")?;
     let jobs = jobs(font, &pick, p.bool_or("mastersAsInstances", false)?, p)?;
     if jobs.is_empty() {

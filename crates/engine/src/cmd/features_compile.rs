@@ -358,9 +358,8 @@ fn compile(s: &mut Session, raw: &Value) -> Result<Value> {
     let force = p.bool_or("force", false)?;
     let doc = s.doc()?;
     let (doc_id, revision) = (doc.id, doc.revision);
-    // A folder outside the automation read root has no includes to read.
-    let include_dir: Option<PathBuf> =
-        doc.path.as_ref().and_then(|path| path.parent()).filter(|d| crate::file_access::check_read(d).is_ok()).map(|d| d.to_path_buf());
+    // The folder an export reads includes from; none outside the automation read root.
+    let include_dir: Option<PathBuf> = doc.path.as_deref().and_then(super::compile::source_feature_dir);
     let data = s.glyph_data()?;
     let font = s.font()?;
     let master = master_id(&p, font, p.opt_str("master")?)?;

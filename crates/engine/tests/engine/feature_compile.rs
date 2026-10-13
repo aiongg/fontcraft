@@ -288,6 +288,39 @@ fn compile_cached(s: &mut Session, preview: bool) -> bool {
     r["cached"].as_bool().unwrap()
 }
 
+/// File › Export reads the files the feature code includes from the source's folder, as
+/// font.compile does: the instance is built, with the included rule in GSUB.
+#[test]
+fn export_static_reads_includes_from_the_source_folder() {
+    let (mut s, dir) = including_session("export");
+    let ttf = dir.join("out").join("Font.ttf");
+    let r = run(&mut s, "file.exportStatic", json!({"destination": ttf, "timestamp": 0}));
+    assert_eq!(r["skipped"], json!([]), "{r}");
+    let listed = run(&mut s, "layout.listFeatures", json!({"font": ttf}));
+    let features = listed["features"].as_array().unwrap();
+    assert!(features.iter().any(|f| f["feature"] == "liga" && f["table"] == "GSUB"), "{listed}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// For a designspace, the code editor's compile reads includes from the folder of its first UFO,
+/// as export does, not from the designspace's own folder.
+#[test]
+fn a_designspace_compile_reads_includes_beside_its_first_ufo() {
+    let dir = std::env::temp_dir().join(format!("fontcraft-feature-designspace-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("masters")).unwrap();
+    std::fs::write(dir.join("masters/rules.fea"), "sub a by b;\n").unwrap();
+    let designspace = dir.join("Family.designspace");
+    std::fs::write(&designspace, r#"<designspace format="5.0"><sources><source filename="masters/A.ufo"/></sources></designspace>"#).unwrap();
+    let font = Session::with_document().font().unwrap().clone();
+    let mut s = Session::new();
+    s.add_document(font, Some(designspace)).unwrap();
+    run(&mut s, "font.features.addFeature", json!({"tag": "liga", "code": "include(rules.fea);"}));
+    let r = run(&mut s, "font.features.compile", json!({}));
+    assert_eq!(r["ok"], json!(true), "{r}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// A reused compile follows the files the code includes.
 #[test]
 fn a_reused_compile_follows_included_files() {
