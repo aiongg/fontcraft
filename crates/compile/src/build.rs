@@ -306,7 +306,7 @@ fn truetype(order: &[ResolvedGlyph], outlines: &[Prepared], builder: &mut FontBu
 /// box is the table's `FontBBox`, as fontTools recomputes `hmtx`, `hhea` and `head` from a CFF
 /// table when it writes a font.
 fn postscript(input: &CffInput, builder: &mut FontBuilder, warnings: &mut Vec<String>) -> Result<(Boxes, Maxp), CompileError> {
-    let built = cff::build(input.font, input.info, input.order, input.outlines, input.names, input.synthesised_notdef, warnings)?;
+    let built = cff::build(input.source, input.font, input.info, input.order, input.outlines, input.names, input.synthesised_notdef, warnings)?;
     let clamp = |v: i64| i16::try_from(v.clamp(i64::from(i16::MIN), i64::from(i16::MAX))).unwrap_or(0);
     let bbox = |[x_min, y_min, x_max, y_max]: [i64; 4]| Bbox { x_min: clamp(x_min), y_min: clamp(y_min), x_max: clamp(x_max), y_max: clamp(y_max) };
     let boxes = Boxes {
@@ -333,6 +333,7 @@ fn postscript(input: &CffInput, builder: &mut FontBuilder, warnings: &mut Vec<St
 
 /// What [`postscript`] reads.
 struct CffInput<'a> {
+    source: Option<&'a fontcraft_model::Font>,
     font: &'a Resolved,
     info: &'a Info,
     order: &'a [ResolvedGlyph],
@@ -345,6 +346,7 @@ struct CffInput<'a> {
 /// `.notdef`.
 #[allow(clippy::too_many_arguments)]
 pub fn assemble(
+    source: Option<&fontcraft_model::Font>,
     font: &Resolved,
     order: &[ResolvedGlyph],
     outlines: &[Prepared],
@@ -377,7 +379,7 @@ pub fn assemble(
     let (boxes, maxp) = match flavour {
         Flavour::TrueType => truetype(order, outlines, &mut builder)?,
         Flavour::Cff => {
-            let input = CffInput { font, info: &info, order, outlines, names: &names, synthesised_notdef };
+            let input = CffInput { source, font, info: &info, order, outlines, names: &names, synthesised_notdef };
             postscript(&input, &mut builder, warnings)?
         }
     };

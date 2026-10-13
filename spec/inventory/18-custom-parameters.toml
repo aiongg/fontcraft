@@ -761,7 +761,7 @@ effect = "hinting"
 summary = "List of zones, normally copied from the family's main style (Regular or Book). A rasteriser aligns every weight to them when the weight's own height differs from the family value by less than a pixel; they must be compatible with the masters' own alignment zones."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "M10 planning pass: glyphsLib passes this parameter through as a raw lib key, so fontmake writes no FamilyBlues from it; FontCraft writes them as the handbook says, a difference from fontmake recorded in docs/spec/40-compile.md § 4a by M10.14."
+notes = "glyphsLib passes this parameter through as a raw lib key, so fontmake writes no FamilyBlues from it; FontCraft writes them as FamilyBlues and FamilyOtherBlues, a difference from fontmake recorded in docs/spec/40-compile.md § 4a. Documented, not yet observed."
 
 [[parameter]]
 name = "familyNames"

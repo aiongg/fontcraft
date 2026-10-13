@@ -379,8 +379,9 @@ What we build:
 Verification plan: read our output back with read-fonts's charstring evaluator and compare
 outlines; compare against fontmake and makeotf builds through the oracle harness.
 
-State (M2.3): items 1 to 5 are done for name-keyed fonts without hints (`crates/cff`, byte for
-byte as fontTools writes them), and the compiler builds static CFF fonts with them
+State (M2.3, M10.14): items 1 to 5 are done for name-keyed fonts (`crates/cff`, byte for byte
+as fontTools writes them for glyphs without hints; hint operators, masks and flex as
+`crates/cff/src/hints.rs` describes), and the compiler builds static CFF fonts with them
 (`Flavour::Cff`, `crates/compile/src/cff.rs`). What the compiler supplies follows ufo2ft's
 `OutlineOTFCompiler`:
 
@@ -389,7 +390,7 @@ byte as fontTools writes them), and the compiler builds static CFF fonts with th
 | Outlines | the decomposed contours in their drawn direction (no reversal); quadratic segments made cubic by fontTools' two-thirds rule; a closed contour's closing line left out unless the point before it sits on the start; the compiler's own `.notdef` keeps its closing lines, as ufo2ft draws it |
 | Glyph names | the charset holds the names `post` would hold; `post` is 3.0 |
 | Top DICT | font name = name ID 6; `version` = `major.minor`; `Notice` and `Copyright` from the trademark and copyright with `©` spelt out and reduced to printable ASCII; `FullName` and `FamilyName` from the PostScript full name or the typographic names of the `name` table; `Weight` only from `postscriptWeightName`; `ItalicAngle` always real; `FontMatrix` `1/upem` |
-| Private DICT | blue values from the master's alignment zones (rounded), and only with them `BlueFuzz` (0), `BlueShift` (7), `BlueScale` (`3/(4 × tallest zone)`) and `ForceBold`; `StemSnapH/V` sorted with `StdHW/VW` the first stem of each direction, only when both directions have stems; widths optimised unless the source sets `postscriptDefaultWidthX` or `postscriptNominalWidthX` |
+| Private DICT | blue values from the master's alignment zones (rounded), family blues from Family Alignment Zones, and only with them `BlueFuzz` (1), `BlueShift` (7), `BlueScale` (0.037) and `ForceBold` (§ 4a); `StemSnapH/V` sorted with `StdHW/VW` the first stem of each direction, only when both directions have stems; widths optimised unless the source sets `postscriptDefaultWidthX` or `postscriptNominalWidthX` |
 | Other tables | `maxp` 0.5; `hmtx` side bearings and `vmtx` top side bearings from the charstring bounds rounded half up; `hhea`/`vhea` extents from the bounds rounded outwards; `head` box = `FontBBox` |
 
 Where FontCraft's CFF differs from ufo2ft's on purpose:
@@ -665,14 +666,21 @@ Against fontmake (and so for CFF fonts, which fontc does not write), every field
 references derive differently keeps fontc's value; `crates/oracle/allow.toml` lists those
 differences for fontmake with their reasons (`docs/plans/M2.md` › M2.3b).
 
-**Private DICT defaults, against fontmake** (from M10.14). When a master has alignment zones and
-the source sets no blueScale or blueFuzz parameter, FontCraft writes BlueScale 0.037 and
-BlueFuzz 1, the defaults the handbook's parameter descriptions give (the answer to
-`docs/plans/M10.md` § 7, question 6). fontmake writes BlueScale as 3 / (4 × the tallest zone)
-and BlueFuzz 0, so every CFF build from such a source differs in these two Private DICT entries;
-`crates/oracle/allow.toml` lists them for fontmake. Where a source sets blueFuzz or Family
-Alignment Zones, FontCraft writes them as the handbook says, and fontmake ignores both. The reference app's own export is not yet observed (`hinting.ps.blueScale`,
-`hinting.ps.blueFuzz`).
+**Private DICT defaults, against fontmake.** When a master has alignment zones and the source
+sets no blueScale or blueFuzz parameter, FontCraft writes BlueScale 0.037 and BlueFuzz 1, the
+defaults the handbook's parameter descriptions give (the answer to `docs/plans/M10.md` § 7,
+question 6). fontmake writes BlueScale as 3 / (4 × the tallest zone) and BlueFuzz 0, so every
+CFF build from such a source differs in these two Private DICT entries. Where a source sets
+blueFuzz or Family Alignment Zones, FontCraft writes them (Family Alignment Zones as FamilyBlues
+and FamilyOtherBlues), and fontmake ignores both. The oracle compares the decoded outlines of a
+`CFF ` table, not its Private DICT, so these differences need no allow-list entry. The
+reference app's own export is not yet observed (`hinting.ps.blueScale`, `hinting.ps.blueFuzz`).
+
+**Manual PostScript hints.** No reference compiler writes a `.glyphs` source's manual hints:
+glyphsLib passes them through as lib keys and ufo2ft drops them. FontCraft writes them into the
+charstrings (`crates/compile/src/cff_hints.rs`), so a hinted glyph's charstring differs from
+fontmake's in its stem operators and masks while its outline stays the same; the oracle's
+outline comparison does not see the difference.
 
 ---
 

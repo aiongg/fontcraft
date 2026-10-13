@@ -178,7 +178,7 @@ milestone = "M10"
 summary = "Family Alignment Zones is an optional custom parameter holding a second zone list shared by all fonts of a family, written as FamilyBlues (baseline and top zones) and FamilyOtherBlues (other bottom zones). The handbook only names the parameter; its exact scope (font, master or instance) and editor are not described in this chapter."
 ref = "PostScript Hinting › Custom Parameters"
 status = "handbook"
-guesses = ["Family Alignment Zones is read from the font's custom parameters and written as FamilyBlues and FamilyOtherBlues with the same ordering rule as the master zones; an export from the reference app would confirm the split."]
+guesses = ["Family Alignment Zones is read where it is most specific (instance, then master, then font) and written as FamilyBlues and FamilyOtherBlues with the same rule as the master zones (a zone at 0 or of positive size to FamilyBlues); an export from the reference app would confirm the scope and the split."]
 observe = ["T1: add a Family Alignment Zones parameter with one top zone and two bottom zones, export as CFF and read the Private dict; note which zones go to FamilyBlues and which to FamilyOtherBlues."]
 
 [[command]]
@@ -238,6 +238,7 @@ milestone = "M10"
 summary = "Manual and automatic hints never mix inside one glyph: a glyph that has at least one manual hint is left out of autohinting at export and is written with exactly its manual hints. Such a glyph therefore has to be hinted completely by hand."
 ref = "PostScript Hinting › Manual hinting"
 status = "handbook"
+notes = "Documented, not yet observed. A glyph whose hint-source layer has any PostScript hint is written with those hints only, even when none of them can be placed (crates/compile/src/cff_hints.rs)."
 
 [[behavior]]
 id = "hinting.ps.export.stemHintsMadePositive"
@@ -246,6 +247,7 @@ milestone = "M10"
 summary = "Stem hints in the exported font must have a width above zero. A stem hint stored with a negative size is flipped at export (origin moved to the lower or left edge, size made positive) without changing the source. Ghost hints are not stem hints and are exempt (see autohint.ps.ghostStems)."
 ref = "PostScript Hinting › Stem Hints"
 status = "handbook"
+notes = "Documented, not yet observed. The charstring encoder also sorts the stems by lower edge, as the format requires."
 
 [[behavior]]
 id = "hinting.ps.export.hintReplacement"
@@ -254,7 +256,8 @@ milestone = "M10"
 summary = "Stem hints of one direction may overlap in the source (the two bowls of a figure eight, for example), which the charstring format forbids for simultaneously active hints. The exporter resolves this itself by inserting hint replacement: it splits the hints into non-overlapping groups and switches the active group along the outline. There is no manual control over this."
 ref = "PostScript Hinting › Manual hinting"
 status = "handbook"
-guesses = ["Manual hints that overlap go through the same mask builder as autohinted ones (the port of otfautohint's hint substitution), so the masks match what the autohinter would write for those stems; the reference's masks for a hand-hinted 8 would settle it."]
+guesses = ["Manual hints that overlap get masks from FontCraft's own rule: the first mask applies from the start, a new one starts at the first node on an edge of a stem that overlaps a stem the current mask holds, the first of two overlapping stems at one node wins, and a stem no node touches joins every mask it fits; the reference's masks for a hand-hinted 8 would settle it."]
+notes = "Documented, not yet observed. The rule is in docs/spec/13-postscript-hinting.md § 5 and crates/compile/src/cff_hints.rs; every mask is checked to hold no two overlapping stems before the charstring is written."
 observe = ["T1: hint eight by hand on its two overlapping vertical stems, export as CFF and read its charstring; note where hintmask operators appear and which stems each mask holds."]
 
 [[behavior]]
@@ -266,6 +269,7 @@ ref = "PostScript Hinting › Flex Hints"
 status = "handbook"
 guesses = ["Flex is added to every exported glyph that qualifies, hand-hinted glyphs included, with otfautohint's flex test (the handbook's conditions plus its length ratio); an export from the reference app of a cupped serif under 20 units, hinted by hand, would settle both points."]
 observe = ["T1: set blueShift to 6, hint n.serif by hand, export as CFF and read its charstring; note whether the 5-unit cupped serifs are written with a flex operator."]
+notes = "The charstring encoder writes all four flex forms (crates/cff/src/hints.rs). Hand-hinted glyphs get no flex until the flex test runs at export with the autohinter (M10.15)."
 
 [[behavior]]
 id = "hinting.ps.flex.conditions"

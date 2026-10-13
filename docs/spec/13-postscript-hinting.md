@@ -89,6 +89,16 @@ Rows: `hinting.ps.export.autohintOption`, `.autohintParameter`, `.manualGlyphsSk
 - Overlapping stem hints in one direction are legal in the source; the exporter partitions them into
   non-overlapping groups and emits hint masks (hint replacement). No user control.
 
+How FontCraft writes manual hints (`crates/compile/src/cff_hints.rs`, `crates/cff/src/hints.rs`):
+
+| Step | Rule |
+|---|---|
+| edges | node references read on the glyph's layer in the master being built; a node that layer lacks takes its position on the layer the hint is stored on, with a warning |
+| stems | made positive; top ghost width −20, bottom ghost −21; duplicates dropped; at most 96 per glyph |
+| masks | only when two stems of one direction overlap. The first mask applies from the start; a new one starts at the first node lying on an edge of a stem that overlaps a stem the current mask holds. Where one node lies on two overlapping stems, the first in source order wins; a stem no node touches goes into every mask it fits (our rule, guess on `hinting.ps.export.hintReplacement`) |
+| flex | none yet for hand-hinted glyphs: the flex test comes with the autohinter's export stage (M10.15) |
+| Export PostScript Hints off | no glyph gets hints; the Private DICT is written as usual |
+
 ## 6. Flex
 
 Rows: `hinting.ps.flex.automatic`, `.conditions`, `.zonePlacement`, `autohint.ps.noFlex`,

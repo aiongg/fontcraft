@@ -15,7 +15,8 @@
 //! | `Weight` | the PostScript weight name, only when the source sets it |
 //! | `isFixedPitch`, `ItalicAngle`, `UnderlinePosition`, `UnderlineThickness` | as `post` writes them; the angle always as a real number |
 //! | `FontMatrix` | `1/upem` (left out at 1000 units per em, where it is the default) |
-//! | blue zones | the master's alignment zones as blue values, rounded; with them, and only then, `BlueFuzz` (0 by default), `BlueShift` (7), `BlueScale` (`3 / (4 × tallest zone)`) and `ForceBold` |
+//! | blue zones | the master's alignment zones as blue values, rounded; Family Alignment Zones (a UFO's family blues) as family blues by the same rule; with any of them, and only then, `BlueFuzz` (1 by default), `BlueShift` (7), `BlueScale` (0.037) and `ForceBold`. The two defaults are the handbook's; the reference compiler writes BlueFuzz 0 and `3 / (4 × tallest zone)` (`docs/spec/40-compile.md` § 4a) |
+//! | hints | each glyph's manual PostScript hints ([`cff_hints`]), unless Export PostScript Hints is off |
 //! | stems | `StemSnapH`/`StemSnapV` sorted and `StdHW`/`StdVW` the first of each list, only when both directions have stems |
 //! | widths | `defaultWidthX` and `nominalWidthX` from the source when it sets either, else optimised |
 //!
@@ -26,13 +27,15 @@
 
 use fontcraft_cff::{self as cff, Number, PathOp, PrivateDict, TopDict, Widths};
 use fontcraft_geom::{BezPath, PathEl, Point};
+use fontcraft_hinting::HintSettings;
+use fontcraft_hinting::settings::{DEFAULT_BLUE_FUZZ, DEFAULT_BLUE_SCALE};
 use fontcraft_model::plist::{Num, Value};
-use fontcraft_model::{Resolved, ResolvedGlyph, blue_values, is_ufo_family};
+use fontcraft_model::{AlignmentZone, Font, Resolved, ResolvedGlyph, blue_values, is_ufo_family};
 use unicode_normalization::UnicodeNormalization;
 
 use crate::info::{Info, boolean, float, param, text};
 use crate::outline::Prepared;
-use crate::{CompileError, ot_round};
+use crate::{CompileError, cff_hints, ot_round};
 
 /// The rounding tolerance of charstring coordinates: every coordinate becomes an integer, as the
 /// reference compiles by default (`compile.cffRoundTolerance`).
@@ -48,8 +51,11 @@ fn table_error(e: cff::Error) -> CompileError {
 
 /// Builds the `CFF ` table. `names` are the glyph names in order (the same the `post` table
 /// would hold); `synthesised_notdef` says glyph 0 was drawn by the compiler, whose box keeps its
-/// explicit closing lines as the reference draws it.
+/// explicit closing lines as the reference draws it. `source` is the font `font` was resolved
+/// from, which holds the hints and the hint settings; without it the glyphs are unhinted.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn build(
+    source: Option<&Font>,
     font: &Resolved,
     info: &Info,
     order: &[ResolvedGlyph],
@@ -58,6 +64,7 @@ pub(crate) fn build(
     synthesised_notdef: bool,
     warnings: &mut Vec<String>,
 ) -> Result<cff::Built, CompileError> {
+    let settings = source.and_then(|s| hint_settings(s, font, warnings));
     let mut glyphs = Vec::with_capacity(order.len());
     for (gid, ((g, prepared), name)) in order.iter().zip(outlines).zip(names).enumerate() {
         let path = match prepared {
@@ -67,18 +74,41 @@ pub(crate) fn build(
                 return Err(CompileError::Glyph { glyph: g.name.clone(), message: "a CFF outline cannot hold components or TrueType points".into() });
             }
         };
-        glyphs.push(cff::Glyph { name: name.clone(), advance: g.width, path, hints: None });
+        let hints = match (source, &settings) {
+            (Some(source), Some(settings)) => cff_hints::glyph_hints(source, settings, g, &path, None, warnings)?,
+            _ => None,
+        };
+        glyphs.push(cff::Glyph { name: name.clone(), advance: g.width, path, hints });
     }
     let cff_font = cff::Font {
         name: font_name(info, warnings),
         top: top_dict(font, info, warnings),
-        private: private_dict(font),
+        private: private_dict(font, settings.as_ref()),
         glyphs,
         widths: widths(font),
         round_tolerance: ROUND_TOLERANCE,
         specialise: true,
     };
     cff::build(&cff_font).map_err(table_error)
+}
+
+/// The hint settings of the master or instance `font` was resolved at, or `None` with a warning
+/// when its hinting parameters cannot be read.
+fn hint_settings(source: &Font, font: &Resolved, warnings: &mut Vec<String>) -> Option<HintSettings> {
+    let read = match font.instance.filter(|i| source.instances.get(*i).is_some()) {
+        Some(i) => HintSettings::for_instance(source, i, &font.master),
+        None => HintSettings::for_master(source, &font.master),
+    };
+    match read {
+        Ok(s) => {
+            warnings.extend(s.warnings.iter().cloned());
+            Some(s)
+        }
+        Err(e) => {
+            warnings.push(format!("the hinting parameters cannot be read ({e}); the CFF table was written without hints"));
+            None
+        }
+    }
 }
 
 /// The font name: name ID 6, or, when the `name` table has none, the typographic family and
@@ -253,20 +283,24 @@ fn rounded(v: &[f64]) -> Vec<Number> {
     v.iter().map(|x| Number::Int(ot_round(*x) as i64)).collect()
 }
 
-fn private_dict(font: &Resolved) -> PrivateDict {
+fn private_dict(font: &Resolved, settings: Option<&HintSettings>) -> PrivateDict {
     let params = &font.params;
     let ufo = is_ufo_family(font.format);
     // A UFO's blue values that its reader could not turn into zones are kept as written.
     let (zone_blues, zone_other) = blue_values(&font.zones);
     let blues = param(params, &["postscriptBlueValues"], numbers).unwrap_or(zone_blues);
     let other = param(params, &["postscriptOtherBlues"], numbers).unwrap_or(zone_other);
-    let family = if ufo { param(params, &["postscriptFamilyBlues"], numbers).unwrap_or_default() } else { Vec::new() };
-    let family_other = if ufo { param(params, &["postscriptFamilyOtherBlues"], numbers).unwrap_or_default() } else { Vec::new() };
+    let family_zones: Vec<AlignmentZone> =
+        settings.map(|s| s.family_zones.iter().map(|z| AlignmentZone { pos: z.position, size: z.size }).collect()).unwrap_or_default();
+    let (zone_family, zone_family_other) = blue_values(&family_zones);
+    let ufo_list = |key: &str| if ufo { param(params, &[key], numbers) } else { None };
+    let family = ufo_list("postscriptFamilyBlues").unwrap_or(zone_family);
+    let family_other = ufo_list("postscriptFamilyOtherBlues").unwrap_or(zone_family_other);
     let mut p = PrivateDict::default();
     if [&blues, &other, &family, &family_other].iter().any(|l| !l.is_empty()) {
-        p.blue_fuzz = Number::Int(ot_round(param(params, &["postscriptBlueFuzz"], float).unwrap_or(0.0)) as i64);
+        p.blue_fuzz = Number::Int(ot_round(param(params, &["blueFuzz", "postscriptBlueFuzz"], float).unwrap_or(DEFAULT_BLUE_FUZZ)) as i64);
         p.blue_shift = Number::Int(ot_round(param(params, &["blueShift", "postscriptBlueShift"], float).unwrap_or(7.0)) as i64);
-        p.blue_scale = param(params, &["blueScale", "postscriptBlueScale"], number).unwrap_or_else(|| blue_scale(&blues, &other));
+        p.blue_scale = param(params, &["blueScale", "postscriptBlueScale"], number).unwrap_or(Number::Real(DEFAULT_BLUE_SCALE));
         p.force_bold = Number::Int(i64::from(param(params, &["postscriptForceBold"], boolean).unwrap_or(false)));
         p.blue_values = rounded(&blues);
         p.other_blues = rounded(&other);
@@ -289,17 +323,6 @@ fn private_dict(font: &Resolved) -> PrivateDict {
 fn sorted(mut v: Vec<i64>) -> Vec<Number> {
     v.sort_unstable();
     v.into_iter().map(Number::Int).collect()
-}
-
-/// `3 / (4 × the tallest zone)` over the unrounded blue values, or the format's default when
-/// there is no zone of any height (ufo2ft's `postscriptBlueScaleFallback`).
-fn blue_scale(blues: &[f64], other: &[f64]) -> Number {
-    let tallest = [blues, other]
-        .iter()
-        .flat_map(|list| list.chunks_exact(2))
-        .filter_map(|pair| Some((pair.get(1)? - pair.first()?).abs()))
-        .fold(0.0f64, f64::max);
-    if tallest == 0.0 { Number::Real(0.039_625) } else { Number::Real(3.0 / (4.0 * tallest)) }
 }
 
 /// The widths the source fixes, else optimised (`compile.cffWidthOptimisation`).

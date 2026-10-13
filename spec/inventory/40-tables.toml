@@ -1692,10 +1692,10 @@ status = "observed"
 id = "compile.cffPrivateDictValues"
 area = "compile"
 milestone = "M2"
-summary = "Private DICT values of a static CFF font as fontmake writes them: BlueValues and OtherBlues from the master's alignment zones (overshoots of the metrics, then the master's other zones), rounded; only when some blue array is present also BlueFuzz (default 0), BlueShift (7), BlueScale (3 / (4 × the tallest zone), else 0.039625) and ForceBold, each overridable by its parameter; StemSnapH and StemSnapV sorted with StdHW and StdVW the first stem of each direction, written only when both directions have stems; defaultWidthX and nominalWidthX from the source when it sets either, else optimised. No LanguageGroup or ExpansionFactor."
+summary = "Private DICT values of a static CFF font as fontmake writes them, except two defaults: BlueValues and OtherBlues from the master's alignment zones (overshoots of the metrics, then the master's other zones), rounded; FamilyBlues and FamilyOtherBlues from Family Alignment Zones by the same rule (a UFO's own family blues as written); only when some blue array is present also BlueFuzz (default 1, the handbook's; fontmake writes 0), BlueShift (7), BlueScale (default 0.037, the handbook's; fontmake writes 3 / (4 × the tallest zone)) and ForceBold, each overridable by its parameter; StemSnapH and StemSnapV sorted with StdHW and StdVW the first stem of each direction, written only when both directions have stems; defaultWidthX and nominalWidthX from the source when it sets either, else optimised. No LanguageGroup or ExpansionFactor."
 ref = "ufo2ft outlineCompiler.py (setupTable_CFF), fontInfoData.py (postscriptBlueScaleFallback); glyphsLib builder/blue_values.py; oracle runs against fontmake 3.12.1 (M2.3b)"
 status = "observed"
-notes = "From M10.14, where a source with zones sets no blueScale or blueFuzz, FontCraft writes the handbook's BlueScale 0.037 and BlueFuzz 1 instead of fontmake's values (hinting.ps.blueScale, hinting.ps.blueFuzz; docs/spec/40-compile.md § 4a)."
+notes = "The two defaults follow the handbook, not fontmake (hinting.ps.blueScale, hinting.ps.blueFuzz; docs/plans/M10.md § 7, question 6); docs/spec/40-compile.md § 4a records the difference. fontmake ignores Family Alignment Zones."
 
 [[behavior]]
 id = "compile.cidKeyedFonts"

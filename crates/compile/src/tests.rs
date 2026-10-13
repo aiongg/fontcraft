@@ -1224,7 +1224,7 @@ fn cff_dicts_hold_the_names_numbers_zones_and_stems() {
     assert_eq!(s("Weight"), None);
     assert!(!d.top.iter().any(|e| matches!(e, Entry::FontMatrix(_))), "the default matrix at 1000 units per em");
 
-    // The master's overshoots become blue zones, with the scale from the tallest zone.
+    // The master's overshoots become blue zones, with the handbook's BlueScale and BlueFuzz.
     let p = &d.private;
     let blues = |e: &Entry| -> Option<Vec<(i32, i32)>> {
         match e {
@@ -1235,9 +1235,8 @@ fn cff_dicts_hold_the_names_numbers_zones_and_stems() {
     assert_eq!(p.iter().find_map(blues), Some(vec![(-16, 0), (500, 516), (700, 716), (800, 816)]));
     let other = p.iter().find_map(|e| if let Entry::OtherBlues(b) = e { Some(b.values().to_vec()) } else { None });
     assert_eq!(other, Some(vec![(fixed(-216.0), fixed(-200.0))]));
-    assert!(p.contains(&Entry::BlueScale(fixed(3.0 / 64.0))), "{p:?}");
-    assert!(p.contains(&Entry::BlueFuzz(fixed(0.0))), "0 unless the source says otherwise");
-    assert!(!p.iter().any(|e| matches!(e, Entry::BlueShift(_) | Entry::ForceBold(_))), "defaults are left out");
+    assert!(p.contains(&Entry::BlueScale(fixed(0.037))), "{p:?}");
+    assert!(!p.iter().any(|e| matches!(e, Entry::BlueFuzz(_) | Entry::BlueShift(_) | Entry::ForceBold(_))), "1, 7 and false are the defaults");
     assert!(!p.iter().any(|e| matches!(e, Entry::StdHw(_) | Entry::StemSnapH(_))), "no stems");
 
     // Stems of both directions, a zone of the master's own, parameters for the rest, another em.
@@ -1745,4 +1744,115 @@ fn corner_and_smart_components_are_drawn_into_the_compiled_glyphs() {
     let h = drawn(&font, gid_of(&out, "H"));
     let right = h.iter().flatten().map(|p| p.0).fold(f32::MIN, f32::max);
     assert_eq!(right, 200.0, "the smart component is interpolated at its value");
+}
+
+// --- PostScript hints at export -------------------------------------------------------------
+
+mod ps_hints_export {
+    use fontcraft_hinting::{Edge, NodeRef, PsHint, set_ps_hints};
+    use fontcraft_model::plist::Value as PValue;
+    use skrifa::raw::ps::cff::CffFontRef;
+    use skrifa::raw::ps::cs::CommandSink;
+    use skrifa::raw::types::{Fixed, Tag};
+
+    use super::*;
+
+    #[derive(Default)]
+    struct Stems {
+        h: Vec<(i32, i32)>,
+        v: Vec<(i32, i32)>,
+        masks: usize,
+    }
+
+    impl CommandSink for Stems {
+        fn move_to(&mut self, _: Fixed, _: Fixed) {}
+        fn line_to(&mut self, _: Fixed, _: Fixed) {}
+        fn curve_to(&mut self, _: Fixed, _: Fixed, _: Fixed, _: Fixed, _: Fixed, _: Fixed) {}
+        fn close(&mut self) {}
+        fn hstem(&mut self, y: Fixed, dy: Fixed) {
+            self.h.push((y.to_i32(), dy.to_i32()));
+        }
+        fn vstem(&mut self, x: Fixed, dx: Fixed) {
+            self.v.push((x.to_i32(), dx.to_i32()));
+        }
+        fn hint_mask(&mut self, _: &[u8]) {
+            self.masks += 1;
+        }
+    }
+
+    /// The stems of `glyph` in a compiled CFF font, as (lower, upper) edges read back.
+    fn stems(out: &Compiled, glyph: &str) -> Stems {
+        let font = FontRef::new(&out.bytes).unwrap();
+        let table = font.table_data(Tag::new(b"CFF ")).unwrap();
+        let cff = CffFontRef::new_cff(table.as_bytes(), 0, None).unwrap();
+        let subfont = cff.subfont(0, &[]).unwrap();
+        let mut sink = Stems::default();
+        cff.evaluate_charstring(&subfont, gid_of(out, glyph), &[], &mut sink).unwrap();
+        sink
+    }
+
+    /// Two masters whose `A` is a box moved between them; the first master's `A` carries a
+    /// horizontal stem from its bottom-left node to the number 80, a vertical stem stored right
+    /// to left between nodes, and a top ghost on its top-left node; the second master's `A` a
+    /// stem of its own. Instances sit at both masters.
+    fn hinted() -> Font {
+        let mut f = two_masters();
+        let mut a = f.glyph_mut("A").unwrap();
+        a.layers[1].shapes = vec![Shape::Path(Path::rect(40.0, -10.0, 580.0, 720.0))];
+        let node = |p, n| Edge::Node(NodeRef::new(p, n));
+        let main = [PsHint::stem(true, node(0, 0), Edge::Value(80.0)), PsHint::stem(false, node(0, 1), node(0, 0)), PsHint::ghost(true, node(0, 3))];
+        set_ps_hints(&mut a.layers[0].info, &main).unwrap();
+        set_ps_hints(&mut a.layers[1].info, &[PsHint::stem(false, Edge::Value(0.0), Edge::Value(10.0))]).unwrap();
+        drop(a);
+        for (name, at) in [("Regular", 100.0), ("Bold", 200.0)] {
+            Arc::make_mut(&mut f.instances).push(fontcraft_model::Instance { name: name.into(), location: vec![at], ..Default::default() });
+        }
+        f
+    }
+
+    #[test]
+    fn a_hand_hinted_glyph_follows_its_nodes_into_every_master() {
+        let f = hinted();
+        let cff = |t: Target| compile(&f, &t, Flavour::Cff, &Options::default()).unwrap();
+        for (target, h, v) in [
+            (Target::Master("m01".into()), vec![(0, 80), (700, 680)], vec![(60, 560)]),
+            (Target::Instance(0), vec![(0, 80), (700, 680)], vec![(60, 560)]),
+            (Target::Master("m02".into()), vec![(-10, 80), (720, 700)], vec![(40, 580)]),
+            (Target::Instance(1), vec![(-10, 80), (720, 700)], vec![(40, 580)]),
+        ] {
+            let s = stems(&cff(target.clone()), "A");
+            assert_eq!((s.h, s.v, s.masks), (h, v, 0), "{target:?}");
+        }
+        // Unhinted glyphs stay unhinted.
+        let s = stems(&cff(Target::Master("m01".into())), "O");
+        assert!(s.h.is_empty() && s.v.is_empty());
+    }
+
+    #[test]
+    fn family_alignment_zones_become_family_blues() {
+        let mut f = sample();
+        let zones =
+            fontcraft_model::plist::openstep::parse_value("({pos = 700; size = 12;}, {pos = 0; size = -12;}, {pos = -200; size = -12;})").unwrap();
+        param(&mut f, "Family Alignment Zones", zones);
+        let d = dicts(&compile_otf(&f).bytes);
+        let pairs = |b: &skrifa::raw::ps::hinting::Blues| -> Vec<(i32, i32)> { b.values().iter().map(|(a, b)| (a.to_i32(), b.to_i32())).collect() };
+        let family = d.private.iter().find_map(|e| if let Entry::FamilyBlues(b) = e { Some(pairs(b)) } else { None });
+        let family_other = d.private.iter().find_map(|e| if let Entry::FamilyOtherBlues(b) = e { Some(pairs(b)) } else { None });
+        assert_eq!((family, family_other), (Some(vec![(-12, 0), (700, 712)]), Some(vec![(-212, -200)])));
+    }
+
+    #[test]
+    fn get_hints_from_master_and_export_postscript_hints() {
+        let mut f = hinted();
+        int_param(&mut f, "Export PostScript Hints", 0);
+        let out = compile(&f, &Target::Master("m01".into()), Flavour::Cff, &Options::default()).unwrap();
+        let s = stems(&out, "A");
+        assert!(s.h.is_empty() && s.v.is_empty(), "Export PostScript Hints off writes none");
+
+        let mut f = hinted();
+        Arc::make_mut(&mut f.info).params.0.push(fontcraft_model::Param::new("Get Hints From Master", PValue::String("Bold".into())));
+        let out = compile(&f, &Target::Master("m01".into()), Flavour::Cff, &Options::default()).unwrap();
+        let s = stems(&out, "A");
+        assert_eq!((s.h, s.v), (vec![], vec![(0, 10)]), "the second master's hints");
+    }
 }

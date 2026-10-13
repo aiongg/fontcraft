@@ -473,6 +473,7 @@ pub(crate) fn compile_stages_with(
     };
     let color_tables = color::build(font, &color_plan, &color::GlyphOrder::new(&glyphs, &made)?, options, &mut warnings)?;
     let bytes = build::assemble(
+        font,
         &resolved,
         &glyphs,
         &outlines,
