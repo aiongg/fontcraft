@@ -183,6 +183,8 @@ struct Source {
     normalized: Vec<f64>,
     glyphs: Vec<ResolvedGlyph>,
     index: HashMap<String, usize>,
+    /// The global metrics, for a master source (`MVAR`).
+    metrics: Option<crate::info::GlobalMetrics>,
 }
 
 impl Source {
@@ -192,10 +194,80 @@ impl Source {
     }
 }
 
-/// The glyphs of `prepared` at `target` after every stage before the outlines.
-fn source_glyphs(font: &Font, prepared: &Font, target: &Target, options: &Options) -> Result<Vec<ResolvedGlyph>, CompileError> {
+/// The glyphs of `prepared` at `target` after every stage before the outlines, with the global
+/// metrics there.
+fn source_glyphs(
+    font: &Font,
+    prepared: &Font,
+    target: &Target,
+    options: &Options,
+) -> Result<(Vec<ResolvedGlyph>, crate::info::GlobalMetrics), CompileError> {
     let mut resolved = crate::drawing::resolve(prepared, target)?;
-    crate::glyph_stages(Some(font), &mut resolved, Flavour::TrueType, options, &mut Vec::new())
+    let glyphs = crate::glyph_stages(Some(font), &mut resolved, Flavour::TrueType, options, &mut Vec::new())?;
+    Ok((glyphs, crate::info::derive(&resolved, &options.style_name, &mut Vec::new()).metrics))
+}
+
+/// Reads one global metric.
+type Metric = fn(&crate::info::GlobalMetrics) -> f64;
+
+/// The `MVAR` value tags and the metric each one varies.
+const MVAR_TAGS: [(&[u8; 4], Metric); 27] = [
+    (b"cpht", |m| m.cap_height),
+    (b"hasc", |m| m.typo_ascender),
+    (b"hcla", |m| m.win_ascent),
+    (b"hcld", |m| m.win_descent),
+    (b"hcof", |m| m.caret_offset),
+    (b"hcrn", |m| m.caret_slope_run),
+    (b"hcrs", |m| m.caret_slope_rise),
+    (b"hdsc", |m| m.typo_descender),
+    (b"hlgp", |m| m.typo_line_gap),
+    (b"sbxo", |m| m.subscript_x_offset),
+    (b"sbxs", |m| m.subscript_x_size),
+    (b"sbyo", |m| m.subscript_y_offset),
+    (b"sbys", |m| m.subscript_y_size),
+    (b"spxo", |m| m.superscript_x_offset),
+    (b"spxs", |m| m.superscript_x_size),
+    (b"spyo", |m| m.superscript_y_offset),
+    (b"spys", |m| m.superscript_y_size),
+    (b"stro", |m| m.strikeout_position),
+    (b"strs", |m| m.strikeout_size),
+    (b"undo", |m| m.underline_position),
+    (b"unds", |m| m.underline_thickness),
+    (b"vasc", |m| m.vhea_ascender),
+    (b"vcof", |m| m.vhea_caret_offset),
+    (b"vcrn", |m| m.vhea_caret_slope_run),
+    (b"vcrs", |m| m.vhea_caret_slope_rise),
+    (b"vdsc", |m| m.vhea_descender),
+    (b"xhgt", |m| m.x_height),
+];
+
+/// The `MVAR` values of the masters: the origin's metrics first, then each master source's.
+fn mvar_values(origin: &crate::info::GlobalMetrics, sources: &[Source]) -> Result<Vec<(Tag, VarValue)>, CompileError> {
+    // Masters that share a location (or the origin's) give one value.
+    let mut masters: Vec<(&[f64], &crate::info::GlobalMetrics)> = Vec::new();
+    for s in sources {
+        let Some(m) = s.metrics.as_ref() else { continue };
+        if s.normalized.iter().any(|v| *v != 0.0) && !masters.iter().any(|(l, _)| *l == s.normalized.as_slice()) {
+            masters.push((s.normalized.as_slice(), m));
+        }
+    }
+    let mut locations = vec![vec![0.0; masters.first().map_or(0, |m| m.0.len())]];
+    locations.extend(masters.iter().map(|m| m.0.to_vec()));
+    let mut models = gvar::Models::default();
+    let bad = |e: String| CompileError::Table { table: "MVAR", message: e };
+    let model = models.get(&locations).map_err(bad)?;
+    let mut out = Vec::with_capacity(MVAR_TAGS.len());
+    for (tag, get) in MVAR_TAGS {
+        let mut values = vec![vec![ot_round(get(origin))]];
+        values.extend(masters.iter().map(|m| vec![ot_round(get(m.1))]));
+        let deltas = gvar::region_deltas(model, &values)
+            .map_err(bad)?
+            .into_iter()
+            .filter_map(|(region, d)| d.first().copied().filter(|d| *d != 0.0).map(|d| (region, d as i32)))
+            .collect();
+        out.push((Tag::new(tag), VarValue { default: ot_round(get(origin)) as i32, deltas }));
+    }
+    Ok(out)
 }
 
 /// `font` interpolated at `location` (internal coordinates of `designspace`), as a font with one
@@ -289,10 +361,14 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
 
     // The sources besides the origin: the other masters, then each intermediate location.
     let mut sources: Vec<Source> = Vec::new();
-    let mut add = |master: Option<String>, location: fontcraft_interp::Location, glyphs: Vec<ResolvedGlyph>| -> Result<(), CompileError> {
+    let mut add = |master: Option<String>,
+                   location: fontcraft_interp::Location,
+                   (glyphs, metrics): (Vec<ResolvedGlyph>, crate::info::GlobalMetrics)|
+     -> Result<(), CompileError> {
         let normalized = designspace.to_normalized(&location)?.0;
         let index = glyphs.iter().enumerate().map(|(i, g)| (g.name.clone(), i)).collect();
-        sources.push(Source { master, location, normalized, glyphs, index });
+        let metrics = master.is_some().then_some(metrics);
+        sources.push(Source { master, location, normalized, glyphs, index, metrics });
         Ok(())
     };
     for m in designspace.masters().iter().filter(|m| m.id != origin.id) {
@@ -336,7 +412,7 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
             .collect::<Vec<_>>()
     };
     let ctx = Outlines { designspace: &designspace, prepared, origin: &origin.id, sources: &sources, glyph_sources: &glyph_sources };
-    let mut stage = |_: &fontcraft_model::Resolved,
+    let mut stage = |origin_resolved: &fontcraft_model::Resolved,
                      glyphs: &[ResolvedGlyph],
                      settings: &crate::outline::Settings,
                      warnings: &mut Vec<String>|
@@ -360,6 +436,10 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
         }
         if advances.iter().any(|a| !a.deltas.is_empty()) {
             extra.tables.push((Tag::new(b"HVAR"), dump("HVAR", write_fonts::dump_table(&hvar::build_hvar(axis_count, &advances)?))?));
+        }
+        let origin_metrics = crate::info::derive(origin_resolved, &options.style_name, &mut Vec::new()).metrics;
+        if let Some(mvar) = mvar::build_mvar(axis_count, &mvar_values(&origin_metrics, &sources)?)? {
+            extra.tables.push((Tag::new(b"MVAR"), dump("MVAR", write_fonts::dump_table(&mvar))?));
         }
         if let Some(stat) = stat {
             extra.tables.push((Tag::new(b"STAT"), dump("STAT", write_fonts::dump_table(&stat))?));
@@ -403,7 +483,23 @@ struct Outlines<'a> {
 impl Outlines<'_> {
     /// The sources besides the origin that `name` has a layer for (indices into `sources`).
     fn own_sources(&self, name: &str, warnings: &mut Vec<String>) -> Vec<usize> {
-        let Some(gs) = self.glyph_sources.get(name) else { return Vec::new() };
+        let Some(gs) = self.glyph_sources.get(name) else {
+            // The `.notdef` the compile draws follows each master's vertical metrics, as fontc
+            // and fontmake vary it.
+            if name != ".notdef" {
+                return Vec::new();
+            }
+            // Masters that share a location (or the origin's) give one source.
+            let mut kept: Vec<usize> = Vec::new();
+            for (k, o) in self.sources.iter().enumerate() {
+                let distinct = o.normalized.iter().any(|v| *v != 0.0)
+                    && !kept.iter().any(|&j| self.sources.get(j).is_some_and(|p| p.normalized == o.normalized));
+                if o.master.is_some() && o.index.contains_key(name) && distinct {
+                    kept.push(k);
+                }
+            }
+            return kept;
+        };
         if gs.missing_masters.iter().any(|m| m == self.origin) {
             if gs.main.iter().any(|s| s.is_master) {
                 warnings.push(format!("glyph `{name}` has no layer for the origin master, so it does not vary"));

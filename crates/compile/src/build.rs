@@ -364,7 +364,9 @@ pub fn assemble(
         }
         info.names.push(info::NameRecord { platform: 3, encoding: 1, language: 0x409, id: *id, text: text.clone() });
     }
-    info.names.sort_by_key(|r| (r.platform, r.encoding, r.language, r.id));
+    if !extra.names.is_empty() {
+        info.names.sort_by_key(|r| (r.platform, r.encoding, r.language, r.id));
+    }
     if options.version_stamp {
         info::stamp_version(&mut info, font);
     }
