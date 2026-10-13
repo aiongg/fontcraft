@@ -344,6 +344,13 @@ pub fn with_bracket_glyphs(font: &Font, designspace: &Designspace) -> Result<Opt
 /// (parent, x) gives (alternate, x), (x, parent) gives (x, alternate), and (parent, parent) gives
 /// (alternate, alternate) only. A copied pair replaces one already there.
 fn copy_kerning(master: &mut MasterKerning, renames: &[(String, String)], work: &mut usize) -> Result<(), CompileError> {
+    // Index maps keep each copied pair's lookup constant-time; the first of duplicate entries
+    // wins, as a search from the front would find it.
+    let mut first_at: HashMap<String, usize> = HashMap::new();
+    for (i, f) in master.firsts.iter().enumerate() {
+        first_at.entry(f.first.clone()).or_insert(i);
+    }
+    let mut second_at: HashMap<usize, HashMap<String, usize>> = HashMap::new();
     for (parent, alternate) in renames {
         let mut added: Vec<(String, String, f64)> = Vec::new();
         for first in &master.firsts {
@@ -365,17 +372,29 @@ fn copy_kerning(master: &mut MasterKerning, renames: &[(String, String)], work: 
             }
         }
         for (first, second, value) in added {
-            let at = match master.firsts.iter().position(|f| f.first == first) {
-                Some(i) => i,
+            let at = match first_at.get(&first) {
+                Some(&i) => i,
                 None => {
+                    let i = master.firsts.len();
+                    first_at.insert(first.clone(), i);
                     master.firsts.push(KernFirst { first, seconds: Vec::new() });
-                    master.firsts.len() - 1
+                    i
                 }
             };
             let Some(entry) = master.firsts.get_mut(at) else { continue };
-            match entry.seconds.iter_mut().find(|(s, _)| *s == second) {
+            let seconds = second_at.entry(at).or_insert_with(|| {
+                let mut map = HashMap::new();
+                for (j, (s, _)) in entry.seconds.iter().enumerate() {
+                    map.entry(s.clone()).or_insert(j);
+                }
+                map
+            });
+            match seconds.get(&second).and_then(|&j| entry.seconds.get_mut(j)) {
                 Some(pair) => pair.1 = value,
-                None => entry.seconds.push((second, value)),
+                None => {
+                    seconds.insert(second.clone(), entry.seconds.len());
+                    entry.seconds.push((second, value));
+                }
             }
         }
     }
@@ -861,5 +880,31 @@ mod tests {
         assert_eq!(made, vec![MadeGlyph { name: "a.BRACKET.varAlt02".into(), source: MadeFrom::Alternate { glyph: "a".into(), set: 0 } }]);
         let rules = alternate_rules(&font, &designspace).unwrap();
         assert_eq!(rules[0].payload, vec![("a".to_string(), "a.BRACKET.varAlt02".to_string())]);
+    }
+
+    #[test]
+    fn copied_kerning_keeps_its_order_and_scales_with_the_pairs() {
+        let first = |name: &str, seconds: &[(&str, f64)]| KernFirst {
+            first: name.into(),
+            seconds: seconds.iter().map(|(s, v)| (s.to_string(), *v)).collect(),
+        };
+        let mut master = MasterKerning { master: "m".into(), firsts: vec![first("a", &[("V", -10.0), ("a.alt", 5.0)]), first("T", &[("a", -20.0)])] };
+        let mut work = 0;
+        copy_kerning(&mut master, &[("a".into(), "a.alt".into())], &mut work).unwrap();
+        let expected = vec![
+            first("a", &[("V", -10.0), ("a.alt", 5.0)]),
+            first("T", &[("a", -20.0), ("a.alt", -20.0)]),
+            first("a.alt", &[("V", -10.0), ("a.alt", 5.0)]),
+        ];
+        assert_eq!(master.firsts, expected);
+
+        // Many firsts against a glyph with many alternates: each copied pair is one lookup.
+        let firsts: Vec<KernFirst> = (0..5_000).map(|i| first(&format!("g{i}"), &[("p", -1.0)])).collect();
+        let mut master = MasterKerning { master: "m".into(), firsts };
+        let renames: Vec<(String, String)> = (0..50).map(|i| ("p".to_string(), format!("p.alt{i}"))).collect();
+        let mut work = 0;
+        copy_kerning(&mut master, &renames, &mut work).unwrap();
+        assert_eq!(master.firsts.len(), 5_000);
+        assert!(master.firsts.iter().all(|f| f.seconds.len() == 51));
     }
 }
