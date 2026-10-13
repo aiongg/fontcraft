@@ -81,7 +81,7 @@ pub(crate) fn build(
     }
     let mut glyphs = Vec::with_capacity(order.len());
     for (gid, ((g, prepared), name)) in order.iter().zip(outlines).zip(names).enumerate() {
-        let path = match prepared {
+        let mut path = match prepared {
             Prepared::Empty => Vec::new(),
             Prepared::Simple(path) => path_ops(path, !(gid == 0 && synthesised_notdef)),
             Prepared::Composite(_) | Prepared::Points(_) => {
@@ -90,7 +90,7 @@ pub(crate) fn build(
         };
         let hints = match (source, &settings) {
             (Some(source), Some(settings)) if !hinting.strip => {
-                cff_hints::glyph_hints(source, settings, g, &path, dict.as_ref(), autohint, warnings)?
+                cff_hints::glyph_hints(source, settings, g, &mut path, dict.as_ref(), autohint, warnings)?
             }
             _ => None,
         };

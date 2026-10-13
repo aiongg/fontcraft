@@ -1960,6 +1960,24 @@ mod ps_hints_export {
     }
 
     #[test]
+    fn the_autohinter_sees_the_path_as_the_charstring_draws_it() {
+        use fontcraft_cff::PathOp::{CurveTo, LineTo, MoveTo};
+        let path = [
+            MoveTo((0.4, 0.0)),
+            LineTo((10.0, 0.0)),
+            LineTo((42.0, 0.0)),                              // joined to the line before
+            CurveTo((42.0, 0.0), (42.0, 50.0), (42.0, 50.0)), // handles on its ends: a vertical line
+            LineTo((42.0, 50.2)),                             // zero length once rounded: dropped
+            LineTo((42.0, 80.0)),                             // not joined across the dropped step
+            LineTo((0.0, 80.0)),
+        ];
+        assert_eq!(
+            crate::cff_hints::charstring_path(&path),
+            vec![MoveTo((0.0, 0.0)), LineTo((42.0, 0.0)), LineTo((42.0, 50.0)), LineTo((42.0, 80.0)), LineTo((0.0, 80.0))]
+        );
+    }
+
+    #[test]
     fn the_autohinter_s_flex_reaches_the_charstring_hints() {
         // A box whose top is a shallow dip of two curves (the port's flex sample).
         use fontcraft_cff::PathOp::{CurveTo, LineTo, MoveTo};

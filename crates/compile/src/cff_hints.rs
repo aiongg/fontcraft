@@ -35,8 +35,8 @@ use fontcraft_hinting::ps::ps_hint_layer;
 use fontcraft_hinting::{HintSettings, PsHintKind, ps_hints};
 use fontcraft_model::{Font, ResolvedGlyph, Target};
 
-use crate::CompileError;
 use crate::cff::ROUND_TOLERANCE;
+use crate::{CompileError, ot_round};
 
 /// How far a node may lie from a stem edge and still count as on it, in font units: charstring
 /// coordinates are rounded to whole units.
@@ -73,19 +73,21 @@ pub fn autohint_dict(private: &PrivateDict, name: &str, warnings: &mut Vec<Strin
         if snap.is_empty() { std.map(value).into_iter().collect() } else { snap.iter().map(value).collect() }
     };
     let stems = StemSet { h: stems(&private.stem_snap_h, private.std_hw.as_ref()), v: stems(&private.stem_snap_v, private.std_vw.as_ref()) };
-    match FdDict::new(name, &set, &stems, false) {
-        Ok(d) => Some(d),
-        Err(e) => {
-            warnings.push(format!("PostScript autohinting: {e}; the glyphs were autohinted without alignment zones and standard stems"));
-            match FdDict::new(name, &ZoneSet::default(), &StemSet::default(), true) {
-                Ok(d) => Some(d),
-                Err(e) => {
-                    warnings.push(format!("PostScript autohinting is not possible: {e}"));
-                    None
-                }
-            }
+    let first = match FdDict::new(name, &set, &stems, false) {
+        Ok(d) => return Some(d),
+        Err(e) => e,
+    };
+    // As otfautohint's allowNoBlues: missing zones or stems replaced by inactive ones, then the
+    // zones left out, then the stems too.
+    let fallbacks = [(&set, &stems), (&ZoneSet::default(), &stems), (&ZoneSet::default(), &StemSet::default())];
+    for (zones, stems) in fallbacks {
+        if let Ok(d) = FdDict::new(name, zones, stems, true) {
+            warnings.push(format!("PostScript autohinting: {first}; the glyphs were autohinted without what cannot be used"));
+            return Some(d);
         }
     }
+    warnings.push(format!("PostScript autohinting is not possible: {first}"));
+    None
 }
 
 /// The autohinter's zones and stems for master `master` of `font`: those of the Private dict an
@@ -108,7 +110,7 @@ pub fn glyph_hints(
     font: &Font,
     settings: &HintSettings,
     glyph: &ResolvedGlyph,
-    path: &[PathOp],
+    path: &mut Vec<PathOp>,
     dict: Option<&FdDict>,
     autohint: bool,
     warnings: &mut Vec<String>,
@@ -133,7 +135,72 @@ pub fn glyph_hints(
     if settings.disable_autohint_glyphs.contains(&glyph.name) {
         return Ok(None);
     }
-    Ok(autohinted(&glyph.name, path, dict, &Options::default(), warnings))
+    let drawn = charstring_path(path);
+    let hints = autohinted(&glyph.name, &drawn, dict, &Options::default(), warnings);
+    if hints.is_some() {
+        *path = drawn;
+    }
+    Ok(hints)
+}
+
+/// `path` as the charstring draws it, which is what the autohinter must see to hint as the
+/// reference does on a compiled font: coordinates rounded as the encoder rounds them, then the
+/// steps the specialiser removes (`fontcraft_cff`'s pass 3): a curve whose first and last
+/// handles lie on its ends becomes a line, a zero-length line goes, and a horizontal (or
+/// vertical) step right after a line of the same direction is joined to it. Successive movetos keep the last.
+pub fn charstring_path(path: &[PathOp]) -> Vec<PathOp> {
+    let r = |(x, y): (f64, f64)| (ot_round(x), ot_round(y));
+    let mut out: Vec<PathOp> = Vec::with_capacity(path.len());
+    let mut current = (0.0, 0.0);
+    // The direction of the last line drawn, when the step before this one was that line.
+    let mut last_line: Option<bool> = None;
+    for op in path {
+        let step = match *op {
+            PathOp::MoveTo(p) => {
+                let p = r(p);
+                if let Some(PathOp::MoveTo(prev)) = out.last_mut() {
+                    *prev = p;
+                } else {
+                    out.push(PathOp::MoveTo(p));
+                }
+                current = p;
+                last_line = None;
+                continue;
+            }
+            PathOp::LineTo(p) => PathOp::LineTo(r(p)),
+            PathOp::CurveTo(a, b, p) => {
+                let (a, b, p) = (r(a), r(b), r(p));
+                if a == current && b == p { PathOp::LineTo(p) } else { PathOp::CurveTo(a, b, p) }
+            }
+        };
+        let was_line = matches!(op, PathOp::LineTo(_));
+        let PathOp::LineTo(p) = step else {
+            out.push(step);
+            current = end(&step);
+            last_line = None;
+            continue;
+        };
+        if p == current {
+            // Dropped; the line before it is no longer right before the next step.
+            last_line = None;
+            continue;
+        }
+        let horizontal = p.1 == current.1;
+        let axis = (horizontal || p.0 == current.0).then_some(horizontal);
+        match (axis, last_line, out.last_mut()) {
+            (Some(h), Some(prev), Some(PathOp::LineTo(prev_end))) if h == prev => *prev_end = p,
+            _ => out.push(PathOp::LineTo(p)),
+        }
+        current = p;
+        last_line = if was_line { axis } else { None };
+    }
+    out
+}
+
+fn end(op: &PathOp) -> (f64, f64) {
+    match *op {
+        PathOp::MoveTo(p) | PathOp::LineTo(p) | PathOp::CurveTo(_, _, p) => p,
+    }
 }
 
 /// The autohinter's hints for the outline `path` of glyph `name`, as charstring hints, or `None`
@@ -193,10 +260,10 @@ pub fn contours(path: &[PathOp]) -> (Vec<BezPath>, Vec<usize>) {
 }
 
 /// The autohinter's result as charstring hints for a path of `ops` operations whose contours
-/// start at `starts`. An element names the operation after its contour's moveto; a contour's
-/// implicit closing line names the next contour's moveto, before which a charstring writes a
-/// mask meant for it (and a mask on the last one is dropped). The mask on the second curve of
-/// a flex is dropped, as the reference does.
+/// start at `starts`. An element names the operation after its contour's moveto; a mask on a
+/// contour's implicit closing line goes before that contour's own moveto (the hinter walks each
+/// contour from its closing line), after the start mask for the first contour. The mask on the
+/// second curve of a flex is dropped, as the reference does.
 fn charstring_hints(hints: &GlyphHints, starts: &[usize], ops: usize) -> CharstringHints {
     let stem = |s: &fontcraft_autohint::Stem| StemHint { edge: s.lb, width: s.rt - s.lb };
     let mask = |m: &HintMask| Mask { h: m.h.clone(), v: m.v.clone() };
@@ -204,7 +271,7 @@ fn charstring_hints(hints: &GlyphHints, starts: &[usize], ops: usize) -> Charstr
         let start = *starts.get(pos.subpath)?;
         let end = starts.get(pos.subpath + 1).copied().unwrap_or(ops);
         let op = start.checked_add(1)?.checked_add(pos.element)?;
-        if op < end { Some(op) } else { starts.get(pos.subpath + 1).copied() }
+        if op < end { Some(op) } else { Some(start) }
     };
     let mut out = CharstringHints {
         h_stems: hints.h.iter().map(stem).collect(),
@@ -216,15 +283,17 @@ fn charstring_hints(hints: &GlyphHints, starts: &[usize], ops: usize) -> Charstr
     if !hints.masks.is_empty() || hints.start_mask.is_some() {
         let all = Mask { h: vec![true; out.h_stems.len()], v: vec![true; out.v_stems.len()] };
         out.masks.push((0, hints.start_mask.as_ref().map(mask).unwrap_or(all)));
-        for (pos, m) in &hints.masks {
-            let Some(op) = op_of(pos) else { continue };
-            if out.flex.iter().any(|f| f + 1 == op) {
-                continue;
-            }
+        let mut placed: Vec<(usize, Mask)> = hints
+            .masks
+            .iter()
+            .filter_map(|(pos, m)| op_of(pos).map(|op| (op, mask(m))))
+            .filter(|(op, _)| !out.flex.iter().any(|f| f + 1 == *op))
+            .collect();
+        placed.sort_by_key(|(op, _)| *op);
+        for (op, m) in placed {
             match out.masks.last_mut() {
-                Some((last, slot)) if *last == op => *slot = mask(m),
-                Some((last, _)) if *last > op => {}
-                _ => out.masks.push((op, mask(m))),
+                Some((last, slot)) if *last == op => *slot = m,
+                _ => out.masks.push((op, m)),
             }
         }
     }
