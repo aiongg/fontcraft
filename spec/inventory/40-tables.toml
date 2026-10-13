@@ -357,6 +357,7 @@ milestone = "M10"
 summary = "Control values as a plain array of big-endian int16. read-fonts returns the array; write-fonts has no table type for it, so we serialise the values ourselves and add them with FontBuilder::add_raw. None of fontc, fontmake or makeotf generates it from stems and zones; fontmake only gets it by running ttfautohint as a post step."
 ref = "read-fonts src/table_provider.rs (cvt); write-fonts src/tables.rs; fontmake USAGE.md (-a)"
 status = "docs"
+notes = "M10.17: our layout comes from crates/hinting/src/tt_font.rs (CvtLayout): per TT zone its position and fitted row, per TT stem its width and fitted width, then family zone positions."
 
 [[table]]
 tag = "fpgm"
@@ -368,6 +369,7 @@ milestone = "M10"
 summary = "Font program bytecode. Neither crate has a typed view (read-fonts hands back the raw bytes; skrifa can execute them), so decoding to mnemonics and assembling from our hinting model is ours, and the bytes go in through add_raw. Writing it also obliges us to fill maxp's function, storage, stack and instruction limits, which fontc leaves at zero."
 ref = "read-fonts src/table_provider.rs; skrifa src/outline/glyf/hint; fontc fontbe/src/metrics_and_limits.rs"
 status = "docs"
+notes = "M10.17: our function library is assembled from text in crates/hinting/src/tt_font.rs; maxp function, storage and stack limits come from fontcraft-ttasm's analysis."
 
 [[table]]
 tag = "prep"
@@ -379,6 +381,7 @@ milestone = "M10"
 summary = "Control value program bytecode, handled exactly like fpgm: raw bytes in and out, with our own assembler and disassembler."
 ref = "read-fonts src/table_provider.rs; skrifa src/outline/glyf/hint"
 status = "docs"
+notes = "M10.17: generated per master or instance in crates/hinting/src/tt_font.rs."
 
 [[table]]
 tag = "cvar"

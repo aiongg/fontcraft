@@ -48,6 +48,8 @@ pub mod tt;
 pub mod tt_auto;
 pub mod tt_font;
 pub mod tt_glyph;
+#[cfg(test)]
+mod tt_testfont;
 pub mod validate;
 
 pub use error::{

@@ -104,7 +104,8 @@ Rows: `hinting.tt.stems.*`, `hinting.tt.param.ttfStems`, panel `dialog.ttfStems`
 | gasp Table | font or instance | 8 and 20 | Two PPM thresholds, three rendering ranges | `hinting.tt.param.gaspTable` |
 
 Rounding-threshold example to use as a test: threshold 0.2; small-caps zone at 6.45 px → 6.65 → 7;
-`xHeight` zone at 5.25 px → 5.65 → 6. With the default the same zones give 6 and 5.
+`xHeight` zone at 5.25 px → 5.65 → 6. Without a threshold the same zones give 6 and 5; the default
+0.09375 gives 7 (6.54) and 5 (5.44).
 
 ### gasp ranges
 
@@ -406,6 +407,14 @@ pixel-preview toggle, point-index toggle, previewed instance.
 | `maxp` | Stack, storage, function, twilight and instruction-size maxima recomputed | same | recomputed or kept |
 | `cvar` (variable only) | Per-master differences of the zone- and stem-derived `cvt` entries (inferred) | n/a | n/a |
 | `head` flags | Bits signalling that instructions depend on point size / may alter advance, as required by the programs | same | kept |
+
+Our generated programs (M10.17, `crates/hinting/src/tt_font.rs`): `cvt ` holds per TT zone its
+position and its fitted row, per TT stem its width and fitted width, then the family zone
+positions; `prep` rounds the zones (threshold, family zones up to TTFFamilyZonesThreshold),
+aligns them, applies zone deltas, rounds the stems and applies stem deltas under GDI ClearType;
+`fpgm` holds the functions glyph programs call to snap a point to a zone (overshoots shown from
+TTFOvershootSuppressionBelowPPM up), place a stem (five rounding modes, TTMinimumDistance) and
+move a point at one size. The module documentation lists the function numbers and arguments.
 
 Unhinted export (no instructions, autohint off): no `cvt `, `fpgm`, glyph programs; a minimal `prep`
 and a `gasp` suited to unhinted rendering are a separate export decision (see the compile spec).

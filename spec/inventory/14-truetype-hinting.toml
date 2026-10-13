@@ -314,6 +314,8 @@ milestone = "M10"
 summary = "A zone may be aligned to another zone. Its pixel position is then derived from the other zone's rounded position plus the rounded distance between the two: the same pixel row for distances below 0.5 px, a neighbouring row from 0.5 px upwards, and so on. This keeps close or overlapping zones from drifting apart unevenly from one PPM to the next."
 ref = "TrueType Hinting › TrueType Zones › Alignment"
 status = "handbook"
+notes = "M10.17: prep places an aligned zone at its target's fitted row (threshold and deltas included) plus the distance between the two positions rounded half away from zero; an aligned zone gets no threshold of its own. Tested in skrifa: 0.3 px apart lands on the same row, 0.5 px on the next. Documented, not yet observed."
+guesses = ["An alignment to a missing zone, or the link that closes a cycle, is left out with a warning and that zone is rounded on its own; the reference's editor may refuse such links instead.", "An aligned zone's own deltas are applied after the alignment; a reference export with deltas on both zones would settle it."]
 
 [[behavior]]
 id = "hinting.tt.zones.deltas"
@@ -322,6 +324,8 @@ milestone = "M10"
 summary = "A zone can be nudged at individual pixel sizes: for each (master, PPM) cell the setting is round up, round down, or none, moving the zone's rounded height one pixel up or down at that size. Zone deltas are stored on the main master's zone only. They help where, at some size, the Hinting Preview renders a zone a pixel above or below where it belongs."
 ref = "TrueType Hinting › TrueType Zones › Deltas"
 status = "handbook"
+notes = "M10.17: prep adds or removes one pixel from the zone's fitted row at that PPM, after rounding and alignment; zones aligned to it follow. Tested in skrifa at one PPM and its neighbours. Documented, not yet observed."
+guesses = ["The delta column that applies is the master id in a master's build and the instance name in an instance's; the reference's stored delta tables would settle it."]
 
 [[panel]]
 id = "dialog.ttDeltas"
@@ -466,6 +470,8 @@ milestone = "M10"
 summary = "A stem can be rounded up or down at individual pixel sizes per master, through the same table as zone deltas, stored on the main master only. Stem deltas take effect only in ClearType-style (Windows GDI) rendering."
 ref = "TrueType Hinting › TrueType Stems › Deltas"
 status = "handbook"
+notes = "M10.17: prep rounds each stem width to whole pixels and applies its deltas only when GETINFO reports ClearType on and symmetric smoothing off. Tested in skrifa: the delta acts under the GDI ClearType target and not under grayscale or monochrome. Documented, not yet observed."
+guesses = ["GDI ClearType is recognised as ClearType on with symmetric smoothing off (GETINFO selectors 64 and 2048), so monochrome rendering counts as not GDI; rendering in Windows GDI with and without ClearType would settle it."]
 
 [[behavior]]
 id = "hinting.tt.stems.filter"
@@ -543,7 +549,7 @@ milestone = "M10"
 summary = "TTFBlueFuzz widens every TT zone by the given number of units both above and below; the default is 1. It may be set on the font (applies to all instances), on masters (the values are interpolated at export), or on an export instance (overrides font and master values). Its main use is catching extremes that drop out of a zone through rounding in interpolated instances."
 ref = "TrueType Hinting › TrueType BlueFuzz"
 status = "handbook"
-notes = "Read from the instance, else the master, else the font, default 1 (crates/hinting/src/settings.rs). Documented, not yet observed."
+notes = "Read from the instance, else the master, else the font, default 1 (crates/hinting/src/settings.rs). Documented, not yet observed. M10.17: the fuzz widens each zone's span in the cvt layout (CvtLayout::spans), which decides whether a point is in a zone; the cvt values themselves are the zone positions."
 
 [[behavior]]
 id = "hinting.tt.param.overshootSuppressionBelowPpm"
@@ -552,6 +558,7 @@ milestone = "M10"
 summary = "TTFOvershootSuppressionBelowPPM is a font-level custom parameter (Font Info › Font) setting a pixel size; at smaller sizes, overshoots inside a zone are collapsed onto the zone's flat edge (its position). At that size and above, overshoots are allowed to show. No default is stated."
 ref = "TrueType Hinting › Advanced TrueType Hinting"
 status = "handbook"
+notes = "M10.17: a Snap in a zone moves the point to the zone's row; from the given PPM up it adds the point's own distance from the zone position, rounded, so the overshoot shows (tested in skrifa: a 0.64 px overshoot at 40 PPM collapses below 60, a 0.96 px one shows at 60). Without the parameter overshoots inside a zone always collapse. Documented, not yet observed."
 guesses = ["Absent TTFOvershootSuppressionBelowPPM: no size-based suppression beyond what the zones do on their own; a reference export without the parameter would settle it."]
 observe = ["T3, without a TTFOvershootSuppressionBelowPPM parameter: look at o in the Hinting Preview from 30 to 60 PPM; note the first size at which the overshoot shows."]
 
@@ -562,6 +569,8 @@ milestone = "M10"
 summary = "TTZoneRoundingThreshold (font or export instance; the font value applies to instances without their own) is a small decimal, default 0.09375, added to the pixel position of every positive zone before rounding and added twice for the zone named xHeight, making those zones more likely to round up. Example: at 0.15, a zone at 8.4 px becomes 9 px (8.4 + 0.15 = 8.55) and an xHeight zone at 6.25 px becomes 7 px (6.25 + 2 × 0.15 = 6.55)."
 ref = "TrueType Hinting › Advanced TrueType Hinting"
 status = "handbook"
+notes = "M10.17, crates/hinting/src/tt_font.rs: prep rounds each zone that is not aligned to round(position + threshold), the threshold in whole 1/64 px, twice for the zone named xHeight. The handbook's example passes in skrifa's interpreter: at 0.2, 6.45 px gives 7 and 5.25 px gives 6; without a threshold they give 6 and 5. The documented default 0.09375 already lifts 6.45 px to 7 (6.54), so the example's 'without any change' means no threshold. Documented, not yet observed."
+guesses = ["A 'positive zone' is read as a zone with a positive size (a top zone), so bottom zones get no threshold; rounding a negative-position top zone in the reference app would settle it.", "The threshold is clamped to plus or minus one pixel; a reference export with a larger value would settle it."]
 
 [[behavior]]
 id = "hinting.tt.param.minimumDistance"
@@ -570,6 +579,8 @@ milestone = "M10"
 summary = "TTMinimumDistance is an export-instance custom parameter (Font Info › Exports) giving, in pixels, the smallest length a stem with a Stem instruction may be drawn at any PPM. The default is 0.25, a quarter pixel."
 ref = "TrueType Hinting › Advanced TrueType Hinting"
 status = "handbook"
+notes = "M10.17: the Stem function of fpgm takes the larger of the rounded length and this distance after every rounding mode, No Stem included, and prep stores it in 1/64 px (tested in skrifa: a 0.3 px stem rounded down is drawn at 0.25 px, at 0.5 px with the parameter at 0.5). Documented, not yet observed."
+guesses = ["The minimum distance also applies to Round up and Round down and to stems without a stem definition, and is clamped to 0 to 8 px; a reference export with a stem rounded to zero would settle it."]
 
 [[behavior]]
 id = "hinting.tt.param.controlValueProgram"
@@ -1416,6 +1427,7 @@ milestone = "M10"
 summary = "For manually instructed fonts the exporter generates the supporting tables itself: cvt entries from the instance's TT zones (position and size, widened by TTFBlueFuzz) and stems; fpgm functions for zone rounding, stem width selection per rendering mode and triple hints; a prep program applying zone alignment, zone and stem deltas, the rounding threshold and overshoot suppression per pixel size; and per-glyph programs from the ordered instruction lists ending with IUP. The table split is our reading; the handbook only describes the resulting behaviour."
 ref = "TrueType Hinting › Font-level Hints; Instructions; Advanced TrueType Hinting"
 status = "inferred"
+notes = "M10.17, crates/hinting/src/tt_font.rs: cvt holds per zone its position and fitted row, per stem its width and fitted width, then the family zone positions; fpgm holds seven functions (zone rounding, zone alignment, rounding, cvt delta, zone snap, stem, point delta); prep sets the rendering mode, overshoot and minimum-distance storage, then rounds, aligns and nudges zones and stems for the size. maxp limits come from the static analysis; skrifa runs every program at 8 to 72 PPM in the three intents within them. Stem rounding: Round takes the fitted width, Round up and Round down the ceiling and floor of the stem's own width. Triple hints and diagonal preservation wait for M10.18."
 guesses = ["The fpgm, prep and cvt layout is FontCraft's own, written from the TrueType instruction set specification; byte parity with the reference app is not a goal and nothing from its output is copied."]
 
 [[behavior]]

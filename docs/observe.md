@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1127 rows to check: 1575 guesses and 415 observe steps.**
+**1133 rows to check: 1583 guesses and 415 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,7 +48,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 40 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 4 |
-| **Later milestones (after M6)** | all | **656** |
+| **Later milestones (after M6)** | all | **662** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 39 |
 | Later milestones (after M6) | Edit View: text mode and preview | 14 |
 | Later milestones (after M6) | Components and anchors | 33 |
@@ -56,9 +56,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Spacing and metrics keys | 3 |
 | Later milestones (after M6) | Kerning and the Kerning window | 4 |
 | Later milestones (after M6) | Font View | 13 |
-| Later milestones (after M6) | Font Info and features | 250 |
+| Later milestones (after M6) | Font Info and features | 251 |
 | Later milestones (after M6) | Interpolation | 44 |
-| Later milestones (after M6) | Hinting | 68 |
+| Later milestones (after M6) | Hinting | 73 |
 | Later milestones (after M6) | Colour fonts | 46 |
 | Later milestones (after M6) | Files: open, import, export | 45 |
 | Later milestones (after M6) | Settings and the window | 12 |
@@ -1338,7 +1338,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (656)
+## Later milestones (after M6) (662)
 
 ### Edit View: drawing, guides, layers and the Palette (39)
 
@@ -1708,7 +1708,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The decomposition sections use Unicode's canonical decompositions, one level and full together, so U+1EA4 lists both U+00C2 and U+0041, and characters the font has no glyph for are listed dimmed.
   - Guess: Clicking an entry opens the glyph in a new tab; the reference's documentation does not say whether it replaces the current glyph instead.
 
-### Font Info and features (250)
+### Font Info and features (251)
 
 - [ ] `fontInfo.rows.selection` (behavior, M7, handbook): Clicking a row selects it and Cmd+click builds a selection of several…
   - Guess: Shift-click adds every row between the last row clicked and the clicked one; Shift-clicking in the reference app settles it.
@@ -2454,6 +2454,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `TTFAutohint options` (parameter, M10, handbook): Option string for ttfautohint, edited through a dialog: hint set range, default…
   - Guess: No corpus source holds the parameter; FontCraft stores and reads it as ttfautohint command-line options in one string, which is how fontmake reads it from an instance (split on spaces); a file saved by the reference app with the options sheet filled in would show the real form.
   - Observe: T3: fill in the TTFAutohint options sheet on an instance and save; note how the parameter's value is stored in the .glyphs file (one string, long or short options, or a dictionary).
+- [ ] `TTFFamilyZonesThreshold` (parameter, M10, handbook): Integer PPM limit for applying family zones in TrueType hinting
+  - Guess: Family zones apply up to and including the threshold PPM, are matched to the master's zones by index, are left out with a warning when the counts differ, and are not applied without the parameter; a reference export with family zones at the threshold size would settle it.
 - [ ] `color.preview.paletteDrivesFontView` (behavior, M11, handbook): Once the Color Palettes parameter exists, glyphs with palette layers are previewed…
   - Observe: Palette font: look at A in Font View; note whether its cell is drawn in colour and with which palette.
 - [ ] `color.layered.toColr` (behavior, M11, handbook): Color Layers to COLR on an instance converts a layered setup into…
@@ -2592,7 +2594,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `hoi.setControlPoints` (M13, inferred): Set Interpolation Control Points
   - Open (our design, not confirmed): Headless form of dragging a knob or handle: sets the intermediate point (one point), the two handles (two points) or the rotation centre (one point) of a node's interpolation curve.
 
-### Hinting (68)
+### Hinting (73)
 
 - [ ] `hinting.ps.standardStems.privateDictMapping` (behavior, M10, docs): At export the first horizontal stem becomes StdHW and the first vertical…
   - Guess: More than twelve stems in one direction: the export writes the first twelve in list order and warns, and hint.ps.validateFontHints reports it; an export from the reference app with thirteen stems would settle it.
@@ -2704,9 +2706,21 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `hinting.tt.zones.name` (behavior, M10, handbook): A zone's name is free text but must be unique within the…
   - Guess: TT zones and TT stems are matched across masters by name; a master that lacks a name uses the main master's value for it; adding or renaming a zone or stem acts on every master; names must be unique and a duplicate is refused; the reference app would settle all four.
   - Observe: T3: add a TT zone in master 1 only and note whether master 2 gets it too; give two zones the same name and note whether the duplicate name is refused.
+- [ ] `hinting.tt.zones.align` (behavior, M10, handbook): A zone may be aligned to another zone
+  - Guess: An alignment to a missing zone, or the link that closes a cycle, is left out with a warning and that zone is rounded on its own; the reference's editor may refuse such links instead.
+  - Guess: An aligned zone's own deltas are applied after the alignment; a reference export with deltas on both zones would settle it.
+- [ ] `hinting.tt.zones.deltas` (behavior, M10, handbook): A zone can be nudged at individual pixel sizes: for each (master,…
+  - Guess: The delta column that applies is the master id in a master's build and the instance name in an instance's; the reference's stored delta tables would settle it.
+- [ ] `hinting.tt.stems.deltas` (behavior, M10, handbook): A stem can be rounded up or down at individual pixel sizes…
+  - Guess: GDI ClearType is recognised as ClearType on with symmetric smoothing off (GETINFO selectors 64 and 2048), so monochrome rendering counts as not GDI; rendering in Windows GDI with and without ClearType would settle it.
 - [ ] `hinting.tt.param.overshootSuppressionBelowPpm` (behavior, M10, handbook): TTFOvershootSuppressionBelowPPM is a font-level custom parameter (Font Info › Font) setting a…
   - Guess: Absent TTFOvershootSuppressionBelowPPM: no size-based suppression beyond what the zones do on their own; a reference export without the parameter would settle it.
   - Observe: T3, without a TTFOvershootSuppressionBelowPPM parameter: look at o in the Hinting Preview from 30 to 60 PPM; note the first size at which the overshoot shows.
+- [ ] `hinting.tt.param.zoneRoundingThreshold` (behavior, M10, handbook): TTZoneRoundingThreshold (font or export instance; the font value applies to instances without…
+  - Guess: A 'positive zone' is read as a zone with a positive size (a top zone), so bottom zones get no threshold; rounding a negative-position top zone in the reference app would settle it.
+  - Guess: The threshold is clamped to plus or minus one pixel; a reference export with a larger value would settle it.
+- [ ] `hinting.tt.param.minimumDistance` (behavior, M10, handbook): TTMinimumDistance is an export-instance custom parameter (Font Info › Exports) giving, in…
+  - Guess: The minimum distance also applies to Round up and Round down and to stems without a stem definition, and is clamped to 0 to 8 px; a reference export with a stem rounded to zero would settle it.
 - [ ] `hinting.tt.param.controlValueProgram` (behavior, M10, handbook): Opening a hinted TrueType font adds three custom parameters to the masters:…
   - Guess: No corpus source holds the prep or fpgm Table Assembly parameter, so FontCraft writes and reads them in its own assembly syntax (one instruction per line, mnemonics with bracketed flags as fontTools prints them, push values on the push's line; fontTools' layout with the values on the following lines and /* */ comments is read too); a file saved by the reference app after opening a hinted TrueType font would show its syntax, and the reader would then accept both.
   - Observe: Open a hinted TTF that FontCraft exported from T3 and save it as .glyphs; note how the CVT Table, prep Table Assembly and fpgm Table Assembly values are stored in the file (keys, value types, layout).

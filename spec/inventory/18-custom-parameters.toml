@@ -2097,6 +2097,8 @@ effect = "hinting"
 summary = "Integer PPM limit for applying family zones in TrueType hinting. Family zones are given by a TTFZones parameter on the font rather than on a master, with the same number of zones in both places."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "M10.17: up to and including the given PPM, prep rounds each master zone from the family zone at the same index instead of its own position. Tested in skrifa at a size below and above the threshold. Documented, not yet observed."
+guesses = ["Family zones apply up to and including the threshold PPM, are matched to the master's zones by index, are left out with a warning when the counts differ, and are not applied without the parameter; a reference export with family zones at the threshold size would settle it."]
 
 [[parameter]]
 name = "TTFMinimumDistance"
