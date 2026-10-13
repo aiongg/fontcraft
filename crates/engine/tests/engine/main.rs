@@ -57,6 +57,7 @@ mod glyph_search;
 mod glyph_set;
 mod guides;
 mod hint_preview;
+mod hint_upkeep;
 mod image;
 mod instances;
 mod interaction;

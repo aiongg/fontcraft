@@ -135,6 +135,48 @@ fn realigned(what: &str, old: &Arc<Font>, new: &Arc<Font>, stamp: Option<&str>) 
     Ok(Some(Arc::new(next)))
 }
 
+/// `new` with the hint node references of each layer whose nodes changed since `old` kept on
+/// the same nodes (`fontcraft_hinting::remap`); `None` when none needs to change. Remove Overlap
+/// moves TrueType instructions on removed nodes to the nearest node it created.
+fn hint_upkeep(what: &str, old: &Arc<Font>, new: &Arc<Font>, report: &mut fontcraft_hinting::RemapReport) -> Result<Option<Arc<Font>>> {
+    if Arc::ptr_eq(old, new) {
+        return Ok(None);
+    }
+    let mode = match what {
+        "path.removeOverlap" | "path.removeOverlapForAllMasters" => fontcraft_hinting::RemapMode::OverlapRemoval,
+        _ => fontcraft_hinting::RemapMode::Edit,
+    };
+    let (next, found) = fontcraft_hinting::remap_after_edit(old, Font::clone(new), mode)
+        .map_err(|e| EngineError::Disabled(what.to_string(), format!("the hints on the changed nodes cannot be kept: {e}")))?;
+    if found.is_empty() && next.glyphs.as_arcs().iter().zip(new.glyphs.as_arcs()).all(|(a, b)| Arc::ptr_eq(a, b)) {
+        return Ok(None);
+    }
+    next.check_changed(new)?;
+    report.removed.extend(found.removed);
+    report.unlinked += found.unlinked;
+    report.moved += found.moved;
+    Ok(Some(Arc::new(next)))
+}
+
+/// A command's result with what the hint upkeep did added as `hintUpkeep` (`removed`: one
+/// message per removed TrueType instruction; `unlinked`: PostScript ends turned into numbers;
+/// `moved`: TrueType points moved to a node Remove Overlap created). A `null` result becomes an
+/// object holding only the report; other results that are not objects stay as they are.
+fn with_hint_upkeep(v: Value, upkeep: fontcraft_hinting::RemapReport) -> Value {
+    if upkeep.is_empty() {
+        return v;
+    }
+    let report = serde_json::json!({"removed": upkeep.removed, "unlinked": upkeep.unlinked, "moved": upkeep.moved});
+    match v {
+        Value::Object(mut map) => {
+            map.insert("hintUpkeep".to_string(), report);
+            Value::Object(map)
+        }
+        Value::Null => serde_json::json!({ "hintUpkeep": report }),
+        other => other,
+    }
+}
+
 /// Records `before` as the step that undoes the document's last change, and drops the redo steps.
 pub(crate) fn push_undo(doc: &mut DocState, label: Arc<str>, before: Arc<Font>) {
     doc.history.undo.push(HistoryEntry { label, font: before, path: doc.path.clone() });
@@ -657,9 +699,9 @@ impl Session {
         let outcome = guard::catch_panic(|| (spec.run)(self, params));
         self.depth = 0;
         let result = match outcome {
-            Ok(r) => {
-                r.and_then(|v| self.realign_after(id, snapshot.as_ref().map(|s| s.0.as_slice())).map(|()| v)).and_then(|v| accept(self).map(|()| v))
-            }
+            Ok(r) => r
+                .and_then(|v| self.realign_after(id, snapshot.as_ref().map(|s| s.0.as_slice())).map(|upkeep| with_hint_upkeep(v, upkeep)))
+                .and_then(|v| accept(self).map(|()| v)),
             Err(panic) => Err(EngineError::Internal(format!("`{id}` failed unexpectedly: {panic}"))),
         };
         if record {
@@ -690,10 +732,14 @@ impl Session {
     /// (`None` for a query). Undo and redo put back fonts as they were and are left alone; a
     /// document the command opened has no `before` and is not aligned. Previews run through
     /// [`Session::run_command`], so each preview is aligned too.
-    fn realign_after(&mut self, id: &str, before: Option<&[DocState]>) -> Result<()> {
-        let Some(before) = before else { return Ok(()) };
+    ///
+    /// Then the hint node references of every layer whose nodes the command changed are kept on
+    /// the same nodes ([`hint_upkeep`]); what that removed or unlinked is returned.
+    fn realign_after(&mut self, id: &str, before: Option<&[DocState]>) -> Result<fontcraft_hinting::RemapReport> {
+        let mut upkeep = fontcraft_hinting::RemapReport::default();
+        let Some(before) = before else { return Ok(upkeep) };
         if matches!(id, "edit.undo" | "edit.redo") {
-            return Ok(());
+            return Ok(upkeep);
         }
         let stamp = self.stamp();
         for doc in &mut self.docs {
@@ -701,8 +747,11 @@ impl Session {
             if let Some(font) = realigned(id, &old.font, &doc.font, stamp.as_deref())? {
                 doc.font = font;
             }
+            if let Some(font) = hint_upkeep(id, &old.font, &doc.font, &mut upkeep)? {
+                doc.font = font;
+            }
         }
-        Ok(())
+        Ok(upkeep)
     }
 
     /// Starts an interaction on the active document: a drag, or a dialog with a live preview.

@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**1695 guesses on 1097 rows (397 of them live commands).**
+**1700 guesses on 1099 rows (397 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -1205,6 +1205,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `hinting.ps.manual.hintKinds` (behavior) | M10 | handbook | – | A stem with one edge on a node and the other a number (left when a linked node is deleted) is stored with the number as place = (number, 0); a file saved by the reference app after deleting one linked node of a stem hint would show its form. |
 | `hinting.ps.manual.display` (behavior) | M10 | handbook | – | PostScript hints are shown and edited with the Select tool while View › Show Hints is on; whether another tool is needed would be settled in the reference app. |
 | `hinting.ps.manual.select` (behavior) | M10 | handbook | – | Tab after the last hint wraps to the first and Shift+Tab before the first wraps to the last; with several hints selected Tab moves on from the last selected one; trying it in the reference app would settle it. |
+| `hinting.ps.manual.linkOnDrop` (behavior) | M10 | handbook | – | An edit that deletes the node a hint end is linked to turns that end into a number at the node's last position; deleting a linked node in the reference app would settle it. |
+| `hinting.ps.manual.linkOnDrop` (behavior) | M10 | handbook | – | After an edit, a linked node is found again by index, then by place and on- or off-curve class within half a unit, then by index when its path keeps the same node classes; reversing a contour and changing its start point with linked hints in the reference app would settle whether links follow the node. |
 | `hinting.ps.manual.ghostFromSingleNode` (behavior) | M10 | handbook | – | A ghost hint made from one node is a top ghost when the node lies in a top zone or nearer to a top zone than to a bottom zone, else a bottom ghost; doing it in the reference app on a node at the cap height and one at the baseline would settle it. |
 | `hinting.ps.masters.transferByNodeLink` (behavior) | M10 | handbook | – | An unlinked hint end keeps its main-master number in every master and instance, and a link whose node no longer exists in a master falls back to that number; an export of an interpolated instance with one unlinked hint would settle it. |
 | `hinting.ps.masters.fallbackToOtherMasters` (behavior) | M10 | handbook | – | When the main master has no hints for a glyph and several other masters do, the first of them in master order is used; a reference export of such a glyph would settle it. |
@@ -1244,6 +1246,9 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `hinting.tt.instructions.addFromSelection` (behavior) | M10 | handbook | – | Dragging an instruction badge moves only the badge's drawn position, which is view state and not saved; dropping it on another node does not re-target it; the reference app would settle what the drag changes. |
 | `hinting.tt.instructions.badgeColours` (behavior) | M10 | handbook | – | Delta badges are orange, a colour no other instruction uses; the reference app would settle it. |
 | `hinting.tt.snap.zoneAuto` (behavior) | M10 | handbook | – | In horizontal mode Auto ignores zones and rounds to the nearest pixel edge, since zones are vertical; the reference app would settle it. |
+| `hinting.tt.export.overlapRemovalMovesHints` (behavior) | M10 | handbook | – | Path > Remove Overlap in the editor applies the documented export rule to instructions on removed nodes and on intersections, and PostScript ends on removed nodes become numbers; running Remove Overlap on an instructed glyph in the reference app would settle it. |
+| `hinting.tt.export.overlapRemovalMovesHints` (behavior) | M10 | handbook | – | An outline edit other than Remove Overlap removes an instruction whose node is gone instead of moving it; deleting an instructed node in the reference app would settle it. |
+| `hinting.tt.export.overlapRemovalMovesHints` (behavior) | M10 | handbook | – | When upkeep removes one Stem instruction of a triple hint, the other two stay as plain Stem instructions; deleting a node of a triple hint in the reference app would settle it. |
 | `hinting.tt.variable.deltasIgnored` (behavior) | M10 | handbook | – | Zone and stem deltas reach a variable font only for the default master's column; per-instance Delta instructions are dropped as the handbook says; a variable export from the reference app would settle the zone and stem part. |
 | `hinting.tt.variable.cvar` (behavior) | M10 | inferred | – | Per-master zones and stems reach a variable font as cvt values of the default master plus cvar deltas; a variable export from the reference app would settle it. |
 | `hinting.tt.export.generatedPrograms` (behavior) | M10 | inferred | – | The fpgm, prep and cvt layout is FontCraft's own, written from the TrueType instruction set specification; byte parity with the reference app is not a goal and nothing from its output is copied. |

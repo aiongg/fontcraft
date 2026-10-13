@@ -57,7 +57,7 @@ pub use error::{
 pub use noderef::{Edge, NodeRef, TtPoint};
 pub use point_map::{PointMap, VecPointMap};
 pub use ps::{PsHint, PsHintKind, ps_hints, set_ps_hints};
-pub use remap::remap_after_edit;
+pub use remap::{RemapMode, RemapReport, remap_after_edit};
 pub use replay::TouchedState;
 pub use settings::{DeltaDir, Deltas, HintSettings, PsZone, TtStem, TtZone};
 pub use tt::{Direction, Rounding, StemRef, TtInstruction, TtKind, ZoneRef, set_tt_instructions, tt_instructions};

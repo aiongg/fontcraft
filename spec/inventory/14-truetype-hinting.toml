@@ -1368,7 +1368,17 @@ milestone = "M10"
 summary = "When a static font is exported with Remove Overlaps, points inside overlaps disappear and intersections become single points. An instruction on a point that is removed is reattached to whichever intersection point created by the removal lies closest, so hinting a regular node next to an intersection and hinting the intersection's extra node give the same result."
 ref = "TrueType Hinting › Points in Overlapping Intersections"
 status = "handbook"
-observe = ["T4: instruct X on a node at the crossing and on a normal node, export a static TTF with Remove Overlaps and read X's glyph program; note which point the crossing node's instruction ends up on."]
+notes = "The editor half (M10.3, crates/hinting/src/remap.rs): Path > Remove Overlap keeps instructions on nodes that survive, found by place, and moves an instruction on a removed node, or on an intersection extra node, to the nearest on-curve node the removal created; with no such node it is removed and reported under hintUpkeep in the command result. Other outline edits remove an instruction whose node is gone and report it. The export half waits for M10.19. Documented for export, not yet observed in the editor."
+guesses = [
+  "Path > Remove Overlap in the editor applies the documented export rule to instructions on removed nodes and on intersections, and PostScript ends on removed nodes become numbers; running Remove Overlap on an instructed glyph in the reference app would settle it.",
+  "An outline edit other than Remove Overlap removes an instruction whose node is gone instead of moving it; deleting an instructed node in the reference app would settle it.",
+  "When upkeep removes one Stem instruction of a triple hint, the other two stay as plain Stem instructions; deleting a node of a triple hint in the reference app would settle it.",
+]
+observe = [
+  "T4: instruct X on a node at the crossing and on a normal node, export a static TTF with Remove Overlaps and read X's glyph program; note which point the crossing node's instruction ends up on.",
+  "T4: instruct a node inside the overlap of X and an intersection extra node, run Path > Remove Overlap, and note where each instruction ends up.",
+  "T4: delete a node that carries a Snap instruction and one that belongs to a triple hint, and note what happens to each instruction.",
+]
 
 [[behavior]]
 id = "hinting.tt.variable.extraNodeHintsIgnored"

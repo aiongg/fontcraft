@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1115 rows to check: 1551 guesses and 410 observe steps.**
+**1116 rows to check: 1556 guesses and 414 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,7 +48,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 39 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 3 |
-| **Later milestones (after M6)** | all | **646** |
+| **Later milestones (after M6)** | all | **647** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 39 |
 | Later milestones (after M6) | Edit View: text mode and preview | 14 |
 | Later milestones (after M6) | Components and anchors | 33 |
@@ -58,7 +58,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Font View | 13 |
 | Later milestones (after M6) | Font Info and features | 248 |
 | Later milestones (after M6) | Interpolation | 44 |
-| Later milestones (after M6) | Hinting | 67 |
+| Later milestones (after M6) | Hinting | 68 |
 | Later milestones (after M6) | Colour fonts | 44 |
 | Later milestones (after M6) | Files: open, import, export | 44 |
 | Later milestones (after M6) | Settings and the window | 12 |
@@ -1332,7 +1332,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (646)
+## Later milestones (after M6) (647)
 
 ### Edit View: drawing, guides, layers and the Palette (39)
 
@@ -2578,7 +2578,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `hoi.setControlPoints` (M13, inferred): Set Interpolation Control Points
   - Open (our design, not confirmed): Headless form of dragging a knob or handle: sets the intermediate point (one point), the two handles (two points) or the rotation centre (one point) of a node's interpolation curve.
 
-### Hinting (67)
+### Hinting (68)
 
 - [ ] `hinting.ps.standardStems.privateDictMapping` (behavior, M10, docs): At export the first horizontal stem becomes StdHW and the first vertical…
   - Guess: More than twelve stems in one direction: the export writes the first twelve in list order and warns, and hint.ps.validateFontHints reports it; an export from the reference app with thirteen stems would settle it.
@@ -2623,6 +2623,11 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `hinting.ps.manual.select` (behavior, M10, handbook): Clicking a hint's number badge selects the hint; Shift+click adds to or…
   - Guess: Tab after the last hint wraps to the first and Shift+Tab before the first wraps to the last; with several hints selected Tab moves on from the last selected one; trying it in the reference app would settle it.
   - Observe: T1: in n, select the last hint and press Tab; note whether the selection wraps to the first hint. Then select two hints and press Tab; note which hint is selected next.
+- [ ] `hinting.ps.manual.linkOnDrop` (behavior, M10, handbook): Dropping a hint marker on a node links that end of the…
+  - Guess: An edit that deletes the node a hint end is linked to turns that end into a number at the node's last position; deleting a linked node in the reference app would settle it.
+  - Guess: After an edit, a linked node is found again by index, then by place and on- or off-curve class within half a unit, then by index when its path keeps the same node classes; reversing a contour and changing its start point with linked hints in the reference app would settle whether links follow the node.
+  - Observe: T1: link a stem hint of I to two nodes, delete one of them, and note whether the hint keeps its position as a number, is deleted, or moves.
+  - Observe: T1: link a stem hint of O to two nodes, reverse the contour, then make another node first, and note whether the hint stays on the same nodes.
 - [ ] `hinting.ps.manual.ghostFromSingleNode` (behavior, M10, handbook): Control-click or right-click on exactly one node and choosing Add Horizontal Hint…
   - Guess: A ghost hint made from one node is a top ghost when the node lies in a top zone or nearer to a top zone than to a bottom zone, else a bottom ghost; doing it in the reference app on a node at the cap height and one at the baseline would settle it.
   - Observe: T1: in I, select one node at the cap height and choose Add Horizontal Hint, then do the same with one node on the baseline; note whether each new hint is a top or a bottom ghost hint.
@@ -2713,7 +2718,12 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: In horizontal mode Auto ignores zones and rounds to the nearest pixel edge, since zones are vertical; the reference app would settle it.
   - Observe: T3: in horizontal mode, Snap a node that lies vertically inside a zone, with the zone choice left at Auto; note whether the zone changes the instruction or its effect.
 - [ ] `hinting.tt.export.overlapRemovalMovesHints` (behavior, M10, handbook): When a static font is exported with Remove Overlaps, points inside overlaps…
+  - Guess: Path > Remove Overlap in the editor applies the documented export rule to instructions on removed nodes and on intersections, and PostScript ends on removed nodes become numbers; running Remove Overlap on an instructed glyph in the reference app would settle it.
+  - Guess: An outline edit other than Remove Overlap removes an instruction whose node is gone instead of moving it; deleting an instructed node in the reference app would settle it.
+  - Guess: When upkeep removes one Stem instruction of a triple hint, the other two stay as plain Stem instructions; deleting a node of a triple hint in the reference app would settle it.
   - Observe: T4: instruct X on a node at the crossing and on a normal node, export a static TTF with Remove Overlaps and read X's glyph program; note which point the crossing node's instruction ends up on.
+  - Observe: T4: instruct a node inside the overlap of X and an intersection extra node, run Path > Remove Overlap, and note where each instruction ends up.
+  - Observe: T4: delete a node that carries a Snap instruction and one that belongs to a triple hint, and note what happens to each instruction.
 - [ ] `hinting.tt.variable.extraNodeHintsIgnored` (behavior, M10, handbook): Variable fonts keep their overlaps, so intersection (extra) nodes do not exist…
   - Observe: T4: instruct X on a node at the crossing and on a normal node, export a variable TTF and read X's glyph program; note whether the instruction on the crossing node is dropped.
 - [ ] `hinting.tt.variable.deltasIgnored` (behavior, M10, handbook): Delta instructions are not written into variable fonts
