@@ -217,6 +217,28 @@ fn moving_a_contour_by_the_gap_between_its_nodes_keeps_every_link_on_its_node() 
     assert_eq!(tt_place(&s, tt(&s)[0].target), (200.0, 1400.0));
 }
 
+/// A drag previews each step from the interaction's snapshot; the upkeep runs on every preview
+/// and the commit leaves one undo step with the links of the last preview.
+#[test]
+fn an_interaction_keeps_the_links_of_its_last_preview_in_one_undo_step() {
+    let mut s = stem();
+    let (undo, before) = (s.doc().unwrap().history.undo.len(), layer(&s).info.hints.clone());
+    s.begin("Drag").unwrap();
+    s.preview("selection.move", &json!({"glyph": "I", "points": [[0, 0], [0, 1], [0, 2], [0, 3]], "dx": 0, "dy": 700})).unwrap();
+    assert_eq!(ps(&s)[0].edges(&layer(&s)).unwrap(), (700.0, 1400.0));
+    let out = s.preview("path.insertNode", &json!({"glyph": "I", "segment": [0, 1]})).unwrap();
+    assert!(out.get("hintUpkeep").is_none(), "nothing was unlinked or removed: {out}");
+    assert!(s.commit().unwrap());
+    let h = &ps(&s)[0];
+    assert_eq!((h.origin, h.other), (node(0, 0), Some(node(0, 4))));
+    assert_eq!(h.edges(&layer(&s)).unwrap(), (0.0, 700.0), "the move was replaced by the insertion");
+    assert_eq!(tt_place(&s, tt(&s)[0].target), (200.0, 700.0));
+    assert_eq!(s.doc().unwrap().history.undo.len(), undo + 1);
+    s.execute("edit.undo", &json!({})).unwrap();
+    assert_eq!(layer(&s).info.hints, before);
+    assert_eq!(layer(&s).shapes.len(), 1);
+}
+
 fn read_tree(dir: &std::path::Path, root: &std::path::Path, out: &mut fontcraft_io_glyphs::Files) {
     for e in std::fs::read_dir(dir).unwrap().flatten() {
         let p = e.path();

@@ -161,7 +161,9 @@ fn hint_upkeep(what: &str, old: &Arc<Font>, new: &Arc<Font>, report: &mut fontcr
 /// A command's result with what the hint upkeep did added as `hintUpkeep` (`removed`: one
 /// message per removed TrueType instruction; `unlinked`: PostScript ends turned into numbers;
 /// `moved`: TrueType points moved to a node Remove Overlap created). A `null` result becomes an
-/// object holding only the report; other results that are not objects stay as they are.
+/// object holding only the report. An array or scalar result is returned as it is and the report
+/// is dropped: wrapping it in an object would change the result type its callers parse, and the
+/// upkeep itself is already done and in the undo step.
 fn with_hint_upkeep(v: Value, upkeep: fontcraft_hinting::RemapReport) -> Value {
     if upkeep.is_empty() {
         return v;
