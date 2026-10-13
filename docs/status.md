@@ -2,11 +2,11 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-13, the first waves of M6 to M12, seven second-wave packages, all 22 first-wave packages of M13, and the builder packages M8.9, M8.7, M7.8, M6.10, M9.10, M9.4, M9.5, M9.9, M9.8b, M10.3, M10.14 and M11.5 (part 1), and M12.44, M12.17 and M13.2, M9.11, M9.12, M9.13, M10.17, M10.6 and M10.7 integrated and gated on `master`, with the gate on nextest and the automation file roots._
+_Updated: 2026-10-13, the first waves of M6 to M12, seven second-wave packages, all 22 first-wave packages of M13, and the builder packages M8.9, M8.7, M7.8, M6.10, M9.10, M9.4, M9.5, M9.9, M9.8b, M10.3, M10.14 and M11.5 (part 1), and M12.44, M12.17 and M13.2, M9.11, M9.12, M9.13, M10.17, M10.6, M10.7, M10.18 and M10.19, the shared atomic file writer X.suite1 and the review fixes X.fix25 integrated and gated on `master`, with the gate on nextest and the automation file roots._
 
 ## State of the tree
 
-- `cargo xtask ci` passes all eleven steps (3,015 tests pass, none fail, 36 ignored). The
+- `cargo xtask ci` passes all eleven steps (TESTCOUNT tests pass, none fail, 36 ignored). The
   test step runs on cargo nextest; a full gate on a warm build takes about 5 minutes.
   Built and run on Linux x86-64 with Rust 1.97.
 - `master` holds everything described here, merged and green; the latest commits are not pushed.
@@ -22,14 +22,16 @@ _Updated: 2026-10-13, the first waves of M6 to M12, seven second-wave packages, 
   (subset) and M13.2 (the plug-in module runtime), M9.11 and M9.12 (the reference's variable
   feature syntax, lowered and compiled), M9.13 (CFF2 variable fonts), M10.17 (the TrueType font
   programs), M10.6 and M10.7 (the touched-state model and 14 commands that edit TrueType
-  instructions), the test-layout change X.build1, the nextest gate X.build2, the fix passes that
-  followed (X.fix19 to X.fix24 among them), and the automation file roots.
-- 679 of the 960 inventory commands exist (`docs/parity.md`); M3's, M4's and M5's are all live,
-  M6 has 40 of 46, M7 66 of 66, M8 36 of 41, M9 5 of 48, M10 19 of 56, M11 37 of 41, M12 50 of
-  81, M13 63 of 180. Feature parity is about 26% (ROADMAP.md › Parity estimate). 1,741 guesses
-  on 1,125 rows are listed in `docs/guesses.md`; `docs/observe.md` lists 1,139 rows.
+  instructions), M10.18 and M10.19 (glyph programs compiled from those instructions and written
+  into TrueType exports), X.suite1 (atomic file writes through the Craft suite's `craft-atomic`),
+  the test-layout change X.build1, the nextest gate X.build2, the fix passes that followed
+  (X.fix19 to X.fix25 among them), and the automation file roots.
+- 680 of the 960 inventory commands exist (`docs/parity.md`); M3's, M4's and M5's are all live,
+  M6 has 40 of 46, M7 66 of 66, M8 36 of 41, M9 5 of 48, M10 20 of 56, M11 37 of 41, M12 50 of
+  81, M13 63 of 180. Feature parity is about 26% (ROADMAP.md › Parity estimate). 1,755 guesses
+  on 1,132 rows are listed in `docs/guesses.md`; `docs/observe.md` lists 1,146 rows.
 - Packages built (done of total, counted from commit subjects, M8.7b with M8.7): M6 16 of 20, M7
-  18 of 21, M8 16 of 25, M9 15 of 27 (M9.8b is a follow-up of M9.8 and not counted), M10 16 of 33, M11 7 of 21, M12 28 of 68, M13 25 of 62; 141
+  18 of 21, M8 16 of 25, M9 15 of 27 (M9.8b is a follow-up of M9.8 and not counted), M10 18 of 33, M11 7 of 21, M12 28 of 68, M13 25 of 62; 143
   of 277 in all.
 - Test layout: the gate runs the tests with cargo nextest (all test binaries in parallel,
   doctests apart). The command sweep is 16 tests (4 states times 4 chunks, chunked by a stable
@@ -84,7 +86,7 @@ _Updated: 2026-10-13, the first waves of M6 to M12, seven second-wave packages, 
   fitted rows, stem widths and fitted widths, family zones), a seven-function `fpgm` library
   (zone rounding and alignment, rounding, cvt delta, zone snap with overshoot suppression, stem
   with five rounding modes and the minimum distance, point delta) and a per-size `prep`; each
-  handbook behaviour is tested in skrifa's interpreter. Exports do not carry them yet (M10.19).
+  handbook behaviour is tested in skrifa's interpreter. M10.19 writes them into exports.
   The handbook's rounding-threshold example contradicts its stated default (0.09375 lifts
   6.45 px to 7, the example says 6); FontCraft follows the default, and a trial check is listed.
   14 commands edit instructions against `TouchedState`, which replays the touched points per
@@ -103,7 +105,32 @@ _Updated: 2026-10-13, the first waves of M6 to M12, seven second-wave packages, 
 - CFF exports carry stem hints, masks, flex and the source's manual PostScript hints (M10.14).
   fontTools decodes 43 exported fonts with 0 warnings; skrifa's PostScript hinter draws every
   glyph; the CFF oracle against fontmake has 0 different glyphs (1,838 same). Flex for
-  hand-hinted glyphs waits for M10.15. TrueType exports carry no instructions (M10.19).
+  hand-hinted glyphs waits for M10.15.
+- TrueType export carries instructions (M10.18, M10.19). `fontcraft_hinting::glyph_program`
+  compiles a layer's instructions plus the exported point map to `glyf` bytecode: Snap (zones,
+  named-zone distance, five rounding modes), Stem (Auto, named, No Stem), Shift and Interpolate
+  with rounding, Delta before IUP, triple hints keeping a pixel between stems, diagonals
+  preserved unless `TTFDontPreserveDiagonals`, Ignore Vertical Hints; `fpgm` has 10 functions,
+  and 14 behaviour tests run the programs in skrifa's interpreter in both directions. The point
+  map follows cu2qu, overlap removal and decomposition in one linear pass under one work budget
+  per glyph; an off-curve node next to a removed node is left unmapped with a warning. The font
+  gets the generated `cvt `, `fpgm` and `prep`, or the imported `cvt Table` and the `prep` and
+  `fpgm Table Assembly` parameters, `maxp` covering the analysed needs, and the `head` and
+  `gasp` flags. Static instances interpolate zones and stems by name and take the main master's
+  hints (TrueType and PostScript) at matching nodes. A glyph that fails to compile exports
+  unhinted with a warning. Variable fonts take the default master's programs, without deltas
+  or `cvar`; an instructed source built without glyph programs writes plain points.
+  `hint.tt.getPointIndexes` is live. skrifa runs every exported glyph of the instructed corpus
+  samples at 8 to 72 PPM in three intents with 0 errors; fontTools reads them without
+  warnings. Oracle baselines are unchanged (static against fontmake: 2,360 compared, 2,202 the
+  same; variable against fontc: 101/37/20). Left: `cvar`, the autohinter at export (M10.21),
+  drawing of point indexes, special layers' own instructions.
+- Atomic file writes (X.suite1) go through the Craft suite's `craft-atomic` library, taken from
+  craft-libs and pinned by git commit; `fontcraft_format::write_atomic` keeps its signature.
+  Native builds only: the browser build refuses to write. Saving over a read-only file is
+  refused and the original kept; the folder is flushed after the rename.
+  `docs/decisions/0008-shared-suite-libraries.md` lists which suite libraries FontCraft adopts
+  and when (`craft-quit`, `craft-settings`, `craft-print`, `craft-ui`; not `craft-cms`).
 - Paint attributes are typed in `.glyphs` versions 2 to 4 (M11.5 part 1). Writing version 3 and
   saving a UFO report what they cannot hold. All 23 corpus colour sources keep their colour keys.
 - The audit runner (M12.44) ran 3,676 times over 4 profiles and 919 corpus files with no crash;
@@ -146,19 +173,31 @@ linked file is checked against it, and a linked file outside the read root reads
 1. **The skeleton pass for waves 2 to 5**: fix the interfaces the later packages of each plan
    share, as M6.1a and M7.1 to M13.1 did, so they can be written in parallel. A skeleton file
    marks each placeholder with the package that fills it (`// M8.5`).
-2. **The builder packages**, one at a time in the main checkout: M10.18 (glyph programs), then
-   M10.19 (TrueType export), M10.15 (PostScript autohinting at export, flex for hand-hinted
-   glyphs), M11.5b (UFO full-colour layers as ufo2ft
-   `colorLayers`, JPEG and TIFF to PNG for UFO images), M12.18 and M12.19 (subset: layout,
-   variation and colour tables), and M13.3 to M13.6 (module commands, filters in export, checks
-   in the audit), then the rest each plan's § 6 lists. The requests the integrations left for them are below.
+2. **The builder packages**, one at a time in the main checkout: M10.15 (PostScript autohinting
+   at export, flex for hand-hinted glyphs), M10.21 (TrueType autohinter), M11.5b (UFO
+   full-colour layers as ufo2ft `colorLayers`, JPEG and TIFF to PNG for UFO images), M12.18 and
+   M12.19 (subset: layout, variation and colour tables), and M13.3 to M13.6 (module commands,
+   filters in export, checks in the audit), then the rest each plan's § 6 lists. The requests
+   the integrations left for them are below.
+   After them, the Craft suite's shared libraries (decision 0008), in this order:
+   - X.suite2: `craft-quit`, native macOS quit and window-close handling for the desktop app;
+     the save prompts stay FontCraft's.
+   - X.suite3: `craft-settings`, settings storage in `config.toml` with backup and recovery,
+     with a one-time import of FontCraft's existing JSON settings file; it pairs with the
+     settings window.
+   - Watch item: the suite's proposed shared control-port authentication (`craft-control`, an
+     open upstream proposal). Adopt it for the control channel once it exists.
+
+   `craft-print` comes with the PDF proof (M12.36) and `craft-ui` with M14. Pin each crate to a
+   git commit; bumping a pin is its own commit with the full gate.
 3. **The M13.15 base-choice follow-up**: among bases with identical outlines prefer the
    combining-mark form (`acutecomb` over `acute`), and never use a detected composite as a base;
    then rerun the recovery measure on Inter (target 95%). Also reduce the per-edit alignment
    pass (`metrics::realign`) below the 2 ms hook target.
    Hint follow-up: upkeep on background layers and for corner and cap hints.
-   CFF2 follow-ups: hints, subroutines and specialisation. TrueType follow-up: the variation of
-   composites with intermediate layers.
+   CFF2 follow-ups: hints, subroutines and specialisation. TrueType follow-ups: the variation of
+   composites with intermediate layers; `cvar` and instruction deltas in variable fonts, drawing
+   of point indexes, special layers' own instructions (M10.19).
    Audit follow-ups: a per-glyph hash cache, several `checkOutlines` and `compareFamily`
    options, the `BASE`, ligature and accent width checks, `summary.errors`, source-field names
    beyond the common `OS/2`, `hhea`, `head`, `post` and `name` fields, and a look at the outline
@@ -234,7 +273,7 @@ The first waves of M9 to M12, as built (ROADMAP.md › What is real: the first w
 | Milestone | Built | Not yet |
 |---|---|---|
 | M9 | M9.2, M9.3, M9.4, M9.5, M9.6, M9.7, M9.8, M9.8b, M9.9, M9.10, M9.11, M9.12, M9.13, M9.14, M9.19: axes and mappings, glyph sources and compatibility, the variable tables and `STAT`, feature variations, opening variable fonts, the compare commands, static instances between and beyond masters, the variable TrueType compile, variable kerning and marks, alternate layers in variable fonts, the oracle harness for variable fonts, variable feature syntax lowered and compiled (M9.11, M9.12), variable fonts with CFF2 outlines (M9.13) | hints, subroutines and specialisation in CFF2, variable values in table blocks, designspace instance info and `<rules>`, the axis, instance and master commands and the UI |
-| M10 | M10.2, M10.3, M10.6, M10.7, M10.8 to M10.14, M10.16, M10.17, M10.20, M10.23: typed hints and settings, the otfautohint port (agrees with the AFDKO 5.0.1 oracle scripts; each master gets an overlap-free outline), the TrueType assembler, `gasp`, hinted previews, node-reference upkeep, CFF hints at export, the TrueType font programs (`cvt `, `fpgm`, `prep`), the touched-state model and 14 instruction-editing commands | PostScript autohinting at export and flex for hand-hinted glyphs (M10.15), the glyph programs (M10.18), TrueType instructions in exports (M10.19), M10.21; upkeep on background layers and for corner and cap hints |
+| M10 | M10.2, M10.3, M10.6, M10.7, M10.8 to M10.14, M10.16, M10.17, M10.20, M10.23: typed hints and settings, the otfautohint port (agrees with the AFDKO 5.0.1 oracle scripts; each master gets an overlap-free outline), the TrueType assembler, `gasp`, hinted previews, node-reference upkeep, CFF hints at export, the TrueType font programs (`cvt `, `fpgm`, `prep`), the touched-state model and 14 instruction-editing commands; M10.18 and M10.19: glyph programs compiled from manual instructions and written into static and variable TrueType exports | PostScript autohinting at export and flex for hand-hinted glyphs (M10.15), the TrueType autohinter (M10.21), `cvar`; upkeep on background layers and for corner and cap hints |
 | M11 | M11.2 to M11.5 (part 1), M11.9, M11.12: palettes, colour layers, path attributes, typed paint attributes in `.glyphs` files, the `SVG ` table at export, images | M11.5b (UFO colour layers, image conversion), `COLR`, `CPAL`, `sbix`, `CBDT` |
 | M12 | M12.2, 3, 4, 11, 12, 15, 16, 17, 27, 28, 31, 33, 35, 37, 43, 44, 45, 46, 48, 50, 53 to 60: the table tools, 157 checks, profiles and report export, the audit runner over sources, compiled fonts and families (`fontcraft-cli check`), subset by pyftsubset's options | subset's layout, variation and colour tables (M12.18, M12.19) and CFF2, the audit runner's follow-ups above; the other corpus measures |
 
@@ -251,7 +290,11 @@ Requests the integrations left for the builder packages:
 | M9.14 | kerning and mark variations are not read from variable fonts |
 | M9.4, M9.5 | a designspace instance takes its names, `usWeightClass` and font info from `<instance>`; designspace `<rules>`; vertical phantom points and `VVAR`; `OVERLAP_COMPOUND`; the avar version 2 build (M12.33) |
 | M10.2 | the Alignment Zones master parameter is not read |
-| M10.19 | the hinted-preview measures wait for this package |
+| M10.19 | the hinted-preview measures of the M10 plan (§ 5) can run against instructed exports; they have not been run. Left in M10.19: `cvar` and deltas for variable fonts, `showPointIndexes` drawing, special layers' own instructions |
+| X.suite2, X.suite3 | `craft-quit` (native macOS quit and window-close handling; the save prompts stay ours) and `craft-settings` (`config.toml` with backup and recovery, one-time import of the JSON settings file; pairs with the settings window), after the builder packages above (decision 0008) |
+| craft-control | watch the suite's open proposal for shared control-port authentication; adopt it for the control channel once it exists (decision 0008) |
+| M12.36 | the PDF proof prints through the suite's `craft-print` (decision 0008) |
+| M14 | adopt the suite's `craft-ui` (docking, tabs, icon buttons, widget-state theme; decision 0008) |
 | M10.10, M10.16 | the counter-hint summary against LanguageGroup; `FunctionInfo` consumes and uncertain fields for M10.17 and M10.22 |
 | M11.5b | palette conversion between the version 3 and 4 forms on version change; the UFO palette reader cannot read the version 4 dictionary; UFO full-colour layers as ufo2ft `colorLayers`; JPEG and TIFF to PNG conversion for UFO images |
 | M11.8, M11.10 | embedded image and SVG files must sniff as the format their consumer expects (a hostile document's paths can point at any file) |
@@ -423,7 +466,7 @@ atomic failure; WebAssembly plug-ins and no Python; no compiled fonts in the rep
   allow-listed causes: bracket and colour glyphs, the glyph database, smart components); overlaps
   are removed, strokes expanded and masks applied at export; `gasp`, `GDEF`, the mark features,
   compiled feature code and the `SVG ` table are written. Variable TrueType fonts match fontc's in 101 of
-  158 sources and fontmake's in 104; variable CFF2 fonts match fontmake's in 104 of 158. No CFF2 hints, subroutines or specialisation, TrueType instructions, flex for hand-hinted glyphs or CFF subroutines yet
+  158 sources and fontmake's in 104; variable CFF2 fonts match fontmake's in 104 of 158. TrueType exports carry the glyph programs of manual instructions (no `cvar`, no autohinter). No CFF2 hints, subroutines or specialisation, flex for hand-hinted glyphs or CFF subroutines yet
   (`docs/plans/M2.md` § 5, `docs/plans/M3.md` § 5, `docs/spec/40-compile.md` § 4).
 - **Most M10 to M12 corpus measures have not been run.** The audit runner (M12.44) and subset
   (M12.17) have; the other packages were tested against small outputs of the oracles, and each
@@ -950,3 +993,41 @@ Append one terse entry per session: what landed, numbers, what is still open.
   info from `<instance>`, designspace `<rules>`, M13.15, M8.11, token expansion in
   `plan::postscript_name` and `plan::file_stem`, corner-component selection; the skeleton pass
   for waves 2 to 5.
+- **2026-10-13, batch 11: M10.18, M10.19, X.suite1 and X.fix25.** Integrated: glyph programs
+  (`fontcraft_hinting::glyph_program`) that compile a layer's TrueType instructions plus the
+  exported point map to `glyf` bytecode (Snap through zones, named-zone distance and five
+  rounding modes; Stem with Auto, named and No Stem; Shift and Interpolate with rounding; Delta
+  before IUP; triple hints keeping a pixel between stems; diagonals preserved unless
+  `TTFDontPreserveDiagonals`; Ignore Vertical Hints; a 10-function `fpgm`; 14 behaviour tests in
+  skrifa's interpreter in both directions). TrueType export (M10.19): manual instructions compile
+  against a point map that follows cu2qu, overlap removal and decomposition, the font gets the
+  generated `cvt `, `fpgm` and `prep` or the imported `cvt Table` and `prep` and `fpgm Table
+  Assembly` parameters, `maxp` covers the analysed needs, `head` and `gasp` flags are set,
+  static instances interpolate zones and stems by name and take the main master's hints, a
+  glyph that fails to compile exports unhinted with a warning, and variable fonts take the
+  default master's programs without deltas or `cvar`. `hint.tt.getPointIndexes` is live. skrifa
+  runs every exported glyph of the instructed corpus samples at 8 to 72 PPM in three intents
+  with 0 errors; fontTools reads them without warnings. X.suite1: `write_atomic` goes through
+  the Craft suite's `craft-atomic` (craft-libs, pinned by git commit; native builds only); a
+  read-only file is refused and kept; the folder is flushed after the rename; decision 0008
+  records which suite libraries FontCraft adopts and when. X.fix25 (review fixes): a linear point
+  map, unhinted variable exports of instructed sources write plain points, off-curve nodes next
+  to removed nodes are left unmapped with a warning, the PostScript instance-hint rule is
+  documented and tested with a CFF instance test. Round trips (`.glyphs` 122/1/118/4,
+  `.glyphspackage` 22/0/7/0, UFO 125/2/13, designspace 59/53), the static oracle summary
+  against fontmake (2,360 compared, 2,202 the same), the variable summary against fontc
+  (101/37/20) and the instances (169/41/0/24) are unchanged. All eleven gate steps pass;
+  TESTCOUNT tests pass, none fail, 36 ignored; 680 of 960 commands live; 1,755 guesses on 1,132
+  rows; 1,146 observe rows. Packages built: 143 of 277 (M6 16/20, M7 18/21, M8 16/25, M9 15/27,
+  M10 18/33, M11 7/21, M12 28/68, M13 25/62). Open: the builder packages M10.15, M10.21,
+  M11.5b, M12.18, M12.19 and M13.3 to M13.6, then X.suite2 (`craft-quit`) and X.suite3
+  (`craft-settings`), with `craft-print` at M12.36, `craft-ui` at M14 and a watch on the suite's
+  proposed `craft-control`; the follow-ups `cvar` and instruction deltas in variable fonts,
+  drawing of point indexes, special layers' own instructions, hints, subroutines and
+  specialisation in CFF2, the variation of TrueType composites with intermediate layers,
+  variable values in table blocks, stale kept-layout extras, the audit runner (hash cache,
+  options, width checks, `summary.errors`, source-field names, the outline warnings on decoded
+  fonts) and subset (CFF2, subroutine pruning, `--desubroutinize`, sources), hint upkeep on
+  background layers and for corner and cap hints, designspace instance info from `<instance>`,
+  designspace `<rules>`, M13.15, M8.11, token expansion in `plan::postscript_name` and
+  `plan::file_stem`, corner-component selection; the skeleton pass for waves 2 to 5.
