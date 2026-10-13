@@ -285,6 +285,9 @@ pub(super) fn resolved(path: &Path) -> PathBuf {
 /// removed again, as are the output folders it created, and the error says so and names the
 /// files it had replaced.
 pub(super) fn write_all(files: &[(&Path, &[u8])], req: &OutputRequest) -> Result<()> {
+    for &(target, _) in files {
+        file_io::check_write(target)?;
+    }
     let created = file_io::create_output_dir(req)?;
     let mut written: Vec<(&Path, bool)> = Vec::with_capacity(files.len());
     for &(target, bytes) in files {

@@ -228,3 +228,49 @@ fn a_relative_image_path_starts_from_the_document_folder_under_roots() {
     });
     let _ = std::fs::remove_dir_all(base);
 }
+
+/// A one-glyph font exported to `path`, written without roots in force.
+fn export_ttf(path: &std::path::Path) {
+    let mut s = Session::with_document();
+    run(&mut s, "path.addPath", json!({"glyph": "A", "nodes": [{"x": 0, "y": 0}, {"x": 500, "y": 0}, {"x": 500, "y": 700}]}));
+    run(&mut s, "file.exportStatic", json!({"destination": path, "timestamp": 0}));
+}
+
+#[test]
+fn file_access_subset_output_beside_an_input_in_the_read_root_is_refused() {
+    let (base, roots) = folders("subset");
+    let ttf = base.join("in/Font.ttf");
+    export_ttf(&ttf);
+    let original = std::fs::read(&ttf).unwrap();
+    let mut s = Session::new();
+    confine(Some(&roots), || {
+        let e = refused(&mut s, "font.subset", json!({"font": ttf, "keep": {"text": "A"}}));
+        assert!(e.contains("outside the write root"), "{e}");
+        assert!(!base.join("in/Font.subset.ttf").exists(), "a refused command writes nothing");
+        let e = refused(&mut s, "font.subset", json!({"font": ttf, "keep": {"text": "A"}, "inPlace": true}));
+        assert!(e.contains("outside the write root"), "{e}");
+        assert_eq!(std::fs::read(&ttf).unwrap(), original, "the input stays");
+        run(&mut s, "font.subset", json!({"font": ttf, "keep": {"text": "A"}, "outputDir": base.join("out")}));
+        assert!(base.join("out/Font.subset.ttf").exists());
+    });
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+#[cfg(unix)]
+#[test]
+fn file_access_audit_folder_link_out_of_the_read_root_is_refused() {
+    let (base, roots) = folders("audit-link");
+    let fonts = base.join("in/fonts");
+    std::fs::create_dir_all(&fonts).unwrap();
+    export_ttf(&fonts.join("Inside.ttf"));
+    export_ttf(&base.join("outside/Secret.ttf"));
+    let mut s = Session::new();
+    confine(Some(&roots), || {
+        let r = run(&mut s, "audit.run", json!({"target": fonts, "scope": ["binary"]}));
+        assert_eq!(r["target"]["fonts"].as_array().unwrap().len(), 1);
+        std::os::unix::fs::symlink(base.join("outside/Secret.ttf"), fonts.join("Secret.ttf")).unwrap();
+        let e = refused(&mut s, "audit.run", json!({"target": fonts, "scope": ["binary"]}));
+        assert!(e.contains("outside the read root") && e.contains("Secret.ttf"), "{e}");
+    });
+    let _ = std::fs::remove_dir_all(&base);
+}

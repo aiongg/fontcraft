@@ -168,9 +168,12 @@ pub fn output_path(input: &Path, req: &OutputRequest, suffix: &str, extension: O
 
 /// Writes `bytes` to `path` atomically, creating `outputDir` when it is missing. With
 /// `noClobber`, an existing file is refused and left alone. When the write fails, the folders
-/// this call created are removed again.
+/// this call created are removed again. Under automation roots `path` must lie in the write
+/// root: a derived output beside the input, or the input itself with `inPlace`, is not a
+/// parameter the command checks before it runs.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn write_output(path: &Path, bytes: &[u8], req: &OutputRequest) -> Result<()> {
+    check_write(path)?;
     if req.no_clobber && !req.in_place && path.exists() {
         return Err(EngineError::Io(format!("{} exists and noClobber is set", path.display())));
     }
@@ -191,6 +194,7 @@ pub fn create_output_dir(req: &OutputRequest) -> Result<Vec<PathBuf>> {
     if req.in_place || dir.as_os_str().is_empty() {
         return Ok(Vec::new());
     }
+    check_write(dir)?;
     let missing: Vec<PathBuf> = dir.ancestors().take_while(|a| !a.as_os_str().is_empty() && !a.exists()).map(Path::to_path_buf).collect();
     if let Err(e) = std::fs::create_dir_all(dir) {
         remove_created(&missing);
@@ -208,6 +212,17 @@ pub fn remove_created(dirs: &[PathBuf]) {
             break;
         }
     }
+}
+
+/// [`crate::file_access::check_write`] as an engine error.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn check_write(path: &Path) -> Result<()> {
+    crate::file_access::check_write(path).map_err(|e| EngineError::Io(format!("refusing to write {}: {e}", path.display())))
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn check_write(_: &Path) -> Result<()> {
+    Err(refused())
 }
 
 #[cfg(target_arch = "wasm32")]
