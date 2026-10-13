@@ -861,3 +861,30 @@ fn one_line_dictionaries_are_read_into_the_model_and_keep_their_layout() {
     Arc::make_mut(&mut edited.numbers)[0].name = "space".into();
     assert!(write(&edited).unwrap().contains("numbers = (\n{\nname = space;\n}\n);"));
 }
+
+#[test]
+fn a_large_one_line_dictionary_is_read_and_written_in_linear_time() {
+    // Matching entries by key, one search per entry, was quadratic in the dictionary's size.
+    let weights = (0..200_000).map(|i| format!("m{i} = 1;")).collect::<Vec<_>>().join(" ");
+    let text = V3.replace("metrics = (", &format!("instances = (\n{{\ninstanceInterpolations = {{{weights}}};\nname = Big;\n}}\n);\nmetrics = ("));
+    let started = std::time::Instant::now();
+    let font = read(&text).unwrap();
+    assert_eq!(font.instances[0].interpolation.len(), 200_000);
+    let written = write(&font).unwrap();
+    assert!(written == text, "the large dictionary was not written back as read");
+    assert!(started.elapsed() < std::time::Duration::from_secs(20), "{:?}", started.elapsed());
+}
+
+#[test]
+fn a_value_kept_for_its_layout_is_left_out_once_the_field_changes() {
+    let text = V3.replace("unitsPerEm = 1000;", "numbers = ({name = gap;});\nunitsPerEm = 1000;");
+    let mut font = read(&text).unwrap();
+    Arc::make_mut(&mut font.numbers)[0].name = "space".into();
+    let written = write(&font).unwrap();
+    assert!(written.contains("numbers = (\n{\nname = space;\n}\n);") && !written.contains("gap") && !written.contains(LAYOUT_KEY), "{written}");
+    // Written in another version, the kept value still matches while the field gives it.
+    let mut font = read(&text).unwrap();
+    font.source.glyphs_version = Some(4);
+    let v4 = write(&font).unwrap();
+    assert!(v4.contains("numbers = ({name = gap;});"), "{v4}");
+}

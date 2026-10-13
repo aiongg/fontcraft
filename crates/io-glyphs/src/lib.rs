@@ -16,6 +16,7 @@
 //! or spiral nodes, paths whose node list does not make an outline) are kept as [`Shape::Raw`].
 #![forbid(unsafe_code)]
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use fontcraft_model::{
@@ -174,17 +175,32 @@ fn into_extra(d: Dict) -> Extra {
 /// the value as read while the field still gives it.
 pub const LAYOUT_KEY: &str = "com.fontcraft.glyphsLayout.";
 
+fn text_in(v: &Value, dialect: Dialect) -> String {
+    let mut out = String::new();
+    openstep::write_value(&mut out, v, dialect);
+    out
+}
+
 /// Keeps `source`, the value read under `key`, for its layout ([`LAYOUT_KEY`]).
 pub(crate) fn keep_layout(d: &mut Dict, key: &str, source: Value) {
     d.entries.push((format!("{LAYOUT_KEY}{key}").as_str().into(), source));
 }
 
-/// `written` with the layout of `source` wherever the two have the same shape: dictionaries
-/// matched by key, lists by position.
+/// `written` with the layout of `source` wherever the two have the same shape: dictionary
+/// entries and list items matched by position (an entry whose key differs keeps its own
+/// layout, so the texts differ anyway).
 pub(crate) fn relaid(written: &Value, source: &Value) -> Value {
     match (written, source) {
         (Value::Dict(w), Value::Dict(s)) => {
-            let entries = w.entries.iter().map(|(k, v)| (k.clone(), s.get(k.as_str()).map_or_else(|| v.clone(), |sv| relaid(v, sv)))).collect();
+            let entries = w
+                .entries
+                .iter()
+                .enumerate()
+                .map(|(i, (k, v))| {
+                    let same_key = s.entries.get(i).filter(|(sk, _)| sk.as_str() == k.as_str());
+                    (k.clone(), same_key.map_or_else(|| v.clone(), |(_, sv)| relaid(v, sv)))
+                })
+                .collect();
             Value::Dict(Dict { entries, layout: s.layout, spacing: w.spacing.clone() })
         }
         (Value::Array(w), Value::Array(s)) => {
@@ -958,14 +974,23 @@ fn pair(a: f64, b: f64, at: &str) -> Result<Value> {
 
 /// The fields' entries plus the extra entries of this family, keys sorted byte-wise. A field
 /// wins over an extra entry with the same key.
+///
+/// A value kept for its layout ([`LAYOUT_KEY`]) replaces its field's value while the two give
+/// the same text in every dialect, so whichever version is written; once the field is edited
+/// the kept value no longer matches and is left out, and the writer's layout is used.
 fn finish(mut entries: Vec<(Str, Value)>, extra: &Extra) -> Dict {
-    if extra.iter().any(|e| e.key.as_str().starts_with(LAYOUT_KEY)) {
+    let kept: HashMap<&str, &Value> = extra
+        .iter()
+        .filter(|e| matches!(e.family, Family::Native | Family::Glyphs))
+        .filter_map(|e| e.key.as_str().strip_prefix(LAYOUT_KEY).map(|k| (k, &e.value)))
+        .collect();
+    if !kept.is_empty() {
         for (k, v) in &mut entries {
-            let kept = format!("{LAYOUT_KEY}{}", k.as_str());
-            if let Some(source) = extra.get(Family::Native, &kept).or_else(|| extra.get(Family::Glyphs, &kept))
-                && design::same_text(&relaid(v, source), source)
-            {
-                *v = source.clone();
+            if let Some(source) = kept.get(k.as_str()) {
+                let relaid = relaid(v, source);
+                if [Dialect::Glyphs2, Dialect::Glyphs3, Dialect::Glyphs4].into_iter().all(|d| text_in(&relaid, d) == text_in(source, d)) {
+                    *v = (*source).clone();
+                }
             }
         }
     }
