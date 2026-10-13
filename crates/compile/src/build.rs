@@ -331,6 +331,43 @@ fn postscript(input: &CffInput, builder: &mut FontBuilder, warnings: &mut Vec<St
     Ok((boxes, maxp))
 }
 
+/// The `CFF2` table of a variable font, with the boxes and `maxp` (version 0.5) of its outlines
+/// at the origin, rounded as [`postscript`] rounds them.
+fn cff2_table(built: &fontcraft_cff::cff2::Cff2Built, glyphs: usize, builder: &mut FontBuilder) -> Result<(Boxes, Maxp), CompileError> {
+    let clamp = |v: i64| i16::try_from(v.clamp(i64::from(i16::MIN), i64::from(i16::MAX))).unwrap_or(0);
+    let bbox = |[x_min, y_min, x_max, y_max]: [i64; 4]| Bbox { x_min: clamp(x_min), y_min: clamp(y_min), x_max: clamp(x_max), y_max: clamp(y_max) };
+    let union = built.glyph_bounds.iter().flatten().fold(None, |acc: Option<fontcraft_cff::Bounds>, b| {
+        Some(match acc {
+            None => *b,
+            Some(a) => fontcraft_cff::Bounds {
+                x_min: a.x_min.min(b.x_min),
+                y_min: a.y_min.min(b.y_min),
+                x_max: a.x_max.max(b.x_max),
+                y_max: a.y_max.max(b.y_max),
+            },
+        })
+    });
+    let boxes = Boxes {
+        glyphs: built.glyph_bounds.iter().map(|b| b.map(|b| bbox(b.round_with_tolerance(cff::ROUND_TOLERANCE)))).collect(),
+        extents: built
+            .glyph_bounds
+            .iter()
+            .map(|b| {
+                b.map(|b| {
+                    let [x_min, y_min, x_max, y_max] = b.round_out();
+                    let span = |a: i64, b: i64| i32::try_from(b.saturating_sub(a)).unwrap_or(i32::MAX);
+                    (span(x_min, x_max), span(y_min, y_max))
+                })
+            })
+            .collect(),
+        font: union.map_or(Bbox::default(), |u| bbox(u.round_out())),
+        loc_format: 0,
+    };
+    let maxp = Maxp { num_glyphs: u16::try_from(glyphs).map_err(|_| CompileError::TooManyGlyphs(glyphs))?, ..Default::default() };
+    builder.add_raw(Tag::new(b"CFF2"), built.table.clone());
+    Ok((boxes, maxp))
+}
+
 /// What [`postscript`] reads.
 struct CffInput<'a> {
     source: Option<&'a fontcraft_model::Font>,
@@ -378,10 +415,13 @@ pub fn assemble(
     let names = if flavour == Flavour::Cff || order.len() <= MAX_POST_NAMES { crate::names::final_names(font, order, warnings) } else { Vec::new() };
     let (boxes, maxp) = match flavour {
         Flavour::TrueType => truetype(order, outlines, &mut builder)?,
-        Flavour::Cff => {
-            let input = CffInput { source, font, info: &info, order, outlines, names: &names, synthesised_notdef };
-            postscript(&input, &mut builder, warnings)?
-        }
+        Flavour::Cff => match &extra.cff2 {
+            Some(built) => cff2_table(built, order.len(), &mut builder)?,
+            None => {
+                let input = CffInput { source, font, info: &info, order, outlines, names: &names, synthesised_notdef };
+                postscript(&input, &mut builder, warnings)?
+            }
+        },
     };
 
     // Horizontal metrics, from the glyphs as written.
@@ -460,7 +500,8 @@ pub fn assemble(
 
     // Glyph names: in `post` 2.0 for TrueType when there are few enough; CFF keeps them in its
     // charset and has `post` 3.0 (`compile.postFormat`).
-    let mut post = if flavour == Flavour::Cff {
+    // A CFF2 table stores no names, so a CFF2 font keeps them in `post` 2.0 as fontmake does.
+    let mut post = if flavour == Flavour::Cff && extra.cff2.is_none() {
         Post { version: Version16Dot16::VERSION_3_0, ..Default::default() }
     } else if order.len() > MAX_POST_NAMES {
         warnings.push(format!("the font has more than {MAX_POST_NAMES} glyphs, so glyph names were left out of it"));

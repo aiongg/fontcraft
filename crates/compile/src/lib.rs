@@ -423,6 +423,8 @@ pub fn compile_resolved_from(font: &Font, resolved: Resolved, flavour: Flavour, 
 pub(crate) struct Extra {
     pub tables: Vec<(Tag, Vec<u8>)>,
     pub names: Vec<(u16, String)>,
+    /// The `CFF2` table of a CFF2 variable font, which replaces the static `CFF ` table.
+    pub cff2: Option<fontcraft_cff::cff2::Cff2Built>,
 }
 
 /// The outline stage of a variable compile: given the origin's final glyphs, the outlines to

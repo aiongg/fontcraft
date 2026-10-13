@@ -358,7 +358,10 @@ milestone = "M9"
 summary = "Variable font with cubic outlines stored as CFF2 blends. The reference app exports variable fonts only with TrueType outlines, so this follows the AFDKO and fontmake tool chains instead and is offered as an extra flavour."
 ref = "OpenType specification › CFF2; AFDKO buildcff2vf; fontmake variable-cff2 output"
 status = "docs"
-notes = "Built in M9 (M9.13) and offered from the command line and `file.exportVariable {flavour: cff2}` only; the Export dialog's Variable tab stays TrueType, as the reference app offers (docs/plans/M9.md § 7, question 8 (a), decided by the orchestrator on the owner's behalf)."
+notes = "Built in M9.13 (`fontcraft_compile::var::compile_variable` with `VarFlavour::Cff2`, written by `fontcraft_cff::cff2::write_cff2`) and offered from the command line (`compile --variable --format otf`, or `--format variable-cff2`) and `file.exportVariable {outlines: cff2}` only; the Export dialog's Variable tab stays TrueType, as the reference app offers (docs/plans/M9.md § 7, question 8 (a), decided by the orchestrator on the owner's behalf). Checked with `oracle --corpus --variable --format otf` against fontmake -o variable-cff2 (docs/spec/40-compile.md § 4a)."
+guesses = [
+  "Manual PostScript hints are left out of a CFF2 font, with a warning, where fontmake would write blended stems; comparing the hinted output of the two would settle whether blended hints are worth writing.",
+]
 
 [[format]]
 id = "ttc.export"

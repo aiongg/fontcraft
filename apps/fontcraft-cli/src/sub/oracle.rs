@@ -24,7 +24,8 @@ const USAGE: &str = "\
       --variable compares the variable fonts of sources with two masters or more (fontc or
       fontmake): outlines, advances, MVAR, GSUB feature variations, GPOS kerning and marks at the
       masters, virtual masters, instances and midpoints between masters; fvar, avar and STAT as
-      structures. --instances compares each exported static instance with fontmake's (-i) by the
+      structures; with --format otf, CFF2 variable fonts against fontmake's -o variable-cff2.
+      --instances compares each exported static instance with fontmake's (-i) by the
       static comparison. In both, a font FontCraft does not build yet counts as not built and
       does not set the exit status.
 ";
@@ -75,8 +76,11 @@ fn oracle(args: &[String]) -> Outcome {
     if variable && instances {
         return Err(usage("--variable and --instances are separate runs; give one"));
     }
-    if (variable || instances) && flavour == Some(Flavour::Cff) {
-        return Err(usage("--variable and --instances compare TrueType fonts; leave out --format otf"));
+    if instances && flavour == Some(Flavour::Cff) {
+        return Err(usage("--instances compares TrueType fonts; leave out --format otf"));
+    }
+    if variable && flavour == Some(Flavour::Cff) && against == Some(Oracle::Fontc) {
+        return Err(usage("fontc builds no CFF2 font; --variable --format otf compares with fontmake"));
     }
     let flavour = flavour.unwrap_or(Flavour::TrueType);
     let against = against.unwrap_or(if flavour == Flavour::Cff || instances { Oracle::Fontmake } else { Oracle::Fontc });
@@ -235,7 +239,10 @@ mod varrun {
     fn variable_font(font: &Font, setting: Option<usize>, path: &Path, settings: &Settings, warnings: &[String]) -> Result<Ours, OursError> {
         guarded(|| {
             let hint = Hint { family: font.family_name.clone(), style: String::new() };
-            match compile::var::compile_variable(font, setting, &options(path, settings, false), &compile::var::VariableOptions::default()) {
+            let flavour =
+                if settings.flavour == fontcraft_oracle::Flavour::Cff { compile::var::VarFlavour::Cff2 } else { compile::var::VarFlavour::TrueType };
+            let var_options = compile::var::VariableOptions { flavour, ..Default::default() };
+            match compile::var::compile_variable(font, setting, &options(path, settings, false), &var_options) {
                 Ok(v) => {
                     let mut all = warnings.to_vec();
                     all.extend(v.compiled.warnings);

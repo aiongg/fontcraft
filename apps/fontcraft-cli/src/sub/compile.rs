@@ -13,7 +13,7 @@ const USAGE: &str = "\
                         [-o FILE | --output-dir DIR] [--instances[=NAME,...]] [--masters-as-instances]
                         [--keep-overlaps] [--keep-direction] [--conversion-error EM]
                         [--timestamp SECS|now] [--plan]
-  fontcraft-cli compile SOURCE... --variable [--settings NAME,...] [--container plain|woff|woff2]...
+  fontcraft-cli compile SOURCE... --variable [--format ttf|otf] [--settings NAME,...] [--container plain|woff|woff2]...
                         [-o FILE | --output-dir DIR] [--timestamp SECS|now]
       Compile each SOURCE to static fonts: every exportable instance (or the named ones; a font
       without instances builds its first master), plus each master with --masters-as-instances,
@@ -24,8 +24,9 @@ const USAGE: &str = "\
       given. --plan prints what would be built, without building.
       --variable builds variable fonts instead: one per variable font setting (or the settings
       --settings names), or one for the whole designspace when the source has none, with
-      TrueType outlines; files are named by the setting's file name. `--format variable` is the
-      same as --variable.
+      TrueType outlines, or CFF2 outlines with --format otf; files are named by the setting's file
+      name. `--format variable` is the same as --variable, `--format variable-cff2` the same as
+      --variable --format otf.
       One JSON line per SOURCE.
 ";
 
@@ -118,6 +119,23 @@ fn compile(args: &[String]) -> Outcome {
         formats.retain(|f| f != "variable");
         variable = true;
     }
+    let mut cff2 = false;
+    if formats.iter().any(|f| f == "variable-cff2") {
+        formats.retain(|f| f != "variable-cff2");
+        variable = true;
+        cff2 = true;
+    }
+    if variable {
+        match formats.as_slice() {
+            [] => {}
+            [f] if f == "ttf" => formats.clear(),
+            [f] if f == "otf" => {
+                formats.clear();
+                cff2 = true;
+            }
+            _ => return Err(usage("--variable takes one --format: ttf (TrueType outlines) or otf (CFF2 outlines)")),
+        }
+    }
     if settings.is_some() && !variable {
         return Err(usage("--settings goes with --variable"));
     }
@@ -128,9 +146,12 @@ fn compile(args: &[String]) -> Outcome {
             || params.contains_key("instances")
             || params.contains_key("mastersAsInstances")
         {
-            return Err(usage("--variable takes only --settings, --container, -o, --output-dir and --timestamp"));
+            return Err(usage("--variable takes only --format, --settings, --container, -o, --output-dir and --timestamp"));
         }
         params.remove("formats");
+        if cff2 {
+            params.insert("outlines".into(), json!("cff2"));
+        }
         if let Some(names) = settings {
             params.insert("settings".into(), json!(names));
         }

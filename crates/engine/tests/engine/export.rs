@@ -553,6 +553,16 @@ fn export_variable_writes_one_variable_font_with_the_masters_as_its_extremes() {
     let gid = font.charmap().map('A').unwrap();
     let advance = |w: f32| font.glyph_metrics(skrifa::instance::Size::unscaled(), &font.axes().location([("wght", w)])).advance_width(gid);
     assert_eq!((advance(400.0), advance(700.0)), (Some(600.0), Some(700.0)));
+    // CFF2 outlines go into an .otf file with the same advances; a .ttf path is refused.
+    let r = run(&mut s, "file.exportVariable", json!({ "destination": out, "outlines": "cff2", "timestamp": 0 }));
+    assert_eq!(r["fonts"][0]["files"][0]["name"], "TestSansVF.otf", "{r}");
+    let bytes = std::fs::read(out.join("TestSansVF.otf")).unwrap();
+    let cff2 = skrifa::FontRef::new(&bytes).unwrap();
+    assert!(skrifa::raw::TableProvider::cff2(&cff2).is_ok());
+    let advance = |w: f32| cff2.glyph_metrics(skrifa::instance::Size::unscaled(), &cff2.axes().location([("wght", w)])).advance_width(gid);
+    assert_eq!((advance(400.0), advance(700.0)), (Some(600.0), Some(700.0)));
+    let e = s.execute("file.exportVariable", &json!({ "destination": dir.join("x.ttf"), "outlines": "cff2" })).unwrap_err().to_string();
+    assert!(e.contains(".otf") && !dir.join("x.ttf").exists(), "{e}");
     // A named setting that does not exist is refused; nothing more is written.
     assert!(s.execute("file.exportVariable", &json!({ "settings": ["Nope"] })).is_err());
     // An incompatible glyph stops the export and is named.

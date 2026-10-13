@@ -283,7 +283,7 @@ fn rounded(v: &[f64]) -> Vec<Number> {
     v.iter().map(|x| Number::Int(ot_round(*x) as i64)).collect()
 }
 
-fn private_dict(font: &Resolved, settings: Option<&HintSettings>, warnings: &mut Vec<String>) -> PrivateDict {
+pub(crate) fn private_dict(font: &Resolved, settings: Option<&HintSettings>, warnings: &mut Vec<String>) -> PrivateDict {
     let params = &font.params;
     let ufo = is_ufo_family(font.format);
     // A UFO's blue values that its reader could not turn into zones are kept as written.

@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1126 rows to check: 1574 guesses and 415 observe steps.**
+**1127 rows to check: 1575 guesses and 415 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,7 +48,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 40 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 4 |
-| **Later milestones (after M6)** | all | **655** |
+| **Later milestones (after M6)** | all | **656** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 39 |
 | Later milestones (after M6) | Edit View: text mode and preview | 14 |
 | Later milestones (after M6) | Components and anchors | 33 |
@@ -60,7 +60,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Interpolation | 44 |
 | Later milestones (after M6) | Hinting | 68 |
 | Later milestones (after M6) | Colour fonts | 46 |
-| Later milestones (after M6) | Files: open, import, export | 44 |
+| Later milestones (after M6) | Files: open, import, export | 45 |
 | Later milestones (after M6) | Settings and the window | 12 |
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 61 |
 | Later milestones (after M6) | Elsewhere | 19 |
@@ -1338,7 +1338,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (655)
+## Later milestones (after M6) (656)
 
 ### Edit View: drawing, guides, layers and the Palette (39)
 
@@ -2941,7 +2941,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The chooser and the Edit View preview always use palette 0. Settled by opening the chooser in a font with two palettes in the reference.
   - Observe: Palette font (two palettes): click the swatch of a palette layer in the Layers palette; note which palette's colours the chooser lists.
 
-### Files: open, import, export (44)
+### Files: open, import, export (45)
 
 - [ ] `export.instanceExportFolder` (behavior, M7, handbook): An instance carrying the Export Folder custom parameter is written to that…
   - Guess: The sub-path is used as written, `..` segments included, as the handbook says; an absolute path, an empty segment, a folder name with a character such as `:` or `\`, or a path of more than 32 segments makes export skip that instance with the reason, one trailing `/` is ignored, and the warnings name every file written outside the export destination; an Export Folder of `../x` and one of `/tmp/x` in the reference app settle it.
@@ -3002,6 +3002,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A master takes the name of the named instance at its location, else its axis names and design coordinates; an intermediate layer is named by its coordinates in braces.
 - [ ] `cff2.open` (format, M9, inferred): Variable OpenType, CFF2 outlines (opened for editing)
   - Guess: Every region of the CFF2 variation store becomes a master, since the charstrings do not say which glyphs use which region without evaluating them. Settled by opening CFF2 fonts built from sources with intermediate layers and comparing.
+- [ ] `cff2.export` (format, M9, docs): Variable OpenType, CFF2 outlines (export)
+  - Guess: Manual PostScript hints are left out of a CFF2 font, with a warning, where fontmake would write blended stems; comparing the hinted output of the two would settle whether blended hints are worth writing.
 - [ ] `compile.instanceInterpolation` (behavior, M9, docs): Static instances are produced by interpolating masters at the instance location before…
   - Guess: Copied from fontmake's instancer: a glyph with no layer in the origin master is left out of the instance; a glyph whose layer is empty in some masters but drawn at the origin interpolates without the empty ones; outlines are not rounded before the compile; a glyph that does not export and cannot interpolate keeps its nearest layer instead of failing the instance. Settle each with an instance export from the reference app.
 - [ ] `compile.instanceLayoutInterpolation` (behavior, M9, docs): fontmake's feature writers interpolate kerning and anchors for instances but not explicit…

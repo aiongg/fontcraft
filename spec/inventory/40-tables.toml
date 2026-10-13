@@ -319,12 +319,16 @@ status = "docs"
 tag = "CFF2"
 flavour = ["variable-otf"]
 read = "read-fonts"
-write = "none-yet"
+write = "own"
 area = "compile"
 milestone = "M9"
 summary = "Variable cubic outlines: charstrings with blend operators, a variation store, FDArray/Private DICTs with blended hint values, no glyph names, no widths and no encoding. read-fonts parses it and evaluates blends. write-fonts 0.54.0 exposes only a Cff2Header struct (raw Top DICT bytes and raw trailing bytes) and Index::from_items; DICT encoding, charstring encoding with blend, the variation store placement and subroutinisation are missing. fontc does not produce it; fontmake does with -o variable-cff2 and AFDKO with buildmasterotfs plus buildcff2vf."
-ref = "write-fonts src/ps/cff/v2.rs, generated/generated_cff2.rs; read-fonts src/ps/cff/v2.rs, blend.rs; fontmake README.md; AFDKO docs/CFF2_Support.md"
+ref = "write-fonts src/ps/cff/v2.rs, generated/generated_cff2.rs; read-fonts src/ps/cff/v2.rs, blend.rs; fontmake README.md; AFDKO docs/CFF2_Support.md; fontTools varLib/cff.py, cffLib (MIT)"
 status = "docs"
+notes = "Written by `fontcraft_cff::cff2` (M9.13): header, Top DICT (FontMatrix when the em is not 1000, CharStrings, FDArray, vstore), an empty global subroutine INDEX, one Font DICT and no FDSelect, a Private DICT whose blue zones, stems, BlueScale, BlueShift and BlueFuzz are blended where the masters differ, and an item variation store with one region list per set of sources. Charstrings use one generic operator per segment (no specialisation, no subroutines, no hints); consecutive varying operands share one blend while the 513-operand stack has room, and a run is split where it has not. Relative coordinates and deltas are rounded with fontTools' tolerance of 0.01, so fractional deltas stay fractional as fontmake writes them. The variable font is larger than fontmake's, which subroutinises and specialises."
+guesses = [
+  "Charstrings are not specialised or subroutinised; byte size against fontmake's output would show whether that is worth doing.",
+]
 
 # ---------------------------------------------------------------------------------------------------
 # Tables: hinting (M10)
@@ -1493,16 +1497,18 @@ id = "compile.cff2VariableBuild"
 area = "compile"
 milestone = "M9"
 summary = "Reference routes to a CFF2 variable font: fontmake -o variable-cff2 builds interpolatable CFF masters and merges them; AFDKO builds one CFF OTF per master with buildmasterotfs (running makeotf on each font.ufo) and merges them with buildcff2vf (options: -k keep glyph names in post format 2, --omit-mac-names, -c check compatibility and fix flat curves, -i per-master glyph inclusion). AFDKO's newer flow merges outlines into a bare CFF2 OTF first and then adds layout with addfeatures. We build CFF2 directly from the source model, which is the newer flow without intermediate files."
-ref = "fontmake README.md; AFDKO python/afdko/buildmasterotfs.py, buildcff2vf.py, docs/CFF2_Support.md"
+ref = "fontmake README.md; AFDKO python/afdko/buildmasterotfs.py, buildcff2vf.py, docs/CFF2_Support.md; fontTools varLib/cff.py (merge_charstrings, merge_PrivateDicts)"
 status = "docs"
+notes = "Built in M9.13 (`compile/src/var/cff2.rs`): the same sources, decomposition and variation models as the TrueType build, every composite decomposed, cubic outlines kept as drawn. Sources are rounded to whole units as fontmake rounds its CFF masters; a glyph whose sources do not draw the same segments refuses the export. Glyphs with the same sources share a region list (`vsindex`); list 0 is the masters' model, which the Private DICT uses. Where a master gives a different number of blue zones or stem snaps the origin's are kept, with a warning, as fontTools keeps the default's."
 
 [[behavior]]
 id = "compile.cff2CompanionTables"
 area = "compile"
 milestone = "M9"
 summary = "Because CFF2 drops data that CFF carried, a CFF2 font needs it elsewhere: advances in hmtx with HVAR, glyph names in post (when names are wanted), all naming strings in name, and the em size and font box in head. A CFF table's built-in encoding is ignored in favour of cmap."
-ref = "AFDKO docs/CFF2_Support.md (CFF2 Portability)"
+ref = "AFDKO docs/CFF2_Support.md (CFF2 Portability); fontTools varLib/__init__.py (post format 2 for CFF2)"
 status = "docs"
+notes = "Built in M9.13: hmtx and HVAR as the TrueType build writes them, post 2.0 with the glyph names (fontTools' varLib switches a CFF2 font's post to format 2), maxp 0.5, head and hhea boxes from the outlines at the origin; no glyf, loca or gvar. MVAR, fvar, avar, STAT and the layout tables are the TrueType build's."
 
 # ---------------------------------------------------------------------------------------------------
 # Behaviours: layout compilation

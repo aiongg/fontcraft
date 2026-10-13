@@ -287,7 +287,7 @@ fn build_fontmake(req: &Request, kind: SourceKind, source: &Path) -> Result<Buil
 }
 
 /// Builds `req.source`'s variable font with the reference compiler (M9.10): fontc from the
-/// source itself, fontmake with `-o variable`. Of several fontmake outputs (one per variable font
+/// source itself, fontmake with `-o variable` (`-o variable-cff2` for CFF outlines, M9.13). Of several fontmake outputs (one per variable font
 /// setting), the one whose file stem is `req.hint.style` when it names one, else the first.
 pub fn build_variable(req: &Request) -> Result<Built, String> {
     let kind = SourceKind::of(req.source).ok_or_else(|| format!("{} is not a source the reference compilers read", req.source.display()))?;
@@ -305,11 +305,12 @@ pub fn build_variable(req: &Request) -> Result<Built, String> {
         }
         Oracle::Fontmake => {
             let out_dir = req.work_dir.join("fontmake");
-            let (args, command) = fontmake_args(req, kind, &source, &["-o", "variable"]);
+            let (output, extension) = if req.flavour == Flavour::Cff { ("variable-cff2", "otf") } else { ("variable", "ttf") };
+            let (args, command) = fontmake_args(req, kind, &source, &["-o", output]);
             let mut cmd = Command::new(req.tool);
             cmd.args(&args).arg("--output-dir").arg(&out_dir);
             run(req, cmd)?;
-            let files = crate::variable::ttf_files(&out_dir, MAX_OUTPUT_FILES);
+            let files = crate::variable::font_files(&out_dir, extension, MAX_OUTPUT_FILES);
             let stem_of = |p: &PathBuf| p.file_stem().and_then(|s| s.to_str()).map(str::to_string).unwrap_or_default();
             let chosen = files.iter().find(|p| !req.hint.style.is_empty() && stem_of(p) == req.hint.style).or(files.first());
             let Some(path) = chosen.cloned() else { return Err("fontmake finished but wrote no variable font".into()) };

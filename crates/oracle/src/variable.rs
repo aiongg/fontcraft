@@ -610,7 +610,7 @@ pub fn check_variable(
         }
     };
     if let (Ok(o), Some(_)) = (&ours, &settings.keep) {
-        let path = work.path.join("fontcraft-variable.ttf");
+        let path = work.path.join(if settings.flavour == crate::Flavour::Cff { "fontcraft-variable.otf" } else { "fontcraft-variable.ttf" });
         if let Err(e) = std::fs::write(&path, &o.bytes) {
             r.notes.push(format!("cannot keep FontCraft's font at {}: {e}", path.display()));
         }
@@ -786,8 +786,15 @@ pub fn render_measure(what: &str, m: &Measure) -> String {
 
 /// The files of a build, for [`tools::instance_file`].
 pub(crate) fn ttf_files(dir: &Path, limit: usize) -> Vec<PathBuf> {
+    font_files(dir, "ttf", limit)
+}
+
+/// The files of a build with `extension`, sorted.
+pub(crate) fn font_files(dir: &Path, extension: &str, limit: usize) -> Vec<PathBuf> {
     let mut files: Vec<PathBuf> = std::fs::read_dir(dir)
-        .map(|it| it.take(limit).filter_map(|e| e.ok().map(|e| e.path())).filter(|p| p.extension().and_then(|x| x.to_str()) == Some("ttf")).collect())
+        .map(|it| {
+            it.take(limit).filter_map(|e| e.ok().map(|e| e.path())).filter(|p| p.extension().and_then(|x| x.to_str()) == Some(extension)).collect()
+        })
         .unwrap_or_default();
     files.sort();
     files

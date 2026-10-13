@@ -135,7 +135,11 @@ bundled, the file says so in its header and the project is listed here with its 
   crates/features/src/fea_variable.rs ports misc/fixedTools.py's nearestMultipleShortestRepr,
   which writes a user coordinate with the fewest decimals a 16.16 fixed-point number keeps.
   crates/geom/src/variation.rs ports varLib's normalizeValue, supportScalar and VariationModel
-  with getDeltas (models.py). The CFF writer (crates/cff) ports cffLib: the table layout and offset passes, INDEX, charset
+  with getDeltas (models.py). The CFF2 writer (crates/cff/src/cff2.rs) and the CFF2 compile
+  (crates/compile/src/var/cff2.rs) follow varLib.cff (merge_charstrings, CFF2CharStringMergePen,
+  merge_PrivateDicts) and cffLib's blend layout: relative blended coordinates, the 0.01 rounding
+  tolerance, region lists per set of sources, and Private DICT values stored as blended
+  differences. The CFF writer (crates/cff) ports cffLib: the table layout and offset passes, INDEX, charset
   and DICT compilers, the standard strings and predefined charsets (data from Adobe Technical
   Note #5176), the specialiser (specializer.py) and the width optimiser (width.py); the number
   encoders of misc/psCharStrings.py; the rounding of misc/roundTools.py; the charstring pen

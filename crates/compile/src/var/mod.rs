@@ -50,6 +50,10 @@ pub use fontcraft_geom::variation::{Region, RegionAxis};
 use crate::outline::Prepared;
 use crate::{CompileError, Compiled, Flavour, Options, ot_round};
 
+/// Most glyphs one composite reaches through its components when its intermediate sources are
+/// gathered.
+const MAX_COMPONENT_CLOSURE: usize = 1024;
+
 /// Which outlines a variable font gets.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum VarFlavour {
@@ -201,10 +205,11 @@ fn source_glyphs(
     font: &Font,
     prepared: &Font,
     target: &Target,
+    flavour: Flavour,
     options: &Options,
 ) -> Result<(Vec<ResolvedGlyph>, crate::info::GlobalMetrics), CompileError> {
     let mut resolved = crate::drawing::resolve(prepared, target)?;
-    let glyphs = crate::glyph_stages(Some(font), &mut resolved, Flavour::TrueType, options, &mut Vec::new())?;
+    let glyphs = crate::glyph_stages(Some(font), &mut resolved, flavour, options, &mut Vec::new())?;
     Ok((glyphs, crate::info::derive(&resolved, &options.style_name, &mut Vec::new()).metrics))
 }
 
@@ -310,10 +315,8 @@ fn phantoms(advance: f64) -> [(f64, f64); gvar::PHANTOM_POINTS] {
 /// whole designspace). Refuses incompatible glyphs, a designspace without a usable origin, and
 /// everything the static compile refuses.
 pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, var: &VariableOptions) -> Result<VariableFont, CompileError> {
-    if var.flavour == VarFlavour::Cff2 {
-        return Err(CompileError::NotYetImplemented("CFF2 variable fonts"));
-    }
     font.check()?;
+    let flavour = if var.flavour == VarFlavour::Cff2 { Flavour::Cff } else { Flavour::TrueType };
     let mut notes: Vec<String> = Vec::new();
     let font = setting_font(font, setting);
     let font: &Font = &font;
@@ -326,6 +329,10 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
         return Err(CompileError::Table { table: "fvar", message: "a variable font needs two masters and an axis with a range".into() });
     }
     designspace.check_variable_origin()?;
+    let postscript_hint = |h: &fontcraft_model::Hint| matches!(h.kind(), None | Some("Stem" | "TopGhost" | "BottomGhost" | "Flex"));
+    if flavour == Flavour::Cff && font.glyphs.iter().any(|g| g.export && g.layers.iter().any(|l| l.info.hints.iter().any(postscript_hint))) {
+        notes.push(cff2::HINTS_DROPPED.to_string());
+    }
     let origin = designspace.origin().cloned().ok_or(CompileError::NotYetImplemented("a designspace without an origin"))?;
     let axis_count = u16::try_from(designspace.axes().len()).map_err(|_| CompileError::Table { table: "fvar", message: "too many axes".into() })?;
 
@@ -383,7 +390,7 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
         Ok(())
     };
     for m in designspace.masters().iter().filter(|m| m.id != origin.id) {
-        add(Some(m.id.clone()), m.location.clone(), source_glyphs(font, prepared, &Target::Master(m.id.clone()), &options)?)?;
+        add(Some(m.id.clone()), m.location.clone(), source_glyphs(font, prepared, &Target::Master(m.id.clone()), flavour, &options)?)?;
     }
     let mut intermediate: Vec<fontcraft_interp::Location> = Vec::new();
     for s in glyph_sources.values().flat_map(|g| g.main.iter()).filter(|s| !s.is_master) {
@@ -406,7 +413,7 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
         }
         let at = font_at(prepared, &designspace, &location)?;
         let target = at.default_target()?;
-        add(None, location, source_glyphs(&at, &at, &target, &options)?)?;
+        add(None, location, source_glyphs(&at, &at, &target, flavour, &options)?)?;
     }
 
     // The masters the generated kerning and mark positions vary with: the origin, then each
@@ -440,15 +447,26 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
             .map(|r| (NameId::new(r.id), r.text))
             .collect::<Vec<_>>()
     };
-    let ctx = Outlines { designspace: &designspace, prepared, origin: &origin.id, sources: &sources, glyph_sources: &glyph_sources };
+    let ctx = Outlines { designspace: &designspace, prepared, origin: &origin.id, sources: &sources, glyph_sources: &glyph_sources, flavour };
     let mut stage = |origin_resolved: &fontcraft_model::Resolved,
                      glyphs: &[ResolvedGlyph],
                      settings: &crate::outline::Settings,
                      warnings: &mut Vec<String>|
      -> Result<(Vec<Prepared>, crate::Extra), CompileError> {
-        let (outlines, per_glyph) = ctx.build(glyphs, settings, warnings)?;
+        let (outlines, per_glyph, cubic) = ctx.build(glyphs, settings, warnings)?;
         let mut extra = crate::Extra::default();
-        let gvar = gvar::build_gvar(axis_count, &per_glyph, &gvar_options)?;
+        if flavour == Flavour::Cff {
+            let masters = cff2::master_privates(prepared, origin_resolved, &sources, warnings)?;
+            let cff2_font = cff2::cff2_font(axis_count, &cubic, &masters, origin_resolved.units_per_em, warnings)?;
+            let built = fontcraft_cff::cff2::write_cff2(&cff2_font).map_err(|e| CompileError::Table { table: "CFF2", message: e.to_string() })?;
+            extra.cff2 = Some(built);
+        } else {
+            let gvar = gvar::build_gvar(axis_count, &per_glyph, &gvar_options)?;
+            extra.tables.push((
+                Tag::new(b"gvar"),
+                write_fonts::dump_table(&gvar).map_err(|e| CompileError::Table { table: "gvar", message: e.to_string() })?,
+            ));
+        }
         let advances = ctx.advances(&per_glyph)?;
         let axes = VarAxes::from_designspace(&designspace)?;
         let instances = fvar::named_instances(font, &designspace)?;
@@ -459,7 +477,6 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
             r.map_err(|e| CompileError::Table { table: tag, message: e.to_string() })
         };
         extra.tables.push((Tag::new(b"fvar"), dump("fvar", write_fonts::dump_table(&fvar))?));
-        extra.tables.push((Tag::new(b"gvar"), dump("gvar", write_fonts::dump_table(&gvar))?));
         if let Some(avar) = avar::build_avar(&axes)? {
             extra.tables.push((Tag::new(b"avar"), dump("avar", write_fonts::dump_table(&avar))?));
         }
@@ -482,7 +499,7 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
         }
         Ok((outlines, extra))
     };
-    let mut compiled = crate::compile_stages_with(Some(font), resolved, Flavour::TrueType, &options, Some(&mut stage), Some(&variable_layout))?;
+    let mut compiled = crate::compile_stages_with(Some(font), resolved, flavour, &options, Some(&mut stage), Some(&variable_layout))?;
     notes.append(&mut compiled.warnings);
     compiled.warnings = notes;
     Ok(VariableFont { compiled, setting, file_stem: vnames.file_stem })
@@ -500,6 +517,10 @@ fn optimize_deltas(font: &Font) -> bool {
         .all(|on| on)
 }
 
+/// The outlines to write, each glyph's points at its sources, and (CFF2 only) its cubic
+/// sources.
+type BuiltOutlines = (Vec<Prepared>, Vec<gvar::SourceOutlines>, Vec<cff2::CubicSources>);
+
 /// What the outline stage of a variable compile reads.
 struct Outlines<'a> {
     designspace: &'a fontcraft_interp::Designspace,
@@ -507,6 +528,8 @@ struct Outlines<'a> {
     origin: &'a str,
     sources: &'a [Source],
     glyph_sources: &'a HashMap<String, fontcraft_interp::GlyphSources>,
+    /// `Cff` for a CFF2 font: every composite decomposed, cubic outlines kept.
+    flavour: Flavour,
 }
 
 impl Outlines<'_> {
@@ -549,14 +572,43 @@ impl Outlines<'_> {
             .collect()
     }
 
+    /// The intermediate sources (indices into `sources`) at the locations of the intermediate
+    /// layers of the glyphs `g` reaches through its components, nested ones included.
+    fn component_sources(&self, g: &ResolvedGlyph, glyphs: &[ResolvedGlyph], index: &HashMap<&str, usize>) -> Vec<usize> {
+        let mut seen: Vec<&str> = Vec::new();
+        let mut todo: Vec<&str> = g.components.iter().map(|c| c.base.as_str()).collect();
+        let mut out = Vec::new();
+        while let Some(name) = todo.pop() {
+            if seen.contains(&name) || seen.len() >= MAX_COMPONENT_CLOSURE {
+                continue;
+            }
+            seen.push(name);
+            if let Some(gs) = self.glyph_sources.get(name) {
+                for s in gs.main.iter().filter(|s| !s.is_master) {
+                    if let Some(k) = self.sources.iter().position(|o| o.master.is_none() && o.location == s.location)
+                        && !out.contains(&k)
+                    {
+                        out.push(k);
+                    }
+                }
+            }
+            if let Some(r) = index.get(name).and_then(|&j| glyphs.get(j)) {
+                todo.extend(r.components.iter().map(|c| c.base.as_str()));
+            }
+        }
+        out.sort_unstable();
+        out
+    }
+
     /// The outline of each glyph of `glyphs` (the origin's final order) and its points at each of
-    /// its sources.
+    /// its sources; for CFF2 the points are the advances' phantoms only and the cubic outlines of
+    /// each source come third.
     fn build(
         &self,
         glyphs: &[ResolvedGlyph],
         settings: &crate::outline::Settings,
         warnings: &mut Vec<String>,
-    ) -> Result<(Vec<Prepared>, Vec<gvar::SourceOutlines>), CompileError> {
+    ) -> Result<BuiltOutlines, CompileError> {
         let index: HashMap<&str, usize> = glyphs.iter().enumerate().map(|(i, g)| (g.name.as_str(), i)).collect();
         let own: Vec<Vec<usize>> = glyphs.iter().map(|g| self.own_sources(&g.name, warnings)).collect();
         let mut decompose = vec![false; glyphs.len()];
@@ -568,9 +620,27 @@ impl Outlines<'_> {
             drawn.extend(own.get(i).into_iter().flatten().filter_map(|&k| self.sources.get(k)?.glyph(&g.name).map(|(_, r)| r)));
             let model_reason = self.glyph_sources.get(&g.name).and_then(|gs| decompose::decompose_reason(self.prepared, self.designspace, gs));
             if let Some(slot) = decompose.get_mut(i) {
-                *slot = drawn.iter().any(|r| crate::outline::must_decompose(r, Flavour::TrueType))
+                *slot = drawn.iter().any(|r| crate::outline::must_decompose(r, self.flavour))
                     || decompose::inconsistent_transform(&drawn).is_some()
                     || model_reason.is_some();
+            }
+        }
+        // A CFF2 composite is decomposed, so it varies with its components' intermediate layers
+        // too, as the TrueType composite does through its components.
+        let mut own = own;
+        if self.flavour == Flavour::Cff {
+            for (i, g) in glyphs.iter().enumerate() {
+                if !decompose.get(i).copied().unwrap_or(false) {
+                    continue;
+                }
+                let extra = self.component_sources(g, glyphs, &index);
+                if let Some(list) = own.get_mut(i) {
+                    for k in extra {
+                        if !list.contains(&k) && self.sources.get(k).is_some_and(|o| o.index.contains_key(&g.name)) {
+                            list.push(k);
+                        }
+                    }
+                }
             }
         }
         // Each source's flags, by name, for nested decomposition.
@@ -582,7 +652,7 @@ impl Outlines<'_> {
                     .iter()
                     .map(|g| match index.get(g.name.as_str()) {
                         Some(&i) => decompose.get(i).copied().unwrap_or(false),
-                        None => crate::outline::must_decompose(g, Flavour::TrueType),
+                        None => crate::outline::must_decompose(g, self.flavour),
                     })
                     .collect()
             })
@@ -595,6 +665,7 @@ impl Outlines<'_> {
 
         let mut outlines = Vec::with_capacity(glyphs.len());
         let mut per_glyph = Vec::with_capacity(glyphs.len());
+        let mut cubic = Vec::new();
         for (i, g) in glyphs.iter().enumerate() {
             let ks: &[usize] = own.get(i).map_or(&[], Vec::as_slice);
             let mut locations = vec![origin_location.clone()];
@@ -653,6 +724,21 @@ impl Outlines<'_> {
                 return Err(CompileError::Glyph { glyph: g.name.clone(), message: "a source of the glyph could not be drawn".into() });
             }
             let advances: Vec<f64> = drawn.iter().map(|(_, r)| r.width).collect();
+            if self.flavour == Flavour::Cff {
+                let points = advances.iter().map(|&a| phantoms(a).to_vec()).collect();
+                let origin_path = contours.first().map(|list| {
+                    let mut path = BezPath::new();
+                    list.iter().for_each(|c| path.extend(c.clone()));
+                    path
+                });
+                outlines.push(match origin_path {
+                    Some(p) if !p.elements().is_empty() => Prepared::Simple(p),
+                    _ => Prepared::Empty,
+                });
+                per_glyph.push(gvar::SourceOutlines { glyph: g.name.clone(), locations: locations.clone(), points, contour_ends: Vec::new() });
+                cubic.push(cff2::CubicSources { glyph: g.name.clone(), locations, paths: contours });
+                continue;
+            }
             if contours.iter().all(|c| c.iter().all(|p| p.elements().is_empty())) {
                 outlines.push(Prepared::Empty);
                 let points = advances.iter().map(|&a| phantoms(a).to_vec()).collect();
@@ -712,7 +798,7 @@ impl Outlines<'_> {
             outlines.push(Prepared::Points(origin));
             per_glyph.push(gvar::SourceOutlines { glyph: g.name.clone(), locations, points, contour_ends });
         }
-        Ok((outlines, per_glyph))
+        Ok((outlines, per_glyph, cubic))
     }
 
     /// Each glyph's advance with its deltas, from the second phantom point of its sources.

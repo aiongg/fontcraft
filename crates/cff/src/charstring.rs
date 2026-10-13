@@ -118,7 +118,7 @@ fn write_commands(commands: &[Cmd], what: &str, bytes: &mut Vec<u8>) -> Result<(
 }
 
 /// The generic commands a pen records: relative moves, lines and curves between rounded points.
-fn pen_commands(path: &[PathOp], tolerance: f64) -> Vec<Cmd> {
+pub(crate) fn pen_commands(path: &[PathOp], tolerance: f64) -> Vec<Cmd> {
     let mut last = (0.0f64, 0.0f64);
     let mut rel = |p: (f64, f64), args: &mut Vec<f64>| {
         let r = (round_with_tolerance(p.0, tolerance), round_with_tolerance(p.1, tolerance));
@@ -171,7 +171,7 @@ fn opcode(op: Op) -> Option<u8> {
 
 /// Draw the finished operators into a bounds pen, accumulating points as the reference's
 /// charstring reader does (each point is the previous one plus the delta).
-fn bounds(commands: &[Cmd]) -> Option<Bounds> {
+pub(crate) fn bounds(commands: &[Cmd]) -> Option<Bounds> {
     let mut walker = Walker::default();
     for c in commands {
         walker.command(c);

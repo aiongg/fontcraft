@@ -303,7 +303,7 @@ reference compilers.
 | glyf | S V | read-fonts | write-fonts | no instruction assembler; no cubic outlines |
 | loca | S V | read-fonts | write-fonts | none |
 | CFF  | O | read-fonts | none-yet | whole writer: DICTs, INDEXes, charsets, charstrings, specialiser, subroutiniser, CID structures |
-| CFF2 | C | read-fonts | none-yet | whole writer beyond header and INDEX: DICTs, blend charstrings, variation store, FDSelect, subroutiniser |
+| CFF2 | C | read-fonts | own (M9.13) | subroutiniser, specialiser and FDSelect not written |
 | vhea, vmtx | s o v c | read-fonts | write-fonts | none |
 | VORG | o c | read-fonts | none-yet | generated code exists in the repository but is not compiled into the crate |
 | GSUB | s o v c | read-fonts | write-fonts | none (contextual lookups assembled by fea-rs) |
@@ -405,10 +405,19 @@ FontCraft.
 
 ### 3.2 CFF2 writing (blocks variable OTF, M9)
 
-write-fonts gives us `Cff2Header` (raw Top DICT bytes plus a raw tail) and `Index::from_items`.
-Everything inside is ours: Top DICT, FDArray, Private DICTs with `blend`, the charstrings with
-`blend` and `vsindex`, the embedded ItemVariationStore (the write-fonts store builder can produce
-the store bytes), FDSelect, and CFF2 subroutinisation. Shares items 1 to 4 and 6 of the CFF list.
+`fontcraft_cff::cff2` writes the whole table (M9.13): header, Top DICT, an empty global
+subroutine INDEX, one Font DICT in the FDArray (no FDSelect), a Private DICT with `blend`, the
+charstrings with `blend` and `vsindex`, and the item variation store with no items. Not written:
+charstring specialisation, subroutines, hints and FDSelect for CID-keyed fonts.
+
+| What | fontmake `-o variable-cff2` | FontCraft |
+|---|---|---|
+| Charstrings | specialised (`hlineto`, `hvcurveto`…) and subroutinised by `tx` | one `rmoveto`, `rlineto` or `rrcurveto` per segment, no subroutines; same outlines, larger table |
+| Blend runs | as many varying operands per `blend` as the 513-operand stack allows | the same; a run past the stack is split |
+| Hints | the hints of the masters' CFF tables, merged into blended stems and masks | none, with a warning when the source has manual PostScript hints |
+| Private DICT | blended where the masters differ; a list some master lacks keeps the default's | the same, with a warning; BlueScale, BlueShift and BlueFuzz blended too |
+| Composites | decomposed in each master; a composite follows its components' intermediate layers | the same: a decomposed composite gains its components' intermediate locations as sources |
+| `post` | 2.0 with names (varLib switches CFF2 fonts to it) | 2.0 with names |
 
 ### 3.3 TrueType instruction assembly (M10)
 
@@ -542,7 +551,7 @@ all five.
 | Underline position default | −0.075 em | −100 for `.glyphs`, −0.075 em for UFO | from source font | as fontc (the UFO reader stores ufo2ft's value) |
 | lowestRecPPEM | 6 | 6 | 3 | 6 |
 | xAvgCharWidth | mean of non-zero advances, rounded | same | same mean, truncated | rounded |
-| post version | 2.0 for TTF | 2.0 always | 3.0 for CFF; CFF2 3.0 unless `-k` | 2.0 TTF and CFF2, 3.0 CFF |
+| post version | 2.0 for TTF and for CFF2 (varLib) | 2.0 always | 3.0 for CFF; CFF2 3.0 unless `-k` | 2.0 TTF and CFF2, 3.0 CFF |
 | Timestamps | now, or SOURCE_DATE_EPOCH (fontTools) | source created date, now for modified, SOURCE_DATE_EPOCH | now | fontc rule |
 | CFF subroutinisation | on by default (level 2) | n/a | off unless `-S` or `-r` | on for release, off for draft |
 | Feature compiler | feaLib; MTI optional | fea-rs | addfeatures (own parser) | fea-rs |

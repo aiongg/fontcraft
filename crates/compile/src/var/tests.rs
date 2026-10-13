@@ -400,3 +400,163 @@ fn touching_alternate_ranges_switch_as_the_oracles_do() {
     assert_eq!(names(variation_subs(&v, 0.625)), ["o"]);
     assert_eq!(names(variation_subs(&v, 0.75)), ["a", "c", "d"]);
 }
+
+fn build_cff2(font: &Font, setting: Option<usize>) -> VariableFont {
+    let var = VariableOptions { flavour: VarFlavour::Cff2, ..VariableOptions::default() };
+    compile_variable(font, setting, &Options::default(), &var).unwrap()
+}
+
+/// Bounds of the drawn outline, curves sampled, so quadratic and cubic outlines of one shape
+/// compare.
+#[derive(Default)]
+struct Drawn {
+    bounds: Bounds,
+    at: (f32, f32),
+}
+
+impl OutlinePen for Drawn {
+    fn move_to(&mut self, x: f32, y: f32) {
+        self.bounds.add(x, y);
+        self.at = (x, y);
+    }
+    fn line_to(&mut self, x: f32, y: f32) {
+        self.move_to(x, y);
+    }
+    fn quad_to(&mut self, cx: f32, cy: f32, x: f32, y: f32) {
+        let (x0, y0) = self.at;
+        for i in 1..=32 {
+            let t = i as f32 / 32.0;
+            let u = 1.0 - t;
+            self.bounds.add(u * u * x0 + 2.0 * u * t * cx + t * t * x, u * u * y0 + 2.0 * u * t * cy + t * t * y);
+        }
+        self.at = (x, y);
+    }
+    fn curve_to(&mut self, ax: f32, ay: f32, bx: f32, by: f32, x: f32, y: f32) {
+        let (x0, y0) = self.at;
+        for i in 1..=32 {
+            let t = i as f32 / 32.0;
+            let u = 1.0 - t;
+            let (p, q, r, s) = (u * u * u, 3.0 * u * u * t, 3.0 * u * t * t, t * t * t);
+            self.bounds.add(p * x0 + q * ax + r * bx + s * x, p * y0 + q * ay + r * by + s * y);
+        }
+        self.at = (x, y);
+    }
+    fn close(&mut self) {}
+}
+
+/// The sampled bounds and the advance of `name` at `wght`.
+fn drawn_at(v: &VariableFont, name: &str, wght: f32) -> ((f32, f32, f32, f32), f32) {
+    let font = FontRef::new(&v.compiled.bytes).unwrap();
+    let gid = GlyphId::new(v.compiled.glyph_order.iter().position(|g| g == name).unwrap() as u32);
+    let location = font.axes().location([("wght", wght)]);
+    let mut pen = Drawn::default();
+    // At one pixel per unit rather than unscaled, which truncates CFF coordinates to whole units.
+    let size = Size::new(f32::from(font.head().unwrap().units_per_em()));
+    font.outline_glyphs().get(gid).unwrap().draw(DrawSettings::unhinted(size, &location), &mut pen).unwrap();
+    let advance = font.glyph_metrics(Size::unscaled(), &location).advance_width(gid).unwrap();
+    (pen.bounds.0.unwrap_or_default(), advance)
+}
+
+/// Every glyph of `cff2` drawn like the TrueType build of the same source at each of
+/// `locations` (the TrueType curves are approximations).
+fn assert_like_truetype(tt: &VariableFont, cff2: &VariableFont, locations: &[f32]) {
+    assert_eq!(tt.compiled.glyph_order, cff2.compiled.glyph_order);
+    for name in &tt.compiled.glyph_order {
+        for &w in locations {
+            let ((a, b), (c, d)) = (drawn_at(tt, name, w), drawn_at(cff2, name, w));
+            // The CFF2 reader truncates coordinates to whole units and the TrueType reader rounds them,
+            // so a point half a unit off a whole number can read one unit apart.
+            let close = [a.0 - c.0, a.1 - c.1, a.2 - c.2, a.3 - c.3, b - d].iter().all(|e| e.abs() <= 1.0);
+            assert!(close, "`{name}` at {w}: TrueType {a:?} {b}, CFF2 {c:?} {d}");
+        }
+    }
+}
+
+#[test]
+fn cff2_fonts_draw_like_the_truetype_build() {
+    let f = two_masters();
+    let cff2 = build_cff2(&f, None);
+    let font = FontRef::new(&cff2.compiled.bytes).unwrap();
+    assert!(font.cff2().is_ok() && font.hvar().is_ok() && font.fvar().is_ok());
+    assert!(font.glyf().is_err() && font.gvar().is_err() && font.loca(None).is_err() && font.cff().is_err());
+    assert_eq!(font.maxp().unwrap().version(), skrifa::raw::types::Version16Dot16::VERSION_0_5);
+    // A CFF2 table holds no names, so `post` does.
+    assert_eq!(font.post().unwrap().version(), skrifa::raw::types::Version16Dot16::VERSION_2_0);
+    assert_like_truetype(&build(&f, None), &cff2, &[100.0, 300.0, 500.0, 700.0, 900.0]);
+    // The intermediate layer of `b` and the moved component of `d`.
+    assert_eq!(drawn_at(&cff2, "b", 500.0), ((0.0, 0.0, 250.0, 700.0), 450.0));
+    assert_eq!(drawn_at(&cff2, "d", 500.0).0, (25.0, 0.0, 225.0, 700.0));
+}
+
+#[test]
+fn cff2_with_three_masters_an_intermediate_layer_and_disabled_masters() {
+    let f = with_settings();
+    let (tt, cff2) = (build(&f, Some(0)), build_cff2(&f, Some(0)));
+    assert_like_truetype(&tt, &cff2, &[100.0, 250.0, 400.0, 450.0, 500.0, 650.0, 900.0]);
+    let reduced = build_cff2(&f, Some(1));
+    let max = FontRef::new(&reduced.compiled.bytes).unwrap().fvar().unwrap().axes().unwrap()[0].max_value().to_f64();
+    assert_eq!(max, 400.0);
+    assert_eq!(drawn_at(&reduced, "a", 400.0).0.2, 300.0);
+    assert_like_truetype(&build(&f, Some(1)), &reduced, &[100.0, 250.0, 400.0]);
+}
+
+#[test]
+fn cff2_incompatible_glyphs_block_the_export() {
+    let mut f = two_masters();
+    f.glyph_mut("a").unwrap().layers[1].shapes.push(rect(10.0));
+    let var = VariableOptions { flavour: VarFlavour::Cff2, ..VariableOptions::default() };
+    let err = compile_variable(&f, None, &Options::default(), &var).unwrap_err();
+    assert!(err.to_string().contains("not compatible"), "{err}");
+}
+
+/// A one-axis `CFF2` font of one curve glyph whose every coordinate varies over `regions`
+/// regions, each peaking at a different point of the axis.
+fn many_regions(regions: usize) -> fontcraft_cff::cff2::Cff2Font {
+    use fontcraft_cff::cff2::{Blend, BlendOp, Cff2Font, Cff2Glyph, RegionAxis};
+    let peaks: Vec<f64> = (1..=regions).map(|i| i as f64 / regions as f64).collect();
+    let region = |i: usize| {
+        let peak = peaks[i];
+        let start = if i == 0 { 0.0 } else { peaks[i - 1] };
+        let end = peaks.get(i + 1).copied().unwrap_or(1.0);
+        vec![RegionAxis { start, peak, end }]
+    };
+    // Each coordinate moves by 1 unit per region; at a peak only that region applies.
+    let v = |d: f64| Blend { default: d, deltas: vec![1.0; regions] };
+    let curve = BlendOp::CurveTo((v(0.0), v(100.0)), (v(50.0), v(200.0)), (v(100.0), v(100.0)));
+    let glyph = Cff2Glyph { name: "c".into(), vsindex: 0, path: vec![BlendOp::MoveTo((v(0.0), v(0.0))), curve] };
+    Cff2Font {
+        axis_count: 1,
+        regions: (0..regions).map(region).collect(),
+        region_lists: vec![(0..regions as u16).collect()],
+        glyphs: vec![Cff2Glyph { name: ".notdef".into(), ..Cff2Glyph::default() }, glyph],
+        round_tolerance: 0.01,
+        ..Cff2Font::default()
+    }
+}
+
+#[test]
+fn cff2_blends_past_the_stack_limit_are_split() {
+    use skrifa::instance::LocationRef;
+    use skrifa::raw::types::F2Dot14;
+    // 6 blended operands × 101 values each is past the 513-operand stack.
+    let built = fontcraft_cff::cff2::write_cff2(&many_regions(100)).unwrap();
+    let mut b = write_fonts::FontBuilder::new();
+    b.add_raw(skrifa::raw::types::Tag::new(b"CFF2"), built.table);
+    b.add_table(&write_fonts::tables::maxp::Maxp { num_glyphs: 2, ..Default::default() }).unwrap();
+    b.add_table(&write_fonts::tables::head::Head { units_per_em: 1000, ..Default::default() }).unwrap();
+    // The outline reader wants horizontal metrics too.
+    b.add_table(&write_fonts::tables::hhea::Hhea { number_of_h_metrics: 2, ..Default::default() }).unwrap();
+    let metric = write_fonts::tables::hmtx::LongMetric { advance: 500, side_bearing: 0 };
+    b.add_table(&write_fonts::tables::hmtx::Hmtx::new(vec![metric.clone(), metric], Vec::new())).unwrap();
+    let bytes = b.build();
+    let font = FontRef::new(&bytes).unwrap();
+    let coords = [F2Dot14::from_f32(0.5)];
+    let mut pen = Bounds::default();
+    let glyph = font.outline_glyphs().get(GlyphId::new(1)).unwrap();
+    glyph.draw(DrawSettings::unhinted(Size::unscaled(), LocationRef::new(&coords)), &mut pen).unwrap();
+    // At a peak one region applies: every coordinate moves by 1.
+    assert_eq!(pen.0.unwrap(), (1.0, 1.0, 101.0, 101.0));
+    // One value with more regions than the stack holds cannot be written.
+    let err = fontcraft_cff::cff2::write_cff2(&many_regions(600)).unwrap_err();
+    assert!(matches!(err, fontcraft_cff::cff2::Cff2Error::StackOverflow { .. }), "{err}");
+}

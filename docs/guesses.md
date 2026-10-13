@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**1720 guesses on 1111 rows (401 of them live commands).**
+**1722 guesses on 1113 rows (401 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -1619,6 +1619,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `variable-ttf.open` (format) | M9 | inferred | – | A peak becomes a master when every coordinate is -1, 0 or 1, or when at least half of the glyphs with variations use it; any other peak becomes an intermediate layer of the glyphs that use it, on the nearest master. Settled by opening fonts built from sources with known masters and intermediate layers and comparing. |
 | `variable-ttf.open` (format) | M9 | inferred | – | A master takes the name of the named instance at its location, else its axis names and design coordinates; an intermediate layer is named by its coordinates in braces. |
 | `cff2.open` (format) | M9 | inferred | – | Every region of the CFF2 variation store becomes a master, since the charstrings do not say which glyphs use which region without evaluating them. Settled by opening CFF2 fonts built from sources with intermediate layers and comparing. |
+| `cff2.export` (format) | M9 | docs | – | Manual PostScript hints are left out of a CFF2 font, with a warning, where fontmake would write blended stems; comparing the hinted output of the two would settle whether blended hints are worth writing. |
 | `type1` (format) | M12 | docs | – | Vertical metrics are measured on the glyphs d, H, x and p (falling back to the FontBBox), since a Type 1 font has no such fields; the reference app's import of a .pfb would settle it. |
 | `type1` (format) | M12 | docs | – | Ghost hints become TopGhost and BottomGhost hints with place (edge, 0), the edge being y for a top ghost and y + dy for a bottom ghost as tx reports them; the reference app's import of a hinted .pfb would settle it. |
 | `type1` (format) | M12 | docs | – | Standard stems are named hStem0, hStem1… and vStem0…; the reference app's import of a .pfb would show its names. |
@@ -1675,6 +1676,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `compile.gdefLigatureCarets` (behavior) | M6 | docs | – | Carets at the same position are all kept, as fontc keeps them, where ufo2ft keeps one; a ligature with two carets at one position in the reference app's export would settle it. |
 | `compile.bracketLayerGlyphs` (behavior) | M9 | docs | – | When the font already has a glyph named like an alternate glyph (`a.BRACKET.varAlt01`), the alternate takes the next free number instead of replacing or clashing with it; settle by exporting such a font from the reference app and reading the glyph order. |
 | `compile.bracketLayerGlyphs` (behavior) | M9 | docs | – | A kern pair on a glyph with alternate layers is copied to its alternate glyphs the way glyphsLib copies it, not to every combination of alternates as fontc does; settle by exporting a variable font with a pair between two glyphs that both have alternate layers and reading its kerning at a location inside both ranges. |
+| `CFF2` (table) | M9 | docs | – | Charstrings are not specialised or subroutinised; byte size against fontmake's output would show whether that is worth doing. |
 | `gasp` (table) | M10 | docs | – | A CFF export gets no gasp table even with the parameter, as ufo2ft writes gasp for TrueType output only and the handbook describes the parameter for TrueType fonts; a CFF export from the reference app with the parameter would settle it. |
 | `gasp` (table) | M10 | docs | – | A gasp Table parameter with no usable range counts as no source, so a hinted font gets the default ranges; an export from the reference app with an empty parameter would settle it. |
 
