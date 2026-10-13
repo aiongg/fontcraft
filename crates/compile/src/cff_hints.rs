@@ -9,7 +9,7 @@
 //! |---|---|
 //! | source layer | [`fontcraft_hinting::ps::ps_hint_layer`]: the main master's layer (Get Hints From Master, else the first master), else the first other master's layer with hints; a special layer that replaces the master layer uses its own |
 //! | edges | a node reference is read on the glyph's layer in the master being built, so hints follow the outline into every master; a number is used as it is |
-//! | stems | made positive (lower edge first) and rounded as the charstring stores them; a top ghost written with width −20, a bottom ghost with −21; duplicates dropped; a stem whose numbers a charstring cannot hold ([`writable_stems`]) left out with a warning; beyond [`MAX_STEM_HINTS`] the first are kept, with a warning |
+//! | stems | made positive (lower edge first) and rounded as the charstring stores them; a top ghost written with width −20, a bottom ghost with −21; duplicates dropped; beyond [`MAX_STEM_HINTS`] the first are kept, with a warning; then a stem whose numbers a charstring cannot hold ([`writable_stems`]) left out with a warning |
 //! | hint replacement | only when two stems of one direction overlap: masks are built along the outline (see [`masks`]) |
 //! | autohinting | skipped for a glyph whose hint-source layer has any PostScript hint, even when none of them can be written |
 //!
@@ -103,6 +103,15 @@ pub fn manual_hints(font: &Font, settings: &HintSettings, name: &str, path: &[Pa
             list.push((index, stem));
         }
     }
+    // Truncated first: leaving stems out changes the offsets the stems after them are written at,
+    // so the stems written are the ones checked.
+    let total = h.len() + v.len();
+    if total > MAX_STEM_HINTS {
+        warnings
+            .push(format!("glyph `{name}`: {total} PostScript stem hints, more than the {MAX_STEM_HINTS} a charstring holds; the first were kept"));
+        h.truncate(MAX_STEM_HINTS);
+        v.truncate(MAX_STEM_HINTS - h.len());
+    }
     let mut out = CharstringHints::default();
     for (list, stems) in [(h, &mut out.h_stems), (v, &mut out.v_stems)] {
         let only: Vec<StemHint> = list.iter().map(|(_, s)| *s).collect();
@@ -113,13 +122,6 @@ pub fn manual_hints(font: &Font, settings: &HintSettings, name: &str, path: &[Pa
                 warnings.push(format!("glyph `{name}`: PostScript hint {index} lies beyond the numbers a charstring can hold; it was left out"));
             }
         }
-    }
-    let total = out.h_stems.len() + out.v_stems.len();
-    if total > MAX_STEM_HINTS {
-        warnings
-            .push(format!("glyph `{name}`: {total} PostScript stem hints, more than the {MAX_STEM_HINTS} a charstring holds; the first were kept"));
-        out.h_stems.truncate(MAX_STEM_HINTS);
-        out.v_stems.truncate(MAX_STEM_HINTS - out.h_stems.len());
     }
     out.masks = masks(&out.h_stems, &out.v_stems, path);
     Some(out)

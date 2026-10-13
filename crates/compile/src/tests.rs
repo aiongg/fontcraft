@@ -1865,6 +1865,22 @@ mod ps_hints_export {
     }
 
     #[test]
+    fn stems_beyond_the_charstring_limit_are_cut_before_their_offsets_are_checked() {
+        // In source order 60000 comes first and 30000 last, the one cut; without it, 60000 lies
+        // more than 32767 above the stem written before it.
+        let value = |a: f64, b: f64| PsHint::stem(true, Edge::Value(a), Edge::Value(b));
+        let mut hints = vec![value(60_000.0, 60_010.0), value(0.0, 10.0)];
+        hints.extend((0..94).map(|k| value(100.0 + 3.0 * f64::from(k), 101.0 + 3.0 * f64::from(k))));
+        hints.push(value(30_000.0, 30_010.0));
+        let out = valued(&hints);
+        let s = stems(&out, "A");
+        assert_eq!(s.h.len(), 95);
+        assert!(!s.h.iter().any(|(a, _)| *a >= 30_000), "{:?}", s.h.last());
+        assert!(out.warnings.iter().any(|w| w.contains("more than the 96")), "{:?}", out.warnings);
+        assert!(out.warnings.iter().any(|w| w.contains("PostScript hint 0 lies beyond")), "{:?}", out.warnings);
+    }
+
+    #[test]
     fn stems_that_overlap_once_rounded_get_hint_masks() {
         // 0..100.3 and 100.4..200 share the edge 100 once the charstring rounds them.
         let out = valued(&[PsHint::stem(true, Edge::Value(0.0), Edge::Value(100.3)), PsHint::stem(true, Edge::Value(100.4), Edge::Value(200.0))]);

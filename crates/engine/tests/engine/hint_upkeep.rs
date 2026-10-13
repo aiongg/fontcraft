@@ -217,6 +217,23 @@ fn moving_a_contour_by_the_gap_between_its_nodes_keeps_every_link_on_its_node() 
     assert_eq!(tt_place(&s, tt(&s)[0].target), (200.0, 1400.0));
 }
 
+/// "=": two identical bars, moved up by the gap between them; the lower bar lands on the upper
+/// bar's old places, and each bar keeps its own hint.
+#[test]
+fn identical_contours_moved_onto_each_others_places_keep_their_own_links() {
+    let mut s = session(
+        vec![Path::rect(100.0, 0.0, 200.0, 100.0), Path::rect(100.0, 300.0, 200.0, 400.0)],
+        &[PsHint::stem(true, node(0, 0), node(0, 3)), PsHint::stem(true, node(1, 0), node(1, 3))],
+        &[],
+    );
+    let before = layer(&s).info.hints.clone();
+    let all: Vec<[usize; 2]> = (0..2).flat_map(|p| (0..4).map(move |n| [p, n])).collect();
+    s.execute("selection.move", &json!({"glyph": "I", "points": all, "dx": 0, "dy": 300})).unwrap();
+    assert_eq!(layer(&s).info.hints, before);
+    let edges: Vec<(f64, f64)> = ps(&s).iter().map(|h| h.edges(&layer(&s)).unwrap()).collect();
+    assert_eq!(edges, vec![(300.0, 400.0), (600.0, 700.0)]);
+}
+
 /// A drag previews each step from the interaction's snapshot; the upkeep runs on every preview
 /// and the commit leaves one undo step with the links of the last preview.
 #[test]

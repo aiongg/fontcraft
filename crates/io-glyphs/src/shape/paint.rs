@@ -302,18 +302,26 @@ pub(crate) fn write_shadow(s: &Shadow, f: Form, at: &str) -> Option<Value> {
 
 /// The version 4 stroke position for a version 3 one (0 outside, 0.5 centred, 1 inside).
 fn from_v3(p: f64) -> f64 {
-    tidy(1.0 - 2.0 * p)
+    convert(p, |p| 1.0 - 2.0 * p, |p| (1.0 - p) / 2.0)
 }
 
 /// The version 3 stroke position for a version 4 one (−1 inside, 0 centred, 1 outside).
 fn to_v3(p: f64) -> f64 {
-    tidy((1.0 - p) / 2.0)
+    convert(p, |p| (1.0 - p) / 2.0, |p| 1.0 - 2.0 * p)
 }
 
-/// `p` to nine decimals, so a converted position written back reads as the text it came from
-/// (0.3 stays 0.3, not 0.29999999999999993); `p` itself when that is not finite.
+/// `forward(p)`, so that a value converted and written back reads as the text it came from:
+/// rounded to twelve decimals when that converts back to `p` (0.15 and 0.7, not
+/// 0.7000000000000001), else unrounded when that does (0.3333333333333333), else rounded.
+fn convert(p: f64, forward: fn(f64) -> f64, back: fn(f64) -> f64) -> f64 {
+    let raw = forward(p);
+    let rounded = tidy(raw);
+    [rounded, raw].into_iter().find(|&q| back(q) == p || tidy(back(q)) == p).unwrap_or(rounded)
+}
+
+/// `p` to twelve decimals; `p` itself when that is not finite.
 fn tidy(p: f64) -> f64 {
-    let r = (p * 1e9).round() / 1e9;
+    let r = (p * 1e12).round() / 1e12;
     if r.is_finite() { r } else { p }
 }
 

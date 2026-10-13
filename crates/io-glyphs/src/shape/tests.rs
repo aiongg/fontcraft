@@ -458,8 +458,17 @@ fn paint_keys_are_typed_and_written_back_the_same() {
 
 #[test]
 fn stroke_positions_convert_between_versions_3_and_4() {
-    let cases =
-        [("0", "1"), ("0.5", "0"), ("1", "-1"), ("0.25", "0.5"), ("0.3", "0.4"), ("0.15", "0.7"), ("\"1\"", "\"-1\""), ("\"0.3\"", "\"0.4\"")];
+    let cases = [
+        ("0", "1"),
+        ("0.5", "0"),
+        ("1", "-1"),
+        ("0.25", "0.5"),
+        ("0.3", "0.4"),
+        ("0.15", "0.7"),
+        ("0.3333333333333333", "0.33333333333333337"),
+        ("\"1\"", "\"-1\""),
+        ("\"0.3\"", "\"0.4\""),
+    ];
     for (v3, v4) in cases {
         let shape = |pos: &str, end: &str| {
             format!("{{\nattr = {{\nstrokePos = {pos};\nstrokeWidth = 10;\n}};\nclosed = 0;\nnodes = (\n(0,0,l),\n(10,0,l){end}\n);\n}}")
