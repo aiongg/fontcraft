@@ -163,9 +163,36 @@ fn take(d: &mut Dict, key: &str) -> Option<Value> {
 fn into_extra(d: Dict) -> Extra {
     let mut x = Extra::new();
     for (k, v) in d.entries {
-        x.push(Family::Glyphs, k, v);
+        let family = if k.as_str().starts_with(LAYOUT_KEY) { Family::Native } else { Family::Glyphs };
+        x.push(family, k, v);
     }
     x
+}
+
+/// The prefix of the key under which an object keeps a value as read, when a field holds it
+/// but the writer would lay it out otherwise (a one-line dictionary or list). [`finish`] writes
+/// the value as read while the field still gives it.
+pub const LAYOUT_KEY: &str = "com.fontcraft.glyphsLayout.";
+
+/// Keeps `source`, the value read under `key`, for its layout ([`LAYOUT_KEY`]).
+pub(crate) fn keep_layout(d: &mut Dict, key: &str, source: Value) {
+    d.entries.push((format!("{LAYOUT_KEY}{key}").as_str().into(), source));
+}
+
+/// `written` with the layout of `source` wherever the two have the same shape: dictionaries
+/// matched by key, lists by position.
+pub(crate) fn relaid(written: &Value, source: &Value) -> Value {
+    match (written, source) {
+        (Value::Dict(w), Value::Dict(s)) => {
+            let entries = w.entries.iter().map(|(k, v)| (k.clone(), s.get(k.as_str()).map_or_else(|| v.clone(), |sv| relaid(v, sv)))).collect();
+            Value::Dict(Dict { entries, layout: s.layout, spacing: w.spacing.clone() })
+        }
+        (Value::Array(w), Value::Array(s)) => {
+            let items = w.items.iter().enumerate().map(|(i, v)| s.items.get(i).map_or_else(|| v.clone(), |sv| relaid(v, sv))).collect();
+            Value::Array(Array { items, layout: s.layout, spacing: w.spacing.clone() })
+        }
+        _ => written.clone(),
+    }
 }
 
 fn as_f64(v: &Value, at: &str) -> Result<f64> {
@@ -932,8 +959,18 @@ fn pair(a: f64, b: f64, at: &str) -> Result<Value> {
 /// The fields' entries plus the extra entries of this family, keys sorted byte-wise. A field
 /// wins over an extra entry with the same key.
 fn finish(mut entries: Vec<(Str, Value)>, extra: &Extra) -> Dict {
+    if extra.iter().any(|e| e.key.as_str().starts_with(LAYOUT_KEY)) {
+        for (k, v) in &mut entries {
+            let kept = format!("{LAYOUT_KEY}{}", k.as_str());
+            if let Some(source) = extra.get(Family::Native, &kept).or_else(|| extra.get(Family::Glyphs, &kept))
+                && design::same_text(&relaid(v, source), source)
+            {
+                *v = source.clone();
+            }
+        }
+    }
     for e in extra.of(Family::Glyphs) {
-        if !entries.iter().any(|(k, _)| k.as_str() == e.key.as_str()) {
+        if !e.key.as_str().starts_with(LAYOUT_KEY) && !entries.iter().any(|(k, _)| k.as_str() == e.key.as_str()) {
             entries.push((e.key.clone(), e.value.clone()));
         }
     }

@@ -402,12 +402,14 @@ fn is_native(body: &str) -> bool {
 
 /// What saving could not keep: extra entries and kept shapes of other format families. The UFO
 /// and designspace readers' entries are records of the files as read; only the data some of them
-/// hold is reported ([`fontcraft_io_ufo::ufo::kept_data_losses`]), not the file layout.
+/// hold is reported ([`fontcraft_io_ufo::ufo::kept_data_losses`]), not the file layout, and
+/// neither are the layouts the .glyphs reader keeps ([`fontcraft_io_glyphs::LAYOUT_KEY`]).
 fn losses(font: &Font, targets: &[Family]) -> Vec<Value> {
     let mut counts: BTreeMap<&'static str, usize> = BTreeMap::new();
     let record = |f: Family| matches!(f, Family::Ufo | Family::Designspace);
     let mut count = |x: &fontcraft_model::Extra| {
-        for e in x.iter().filter(|e| !targets.contains(&e.family) && !record(e.family)) {
+        let layout = |e: &fontcraft_model::ExtraEntry| e.key.as_str().starts_with(fontcraft_io_glyphs::LAYOUT_KEY);
+        for e in x.iter().filter(|e| !targets.contains(&e.family) && !record(e.family) && !layout(e)) {
             *counts.entry(family_name(e.family)).or_default() += 1;
         }
     };

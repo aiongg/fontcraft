@@ -42,13 +42,23 @@ pub(crate) fn take_checked<T>(d: &mut Dict, key: &str, read: impl Fn(&Value) -> 
         return Vec::new();
     }
     let mut out = Vec::with_capacity(a.items.len());
+    let mut relayout = a.layout != Layout::Multiline;
     for item in &a.items {
-        match read(item) {
-            Some(t) if write(&t).is_some_and(|w| same_text(&w, item)) => out.push(t),
-            _ => return Vec::new(),
+        let Some(t) = read(item) else { return Vec::new() };
+        let Some(w) = write(&t) else { return Vec::new() };
+        if !same_text(&w, item) {
+            if !same_text(&crate::relaid(&w, item), item) {
+                return Vec::new();
+            }
+            relayout = true;
         }
+        out.push(t);
     }
-    take(d, key);
+    if let Some(source) = take(d, key)
+        && relayout
+    {
+        crate::keep_layout(d, key, source);
+    }
     out
 }
 
@@ -56,10 +66,16 @@ pub(crate) fn take_checked<T>(d: &mut Dict, key: &str, read: impl Fn(&Value) -> 
 pub(crate) fn take_same<T>(d: &mut Dict, key: &str, read: impl Fn(&Value) -> Option<T>, write: impl Fn(&T) -> Option<Value>) -> Option<T> {
     let v = d.get(key)?;
     let t = read(v)?;
-    if !write(&t).is_some_and(|w| same_text(&w, v)) {
+    let w = write(&t)?;
+    let relayout = !same_text(&w, v);
+    if relayout && !same_text(&crate::relaid(&w, v), v) {
         return None;
     }
-    take(d, key);
+    if let Some(source) = take(d, key)
+        && relayout
+    {
+        crate::keep_layout(d, key, source);
+    }
     Some(t)
 }
 

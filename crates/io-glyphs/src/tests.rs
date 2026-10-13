@@ -843,3 +843,21 @@ fn hand_written_files_read_as_the_reference_compilers_read_them() {
     let v2 = "{\nfamilyName = V2;\nfontMaster = (\n{\nid = m01;\n}\n);\nglyphs = (\n{\nglyphname = a;\nlayers = (\n{\nlayerId = m01;\n}\n);\n}\n);\nunitsPerEm = 1000;\n}\n";
     assert_eq!(read(v2).unwrap().glyph("a").unwrap().layers[0].width, 600.0);
 }
+
+#[test]
+fn one_line_dictionaries_are_read_into_the_model_and_keep_their_layout() {
+    let text = V3
+        .replace("unitsPerEm = 1000;", "numbers = ({name = gap;});\nunitsPerEm = 1000;")
+        .replace("associatedMasterId = m01;\n", "associatedMasterId = m01;\nattr = {axisRules = ({min = 600;});};\n");
+    let font = read(&text).unwrap();
+    assert_eq!(font.numbers.iter().map(|n| n.name.as_str()).collect::<Vec<_>>(), ["gap"]);
+    assert!(font.extra.get(Family::Glyphs, "numbers").is_none(), "typed, not carried");
+    let alternate = &font.glyph("A").unwrap().layers[1];
+    assert_eq!(alternate.info.attrs.axis_rules, [fontcraft_model::AxisRule { min: Some(600.0), max: None }]);
+    assert_eq!(write(&font).unwrap(), text);
+
+    // An edited value is written in the writer's layout.
+    let mut edited = font.clone();
+    Arc::make_mut(&mut edited.numbers)[0].name = "space".into();
+    assert!(write(&edited).unwrap().contains("numbers = (\n{\nname = space;\n}\n);"));
+}

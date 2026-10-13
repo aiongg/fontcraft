@@ -85,6 +85,24 @@ pub(crate) fn take_same<T>(
     Some(t)
 }
 
+/// [`take_same`], also taking a value the writer would lay out otherwise (a one-line
+/// dictionary): the value as read stays beside the field for its layout ([`crate::LAYOUT_KEY`]).
+fn take_relaid<T>(d: &mut Dict, key: &str, version: u32, read: impl Fn(&Value) -> Option<T>, write: impl Fn(&T) -> Option<Value>) -> Option<T> {
+    let v = d.get(key)?;
+    let t = read(v)?;
+    let w = write(&t)?;
+    let relayout = !same_text(&w, v, version);
+    if relayout && !same_text(&crate::relaid(&w, v), v, version) {
+        return None;
+    }
+    if let Some(source) = take(d, key)
+        && relayout
+    {
+        crate::keep_layout(d, key, source);
+    }
+    Some(t)
+}
+
 /// The list under `key`, item by item, when it has from 1 to `max` items and every item writes
 /// back as the same text; otherwise empty, and the list stays in `d`.
 fn take_list<T>(
@@ -686,7 +704,7 @@ pub(crate) fn take_layer_info(d: &mut Dict, version: u32, shapes: &Shapes) -> La
     if version == 2 {
         info.attrs = info.name.as_deref().map(v2_attrs).unwrap_or_default();
     } else {
-        info.attrs = take_same(d, "attr", version, |v| read_attrs(v, version), write_attrs).unwrap_or_default();
+        info.attrs = take_relaid(d, "attr", version, |v| read_attrs(v, version), write_attrs).unwrap_or_default();
         info.attrs.smart_poles = take_same(d, "partSelection", version, read_poles, |p: &Vec<SmartPole>| Some(write_poles(p))).unwrap_or_default();
     }
     info.vert_width = take_same(d, "vertWidth", version, number, |v| num(*v, "vertWidth").ok());
