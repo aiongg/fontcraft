@@ -148,7 +148,7 @@ fn capped(count: usize) -> Result<usize> {
 
 /// A format 4 subtable: one segment per run of consecutive code points, with `idDelta` when
 /// the glyph ids rise with the code points and a glyph id array otherwise.
-fn write_format4(language: u16, map: &[(u32, u16)]) -> Result<Vec<u8>> {
+pub(crate) fn write_format4(language: u16, map: &[(u32, u16)]) -> Result<Vec<u8>> {
     let mut segments: Vec<Vec<(u32, u16)>> = Vec::new();
     for (cp, gid) in map {
         match segments.last_mut() {
@@ -212,7 +212,7 @@ fn write_format4(language: u16, map: &[(u32, u16)]) -> Result<Vec<u8>> {
 }
 
 /// A format 12 subtable: one group per run of consecutive code points and glyph ids.
-fn write_format12(language: u32, map: &[(u32, u16)]) -> Result<Vec<u8>> {
+pub(crate) fn write_format12(language: u32, map: &[(u32, u16)]) -> Result<Vec<u8>> {
     let mut groups: Vec<(u32, u32, u32)> = Vec::new();
     for (cp, gid) in map {
         let gid = u32::from(*gid);

@@ -236,6 +236,8 @@ bundled, the file says so in its header and the project is listed here with its 
 
   Hint removal (crates/tables/src/dehint, M12.27) follows the --no-hinting rules of fontTools' subset module (MIT License): the hinting-table list, the maxp limits, the GPOS device-table and anchor pruning, and the Private DICT keys.
 
+  The subsetter (crates/tables/src/subset, M12.17) ports fontTools' subset module (MIT License, Copyright 2013 Google, Inc.): the option defaults, the glyph closure over cmap, glyf components and CFF seac, and the table rules for cmap, glyf, CFF, hmtx, vmtx, post, name, OS/2 and maxp. Its bidirectional mirroring pairs (crates/tables/src/subset/mirror.rs) are the Unicode Character Database's BidiMirroring.txt 18.0.0 (Unicode License v3, LICENSE-Unicode.txt) as fontTools' unicodedata.Mirrored lists them.
+
   The audit's data sets (crates/audit/src/data, M12.45): the OS/2 Unicode range blocks and bit
   search are ported from fontTools 4.66.1 (ttLib/tables/O_S_2f_2.py, MIT License); the expected
   contour counts (glyphdata.py), the cached list of registered vendor IDs, and the character lists

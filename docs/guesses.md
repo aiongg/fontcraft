@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**1712 guesses on 1108 rows (401 of them live commands).**
+**1714 guesses on 1109 rows (401 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -1483,6 +1483,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `metrics` (cli) | M12 | docs | – | The text form adds statistics, font-statistics and kerning sections in the same bracketed style as the glyph lines; a comparison with a future tx release or user feedback would settle the layout. |
 | `metrics` (cli) | M12 | docs | – | Glyph names come from post, then the CFF charset, then uniXXXX from the cmap, then glyphNNNNN, with #n added to repeats as fontTools does; tx's own fallback names (g1, g2) were not followed. |
 | `metrics` (cli) | M12 | docs | – | With several fonts on the command line the text forms print a '## FONT' line before each report. |
+| `subset` (cli) | M12 | docs | – | While variation subsetting is not built, a variable font loses every variation table together (fvar, avar, gvar, cvar, HVAR, VVAR, MVAR, STAT), so no subset claims axes without the data behind them; M12.19 replaces this. |
+| `subset` (cli) | M12 | docs | – | Unused CFF subroutines stay in the subset (pyftsubset removes them); outlines are the same, the file is larger. Comparing sizes on the corpus would show whether pruning is worth porting. |
 | `collection pack` (cli) | M12 | docs | – | A --share-table that names a font past the inputs, or a font without that table, is refused; otf2otc ignores it silently. A user report of a script that relies on otf2otc's behaviour would settle it. |
 | `collection unpack` (cli) | M12 | docs | – | When two members have the same PostScript name, the later ones are named STEM-fontN; otc2otf writes them to the same path, so the last one wins. A user report would settle whether the reference behaviour is wanted. |
 | `outlines remove-overlaps` (cli) | M12 | docs | – | --min-area (default 25) only drops contours of glyphs whose overlaps were merged, so glyphs without overlaps match the fontTools result; checkoutlinesufo's behaviour on tiny contours of unmerged glyphs would settle it. |

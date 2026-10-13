@@ -84,7 +84,7 @@ fn remove_hints(_: &mut Session, v: &Value) -> Result<Value> {
 }
 
 /// `face`: an index, or a PostScript name looked up in the collection.
-fn face_index(p: &Params<'_>, bytes: &[u8]) -> Result<u32> {
+pub(super) fn face_index(p: &Params<'_>, bytes: &[u8]) -> Result<u32> {
     match p.get("face") {
         None => Ok(0),
         Some(Value::Number(n)) => {

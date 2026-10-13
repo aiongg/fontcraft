@@ -93,6 +93,7 @@ mod spacing_set;
 mod status;
 mod stem_filters;
 mod stroke;
+mod subset_file;
 mod tables_file;
 mod thickness;
 mod transform;

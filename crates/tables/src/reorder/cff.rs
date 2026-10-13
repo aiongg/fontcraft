@@ -51,6 +51,9 @@ struct Private<'a> {
     subrs: Option<&'a [u8]>,
 }
 
+/// The local and global subroutines of a glyph, item by item.
+pub(crate) type Subrs<'a> = (Vec<&'a [u8]>, Vec<&'a [u8]>);
+
 /// A parsed `CFF ` table.
 pub(crate) struct Cff<'a> {
     header: &'a [u8],
@@ -422,7 +425,51 @@ impl Cff<'_> {
     /// The table with glyph `new_to_old[i]` at index `i`, and with `names` (by new glyph id)
     /// in the charset when given. A CID-keyed font keeps its CIDs.
     pub(crate) fn rebuild(&self, new_to_old: &[u16], names: Option<&[String]>) -> Result<Vec<u8>> {
+        self.rebuild_with(new_to_old, names, &HashMap::new(), false)
+    }
+
+    /// The charstring of glyph `g`.
+    pub(crate) fn charstring(&self, g: usize) -> Option<&[u8]> {
+        self.charstrings.get(g).copied()
+    }
+
+    /// The local and global subroutines glyph `g` calls into.
+    pub(crate) fn subrs(&self, g: usize) -> Result<Subrs<'_>> {
+        let (global, _) = index(Data::new(TAG, self.gsubrs), 0)?;
+        let local = match self.private_of(g).and_then(|p| p.subrs) {
+            Some(bytes) => index(Data::new(TAG, bytes), 0)?.0,
+            None => Vec::new(),
+        };
+        Ok((local, global))
+    }
+
+    /// `defaultWidthX` and `nominalWidthX` of the Private DICT glyph `g` uses, when they are
+    /// integers (both default to 0).
+    pub(crate) fn widths(&self, g: usize) -> (Option<i64>, Option<i64>) {
+        let get = |op: u16| match self.private_of(g).and_then(|p| find(&p.dict, op)) {
+            None => Some(0),
+            Some(e) => e.int(0),
+        };
+        (get(20), get(21))
+    }
+
+    fn private_of(&self, g: usize) -> Option<&Private<'_>> {
+        let fd = if self.cid { usize::from(self.fd_select.get(g).copied().unwrap_or(0)) } else { 0 };
+        self.privates.get(fd)
+    }
+
+    /// [`Self::rebuild`] with the charstrings of `replace` (by new glyph id) and, when
+    /// `standard_encoding`, without a custom or expert Encoding.
+    pub(crate) fn rebuild_with(
+        &self,
+        new_to_old: &[u16],
+        names: Option<&[String]>,
+        replace: &HashMap<usize, Vec<u8>>,
+        standard_encoding: bool,
+    ) -> Result<Vec<u8>> {
         let old = |g: usize| usize::from(new_to_old.get(g).copied().unwrap_or(0));
+        let encoding = if standard_encoding { None } else { self.encoding };
+        let top: Vec<Entry> = if standard_encoding { self.top.iter().filter(|e| e.op != ENCODING).cloned().collect() } else { self.top.clone() };
         let n = new_to_old.len();
         let mut strings: Vec<Vec<u8>> = self.strings.iter().map(|s| s.to_vec()).collect();
         let mut charset: Vec<u16> = (0..n).map(|g| self.charset.get(old(g)).copied().unwrap_or(0)).collect();
@@ -452,7 +499,8 @@ impl Cff<'_> {
                 }
             }
         }
-        let charstrings: Vec<&[u8]> = (0..n).map(|g| self.charstrings.get(old(g)).copied().unwrap_or_default()).collect();
+        let charstrings: Vec<&[u8]> =
+            (0..n).map(|g| replace.get(&g).map(Vec::as_slice).unwrap_or_else(|| self.charstrings.get(old(g)).copied().unwrap_or_default())).collect();
         let fd_select: Vec<u8> = if self.cid { (0..n).map(|g| self.fd_select.get(old(g)).copied().unwrap_or(0)).collect() } else { Vec::new() };
 
         let string_refs: Vec<&[u8]> = strings.iter().map(Vec::as_slice).collect();
@@ -475,12 +523,12 @@ impl Cff<'_> {
             } else if !self.privates.is_empty() {
                 r.push((PRIVATE, vec![private.0, private.1]));
             }
-            if self.encoding.is_some() {
+            if encoding.is_some() {
                 r.push((ENCODING, vec![enc]));
             }
             r
         };
-        let top_len = write_index(&[encode(&self.top, &top_replace(0, 0, 0, 0, (0, 0), 0))?.as_slice()])?.len();
+        let top_len = write_index(&[encode(&top, &top_replace(0, 0, 0, 0, (0, 0), 0))?.as_slice()])?.len();
 
         let mut pos = self.header.len() + self.name_index.len() + top_len + string_index.len() + self.gsubrs.len();
         let charset_at = pos;
@@ -502,7 +550,7 @@ impl Cff<'_> {
         }
 
         let first_private = (privates_sized.first().map_or(0, Vec::len), private_at.first().copied().unwrap_or(0));
-        let top = encode(&self.top, &top_replace(charset_at, fd_select_at, cs_at, fd_array_at, first_private, encoding_at))?;
+        let top = encode(&top, &top_replace(charset_at, fd_select_at, cs_at, fd_array_at, first_private, encoding_at))?;
         let mut out = Vec::with_capacity(pos);
         out.extend_from_slice(self.header);
         out.extend_from_slice(self.name_index);
@@ -531,7 +579,7 @@ impl Cff<'_> {
                 out.extend_from_slice(subrs);
             }
         }
-        if let Some(enc) = self.encoding {
+        if let Some(enc) = encoding {
             out.extend_from_slice(enc);
         }
         Ok(out)

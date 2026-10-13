@@ -9,9 +9,9 @@
 //! bitmap, `MATH`, `CFF2`, the Apple layout tables…) is refused; tables that do not index glyphs,
 //! and unknown tables, pass through byte for byte, as fontTools passes them.
 
-mod be;
+pub(crate) mod be;
 pub(crate) mod cff;
-mod cmap;
+pub(crate) mod cmap;
 mod layout;
 pub(crate) mod names;
 pub(crate) mod tables;

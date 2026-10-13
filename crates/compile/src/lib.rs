@@ -59,7 +59,7 @@ pub mod plan;
 pub mod points;
 pub mod preflight;
 pub mod preview;
-mod ranges;
+pub mod ranges;
 pub mod thickness;
 pub mod tt_hints;
 pub mod var;
