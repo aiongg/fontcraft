@@ -443,7 +443,7 @@ impl<'v> Evaluator<'v> {
         }
         Ok(match &token.body {
             Body::Name(_) => Some(code.get(token.range.clone()).unwrap_or_default().to_string()),
-            _ => axes.master_scalar(&values),
+            _ => axes.master_scalar(&values)?,
         })
     }
 

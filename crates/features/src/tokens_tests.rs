@@ -273,3 +273,18 @@ fn variable_tokens_vary_only_in_metric_statements() {
         "sub a by b; # pos\nlookup x { sub c by d; } x; pos a b (wght=100:10 wght=900:30); Ascender 10;"
     );
 }
+
+#[test]
+fn two_masters_at_one_location_with_different_token_values_are_an_error() {
+    let mut f = font();
+    f.axes = Arc::new(vec![fontcraft_model::Axis { name: "Weight".into(), tag: "wght".into(), ..Default::default() }]);
+    {
+        let masters = Arc::make_mut(&mut f.masters);
+        masters[0].location = vec![400.0];
+        masters[1].location = vec![400.0];
+    }
+    let data = GlyphData::new().unwrap();
+    let values = MasterValues::new(&f, &data, "m01").unwrap().for_variable_font();
+    let errors = expand("pos a b ${tracking * 2};", &values, EntryKind::Feature).unwrap_err();
+    assert!(errors[0].message.contains("share the location wght=400") && errors[0].message.contains("Bold"), "{}", errors[0].message);
+}

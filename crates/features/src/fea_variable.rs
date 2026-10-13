@@ -148,13 +148,13 @@ impl FeatureAxes {
     }
 
     /// A variable value with `values` (parallel to [`FeatureAxes::masters`]) at the masters,
-    /// in user coordinates: `(wght=100:10 wght=900:30)`. `None` without axes.
-    pub fn master_scalar(&self, values: &[i32]) -> Option<String> {
+    /// in user coordinates: `(wght=100:10 wght=900:30)`. `None` without axes. Two masters at
+    /// one location with different values are an error naming them.
+    pub fn master_scalar(&self, values: &[i32]) -> Result<Option<String>, String> {
         if self.axes.is_empty() {
-            return None;
+            return Ok(None);
         }
-        let mut seen = BTreeSet::new();
-        let mut entries = Vec::new();
+        let mut seen: Vec<(String, &str, i32)> = Vec::new();
         for (master, value) in self.masters.iter().zip(values) {
             let location = self
                 .axes
@@ -163,11 +163,16 @@ impl FeatureAxes {
                 .map(|(i, a)| format!("{}={}", a.tag, number_text(user_coordinate(a, master.location.get(i).copied().unwrap_or(a.internal.default)))))
                 .collect::<Vec<_>>()
                 .join(",");
-            if seen.insert(location.clone()) {
-                entries.push(format!("{location}:{value}"));
+            match seen.iter().find(|(l, _, _)| *l == location) {
+                Some((_, _, v)) if v == value => {}
+                Some((_, other, v)) => {
+                    return Err(format!("masters `{other}` and `{}` share the location {location} but give the token {v} and {value}", master.name));
+                }
+                None => seen.push((location, master.name.as_str(), *value)),
             }
         }
-        Some(format!("({})", entries.join(" ")))
+        let entries = seen.iter().map(|(location, _, value)| format!("{location}:{value}")).collect::<Vec<_>>();
+        Ok(Some(format!("({})", entries.join(" "))))
     }
 
     fn axis(&self, tag: &str) -> Option<(usize, &FeatureAxis)> {
