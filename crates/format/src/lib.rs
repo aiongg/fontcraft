@@ -124,6 +124,15 @@ mod tests {
     }
 
     #[test]
+    fn the_glyphs_v2_kerning_flag_is_kept_and_stored_only_when_set() {
+        let plain = save(&Font::new("Kerning")).unwrap();
+        assert!(!String::from_utf8_lossy(&plain).contains("glyphsV2Kerning"));
+        let mut font = Font::new("Kerning");
+        font.source.glyphs_v2_kerning = true;
+        assert!(load(&save(&font).unwrap()).unwrap().source.glyphs_v2_kerning);
+    }
+
+    #[test]
     fn stems_guides_zones_and_instance_fields_round_trip() {
         use fontcraft_model::{AlignmentZone, Guide, Instance, NameParts, NumberDef, StemDef, StyleClass};
         use std::sync::Arc;

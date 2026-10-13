@@ -40,8 +40,9 @@ pub struct Source {
     #[serde(skip)]
     pub compressed: bool,
     /// A version 3 or 4 `.glyphs` file whose left-to-right kerning was read from the version 2
-    /// `kerning` key, having no `kerningLTR`. Not stored in the file: the reader sets it.
-    #[serde(skip)]
+    /// `kerning` key, having no `kerningLTR`, and is written so again. Stored in a native file
+    /// only when set, so a `.glyphs` file saved through one keeps its key.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub glyphs_v2_kerning: bool,
 }
 
