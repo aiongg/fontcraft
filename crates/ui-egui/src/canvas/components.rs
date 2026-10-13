@@ -34,6 +34,9 @@ const MAX_DRAWN_COMPONENTS: usize = 2000;
 /// Most selected components whose smart handles are resolved; each costs three interpolations
 /// per property.
 const MAX_HANDLE_COMPONENTS: usize = 64;
+/// Most properties of one smart component that handles and sizes are resolved for; each costs up
+/// to five interpolations.
+const MAX_SMART_PARTS: usize = 32;
 /// Two handle positions closer than this, in font units, count as one: the anchor does not move
 /// with the property.
 const SAME_POSITION: f64 = 1e-6;
@@ -139,7 +142,7 @@ pub fn draw(c: &Painting, font: &Font, glyph: &str, layer: &Layer, selection: &S
         }
     }
     corners(c, layer);
-    for h in smart_handles(font, layer, selection) {
+    for h in smart(font, layer, selection).0 {
         let at = pos(c.view.to_screen(h.at));
         if at.x.is_finite() && at.y.is_finite() {
             c.painter.add(Shape::circle_filled(at, t.anchor_size / 2.0, t.smart_handle));
@@ -147,9 +150,56 @@ pub fn draw(c: &Painting, font: &Font, glyph: &str, layer: &Layer, selection: &S
     }
 }
 
+/// What the smart handles and sizes were last resolved from, and the result. The font's tables
+/// are held, so a pointer that matches is the same, unchanged table: an edit replaces them.
+struct SmartMemo {
+    glyphs: fontcraft_engine::model::GlyphTable,
+    masters: std::sync::Arc<Vec<fontcraft_engine::model::Master>>,
+    axes: std::sync::Arc<Vec<fontcraft_engine::model::Axis>>,
+    layer: Layer,
+    shapes: std::collections::BTreeSet<usize>,
+    handles: Vec<SmartHandle>,
+    sizes: Vec<SmartSize>,
+}
+
+thread_local! {
+    static SMART_MEMO: std::cell::RefCell<Option<SmartMemo>> = const { std::cell::RefCell::new(None) };
+}
+
+/// [`smart_handles`] and [`smart_sizes`] of the selected components of `layer`. The canvas and
+/// every panel that builds a scene ask for them each frame; they are resolved again only when
+/// the font, the layer or the selection changed.
+pub fn smart(font: &Font, layer: &Layer, selection: &Selection) -> (Vec<SmartHandle>, Vec<SmartSize>) {
+    let same = |m: &SmartMemo| {
+        m.glyphs.as_ptr() == font.glyphs.as_ptr()
+            && m.glyphs.len() == font.glyphs.len()
+            && std::sync::Arc::ptr_eq(&m.masters, &font.masters)
+            && std::sync::Arc::ptr_eq(&m.axes, &font.axes)
+            && m.shapes == selection.shapes
+            && m.layer == *layer
+    };
+    let cached = SMART_MEMO.with(|memo| memo.borrow().as_ref().filter(|m| same(m)).map(|m| (m.handles.clone(), m.sizes.clone())));
+    if let Some(found) = cached {
+        return found;
+    }
+    let handles = smart_handles(font, layer, selection);
+    let sizes = smart_sizes(font, layer, selection);
+    let memo = SmartMemo {
+        glyphs: font.glyphs.clone(),
+        masters: font.masters.clone(),
+        axes: font.axes.clone(),
+        layer: layer.clone(),
+        shapes: selection.shapes.clone(),
+        handles: handles.clone(),
+        sizes: sizes.clone(),
+    };
+    SMART_MEMO.with(|m| *m.borrow_mut() = Some(memo));
+    (handles, sizes)
+}
+
 /// The selected smart components of `layer` with their `Width` and `Height` properties (the
 /// names matched exactly) and the component's extent at each end of them.
-pub fn smart_sizes(font: &Font, layer: &Layer, selection: &Selection) -> Vec<SmartSize> {
+fn smart_sizes(font: &Font, layer: &Layer, selection: &Selection) -> Vec<SmartSize> {
     let mut out = Vec::new();
     for &shape in selection.shapes.iter().take(MAX_HANDLE_COMPONENTS) {
         let Some(ModelShape::Component(c)) = layer.shapes.get(shape) else { continue };
@@ -158,7 +208,7 @@ pub fn smart_sizes(font: &Font, layer: &Layer, selection: &Selection) -> Vec<Sma
             continue;
         }
         let axis = |name: &str, horizontal: bool| -> Option<SmartAxis> {
-            let part = base.info.parts.iter().find(|p| p.name == name)?;
+            let part = base.info.parts.iter().take(MAX_SMART_PARTS).find(|p| p.name == name)?;
             let (min, max) = (part.bottom_value.min(part.top_value), part.bottom_value.max(part.top_value));
             let size = |value: f64| -> Option<f64> {
                 let mut probe = c.clone();
@@ -177,12 +227,12 @@ pub fn smart_sizes(font: &Font, layer: &Layer, selection: &Selection) -> Vec<Sma
 /// The smart handles of the selected components of `layer`: for each property of a component's
 /// smart glyph, the anchor of the same name (case included) when it moves between the
 /// property's two ends.
-pub fn smart_handles(font: &Font, layer: &Layer, selection: &Selection) -> Vec<SmartHandle> {
+fn smart_handles(font: &Font, layer: &Layer, selection: &Selection) -> Vec<SmartHandle> {
     let mut out = Vec::new();
     for &shape in selection.shapes.iter().take(MAX_HANDLE_COMPONENTS) {
         let Some(ModelShape::Component(c)) = layer.shapes.get(shape) else { continue };
         let Some(base) = font.glyph(&c.glyph) else { continue };
-        for part in &base.info.parts {
+        for part in base.info.parts.iter().take(MAX_SMART_PARTS) {
             let anchor_at = |value: Option<f64>| -> Option<Point> {
                 let mut probe = c.clone();
                 if let Some(value) = value {

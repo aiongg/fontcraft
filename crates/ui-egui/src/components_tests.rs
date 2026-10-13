@@ -419,6 +419,35 @@ fn a_smart_handle_drag_sets_the_property_like_the_command() {
     assert_eq!(painted(&shapes, t.smart_handle), 0, "only selected components show handles");
 }
 
+/// The handles are resolved once and reused while nothing changes, and follow an edit of the
+/// smart glyph at the next frame.
+#[test]
+fn a_smart_handle_follows_an_edit_of_the_smart_glyph() {
+    let mut app = smart_app();
+    let t = Tokens::dark();
+    let w = Window::new();
+    let at = |app: &FontcraftApp, shapes: &[Shape], x: f64| {
+        let p = screen(app, x, 50.0);
+        shapes.iter().any(|s| matches!(s, Shape::Circle(c) if c.fill == t.smart_handle && c.center.distance(p) < 1.0))
+    };
+    // The first frame settles the view.
+    w.frame(&mut app, Vec::new());
+    let shown = w.frame(&mut app, Vec::new());
+    assert!(at(&app, &shown, 200.0));
+    app.session
+        .edit("move anchor", |font| {
+            let m = font.masters[0].id.clone();
+            let mut part = font.glyph_mut("_part.bar").unwrap();
+            let layer = part.layers.iter_mut().find(|l| l.id == m).unwrap();
+            layer.anchors[0].x = 150.0;
+            Ok(())
+        })
+        .unwrap();
+    let moved = w.frame(&mut app, Vec::new());
+    assert!(at(&app, &moved, 150.0), "the handle follows the anchor");
+    assert!(!at(&app, &moved, 200.0));
+}
+
 #[test]
 fn bounding_box_knobs_set_width_on_a_smart_component() {
     let mut app = smart_app();
