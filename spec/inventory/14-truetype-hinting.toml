@@ -28,6 +28,8 @@ milestone = "M10"
 summary = "Sources keep cubic outlines; TrueType export converts them to quadratic outlines on the fly, and manual instructions, which refer to source nodes, are carried over to the matching points of the converted outline. Instructions are therefore stored against source nodes, never against final point numbers."
 ref = "TrueType Hinting › introduction"
 status = "handbook"
+notes = "M10.19, crates/compile/src/points.rs: the point map is built by position on the outline the TrueType stage prepared, after decomposition, overlap removal, curve conversion and reversal. An on-curve node keeps its place and is never left out as an implied point; an off-curve node takes the nearest off-curve point between the points of its segment's ends. Tested in skrifa with an Interpolate on a cubic handle. Documented, not yet observed."
+guesses = ["An instruction on a cubic handle moves the off-curve point of the converted segment nearest to the handle, and an on-curve node that the conversion could leave implied is written as a point; exporting a glyph instructed on a handle from the reference app and reading its glyf would settle both."]
 
 [[behavior]]
 id = "hinting.tt.mainMasterOnly"
@@ -86,6 +88,7 @@ milestone = "M10"
 summary = "With the Autohint export option off, the manual instructions stored in the source are compiled into the exported font. Glyphs without instructions are exported unhinted."
 ref = "TrueType Hinting › Autohinting"
 status = "handbook"
+notes = "M10.19, crates/compile/src/tt_hints.rs: with Autohint off (the instance's Autohint parameter, else the export option) each glyph whose main-master layer has instructions gets its glyph program, and the font gets our cvt, fpgm and prep and maxp values that cover the analysed needs of every program; glyphs without instructions and composites get none. skrifa runs every glyph at 8 to 72 PPM in the three intents. With Autohint on the font is written without TrueType hints, with a warning, until the TrueType autohinter (M10.21) is built. Documented, not yet observed."
 
 [[behavior]]
 id = "hinting.tt.param.ttfAutohintOptions"
@@ -590,7 +593,11 @@ milestone = "M10"
 summary = "Opening a hinted TrueType font adds three custom parameters to the masters: CVT Table, prep Table Assembly and fpgm Table Assembly, holding the font's control values and the assembly source of its control-value and font programs. They exist so that the original hinting survives a re-export and are rarely edited by hand; at export they are written to the cvt, prep and fpgm tables."
 ref = "TrueType Hinting › Advanced TrueType Hinting › Control Value Program"
 status = "handbook"
-guesses = ["No corpus source holds the prep or fpgm Table Assembly parameter, so FontCraft writes and reads them in its own assembly syntax (one instruction per line, mnemonics with bracketed flags as fontTools prints them, push values on the push's line; fontTools' layout with the values on the following lines and /* */ comments is read too); a file saved by the reference app after opening a hinted TrueType font would show its syntax, and the reader would then accept both."]
+notes = "M10.19: at export the cvt Table values and the assembled prep and fpgm Table Assembly programs are written as they are, and maxp takes what the analysis finds in them (a stack of 1024 when it cannot follow them). Glyph programs from imported fonts wait for M10.22."
+guesses = [
+  "No corpus source holds the prep or fpgm Table Assembly parameter, so FontCraft writes and reads them in its own assembly syntax (one instruction per line, mnemonics with bracketed flags as fontTools prints them, push values on the push's line; fontTools' layout with the values on the following lines and /* */ comments is read too); a file saved by the reference app after opening a hinted TrueType font would show its syntax, and the reader would then accept both.",
+  "When a master carries any of the three parameters, manual instructions are not compiled, since they call functions of FontCraft's own fpgm, and a warning says to remove the parameters (the handbook says to remove them before instructing afresh); a reference export of a font with both would show what it does.",
+]
 observe = [
   "Open a hinted TTF that FontCraft exported from T3 and save it as .glyphs; note how the CVT Table, prep Table Assembly and fpgm Table Assembly values are stored in the file (keys, value types, layout).",
 ]
@@ -901,6 +908,7 @@ milestone = "M10"
 summary = "Read-only query returning, for each source node of the glyph, the point index it receives in the exported quadratic outline. Headless counterpart of Show Point Indexes, for agents writing control instructions."
 ref = "TrueType Hinting › Show Point Indexes"
 status = "inferred"
+notes = "M10.19, crates/engine/src/cmd/hint_points.rs over crates/compile/src/points.rs: the numbers come from the same point map the export uses, for the main master or a named static instance, with overlap removal on unless removeOverlaps is false; export parameters that rename or decompose glyphs are not applied. Tested against the exported glyf."
 own = true
 
 # ---------------------------------------------------------------------------------------------
@@ -1422,7 +1430,7 @@ milestone = "M10"
 summary = "When a static font is exported with Remove Overlaps, points inside overlaps disappear and intersections become single points. An instruction on a point that is removed is reattached to whichever intersection point created by the removal lies closest, so hinting a regular node next to an intersection and hinting the intersection's extra node give the same result."
 ref = "TrueType Hinting › Points in Overlapping Intersections"
 status = "handbook"
-notes = "The editor half (M10.3, crates/hinting/src/remap.rs): Path > Remove Overlap keeps instructions on nodes that survive, found by place, and moves an instruction on a removed node, or on an intersection extra node, to the nearest on-curve node the removal created; with no such node it is removed and reported under hintUpkeep in the command result. Other outline edits remove an instruction whose node is gone and report it. The export half waits for M10.19. Documented for export, not yet observed in the editor."
+notes = "The editor half (M10.3, crates/hinting/src/remap.rs): Path > Remove Overlap keeps instructions on nodes that survive, found by place, and moves an instruction on a removed node, or on an intersection extra node, to the nearest on-curve node the removal created; with no such node it is removed and reported under hintUpkeep in the command result. Other outline edits remove an instruction whose node is gone and report it. The export half (M10.19, crates/compile/src/points.rs): a node that overlap removal takes away maps to the nearest on-curve point the removal created, and an instruction on an intersection extra node to the created point nearest to where its two segments' chords cross, the rule the editor uses. Documented for export, not yet observed in the editor."
 guesses = [
   "Path > Remove Overlap in the editor applies the documented export rule to instructions on removed nodes and on intersections, and PostScript ends on removed nodes become numbers; running Remove Overlap on an instructed glyph in the reference app would settle it.",
   "An outline edit other than Remove Overlap removes an instruction whose node is gone instead of moving it; deleting an instructed node in the reference app would settle it.",
@@ -1460,6 +1468,7 @@ milestone = "M10"
 summary = "In a variable TrueType export the glyph programs come once from the main master, and the control values derived from zones and stems (cvt) are those of the default master, with each other master's differences written to the cvar table so that zone positions and stem widths follow the design space. The handbook does not describe this; it follows from per-master zones and stems being the mechanism that replicates hints across masters."
 ref = "TrueType Hinting › Font-level Hints; OpenType spec › cvar"
 status = "inferred"
+notes = "M10.19: a variable TrueType export with instructions uses the default master's cvt, fpgm and prep and the main master's instructions without Delta instructions; no cvar is written yet, and the export warns that zones and stems do not follow the other masters."
 guesses = ["Per-master zones and stems reach a variable font as cvt values of the default master plus cvar deltas; a variable export from the reference app would settle it."]
 observe = ["T3: give a TT zone a delta and export a variable TTF; note whether a cvar table is written and which cvt entries it varies."]
 
@@ -1471,7 +1480,10 @@ summary = "For manually instructed fonts the exporter generates the supporting t
 ref = "TrueType Hinting › Font-level Hints; Instructions; Advanced TrueType Hinting"
 status = "inferred"
 notes = "M10.17, crates/hinting/src/tt_font.rs: cvt holds per zone its position and fitted row, per stem its width and fitted width, then the family zone positions; fpgm holds seven functions (zone rounding, zone alignment, rounding, cvt delta, zone snap, stem, point delta); prep sets the rendering mode, overshoot and minimum-distance storage, then rounds, aligns and nudges zones and stems for the size. maxp limits come from the static analysis; skrifa runs every program at 8 to 72 PPM in the three intents within them. Stem rounding: Round takes the fitted width, Round up and Round down the ceiling and floor of the stem's own width. Triple hints and diagonal preservation wait for M10.18."
-guesses = ["The fpgm, prep and cvt layout is FontCraft's own, written from the TrueType instruction set specification; byte parity with the reference app is not a goal and nothing from its output is copied."]
+guesses = [
+  "The fpgm, prep and cvt layout is FontCraft's own, written from the TrueType instruction set specification; byte parity with the reference app is not a goal and nothing from its output is copied.",
+  "A font with TrueType programs sets head flags bits 2 (instructions depend on point size) and 3 (integer PPM); a reference export of an instructed font would show its head flags.",
+]
 
 [[behavior]]
 id = "hinting.tt.export.instanceValues"
@@ -1480,6 +1492,7 @@ milestone = "M10"
 summary = "For a static instance, TT zone positions and sizes, stem sizes and master-level TTFBlueFuzz are interpolated from the masters like other master values; instance-level parameters (TTFBlueFuzz, TTZoneRoundingThreshold, TTMinimumDistance, gasp Table) then override font-level ones. Zones and stems are matched across masters; the handbook does not say whether by name or by list position."
 ref = "TrueType Hinting › TrueType BlueFuzz; Font-level Hints"
 status = "handbook"
+notes = "M10.19: a static instance between the masters is exported from its interpolated font; each glyph there takes the hints of its main-master layer when that layer has hints and the same paths, and TTFZones and TTFStems positions, sizes and widths are interpolated by name in the main master's order (crates/compile/src/tt_hints.rs). The Delta column is the instance's location key; the zone and stem delta column is the instance's name. Documented, not yet observed."
 guesses = ["Composite glyphs get no glyph program of their own: their components' programs apply; Alternate and Intermediate layers that replace the main master's layer carry their own instructions, as the PostScript chapter says for hints; a reference export would settle both."]
 observe = [
   "T3: instruct A, export as TTF and read Aacute in glyf; note whether the composite has instructions of its own.",
@@ -1493,3 +1506,5 @@ milestone = "M10"
 summary = "When a glyph's instructions cannot be compiled the reference reports 'There was a problem compiling TrueType instructions' (stated for the Autohint action). The engine should return a per-glyph error naming the offending instruction rather than a bare message."
 ref = "TrueType Hinting › Instructions"
 status = "handbook"
+notes = "M10.19: a glyph whose instructions cannot be compiled (a point its outline lacks, a program past the glyf limit) is exported without them; the export warning names the glyph and the reason. An instruction whose point cannot be resolved is left out of its program with a warning naming the glyph and the instruction. Font programs that cannot be built leave the whole font unhinted, with a warning."
+guesses = ["A glyph whose instructions fail to compile is exported unhinted and the export goes on, with a warning naming the glyph; a reference export of a glyph with a broken instruction would show whether it stops instead."]

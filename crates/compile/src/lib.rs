@@ -394,8 +394,10 @@ pub fn with_instance_feature_axes<'a>(options: &'a Options, font: &Font, target:
 /// The instance font of the static instance at `index`, its notes added to `warnings`.
 fn instance_source(font: &Font, index: usize, warnings: &mut Vec<String>) -> Result<Font, CompileError> {
     let options = fontcraft_interp::instance::options_for(font, index)?;
-    let (out, notes) = fontcraft_interp::instance::instance_font_with_notes(font, index, &options)?;
+    let staged = tt_hints::with_tt_values(font);
+    let (mut out, notes) = fontcraft_interp::instance::instance_font_with_notes(staged.as_ref().unwrap_or(font), index, &options)?;
     warnings.extend(notes);
+    tt_hints::finish_instance(font, &mut out);
     Ok(out)
 }
 
@@ -594,3 +596,5 @@ pub(crate) fn u16_of(v: f64) -> u16 {
 mod instance_names_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tt_hints_tests;

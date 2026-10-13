@@ -952,6 +952,7 @@ dependencies = [
  "fontcraft-pathops",
  "fontcraft-spacing",
  "fontcraft-ttasm",
+ "read-fonts 0.45.0",
  "skrifa 0.48.0",
  "thiserror 2.0.21",
  "unicode-normalization",

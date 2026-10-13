@@ -430,6 +430,22 @@ Ignore Vertical Hints leaves out the horizontal Stem instructions on vertical TT
 instruction naming a point the outline lacks is left out with a warning; a program past 65,535
 bytes is an error.
 
+The export (M10.19, `crates/compile/src/tt_hints.rs` and `points.rs`):
+
+| Step | Rule |
+|---|---|
+| when | a TrueType build, hints not stripped, Export TrueType Hints on, Autohint off; Autohint on writes no TrueType hints until the autohinter exists (M10.21) |
+| imported tables | any of cvt Table, prep Table Assembly, fpgm Table Assembly on the build: those tables as they are; manual instructions are not compiled, with a warning (they call our `fpgm`) |
+| glyphs | each glyph whose main-master layer has instructions and that exports as a simple outline; composites get none |
+| point map | by position on the prepared outline: on-curve nodes at their place (never left out as implied points), off-curve nodes to the nearest off-curve point of their segment, nodes removed by overlap removal and intersection extra nodes to the nearest created on-curve point |
+| static instance between masters | built from its interpolated font: glyphs take their main-master layer's hints, TTFZones and TTFStems values are interpolated by name |
+| errors | a glyph program that cannot be compiled leaves that glyph unhinted, with a warning naming it; font programs that cannot be built leave the font unhinted, with a warning |
+| `maxp` | the largest needs `ttasm::analyse` finds in `fpgm`, `prep` and every glyph program; the longest glyph program |
+| `head` | bits 2 and 3 set when the font has programs (guess) |
+| variable | the default master's `cvt `, `fpgm`, `prep`; no Delta instructions, no `cvar` yet (a warning says so) |
+
+`hint.tt.getPointIndexes` returns the same point map for one glyph.
+
 Unhinted export (no instructions, autohint off): no `cvt `, `fpgm`, glyph programs; a minimal `prep`
 and a `gasp` suited to unhinted rendering are a separate export decision (see the compile spec).
 

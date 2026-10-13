@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1144 rows to check: 1601 guesses and 422 observe steps.**
+**1146 rows to check: 1605 guesses and 422 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,7 +48,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 40 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 4 |
-| **Later milestones (after M6)** | all | **673** |
+| **Later milestones (after M6)** | all | **675** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 39 |
 | Later milestones (after M6) | Edit View: text mode and preview | 14 |
 | Later milestones (after M6) | Components and anchors | 33 |
@@ -58,7 +58,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Font View | 13 |
 | Later milestones (after M6) | Font Info and features | 253 |
 | Later milestones (after M6) | Interpolation | 44 |
-| Later milestones (after M6) | Hinting | 82 |
+| Later milestones (after M6) | Hinting | 84 |
 | Later milestones (after M6) | Colour fonts | 46 |
 | Later milestones (after M6) | Files: open, import, export | 45 |
 | Later milestones (after M6) | Settings and the window | 12 |
@@ -1338,7 +1338,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (673)
+## Later milestones (after M6) (675)
 
 ### Edit View: drawing, guides, layers and the Palette (39)
 
@@ -2598,7 +2598,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `hoi.setControlPoints` (M13, inferred): Set Interpolation Control Points
   - Open (our design, not confirmed): Headless form of dragging a knob or handle: sets the intermediate point (one point), the two handles (two points) or the rotation centre (one point) of a node's interpolation curve.
 
-### Hinting (82)
+### Hinting (84)
 
 - [ ] `hinting.ps.standardStems.privateDictMapping` (behavior, M10, docs): At export the first horizontal stem becomes StdHW and the first vertical…
   - Guess: More than twelve stems in one direction: the export writes the first twelve in list order and warns, and hint.ps.validateFontHints reports it; an export from the reference app with thirteen stems would settle it.
@@ -2692,6 +2692,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `autohint.ps.run` (M10, docs): Autohint PostScript
   - Guess: The autohinter is a port of otfautohint with its defaults; which autohinter the reference app runs is not documented, and a reference export compared with otfautohint's output on the same font would show whether they agree.
   - Observe: T1: export as CFF with Autohint on; export it again unhinted and run otfautohint on that file; compare the hstem and vstem lists and the hint masks glyph by glyph and note every glyph where they differ.
+- [ ] `hinting.tt.cubicSourceQuadraticOutput` (behavior, M10, handbook): Sources keep cubic outlines; TrueType export converts them to quadratic outlines on…
+  - Guess: An instruction on a cubic handle moves the off-curve point of the converted segment nearest to the handle, and an on-curve node that the conversion could leave implied is written as a point; exporting a glyph instructed on a handle from the reference app and reading its glyf would settle both.
 - [ ] `hinting.tt.mainMasterOnly` (behavior, M10, handbook): Glyph-level TrueType instructions are defined on one master only, the main master:…
   - Guess: Rounding only in GDI ClearType is stored as options 3, which no source shows; a file saved by the reference app with that rounding mode would show the value.
   - Guess: A Snap stores its zone in the stem key (−2 automatic, −1 none, else the index), as a Stem stores its stem; a file with a Snap set to a named zone would show the key.
@@ -2728,6 +2730,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The minimum distance also applies to Round up and Round down and to stems without a stem definition, and is clamped to 0 to 8 px; a reference export with a stem rounded to zero would settle it.
 - [ ] `hinting.tt.param.controlValueProgram` (behavior, M10, handbook): Opening a hinted TrueType font adds three custom parameters to the masters:…
   - Guess: No corpus source holds the prep or fpgm Table Assembly parameter, so FontCraft writes and reads them in its own assembly syntax (one instruction per line, mnemonics with bracketed flags as fontTools prints them, push values on the push's line; fontTools' layout with the values on the following lines and /* */ comments is read too); a file saved by the reference app after opening a hinted TrueType font would show its syntax, and the reader would then accept both.
+  - Guess: When a master carries any of the three parameters, manual instructions are not compiled, since they call functions of FontCraft's own fpgm, and a warning says to remove the parameters (the handbook says to remove them before instructing afresh); a reference export of a font with both would show what it does.
   - Observe: Open a hinted TTF that FontCraft exported from T3 and save it as .glyphs; note how the CVT Table, prep Table Assembly and fpgm Table Assembly values are stored in the file (keys, value types, layout).
 - [ ] `hinting.tt.import.glyphPrograms` (behavior, M10, inferred): The handbook describes how cvt, prep and fpgm of an opened font…
   - Guess: Imported glyph programs are kept per layer as assembly text with a fingerprint of the outline; they are written back while the outline is unchanged and the layer has no editor instructions, editor instructions win, and a changed outline drops the program with a warning; opening a hinted TTF in the reference app would settle how it stores them.
@@ -2779,10 +2782,13 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: T3: give a TT zone a delta and export a variable TTF; note whether a cvar table is written and which cvt entries it varies.
 - [ ] `hinting.tt.export.generatedPrograms` (behavior, M10, inferred): For manually instructed fonts the exporter generates the supporting tables itself: cvt…
   - Guess: The fpgm, prep and cvt layout is FontCraft's own, written from the TrueType instruction set specification; byte parity with the reference app is not a goal and nothing from its output is copied.
+  - Guess: A font with TrueType programs sets head flags bits 2 (instructions depend on point size) and 3 (integer PPM); a reference export of an instructed font would show its head flags.
 - [ ] `hinting.tt.export.instanceValues` (behavior, M10, handbook): For a static instance, TT zone positions and sizes, stem sizes and…
   - Guess: Composite glyphs get no glyph program of their own: their components' programs apply; Alternate and Intermediate layers that replace the main master's layer carry their own instructions, as the PostScript chapter says for hints; a reference export would settle both.
   - Observe: T3: instruct A, export as TTF and read Aacute in glyf; note whether the composite has instructions of its own.
   - Observe: T3: add an Alternate layer for master 1 of n with instructions of its own, export as TTF and read n's glyph program; note which layer's instructions were used.
+- [ ] `hinting.tt.export.compileError` (behavior, M10, handbook): When a glyph's instructions cannot be compiled the reference reports 'There was…
+  - Guess: A glyph whose instructions fail to compile is exported unhinted and the export goes on, with a warning naming the glyph; a reference export of a glyph with a broken instruction would show whether it stops instead.
 - [ ] `autohint.tt.run` (M10, inferred): Autohint TrueType
   - Guess: The built-in TrueType autohinter is FontCraft's own (decided in M10 § 7, question 2): Snap and Stem instructions from the PostScript autohinter's zone and stem analysis, compiled with the manual-instruction compiler; ttfautohint runs instead when the TTFAutohint binary path parameter names one; the reference app's built-in autohinter is ttfautohint.
 - [ ] `hint.tt.getPsZones` (M10, handbook): Get PS zones

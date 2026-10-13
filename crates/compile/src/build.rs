@@ -413,7 +413,23 @@ pub fn assemble(
     let mut builder = FontBuilder::new();
     // Glyph names: in `post` for TrueType, unless there are too many; in the charset for CFF.
     let names = if flavour == Flavour::Cff || order.len() <= MAX_POST_NAMES { crate::names::final_names(font, order, warnings) } else { Vec::new() };
-    let (boxes, maxp) = match flavour {
+    let variable = extra.tables.iter().any(|(tag, _)| *tag == Tag::new(b"gvar"));
+    let tt_hinting = match (flavour, source) {
+        (Flavour::TrueType, Some(source)) => crate::tt_hints::tt_hinting(source, font, order, outlines, options, variable, warnings)?,
+        _ => None,
+    };
+    // Glyphs with a program are written from the points their program was compiled against.
+    let instructed: Option<Vec<Prepared>> = tt_hinting.as_ref().filter(|h| !h.glyphs.is_empty()).map(|h| {
+        let mut all = outlines.to_vec();
+        for (gid, glyph) in &h.glyphs {
+            if let Some(slot) = all.get_mut(*gid) {
+                *slot = Prepared::Points(glyph.clone());
+            }
+        }
+        all
+    });
+    let outlines = instructed.as_deref().unwrap_or(outlines);
+    let (boxes, mut maxp) = match flavour {
         Flavour::TrueType => truetype(order, outlines, &mut builder)?,
         Flavour::Cff => match &extra.cff2 {
             Some(built) => cff2_table(built, order.len(), &mut builder)?,
@@ -466,7 +482,11 @@ pub fn assemble(
     let head = Head {
         font_revision: Fixed::from_f64(revision),
         // Left side bearings are always the glyphs' xMin here, so bit 1 is always true.
-        flags: info.head_flags | Flags::LSB_AT_X_0,
+        // A hinted font's programs depend on the size in whole pixels (guess on
+        // `hinting.tt.export.generatedPrograms`).
+        flags: info.head_flags
+            | Flags::LSB_AT_X_0
+            | if tt_hinting.is_some() { Flags::INSTRUCTIONS_MAY_DEPEND_ON_POINT_SIZE | Flags::FORCE_INTEGER_PPEM } else { Flags::empty() },
         units_per_em: font.units_per_em,
         created: date(created),
         modified: date(modified),
@@ -517,6 +537,18 @@ pub fn assemble(
     let name =
         Name::new(info.names.iter().map(|r| NameRecord::new(r.platform, r.encoding, r.language, NameId::new(r.id), r.text.clone().into())).collect());
 
+    if let Some(h) = &tt_hinting {
+        set_program_limits(&mut maxp, h, outlines);
+        if !h.cvt.is_empty() {
+            builder.add_raw(Tag::new(b"cvt "), h.cvt.iter().flat_map(|v| v.to_be_bytes()).collect::<Vec<u8>>());
+        }
+        if !h.fpgm.is_empty() {
+            builder.add_raw(Tag::new(b"fpgm"), h.fpgm.clone());
+        }
+        if !h.prep.is_empty() {
+            builder.add_raw(Tag::new(b"prep"), h.prep.clone());
+        }
+    }
     builder.add_table(&head).map_err(table("head"))?;
     builder.add_table(&hhea).map_err(table("hhea"))?;
     builder.add_table(&maxp).map_err(table("maxp"))?;
@@ -531,8 +563,7 @@ pub fn assemble(
     if let Some(kern) = kern {
         builder.add_raw(Tag::new(b"kern"), kern);
     }
-    // M10.19: `hinted` is true when the font carries TrueType instructions.
-    let hinted = false;
+    let hinted = tt_hinting.is_some();
     if let Some(gasp) = crate::gasp::gasp_table(font, flavour, hinted, warnings)? {
         builder.add_table(&gasp).map_err(table("gasp"))?;
     }
@@ -545,6 +576,27 @@ pub fn assemble(
         builder.add_raw(*tag, bytes.as_slice());
     }
     Ok(builder.build())
+}
+
+/// `maxp`'s program values: the merged needs of the TrueType programs, and the longest glyph
+/// program.
+fn set_program_limits(maxp: &mut Maxp, h: &crate::tt_hints::TtHinting, outlines: &[Prepared]) {
+    let l = &h.limits;
+    let longest = outlines
+        .iter()
+        .filter_map(|o| match o {
+            Prepared::Points(g) => u16::try_from(g.instructions.len()).ok(),
+            _ => None,
+        })
+        .max()
+        .unwrap_or(0);
+    maxp.max_zones = Some(l.max_zones.max(1));
+    maxp.max_twilight_points = Some(l.max_twilight_points);
+    maxp.max_storage = Some(l.max_storage);
+    maxp.max_function_defs = Some(l.max_function_defs);
+    maxp.max_instruction_defs = Some(l.max_instruction_defs);
+    maxp.max_stack_elements = Some(l.max_stack_elements);
+    maxp.max_size_of_instructions = Some(longest.max(l.max_size_of_instructions));
 }
 
 /// `OS/2` version 4 (`compile.os2*`).
