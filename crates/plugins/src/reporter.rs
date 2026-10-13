@@ -181,6 +181,19 @@ impl Drawing {
     pub fn is_empty(&self) -> bool {
         self.background.is_empty() && self.foreground.is_empty()
     }
+
+    /// About how many bytes the drawing holds: its primitives, path steps and text.
+    pub fn held_bytes(&self) -> usize {
+        let one = |p: &Primitive| {
+            std::mem::size_of::<Primitive>()
+                + match p {
+                    Primitive::Path { commands, .. } => commands.len().saturating_mul(std::mem::size_of::<PathCommand>()),
+                    Primitive::Text { text, .. } => text.len(),
+                    _ => 0,
+                }
+        };
+        self.background.iter().chain(&self.foreground).map(one).fold(std::mem::size_of::<Drawing>(), usize::saturating_add)
+    }
 }
 
 /// What a cached drawing depends on.
@@ -233,11 +246,30 @@ pub fn layer_key(document: u64, glyph: &str, layer: &str, revision: u64) -> u64 
 /// Most drawings kept; the cache is cleared when it grows past this.
 pub const MAX_CACHED_DRAWINGS: usize = 4_096;
 
+/// Most bytes the cached drawings hold together ([`Drawing::held_bytes`]); the cache is cleared
+/// when a new drawing would take it past this. One drawing can hold up to [`MAX_PRIMITIVES`]
+/// items, so the drawing count alone would let the cache grow to gigabytes.
+pub const MAX_CACHED_BYTES: usize = 256 << 20;
+
 /// Reporter drawings by [`CacheKey`]. Shared across threads; methods take `&self`, so the
 /// canvas can fill it while it holds the session read-only.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct ReporterCache {
-    drawings: Mutex<HashMap<CacheKey, Arc<Drawing>>>,
+    drawings: Mutex<Cached>,
+    max_bytes: usize,
+}
+
+impl Default for ReporterCache {
+    fn default() -> Self {
+        ReporterCache { drawings: Mutex::default(), max_bytes: MAX_CACHED_BYTES }
+    }
+}
+
+#[derive(Debug, Default)]
+struct Cached {
+    map: HashMap<CacheKey, Arc<Drawing>>,
+    /// The sum of [`Drawing::held_bytes`] over `map`.
+    bytes: usize,
 }
 
 impl ReporterCache {
@@ -245,30 +277,46 @@ impl ReporterCache {
         Self::default()
     }
 
+    /// A cache that holds at most `max_bytes` instead of [`MAX_CACHED_BYTES`].
+    #[cfg(test)]
+    pub(crate) fn with_max_bytes(max_bytes: usize) -> Self {
+        ReporterCache { drawings: Mutex::default(), max_bytes }
+    }
+
     /// The drawing for `key`, running `run` (the reporter call and parse) when it is not cached.
     /// An error is returned, not cached.
     pub fn get_or_run(&self, key: CacheKey, run: impl FnOnce() -> Result<Drawing>) -> Result<Arc<Drawing>> {
-        if let Some(d) = self.lock().get(&key) {
+        if let Some(d) = self.lock().map.get(&key) {
             return Ok(d.clone());
         }
         // The lock is not held while the module runs, so other layers can be drawn meanwhile.
         let drawing = Arc::new(run()?);
-        let mut map = self.lock();
-        if map.len() >= MAX_CACHED_DRAWINGS {
-            map.clear();
+        let size = drawing.held_bytes();
+        let mut cached = self.lock();
+        if cached.map.len() >= MAX_CACHED_DRAWINGS || cached.bytes.saturating_add(size) > self.max_bytes {
+            cached.map.clear();
+            cached.bytes = 0;
         }
-        map.insert(key, drawing.clone());
+        if let Some(old) = cached.map.insert(key, drawing.clone()) {
+            cached.bytes = cached.bytes.saturating_sub(old.held_bytes());
+        }
+        cached.bytes = cached.bytes.saturating_add(size);
         Ok(drawing)
     }
 
     /// The cached drawing for `key`, without running anything.
     pub fn get(&self, key: &CacheKey) -> Option<Arc<Drawing>> {
-        self.lock().get(key).cloned()
+        self.lock().map.get(key).cloned()
     }
 
     /// How many drawings are cached.
     pub fn len(&self) -> usize {
-        self.lock().len()
+        self.lock().map.len()
+    }
+
+    /// The bytes the cached drawings hold ([`Drawing::held_bytes`]).
+    pub fn held_bytes(&self) -> usize {
+        self.lock().bytes
     }
 
     pub fn is_empty(&self) -> bool {
@@ -278,15 +326,19 @@ impl ReporterCache {
     /// Drops the drawings of modules whose serial is not in `serials` (after an uninstall or a
     /// replacement).
     pub fn retain_modules(&self, serials: &[u64]) {
-        self.lock().retain(|k, _| serials.contains(&k.module));
+        let mut cached = self.lock();
+        cached.map.retain(|k, _| serials.contains(&k.module));
+        cached.bytes = cached.map.values().map(|d| d.held_bytes()).fold(0, usize::saturating_add);
     }
 
     pub fn clear(&self) {
-        self.lock().clear();
+        let mut cached = self.lock();
+        cached.map.clear();
+        cached.bytes = 0;
     }
 
     /// The map; a poisoned lock is taken over, since every value in it is complete.
-    fn lock(&self) -> MutexGuard<'_, HashMap<CacheKey, Arc<Drawing>>> {
+    fn lock(&self) -> MutexGuard<'_, Cached> {
         self.drawings.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 }

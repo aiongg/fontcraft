@@ -352,3 +352,39 @@ fn measure_module_speed() {
     println!("reporter uncached: {:?} per layer (target < 5 ms)", uncached / 1000);
     println!("reporter cached: {:?} per glyph (target < 1 ms)", cached / 1000);
 }
+
+#[test]
+fn filter_output_values_are_counted_and_long_logs_skipped() {
+    // One node whose user data holds more values than the whole output may: refused while
+    // counting, before any of it is built.
+    let zeros = vec!["0"; layer_json::MAX_OUTPUT_VALUES].join(",");
+    let nested = format!(r#"{{"shapes":[{{"path":{{"closed":true,"nodes":[{{"x":0,"y":0,"type":"line","userData":{{"k":[{zeros}]}}}}]}}}}]}}"#);
+    let e = FilterOutput::parse(nested.as_bytes()).unwrap_err();
+    assert!(matches!(&e, Error::Output(m) if m.contains("JSON values")), "{e}");
+    // The same values spread over anchors count against the same budget.
+    let anchors = format!(r#"{{"shapes":[],"anchors":[{{"name":"a","x":0,"y":0,"userData":{{"k":[{zeros}]}}}}]}}"#);
+    assert!(matches!(FilterOutput::parse(anchors.as_bytes()), Err(Error::Output(m)) if m.contains("JSON values")));
+    // Log entries past the limit are skipped unread; one that is not a string shows as JSON text.
+    let log = format!(r#"{{"shapes":[],"log":[{{"a":1}},{}]}}"#, vec!["[0,0,0,0]"; 1_000_000].join(","));
+    let out = FilterOutput::parse(log.as_bytes()).unwrap();
+    assert_eq!(out.log.len(), error::MAX_LOG_LINES);
+    assert_eq!(out.log[0], r#"{"a":1}"#);
+}
+
+#[test]
+fn the_reporter_cache_is_cleared_past_its_byte_limit() {
+    let step = PathCommand::LineTo { to: [0.0, 0.0] };
+    let drawing = Drawing { background: vec![Primitive::Path { commands: vec![step; 1_000], fill: None, stroke: None }], foreground: Vec::new() };
+    let size = drawing.held_bytes();
+    assert!(size > 1_000 * std::mem::size_of::<PathCommand>());
+    let cache = ReporterCache::with_max_bytes(3 * size);
+    let key = |layer| CacheKey::new(1, &serde_json::Map::new(), layer, 1.0);
+    for layer in 0..3 {
+        cache.get_or_run(key(layer), || Ok(drawing.clone())).unwrap();
+    }
+    assert_eq!((cache.len(), cache.held_bytes()), (3, 3 * size));
+    cache.get_or_run(key(3), || Ok(drawing.clone())).unwrap();
+    assert_eq!((cache.len(), cache.held_bytes()), (1, size), "a fourth drawing clears the cache first");
+    cache.retain_modules(&[]);
+    assert_eq!(cache.held_bytes(), 0);
+}

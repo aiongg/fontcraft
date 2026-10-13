@@ -9,7 +9,9 @@
 //! and anchors in the same form; other keys are ignored, so a filter may return the `layer`
 //! object it was given, changed. `shapes` replaces the layer's shapes (images and kept shapes
 //! included); without `anchors` or `width` the layer keeps its own. `{"error": "…"}` reports a
-//! failure. [`FilterOutput::apply`] checks every value against the model's limits
+//! failure. The shapes and anchors hold at most [`MAX_OUTPUT_VALUES`] JSON values in all, nodes
+//! and their nested data included, counted before any is built; log entries past
+//! [`MAX_LOG_LINES`] are skipped unread. [`FilterOutput::apply`] checks every value against the model's limits
 //! (`MAX_OUTLINE_ELEMENTS`, `MAX_COORDINATE`, finite numbers, `MAX_NAME_LEN`) before it builds the
 //! new layer, so a bad output changes nothing; the engine applies every layer's result in one
 //! edit. Locked and hidden paths go to filters like the others and may change
@@ -18,10 +20,12 @@
 use std::collections::BTreeMap;
 
 use fontcraft_model::{Anchor, Font, Glyph, Layer, MAX_NAME_LEN, MAX_OUTLINE_ELEMENTS, Shape};
+use serde::de::{IgnoredAny, SeqAccess, Visitor};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use serde_json::value::RawValue;
 
-use crate::capped::{capped_opt, with_budget};
+use crate::capped::{capped_opt, charge_values, with_budget};
 pub use crate::error::{MAX_LOG_LINE_CHARS, MAX_LOG_LINES};
 use crate::{Error, Result};
 
@@ -110,19 +114,58 @@ pub struct FilterOutput {
     pub log: Vec<String>,
 }
 
-/// The output as read; shapes and anchors share one element budget.
+/// Most JSON values the shapes and anchors of one filter output may hold, path nodes and their
+/// nested data included: eight per outline element, room for every key a node carries.
+pub const MAX_OUTPUT_VALUES: usize = 8 * MAX_OUTLINE_ELEMENTS;
+
+/// The output as read: shapes and anchors share one element budget and stay unparsed until
+/// their values are counted; log lines past [`MAX_LOG_LINES`] are skipped unread.
 #[derive(Deserialize)]
-struct FilterOut {
+struct FilterOut<'a> {
     #[serde(default)]
     error: Option<String>,
-    #[serde(default, deserialize_with = "capped_opt")]
-    shapes: Option<Vec<Shape>>,
-    #[serde(default, deserialize_with = "capped_opt")]
-    anchors: Option<Vec<Anchor>>,
+    #[serde(default, borrow, deserialize_with = "capped_opt")]
+    shapes: Option<Vec<&'a RawValue>>,
+    #[serde(default, borrow, deserialize_with = "capped_opt")]
+    anchors: Option<Vec<&'a RawValue>>,
     #[serde(default)]
     width: Option<f64>,
-    #[serde(default)]
-    log: Vec<Value>,
+    #[serde(default, deserialize_with = "log_lines")]
+    log: Vec<String>,
+}
+
+/// The first [`MAX_LOG_LINES`] entries of a log list, each cut at [`MAX_LOG_LINE_CHARS`]
+/// characters; an entry that is not a string is shown as its JSON text.
+fn log_lines<'de, D: serde::Deserializer<'de>>(d: D) -> std::result::Result<Vec<String>, D::Error> {
+    struct V;
+    impl<'de> Visitor<'de> for V {
+        type Value = Vec<String>;
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            f.write_str("a list of log lines")
+        }
+        fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> std::result::Result<Vec<String>, A::Error> {
+            let mut out = Vec::new();
+            while out.len() < MAX_LOG_LINES {
+                let Some(raw) = seq.next_element::<&RawValue>()? else { return Ok(out) };
+                let line = match serde_json::from_str::<String>(raw.get()) {
+                    Ok(s) => cut(&s, MAX_LOG_LINE_CHARS),
+                    Err(_) => cut(raw.get(), MAX_LOG_LINE_CHARS),
+                };
+                out.push(line);
+            }
+            while seq.next_element::<IgnoredAny>()?.is_some() {}
+            Ok(out)
+        }
+    }
+    d.deserialize_seq(V)
+}
+
+/// Parses `raw` items as `T` once all of them, counted together against `left`, fit.
+fn counted<T: serde::de::DeserializeOwned>(raw: &[&RawValue], left: &mut usize) -> Result<Vec<T>> {
+    if !raw.iter().all(|r| charge_values(r, left)) {
+        return Err(Error::Output(format!("the shapes and anchors hold more than {MAX_OUTPUT_VALUES} JSON values")));
+    }
+    raw.iter().map(|r| serde_json::from_str::<T>(r.get()).map_err(|e| Error::Output(e.to_string()))).collect()
 }
 
 /// `s` cut to at most `max` characters.
@@ -141,17 +184,14 @@ impl FilterOutput {
         if let Some(e) = out.error {
             return Err(Error::Failed(cut(&e, MAX_LOG_LINE_CHARS)));
         }
-        let shapes = out.shapes.ok_or_else(|| Error::Output("a filter's output must list the layer's `shapes`".into()))?;
-        let log = out
-            .log
-            .iter()
-            .take(MAX_LOG_LINES)
-            .map(|v| match v {
-                Value::String(s) => cut(s, MAX_LOG_LINE_CHARS),
-                v => cut(&v.to_string(), MAX_LOG_LINE_CHARS),
-            })
-            .collect();
-        Ok(FilterOutput { shapes, anchors: out.anchors, width: out.width, log })
+        let raw_shapes = out.shapes.ok_or_else(|| Error::Output("a filter's output must list the layer's `shapes`".into()))?;
+        let mut left = MAX_OUTPUT_VALUES;
+        let shapes = counted(&raw_shapes, &mut left)?;
+        let anchors = match &out.anchors {
+            Some(raw) => Some(counted(raw, &mut left)?),
+            None => None,
+        };
+        Ok(FilterOutput { shapes, anchors, width: out.width, log: out.log })
     }
 
     /// `layer` with its shapes, anchors and width replaced by this output, after every value is
