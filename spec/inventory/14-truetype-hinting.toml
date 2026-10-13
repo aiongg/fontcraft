@@ -1468,7 +1468,7 @@ milestone = "M10"
 summary = "In a variable TrueType export the glyph programs come once from the main master, and the control values derived from zones and stems (cvt) are those of the default master, with each other master's differences written to the cvar table so that zone positions and stem widths follow the design space. The handbook does not describe this; it follows from per-master zones and stems being the mechanism that replicates hints across masters."
 ref = "TrueType Hinting › Font-level Hints; OpenType spec › cvar"
 status = "inferred"
-notes = "M10.19: a variable TrueType export with instructions uses the default master's cvt, fpgm and prep and the main master's instructions without Delta instructions; no cvar is written yet, and the export warns that zones and stems do not follow the other masters."
+notes = "M10.19: a variable TrueType export with instructions uses the default master's cvt, fpgm and prep and the main master's instructions without Delta instructions; no cvar is written yet, and the export warns that zones and stems do not follow the other masters. Its glyphs with instructions keep every on-curve point their nodes give, in all sources, so the instructions find them."
 guesses = ["Per-master zones and stems reach a variable font as cvt values of the default master plus cvar deltas; a variable export from the reference app would settle it."]
 observe = ["T3: give a TT zone a delta and export a variable TTF; note whether a cvar table is written and which cvt entries it varies."]
 

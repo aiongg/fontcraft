@@ -212,8 +212,9 @@ fn imported_tables_are_written_as_they_are() {
     runs_everywhere(&out.bytes);
 }
 
-#[test]
-fn an_instance_between_masters_exports_its_programs() {
+/// [`hinted_font`] with a second master at weight 200 whose layers carry no hints, and an
+/// instance `Medium` at 150.
+fn two_masters() -> Font {
     let mut f = hinted_font();
     f.axes = std::sync::Arc::new(vec![fontcraft_model::Axis { name: "Weight".into(), tag: "wght".into(), ..Default::default() }]);
     let masters = std::sync::Arc::make_mut(&mut f.masters);
@@ -233,8 +234,27 @@ fn an_instance_between_masters_exports_its_programs() {
     }
     let inst = fontcraft_model::Instance { name: "Medium".into(), location: vec![150.0], ..Default::default() };
     f.instances = std::sync::Arc::new(vec![inst]);
+    f
+}
+
+#[test]
+fn an_instance_between_masters_exports_its_programs() {
+    let f = two_masters();
     let out = compile(&f, &Target::Instance(0), crate::Flavour::TrueType, &Options::default()).unwrap();
     let font = FontRef::new(&out.bytes).unwrap();
     assert!(!program(&font, gid(&out, "o")).is_empty(), "the main master's instructions apply to the instance: {:?}", out.warnings);
+    runs_everywhere(&out.bytes);
+}
+
+#[test]
+fn a_variable_font_takes_the_main_master_s_programs_without_deltas() {
+    let f = two_masters();
+    let var = crate::var::compile_variable(&f, None, &Options::default(), &crate::var::VariableOptions::default()).unwrap();
+    let out = &var.compiled;
+    assert!(out.warnings.iter().any(|w| w.contains("cvar")), "{:?}", out.warnings);
+    assert!(out.warnings.iter().any(|w| w.contains("Delta instructions are not written")), "{:?}", out.warnings);
+    let font = FontRef::new(&out.bytes).unwrap();
+    assert!(font.table_data(skrifa::Tag::new(b"gvar")).is_some());
+    assert!(!program(&font, gid(out, "o")).is_empty(), "{:?}", out.warnings);
     runs_everywhere(&out.bytes);
 }

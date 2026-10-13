@@ -771,10 +771,16 @@ impl Outlines<'_> {
                     if settings.keep_direction { path } else { path.reverse_subpaths() }
                 })
                 .collect();
-            let mut simples = SimpleGlyph::interpolatable_glyphs_from_bezpaths(&paths).map_err(|e| CompileError::Glyph {
-                glyph: g.name.clone(),
-                message: format!("its sources cannot be written with the same points: {e:?}"),
-            })?;
+            // A glyph with TrueType instructions keeps the on-curve points its nodes give, so
+            // the instructions find them ([`crate::points`]).
+            let keep = crate::points::kept_nodes(self.prepared, &g.name, self.origin);
+            let mut simples = match Some(&keep).filter(|k| !k.is_empty()).and_then(|k| crate::points::interpolatable_glyphs(&paths, k)) {
+                Some(s) => s,
+                None => SimpleGlyph::interpolatable_glyphs_from_bezpaths(&paths).map_err(|e| CompileError::Glyph {
+                    glyph: g.name.clone(),
+                    message: format!("its sources cannot be written with the same points: {e:?}"),
+                })?,
+            };
             let count: usize = simples.first().map_or(0, |s| s.contours.iter().map(|c| c.len()).sum());
             if count > crate::MAX_TT_POINTS {
                 return Err(CompileError::Glyph {

@@ -172,7 +172,13 @@ pub fn exported(layer: &Layer, instructions: &[TtInstruction], prepared: &Prepar
         starts.push(at);
         at += c.len();
     }
-    let nodes = source_nodes(layer);
+    let mut nodes = source_nodes(layer);
+    if !droppable {
+        // Points already rounded: compare them with the nodes rounded the same way.
+        for (p, _) in nodes.iter_mut().flatten() {
+            *p = Point::new(round(p.x), round(p.y));
+        }
+    }
     let mut grid: HashMap<(i64, i64), Vec<usize>> = HashMap::new();
     for (i, p) in pts.iter().enumerate().filter(|(_, p)| p.on) {
         grid.entry(cell(p.p)).or_default().push(i);
@@ -349,6 +355,60 @@ pub fn exported(layer: &Layer, instructions: &[TtInstruction], prepared: &Prepar
         count: next,
     };
     Some(Exported { glyph, outline, contour_ends, map })
+}
+
+/// The on-curve node positions of `glyph`'s layer for `master` when its main-master layer has
+/// TrueType instructions: the points a variable build keeps even where they could be implied.
+pub(crate) fn kept_nodes(font: &Font, glyph: &str, master: &str) -> Vec<Point> {
+    let Some(g) = font.glyph(glyph) else { return Vec::new() };
+    let main = fontcraft_hinting::settings::main_master(font);
+    let instructed = g.layer(&main).and_then(|l| fontcraft_hinting::tt_instructions(l).ok()).is_some_and(|t| !t.is_empty());
+    let Some(layer) = g.layer(master).filter(|_| instructed) else { return Vec::new() };
+    source_nodes(layer).into_iter().flatten().filter(|n| n.1).map(|n| n.0).collect()
+}
+
+/// `write-fonts`' interpolation-compatible glyphs of `paths` (one per source, the origin first),
+/// keeping the on-curve points of the origin that lie at a place in `keep`; `None` when the
+/// paths do not have the same points.
+pub(crate) fn interpolatable_glyphs(paths: &[BezPath], keep: &[Point]) -> Option<Vec<SimpleGlyph>> {
+    let lists: Vec<Vec<Vec<(Point, bool)>>> = paths.iter().map(path_points).collect::<Option<_>>()?;
+    let first = lists.first()?;
+    let same = lists
+        .iter()
+        .all(|l| l.len() == first.len() && l.iter().zip(first).all(|(a, b)| a.len() == b.len() && a.iter().zip(b).all(|(p, q)| p.1 == q.1)));
+    if !same {
+        return None;
+    }
+    let mut grid: HashMap<(i64, i64), Vec<Point>> = HashMap::new();
+    for p in keep {
+        grid.entry(cell(*p)).or_default().push(*p);
+    }
+    let kept = |p: Point| {
+        let (cx, cy) = cell(p);
+        (-1..=1i64)
+            .flat_map(|dx| (-1..=1i64).map(move |dy| (cx.saturating_add(dx), cy.saturating_add(dy))))
+            .filter_map(|k| grid.get(&k))
+            .flatten()
+            .any(|q| q.distance(p) <= SAME_PLACE)
+    };
+    let mut out = Vec::with_capacity(lists.len());
+    for (path, list) in paths.iter().zip(&lists) {
+        let mut contours = Vec::with_capacity(list.len());
+        for (ci, c) in list.iter().enumerate() {
+            let origin = first.get(ci)?;
+            let mut points = Vec::with_capacity(c.len());
+            for (i, &(p, on)) in c.iter().enumerate() {
+                let drop = lists.iter().all(|l| l.get(ci).is_some_and(|c| implied(c, i))) && !origin.get(i).is_some_and(|q| kept(q.0));
+                if !drop {
+                    #[allow(clippy::cast_possible_truncation)]
+                    points.push(CurvePoint::new(round(p.x) as i16, round(p.y) as i16, on));
+                }
+            }
+            contours.push(Contour::from(points));
+        }
+        out.push(SimpleGlyph { bbox: path.control_box().into(), contours, instructions: Vec::new(), overlaps: false });
+    }
+    Some(out)
 }
 
 /// The off-curve point nearest `at` between points `a` and `b` of one contour, on the shorter

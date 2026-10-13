@@ -316,13 +316,19 @@ pub(crate) fn finish_instance(font: &Font, out: &mut Font) {
     };
     for i in 0..out.glyphs.len() {
         let Some(name) = out.glyphs.as_arcs().get(i).map(|g| g.name.clone()) else { continue };
-        let Some(source) = font.glyph(&name).and_then(|g| g.layer(&main).cloned()) else { continue };
-        if source.info.hints.is_empty() {
+        let Some(glyph) = font.glyph(&name) else { continue };
+        let Some(source) = glyph.layer(&main).filter(|l| !l.info.hints.is_empty()) else { continue };
+        let needs = out
+            .glyphs
+            .as_arcs()
+            .get(i)
+            .is_some_and(|g| g.layers.iter().any(|l| l.is_master_layer() && l.info.hints != source.info.hints && shape(l) == shape(source)));
+        if !needs {
             continue;
         }
         let Some(mut g) = out.glyphs.get_mut_at(i) else { continue };
         for layer in g.layers.iter_mut().filter(|l| l.is_master_layer()) {
-            if layer.info.hints != source.info.hints && shape(layer) == shape(&source) {
+            if layer.info.hints != source.info.hints && shape(layer) == shape(source) {
                 layer.info.hints.clone_from(&source.info.hints);
             }
         }
