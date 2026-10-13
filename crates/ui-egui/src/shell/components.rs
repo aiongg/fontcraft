@@ -50,7 +50,17 @@ pub fn run(app: &mut FontcraftApp, id: &str, args: &Args) -> Result<Value, Strin
     }
     let at = tab.edited_index().unwrap_or(0);
     let tab_id = tab.id;
+    let before = tab.clone();
     app.run("editView.insertText", &json!({"tab": tab_id, "glyphs": [base], "at": at}))?;
-    app.run("editView.setCursor", &json!({"tab": tab_id, "index": at}))?;
+    if let Err(e) = app.run("editView.setCursor", &json!({"tab": tab_id, "index": at})) {
+        // A command that fails changes nothing: the inserted glyph goes again.
+        if let Some(tab) = app.state.tabs.get_mut(index) {
+            *tab = before;
+        }
+        if let Some(tab) = app.state.tabs.get(index) {
+            app.layouts.prepare(&mut app.session, tab);
+        }
+        return Err(e);
+    }
     Ok(json!({"glyph": base}))
 }
