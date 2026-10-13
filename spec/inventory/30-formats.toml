@@ -702,7 +702,7 @@ milestone = "M11"
 summary = "Placed as a tracing template or as the bitmap of a colour glyph. A Glyphs source stores only a path relative to the document, with position, scale, slant, rotation, crop and alpha; a UFO requires the file itself inside `images/` and allows PNG only, so other image types are converted to PNG when saving to UFO. Images are left out of exports except for bitmap colour fonts."
 ref = "Edit View › Images; UFO 3 images directory, GLIF image element; Color Fonts › Standard Bitmap Graphics"
 status = "docs"
-notes = "Read by sniffing the header first (size and resolution), then decoded to RGBA within 64 MiB per file, 16,384 pixels per side and 2^26 pixels."
+notes = "Read by sniffing the header first (size and resolution), then decoded to RGBA within 64 MiB per file, 16,384 pixels per side and 2^26 pixels. A UFO written by FontCraft carries the image files of the UFO it was read from; saving reports every layer image that is not a PNG file in the UFO's `images/` folder as a loss (an image of another document, or a JPEG or TIFF)."
 
 [[format]]
 id = "image-jpeg"

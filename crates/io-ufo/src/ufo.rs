@@ -1789,6 +1789,15 @@ pub(crate) fn glyph_losses(font: &Font) -> Vec<String> {
 pub(crate) fn layer_losses(font: &Font, designspace: bool) -> Vec<String> {
     use fontcraft_model::{Background, Image, LayerInfo};
     let unfiled = |i: &Option<Image>| i.as_ref().is_some_and(|i| i.path.is_none());
+    // A GLIF image names a PNG file in the UFO's `images/` folder; only a UFO's own image files
+    // travel, and other formats are not converted.
+    let not_in_images = |i: &Option<Image>| {
+        i.as_ref().and_then(|i| i.path.as_deref()).is_some_and(|p| {
+            let png = std::path::Path::new(p).extension().is_some_and(|e| e.eq_ignore_ascii_case("png"));
+            let suffix = format!("images/{p}");
+            !png || !font.files.0.keys().any(|k| k.ends_with(&suffix))
+        })
+    };
     let guide_extras = |guides: &[fontcraft_model::Guide]| {
         guides.iter().any(|g| g.filter.is_some() || g.angle_locked || g.show_measurement || g.orientation.is_some())
     };
@@ -1863,6 +1872,7 @@ pub(crate) fn layer_losses(font: &Font, designspace: bool) -> Vec<String> {
             guide_extras(&i.guides) || bg(i, &|b| guide_extras(&b.guides)),
             ufo2 && (!i.guides.is_empty() || i.image.is_some() || bg(i, &|b| !b.guides.is_empty() || b.image.is_some())),
             !l.is_master_layer() && id_lost,
+            not_in_images(&i.image) || bg(i, &|b| not_in_images(&b.image)),
         ];
         for ((_, n), on) in counts.iter_mut().zip(has) {
             *n += usize::from(on);
@@ -1931,7 +1941,7 @@ pub const SHAPE_LOSSES: [&str; 10] = [
 ];
 
 /// The kinds of layer data [`layer_losses`] reports, as its lines begin.
-pub const LAYER_LOSSES: [&str; 14] = [
+pub const LAYER_LOSSES: [&str; 15] = [
     "the layers' names",
     "the layers' attributes other than colour palette entries",
     "the layers' vertical widths of 0",
@@ -1946,6 +1956,7 @@ pub const LAYER_LOSSES: [&str; 14] = [
     "the layers' guide filters, angle locks, measurements and label positions",
     "the layers' guides and images, which UFO 2 has no place for",
     "the ids of layers other than master layers",
+    "the layers' image files, which are not PNG files in the UFO's images folder",
 ];
 
 /// The kinds of glyph metadata [`glyph_losses`] reports, as its lines begin.
@@ -2741,6 +2752,22 @@ mod tests {
         assert_eq!(names, [Some("Backup"), Some("Backup #1"), Some("{550}"), Some("color.65535")]);
         assert!(a.layers.iter().find(|l| l.info.name.as_deref() == Some("Backup #1")).unwrap().info.background.is_some());
         assert_eq!(write(&back).unwrap(), files, "a UFO we wrote comes back unchanged");
+    }
+
+    #[test]
+    fn image_files_that_do_not_travel_are_losses() {
+        const LOST: &str = "the layers' image files, which are not PNG files in the UFO's images folder (1)";
+        let mut font = layered();
+        assert!(info_losses(&font).iter().any(|l| l == LOST), "a file the font does not hold");
+        let mut files = fontcraft_model::FileStore::default();
+        files.0.insert("Layered.ufo/images/a.png".into(), std::sync::Arc::from(&b"png"[..]));
+        font.files = std::sync::Arc::new(files);
+        assert!(!info_losses(&font).iter().any(|l| l.starts_with("the layers' image files")));
+        {
+            let mut a = font.glyph_mut("A").unwrap();
+            a.layer_mut("m01").unwrap().info.image.as_mut().unwrap().path = Some("a.jpg".into());
+        }
+        assert!(info_losses(&font).iter().any(|l| l == LOST), "a JPEG is not converted");
     }
 
     #[test]
