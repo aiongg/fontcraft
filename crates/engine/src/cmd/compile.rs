@@ -42,6 +42,15 @@ pub fn specs() -> Vec<CommandSpec> {
             compile
         ).files(const { &[FileParam::write("destination")] }).writes_files(),
         cmd!(
+            "file.exportVariable",
+            "Export Variable Fonts",
+            [],
+            None,
+            "{settings?: [string], outlines?: \"truetype\"|\"cff2\", containers?: [\"plain\"|\"woff\"|\"woff2\"], destination?: string, optimizeDeltas?: bool, timestamp?: number|\"now\", versionStamp?: bool} compile the active document's variable fonts: one per variable font setting (or the settings named), or one for the whole designspace when the font has none. Each is written once per container (default plain). destination: a folder, created when missing, where each file is named by the setting's Variable Font File Name or fileName parameter, else the family name, the setting's name unless it is Regular, and VF; or one file path ending in .ttf, .woff or .woff2 when one font results; without it the fonts are returned as dataBase64. The export stops while an exported glyph's layers are incompatible, naming the glyphs. outlines: truetype (default; cff2 is not available yet). optimizeDeltas: leave out the deltas of points that interpolation between their neighbours gives within half a unit (default: the Optimize Variable Deltas parameter, else true). timestamp: seconds since the Unix epoch for the head table (default SOURCE_DATE_EPOCH, else now). versionStamp: append `;FontCraft <version>` to the version string unless the font states its own (default true). Existing files are replaced; a failing export writes nothing → {fonts: [{setting, fileName, glyphs, warnings, files: [{name, container, bytes, path? | dataBase64?}]}], warnings}",
+            has_doc,
+            export_variable
+        ).files(const { &[FileParam::write("destination")] }).writes_files(),
+        cmd!(
             query "font.compilePlan",
             "Describe Compile Plan",
             [],
@@ -1113,6 +1122,89 @@ fn compile(s: &mut Session, p: &Value) -> Result<Value> {
     }
     sink.commit()?;
     Ok(json!({ "fonts": report.fonts_json(false), "skipped": report.skipped, "warnings": report.warnings }))
+}
+
+fn export_variable(s: &mut Session, p: &Value) -> Result<Value> {
+    use fontcraft_compile::var::{self, VarFlavour, VariableOptions};
+    let p = Params::new("file.exportVariable", p)?;
+    let dest = Dest::read(&p)?;
+    let containers = containers(&p, "containers", &dest)?;
+    if dest.extension().is_some_and(|e| e == "otf") {
+        return Err(p.bad("variable fonts have TrueType outlines: give a .ttf, .woff or .woff2 file, or a folder"));
+    }
+    let flavour = match p.opt_str("outlines")? {
+        None | Some("truetype") => VarFlavour::TrueType,
+        Some("cff2") => VarFlavour::Cff2,
+        Some(other) => return Err(p.bad(format!("`outlines` is \"truetype\" or \"cff2\", got \"{other}\""))),
+    };
+    let optimize_deltas = if p.get("optimizeDeltas").is_some_and(|v| !v.is_null()) { Some(p.bool_or("optimizeDeltas", true)?) } else { None };
+    let mut options = Options {
+        glyph_data: DataRef(Some(s.glyph_data()?)),
+        assets: AssetsRef(Some(s.assets())),
+        timestamp: timestamp(&p)?,
+        version_stamp: p.bool_or("versionStamp", true)?,
+        ..Options::default()
+    };
+    let outside = s.export_outside();
+    let doc = s.doc()?;
+    source_includes(&mut options, doc.path.as_deref());
+    let font = &doc.font;
+    check_glyph_names(font)?;
+    let targets = var::variable_targets(font);
+    let picked: Vec<Option<usize>> = match p.opt_strings("settings")? {
+        None => targets,
+        Some(names) => {
+            let mut out = Vec::with_capacity(names.len());
+            for name in names {
+                let found = targets.iter().copied().find(|t| t.and_then(|i| font.instances.get(i)).is_some_and(|i| i.name == name));
+                out.push(found.ok_or_else(|| p.bad(format!("`settings` names \"{name}\", which is not a variable font setting of the font")))?);
+            }
+            out
+        }
+    };
+    if picked.is_empty() {
+        return Err(p.bad("`settings` names no variable font setting"));
+    }
+    if matches!(dest, Dest::File(_)) && picked.len() > 1 {
+        return Err(
+            p.bad(format!("`destination` is one file, but the font has {} variable font settings: give a folder or name one setting", picked.len()))
+        );
+    }
+    let mut warnings = Vec::new();
+    let linked = crate::export_steps::linked(font, doc.path.as_deref(), &mut warnings)?;
+    let var_options = VariableOptions { flavour, optimize_deltas };
+    let mut sink = Sink::new(&dest, true, outside)?;
+    let mut fonts = Vec::with_capacity(picked.len());
+    for setting in picked {
+        let built = var::compile_variable(&linked, setting, &options, &var_options)?;
+        let mut files = Vec::with_capacity(containers.len());
+        for &container in &containers {
+            let data = container.wrap(&built.compiled.bytes)?;
+            let name = format!("{}.{}", built.file_stem, container.extension(Flavour::TrueType));
+            files.push(sink.put(name, container, data, &mut warnings)?);
+        }
+        let label = setting.and_then(|i| font.instances.get(i)).map_or_else(|| "default".to_string(), |i| i.name.clone());
+        let files: Vec<Value> = files
+            .iter()
+            .map(|file| {
+                let mut v = json!({ "name": file.name, "container": file.container.name(), "bytes": file.bytes });
+                if let Value::Object(m) = &mut v {
+                    match (&file.path, &file.data) {
+                        (Some(path), _) => m.insert("path".into(), json!(path.to_string_lossy())),
+                        (None, Some(data)) => m.insert("dataBase64".into(), json!(base64::engine::general_purpose::STANDARD.encode(data))),
+                        (None, None) => None,
+                    };
+                }
+                v
+            })
+            .collect();
+        fonts.push(json!({
+            "setting": label, "fileName": built.file_stem, "glyphs": built.compiled.glyph_order.len(),
+            "warnings": built.compiled.warnings, "files": files,
+        }));
+    }
+    sink.commit()?;
+    Ok(json!({ "fonts": fonts, "warnings": warnings }))
 }
 
 /// The error of a command that built nothing: why each font was skipped.

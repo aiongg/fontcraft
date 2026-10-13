@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**1689 guesses on 1094 rows (396 of them live commands).**
+**1692 guesses on 1096 rows (397 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -620,6 +620,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | Row | Milestone | Status | Live | Guess |
 |---|---|---|---|---|
 | `file.exportAll` | M2 | handbook | yes | The reference's settings for Export All are not documented; using each document's last-used export settings is our assumption, and until FontCraft remembers settings the command takes them as parameters. |
+| `file.exportVariable` | M9 | handbook | yes | A glyph that has no layer for the origin master does not vary and keeps the origin's empty outline, with a warning; exporting such a font from the reference app would settle it. |
+| `file.exportVariable` | M9 | handbook | yes | An intermediate layer that lies outside the axes of a variable font setting (one that disables masters) is left out of that font, with a note; exporting such a setting from the reference app would settle it. |
 | `file.exportMetrics` | M5 | handbook | yes | The `metrics` format is our kerning-text format (`kerning-text` in 30-formats.toml), because the reference does not document its own metrics file; files in the reference format are neither read nor written. |
 | `file.exportMetrics` | M5 | handbook | yes | A metrics file holds the pairs of one direction (left to right by default, `direction` for the others), because kerning-text has one direction line; an export of a master with right-to-left or vertical pairs needs one file per direction. A reference metrics file with such pairs would settle it. |
 | `file.exportMetrics` | M5 | handbook | yes | The metrics file's extension is .tsv; the reference's own extension is not documented. |
@@ -1405,6 +1407,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `Local Interpolation` (parameter) | M9 | handbook | – | The listed glyphs are interpolated at the given location with every other part of the instance unchanged, including their widths; settle with an instance that sets it in the reference app. |
 | `Optical Size` (parameter) | M8 | handbook | – | The values are whole decipoints from 0 to 65535 and the code is a `size` feature added at the end of the list, replacing the code of a `size` feature the font already has; exporting with the parameter in the reference app and reading GPOS settles it. |
 | `Optical Size` (parameter) | M8 | handbook | – | The menu name is written for Windows (English) and, when it is plain ASCII, for the Mac (Roman, English); a subfamily of 0 writes no range and no name, as the feature file specification asks; the exported name table of the reference app settles it. |
+| `Optimize Variable Deltas` (parameter) | M9 | handbook | – | The handbook drops the deltas of a contour whose nodes all move half a unit or less; FontCraft drops the deltas IUP can infer within half a unit, as both oracles do. A variable font exported by the reference app with the parameter on and off would settle it. |
 | `Point To Unit Ratio` (parameter) | M7 | handbook | – | The copied SVG gives coordinates in points, font units divided by the ratio, and declares its width and height in pt; without the parameter the SVG keeps one font unit per user unit with no unit on its size; copying into a drawing application from the reference app settles the scale. |
 | `Point To Unit Ratio` (parameter) | M7 | handbook | – | The master's parameter wins over the font's, and a ratio that is not a number from 0.001 to 1,000,000 is ignored; copying from a font with the parameter on a master in the reference app settles it. |
 | `Point To Unit Ratio` (parameter) | M7 | handbook | – | Only the SVG flavour is scaled: the clipboard fragment that edit.paste reads keeps font units, so copy and paste inside the app keeps the size; pasting a drawing copied from the reference app back into it settles what its own paste does. |

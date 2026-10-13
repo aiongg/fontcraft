@@ -1,8 +1,8 @@
 //! Interpolation between masters at a location in a normalized design space.
 //!
 //! Ported from fontTools `fontTools/varLib/models.py` (MIT; see `NOTICE`): `normalizeValue`,
-//! `supportScalar` and `VariationModel` with its master ordering, supports, delta weights and
-//! master scalars, so the numbers match the ones fontTools computes. Axes are numbered: a location
+//! `supportScalar` and `VariationModel` with its master ordering, supports, delta weights,
+//! master scalars and `getDeltas`, so the numbers match the ones fontTools computes. Axes are numbered: a location
 //! is one value per axis, 0 meaning the axis default, and the axis order of the reference's
 //! `axisOrder` argument is the numbering.
 
@@ -301,17 +301,55 @@ impl VariationModel {
     /// The region of each master's delta, in the model's order (the order of [`Self::deltas`]):
     /// the default master first, with every axis at zero.
     pub fn regions(&self) -> Vec<Region> {
-        // M9.5: the supports as tents, axes without a support at zero.
-        Vec::new()
+        self.supports
+            .iter()
+            .map(|support| {
+                let mut axes = vec![RegionAxis::default(); self.axis_count];
+                for &(axis, (start, peak, end)) in support {
+                    if let Some(slot) = axes.get_mut(axis) {
+                        *slot = RegionAxis { start, peak, end };
+                    }
+                }
+                Region(axes)
+            })
+            .collect()
     }
 
     /// The deltas of `masters` (one list of numbers per master, in the caller's order, all the
     /// same length), in the model's order: the first is the default master's values, each later
     /// one the change its [`Self::regions`] entry adds (fontTools' `getDeltas`, unrounded).
     pub fn deltas(&self, masters: &[Vec<f64>]) -> Result<Vec<Vec<f64>>, VariationError> {
-        // M9.5
-        let _ = masters;
-        Err(VariationError::NotYetImplemented("deltas between masters are not available yet"))
+        self.deltas_with(masters, |v| v)
+    }
+
+    /// [`Self::deltas`] with each delta passed through `round` before the later deltas are taken
+    /// from it, as fontTools' `getDeltas(round=…)` does: the rounded deltas then add up exactly
+    /// to each master's values when those are whole numbers.
+    pub fn deltas_with(&self, masters: &[Vec<f64>], round: impl Fn(f64) -> f64) -> Result<Vec<Vec<f64>>, VariationError> {
+        let len = masters.first().map_or(0, Vec::len);
+        if masters.len() != self.mapping.len() || masters.iter().any(|m| m.len() != len) {
+            return Err(VariationError::BadValues);
+        }
+        // For each position in the model's order, the caller's index of its master.
+        let mut by_position = vec![0usize; self.mapping.len()];
+        for (caller, &position) in self.mapping.iter().enumerate() {
+            if let Some(slot) = by_position.get_mut(position) {
+                *slot = caller;
+            }
+        }
+        let mut out: Vec<Vec<f64>> = Vec::with_capacity(masters.len());
+        for (position, weights) in self.delta_weights.iter().enumerate() {
+            let mut delta = by_position.get(position).and_then(|&c| masters.get(c)).cloned().ok_or(VariationError::BadValues)?;
+            for &(earlier, weight) in weights {
+                let Some(prev) = out.get(earlier) else { continue };
+                for (d, p) in delta.iter_mut().zip(prev) {
+                    *d -= if weight == 1.0 { *p } else { p * weight };
+                }
+            }
+            delta.iter_mut().for_each(|d| *d = round(*d));
+            out.push(delta);
+        }
+        Ok(out)
     }
 
     /// Interpolates `masters` (one list of numbers per master, in the caller's order, all the
@@ -350,6 +388,38 @@ fn compare_floats(a: &[f64], b: &[f64]) -> Ordering {
 mod tests {
     #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
     use super::*;
+
+    #[test]
+    fn deltas_rebuild_every_master_through_the_regions() {
+        // Default first in the caller's order is not required: the model sorts.
+        let locations = vec![vec![1.0], vec![0.0], vec![0.5]];
+        let model = VariationModel::new(&locations, false).unwrap();
+        let masters = vec![vec![200.0], vec![100.0], vec![151.0]];
+        let deltas = model.deltas_with(&masters, f64::round).unwrap();
+        let regions = model.regions();
+        assert_eq!(deltas[0], vec![100.0]);
+        assert_eq!(regions[0].0[0], RegionAxis::default());
+        for (location, master) in locations.iter().zip(&masters) {
+            let mut sum = 0.0;
+            for (region, delta) in regions.iter().zip(&deltas) {
+                let r = region.0[0];
+                let x = location[0];
+                let scalar = if r.peak == 0.0 || x == r.peak {
+                    1.0
+                } else if x <= r.start || x >= r.end {
+                    0.0
+                } else if x < r.peak {
+                    (x - r.start) / (r.peak - r.start)
+                } else {
+                    (r.end - x) / (r.end - r.peak)
+                };
+                sum += scalar * delta[0];
+            }
+            assert_eq!(sum, master[0]);
+        }
+        assert_eq!(regions[1].0[0], RegionAxis { start: 0.0, peak: 0.5, end: 1.0 });
+        assert!(model.deltas(&masters[..2]).is_err());
+    }
 
     #[test]
     fn normalize_value_matches_the_reference_examples() {

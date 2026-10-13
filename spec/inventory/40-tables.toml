@@ -804,6 +804,7 @@ milestone = "M9"
 summary = "write-fonts can set OVERLAP_SIMPLE (first point of the first contour) and OVERLAP_COMPOUND, but fontc's backend never sets either (no use of those fields in fontbe). Our choice: set them on glyphs of variable TrueType fonts, where overlaps are kept, and never on static fonts whose overlaps were removed."
 ref = "write-fonts src/tables/glyf/simple.rs, glyf/composite.rs; fontc fontbe/src/glyphs.rs"
 status = "inferred"
+notes = "M9.5 sets OVERLAP_SIMPLE on every simple glyph of a variable font; OVERLAP_COMPOUND on composites is not written yet."
 
 [[behavior]]
 id = "compile.cu2quTolerance"
@@ -1418,6 +1419,7 @@ id = "compile.gvarIupOptimisation"
 area = "compile"
 milestone = "M9"
 summary = "Deltas that a renderer can infer by interpolating untouched points are dropped from gvar for simple glyphs, using a tolerance of 0.5 font units; composite glyphs are not optimised this way, their all-zero deltas are simply omitted. fontmake does the same by default and --no-optimize-gvar turns it off; fontc has no switch."
+notes = "Deltas are rounded region by region, each later region taken from the rounded earlier ones, as fontmake's varLib rounds them (`getDeltas(round=…)`), so every source's own coordinates come back exactly; fontc rounds each delta on its own. docs/spec/40-compile.md § 4a lists the choice."
 ref = "fontc fontbe/src/glyphs.rs (compute_deltas, should_iup); write-fonts src/tables/gvar/iup.rs; fontmake USAGE.md (--no-optimize-gvar)"
 status = "docs"
 

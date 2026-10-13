@@ -6,13 +6,15 @@ use fontcraft_engine::Session;
 use serde_json::{Value, json};
 
 pub const SUBCOMMAND: Subcommand =
-    Subcommand { name: "compile", summary: "Compile sources to static fonts", usage: USAGE, options: &[], actions: &[], run: compile };
+    Subcommand { name: "compile", summary: "Compile sources to static or variable fonts", usage: USAGE, options: &[], actions: &[], run: compile };
 
 const USAGE: &str = "\
   fontcraft-cli compile SOURCE... [--format ttf|otf]... [--container plain|woff|woff2]...
                         [-o FILE | --output-dir DIR] [--instances[=NAME,...]] [--masters-as-instances]
                         [--keep-overlaps] [--keep-direction] [--conversion-error EM]
                         [--timestamp SECS|now] [--plan]
+  fontcraft-cli compile SOURCE... --variable [--settings NAME,...] [--container plain|woff|woff2]...
+                        [-o FILE | --output-dir DIR] [--timestamp SECS|now]
       Compile each SOURCE to static fonts: every exportable instance (or the named ones; a font
       without instances builds its first master), plus each master with --masters-as-instances,
       once per format (default ttf) and container (default plain). Files are named by PostScript
@@ -20,6 +22,10 @@ const USAGE: &str = "\
       subfolder. -o names the one file a single SOURCE builds. Instances between masters are
       skipped until interpolation exists. Overlapping contours are merged unless --keep-overlaps is
       given. --plan prints what would be built, without building.
+      --variable builds variable fonts instead: one per variable font setting (or the settings
+      --settings names), or one for the whole designspace when the source has none, with
+      TrueType outlines; files are named by the setting's file name. `--format variable` is the
+      same as --variable.
       One JSON line per SOURCE.
 ";
 
@@ -32,6 +38,8 @@ fn compile(args: &[String]) -> Outcome {
     let mut params = serde_json::Map::new();
     let mut outlines = serde_json::Map::new();
     let mut plan = false;
+    let mut variable = false;
+    let mut settings: Option<Vec<String>> = None;
     let mut it = args.iter();
     let list = |v: &str| -> Vec<String> { v.split(',').map(str::trim).filter(|s| !s.is_empty()).map(str::to_string).collect() };
     while let Some(arg) = it.next() {
@@ -74,6 +82,8 @@ fn compile(args: &[String]) -> Outcome {
                 params.insert("timestamp".into(), t);
             }
             "--plan" => plan = true,
+            "--variable" => variable = true,
+            "--settings" => settings = Some(list(it.next().ok_or_else(|| usage("--settings needs setting names"))?)),
             other => match other.strip_prefix("--instances=") {
                 Some(names) => {
                     params.insert("instances".into(), json!(list(names)));
@@ -103,7 +113,35 @@ fn compile(args: &[String]) -> Outcome {
     if !outlines.is_empty() {
         params.insert("outlines".into(), Value::Object(outlines));
     }
-    let command = if plan { "font.compilePlan" } else { "font.compile" };
+    // `--format variable` is the reference's spelling of `--variable`.
+    if formats.iter().any(|f| f == "variable") {
+        formats.retain(|f| f != "variable");
+        variable = true;
+    }
+    if settings.is_some() && !variable {
+        return Err(usage("--settings goes with --variable"));
+    }
+    if variable {
+        if plan
+            || !formats.is_empty()
+            || params.contains_key("outlines")
+            || params.contains_key("instances")
+            || params.contains_key("mastersAsInstances")
+        {
+            return Err(usage("--variable takes only --settings, --container, -o, --output-dir and --timestamp"));
+        }
+        params.remove("formats");
+        if let Some(names) = settings {
+            params.insert("settings".into(), json!(names));
+        }
+    }
+    let command = if variable {
+        "file.exportVariable"
+    } else if plan {
+        "font.compilePlan"
+    } else {
+        "font.compile"
+    };
     if plan {
         params.remove("timestamp");
     }

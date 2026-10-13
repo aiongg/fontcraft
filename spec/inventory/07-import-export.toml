@@ -58,12 +58,17 @@ label = "Export Variable Fonts"
 menu = []
 shortcut = ""
 kind = "engine"
-params = '{document?: path, settings?: [names], containers: ["plain"|"woff"|"woff2"], destination?: path, testInstall?: bool}'
+params = '{settings?: [names], outlines?: "truetype"|"cff2", containers?: ["plain"|"woff"|"woff2"], destination?: path, optimizeDeltas?: bool, timestamp?: number|"now", versionStamp?: bool}'
 area = "compile"
 milestone = "M9"
 summary = "Compiles one variable font per variable font setting, or one from a default setting when the font defines none. Output is always TrueType-flavoured; container formats and destination work as for static export. Headless form of the dialog's Variable Fonts tab."
 ref = "Import & Export › Exporting Font Files › Exporting Variable Fonts"
 status = "handbook"
+notes = "Documented, not yet observed. Built in M9.5 (`fontcraft_compile::var::compile_variable`); the command line runs it as `compile --variable`. CFF2 (`outlines: cff2`) waits for M9.13. The dialog's test-install option is the app's (M9.23), not this command's. Alternate layers (M9.8), MVAR and variable kerning and marks (M9.9) are not in the font yet."
+guesses = [
+  "A glyph that has no layer for the origin master does not vary and keeps the origin's empty outline, with a warning; exporting such a font from the reference app would settle it.",
+  "An intermediate layer that lies outside the axes of a variable font setting (one that disables masters) is left out of that font, with a note; exporting such a setting from the reference app would settle it.",
+]
 
 [[command]]
 id = "file.exportUfo"

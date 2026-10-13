@@ -782,6 +782,7 @@ fn decomposition_follows_the_reference_rules() {
         Prepared::Empty => "empty",
         Prepared::Simple(_) => "simple",
         Prepared::Composite(_) => "composite",
+        Prepared::Points(_) => "points",
     };
     assert_eq!(out.iter().map(kind).collect::<Vec<_>>(), ["simple", "composite", "composite", "simple", "simple", "composite"]);
     let cff = outline::prepare(&glyphs, &Settings { flavour: Flavour::Cff, ..settings() }, &mut Vec::new()).unwrap();

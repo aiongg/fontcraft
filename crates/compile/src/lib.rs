@@ -69,7 +69,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use fontcraft_model::glyphdata::GlyphData;
-use fontcraft_model::{Font, ModelError, Resolved, Target};
+use fontcraft_model::{Font, ModelError, Resolved, ResolvedGlyph, Target};
+use write_fonts::types::Tag;
 
 pub use outline::Flavour;
 
@@ -145,6 +146,10 @@ pub enum CompileError {
     /// layers, until variable colour lands); the message names the instance.
     #[error("{0}")]
     ColorRefused(String),
+    /// Glyphs whose layers are not compatible, so no variable font can be made
+    /// (`compatibility.exportBlocked`); the text names them.
+    #[error("the layers of these glyphs are not compatible, so the variable font cannot be made: {0}")]
+    Incompatible(String),
     /// A stage or table builder whose package has not been written yet.
     #[error("{0} is not available yet")]
     NotYetImplemented(&'static str),
@@ -386,7 +391,48 @@ pub fn compile_resolved_from(font: &Font, resolved: Resolved, flavour: Flavour, 
     compile_stages(Some(font), resolved, flavour, options)
 }
 
-fn compile_stages(font: Option<&Font>, mut resolved: Resolved, flavour: Flavour, options: &Options) -> Result<Compiled, CompileError> {
+/// Tables and name records a variable compile adds to its origin's static tables. A name ID
+/// below 256 replaces the static records of that ID.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct Extra {
+    pub tables: Vec<(Tag, Vec<u8>)>,
+    pub names: Vec<(u16, String)>,
+}
+
+/// The outline stage of a variable compile: given the origin's final glyphs, the outlines to
+/// write and the variation tables. Static compiles have none.
+pub(crate) type VarStage<'a> =
+    &'a mut dyn FnMut(&Resolved, &[ResolvedGlyph], &outline::Settings, &mut Vec<String>) -> Result<(Vec<outline::Prepared>, Extra), CompileError>;
+
+fn compile_stages(font: Option<&Font>, resolved: Resolved, flavour: Flavour, options: &Options) -> Result<Compiled, CompileError> {
+    compile_stages_with(font, resolved, flavour, options, None)
+}
+
+/// The glyphs of `resolved` as every compile stage before the outlines leaves them: glyph data,
+/// tokens, export parameters, preflight, the final order and the component options.
+pub(crate) fn glyph_stages(
+    font: Option<&Font>,
+    resolved: &mut Resolved,
+    flavour: Flavour,
+    options: &Options,
+    warnings: &mut Vec<String>,
+) -> Result<Vec<ResolvedGlyph>, CompileError> {
+    fill_glyph_data(resolved, options, warnings);
+    info::expand_tokens(font, resolved, warnings);
+    export_params::apply(font, resolved, warnings)?;
+    let glyphs = preflight::run(std::mem::take(&mut resolved.glyphs), warnings)?;
+    let glyphs = order::final_order(glyphs, resolved, warnings)?;
+    let mut expansion = Expansion::new(MAX_EXPANDED_ELEMENTS);
+    components_opt::apply(font, resolved, glyphs, flavour, &options.components, &mut expansion, warnings)
+}
+
+pub(crate) fn compile_stages_with(
+    font: Option<&Font>,
+    mut resolved: Resolved,
+    flavour: Flavour,
+    options: &Options,
+    var: Option<VarStage<'_>>,
+) -> Result<Compiled, CompileError> {
     let mut warnings = std::mem::take(&mut resolved.notes);
     fill_glyph_data(&mut resolved, options, &mut warnings);
     info::expand_tokens(font, &mut resolved, &mut warnings);
@@ -412,8 +458,17 @@ fn compile_stages(font: Option<&Font>, mut resolved: Resolved, flavour: Flavour,
         remove_overlap: options.remove_overlap,
         overlap_time_limit: options.overlap_time_limit,
     };
-    let outlines = outline::prepare(&glyphs, &settings, &mut warnings)?;
-    let kern_table = font.and_then(|font| kern_table::build(font, &resolved, &glyphs, flavour, &edits, &mut warnings));
+    let (outlines, extra, kern_table) = match var {
+        Some(stage) => {
+            let (outlines, extra) = stage(&resolved, &glyphs, &settings, &mut warnings)?;
+            (outlines, extra, None)
+        }
+        None => {
+            let outlines = outline::prepare(&glyphs, &settings, &mut warnings)?;
+            let kern_table = font.and_then(|font| kern_table::build(font, &resolved, &glyphs, flavour, &edits, &mut warnings));
+            (outlines, Extra::default(), kern_table)
+        }
+    };
     let color_tables = color::build(font, &color_plan, &color::GlyphOrder::new(&glyphs, &made)?, options, &mut warnings)?;
     let bytes = build::assemble(
         &resolved,
@@ -424,6 +479,7 @@ fn compile_stages(font: Option<&Font>, mut resolved: Resolved, flavour: Flavour,
         &layout.tables(),
         kern_table.as_deref(),
         &color_tables.tables,
+        &extra,
         options,
         &mut warnings,
     )?;

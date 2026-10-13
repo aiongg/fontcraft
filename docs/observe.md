@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1112 rows to check: 1545 guesses and 410 observe steps.**
+**1114 rows to check: 1548 guesses and 410 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,7 +48,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 39 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 3 |
-| **Later milestones (after M6)** | all | **643** |
+| **Later milestones (after M6)** | all | **645** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 39 |
 | Later milestones (after M6) | Edit View: text mode and preview | 14 |
 | Later milestones (after M6) | Components and anchors | 33 |
@@ -56,11 +56,11 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Spacing and metrics keys | 3 |
 | Later milestones (after M6) | Kerning and the Kerning window | 4 |
 | Later milestones (after M6) | Font View | 13 |
-| Later milestones (after M6) | Font Info and features | 247 |
+| Later milestones (after M6) | Font Info and features | 248 |
 | Later milestones (after M6) | Interpolation | 44 |
 | Later milestones (after M6) | Hinting | 67 |
 | Later milestones (after M6) | Colour fonts | 44 |
-| Later milestones (after M6) | Files: open, import, export | 42 |
+| Later milestones (after M6) | Files: open, import, export | 43 |
 | Later milestones (after M6) | Settings and the window | 12 |
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 61 |
 | Later milestones (after M6) | Elsewhere | 15 |
@@ -1332,7 +1332,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (643)
+## Later milestones (after M6) (645)
 
 ### Edit View: drawing, guides, layers and the Palette (39)
 
@@ -1702,7 +1702,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The decomposition sections use Unicode's canonical decompositions, one level and full together, so U+1EA4 lists both U+00C2 and U+0041, and characters the font has no glyph for are listed dimmed.
   - Guess: Clicking an entry opens the glyph in a new tab; the reference's documentation does not say whether it replaces the current glyph instead.
 
-### Font Info and features (247)
+### Font Info and features (248)
 
 - [ ] `fontInfo.rows.selection` (behavior, M7, handbook): Clicking a row selects it and Cmd+click builds a selection of several…
   - Guess: Shift-click adds every row between the last row clicked and the clicked one; Shift-clicking in the reference app settles it.
@@ -2407,6 +2407,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `Local Interpolation` (parameter, M9, handbook): Value: one interpolation value per axis separated by semicolons, then a semicolon,…
   - Guess: The listed glyphs are interpolated at the given location with every other part of the instance unchanged, including their widths; settle with an instance that sets it in the reference app.
   - Observe: In F1 (two masters), put Local Interpolation `700; include: o` on Regular, export and measure `o`: note whether o is drawn as at 700 while the other glyphs stay at 400.
+- [ ] `Optimize Variable Deltas` (parameter, M9, handbook): On by default: a contour whose nodes all move by half a…
+  - Guess: The handbook drops the deltas of a contour whose nodes all move half a unit or less; FontCraft drops the deltas IUP can infer within half a unit, as both oracles do. A variable font exported by the reference app with the parameter on and off would settle it.
 - [ ] `Variable Font Family Name` (parameter, M9, handbook): Family name for the variable font, so static and variable versions installed…
   - Guess: Looked up on the variable font setting first and on the font second; an export from the reference app with the parameter on each would settle it.
   - Observe: In F1 (two masters), set Variable Font Family Name on the font and a different one on a variable font setting; export the variable font and read name IDs 1 and 16.
@@ -2908,7 +2910,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The chooser and the Edit View preview always use palette 0. Settled by opening the chooser in a font with two palettes in the reference.
   - Observe: Palette font (two palettes): click the swatch of a palette layer in the Layers palette; note which palette's colours the chooser lists.
 
-### Files: open, import, export (42)
+### Files: open, import, export (43)
 
 - [ ] `export.instanceExportFolder` (behavior, M7, handbook): An instance carrying the Export Folder custom parameter is written to that…
   - Guess: The sub-path is used as written, `..` segments included, as the handbook says; an absolute path, an empty segment, a folder name with a character such as `:` or `\`, or a path of more than 32 segments makes export skip that instance with the reason, one trailing `/` is ignored, and the warnings name every file written outside the export destination; an Export Folder of `../x` and one of `/tmp/x` in the reference app settle it.
@@ -2960,6 +2962,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: In F1 (Latin features), import a `.fea` file whose class and feature names already exist in the font: note how each clash is resolved.
 - [ ] `dialog.importFeatures` (panel, M8, handbook): Import Features
   - Guess: The file is typed as a path, as in the other import dialogs, until the shell has a file chooser limited to .fea files.
+- [ ] `file.exportVariable` (M9, handbook, live): Export Variable Fonts
+  - Guess: A glyph that has no layer for the origin master does not vary and keeps the origin's empty outline, with a warning; exporting such a font from the reference app would settle it.
+  - Guess: An intermediate layer that lies outside the axes of a variable font setting (one that disables masters) is left out of that font, with a note; exporting such a setting from the reference app would settle it.
 - [ ] `variable-ttf.open` (format, M9, inferred): Variable OpenType, TrueType outlines (opened for editing)
   - Guess: A variable font beyond the limits (more than 256 avar points on an axis, more than 2,000,000 layers to make) opens as its default instance with the reason among the warnings rather than being refused; settled by checking what users expect when a huge variable font opens.
   - Guess: A peak becomes a master when every coordinate is -1, 0 or 1, or when at least half of the glyphs with variations use it; any other peak becomes an intermediate layer of the glyphs that use it, on the nearest master. Settled by opening fonts built from sources with known masters and intermediate layers and comparing.

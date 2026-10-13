@@ -1416,7 +1416,10 @@ effect = "interpolation"
 summary = "On by default: a contour whose nodes all move by half a unit or less gets no deltas. Set to off to keep these small deltas."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Neither oracle reads it; both always drop deltas that IUP can infer, within 0.5 units."
+notes = "Neither oracle reads it; both always drop deltas that IUP can infer, within 0.5 units. FontCraft reads it (and Variable Font Optimize Deltas) as the switch for that IUP optimisation: on, or absent, IUP at 0.5 units; off, every delta is kept."
+guesses = [
+  "The handbook drops the deltas of a contour whose nodes all move half a unit or less; FontCraft drops the deltas IUP can infer within half a unit, as both oracles do. A variable font exported by the reference app with the parameter on and off would settle it.",
+]
 
 [[parameter]]
 name = "panose"

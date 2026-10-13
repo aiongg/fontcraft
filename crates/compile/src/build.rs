@@ -73,8 +73,12 @@ fn build_glyphs(order: &[ResolvedGlyph], outlines: &[Prepared]) -> Result<Vec<Bu
         let glyph_error = |message: String| CompileError::Glyph { glyph: g.name.clone(), message };
         let entry = match prepared {
             Prepared::Empty => Built { glyph: TtGlyph::Empty, points: 0, contours: 0 },
-            Prepared::Simple(path) => {
-                let simple = SimpleGlyph::from_bezpath(path).map_err(|e| glyph_error(format!("{e:?}")))?;
+            Prepared::Simple(_) | Prepared::Points(_) => {
+                let simple = match prepared {
+                    Prepared::Points(simple) => simple.clone(),
+                    Prepared::Simple(path) => SimpleGlyph::from_bezpath(path).map_err(|e| glyph_error(format!("{e:?}")))?,
+                    _ => SimpleGlyph::default(),
+                };
                 let point_count: usize = simple.contours.iter().map(|c| c.len()).sum();
                 if point_count > MAX_TT_POINTS || simple.contours.len() > MAX_TT_POINTS {
                     return Err(glyph_error(format!("the outline has {point_count} points; a TrueType glyph holds at most {MAX_TT_POINTS}")));
@@ -349,10 +353,18 @@ pub fn assemble(
     layout: &[(Tag, &[u8])],
     kern: Option<&[u8]>,
     color: &[(Tag, Vec<u8>)],
+    extra: &crate::Extra,
     options: &Options,
     warnings: &mut Vec<String>,
 ) -> Result<Vec<u8>, CompileError> {
     let mut info = info::derive(font, &options.style_name, warnings);
+    for (id, text) in &extra.names {
+        if *id < crate::var::names::FIRST_FONT_NAME_ID {
+            info.names.retain(|r| r.id != *id);
+        }
+        info.names.push(info::NameRecord { platform: 3, encoding: 1, language: 0x409, id: *id, text: text.clone() });
+    }
+    info.names.sort_by_key(|r| (r.platform, r.encoding, r.language, r.id));
     if options.version_stamp {
         info::stamp_version(&mut info, font);
     }
@@ -484,7 +496,7 @@ pub fn assemble(
         builder.add_table(&vhea).map_err(table("vhea"))?;
         builder.add_table(&vmtx).map_err(table("vmtx"))?;
     }
-    for (tag, bytes) in color {
+    for (tag, bytes) in color.iter().chain(&extra.tables) {
         builder.add_raw(*tag, bytes.as_slice());
     }
     Ok(builder.build())

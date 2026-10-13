@@ -63,8 +63,8 @@ pub(crate) fn build(
         let path = match prepared {
             Prepared::Empty => Vec::new(),
             Prepared::Simple(path) => path_ops(path, !(gid == 0 && synthesised_notdef)),
-            Prepared::Composite(_) => {
-                return Err(CompileError::Glyph { glyph: g.name.clone(), message: "a CFF outline cannot hold components".into() });
+            Prepared::Composite(_) | Prepared::Points(_) => {
+                return Err(CompileError::Glyph { glyph: g.name.clone(), message: "a CFF outline cannot hold components or TrueType points".into() });
             }
         };
         glyphs.push(cff::Glyph { name: name.clone(), advance: g.width, path, hints: None });

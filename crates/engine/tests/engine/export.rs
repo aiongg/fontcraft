@@ -535,3 +535,29 @@ fn compile_component_flags_decompose_and_flatten() {
     assert!(e.contains("flattenComponents"), "{e}");
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn export_variable_writes_one_variable_font_with_the_masters_as_its_extremes() {
+    let dir = temp("variable");
+    let mut s = two_masters(&dir, TWO_MASTERS);
+    let out = dir.join("out");
+    let r = run(&mut s, "file.exportVariable", json!({ "destination": out, "containers": ["plain", "woff2"], "timestamp": 0 }));
+    let fonts = r["fonts"].as_array().unwrap();
+    assert_eq!(fonts.len(), 1, "{r}");
+    assert_eq!(fonts[0]["fileName"], "TestSansVF");
+    assert_eq!(names(&out), ["TestSansVF.ttf", "TestSansVF.woff2"]);
+    let bytes = std::fs::read(out.join("TestSansVF.ttf")).unwrap();
+    let font = skrifa::FontRef::new(&bytes).unwrap();
+    let axes: Vec<_> = font.axes().iter().map(|a| (a.tag().to_string(), a.min_value(), a.default_value(), a.max_value())).collect();
+    assert_eq!(axes, [("wght".to_string(), 400.0, 400.0, 700.0)]);
+    let gid = font.charmap().map('A').unwrap();
+    let advance = |w: f32| font.glyph_metrics(skrifa::instance::Size::unscaled(), &font.axes().location([("wght", w)])).advance_width(gid);
+    assert_eq!((advance(400.0), advance(700.0)), (Some(600.0), Some(700.0)));
+    // A named setting that does not exist is refused; nothing more is written.
+    assert!(s.execute("file.exportVariable", &json!({ "settings": ["Nope"] })).is_err());
+    // An incompatible glyph stops the export and is named.
+    let broken = TWO_MASTERS.replacen("(80,0,l),", "", 1);
+    let mut s = two_masters(&temp("variable-broken"), &broken);
+    let err = s.execute("file.exportVariable", &json!({})).unwrap_err().to_string();
+    assert!(err.contains("not compatible") && err.contains('A'), "{err}");
+}

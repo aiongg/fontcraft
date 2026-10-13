@@ -75,6 +75,9 @@ pub enum Prepared {
     Simple(BezPath),
     /// Components, by glyph name, each with its transform.
     Composite(Vec<ResolvedComponent>),
+    /// Rounded quadratic points made with the other sources of a variable font, so every source
+    /// keeps the same points; written as they are (TrueType only).
+    Points(write_fonts::tables::glyf::SimpleGlyph),
 }
 
 /// Does a component's 2×2 transform hold a value that `glyf` cannot store?
@@ -110,7 +113,7 @@ pub fn prepare(glyphs: &[ResolvedGlyph], s: &Settings, warnings: &mut Vec<String
 }
 
 /// A composite as it is written, after the checks `glyf` needs.
-fn composite(g: &ResolvedGlyph) -> Result<Prepared, CompileError> {
+pub(crate) fn composite(g: &ResolvedGlyph) -> Result<Prepared, CompileError> {
     let bad = |message: String| CompileError::Glyph { glyph: g.name.clone(), message };
     if g.components.len() > MAX_COMPONENTS {
         return Err(bad(format!("{} components; a glyph holds at most {MAX_COMPONENTS}", g.components.len())));
