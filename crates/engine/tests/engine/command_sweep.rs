@@ -137,9 +137,11 @@ fn sweep(state: &str, chunk: u64) {
     assert!(failures.is_empty(), "{} of {calls} calls failed:\n{}", failures.len(), failures.iter().take(40).cloned().collect::<Vec<_>>().join("\n"));
 }
 
-/// One test per starting state and chunk: `empty_chunk_0` … `hinted_chunk_3`.
+/// One test per starting state and chunk: `empty_chunk_0` … `hinted_chunk_3`, and `SWEPT`, the
+/// pairs they cover.
 macro_rules! sweep_tests {
     ($($state:literal => [$($chunk:literal => $test:ident),*]),*) => {
+        const SWEPT: &[(&str, u64)] = &[$($(($state, $chunk)),*),*];
         $($(
             #[test]
             fn $test() {
@@ -154,6 +156,15 @@ sweep_tests! {
     "NewFont" => [0 => new_font_chunk_0, 1 => new_font_chunk_1, 2 => new_font_chunk_2, 3 => new_font_chunk_3],
     "Drawn" => [0 => drawn_chunk_0, 1 => drawn_chunk_1, 2 => drawn_chunk_2, 3 => drawn_chunk_3],
     "Hinted" => [0 => hinted_chunk_0, 1 => hinted_chunk_1, 2 => hinted_chunk_2, 3 => hinted_chunk_3]
+}
+
+#[test]
+fn the_chunk_tests_cover_every_state_and_chunk() {
+    let mut wanted: Vec<(&str, u64)> = states().iter().flat_map(|(name, _)| (0..CHUNKS).map(move |c| (*name, c))).collect();
+    let mut swept = SWEPT.to_vec();
+    wanted.sort_unstable();
+    swept.sort_unstable();
+    assert_eq!(swept, wanted, "add a test to `sweep_tests!` for each new state or chunk");
 }
 
 #[test]
