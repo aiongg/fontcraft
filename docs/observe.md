@@ -32,11 +32,11 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1119 rows to check: 1562 guesses and 415 observe steps.**
+**1124 rows to check: 1568 guesses and 415 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
-| **Built milestones (M0 to M6)** | all | **470** |
+| **Built milestones (M0 to M6)** | all | **471** |
 | Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 99 |
 | Built milestones (M0 to M6) | Edit View: text mode and preview | 32 |
 | Built milestones (M0 to M6) | Components and anchors | 70 |
@@ -47,8 +47,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Font Info and features | 9 |
 | Built milestones (M0 to M6) | Files: open, import, export | 40 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
-| Built milestones (M0 to M6) | Elsewhere | 3 |
-| **Later milestones (after M6)** | all | **649** |
+| Built milestones (M0 to M6) | Elsewhere | 4 |
+| **Later milestones (after M6)** | all | **653** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 39 |
 | Later milestones (after M6) | Edit View: text mode and preview | 14 |
 | Later milestones (after M6) | Components and anchors | 33 |
@@ -63,9 +63,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Files: open, import, export | 44 |
 | Later milestones (after M6) | Settings and the window | 12 |
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 61 |
-| Later milestones (after M6) | Elsewhere | 15 |
+| Later milestones (after M6) | Elsewhere | 19 |
 
-## Built milestones (M0 to M6) (470)
+## Built milestones (M0 to M6) (471)
 
 ### Edit View: drawing, guides, layers and the Palette (99)
 
@@ -1326,8 +1326,11 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `sampleStrings.groups` (setting, M5, handbook): Sample Strings
   - Guess: The built-in default holds groups of our own choosing: spacing strings built around n, o, H and O with placeholders, figures, and traditional pangrams for Latin, Greek and Cyrillic; no source lists the reference defaults we may copy.
 
-### Elsewhere (3)
+### Elsewhere (4)
 
+- [ ] `audit.run` (M3, docs, live): Run Audit
+  - Guess: A source's instances are compiled as TrueType for the binary checks whatever outline format the source exports, and at most 32 of them; a run of the reference auditors on a source would settle whether the CFF flavour or every instance should be read.
+  - Guess: On a source, the family checks receive every instance compiled from it, the variable font included; checks that should compare only the static instances would need the reference tools' behaviour on sources to settle it.
 - [ ] `audit.fix` (M3, docs, live): Fix Issues
   - Guess: An outline fix on a composite glyph only reports unless `safeOnly` is false (21-qa question 4).
 - [ ] `audit.toggleLiveAudit` (M3, inferred, live): Live Audit
@@ -1335,7 +1338,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (649)
+## Later milestones (after M6) (653)
 
 ### Edit View: drawing, guides, layers and the Palette (39)
 
@@ -3273,12 +3276,16 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `dialog.actions` (panel, M13, docs): Actions
   - Guess: Each action's parameter form is the command's own dialog when it has one, and otherwise a JSON editor checked against the command's params doc; FontLab's dialog lists only its own actions, each with a form.
 
-### Elsewhere (15)
+### Elsewhere (19)
 
+- [ ] `audit.glyphSelectionSyntax` (behavior, M12, docs): Wherever a glyph list is accepted on the command line, entries may…
+  - Guess: A piece that is a glyph name is read as a name even when it holds a hyphen, and `/N` names the glyph `cidNNNNN` (five digits) before glyph index N; a CID-keyed source in the reference tool would settle it.
 - [ ] `audit.familyGrouping` (behavior, M12, docs): Family checks work on two groupings: style-linked groups, fonts with the same…
   - Guess: On a compiled font without its source the style comes from name IDs 2 and 17 and the fsSelection bits, never from the file name; only check.files.canonicalFileName reads the file name (21-qa.md question 9).
 - [ ] `audit.validatorKnownIssues` (behavior, M12, docs): Findings imported from an external validator are filtered through a list of…
   - Guess: W2106 (OS/2 version below 3) is treated as wrong for OS/2 version 2 and later, and a ssNN tag counts as registered for 01 to 20 and cvNN for 01 to 99; a run of the validator on fonts with those values would settle it.
+- [ ] `audit.exitStatus` (behavior, M12, docs): On the command line the check command exits with 0 when no…
+  - Guess: Results hidden by --min-severity still make the exit status 1 when they reach --fail-on; the reference tools have no separate display threshold, so nothing settles it.
 - [ ] `audit.profile.save` (M12, inferred, live): Save Audit Profile
   - Guess: Without store the profile goes to the user's settings rather than the project; a user report would settle which store people expect by default.
 - [ ] `audit.profile.delete` (M12, inferred, live): Delete Audit Profile
@@ -3295,7 +3302,11 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Without `format`, the format follows the extension of `path` (.json, .txt, .md, .html) and is JSON for any other; a look at how the command line is used would settle it.
   - Guess: A result document can be passed in as `results` instead of naming a target, so a run on files can be exported without being kept; settled once the run on compiled fonts keeps its results.
   - Guess: The Markdown and HTML reports end with the checks that were skipped or failed to run, with their reasons; the reference tools' reports would settle whether to list them.
-- [ ] `audit.compareFamily` (M12, docs): Check Family
+- [ ] `audit.checkOutlines` (M12, docs, live): Check Outlines
+  - Guess: A fix of a file given by path is refused; the command line opens the source, fixes it and saves it, so the engine command only fixes the open document.
+- [ ] `audit.checkInterpolation` (M12, docs, live): Check Interpolation
+  - Guess: `showAll` lists the glyphs without problems in `glyphsWithoutProblems` instead of one line per glyph as the reference prints; its JSON output would settle the shape.
+- [ ] `audit.compareFamily` (M12, docs, live): Check Family
   - Guess: The label is Check Family and the results go to the Font Audit panel, never to the Compare Family window, so the two features with similar names stay apart; the id stays for the command line (21-qa.md question 13).
 - [ ] `audit.report.metrics` (M12, docs, live): Font Metrics Report
   - Guess: The underline thickness, which comparefamily does not print, is listed after the underline position and sorted the same way; the row's summary asks for it.

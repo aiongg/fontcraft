@@ -242,7 +242,6 @@ fn hostile_patterns_and_settings_are_errors() {
         json!({"config": {"check.outlines.flatCurve": {"tolerance": 1e9}}}),
         json!({"config": {"check.outlines.flatCurve": {"nope": 1}}}),
         json!({"config": {"check.outlines.flatCurve": 3}}),
-        json!({"glyphs": ["no-such-glyph"]}),
         json!({"masters": ["m99"]}),
         json!({"target": "/etc/passwd"}),
     ];
@@ -251,6 +250,9 @@ fn hostile_patterns_and_settings_are_errors() {
         assert!(s.execute("audit.fix", p).is_err(), "audit.fix {p}");
     }
     assert_eq!(font_json(&s), before);
+    // A glyph entry that matches nothing is warned about and skipped (`audit.glyphSelectionSyntax`).
+    let r = run(&mut s, "audit.run", json!({"glyphs": ["no-such-glyph"]}));
+    assert_eq!(r["warnings"], json!(["`no-such-glyph` matches no glyph and was skipped"]));
     run(&mut s, "audit.run", json!({}));
     for p in [json!({"checks": ["check.outlines.["]}), json!({"glyphs": vec!["x"; 200_000]}), json!({"minSeverity": 3})] {
         assert!(s.execute("audit.results", &p).is_err(), "audit.results {p}");

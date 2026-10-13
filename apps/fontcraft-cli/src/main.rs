@@ -99,7 +99,10 @@ fn main() -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(failure) => {
-            eprintln!("fontcraft-cli: {}", failure.message());
+            // An empty message: the subcommand has already said everything (`check --quiet`).
+            if !failure.message().is_empty() {
+                eprintln!("fontcraft-cli: {}", failure.message());
+            }
             ExitCode::from(failure.exit_code())
         }
     }

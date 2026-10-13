@@ -3522,13 +3522,14 @@ label = "Run Audit"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{target?: 'document'|path|[paths], profile?: id, checks?: [id|glob], exclude?: [id|glob], groups?: [group], scope?: ['source'|'binary'|'family'], glyphs?: [names|ranges], masters?: [ids], layers?: [ids], minSeverity?: 'info'|'warn'|'fail', config?: {checkId: {threshold: value}}, maxResults?: count, all?: bool, network?: bool, includeIgnored?: bool, includePassed?: bool}"
+params = "{target?: 'document'|path|[paths], profile?: id, checks?: [id|glob], exclude?: [id|glob], groups?: [group], scope?: ['source'|'binary'|'family'], glyphs?: [names|ranges], glyphFile?: path, masters?: [ids], layers?: [ids], minSeverity?: 'info'|'warn'|'fail', config?: {checkId: {threshold: value}}, maxResults?: count, all?: bool, network?: bool, includeIgnored?: bool, includePassed?: bool}"
 area = "qa"
 milestone = "M3"
 summary = "Runs the selected checks on the open document, a source or font file, or a set of files treated as a family, and returns the result document described in docs/spec/21-qa.md. Defaults: the current document, the document's default profile, every glyph and master, and only glyphs changed since the last run unless `all` is set. Changes nothing in the font."
 ref = "fontbakery check-profile; AFDKO checkoutlinesufo; AFDKO comparefamily; fontTools varLib.interpolatable"
 status = "docs"
-notes = "M3 builds the open-document target with profile, checks, exclude, groups, scope, glyphs (names), masters, layers, minSeverity, config, maxResults and includePassed. Without `layers` a run skips backup layers. A pattern that matches no registered check is an error. File and family targets, glyph ranges, the per-glyph hash cache (`all`), network and the ignore list wait for M12."
+notes = "M3 built the open-document target. M12.44 adds file targets (a source, a compiled font with each face of a collection and the contents of WOFF and WOFF2, several files or a folder of compiled fonts as one family), every check scope (glyph, source, binary and family checks besides the layer checks), preconditions, glyph selection entries and glyphFile (audit.glyphSelectionSyntax), the document's and the application's default profile and project or user profiles with their severity overrides and thresholds, network and includeIgnored. A source's exporting static instances, at most 32, and its variable font (with more than one master) are compiled in memory for the binary and family checks. Only a run on the open document is kept for audit.results and audit.fix. The per-glyph hash cache (`all`) is not built: every run examines every selected glyph."
+guesses = ["A source's instances are compiled as TrueType for the binary checks whatever outline format the source exports, and at most 32 of them; a run of the reference auditors on a source would settle whether the CFF flavour or every instance should be read.", "On a source, the family checks receive every instance compiled from it, the variable font included; checks that should compare only the static instances would need the reference tools' behaviour on sources to settle it."]
 
 [[command]]
 id = "audit.list"
@@ -3718,7 +3719,7 @@ milestone = "M12"
 summary = "Adds an entry to the document's ignore list, from a result id or from an explicit check and location, so that matching results are hidden and do not count toward the exit status. An entry without a glyph silences the check for the whole font."
 ref = "Our design; cf. fontbakery exclude_checks"
 status = "inferred"
-notes = "Built in M12.59. An entry made from a result keeps the result's check, glyph, master and table-level location keys (table, field, nameId, platform, encoding, language, feature, script, lookup, axis, instance, pair); outline addresses change with every edit and are not kept. Ignoring the same issue again replaces its reason and date. The date comes from the session clock. At most 100,000 entries. Hiding matching results in audit.run and the exit status is the runner's (M12.44)."
+notes = "Built in M12.59. An entry made from a result keeps the result's check, glyph, master and table-level location keys (table, field, nameId, platform, encoding, language, feature, script, lookup, axis, instance, pair); outline addresses change with every edit and are not kept. Ignoring the same issue again replaces its reason and date. The date comes from the session clock. At most 100,000 entries. audit.run and audit.results (M12.44) mark matching results `ignored`, count them in summary.ignored and leave them out of the other counts, the check statuses and the exit status; audit.results reads the list as it is when called."
 guesses = ["An entry made from a result keeps table-level keys but not outline addresses, which change with every edit; a user report would settle whether point-level entries are wanted."]
 
 [[command]]
@@ -3782,7 +3783,8 @@ milestone = "M12"
 summary = "Shortcut for the classic outline check: runs overlap, coincident points, flat curves, collinear lines, tiny contours and empty glyphs, and repairs them when `fix` is set. Defaults: minArea 25, tolerance 0, integer rounding, both check families on, fixed outlines written with the original kept in a backup layer."
 ref = "AFDKO checkoutlinesufo (all options)"
 status = "docs"
-notes = "Repair order read from AFDKO 5.0.1's checkoutlinesufo (Apache-2.0): coincident points, flat curves, collinear lines, overlap removal repeated until the rounded point list stops changing, tiny contours, collinear lines again; coordinates rounded (three decimals with decimal), points closer than one unit merged, then the original contour order restored for contours that did not change."
+notes = "Built in M12.44 as one audit.run of overlap, coincidentPoints, flatCurve, collinearLines, tinyContour and noContours with the reference defaults (minArea 25, tolerance 0); `fix` then runs audit.fix on the open document with every repair, not only the safe ones, as the reference's error correction mode does. Repair order read from AFDKO 5.0.1's checkoutlinesufo (Apache-2.0): coincident points, flat curves, collinear lines, overlap removal repeated until the rounded point list stops changing, tiny contours, collinear lines again; coordinates rounded (three decimals with decimal), points closer than one unit merged, then the original contour order restored for contours that did not change. `decimal`, `keepContourOrder`, `all` and `quiet` are accepted; the repairs keep the coordinates and the contour order audit.fix's commands give, and there is no glyph hash cache yet."
+guesses = ["A fix of a file given by path is refused; the command line opens the source, fixes it and saves it, so the engine command only fixes the open document."]
 
 [[command]]
 id = "audit.checkInterpolation"
@@ -3796,6 +3798,8 @@ milestone = "M12"
 summary = "Shortcut for the master-compatibility checks of the variations group on a multi-master source, a designspace, a variable font or a list of static files. Defaults: tolerance 0.95, kinkiness 0.5. Results are ordered by problem severity; `showAll` also lists glyphs without problems."
 ref = "fontTools varLib.interpolatable (--glyphs, --tolerance, --kinkiness, --ignore-missing, --show-all, --name)"
 status = "docs"
+notes = "Built in M12.44 as one audit.run of the nine compatibility checks of the reference's problem types (overweight stays out: it is opt-in in the strict profile), with results in the reference's problem-type order. A tolerance of 10 or more is read as a percentage. `masters` keeps only results whose compared masters are all listed. Several master files given at once are refused: give a designspace or a multi-master source."
+guesses = ["`showAll` lists the glyphs without problems in `glyphsWithoutProblems` instead of one line per glyph as the reference prints; its JSON output would settle the shape."]
 
 [[command]]
 id = "audit.compareFamily"
@@ -3810,7 +3814,7 @@ summary = "Shortcut for the family comparison: groups the given fonts into style
 ref = "AFDKO comparefamily (-d, -st, -ft, -tolerance, -nohints)"
 status = "docs"
 guesses = ["The label is Check Family and the results go to the Font Audit panel, never to the Compare Family window, so the two features with similar names stay apart; the id stays for the command line (21-qa.md question 13)."]
-notes = "Test numbers checked against AFDKO 5.0.1, run locally: comparefamily has single-face tests 1 to 34 and family tests 1 to 21, as 21-qa.md § 6 maps them; single-face test 29 is empty."
+notes = "Test numbers checked against AFDKO 5.0.1, run locally: comparefamily has single-face tests 1 to 34 and family tests 1 to 21, as 21-qa.md § 6 maps them; single-face test 29 is empty. Built in M12.44 as one audit.run of the mapped checks on the fonts and folder given; a number whose checks are not built yet is named in `warnings`, and a selection with no built check at all is refused. `tolerance` sets the `tolerance` threshold of each selected check that has one."
 
 [[command]]
 id = "audit.report.menuNames"
@@ -4074,6 +4078,8 @@ milestone = "M12"
 summary = "Wherever a glyph list is accepted on the command line, entries may be glyph names, glyph indexes, ranges written first-last, and CID values written with a leading slash; separators are commas or any white space, and a list may be read from a file. Entries that match no glyph draw a warning and are skipped."
 ref = "AFDKO checkoutlinesufo -g, -f"
 status = "docs"
+notes = "Built in M12.44 for audit.run (`glyphs`, `glyphFile`) and the shortcuts. Unmatched entries come back in the result's `warnings`."
+guesses = ["A piece that is a glyph name is read as a name even when it holds a hyphen, and `/N` names the glyph `cidNNNNN` (five digits) before glyph index N; a CID-keyed source in the reference tool would settle it."]
 
 [[behavior]]
 id = "audit.overlapTestsDecomposedCopy"
@@ -4136,6 +4142,7 @@ milestone = "M12"
 summary = "Master compatibility is tested between each master and its nearest neighbour toward the default master, not between all pairs, so one bad master is reported once; kink and weight tests look at the halfway interpolation of each such pair."
 ref = "fontTools varLib.interpolatable (master ordering, mid-point tests)"
 status = "docs"
+notes = "Built inside the compatibility checks (checks/compat.rs); M12.44 runs them on sources, designspaces and multi-master files given by path."
 
 [[behavior]]
 id = "audit.interpolationTolerance"
@@ -4144,6 +4151,7 @@ milestone = "M12"
 summary = "The contour-order, start-point and weight tests each yield a score from 0 to 1 and report when it falls below `tolerance` (default 0.95; values of 10 or more are read as percentages). The score is included in the result so that results can be ranked."
 ref = "fontTools varLib.interpolatable --tolerance"
 status = "docs"
+notes = "Built in M12.44: audit.checkInterpolation reads 10 or more as a percentage and sets the tolerance of each check that has one; the score is in each result's `data`."
 
 [[behavior]]
 id = "audit.familyGrouping"
@@ -4152,6 +4160,7 @@ milestone = "M12"
 summary = "Family checks work on two groupings: style-linked groups, fonts with the same family name (name ID 1), and typographic families, fonts with the same typographic family name (name ID 16, falling back to ID 1). Each family check states which grouping it uses."
 ref = "AFDKO comparefamily (compatible family vs preferred family groups)"
 status = "docs"
+notes = "Built in M12.44: every family check receives all fonts of the run (at most 256) and groups them itself, by name ID 1 or by name ID 16 falling back to ID 1, as checks/family.rs lists per check."
 guesses = ["On a compiled font without its source the style comes from name IDs 2 and 17 and the fsSelection bits, never from the file name; only check.files.canonicalFileName reads the file name (21-qa.md question 9)."]
 
 [[behavior]]
@@ -4161,6 +4170,7 @@ milestone = "M12"
 summary = "Family and single-face metric comparisons accept differences up to `tolerance` design units (default 0); this applies to the BASE table, ligature width and accented-glyph width checks."
 ref = "AFDKO comparefamily -tolerance"
 status = "docs"
+notes = "audit.compareFamily (M12.44) sets `tolerance` on every selected check with a `tolerance` threshold. The BASE, ligature-width and accent-width checks it names are not in the registry yet."
 
 [[behavior]]
 id = "audit.projectValues"
@@ -4216,7 +4226,8 @@ milestone = "M12"
 summary = "On the command line the check command exits with 0 when no result reaches the `--fail-on` severity (default fail), 1 when one does, 2 for usage errors and 3 for targets that cannot be read (the statuses every subcommand shares: cli.global.exitCodes). Skipped and ignored results never affect the status."
 ref = "fontbakery exit codes and --error-code-on; fontTools varLib.interpolatable --quiet"
 status = "docs"
-notes = "Settled by the M12 planning pass (20-cli.md question 20): 3 for an unreadable target, as every subcommand uses."
+notes = "Settled by the M12 planning pass (20-cli.md question 20): 3 for an unreadable target, as every subcommand uses. Built in M12.44: a check that failed to run also gives 1, and the run asks the engine for results down to the lower of --min-severity and --fail-on so hidden results still count."
+guesses = ["Results hidden by --min-severity still make the exit status 1 when they reach --fail-on; the reference tools have no separate display threshold, so nothing settles it."]
 
 [[behavior]]
 id = "audit.networkOptIn"
@@ -4225,9 +4236,9 @@ milestone = "M13"
 summary = "Checks that need network access (name registry lookup, auditor version) never run unless the run explicitly allows network use."
 ref = "fontbakery network condition"
 status = "docs"
+notes = "Moved from M12 to M13 with the two network checks (docs/plans/M12.md § 7, question 4): M12 has no check that needs the network. audit.run takes `network` and `fontcraft-cli check` takes --network (M12.44); the Network precondition holds only when it is set."
 
 # ───────────────────────────── Fix commands (M12 spec pass) ─────────────────────────────
-notes = "Moved from M12 to M13 with the two network checks (docs/plans/M12.md § 7, question 4): M12 has no check that needs the network."
 
 [[command]]
 id = "path.eraseOpenCorners"

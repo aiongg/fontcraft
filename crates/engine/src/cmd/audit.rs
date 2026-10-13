@@ -14,7 +14,8 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
 
-use fontcraft_audit::{self as audit, AuditContext, CHECKS, CheckSpec, Config, CurveType, Finding, Profile, Severity};
+use fontcraft_audit::profile::{self as prof, DocumentSettings};
+use fontcraft_audit::{self as audit, AuditContext, CHECKS, CheckScope, CheckSpec, Config, CurveType, Finding, Profile, Severity};
 use fontcraft_model::{Font, Glyph, Layer, Path, Shape};
 use serde_json::{Map, Value, json};
 
@@ -82,10 +83,11 @@ pub fn specs() -> Vec<CommandSpec> {
             "Run Audit",
             [],
             None,
-            "{profile?: \"outlines\" | \"opentype\" | \"universal\" | \"strict\" (default universal), checks?: [id | prefix*], exclude?: [id | prefix*], groups?: [group], scope?: [\"source\" | \"binary\" | \"family\"], glyphs?: [names], masters?: [ids], layers?: [ids], minSeverity?: \"info\" | \"warn\" | \"fail\", config?: {checkId: {threshold: number}}, maxResults?: count = 100, includePassed?: bool = false, target?: \"document\"} runs the checks on the open document: every layer of the glyphs except backup layers (or the layers in `layers`), and changes nothing. A pattern that matches no check is an error. A capped check with more than maxResults results in the font gives one info result with the count instead. The run is kept for audit.results and audit.fix → {schema, tool, target, document: {title, revision}, profile, config, summary: {fail, warn, info, passed, skipped, ignored, errors, truncated}, checks: [{id, status, results, reason?}], results: [{id, check, code, severity, message, location: {font, glyph, master, layer, shapes?, points?, segments?, point?, bounds?}, data, fix: {available, id?, safe?, description?, command?, params?, via?}, ignored, stale}]}",
-            has_doc,
+            "{target?: \"document\" | path | [paths] (default the open document; several files or a folder of compiled fonts are also one family), profile?: id (default the document's default profile, else the application's, else universal), checks?: [id | prefix*], exclude?: [id | prefix*], groups?: [group], scope?: [\"source\" | \"binary\" | \"family\"], glyphs?: [names, indexes, first-last ranges, /CID] (entries that match nothing are warned about), glyphFile?: path (the same entries in a file), masters?: [ids], layers?: [ids], minSeverity?: \"info\" | \"warn\" | \"fail\", config?: {checkId: {threshold: number}}, maxResults?: count = 100, includePassed?: bool = false, includeIgnored?: bool = false, network?: bool = false} runs the checks of every scope and changes nothing: layer checks on every layer of the selected glyphs except backup layers (or the layers in `layers`), glyph and source checks on the source, binary checks on each compiled font (a source's exporting instances and variable font are compiled in memory and their findings name the source field behind a compiled value), family checks on two or more fonts. On a compiled font the outline checks read the decoded file and checks that need source data are skipped. A check whose preconditions do not hold is skipped with the reason. A pattern that matches no check is an error. A capped check with more than maxResults results in one font gives one info result with the count instead. Results on the source's ignore list are counted in summary.ignored and listed only with includeIgnored. A run on the open document is kept for audit.results and audit.fix → {schema, tool, target: {kind, path, fonts: [{id, name, path, instance, format}]}, document?: {title, revision}, profile, config, summary: {fail, warn, info, passed, skipped, ignored, errors, truncated}, checks: [{id, status, results, reason?}], results: [{id, check, code, severity, message, location: {font, glyph, master, layer, shapes?, points?, segments?, point?, bounds?, table?, field?, sourceField?, instance?, fonts?, masters?}, data, fix: {available, id?, safe?, description?, command?, params?, via?}, ignored, stale}], warnings?: [text]}",
+            always,
             run
-        ),
+        )
+        .files(const { &[FileParam::read("target").keywords(&["document"]), FileParam::read("glyphFile")] }),
         cmd!(
             query "audit.list",
             "List Checks",
@@ -137,8 +139,11 @@ pub fn specs() -> Vec<CommandSpec> {
 // ── Reading a selection ─────────────────────────────────────────────────────────────────────────
 
 /// What one run examines, with which settings.
+#[derive(Clone)]
 struct Run {
-    profile: Profile,
+    profile: String,
+    /// The resolved profile, for its severity overrides.
+    resolved: prof::Resolved,
     checks: Vec<&'static CheckSpec>,
     glyphs: Option<HashSet<String>>,
     masters: Option<HashSet<String>>,
@@ -148,6 +153,10 @@ struct Run {
     min_severity: Severity,
     max_results: usize,
     include_passed: bool,
+    include_ignored: bool,
+    network: bool,
+    /// Glyph selection entries that matched nothing.
+    warnings: Vec<String>,
 }
 
 /// Only the open document can be audited so far.
@@ -192,9 +201,6 @@ fn names_from<'a>(p: &Params<'a>, key: &str, allowed: &[&str]) -> Result<Option<
 fn group_of(id: &str) -> &str {
     id.strip_prefix("check.").and_then(|rest| rest.split('.').next()).unwrap_or("")
 }
-
-/// Every check in the registry reads the editable document.
-const CHECK_SCOPE: &str = "source";
 
 fn profile_param(p: &Params) -> Result<Option<Profile>> {
     match p.opt_str("profile")? {
@@ -244,27 +250,65 @@ fn config_param(p: &Params) -> Result<(Config, Value)> {
     Ok((config, Value::Object(map.clone())))
 }
 
-/// Reads the selection keys shared by `audit.run` and `audit.fix`.
-fn read_run(p: &Params, font: &Font) -> Result<Run> {
-    document_target(p)?;
-    let profile = profile_param(p)?.unwrap_or(Profile::Universal);
+/// The profile a run uses: the one named, else the document's default, else the application's,
+/// else `universal`; resolved through the document's and the user's profiles.
+fn resolve_profile(p: &Params, s: &Session, settings: &DocumentSettings) -> Result<(String, prof::Resolved, Option<String>)> {
+    let (user, _) = super::audit_profiles::user_store(s);
+    let (id, note) = match p.opt_str("profile")? {
+        Some(id) => (id.to_string(), None),
+        None => {
+            let (id, _, note) = super::audit_profiles::default_profile(settings, &user);
+            (id, note)
+        }
+    };
+    let profiles = prof::Profiles { project: &settings.profiles, user: &user.profiles };
+    let resolved = profiles.resolve(&id).map_err(|e| p.bad(e))?;
+    Ok((id, resolved, note))
+}
+
+/// Reads the selection keys shared by `audit.run` and `audit.fix`. `settings` are the target
+/// source's audit settings (empty for compiled fonts): its profiles, default profile and
+/// threshold overrides.
+fn read_run(p: &Params, s: &Session, font: &Font, settings: &DocumentSettings) -> Result<Run> {
+    let (profile, resolved, note) = resolve_profile(p, s, settings)?;
     let include = patterns(p, "checks")?;
     let exclude = patterns(p, "exclude")?;
     let groups = names_from(p, "groups", &GROUPS)?;
     let scopes = names_from(p, "scope", &SCOPES)?;
-    let checks = audit::select(Some(profile), &include, &exclude)
-        .into_iter()
+    let checks = resolved
+        .checks
+        .iter()
+        .copied()
+        .filter(|c| include.is_empty() || include.iter().any(|pat| audit::matches_pattern(c.id, pat)))
+        .filter(|c| !exclude.iter().any(|pat| audit::matches_pattern(c.id, pat)))
         .filter(|c| groups.as_ref().is_none_or(|g| g.contains(&group_of(c.id))))
-        .filter(|_| scopes.as_ref().is_none_or(|s| s.contains(&CHECK_SCOPE)))
+        .filter(|c| scopes.as_ref().is_none_or(|s| s.contains(&c.scope.row_scope())))
         .collect();
-    let glyphs = p.opt_glyphs("glyphs", font)?.map(|v| v.into_iter().collect());
+    let mut warnings: Vec<String> = note.into_iter().collect();
+    let glyphs = glyph_param(p, font, &mut warnings)?;
     let masters = id_set(p, "masters", |id| font.master(id).is_ok())?;
     let layers = id_set(p, "layers", |id| font.glyphs.as_arcs().iter().any(|g| g.layers.iter().any(|l| l.id == id)))?;
-    let (config, config_json) = config_param(p)?;
+    let (mut config, config_json) = config_param(p)?;
+    // Profile thresholds, then the document's overrides, then the call's: the last set wins.
+    let mut merged = resolved.config();
+    for (check, values) in &settings.thresholds {
+        for (name, v) in values {
+            let _ = merged.set(check, name, *v);
+        }
+    }
+    for c in CHECKS {
+        for t in c.thresholds {
+            if let Some(v) = config.get(c.id, t.name) {
+                let _ = merged.set(c.id, t.name, v);
+            }
+        }
+    }
+    config = merged;
     let max =
         p.opt_int("maxResults", 0, MAX_MAX_RESULTS)?.map_or(audit::DEFAULT_MAX_RESULTS, |n| usize::try_from(n).unwrap_or(audit::DEFAULT_MAX_RESULTS));
     Ok(Run {
         profile,
+        resolved,
         checks,
         glyphs,
         masters,
@@ -274,7 +318,55 @@ fn read_run(p: &Params, font: &Font) -> Result<Run> {
         min_severity: severity_param(p)?,
         max_results: max,
         include_passed: p.bool_or("includePassed", false)?,
+        include_ignored: p.bool_or("includeIgnored", false)?,
+        network: p.bool_or("network", false)?,
+        warnings,
     })
+}
+
+/// `glyphs` (a list of selection entries) and `glyphFile` (a path to a file of them), read with
+/// the glyph selection syntax; entries that match nothing become warnings.
+fn glyph_param(p: &Params, font: &Font, warnings: &mut Vec<String>) -> Result<Option<HashSet<String>>> {
+    let mut entries: Vec<String> = Vec::new();
+    match p.get("glyphs") {
+        None => {}
+        Some(Value::String(s)) => entries.push(s.clone()),
+        Some(Value::Array(a)) if a.len() > fontcraft_model::MAX_GLYPHS => {
+            return Err(p.bad(format!("`glyphs` holds {} entries; at most {} are allowed", a.len(), fontcraft_model::MAX_GLYPHS)));
+        }
+        Some(_) => entries.extend(p.strings("glyphs")?.into_iter().map(str::to_string)),
+    }
+    if let Some(path) = p.opt_str("glyphFile")? {
+        entries.push(read_glyph_file(std::path::Path::new(path))?);
+    }
+    if p.get("glyphs").is_none() && p.get("glyphFile").is_none() {
+        return Ok(None);
+    }
+    let refs: Vec<&str> = entries.iter().map(String::as_str).collect();
+    let sel = audit::run::select_glyphs(font, &refs);
+    warnings.extend(sel.warnings);
+    Ok(Some(sel.glyphs.into_iter().collect()))
+}
+
+/// Largest glyph list file read, in bytes.
+const MAX_GLYPH_FILE: u64 = 16 << 20;
+
+#[cfg(not(target_arch = "wasm32"))]
+fn read_glyph_file(path: &std::path::Path) -> Result<String> {
+    use std::io::Read as _;
+    let mut text = String::new();
+    std::fs::File::open(path)
+        .and_then(|f| f.take(MAX_GLYPH_FILE + 1).read_to_string(&mut text))
+        .map_err(|e| EngineError::Io(format!("cannot read the glyph list {}: {e}", path.display())))?;
+    if text.len() as u64 > MAX_GLYPH_FILE {
+        return Err(EngineError::Io(format!("the glyph list {} is larger than {MAX_GLYPH_FILE} bytes", path.display())));
+    }
+    Ok(text)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn read_glyph_file(_: &std::path::Path) -> Result<String> {
+    Err(EngineError::Unsupported("reading a glyph list file in the browser".into()))
 }
 
 // ── Running the checks ──────────────────────────────────────────────────────────────────────────
@@ -283,24 +375,23 @@ fn is_backup(l: &Layer) -> bool {
     !l.is_master_layer() && l.info.attrs.is_empty()
 }
 
-/// One finding with where it sorts: glyph and layer positions in the font.
+/// One finding with where it sorts: font, glyph and layer positions.
 struct Hit {
     finding: Finding,
+    /// The font's index in the target's font list.
+    font: usize,
     glyph: usize,
     layer: usize,
     master: String,
+    /// On the target source's ignore list.
+    ignored: bool,
 }
 
 /// What one run found.
 #[derive(Default)]
 struct Examined {
     hits: Vec<Hit>,
-    /// Per check: the layers it ran on.
-    ran: HashMap<&'static str, usize>,
-    /// Per check: the layers it skipped, and the first reason.
-    skipped: HashMap<&'static str, (usize, String)>,
-    /// Findings dropped: over a check's per-layer limit, or over [`MAX_REPORTED`].
-    truncated: usize,
+    tally: audit::run::Tally,
 }
 
 /// The layers a run examines, in font order.
@@ -323,43 +414,378 @@ fn layers_of<'f>(font: &'f Font, run: &Run) -> Vec<(usize, &'f Arc<Glyph>, usize
     out
 }
 
-/// Runs the checks, applies `minSeverity` and, with `cap`, the result cap and [`MAX_REPORTED`],
-/// and sorts the results: by severity, check id, glyph order and layer order.
-fn examine(font: &Font, run: &Run, cap: bool) -> Examined {
+/// Where a font's findings sort: glyph index by name, and glyph, layer and master by
+/// `(glyph, layer)`.
+#[derive(Default)]
+struct Places {
+    glyphs: HashMap<String, usize>,
+    layers: HashMap<(String, String), (usize, String)>,
+}
+
+/// Findings before the result cap, ignore list and sorting, with the index of their font.
+type Raw = Vec<(usize, Finding)>;
+
+/// Runs the layer, glyph and source checks of `run` on `font`, the font at `fi` in the target.
+fn examine_font(font: &Font, fi: usize, run: &Run, facts: &audit::run::Facts, ex: &mut Examined, raw: &mut Raw, places: &mut HashMap<usize, Places>) {
     let ctx = AuditContext::new(font);
-    let mut ex = Examined::default();
-    let mut places: HashMap<(String, String), (usize, usize, String)> = HashMap::new();
-    let mut findings = Vec::new();
-    for (gi, g, li, layer) in layers_of(font, run) {
-        let report = audit::audit_layer(&ctx, g, layer, &run.checks, &run.config);
-        for c in &run.checks {
-            match report.skipped.iter().find(|s| s.check == c.id) {
-                Some(s) => {
-                    let e = ex.skipped.entry(c.id).or_insert_with(|| (0, s.reason.clone()));
-                    e.0 += 1;
+    let services = super::audit_services::EngineServices;
+    let mut layer_checks = Vec::new();
+    for &c in run.checks.iter().filter(|c| c.scope == CheckScope::Layer) {
+        match audit::run::unmet(c, facts, None) {
+            Some(reason) => ex.tally.skip(c.id, reason),
+            None => layer_checks.push(c),
+        }
+    }
+    let place = places.entry(fi).or_default();
+    place.glyphs = font.glyphs.as_arcs().iter().enumerate().map(|(i, g)| (g.name.clone(), i)).collect();
+    if !layer_checks.is_empty() {
+        for (_, g, li, layer) in layers_of(font, run) {
+            let report = audit::audit_layer(&ctx, g, layer, &layer_checks, &run.config);
+            place.layers.insert((g.name.clone(), layer.id.clone()), (li, layer.master.clone()));
+            ex.tally.absorb(&layer_checks, report);
+        }
+    }
+    audit::run::run_glyphs(&ctx, &services, &run.checks, &run.config, facts, run.glyphs.as_ref(), &mut ex.tally);
+    audit::run::run_source(&ctx, &services, &run.checks, &run.config, facts, &mut ex.tally);
+    raw.extend(ex.tally.findings.drain(..).map(|f| (fi, f)));
+}
+
+/// Runs the binary checks on each compiled font and the family checks on all of them.
+fn examine_binaries(bins: &[Bin], ids: &[String], run: &Run, facts: &audit::run::Facts, ex: &mut Examined, raw: &mut Raw) {
+    let services = super::audit_services::EngineServices;
+    let mut ctxs = Vec::with_capacity(bins.len());
+    let mut at = Vec::with_capacity(bins.len());
+    for b in bins {
+        let id = ids.get(b.font).map_or("", String::as_str);
+        match audit::BinaryCtx::new(id, &b.bytes, b.face, &services) {
+            Ok(mut ctx) => {
+                ctx.source = b.map.as_ref();
+                if let Some(path) = &b.path {
+                    ctx = ctx.with_file(path.clone(), b.size);
                 }
-                None => *ex.ran.entry(c.id).or_default() += 1,
+                ctxs.push(ctx);
+                at.push(b.font);
+            }
+            Err(e) => {
+                ex.tally.notes.push(format!("{id}: {e}"));
+                for c in run.checks.iter().filter(|c| c.scope == CheckScope::Binary) {
+                    ex.tally.skip(c.id, e.clone());
+                }
             }
         }
-        ex.truncated = report.truncated.iter().fold(ex.truncated, |n, t| n.saturating_add(t.dropped));
-        places.insert((g.name.clone(), layer.id.clone()), (gi, li, layer.master.clone()));
-        findings.extend(report.findings);
     }
-    let findings = if cap { audit::collapse(findings, run.max_results) } else { findings };
-    let mut hits: Vec<Hit> = findings
-        .into_iter()
-        .filter(|f| f.severity <= run.min_severity)
-        .map(|f| {
-            let (glyph, layer, master) = places.get(&(f.location.glyph.clone(), f.location.layer.clone())).cloned().unwrap_or((0, 0, String::new()));
-            Hit { finding: f, glyph, layer, master }
-        })
-        .collect();
-    hits.sort_by(|a, b| (a.finding.severity, a.finding.check, a.glyph, a.layer).cmp(&(b.finding.severity, b.finding.check, b.glyph, b.layer)));
+    for (ctx, &fi) in ctxs.iter().zip(&at) {
+        audit::run::run_binary(ctx, &run.checks, &run.config, facts, &mut ex.tally);
+        raw.extend(ex.tally.findings.drain(..).map(|f| (fi, f)));
+    }
+    audit::run::run_family(&ctxs, &services, &run.checks, &run.config, facts, &mut ex.tally);
+    raw.extend(ex.tally.findings.drain(..).map(|f| (usize::MAX, f)));
+}
+
+/// Applies the result cap (per font, with `cap`), the profile's severity overrides,
+/// `minSeverity`, the master filter and the ignore list, then sorts the results: by severity,
+/// group, check id, font, glyph order and layer order.
+fn finish(raw: Raw, run: &Run, places: &HashMap<usize, Places>, ignore: &prof::IgnoreIndex<'_>, cap: bool, ex: &mut Examined) {
+    let mut per_font: BTreeMap<usize, Vec<Finding>> = BTreeMap::new();
+    for (fi, f) in raw {
+        per_font.entry(fi).or_default().push(f);
+    }
+    let mut hits = Vec::new();
+    for (fi, findings) in per_font {
+        let findings = if cap { audit::collapse(findings, run.max_results) } else { findings };
+        let place = places.get(&fi);
+        for mut f in findings {
+            if f.code != audit::TOO_MANY_RESULTS
+                && run.resolved.overrides.iter().any(|o| o.check == f.check)
+                && let Some(spec) = audit::find(f.check)
+            {
+                f.severity = run.resolved.severity(spec, f.code);
+            }
+            if f.severity > run.min_severity {
+                continue;
+            }
+            if let Some(set) = &run.masters
+                && !f.location.masters.is_empty()
+                && !f.location.masters.iter().all(|m| set.contains(m))
+            {
+                continue;
+            }
+            let glyph = place.and_then(|p| p.glyphs.get(&f.location.glyph)).copied().unwrap_or(0);
+            let (layer, master) = place
+                .and_then(|p| p.layers.get(&(f.location.glyph.clone(), f.location.layer.clone())))
+                .cloned()
+                .unwrap_or_else(|| (0, f.location.master.clone().unwrap_or_default()));
+            let ignored = is_ignored(ignore, &f, &master);
+            hits.push(Hit { finding: f, font: fi, glyph, layer, master, ignored });
+        }
+    }
+    hits.sort_by(|a, b| {
+        (a.finding.severity, group_of(a.finding.check), a.finding.check, a.font, a.glyph, a.layer).cmp(&(
+            b.finding.severity,
+            group_of(b.finding.check),
+            b.finding.check,
+            b.font,
+            b.glyph,
+            b.layer,
+        ))
+    });
     if cap && hits.len() > MAX_REPORTED {
-        ex.truncated = ex.truncated.saturating_add(hits.len() - MAX_REPORTED);
+        ex.tally.truncated = ex.tally.truncated.saturating_add(hits.len() - MAX_REPORTED);
         hits.truncate(MAX_REPORTED);
     }
     ex.hits = hits;
+}
+
+/// Is `f` on the ignore list? An entry matches the check, the glyph (none for a result without
+/// one), the master and the location keys it holds.
+fn is_ignored(ignore: &prof::IgnoreIndex<'_>, f: &Finding, master: &str) -> bool {
+    let Ok(Value::Object(loc)) = serde_json::to_value(&f.location) else { return false };
+    let location = super::audit_profiles::result_location(&loc);
+    let glyph = (!f.location.glyph.is_empty()).then_some(f.location.glyph.as_str());
+    let master = (!master.is_empty()).then_some(master);
+    ignore.is_ignored(f.check, glyph, master, &location)
+}
+
+/// Runs the layer checks of `run` on the open document only: what `audit.fix` repairs and
+/// re-checks.
+fn examine(font: &Font, run: &Run, cap: bool) -> Examined {
+    let mut ex = Examined::default();
+    let (mut raw, mut places) = (Raw::new(), HashMap::new());
+    let facts = audit::run::Facts { source: true, variable: font.masters.len() > 1, network: run.network, ..Default::default() };
+    let layer_run = Run { checks: run.checks.iter().copied().filter(|c| c.scope == CheckScope::Layer).collect(), ..run.clone() };
+    examine_font(font, 0, &layer_run, &facts, &mut ex, &mut raw, &mut places);
+    let none = prof::IgnoreIndex::new(&[]);
+    finish(raw, run, &places, &none, cap, &mut ex);
+    ex
+}
+
+// ── Targets ─────────────────────────────────────────────────────────────────────────────────────
+
+/// A compiled font of the target: a file, a face of a collection, or an instance compiled in
+/// memory from a source.
+struct Bin {
+    /// Index in the target's font list.
+    font: usize,
+    /// The sfnt (after any WOFF unwrapping), or the whole collection.
+    bytes: Vec<u8>,
+    face: u32,
+    path: Option<String>,
+    size: u64,
+    map: Option<audit::SourceMap>,
+}
+
+/// A font the layer, glyph and source checks read: a source, or a compiled font decoded.
+struct Src {
+    font: usize,
+    model: Arc<Font>,
+    /// A source (true) or a decoded compiled font.
+    source: bool,
+}
+
+/// What a run examines.
+#[derive(Default)]
+struct Target {
+    /// `source`, `binary` or `family`.
+    kind: &'static str,
+    path: Option<String>,
+    /// One entry per font: `{id, name, path, instance, format}`.
+    fonts: Vec<Value>,
+    srcs: Vec<Src>,
+    bins: Vec<Bin>,
+    /// The first source's audit settings: profiles, thresholds, project values, ignore list.
+    settings: DocumentSettings,
+    /// The open document's title and revision, for a document target.
+    document: Option<Value>,
+    notes: Vec<String>,
+}
+
+impl Target {
+    fn add_font(&mut self, name: &str, path: Option<&str>, instance: Option<&str>, format: &str) -> usize {
+        let i = self.fonts.len();
+        self.fonts.push(json!({"id": format!("f{i}"), "name": name, "path": path, "instance": instance, "format": format}));
+        i
+    }
+
+    fn ids(&self) -> Vec<String> {
+        (0..self.fonts.len()).map(|i| format!("f{i}")).collect()
+    }
+}
+
+/// The open document as a target.
+fn document_target_of(doc: &DocState) -> Target {
+    let mut t = Target { kind: "source", path: doc.path.as_ref().map(|p| p.to_string_lossy().into_owned()), ..Target::default() };
+    let i = t.add_font(&doc.font.family_name, t.path.clone().as_deref(), None, "source");
+    t.srcs.push(Src { font: i, model: doc.font.clone(), source: true });
+    t.settings = DocumentSettings::read(&doc.font).0;
+    t.document = Some(json!({"title": doc.title, "revision": doc.revision}));
+    t
+}
+
+/// The paths of `target`: one text or a list.
+fn target_paths(p: &Params) -> Result<Option<Vec<String>>> {
+    match p.get("target") {
+        None => Ok(None),
+        Some(Value::String(s)) if s == "document" => Ok(None),
+        Some(Value::String(s)) => Ok(Some(vec![s.clone()])),
+        Some(Value::Array(a)) if a.is_empty() || a.len() > audit::run::MAX_TARGET_FONTS => {
+            Err(p.bad(format!("`target` lists 1 to {} paths", audit::run::MAX_TARGET_FONTS)))
+        }
+        Some(Value::Array(_)) => Ok(Some(p.strings("target")?.into_iter().map(str::to_string).collect())),
+        Some(_) => Err(p.bad("`target` is \"document\", a path or a list of paths")),
+    }
+}
+
+/// Reads the files of a path target. A folder that is not a source package contributes the
+/// compiled fonts directly inside it.
+#[cfg(not(target_arch = "wasm32"))]
+fn load_paths(paths: &[String]) -> Result<Target> {
+    use std::path::Path;
+    let mut t = Target::default();
+    let mut files: Vec<std::path::PathBuf> = Vec::new();
+    for raw in paths {
+        let path = Path::new(raw);
+        let package = ["metainfo.plist", "fontinfo.plist", "font.props"].iter().any(|f| path.join(f).is_file());
+        if path.is_dir() && !package {
+            let mut entries: Vec<std::path::PathBuf> = std::fs::read_dir(path)
+                .map_err(|e| EngineError::Io(format!("cannot read the folder {raw}: {e}")))?
+                .filter_map(|e| e.ok().map(|e| e.path()))
+                .filter(|p| p.is_file())
+                .collect();
+            entries.sort();
+            let before = files.len();
+            for e in entries {
+                match super::file_io::read_input(&e) {
+                    Ok(input) if input.kind.is_font() => files.push(e),
+                    _ => {}
+                }
+                if files.len() > audit::run::MAX_TARGET_FONTS {
+                    return Err(EngineError::Io(format!("{raw} holds more than {} fonts", audit::run::MAX_TARGET_FONTS)));
+                }
+            }
+            if files.len() == before {
+                t.notes.push(format!("the folder {raw} holds no compiled fonts"));
+            }
+        } else {
+            files.push(path.to_path_buf());
+        }
+    }
+    if files.is_empty() {
+        return Err(EngineError::Io("the target holds no fonts or sources".into()));
+    }
+    for path in &files {
+        load_one(path, &mut t)?;
+        if t.fonts.len() > audit::run::MAX_TARGET_FONTS {
+            return Err(EngineError::Io(format!("the target holds more than {} fonts", audit::run::MAX_TARGET_FONTS)));
+        }
+    }
+    let first_source = t.srcs.iter().find(|s| s.source).map(|s| s.model.clone());
+    if let Some(font) = first_source {
+        t.settings = DocumentSettings::read(&font).0;
+    }
+    t.path = paths.first().filter(|_| paths.len() == 1).cloned();
+    t.kind = match (t.fonts.len(), t.srcs.iter().any(|s| s.source)) {
+        (1, true) => "source",
+        (1, false) => "binary",
+        _ => "family",
+    };
+    Ok(t)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn load_paths(_: &[String]) -> Result<Target> {
+    Err(EngineError::Unsupported("auditing files by path in the browser; audit the open document".into()))
+}
+
+/// Adds one file of a path target: each face of a compiled font, or a source.
+#[cfg(not(target_arch = "wasm32"))]
+fn load_one(path: &std::path::Path, t: &mut Target) -> Result<()> {
+    let text = path.to_string_lossy().into_owned();
+    if path.is_file() {
+        let input = super::file_io::read_input(path)?;
+        if input.kind.is_font() {
+            let size = input.bytes.len() as u64;
+            let sfnt = fontcraft_container::to_sfnt(&input.bytes).map_err(|e| EngineError::Io(format!("cannot read {text}: {e}")))?.into_owned();
+            let faces = audit::export::face_count(&sfnt).map_err(|e| EngineError::Io(format!("cannot read {text}: {e}")))?;
+            let faces = faces.min(u32::try_from(audit::run::MAX_TARGET_FONTS).unwrap_or(u32::MAX));
+            for face in 0..faces {
+                let (model, warnings) = match crate::io::open(path, Some(face)) {
+                    Ok((m, w)) => (Some(m), w),
+                    Err(e) => (None, vec![format!("its outlines cannot be decoded, so the outline checks skip it: {e}")]),
+                };
+                let name = model.as_ref().map_or_else(|| file_stem(path), |m| m.family_name.clone());
+                let i = t.add_font(&name, Some(&text), None, input.kind.name());
+                t.notes.extend(warnings.into_iter().take(MAX_NOTES_PER_FONT).map(|w| format!("f{i}: {w}")));
+                if let Some(model) = model {
+                    t.srcs.push(Src { font: i, model: Arc::new(model), source: false });
+                }
+                t.bins.push(Bin { font: i, bytes: sfnt.clone(), face, path: Some(text.clone()), size, map: None });
+            }
+            return Ok(());
+        }
+    }
+    let (font, _) = crate::io::open(path, None)?;
+    let i = t.add_font(&font.family_name, Some(&text), None, "source");
+    t.srcs.push(Src { font: i, model: Arc::new(font), source: true });
+    Ok(())
+}
+
+/// Most decoding warnings kept per font.
+const MAX_NOTES_PER_FONT: usize = 5;
+
+#[cfg(not(target_arch = "wasm32"))]
+fn file_stem(path: &std::path::Path) -> String {
+    path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default()
+}
+
+/// Compiles each source of the target in memory for the binary and family checks.
+fn compile_sources(t: &mut Target, run: &Run, ex: &mut Examined) {
+    let wanted = audit::run::any_of(&run.checks, CheckScope::Binary) || audit::run::any_of(&run.checks, CheckScope::Family);
+    if !wanted {
+        return;
+    }
+    let sources: Vec<Arc<Font>> = t.srcs.iter().filter(|s| s.source).map(|s| s.model.clone()).collect();
+    for font in sources {
+        let (instances, notes) = super::audit_services::EngineServices.compile_all(&font);
+        t.notes.extend(notes);
+        if instances.is_empty() {
+            let reason = "no instance of the source could be compiled".to_string();
+            for c in run.checks.iter().filter(|c| c.scope == CheckScope::Binary) {
+                ex.tally.skip(c.id, reason.clone());
+            }
+        }
+        for inst in instances {
+            if t.fonts.len() >= audit::run::MAX_TARGET_FONTS {
+                t.notes.push(format!("the run reads at most {} fonts; further instances were not compiled", audit::run::MAX_TARGET_FONTS));
+                return;
+            }
+            let instance = inst.map.instance.clone();
+            let i = t.add_font(&inst.name, None, Some(instance.as_deref().unwrap_or(&inst.name)), inst.format);
+            let size = inst.bytes.len() as u64;
+            t.bins.push(Bin { font: i, bytes: inst.bytes, face: 0, path: None, size, map: Some(inst.map) });
+        }
+    }
+}
+
+/// Runs every check of `run` on `t`.
+fn examine_target(t: &mut Target, run: &Run) -> Examined {
+    let mut ex = Examined::default();
+    compile_sources(t, run, &mut ex);
+    let (mut raw, mut places) = (Raw::new(), HashMap::new());
+    let values = t.settings.values.keys().cloned().collect();
+    let facts = |source: bool, font: &Font| audit::run::Facts {
+        source,
+        variable: font.masters.len() > 1,
+        network: run.network,
+        values: BTreeSet::clone(&values),
+    };
+    for src in &t.srcs {
+        examine_font(&src.model, src.font, run, &facts(src.source, &src.model), &mut ex, &mut raw, &mut places);
+    }
+    let base = audit::run::Facts { source: false, variable: false, network: run.network, values: values.clone() };
+    examine_binaries(&t.bins, &t.ids(), run, &base, &mut ex, &mut raw);
+    let ignore = t.settings.ignore_index();
+    finish(raw, run, &places, &ignore, true, &mut ex);
+    t.notes.append(&mut ex.tally.notes);
     ex
 }
 
@@ -399,11 +825,13 @@ fn fix_json(f: &Finding, id: &str, how: FixParams) -> Value {
     Value::Object(m)
 }
 
-fn result_json(hit: &Hit, id: &str, how: FixParams) -> Result<Value> {
+fn result_json(hit: &Hit, id: &str, ids: &[String], how: FixParams) -> Result<Value> {
     let f = &hit.finding;
     let mut location = serde_json::to_value(&f.location).map_err(|e| EngineError::Internal(e.to_string()))?;
-    if let Some(o) = location.as_object_mut() {
-        o.insert("font".into(), json!("f0"));
+    if let Some(o) = location.as_object_mut()
+        && let Some(font) = ids.get(hit.font)
+    {
+        o.insert("font".into(), json!(font));
         if !hit.master.is_empty() {
             o.insert("master".into(), json!(hit.master));
         }
@@ -418,7 +846,7 @@ fn result_json(hit: &Hit, id: &str, how: FixParams) -> Result<Value> {
         "location": location,
         "data": data,
         "fix": fix_json(f, id, how),
-        "ignored": false,
+        "ignored": hit.ignored,
         "stale": false,
     }))
 }
@@ -428,13 +856,24 @@ fn result_id(i: usize) -> String {
     format!("r{}", i.saturating_add(1))
 }
 
-/// Builds the result document of `docs/spec/21-qa.md` § 4.
-fn document(doc: &DocState, run: &Run, ex: &Examined, how: FixParams) -> Result<Value> {
+/// Builds the result document of `docs/spec/21-qa.md` § 4. Ignored results are counted in
+/// `summary.ignored`, never in the other counts or a check's status, and listed only with
+/// `includeIgnored` (or `all_results`, for the kept run).
+fn document(t: &Target, run: &Run, ex: &Examined, how: FixParams, all_results: bool) -> Result<Value> {
+    let ids = t.ids();
     let mut results = Vec::with_capacity(ex.hits.len());
     let mut per_check: HashMap<&str, (usize, Severity)> = HashMap::new();
     let mut counts = [0usize; 3];
+    let mut ignored = 0usize;
     for (i, hit) in ex.hits.iter().enumerate() {
-        results.push(result_json(hit, &result_id(i), how)?);
+        if hit.ignored {
+            ignored += 1;
+            if run.include_ignored || all_results {
+                results.push(result_json(hit, &result_id(i), &ids, how)?);
+            }
+            continue;
+        }
+        results.push(result_json(hit, &result_id(i), &ids, how)?);
         let e = per_check.entry(hit.finding.check).or_insert((0, Severity::Info));
         e.0 += 1;
         e.1 = e.1.min(hit.finding.severity);
@@ -445,8 +884,8 @@ fn document(doc: &DocState, run: &Run, ex: &Examined, how: FixParams) -> Result<
     let (mut passed, mut skipped) = (0usize, 0usize);
     let mut checks = Vec::new();
     for c in &run.checks {
-        let ran = ex.ran.get(c.id).copied().unwrap_or(0);
-        let skip = ex.skipped.get(c.id);
+        let ran = ex.tally.ran.get(c.id).copied().unwrap_or(0);
+        let skip = ex.tally.skipped.get(c.id);
         let mut m = Map::new();
         m.insert("id".into(), json!(c.id));
         let status = match (per_check.get(c.id), skip) {
@@ -478,21 +917,26 @@ fn document(doc: &DocState, run: &Run, ex: &Examined, how: FixParams) -> Result<
         }
     }
     let [fail, warn, info] = counts;
-    Ok(json!({
+    let mut out = json!({
         "schema": SCHEMA,
         "tool": {"name": "fontcraft", "version": env!("CARGO_PKG_VERSION")},
-        "target": {
-            "kind": "source",
-            "path": doc.path.as_ref().map(|p| p.to_string_lossy().into_owned()),
-            "fonts": [{"id": "f0", "name": doc.font.family_name, "path": doc.path.as_ref().map(|p| p.to_string_lossy().into_owned()), "instance": null, "format": "source"}],
-        },
-        "document": {"title": doc.title, "revision": doc.revision},
-        "profile": run.profile.as_str(),
+        "target": {"kind": t.kind, "path": t.path, "fonts": t.fonts},
+        "profile": run.profile,
         "config": run.config_json,
-        "summary": {"fail": fail, "warn": warn, "info": info, "passed": passed, "skipped": skipped, "ignored": 0, "errors": 0, "truncated": ex.truncated},
+        "summary": {"fail": fail, "warn": warn, "info": info, "passed": passed, "skipped": skipped, "ignored": ignored, "errors": 0, "truncated": ex.tally.truncated},
         "checks": checks,
         "results": results,
-    }))
+    });
+    if let Some(o) = out.as_object_mut() {
+        if let Some(d) = &t.document {
+            o.insert("document".into(), d.clone());
+        }
+        let warnings: Vec<&String> = run.warnings.iter().chain(&t.notes).collect();
+        if !warnings.is_empty() {
+            o.insert("warnings".into(), json!(warnings));
+        }
+    }
+    Ok(out)
 }
 
 // ── The kept run ────────────────────────────────────────────────────────────────────────────────
@@ -534,10 +978,19 @@ fn glyph_changed(then: &Font, now: &Font, glyph: &str) -> bool {
 
 fn run(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("audit.run", v)?;
+    if let Some(paths) = target_paths(&p)? {
+        let mut t = load_paths(&paths)?;
+        let first = t.srcs.first().map(|s| s.model.clone()).unwrap_or_else(|| Arc::new(Font::new("")));
+        let run = read_run(&p, s, &first, &t.settings)?;
+        let ex = examine_target(&mut t, &run);
+        return document(&t, &run, &ex, FixParams::BySelection, false);
+    }
     let doc = s.doc()?;
-    let run = read_run(&p, &doc.font)?;
-    let ex = examine(&doc.font, &run, true);
-    let report = document(doc, &run, &ex, FixParams::ById)?;
+    let mut t = document_target_of(doc);
+    let run = read_run(&p, s, &doc.font, &t.settings)?;
+    let ex = examine_target(&mut t, &run);
+    let kept = document(&t, &run, &ex, FixParams::ById, true)?;
+    let report = if run.include_ignored { kept.clone() } else { document(&t, &run, &ex, FixParams::ById, false)? };
     let refs = ex
         .hits
         .iter()
@@ -549,8 +1002,8 @@ fn run(s: &mut Session, v: &Value) -> Result<Value> {
             layer: h.finding.location.layer.clone(),
         })
         .collect();
-    let font = doc.font.clone();
-    s.doc_mut()?.audit = Some(Arc::new(KeptRun { font, report: report.clone(), refs }));
+    let font = s.doc()?.font.clone();
+    s.doc_mut()?.audit = Some(Arc::new(KeptRun { font, report: kept, refs }));
     Ok(report)
 }
 
@@ -570,9 +1023,13 @@ fn results(s: &mut Session, v: &Value) -> Result<Value> {
         None => None,
         Some(_) => Some(p.bool_or("fixable", false)?),
     };
-    p.bool_or("includeIgnored", false)?;
+    let include_ignored = p.bool_or("includeIgnored", false)?;
     let doc = s.doc()?;
     let last = kept_run(doc).ok_or_else(|| p.bad(NO_RUN))?;
+    // The ignore list as it is now: entries added or removed since the run apply.
+    let settings = DocumentSettings::read(&doc.font).0;
+    let ignore = settings.ignore_index();
+    let mut ignored_count = 0usize;
     let (then, mut report) = (last.font.clone(), last.report.clone());
     let mut changed: HashMap<String, bool> = HashMap::new();
     let mut kept = Vec::new();
@@ -591,12 +1048,24 @@ fn results(s: &mut Session, v: &Value) -> Result<Value> {
         if !wanted {
             continue;
         }
+        let master = r.pointer("/location/master").and_then(Value::as_str);
+        let location = r.get("location").and_then(Value::as_object).map(super::audit_profiles::result_location).unwrap_or_default();
+        let ignored = ignore.is_ignored(check, (!glyph.is_empty()).then_some(glyph.as_str()), master, &location);
+        if let Some(o) = r.as_object_mut() {
+            o.insert("ignored".into(), json!(ignored));
+        }
+        if ignored {
+            ignored_count += 1;
+            if !include_ignored {
+                continue;
+            }
+        }
         let stale = !glyph.is_empty() && *changed.entry(glyph.clone()).or_insert_with(|| glyph_changed(&then, &doc.font, &glyph));
         if let Some(o) = r.as_object_mut() {
             o.insert("stale".into(), json!(stale));
         }
         stale_count += usize::from(stale);
-        if let Some(n) = counts.get_mut(severity as usize) {
+        if !ignored && let Some(n) = counts.get_mut(severity as usize) {
             *n += 1;
         }
         kept.push(r);
@@ -609,6 +1078,7 @@ fn results(s: &mut Session, v: &Value) -> Result<Value> {
             summary.insert("warn".into(), json!(warn));
             summary.insert("info".into(), json!(info));
             summary.insert("stale".into(), json!(stale_count));
+            summary.insert("ignored".into(), json!(ignored_count));
         }
     }
     Ok(report)
@@ -672,13 +1142,16 @@ fn fix(s: &mut Session, v: &Value) -> Result<Value> {
                 return Err(p.bad(format!("`results` holds {} ids; at most {MAX_RESULT_IDS} are allowed", ids.len())));
             }
             let ids = p.strings("results")?;
-            let mut run = read_run(&p, s.font()?)?;
+            let font = s.font()?;
+            let settings = DocumentSettings::read(font).0;
+            let mut run = read_run(&p, s, font, &settings)?;
             let groups = groups_from_ids(s, &p, &ids, &mut run, &mut report)?;
             (run, groups)
         }
         None => {
             let doc = s.doc()?;
-            let run = read_run(&p, &doc.font)?;
+            let settings = DocumentSettings::read(&doc.font).0;
+            let run = read_run(&p, s, &doc.font, &settings)?;
             // Every finding counts here: a check over the result cap is still fixed.
             let ex = examine(&doc.font, &run, false);
             let groups = groups_from_hits(&doc.font, &ex.hits);
@@ -701,7 +1174,7 @@ fn fix(s: &mut Session, v: &Value) -> Result<Value> {
     run.glyphs = Some(touched);
     let doc = s.doc()?;
     let ex = examine(&doc.font, &run, true);
-    let remaining = document(doc, &run, &ex, FixParams::BySelection)?;
+    let remaining = document(&document_target_of(doc), &run, &ex, FixParams::BySelection, false)?;
     let mut out = json!({
         "applied": report.applied,
         "backups": report.backups,
@@ -1034,7 +1507,7 @@ fn list(_: &mut Session, v: &Value) -> Result<Value> {
         .iter()
         .filter(|c| profile.is_none_or(|pr| pr.includes(c.profile)))
         .filter(|c| groups.as_ref().is_none_or(|g| g.contains(&group_of(c.id))))
-        .filter(|_| scopes.as_ref().is_none_or(|s| s.contains(&CHECK_SCOPE)))
+        .filter(|c| scopes.as_ref().is_none_or(|s| s.contains(&c.scope.row_scope())))
         .filter(|c| fixable.is_none_or(|f| f == c.fix.is_some()))
         .map(|c| {
             json!({
@@ -1042,7 +1515,7 @@ fn list(_: &mut Session, v: &Value) -> Result<Value> {
                 "label": c.label,
                 "group": group_of(c.id),
                 "severity": c.severity.as_str(),
-                "scope": CHECK_SCOPE,
+                "scope": c.scope.row_scope(),
                 "profile": c.profile.as_str(),
                 "fixable": c.fix.is_some(),
                 "fix": c.fix.map(|f| f.id),
@@ -1077,7 +1550,7 @@ fn describe(_: &mut Session, v: &Value) -> Result<Value> {
         "group": group_of(c.id),
         "family": family,
         "severity": c.severity.as_str(),
-        "scope": CHECK_SCOPE,
+        "scope": c.scope.row_scope(),
         "profile": c.profile.as_str(),
         "profiles": profiles,
         "thresholds": thresholds,

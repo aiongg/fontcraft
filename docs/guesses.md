@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**1706 guesses on 1103 rows (397 of them live commands).**
+**1712 guesses on 1108 rows (401 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -1517,6 +1517,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 
 | Row | Milestone | Status | Live | Guess |
 |---|---|---|---|---|
+| `audit.run` | M3 | docs | yes | A source's instances are compiled as TrueType for the binary checks whatever outline format the source exports, and at most 32 of them; a run of the reference auditors on a source would settle whether the CFF flavour or every instance should be read. |
+| `audit.run` | M3 | docs | yes | On a source, the family checks receive every instance compiled from it, the variable font included; checks that should compare only the static instances would need the reference tools' behaviour on sources to settle it. |
 | `audit.fix` | M3 | docs | yes | An outline fix on a composite glyph only reports unless `safeOnly` is false (21-qa question 4). |
 | `audit.profile.save` | M12 | inferred | yes | Without store the profile goes to the user's settings rather than the project; a user report would settle which store people expect by default. |
 | `audit.profile.delete` | M12 | inferred | yes | Deleting a profile that another profile of its store includes is refused rather than removing the include; a user report would settle it. |
@@ -1527,12 +1529,17 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `audit.export` | M12 | docs | yes | Without `format`, the format follows the extension of `path` (.json, .txt, .md, .html) and is JSON for any other; a look at how the command line is used would settle it. |
 | `audit.export` | M12 | docs | yes | A result document can be passed in as `results` instead of naming a target, so a run on files can be exported without being kept; settled once the run on compiled fonts keeps its results. |
 | `audit.export` | M12 | docs | yes | The Markdown and HTML reports end with the checks that were skipped or failed to run, with their reasons; the reference tools' reports would settle whether to list them. |
+| `audit.checkOutlines` | M12 | docs | yes | A fix of a file given by path is refused; the command line opens the source, fixes it and saves it, so the engine command only fixes the open document. |
+| `audit.checkInterpolation` | M12 | docs | yes | `showAll` lists the glyphs without problems in `glyphsWithoutProblems` instead of one line per glyph as the reference prints; its JSON output would settle the shape. |
+| `audit.compareFamily` | M12 | docs | yes | The label is Check Family and the results go to the Font Audit panel, never to the Compare Family window, so the two features with similar names stay apart; the id stays for the command line (21-qa.md question 13). |
 | `audit.report.metrics` | M12 | docs | yes | The underline thickness, which comparefamily does not print, is listed after the underline position and sorted the same way; the row's summary asks for it. |
 | `audit.report.panose` | M12 | docs | yes | Two misspelled value names of comparefamily's tables are spelled correctly (Borders, Literals); a reader comparing text output would notice the difference. |
 | `audit.toggleLiveAudit` | M3 | inferred | yes | Live audit is off when the app starts; the default is ours. |
 | `audit.toggleMarkers` | M3 | inferred | yes | Markers are on when the app starts; the default is ours. |
+| `audit.glyphSelectionSyntax` (behavior) | M12 | docs | – | A piece that is a glyph name is read as a name even when it holds a hyphen, and `/N` names the glyph `cidNNNNN` (five digits) before glyph index N; a CID-keyed source in the reference tool would settle it. |
 | `audit.familyGrouping` (behavior) | M12 | docs | – | On a compiled font without its source the style comes from name IDs 2 and 17 and the fsSelection bits, never from the file name; only check.files.canonicalFileName reads the file name (21-qa.md question 9). |
 | `audit.validatorKnownIssues` (behavior) | M12 | docs | – | W2106 (OS/2 version below 3) is treated as wrong for OS/2 version 2 and later, and a ssNN tag counts as registered for 01 to 20 and cvNN for 01 to 99; a run of the validator on fonts with those values would settle it. |
+| `audit.exitStatus` (behavior) | M12 | docs | – | Results hidden by --min-severity still make the exit status 1 when they reach --fail-on; the reference tools have no separate display threshold, so nothing settles it. |
 | `check.outlines.missingExtremes` (check) | M3 | inferred | – | The default `minDistance` of 1 unit is a first guess to tune on real fonts (21-qa question 5). |
 | `check.outlines.almostStraightCurve` (check) | M3 | inferred | – | The default `maxDeviation` of 2 units is a first guess to tune on real fonts (21-qa question 5). |
 | `check.outlines.almostOrthogonalHandle` (check) | M3 | inferred | – | The defaults `maxAngle` 2° and `maxOffset` 2 units are first guesses to tune on real fonts (21-qa question 5). |
@@ -1584,7 +1591,6 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `check.sources.requiredInfoFields` (check) | M12 | docs | – | A master's metric counts as unset only when its value list ends before it; a value stated as 0 between others cannot be told from an unset one. |
 | `check.sources.recommendedInfoFields` (check) | M12 | docs | – | Underline thickness and position and the version are never reported: the model gives them the reference's defaults, so they always have a value. |
 | `check.sources.unnecessaryInfoFields` (check) | M12 | docs | – | versionString and uniqueID are reported in .glyphs sources too, since they compile to the same name records as the UFO keys FontBakery names. |
-| `audit.compareFamily` | M12 | docs | no | The label is Check Family and the results go to the Font Audit panel, never to the Compare Family window, so the two features with similar names stay apart; the id stays for the command line (21-qa.md question 13). |
 | `audit.showPanel` | M12 | inferred | no | The Font Audit panel opens from the Window menu with no shortcut, because the reference app has no audit panel; a later decision on shortcuts would settle it (21-qa.md question 1). |
 | `audit.nextIssue` | M12 | inferred | no | No menu item and no shortcut: the panel's arrow buttons and the Edit View marker badges run it, because the reference app has no audit panel (21-qa.md question 1). |
 | `audit.previousIssue` | M12 | inferred | no | No menu item and no shortcut: the panel's arrow buttons and the Edit View marker badges run it, because the reference app has no audit panel (21-qa.md question 1). |

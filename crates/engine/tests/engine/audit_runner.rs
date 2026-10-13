@@ -1,0 +1,191 @@
+//! The audit runner (M12.44): `audit.run` on compiled fonts, families and sources compiled in
+//! memory, the ignore list, and the three shortcut commands. Fixtures are built in code.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
+
+use std::path::PathBuf;
+
+use fontcraft_engine::Session;
+use fontcraft_testkit::rect;
+use serde_json::{Value, json};
+
+fn run(s: &mut Session, id: &str, p: Value) -> Value {
+    s.execute(id, &p).unwrap_or_else(|e| panic!("{id} {p}: {e}"))
+}
+
+fn scratch(tag: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("fontcraft-audit-runner-{tag}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+/// A document with one glyph exported to `dir/name`.
+fn exported(dir: &std::path::Path, name: &str) -> (Session, PathBuf) {
+    let mut s = Session::with_document();
+    run(&mut s, "path.addPath", json!({"glyph": "A", "nodes": rect(60.0, 0.0, 560.0, 700.0)}));
+    let ttf = dir.join(name);
+    run(&mut s, "file.exportStatic", json!({"destination": ttf, "timestamp": 0}));
+    (s, ttf)
+}
+
+fn results(r: &Value) -> &Vec<Value> {
+    r["results"].as_array().unwrap()
+}
+
+fn check<'a>(r: &'a Value, id: &str) -> Option<&'a Value> {
+    r["checks"].as_array().unwrap().iter().find(|c| c["id"] == id)
+}
+
+#[test]
+fn a_compiled_font_by_path_runs_binary_and_outline_checks() {
+    let dir = scratch("binary");
+    let (mut s, ttf) = exported(&dir, "Font.ttf");
+    let r = run(&mut s, "audit.run", json!({"target": ttf, "includePassed": true}));
+    assert_eq!(r["target"]["kind"], "binary");
+    assert_eq!(r["target"]["fonts"].as_array().unwrap().len(), 1);
+    assert_eq!(r["target"]["fonts"][0]["path"], json!(ttf.to_string_lossy()));
+    assert!(r.get("document").is_none(), "a file target is not the open document");
+    assert!(results(&r).iter().all(|x| x["location"]["font"] == "f0"));
+    assert!(results(&r).iter().any(|x| x["location"]["table"] == "name"), "binary checks ran: {}", r["summary"]);
+    // The outline checks read the decoded file; checks that need source data are skipped.
+    assert_eq!(check(&r, "check.outlines.overlap").unwrap()["status"], "pass");
+    let strict = run(&mut s, "audit.run", json!({"target": ttf, "profile": "strict", "checks": ["check.hinting.stemsUndefined"]}));
+    assert_eq!(check(&strict, "check.hinting.stemsUndefined").unwrap()["reason"], "the check needs data only a source keeps");
+    // Family checks need two fonts.
+    let fam = run(&mut s, "audit.run", json!({"target": ttf, "scope": ["family"]}));
+    let skipped = fam["checks"].as_array().unwrap();
+    assert!(!skipped.is_empty() && skipped.iter().all(|c| c["status"] == "skipped"));
+    assert!(s.execute("audit.run", &json!({"target": dir.join("missing.ttf")})).is_err());
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn a_folder_of_fonts_is_one_family() {
+    let dir = scratch("family");
+    let (mut s, _) = exported(&dir, "One.ttf");
+    run(&mut s, "file.exportStatic", json!({"destination": dir.join("Two.ttf"), "timestamp": 0}));
+    std::fs::write(dir.join("notes.txt"), "not a font").unwrap();
+    let r = run(&mut s, "audit.run", json!({"target": dir, "scope": ["family"]}));
+    assert_eq!(r["target"]["kind"], "family");
+    assert_eq!(r["target"]["fonts"].as_array().unwrap().len(), 2, "the text file is passed over");
+    // Two fonts with the same names: the family checks see both.
+    let both = results(&r).iter().find(|x| x["location"]["fonts"].as_array().is_some_and(|f| f.len() == 2));
+    assert!(both.is_some(), "a finding names both fonts: {}", serde_json::to_string(&r["results"]).unwrap());
+    let listed = run(&mut s, "audit.run", json!({"target": [dir.join("One.ttf"), dir.join("Two.ttf")], "scope": ["family"]}));
+    assert_eq!(listed["summary"], r["summary"]);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn binary_findings_on_a_source_name_the_source_field() {
+    let mut s = Session::with_document();
+    run(&mut s, "path.addPath", json!({"glyph": "A", "nodes": rect(60.0, 0.0, 560.0, 700.0)}));
+    let r = run(&mut s, "audit.run", json!({"scope": ["binary"]}));
+    assert_eq!(r["target"]["kind"], "source");
+    let fonts = r["target"]["fonts"].as_array().unwrap();
+    assert_eq!((fonts[0]["format"].as_str(), fonts[1]["format"].as_str()), (Some("source"), Some("ttf")), "the instance compiled in memory");
+    let licence = results(&r).iter().find(|x| x["location"]["nameId"] == 14).expect("the empty licence URL is reported");
+    assert_eq!(licence["location"]["sourceField"], "font.licenseURL");
+    assert_eq!(licence["location"]["instance"], fonts[1]["instance"]);
+    assert_eq!(licence["location"]["font"], "f1");
+}
+
+#[test]
+fn ignored_results_are_counted_apart_and_hidden() {
+    let mut s = Session::with_document();
+    run(&mut s, "path.addPath", json!({"glyph": "A", "nodes": rect(0.0, 0.0, 100.0, 100.0)}));
+    run(&mut s, "path.addPath", json!({"glyph": "A", "nodes": rect(50.0, 50.0, 150.0, 150.0)}));
+    let only = json!({"checks": ["check.outlines.overlap"]});
+    let before = run(&mut s, "audit.run", only.clone());
+    assert_eq!(before["summary"]["warn"].as_u64().unwrap() + before["summary"]["fail"].as_u64().unwrap(), 1);
+    run(&mut s, "audit.ignoreIssue", json!({"result": before["results"][0]["id"], "reason": "intended"}));
+    let r = run(&mut s, "audit.run", only.clone());
+    assert_eq!(r["summary"]["ignored"], 1);
+    assert_eq!((r["summary"]["warn"].as_u64(), r["summary"]["fail"].as_u64()), (Some(0), Some(0)));
+    assert!(results(&r).is_empty());
+    let mut all = only.clone();
+    all["includeIgnored"] = json!(true);
+    let r = run(&mut s, "audit.run", all);
+    assert_eq!(results(&r)[0]["ignored"], true);
+    let kept = run(&mut s, "audit.results", json!({}));
+    assert!(results(&kept).is_empty());
+    assert_eq!(kept["summary"]["ignored"], 1);
+    // Removing the entry brings the result back without a new run.
+    run(&mut s, "audit.unignoreIssue", json!({"check": "check.outlines.overlap", "glyph": "A"}));
+    let kept = run(&mut s, "audit.results", json!({}));
+    assert_eq!((results(&kept).len(), &kept["summary"]["ignored"]), (1, &json!(0)));
+}
+
+#[test]
+fn check_outlines_takes_the_reference_options() {
+    let mut s = Session::with_document();
+    run(&mut s, "path.addPath", json!({"glyph": "A", "nodes": rect(0.0, 0.0, 100.0, 100.0)}));
+    run(&mut s, "path.addPath", json!({"glyph": "A", "nodes": rect(50.0, 50.0, 150.0, 150.0)}));
+    run(&mut s, "path.addPath", json!({"glyph": "B", "nodes": rect(0.0, 0.0, 3.0, 3.0)}));
+    let r = run(&mut s, "audit.checkOutlines", json!({"includePassed": true}));
+    let ids: Vec<&str> = r["checks"].as_array().unwrap().iter().filter_map(|c| c["id"].as_str()).collect();
+    for id in ["check.outlines.overlap", "check.outlines.tinyContour"] {
+        assert!(results(&r).iter().any(|x| x["check"] == id), "{id} in {ids:?}");
+    }
+    assert_eq!(r["config"]["check.outlines.tinyContour"]["minArea"], 25.0);
+    let r = run(&mut s, "audit.checkOutlines", json!({"overlapChecks": false, "minArea": 4, "tolerance": 1, "glyphs": ["B"]}));
+    assert!(results(&r).iter().all(|x| x["check"] != "check.outlines.overlap" && x["location"]["glyph"] == "B"));
+    assert_eq!(r["config"]["check.outlines.flatCurve"]["tolerance"], 1.0);
+    let r = run(&mut s, "audit.checkOutlines", json!({"basicChecks": false, "glyphs": "A", "fix": true, "keepOriginal": "none"}));
+    assert!(r["fix"]["applied"].as_array().is_some_and(|a| !a.is_empty()), "{}", r["fix"]);
+    let after = run(&mut s, "audit.checkOutlines", json!({"glyphs": ["A"]}));
+    assert!(results(&after).iter().all(|x| x["check"] != "check.outlines.overlap"));
+    for bad in [json!({"minArea": -1}), json!({"keepOriginal": "keep"}), json!({"fix": true, "target": "/no/such.ufo"}), json!({"decimal": 3})] {
+        assert!(s.execute("audit.checkOutlines", &bad).is_err(), "{bad}");
+    }
+}
+
+#[test]
+fn check_interpolation_keeps_the_problem_order() {
+    let mut s = Session::with_document();
+    s.edit("setup", |font| {
+        let mut m = font.default_master()?.clone();
+        m.id = "m02".into();
+        m.name = "Bold".into();
+        std::sync::Arc::make_mut(&mut font.masters).push(m);
+        for i in 0..font.glyphs.len() {
+            if let Some(mut g) = font.glyphs.get_mut_at(i) {
+                g.layers.push(fontcraft_model::Layer::new("m02", 600.0));
+            }
+        }
+        font.glyph_mut("A")?.layers[0].shapes.push(fontcraft_model::Shape::Path(fontcraft_model::Path::rect(0.0, 0.0, 10.0, 10.0)));
+        Ok(())
+    })
+    .unwrap();
+    let r = run(&mut s, "audit.checkInterpolation", json!({"tolerance": 90, "kinkiness": 0.4, "showAll": true}));
+    assert_eq!(r["config"]["check.variations.contourOrder"]["tolerance"], 0.9, "90 is read as a percentage");
+    assert_eq!(r["config"]["check.variations.kink"]["kinkiness"], 0.4);
+    let found: Vec<&str> = results(&r).iter().filter_map(|x| x["check"].as_str()).collect();
+    assert!(found.contains(&"check.variations.pathCount"), "{found:?}");
+    assert!(r["glyphsWithoutProblems"].as_array().unwrap().iter().all(|g| g != "A"));
+    let order =
+        ["check.variations.glyphMissingInMaster", "check.variations.openPathInMaster", "check.variations.pathCount", "check.variations.nodeCount"];
+    let ranks: Vec<usize> = found.iter().map(|c| order.iter().position(|o| o == c).unwrap_or(order.len())).collect();
+    assert!(ranks.windows(2).all(|w| w[0] <= w[1]), "{found:?}");
+    for bad in [json!({"tolerance": 5}), json!({"kinkiness": 0}), json!({"target": ["a.ttf", "b.ttf"]})] {
+        assert!(s.execute("audit.checkInterpolation", &bad).is_err(), "{bad}");
+    }
+}
+
+#[test]
+fn compare_family_maps_the_reference_test_numbers() {
+    let dir = scratch("compare");
+    let (mut s, one) = exported(&dir, "One.ttf");
+    let two = dir.join("Two.ttf");
+    run(&mut s, "file.exportStatic", json!({"destination": two, "timestamp": 0}));
+    let r = run(&mut s, "audit.compareFamily", json!({"fonts": [one, two], "familyTests": [3], "singleTests": [5], "includePassed": true}));
+    let ids: Vec<&str> = r["checks"].as_array().unwrap().iter().filter_map(|c| c["id"].as_str()).collect();
+    assert!(ids.iter().all(|id| ["check.family.consistentFamilyName", "check.names.postScriptNameConsistency"].contains(id)), "{ids:?}");
+    let all = run(&mut s, "audit.compareFamily", json!({"directory": dir, "noHints": true}));
+    assert_eq!(all["target"]["fonts"].as_array().unwrap().len(), 2);
+    assert!(all["checks"].as_array().unwrap().iter().all(|c| c["id"] != "check.hinting.missingStemHints"));
+    for bad in [json!({}), json!({"directory": dir, "singleTests": [35]}), json!({"directory": dir, "singleTests": [29], "familyTests": []})] {
+        assert!(s.execute("audit.compareFamily", &bad).is_err(), "{bad}");
+    }
+    std::fs::remove_dir_all(&dir).unwrap();
+}

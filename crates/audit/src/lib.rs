@@ -29,6 +29,7 @@ mod name_records;
 mod points;
 pub mod profile;
 mod registry;
+pub mod run;
 mod scope;
 pub mod services;
 

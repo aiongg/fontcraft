@@ -1584,6 +1584,7 @@ milestone = "M12"
 summary = "Runs the quality checks of a profile on sources or binary fonts and prints the findings; several files or a folder are also checked as a family. Three action words give the classic single-purpose audits with the option sets of their reference tools: outlines, family and interpolation. Nothing is changed unless --fix is given. Exit status 1 when a finding reaches the --fail-on severity."
 ref = "docs/spec/21-qa.md › Running an audit (the mapping this row implements); AFDKO checkoutlinesufo.py, comparefamily.py; fontTools varLib.interpolatable"
 status = "docs"
+notes = "Built in M12.44. Several inputs are checked as one target (one family); text output prints one line per result and a summary line; --format markdown and html render through audit.export. --fix opens one source, runs audit.fix and saves it over the input or to -o. The per-glyph cache (--all) is not built."
 
 [[cli]]
 id = "check outlines"
@@ -1611,6 +1612,7 @@ milestone = "M12"
 summary = "Examines glyph outlines for overlapping contours, coincident points, collinear line segments, curves that are really straight lines, contours too small to matter and glyphs without contours, in a source or a binary font. With --fix it repairs what it reports. This is the classic AFDKO outline check with the same options and defaults."
 ref = "AFDKO checkoutlinesufo.py; docs/spec/21-qa.md › checkoutlinesufo"
 status = "docs"
+notes = "Built in M12.44 on audit.checkOutlines. The reference names -e/--error-correction-mode, -g/--glyph-list, -f/--glyph-file, -d/--decimal, --ignore-contour-order, -w/--write-to-default-layer, --clear-hash-map, -o/--output-file and --quiet-mode are accepted beside ours. --clear-cache exits at once: no hashes are stored yet."
 
 [[cli]]
 id = "check family"
@@ -1637,6 +1639,7 @@ milestone = "M12"
 summary = "Examines all OpenType fonts in a folder, or the fonts listed, as families and reports problems within each font and inconsistencies between them: naming and style linking, weight and width classes, vertical metrics, underline, embedding permissions, hint zones, script and feature coverage. Optional reports tabulate menu names, global metrics, PANOSE values and feature coverage side by side."
 ref = "AFDKO comparefamily.py usage, help and test titles, WinWeights.md; docs/spec/21-qa.md › comparefamily"
 status = "docs"
+notes = "Built in M12.44 on audit.compareFamily and the four audit.report.* commands (printed as JSON). -d names the folder. --expect-vendor and --expect-url are not built: the vendor and URL checks read the project values."
 
 [[cli]]
 id = "check interpolation"
@@ -1663,6 +1666,7 @@ milestone = "M12"
 summary = "Tests whether the masters of a design interpolate cleanly: same glyphs, closed contours, same number of contours and points with the same curve types, contours in the same order, the same start point on each contour, and no kinks or weight anomalies appearing between masters. Input is one variable font, designspace or multi-master source, or several fonts or UFOs that are the masters."
 ref = "fontTools varLib.interpolatable; AFDKO buildcff2vf -c; fontmake --check-compatibility; docs/spec/21-qa.md › varLib.interpolatable"
 status = "docs"
+notes = "Built in M12.44 on audit.checkInterpolation. The reference names --name (for --master) and --output (for --report) are accepted. One input: several master files are refused with a usage error."
 
 [[cli]]
 id = "proof"

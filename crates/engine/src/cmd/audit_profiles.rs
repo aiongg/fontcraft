@@ -682,7 +682,7 @@ fn config_set(s: &mut Session, v: &Value) -> Result<Value> {
 // ── The ignore list ─────────────────────────────────────────────────────────────────────────────
 
 /// The table-level part of a result's location.
-fn result_location(loc: &Map<String, Value>) -> Location {
+pub(super) fn result_location(loc: &Map<String, Value>) -> Location {
     let mut out = Location::new();
     for key in LOCATION_KEYS {
         let Some(v) = loc.get(key) else { continue };

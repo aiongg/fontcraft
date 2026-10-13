@@ -10,6 +10,7 @@ mod attributes;
 mod audit;
 mod audit_profiles;
 mod audit_reports;
+mod audit_runner;
 mod autohint_reports;
 mod automation_roots;
 mod background_layers;
