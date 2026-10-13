@@ -6,7 +6,7 @@ _Updated: 2026-10-13, the first waves of M6 to M12, seven second-wave packages, 
 
 ## State of the tree
 
-- `cargo xtask ci` passes all eleven steps (TESTCOUNT tests pass, none fail, 36 ignored). The
+- `cargo xtask ci` passes all eleven steps (2,983 tests pass, none fail, 36 ignored). The
   test step runs on cargo nextest; a full gate on a warm build takes about 5 minutes.
   Built and run on Linux x86-64 with Rust 1.97.
 - `master` holds everything described here, merged and green; the latest commits are not pushed.
@@ -875,7 +875,7 @@ Append one terse entry per session: what landed, numbers, what is still open.
   (for example `numbers = ({name = gap;})`, `axisRules = ({min = 600;})`) reach the model and
   keep their layout on write, matched by position in linear time. Round trips (`.glyphs`
   122/1/118/4, `.glyphspackage` 22/0/7/0, UFO 125/2/13, designspace 59/53), the static oracle
-  summary and the instances (169/41/0/24) are unchanged. All eleven gate steps pass; TESTCOUNT
+  summary and the instances (169/41/0/24) are unchanged. All eleven gate steps pass; 2,983
   tests pass, none fail, 36 ignored; 665 of 960 commands live; 1,720 guesses on 1,111 rows; 1,126
   observe rows. Packages built: 137 of 277 (M6 16/20, M7 18/21, M8 16/25, M9 14/27, M10 13/33,
   M11 7/21, M12 28/68, M13 25/62). Open: the builder packages M9.13, M10.17, M10.18, M10.19,
