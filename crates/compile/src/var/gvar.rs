@@ -340,7 +340,7 @@ mod tests {
         let err = build_gvar(1, &[many_points(16_257, |_| 200.0)], &plain).unwrap_err().to_string();
         assert!(err.contains("`big`") && err.contains("65539 bytes"), "{err}");
         // With optimization, deltas IUP cannot infer are kept and the glyph is still refused.
-        let zigzag = |i: usize| if i % 2 == 0 { 300.0 } else { -300.0 };
+        let zigzag = |i: usize| if i.is_multiple_of(2) { 300.0 } else { -300.0 };
         let err = build_gvar(1, &[many_points(20_000, zigzag)], &GvarOptions::default()).unwrap_err().to_string();
         assert!(err.contains("`big`"), "{err}");
     }
