@@ -571,6 +571,7 @@ ref = "TrueType Hinting › Advanced TrueType Hinting"
 status = "handbook"
 notes = "M10.17, crates/hinting/src/tt_font.rs: prep rounds each zone that is not aligned to round(position + threshold), the threshold in whole 1/64 px, twice for the zone named xHeight. The handbook's example passes in skrifa's interpreter: at 0.2, 6.45 px gives 7 and 5.25 px gives 6; without a threshold they give 6 and 5. The documented default 0.09375 already lifts 6.45 px to 7 (6.54), so the example's 'without any change' means no threshold. Documented, not yet observed."
 guesses = ["A 'positive zone' is read as a zone with a positive size (a top zone), so bottom zones get no threshold; rounding a negative-position top zone in the reference app would settle it.", "The threshold is clamped to plus or minus one pixel; a reference export with a larger value would settle it."]
+observe = ["T3: in a font without TTZoneRoundingThreshold, set a small-caps TT zone whose top lands at 6.45 px at one size (e.g. 645 units at 10 PPM in a 1000-unit font), export, render that size and note whether the zone's edge lands on pixel row 6 or 7 (the documented default 0.09375 gives 6.54, which rounds to 7)."]
 
 [[behavior]]
 id = "hinting.tt.param.minimumDistance"
@@ -862,6 +863,9 @@ milestone = "M10"
 summary = "A point that an instruction has moved is a touched point (in that direction). Several instruction types have requirements on this state: Snap needs untouched points, Shift a touched origin and untouched targets, Interpolate two touched references and an untouched target. Commands must evaluate the state by replaying the instruction list in order."
 ref = "TrueType Hinting › Hint Order; Instructions"
 status = "handbook"
+notes = "M10.6, crates/hinting/src/replay.rs: TouchedState::replay gives the touched points per direction after the first n instructions; TouchedState::check says whether an instruction's needs are met, unmet_needs lists the instructions of a list whose needs are not. Snap, Shift and Interpolate touch their target, Stem its origin and target. Documented, not yet observed."
+guesses = ["A Delta instruction leaves its point untouched in the model, since it moves the point only at the sizes it lists; the reference app would settle whether a point with only a Delta can still take a Snap."]
+observe = ["T3: add a Delta instruction to an untouched node, then select that node alone and press A; note whether a Snap instruction is added."]
 
 [[behavior]]
 id = "hinting.tt.iup"
@@ -1064,12 +1068,13 @@ label = "Set Instruction Rounding"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, instructions?: [index], rounding: 'round'|'up'|'down'|'none'|'gdiOnly'}"
+params = "{glyph: name, layer?: id, instructions: [index], rounding: 'round'|'up'|'down'|'none'|'gdiOnly'}"
 area = "hinting-tt"
 milestone = "M10"
 summary = "Sets the rounding mode of the selected Snap, Stem, Shift or Interpolate instructions; in the UI these are the five icon buttons at the bottom of the Info box. Defaults by type: Snap rounds, the other three do not round."
 ref = "TrueType Hinting › Snap (A); Stem (S); Shift (F); Interpolate (G)"
 status = "handbook"
+notes = "M10.6, crates/engine/src/cmd/hint_tt.rs: a Delta instruction is refused. New instructions take the type's default (TtInstruction::default_rounding). Documented, not yet observed."
 
 [[behavior]]
 id = "hinting.tt.rounding.modes"
@@ -1090,12 +1095,13 @@ menu = []
 shortcut = "A"
 when = "tool:trueTypeInstructor"
 kind = "engine"
-params = "{glyph?: name, layer?: id, nodes?: [nodeRef], direction?: 'vertical'|'horizontal', zone?: 'auto'|'none'|zoneName, rounding?: 'round'|'up'|'down'|'none'|'gdiOnly'}"
+params = "{glyph: name, layer?: id, nodes: [point], direction?: 'vertical'|'horizontal', zone?: 'auto'|'none'|zoneName, rounding?: 'round'|'up'|'down'|'none'|'gdiOnly'}"
 area = "hinting-tt"
 milestone = "M10"
 summary = "Adds one Snap instruction per selected point; each must be untouched so far. A Snap instruction rounds its point to a pixel edge in the current direction and makes it a touched point. Defaults: zone Auto, rounding Round."
 ref = "TrueType Hinting › Snap (A)"
 status = "handbook"
+notes = "M10.6, crates/engine/src/cmd/hint_tt.rs: one Snap per point at the end of the list, each checked against the touched state after the instructions before it (fontcraft_hinting::TouchedState); one refused point adds nothing. A named zone needs the vertical direction. Documented, not yet observed."
 
 [[command]]
 id = "hint.tt.setSnapZone"
@@ -1103,12 +1109,15 @@ label = "Set Snap Zone"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, instructions?: [index], zone: 'auto'|'none'|zoneName}"
+params = "{glyph: name, layer?: id, instructions: [index], zone: 'auto'|'none'|zoneName}"
 area = "hinting-tt"
 milestone = "M10"
 summary = "Sets the zone option of the selected Snap instructions; in the UI this is the pop-up at the top of the Info box."
 ref = "TrueType Hinting › Snap (A)"
 status = "handbook"
+notes = "M10.6, crates/engine/src/cmd/hint_tt.rs: instructions by position in the layer's list; any other type is refused. Documented, not yet observed."
+guesses = ["A named zone on a horizontal Snap instruction is refused, since zones are vertical; the reference app would show whether its pop-up offers zone names in horizontal mode."]
+observe = ["T3: in horizontal mode, select a Snap instruction and open the zone pop-up of the Info box; note whether zone names are listed."]
 
 [[behavior]]
 id = "hinting.tt.snap.zoneAuto"
@@ -1155,14 +1164,15 @@ menu = []
 shortcut = "S"
 when = "tool:trueTypeInstructor"
 kind = "engine"
-params = "{glyph?: name, layer?: id, pairs?: [[originNodeRef, targetNodeRef]], direction?: 'vertical'|'horizontal', stem?: 'auto'|'none'|stemName, rounding?: 'round'|'up'|'down'|'none'|'gdiOnly'}"
+params = "{glyph: name, layer?: id, nodes: [point] (even count, paired in order), direction?: 'vertical'|'horizontal', stem?: 'auto'|'none'|stemName, rounding?: 'round'|'up'|'down'|'none'|'gdiOnly'}"
 area = "hinting-tt"
 milestone = "M10"
 summary = "Adds a Stem instruction that links two points, the origin and the target (arrowhead end). The target is moved to follow the origin's movement at a distance governed by a TT stem. A pair is valid when neither point is touched or when exactly one of them is. With an even number of points selected, one instruction is added per pair. Default rounding: none (the handbook states no default for the stem choice). The context-menu label is not given in the handbook."
 ref = "TrueType Hinting › Stem (S)"
 status = "handbook"
-guesses = ["The context-menu label of the Stem instruction is Stem, as the key list names it; the reference app would settle it."]
-observe = ["T3: with the TrueType Instructor, select two nodes and right-click; note the exact label of the item that adds a stem instruction."]
+guesses = ["The context-menu label of the Stem instruction is Stem, as the key list names it; the reference app would settle it.", "With four or more points selected, the points pair in the order given (first with second, third with fourth); the reference app would settle how a larger selection pairs.", "In a pair of one touched and one untouched point the touched one becomes the origin, and of two untouched points the first one does; the reference app would settle which end gets the arrowhead."]
+observe = ["T3: with the TrueType Instructor, select two nodes and right-click; note the exact label of the item that adds a stem instruction.", "T3: Snap one node, select it and an untouched node in either click order, press S, and note which end gets the arrowhead; then select four untouched nodes and press S, and note how they pair."]
+notes = "M10.6, crates/engine/src/cmd/hint_tt.rs: one Stem per pair at the end of the list; an odd count or a pair of two touched points is refused and adds nothing. A named stem must suit the direction (horizontal stems for vertical instructions). Documented, not yet observed."
 
 [[command]]
 id = "hint.tt.reverse"
@@ -1170,12 +1180,13 @@ label = "Reverse"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, instructions?: [index]}"
+params = "{glyph: name, layer?: id, instructions: [index]}"
 area = "hinting-tt"
 milestone = "M10"
 summary = "Context-menu item on a Stem instruction that swaps its originating and target points."
 ref = "TrueType Hinting › Stem (S)"
 status = "handbook"
+notes = "M10.6, crates/engine/src/cmd/hint_tt.rs: swaps origin and target of Stem instructions, without checking the touched state; reversing a member dissolves its triple hint (guess on hint.tt.makeTripleHint). Documented, not yet observed."
 
 [[command]]
 id = "hint.tt.setStemReference"
@@ -1183,12 +1194,15 @@ label = "Set Stem Reference"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, instructions?: [index], stem: 'auto'|'none'|stemName}"
+params = "{glyph: name, layer?: id, instructions: [index], stem: 'auto'|'none'|stemName}"
 area = "hinting-tt"
 milestone = "M10"
 summary = "Sets the stem option of the selected Stem instructions; in the UI this is the pop-up at the top of the Info box."
 ref = "TrueType Hinting › Stem (S)"
 status = "handbook"
+notes = "M10.6, crates/engine/src/cmd/hint_tt.rs: Stem instructions only. Documented, not yet observed."
+guesses = ["A named stem whose orientation does not suit the instruction (a vertical stem on a vertical instruction) is refused; the reference app would show whether its pop-up lists stems of both orientations."]
+observe = ["T3: select a vertical Stem instruction and open the stem pop-up of the Info box; note whether vertical stems are listed beside the horizontal ones."]
 
 [[command]]
 id = "hint.tt.makeTripleHint"
@@ -1196,14 +1210,15 @@ label = "Make Triple Hint"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, instructions?: [index, index, index]}"
+params = "{glyph: name, layer?: id, instructions: [index, index, index]}"
 area = "hinting-tt"
 milestone = "M10"
 summary = "Context-menu item available when three Stem instructions on three horizontal stems are selected (Shift+click each badge). It links them into a group that keeps at least one pixel of distance between the stems at every size; the linked instructions are drawn purple. How to dissolve a triple hint is not stated."
 ref = "TrueType Hinting › Stem (S)"
 status = "handbook"
-guesses = ["Deleting or reversing one member of a triple hint dissolves the group and the other two become plain Stem instructions; the reference app would settle it."]
+guesses = ["Deleting or reversing one member of a triple hint dissolves the group and the other two become plain Stem instructions; the reference app would settle it.", "Three instructions that would interleave with another triple hint in list order are refused, since the stored form keeps one flag per instruction and groups the flagged ones by threes; a reference file with two interleaved triple hints would settle how groups are stored."]
 observe = ["T3: make a triple hint, delete one of its members and note whether the group dissolves; make it again, reverse one member and note whether the group dissolves."]
+notes = "M10.6, crates/engine/src/cmd/hint_tt.rs: exactly three vertical Stem instructions (on horizontal stems), none in a triple hint already. Documented, not yet observed."
 
 [[behavior]]
 id = "hinting.tt.stem.originInZoneSnaps"

@@ -15,7 +15,7 @@
 //! | [`settings`] | M10.2 | [`HintSettings`] of a master or instance, parameter names, defaults |
 //! | [`validate`] | M10.2 | [`validate_font_hints`]: the zone and stem rules |
 //! | [`remap`] | M10.3 | [`remap_after_edit`]: node references kept right after edits |
-//! | [`replay`] | M10.6 | [`TouchedState::replay`]: which points are touched after n instructions |
+//! | [`replay`] | M10.6 | [`TouchedState::replay`]: which points are touched after n instructions; [`unmet_needs`] |
 //! | [`point_map`] | M10.1 | the [`PointMap`] trait the compiler implements |
 //! | [`tt_font`] | M10.17 | [`CvtLayout`], [`FontPrograms`], [`font_programs`] |
 //! | [`tt_glyph`] | M10.18 | [`glyph_program`]: instructions to bytecode |
@@ -60,7 +60,7 @@ pub use noderef::{Edge, NodeOrder, NodeRef, TtPoint};
 pub use point_map::{PointMap, VecPointMap};
 pub use ps::{PsHint, PsHintKind, ps_hints, set_ps_hints};
 pub use remap::{RemapMode, RemapReport, remap_after_edit};
-pub use replay::TouchedState;
+pub use replay::{TouchedState, unmet_needs};
 pub use settings::{DeltaDir, Deltas, HintSettings, PsZone, TtStem, TtZone};
 pub use tt::{Direction, Rounding, StemRef, TtInstruction, TtKind, ZoneRef, set_tt_instructions, tt_instructions};
 pub use tt_auto::{TtAutohintOptions, autohint_tt};

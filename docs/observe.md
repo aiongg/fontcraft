@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1133 rows to check: 1583 guesses and 415 observe steps.**
+**1136 rows to check: 1589 guesses and 420 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,7 +48,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 40 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 4 |
-| **Later milestones (after M6)** | all | **662** |
+| **Later milestones (after M6)** | all | **665** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 39 |
 | Later milestones (after M6) | Edit View: text mode and preview | 14 |
 | Later milestones (after M6) | Components and anchors | 33 |
@@ -58,7 +58,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Font View | 13 |
 | Later milestones (after M6) | Font Info and features | 251 |
 | Later milestones (after M6) | Interpolation | 44 |
-| Later milestones (after M6) | Hinting | 73 |
+| Later milestones (after M6) | Hinting | 76 |
 | Later milestones (after M6) | Colour fonts | 46 |
 | Later milestones (after M6) | Files: open, import, export | 45 |
 | Later milestones (after M6) | Settings and the window | 12 |
@@ -1338,7 +1338,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (662)
+## Later milestones (after M6) (665)
 
 ### Edit View: drawing, guides, layers and the Palette (39)
 
@@ -2594,7 +2594,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `hoi.setControlPoints` (M13, inferred): Set Interpolation Control Points
   - Open (our design, not confirmed): Headless form of dragging a knob or handle: sets the intermediate point (one point), the two handles (two points) or the rotation centre (one point) of a node's interpolation curve.
 
-### Hinting (73)
+### Hinting (76)
 
 - [ ] `hinting.ps.standardStems.privateDictMapping` (behavior, M10, docs): At export the first horizontal stem becomes StdHW and the first vertical…
   - Guess: More than twelve stems in one direction: the export writes the first twelve in list order and warns, and hint.ps.validateFontHints reports it; an export from the reference app with thirteen stems would settle it.
@@ -2719,6 +2719,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `hinting.tt.param.zoneRoundingThreshold` (behavior, M10, handbook): TTZoneRoundingThreshold (font or export instance; the font value applies to instances without…
   - Guess: A 'positive zone' is read as a zone with a positive size (a top zone), so bottom zones get no threshold; rounding a negative-position top zone in the reference app would settle it.
   - Guess: The threshold is clamped to plus or minus one pixel; a reference export with a larger value would settle it.
+  - Observe: T3: in a font without TTZoneRoundingThreshold, set a small-caps TT zone whose top lands at 6.45 px at one size (e.g. 645 units at 10 PPM in a 1000-unit font), export, render that size and note whether the zone's edge lands on pixel row 6 or 7 (the documented default 0.09375 gives 6.54, which rounds to 7).
 - [ ] `hinting.tt.param.minimumDistance` (behavior, M10, handbook): TTMinimumDistance is an export-instance custom parameter (Font Info › Exports) giving, in…
   - Guess: The minimum distance also applies to Round up and Round down and to stems without a stem definition, and is clamped to 0 to 8 px; a reference export with a stem rounded to zero would settle it.
 - [ ] `hinting.tt.param.controlValueProgram` (behavior, M10, handbook): Opening a hinted TrueType font adds three custom parameters to the masters:…
@@ -2738,6 +2739,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `hinting.tt.hintOrder` (behavior, M10, handbook): Instructions run in the order in which they were added, and the…
   - Guess: Instructions cannot be reordered: the list order is creation order, and deleting and re-adding is the way to move one to the end; the reference app would show whether a reorder exists.
   - Observe: T3: on a glyph with several instructions, look for any way (drag, menu item or key) to move an instruction earlier in the list; note whether instructions can be reordered.
+- [ ] `hinting.tt.touchedPoints` (behavior, M10, handbook): A point that an instruction has moved is a touched point (in…
+  - Guess: A Delta instruction leaves its point untouched in the model, since it moves the point only at the sizes it lists; the reference app would settle whether a point with only a Delta can still take a Snap.
+  - Observe: T3: add a Delta instruction to an untouched node, then select that node alone and press A; note whether a Snap instruction is added.
 - [ ] `hinting.tt.instructions.addFromSelection` (behavior, M10, handbook): An instruction is added by selecting the nodes it should act on…
   - Guess: Dragging an instruction badge moves only the badge's drawn position, which is view state and not saved; dropping it on another node does not re-target it; the reference app would settle what the drag changes.
   - Observe: T3: drag an instruction badge, save, reopen, and note what the drag changed and whether it was saved; then drag a badge onto another node and note whether the instruction moves to that node.
@@ -2798,11 +2802,21 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `hint.tt.deleteInstructions` (M10, inferred): Delete Instructions
   - Guess: The Delete key removes the selected instructions, as for PostScript hints; the reference app would settle it.
   - Observe: T3: with the TrueType Instructor, select an instruction badge and press Delete; note whether the instruction is removed.
-- [ ] `hint.tt.addStemHint` (M10, handbook): Stem
+- [ ] `hint.tt.setSnapZone` (M10, handbook, live): Set Snap Zone
+  - Guess: A named zone on a horizontal Snap instruction is refused, since zones are vertical; the reference app would show whether its pop-up offers zone names in horizontal mode.
+  - Observe: T3: in horizontal mode, select a Snap instruction and open the zone pop-up of the Info box; note whether zone names are listed.
+- [ ] `hint.tt.addStemHint` (M10, handbook, live): Stem
   - Guess: The context-menu label of the Stem instruction is Stem, as the key list names it; the reference app would settle it.
+  - Guess: With four or more points selected, the points pair in the order given (first with second, third with fourth); the reference app would settle how a larger selection pairs.
+  - Guess: In a pair of one touched and one untouched point the touched one becomes the origin, and of two untouched points the first one does; the reference app would settle which end gets the arrowhead.
   - Observe: T3: with the TrueType Instructor, select two nodes and right-click; note the exact label of the item that adds a stem instruction.
-- [ ] `hint.tt.makeTripleHint` (M10, handbook): Make Triple Hint
+  - Observe: T3: Snap one node, select it and an untouched node in either click order, press S, and note which end gets the arrowhead; then select four untouched nodes and press S, and note how they pair.
+- [ ] `hint.tt.setStemReference` (M10, handbook, live): Set Stem Reference
+  - Guess: A named stem whose orientation does not suit the instruction (a vertical stem on a vertical instruction) is refused; the reference app would show whether its pop-up lists stems of both orientations.
+  - Observe: T3: select a vertical Stem instruction and open the stem pop-up of the Info box; note whether vertical stems are listed beside the horizontal ones.
+- [ ] `hint.tt.makeTripleHint` (M10, handbook, live): Make Triple Hint
   - Guess: Deleting or reversing one member of a triple hint dissolves the group and the other two become plain Stem instructions; the reference app would settle it.
+  - Guess: Three instructions that would interleave with another triple hint in list order are refused, since the stored form keeps one flag per instruction and groups the flagged ones by threes; a reference file with two interleaved triple hints would settle how groups are stored.
   - Observe: T3: make a triple hint, delete one of its members and note whether the group dissolves; make it again, reverse one member and note whether the group dissolves.
 - [ ] `dialog.ttDeltas` (panel, M10, handbook): Delta table
   - Guess: The table has one row per PPM from 8 to 80, the waterfall's range; its columns are the masters for zone and stem deltas and the static instances for Delta instructions; the reference app would settle both.
