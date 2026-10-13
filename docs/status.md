@@ -2,11 +2,11 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-13, the first waves of M6 to M12, seven second-wave packages, all 22 first-wave packages of M13, and the builder packages M8.9, M8.7, M7.8, M6.10, M9.10, M9.4, M9.5, M9.9, M9.8b, M10.3, M10.14 and M11.5 (part 1) integrated and gated on `master`, with the automation file roots._
+_Updated: 2026-10-13, the first waves of M6 to M12, seven second-wave packages, all 22 first-wave packages of M13, and the builder packages M8.9, M8.7, M7.8, M6.10, M9.10, M9.4, M9.5, M9.9, M9.8b, M10.3, M10.14 and M11.5 (part 1), and M12.44, M12.17 and M13.2 integrated and gated on `master`, with the automation file roots._
 
 ## State of the tree
 
-- `cargo xtask ci` passes all eleven steps (2,903 tests pass, none fail, 35 ignored).
+- `cargo xtask ci` passes all eleven steps (TESTCOUNT tests pass, none fail).
   Built and run on Linux x86-64 with Rust 1.97.
 - `master` holds everything described here, merged and green; the latest commits are not pushed.
   It has the first waves of M6 to M12, the second-wave packages M6.14, M7.14, M7.15 to M7.18
@@ -17,14 +17,15 @@ _Updated: 2026-10-13, the first waves of M6 to M12, seven second-wave packages, 
   (static instances between and beyond masters), M9.5 (the variable TrueType compile), M9.9
   (variable kerning and marks) and M9.8b (alternate layers in variable fonts), M10.3 (hint and
   instruction references follow their nodes through edits), M10.14 (CFF hints at export) and
-  M11.5 part 1 (typed paint attributes in `.glyphs` files), the test-layout change X.build1, the
-  fix passes that followed (X.fix19 to X.fix21 among them), and the automation file roots.
-- 661 of the 960 inventory commands exist (`docs/parity.md`); M3's, M4's and M5's are all live,
-  M6 has 40 of 46, M7 66 of 66, M8 36 of 41, M9 5 of 48, M10 5 of 56, M11 37 of 41, M12 46 of
-  81, M13 63 of 180. Feature parity is about 26% (ROADMAP.md › Parity estimate). 1,706 guesses
-  on 1,103 rows are listed in `docs/guesses.md`; `docs/observe.md` lists 1,119 rows.
+  M11.5 part 1 (typed paint attributes in `.glyphs` files), M12.44 (the audit runner), M12.17
+  (subset) and M13.2 (the plug-in module runtime), the test-layout change X.build1, the fix
+  passes that followed (X.fix19 to X.fix22 among them), and the automation file roots.
+- 665 of the 960 inventory commands exist (`docs/parity.md`); M3's, M4's and M5's are all live,
+  M6 has 40 of 46, M7 66 of 66, M8 36 of 41, M9 5 of 48, M10 5 of 56, M11 37 of 41, M12 50 of
+  81, M13 63 of 180. Feature parity is about 26% (ROADMAP.md › Parity estimate). 1,714 guesses
+  on 1,109 rows are listed in `docs/guesses.md`; `docs/observe.md` lists 1,124 rows.
 - Packages built (done of total, counted from commit subjects, M8.7b with M8.7): M6 16 of 20, M7
-  18 of 21, M8 16 of 25, M9 12 of 27 (M9.8b is a follow-up of M9.8 and not counted), M10 13 of 33, M11 7 of 21, M12 26 of 68, M13 24 of 62; 132
+  18 of 21, M8 16 of 25, M9 12 of 27 (M9.8b is a follow-up of M9.8 and not counted), M10 13 of 33, M11 7 of 21, M12 28 of 68, M13 25 of 62; 135
   of 277 in all.
 - Test layout: the engine's integration tests are modules of one binary
   (`crates/engine/tests/engine/`; `cargo test -p fontcraft-engine --test engine <filter>`), and
@@ -60,6 +61,15 @@ _Updated: 2026-10-13, the first waves of M6 to M12, seven second-wave packages, 
   hand-hinted glyphs waits for M10.15. TrueType exports carry no instructions (M10.19).
 - Paint attributes are typed in `.glyphs` versions 2 to 4 (M11.5 part 1). Writing version 3 and
   saving a UFO report what they cannot hold. All 23 corpus colour sources keep their colour keys.
+- The audit runner (M12.44) ran 3,676 times over 4 profiles and 919 corpus files with no crash;
+  the readers refuse 70 sources as unreadable. The outline checks give many warnings on decoded
+  compiled fonts; the cause is not examined.
+- Subset (M12.17) against pyftsubset over 340 corpus fonts and 4 selections: the glyph map is
+  equal in 338 or 339 per selection and the core tables in 337 or 338. The rest are one CFF2
+  font (refused) and two `cmap` test fonts.
+- The module runtime (M13.2) on 1,000 synthetic layers: a filter takes 292 ms (target under 1 s);
+  a reporter takes 0.35 ms per layer uncached (target 5 ms) and 0.4 µs cached (target 1 ms). No
+  command, menu or dialog calls it yet.
 - Round trips: `.glyphs` 122/1/118/4, `.glyphspackage` 22/0/7/0, designspace 59 identical and 53
   failed, UFO 125 identical, 2 different and 13 failed (two UFO 1 files now open).
 - Measures: console completion takes 2.28 ms at worst (target 5 ms, met). The follow-up hook
@@ -91,16 +101,22 @@ linked file is checked against it, and a linked file outside the read root reads
 1. **The skeleton pass for waves 2 to 5**: fix the interfaces the later packages of each plan
    share, as M6.1a and M7.1 to M13.1 did, so they can be written in parallel. A skeleton file
    marks each placeholder with the package that fills it (`// M8.5`).
-2. **The builder packages**, one at a time in the main checkout: M12.44 (the audit runner),
-   M12.17, M13.2, M9.11 and M9.12 (variable feature syntax), M9.13 (CFF2), M10.17 and M10.18,
-   then M10.19 (TrueType hints at export), M10.15 (flex for hand-hinted glyphs) and M11.5b (UFO
-   full-colour layers as ufo2ft `colorLayers`, JPEG and TIFF to PNG for UFO images), then the
-   rest each plan's § 6 lists. The requests the integrations left for them are below.
+2. **The builder packages**, one at a time in the main checkout: M9.11 and M9.12 (variable
+   feature syntax), M9.13 (CFF2), M10.17 and M10.18, then M10.19 (TrueType hints at export),
+   M10.15 (flex for hand-hinted glyphs), M11.5b (UFO full-colour layers as ufo2ft
+   `colorLayers`, JPEG and TIFF to PNG for UFO images), M12.18 and M12.19 (subset: layout,
+   variation and colour tables), and M13.3 to M13.6 (module commands, filters in export, checks
+   in the audit), then the rest each plan's § 6 lists. The requests the integrations left for them are below.
 3. **The M13.15 base-choice follow-up**: among bases with identical outlines prefer the
    combining-mark form (`acutecomb` over `acute`), and never use a detected composite as a base;
    then rerun the recovery measure on Inter (target 95%). Also reduce the per-edit alignment
    pass (`metrics::realign`) below the 2 ms hook target.
    Hint follow-up: upkeep on background layers and for corner and cap hints.
+   Audit follow-ups: a per-glyph hash cache, several `checkOutlines` and `compareFamily`
+   options, the `BASE`, ligature and accent width checks, `summary.errors`, source-field names
+   beyond the common `OS/2`, `hhea`, `head`, `post` and `name` fields, and a look at the outline
+   warnings on decoded compiled fonts. Subset follow-ups: CFF2, subroutine pruning,
+   `--desubroutinize`, several pyftsubset options, subsetting sources.
    Other follow-ups: M8.11 (the ligature, fraction, ordinal, ornament and aalt generators; the
    automatic framework has no entries for them yet), text-token expansion in
    `plan::postscript_name` and `plan::file_stem`, and selecting and deleting corner components in
@@ -170,7 +186,7 @@ The first waves of M9 to M12, as built (ROADMAP.md › What is real: the first w
 | M9 | M9.2, M9.3, M9.4, M9.5, M9.6, M9.7, M9.8, M9.8b, M9.9, M9.10, M9.14, M9.19: axes and mappings, glyph sources and compatibility, the variable tables and `STAT`, feature variations, opening variable fonts, the compare commands, static instances between and beyond masters, the variable TrueType compile, variable kerning and marks, alternate layers in variable fonts, the oracle harness for variable fonts | CFF2 (M9.13), variable feature syntax (M9.11, M9.12), designspace instance info and `<rules>`, the axis, instance and master commands and the UI |
 | M10 | M10.2, M10.3, M10.8 to M10.14, M10.16, M10.20, M10.23: typed hints and settings, the otfautohint port (agrees with the AFDKO 5.0.1 oracle scripts; each master gets an overlap-free outline), the TrueType assembler, `gasp`, hinted previews, node-reference upkeep, CFF hints at export | flex for hand-hinted glyphs (M10.15), TrueType instructions in exports (M10.19), M10.17, M10.18, M10.21; upkeep on background layers and for corner and cap hints |
 | M11 | M11.2 to M11.5 (part 1), M11.9, M11.12: palettes, colour layers, path attributes, typed paint attributes in `.glyphs` files, the `SVG ` table at export, images | M11.5b (UFO colour layers, image conversion), `COLR`, `CPAL`, `sbix`, `CBDT` |
-| M12 | M12.2, 3, 4, 11, 12, 15, 16, 27, 28, 31, 33, 35, 37, 43, 45, 46, 48, 50, 53 to 60: the table tools, 157 checks, profiles and report export | `audit.run` applying profiles, the ignore list, thresholds and project values (M12.44); the corpus measures |
+| M12 | M12.2, 3, 4, 11, 12, 15, 16, 17, 27, 28, 31, 33, 35, 37, 43, 44, 45, 46, 48, 50, 53 to 60: the table tools, 157 checks, profiles and report export, the audit runner over sources, compiled fonts and families (`fontcraft-cli check`), subset by pyftsubset's options | subset's layout, variation and colour tables (M12.18, M12.19) and CFF2, the audit runner's follow-ups above; the other corpus measures |
 
 Every command that takes an `outputDir` creates it when missing. Type 1 PFA files whose
 CharStrings open with `dup /CharStrings` after the subroutines read.
@@ -189,7 +205,9 @@ Requests the integrations left for the builder packages:
 | M10.10, M10.16 | the counter-hint summary against LanguageGroup; `FunctionInfo` consumes and uncertain fields for M10.17 and M10.22 |
 | M11.5b | palette conversion between the version 3 and 4 forms on version change; the UFO palette reader cannot read the version 4 dictionary; UFO full-colour layers as ufo2ft `colorLayers`; JPEG and TIFF to PNG conversion for UFO images |
 | M11.8, M11.10 | embedded image and SVG files must sniff as the format their consumer expects (a hostile document's paths can point at any file) |
-| M12.44 | the audit runner: profiles, the ignore list, thresholds, project values, file context for the file checks, `compareFamily` strict and no-hints settings, preconditions, the interpolation tolerance scale |
+| M12.44 | per-glyph hash cache; several `checkOutlines` and `compareFamily` options; `BASE`, ligature and accent width checks; `summary.errors`; source-field names beyond the common fields; the outline checks' many warnings on decoded compiled fonts |
+| M12.17 | CFF2 (refused); subroutine pruning and `--desubroutinize`; several pyftsubset options; subsetting sources; layout, variation and colour tables are dropped until M12.18 and M12.19 |
+| M13.2 | no command, menu or dialog calls the module runtime (M13.3 to M13.6); filters in export and checks in the audit wait for those packages |
 | M12 checks | the engine's external-validator and source-file services (both answer Unavailable); M12.46's three unregistered checks (misaligned components, missing anchors, marks without attachment) need the components or glyph-data dependency; a font-wide work budget for rasterising in the file checks and for static instancing in the variable-font checks |
 | M12 tools | `tables.list` splitting a WOFF2 collection by face; glyph renames in a source's feature code (`font.renameGlyphs` lists the glyphs still named there); commands to delete tabular and redundant kerning pairs and to clear info fields; `fontcraft-cli proof` defaults to PDF and exits with status 4 until M12.36; `metrics --location` waits for M12.20; dehint refuses sources until M10's model is used; outline repairs refuse CFF and `gvar` fonts except rounding |
 
@@ -357,8 +375,9 @@ atomic failure; WebAssembly plug-ins and no Python; no compiled fonts in the rep
   compiled feature code and the `SVG ` table are written. Variable fonts match fontc's in 100 of
   158 sources and fontmake's in 103. No CFF2 variable fonts, TrueType instructions, flex for hand-hinted glyphs or CFF subroutines yet
   (`docs/plans/M2.md` § 5, `docs/plans/M3.md` § 5, `docs/spec/40-compile.md` § 4).
-- **The M10 to M12 corpus measures have not been run.** Their packages were tested against small
-  outputs of the oracles; each plan's § 5 lists the corpus runs still owed.
+- **Most M10 to M12 corpus measures have not been run.** The audit runner (M12.44) and subset
+  (M12.17) have; the other packages were tested against small outputs of the oracles, and each
+  plan's § 5 lists the corpus runs still owed.
 - **`docs/spec/20-cli.md` is very long** (about 26,000 words). Read the section for the subcommand
   you are building, not the whole file.
 
@@ -374,7 +393,7 @@ M12 first waves left the last two for the packages named. None can lose data.
 |---|---|---|
 | Each command's rollback snapshot copies every document's history list (pointers and labels, no glyph data) | `crates/engine` | when it matters |
 | The vendor-names scanner does not see through `concat!` or string escapes | `xtask/src/brands.rs` | when it matters |
-| No font-wide work budget for rasterising in the file checks, for drawing every glyph in the static-instancing check, or for the CFF glyph reading each hinting check repeats | `crates/audit` | M12.44 or a check package |
+| No font-wide work budget for rasterising in the file checks, for drawing every glyph in the static-instancing check, or for the CFF glyph reading each hinting check repeats | `crates/audit` | a check package |
 | An embedded image or SVG file is not checked to be the format its table expects | `crates/engine` (assets) | M11.8, M11.10 |
 
 ## Waiting on the owner
@@ -773,3 +792,40 @@ Append one terse entry per session: what landed, numbers, what is still open.
   background layers and for corner and cap hints, designspace instance info from `<instance>`,
   designspace `<rules>`, M13.15, M8.11, token expansion in `plan::postscript_name` and
   `plan::file_stem`, corner-component selection; the skeleton pass for waves 2 to 5.
+- **2026-10-13, batch 8: M12.44, M12.17, M13.2 and X.fix22.** Integrated: the audit runner
+  (`audit.run` over the open document, sources compiled in memory, compiled fonts, collections,
+  WOFF and WOFF2 files, and several files or a folder as a family; binary findings name the
+  source field; preconditions, glyph selections, profile resolution and the ignore list apply,
+  with ignored results counted apart and left out of the exit status; `audit.checkOutlines`,
+  `audit.checkInterpolation`, `audit.compareFamily` and `fontcraft-cli check` with `outlines`,
+  `family` and `interpolation` take the reference tools' option names and exit with 0, 1, 2, 3 or
+  4); 3,676 corpus runs over 4 profiles and 919 files, no crash, 70 sources refused as unreadable.
+  Subset (`font.subset`, `fontcraft-cli subset`, pyftsubset's option names; selections by text,
+  code points, glyph names, glyph ids and `*`; closure through `cmap`, `glyf` components and CFF
+  `seac`; core tables only, layout, variation and colour tables dropped with a stated reason;
+  no new dependency): over 340 corpus fonts and 4 selections the glyph map equals pyftsubset's
+  in 338 or 339 per selection and the core tables in 337 or 338. The plug-in module runtime
+  (`crates/plugins`: wasmi, no imports, caps on fuel, wall-clock time, memory, call depth,
+  output, manifest size and ABI version; filter output checked against the model's limits;
+  reporter and check outputs parsed under item budgets; reporter drawings cached; 18 hostile
+  modules each fail with their own error and change nothing; ported with credit, see `NOTICE`):
+  filter 292 ms and reporter 0.35 ms (cached 0.4 µs) on 1,000 synthetic layers, all inside the
+  targets; builds for wasm32. X.fix22 (review fixes): subset parses CFF subroutine INDEXes once
+  and keeps one charstring operation budget per font, a component past the glyph count is an
+  error, a format 4 `cmap` mapping U+FFFF stays format 4; the audit shares the bytes of a file's
+  faces and caps the bytes, glyphs and folder entries of a run; folder entries and the outputs of
+  whole-file commands pass the automation read and write root checks; plug-in output values are
+  counted before anything is built, long logs are skipped and the reporter cache is capped by
+  size; native-only limits and counters stay out of the web build. Round trips and the static,
+  variable and instance oracle summaries are unchanged (`.glyphs` 122/1/118/4, `.glyphspackage`
+  22/0/7/0, UFO 125/2/13, designspace 59/53; variable fontc 100/37/21, fontmake 103/38/17;
+  instances 169/41/0/24). All eleven gate steps pass; TESTCOUNT tests pass, none fail; 665 of 960
+  commands live; 1,714 guesses on 1,109 rows; 1,124 observe rows. Packages built: 135 of 277
+  (M6 16/20, M7 18/21, M8 16/25, M9 12/27, M10 13/33, M11 7/21, M12 28/68, M13 25/62). Open: the
+  builder packages M9.11, M9.12, M9.13, M10.17, M10.18, M10.19, M10.15, M11.5b, M12.18, M12.19
+  and M13.3 to M13.6; the follow-ups for the audit runner (hash cache, options, width checks,
+  `summary.errors`, source-field names, the outline warnings on decoded fonts) and subset (CFF2,
+  subroutine pruning, `--desubroutinize`, sources), hint upkeep on background layers and for
+  corner and cap hints, designspace instance info from `<instance>`, designspace `<rules>`,
+  M13.15, M8.11, token expansion in `plan::postscript_name` and `plan::file_stem`,
+  corner-component selection; the skeleton pass for waves 2 to 5.
