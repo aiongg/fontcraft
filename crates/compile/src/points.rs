@@ -9,7 +9,7 @@
 //! |---|---|
 //! | on-curve | the on-curve point at its place (within [`SAME_PLACE`]); with several, the one in the contour where most of its path's nodes landed. It is never left out as an implied point |
 //! | on-curve, removed by overlap removal | the nearest on-curve point the removal created (the handbook's rule, as the editor's Remove Overlap applies it) |
-//! | off-curve | the nearest off-curve point between the points of the on-curve nodes around it, on the shorter way round the contour |
+//! | off-curve | the nearest off-curve point between the points of the on-curve nodes around it, on the shorter way round the contour; none when overlap removal took one of those nodes away |
 //! | intersection of two segments | the created on-curve point nearest to where the two segments' chords cross |
 //! | anything else | none: an instruction on it is left out with a warning |
 //!
@@ -32,7 +32,7 @@ use crate::{CompileError, DEFAULT_CONVERSION_ERROR, MAX_EXPANDED_ELEMENTS, MAX_T
 /// How far, in font units, an exported point may lie from a source node and still be that
 /// node: overlap removal computes the outline again in floating point.
 pub const SAME_PLACE: f64 = 0.5;
-/// Most (node, created point) distances one glyph's removed nodes and intersections may compare.
+/// Most distance comparisons one glyph's point map may make; past it, nodes are left unmapped.
 pub const MAX_NEAREST_WORK: usize = 4_000_000;
 
 /// One glyph's exported point numbers.
@@ -183,88 +183,79 @@ pub fn exported(layer: &Layer, instructions: &[TtInstruction], prepared: &Prepar
     for (i, p) in pts.iter().enumerate().filter(|(_, p)| p.on) {
         grid.entry(cell(p.p)).or_default().push(i);
     }
-    let near = |at: Point| -> Vec<usize> {
-        let (cx, cy) = cell(at);
-        let mut out: Vec<usize> = (-1..=1i64)
-            .flat_map(|dx| (-1..=1i64).map(move |dy| (cx.saturating_add(dx), cy.saturating_add(dy))))
-            .filter_map(|k| grid.get(&k))
-            .flatten()
-            .copied()
-            .filter(|&i| pts.get(i).is_some_and(|p| p.p.distance(at) <= SAME_PLACE))
-            .collect();
-        out.sort_by(|&a, &b| {
-            let d = |i: usize| pts.get(i).map_or(f64::INFINITY, |p| p.p.distance(at));
-            d(a).total_cmp(&d(b))
-        });
-        out
-    };
+    // Every lookup below spends from this one budget, so a hostile outline (thousands of
+    // coincident points, segments with thousands of handles) stays linear.
+    let mut work = 0usize;
 
     // On-curve nodes at their place, in the contour most of their path's nodes landed in.
     let mut map: Vec<Vec<Option<usize>>> = nodes.iter().map(|p| vec![None; p.len()]).collect();
     let mut known = vec![false; pts.len()];
     for (pi, path) in nodes.iter().enumerate() {
-        let candidates: Vec<Vec<usize>> = path.iter().map(|&(p, on)| if on { near(p) } else { Vec::new() }).collect();
+        let nearest: Vec<Option<usize>> = path.iter().map(|&(p, on)| if on { nearest_on(&grid, &pts, p, None, &mut work) } else { None }).collect();
         let mut votes: HashMap<usize, usize> = HashMap::new();
-        for c in &candidates {
-            if let Some(&first) = c.first() {
-                *votes.entry(pts.get(first).map_or(0, |p| p.contour)).or_default() += 1;
-            }
+        for &i in nearest.iter().flatten() {
+            *votes.entry(pts.get(i).map_or(0, |p| p.contour)).or_default() += 1;
         }
         let main = votes.into_iter().max_by(|a, b| a.1.cmp(&b.1).then(b.0.cmp(&a.0))).map(|(c, _)| c);
-        for (ni, c) in candidates.iter().enumerate() {
-            let pick = c.iter().copied().find(|&i| pts.get(i).map(|p| p.contour) == main).or_else(|| c.first().copied());
-            if let (Some(i), Some(slot)) = (pick, map.get_mut(pi).and_then(|m| m.get_mut(ni))) {
-                *slot = Some(i);
-                if let Some(k) = known.get_mut(i) {
-                    *k = true;
-                }
+        for (ni, (&first, &(p, _))) in nearest.iter().zip(path).enumerate() {
+            let Some(first) = first else { continue };
+            let pick = match main {
+                Some(c) if pts.get(first).map(|q| q.contour) != Some(c) => nearest_on(&grid, &pts, p, Some(c), &mut work).unwrap_or(first),
+                _ => first,
+            };
+            if let Some(slot) = map.get_mut(pi).and_then(|m| m.get_mut(ni)) {
+                *slot = Some(pick);
+            }
+            if let Some(k) = known.get_mut(pick) {
+                *k = true;
             }
         }
     }
 
-    // Points overlap removal created: on-curve points no source node is at.
+    // Points overlap removal created: on-curve points no source node is at. (This includes
+    // on-curve points the cubic-to-quadratic conversion added; guess on
+    // `hinting.tt.export.overlapRemovalMovesHints`.)
     let created: Vec<usize> = if overlaps_removed {
         (0..pts.len()).filter(|&i| pts.get(i).is_some_and(|p| p.on) && known.get(i) == Some(&false)).collect()
     } else {
         Vec::new()
     };
-    let mut work = 0usize;
-    let mut nearest_created = |at: Point| -> Option<usize> {
-        work = work.saturating_add(created.len());
-        if work > MAX_NEAREST_WORK {
-            return None;
-        }
-        created.iter().copied().min_by(|&a, &b| {
-            let d = |i: usize| pts.get(i).map_or(f64::INFINITY, |p| p.p.distance(at));
-            d(a).total_cmp(&d(b))
-        })
-    };
+    // Nodes that moved to a created point: the segments next to them are no longer theirs.
+    let mut moved: Vec<Vec<bool>> = nodes.iter().map(|p| vec![false; p.len()]).collect();
     if overlaps_removed {
         for (pi, path) in nodes.iter().enumerate() {
             for (ni, &(p, on)) in path.iter().enumerate() {
                 if on && map.get(pi).and_then(|m| m.get(ni)).copied().flatten().is_none() {
-                    let found = nearest_created(p);
+                    let found = nearest_created(&created, &pts, p, &mut work);
                     if let Some(slot) = map.get_mut(pi).and_then(|m| m.get_mut(ni)) {
                         *slot = found;
+                    }
+                    if let Some(m) = moved.get_mut(pi).and_then(|m| m.get_mut(ni)) {
+                        *m = true;
                     }
                 }
             }
         }
     }
 
-    // Off-curve nodes: the nearest off-curve point of their segment.
+    // Off-curve nodes: the nearest off-curve point of their segment, when both its ends are
+    // still where they were.
     for (pi, path) in nodes.iter().enumerate() {
-        let n = path.len();
+        let (prev, next) = on_curve_neighbours(path);
         for (ni, &(p, on)) in path.iter().enumerate() {
             if on {
                 continue;
             }
-            let on_at = |k: usize| path.get(k).is_some_and(|q| q.1);
-            let prev = (1..n).map(|k| (ni + n - k) % n).find(|&k| on_at(k));
-            let next = (1..n).map(|k| (ni + k) % n).find(|&k| on_at(k));
-            let mapped = |k: Option<usize>| k.and_then(|k| map.get(pi).and_then(|m| m.get(k)).copied().flatten());
-            let found = match (mapped(prev), mapped(next)) {
-                (Some(a), Some(b)) => off_curve_between(&pts, &starts, a, b, p),
+            let end = |k: Option<usize>| -> Option<usize> {
+                let k = k?;
+                if moved.get(pi).and_then(|m| m.get(k)).copied().unwrap_or(true) {
+                    return None;
+                }
+                map.get(pi).and_then(|m| m.get(k)).copied().flatten()
+            };
+            let ends = (end(prev.get(ni).copied().flatten()), end(next.get(ni).copied().flatten()));
+            let found = match ends {
+                (Some(a), Some(b)) => off_curve_between(&pts, &starts, a, b, p, &mut work),
                 _ => None,
             };
             if let Some(slot) = map.get_mut(pi).and_then(|m| m.get_mut(ni)) {
@@ -284,7 +275,7 @@ pub fn exported(layer: &Layer, instructions: &[TtInstruction], prepared: &Prepar
             if crossings.iter().any(|(x, y, _)| (*x, *y) == (a, b)) {
                 continue;
             }
-            if let Some(i) = chord_crossing(&nodes, a, b).and_then(&mut nearest_created) {
+            if let Some(i) = chord_crossing(&nodes, a, b).and_then(|at| nearest_created(&created, &pts, at, &mut work)) {
                 crossings.push((a, b, i));
             }
         }
@@ -411,27 +402,91 @@ pub(crate) fn interpolatable_glyphs(paths: &[BezPath], keep: &[Point]) -> Option
     Some(out)
 }
 
+/// Spends `n` from the glyph's lookup budget; `false` once it is used up.
+fn spend(work: &mut usize, n: usize) -> bool {
+    *work = work.saturating_add(n);
+    *work <= MAX_NEAREST_WORK
+}
+
+/// The on-curve point within [`SAME_PLACE`] of `at` nearest to it, in `contour` when given;
+/// the first of equally near points in grid order.
+fn nearest_on(grid: &HashMap<(i64, i64), Vec<usize>>, pts: &[Pt], at: Point, contour: Option<usize>, work: &mut usize) -> Option<usize> {
+    let (cx, cy) = cell(at);
+    let mut best: Option<(usize, f64)> = None;
+    for dx in -1..=1i64 {
+        for dy in -1..=1i64 {
+            let Some(list) = grid.get(&(cx.saturating_add(dx), cy.saturating_add(dy))) else { continue };
+            if !spend(work, list.len()) {
+                return None;
+            }
+            for &i in list {
+                let Some(q) = pts.get(i) else { continue };
+                let d = q.p.distance(at);
+                if d <= SAME_PLACE && contour.is_none_or(|c| q.contour == c) && best.is_none_or(|(_, b)| d < b) {
+                    best = Some((i, d));
+                }
+            }
+        }
+    }
+    best.map(|(i, _)| i)
+}
+
+/// The point of `created` nearest `at`.
+fn nearest_created(created: &[usize], pts: &[Pt], at: Point, work: &mut usize) -> Option<usize> {
+    if !spend(work, created.len()) {
+        return None;
+    }
+    created.iter().copied().min_by(|&a, &b| {
+        let d = |i: usize| pts.get(i).map_or(f64::INFINITY, |p| p.p.distance(at));
+        d(a).total_cmp(&d(b))
+    })
+}
+
+/// For each node of a closed path, the on-curve nodes before and after it, going round.
+fn on_curve_neighbours(path: &[(Point, bool)]) -> (Vec<Option<usize>>, Vec<Option<usize>>) {
+    let n = path.len();
+    let mut prev = vec![None; n];
+    let mut next = vec![None; n];
+    let mut last = path.iter().rposition(|q| q.1);
+    for (i, q) in path.iter().enumerate() {
+        if let Some(slot) = prev.get_mut(i) {
+            *slot = last;
+        }
+        if q.1 {
+            last = Some(i);
+        }
+    }
+    let mut first = path.iter().position(|q| q.1);
+    for (i, q) in path.iter().enumerate().rev() {
+        if let Some(slot) = next.get_mut(i) {
+            *slot = first;
+        }
+        if q.1 {
+            first = Some(i);
+        }
+    }
+    (prev, next)
+}
+
 /// The off-curve point nearest `at` between points `a` and `b` of one contour, on the shorter
 /// way round.
-fn off_curve_between(pts: &[Pt], starts: &[usize], a: usize, b: usize, at: Point) -> Option<usize> {
+fn off_curve_between(pts: &[Pt], starts: &[usize], a: usize, b: usize, at: Point, work: &mut usize) -> Option<usize> {
     let (pa, pb) = (pts.get(a)?, pts.get(b)?);
     if pa.contour != pb.contour {
         return None;
     }
     let start = *starts.get(pa.contour)?;
-    let len = pts.iter().skip(start).take_while(|p| p.contour == pa.contour).count();
-    if len == 0 {
-        return None;
-    }
-    let (la, lb) = (a - start, b - start);
+    let end = starts.get(pa.contour + 1).copied().unwrap_or(pts.len());
+    let len = end.checked_sub(start).filter(|&l| l > 0)?;
+    let (la, lb) = (a.checked_sub(start)?, b.checked_sub(start)?);
     let forward = (lb + len - la) % len;
     let backward = (la + len - lb) % len;
-    let steps: Vec<usize> = if forward <= backward {
-        (1..forward).map(|k| start + (la + k) % len).collect()
-    } else {
-        (1..backward).map(|k| start + (la + len - k) % len).collect()
-    };
-    steps.into_iter().filter(|&i| pts.get(i).is_some_and(|p| !p.on)).min_by(|&x, &y| {
+    let steps = forward.min(backward);
+    if !spend(work, steps) {
+        return None;
+    }
+    let index = |k: usize| if forward <= backward { start + (la + k) % len } else { start + (la + len - k) % len };
+    (1..steps).map(index).filter(|&i| pts.get(i).is_some_and(|p| !p.on)).min_by(|&x, &y| {
         let d = |i: usize| pts.get(i).map_or(f64::INFINITY, |p| p.p.distance(at));
         d(x).total_cmp(&d(y))
     })
@@ -608,5 +663,46 @@ mod tests {
         assert_eq!(at(&e, kept), (300.0, 300.0, true));
         let cross = e.map.intersection(NodeRef::new(0, 2), NodeRef::new(1, 1)).unwrap();
         assert_eq!(at(&e, cross), (200.0, 100.0, true));
+    }
+
+    #[test]
+    fn an_off_curve_node_whose_segment_end_was_removed_has_no_point() {
+        use NodeKind::{Curve, Line, OffCurve as Off};
+        // The second shape's node 0 lies inside the square; the curve into it, with handles 4
+        // and 5, is cut where it enters the square, and node 0 moves to that crossing.
+        let layer = layer_of(vec![
+            vec![(0.0, 0.0, Line), (200.0, 0.0, Line), (200.0, 200.0, Line), (0.0, 200.0, Line)],
+            vec![(190.0, 100.0, Curve), (190.0, -100.0, Line), (300.0, -100.0, Line), (300.0, 250.0, Line), (250.0, 250.0, Off), (200.0, 120.0, Off)],
+        ]);
+        let prep = prepared(&layer, true);
+        let e = exported(&layer, &[], &prep, true).unwrap();
+        let moved = e.map.point(NodeRef::new(1, 0)).unwrap();
+        let (x, _, on) = at(&e, moved);
+        assert!(on && (x - 200.0).abs() < 1.0, "the removed node moves to the crossing on the square's edge: {:?}", at(&e, moved));
+        assert_eq!(at(&e, e.map.point(NodeRef::new(1, 3)).unwrap()), (300.0, 250.0, true));
+        assert_eq!(e.map.point(NodeRef::new(1, 4)), None);
+        assert_eq!(e.map.point(NodeRef::new(1, 5)), None);
+    }
+
+    #[test]
+    fn hostile_sources_map_within_the_work_budget() {
+        use NodeKind::{Line, OffCurve as Off};
+        let started = std::time::Instant::now();
+        // One on-curve node and 65,000 handles: each handle used to search the whole path.
+        let square = layer_of(vec![vec![(0.0, 0.0, Line), (200.0, 0.0, Line), (200.0, 200.0, Line), (0.0, 200.0, Line)]]);
+        let prep = prepared(&square, false);
+        let mut handles = vec![(0.0, 0.0, Line)];
+        handles.extend((0..65_000).map(|i| (f64::from(i % 200), 100.0, Off)));
+        let e = exported(&layer_of(vec![handles]), &[], &prep, false).unwrap();
+        assert_eq!(at(&e, e.map.point(NodeRef::new(0, 0)).unwrap()), (0.0, 0.0, true));
+        assert_eq!(e.map.point(NodeRef::new(0, 1)), None);
+        // 20,000 on-curve points in one place, and as many nodes there: each node used to sort
+        // every point of its place.
+        let points = vec![CurvePoint::new(0, 0, true); 20_000];
+        let glyph = SimpleGlyph { bbox: Default::default(), contours: vec![Contour::from(points)], instructions: Vec::new(), overlaps: false };
+        let crowd = layer_of(vec![vec![(0.0, 0.0, Line); 20_000]]);
+        let e = exported(&crowd, &[], &Prepared::Points(glyph), false).unwrap();
+        assert!(e.map.point(NodeRef::new(0, 0)).is_some());
+        assert!(started.elapsed() < std::time::Duration::from_secs(20), "took {:?}", started.elapsed());
     }
 }

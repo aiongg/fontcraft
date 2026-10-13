@@ -258,3 +258,23 @@ fn a_variable_font_takes_the_main_master_s_programs_without_deltas() {
     assert!(!program(&font, gid(out, "o")).is_empty(), "{:?}", out.warnings);
     runs_everywhere(&out.bytes);
 }
+
+#[test]
+fn an_unhinted_variable_export_of_an_instructed_source_writes_the_plain_points() {
+    let glyf = |f: &Font, options: &Options| -> Vec<u8> {
+        let var = crate::var::compile_variable(f, None, options, &crate::var::VariableOptions::default()).unwrap();
+        FontRef::new(&var.compiled.bytes).unwrap().table_data(skrifa::Tag::new(b"glyf")).unwrap().as_bytes().to_vec()
+    };
+    let mut plain = two_masters();
+    for i in 0..plain.glyphs.len() {
+        plain.glyphs.get_mut_at(i).unwrap().layers.iter_mut().for_each(|l| l.info.hints.clear());
+    }
+    let expected = glyf(&plain, &Options::default());
+    let f = two_masters();
+    assert_ne!(glyf(&f, &Options::default()), expected, "instructed glyphs keep the on-curve points of their nodes");
+    let strip = Options { hinting: crate::HintingOptions { strip: true, ..Default::default() }, ..Options::default() };
+    assert_eq!(glyf(&f, &strip), expected, "stripped");
+    let mut off = two_masters();
+    std::sync::Arc::make_mut(&mut off.info).params.0.push(Param::new("Export TrueType Hints", Value::Number(Number::int(0))));
+    assert_eq!(glyf(&off, &Options::default()), expected, "Export TrueType Hints off");
+}

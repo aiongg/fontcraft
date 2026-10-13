@@ -627,7 +627,11 @@ milestone = "M10"
 summary = "For an interpolated instance, each main-master hint is rebuilt from the nodes it is linked to: the same node indices are looked up in the interpolated outline and give the hint's edges. This needs compatible paths and linked hints; an unlinked hint carries only main-master numbers, which is why multiple-master fonts should link every manual hint to nodes."
 ref = "PostScript Hinting › Hinting Multiple Masters; Manual hinting"
 status = "handbook"
-guesses = ["An unlinked hint end keeps its main-master number in every master and instance, and a link whose node no longer exists in a master falls back to that number; an export of an interpolated instance with one unlinked hint would settle it."]
+notes = "Static instances (crates/compile/src/tt_hints.rs, finish_instance): before the instance is compiled, each glyph's interpolated layer takes the hints of its main-master layer, PostScript and TrueType alike, when its paths have the same node counts as the main master's; the hint ends linked to nodes then give the instance's edges. Documented, not yet observed."
+guesses = [
+  "An unlinked hint end keeps its main-master number in every master and instance, and a link whose node no longer exists in a master falls back to that number; an export of an interpolated instance with one unlinked hint would settle it.",
+  "When a glyph's interpolated layer has paths whose node counts differ from its main-master layer's, the instance keeps the hints interpolation gave it instead of the main master's; exporting an instance of such a glyph in the reference app would settle it.",
+]
 observe = ["T2: export the instance halfway between masters 1 and 2 as CFF and read I; note the position of its unlinked hint (master 1's value, an interpolated value, or dropped)."]
 
 [[behavior]]

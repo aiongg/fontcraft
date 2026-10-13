@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1146 rows to check: 1605 guesses and 422 observe steps.**
+**1146 rows to check: 1608 guesses and 422 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -2655,6 +2655,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: T1: in I, select one node at the cap height and choose Add Horizontal Hint, then do the same with one node on the baseline; note whether each new hint is a top or a bottom ghost hint.
 - [ ] `hinting.ps.masters.transferByNodeLink` (behavior, M10, handbook): For an interpolated instance, each main-master hint is rebuilt from the nodes…
   - Guess: An unlinked hint end keeps its main-master number in every master and instance, and a link whose node no longer exists in a master falls back to that number; an export of an interpolated instance with one unlinked hint would settle it.
+  - Guess: When a glyph's interpolated layer has paths whose node counts differ from its main-master layer's, the instance keeps the hints interpolation gave it instead of the main master's; exporting an instance of such a glyph in the reference app would settle it.
   - Observe: T2: export the instance halfway between masters 1 and 2 as CFF and read I; note the position of its unlinked hint (master 1's value, an interpolated value, or dropped).
 - [ ] `hinting.ps.masters.fallbackToOtherMasters` (behavior, M10, handbook): Manual hints placed on a glyph in a master other than the…
   - Guess: When the main master has no hints for a glyph and several other masters do, the first of them in master order is used; a reference export of such a glyph would settle it.
@@ -2767,6 +2768,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Deltas run at their place in the list, before the final interpolation, so on an untouched point a Delta moves it from its unhinted position at that size; the reference app would settle it by adding a Delta to an untouched point and comparing that size with its neighbours.
 - [ ] `hinting.tt.export.overlapRemovalMovesHints` (behavior, M10, handbook): When a static font is exported with Remove Overlaps, points inside overlaps…
   - Guess: Path > Remove Overlap in the editor applies the documented export rule to instructions on removed nodes and on intersections, and PostScript ends on removed nodes become numbers; running Remove Overlap on an instructed glyph in the reference app would settle it.
+  - Guess: At export, the points a removed node can move to are the on-curve points no source node lies at, which includes on-curve points the cubic-to-quadratic conversion added; they lie on the source segment as crossing points do, so they are not told apart. Exporting an instructed cubic glyph with Remove Overlaps in the reference app and reading where the instruction lands would settle it.
+  - Guess: At export, an off-curve node whose segment lost an end to overlap removal has no point, and an instruction on it is left out with a warning; exporting such a glyph in the reference app would settle it.
   - Guess: An outline edit other than Remove Overlap removes an instruction whose node is gone instead of moving it; deleting an instructed node in the reference app would settle it.
   - Guess: When upkeep removes one Stem instruction of a triple hint, the other two stay as plain Stem instructions; deleting a node of a triple hint in the reference app would settle it.
   - Observe: T4: instruct X on a node at the crossing and on a normal node, export a static TTF with Remove Overlaps and read X's glyph program; note which point the crossing node's instruction ends up on.

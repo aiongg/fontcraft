@@ -76,6 +76,25 @@ fn names(list: &[String]) -> String {
     out
 }
 
+fn autohinted(settings: &HintSettings, options: &Options) -> bool {
+    settings.autohint.unwrap_or(options.hinting.autohint)
+}
+
+/// Does the master carry imported tables (cvt Table, prep or fpgm Table Assembly)? They are
+/// written instead of glyph programs.
+fn imported(settings: &HintSettings) -> bool {
+    settings.cvt.is_some() || settings.prep_assembly.is_some() || settings.fpgm_assembly.is_some()
+}
+
+/// Does [`tt_hinting`] compile glyph programs for the font `resolved` was resolved from with
+/// `options`? The checks it makes before it looks at any glyph.
+pub(crate) fn compiles_glyph_programs(source: &Font, resolved: &Resolved, options: &Options) -> bool {
+    if options.hinting.strip {
+        return false;
+    }
+    settings_for(source, resolved, &mut Vec::new()).is_some_and(|s| s.export_tt_hints && !autohinted(&s, options) && !imported(&s))
+}
+
 /// The TrueType hinting for the glyphs of `order` with outlines `outlines`, or `None` when the
 /// font gets none. `source` is the font `resolved` was resolved from; `variable`: the font is a
 /// variable font whose outlines are the default master's.
@@ -113,15 +132,14 @@ pub fn tt_hinting(
             .push(format!("the TrueType instructions of these glyphs cannot be read, so they were exported without them: {}", unreadable.join(", ")));
     }
 
-    if settings.autohint.unwrap_or(options.hinting.autohint) {
+    if autohinted(&settings, options) {
         // The TrueType autohinter replaces every manual instruction; until it is built the
         // font is written unhinted.
         warnings.push("TrueType autohinting is not available, so the font was written without TrueType hints".to_string());
         return Ok(None);
     }
 
-    let imported = settings.cvt.is_some() || settings.prep_assembly.is_some() || settings.fpgm_assembly.is_some();
-    if imported {
+    if imported(&settings) {
         return Ok(imported_tables(&settings, &instructed, order, warnings));
     }
     if instructed.is_empty() {

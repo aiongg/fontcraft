@@ -452,7 +452,8 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
                      settings: &crate::outline::Settings,
                      warnings: &mut Vec<String>|
      -> Result<(Vec<Prepared>, crate::Extra), CompileError> {
-        let (outlines, per_glyph, cubic) = ctx.build(glyphs, settings, warnings)?;
+        let programs = flavour == Flavour::TrueType && crate::tt_hints::compiles_glyph_programs(prepared, origin_resolved, &options);
+        let (outlines, per_glyph, cubic) = ctx.build(glyphs, settings, programs, warnings)?;
         let mut extra = crate::Extra::default();
         if flavour == Flavour::Cff {
             let masters = cff2::master_privates(prepared, origin_resolved, &sources, warnings)?;
@@ -609,11 +610,12 @@ impl Outlines<'_> {
 
     /// The outline of each glyph of `glyphs` (the origin's final order) and its points at each of
     /// its sources; for CFF2 the points are the advances' phantoms only and the cubic outlines of
-    /// each source come third.
+    /// each source come third. `programs`: glyph programs are compiled for the font.
     fn build(
         &self,
         glyphs: &[ResolvedGlyph],
         settings: &crate::outline::Settings,
+        programs: bool,
         warnings: &mut Vec<String>,
     ) -> Result<BuiltOutlines, CompileError> {
         let index: HashMap<&str, usize> = glyphs.iter().enumerate().map(|(i, g)| (g.name.as_str(), i)).collect();
@@ -771,9 +773,9 @@ impl Outlines<'_> {
                     if settings.keep_direction { path } else { path.reverse_subpaths() }
                 })
                 .collect();
-            // A glyph with TrueType instructions keeps the on-curve points its nodes give, so
-            // the instructions find them ([`crate::points`]).
-            let keep = crate::points::kept_nodes(self.prepared, &g.name, self.origin);
+            // A glyph whose TrueType instructions are compiled keeps the on-curve points its
+            // nodes give, so the instructions find them ([`crate::points`]).
+            let keep = if programs { crate::points::kept_nodes(self.prepared, &g.name, self.origin) } else { Vec::new() };
             let mut simples = match Some(&keep).filter(|k| !k.is_empty()).and_then(|k| crate::points::interpolatable_glyphs(&paths, k)) {
                 Some(s) => s,
                 None => SimpleGlyph::interpolatable_glyphs_from_bezpaths(&paths).map_err(|e| CompileError::Glyph {

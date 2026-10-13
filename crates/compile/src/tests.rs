@@ -1844,6 +1844,16 @@ mod ps_hints_export {
         assert!(s.h.is_empty() && s.v.is_empty());
     }
 
+    #[test]
+    fn an_interpolated_instance_takes_the_main_master_s_hints_at_its_nodes() {
+        // The second master's own stem is ignored: the main master's hints follow their nodes
+        // to the instance halfway between the boxes.
+        let mut f = hinted();
+        Arc::make_mut(&mut f.instances).push(fontcraft_model::Instance { name: "Medium".into(), location: vec![150.0], ..Default::default() });
+        let s = stems(&compile(&f, &Target::Instance(2), Flavour::Cff, &Options::default()).unwrap(), "A");
+        assert_eq!((s.h, s.v), (vec![(-5, 80), (710, 690)], vec![(50, 570)]));
+    }
+
     /// `A` on master `m01` with `hints` (numbers only) and one box from 0 to 300 by 0 to 200.
     fn valued(hints: &[PsHint]) -> Compiled {
         let mut f = sample();
