@@ -17,7 +17,7 @@ use std::sync::Arc;
 
 use fontcraft_compile::{AssetsRef, DataRef, Flavour, Options};
 use fontcraft_model::glyphdata::GlyphData;
-use fontcraft_model::{Font, ModelError, Resolved, Target};
+use fontcraft_model::{Font, Resolved, Target};
 
 use super::*;
 use crate::EngineError;
@@ -374,8 +374,6 @@ fn skip(job: &Job, reason: &str) -> Value {
     json!({ "instance": job.label, "source": job.source, "reason": reason })
 }
 
-const BETWEEN_MASTERS: &str = "it lies between masters, and building interpolated instances is not supported yet (ROADMAP.md, M9)";
-
 fn font_json(f: &FontOut, with_data: bool) -> Value {
     let files: Vec<Value> = f
         .files
@@ -532,18 +530,28 @@ pub(super) fn build(
         }
         // Propagation reads the job's source as stored; the drawing reads it prepared.
         let source_job = crate::export_steps::prepare(font, job, &ctx, &mut report.warnings)?;
-        let font: &Font = &source_job;
-        let prepared_job = match &source_job {
-            std::borrow::Cow::Borrowed(_) => std::borrow::Cow::Borrowed(&*prepared),
-            std::borrow::Cow::Owned(f) => fontcraft_compile::prepare_source(f, &mut report.warnings),
+        // An instance away from the masters is built from the font interpolated at it.
+        let instanced = match fontcraft_compile::needs_instance_font(&source_job, &job.target) {
+            Some(_) => match fontcraft_compile::sources_at(&source_job, &job.target, &mut report.warnings) {
+                Ok((s, p)) => Some((s.into_owned(), p.into_owned())),
+                Err(e) => {
+                    report.skipped.push(skip(job, &format!("it cannot be interpolated: {e}")));
+                    continue;
+                }
+            },
+            None => None,
         };
-        let resolved = match fontcraft_compile::drawing::resolve(&prepared_job, &job.target) {
-            Err(ModelError::BetweenMasters(_)) => {
-                report.skipped.push(skip(job, BETWEEN_MASTERS));
-                continue;
-            }
-            other => other?,
+        let (font, prepared_job): (&Font, std::borrow::Cow<'_, Font>) = match &instanced {
+            Some((s, p)) => (s, std::borrow::Cow::Borrowed(p)),
+            None => (
+                &source_job,
+                match &source_job {
+                    std::borrow::Cow::Borrowed(_) => std::borrow::Cow::Borrowed(&*prepared),
+                    std::borrow::Cow::Owned(f) => fontcraft_compile::prepare_source(f, &mut report.warnings),
+                },
+            ),
         };
+        let resolved = fontcraft_compile::drawing::resolve(&prepared_job, &job.target)?;
         let stem = stem(&resolved, &options, source);
         let folder = match crate::export_steps::export_folder(&resolved, &options) {
             Ok(folder) => folder,
@@ -1150,18 +1158,28 @@ fn compile_plan(s: &mut Session, p: &Value) -> Result<Value> {
     for job in &jobs {
         // Propagation reads the job's source as stored; the drawing reads it prepared.
         let source_job = crate::export_steps::prepare(font, job, &ctx, &mut warnings)?;
-        let font: &Font = &source_job;
-        let prepared_job = match &source_job {
-            std::borrow::Cow::Borrowed(_) => std::borrow::Cow::Borrowed(&*prepared),
-            std::borrow::Cow::Owned(f) => fontcraft_compile::prepare_source(f, &mut warnings),
+        // An instance away from the masters is built from the font interpolated at it.
+        let instanced = match fontcraft_compile::needs_instance_font(&source_job, &job.target) {
+            Some(_) => match fontcraft_compile::sources_at(&source_job, &job.target, &mut warnings) {
+                Ok((s, p)) => Some((s.into_owned(), p.into_owned())),
+                Err(e) => {
+                    skipped.push(skip(job, &format!("it cannot be interpolated: {e}")));
+                    continue;
+                }
+            },
+            None => None,
         };
-        let resolved = match fontcraft_compile::drawing::resolve(&prepared_job, &job.target) {
-            Err(ModelError::BetweenMasters(_)) => {
-                skipped.push(skip(job, BETWEEN_MASTERS));
-                continue;
-            }
-            other => other?,
+        let (font, prepared_job): (&Font, std::borrow::Cow<'_, Font>) = match &instanced {
+            Some((s, p)) => (s, std::borrow::Cow::Borrowed(p)),
+            None => (
+                &source_job,
+                match &source_job {
+                    std::borrow::Cow::Borrowed(_) => std::borrow::Cow::Borrowed(&*prepared),
+                    std::borrow::Cow::Owned(f) => fontcraft_compile::prepare_source(f, &mut warnings),
+                },
+            ),
         };
+        let resolved = fontcraft_compile::drawing::resolve(&prepared_job, &job.target)?;
         let stem = stem(&resolved, &req.options, source);
         let folder = match crate::export_steps::export_folder(&resolved, &req.options) {
             Ok(folder) => folder,

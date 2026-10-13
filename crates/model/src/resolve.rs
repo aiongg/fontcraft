@@ -14,7 +14,7 @@
 //! |---|---|
 //! | a master | the glyph's master layer for it |
 //! | an instance at a master's location | that master's layer |
-//! | an instance between masters | none: an error until interpolation lands (M9) |
+//! | an instance between or beyond masters | none: an error; the compiler resolves the font `fontcraft_interp` interpolates at the instance instead |
 //!
 //! Alternate layers (the ones with axis rules) and intermediate layers are not used: at a
 //! master's location the master layer is the drawing, and alternate layers become separate
@@ -257,6 +257,16 @@ impl Font {
         Ok(Target::Master(self.default_master()?.id.clone()))
     }
 
+    /// The first master at `location` (design coordinates parallel to [`Font::axes`]); `None`
+    /// when the location lies between or beyond the masters, where a static instance needs
+    /// interpolation.
+    pub fn master_at(&self, location: &[f64]) -> Option<&Master> {
+        self.masters.iter().find(|m| {
+            (0..self.axes.len().max(m.location.len()).max(location.len()))
+                .all(|a| (axis_value(&m.location, a) - axis_value(location, a)).abs() <= SAME_LOCATION)
+        })
+    }
+
     /// The font as a compiler reads it at `target` (see the module notes).
     ///
     /// The font is assumed valid ([`Font::check`]); a path that is not is still an error, not a
@@ -279,11 +289,7 @@ impl Font {
                 if inst.kind.is_some() {
                     return Err(ModelError::NotStatic(label));
                 }
-                let at = |m: &&Master| {
-                    (0..self.axes.len().max(m.location.len()).max(inst.location.len()))
-                        .all(|a| (axis_value(&m.location, a) - axis_value(&inst.location, a)).abs() <= SAME_LOCATION)
-                };
-                let master = self.masters.iter().find(at).ok_or(ModelError::BetweenMasters(label))?;
+                let master = self.master_at(&inst.location).ok_or(ModelError::BetweenMasters(label))?;
                 (master, Some(inst))
             }
         };

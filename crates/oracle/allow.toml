@@ -636,3 +636,23 @@ oracle = "fontmake"
 sources = ["/AlumniSans-wononly.glyphs › ", "/BracketTestFontKerning.glyphs › ", "/LibreFranklin-bracketlayer.glyphs › ", "/glyph-with-bracket-component.glyphs › ", "/bracket-glyph-order.glyphs › ", "/bracket-rules-processed-in-glyph-order.glyphs › "]
 theirs = "*BRACKET*"
 reason = "Follows from the alternate glyphs fontmake keeps in a static instance (see GDEF): its kerning and mark attachment rules name them as well."
+
+# --- Static instances beyond the masters (M9.4) --------------------------------------------------
+# FontCraft extrapolates a static instance that lies beyond the masters, as the reference app's
+# handbook says; fontmake clamps it to the nearest master (docs/spec/40-compile.md § 4a,
+# `fontInfo.instance.extrapolation`). In these sources only the space glyph's advance changes
+# between masters, so the extrapolated advance and the average width differ.
+
+[[allow]]
+table = "hmtx"
+key = "hmtx * advance"
+oracle = "fontmake"
+sources = ["AxisLocationBeyondMasters.glyphs › Black", "AxisLocationOverridesMaster.glyphs › Black", "AxisMappingsBeyondMasters.glyphs › Light", "AxisMappingsBeyondMasters.glyphs › Black", "InstanceMappingBeyondMasters.glyphs › Light", "InstanceMappingBeyondMasters.glyphs › Black", "InstanceMappingNotExtendable.glyphs › Black"]
+reason = "Decided difference: FontCraft extrapolates a static instance beyond the masters (the handbook's rule); fontmake clamps it to the nearest master (docs/spec/40-compile.md § 4a)."
+
+[[allow]]
+table = "OS/2"
+key = "OS/2.xAvgCharWidth"
+oracle = "fontmake"
+sources = ["AxisLocationBeyondMasters.glyphs › Black", "AxisLocationOverridesMaster.glyphs › Black", "AxisMappingsBeyondMasters.glyphs › Light", "AxisMappingsBeyondMasters.glyphs › Black", "InstanceMappingBeyondMasters.glyphs › Light", "InstanceMappingBeyondMasters.glyphs › Black", "InstanceMappingNotExtendable.glyphs › Black"]
+reason = "Follows from the extrapolated advances of a static instance beyond the masters (see hmtx); decided difference (docs/spec/40-compile.md § 4a)."

@@ -668,6 +668,9 @@ summary = "Static instances are produced by interpolating masters at the instanc
 ref = "fontmake USAGE.md (Options for instance generation)"
 status = "docs"
 notes = "FontCraft extrapolates static instances that lie outside the masters, as the handbook says (`fontInfo.instance.extrapolation`; docs/plans/M9.md § 7, question 6 (a)); the difference from fontmake is in docs/spec/40-compile.md § 4a."
+guesses = [
+  "Copied from fontmake's instancer: a glyph with no layer in the origin master is left out of the instance; a glyph whose layer is empty in some masters but drawn at the origin interpolates without the empty ones; outlines are not rounded before the compile; a glyph that does not export and cannot interpolate keeps its nearest layer instead of failing the instance. Settle each with an instance export from the reference app.",
+]
 
 [[behavior]]
 id = "compile.instanceLayoutInterpolation"
@@ -1532,6 +1535,9 @@ milestone = "M9"
 summary = "When masters group glyphs differently for kerning, output classes are the common refinement of all masters' groupings: glyphs that share a kerned group in every master stay together and the rest split into smaller classes. A glyph-to-class pair is treated as per-glyph exceptions and emitted glyph by glyph. Pairs that are zero in every master are dropped."
 ref = "fontc fontbe/src/features/kern.rs (build_variable_kern_adjustments, refine_divergent_groups)"
 status = "docs"
+guesses = [
+  "A static instance interpolates kerning as fontmake's instancer does (fontMath): a pair one master lacks takes the value that master's groups give it (the pair, the second side's group, the first side's group, both groups, else zero); a master read from its own UFO uses that file's groups; a pair that comes out zero is dropped unless one side is a glyph in a group; values are rounded half up. The common refinement of the groups is for variable fonts (M9.9); settle by comparing an instance of a source whose masters group glyphs differently with fontmake.",
+]
 
 [[behavior]]
 id = "compile.kernFeatureWriter"

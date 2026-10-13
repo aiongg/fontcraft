@@ -546,11 +546,19 @@ fn a_target_compiles_its_own_master_and_an_instance_at_a_master() {
     let metrics = font.glyph_metrics(Size::unscaled(), LocationRef::default());
     assert_eq!(metrics.advance_width(font.charmap().map('A').unwrap()), Some(720.0), "the master's layer");
     assert_eq!(names(&font, StringId::TYPOGRAPHIC_SUBFAMILY_NAME), ["Heavy"]);
-    // Between masters: reported, not interpolated.
-    assert!(matches!(
-        compile(&f, &Target::Instance(1), Flavour::TrueType, &Options::default()),
-        Err(CompileError::Model(ModelError::BetweenMasters(name))) if name == "Semibold"
-    ));
+    // Between masters: interpolated.
+    let semibold = compile(&f, &Target::Instance(1), Flavour::TrueType, &Options::default()).unwrap();
+    let font = FontRef::new(&semibold.bytes).unwrap();
+    let metrics = font.glyph_metrics(Size::unscaled(), LocationRef::default());
+    assert_eq!(metrics.advance_width(font.charmap().map('A').unwrap()), Some(670.0), "halfway between the masters");
+    assert_eq!(names(&font, StringId::TYPOGRAPHIC_SUBFAMILY_NAME), ["Semibold"]);
+    let mut beyond = f.clone();
+    Arc::make_mut(&mut beyond.instances).push(fontcraft_model::Instance { name: "Black".into(), location: vec![300.0], ..Default::default() });
+    let black = compile(&beyond, &Target::Instance(2), Flavour::TrueType, &Options::default()).unwrap();
+    let font = FontRef::new(&black.bytes).unwrap();
+    let metrics = font.glyph_metrics(Size::unscaled(), LocationRef::default());
+    assert_eq!(metrics.advance_width(font.charmap().map('A').unwrap()), Some(820.0), "extrapolated");
+    assert!(black.warnings.iter().any(|w| w.contains("`Black`") && w.contains("extrapolated")), "{:?}", black.warnings);
     assert!(matches!(
         compile(&f, &Target::Instance(9), Flavour::TrueType, &Options::default()),
         Err(CompileError::Model(ModelError::NoSuchInstance(9)))

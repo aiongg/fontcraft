@@ -140,7 +140,7 @@ pub enum ModelError {
     NoSuchInstance(usize),
     #[error("instance `{0}` describes a variable font, not a static one")]
     NotStatic(String),
-    #[error("instance `{0}` lies between masters; static instances between masters need interpolation, which is not built yet")]
+    #[error("instance `{0}` lies between masters; it is interpolated before it is resolved")]
     BetweenMasters(String),
 }
 

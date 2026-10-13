@@ -1060,7 +1060,7 @@ summary = "Float used to interpolate y coordinates of an instance while x coordi
 ref = "Appendix › Custom Parameters"
 status = "handbook"
 guesses = [
-  "Read only for fonts whose first axis is the weight axis, and applied to y coordinates of outlines, anchors and vertical metrics; settle with an instance that sets it in the reference app.",
+  "Applied to the axis tagged wght (ignored without one) and to y coordinates of outlines, component offsets, anchors, vertical metrics, horizontal stems and alignment zones; settle with an instance that sets it in the reference app.",
 ]
 observe = [
   "In F1 (two masters), put InterpolationWeightY 600 on Regular, export and measure the horizontal strokes: note whether they are drawn as at 600.",

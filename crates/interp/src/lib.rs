@@ -40,8 +40,8 @@ pub mod sources;
 pub use compat::{AngleWarning, Compat, MasterPairs, Mismatch, MismatchKind};
 pub use designspace::{AxisInfo, Designspace, Location, MasterInfo, NormLocation, Placement, Space, UserLocation, VirtualMasterInfo};
 pub use error::{
-    ANGLE_WARNING_DEGREES, InterpError, MAX_AXES, MAX_COORDINATE, MAX_GENERATED_INSTANCES, MAX_INSTANCES, MAX_MAPPING_POINTS, MAX_OVERLAY_RECORDS,
-    MAX_OVERLAY_WORK, MAX_RANGE_SETS, MAX_SOURCES, MAX_VIRTUAL_MASTERS,
+    ANGLE_WARNING_DEGREES, InterpError, MAX_AXES, MAX_CACHED_MODELS, MAX_COORDINATE, MAX_GENERATED_INSTANCES, MAX_GLYPHS, MAX_INSTANCES,
+    MAX_KERN_PAIRS, MAX_LAYER_NUMBERS, MAX_MAPPING_POINTS, MAX_OVERLAY_RECORDS, MAX_OVERLAY_WORK, MAX_RANGE_SETS, MAX_SOURCES, MAX_VIRTUAL_MASTERS,
 };
 pub use instance::{InterpOptions, ModelCache, ModelKind};
 pub use overlay::{AxisSpan, OverlayRecord, OverlayRule, RegionBox};

@@ -849,6 +849,10 @@ milestone = "M9"
 summary = "For a static instance, each glyph with alternate layers is interpolated from the alternate layers when the instance location lies inside their range and from the normal layers otherwise; no substitution feature is involved."
 ref = "Interpolation › Switching Shapes"
 status = "handbook"
+notes = "Documented, not yet observed. Built in M9.4: bounds are inclusive, and at a master's location an alternate layer that applies replaces the master layer too, which makes the compiler build such an instance from the interpolated font. Agrees with fontmake on the corpus bracket sources except `manual_bracket_layer_and_component_has_one_too.glyphs`, where fontmake keeps the master layers at Black."
+guesses = [
+  "When several alternate sets contain the location, every one applies and the set with more bounds wins for a master both replace; settle with overlapping bracket ranges in the reference app.",
+]
 
 [[behavior]]
 id = "alternateLayer.variableExport"

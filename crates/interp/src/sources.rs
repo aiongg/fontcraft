@@ -138,10 +138,21 @@ impl GlyphSources {
 
     /// The sources that apply at `location`: the main sources with each alternate set that
     /// contains the location put in place of the master layers it replaces.
+    ///
+    /// Bounds are inclusive. When several sets contain the location, every one applies, the sets
+    /// with more bounds last, so the most specific set wins for a master both replace.
     pub fn at(&self, location: &Location) -> Vec<&Source> {
-        // M9.4
-        let _ = location;
-        self.main.iter().collect()
+        let mut out: Vec<&Source> = self.main.iter().collect();
+        let mut sets: Vec<&AlternateSet> = self.alternates.iter().filter(|a| a.ranges.contains(location)).collect();
+        sets.sort_by_key(|a| a.ranges.axes.iter().map(|r| usize::from(r.min.is_some()) + usize::from(r.max.is_some())).sum::<usize>());
+        for set in sets {
+            for slot in out.iter_mut().filter(|s| s.is_master) {
+                if let Some(alt) = set.sources.iter().find(|a| a.is_master && a.master == slot.master) {
+                    *slot = alt;
+                }
+            }
+        }
+        out
     }
 
     /// Whether the glyph has intermediate layers (a source that is not at a master's location).

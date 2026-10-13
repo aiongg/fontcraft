@@ -32,8 +32,8 @@ pub struct Plan {
 pub fn plan(font: &Font, target: &Target, flavour: Flavour, options: &Options) -> Result<Plan, CompileError> {
     font.check()?;
     let mut notes = Vec::new();
-    let prepared = crate::prepare_source(font, &mut notes);
-    let mut plan = plan_stages(Some(font), crate::drawing::resolve(&prepared, target)?, flavour, options)?;
+    let (source, prepared) = crate::sources_at(font, target, &mut notes)?;
+    let mut plan = plan_stages(Some(&source), crate::drawing::resolve(&prepared, target)?, flavour, options)?;
     notes.append(&mut plan.warnings);
     plan.warnings = notes;
     Ok(plan)

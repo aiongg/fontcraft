@@ -6,7 +6,7 @@
 //! | Stage | Where | What it does |
 //! |---|---|---|
 //! | Source preparation | [`prepare_source`] | corner components fitted into their paths, then smart components drawn as outlines, as both reference compilers do when they load a source |
-//! | Resolve | [`drawing::resolve`] | one master, or an instance at a master, as the compiler reads it: glyphs, contours, components, metrics, names; strokes expanded and masks applied |
+//! | Resolve | [`drawing::resolve`] | one master, or an instance at a master (an instance elsewhere first becomes a one-master font, [`sources_at`]), as the compiler reads it: glyphs, contours, components, metrics, names; strokes expanded and masks applied |
 //! | Preflight | [`preflight`] | component cycles refused, missing components dropped, non-exported glyphs inlined and removed, code point conflicts refused |
 //! | Glyph data | [`fill_glyph_data`] | production names and categories a glyph does not store, from the glyph database; non-spacing marks get no advance |
 //! | Export parameters | [`export_params`] | Export, Keep, Remove, Rename and Reencode Glyphs and the Arabic presentation forms change the resolved glyphs; the renames and removals go to the kerning writers |
@@ -281,13 +281,13 @@ pub struct Compiled {
     pub warnings: Vec<String>,
 }
 
-/// Compiles `font` at `target` (a master, or an instance at a master) to a static font.
+/// Compiles `font` at `target` (a master, or a static instance anywhere) to a static font.
 pub fn compile(font: &Font, target: &Target, flavour: Flavour, options: &Options) -> Result<Compiled, CompileError> {
     font.check()?;
     let mut notes = Vec::new();
-    let prepared = prepare_source(font, &mut notes);
+    let (source, prepared) = sources_at(font, target, &mut notes)?;
     let resolved = drawing::resolve(&prepared, target)?;
-    let mut compiled = compile_resolved_from(font, resolved, flavour, options)?;
+    let mut compiled = compile_resolved_from(&source, resolved, flavour, options)?;
     notes.append(&mut compiled.warnings);
     compiled.warnings = notes;
     Ok(compiled)
@@ -315,6 +315,57 @@ pub fn prepare_source<'a>(font: &'a Font, warnings: &mut Vec<String>) -> Cow<'a,
         out = Cow::Owned(drawn);
     }
     out
+}
+
+/// `font` as stored and as prepared ([`prepare_source`]) for a compile at `target`: for a static
+/// instance between or beyond the masters, or at a master where an alternate layer applies, both
+/// are the font [`fontcraft_interp::instance::instance_font`] makes at the instance, which
+/// resolves at `target` like any instance at a master. The prepared font is interpolated after
+/// corners and smart components are drawn into every master.
+pub fn sources_at<'a>(font: &'a Font, target: &Target, warnings: &mut Vec<String>) -> Result<(Cow<'a, Font>, Cow<'a, Font>), CompileError> {
+    let prepared = prepare_source(font, warnings);
+    let Some(index) = needs_instance_font(font, target) else { return Ok((Cow::Borrowed(font), prepared)) };
+    let source = instance_source(font, index, warnings)?;
+    let prepared = match prepared {
+        Cow::Borrowed(_) => source.clone(),
+        Cow::Owned(p) => instance_source(&p, index, &mut Vec::new())?,
+    };
+    Ok((Cow::Owned(source), Cow::Owned(prepared)))
+}
+
+/// The static instance `target` names when the compile must interpolate it: it lies away from
+/// every master, or at a master where some glyph's alternate layer applies.
+pub fn needs_instance_font(font: &Font, target: &Target) -> Option<usize> {
+    let Target::Instance(index) = *target else { return None };
+    let inst = font.instances.get(index).filter(|i| i.kind.is_none())?;
+    if font.master_at(&inst.location).is_none() {
+        return Some(index);
+    }
+    let has_alternates =
+        font.glyphs.iter().any(|g| g.layers.iter().any(|l| l.info.attrs.axis_rules.iter().any(|r| r.min.is_some() || r.max.is_some())));
+    if !has_alternates {
+        return None;
+    }
+    let designspace = fontcraft_interp::Designspace::new(font).ok()?;
+    let location = designspace.instance_location(font, index).ok()?;
+    font.glyphs
+        .iter()
+        .any(|g| {
+            g.layers.iter().any(|l| {
+                !l.info.attrs.axis_rules.is_empty()
+                    && fontcraft_interp::RangeSet::from_rules(&designspace, &l.info.attrs.axis_rules)
+                        .is_ok_and(|r| r.axes.iter().any(|a| a.min.is_some() || a.max.is_some()) && r.contains(&location))
+            })
+        })
+        .then_some(index)
+}
+
+/// The instance font of the static instance at `index`, its notes added to `warnings`.
+fn instance_source(font: &Font, index: usize, warnings: &mut Vec<String>) -> Result<Font, CompileError> {
+    let options = fontcraft_interp::instance::options_for(font, index)?;
+    let (out, notes) = fontcraft_interp::instance::instance_font_with_notes(font, index, &options)?;
+    warnings.extend(notes);
+    Ok(out)
 }
 
 /// Compiles the first master of `font` to a static TrueType font.

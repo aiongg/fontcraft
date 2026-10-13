@@ -186,8 +186,8 @@ fn oracle(args: &[String]) -> Outcome {
 mod varrun {
     use crate::io::{Failure, Outcome, out};
     use fontcraft_engine::compile::{self, CompileError};
-    use fontcraft_engine::interp::{self, Designspace, InterpError};
-    use fontcraft_engine::model::{Font, ModelError, Target};
+    use fontcraft_engine::interp::{Designspace, InterpError};
+    use fontcraft_engine::model::{Font, Target};
     use fontcraft_oracle::variable::{self, InstanceJob, Space};
     use fontcraft_oracle::{Hint, Ours, OursError, Settings, SourceReport};
     use serde_json::json;
@@ -258,19 +258,7 @@ mod varrun {
             let ours = |c: compile::Compiled| Ours { bytes: c.bytes, warnings: c.warnings, hint: hint.clone() };
             match compile::compile(font, &Target::Instance(index), tt, &options) {
                 Ok(c) => Ok(ours(c)),
-                // Between masters or outside them: the interpolated instance font.
-                Err(CompileError::Model(ModelError::BetweenMasters(_))) => {
-                    let interpolated = interp::instance::options_for(font, index).and_then(|o| interp::instance::instance_font(font, index, &o));
-                    match interpolated {
-                        Ok(f) => {
-                            let master =
-                                f.masters.first().map(|m| m.id.clone()).ok_or_else(|| OursError::Failed("the instance font has no master".into()))?;
-                            compile::compile(&f, &Target::Master(master), tt, &options).map(ours).map_err(|e| OursError::Failed(e.to_string()))
-                        }
-                        Err(InterpError::NotYetImplemented(what)) => Err(unsupported(what, hint.clone())),
-                        Err(e) => Err(OursError::Failed(e.to_string())),
-                    }
-                }
+                Err(CompileError::Interp(InterpError::NotYetImplemented(what))) => Err(unsupported(what, hint.clone())),
                 Err(CompileError::NotYetImplemented(what)) => Err(unsupported(what, hint.clone())),
                 Err(e) => Err(OursError::Failed(e.to_string())),
             }

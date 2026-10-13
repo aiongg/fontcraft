@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1107 rows to check: 1539 guesses and 410 observe steps.**
+**1112 rows to check: 1545 guesses and 410 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,7 +48,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 39 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 3 |
-| **Later milestones (after M6)** | all | **638** |
+| **Later milestones (after M6)** | all | **643** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 39 |
 | Later milestones (after M6) | Edit View: text mode and preview | 14 |
 | Later milestones (after M6) | Components and anchors | 33 |
@@ -57,10 +57,10 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Kerning and the Kerning window | 4 |
 | Later milestones (after M6) | Font View | 13 |
 | Later milestones (after M6) | Font Info and features | 247 |
-| Later milestones (after M6) | Interpolation | 41 |
+| Later milestones (after M6) | Interpolation | 44 |
 | Later milestones (after M6) | Hinting | 67 |
 | Later milestones (after M6) | Colour fonts | 44 |
-| Later milestones (after M6) | Files: open, import, export | 40 |
+| Later milestones (after M6) | Files: open, import, export | 42 |
 | Later milestones (after M6) | Settings and the window | 12 |
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 61 |
 | Later milestones (after M6) | Elsewhere | 15 |
@@ -1332,7 +1332,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (638)
+## Later milestones (after M6) (643)
 
 ### Edit View: drawing, guides, layers and the Palette (39)
 
@@ -2361,6 +2361,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: In F1 (Latin features), add a glyph with `.sc` after the last Update and export without pressing Update, then export again with Update Features off: read GSUB each time and note whether export regenerated smcp.
 - [ ] `fontInfo.customParameters.masterInterpolation` (behavior, M9, handbook): A custom parameter present on every master is interpolated for instances that…
   - Guess: A parameter interpolates when its value is a number, or a list of numbers of the same length, on every master; other values are taken from the origin master. Settle with a parameter that is text on one master in the reference app.
+  - Guess: A parameter that is a whole number on every weighted master stays whole, rounded half up as fontmake rounds font info; the origin master's parameters are the ones the instance has, so one missing from the origin is left out. Settle with a parameter set only on the second master in the reference app.
   - Observe: In F1 (two masters), set a custom parameter to a number on Thin and to text on Black, export Regular and read the value written: note whether it was interpolated, taken from one master, or dropped.
 - [ ] `fontInfo.instance.extrapolation` (behavior, M9, handbook): An instance whose coordinates lie inside the range covered by masters is…
   - Observe: In F1 (two masters), export ExtraBlack (1000, outside the masters) as a static font and as part of a variable font: note whether the outlines are extrapolated, any warning, and whether `fvar` lists it.
@@ -2399,7 +2400,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `Feature for Feature Variations` (parameter, M9, handbook): Feature tag into which the conditional glyph substitutions generated from alternate (bracket)…
   - Guess: A value that is not a feature tag puts the substitutions in `rvrn` with a warning, as fontc does; exporting with such a value from the reference app would settle it.
 - [ ] `InterpolationWeightY` (parameter, M9, handbook): Float used to interpolate y coordinates of an instance while x coordinates…
-  - Guess: Read only for fonts whose first axis is the weight axis, and applied to y coordinates of outlines, anchors and vertical metrics; settle with an instance that sets it in the reference app.
+  - Guess: Applied to the axis tagged wght (ignored without one) and to y coordinates of outlines, component offsets, anchors, vertical metrics, horizontal stems and alignment zones; settle with an instance that sets it in the reference app.
   - Observe: In F1 (two masters), put InterpolationWeightY 600 on Regular, export and measure the horizontal strokes: note whether they are drawn as at 600.
 - [ ] `Italic Style Linking` (parameter, M9, handbook): Controls whether a variable font's STAT table gets a format 3 axis…
   - Guess: On links the value at 0 on the ital axis (the font's own or the table-only one) to 1 when it has no link; off removes every link on that axis; read from the variable font setting, else from the font. Exporting an upright and an italic family with the parameter on and off and reading STAT settles it.
@@ -2458,8 +2459,12 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `proof-pdf` (format, M14, inferred): PDF proof sheet
   - Open (our design, not confirmed): Vector PDF of an Edit View text, a glyph overview or a waterfall, drawn straight from the source outlines of the current master or instance so no font has to be installed. Scale follows the font's units-per-point setting; nodes, guides and annotations are included only when asked for.
 
-### Interpolation (41)
+### Interpolation (44)
 
+- [ ] `instance.manualInterpolation` (parameter, M9, docs): Whether the instance uses hand-entered master factors instead of factors computed from…
+  - Guess: With manual interpolation on, the instance is the stored factors applied to the master layers; intermediate layers get no weight, alternate layers still switch by the instance's location, and the factors also weight metrics, kerning and parameters; settle with an instance using manual factors and a brace glyph in the reference app.
+- [ ] `instance.instanceInterpolations` (parameter, M9, docs): Interpolation factors per master id, each either one number or an x/y…
+  - Guess: The model keeps one number per master; an x/y pair keeps its first number, so horizontal and vertical factors are the same; settle with an instance whose factors are pairs in the reference app.
 - [ ] `axes.tagRules` (behavior, M9, handbook): Axis tags are four characters
   - Guess: A tag of fewer than four printable ASCII characters is padded with spaces and a longer one exports its first four; settle by typing a three- and a five-character tag in the reference app's axis dialog and exporting.
 - [ ] `axes.unusedAxesDropped` (behavior, M9, handbook): When masters are disabled for a variable-font export, any axis on which…
@@ -2493,6 +2498,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Both bounds inclusive, as the oracles; the handbook does not say. Settle with an instance exactly on a bound in the reference app (docs/plans/M9.md § 8).
   - Guess: A range whose minimum is above its maximum is refused with a message naming the axis, rather than swapped or treated as empty; settle by typing a reversed range into the reference app's layer dialog and exporting.
   - Observe: In F2 (special layers), export instances at exactly 600 and at 599 and preview them: note which shows the alternate `dollar`.
+- [ ] `alternateLayer.staticExport` (behavior, M9, handbook): For a static instance, each glyph with alternate layers is interpolated from…
+  - Guess: When several alternate sets contain the location, every one applies and the set with more bounds wins for a master both replace; settle with overlapping bracket ranges in the reference app.
 - [ ] `alternateLayer.variableExport` (behavior, M9, handbook): In a variable font, alternate layers are switched on by an OpenType…
   - Observe: In F2 (special layers), export the variable font with no Feature for Feature Variations parameter and read GSUB: note the feature that holds the `dollar` swap (rvrn or rlig).
 - [ ] `variable.originMaster` (behavior, M9, handbook): A variable font stores the outlines of one origin master in full…
@@ -2901,7 +2908,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The chooser and the Edit View preview always use palette 0. Settled by opening the chooser in a font with two palettes in the reference.
   - Observe: Palette font (two palettes): click the swatch of a palette layer in the Layers palette; note which palette's colours the chooser lists.
 
-### Files: open, import, export (40)
+### Files: open, import, export (42)
 
 - [ ] `export.instanceExportFolder` (behavior, M7, handbook): An instance carrying the Export Folder custom parameter is written to that…
   - Guess: The sub-path is used as written, `..` segments included, as the handbook says; an absolute path, an empty segment, a folder name with a character such as `:` or `\`, or a path of more than 32 segments makes export skip that instance with the reason, one trailing `/` is ignored, and the warnings name every file written outside the export destination; an Export Folder of `../x` and one of `/tmp/x` in the reference app settle it.
@@ -2959,6 +2966,10 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A master takes the name of the named instance at its location, else its axis names and design coordinates; an intermediate layer is named by its coordinates in braces.
 - [ ] `cff2.open` (format, M9, inferred): Variable OpenType, CFF2 outlines (opened for editing)
   - Guess: Every region of the CFF2 variation store becomes a master, since the charstrings do not say which glyphs use which region without evaluating them. Settled by opening CFF2 fonts built from sources with intermediate layers and comparing.
+- [ ] `compile.instanceInterpolation` (behavior, M9, docs): Static instances are produced by interpolating masters at the instance location before…
+  - Guess: Copied from fontmake's instancer: a glyph with no layer in the origin master is left out of the instance; a glyph whose layer is empty in some masters but drawn at the origin interpolates without the empty ones; outlines are not rounded before the compile; a glyph that does not export and cannot interpolate keeps its nearest layer instead of failing the instance. Settle each with an instance export from the reference app.
+- [ ] `compile.kernGroupReconciliation` (behavior, M9, docs): When masters group glyphs differently for kerning, output classes are the common…
+  - Guess: A static instance interpolates kerning as fontmake's instancer does (fontMath): a pair one master lacks takes the value that master's groups give it (the pair, the second side's group, the first side's group, both groups, else zero); a master read from its own UFO uses that file's groups; a pair that comes out zero is dropped unless one side is a glyph in a group; values are rounded half up. The common refinement of the groups is for variable fonts (M9.9); settle by comparing an instance of a source whose masters group glyphs differently with fontmake.
 - [ ] `compile.bracketLayerGlyphs` (behavior, M9, docs): Each alternate (bracket) layer set becomes an extra glyph named after its…
   - Guess: When the font already has a glyph named like an alternate glyph (`a.BRACKET.varAlt01`), the alternate takes the next free number instead of replacing or clashing with it; settle by exporting such a font from the reference app and reading the glyph order.
 - [ ] `color.export.fullColorToColrV1` (behavior, M11, docs): Full-colour layers are compiled to COLR version 1 when any of them…

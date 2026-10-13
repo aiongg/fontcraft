@@ -29,6 +29,16 @@ pub const MAX_OVERLAY_WORK: usize = 10_000_000;
 pub const MAX_MAPPING_POINTS: usize = fontcraft_model::axes::MAX_MAPPING_POINTS;
 /// Largest absolute coordinate, internal or external, accepted anywhere.
 pub const MAX_COORDINATE: f64 = fontcraft_model::MAX_COORDINATE;
+/// Most variation models one [`crate::ModelCache`] keeps; past it the cache starts again.
+pub const MAX_CACHED_MODELS: usize = 4_096;
+/// Most numbers (coordinates, transform values, anchors, the width) one interpolated layer may
+/// have.
+pub const MAX_LAYER_NUMBERS: usize = fontcraft_model::MAX_OUTLINE_ELEMENTS;
+/// Most glyphs an instance font interpolates.
+pub const MAX_GLYPHS: usize = fontcraft_model::MAX_GLYPHS;
+/// Most kerning pairs an instance font interpolates per direction.
+pub const MAX_KERN_PAIRS: usize = 1_000_000;
+
 /// Most documents one Generate Instances run may create.
 pub const MAX_GENERATED_INSTANCES: usize = 256;
 /// Compatible layers whose corresponding handles turn by more than this many degrees get an

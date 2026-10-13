@@ -43,9 +43,14 @@ Input: the source model plus export options. Output: a list of errors and warnin
 
 ### 1.2 Instance or master preparation
 
-- Static instance: interpolate masters at the instance location first; no extrapolation unless the
-  user asks for it (`compile.instanceInterpolation`). Layout values for instances come from the
-  variable layout data, not from re-running generators (`compile.instanceLayoutInterpolation`).
+- Static instance: interpolate masters at the instance location first
+  (`compile.instanceInterpolation`, `fontcraft_interp::instance::instance_font`): the result is a
+  font with one master at the instance, which resolves like an instance at a master. An instance
+  at a master goes the same way when an alternate layer applies there. An instance beyond the
+  masters is extrapolated and named in the export report (§ 4a). Kerning interpolates as
+  fontmake's instancer does (`compile.kernGroupReconciliation`); outlines are not rounded before
+  the compile, as fontmake leaves them by default. Layout values written in feature code are not
+  interpolated (`compile.instanceLayoutInterpolation`).
 - Variable font: keep all masters; single-point axes are removed from the variation model
   (`compile.variableOnlyTables`).
 - Apply instance glyph filters here (`compile.subsetOnExport`).

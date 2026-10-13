@@ -830,6 +830,7 @@ status = "handbook"
 # ───────────────────────────── Masters tab ─────────────────────────────
 guesses = [
   "A parameter interpolates when its value is a number, or a list of numbers of the same length, on every master; other values are taken from the origin master. Settle with a parameter that is text on one master in the reference app.",
+  "A parameter that is a whole number on every weighted master stays whole, rounded half up as fontmake rounds font info; the origin master's parameters are the ones the instance has, so one missing from the origin is left out. Settle with a parameter set only on the second master in the reference app.",
 ]
 observe = [
   "In F1 (two masters), set a custom parameter to a number on Thin and to text on Black, export Regular and read the value written: note whether it was interpolated, taken from one master, or dropped.",
@@ -1978,6 +1979,9 @@ milestone = "M9"
 summary = "Whether the instance uses hand-entered master factors instead of factors computed from its axis coordinates. Not described in this handbook chapter; taken from the file-format documentation. Glyphs source key: instances[].manualInterpolation."
 ref = "GlyphsSDK GlyphsFileFormatv3.md"
 status = "docs"
+guesses = [
+  "With manual interpolation on, the instance is the stored factors applied to the master layers; intermediate layers get no weight, alternate layers still switch by the instance's location, and the factors also weight metrics, kerning and parameters; settle with an instance using manual factors and a brace glyph in the reference app.",
+]
 
 [[parameter]]
 name = "instance.instanceInterpolations"
@@ -1988,6 +1992,9 @@ milestone = "M9"
 summary = "Interpolation factors per master id, each either one number or an x/y pair, used when manual interpolation is on. Not described in this handbook chapter; taken from the file-format documentation. Glyphs source key: instances[].instanceInterpolations."
 ref = "GlyphsSDK GlyphsFileFormatv3.md"
 status = "docs"
+guesses = [
+  "The model keeps one number per master; an x/y pair keeps its first number, so horizontal and vertical factors are the same; settle with an instance whose factors are pairs in the reference app.",
+]
 
 [[behavior]]
 id = "fontInfo.exports.selection"

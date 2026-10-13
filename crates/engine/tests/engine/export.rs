@@ -225,7 +225,7 @@ fn truetype_woff2_export_decodes_to_the_plain_font() {
 }
 
 #[test]
-fn export_all_builds_instances_at_masters_and_reports_the_rest() {
+fn export_all_builds_every_instance() {
     let dir = temp("all");
     let mut s = two_masters(&dir, TWO_MASTERS);
     run(&mut s, "file.new", json!({"familyName": "Second"}));
@@ -242,23 +242,24 @@ fn export_all_builds_instances_at_masters_and_reports_the_rest() {
             "otf/Second-Regular.woff",
             "otf/TestSans-Heavy.otf",
             "otf/TestSans-Heavy.woff",
+            "otf/TestSans-Medium.otf",
+            "otf/TestSans-Medium.woff",
             "otf/TestSans-Regular.otf",
             "otf/TestSans-Regular.woff",
             "ttf/Second-Regular.ttf",
             "ttf/Second-Regular.woff",
             "ttf/TestSans-Heavy.ttf",
             "ttf/TestSans-Heavy.woff",
+            "ttf/TestSans-Medium.ttf",
+            "ttf/TestSans-Medium.woff",
             "ttf/TestSans-Regular.ttf",
             "ttf/TestSans-Regular.woff",
         ]
     );
-    assert_eq!(out["written"], 12);
+    assert_eq!(out["written"], 16);
     let test_sans = &out["documents"][0];
     assert_eq!(test_sans["title"], "TestSans");
-    let skipped = test_sans["skipped"].as_array().unwrap();
-    assert_eq!(skipped.len(), 1, "{skipped:?}");
-    assert_eq!(skipped[0]["instance"], "Medium");
-    assert!(skipped[0]["reason"].as_str().unwrap().contains("between masters"));
+    assert!(test_sans["skipped"].as_array().is_none_or(|s| s.is_empty()), "the instance between masters is interpolated: {}", test_sans["skipped"]);
     assert_eq!(out["documents"][1]["fonts"][0]["source"], "default", "a font without instances exports its first master");
     assert!(!out["warnings"].as_array().unwrap().iter().any(|w| w.as_str().unwrap().contains("overlap")), "overlaps are removed");
 
@@ -283,9 +284,9 @@ fn compile_plan_describes_what_compile_builds_without_writing() {
 
     let outputs = plan["outputs"].as_array().unwrap();
     let fonts = built["fonts"].as_array().unwrap();
-    // Regular and Bold instances, then the two masters, each in two formats.
-    assert_eq!(outputs.len(), 8);
-    assert_eq!(fonts.len(), 8);
+    // Regular, Medium and Bold instances, then the two masters, each in two formats.
+    assert_eq!(outputs.len(), 10);
+    assert_eq!(fonts.len(), 10);
     for (planned, font) in outputs.iter().zip(fonts) {
         assert_eq!((&planned["instance"], &planned["format"]), (&font["instance"], &font["format"]));
         assert_eq!(planned["glyphs"], font["glyphs"]);
@@ -297,9 +298,10 @@ fn compile_plan_describes_what_compile_builds_without_writing() {
     assert_eq!(outputs[0]["postscriptName"], "TestSans-Regular");
     assert_eq!(outputs[0]["removeOverlap"], true);
     assert_eq!(plan["glyphOrder"], json!([".notdef", "A"]));
-    assert_eq!(plan["skipped"][0]["instance"], "Medium");
+    assert!(plan["skipped"].as_array().is_none_or(|s| s.is_empty()), "{}", plan["skipped"]);
     let instances = plan["instances"].as_array().unwrap();
-    assert_eq!(instances.iter().map(|i| i["master"].as_str().unwrap()).collect::<Vec<_>>(), ["m01", "m02", "m01", "m02"]);
+    // Medium is built from the font interpolated at it, whose one master keeps the origin's id.
+    assert_eq!(instances.iter().map(|i| i["master"].as_str().unwrap()).collect::<Vec<_>>(), ["m01", "m01", "m02", "m01", "m02"]);
 
     // In memory, font.compile only describes what it built.
     let summary = run(&mut s, "font.compile", json!({"instances": ["Bold"], "formats": ["otf"]}));
@@ -393,7 +395,7 @@ fn file_names_that_differ_only_in_case_collide() {
     let mut s = two_masters(&dir, &text);
     let out_dir = dir.join("out");
     let out = run(&mut s, "file.exportStatic", json!({"destination": out_dir, "timestamp": 0}));
-    assert_eq!(names(&out_dir), ["TestSans-Heavy.ttf"]);
+    assert_eq!(names(&out_dir), ["TestSans-Heavy.ttf", "TestSans-Medium.ttf"]);
     assert!(out["warnings"].as_array().unwrap().iter().any(|w| w.as_str().unwrap().contains("two fonts are written")), "{out}");
     std::fs::remove_dir_all(&dir).unwrap();
 }
@@ -409,7 +411,7 @@ fn a_font_without_a_family_name_is_named_by_its_source_file() {
     run(&mut s, "file.open", json!({ "path": path }));
     let out_dir = dir.join("out");
     run(&mut s, "file.exportStatic", json!({"destination": out_dir, "timestamp": 0}));
-    assert_eq!(names(&out_dir), ["DraftSans-Regular.ttf", "TestSans-Heavy.ttf"]);
+    assert_eq!(names(&out_dir), ["DraftSans-Medium.ttf", "DraftSans-Regular.ttf", "TestSans-Heavy.ttf"]);
     let plan = run(&mut s, "font.compilePlan", json!({"destination": out_dir, "sections": ["outputs"]}));
     assert!(plan.to_string().contains("DraftSans-Regular.ttf"), "{plan}");
     // Only the file name: the name table keeps the source's empty family name.
