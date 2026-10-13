@@ -6,7 +6,7 @@ _Updated: 2026-10-13, the first waves of M6 to M12, seven second-wave packages, 
 
 ## State of the tree
 
-- `cargo xtask ci` passes all eleven steps (2,861 tests pass, none fail, 34 ignored).
+- `cargo xtask ci` passes all eleven steps (2,865 tests pass, none fail, 34 ignored).
   Built and run on Linux x86-64 with Rust 1.97.
 - `master` holds everything described here, merged and green; the latest commits are not pushed.
   It has the first waves of M6 to M12, the second-wave packages M6.14, M7.14, M7.15 to M7.18
@@ -728,7 +728,7 @@ Append one terse entry per session: what landed, numbers, what is still open.
   location is interpolated when it sets manual weights, InterpolationWeightY or Local
   Interpolation. Variable fonts against fontc: 100 equal, 37 different, 21 failed; against
   fontmake 103, 38, 17 (before: all 158 not built). Instances against `fontmake -i`: 169, 41, 0,
-  24 (before: 111, 25, 83, 15). Static comparison summaries and round trips unchanged. 2,861
+  24 (before: 111, 25, 83, 15). Static comparison summaries and round trips unchanged. 2,865
   tests pass, none fail, 34 ignored; 661 of 960 commands live; 1,695 guesses on 1,097 rows; 1,115
   observe rows. Packages built: 129 of 277. Open: the builder packages M10.3, M10.14, M10.19,
   M11.5, M12.44, M12.17, M13.2, M9.11, M9.12, M9.13; the follow-ups designspace instance info
