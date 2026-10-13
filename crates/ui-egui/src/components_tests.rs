@@ -358,3 +358,90 @@ fn composite_text_frame_speed() {
     let after_edit = started.elapsed();
     println!("text mode, 200 composites: steady frame {steady:?}, frame after a base-glyph edit {after_edit:?}");
 }
+
+/// `_part.bar`: a master layer with a 200 × 100 rectangle and a `Wide` layer with a 600 × 100
+/// one, a Width property from 200 to 600 with those layers at its ends, and an anchor `Width` on
+/// the right edge of each. `bars` holds one component of it, selected, edited at actual size.
+fn smart_app() -> FontcraftApp {
+    let mut app = FontcraftApp::default();
+    app.session
+        .edit("setup", |font| {
+            let m = font.masters[0].id.clone();
+            let mut part = Glyph::new("_part.bar");
+            for (id, name, width) in [(m.as_str(), None, 200.0), ("wide", Some("Wide"), 600.0)] {
+                let mut l = Layer::new(m.clone(), 600.0);
+                l.id = id.into();
+                l.info.name = name.map(String::from);
+                l.shapes.push(fontcraft_model::Shape::Path(Path::rect(0.0, 0.0, width, 100.0)));
+                l.anchors.push(fontcraft_model::Anchor::new("Width", width, 50.0));
+                part.layers.push(l);
+            }
+            font.glyphs.push(part);
+            let mut s = Glyph::new("bars");
+            let mut l = Layer::new(m, 800.0);
+            l.shapes.push(fontcraft_model::Shape::Component(Component::new("_part.bar", 0.0, 0.0)));
+            s.layers.push(l);
+            font.glyphs.push(s);
+            Ok(())
+        })
+        .unwrap();
+    app.run("smartGlyph.addProperty", &json!({"glyph": "_part.bar", "name": "Width", "min": 200, "max": 600})).unwrap();
+    let master = app.session.font().unwrap().masters[0].id.clone();
+    app.run("smartGlyph.setLayerPole", &json!({"glyph": "_part.bar", "layer": master, "property": "Width", "pole": "min"})).unwrap();
+    app.run("smartGlyph.setLayerPole", &json!({"glyph": "_part.bar", "layer": "Wide", "property": "Width", "pole": "max"})).unwrap();
+    app.run("view.editSelectedGlyphs", &json!({"glyphs": ["bars"]})).unwrap();
+    app.run("view.setZoom", &json!({"size": 1000, "center": [300, 50]})).unwrap();
+    app.run("selection.set", &json!({"shapes": [0]})).unwrap();
+    app
+}
+
+#[test]
+fn a_smart_handle_drag_sets_the_property_like_the_command() {
+    let mut app = smart_app();
+    let t = Tokens::dark();
+    let w = Window::new();
+    let shapes = w.frame(&mut app, Vec::new());
+    let handle = screen(&app, 200.0, 50.0);
+    let drawn = shapes.iter().any(|s| matches!(s, Shape::Circle(c) if c.fill == t.smart_handle && c.center.distance(handle) < 1.0));
+    assert!(drawn, "the Width anchor is a grey handle on the selected component");
+    let steps = app.session.inspect()["documents"][0]["undo"].as_array().map_or(0, Vec::len);
+    pointer(
+        &mut app,
+        json!([{"kind": "down", "x": 200, "y": 50}, {"kind": "drag", "x": 350, "y": 60}, {"kind": "drag", "x": 500, "y": 70}, {"kind": "up", "x": 500, "y": 70}]),
+    );
+    assert_eq!(app.session.inspect()["documents"][0]["undo"].as_array().map_or(0, Vec::len), steps + 1, "one undo step");
+    let mut headless = smart_app();
+    headless.run("smartComponent.setValue", &json!({"glyph": "bars", "component": 0, "property": "Width", "value": 500})).unwrap();
+    assert_eq!(layer(&app, "bars"), layer(&headless, "bars"), "{}", app.state.status);
+    // Without the anchor on the poles a property has no handle.
+    app.run("selection.set", &json!({})).unwrap();
+    let shapes = w.frame(&mut app, Vec::new());
+    assert_eq!(painted(&shapes, t.smart_handle), 0, "only selected components show handles");
+}
+
+#[test]
+fn bounding_box_knobs_set_width_on_a_smart_component() {
+    let mut app = smart_app();
+    app.run("view.showBoundingBox", &json!({"on": true})).unwrap();
+    let w = Window::new();
+    w.frame(&mut app, Vec::new());
+    let knob = |app: &FontcraftApp| {
+        let view = tools_glue::current_view(app).unwrap();
+        let font = app.session.font().unwrap();
+        let tab = app.state.tab().unwrap();
+        let scene = tools_glue::scene(font, tab).unwrap();
+        let rect = fontcraft_tools::bbox::shown_box(&scene, &tab.selection).unwrap();
+        let (_, at) = fontcraft_tools::bbox::knob_points(rect, 1.0 / view.scale())[4];
+        (rect, at)
+    };
+    let (rect, at) = knob(&app);
+    assert_eq!(rect.width(), 200.0);
+    let to = Point::new(at.x + 200.0, at.y + 30.0);
+    pointer(
+        &mut app,
+        json!([{"kind": "down", "x": at.x, "y": at.y}, {"kind": "drag", "x": at.x + 100.0, "y": at.y}, {"kind": "drag", "x": to.x, "y": to.y}, {"kind": "up", "x": to.x, "y": to.y}]),
+    );
+    let mut headless = smart_app();
+    headless.run("smartComponent.setValue", &json!({"glyph": "bars", "component": 0, "property": "Width", "value": 400})).unwrap();
+    assert_eq!(layer(&app, "bars"), layer(&headless, "bars"), "{}", app.state.status);
+}

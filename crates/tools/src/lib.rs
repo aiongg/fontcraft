@@ -68,7 +68,7 @@ pub mod zoom;
 pub use event::{Key, KeyEvent, Modifiers, PointerEvent, PointerKind};
 pub use hit::{Hit, HitResult, hit_test};
 pub use output::{Action, Invocation, Output, Overlay, OverlayKind, ViewChange};
-pub use scene::{Scene, side_view};
+pub use scene::{Scene, SmartAxis, SmartHandle, SmartSize, side_view};
 pub use selection::{GuideRef, GuideScope, Item, SelectMode, Selection};
 pub use snap::{Moving, Snap, SnapKind, snap};
 pub use tool::{Context, TOOLS, Tool, ToolInfo, ToolSettings, make_tool};

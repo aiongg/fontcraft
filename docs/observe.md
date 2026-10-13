@@ -32,14 +32,14 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1106 rows to check: 1536 guesses and 408 observe steps.**
+**1107 rows to check: 1539 guesses and 410 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
-| **Built milestones (M0 to M6)** | all | **468** |
+| **Built milestones (M0 to M6)** | all | **469** |
 | Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 99 |
 | Built milestones (M0 to M6) | Edit View: text mode and preview | 32 |
-| Built milestones (M0 to M6) | Components and anchors | 69 |
+| Built milestones (M0 to M6) | Components and anchors | 70 |
 | Built milestones (M0 to M6) | Filters | 36 |
 | Built milestones (M0 to M6) | Spacing and metrics keys | 23 |
 | Built milestones (M0 to M6) | Kerning and the Kerning window | 42 |
@@ -65,7 +65,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 61 |
 | Later milestones (after M6) | Elsewhere | 15 |
 
-## Built milestones (M0 to M6) (468)
+## Built milestones (M0 to M6) (469)
 
 ### Edit View: drawing, guides, layers and the Palette (99)
 
@@ -394,7 +394,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Up and Down move to the nearest place on the line above or below, and to the start or the end of the text from the first or the last line; in right-to-left text Left steps forward in the text; in top-to-bottom text Up and Down step along the column and Left and Right move between columns. Moving the cursor in such texts in the reference app settles it.
   - Guess: Backspace and Delete with Alt or Cmd do nothing (no word or line deletion); no source names them.
 
-### Components and anchors (69)
+### Components and anchors (70)
 
 - [ ] `export.underscoreGlyphsOmitted` (behavior, M2, inferred): Non-exporting glyphs, which underscore-named part glyphs are by default, are left out…
   - Guess: Components that use non-exporting glyphs are decomposed at export; our inference from the non-export rule.
@@ -500,8 +500,14 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A mark looks for its anchor only on the nearest base before it and the marks attached since, never on an earlier base; a ligature whose second base lacks the mark's anchor, in the reference app, settles it.
 - [ ] `components.exitEntryAnchorsConnectBases` (behavior, M6, handbook): Base components can be chained with cursive-attachment anchors: when one component's glyph…
   - Guess: Only the #-prefixed anchors connect components; the plain exit and entry anchors serve cursive attachment alone; the composite's width is the connected bases' widths after the shift, ending at the last base's advance. The corpus alignment measure (M6 plan § 5) checks it where sources use it.
+- [ ] `smart.widthHeightFollowBoundingBox` (behavior, M6, handbook): With View › Show Bounding Box on, dragging a selected smart component's…
+  - Guess: A box drag sets the value whose extent matches the dragged box, read linearly between the extents at the property's two ends, unclamped and rounded like other box values; dragging a knob in the reference app settles it.
+  - Guess: With several objects selected, a smart component among them scales like any component; scaling a smart component together with a path in the reference app settles it.
+  - Guess: Rotating a smart component from outside its box rotates it, since the handbook rules out only resizing; trying it in the reference app settles it.
+  - Observe: Select a smart component with a Width property, drag the right knob of its bounding box and note the Width value and whether it stops at the range ends.
 - [ ] `smart.handlesFromPropertyAnchors` (behavior, M6, handbook): An anchor whose name equals a property name exactly (case included), present…
   - Guess: Dragging a handle sets the value whose interpolated anchor position is nearest the pointer, found by projecting the pointer on the line between the anchor's positions at the property's two poles, with no clamp; dragging a handle in the reference app settles it.
+  - Observe: Add an anchor named after a property to every layer of a smart glyph, select a component of it and drag the grey handle; note the value it sets beyond the range ends.
 - [ ] `corner.glyphNaming` (behavior, M6, handbook): A glyph is a corner glyph when its name starts with _corner
   - Guess: A layer with a corner that cannot be fitted (its path deleted, a zero-length segment next to it) is drawn in the editor without any of its corners, as the export leaves it; a hint whose path was deleted in the reference app shows what it draws.
   - Guess: Corners are fitted on the layer's stored shapes, whose indices the hints name, before its smart components are drawn; fontc draws smart components first and then reads the indices against the shapes that result, which differs only in a layer that has both. A layer with a smart component before a path with a corner, built in the reference app, settles it.

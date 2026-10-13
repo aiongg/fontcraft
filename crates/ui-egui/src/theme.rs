@@ -55,6 +55,8 @@ pub struct Tokens {
     pub anchor: Color32,
     /// The faint background of a corner component on its node.
     pub corner_highlight: Color32,
+    /// Smart handles on selected smart components.
+    pub smart_handle: Color32,
     /// Alignment zones, as bands along their metric lines.
     pub zone_fill: Color32,
     /// Names on the metric lines.
@@ -356,6 +358,7 @@ impl Tokens {
             component_node: Color32::from_rgb(0x9c, 0x9c, 0xa8),
             anchor: Color32::from_rgb(0xe8, 0x8a, 0x1a),
             corner_highlight: Color32::from_rgba_unmultiplied(0x50, 0x96, 0xf0, 0x40),
+            smart_handle: Color32::from_rgb(0x96, 0x96, 0x96),
             zone_fill: Color32::from_rgba_unmultiplied(0x9a, 0xb8, 0xdc, 0x38),
             metric_name: Color32::from_rgb(0x80, 0x88, 0x94),
             selection: Color32::from_rgb(0xf0, 0x8c, 0x1e),

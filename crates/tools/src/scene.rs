@@ -63,8 +63,76 @@ pub struct Scene<'a> {
     pub guides_shown: bool,
     /// The `.glyphs` format version whose conventions the stroke positions follow (3 unless the font came from a version 4 file).
     pub glyphs_version: u32,
+    /// The smart handles of the selected smart components, resolved by the caller.
+    pub smart_handles: Vec<SmartHandle>,
+    /// The selected smart components and their Width and Height properties, resolved by the
+    /// caller (`smart.widthHeightFollowBoundingBox`).
+    pub smart_sizes: Vec<SmartSize>,
     components: Vec<ComponentGeom>,
     component_points: usize,
+}
+
+/// A smart handle (`smart.handlesFromPropertyAnchors`): the anchor named after a property of a
+/// selected smart component, where it lies now and at the property's two ends, in the layer's
+/// coordinates.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SmartHandle {
+    /// The component's index among the layer's shapes.
+    pub shape: usize,
+    pub property: String,
+    pub at: Point,
+    pub at_min: Point,
+    pub at_max: Point,
+    pub min: f64,
+    pub max: f64,
+}
+
+/// A selected smart component: the bounding box knobs set its Width and Height properties
+/// instead of scaling it, and do nothing on an axis without such a property.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SmartSize {
+    /// The component's index among the layer's shapes.
+    pub shape: usize,
+    pub width: Option<SmartAxis>,
+    pub height: Option<SmartAxis>,
+}
+
+/// One size property of a smart component: its range and the component's extent at each end.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SmartAxis {
+    pub property: String,
+    pub min: f64,
+    pub max: f64,
+    pub size_at_min: f64,
+    pub size_at_max: f64,
+}
+
+impl SmartAxis {
+    /// The value at which the component's extent is `size`, read off the line through the two
+    /// ends, not clamped to the range.
+    pub fn value_for(&self, size: f64) -> Option<f64> {
+        let span = self.size_at_max - self.size_at_min;
+        if span.is_nan() || span.abs() <= 1e-9 {
+            return None;
+        }
+        let v = self.min + (size - self.size_at_min) / span * (self.max - self.min);
+        v.is_finite().then_some(v)
+    }
+}
+
+impl SmartHandle {
+    /// The value whose handle position is nearest `p`: `p` projected on the line from the
+    /// minimum's position to the maximum's, not clamped to the range. `None` when the two
+    /// positions coincide or the result is not finite.
+    pub fn value_at(&self, p: Point) -> Option<f64> {
+        let (d, q) = (self.at_max - self.at_min, p - self.at_min);
+        let len = d.hypot2();
+        if len.is_nan() || len <= 1e-12 {
+            return None;
+        }
+        let v = self.min + (q.dot(d) / len) * (self.max - self.min);
+        v.is_finite().then_some(v)
+    }
 }
 
 impl<'a> Scene<'a> {
@@ -84,6 +152,8 @@ impl<'a> Scene<'a> {
             guides_shown: true,
             glyphs_version: 3,
             components: Vec::new(),
+            smart_handles: Vec::new(),
+            smart_sizes: Vec::new(),
             component_points: 0,
         }
     }

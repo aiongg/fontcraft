@@ -12,6 +12,7 @@
 //! | drag from just outside the box | `transform.rotateCounterclockwise` about the knob opposite the grab position |
 //! | `Alt` while rotating | about the box centre |
 //! | click just outside the box | what a click on empty canvas does: clear the selection |
+//! | drag a knob of one selected smart component | `smartComponent.setValue` of its Width (horizontal) and Height (vertical) property; nothing on an axis without one |
 //!
 //! An object under the pointer in the band outside the box belongs to the Select tool.
 //!
@@ -294,6 +295,40 @@ pub fn grab_at(cx: &Context<'_>, pos: Point) -> Option<(Rect, Grab)> {
     Some((r, Grab::Outside(k)))
 }
 
+/// The smart component the selection is, when it is exactly one.
+fn smart_size<'s>(scene: &'s Scene, selection: &Selection) -> Option<&'s crate::scene::SmartSize> {
+    let items = selection.items();
+    let [crate::selection::Item::Shape(shape)] = items.as_slice() else { return None };
+    scene.smart_sizes.iter().find(|s| s.shape == *shape)
+}
+
+/// `smartComponent.setValue` for the box scaled by `factors`: the Width property for the
+/// horizontal extent and the Height property for the vertical one, on the axes the knob moves.
+/// Both at once go in one `command.batch`; `None` when the knob moves no axis with a property.
+fn smart_invocation(scene: &Scene, smart: &crate::scene::SmartSize, rect: Rect, (fx, fy): (f64, f64), (x, y): (bool, bool)) -> Option<Invocation> {
+    let step = |axis: &crate::scene::SmartAxis, size: f64| -> Option<Value> {
+        let value = round(axis.value_for(size)?);
+        Some(json!({"command": "smartComponent.setValue", "params": {
+            "glyph": scene.glyph, "layer": scene.layer.id, "component": smart.shape, "property": axis.property, "value": value,
+        }}))
+    };
+    let mut steps = Vec::new();
+    if x && let Some(axis) = &smart.width {
+        steps.extend(step(axis, rect.width() * fx));
+    }
+    if y && let Some(axis) = &smart.height {
+        steps.extend(step(axis, rect.height() * fy));
+    }
+    match steps.len() {
+        0 => None,
+        1 => {
+            let mut step = steps.pop()?;
+            Some(Invocation::new("smartComponent.setValue", step.get_mut("params")?.take()))
+        }
+        _ => Some(Invocation::new("command.batch", json!({"label": "Set Smart Values", "steps": steps}))),
+    }
+}
+
 /// A press or drag on the bounding box, handed over by the Select tool.
 #[derive(Clone, Debug)]
 pub struct BoxDrag {
@@ -326,7 +361,7 @@ impl BoxDrag {
         if mods.alt { center(self.rect) } else { knob.opposite().point_in(self.rect) }
     }
 
-    fn invocation(&self, cx: &Context<'_>, pos: Point, mods: Modifiers) -> Invocation {
+    fn invocation(&self, cx: &Context<'_>, pos: Point, mods: Modifiers) -> Option<Invocation> {
         let fixed = self.fixed(mods);
         match self.grab {
             Grab::Knob(k) => {
@@ -334,9 +369,12 @@ impl BoxDrag {
                 let to = Point::new(from.x + pos.x - self.down.x, from.y + pos.y - self.down.y);
                 let (sx, sy) = k.side();
                 let factors = scale_factors(fixed, from, to, (sx != 0, sy != 0), mods.shift, 0.0);
-                scale_invocation(cx.scene, &self.selection, factors, fixed)
+                match smart_size(cx.scene, &self.selection) {
+                    Some(smart) => smart_invocation(cx.scene, smart, self.rect, factors, (sx != 0, sy != 0)),
+                    None => Some(scale_invocation(cx.scene, &self.selection, factors, fixed)),
+                }
             }
-            Grab::Outside(_) => rotate_invocation(cx.scene, &self.selection, rotation_angle(fixed, self.down, pos), fixed),
+            Grab::Outside(_) => Some(rotate_invocation(cx.scene, &self.selection, rotation_angle(fixed, self.down, pos), fixed)),
         }
     }
 
@@ -346,7 +384,7 @@ impl BoxDrag {
             return None;
         }
         self.last_pos = pos;
-        let inv = self.invocation(cx, pos, mods);
+        let inv = self.invocation(cx, pos, mods)?;
         if self.last_sent.as_ref() == Some(&inv) {
             return None;
         }

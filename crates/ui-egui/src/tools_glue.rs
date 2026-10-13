@@ -151,6 +151,8 @@ pub fn scene<'a>(font: &'a Font, tab: &Tab) -> Option<Scene<'a>> {
     let layer = view::active_layer(font, tab)?;
     let mut scene = Scene::from_font_side(font, glyph, Some(&layer.id), tab.side())?;
     scene.focus = tab.focus.clone();
+    scene.smart_handles = crate::canvas::components::smart_handles(font, &scene.layer, &tab.selection);
+    scene.smart_sizes = crate::canvas::components::smart_sizes(font, &scene.layer, &tab.selection);
     Some(scene)
 }
 

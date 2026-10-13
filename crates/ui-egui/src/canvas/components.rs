@@ -9,6 +9,7 @@
 //! | empty base layer, missing base glyph, circular reference | a crossed box with a label, `component_placeholder` (`components.placeholder*`) |
 //! | nodes inside components while a tool drags | small rings, `component_node` (`components.nodesInsideComponentsSnap`) |
 //! | corner component | a faint disc on its node, `corner_highlight` (`corner.highlightAndSelection`) |
+//! | smart handle of a selected smart component | a grey dot, `smart_handle` (`smart.handlesFromPropertyAnchors`) |
 //!
 //! Outlines are resolved every frame from the font, so composites follow a base glyph while it is
 //! being edited (`components.liveUpdateFromBaseGlyph`).
@@ -18,9 +19,11 @@ use std::collections::HashSet;
 use egui::{Align2, FontId, Pos2, Shape, Stroke};
 use fontcraft_engine::components::align::{AlignMode, component_alignment};
 use fontcraft_engine::model::corner::{CornerTarget, corner_hint, is_corner};
-use fontcraft_engine::model::{Font, Layer, Shape as ModelShape};
+use fontcraft_engine::model::smart::component_anchors;
+use fontcraft_engine::model::{Font, Layer, Shape as ModelShape, SmartValue};
+use fontcraft_geom::Shape as _;
 use fontcraft_geom::{Affine, BezPath, Point};
-use fontcraft_tools::Selection;
+use fontcraft_tools::{Selection, SmartAxis, SmartHandle, SmartSize};
 
 use super::{Painting, flatten};
 
@@ -28,6 +31,12 @@ use super::{Painting, flatten};
 const MAX_REFERENCE_VISITS: usize = 4096;
 /// Most components drawn one by one; past this the layer's outline alone shows them.
 const MAX_DRAWN_COMPONENTS: usize = 2000;
+/// Most selected components whose smart handles are resolved; each costs three interpolations
+/// per property.
+const MAX_HANDLE_COMPONENTS: usize = 64;
+/// Two handle positions closer than this, in font units, count as one: the anchor does not move
+/// with the property.
+const SAME_POSITION: f64 = 1e-6;
 
 /// Why a component cannot be drawn from its base glyph.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -130,6 +139,69 @@ pub fn draw(c: &Painting, font: &Font, glyph: &str, layer: &Layer, selection: &S
         }
     }
     corners(c, layer);
+    for h in smart_handles(font, layer, selection) {
+        let at = pos(c.view.to_screen(h.at));
+        if at.x.is_finite() && at.y.is_finite() {
+            c.painter.add(Shape::circle_filled(at, t.anchor_size / 2.0, t.smart_handle));
+        }
+    }
+}
+
+/// The selected smart components of `layer` with their `Width` and `Height` properties (the
+/// names matched exactly) and the component's extent at each end of them.
+pub fn smart_sizes(font: &Font, layer: &Layer, selection: &Selection) -> Vec<SmartSize> {
+    let mut out = Vec::new();
+    for &shape in selection.shapes.iter().take(MAX_HANDLE_COMPONENTS) {
+        let Some(ModelShape::Component(c)) = layer.shapes.get(shape) else { continue };
+        let Some(base) = font.glyph(&c.glyph) else { continue };
+        if base.info.parts.is_empty() {
+            continue;
+        }
+        let axis = |name: &str, horizontal: bool| -> Option<SmartAxis> {
+            let part = base.info.parts.iter().find(|p| p.name == name)?;
+            let (min, max) = (part.bottom_value.min(part.top_value), part.bottom_value.max(part.top_value));
+            let size = |value: f64| -> Option<f64> {
+                let mut probe = c.clone();
+                probe.info.smart_values.retain(|v| v.property != name);
+                probe.info.smart_values.push(SmartValue { property: name.to_string(), value });
+                let b = font.component_outline(&probe, &layer.master).ok()?.bounding_box();
+                Some(if horizontal { b.width() } else { b.height() })
+            };
+            Some(SmartAxis { property: name.to_string(), min, max, size_at_min: size(min)?, size_at_max: size(max)? })
+        };
+        out.push(SmartSize { shape, width: axis("Width", true), height: axis("Height", false) });
+    }
+    out
+}
+
+/// The smart handles of the selected components of `layer`: for each property of a component's
+/// smart glyph, the anchor of the same name (case included) when it moves between the
+/// property's two ends.
+pub fn smart_handles(font: &Font, layer: &Layer, selection: &Selection) -> Vec<SmartHandle> {
+    let mut out = Vec::new();
+    for &shape in selection.shapes.iter().take(MAX_HANDLE_COMPONENTS) {
+        let Some(ModelShape::Component(c)) = layer.shapes.get(shape) else { continue };
+        let Some(base) = font.glyph(&c.glyph) else { continue };
+        for part in &base.info.parts {
+            let anchor_at = |value: Option<f64>| -> Option<Point> {
+                let mut probe = c.clone();
+                if let Some(value) = value {
+                    probe.info.smart_values.retain(|v| v.property != part.name);
+                    probe.info.smart_values.push(SmartValue { property: part.name.clone(), value });
+                }
+                let anchors = component_anchors(font, &probe, &layer.master).ok()??;
+                let a = anchors.iter().find(|a| a.name == part.name)?;
+                Some(c.affine() * Point::new(a.x, a.y))
+            };
+            let (min, max) = (part.bottom_value.min(part.top_value), part.bottom_value.max(part.top_value));
+            let (Some(at), Some(at_min), Some(at_max)) = (anchor_at(None), anchor_at(Some(min)), anchor_at(Some(max))) else { continue };
+            if (at_max - at_min).hypot() < SAME_POSITION {
+                continue;
+            }
+            out.push(SmartHandle { shape, property: part.name.clone(), at, at_min, at_max, min, max });
+        }
+    }
+    out
 }
 
 /// A crossed box where the base glyph would be: its advance wide when it has one, half an em

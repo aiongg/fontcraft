@@ -16,6 +16,7 @@
 //! | double-click a segment | select its whole path |
 //! | double-click a component | `component.editBaseGlyph`: its base glyph joins the tab text, edited |
 //! | drag a guide's knob, or the guide elsewhere; double-click it | see [`crate::guide_drag`] |
+//! | drag a smart handle of a selected smart component | `smartComponent.setValue` in one interaction |
 //! | `Escape` during a gesture | cancel it |
 //!
 //! Presses on the bounding box's knobs and just outside it go to [`crate::bbox`] first.
@@ -167,6 +168,36 @@ enum State {
     Dragging(Box<Drag>),
     Marquee(Box<Marquee>),
     Guide(Box<GuideDrag>),
+    Smart(Box<SmartDrag>),
+}
+
+/// A smart handle being dragged: `smartComponent.setValue` previews in one interaction.
+#[derive(Clone, Debug)]
+struct SmartDrag {
+    handle: crate::scene::SmartHandle,
+    begun: bool,
+    last: Option<f64>,
+}
+
+impl SmartDrag {
+    fn update(&mut self, cx: &Context<'_>, pos: Point) -> Output {
+        let mut out = Output::handled();
+        if !self.begun {
+            self.begun = true;
+            out.push(Action::Begin { label: "Smart Handle".into() });
+        }
+        if let Some(value) = self.handle.value_at(pos)
+            && self.last != Some(value)
+        {
+            self.last = Some(value);
+            let params = json!({
+                "glyph": cx.scene.glyph, "layer": cx.scene.layer.id, "component": self.handle.shape,
+                "property": self.handle.property, "value": value,
+            });
+            out.push(Action::Preview { invocation: Invocation::new("smartComponent.setValue", params) });
+        }
+        out
+    }
 }
 
 /// The Select tool.
@@ -183,6 +214,13 @@ impl SelectTool {
         let mut out = self.cancel();
         out.handled = true;
         let scene = cx.scene;
+        let near = |p: Point| dist(cx.view.to_screen(p), cx.view.to_screen(ev.pos)) <= cx.settings.hit_tolerance;
+        if !scene.locked
+            && let Some(handle) = scene.smart_handles.iter().find(|h| near(h.at))
+        {
+            self.state = State::Smart(Box::new(SmartDrag { handle: handle.clone(), begun: false, last: None }));
+            return out;
+        }
         let Some(hit) = hit_test(scene, &cx.view, ev.pos, cx.settings.hit_tolerance) else {
             let base = if ev.mods.shift { cx.selection.clone() } else { Selection::new() };
             if !ev.mods.shift && !cx.selection.is_empty() {
@@ -297,6 +335,7 @@ impl SelectTool {
                     out.push(Action::Preview { invocation: inv });
                 }
             }
+            State::Smart(smart) => out.actions.extend(smart.update(cx, ev.pos).actions),
         }
         out
     }
@@ -356,6 +395,12 @@ impl SelectTool {
                     out.push(Action::Preview { invocation: inv });
                 }
                 out.push(Action::Commit);
+            }
+            State::Smart(mut smart) => {
+                if smart.begun {
+                    out.actions.extend(smart.update(cx, ev.pos).actions);
+                    out.push(Action::Commit);
+                }
             }
         }
         out
@@ -480,13 +525,14 @@ impl Tool for SelectTool {
         self.hover = None;
         match std::mem::take(&mut self.state) {
             State::Dragging(_) | State::Guide(_) => out.push(Action::Cancel),
+            State::Smart(smart) if smart.begun => out.push(Action::Cancel),
             State::Marquee(m) => {
                 let m = *m;
                 if m.last != m.base {
                     out.push(Action::Select { selection: m.base });
                 }
             }
-            State::Idle | State::Pressed(_) => {}
+            State::Idle | State::Pressed(_) | State::Smart(_) => {}
         }
         out
     }
@@ -504,7 +550,7 @@ impl Tool for SelectTool {
                 Some(h) => vec![Overlay::Marker { kind: if h.locked { OverlayKind::HoverLocked } else { OverlayKind::Hover }, at: h.at }],
                 None => Vec::new(),
             },
-            State::Pressed(_) => Vec::new(),
+            State::Pressed(_) | State::Smart(_) => Vec::new(),
         }
     }
 }

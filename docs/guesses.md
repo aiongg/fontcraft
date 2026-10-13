@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**1680 guesses on 1088 rows (396 of them live commands).**
+**1683 guesses on 1089 rows (396 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -893,6 +893,9 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `components.marksBelongToPrecedingBase` (behavior) | M6 | handbook | – | A mark looks for its anchor only on the nearest base before it and the marks attached since, never on an earlier base; a ligature whose second base lacks the mark's anchor, in the reference app, settles it. |
 | `components.exitEntryAnchorsConnectBases` (behavior) | M6 | handbook | – | Only the #-prefixed anchors connect components; the plain exit and entry anchors serve cursive attachment alone; the composite's width is the connected bases' widths after the shift, ending at the last base's advance. The corpus alignment measure (M6 plan § 5) checks it where sources use it. |
 | `export.underscoreGlyphsOmitted` (behavior) | M2 | inferred | – | Components that use non-exporting glyphs are decomposed at export; our inference from the non-export rule. |
+| `smart.widthHeightFollowBoundingBox` (behavior) | M6 | handbook | – | A box drag sets the value whose extent matches the dragged box, read linearly between the extents at the property's two ends, unclamped and rounded like other box values; dragging a knob in the reference app settles it. |
+| `smart.widthHeightFollowBoundingBox` (behavior) | M6 | handbook | – | With several objects selected, a smart component among them scales like any component; scaling a smart component together with a path in the reference app settles it. |
+| `smart.widthHeightFollowBoundingBox` (behavior) | M6 | handbook | – | Rotating a smart component from outside its box rotates it, since the handbook rules out only resizing; trying it in the reference app settles it. |
 | `smart.handlesFromPropertyAnchors` (behavior) | M6 | handbook | – | Dragging a handle sets the value whose interpolated anchor position is nearest the pointer, found by projecting the pointer on the line between the anchor's positions at the property's two poles, with no clamp; dragging a handle in the reference app settles it. |
 | `corner.glyphNaming` (behavior) | M6 | handbook | – | A layer with a corner that cannot be fitted (its path deleted, a zero-length segment next to it) is drawn in the editor without any of its corners, as the export leaves it; a hint whose path was deleted in the reference app shows what it draws. |
 | `corner.glyphNaming` (behavior) | M6 | handbook | – | Corners are fitted on the layer's stored shapes, whose indices the hints name, before its smart components are drawn; fontc draws smart components first and then reads the indices against the shapes that result, which differs only in a layer that has both. A layer with a smart component before a path with a corner, built in the reference app, settles it. |
