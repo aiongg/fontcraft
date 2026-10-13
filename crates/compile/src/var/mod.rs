@@ -44,6 +44,7 @@ use write_fonts::tables::glyf::SimpleGlyph;
 use write_fonts::types::{NameId, Tag};
 
 pub use fontcraft_features::var_layout::VarValue;
+use fontcraft_features::var_layout::{VarLayout, VarMaster};
 pub use fontcraft_geom::variation::{Region, RegionAxis};
 
 use crate::outline::Prepared;
@@ -398,6 +399,23 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
         add(None, location, source_glyphs(&at, &at, &target, &options)?)?;
     }
 
+    // The masters the generated kerning and mark positions vary with: the origin, then each
+    // other master source.
+    let layout_axes: Vec<Tag> = VarAxes::from_designspace(&designspace)?.axes.into_iter().map(|a| a.tag).collect();
+    let mut layout_masters = vec![VarMaster { id: origin.id.clone(), location: vec![0.0; layout_axes.len()] }];
+    layout_masters.extend(sources.iter().filter_map(|s| Some(VarMaster { id: s.master.clone()?, location: s.normalized.clone() })));
+    let var_layout = VarLayout::new(layout_axes, layout_masters).map_err(|e| CompileError::Table { table: "GPOS", message: e.to_string() })?;
+
+    let variable_layout = crate::layout::VariableLayout {
+        layout: &var_layout,
+        masters: sources
+            .iter()
+            .filter_map(|s| {
+                Some(crate::layout::OtherMaster { id: s.master.as_deref()?, glyphs: s.glyphs.iter().map(|g| (g.name.as_str(), g)).collect() })
+            })
+            .collect(),
+    };
+
     let mut resolved = crate::drawing::resolve(prepared, &Target::Master(origin.id.clone()))?;
     resolved.family_name.clone_from(&vnames.family);
     let gvar_options = gvar::GvarOptions { optimize: var.optimize_deltas.unwrap_or_else(|| optimize_deltas(font)) };
@@ -453,7 +471,7 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
         }
         Ok((outlines, extra))
     };
-    let mut compiled = crate::compile_stages_with(Some(font), resolved, Flavour::TrueType, &options, Some(&mut stage))?;
+    let mut compiled = crate::compile_stages_with(Some(font), resolved, Flavour::TrueType, &options, Some(&mut stage), Some(&variable_layout))?;
     notes.append(&mut compiled.warnings);
     compiled.warnings = notes;
     Ok(VariableFont { compiled, setting, file_stem: vnames.file_stem })

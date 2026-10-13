@@ -280,28 +280,58 @@ pub(crate) fn kern_pairs(req: &KernRequest, budget: &mut Budget, warnings: &mut 
     let rtl_glyphs = glyphs_with_rtl_kerning(req, budget)?;
     let groups = derive_kern_groups(req, &rtl_glyphs);
 
-    // The master's left-to-right pairs, then its right-to-left pairs in left-to-right spelling.
-    let mut kerns: BTreeMap<IrPair, f64> = BTreeMap::new();
+    // Each master's left-to-right pairs, then its right-to-left pairs in left-to-right spelling.
+    // A static font has the one master compiled; a variable font every master, the origin first.
+    let masters: Vec<&str> = match req.variable {
+        Some(v) => v.masters().iter().map(|m| m.id.as_str()).collect(),
+        None => vec![req.master],
+    };
+    let mut per_master: Vec<BTreeMap<IrPair, f64>> = Vec::with_capacity(masters.len());
+    let mut has_pairs: Vec<bool> = Vec::with_capacity(masters.len());
     let mut ltr_groups: HashSet<KernGroup> = HashSet::new();
     let mut replaced = 0usize;
-    for (direction, flip) in [(Direction::Ltr, false), (Direction::Rtl, true)] {
-        let table = req.index.table(direction, req.master).map_err(|e| FeatureError::Kerning(e.to_string()))?;
-        for (first, second, value) in table.pairs() {
-            budget.spend(1)?;
-            if !flip {
-                ltr_groups.extend([first, second].into_iter().filter_map(parse_kern_group));
-            }
-            let (first, second) = if flip { (flip_class_side(first), flip_class_side(second)) } else { (first.to_string(), second.to_string()) };
-            let side1 = kern_participant(&first, first_side, &groups, &gids);
-            let side2 = kern_participant(&second, second_side, &groups, &gids);
-            if let (Some(side1), Some(side2)) = (side1, side2)
-                && let Some(old) = kerns.insert((side1, side2), value)
-                && flip
-                && old != value
-            {
-                replaced = replaced.saturating_add(1);
+    for master in &masters {
+        let mut kerns: BTreeMap<IrPair, f64> = BTreeMap::new();
+        let mut any = false;
+        for (direction, flip) in [(Direction::Ltr, false), (Direction::Rtl, true)] {
+            let table = req.index.table(direction, master).map_err(|e| FeatureError::Kerning(e.to_string()))?;
+            for (first, second, value) in table.pairs() {
+                budget.spend(1)?;
+                any = true;
+                if !flip {
+                    ltr_groups.extend([first, second].into_iter().filter_map(parse_kern_group));
+                }
+                let (first, second) = if flip { (flip_class_side(first), flip_class_side(second)) } else { (first.to_string(), second.to_string()) };
+                let side1 = kern_participant(&first, first_side, &groups, &gids);
+                let side2 = kern_participant(&second, second_side, &groups, &gids);
+                if let (Some(side1), Some(side2)) = (side1, side2)
+                    && let Some(old) = kerns.insert((side1, side2), value)
+                    && flip
+                    && old != value
+                {
+                    replaced = replaced.saturating_add(1);
+                }
             }
         }
+        per_master.push(kerns);
+        has_pairs.push(any);
+    }
+    // A master without any kerning has no kerning value, as both reference compilers read it:
+    // the others' values interpolate there. The origin always has one.
+    let kept: Vec<usize> = (0..per_master.len()).filter(|&m| m == 0 || has_pairs.get(m).copied().unwrap_or(false)).collect();
+    let subset;
+    let layout = match req.variable {
+        Some(v) if kept.len() < per_master.len() => {
+            subset = v.subset(&kept)?;
+            per_master = per_master.into_iter().enumerate().filter(|(m, _)| kept.contains(m)).map(|(_, k)| k).collect();
+            Some(&subset)
+        }
+        other => other,
+    };
+    // The rules of every master; each master's value of a rule is what its own pairs give it.
+    let mut kerns: BTreeSet<&IrPair> = BTreeSet::new();
+    for m in &per_master {
+        kerns.extend(m.keys());
     }
     if replaced > 0 {
         warnings.push(format!(
@@ -330,22 +360,24 @@ pub(crate) fn kern_pairs(req: &KernRequest, budget: &mut Budget, warnings: &mut 
         }
     }
 
-    let mut adjustments: BTreeMap<IrPair, f64> = BTreeMap::new();
-    for key in kerns.keys() {
+    let values_of = |pair: &IrPair| -> Vec<f64> { per_master.iter().map(|k| lookup_kerning_value(pair, k, &side1_of, &side2_of)).collect() };
+    let masters_len = per_master.len();
+    let mut adjustments: BTreeMap<IrPair, Vec<f64>> = BTreeMap::new();
+    for key in kerns {
         if let (IrSide::Glyph(first), IrSide::Group(second_group)) = key {
             for member in groups.get(second_group).into_iter().flatten() {
-                budget.spend(1)?;
+                budget.spend(masters_len)?;
                 let pair = (IrSide::Glyph(first.clone()), IrSide::Glyph(member.clone()));
-                let value = lookup_kerning_value(&pair, &kerns, &side1_of, &side2_of);
-                adjustments.insert(pair, value);
+                let values = values_of(&pair);
+                adjustments.insert(pair, values);
             }
         } else {
-            budget.spend(1)?;
-            let value = lookup_kerning_value(key, &kerns, &side1_of, &side2_of);
-            if matches!(key, (IrSide::Group(_), IrSide::Group(_))) && value == 0.0 {
+            budget.spend(masters_len)?;
+            let values = values_of(key);
+            if matches!(key, (IrSide::Group(_), IrSide::Group(_))) && values.iter().all(|v| *v == 0.0) {
                 continue;
             }
-            adjustments.insert(key.clone(), value);
+            adjustments.insert(key.clone(), values);
         }
         if adjustments.len() > req.limits.rules {
             return Err(FeatureError::TooMany { what: "kerning rules", limit: req.limits.rules });
@@ -367,9 +399,19 @@ pub(crate) fn kern_pairs(req: &KernRequest, budget: &mut Budget, warnings: &mut 
         }
     };
 
+    // A variable font's values as the origin's plus deltas, one column per rule.
+    let variable = match layout {
+        Some(v) => {
+            let columns: Vec<Vec<f64>> =
+                (0..per_master.len()).map(|m| adjustments.values().map(|values| values.get(m).copied().unwrap_or(0.0)).collect()).collect();
+            Some((v, v.resolve(&columns)?))
+        }
+        None => None,
+    };
     let mut out = Vec::with_capacity(adjustments.len());
     let mut clamped = 0usize;
-    for ((first, second), value) in &adjustments {
+    for (i, ((first, second), values)) in adjustments.iter().enumerate() {
+        let value = values.first().copied().unwrap_or(0.0);
         // Each group side is copied: its members count as work.
         let group_len = |s: &IrSide| match s {
             IrSide::Glyph(_) => 0,
@@ -382,7 +424,11 @@ pub(crate) fn kern_pairs(req: &KernRequest, budget: &mut Budget, warnings: &mut 
         if x_advance != rounded {
             clamped = clamped.saturating_add(1);
         }
-        out.push(KernPair { side1, side2, value: ValueRecordBuilder::new().with_x_advance(x_advance as i16) });
+        let mut record = ValueRecordBuilder::new().with_x_advance(x_advance as i16);
+        if let Some(device) = variable.as_ref().and_then(|(v, resolved)| v.device(resolved.get(i)?)) {
+            record = record.with_x_advance_device(device);
+        }
+        out.push(KernPair { side1, side2, value: record });
     }
     if clamped > 0 {
         warnings.push(format!("{clamped} kerning values do not fit the font (−32,768 to 32,767) and were written as the nearest that does"));

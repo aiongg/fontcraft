@@ -556,3 +556,112 @@ fn variable_locations_are_masters_instances_and_midpoints_and_each_is_compared()
     );
     assert_eq!(check("advances").status, Status::Identical);
 }
+
+/// Light (wght 100, the origin) and Bold (900): `A V` −40 and −100; `V A` only in Light; `T o`
+/// an exception in Light only, over a `T @o` group pair in both; `top` anchors on `A` and
+/// `acutecomb` that move between the masters.
+fn variable_layout_font() -> Font {
+    use std::sync::Arc;
+
+    use fontcraft_model::{Anchor, Axis, Glyph, GlyphTable, KernFirst, KernTable, Kerning, Layer, Master, MasterKerning};
+    let mut f = Font::new("Var Layout");
+    f.axes = Arc::new(vec![Axis { name: "Weight".into(), tag: "wght".into(), ..Axis::default() }]);
+    f.masters = Arc::new(vec![
+        Master { id: "light".into(), name: "Light".into(), location: vec![100.0], ..Master::default() },
+        Master { id: "bold".into(), name: "Bold".into(), location: vec![900.0], ..Master::default() },
+    ]);
+    let layer = |master: &str, width: f64, anchors: Vec<Anchor>| {
+        let mut l = Layer::new(master, width);
+        l.id = master.into();
+        l.shapes = vec![Shape::Path(Contour::rect(0.0, 0.0, width / 2.0, 600.0))];
+        l.anchors = anchors;
+        l
+    };
+    let glyph = |name: &str, cp: u32, light: Vec<Anchor>, bold: Vec<Anchor>| {
+        let mut g = Glyph::new(name);
+        g.unicodes = vec![cp];
+        g.layers = vec![layer("light", 400.0, light), layer("bold", 600.0, bold)];
+        g
+    };
+    let mut o = glyph("o", 0x6F, vec![], vec![]);
+    o.kern_groups.left = Some("o".into());
+    let glyphs = vec![
+        glyph("A", 0x41, vec![Anchor::new("top", 200.0, 600.0)], vec![Anchor::new("top", 300.0, 700.0)]),
+        glyph("T", 0x54, vec![], vec![]),
+        glyph("V", 0x56, vec![], vec![]),
+        o,
+        glyph("acutecomb", 0x301, vec![Anchor::new("_top", 50.0, 500.0)], vec![Anchor::new("_top", 80.0, 500.0)]),
+    ];
+    f.glyphs = GlyphTable::from_glyphs(glyphs.into_iter().map(Arc::new).collect());
+    let pairs = |master: &str, list: &[(&str, &str, f64)]| MasterKerning {
+        master: master.into(),
+        firsts: list.iter().map(|(a, b, v)| KernFirst { first: (*a).into(), seconds: vec![((*b).into(), *v)] }).collect(),
+    };
+    f.kerning = Arc::new(Kerning {
+        ltr: KernTable(vec![
+            pairs("light", &[("A", "V", -40.0), ("V", "A", -20.0), ("T", "@MMK_R_o", -60.0), ("T", "o", -80.0)]),
+            pairs("bold", &[("A", "V", -100.0), ("T", "@MMK_R_o", -120.0)]),
+        ]),
+        ..Kerning::default()
+    });
+    f
+}
+
+#[test]
+fn variable_kerning_and_marks_vary_between_masters() {
+    use skrifa::raw::types::F2Dot14;
+    let font = variable_layout_font();
+    let v = fontcraft_compile::var::compile_variable(&font, None, &Options::default(), &fontcraft_compile::var::VariableOptions::default()).unwrap();
+    let f = skrifa::FontRef::new(&v.compiled.bytes).unwrap();
+    let names: evaluate::Names = v.compiled.glyph_order.iter().enumerate().map(|(i, n)| (i as u32, n.clone())).collect();
+    let kern_at = |t: f32| {
+        let (k, _) = evaluate::kerning(&f, &[F2Dot14::from_f32(t)], &names);
+        let x = |pair: &str| k.get(pair).map_or(0.0, |v| v[2]);
+        [x("A V"), x("V A"), x("T o")]
+    };
+    // A pair a master lacks is 0 there; an exception a master lacks takes its group's value.
+    assert_eq!(kern_at(0.0), [-40.0, -20.0, -80.0]);
+    assert_eq!(kern_at(1.0), [-100.0, 0.0, -120.0]);
+    assert_eq!(kern_at(0.5), [-70.0, -10.0, -100.0]);
+
+    let mark_at = |t: f32| {
+        let (m, _) = evaluate::attachments(&f, &[F2Dot14::from_f32(t)], &names);
+        *m.get("base A acutecomb").unwrap()
+    };
+    let (light, bold, mid) = (mark_at(0.0), mark_at(1.0), mark_at(0.5));
+    assert_ne!(light, bold);
+    assert_eq!(mid, [(light[0] + bold[0]) / 2.0, (light[1] + bold[1]) / 2.0]);
+}
+
+#[test]
+fn a_master_without_kerning_takes_the_interpolated_value() {
+    use std::sync::Arc;
+
+    use skrifa::raw::types::F2Dot14;
+    let mut font = variable_layout_font();
+    let mut masters = (*font.masters).clone();
+    masters.push(fontcraft_model::Master { id: "mid".into(), name: "Medium".into(), location: vec![500.0], ..fontcraft_model::Master::default() });
+    font.masters = Arc::new(masters);
+    let glyphs: Vec<Arc<fontcraft_model::Glyph>> = font
+        .glyphs
+        .iter()
+        .map(|g| {
+            let mut g = (**g).clone();
+            let mut mid = g.layers.iter().find(|l| l.id == "light").unwrap().clone();
+            mid.id = "mid".into();
+            mid.master = "mid".into();
+            mid.width = 500.0;
+            for a in &mut mid.anchors {
+                a.x += 25.0;
+            }
+            g.layers.push(mid);
+            Arc::new(g)
+        })
+        .collect();
+    font.glyphs = fontcraft_model::GlyphTable::from_glyphs(glyphs);
+    let v = fontcraft_compile::var::compile_variable(&font, None, &Options::default(), &fontcraft_compile::var::VariableOptions::default()).unwrap();
+    let f = skrifa::FontRef::new(&v.compiled.bytes).unwrap();
+    let names: evaluate::Names = v.compiled.glyph_order.iter().enumerate().map(|(i, n)| (i as u32, n.clone())).collect();
+    let (k, _) = evaluate::kerning(&f, &[F2Dot14::from_f32(0.5)], &names);
+    assert_eq!(k.get("A V").map(|v| v[2]), Some(-70.0));
+}

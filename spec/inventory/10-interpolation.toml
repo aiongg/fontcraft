@@ -158,6 +158,7 @@ milestone = "M9"
 summary = "Besides outlines, per-master data must interpolate between masters: advance widths, anchors, component placement, vertical metrics, kerning, and stems and number values matched by name. The chapter only says an instance has outlines and metrics; the name-matching rule for stems and numbers is in the Font Info chapter, and the rest of the list is our reading of what an instance needs."
 ref = "Interpolation › Working with Multiple Fonts; Font Info › Masters"
 status = "inferred"
+notes = "In variable fonts, kerning and anchors vary through GPOS device deltas (M9.9, `compile.instanceLayoutInterpolation`); a master linked with Link Metrics With Master takes the kerning of the master it names."
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Instances and variable font settings (Font Info › Exports)

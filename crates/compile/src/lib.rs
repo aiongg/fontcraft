@@ -405,7 +405,7 @@ pub(crate) type VarStage<'a> =
     &'a mut dyn FnMut(&Resolved, &[ResolvedGlyph], &outline::Settings, &mut Vec<String>) -> Result<(Vec<outline::Prepared>, Extra), CompileError>;
 
 fn compile_stages(font: Option<&Font>, resolved: Resolved, flavour: Flavour, options: &Options) -> Result<Compiled, CompileError> {
-    compile_stages_with(font, resolved, flavour, options, None)
+    compile_stages_with(font, resolved, flavour, options, None, None)
 }
 
 /// The glyphs of `resolved` as every compile stage before the outlines leaves them: glyph data,
@@ -432,6 +432,7 @@ pub(crate) fn compile_stages_with(
     flavour: Flavour,
     options: &Options,
     var: Option<VarStage<'_>>,
+    var_layout: Option<&layout::VariableLayout<'_>>,
 ) -> Result<Compiled, CompileError> {
     let mut warnings = std::mem::take(&mut resolved.notes);
     fill_glyph_data(&mut resolved, options, &mut warnings);
@@ -444,7 +445,7 @@ pub(crate) fn compile_stages_with(
     let glyph_data = font.and_then(|_| compile_glyph_data(options));
     let color_plan = color::plan(font, &resolved, options);
     let (glyphs, made) = color::append_layer_glyphs(font, &color_plan, &resolved, glyphs, &mut warnings)?;
-    let layout = layout_tables(font, glyph_data.as_deref(), &resolved, &glyphs, &edits, options, &mut warnings)?;
+    let layout = layout_tables(font, glyph_data.as_deref(), &resolved, &glyphs, &edits, options, var_layout, &mut warnings)?;
     let upm = f64::from(resolved.units_per_em);
     let error =
         if options.conversion_error.is_finite() && options.conversion_error > 0.0 { options.conversion_error } else { DEFAULT_CONVERSION_ERROR };
@@ -486,7 +487,9 @@ pub(crate) fn compile_stages_with(
     Ok(Compiled { bytes, glyph_order: glyphs.into_iter().map(|g| g.name).collect(), warnings })
 }
 
-/// The layout stage of a static build ([`layout::build`]); nothing when the options skip features.
+/// The layout stage ([`layout::build`]), variable when `variable` gives the masters; nothing when
+/// the options skip features.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn layout_tables(
     font: Option<&Font>,
     data: Option<&GlyphData>,
@@ -494,6 +497,7 @@ pub(crate) fn layout_tables(
     order: &[fontcraft_model::ResolvedGlyph],
     edits: &export_params::ExportEdits,
     options: &Options,
+    variable: Option<&layout::VariableLayout<'_>>,
     warnings: &mut Vec<String>,
 ) -> Result<layout::LayoutTables, CompileError> {
     if options.skip_features {
@@ -507,6 +511,7 @@ pub(crate) fn layout_tables(
         edits,
         include_dir: options.feature_dir.as_deref(),
         include_check: options.include_check.as_ref(),
+        variable,
     };
     layout::build(&input, &layout::LayoutOptions::default(), warnings)
 }

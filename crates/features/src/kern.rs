@@ -85,9 +85,11 @@ impl<'a> KernCode<'a> {
     }
 }
 
-/// A value record in the compiler's neutral form.
-pub(crate) fn neutral_value(v: &ValueRecordBuilder) -> fontcraft_fea::Value {
-    let metric = |m: &Option<write_fonts::tables::layout::builders::Metric>| m.as_ref().map(|m| fontcraft_fea::Metric::fixed(m.default));
+/// A value record in the compiler's neutral form; `axes` names the axes of its deltas.
+pub(crate) fn neutral_value(v: &ValueRecordBuilder, axes: &[Tag]) -> fontcraft_fea::Value {
+    let metric = |m: &Option<write_fonts::tables::layout::builders::Metric>| {
+        m.as_ref().map(|m| fontcraft_fea::Metric { default: m.default, deltas: crate::var_layout::neutral_deltas(axes, &m.device_or_deltas) })
+    };
     fontcraft_fea::Value {
         x_placement: metric(&v.x_placement),
         y_placement: metric(&v.y_placement),
@@ -117,13 +119,15 @@ pub(crate) fn finalize_kerning(
     limits: &KernLimits,
     budget: &mut Budget,
     skipped: &mut Skipped,
+    axes: &[Tag],
 ) -> Result<Kerns, FeatureError> {
     if pairs.is_empty() {
         return Ok(Kerns::default());
     }
     let fea_scripts: Vec<Tag> = code.languages.keys().copied().collect();
     let known_scripts = guess_font_scripts(char_map, &fea_scripts);
-    let split_ctx = KernSplitContext::new(char_map, &known_scripts, marks, *limits, code.gsub.as_ref());
+    let mut split_ctx = KernSplitContext::new(char_map, &known_scripts, marks, *limits, code.gsub.as_ref());
+    split_ctx.axes = axes.to_vec();
     let lookups = split_ctx.make_lookups(pairs, budget, skipped)?;
     let (lookups_by_script, lookups) = split_lookups_by_script(lookups);
     let mut features: BTreeMap<FeatureKey, Vec<usize>> = assign_lookups_to_scripts(lookups_by_script.clone(), KERN, &code.languages)
@@ -263,6 +267,8 @@ struct KernSplitContext {
     dflt_scripts: HashSet<ScriptCode>,
     common_scripts: HashSet<ScriptCode>,
     limits: KernLimits,
+    /// The variable font's axes, which the values' deltas span; empty for a static font.
+    axes: Vec<Tag>,
 }
 
 /// The distinct classes of one lookup, for the cap on classes per side.
@@ -301,16 +307,21 @@ struct Rules {
     builder: PairPosBuilder,
     glyph_pairs: Vec<fontcraft_fea::GlyphPair>,
     class_pairs: Vec<fontcraft_fea::ClassPair>,
+    axes: Vec<Tag>,
 }
 
 impl Rules {
     fn pair(&mut self, left: GlyphId16, value: &ValueRecordBuilder, right: GlyphId16) {
-        self.glyph_pairs.push(fontcraft_fea::GlyphPair { left, right, value: neutral_value(value) });
+        self.glyph_pairs.push(fontcraft_fea::GlyphPair { left, right, value: neutral_value(value, &self.axes) });
         self.builder.insert_pair(left, value.clone(), right, Default::default());
     }
 
     fn classes(&mut self, left: IntSet<GlyphId16>, value: ValueRecordBuilder, right: IntSet<GlyphId16>) {
-        self.class_pairs.push(fontcraft_fea::ClassPair { left: left.iter().collect(), right: right.iter().collect(), value: neutral_value(&value) });
+        self.class_pairs.push(fontcraft_fea::ClassPair {
+            left: left.iter().collect(),
+            right: right.iter().collect(),
+            value: neutral_value(&value, &self.axes),
+        });
         self.builder.insert_classes(left, value, right, Default::default());
     }
 }
@@ -338,6 +349,7 @@ impl KernSplitContext {
             dflt_scripts: HashSet::from([COMMON_SCRIPT, INHERITED_SCRIPT]),
             common_scripts: HashSet::from([COMMON_SCRIPT]),
             limits,
+            axes: Vec::new(),
         }
     }
 
@@ -372,7 +384,7 @@ impl KernSplitContext {
         for (scripts, pairs) in kerning_per_script {
             let Some(first_script) = scripts.first() else { continue };
             let script_is_rtl = ScriptDirection::for_script(first_script) == ScriptDirection::RightToLeft;
-            let mut builder = Rules::default();
+            let mut builder = Rules { axes: self.axes.clone(), ..Rules::default() };
             let mut size = LookupSize::default();
             for mut pair in pairs {
                 bidi_buf.clear();

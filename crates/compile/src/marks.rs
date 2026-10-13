@@ -16,24 +16,29 @@
 
 use std::collections::HashMap;
 
-use fontcraft_components::propagate::effective_anchors_for_master_with;
+use fontcraft_components::propagate::{EffectiveAnchor, effective_anchors_for_master_with};
 use fontcraft_features::FEATURE_WRITERS_KEY;
 use fontcraft_features::marks::{MarkAnchor, MarkGlyph, MarkInput, MarkTags, MasterAnchors, mark_tags};
 use fontcraft_model::glyphdata::GlyphData;
 use fontcraft_model::{Font, ORIGIN_ANCHOR, Resolved, ResolvedGlyph, is_ufo_family, ufo_classes};
 
 use crate::components_opt::{Scope, listed_filter, reaches};
+use crate::layout::OtherMaster;
 
 /// The ufo2ft filter that propagates anchors, as [`listed_filter`] spells it.
 const PROPAGATE_FILTER: &str = "propagateAnchors";
-/// The mark writer's input: every glyph of `order` with its anchors on the compiled master, and
-/// the feature code's language systems as (script, language).
+/// Anchors passed on from components, by glyph.
+type Propagated = HashMap<String, Vec<EffectiveAnchor>>;
+
+/// The mark writer's input for `resolved`'s master and each of `others` (a variable font's other
+/// masters), whose anchors each glyph carries beside the first master's.
 pub(crate) fn input(
     font: Option<&Font>,
     data: Option<&GlyphData>,
     resolved: &Resolved,
     order: &[ResolvedGlyph],
     language_systems: Vec<(String, String)>,
+    others: &[OtherMaster],
     warnings: &mut Vec<String>,
 ) -> MarkInput {
     let ufo = is_ufo_family(resolved.format);
@@ -41,51 +46,33 @@ pub(crate) fn input(
         Some(font) if ufo => listed_filter(font, &resolved.master, PROPAGATE_FILTER),
         _ => vec![Scope::All],
     };
-    let propagated = match font {
-        Some(font) if !scopes.is_empty() => match effective_anchors_for_master_with(font, data, &resolved.master) {
-            Ok(master) => {
-                if let Some((glyph, e)) = master.failed.first() {
-                    let more = master.failed.len().saturating_sub(1);
-                    let others = if more == 0 { String::new() } else { format!(" (and {more} more glyphs)") };
-                    warnings.push(format!(
-                        "anchors were not passed on from components to `{glyph}`{others}, so it uses its own anchors for mark attachment: {e}"
-                    ));
-                }
-                if let Some((glyph, e)) = master.smart_fallbacks.first() {
-                    let more = master.smart_fallbacks.len().saturating_sub(1);
-                    let others = if more == 0 { String::new() } else { format!(" (and {more} more)") };
-                    warnings.push(format!(
-                        "a smart component in `{glyph}`{others} passes on its glyph's master-layer anchors for mark attachment, not anchors at its values: {e}"
-                    ));
-                }
-                Some(master.anchors)
-            }
-            Err(e) => {
-                warnings.push(format!("anchors were not passed on from components for mark attachment, so each glyph's own anchors were used: {e}"));
-                None
-            }
-        },
-        _ => None,
-    };
-    // The built-in glyph database, as when the UFO was read (`ufo_classes`).
+    let first = propagated(font, data, &resolved.master, &scopes, warnings);
+    // The other masters' warnings repeat the first master's.
+    let others: Vec<(&OtherMaster, Option<Propagated>)> =
+        others.iter().map(|o| (o, propagated(font, data, o.id, &scopes, &mut Vec::new()))).collect();
     let stated = match font {
         Some(font) if ufo => GlyphData::new()
             .map(|data| ufo_classes::stated(font, &resolved.master, &ufo_classes::rule_classes(font, &resolved.master, &data)))
             .unwrap_or_default(),
         _ => HashMap::new(),
     };
+    let anchors_of = |g: &ResolvedGlyph, map: Option<&Propagated>| -> Vec<MarkAnchor> {
+        match map.filter(|_| reaches(&scopes, &g.name)).and_then(|map| map.get(&g.name)) {
+            Some(list) => {
+                let anchors = list.iter().map(|a| MarkAnchor { name: a.name.clone(), x: a.x, y: a.y }).collect();
+                if ufo { anchors } else { origin_adjusted(anchors) }
+            }
+            None => g.anchors.iter().map(|(name, p)| MarkAnchor { name: name.clone(), x: p.x, y: p.y }).collect(),
+        }
+    };
     let glyphs = order
         .iter()
         .map(|g| {
-            let anchors: Vec<MarkAnchor> = match propagated.as_ref().filter(|_| reaches(&scopes, &g.name)).and_then(|map| map.get(&g.name)) {
-                Some(list) => {
-                    let anchors = list.iter().map(|a| MarkAnchor { name: a.name.clone(), x: a.x, y: a.y }).collect();
-                    // Propagation keeps a glyph's own `*origin` when it has no components; the
-                    // compiled outline is moved by it (`Font::resolve`), so its anchors are too.
-                    if ufo { anchors } else { origin_adjusted(anchors) }
-                }
-                None => g.anchors.iter().map(|(name, p)| MarkAnchor { name: name.clone(), x: p.x, y: p.y }).collect(),
-            };
+            let mut anchors = vec![MasterAnchors { master: resolved.master.clone(), anchors: anchors_of(g, first.as_ref()) }];
+            for (other, map) in &others {
+                let own = other.glyphs.get(g.name.as_str()).copied().unwrap_or(g);
+                anchors.push(MasterAnchors { master: other.id.to_string(), anchors: anchors_of(own, map.as_ref()) });
+            }
             let opentype_category = if ufo { stated.get(&g.name).cloned() } else { None };
             MarkGlyph {
                 name: g.name.clone(),
@@ -93,11 +80,40 @@ pub(crate) fn input(
                 category: g.category.clone(),
                 sub_category: g.sub_category.clone(),
                 opentype_category,
-                anchors: vec![MasterAnchors { master: resolved.master.clone(), anchors }],
+                anchors,
             }
         })
         .collect();
     MarkInput { glyphs, explicit_classes: ufo, language_systems }
+}
+
+/// The anchors of `master`'s glyphs passed on from their components, or `None` when they are not
+/// passed on (each glyph then uses its own).
+fn propagated(font: Option<&Font>, data: Option<&GlyphData>, master: &str, scopes: &[Scope], warnings: &mut Vec<String>) -> Option<Propagated> {
+    let font = font.filter(|_| !scopes.is_empty())?;
+    match effective_anchors_for_master_with(font, data, master) {
+        Ok(master) => {
+            if let Some((glyph, e)) = master.failed.first() {
+                let more = master.failed.len().saturating_sub(1);
+                let others = if more == 0 { String::new() } else { format!(" (and {more} more glyphs)") };
+                warnings.push(format!(
+                    "anchors were not passed on from components to `{glyph}`{others}, so it uses its own anchors for mark attachment: {e}"
+                ));
+            }
+            if let Some((glyph, e)) = master.smart_fallbacks.first() {
+                let more = master.smart_fallbacks.len().saturating_sub(1);
+                let others = if more == 0 { String::new() } else { format!(" (and {more} more)") };
+                warnings.push(format!(
+                    "a smart component in `{glyph}`{others} passes on its glyph's master-layer anchors for mark attachment, not anchors at its values: {e}"
+                ));
+            }
+            Some(master.anchors)
+        }
+        Err(e) => {
+            warnings.push(format!("anchors were not passed on from components for mark attachment, so each glyph's own anchors were used: {e}"));
+            None
+        }
+    }
 }
 
 /// `anchors` moved by minus the first `*origin` anchor's position, without the `*origin` anchors.

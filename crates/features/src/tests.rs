@@ -69,6 +69,7 @@ fn build_with(f: &Font, marks: &[(&str, MarkSpacing)], limits: KernLimits) -> Re
         limits,
         language_systems: &[],
         gsub: None,
+        variable: None,
     })
 }
 
@@ -263,6 +264,7 @@ fn a_font_without_pairs_gets_no_table() {
         limits: KernLimits::default(),
         language_systems: &[],
         gsub: None,
+        variable: None,
     })
     .unwrap();
     assert!(out.gpos.is_none());
@@ -299,6 +301,7 @@ fn the_feature_writer_setting_decides_which_kern_features_are_written() {
         limits: KernLimits::default(),
         language_systems: &[],
         gsub: None,
+        variable: None,
     };
     assert!(kern_feature(&request(KernTags::NONE)).unwrap().gpos.is_none());
     assert!(kern_feature(&request(KernTags { kern: false, dist: true })).unwrap().gpos.is_none(), "Latin kerning goes to kern only");

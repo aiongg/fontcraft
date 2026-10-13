@@ -200,6 +200,12 @@ Only when at least one axis has a range (`compile.variableOnlyTables`).
   `compile.gvarSharedTuples`).
 - HVAR and VVAR, smaller of direct and mapped stores (`compile.hvarStoreChoice`).
 - MVAR for tagged global metrics.
+- Variable kerning and mark positions in GPOS, their deltas in the GDEF variation store
+  (`compile.instanceLayoutInterpolation`). Kerning: the rules of every master; a master's value
+  of a rule is what its own pairs and groups give it, else 0; a master with no kerning at all
+  has no value there, so the others' values interpolate. Marks: the mark writer runs for each
+  master and each anchor position varies; when a master's rules differ from the origin's, the
+  positions stay the origin's with a warning.
 - STAT (`compile.statDefaults`), also allowed in static fonts.
 - CFF2 instead of gvar for the cubic flavour, with its companion tables
   (`compile.cff2VariableBuild`, `compile.cff2CompanionTables`).
@@ -610,7 +616,9 @@ comparison allow-lists each difference for the corpus sources it shows in.
 | `styleNames`, `styleMapFamilyNames`, `styleMapStyleNames` and `compatibleFullNames` properties | not read | not read | written to the name IDs the handbook gives them (14 corpus sources hold `styleNames`) | M7, question 2 |
 | An instance's Width Class without a width axis | no static instances | OS/2 `usWidthClass` stays 5 | the instance's value | M7, question 2 |
 | Automatic feature code whose stored text is older than the glyph set | compiled as stored | compiled as stored | regenerated for each export target unless Update Features is off; a source last updated in the reference app gives the same code | M8, question 4 |
-| The origin of a variable font without Variable Font Origin | the master named by the words all master names share (Regular when none), else the first | the same | the first master; designs at every location agree, `fvar` defaults and `glyf` differ (22 corpus sources name their origin and agree) | M9, question 3 |
+| Kerning of a master with Link Metrics With Master in a variable font (`KerningLinkedMaster`) | its own reading of the links: `A B` −3.333 at the linked Bold, 0 at Heavy | the kerning of the master the link names (−40); a master whose link leads to no kerning takes the others' interpolated value, as fontmake does | the handbook's link rule; fontmake agrees |
+| Mark attachment of colour layer glyphs in a variable font (`COLRv0-component-anchors`) | marks attach to `A.color0` | no attachment, as fontmake | the layer glyphs carry no anchors of their own |
+| The origin of a variable font without Variable Font Origin | the master named by the words all master names share (Regular when none), else the first | the same | the first master; designs at every location agree, `fvar` defaults and `glyf` differ (22 corpus sources name their origin and agree; the three Oswald sources, whose first master is ExtraLight, are allow-listed for `fvar`, `avar` and the values at instances, which move by a unit where the quantized coordinates differ) | M9, question 3 |
 | A static instance outside the masters | no static instances | clamped to the axis range | extrapolated, named in the export report, left out of variable fonts (25 instances in 11 corpus sources); compared with fontTools' model with extrapolation on | M9, question 6 |
 
 Macintosh name records stay off unless Export Mac Name Table Entries is on, as both oracles

@@ -17,6 +17,8 @@ use write_fonts_052::tables::gpos::builders::{
 };
 use write_fonts_052::tables::layout::LookupFlag;
 use write_fonts_052::tables::layout::builders::{CaretValueBuilder, DeviceOrDeltas};
+use write_fonts_052::tables::variations::{RegionAxisCoordinates, VariationRegion};
+use write_fonts_052::types::F2Dot14;
 
 use crate::{Anchor, Diagnostic, GeneratedLookup, GeneratedLookups, GeneratedRules, GlyphId16, LookupFlags, Metric, Severity, Tag, Value};
 
@@ -77,8 +79,8 @@ pub(crate) fn check(generated: &GeneratedLookups, glyph_count: usize, rules_limi
         if !glyphs_ok {
             return refuse(format!("generated lookup {i} names a glyph the font does not have"));
         }
-        if lookup_metrics(lookup).any(Metric::is_variable) {
-            return refuse("generated values with deltas need a variable font".into());
+        if let Some(problem) = lookup_metrics(lookup).find_map(|m| metric_problem(m, &generated.axes)) {
+            return refuse(format!("generated lookup {i}: {problem}"));
         }
         if let GeneratedRules::MarkToLigature { ligatures, .. } = &lookup.rules
             && ligatures.iter().any(|(_, c)| c.len() > ligature_components)
@@ -87,6 +89,9 @@ pub(crate) fn check(generated: &GeneratedLookups, glyph_count: usize, rules_limi
         }
     }
     let carets_ok = generated.carets.iter().all(|(g, c)| glyph_ok(g) && c.len() <= ligature_components && !c.iter().any(Metric::is_variable));
+    if generated.axes.len() > crate::MAX_AXES {
+        return refuse(format!("a variable font may have at most {} axes", crate::MAX_AXES));
+    }
     if !carets_ok || !generated.glyph_classes.keys().all(glyph_ok) {
         return refuse("the generated glyph classes or carets name a glyph the font does not have, or carets need a variable font".into());
     }
@@ -104,6 +109,36 @@ fn lookup_glyphs(lookup: &GeneratedLookup) -> Box<dyn Iterator<Item = GlyphId16>
         GeneratedRules::MarkToLigature { marks, ligatures } => Box::new(marks.iter().map(|(g, _)| *g).chain(ligatures.iter().map(|(g, _)| *g))),
         GeneratedRules::Cursive { glyphs } => Box::new(glyphs.iter().map(|(g, _, _)| *g)),
     }
+}
+
+/// Why fea-rs cannot take `m`'s deltas in a font with `axes`, or `None` when it can: deltas need
+/// a variable font, regions must name its axes with finite tents within -1 to 1, and the count
+/// is capped.
+fn metric_problem(m: &Metric, axes: &[Tag]) -> Option<String> {
+    if !m.is_variable() {
+        return None;
+    }
+    if axes.is_empty() {
+        return Some("values with deltas need a variable font".into());
+    }
+    if m.deltas.len() > crate::MAX_DELTAS {
+        return Some(format!("a value has more than {} deltas", crate::MAX_DELTAS));
+    }
+    for (region, _) in &m.deltas {
+        if region.0.len() > axes.len() {
+            return Some("a region has more axes than the font".into());
+        }
+        for a in &region.0 {
+            if !axes.contains(&a.axis) {
+                return Some(format!("a region names the axis `{}`, which the font does not have", a.axis));
+            }
+            let ok = [a.start, a.peak, a.end].iter().all(|v| v.is_finite() && (-1.0..=1.0).contains(v)) && a.start <= a.peak && a.peak <= a.end;
+            if !ok {
+                return Some("a region's tent is not within -1 to 1 or not in order".into());
+            }
+        }
+    }
+    None
 }
 
 fn lookup_metrics(lookup: &GeneratedLookup) -> Box<dyn Iterator<Item = &Metric> + '_> {
@@ -135,7 +170,7 @@ pub(crate) struct Provider<'a> {
 impl FeatureProvider for Provider<'_> {
     fn add_features(&self, builder: &mut FeatureBuilder) {
         let generated = self.generated;
-        let ids: Vec<Option<LookupId>> = generated.lookups.iter().map(|l| add_lookup(builder, l)).collect();
+        let ids: Vec<Option<LookupId>> = generated.lookups.iter().map(|l| add_lookup(builder, l, &generated.axes)).collect();
         for (key, indices) in &generated.features {
             let lookups: Vec<LookupId> = indices.iter().filter_map(|&i| ids.get(i).copied().flatten()).collect::<BTreeSet<_>>().into_iter().collect();
             if !lookups.is_empty() {
@@ -157,7 +192,9 @@ impl FeatureProvider for Provider<'_> {
 }
 
 /// Adds one lookup; `None` when it has no rules, which fea-rs cannot build.
-fn add_lookup(builder: &mut FeatureBuilder, lookup: &GeneratedLookup) -> Option<LookupId> {
+fn add_lookup(builder: &mut FeatureBuilder, lookup: &GeneratedLookup, axes: &[Tag]) -> Option<LookupId> {
+    let value = |v: &Value| value(v, axes);
+    let anchor = |a: &Anchor| anchor(a, axes);
     let mut bits = lookup.flags.0;
     if lookup.filter_set.is_some() {
         bits |= LookupFlags::USE_MARK_FILTERING_SET;
@@ -227,23 +264,66 @@ fn add_lookup(builder: &mut FeatureBuilder, lookup: &GeneratedLookup) -> Option<
     }
 }
 
-fn value(v: &Value) -> ValueRecordBuilder {
+fn value(v: &Value, axes: &[Tag]) -> ValueRecordBuilder {
     let mut r = ValueRecordBuilder::new();
     if let Some(m) = &v.x_placement {
         r = r.with_x_placement(m.default);
+        if let Some(d) = deltas(m, axes) {
+            r = r.with_x_placement_device(d);
+        }
     }
     if let Some(m) = &v.y_placement {
         r = r.with_y_placement(m.default);
+        if let Some(d) = deltas(m, axes) {
+            r = r.with_y_placement_device(d);
+        }
     }
     if let Some(m) = &v.x_advance {
         r = r.with_x_advance(m.default);
+        if let Some(d) = deltas(m, axes) {
+            r = r.with_x_advance_device(d);
+        }
     }
     if let Some(m) = &v.y_advance {
         r = r.with_y_advance(m.default);
+        if let Some(d) = deltas(m, axes) {
+            r = r.with_y_advance_device(d);
+        }
     }
     r
 }
 
-fn anchor(a: &Anchor) -> AnchorBuilder {
-    AnchorBuilder::new(a.x.default, a.y.default)
+fn anchor(a: &Anchor, axes: &[Tag]) -> AnchorBuilder {
+    let mut b = AnchorBuilder::new(a.x.default, a.y.default);
+    if let Some(d) = deltas(&a.x, axes) {
+        b = b.with_x_device(d);
+    }
+    if let Some(d) = deltas(&a.y, axes) {
+        b = b.with_y_device(d);
+    }
+    b
+}
+
+/// `m`'s deltas with full regions over `axes` (axes a region does not list are unconstrained),
+/// for fea-rs to add to the font's variation store; `None` for a value without deltas.
+fn deltas(m: &Metric, axes: &[Tag]) -> Option<DeviceOrDeltas> {
+    if !m.is_variable() {
+        return None;
+    }
+    let f2 = |v: f64| F2Dot14::from_f32(v as f32);
+    let deltas = m
+        .deltas
+        .iter()
+        .map(|(region, delta)| {
+            let coords = axes
+                .iter()
+                .map(|tag| match region.0.iter().find(|a| a.axis == *tag) {
+                    Some(a) => RegionAxisCoordinates::new(f2(a.start), f2(a.peak), f2(a.end)),
+                    None => RegionAxisCoordinates::new(F2Dot14::ZERO, F2Dot14::ZERO, F2Dot14::ZERO),
+                })
+                .collect();
+            (VariationRegion::new(coords), *delta)
+        })
+        .collect();
+    Some(DeviceOrDeltas::Deltas(deltas))
 }

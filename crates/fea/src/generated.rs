@@ -192,6 +192,9 @@ pub struct GeneratedLookups {
     pub carets: BTreeMap<GlyphId16, Vec<Metric>>,
     /// Bracket-layer substitutions of a variable font (M9.8); empty for a static font.
     pub feature_variations: Vec<FeatureVariation>,
+    /// The variable font's axis tags in `fvar` order, which the regions of [`Metric::deltas`]
+    /// name; empty for a static font, whose values have no deltas. At most [`crate::MAX_AXES`].
+    pub axes: Vec<Tag>,
 }
 
 impl GeneratedLookups {

@@ -679,6 +679,11 @@ milestone = "M9"
 summary = "fontmake's feature writers interpolate kerning and anchors for instances but not explicit pos statements in feature code; --interpolate-binary-layout builds master binaries and interpolates GPOS from them instead. Because we compile variable feature data once, instancing layout should come from the variable GPOS rather than from re-running writers."
 ref = "fontmake USAGE.md (--interpolate-binary-layout)"
 status = "docs"
+notes = "Variable half (M9.9): the generated kerning and mark positions vary in the variable font's GPOS, their deltas in the GDEF variation store (docs/spec/40-compile.md § 1.7). Kerning takes the rules of every master; a master's value of a rule is what its own pairs and groups give it, else 0, as fontc does; a master with no kerning at all has no value there, as both reference compilers read it. Mark positions come from the mark writer run for each master. Measured against fontc and fontmake variable fonts (`oracle --corpus --variable`)."
+guesses = [
+  "A variable font's kerning groups are the font's glyph groups in every master; a UFO master whose own groups differ is read with the glyph groups. A designspace whose masters' groups differ would settle it against fontmake.",
+  "When a master's mark rules differ from the origin's (an anchor missing in one master), the mark positions keep the origin's values with a warning instead of failing the export. An export from the reference app of such a font would settle it.",
+]
 
 [[behavior]]
 id = "compile.expandFeatureIncludes"

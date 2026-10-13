@@ -198,6 +198,9 @@ pub struct KernRequest<'a> {
     /// The feature code's `GSUB` alone ([`fontcraft_fea::FirstPass::gsub`]): unencoded glyphs it
     /// reaches take the scripts and directions of the glyphs they come from.
     pub gsub: Option<&'a [u8]>,
+    /// The variable font's masters, `master` (the origin) first: every master's pairs are
+    /// written, each value as the origin's plus deltas. `None` for a static font.
+    pub variable: Option<&'a var_layout::VarLayout>,
 }
 
 /// The generated kerning.
@@ -235,6 +238,9 @@ impl Budget {
 
 /// The `GPOS` table of `req.master`'s kerning.
 pub fn kern_feature(req: &KernRequest) -> Result<KernFeature, FeatureError> {
+    if req.variable.is_some() {
+        return Err(FeatureError::Unsupported("variable kerning goes through the feature compiler, which writes the variation store".into()));
+    }
     let (kerns, warnings) = kern_rules(req)?;
     let lookups = kerns.lookups.len();
     let gpos = gpos::build(kerns)?;
@@ -254,7 +260,7 @@ pub fn kern_lookups(req: &KernRequest) -> Result<(fontcraft_fea::GeneratedLookup
         .filter_map(|(i, _)| u16::try_from(i).ok().map(GlyphId16::new))
         .collect();
     spacing_marks.sort_unstable();
-    let mut out = fontcraft_fea::GeneratedLookups::default();
+    let mut out = fontcraft_fea::GeneratedLookups { axes: req.variable.map(|v| v.axes().to_vec()).unwrap_or_default(), ..Default::default() };
     for lookup in kerns.lookups {
         let (flags, filter_set) = match (lookup.ignore_marks, spacing_marks.is_empty()) {
             (true, true) => (fontcraft_fea::LookupFlags::IGNORE_MARKS, None),
@@ -302,7 +308,8 @@ fn kern_rules(req: &KernRequest) -> Result<(kern::Kerns, Vec<String>), FeatureEr
 
     let code = kern::KernCode::new(req.language_systems, req.gsub);
     let mut skipped = kern::Skipped::default();
-    let kerns = kern::finalize_kerning(&pairs, &code, &char_map, marks, req.tags, &req.limits, &mut budget, &mut skipped)?;
+    let axes = req.variable.map(|v| v.axes().to_vec()).unwrap_or_default();
+    let kerns = kern::finalize_kerning(&pairs, &code, &char_map, marks, req.tags, &req.limits, &mut budget, &mut skipped, &axes)?;
     if skipped.ambiguous_direction > 0 {
         warnings.push(format!(
             "{} kerning rules were left out: their glyphs mix left-to-right and right-to-left characters",

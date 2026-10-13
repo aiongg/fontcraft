@@ -1039,6 +1039,7 @@ name = "fontcraft-fea"
 version = "0.0.1"
 dependencies = [
  "fea-rs",
+ "fontdrasil",
  "thiserror 2.0.21",
  "write-fonts 0.52.0",
 ]

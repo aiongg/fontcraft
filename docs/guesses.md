@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**1692 guesses on 1096 rows (397 of them live commands).**
+**1694 guesses on 1097 rows (397 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -1635,6 +1635,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | Row | Milestone | Status | Live | Guess |
 |---|---|---|---|---|
 | `compile.instanceInterpolation` (behavior) | M9 | docs | – | Copied from fontmake's instancer: a glyph with no layer in the origin master is left out of the instance; a glyph whose layer is empty in some masters but drawn at the origin interpolates without the empty ones; outlines are not rounded before the compile; a glyph that does not export and cannot interpolate keeps its nearest layer instead of failing the instance. Settle each with an instance export from the reference app. |
+| `compile.instanceLayoutInterpolation` (behavior) | M9 | docs | – | A variable font's kerning groups are the font's glyph groups in every master; a UFO master whose own groups differ is read with the glyph groups. A designspace whose masters' groups differ would settle it against fontmake. |
+| `compile.instanceLayoutInterpolation` (behavior) | M9 | docs | – | When a master's mark rules differ from the origin's (an anchor missing in one master), the mark positions keep the origin's values with a warning instead of failing the export. An export from the reference app of such a font would settle it. |
 | `compile.removeOverlapsStatic` (behavior) | M2 | docs | – | A composite glyph keeps its components at export, so components that overlap each other keep their overlaps, following fontmake; how the reference app exports such a glyph is not documented. |
 | `compile.glyphsOutlinePreSteps` (behavior) | M6 | docs | – | A glyph whose anchor propagation fails keeps its own anchors and the build goes on with a warning; exporting a source with a component cycle from the reference app settles what it does. |
 | `compile.productionNames` (behavior) | M4 | docs | – | Use Custom Naming (disablesNiceNames) keeps the source names at export, as the handbook's Don't use Production Names entry says it has the same effect; the reference compilers ignore it. Settled by exporting a font with Use Custom Naming on from the reference app. |

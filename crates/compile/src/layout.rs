@@ -84,6 +84,19 @@ impl LayoutTables {
     }
 }
 
+/// Another master of a variable font: its id and its glyphs after the glyph stages, by name.
+pub struct OtherMaster<'a> {
+    pub id: &'a str,
+    pub glyphs: std::collections::HashMap<&'a str, &'a ResolvedGlyph>,
+}
+
+/// What a variable font's layout stage reads beyond the origin: the masters and their model,
+/// and the other masters' glyphs for their anchors.
+pub struct VariableLayout<'a> {
+    pub layout: &'a fontcraft_features::var_layout::VarLayout,
+    pub masters: Vec<OtherMaster<'a>>,
+}
+
 /// What the layout stage reads.
 pub struct LayoutInput<'a> {
     /// The source the target was resolved from (its entries, kerning, anchors and number
@@ -100,6 +113,9 @@ pub struct LayoutInput<'a> {
     pub include_dir: Option<&'a Path>,
     /// Which included files on disk may be read; `None` reads any.
     pub include_check: Option<&'a fontcraft_fea::IncludeCheck>,
+    /// The variable font's masters (`resolved` is the origin's): the generated kerning and mark
+    /// positions vary with them. `None` for a static font.
+    pub variable: Option<&'a VariableLayout<'a>>,
 }
 
 /// The entries compiled for `input`'s target: the automatic ones regenerated (unless off), then
@@ -241,12 +257,14 @@ pub fn build(input: &LayoutInput, opts: &LayoutOptions, warnings: &mut Vec<Strin
                     limits: crate::kern::limits(),
                     language_systems: &first.language_systems,
                     gsub: first.gsub.as_deref(),
+                    variable: input.variable.map(|v| v.layout),
                 })
             }
             _ => None,
         };
         let systems: Vec<(String, String)> = first.language_systems.iter().map(|(s, l)| (s.to_string(), l.to_string())).collect();
-        let mark_input = crate::marks::input(input.font, input.data, resolved, input.order, systems, warnings);
+        let others = input.variable.map_or(&[][..], |v| v.masters.as_slice());
+        let mark_input = crate::marks::input(input.font, input.data, resolved, input.order, systems, others, warnings);
         let any_anchor = mark_input.glyphs.iter().any(|g| g.anchors.iter().any(|m| !m.anchors.is_empty()));
         let mark_tags = match input.font {
             Some(font) => crate::marks::tags(font, &resolved.master, any_anchor, &declared, warnings),
@@ -254,9 +272,16 @@ pub fn build(input: &LayoutInput, opts: &LayoutOptions, warnings: &mut Vec<Strin
         };
         let mark_request =
             MarkRequest { input: &mark_input, master: &resolved.master, tags: mark_tags, limits: MarkLimits::default(), gsub: first.gsub.as_deref() };
-        let implicit = generated(&ImplicitRequest { kern: kern_request.as_ref(), marks: Some(&mark_request) });
+        // A variable font's mark positions: the writer runs for each other master too.
+        let other_marks: Vec<MarkRequest> = input
+            .variable
+            .map(|v| v.layout.masters().iter().skip(1).map(|m| MarkRequest { master: &m.id, ..mark_request }).collect())
+            .unwrap_or_default();
+        let master_marks = input.variable.map(|v| (v.layout, other_marks.as_slice()));
+        let implicit = generated(&ImplicitRequest { kern: kern_request.as_ref(), marks: Some(&mark_request), master_marks });
         warnings.extend(implicit.warnings);
         generated_lookups = implicit.lookups;
+        generated_lookups.axes = input.variable.map(|v| v.layout.axes().to_vec()).unwrap_or_default();
         generated_lookups.append = append.iter().map(|t| fontcraft_fea::Tag::new(&tag_bytes(t))).collect();
     }
     if assembly.is_none() && generated_lookups.is_empty() {

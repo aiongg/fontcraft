@@ -15,4 +15,6 @@ fea-rs.workspace = true
 # fea-rs's own write-fonts version; no other crate sees it. The font-types it re-exports (Tag,
 # GlyphId16) is the workspace's, so those types cross the boundary unchanged.
 write-fonts-052.workspace = true
+# The coordinate and axis types of fea-rs's `VariationInfo`, for generated values with deltas.
+fontdrasil.workspace = true
 thiserror.workspace = true

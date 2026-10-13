@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1114 rows to check: 1548 guesses and 410 observe steps.**
+**1115 rows to check: 1550 guesses and 410 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,7 +48,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 39 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 3 |
-| **Later milestones (after M6)** | all | **645** |
+| **Later milestones (after M6)** | all | **646** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 39 |
 | Later milestones (after M6) | Edit View: text mode and preview | 14 |
 | Later milestones (after M6) | Components and anchors | 33 |
@@ -60,7 +60,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Interpolation | 44 |
 | Later milestones (after M6) | Hinting | 67 |
 | Later milestones (after M6) | Colour fonts | 44 |
-| Later milestones (after M6) | Files: open, import, export | 43 |
+| Later milestones (after M6) | Files: open, import, export | 44 |
 | Later milestones (after M6) | Settings and the window | 12 |
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 61 |
 | Later milestones (after M6) | Elsewhere | 15 |
@@ -1332,7 +1332,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (645)
+## Later milestones (after M6) (646)
 
 ### Edit View: drawing, guides, layers and the Palette (39)
 
@@ -2910,7 +2910,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The chooser and the Edit View preview always use palette 0. Settled by opening the chooser in a font with two palettes in the reference.
   - Observe: Palette font (two palettes): click the swatch of a palette layer in the Layers palette; note which palette's colours the chooser lists.
 
-### Files: open, import, export (43)
+### Files: open, import, export (44)
 
 - [ ] `export.instanceExportFolder` (behavior, M7, handbook): An instance carrying the Export Folder custom parameter is written to that…
   - Guess: The sub-path is used as written, `..` segments included, as the handbook says; an absolute path, an empty segment, a folder name with a character such as `:` or `\`, or a path of more than 32 segments makes export skip that instance with the reason, one trailing `/` is ignored, and the warnings name every file written outside the export destination; an Export Folder of `../x` and one of `/tmp/x` in the reference app settle it.
@@ -2973,6 +2973,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Every region of the CFF2 variation store becomes a master, since the charstrings do not say which glyphs use which region without evaluating them. Settled by opening CFF2 fonts built from sources with intermediate layers and comparing.
 - [ ] `compile.instanceInterpolation` (behavior, M9, docs): Static instances are produced by interpolating masters at the instance location before…
   - Guess: Copied from fontmake's instancer: a glyph with no layer in the origin master is left out of the instance; a glyph whose layer is empty in some masters but drawn at the origin interpolates without the empty ones; outlines are not rounded before the compile; a glyph that does not export and cannot interpolate keeps its nearest layer instead of failing the instance. Settle each with an instance export from the reference app.
+- [ ] `compile.instanceLayoutInterpolation` (behavior, M9, docs): fontmake's feature writers interpolate kerning and anchors for instances but not explicit…
+  - Guess: A variable font's kerning groups are the font's glyph groups in every master; a UFO master whose own groups differ is read with the glyph groups. A designspace whose masters' groups differ would settle it against fontmake.
+  - Guess: When a master's mark rules differ from the origin's (an anchor missing in one master), the mark positions keep the origin's values with a warning instead of failing the export. An export from the reference app of such a font would settle it.
 - [ ] `compile.kernGroupReconciliation` (behavior, M9, docs): When masters group glyphs differently for kerning, output classes are the common…
   - Guess: A static instance interpolates kerning as fontmake's instancer does (fontMath): a pair one master lacks takes the value that master's groups give it (the pair, the second side's group, the first side's group, both groups, else zero); a master read from its own UFO uses that file's groups; a pair that comes out zero is dropped unless one side is a glyph in a group; values are rounded half up. The common refinement of the groups is for variable fonts (M9.9); settle by comparing an instance of a source whose masters group glyphs differently with fontmake.
 - [ ] `compile.bracketLayerGlyphs` (behavior, M9, docs): Each alternate (bracket) layer set becomes an extra glyph named after its…

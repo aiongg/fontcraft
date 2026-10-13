@@ -118,7 +118,10 @@ impl Job<'_> {
         }
         let opts = Opts::new().compile_gpos(self.gpos).max_error_messages(max);
         let provider = self.generated.map(|generated| Provider { generated });
-        match fea_rs::compile::compile::<NopVariationInfo, Provider>(&tree, &glyph_map, None, provider.as_ref(), opts) {
+        // Generated values with deltas need fea-rs to build a variation store over the font's
+        // axes; the code's own variable syntax waits for `variations` (M9.12).
+        let axes = self.generated.and_then(|g| u16::try_from(g.axes.len()).ok()).filter(|n| *n > 0).map(GeneratedAxes);
+        match fea_rs::compile::compile::<GeneratedAxes, Provider>(&tree, &glyph_map, axes.as_ref(), provider.as_ref(), opts) {
             Ok((compilation, warnings)) => {
                 messages.extend(convert(&tree, &warnings, max));
                 messages.truncate(max);
@@ -336,4 +339,45 @@ fn convert(tree: &ParseTree, set: &DiagnosticSet, max: usize) -> Vec<Diagnostic>
             Diagnostic::at(file, d.span(), severity, d.text())
         })
         .collect()
+}
+
+/// The variation info of a variable font whose feature code has no variable syntax: the axis
+/// count, so fea-rs builds the generated values' deltas into the `GDEF` variation store.
+struct GeneratedAxes(u16);
+
+#[derive(Debug)]
+struct NoVariableSyntax;
+
+impl std::fmt::Display for NoVariableSyntax {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("variable values in feature code are not available yet")
+    }
+}
+
+impl std::error::Error for NoVariableSyntax {}
+
+impl fea_rs::compile::VariationInfo for GeneratedAxes {
+    type Error = NoVariableSyntax;
+
+    fn axis_count(&self) -> u16 {
+        self.0
+    }
+
+    fn axis(&self, _: write_fonts_052::types::Tag) -> Option<(usize, &fontdrasil::types::Axis)> {
+        None
+    }
+
+    fn resolve_variable_metric(
+        &self,
+        _: &std::collections::HashMap<fontdrasil::coords::NormalizedLocation, i16>,
+    ) -> Result<(i16, Vec<(write_fonts_052::tables::variations::VariationRegion, i16)>), NoVariableSyntax> {
+        Err(NoVariableSyntax)
+    }
+
+    fn resolve_glyphs_number_value(
+        &self,
+        _: &str,
+    ) -> Result<std::collections::HashMap<fontdrasil::coords::NormalizedLocation, f64>, NoVariableSyntax> {
+        Err(NoVariableSyntax)
+    }
 }

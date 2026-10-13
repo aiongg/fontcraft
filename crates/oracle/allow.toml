@@ -637,6 +637,58 @@ sources = ["/AlumniSans-wononly.glyphs › ", "/BracketTestFontKerning.glyphs �
 theirs = "*BRACKET*"
 reason = "Follows from the alternate glyphs fontmake keeps in a static instance (see GDEF): its kerning and mark attachment rules name them as well."
 
+# --- The origin of a variable font (M9, question 3) -----------------------------------------------
+# Without a Variable Font Origin parameter both reference compilers take the master named by the
+# words all master names share ("Regular" when there are none), else the first; FontCraft takes the
+# first master, as the handbook says (docs/spec/40-compile.md § 4a). The Oswald sources have no such
+# parameter and list ExtraLight (200) first and Regular (400) second.
+
+[[allow]]
+table = "fvar"
+key = "fvar axis * wght"
+sources = ["oswald/sources/Oswald.glyphs", "/Oswald-AE-comb.glyphs", "/Oswald-O.glyphs"]
+reason = "Decided difference: FontCraft's origin is the first master (200), the handbook's rule; the references take the master named Regular (400), so the axis default differs."
+
+[[allow]]
+table = "avar"
+key = "avar wght"
+sources = ["oswald/sources/Oswald.glyphs", "/Oswald-AE-comb.glyphs", "/Oswald-O.glyphs"]
+reason = "Follows from the origin (see fvar): the axis mapping is normalized around a different default."
+
+[[allow]]
+table = "outlines"
+key = "* outline at instance *"
+sources = ["oswald/sources/Oswald.glyphs", "/Oswald-AE-comb.glyphs", "/Oswald-O.glyphs"]
+reason = "Follows from the origin (see fvar): the normalized coordinates of an instance between masters are quantized around a different default, which moves a value at a half unit by one unit when rounded. The masters agree."
+
+[[allow]]
+table = "advances"
+key = "* advance at instance *"
+sources = ["oswald/sources/Oswald.glyphs", "/Oswald-AE-comb.glyphs", "/Oswald-O.glyphs"]
+reason = "Follows from the origin, as the outlines at instances do (see outlines)."
+
+[[allow]]
+table = "phantom"
+key = "* phantom advance at instance *"
+sources = ["oswald/sources/Oswald.glyphs", "/Oswald-AE-comb.glyphs", "/Oswald-O.glyphs"]
+reason = "Follows from the origin, as the outlines at instances do (see outlines)."
+
+# --- Variable kerning and marks (M9.9) ------------------------------------------------------------
+
+[[allow]]
+table = "GPOS kerning"
+key = "A B kerning at *"
+oracle = "fontc"
+sources = ["/KerningLinkedMaster.glyphs"]
+reason = "Decided difference: a master with Link Metrics With Master takes the kerning of the master it names, as the handbook says, and a master left with no kerning takes the others' interpolated value; fontmake gives the same values. fontc reads the links its own way (docs/spec/40-compile.md § 4)."
+
+[[allow]]
+table = "GPOS marks"
+key = "base *.color0 * at *"
+oracle = "fontc"
+sources = ["/COLRv0-component-anchors.glyphs"]
+reason = "fontc attaches marks to the colour layer glyphs (`A.color0`); fontmake does not, and FontCraft gives them no attachment either (docs/spec/40-compile.md § 4)."
+
 # --- Static instances beyond the masters (M9.4) --------------------------------------------------
 # FontCraft extrapolates a static instance that lies beyond the masters, as the reference app's
 # handbook says; fontmake clamps it to the nearest master (docs/spec/40-compile.md § 4a,

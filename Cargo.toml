@@ -83,6 +83,8 @@ skrifa = "0.48"
 # write-fonts 0.52, so `fea` alone also sees that version, renamed. See docs/plans/M8.md § 3.
 fea-rs = { version = "=1.0.0", default-features = false }
 write-fonts-052 = { package = "write-fonts", version = "=0.52.0" }
+# fea-rs's `VariationInfo` names its coordinate and axis types; `fea` alone uses them.
+fontdrasil = { version = "=1.0.0", default-features = false }
 
 # Shaping for Edit View and Text Preview (MIT), on the workspace's read-fonts. Never its `icu`
 # feature, which pins another icu_properties.

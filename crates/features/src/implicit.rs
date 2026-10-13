@@ -13,14 +13,18 @@
 use fontcraft_fea::{Anchor, GeneratedLookup, GeneratedLookups, GeneratedRules, GlyphClass, LookupFlags, Metric};
 use write_fonts::tables::gdef::GlyphClassDef;
 
-use crate::KernRequest;
 use crate::marks::{GeneratedMarks, MarkRequest, MarkRules, Point16};
+use crate::var_layout::VarLayout;
+use crate::{FeatureError, KernRequest};
 
 /// What the implicit features are generated from. `None` leaves that writer out (its tags are
 /// off, or the source has no data for it).
 pub struct ImplicitRequest<'a> {
     pub kern: Option<&'a KernRequest<'a>>,
     pub marks: Option<&'a MarkRequest<'a>>,
+    /// A variable font: its masters, and the mark request of each master after the origin, in
+    /// the layout's order (`marks` is the origin's). The mark positions vary with the masters.
+    pub master_marks: Option<(&'a VarLayout, &'a [MarkRequest<'a>])>,
 }
 
 /// The implicit features of one master, with the warnings of the writers.
@@ -48,7 +52,16 @@ pub fn generated(req: &ImplicitRequest) -> Implicit {
         None => GeneratedLookups::default(),
     };
     let marks = match req.marks.map(|m| crate::marks::generate_marks(m, &mut warnings)) {
-        Some(Ok(marks)) => from_marks(&marks),
+        Some(Ok(marks)) => match req.master_marks {
+            Some((layout, others)) => match from_master_marks(layout, &marks, others) {
+                Ok(lookups) => lookups,
+                Err(e) => {
+                    warnings.push(format!("the mark positions do not vary in the variable font, they are the origin's: {e}"));
+                    from_marks(&marks)
+                }
+            },
+            None => from_marks(&marks),
+        },
         Some(Err(e)) => {
             warnings.push(format!("mark attachment and the GDEF table were not written to the font: {e}"));
             GeneratedLookups::default()
@@ -78,6 +91,85 @@ pub fn from_marks(marks: &GeneratedMarks) -> GeneratedLookups {
     out.glyph_classes = marks.classes.iter().filter_map(|(g, c)| Some((*g, glyph_class(*c)?))).collect();
     out.carets = marks.carets.iter().map(|(g, carets)| (*g, carets.iter().map(|c| Metric::fixed(*c)).collect())).collect();
     out
+}
+
+/// The origin's mark lookups (`origin`) with every position varying over the masters: the writer
+/// runs for each other master (`others`, in `layout`'s order), and each position's values become
+/// the origin's plus deltas. Refused when a master's lookups do not have the origin's rules and
+/// glyphs (anchors missing in a master).
+pub fn from_master_marks(layout: &VarLayout, origin: &GeneratedMarks, others: &[MarkRequest]) -> Result<GeneratedLookups, FeatureError> {
+    let mut out = from_marks(origin);
+    if out.lookups.is_empty() {
+        return Ok(out);
+    }
+    let (origin_keys, origin_values) = positions(&mut out);
+    let mut values: Vec<Vec<f64>> = vec![origin_values.iter().map(|v| f64::from(**v)).collect()];
+    for req in others {
+        let mut quiet = Vec::new();
+        let mut theirs = from_marks(&crate::marks::generate_marks(req, &mut quiet)?);
+        let (keys, list) = positions(&mut theirs);
+        if keys != origin_keys {
+            return Err(FeatureError::Unsupported(format!("master `{}` attaches other glyphs or anchors than the origin", req.master)));
+        }
+        values.push(list.iter().map(|v| f64::from(**v)).collect());
+    }
+    let resolved = layout.resolve(&values)?;
+    let (_, mut slots) = metrics(&mut out);
+    for (slot, value) in slots.iter_mut().zip(&resolved) {
+        **slot = layout.metric(value);
+    }
+    Ok(out)
+}
+
+/// Where each position of `lookups` sits (lookup, glyph and slot), and the positions' default
+/// values in the same order.
+fn positions(lookups: &mut GeneratedLookups) -> (Vec<(usize, u16, u8)>, Vec<&i16>) {
+    let (keys, metrics) = metrics(lookups);
+    (keys, metrics.into_iter().map(|m| &m.default).collect())
+}
+
+/// Every anchor coordinate of `lookups` in a fixed order, with keys that tell two masters' rules
+/// apart: an absent anchor (a ligature component or a cursive side) is a key without a metric.
+fn metrics(lookups: &mut GeneratedLookups) -> (Vec<(usize, u16, u8)>, Vec<&mut Metric>) {
+    let mut keys = Vec::new();
+    let mut out: Vec<&mut Metric> = Vec::new();
+    fn push<'m>(keys: &mut Vec<(usize, u16, u8)>, out: &mut Vec<&'m mut Metric>, key: (usize, u16, u8), a: Option<&'m mut Anchor>) {
+        keys.push(key);
+        if let Some(a) = a {
+            out.push(&mut a.x);
+            out.push(&mut a.y);
+        }
+    }
+    for (i, lookup) in lookups.lookups.iter_mut().enumerate() {
+        match &mut lookup.rules {
+            GeneratedRules::MarkToBase { marks, bases } | GeneratedRules::MarkToMark { marks, bases } => {
+                for (g, a) in marks.iter_mut() {
+                    push(&mut keys, &mut out, (i, g.to_u16(), 0), Some(a));
+                }
+                for (g, a) in bases.iter_mut() {
+                    push(&mut keys, &mut out, (i, g.to_u16(), 1), Some(a));
+                }
+            }
+            GeneratedRules::MarkToLigature { marks, ligatures } => {
+                for (g, a) in marks.iter_mut() {
+                    push(&mut keys, &mut out, (i, g.to_u16(), 0), Some(a));
+                }
+                for (g, components) in ligatures.iter_mut() {
+                    for a in components.iter_mut() {
+                        push(&mut keys, &mut out, (i, g.to_u16(), if a.is_some() { 2 } else { 3 }), a.as_mut());
+                    }
+                }
+            }
+            GeneratedRules::Cursive { glyphs } => {
+                for (g, entry, exit) in glyphs.iter_mut() {
+                    push(&mut keys, &mut out, (i, g.to_u16(), if entry.is_some() { 4 } else { 5 }), entry.as_mut());
+                    push(&mut keys, &mut out, (i, g.to_u16(), if exit.is_some() { 6 } else { 7 }), exit.as_mut());
+                }
+            }
+            GeneratedRules::Pair { .. } => {}
+        }
+    }
+    (keys, out)
 }
 
 fn glyph_class(class: GlyphClassDef) -> Option<GlyphClass> {
