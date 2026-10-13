@@ -210,6 +210,28 @@ fn cmd_wasm() -> Result<(), String> {
     Ok(())
 }
 
+/// The gate's test step. With cargo-nextest installed, tests run in parallel, one process each
+/// (the command sweep is split into 16 tests for this), and doctests run apart because nextest
+/// does not run them. Without it, `cargo test --workspace` runs everything one binary at a time.
+fn cmd_test() -> Result<(), String> {
+    let mut probe = cargo();
+    probe.args(["nextest", "--version"]).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
+    if !probe.status().is_ok_and(|s| s.success()) {
+        eprintln!("test: cargo-nextest is not installed (`cargo install cargo-nextest --locked`); running `cargo test --workspace` instead");
+        let mut c = cargo();
+        c.args(["test", "--workspace"]);
+        return run(c, "cargo test --workspace");
+    }
+    let args =
+        ["nextest", "run", "--workspace", "--no-fail-fast", "--status-level", "fail", "--final-status-level", "fail", "--failure-output", "final"];
+    let mut c = cargo();
+    c.args(args);
+    run(c, &format!("cargo {}", args.join(" ")))?;
+    let mut doc = cargo();
+    doc.args(["test", "--workspace", "--doc"]);
+    run(doc, "cargo test --workspace --doc")
+}
+
 fn cmd_ci() -> Result<(), String> {
     type Step = (&'static str, Box<dyn Fn() -> Result<(), String>>);
     let cargo_step = |args: &'static [&'static str]| -> Box<dyn Fn() -> Result<(), String>> {
@@ -222,7 +244,7 @@ fn cmd_ci() -> Result<(), String> {
     let steps: Vec<Step> = vec![
         ("fmt", cargo_step(&["fmt", "--all", "--", "--check"])),
         ("clippy", cargo_step(&["clippy", "--workspace", "--all-targets", "--", "-D", "warnings"])),
-        ("test", cargo_step(&["test", "--workspace"])),
+        ("test", Box::new(cmd_test)),
         ("spec", Box::new(|| spec::run(&root()).and_then(|()| paramcatalog::run(&root(), true)))),
         ("parity", Box::new(|| parity::run(&root(), true))),
         ("guesses", Box::new(|| guesses::run(&root(), true))),

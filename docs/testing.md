@@ -44,6 +44,21 @@ each area as a module (`engine`, `decompile`, `io_glyphs`, `io_ufo`, `plist`):
 `cargo test -p fontcraft-engine --test engine <module>::` runs one. Speed measures and oracle
 runs use `--profile measure`; shipping builds use release.
 
+The gate runs the tests with `cargo nextest run --workspace` (one process per test, in parallel)
+and the doctests with `cargo test --workspace --doc`. To run one test or a group with nextest:
+`cargo nextest run -p fontcraft-engine <name filter>` or `-E 'test(/regex/)'`; add
+`--run-ignored ignored-only` for the `#[ignore]` tests (nextest counts them as skipped otherwise).
+A test that asserts on wall-clock time reserves test slots in `.config/nextest.toml`, so a busy
+machine does not fail it.
+
+**The command sweep** (`crates/engine/tests/engine/command_sweep.rs`) runs every registered
+command with hostile parameters from four starting states: `Empty`, `NewFont`, `Drawn` and
+`Hinted` (outlines with PostScript hints and TrueType instructions). Each state is split into
+four chunks by a hash of the command id, giving 16 tests named `command_sweep::<state>_chunk_<n>`:
+`empty_chunk_0` … `empty_chunk_3`, `new_font_chunk_*`, `drawn_chunk_*` and `hinted_chunk_*`. Every
+command lands in exactly one chunk per state, and a new command is swept without further work. Run
+the whole sweep with `cargo nextest run -p fontcraft-engine 'command_sweep::'`.
+
 None of these is needed to build or to run the ordinary tests. Oracle tests are opt-in
 (`cargo test -p fontcraft-oracle --features oracle`), skip with a message when a tool is missing,
 and are meant to run always once a CI service exists.

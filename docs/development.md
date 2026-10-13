@@ -6,6 +6,7 @@
 cargo xtask ci                                   # the gate (see below)
 cargo test -p fontcraft-engine                   # one crate
 cargo test -p fontcraft-engine --test engine kerning_pairs::   # one module of the crate's integration tests
+cargo nextest run -p fontcraft-engine kerning_pairs::          # the same with nextest (name filter; -E 'test(/regex/)' for more)
 cargo test --profile measure -p fontcraft-oracle --features oracle --test kern -- --ignored   # speed measures and oracle runs
 cargo run -p fontcraft                           # the desktop app, with a new font
 cargo run -p fontcraft -- file.fontcraft --control 7985   # + the JSON control channel
@@ -34,7 +35,7 @@ The first build of the desktop app compiles the windowing and GPU stack and take
 |---|---|---|
 | `fmt` | `cargo fmt --all -- --check` | code is not formatted (`rustfmt.toml`: 150 columns) |
 | `clippy` | `cargo clippy --workspace --all-targets -- -D warnings` | any warning, including the no-panic lints (`unwrap`, `expect`, `panic!`, `todo!`, `unimplemented!`, `unreachable!`, indexing and slicing) |
-| `test` | `cargo test --workspace` | a test fails |
+| `test` | `cargo nextest run --workspace`, then `cargo test --workspace --doc` | a test fails |
 | `spec` | `cargo xtask spec` | the inventory breaks a rule of `spec/README.md` |
 | `parity` | `cargo xtask parity --check` | a registered command has no inventory row; a command is engine in one place and UI in the other; `docs/parity.md` is stale |
 | `guesses` | `cargo xtask guesses --check` | a live `inferred` or `memory` command has no `guesses` entry and no `own = true`; `docs/guesses.md` is stale |
@@ -43,6 +44,15 @@ The first build of the desktop app compiles the windowing and GPU stack and take
 | `brands` | `cargo xtask brands` | user-visible text names another vendor's product |
 | `layers` | `cargo xtask layers` | a crate depends upward, a UI crate is used below L6, a crate is not registered |
 | `wasm` | `cargo xtask wasm` | a library crate does not build for the browser |
+
+The `test` step runs the tests in parallel, one process per test, with cargo-nextest
+(`cargo install cargo-nextest --locked`). Nextest does not run doctests, so they run apart. It
+prints failures and a summary with the counts of tests run, passed, failed and skipped; skipped
+tests are the `#[ignore]` ones (speed measures and oracle runs). Without nextest installed, the
+step prints a note and runs `cargo test --workspace` instead. The command sweep is split into 16
+tests so that it spreads over the cores (see `docs/testing.md`). `.config/nextest.toml` holds the
+runner's settings. Because every test has its own process, a test must not rely on state another
+test left behind: no shared statics, working directory or fixed temp paths.
 
 Run a step alone with `cargo xtask <step>`. After adding or renaming a command run `cargo xtask
 parity` and commit `docs/parity.md`; after changing a row's `guesses` run `cargo xtask guesses` and

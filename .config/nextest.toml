@@ -1,0 +1,7 @@
+# Settings for `cargo nextest run`, the gate's test runner (docs/development.md › The gate).
+
+# Tests that assert on wall-clock time fail when the machine is saturated, so they reserve test
+# slots: nextest then runs fewer other tests beside them.
+[[profile.default.overrides]]
+filter = 'package(fontcraft-pathops) and test(random_paths_through_every_operation_never_panic)'
+threads-required = 8

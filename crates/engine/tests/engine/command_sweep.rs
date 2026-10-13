@@ -94,39 +94,66 @@ fn dangling(s: &Session) -> Option<String> {
     None
 }
 
-#[test]
-fn no_command_panics_or_corrupts_the_session() {
-    let scratch = temp_dir("sweep");
+/// Chunks per starting state. The sweep is split by state and chunk so a parallel test runner
+/// spreads it over all cores.
+const CHUNKS: u64 = 4;
+
+/// The chunk of a command id: a hash of the id, so a command stays in its chunk when others are
+/// added and every command lands in exactly one.
+fn chunk_of(id: &str) -> u64 {
+    id.bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)) % CHUNKS
+}
+
+/// Runs every command of one chunk, with every junk parameter set, from one starting state.
+fn sweep(state: &str, chunk: u64) {
+    let (fx, make) = states().into_iter().find(|(name, _)| *name == state).unwrap();
+    let scratch = temp_dir(&format!("sweep-{fx}-{chunk}"));
     let mut failures = Vec::new();
     let mut calls = 0usize;
-    let states = states();
-    for spec in command_specs() {
+    for spec in command_specs().iter().filter(|spec| chunk_of(spec.id) == chunk) {
         for params in junk_params(spec.params, &scratch) {
-            for (fx, make) in &states {
-                let mut s = make();
-                let before = snapshot(&s);
-                calls += 1;
-                match catch_quiet(|| s.execute(spec.id, &params)) {
-                    Err(panic) => failures.push(format!("PANIC {} {params} [{fx}]: {panic}", spec.id)),
-                    Ok(Err(_)) => {
-                        if snapshot(&s) != before {
-                            failures.push(format!("{} {params} [{fx}]: returned an error but changed the session", spec.id));
-                        }
+            let mut s = make();
+            let before = snapshot(&s);
+            calls += 1;
+            match catch_quiet(|| s.execute(spec.id, &params)) {
+                Err(panic) => failures.push(format!("PANIC {} {params} [{fx}]: {panic}", spec.id)),
+                Ok(Err(_)) => {
+                    if snapshot(&s) != before {
+                        failures.push(format!("{} {params} [{fx}]: returned an error but changed the session", spec.id));
                     }
-                    Ok(Ok(_)) => {
-                        if let Err(e) = check_session(&s) {
-                            failures.push(format!("{} {params} [{fx}]: {e}", spec.id));
-                        } else if let Some(e) = dangling(&s) {
-                            failures.push(format!("{} {params} [{fx}]: {e}", spec.id));
-                        }
+                }
+                Ok(Ok(_)) => {
+                    if let Err(e) = check_session(&s) {
+                        failures.push(format!("{} {params} [{fx}]: {e}", spec.id));
+                    } else if let Some(e) = dangling(&s) {
+                        failures.push(format!("{} {params} [{fx}]: {e}", spec.id));
                     }
                 }
             }
         }
     }
     let _ = std::fs::remove_dir_all(&scratch);
-    assert!(calls > 1000, "the sweep made only {calls} calls");
+    assert!(calls > 100, "the sweep of {fx} chunk {chunk} made only {calls} calls");
     assert!(failures.is_empty(), "{} of {calls} calls failed:\n{}", failures.len(), failures.iter().take(40).cloned().collect::<Vec<_>>().join("\n"));
+}
+
+/// One test per starting state and chunk: `empty_chunk_0` … `hinted_chunk_3`.
+macro_rules! sweep_tests {
+    ($($state:literal => [$($chunk:literal => $test:ident),*]),*) => {
+        $($(
+            #[test]
+            fn $test() {
+                sweep($state, $chunk);
+            }
+        )*)*
+    };
+}
+
+sweep_tests! {
+    "Empty" => [0 => empty_chunk_0, 1 => empty_chunk_1, 2 => empty_chunk_2, 3 => empty_chunk_3],
+    "NewFont" => [0 => new_font_chunk_0, 1 => new_font_chunk_1, 2 => new_font_chunk_2, 3 => new_font_chunk_3],
+    "Drawn" => [0 => drawn_chunk_0, 1 => drawn_chunk_1, 2 => drawn_chunk_2, 3 => drawn_chunk_3],
+    "Hinted" => [0 => hinted_chunk_0, 1 => hinted_chunk_1, 2 => hinted_chunk_2, 3 => hinted_chunk_3]
 }
 
 #[test]
