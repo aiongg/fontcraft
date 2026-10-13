@@ -157,6 +157,9 @@ pub struct Plan {
     pub missing_glyphs: Vec<String>,
     /// Requested code points the font does not map (with `ignore_missing_unicodes`).
     pub missing_unicodes: Vec<u32>,
+    /// Charstring operations left of the font's `MAX_FONT_CHARSTRING_OPS` after the
+    /// closure; the `.notdef` width scan takes from it.
+    pub charstring_ops_left: usize,
     pub options: SubsetOptions,
 }
 

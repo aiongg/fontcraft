@@ -39,7 +39,7 @@ pub fn plan(font: &SfntFont, options: &SubsetOptions) -> Result<Plan> {
         by_name.entry(name.as_str()).or_insert(i as u32);
     }
 
-    let mut plan = Plan { num_glyphs: n, options: options.clone(), ..Plan::default() };
+    let mut plan = Plan { num_glyphs: n, charstring_ops_left: cs::MAX_FONT_CHARSTRING_OPS, options: options.clone(), ..Plan::default() };
     if options.all_glyphs {
         plan.requested.extend(0..n as u32);
     }
@@ -99,14 +99,15 @@ pub fn plan(font: &SfntFont, options: &SubsetOptions) -> Result<Plan> {
     }
 
     if let Some(glyf) = Glyf::read(font, n)? {
-        close(&mut glyphs, |g| glyf.components(g as usize))?;
+        close(&mut glyphs, n, |g| glyf.components(g as usize))?;
     }
     if let Some(bytes) = font.get(*b"CFF ") {
         let table = cff::parse(bytes, n)?;
-        close(&mut glyphs, |g| {
+        let budget = &mut plan.charstring_ops_left;
+        close(&mut glyphs, n, |g| {
             let Some(program) = table.charstring(g as usize) else { return Ok(Vec::new()) };
-            let (local, global) = table.subrs(g as usize)?;
-            let scan = cs::scan(program, &local, &global)?;
+            let (local, global) = table.subrs(g as usize);
+            let scan = cs::scan(program, local, global, budget)?;
             Ok(scan
                 .seac
                 .map(|(base, accent)| {
@@ -126,11 +127,15 @@ pub fn plan(font: &SfntFont, options: &SubsetOptions) -> Result<Plan> {
     Ok(plan)
 }
 
-/// Adds to `glyphs` everything `parts` reaches from them, each glyph visited once.
-fn close(glyphs: &mut BTreeSet<u32>, mut parts: impl FnMut(u32) -> Result<Vec<u32>>) -> Result<()> {
+/// Adds to `glyphs` everything `parts` reaches from them, each glyph visited once. A part past
+/// the `n` glyphs of the font is an error.
+fn close(glyphs: &mut BTreeSet<u32>, n: usize, mut parts: impl FnMut(u32) -> Result<Vec<u32>>) -> Result<()> {
     let mut todo: Vec<u32> = glyphs.iter().copied().collect();
     while let Some(g) = todo.pop() {
         for part in parts(g)? {
+            if part as usize >= n {
+                return Err(TablesError::invalid(format!("glyph {g} uses glyph {part}, which is past the glyph count {n}")));
+            }
             if glyphs.insert(part) {
                 todo.push(part);
             }

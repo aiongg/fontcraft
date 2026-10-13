@@ -49,18 +49,28 @@ impl Entry {
 struct Private<'a> {
     dict: Vec<Entry>,
     subrs: Option<&'a [u8]>,
+    /// Where `subrs` starts in the table.
+    subrs_at: Option<usize>,
+    /// The slot of `subrs` in [`Cff::local_subrs`].
+    local: Option<usize>,
 }
 
 /// The local and global subroutines of a glyph, item by item.
-pub(crate) type Subrs<'a> = (Vec<&'a [u8]>, Vec<&'a [u8]>);
+pub(crate) type Subrs<'s, 'a> = (&'s [&'a [u8]], &'s [&'a [u8]]);
 
 /// A parsed `CFF ` table.
+#[derive(Clone)]
 pub(crate) struct Cff<'a> {
     header: &'a [u8],
     name_index: &'a [u8],
     top: Vec<Entry>,
     strings: Vec<&'a [u8]>,
     gsubrs: &'a [u8],
+    /// The items of `gsubrs`, parsed once.
+    global_subrs: Vec<&'a [u8]>,
+    /// The items of every distinct local Subrs INDEX, parsed once; Private DICTs that share one
+    /// share its slot.
+    local_subrs: Vec<Vec<&'a [u8]>>,
     charstrings: Vec<&'a [u8]>,
     /// SID (or CID) per glyph; glyph 0 has 0.
     charset: Vec<u16>,
@@ -238,15 +248,15 @@ fn private<'a>(d: Data<'a>, e: &Entry) -> Result<Private<'a>> {
     let at = offset_of(d, e, 1)?;
     let bytes = d.slice(at, size)?;
     let dict = dict(d, bytes)?;
-    let subrs = match find(&dict, SUBRS) {
+    let (subrs, subrs_at) = match find(&dict, SUBRS) {
         Some(s) => {
             let start = at.checked_add(offset_of(d, s, 0)?).ok_or_else(|| d.bad("has a Subrs offset past the end"))?;
             let (_, end) = index(d, start)?;
-            Some(d.slice(start, end - start)?)
+            (Some(d.slice(start, end - start)?), Some(start))
         }
-        None => None,
+        None => (None, None),
     };
-    Ok(Private { dict, subrs })
+    Ok(Private { dict, subrs, subrs_at, local: None })
 }
 
 /// Parses `bytes` as a `CFF ` table of a font with `num_glyphs` glyphs.
@@ -268,7 +278,7 @@ pub(crate) fn parse(bytes: &[u8], num_glyphs: usize) -> Result<Cff<'_>> {
     };
     let top = dict(d, top)?;
     let (strings, strings_end) = index(d, top_end)?;
-    let (_, gsubrs_end) = index(d, strings_end)?;
+    let (global_subrs, gsubrs_end) = index(d, strings_end)?;
     let gsubrs = d.slice(strings_end, gsubrs_end - strings_end)?;
 
     let cs = find(&top, CHARSTRINGS).ok_or_else(|| d.bad("has no CharStrings"))?;
@@ -326,7 +336,36 @@ pub(crate) fn parse(bytes: &[u8], num_glyphs: usize) -> Result<Cff<'_>> {
     } else if let Some(p) = find(&top, PRIVATE) {
         privates.push(private(d, p)?);
     }
-    Ok(Cff { header, name_index, top, strings, gsubrs, charstrings, charset, cid, encoding, privates, font_dicts, fd_select })
+    let mut local_subrs: Vec<Vec<&[u8]>> = Vec::new();
+    let mut slots: HashMap<usize, usize> = HashMap::new();
+    for p in &mut privates {
+        let Some(start) = p.subrs_at else { continue };
+        let slot = match slots.get(&start) {
+            Some(slot) => *slot,
+            None => {
+                local_subrs.push(index(d, start)?.0);
+                slots.insert(start, local_subrs.len() - 1);
+                local_subrs.len() - 1
+            }
+        };
+        p.local = Some(slot);
+    }
+    Ok(Cff {
+        header,
+        name_index,
+        top,
+        strings,
+        gsubrs,
+        global_subrs,
+        local_subrs,
+        charstrings,
+        charset,
+        cid,
+        encoding,
+        privates,
+        font_dicts,
+        fd_select,
+    })
 }
 
 fn read_charset(d: Data<'_>, at: usize, n: usize) -> Result<Vec<u16>> {
@@ -379,7 +418,7 @@ fn read_fd_select(d: Data<'_>, at: usize, n: usize) -> Result<Vec<u8>> {
     }
 }
 
-impl Cff<'_> {
+impl<'a> Cff<'a> {
     /// Glyph names by glyph id: from the charset, or `cidNNNNN` for a CID-keyed font as
     /// fontTools names them.
     pub(crate) fn glyph_names(&self) -> Vec<String> {
@@ -433,14 +472,20 @@ impl Cff<'_> {
         self.charstrings.get(g).copied()
     }
 
+    /// The table with `items` as its global subroutines and the charstrings of `replace`.
+    #[cfg(test)]
+    pub(crate) fn with_global_subrs(&self, items: &[&[u8]], replace: &HashMap<usize, Vec<u8>>) -> Result<Vec<u8>> {
+        let index = write_index(items)?;
+        let mut table = self.clone();
+        table.gsubrs = &index;
+        let identity: Vec<u16> = (0..self.charstrings.len()).map(|g| to_u16(g, "a glyph id")).collect::<Result<_>>()?;
+        table.rebuild_with(&identity, None, replace, false)
+    }
+
     /// The local and global subroutines glyph `g` calls into.
-    pub(crate) fn subrs(&self, g: usize) -> Result<Subrs<'_>> {
-        let (global, _) = index(Data::new(TAG, self.gsubrs), 0)?;
-        let local = match self.private_of(g).and_then(|p| p.subrs) {
-            Some(bytes) => index(Data::new(TAG, bytes), 0)?.0,
-            None => Vec::new(),
-        };
-        Ok((local, global))
+    pub(crate) fn subrs(&self, g: usize) -> Subrs<'_, 'a> {
+        let local = self.private_of(g).and_then(|p| p.local).and_then(|slot| self.local_subrs.get(slot)).map_or(&[][..], Vec::as_slice);
+        (local, &self.global_subrs)
     }
 
     /// `defaultWidthX` and `nominalWidthX` of the Private DICT glyph `g` uses, when they are

@@ -8,6 +8,12 @@ use crate::{Result, TablesError};
 /// Most operators and operands one glyph may execute, subroutine calls included.
 pub const MAX_CHARSTRING_OPS: usize = 1 << 20;
 
+/// Most operators and operands one subset executes over all the charstrings of a font (the
+/// closure and the `.notdef` width together). Nested subroutines can make every glyph cost
+/// [`MAX_CHARSTRING_OPS`], so a per-glyph cap alone lets a small font cost that many times its
+/// glyph count; a whole CJK font with heavy subroutines executes well under this.
+pub const MAX_FONT_CHARSTRING_OPS: usize = 1 << 26;
+
 /// What a charstring declares.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Scan {
@@ -24,12 +30,15 @@ struct Scanner<'a> {
     stems: usize,
     seen_first: bool,
     ops: usize,
+    /// Operations left for the whole font.
+    budget: &'a mut usize,
     out: Scan,
 }
 
-/// Scans `program` with its local and global subroutines.
-pub fn scan(program: &[u8], local: &[&[u8]], global: &[&[u8]]) -> Result<Scan> {
-    let mut s = Scanner { local, global, stack: Vec::new(), stems: 0, seen_first: false, ops: 0, out: Scan::default() };
+/// Scans `program` with its local and global subroutines, taking the operations it executes
+/// from `budget`, the font's share (start it at [`MAX_FONT_CHARSTRING_OPS`]).
+pub fn scan(program: &[u8], local: &[&[u8]], global: &[&[u8]], budget: &mut usize) -> Result<Scan> {
+    let mut s = Scanner { local, global, stack: Vec::new(), stems: 0, seen_first: false, ops: 0, budget, out: Scan::default() };
     s.run(program, 0)?;
     Ok(s.out)
 }
@@ -81,6 +90,10 @@ impl Scanner<'_> {
             if self.ops > MAX_CHARSTRING_OPS {
                 return Err(TablesError::TooLarge { what: "the operations of one CFF charstring", limit: MAX_CHARSTRING_OPS });
             }
+            *self.budget = self
+                .budget
+                .checked_sub(1)
+                .ok_or(TablesError::TooLarge { what: "the operations of the CFF charstrings of one font", limit: MAX_FONT_CHARSTRING_OPS })?;
             if self.stack.len() > MAX_CFF2_STACK {
                 return Err(bad("overflows its stack"));
             }
@@ -208,12 +221,12 @@ mod tests {
             program.extend(encode_number(v));
         }
         program.push(14);
-        assert_eq!(scan(&program, &[], &[]).unwrap(), Scan { width: Some(50.0), seac: Some((65, 194)) });
+        assert_eq!(scan(&program, &[], &[], &mut MAX_FONT_CHARSTRING_OPS.clone()).unwrap(), Scan { width: Some(50.0), seac: Some((65, 194)) });
 
         // The same endchar inside local subroutine 0 (index -107 with the bias of 107).
         let sub = program.clone();
         let call = [encode_number(-107.0), vec![10]].concat();
-        assert_eq!(scan(&call, &[&sub], &[]).unwrap().seac, Some((65, 194)));
+        assert_eq!(scan(&call, &[&sub], &[], &mut MAX_FONT_CHARSTRING_OPS.clone()).unwrap().seac, Some((65, 194)));
     }
 
     #[test]
@@ -223,13 +236,13 @@ mod tests {
             p.extend(encode_number(10.0));
             p.push(22); // width hmoveto
             p.push(14);
-            assert_eq!(scan(&p, &[], &[]).unwrap().width, Some(v), "{v}");
+            assert_eq!(scan(&p, &[], &[], &mut MAX_FONT_CHARSTRING_OPS.clone()).unwrap().width, Some(v), "{v}");
         }
     }
 
     #[test]
     fn self_calling_subroutine_is_refused() {
         let sub = [encode_number(-107.0), vec![10]].concat();
-        assert!(scan(&sub, &[&sub], &[]).is_err());
+        assert!(scan(&sub, &[&sub], &[], &mut MAX_FONT_CHARSTRING_OPS.clone()).is_err());
     }
 }

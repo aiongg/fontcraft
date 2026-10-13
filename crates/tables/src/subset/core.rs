@@ -483,7 +483,7 @@ fn subset_cmap(plan: &Plan, bytes: &[u8]) -> Result<Vec<u8>> {
             write_format14(&uvs)?
         } else {
             let map: Vec<(u32, u16)> = s.map.iter().map(|(u, g)| Ok((*u, new(*g)?))).collect::<Result<_>>()?;
-            let bmp = s.map.last_key_value().is_none_or(|(u, _)| *u < 0xFFFF);
+            let bmp = s.map.last_key_value().is_none_or(|(u, _)| *u <= 0xFFFF);
             match s.format {
                 4 | 6 | 2 if bmp => match s.format {
                     6 => write_format6(s.language as u16, &map)?,
@@ -771,8 +771,8 @@ fn subset_cff(plan: &Plan, bytes: &[u8]) -> Result<Vec<u8>> {
     }
     if plan.options.notdef_glyph && !plan.options.notdef_outline {
         let program = table.charstring(0).unwrap_or_default();
-        let (local, global) = table.subrs(0)?;
-        let width = cs::scan(program, &local, &global)?.width;
+        let (local, global) = table.subrs(0);
+        let width = cs::scan(program, local, global, &mut plan.charstring_ops_left.clone())?.width;
         let (default, nominal) = table.widths(0);
         let mut empty = Vec::new();
         if let Some(w) = width {

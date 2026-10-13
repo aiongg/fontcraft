@@ -63,6 +63,31 @@ fn cmap_of(bytes: &[u8]) -> BTreeMap<u32, u32> {
     out
 }
 
+/// The glyf records of `font`, one per glyph.
+fn glyf_glyphs(font: &SfntFont) -> Vec<Vec<u8>> {
+    let glyf = Glyf::read(font, crate::reorder::names::num_glyphs(font).unwrap()).unwrap().unwrap();
+    (0..glyf.len()).map(|g| glyf.glyph(g).to_vec()).collect()
+}
+
+/// Replaces the glyf and loca tables of `font` with `glyphs` (long loca offsets).
+fn set_glyf(font: &mut SfntFont, glyphs: &[Vec<u8>]) {
+    let mut glyf_bytes = Vec::new();
+    let mut loca = Vec::new();
+    for g in glyphs {
+        loca.extend_from_slice(&(glyf_bytes.len() as u32).to_be_bytes());
+        glyf_bytes.extend_from_slice(g);
+        while glyf_bytes.len() % 4 != 0 {
+            glyf_bytes.push(0);
+        }
+    }
+    loca.extend_from_slice(&(glyf_bytes.len() as u32).to_be_bytes());
+    let mut head = font.get(*b"head").unwrap().to_vec();
+    head[50..52].copy_from_slice(&1u16.to_be_bytes());
+    font.insert(*b"head", head);
+    font.insert(*b"glyf", glyf_bytes);
+    font.insert(*b"loca", loca);
+}
+
 fn advance(bytes: &[u8], g: u32) -> u16 {
     FontRef::new(bytes).unwrap().hmtx().unwrap().advance(GlyphId::new(g)).unwrap()
 }
@@ -138,8 +163,7 @@ fn no_hinting_drops_instructions_and_the_hinting_tables() {
     let mut font = built(CompileFlavour::TrueType);
     let a = gid_of(&font, "A") as usize;
     // Give A an instruction (PUSHB[0] 1) and the font a prep table.
-    let glyf = Glyf::read(&font, crate::reorder::names::num_glyphs(&font).unwrap()).unwrap().unwrap();
-    let glyphs: Vec<Vec<u8>> = (0..glyf.len()).map(|g| glyf.glyph(g).to_vec()).collect();
+    let glyphs = glyf_glyphs(&font);
     let mut with = glyphs.clone();
     let simple = &glyphs[a];
     let contours = i16::from_be_bytes([simple[0], simple[1]]) as usize;
@@ -148,21 +172,7 @@ fn no_hinting_drops_instructions_and_the_hinting_tables() {
     patched.extend_from_slice(&[0, 2, 0xB0, 1]);
     patched.extend_from_slice(&simple[at + 2..]);
     with[a] = patched;
-    let mut glyf_bytes = Vec::new();
-    let mut loca = Vec::new();
-    for g in &with {
-        loca.extend_from_slice(&(glyf_bytes.len() as u32).to_be_bytes());
-        glyf_bytes.extend_from_slice(g);
-        while glyf_bytes.len() % 4 != 0 {
-            glyf_bytes.push(0);
-        }
-    }
-    loca.extend_from_slice(&(glyf_bytes.len() as u32).to_be_bytes());
-    let mut head = font.get(*b"head").unwrap().to_vec();
-    head[50..52].copy_from_slice(&1u16.to_be_bytes());
-    font.insert(*b"head", head);
-    font.insert(*b"glyf", glyf_bytes);
-    font.insert(*b"loca", loca);
+    set_glyf(&mut font, &with);
     font.insert(*b"prep", vec![0xB0, 1]);
 
     let keep = subset(&font, &SubsetOptions { text: "A".into(), ..SubsetOptions::default() }).unwrap();
@@ -211,10 +221,11 @@ fn cff_closes_over_seac_and_keeps_the_notdef_width() {
     assert_eq!(out_cff.glyph_names(), [".notdef", "A", "acute", "Aacute"]);
     let notdef = out_cff.charstring(0).unwrap();
     assert_eq!(notdef.last(), Some(&14), ".notdef is reduced to its width and endchar");
-    let (local, global) = out_cff.subrs(0).unwrap();
-    let scan = cs::scan(notdef, &local, &global).unwrap();
-    let (local0, global0) = table.subrs(0).unwrap();
-    assert_eq!(scan.width, cs::scan(table.charstring(0).unwrap(), &local0, &global0).unwrap().width, "the width stays");
+    let budget = &mut cs::MAX_FONT_CHARSTRING_OPS.clone();
+    let (local, global) = out_cff.subrs(0);
+    let scan = cs::scan(notdef, local, global, budget).unwrap();
+    let (local0, global0) = table.subrs(0);
+    assert_eq!(scan.width, cs::scan(table.charstring(0).unwrap(), local0, global0, budget).unwrap().width, "the width stays");
     let bytes = write(&result.font, &WriteOptions::default()).unwrap();
     assert_eq!(cmap_of(&bytes).get(&0xC1), Some(&3));
     assert_eq!(advance(&bytes, 3), 600);
@@ -246,4 +257,61 @@ fn nothing_kept_is_an_error_not_a_crash() {
     let font = built(CompileFlavour::TrueType);
     let options = SubsetOptions { notdef_glyph: false, ..SubsetOptions::default() };
     assert!(subset(&font, &options).is_err());
+}
+
+#[test]
+fn a_component_past_the_glyph_count_is_an_error() {
+    let mut font = built(CompileFlavour::TrueType);
+    let aacute = gid_of(&font, "Aacute") as usize;
+    let mut glyphs = glyf_glyphs(&font);
+    // The first component's glyph id follows the 10-byte header and the 2-byte flags.
+    glyphs[aacute][12..14].copy_from_slice(&0xFFFFu16.to_be_bytes());
+    set_glyf(&mut font, &glyphs);
+    let err = subset(&font, &SubsetOptions { text: "Á".into(), retain_gids: true, ..SubsetOptions::default() }).unwrap_err();
+    assert!(err.to_string().contains("past the glyph count"), "{err}");
+}
+
+#[test]
+fn a_format_4_cmap_mapping_u_ffff_stays_format_4() {
+    let mut f = source();
+    f.add_glyph("uniFFFF", vec![0xFFFF], 500.0).unwrap();
+    let out = compile(&f, &f.default_target().unwrap(), CompileFlavour::TrueType, &Options::default()).unwrap();
+    let font = read(&out.bytes, 0).unwrap();
+    let formats = |bytes: &[u8]| -> Vec<u16> {
+        let f = FontRef::new(bytes).unwrap();
+        let cmap = f.cmap().unwrap();
+        cmap.encoding_records().iter().map(|r| r.subtable(cmap.offset_data()).unwrap().format()).collect()
+    };
+    assert!(formats(&out.bytes).iter().all(|f| *f == 4), "the input maps U+FFFF in format 4");
+    let result = subset(&font, &SubsetOptions { unicodes: vec![0x41, 0xFFFF], ..SubsetOptions::default() }).unwrap();
+    let bytes = write(&result.font, &WriteOptions::default()).unwrap();
+    assert!(formats(&bytes).iter().all(|f| *f == 4));
+    assert_eq!(cmap_of(&bytes).get(&0xFFFF), Some(&result.glyph_map[&gid_of(&font, "uniFFFF")]));
+}
+
+#[test]
+fn fan_out_subroutines_over_many_glyphs_hit_the_font_budget() {
+    // Global subroutine k calls k + 1 four times, eight levels deep: about 2^18 operations
+    // per glyph, under the per-glyph cap, and past the font's budget over 300 glyphs.
+    let mut f = Font::new("Fan Out");
+    for i in 0..300u32 {
+        f.add_glyph(&format!("g{i}"), vec![0x100 + i], 500.0).unwrap();
+    }
+    let out = compile(&f, &f.default_target().unwrap(), CompileFlavour::Cff, &Options::default()).unwrap();
+    let mut font = read(&out.bytes, 0).unwrap();
+    let n = crate::reorder::names::num_glyphs(&font).unwrap();
+    let call = |k: usize| [cs::encode_number(k as f64 - 107.0), vec![29]].concat();
+    let mut subrs: Vec<Vec<u8>> = (0..8).map(|k| [call(k + 1).repeat(4), vec![11]].concat()).collect();
+    subrs.push(vec![11]);
+    let items: Vec<&[u8]> = subrs.iter().map(Vec::as_slice).collect();
+    let glyph = [call(0), vec![14]].concat();
+    let replace: HashMap<usize, Vec<u8>> = (0..n).map(|g| (g, glyph.clone())).collect();
+    let table = cff::parse(font.get(*b"CFF ").unwrap(), n).unwrap();
+    let rebuilt = table.with_global_subrs(&items, &replace).unwrap();
+    font.insert(*b"CFF ", rebuilt);
+
+    let one = closure::plan(&font, &SubsetOptions { gids: vec![1], ..SubsetOptions::default() }).unwrap();
+    assert!(one.charstring_ops_left < cs::MAX_FONT_CHARSTRING_OPS - (1 << 18), "one glyph runs every call");
+    let err = closure::plan(&font, &SubsetOptions { all_glyphs: true, ..SubsetOptions::default() }).unwrap_err();
+    assert!(matches!(err, TablesError::TooLarge { limit: cs::MAX_FONT_CHARSTRING_OPS, .. }), "{err}");
 }
