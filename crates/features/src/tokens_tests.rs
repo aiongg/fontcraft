@@ -246,3 +246,30 @@ fn master_values_read_the_master_layer() {
     let values = MasterValues::new(&f, &data, "m01").unwrap();
     assert_eq!(values.number_value("tracking"), Some(0.0));
 }
+
+#[test]
+fn variable_tokens_vary_only_in_metric_statements() {
+    // token.numberValue.variable: masters at wght 100 (origin) and 900, `tracking` 10 and 30.
+    let mut f = font();
+    f.axes = Arc::new(vec![fontcraft_model::Axis { name: "Weight".into(), tag: "wght".into(), ..Default::default() }]);
+    {
+        let masters = Arc::make_mut(&mut f.masters);
+        masters[0].location = vec![100.0];
+        masters[1].location = vec![900.0];
+    }
+    let data = GlyphData::new().unwrap();
+    let values = MasterValues::new(&f, &data, "m01").unwrap().for_variable_font();
+    let run = |code: &str| expand(code, &values, EntryKind::Feature).unwrap().0;
+    // A bare name stays for the feature compiler; an expression becomes a variable value.
+    assert_eq!(run("pos a b $tracking;"), "pos a b $tracking;");
+    assert_eq!(run("pos a b ${100 - tracking};"), "pos a b (wght=100:90 wght=900:70);");
+    assert_eq!(run("pos a <${tracking / 2} 0 0 0>;"), "pos a <(wght=100:5 wght=900:15) 0 0 0>;");
+    assert_eq!(run("enum pos a b ${(tracking + 5) * 2};"), "enum pos a b (wght=100:30 wght=900:70);");
+    assert_eq!(run("markClass acute <anchor 0 ${tracking}> @TOP;"), "markClass acute <anchor 0 (wght=100:10 wght=900:30)> @TOP;");
+    // Elsewhere, the value at the origin.
+    assert_eq!(run("table hhea { Ascender $tracking; } hhea;"), "table hhea { Ascender 10; } hhea;");
+    assert_eq!(
+        run("sub a by b; # pos\nlookup x { sub c by d; } x; pos a b ${tracking}; Ascender $tracking;"),
+        "sub a by b; # pos\nlookup x { sub c by d; } x; pos a b (wght=100:10 wght=900:30); Ascender 10;"
+    );
+}

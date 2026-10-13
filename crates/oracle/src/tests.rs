@@ -742,3 +742,33 @@ fn variable_feature_code_compiles_to_feature_variations_and_deltas() {
     assert_eq!(kern_at(1.0), [-50.0, 30.0, 10.0, -100.0]);
     assert_eq!(kern_at(0.5), [-30.0, 20.0, 10.0, -70.0]);
 }
+
+#[test]
+fn variable_token_expressions_vary_between_masters_and_table_tokens_read_the_origin() {
+    use std::sync::Arc;
+
+    use skrifa::raw::types::F2Dot14;
+    let mut font = variable_feature_font();
+    let mut features = (*font.features).clone();
+    features.prefixes =
+        vec![fontcraft_model::Snippet { name: "Prefix".into(), code: "table hhea { CaretOffset $gap; } hhea;".into(), ..Default::default() }];
+    // `gap` is 10 in Light (wght 100) and 30 in Bold (900).
+    features.features = vec![fontcraft_model::Snippet {
+        name: "kern".into(),
+        code: "pos o T ${100 - gap};\npos o o ${gap / 2};\npos V V ${(gap + 5) * 2};\npos T T $gap;".into(),
+        ..Default::default()
+    }];
+    font.features = Arc::new(features);
+    // The table token is expanded at the origin: written as is, the feature compiler refuses it.
+    let v = fontcraft_compile::var::compile_variable(&font, None, &Options::default(), &fontcraft_compile::var::VariableOptions::default()).unwrap();
+    let f = skrifa::FontRef::new(&v.compiled.bytes).unwrap();
+    let names: evaluate::Names = v.compiled.glyph_order.iter().enumerate().map(|(i, n)| (i as u32, n.clone())).collect();
+    let kern_at = |t: f32| {
+        let (k, _) = evaluate::kerning(&f, &[F2Dot14::from_f32(t)], &names);
+        let x = |pair: &str| k.get(pair).map_or(f64::NAN, |v| v[2]);
+        [x("o T"), x("o o"), x("V V"), x("T T")]
+    };
+    assert_eq!(kern_at(0.0), [90.0, 5.0, 30.0, 10.0]);
+    assert_eq!(kern_at(1.0), [70.0, 15.0, 70.0, 30.0]);
+    assert_eq!(kern_at(0.5), [80.0, 10.0, 50.0, 20.0]);
+}

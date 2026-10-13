@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1126 rows to check: 1573 guesses and 415 observe steps.**
+**1126 rows to check: 1574 guesses and 415 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -2394,6 +2394,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `font.instance.toMaster` (M9, handbook): Instance as Master
   - Observe: In F1 (two masters), select the Regular instance and choose Instance as Master: note the new master's name and position, and which instances now use it.
 - [ ] `token.numberValue.variable` (behavior, M9, docs): For a variable font a number token becomes a value that varies…
+  - Guess: A number token outside a metric statement (in a `table` block) takes its value at the origin master in the variable font; a variable export from the reference app with a token in `table hhea` would settle it.
   - Guess: A number token with the same value at every master is expanded to that number rather than left to the compiler; a variable export from the reference app with such a token would show whether it writes a variation there.
   - Guess: A glyph property token (`${a:width}`) in the variable font reads the origin master instead of varying; a variable export from the reference app with a property token in a `pos` rule would settle it.
 - [ ] `featureCode.ifdefOtherSymbols` (behavior, M9, inferred): VARIABLE is the only symbol the handbook documents; nesting, `#else` and other…

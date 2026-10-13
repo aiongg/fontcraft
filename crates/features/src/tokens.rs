@@ -30,6 +30,7 @@ use fontcraft_fea::{Diagnostic, Severity};
 use crate::source_map::{EntryKind, OffsetMap};
 use fontcraft_glyphquery::predicate::Predicate;
 
+use crate::fea_variable::FeatureAxes;
 use crate::target::{GlyphMetric, Target};
 use crate::{MAX_ENTRY_BYTES, TargetValues};
 
@@ -78,11 +79,12 @@ pub fn expand(code: &str, values: &dyn TargetValues, kind: EntryKind) -> Result<
     let mut out = String::with_capacity(code.len());
     let mut map = OffsetMap::identity();
     let mut copied = 0;
-    for token in &scanned.tokens {
+    for (n, token) in scanned.tokens.iter().enumerate() {
         if errors.len() >= MAX_DIAGNOSTICS {
             break;
         }
-        let text = match evaluator.text(code, token) {
+        let metric = scanned.metric.get(n).copied().unwrap_or(false);
+        let text = match evaluator.text(code, token, metric) {
             Ok(text) => text,
             Err(message) => {
                 errors.push(error(token.range.clone(), message));
@@ -190,6 +192,9 @@ struct Token {
 
 struct Scanned {
     tokens: Vec<Token>,
+    /// Per token: whether it stands where the feature compiler reads a metric that may vary
+    /// ([`METRIC_STATEMENTS`]).
+    metric: Vec<bool>,
     /// The offset of the first token past the limit.
     beyond: Option<usize>,
 }
@@ -198,11 +203,20 @@ fn scan(code: &str, limit: usize) -> Scanned {
     let b = code.as_bytes();
     let mut tokens = Vec::new();
     let mut beyond = None;
+    let mut metric = Vec::new();
     // Brackets outside comments, quoted text and tokens.
     let mut depth = 0usize;
+    // Where the current statement starts, and whether it is a metric statement once known.
+    let mut statement = 0;
+    let mut statement_metric = None;
     let mut i = 0;
     while let Some(&c) = b.get(i) {
         match c {
+            b';' | b'{' | b'}' => {
+                statement = i.saturating_add(1);
+                statement_metric = None;
+                i = i.saturating_add(1);
+            }
             b'[' => {
                 depth = depth.saturating_add(1);
                 i = i.saturating_add(1);
@@ -220,13 +234,35 @@ fn scan(code: &str, limit: usize) -> Scanned {
                 }
                 let mut token = scan_token(code, i);
                 token.in_brackets = depth > 0;
+                let here = *statement_metric.get_or_insert_with(|| is_metric_statement(b, statement, i));
+                metric.push(here);
                 i = token.range.end.max(i.saturating_add(1));
                 tokens.push(token);
             }
             _ => i = i.saturating_add(1),
         }
     }
-    Scanned { tokens, beyond }
+    Scanned { tokens, metric, beyond }
+}
+
+/// The statements whose numbers the feature compiler reads as metrics that may vary: `pos`
+/// rules and the anchors and value records they use.
+const METRIC_STATEMENTS: [&[u8]; 7] = [b"pos", b"position", b"enum", b"enumerate", b"markClass", b"anchorDef", b"valueRecordDef"];
+
+/// Whether the statement starting at `from` (white space and comments first) and running past
+/// `to` opens with one of [`METRIC_STATEMENTS`].
+fn is_metric_statement(b: &[u8], from: usize, to: usize) -> bool {
+    let mut i = from;
+    while i < to {
+        match b.get(i) {
+            Some(c) if c.is_ascii_whitespace() => i = i.saturating_add(1),
+            Some(b'#') => i = find(b, i, |c| c == b'\n').unwrap_or(to),
+            _ => break,
+        }
+    }
+    let start = i.min(to);
+    let end = find(b, start, |c| !c.is_ascii_alphanumeric()).unwrap_or(b.len()).min(to);
+    b.get(start..end).is_some_and(|word| METRIC_STATEMENTS.contains(&word))
 }
 
 /// The first offset at or after `from` whose byte satisfies `stop`.
@@ -318,8 +354,8 @@ struct Evaluator<'v> {
     /// The kind of entry the code is from, for where predicate tokens may stand; `None` for a
     /// token evaluated on its own.
     kind: Option<EntryKind>,
-    /// For the variable font, each master's number values.
-    masters: Option<Vec<Vec<(String, f64)>>>,
+    /// For a variable font with more than one master: its axes and each master's number values.
+    axes: Option<FeatureAxes>,
 }
 
 /// A target's values with the number values of one master.
@@ -356,12 +392,13 @@ impl TargetValues for AtMaster<'_> {
 
 impl<'v> Evaluator<'v> {
     fn new(values: &'v dyn TargetValues, kind: Option<EntryKind>) -> Self {
-        let masters = values.target().is_variable().then(|| values.feature_axes().masters.into_iter().map(|m| m.numbers).collect());
-        Self { values, predicates: HashMap::new(), work: 0, kind, masters }
+        let axes = values.target().is_variable().then(|| values.feature_axes()).filter(|a| a.masters.len() > 1);
+        Self { values, predicates: HashMap::new(), work: 0, kind, axes }
     }
 
-    /// The text `token` of `code` is replaced by.
-    fn text(&mut self, code: &str, token: &Token) -> Result<String, String> {
+    /// The text `token` of `code` is replaced by; `metric`: the token stands in a metric
+    /// statement ([`METRIC_STATEMENTS`]).
+    fn text(&mut self, code: &str, token: &Token, metric: bool) -> Result<String, String> {
         match &token.body {
             Body::Predicate(inner) => {
                 if let Some(kind) = self.kind {
@@ -376,7 +413,7 @@ impl<'v> Evaluator<'v> {
                 result
             }
             _ => {
-                if let Some(text) = self.variable_text(code, token)? {
+                if let Some(text) = self.variable_text(code, token, metric)? {
                     return Ok(text);
                 }
                 self.number(code, token).map(|v| v.to_string())
@@ -384,28 +421,30 @@ impl<'v> Evaluator<'v> {
         }
     }
 
-    /// For the variable font: a number token that reads number values and gives different
-    /// values at the masters stays as it is written, for the feature compiler to resolve at
-    /// every master (`token.numberValue.variable`). `None`: expand it to its one value. Glyph
-    /// property tokens read the origin master.
-    fn variable_text(&self, code: &str, token: &Token) -> Result<Option<String>, String> {
-        let Some(masters) = self.masters.as_ref().filter(|m| m.len() > 1) else { return Ok(None) };
+    /// For the variable font, a number token in a metric statement whose value differs between
+    /// masters (`token.numberValue.variable`): `$name` stays as written, for the feature
+    /// compiler to resolve at every master; `${…}` is evaluated at each master and written as a
+    /// variable value in user coordinates. `None`: expand it to its value at the origin, as
+    /// everywhere else. Glyph property tokens read the origin master.
+    fn variable_text(&self, code: &str, token: &Token, metric: bool) -> Result<Option<String>, String> {
+        let Some(axes) = self.axes.as_ref().filter(|_| metric) else { return Ok(None) };
         match &token.body {
             Body::Name(_) => {}
             Body::Expression(inner) if !code.get(inner.clone()).unwrap_or_default().contains(':') => {}
             _ => return Ok(None),
         }
-        let mut first = None;
-        for numbers in masters {
-            let at = AtMaster { inner: self.values, numbers };
-            let value = Evaluator::new(&at, self.kind).number(code, token)?;
-            match first {
-                None => first = Some(value),
-                Some(v) if v == value => {}
-                Some(_) => return Ok(Some(code.get(token.range.clone()).unwrap_or_default().to_string())),
-            }
+        let mut values = Vec::with_capacity(axes.masters.len());
+        for master in &axes.masters {
+            let at = AtMaster { inner: self.values, numbers: &master.numbers };
+            values.push(Evaluator::new(&at, self.kind).number(code, token)?);
         }
-        Ok(None)
+        if values.windows(2).all(|w| w.first() == w.get(1)) {
+            return Ok(None);
+        }
+        Ok(match &token.body {
+            Body::Name(_) => Some(code.get(token.range.clone()).unwrap_or_default().to_string()),
+            _ => axes.master_scalar(&values),
+        })
     }
 
     fn predicate(&mut self, code: &str, inner: Range<usize>) -> Result<Vec<String>, String> {

@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**1719 guesses on 1111 rows (401 of them live commands).**
+**1720 guesses on 1111 rows (401 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -1052,6 +1052,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `token.numberValue.simple` (behavior) | M8 | handbook | – | A master that stores no value for a number name reads 0; a source file whose master lacks one of the values, exported from the reference app, would settle it. |
 | `token.numberValue.arithmetic` (behavior) | M8 | handbook | – | Expressions that do not start with the name (`${2*padding}`, `${(a+b)/2}`, literals only) are accepted, as the feature compiler and the reference library accept them; typing one in the reference app would show whether it refuses them. |
 | `token.numberValue.expressionDetails` (behavior) | M8 | docs | – | Results are rounded half away from zero, as fea-rs rounds, where glyphsLib truncates, and division by zero is a compile error at the token; an expression giving 2.5 exported from the reference app would settle the rounding. |
+| `token.numberValue.variable` (behavior) | M9 | docs | – | A number token outside a metric statement (in a `table` block) takes its value at the origin master in the variable font; a variable export from the reference app with a token in `table hhea` would settle it. |
 | `token.numberValue.variable` (behavior) | M9 | docs | – | A number token with the same value at every master is expanded to that number rather than left to the compiler; a variable export from the reference app with such a token would show whether it writes a variation there. |
 | `token.numberValue.variable` (behavior) | M9 | docs | – | A glyph property token (`${a:width}`) in the variable font reads the origin master instead of varying; a variable export from the reference app with a property token in a `pos` rule would settle it. |
 | `token.numberValue.inspect` (behavior) | M8 | handbook | – | Option-click evaluates the token for the master of the active Edit View tab, else the first master; Option-clicking a token in a two-master font with the second master showing in the reference app would settle it. |
