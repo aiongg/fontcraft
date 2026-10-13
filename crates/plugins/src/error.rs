@@ -39,6 +39,10 @@ pub const MAX_LOG_LINE_CHARS: usize = 1_000;
 pub const MAX_PRIMITIVES: usize = 100_000;
 /// Longest text item of a reporter drawing, in characters.
 pub const MAX_TEXT_CHARS: usize = 1_000;
+/// Largest stroke width or text size of a reporter drawing, in screen pixels.
+pub const MAX_SCREEN_PIXELS: f64 = 1_000.0;
+/// Longest finding message, in characters.
+pub const MAX_MESSAGE_CHARS: usize = 1_000;
 /// Most findings a check may return per layer.
 pub const MAX_FINDINGS: usize = 10_000;
 /// Longest `Filter` / `PreFilter` parameter string, in bytes.
@@ -65,6 +69,8 @@ pub const LIMITS_TABLE: &[(&str, u64)] = &[
     ("maxLogLineChars", MAX_LOG_LINE_CHARS as u64),
     ("maxPrimitives", MAX_PRIMITIVES as u64),
     ("maxTextChars", MAX_TEXT_CHARS as u64),
+    ("maxScreenPixels", MAX_SCREEN_PIXELS as u64),
+    ("maxMessageChars", MAX_MESSAGE_CHARS as u64),
     ("maxFindings", MAX_FINDINGS as u64),
     ("maxFilterStringBytes", MAX_FILTER_STRING_BYTES as u64),
     ("maxFilterParts", MAX_FILTER_PARTS as u64),
@@ -97,6 +103,9 @@ pub enum Error {
     /// The module reported a failure of its own (`{"error": "…"}`).
     #[error("module failed: {0}")]
     Failed(String),
+    /// The session already holds [`MAX_INSTALLED`] modules.
+    #[error("too many modules are installed (limit {0}); remove one first")]
+    TooMany(usize),
     /// No installed module has this id.
     #[error("no module {0:?} is installed")]
     NotFound(String),

@@ -1108,6 +1108,32 @@ impl Font {
     }
 }
 
+impl Layer {
+    /// The checks [`Font::check_glyph`] makes on one layer that need neither the font nor the
+    /// glyph: the advance width, the shapes ([`check_shapes`]), anchor positions, the layer's data
+    /// and its background's shapes. For data built outside the model (a filter module's output)
+    /// before it replaces a layer. `Err` names the first problem.
+    pub fn check_contents(&self) -> Result<(), String> {
+        let bad = |message: String| ModelError::BadOutline { glyph: String::new(), message };
+        let text = |e: ModelError| match e {
+            ModelError::BadOutline { message, .. } => message,
+            e => e.to_string(),
+        };
+        if !in_range(self.width) {
+            return Err(format!("the advance width {} is not a number or is beyond ±{MAX_COORDINATE}", self.width));
+        }
+        check_shapes(&self.shapes, &bad).map_err(text)?;
+        if self.anchors.iter().any(|a| !(in_range(a.x) && in_range(a.y))) {
+            return Err("an anchor position is not a number or is out of range".into());
+        }
+        check_layer_info(&self.info)?;
+        if let Some(b) = &self.info.background {
+            check_shapes(&b.shapes, &bad).map_err(text)?;
+        }
+        Ok(())
+    }
+}
+
 /// Every path is a well-formed node list within the coordinate limits, every component names a
 /// glyph and has a finite transform, every image has a finite placement, and the shapes' data
 /// keeps its limits (`crate::shape_info`).

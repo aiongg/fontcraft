@@ -1,5 +1,7 @@
-//! The installed modules of one session (M13.2 ports the install, replace and remove logic from
-//! VectorCraft's process-wide `registry.rs` into this value type; M13.3 adds the folder sync).
+//! The installed modules of one session: install, replace and remove ported from VectorCraft's
+//! process-wide `crates/plugins/src/registry.rs` (MIT OR Apache-2.0, the same owner; see
+//! `NOTICE`) into a value type the engine keeps in its `ExtensionState`. M13.3 adds the folder
+//! sync.
 //!
 //! The registry holds no files and does no I/O: the desktop app reads the Modules folder and
 //! hands the bytes in ([`Registry::sync_folder`]); `plugin.installFromFile` hands one module's
@@ -83,9 +85,23 @@ impl Registry {
     /// Installs `plugin`, turned on, replacing a module with the same id. Refused past
     /// [`MAX_INSTALLED`].
     pub fn install(&mut self, plugin: Plugin, file: Option<String>) -> Result<&Installed> {
-        let _ = (plugin, file);
-        // M13.2.
-        Err(Error::Unsupported("installing modules".into()))
+        let entry = Installed { plugin: Arc::new(plugin), enabled: true, file, new: false };
+        let at = match self.modules.iter().position(|m| m.plugin.id() == entry.plugin.id()) {
+            Some(at) => {
+                let slot = self.modules.get_mut(at).ok_or_else(|| Error::NotFound(entry.plugin.id().to_string()))?;
+                *slot = entry;
+                at
+            }
+            None if self.modules.len() >= MAX_INSTALLED => {
+                return Err(Error::TooMany(MAX_INSTALLED));
+            }
+            None => {
+                self.modules.push(entry);
+                self.modules.len() - 1
+            }
+        };
+        self.revision = self.revision.wrapping_add(1);
+        self.modules.get(at).ok_or_else(|| Error::NotFound(String::new()))
     }
 
     /// Loads `bytes` under the default limits and installs the module ([`Registry::install`]).

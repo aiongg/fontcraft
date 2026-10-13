@@ -290,6 +290,11 @@ bundled, the file says so in its header and the project is listed here with its 
   (mathKerning.py): a pair one master lacks takes the value that master's groups give it, and a
   pair that comes out zero is dropped unless one side is a glyph in a group.
 
+  VectorCraft (the ArtCraft Crafting Apps, the same owner as FontCraft), MIT OR Apache-2.0.
+  crates/plugins (runtime.rs, manifest.rs, registry.rs and the WAT skeleton in wat.rs) ports
+  its plug-in host: the wasmi set-up, the fuel slices and deadline, the instance per call, the
+  manifest and parameter schema, and the installed-module set.
+
   write-fonts (https://github.com/googlefonts/fontations), MIT OR Apache-2.0. The sizes of a
   gvar tuple's packed deltas and point numbers (crates/compile/src/var/gvar.rs,
   check_tuple_size) follow the packing rules of its PackedDeltas and PackedPointNumbers
