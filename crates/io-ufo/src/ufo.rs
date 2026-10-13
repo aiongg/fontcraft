@@ -1582,9 +1582,30 @@ pub fn lib_carries(p: &Param) -> bool {
     libkeys::carried(p, None)
 }
 
-/// What saving `font` as UFOs leaves out of its font information and user data, one line each.
+/// Which writer a loss check is for. It decides where each master's UFO keeps its other files in
+/// [`Font::files`]: under the prefix that writer strips.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FilesFrom {
+    /// [`write`]: one UFO, its files from the root of [`Font::files`].
+    Single,
+    /// [`write_one`]: one UFO per master, its files under the master's designspace file name when
+    /// it has one, else from the root.
+    PerMaster,
+    /// A designspace: each UFO's files under its master's file name; a master without one gets a
+    /// new name, under which the font holds no files.
+    Designspace,
+}
+
+/// What saving `font` as one UFO ([`write`]) leaves out of its font information and user data,
+/// one line each.
 pub fn info_losses(font: &Font) -> Vec<String> {
-    let mut out = font_losses(font, false);
+    info_losses_for(font, FilesFrom::Single)
+}
+
+/// [`info_losses`] for the writer `files` names (not a designspace: see
+/// [`crate::designspace::info_losses`]).
+pub fn info_losses_for(font: &Font, files: FilesFrom) -> Vec<String> {
+    let mut out = font_losses(font, files);
     for i in font.instances.iter() {
         let fields = [
             ("id", i.id.is_some()),
@@ -1614,7 +1635,8 @@ pub fn info_losses(font: &Font) -> Vec<String> {
 
 /// What the UFOs of `font` (the sources of a designspace, or one UFO) leave out of the font's and
 /// the masters' information, one line each.
-pub(crate) fn font_losses(font: &Font, designspace: bool) -> Vec<String> {
+pub(crate) fn font_losses(font: &Font, files: FilesFrom) -> Vec<String> {
+    let designspace = files == FilesFrom::Designspace;
     let mut out: Vec<String> = Vec::new();
     for m in font.masters.iter().filter(|m| m.extra.get(Family::Designspace, "layer").is_none()) {
         let (read, _) = kept_dict(m, FONTINFO);
@@ -1629,7 +1651,7 @@ pub(crate) fn font_losses(font: &Font, designspace: bool) -> Vec<String> {
         }
     }
     out.extend(glyph_losses(font));
-    out.extend(layer_losses(font, designspace));
+    out.extend(layer_losses(font, files));
     out.extend(shape_losses(font, designspace));
     out.extend(crate::features::losses(&font.features));
     out.extend(kerning::losses(font));
@@ -1786,23 +1808,28 @@ pub(crate) fn glyph_losses(font: &Font) -> Vec<String> {
 /// with the number of layers that have it. Layers a UFO cannot hold at all ([`layers_left_out`])
 /// are not counted here. A designspace (`designspace`) also holds alternate layers, as glyphs of
 /// their own, and intermediate layers' coordinates, as sparse sources.
-pub(crate) fn layer_losses(font: &Font, designspace: bool) -> Vec<String> {
+pub(crate) fn layer_losses(font: &Font, files: FilesFrom) -> Vec<String> {
+    let designspace = files == FilesFrom::Designspace;
     use fontcraft_model::{Background, Image, LayerInfo};
     let unfiled = |i: &Option<Image>| i.as_ref().is_some_and(|i| i.path.is_none());
-    // A GLIF image names a PNG file in the UFO's `images/` folder; only a UFO's own image files
-    // travel, and other formats are not converted. A single UFO's files are kept from its root, a
-    // designspace master's under its UFO's file name (the prefixes the writer strips).
-    let ufo_prefix = |master: &str| -> String {
+    // A GLIF image names a PNG file in the UFO's `images/` folder. Only a UFO source's files
+    // travel, from where the writer finds them ([`FilesFrom`]); other formats are not converted.
+    // `None`: the writer finds none of the master's files.
+    let ufo_prefix = |master: &str| -> Option<String> {
+        if !matches!(font.source.format, SourceFormat::Ufo | SourceFormat::Designspace) {
+            return None;
+        }
         let file = font.masters.iter().find(|m| m.id == master).and_then(|m| m.extra.get(Family::Designspace, "filename")).and_then(Value::as_str);
-        match file {
-            Some(f) if designspace => format!("{f}/"),
-            _ => String::new(),
+        match (files, file) {
+            (FilesFrom::Single, _) | (FilesFrom::PerMaster, None) => Some(String::new()),
+            (FilesFrom::PerMaster | FilesFrom::Designspace, Some(f)) => Some(format!("{f}/")),
+            (FilesFrom::Designspace, None) => None,
         }
     };
-    let not_in_images = |i: &Option<Image>, prefix: &str| {
+    let not_in_images = |i: &Option<Image>, prefix: Option<&str>| {
         i.as_ref().and_then(|i| i.path.as_deref()).is_some_and(|p| {
             let png = std::path::Path::new(p).extension().is_some_and(|e| e.eq_ignore_ascii_case("png"));
-            !png || !font.files.0.contains_key(&format!("{prefix}images/{p}"))
+            !png || prefix.is_none_or(|prefix| !font.files.0.contains_key(&format!("{prefix}images/{p}")))
         })
     };
     let guide_extras = |guides: &[fontcraft_model::Guide]| {
@@ -1881,7 +1908,7 @@ pub(crate) fn layer_losses(font: &Font, designspace: bool) -> Vec<String> {
             !l.is_master_layer() && id_lost,
             {
                 let prefix = ufo_prefix(&l.master);
-                not_in_images(&i.image, &prefix) || bg(i, &|b| not_in_images(&b.image, &prefix))
+                not_in_images(&i.image, prefix.as_deref()) || bg(i, &|b| not_in_images(&b.image, prefix.as_deref()))
             },
         ];
         for ((_, n), on) in counts.iter_mut().zip(has) {
@@ -2767,33 +2794,49 @@ mod tests {
     #[test]
     fn image_files_that_do_not_travel_are_losses() {
         const LOST: &str = "the layers' image files, which are not PNG files in the UFO's images folder (1)";
+        let lost = |losses: Vec<String>| losses.iter().any(|l| l == LOST);
+        let holding = |font: &Font, path: &str| {
+            let mut font = font.clone();
+            let mut files = fontcraft_model::FileStore::default();
+            files.0.insert(path.into(), std::sync::Arc::from(&b"png"[..]));
+            font.files = std::sync::Arc::new(files);
+            font
+        };
         let mut font = layered();
-        assert!(info_losses(&font).iter().any(|l| l == LOST), "a file the font does not hold");
-        let mut files = fontcraft_model::FileStore::default();
+        font.source.format = SourceFormat::Ufo;
+        assert!(lost(info_losses(&font)), "a file the font does not hold");
         // Another UFO's images folder, or a folder whose name only ends in `images`, is not the
         // UFO's own.
         for other in ["Other.ufo/images/a.png", "fooimages/a.png"] {
-            let mut files = fontcraft_model::FileStore::default();
-            files.0.insert(other.into(), std::sync::Arc::from(&b"png"[..]));
-            font.files = std::sync::Arc::new(files);
-            assert!(info_losses(&font).iter().any(|l| l == LOST), "{other}");
+            assert!(lost(info_losses(&holding(&font, other))), "{other}");
         }
-        files.0.insert("images/a.png".into(), std::sync::Arc::from(&b"png"[..]));
-        font.files = std::sync::Arc::new(files);
-        assert!(!info_losses(&font).iter().any(|l| l.starts_with("the layers' image files")));
-        // In a designspace the master's UFO keeps its files under its file name.
-        let mut ds = font.clone();
+        let single = holding(&font, "images/a.png");
+        assert!(!lost(info_losses(&single)));
+        assert!(!lost(info_losses_for(&single, FilesFrom::PerMaster)));
+        // Saved as a designspace, a master without a file name gets a new UFO, which the root's
+        // files do not reach.
+        assert!(lost(crate::designspace::info_losses(&single)));
+        let mut glyphs_source = single.clone();
+        glyphs_source.source.format = SourceFormat::Glyphs;
+        assert!(lost(info_losses(&glyphs_source)), "only a UFO source's files are written");
+
+        // Read from a designspace: the master's UFO keeps its files under its file name, which
+        // the designspace writer and the one-UFO-per-master export strip, and the single-UFO
+        // writer does not.
+        let mut ds = holding(&font, "Layered.ufo/images/a.png");
+        ds.source.format = SourceFormat::Designspace;
         std::sync::Arc::make_mut(&mut ds.masters)[0].extra.insert(Family::Designspace, "filename", Value::String("Layered.ufo".into()));
-        assert!(crate::designspace::info_losses(&ds).iter().any(|l| l == LOST), "a file at the root is not in the UFO's folder");
-        let mut files = fontcraft_model::FileStore::default();
-        files.0.insert("Layered.ufo/images/a.png".into(), std::sync::Arc::from(&b"png"[..]));
-        ds.files = std::sync::Arc::new(files);
-        assert!(!crate::designspace::info_losses(&ds).iter().any(|l| l.starts_with("the layers' image files")));
+        assert!(!lost(crate::designspace::info_losses(&ds)));
+        assert!(!lost(info_losses_for(&ds, FilesFrom::PerMaster)));
+        assert!(lost(info_losses(&ds)));
+        assert!(lost(crate::designspace::info_losses(&holding(&ds, "images/a.png"))), "a file at the root is not in the UFO's folder");
+
+        let mut jpeg = single;
         {
-            let mut a = font.glyph_mut("A").unwrap();
+            let mut a = jpeg.glyph_mut("A").unwrap();
             a.layer_mut("m01").unwrap().info.image.as_mut().unwrap().path = Some("a.jpg".into());
         }
-        assert!(info_losses(&font).iter().any(|l| l == LOST), "a JPEG is not converted");
+        assert!(lost(info_losses(&jpeg)), "a JPEG is not converted");
     }
 
     #[test]

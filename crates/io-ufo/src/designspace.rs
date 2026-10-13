@@ -575,7 +575,7 @@ pub fn info_losses(font: &Font) -> Vec<String> {
         let origin = fontcraft_model::axes::origin(font).map(|m| m.id.as_str());
         origin == Some(id) && fontcraft_model::axes::origin_without_parameter(font).map(|m| m.id.as_str()) != Some(id)
     });
-    let mut out: Vec<String> = ufo::font_losses(font, true);
+    let mut out: Vec<String> = ufo::font_losses(font, ufo::FilesFrom::Designspace);
     let alternates = rules::alternate_losses(font);
     let lines = [
         (

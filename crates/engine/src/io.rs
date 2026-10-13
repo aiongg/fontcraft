@@ -10,6 +10,7 @@
 //! [`fontcraft_format::MAX_BYTES`] in all) and follows no symlinked folders, so a hostile folder
 //! can neither exhaust memory nor loop.
 
+use fontcraft_io_ufo::ufo::FilesFrom;
 use std::collections::BTreeMap;
 use std::io::Read as _;
 use std::path::{Path, PathBuf};
@@ -506,8 +507,9 @@ fn ufo_layer_losses(font: &Font, designspace: bool) -> Option<Value> {
 
 /// Font information (properties, parameters, settings, user data, instance fields) a UFO, or a
 /// designspace and its UFOs, has no place for yet.
-fn ufo_info_losses(font: &Font, designspace: bool) -> Option<Value> {
-    let items = if designspace { fontcraft_io_ufo::designspace::info_losses(font) } else { fontcraft_io_ufo::ufo::info_losses(font) };
+fn ufo_info_losses(font: &Font, files: FilesFrom) -> Option<Value> {
+    let designspace = files == FilesFrom::Designspace;
+    let items = if designspace { fontcraft_io_ufo::designspace::info_losses(font) } else { fontcraft_io_ufo::ufo::info_losses_for(font, files) };
     let family = if font.source.format == SourceFormat::Glyphs { "glyphs" } else { "fontcraft" };
     let what =
         if designspace { "font information a designspace and its UFOs have no place for yet" } else { "font information a UFO has no place for yet" };
@@ -550,7 +552,7 @@ pub fn save(font: &Font, path: &Path, format: SaveFormat) -> Result<Saved> {
     if matches!(format, SaveFormat::Ufo | SaveFormat::Designspace) {
         losses.extend(ufo_layer_losses(font, format == SaveFormat::Designspace));
         losses.extend(side_file_losses(font));
-        losses.extend(ufo_info_losses(font, format == SaveFormat::Designspace));
+        losses.extend(ufo_info_losses(font, if format == SaveFormat::Designspace { FilesFrom::Designspace } else { FilesFrom::Single }));
     }
     if matches!(format, SaveFormat::Glyphs | SaveFormat::GlyphsPackage) {
         losses.extend(glyphs_info_losses(font));
@@ -640,7 +642,7 @@ pub fn export_ufos(font: &Font, masters: &[String], destination: &Path) -> Resul
     let mut losses = losses(&font, &[Family::Ufo]);
     losses.extend(ufo_layer_losses(&font, false));
     losses.extend(side_file_losses(&font));
-    losses.extend(ufo_info_losses(&font, false));
+    losses.extend(ufo_info_losses(&font, FilesFrom::PerMaster));
     let mut taken = Vec::new();
     let mut files = Vec::new();
     for id in masters {
