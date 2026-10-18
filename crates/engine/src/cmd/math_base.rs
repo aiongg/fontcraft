@@ -199,9 +199,11 @@ fn assembly(p: &Params, font: &Font, what: &str, v: &Value) -> Result<Vec<Part>>
         }
         let flags = match flags {
             Value::Bool(b) => u16::from(*b),
-            other => {
-                other.as_f64().filter(|f| *f == 0.0 || *f == 1.0).map(|f| u16::from(f == 1.0)).ok_or_else(|| p.bad(format!("{at}: the flags must be 0 or 1 (1 = extender)")))?
-            }
+            other => other
+                .as_f64()
+                .filter(|f| *f == 0.0 || *f == 1.0)
+                .map(|f| u16::from(f == 1.0))
+                .ok_or_else(|| p.bad(format!("{at}: the flags must be 0 or 1 (1 = extender)")))?,
         };
         out.push(Part {
             glyph: glyph.to_string(),

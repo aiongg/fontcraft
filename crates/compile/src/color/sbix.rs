@@ -157,7 +157,7 @@ fn format_name(format: ImageFormat) -> &'static str {
         ImageFormat::Jpeg => "a JPEG image",
         ImageFormat::Tiff => "a TIFF image",
         ImageFormat::Pdf => "a PDF file",
-        ImageFormat::Psd => "a Photoshop file",
+        ImageFormat::Psd => "a PSD file",
         ImageFormat::Svg => "an SVG file",
         ImageFormat::Other => "not an image file this app reads",
     }

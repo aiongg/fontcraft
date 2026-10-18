@@ -14,7 +14,10 @@ use serde_json::{Map, Value, json};
 use super::form::Field;
 use super::{Dialog, Fields, Mode, Shaped};
 
-pub const DIALOG: Dialog = Dialog { mode: Mode::RunOnOk, ..Dialog::new("dialog.baselines", "Baselines", "font.setBaselines", Fields::Shaped(Shaped { fields, given, params, link })) };
+pub const DIALOG: Dialog = Dialog {
+    mode: Mode::RunOnOk,
+    ..Dialog::new("dialog.baselines", "Baselines", "font.setBaselines", Fields::Shaped(Shaped { fields, given, params, link }))
+};
 
 /// Most characters of one text box.
 const MAX_TEXT: usize = 64 * 1024;

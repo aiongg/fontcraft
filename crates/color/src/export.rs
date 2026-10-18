@@ -129,7 +129,7 @@ fn whole_number(v: &Value) -> Option<u64> {
     };
     // Bounded first, so the conversion below is exact.
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    (n.is_finite() && n >= 0.0 && n.fract() == 0.0 && n <= f64::from(u32::MAX)).then(|| n as u64)
+    (n.is_finite() && n >= 0.0 && n.fract() == 0.0 && n <= f64::from(u32::MAX)).then_some(n as u64)
 }
 
 /// The switches of an export of `target`: the font's parameters, then its master's, then the

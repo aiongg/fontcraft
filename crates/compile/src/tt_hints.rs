@@ -479,7 +479,16 @@ fn imported_tables(
         limits.max_size_of_instructions = limits.max_size_of_instructions.max(u16::try_from(p.len()).unwrap_or(u16::MAX));
     }
     finish(&mut limits, warnings);
-    Some(TtHinting { cvt, fpgm, prep, glyphs: std::mem::take(&mut imported.glyphs), composites: std::mem::take(&mut imported.composites), limits, version_suffix: None, ttfa: None })
+    Some(TtHinting {
+        cvt,
+        fpgm,
+        prep,
+        glyphs: std::mem::take(&mut imported.glyphs),
+        composites: std::mem::take(&mut imported.composites),
+        limits,
+        version_suffix: None,
+        ttfa: None,
+    })
 }
 
 /// Glyph programs kept from an opened font, ready to write.

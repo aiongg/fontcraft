@@ -107,7 +107,7 @@ fn private_dict(p: &PrivateDict, font: &mut Font, warnings: &mut Vec<String>) {
     let masters = Arc::make_mut(&mut font.masters);
     let Some(master) = masters.first_mut() else { return };
     let pairs = |v: &[f64]| -> Vec<(f64, f64)> {
-        v.chunks_exact(2).filter_map(|c| Some((*c.first()?, *c.get(1)?))).filter(|(a, b)| usable(*a) && usable(*b)).collect()
+        v.as_chunks::<2>().0.iter().map(|&[a, b]| (a, b)).filter(|(a, b)| usable(*a) && usable(*b)).collect()
     };
     let mut zones = Vec::new();
     let mut baseline_taken = false;

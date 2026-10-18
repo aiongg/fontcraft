@@ -299,7 +299,8 @@ mod tests {
         let entities = r#"<!DOCTYPE svg [<!ENTITY a "<g><g></g></g>">]><svg xmlns="http://www.w3.org/2000/svg">&a;</svg>"#;
         assert!(bad(entities.as_bytes()));
         // Comments, CDATA and quoted `>` do not count as tags.
-        let quoted = r#"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><!-- <g> --><g id="a>b"><rect width="5" height="5"/></g></svg>"#;
+        let quoted =
+            r#"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><!-- <g> --><g id="a>b"><rect width="5" height="5"/></g></svg>"#;
         assert!(import(quoted.as_bytes(), Affine::IDENTITY, 1).is_ok());
         // A file over the limit is refused before it is parsed.
         let mut big = SQUARE.as_bytes().to_vec();
