@@ -1774,6 +1774,7 @@ milestone = "M10"
 summary = "fontmake hints TrueType output by running the external ttfautohint program on the finished binary (-a, with optional pass-through arguments), not during compilation. We keep autohinting as a post-compile stage too, so unhinted and hinted builds share everything before it."
 ref = "fontmake USAGE.md (-a)"
 status = "docs"
+notes = "M10.21: the built-in TrueType autohinter runs inside the TrueType hinting stage (crates/compile/src/tt_hints.rs); the external program named by TTFAutohint binary path runs after the compile on the finished binary, as fontmake runs ttfautohint (crates/engine/src/external_autohint.rs)."
 
 [[behavior]]
 id = "compile.colrClipBoxes"

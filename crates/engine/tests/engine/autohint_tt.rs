@@ -116,3 +116,40 @@ fn autohint_tt_run_reads_options_and_control_instructions_and_refuses_bad_ones()
     let r = run(&mut s, "autohint.tt.run", json!({"glyphs": ["l"], "instance": "Regular"}));
     assert_eq!(hint_count(&s, "l"), 0, "{r}");
 }
+
+/// Sets the TTFAutohint binary path on the font.
+fn set_binary(s: &mut Session, path: &str) {
+    s.edit("binary", |font| {
+        let params = &mut Arc::make_mut(&mut font.info).params.0;
+        params.retain(|p| p.name != "TTFAutohint binary path");
+        params.push(Param::new("TTFAutohint binary path", Plist::String(path.into())));
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn a_missing_or_failing_external_autohinter_keeps_the_built_in_result_with_a_warning() {
+    let mut s = session();
+    let (built_in, _) = exported_program(&mut s, true);
+    set_binary(&mut s, "/nonexistent/fontcraft-test/ttfautohint");
+    let (program, warnings) = exported_program(&mut s, true);
+    assert_eq!(program, built_in);
+    assert!(warnings.to_string().contains("TTFAutohint binary path"), "{warnings}");
+    #[cfg(unix)]
+    {
+        set_binary(&mut s, "/bin/false");
+        let (program, warnings) = exported_program(&mut s, true);
+        assert_eq!(program, built_in);
+        assert!(warnings.to_string().contains("failed"), "{warnings}");
+        // A program that hands the font back unchanged: the export writes what it returns.
+        set_binary(&mut s, "/bin/cat");
+        let (program, warnings) = exported_program(&mut s, true);
+        assert_eq!(program, built_in);
+        assert!(!warnings.to_string().contains("TTFAutohint binary path"), "{warnings}");
+        // Without Autohint the program does not run.
+        set_binary(&mut s, "/bin/false");
+        let (_, warnings) = exported_program(&mut s, false);
+        assert!(!warnings.to_string().contains("TTFAutohint binary path"), "{warnings}");
+    }
+}

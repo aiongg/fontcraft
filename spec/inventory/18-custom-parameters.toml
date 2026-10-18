@@ -2042,6 +2042,8 @@ effect = "hinting"
 summary = "File path of a precompiled ttfautohint binary to run in place of the built-in one, to pin or update the version."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "M10.21, crates/engine/src/external_autohint.rs: FontCraft has no built-in ttfautohint (M10 § 7, question 2); when this parameter names a program, an autohinted TrueType export runs it on the finished font (font on standard input, hinted font on standard output), with the TTFAutohint options split on spaces and the control instructions in a temporary file given as --control-file; it may run 120 s and write 256 MB. A missing or failing program, or one that writes no font, keeps the built-in autohinter's result with a warning. Desktop only; the web app reports the parameter."
+guesses = ["A failing external autohinter keeps the built-in autohinter's font with a warning instead of refusing the export; the reference app with a binary path that does not exist would show what it does."]
 
 [[parameter]]
 name = "TTFAutohint control instructions"

@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1151 rows to check: 1616 guesses and 423 observe steps.**
+**1152 rows to check: 1617 guesses and 423 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,7 +48,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 40 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 4 |
-| **Later milestones (after M6)** | all | **680** |
+| **Later milestones (after M6)** | all | **681** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 39 |
 | Later milestones (after M6) | Edit View: text mode and preview | 14 |
 | Later milestones (after M6) | Components and anchors | 33 |
@@ -56,7 +56,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Spacing and metrics keys | 3 |
 | Later milestones (after M6) | Kerning and the Kerning window | 4 |
 | Later milestones (after M6) | Font View | 13 |
-| Later milestones (after M6) | Font Info and features | 256 |
+| Later milestones (after M6) | Font Info and features | 257 |
 | Later milestones (after M6) | Interpolation | 44 |
 | Later milestones (after M6) | Hinting | 85 |
 | Later milestones (after M6) | Colour fonts | 46 |
@@ -1338,7 +1338,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (680)
+## Later milestones (after M6) (681)
 
 ### Edit View: drawing, guides, layers and the Palette (39)
 
@@ -1708,7 +1708,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The decomposition sections use Unicode's canonical decompositions, one level and full together, so U+1EA4 lists both U+00C2 and U+0041, and characters the font has no glyph for are listed dimmed.
   - Guess: Clicking an entry opens the glyph in a new tab; the reference's documentation does not say whether it replaces the current glyph instead.
 
-### Font Info and features (256)
+### Font Info and features (257)
 
 - [ ] `fontInfo.rows.selection` (behavior, M7, handbook): Clicking a row selects it and Cmd+click builds a selection of several…
   - Guess: Shift-click adds every row between the last row clicked and the clicked one; Shift-clicking in the reference app settles it.
@@ -2460,6 +2460,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The built-in autohinter makes left and right points a rounded horizontal Snap and keeps nodir points out of every instruction; the style forms (script feature @ glyphs, script feature width) are read and left out.
 - [ ] `Ignore Vertical Hints` (parameter, M10, handbook): In TrueType export, leaves out every manual stem hint linked to a…
   - Guess: A horizontal Stem instruction set to No Stem stays under Ignore Vertical Hints, since it is linked to no stem definition; the reference app would settle it.
+- [ ] `TTFAutohint binary path` (parameter, M10, handbook): File path of a precompiled ttfautohint binary to run in place of…
+  - Guess: A failing external autohinter keeps the built-in autohinter's font with a warning instead of refusing the export; the reference app with a binary path that does not exist would show what it does.
 - [ ] `TTFAutohint options` (parameter, M10, handbook): Option string for ttfautohint, edited through a dialog: hint set range, default…
   - Guess: No corpus source holds the parameter; FontCraft stores and reads it as ttfautohint command-line options in one string, which is how fontmake reads it from an instance (split on spaces); a file saved by the reference app with the options sheet filled in would show the real form.
   - Observe: T3: fill in the TTFAutohint options sheet on an instance and save; note how the parameter's value is stored in the .glyphs file (one string, long or short options, or a dictionary).

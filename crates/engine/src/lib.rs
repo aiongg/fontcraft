@@ -29,6 +29,7 @@ pub mod cmd;
 pub(crate) mod export_steps;
 pub mod extension_index;
 pub mod extensions;
+pub mod external_autohint;
 pub mod feature_state;
 pub mod file_access;
 pub mod glyph_data;

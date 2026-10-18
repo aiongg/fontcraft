@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**1763 guesses on 1137 rows (413 of them live commands).**
+**1764 guesses on 1138 rows (413 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -1481,6 +1481,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `Replace Feature` (parameter) | M8 | handbook | – | A Replace parameter that names no entry does nothing, without a message, as the handbook limits these parameters to existing entries and glyphsLib skips them; the reference app's export report settles it. |
 | `Scale to UPM` (parameter) | M7 | handbook | – | The instance's value wins over the master's and the font's; a value that is not a whole number from 16 to 16384 is skipped with a warning, and a scaling that cannot be done refuses the export; a Scale to UPM on a master and another on its instance in the reference app settle the first part. |
 | `styleMapStyleNames` (parameter) | M7 | handbook | – | The value must be regular, italic, bold or bold italic in any case, as the UFO key it comes from; another value is ignored with a warning; the reference app settles it. |
+| `TTFAutohint binary path` (parameter) | M10 | handbook | – | A failing external autohinter keeps the built-in autohinter's font with a warning instead of refusing the export; the reference app with a binary path that does not exist would show what it does. |
 | `TTFAutohint options` (parameter) | M10 | handbook | – | No corpus source holds the parameter; FontCraft stores and reads it as ttfautohint command-line options in one string, which is how fontmake reads it from an instance (split on spaces); a file saved by the reference app with the options sheet filled in would show the real form. |
 | `TTFDontPreserveDiagonals` (parameter) | M10 | handbook | – | Diagonals are preserved for a moved point with exactly one flat neighbour and one straight slanted neighbour that runs at least a quarter of its length along the hinting direction; the reference app would settle which points it applies to, by comparing an exported A's crossbar points at small sizes. |
 | `TTFFamilyZonesThreshold` (parameter) | M10 | handbook | – | Family zones apply up to and including the threshold PPM, are matched to the master's zones by index, are left out with a warning when the counts differ, and are not applied without the parameter; a reference export with family zones at the threshold size would settle it. |

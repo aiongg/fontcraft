@@ -581,7 +581,17 @@ pub(super) fn build(
             continue;
         }
         for &flavour in &req.flavours {
-            let compiled = fontcraft_compile::compile_resolved_from(font, resolved.clone(), flavour, &job_options)?;
+            let mut compiled = fontcraft_compile::compile_resolved_from(font, resolved.clone(), flavour, &job_options)?;
+            if flavour == Flavour::TrueType
+                && let Some(external) = crate::external_autohint::External::wanted(font, &resolved, job_options.hinting.autohint)
+            {
+                match external.run(&compiled.bytes) {
+                    Ok(bytes) => compiled.bytes = bytes,
+                    Err(e) => compiled.warnings.push(format!(
+                        "the TTFAutohint binary path parameter names an autohinter that could not hint the font: {e}; the built-in TrueType autohinter's result was written"
+                    )),
+                }
+            }
             let mut files = Vec::with_capacity(req.containers.len());
             for &container in &req.containers {
                 let data = container.wrap(&compiled.bytes)?;
