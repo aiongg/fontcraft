@@ -755,6 +755,19 @@ mod tests {
         let out = compile(&solid, &solid.default_target().unwrap(), Flavour::TrueType, &Options::default()).unwrap();
         let records = colr_records(&out);
         assert_eq!(records.iter().map(|(base, layers)| (base.as_str(), layers.len())).collect::<Vec<_>>(), [("A", 2), ("B", 1)]);
+
+        // Added colours are numbered in source order, also when a glyph order puts B first.
+        let mut reordered = f.clone();
+        let names = ["B", "A"].iter().map(|n| fontcraft_model::plist::Value::String(fontcraft_model::plist::Str::new(*n))).collect();
+        Arc::make_mut(&mut reordered.info).params.set(
+            fontcraft_model::GLYPH_ORDER_PARAM,
+            fontcraft_model::plist::Value::Array(fontcraft_model::plist::Array { items: names, ..Default::default() }),
+        );
+        if let Some(Shape::Path(p)) = reordered.glyph_mut("B").unwrap().layers[1].shapes.get_mut(0) {
+            p.info.attrs.fill_color = Some(Color::Rgba([1.0, 1.0, 0.0, 1.0]));
+        }
+        let out = compile(&reordered, &reordered.default_target().unwrap(), Flavour::TrueType, &Options::default()).unwrap();
+        assert_eq!(cpal_palettes(&out), [vec![(255, 0, 0, 255), (0, 0, 255, 255), (0, 255, 0, 128), (255, 255, 0, 255)]]);
     }
 
     #[test]
