@@ -76,23 +76,23 @@ fn spacing_auto_space_optical_calibrates_on_n_and_o() {
     draw(&mut s, "I", rect(0.0, 0.0, 100.0, 700.0), 100.0);
     let out = undo_restores(&mut s, "spacing.autoSpace", json!({"glyphs": ["n", "o", "l", "I"]}));
     let area = out["areas"]["m01"]["lowercase"].as_f64().unwrap();
-    // The o's curves hold more white than its 50 units, so the calibrated area lies between
-    // the n's 60 and the o's mean white (clipped at 75 units inward).
-    assert!(area > 60.0 && area < 90.0, "{out}");
-    // Without H and O, capitals take the lowercase area.
+    let weight = out["weights"]["m01"]["lowercase"].as_f64().unwrap();
+    // A straight and a round control: the fitted line runs through both, so the area is the
+    // n's 60 units and the weight what makes the o's clipped depth (50 units deep) give its 50.
+    assert!((area - 60.0).abs() < 1e-9, "{out}");
+    assert!(weight > 0.2 && weight < 1.0, "{out}");
+    // Without H, O and V, capitals take the lowercase calibration.
     assert_eq!(out["areas"]["m01"]["capitals"].as_f64(), Some(area), "{out}");
-    let a = area.round();
-    // Straight sides get the area itself; the o gives back what the n gains, so the pair keeps
-    // its total.
-    assert_eq!(lrw(&s, "n"), (a, a, 380.0 + 2.0 * a));
-    assert_eq!(lrw(&s, "l"), (a, a, 80.0 + 2.0 * a));
-    assert_eq!(lrw(&s, "I"), (a, a, 100.0 + 2.0 * a));
-    let (ol, or, _) = lrw(&s, "o");
-    assert!(ol < 50.0 && (ol - or).abs() <= 1.0, "o: {ol} {or}");
-    assert!((109.0..=111.0).contains(&(a + ol)), "n {a} + o {ol}");
-    assert_eq!(out["values"]["n"]["m01"], json!({"left": a, "right": a}));
+    assert_eq!(out["weights"]["m01"]["capitals"].as_f64(), Some(weight), "{out}");
+    // The controls keep their spacing (the o moves by a fraction to land on whole units); other
+    // straight sides get the area.
+    assert_eq!(lrw(&s, "n"), (60.0, 60.0, 500.0));
+    assert_eq!(lrw(&s, "o"), (50.0, 50.0, 500.0));
+    assert_eq!(lrw(&s, "l"), (60.0, 60.0, 200.0));
+    assert_eq!(lrw(&s, "I"), (60.0, 60.0, 220.0));
+    assert_eq!(out["values"]["n"]["m01"], json!({"left": 60.0, "right": 60.0}));
     let changed: Vec<&str> = out["glyphs"].as_array().unwrap().iter().map(|v| v.as_str().unwrap()).collect();
-    assert_eq!(changed, ["n", "o", "l", "I"]);
+    assert_eq!(changed, ["o", "l", "I"]);
 
     // An explicit separation is twice the area per side.
     run(&mut s, "spacing.autoSpace", json!({"glyphs": ["n"], "separation": 100}));

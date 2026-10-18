@@ -8,9 +8,11 @@
 //! the band with no ink have no sample. [`clip_depth`] limits each sample to `depth` inward from
 //! the side's extreme, so deep counters (the inside of `c`, the gap of `T`) count only so far.
 //! [`white_area`] is the area between a clipped profile and a sidebearing line; [`mean_white`]
-//! divides it by the inked height, which gives the mean width of white per row. Auto-spacing
-//! makes that mean equal to a target. [`optical_gap`] is the mean horizontal distance between the
-//! right profile of one glyph and the left profile of the next.
+//! divides it by the inked height, which gives the mean width of white per row. [`mean_depth`]
+//! is the part of that mean that lies inside the profile, between the samples and the side's
+//! extreme; auto-spacing weighs it against the white outside the extreme. [`optical_gap`] is the
+//! distance between the right profile of one glyph and the left profile of the next, averaged
+//! over the rows so that the closest rows count most.
 //!
 //! Profiles are in the coordinates of the outline they were taken from; the caller places glyphs
 //! by passing offsets. For an italic master, pass the outline slanted back
@@ -26,6 +28,7 @@
 //! clip_depth(profile: &SideProfile, depth: f64) -> SideProfile
 //! white_area(profile: &SideProfile, x: f64) -> f64
 //! mean_white(profile: &SideProfile, x: f64) -> Option<f64>
+//! mean_depth(profile: &SideProfile) -> Option<f64>
 //! optical_gap(right: &SideProfile, left: &SideProfile, offset: f64) -> Option<f64>
 //! SideProfile::extreme(&self) -> Option<f64>;  SideProfile::inked_rows(&self) -> usize
 //! SideProfile::height(&self, i: usize) -> f64;  SideProfile::mean_x(&self) -> Option<f64>
@@ -37,6 +40,12 @@ use fontcraft_geom::{BezPath, Line, ParamCurve, ParamCurveExtrema, Point};
 pub const MIN_PROFILE_STEP: f64 = 1.0;
 /// Most samples in one profile; a band too tall for its step is refused.
 pub const MAX_PROFILE_SAMPLES: usize = 4_096;
+/// The order of the power mean [`optical_gap`] takes of the row distances, negated: 2 makes a
+/// row at half the distance count four times as much.
+pub const GAP_POWER: f64 = 2.0;
+/// The smallest row distance [`optical_gap`] uses; rows closer than this, or overlapping, count
+/// as this close.
+pub const MIN_ROW_GAP: f64 = 1.0;
 
 /// Which side of the glyph.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -205,10 +214,30 @@ pub fn mean_white(profile: &SideProfile, x: f64) -> Option<f64> {
     (n > 0).then(|| white_area(profile, x) / (n as f64 * profile.step))
 }
 
-/// The mean horizontal distance between `right` (the right profile of the first glyph) and
-/// `left` (the left profile of the second glyph, shifted right by `offset`: the first glyph's
-/// advance plus any kerning), over the rows where both have ink; `None` when no row has both.
-/// Both profiles must share bottom and step.
+/// The mean depth of `profile`: the mean over the rows with ink of each sample's distance
+/// inward from the side's extreme. `None` without ink.
+pub fn mean_depth(profile: &SideProfile) -> Option<f64> {
+    let extreme = profile.extreme()?;
+    let n = profile.inked_rows();
+    let sum: f64 = profile
+        .samples
+        .iter()
+        .flatten()
+        .map(|s| match profile.side {
+            Side::Left => s - extreme,
+            Side::Right => extreme - s,
+        })
+        .sum();
+    (n > 0).then(|| sum / n as f64)
+}
+
+/// The optical distance between `right` (the right profile of the first glyph) and `left` (the
+/// left profile of the second glyph, shifted right by `offset`: the first glyph's advance plus
+/// any kerning), over the rows where both have ink: the power mean of order −[`GAP_POWER`] of
+/// the row distances, each at least [`MIN_ROW_GAP`]. Equal distances give that distance; a few
+/// close rows pull the result toward them more than a plain mean would, as the eye judges a pair
+/// by where it comes closest. `None` when no row has both. Both profiles must share bottom and
+/// step.
 pub fn optical_gap(right: &SideProfile, left: &SideProfile, offset: f64) -> Option<f64> {
     if !offset.is_finite() {
         return None;
@@ -217,15 +246,12 @@ pub fn optical_gap(right: &SideProfile, left: &SideProfile, offset: f64) -> Opti
     if !same(right.bottom, left.bottom) || !same(right.step, left.step) {
         return None;
     }
-    let mut sum = 0.0;
-    let mut n = 0usize;
-    for (r, l) in right.samples.iter().zip(&left.samples) {
-        if let (Some(r), Some(l)) = (r, l) {
-            sum += l + offset - r;
-            n += 1;
-        }
-    }
-    (n > 0).then(|| sum / n as f64)
+    let rows: Vec<f64> =
+        right.samples.iter().zip(&left.samples).filter_map(|(r, l)| Some((l.as_ref()? + offset - r.as_ref()?).max(MIN_ROW_GAP))).collect();
+    // Relative to the closest row, so equal distances give that distance exactly.
+    let closest = rows.iter().copied().reduce(f64::min)?;
+    let mean = rows.iter().map(|d| (d / closest).powf(-GAP_POWER)).sum::<f64>() / rows.len() as f64;
+    Some(closest * mean.powf(-1.0 / GAP_POWER)).filter(|g| g.is_finite())
 }
 
 #[cfg(test)]
@@ -235,6 +261,10 @@ mod tests {
 
     fn rect(x0: f64, y0: f64, x1: f64, y1: f64) -> BezPath {
         fontcraft_geom::Rect::new(x0, y0, x1, y1).to_path(0.1)
+    }
+
+    fn rect_left() -> SideProfile {
+        profiles(&rect(50.0, 0.0, 450.0, 500.0), Band { bottom: 0.0, top: 500.0 }, 5.0).unwrap().0
     }
 
     /// An ellipse of four cubic curves.
@@ -287,6 +317,9 @@ mod tests {
         let clipped = clip_depth(&l, 30.0);
         assert!(clipped.samples.iter().flatten().all(|x| *x <= el + 30.0 + 1e-9));
         assert!(white_area(&clipped, 0.0) < white_area(&l, 0.0));
+        // The mean depth is the white between the clipped samples and the extreme.
+        assert!((mean_depth(&clipped).unwrap() - mean_white(&clipped, el).unwrap()).abs() < 1e-9);
+        assert_eq!(mean_depth(&rect_left()), Some(0.0));
         let mean = mean_white(&clipped, 0.0).unwrap();
         assert!(mean > 50.0 && mean < 80.0, "{mean}");
         // The other side clips toward the right extreme.
@@ -296,13 +329,23 @@ mod tests {
     }
 
     #[test]
-    fn the_optical_gap_is_the_mean_distance_where_both_have_ink() {
+    fn the_optical_gap_leans_toward_the_closest_rows_where_both_have_ink() {
         let band = Band { bottom: 0.0, top: 500.0 };
+        let near = |a: Option<f64>, b: f64| a.is_some_and(|a| (a - b).abs() < 1e-9);
         let (_, r) = profiles(&rect(50.0, 0.0, 450.0, 500.0), band, 5.0).unwrap();
         let (l, _) = profiles(&rect(30.0, 0.0, 400.0, 250.0), band, 5.0).unwrap();
         // The second glyph starts at 500 + 30; only its lower half has ink.
-        assert_eq!(optical_gap(&r, &l, 500.0), Some(80.0));
-        assert_eq!(optical_gap(&r, &l, 460.0), Some(40.0));
+        assert!(near(optical_gap(&r, &l, 500.0), 80.0));
+        assert!(near(optical_gap(&r, &l, 460.0), 40.0));
+        // Overlapping rows count as one unit apart.
+        assert!(near(optical_gap(&r, &l, 400.0), MIN_ROW_GAP));
+        // Half the rows 80 apart, half 180: the plain mean would be 130.
+        let mut step = rect(30.0, 0.0, 400.0, 250.0);
+        step.extend(rect(130.0, 250.0, 400.0, 500.0).elements().iter().copied());
+        let (l2, _) = profiles(&step, band, 5.0).unwrap();
+        let expected = ((80f64.powi(-2) + 180f64.powi(-2)) / 2.0).powf(-0.5);
+        assert!(near(optical_gap(&r, &l2, 500.0), expected), "{:?} {expected}", optical_gap(&r, &l2, 500.0));
+        assert!(expected > 100.0 && expected < 105.0);
         let (other, _) = profiles(&rect(30.0, 0.0, 400.0, 250.0), band, 10.0).unwrap();
         assert_eq!(optical_gap(&r, &other, 500.0), None, "different steps");
         let (empty, _) = profiles(&BezPath::new(), band, 5.0).unwrap();

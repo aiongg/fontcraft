@@ -7,12 +7,21 @@
 //! Per master, each glyph belongs to one of two groups: capitals and figures (case `upper` or
 //! category `Number`), measured over the band from the baseline less its overshoot to the cap
 //! height plus its overshoot; and everything else, over the band up to the x-height. Each side's
-//! profile ([`fontcraft_spacing::profile`]) is clipped to `depth` (15% of the x-height by
-//! default) inward from its extreme, and the sidebearing is set so the mean white per inked row
-//! between the clipped profile and the advance edge equals `area`. Without `area`, the group's
-//! area is the mean of the four values the font's own `n` and `o` (capitals: `H` and `O`) have
-//! as they are, so their spacing reproduces the font's; a group without its control glyphs takes
-//! the other group's. Sidebearings are rounded to whole units, then held between `min` and `max`.
+//! profile ([`fontcraft_spacing::profile`]) is clipped to `depth` (10% of the x-height by
+//! default) inward from its extreme. A side's white has two parts: the distance from the advance
+//! edge to the side's extreme, and the mean depth of the clipped profile inside it, which counts
+//! `weight` times. The sidebearing is set so the two add up to `area`; a straight side gets
+//! `area` itself, and round or open sides less, by the weight times their mean depth.
+//!
+//! The group's area and weight are calibrated on the font's own `n`, `o` and `v` (capitals and
+//! figures: `H`, `O` and `V`) as they are: a least-squares line through their sides, the white
+//! outside the extreme against the mean depth, whose slope gives the weight (held between 0 and
+//! [`MAX_WEIGHT`]) and whose value at depth 0 gives the area. A straight, a round and a diagonal
+//! side are spaced alike, so their spacing is reproduced. Without depth to compare (only
+//! straight controls), the weight is 1 and the area their mean white. `area` replaces the
+//! calibrated area and keeps the weight; a group without its control glyphs takes the other
+//! group's; a font with none of them has weight 1 and needs `area`. Sidebearings are rounded to
+//! whole units, then held between `min` and `max`.
 //!
 //! Profiles are taken on the measured outline (slanted back in an italic master), so the values
 //! agree with the sidebearings the Info box shows. A side whose field has a metrics key keeps its
@@ -34,12 +43,16 @@ use crate::params::{Params, TargetKind};
 
 /// Sampling step of the profiles by default, in units.
 const DEFAULT_STEP: f64 = 5.0;
-/// Clipping depth by default, as a share of the master's x-height.
-const DEFAULT_DEPTH_SHARE: f64 = 0.15;
+/// Clipping depth by default, as a share of the master's x-height. On the corpus measure
+/// (`docs/plans/M13.md` § 5) shares from 5% to 10% did about equally well, deeper ones worse.
+const DEFAULT_DEPTH_SHARE: f64 = 0.10;
+/// Largest weight calibration gives the depth inside a profile.
+pub const MAX_WEIGHT: f64 = 2.0;
 /// Sidebearing of method `custom` by default, in percent of the em.
 const DEFAULT_PERCENT: f64 = 5.0;
-/// The control glyphs that calibrate each group, lowercase first.
-const CONTROLS: [[&str; 2]; 2] = [["n", "o"], ["H", "O"]];
+/// The control glyphs that calibrate each group, lowercase first: a straight, a round and a
+/// diagonal side.
+const CONTROLS: [[&str; 3]; 2] = [["n", "o", "v"], ["H", "O", "V"]];
 
 pub fn specs() -> Vec<CommandSpec> {
     let g: &'static [TargetKind] = &[TargetKind::Glyphs];
@@ -49,7 +62,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Auto Space",
             ["Glyph"],
             None,
-            "{glyphs?: [names] (default: every exported letter and figure), masters?: [master ids] (default: every master), method?: 'optical' (default) | 'tight' | 'custom', step?: units between profile samples (optical, default 5, at least 1), depth?: units the profile is clipped to inward from its extreme (optical, default 15% of the x-height), area?: mean white per side in units (optical, default calibrated on the font's n and o, or H and O for capitals and figures), separation?: white between two neighbours in units, twice `area` (give one of the two), percentOfUpm?: both sidebearings in percent of the em (custom, default 5), min?: smallest sidebearing, max?: largest sidebearing, beam?: height to measure at (tight and custom)} set the left and right sidebearings of each glyph's master layers from their shapes. Optical makes the mean white between each side's clipped profile and the advance edge equal to the area, over the band from the baseline to the x-height (cap height for capitals and figures), overshoots included; tight sets both sidebearings to 0, custom to a share of the em. Sidebearings are whole units. A side with a metrics key keeps its value; layers with a width key, under automatic alignment, empty, or without ink in the band are skipped, as are locked glyphs and masters that take their widths from another → {glyphs: [names changed], values: {glyph: {master id: {left, right}}}, areas: {master id: {lowercase, capitals}}, skipped: [{glyph?, layer, reason}]}",
+            "{glyphs?: [names] (default: every exported letter and figure), masters?: [master ids] (default: every master), method?: 'optical' (default) | 'tight' | 'custom', step?: units between profile samples (optical, default 5, at least 1), depth?: units the profile is clipped to inward from its extreme (optical, default 10% of the x-height), area?: the white beside a straight side in units (optical, default calibrated with the depth weight on the font's n, o and v, or H, O and V for capitals and figures), separation?: white between two straight neighbours in units, twice `area` (give one of the two), percentOfUpm?: both sidebearings in percent of the em (custom, default 5), min?: smallest sidebearing, max?: largest sidebearing, beam?: height to measure at (tight and custom)} set the left and right sidebearings of each glyph's master layers from their shapes. Optical makes each side's white equal to the area: the distance from the advance edge to the side's extreme plus the weight times the mean depth of its profile clipped to `depth`, over the band from the baseline to the x-height (cap height for capitals and figures), overshoots included; tight sets both sidebearings to 0, custom to a share of the em. Sidebearings are whole units. A side with a metrics key keeps its value; layers with a width key, under automatic alignment, empty, or without ink in the band are skipped, as are locked glyphs and masters that take their widths from another → {glyphs: [names changed], values: {glyph: {master id: {left, right}}}, areas: {master id: {lowercase, capitals}}, weights: {master id: {lowercase, capitals}}, skipped: [{glyph?, layer, reason}]}",
             has_doc,
             auto_space
         )
@@ -199,12 +212,13 @@ pub(super) fn master_ids(p: &Params, font: &Font) -> Result<Vec<String>> {
     Ok(out)
 }
 
-/// What one master needs to space its layers: the band and area of each group (lowercase,
-/// capitals) and the clipping depth.
+/// What one master needs to space its layers: the band, area and depth weight of each group
+/// (lowercase, capitals) and the clipping depth.
 struct MasterSpacing {
     bands: [Band; 2],
     depth: f64,
     areas: [Option<f64>; 2],
+    weights: [f64; 2],
 }
 
 fn band(font: &Font, m: &Master, height: &str, default: f64) -> Band {
@@ -219,43 +233,65 @@ impl MasterSpacing {
         let metrics = master_metrics(font, m);
         let bands = [band(font, m, metric::X_HEIGHT, metrics.x_height), band(font, m, metric::CAP_HEIGHT, metrics.cap_height)];
         let depth = opts.depth.unwrap_or((DEFAULT_DEPTH_SHARE * metrics.x_height).max(0.0));
-        MasterSpacing { bands, depth, areas: [opts.area; 2] }
+        MasterSpacing { bands, depth, areas: [opts.area; 2], weights: [1.0; 2] }
     }
 
-    /// Fills the areas the options left open from the control glyphs. `Err` names the master
-    /// when neither group has a control glyph to calibrate on.
+    /// Calibrates the weights, and the areas the options left open, on the control glyphs.
+    /// `Err` names the master when an area is open and neither group has a control glyph.
     fn calibrate(&mut self, font: &Font, m: &Master, step: f64) -> std::result::Result<(), String> {
-        if self.areas.iter().all(Option::is_some) {
-            return Ok(());
-        }
         let mut found = [None, None];
         for (i, names) in CONTROLS.iter().enumerate() {
             let band = self.bands.get(i).copied().unwrap_or(Band { bottom: 0.0, top: 0.0 });
-            let mut values = Vec::new();
+            // Per control side: the white outside its extreme, and its clipped mean depth.
+            let mut sides = Vec::new();
             for name in names {
                 let Some(l) = font.glyph(name).and_then(|g| g.layers.iter().find(|l| l.id == m.id)) else { continue };
                 let Ok(outline) = spacing::measure::measured_outline(font, l) else { continue };
                 let (left, right) = profile::profiles(&outline, band, step).map_err(|e| format!("master `{}`: {e}", m.name))?;
                 let (left, right) = (profile::clip_depth(&left, self.depth), profile::clip_depth(&right, self.depth));
-                values.extend(profile::mean_white(&left, 0.0));
-                values.extend(profile::mean_white(&right, l.width));
+                if let (Some(x), Some(d)) = (left.extreme(), profile::mean_depth(&left)) {
+                    sides.push((x, d));
+                }
+                if let (Some(x), Some(d)) = (right.extreme(), profile::mean_depth(&right)) {
+                    sides.push((l.width - x, d));
+                }
             }
-            if !values.is_empty()
-                && let Some(slot) = found.get_mut(i)
-            {
-                *slot = Some(values.iter().sum::<f64>() / values.len() as f64);
+            if let Some(slot) = found.get_mut(i) {
+                *slot = fit(&sides);
             }
         }
         let [lower, upper] = found;
         let (lower, upper) = (lower.or(upper), upper.or(lower));
-        let [a0, a1] = &mut self.areas;
-        *a0 = a0.or(lower);
-        *a1 = a1.or(upper);
+        for (i, fitted) in [lower, upper].into_iter().enumerate() {
+            let (Some(area), Some(weight)) = (self.areas.get_mut(i), self.weights.get_mut(i)) else { continue };
+            if let Some((a, w)) = fitted {
+                *area = area.or(Some(a));
+                *weight = w;
+            }
+        }
         if self.areas.iter().any(Option::is_none) {
-            return Err(format!("master `{}` has none of n, o, H and O to calibrate on; give `area` or `separation`", m.name));
+            return Err(format!("master `{}` has none of n, o, v, H, O and V to calibrate on; give `area` or `separation`", m.name));
         }
         Ok(())
     }
+}
+
+/// The area and depth weight that fit `sides` (white outside the extreme, mean depth) best:
+/// the least-squares line white = area − weight × depth, the weight held between 0 and
+/// [`MAX_WEIGHT`]. Sides that all have about the same depth give weight 1 and their mean white.
+fn fit(sides: &[(f64, f64)]) -> Option<(f64, f64)> {
+    if sides.is_empty() {
+        return None;
+    }
+    let n = sides.len() as f64;
+    let mean_out = sides.iter().map(|s| s.0).sum::<f64>() / n;
+    let mean_depth = sides.iter().map(|s| s.1).sum::<f64>() / n;
+    let cov: f64 = sides.iter().map(|(o, d)| (o - mean_out) * (d - mean_depth)).sum();
+    let var: f64 = sides.iter().map(|(_, d)| (d - mean_depth).powi(2)).sum();
+    // Below a unit of spread in depth the slope means nothing.
+    let weight = if var >= n { (-cov / var).clamp(0.0, MAX_WEIGHT) } else { 1.0 };
+    let area = mean_out + weight * mean_depth;
+    (area.is_finite() && weight.is_finite()).then_some((area, weight))
 }
 
 /// One layer's new spacing: move the contents by `shift`, then set the width.
@@ -295,15 +331,17 @@ fn plan_layer(font: &Font, g: &Glyph, l: &Layer, capital: bool, ms: &MasterSpaci
             let group = usize::from(capital);
             let band = ms.bands.get(group).copied().ok_or("no band")?;
             let area = ms.areas.get(group).copied().flatten().ok_or("no area")?;
+            let weight = ms.weights.get(group).copied().unwrap_or(1.0);
             let (left, right) = profile::profiles(&outline, band, opts.step).map_err(|e| e.to_string())?;
             let left = profile::clip_depth(&left, ms.depth);
             let right = profile::clip_depth(&right, ms.depth);
-            let (Some(ml), Some(mr)) = (left.mean_x(), right.mean_x()) else {
+            let (Some(el), Some(dl), Some(er), Some(dr)) = (left.extreme(), profile::mean_depth(&left), right.extreme(), profile::mean_depth(&right))
+            else {
                 return Err("it has no ink between the band's heights".into());
             };
-            // Moving the contents by d and setting the width to W gives mean whites ml + d and
-            // W − mr − d; both equal the area when the sidebearings below are reached.
-            ((b.x0, l.width - b.x1), (b.x0 + area - ml, area + mr - b.x1))
+            // The white outside each extreme is the area less the weighted depth; the outline's
+            // bounds may reach past the band's extremes (an ascender, a descender).
+            ((b.x0, l.width - b.x1), (area - weight * dl - (el - b.x0), area - weight * dr - (b.x1 - er)))
         }
         Method::Tight | Method::Custom => {
             let v = if opts.method == Method::Tight { 0.0 } else { opts.percent / 100.0 * f64::from(font.units_per_em) };
@@ -354,6 +392,7 @@ fn auto_space(s: &mut Session, v: &Value) -> Result<Value> {
     let mut plans = Vec::new();
     let mut skipped = Vec::new();
     let mut areas = Map::new();
+    let mut weights = Map::new();
     for id in &masters {
         let m = font.master(id)?;
         if let Some(source) = spacing::metrics_source(font, id)
@@ -367,6 +406,8 @@ fn auto_space(s: &mut Session, v: &Value) -> Result<Value> {
             ms.calibrate(font, m, opts.step).map_err(|e| p.bad(e))?;
             let [lower, upper] = ms.areas;
             areas.insert(id.clone(), json!({"lowercase": lower, "capitals": upper}));
+            let [lower, upper] = ms.weights;
+            weights.insert(id.clone(), json!({"lowercase": lower, "capitals": upper}));
         }
         for (g, capital) in &glyphs {
             if g.info.locked {
@@ -402,7 +443,7 @@ fn auto_space(s: &mut Session, v: &Value) -> Result<Value> {
         }
         Ok(())
     })?;
-    Ok(json!({"glyphs": changed, "values": values, "areas": areas, "skipped": skipped}))
+    Ok(json!({"glyphs": changed, "values": values, "areas": areas, "weights": weights, "skipped": skipped}))
 }
 
 // ── Center in Width ────────────────────────────────────────────────────────────────────────────

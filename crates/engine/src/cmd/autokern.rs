@@ -11,10 +11,13 @@
 //! auto-spacing takes them.
 //!
 //! - The **optical gap** is [`profile::optical_gap`] between the left glyph's right profile and
-//!   the right glyph's left profile, each clipped to `depth` inward from its extreme. Both are
-//!   taken over the lowercase band (baseline to x-height, overshoots included), or over the
-//!   cap-height band when both glyphs are capitals or figures: the bands and depth of
-//!   `spacing.autoSpace`.
+//!   the right glyph's left profile, each clipped to `depth` (30% of the x-height by default)
+//!   inward from its extreme: a mean of the row distances that leans toward the closest rows.
+//!   Both are taken over the lowercase band (baseline to x-height, overshoots included), or over
+//!   the cap-height band when both glyphs are capitals or figures: the bands of
+//!   `spacing.autoSpace`. The depth is deeper than auto-spacing's, as the corpus measure
+//!   (`docs/plans/M13.md` § 5) shows kerning needs more of a counter or a diagonal's white to
+//!   tell pairs apart.
 //! - The **closest approach** is the smallest horizontal distance between the two outlines at a
 //!   height both reach: the minimum over rows at most one unit apart, refined between the
 //!   neighbouring rows by a golden-section search on the outlines' exact crossings.
@@ -58,8 +61,11 @@ pub const MAX_PAIRS: usize = 1_000_000;
 pub const MAX_GROUP_COMPARISONS: usize = 20_000_000;
 /// Sampling step of the optical profiles by default, in units.
 const DEFAULT_STEP: f64 = 5.0;
-/// Clipping depth by default, as a share of the master's x-height.
-const DEFAULT_DEPTH_SHARE: f64 = 0.15;
+/// Clipping depth of Auto Kern by default, as a share of the master's x-height. On the corpus
+/// measure, sign agreement rose from 15% up to about 25% and changed little beyond.
+const KERN_DEPTH_SHARE: f64 = 0.30;
+/// Clipping depth of Build Kerning Groups by default, as a share of the master's x-height.
+const GROUP_DEPTH_SHARE: f64 = 0.15;
 /// Auto-kerning values are rounded to this many units by default.
 const DEFAULT_ROUND: f64 = 5.0;
 /// Most rows of the fine profiles the closest approach samples.
@@ -79,7 +85,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Auto Kern",
             ["Font", "Kerning"],
             None,
-            "{pairs?: [[left, right]] (glyph names or \"@group\", logical order), glyphsLeft?: [names], glyphsRight?: [names] (every pair of a first glyph from glyphsLeft and a second from glyphsRight; give pairs, both lists, or both), masters?: [master ids] (default: every master), direction?: \"ltr\" | \"rtl\" (default ltr), separation?: target gap in units (default: the gap of n n for lowercase and H H for capitals and figures, averaged over the pair's two glyphs), minKern?: values smaller than this in size are dropped (default 0), onlyCloser?: bool, drop values that would loosen a pair (default false), touching?: bool, measure gaps at the outlines' closest approach instead of optically (default false), keepExisting?: bool, leave pairs that are stored already (default true), round?: units the values are rounded to (default 5), step?: units between profile samples (default 5), depth?: units each profile is clipped to inward from its extreme (default 15% of the x-height), apply?: bool, store the values (default true; false only proposes)} propose and store kerning for each pair from the optical gap between the two glyphs: target minus the mean distance between the left glyph's right profile and the right glyph's left profile, over the band from the baseline to the x-height (cap height when both are capitals or figures), overshoots included. A group side is measured on the member named like the group, else its first member. A value of 0, below minKern, or positive with onlyCloser stores nothing, and removes the stored pair when keepExisting is false. Masters that take their kerning from another are skipped → {pairs: [{left, right, master, value, gap, target, previous, result: \"set\" | \"kept\" | \"dropped\" | \"removed\"}], targets: {master id: {lowercase, capitals}}, skipped: [{left?, right?, master, reason}]}",
+            "{pairs?: [[left, right]] (glyph names or \"@group\", logical order), glyphsLeft?: [names], glyphsRight?: [names] (every pair of a first glyph from glyphsLeft and a second from glyphsRight; give pairs, both lists, or both), masters?: [master ids] (default: every master), direction?: \"ltr\" | \"rtl\" (default ltr), separation?: target gap in units (default: the gap of n n for lowercase and H H for capitals and figures, averaged over the pair's two glyphs), minKern?: values smaller than this in size are dropped (default 0), onlyCloser?: bool, drop values that would loosen a pair (default false), touching?: bool, measure gaps at the outlines' closest approach instead of optically (default false), keepExisting?: bool, leave pairs that are stored already (default true), round?: units the values are rounded to (default 5), step?: units between profile samples (default 5), depth?: units each profile is clipped to inward from its extreme (default 30% of the x-height), apply?: bool, store the values (default true; false only proposes)} propose and store kerning for each pair from the optical gap between the two glyphs: target minus the distance between the left glyph's right profile and the right glyph's left profile, averaged over the rows so the closest rows count most, over the band from the baseline to the x-height (cap height when both are capitals or figures), overshoots included. A group side is measured on the member named like the group, else its first member. A value of 0, below minKern, or positive with onlyCloser stores nothing, and removes the stored pair when keepExisting is false. Masters that take their kerning from another are skipped → {pairs: [{left, right, master, value, gap, target, previous, result: \"set\" | \"kept\" | \"dropped\" | \"removed\"}], targets: {master id: {lowercase, capitals}}, skipped: [{left?, right?, master, reason}]}",
             has_doc,
             auto_kern
         ),
@@ -381,6 +387,7 @@ impl Kit {
         m: &Master,
         step: Option<f64>,
         depth: Option<f64>,
+        depth_share: f64,
         needs: &[(String, usize)],
         fine: bool,
     ) -> std::result::Result<Kit, String> {
@@ -393,7 +400,7 @@ impl Kit {
                 profile::profiles(&BezPath::new(), b, step).map_err(|e| format!("master `{}`: {e}", m.name))?;
             }
         }
-        let depth = depth.unwrap_or((DEFAULT_DEPTH_SHARE * metrics.x_height).max(0.0));
+        let depth = depth.unwrap_or((depth_share * metrics.x_height).max(0.0));
         let mut glyphs: HashMap<String, Measured> = HashMap::new();
         for (name, band_index) in needs {
             let entry = glyphs.entry(name.clone()).or_insert_with(|| Measured {
@@ -599,7 +606,7 @@ fn auto_kern(s: &mut Session, v: &Value) -> Result<Value> {
             skipped.push(json!({"master": id, "reason": reason}));
             continue;
         }
-        let kit = Kit::new(font, m, Some(step), depth, &needs, touching).map_err(|e| p.bad(e))?;
+        let kit = Kit::new(font, m, Some(step), depth, KERN_DEPTH_SHARE, &needs, touching).map_err(|e| p.bad(e))?;
         let refs = kit.references(touching);
         let [lower, caps] = refs;
         targets.insert(id.clone(), json!({"lowercase": lower, "capitals": caps}));
@@ -703,7 +710,7 @@ fn kern_to_distance(s: &mut Session, v: &Value) -> Result<Value> {
             }
         }
         let (needs, _) = needs_of(font, &data, &jobs);
-        let kit = Kit::new(font, m, None, None, &needs, true).map_err(|e| p.bad(e))?;
+        let kit = Kit::new(font, m, None, None, KERN_DEPTH_SHARE, &needs, true).map_err(|e| p.bad(e))?;
         let table = index.table(direction, id).map_err(|e| p.bad(e.to_string()))?;
         for j in &jobs {
             let gap = match kit.closest(&j.left, &j.right) {
@@ -823,7 +830,7 @@ fn build_groups(s: &mut Session, v: &Value) -> Result<Value> {
     let mut kits = Vec::new();
     for id in &masters {
         let m = font.master(id)?;
-        kits.push(Kit::new(font, m, Some(step), depth, &glyphs, false).map_err(|e| p.bad(e))?);
+        kits.push(Kit::new(font, m, Some(step), depth, GROUP_DEPTH_SHARE, &glyphs, false).map_err(|e| p.bad(e))?);
     }
     let depths: Vec<f64> = kits.iter().map(|k| k.depth).collect();
     // Glyphs that cannot be measured in some master are left out of every side.

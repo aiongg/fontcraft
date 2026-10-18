@@ -1,6 +1,6 @@
 //! Measure (`docs/plans/M13.md` § 5, auto-spacing against the corpus): for Inter Roman and
 //! Oswald, every master, `spacing.autoSpace` with its defaults (every exported letter and figure,
-//! calibrated on the font's own n, o, H and O) against the sidebearings the source stores.
+//! calibrated on the font's own n, o, v, H, O and V) against the sidebearings the source stores.
 //! Glyphs with a metrics key on that layer and layers under automatic alignment are left out, as
 //! the measure asks.
 //!
