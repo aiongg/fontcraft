@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1195 rows to check: 1755 guesses and 440 observe steps.**
+**1198 rows to check: 1771 guesses and 440 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,7 +48,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 40 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 4 |
-| **Later milestones (after M6)** | all | **724** |
+| **Later milestones (after M6)** | all | **727** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 43 |
 | Later milestones (after M6) | Edit View: text mode and preview | 14 |
 | Later milestones (after M6) | Components and anchors | 37 |
@@ -56,7 +56,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Spacing and metrics keys | 3 |
 | Later milestones (after M6) | Kerning and the Kerning window | 4 |
 | Later milestones (after M6) | Font View | 15 |
-| Later milestones (after M6) | Font Info and features | 267 |
+| Later milestones (after M6) | Font Info and features | 270 |
 | Later milestones (after M6) | Interpolation | 58 |
 | Later milestones (after M6) | Hinting | 90 |
 | Later milestones (after M6) | Colour fonts | 49 |
@@ -1333,12 +1333,16 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: On a source, the family checks receive every instance compiled from it, the variable font included; checks that should compare only the static instances would need the reference tools' behaviour on sources to settle it.
 - [ ] `audit.fix` (M3, docs, live): Fix Issues
   - Guess: An outline fix on a composite glyph only reports unless `safeOnly` is false (21-qa question 4).
+  - Guess: The fixes of M12 run in the three stages and the order of docs/spec/21-qa.md § 5 › Fix calls (glyph data, then layers, then kerning, feature code and hints); no reference tool fixes all of these, so a case where the order changes the result would settle it.
+  - Guess: alignHandles turns both handles onto the line that bisects their two directions, keeping their lengths; a type designer's review of fixed kinks would settle whether one handle should stay put instead.
+  - Guess: setGdefClasses makes a glyph that must not be a mark a Symbol when the glyph database classes it as a mark; a review of the fixed glyphs' categories would settle it.
+  - Guess: cleanKerning leaves a tabular glyph that is kerned through a group shared with other glyphs in the report, because removing the group pair would change their kerning; an exception pair of zero is the other choice, which a review of fixed fonts would settle.
 - [ ] `audit.toggleLiveAudit` (M3, inferred, live): Live Audit
   - Guess: Live audit is off when the app starts; the default is ours.
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (724)
+## Later milestones (after M6) (727)
 
 ### Edit View: drawing, guides, layers and the Palette (43)
 
@@ -1762,7 +1766,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The decomposition sections use Unicode's canonical decompositions, one level and full together, so U+1EA4 lists both U+00C2 and U+0041, and characters the font has no glyph for are listed dimmed.
   - Guess: Clicking an entry opens the glyph in a new tab; the reference's documentation does not say whether it replaces the current glyph instead.
 
-### Font Info and features (267)
+### Font Info and features (270)
 
 - [ ] `fontInfo.rows.selection` (behavior, M7, handbook): Clicking a row selects it and Cmd+click builds a selection of several…
   - Guess: Shift-click adds every row between the last row clicked and the clicked one; Shift-clicking in the reference app settles it.
@@ -2584,6 +2588,21 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A master without constants gets an empty set when math data is set, so the font has a MATH table: ufo2ft builds MATH only when the font lib holds a math key.
 - [ ] `font.setBaselines` (M13, docs, live): Set Baselines…
   - Guess: The baselines are stored as feature code rather than in custom parameters or user data, so the reference compilers build the same BASE table from the source; a reference app that edits BASE would settle where it keeps them.
+- [ ] `cid.convertToCid` (M13, docs, live): Convert to CID-Keyed…
+  - Guess: Without a CMap file only the Identity ordering is accepted, with .notdef at CID 0 and the other exporting glyphs from 1 in glyph order; bundled data for the public collections (M7's ROS row) would allow the others.
+  - Guess: Glyphs the CMap does not reach, and a second glyph on a CID already taken, get CIDs after the highest mapped one in glyph order, as the reference's export appends glyphs its ROS does not cover; converting such a font in the reference would settle the order.
+  - Guess: Non-exporting glyphs get no CID, and glyph names and the glyph order do not change.
+  - Guess: The CID font name and the single sub-font's name are the family name without spaces and PostScript delimiters.
+  - Guess: CMap codes are read as UTF-8 or UTF-16 when the CMap's name says so and as the code point otherwise; CMaps whose name does not start with Uni are refused, since glyphs are encoded by code point.
+- [ ] `cid.flatten` (M13, docs, live): Flatten CID Font
+  - Guess: Glyphs without a CID follow the glyphs in CID order, in their old order.
+  - Guess: With a CMap, a glyph whose CID it reaches gets exactly the code points the CMap maps to that CID, replacing its own, and other glyphs lose those code points; the documentation does not say whether existing code points stay.
+- [ ] `cid.editSubfonts` (M13, docs, live): Edit CID Sub-fonts
+  - Guess: An inserted font's glyphs whose names the font already has get .001, .002… (references inside the inserted font follow), code points the font already uses are dropped, and exporting glyphs take CIDs after the highest; the documentation does not say how name and code point clashes are resolved.
+  - Guess: An inserted font needs as many masters as the font, matched in order.
+  - Guess: Removing a sub-font removes its glyphs, and is refused when glyphs that stay use one of them as a component, or when it is the last sub-font.
+  - Guess: A new sub-font is named after the inserted font's family name without spaces, or FD followed by its index for a blank one, with -1, -2… when taken.
+  - Guess: postscriptOtherBlues, the family blues, the stem snaps and postscriptForceBold use the same naming as the keys seen in tx output; a CID-keyed font with those values converted by tx would settle it.
 - [ ] `dialog.mathTable` (panel, M13, docs): Math Table
   - Guess: The dialog edits the first master and one glyph at a time, with the data as text fields rather than a table per glyph; the reference's math dialog would settle the layout.
 - [ ] `proof-pdf` (format, M14, inferred): PDF proof sheet

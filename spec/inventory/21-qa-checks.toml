@@ -1197,7 +1197,7 @@ scope = "binary"
 fixable = true
 area = "qa"
 milestone = "M12"
-summary = "The space has no advance, or the no-break space has a different one. In a font that does not seem monospaced, the other encoded spaces are also compared with their conventional advances (a warning): tab and no-break space as the space, en and em quads and spaces, third-, fourth- and sixth-em spaces, figure space as the zero, punctuation space as the period, thin space within a sixth to a fifth of the em, hair space within a sixteenth to a tenth, zero width space 0. The fix copies the space's advance to the no-break space."
+summary = "The space has no advance, or the no-break space has a different one. In a font that does not seem monospaced, the other encoded spaces are also compared with their conventional advances (a warning): the tab as the space, en and em quads and spaces, third-, fourth- and sixth-em spaces, figure space as the zero, punctuation space as the period, thin space within a sixth to a fifth of the em, hair space within a sixteenth to a tenth, zero width space 0. The fix copies the space's advance to the no-break space."
 ref = "fontbakery whitespace_widths; fontbakery notofonts/hmtx/whitespace_advances"
 status = "docs"
 notes = "Skipped when the font lacks the space or the no-break space, as FontBakery's condition does. The conventional advances are the rule of FontBakery's notofonts/hmtx/whitespace_advances, with its monospace test (glyph_metrics_stats); an advance whose reference character (space, zero, period) is not encoded is not compared."
@@ -1298,7 +1298,7 @@ milestone = "M12"
 summary = "A glyph's sidebearings or width no longer match the metrics key or formula stored for them. The fix recomputes the metrics from the keys."
 ref = "Editor audit convention (metrics keys out of sync)"
 status = "inferred"
-notes = "Reported through the spacing crate's out-of-sync scan (spacing.scan_glyph): out-of-sync, unlinked and unreadable keys. Until the audit depends on the spacing crate, the check skips glyphs that have keys, with a reason."
+notes = "Reported through the spacing crate's out-of-sync scan (spacing.scan_glyph): out-of-sync, unlinked and unreadable keys. Only out-of-sync keys carry the update fix; an unlinked or unreadable key needs a new key first."
 
 [[check]]
 id = "check.metrics.negativeAdvance"
@@ -1671,7 +1671,7 @@ milestone = "M12"
 summary = "OS/2.fsSelection bits 0 (italic), 5 (bold) and 6 (regular) do not match the style, or disagree with the bold and italic bits of head.macStyle. The fix sets all of them from the style-linking settings."
 ref = "fontbakery opentype/fsselection; fontbakery opentype/mac_style; comparefamily single-face test 14"
 status = "docs"
-notes = "The style comes from the names, never the file name: italic when name ID 2 or 17 contains Italic, bold when name ID 2 begins with Bold or a variable font's default weight is 700 (FontBakery reads the file name). The fix is syncStyleLinking, which no command carries out yet."
+notes = "The style comes from the names, never the file name: italic when name ID 2 or 17 contains Italic, bold when name ID 2 begins with Bold or a variable font's default weight is 700 (FontBakery reads the file name). The fix syncStyleLinking runs font.instance.syncStyleLinking (docs/spec/21-qa.md § 5); it stays report-only until audit.fix dispatches source fixes to their commands."
 
 [[check]]
 id = "check.tables.vendorId"
@@ -1876,7 +1876,7 @@ milestone = "M12"
 summary = "GSUB or GPOS uses a language-system tag that is not registered. The common slip of TUR for Turkish instead of TRK is named explicitly, and the fix corrects that case."
 ref = "fontbakery opentype/layout_valid_language_tags; comparefamily family test 12 (unknown language tag, TUR vs TRK)"
 status = "docs"
-notes = "The rename fix is report-only until the feature-code commands of M8 exist; other unregistered tags carry no fix."
+notes = "The fix renameLanguageTag runs font.features.setCode on each prefix and feature that uses the wrong tag (docs/spec/21-qa.md § 5); other unregistered tags carry no fix. It stays report-only until audit.fix dispatches source fixes to their commands."
 
 [[check]]
 id = "check.layout.defaultLanguageSystems"
@@ -1902,7 +1902,7 @@ milestone = "M12"
 summary = "The feature code declares language systems but `languagesystem DFLT dflt` is not the first of them, so the compiler will not add it and default-script behaviour may be lost. The fix inserts the statement at the top."
 ref = "fontbakery ufo_features_default_languagesystem"
 status = "docs"
-notes = "Reads the language-system statements of the switched-on prefixes, classes and features in that order, comments left out. The fix is report-only until the feature-code commands of M8 exist."
+notes = "Reads the language-system statements of the switched-on prefixes, classes and features in that order, comments left out. The fix addDefaultLanguagesystem runs font.features.setCode on the first prefix with a languagesystem statement (docs/spec/21-qa.md § 5); it stays report-only until audit.fix dispatches source fixes to their commands."
 
 [[check]]
 id = "check.layout.gdefMarkClass"
@@ -1950,7 +1950,7 @@ milestone = "M12"
 summary = "The first liga lookup runs before the first smcp lookup, so ligatures form before small caps are applied and survive in small-cap text. The fix reorders the features."
 ref = "fontbakery smallcaps_before_ligatures"
 status = "docs"
-notes = "Skipped when the font has no smcp or no liga lookups. The reorder fix is report-only until the feature-code commands of M8 exist."
+notes = "Skipped when the font has no smcp or no liga lookups. The fix reorderFeatures runs font.features.reorder with smcp moved before liga (docs/spec/21-qa.md § 5); it stays report-only until audit.fix dispatches source fixes to their commands."
 
 [[check]]
 id = "check.layout.stylisticSetNames"
@@ -1974,7 +1974,7 @@ milestone = "M12"
 summary = "GPOS contains a type 7 (contextual, non-chaining) lookup, which at least one major shaping engine does not apply. The fix recompiles the rules as chaining context lookups (type 8)."
 ref = "fontbakery gpos7"
 status = "docs"
-notes = "Finds type 7 lookups directly and inside extension lookups. The recompile fix is report-only until a command carries it out."
+notes = "Finds type 7 lookups directly and inside extension lookups. The fix recompileLayout runs tables.recompileLayout on the compiled font (docs/spec/21-qa.md § 5); it stays report-only until that command is built."
 
 [[check]]
 id = "check.layout.cjkSpacingFeatures"
