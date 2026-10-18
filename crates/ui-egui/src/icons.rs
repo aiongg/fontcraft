@@ -26,6 +26,7 @@ pub enum Icon {
     Scale,
     Measure,
     Thickness,
+    Magnet,
     Text,
     AnnotationSelect,
     AnnotationText,
@@ -98,6 +99,7 @@ pub const ALL: &[Icon] = &[
     Icon::Scale,
     Icon::Measure,
     Icon::Thickness,
+    Icon::Magnet,
     Icon::Text,
     Icon::AnnotationSelect,
     Icon::AnnotationText,
@@ -165,6 +167,7 @@ pub fn for_tool(id: &str) -> Option<Icon> {
         "scale" => Icon::Scale,
         "measurement" => Icon::Measure,
         "thickness" => Icon::Thickness,
+        "magnet" => Icon::Magnet,
         "text" => Icon::Text,
         "annotationSelect" => Icon::AnnotationSelect,
         "annotationText" => Icon::AnnotationText,
@@ -448,6 +451,26 @@ fn draw(pen: &mut Pen, icon: Icon) {
         Icon::Thickness => {
             pen.fill(&[(0.15, 0.79), (0.19, 0.83), (0.90, 0.31), (0.71, 0.12)]);
             pen.dot((0.17, 0.81), 0.06);
+        }
+        // A horseshoe magnet, poles up.
+        Icon::Magnet => {
+            pen.line(&[
+                (0.74, 0.16),
+                (0.74, 0.56),
+                (0.74, 0.56),
+                (0.72, 0.65),
+                (0.67, 0.73),
+                (0.59, 0.78),
+                (0.50, 0.80),
+                (0.41, 0.78),
+                (0.33, 0.73),
+                (0.28, 0.65),
+                (0.26, 0.56),
+                (0.26, 0.56),
+                (0.26, 0.16),
+            ]);
+            pen.thick((0.18, 0.2), (0.34, 0.2), 1.6);
+            pen.thick((0.66, 0.2), (0.82, 0.2), 1.6);
         }
         Icon::Text => {
             pen.line(&[(0.22, 0.3), (0.22, 0.18), (0.78, 0.18), (0.78, 0.3)]);

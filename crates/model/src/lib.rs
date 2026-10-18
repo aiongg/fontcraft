@@ -23,6 +23,7 @@ mod font;
 mod glyph;
 mod glyph_info;
 mod glyph_props;
+pub mod guide_data;
 mod info;
 mod kerning;
 mod layer_info;
