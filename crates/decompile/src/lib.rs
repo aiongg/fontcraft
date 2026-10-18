@@ -8,7 +8,8 @@
 //! components (`open.truetypeKeepsQuadratic`, `open.truetypeKeepsComponents`); CFF outlines come
 //! back cubic. Pair kerning and kerning groups come back from the GPOS `kern` feature
 //! (`gpos_kern`). Hinting comes back too: CFF stems, zones and stems ([`cff_hints`]), and
-//! TrueType `cvt `, `fpgm`, `prep`, `gasp` and glyph programs ([`tt_hints`]). The rest of the
+//! TrueType `cvt `, `fpgm`, `prep`, `gasp` and glyph programs ([`tt_hints`]). Colour palettes and
+//! `COLR` glyphs come back as the `Color Palettes` parameter and colour layers ([`color`]). The rest of the
 //! layout and every other table are not read, and [`Decompiled::warnings`] lists them. The glyph order is recorded in a `glyphOrder` custom parameter, so a later export keeps
 //! the glyph ids (`open.recordsGlyphOrder`).
 //!
@@ -26,6 +27,7 @@ use std::sync::Arc;
 
 pub mod bare_cff;
 pub mod cff_hints;
+pub mod color;
 mod gpos_kern;
 pub mod tt_hints;
 pub mod type1;
@@ -132,7 +134,9 @@ pub fn decompile(bytes: &[u8], face: Option<u32>) -> Result<Decompiled, Decompil
             c.get(face).map_err(|_| DecompileError::NoSuchFace { face })?
         }
     };
-    variable::read_any(&font)
+    let mut d = variable::read_any(&font)?;
+    color::import(&font, &mut d);
+    Ok(d)
 }
 
 fn english(font: &FontRef, ids: &[StringId]) -> Option<String> {
@@ -333,6 +337,7 @@ fn read(font: &FontRef) -> Result<Decompiled, DecompileError> {
     let read_tables: Vec<&str> = ["head", "hhea", "hmtx", "maxp", "cmap", "name", "post", "OS/2", "glyf", "loca", "CFF "]
         .into_iter()
         .chain(tt_hints::TABLES.iter().copied())
+        .chain(color::TABLES.iter().copied())
         .collect();
     let mut left_out: Vec<String> = font
         .table_directory

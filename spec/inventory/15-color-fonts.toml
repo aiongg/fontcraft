@@ -542,13 +542,14 @@ label = "Describe Color Export"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{instance?: id}"
+params = "{instance?: index | name, master?: id, cbdt?: bool}"
 area = "compile"
 milestone = "M11"
 summary = "Query: for one instance (or all) reports which colour tables would be written (CPAL, COLR and its version, sbix, SVG), from which layers and parameters, plus problems such as missing image files or mismatched aspect ratios. Our addition; the reference has no such report."
 ref = "Color Fonts › Working with Color Fonts › Exporting Color Fonts"
 status = "inferred"
 own = true
+notes = "Reads the same export plan the compiler builds its tables from. Without `instance` or `master` it covers every static instance that exports, or the first master when there is none, as a plain export does. `master` describes an export of that master; `cbdt` adds the export option that writes CBDT and CBLC. Each export lists its resolved switches, its tables, the COLR glyphs with the layers they are made from, the strikes, the SVG documents and their sources, and the warnings and refusals."
 
 # ───────────────────────────── Panels ─────────────────────────────
 
@@ -1417,6 +1418,13 @@ milestone = "M11"
 summary = "Export glyph filters can test colour properties: colorIndex (palette index of layers), isAnyColorGlyph (palette, sbix or full-colour glyph) and isAppleColorGlyph (has an iColor layer). Feature-code tokens likewise offer isColorGlyph."
 ref = "Appendix › Custom Parameters › Remove Glyphs; Feature Code › Tokens"
 status = "handbook"
+notes = "Documented, not yet observed. In predicates (feature-code tokens, smart filters) `isColorGlyph` holds for palette layers, `isAnyColorGlyph` for colour layers of any kind and `isAppleColorGlyph` for iColor layers; `colorIndex` there is the glyph's colour label, as the feature-code tokens section says. In Remove Glyphs and Keep Glyphs, `isAnyColorGlyph` and `isAppleColorGlyph` select whole glyphs; `colorIndex=N` names a palette entry and is reported and skipped, because removing the shapes of one palette colour needs the export plan to drop those layers."
+guesses = [
+  "`isAnyColorGlyph` also holds for a glyph whose only colour layer is an svg layer, which the handbook's list (COLR/CPAL, sbix, full colour) leaves out. Settled by exporting a font with Remove Glyphs `isAnyColorGlyph=1` and a glyph that has only an svg layer.",
+]
+observe = [
+  "Remove Glyphs `colorIndex=1` on a palette font: export and read COLR with fontTools; note whether the base glyphs, their layer records for entry 1 or only the layer glyphs are gone.",
+]
 
 [[behavior]]
 id = "color.open.compiledColorTables"
@@ -1426,8 +1434,12 @@ summary = "Opening a compiled font reads its CPAL into the Color Palettes parame
 ref = "Color Fonts"
 status = "inferred"
 own = true
+notes = "Every master gets the colour layers, each made from the layer glyph's layer of that master and given the base glyph's width. Paints that use transformations, blends or nested clips leave the glyph with its plain outline, and the warnings name it. The layer glyphs a colour glyph used are removed, as an export makes them again; one with a code point, one that is a colour glyph itself and one a remaining glyph uses as a component stay."
 guesses = [
   "Opening a compiled colour font recovers palettes and vector colour layers and reports bitmap and SVG glyphs as lost. Settled by opening a COLR font in the reference.",
+  "A COLR version 1 glyph whose paints are all opaque solid palette colours opens as palette layers; any other version 1 glyph opens as one full-colour layer. Settled by opening a COLR version 1 font with solid and gradient glyphs in the reference.",
+  "Colours of full-colour layers open as palette references, so palette rows an export added for RGBA colours stay rows of every palette. Settled by opening, in the reference, a COLR version 1 font exported from full-colour layers with RGBA fills.",
+  "Gradient positions open as fractions of the curve bounds of the layer glyph's outline. Settled by reopening a font exported from a full-colour layer with a gradient and comparing the gradient knobs.",
 ]
 observe = [
   "Palette font: open its exported .ttf in the app; note whether the palettes and palette layers come back, and how bitmap and SVG glyphs of the sbix and SVG fonts' exports are reported when those files are opened.",
