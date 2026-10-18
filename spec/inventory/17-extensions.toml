@@ -22,16 +22,20 @@ status = "inferred"
 
 [[command]]
 id = "window.pluginManager"
-label = "Plugin Manager"
+label = "Extension Manager"
 menu = ["Window"]
 shortcut = ""
 kind = "ui"
-params = "{}"
+params = "{tab?: \"extensions\"|\"indexes\"}"
 area = "extensions"
 milestone = "M13"
 summary = "Opens the Plugin Manager window, the catalogue of installable scripts, plug-ins and modules. FontCraft: opens an Extension Manager listing WebAssembly modules and command macros from the registry index; every action in it is also a command."
 ref = "Extensions › Plugin Manager"
 status = "inferred"
+notes = "FontCraft (M13.10): Window › Extension Manager. Opening it reloads the extension indexes (`pluginManager.reloadIndexes`); the desktop app downloads HTTPS indexes in the background and reloads again when they arrive. The Indexes tab holds the list of indexes until the Settings window exists (M14)."
+guesses = [
+  "The window and its menu item are called Extension Manager, since it lists modules and macros rather than plug-ins; the reference calls it Plugin Manager.",
+]
 observe = [
   "Open Window › Plugin Manager in the trial: note the window's default size, whether it is a separate window or a sheet, which filter buttons are selected at first, and whether the Window menu item has a shortcut.",
 ]
@@ -51,7 +55,11 @@ milestone = "M13"
 summary = "Window that lists the extensions of the main repository and of any registered alternate repository, with two filter groups, a search field and per-entry install controls. FontCraft: the Extension Manager, the same layout over the entries of the extension indexes (modules and macros), with the type buttons Filters, Reporters, Checks and Macros, and each entry showing its kind, size and checksum before install."
 ref = "Extensions › Plugin Manager"
 status = "inferred"
+notes = "FontCraft (M13.10): each entry shows its title, kind, version, vendor, description, size and SHA-256, a Website link and a Donate button when the index gives them, a Preview button when it has a screenshot, and Install, Update, Remove and an on/off switch for installed modules. A second tab, Indexes, lists the indexes with an automatic-updates switch each, the Modules and Macros folders, and a field to add an index."
 guesses = [
+  "Screenshots are shown only when the entry's Preview button is pressed, not in the list, so opening the window downloads no images; the reference shows preview images in the list.",
+  "Entries are listed in index order (first index first), then installed modules no index lists, then macros of the Macros folder; the reference's order is not documented.",
+
   "The type buttons are Filters, Reporters, Checks and Macros in place of Plugins, Scripts and Modules, because FontCraft has no Python modules; settled by nothing in the reference (our own extension model, decision 0005).",
 ]
 observe = [
@@ -73,16 +81,19 @@ status = "inferred"
 
 [[command]]
 id = "pluginManager.filterByType"
-label = "Plugins / Scripts / Modules"
+label = "All / Filters / Reporters / Checks / Macros"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{type: \"plugins\"|\"scripts\"|\"modules\"}"
+params = "{type: \"all\"|\"filter\"|\"reporter\"|\"check\"|\"macro\"}"
 area = "extensions"
 milestone = "M13"
 summary = "Shows one extension type at a time: plug-ins, scripts or modules. FontCraft: Filters, Reporters, Checks or Macros; there is no modules type because each WebAssembly module is self-contained."
 ref = "Extensions › Plugin Manager"
 status = "inferred"
+guesses = [
+  "The type buttons pick one type at a time, with an All button to show every type; the handbook names the buttons but not whether several can be on together or how all types are shown again.",
+]
 
 [[command]]
 id = "pluginManager.search"
@@ -96,6 +107,10 @@ milestone = "M13"
 summary = "Filters the catalogue by a keyword matched against extension name, description and vendor name. FontCraft: same three fields are searched."
 ref = "Extensions › Plugin Manager"
 status = "inferred"
+notes = "FontCraft (M13.10): the text is found anywhere in the id, title, vendor or description, ignoring case, as `pluginManager.list` does."
+guesses = [
+  "The search ignores case and matches inside words, and also matches the id; the reference's matching is not documented.",
+]
 observe = [
   "Type part of a vendor name into the Plugin Manager's search field: confirm entries match on vendor, and note whether matching is case-insensitive and whether it matches inside words.",
 ]
@@ -128,6 +143,7 @@ ref = "Extensions › Plugin Manager"
 status = "inferred"
 guesses = [
   "An install from an index entry whose checksum does not match the downloaded bytes is refused and nothing is written; the reference's handling of a failed download is not documented.",
+  "A macro installed from an index is saved in the Macros folder as `<id>.fcmacro`, so the listing and Remove find it by the entry's id; the reference's scripts keep their repository's file names.",
 ]
 
 [[command]]
@@ -147,17 +163,47 @@ guesses = [
 ]
 
 [[command]]
+id = "pluginManager.reloadIndexes"
+label = "Reload Extension Indexes"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{indexes?: [string], fetched?: [string|null], automaticUpdates?: bool}"
+area = "extensions"
+milestone = "M13"
+summary = "The reference reads its repositories itself. FontCraft: reads the user's extension indexes in order (local files directly, HTTPS indexes as bytes the desktop app fetched), reports each one's entries or error, offers updates of installed modules and installs the automatic ones whose files are local."
+ref = "Extensions › Plugin Manager"
+status = "inferred"
+own = true
+notes = "FontCraft (M13.10): the list defaults to the lines of `addons.alternatePluginRepos`; `fetched` gives the downloaded HTTPS indexes by position, so no URL with credentials appears in the parameters, and both are left out of the command log."
+
+[[command]]
+id = "plugin.setEnabled"
+label = "Turn Module On or Off"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{id: string, enabled: bool}"
+area = "extensions"
+milestone = "M13"
+summary = "The reference has no switch for an installed plug-in: it is removed or kept. FontCraft: the Extension Manager's switch turns an installed module on or off, kept per file in the Modules folder; a module copied in by hand is listed off until turned on."
+ref = "Extensions › Plug-ins"
+status = "inferred"
+own = true
+
+[[command]]
 id = "pluginManager.enlargePreview"
 label = "Enlarge Preview"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{id: string}"
+params = "{id?: string}"
 area = "extensions"
 milestone = "M13"
 summary = "Clicking an entry's preview image shows it at full size. FontCraft: same, as a view-only action."
 ref = "Extensions › Plugin Manager"
 status = "inferred"
+notes = "FontCraft (M13.10): the screenshot is read beside a local index or downloaded by the desktop app (at most 8 MiB, PNG, JPEG or TIFF) and shown at full size in its own window; without `id` the preview closes."
 
 [[command]]
 id = "pluginManager.openWebsite"
@@ -171,6 +217,7 @@ milestone = "M13"
 summary = "The grey link under an entry's description opens the extension's website. FontCraft: same, opening the URL from the registry entry in the system browser."
 ref = "Extensions › Plugin Manager"
 status = "inferred"
+notes = "FontCraft (M13.10): opens the entry's `homepage` (an https:// or http:// link; an index with another scheme is refused). Without a system browser, as in tests and the web build, the command fails with a message."
 
 [[command]]
 id = "pluginManager.openDonationPage"
@@ -184,6 +231,7 @@ milestone = "M13"
 summary = "Entries whose vendor accepts donations show PayPal or Ko-fi icons that open the donation page. FontCraft: one generic `funding` link per index entry, shown as a Donate button and opened in the system browser."
 ref = "Extensions › Plugin Manager"
 status = "inferred"
+notes = "FontCraft (M13.10): `service` is accepted and ignored, since an entry has one `funding` link."
 
 [[behavior]]
 id = "pluginManager.relaunchForPluginsAndModules"
@@ -208,11 +256,13 @@ guesses = [
 id = "pluginManager.automaticUpdates"
 area = "extensions"
 milestone = "M13"
-summary = "Installed extensions are updated to newer versions automatically. FontCraft: when an index lists a newer version of an installed extension, the Extension Manager offers it; it is installed automatically only when the user turned automatic updates on for that index."
+summary = "Installed extensions are updated to newer versions automatically. FontCraft: when an index lists another version of an installed module, the update is installed when the indexes are read (`pluginManager.reloadIndexes`), as the handbook describes; turning automatic updates off for an index makes the Extension Manager only offer its updates."
 ref = "Extensions › Plugin Manager"
 status = "inferred"
+notes = "FontCraft (M13.10): automatic updates are on for every index unless its line in the list starts with `manual `. An update keeps the module's on/off switch. Nothing is installed in safe mode. Updates whose files are on the network are downloaded and installed by the desktop app. Macros have no installed version, so only modules are updated. Documented in the handbook, not yet observed."
 guesses = [
-  "Updates are offered, not installed silently, unless the user turns automatic updates on per index; the reference installs them automatically and does not say whether that can be turned off (open question in docs/spec/17-extensions.md).",
+  "Automatic updates can be turned off per index, and are then offered with an Update button; the reference installs them automatically and does not say whether that can be turned off (open question in docs/spec/17-extensions.md).",
+  "Any version other than the installed one counts as an update, so an index can also roll a module back; the reference's version comparison is not documented.",
 ]
 observe = [
   "In Settings › Addons and the Plugin Manager, look for any switch that turns automatic extension updates off, globally or per extension.",
@@ -225,6 +275,7 @@ milestone = "M13"
 summary = "The catalogue is the main public repository plus any alternate repositories entered in Settings › Addons; entries of an alternate repository are visible only to users who registered that repository. FontCraft: the entries of every extension index listed in Settings › Extensions (local paths, and HTTPS URLs if the owner allows network access), merged by id with the first index winning."
 ref = "Extensions › Plugin Manager"
 status = "inferred"
+notes = "FontCraft (M13.10): local paths and HTTPS URLs, no main index (docs/plans/M13.md § 7 question 5). An index that cannot be read is reported in the Indexes tab and left out; the others still load."
 guesses = [
   "When two indexes list the same id, the index listed first in the settings wins; the reference does not say how it merges entries.",
 ]

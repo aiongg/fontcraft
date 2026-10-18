@@ -13,13 +13,15 @@
 //! user's custom glyph data from the settings folder ([`user_files`]), and saves the settings
 //! whenever they change. It sets the extension folders (Modules and Macros in the settings
 //! folder) and polls them on the first frame, when the window gains focus and every 5 seconds
-//! while it has it; `--safe-mode`, or Alt and Shift held as the window opens, lists the modules
+//! while it has it, and gives the Extension Manager HTTPS downloads and the system browser
+//! ([`net`]); `--safe-mode`, or Alt and Shift held as the window opens, lists the modules
 //! but runs none. Started without a file, it shows the Start Window unless the person
 //! turned that off. A document opens with one Edit View tab per display string it stores, and
 //! saving writes the open tabs back.
 #![forbid(unsafe_code)]
 
 mod control_server;
+mod net;
 mod pickers;
 #[cfg(not(target_arch = "wasm32"))]
 mod preview_server;
@@ -220,6 +222,8 @@ fn run() -> Result<(), String> {
     }
     app.picker = Some(Box::new(pickers::SystemPicker));
     app.state.start.reveal = start_window::Reveal(Some(pickers::reveal));
+    app.state.panels.extensions.manager.platform =
+        fontcraft_ui_egui::shell::extensions::manager::Platform { fetch: Some(net::fetch), open_url: Some(net::open_url) };
     if show_start {
         app.run("window.startWindow", &json!({}))?;
     }

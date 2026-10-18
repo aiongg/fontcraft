@@ -38,6 +38,7 @@ mod export;
 mod export_profiles;
 mod export_steps;
 mod expressions;
+mod extension_indexes;
 mod external_changes;
 mod extra_census;
 mod feature_compile;

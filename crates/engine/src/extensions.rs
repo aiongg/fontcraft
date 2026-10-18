@@ -546,9 +546,11 @@ pub fn poll_folders(ext: &mut ExtensionState) -> Vec<String> {
     problems
 }
 
-/// Parameters that name something by its id in this session only, as the app passes them: left
-/// out of the log, whose lines can be copied and run again in another session.
-const SESSION_PARAMS: &[(&str, &str)] = &[("file.save", "document")];
+/// Parameters that name something by its id in this session only, as the app passes them, or
+/// that may hold index bytes and credentials: left out of the log, whose lines can be copied and
+/// run again in another session.
+const SESSION_PARAMS: &[(&str, &str)] =
+    &[("file.save", "document"), ("pluginManager.reloadIndexes", "fetched"), ("pluginManager.reloadIndexes", "indexes")];
 
 /// `params` without the [`SESSION_PARAMS`] of `command`.
 fn without_session_params<'a>(command: &str, params: &'a Value) -> std::borrow::Cow<'a, Value> {

@@ -326,7 +326,7 @@ fn installed_json(m: &fontcraft_plugins::Manifest, file: Option<&str>, path: Opt
 
 // ── Index entries ───────────────────────────────────────────────────────────────────────────────
 
-fn install_from_index(s: &mut Session, v: &Value) -> Result<Value> {
+pub(crate) fn install_from_index(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("pluginManager.install", v)?;
     let id = p.str("id")?;
     let version = p.opt_str("version")?;
@@ -358,7 +358,8 @@ fn install_from_index(s: &mut Session, v: &Value) -> Result<Value> {
     verify_download(&entry, &bytes).map_err(|e| p.bad(e))?;
     let file_name = entry.url.rsplit(['/', '\\']).next().filter(|n| !n.is_empty() && !n.contains(['?', '#']));
     if entry.kind == EntryKind::Macro {
-        let name = file_name.filter(|n| macros::is_macro_file(n)).map_or_else(|| format!("{}.{MACRO_EXTENSION}", entry.id), str::to_string);
+        // Named after the entry's id, so the listing and Remove find it by that id.
+        let name = format!("{}.{MACRO_EXTENSION}", entry.id);
         return install_macro(s, &p, &bytes, Some(&name), true);
     }
     let plugin_kind = Plugin::load(&bytes, Limits::default()).map_err(|e| p.bad(e.to_string()))?.kind();
@@ -381,7 +382,7 @@ fn find_entry<'a>(indexes: &'a [crate::extension_index::Index], id: &str, versio
 /// Reads the file of a local index entry: a path, absolute or beside the index file.
 fn read_entry_file(p: &Params, entry: &Entry, index: Option<&str>) -> Result<Vec<u8>> {
     let url = entry.url.as_str();
-    if url.starts_with("https://") || url.starts_with("http://") {
+    if url.starts_with("https://") || url.starts_with("http://") || index.is_some_and(|i| i.starts_with("https://")) {
         return Err(p.bad(format!("{:?} is on the network: the desktop app downloads it and passes it as dataBase64", entry.id)));
     }
     let path = PathBuf::from(url.strip_prefix("file://").unwrap_or(url));
@@ -462,6 +463,8 @@ fn list(s: &mut Session, v: &Value) -> Result<Value> {
     let ext = s.extensions();
     let mut entries = Vec::new();
     let mut ids = BTreeSet::new();
+    // Macros of the Macros folder that an index entry stands for, so they are listed once.
+    let mut covered = BTreeSet::new();
     for loaded in &ext.indexes {
         for e in &loaded.index.entries {
             if !ids.insert(e.id.clone()) {
@@ -470,9 +473,16 @@ fn list(s: &mut Session, v: &Value) -> Result<Value> {
             let mut row = json!({
                 "id": e.id, "kind": entry_kind_name(e.kind), "title": e.title("en"), "vendor": e.vendor, "version": e.version,
                 "description": e.descriptions.get("en").cloned().unwrap_or_default(), "size": e.size, "sha256": e.sha256,
-                "source": "index", "index": loaded.source,
+                "source": "index", "index": crate::extension_index::redact(&loaded.source),
             });
-            let installed = if e.kind == EntryKind::Macro { ext.find_macro(&e.id).map(|_| None) } else { ext.registry.get(&e.id).map(Some) };
+            let installed = if e.kind == EntryKind::Macro {
+                ext.find_macro(&e.id).map(|(path, _)| {
+                    covered.insert(path.to_string());
+                    None
+                })
+            } else {
+                ext.registry.get(&e.id).map(Some)
+            };
             if let Some(o) = row.as_object_mut() {
                 o.insert("installed".into(), json!(installed.is_some()));
                 if let Some(Some(m)) = installed {
@@ -495,7 +505,7 @@ fn list(s: &mut Session, v: &Value) -> Result<Value> {
             "size": m.plugin.size(), "sha256": m.sha256, "source": "installed",
         }));
     }
-    for e in ext.macros.iter().filter(|e| e.error.is_none() && !ids.contains(&e.path)) {
+    for e in ext.macros.iter().filter(|e| e.error.is_none() && !ids.contains(&e.path) && !covered.contains(&e.path)) {
         entries.push(json!({
             "id": e.path, "kind": "macro", "title": e.title, "vendor": "", "version": "", "description": e.description,
             "installed": true, "file": e.path, "source": "folder",

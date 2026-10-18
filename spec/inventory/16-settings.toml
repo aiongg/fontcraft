@@ -883,7 +883,7 @@ milestone = "M13"
 summary = "Section that configures how scripts, plug-ins and modules run and where the Plugin Manager finds them."
 ref = "Settings › Addons"
 status = "handbook"
-notes = "FontCraft (docs/plans/M13.md, M13.10): a Settings › Extensions section with the paths of the Macros and Modules folders, the list of extension indexes, an automatic-updates switch per index and the standard-error log switch. There is no Python version field."
+notes = "FontCraft (docs/plans/M13.md, M13.10): a Settings › Extensions section with the paths of the Macros and Modules folders, the list of extension indexes, an automatic-updates switch per index and the standard-error log switch. There is no Python version field. Until the Settings window exists (M14), the Extension Manager's Indexes tab shows the folders, the index list with its switches and the standard-error log switch."
 guesses = [
   "The section is called Extensions, because FontCraft has no add-on kinds that need Python; the reference calls it Addons.",
 ]
@@ -918,7 +918,10 @@ milestone = "M13"
 summary = "Extra extension repositories listed in addition to the main one, one entry per line. An entry is an HTTPS URL (HTTP Basic credentials allowed) or a full local file path."
 ref = "Settings › Addons › Alternate Plugin Repositories"
 status = "handbook"
-notes = "FontCraft (M13.10): Extension Indexes, one local path or HTTPS URL per line, read in order. HTTPS URLs are fetched by the desktop app (docs/plans/M13.md § 7 question 5)."
+notes = "FontCraft (M13.10): the list of extension indexes, one full local path or HTTPS URL per line, read in order, edited in the Extension Manager's Indexes tab until the Settings window exists (M14). A line starting with `manual ` turns automatic updates off for that index. At most 64 indexes and 4,096 bytes of text. HTTPS URLs are fetched by the desktop app (docs/plans/M13.md § 7 question 5)."
+guesses = [
+  "The per-index automatic-updates switch is kept in the same text as a `manual ` prefix, so the list stays one setting; the reference has no such switch.",
+]
 
 [[behavior]]
 id = "addons.repo.mainRepository"
@@ -936,7 +939,7 @@ milestone = "M13"
 summary = "An alternate repository URL may require a user name and password, sent with HTTP Basic authentication over HTTPS."
 ref = "Settings › Addons › Alternate Plugin Repositories"
 status = "handbook"
-notes = "FontCraft (M13.10): an HTTPS index URL may carry a user name and password in its user-information part (`https://user:password@host/index.json`); they are sent as HTTP Basic credentials and never written to the log."
+notes = "FontCraft (M13.10): an HTTPS index URL may carry a user name and password in its user-information part (`https://user:password@host/index.json`); they are sent as HTTP Basic credentials, also for entry files and screenshots beside the index, and never written to the log or to command results, which show the URL without them. The desktop app hands them to the downloader on its standard input, not on its command line."
 guesses = [
   "Credentials are taken from the URL itself and stored with the setting, not in the operating system's keychain; the reference's storage is not described.",
 ]
@@ -966,7 +969,7 @@ milestone = "M13"
 summary = "Entry fields: titles and descriptions are dictionaries keyed by language code (en, …); url points at the extension's repository and path names the item inside it, e.g. a bundle (both read off the example, not explained); screenshot is an image URL."
 ref = "Settings › Addons › Alternate Plugin Repositories"
 status = "handbook"
-notes = "FontCraft (M13.10): entry fields `id`, `kind` (filter, reporter, check, macro), `version`, `titles` and `descriptions` keyed by language code, `vendor`, `url` (the `.wasm` or `.fcmacro` file), `sha256`, `size`, `homepage`, `funding`, `screenshot`. Unknown fields are ignored."
+notes = "FontCraft (M13.10): entry fields `id`, `kind` (filter, reporter, check, macro), `version`, `titles` and `descriptions` keyed by language code, `vendor`, `url` (the `.wasm` or `.fcmacro` file: an https:// URL, or a path, relative to a local index), `sha256`, `size`, `homepage` and `funding` (https:// or http:// links), `screenshot`. Unknown fields are ignored. A bad entry refuses the whole index with the entry's number. Limits: 16 MiB per index, 10,000 entries, 4,096 characters per string, sizes up to the module or macro file limit."
 
 [[behavior]]
 id = "addons.repo.optionalLists"
@@ -975,7 +978,7 @@ milestone = "M13"
 summary = "Lists that are not used may be omitted, e.g. a scripts-only repository has no plugins or modules key."
 ref = "Settings › Addons › Alternate Plugin Repositories"
 status = "handbook"
-notes = "FontCraft (M13.10): an index holds one `entries` list; an index with no entries is valid."
+notes = "FontCraft (M13.10): an index holds one `entries` list; an index with no entries, or without the key, is valid."
 
 [[behavior]]
 id = "addons.repo.localizedScreenshot"
@@ -984,7 +987,7 @@ milestone = "M13"
 summary = "The screenshot is fetched with an Accept-Language header, so a server can answer with a localised image."
 ref = "Settings › Addons › Alternate Plugin Repositories"
 status = "handbook"
-notes = "FontCraft (M13.10): screenshots are fetched with an Accept-Language header naming the interface language, as the reference does, when HTTPS indexes are allowed."
+notes = "FontCraft (M13.10): screenshots are fetched with an Accept-Language header naming the interface language (English until the interface is translated), as the reference does."
 
 # --- Shortcuts ---
 
