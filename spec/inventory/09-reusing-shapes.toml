@@ -123,6 +123,25 @@ milestone = "M6"
 summary = "The glyph picker shown by Add Component. It behaves exactly like the glyph picker the Text tool uses to insert glyphs in Edit View, so one picker implementation serves both."
 ref = "Reusing Shapes › Components › Building Composites"
 status = "handbook"
+notes = "Documented, not yet observed. M6.11: `ui-egui/src/dialogs/glyph_picker_component.rs`, driven by `editView.chooseGlyph`. Glyph › Add Component and Add Component (all masters), from the menu or their shortcuts, and Add Component in the canvas context menu open it while a glyph is edited; the search is glyph.search in All mode, the first result is highlighted, Up and Down move the highlight, Return runs glyph.addComponent with the highlighted glyph, Escape closes it. In Font View the menu items open the batch form instead."
+guesses = [
+  "The picker highlights one result and adds one component per Return, with no multiple selection; the reference app settles it.",
+]
+
+[[command]]
+id = "editView.chooseGlyph"
+label = "Choose Glyph"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{tab?: id, purpose?: addComponent|addComponentAllMasters|baseGlyph|addCorner|cornerGlyph, glyph?: name, layer?: id, component?: index, points?: [[shape, node]], corners?: [indices], query?: string, select?: name, pick?: bool, open?: bool} → {open, purpose, query, results, total, selected} | the picked command's result"
+area = "components"
+milestone = "M6"
+summary = "Drives the glyph picker that the component commands open: Add Component, the base glyph name of the component Info box, Add Corner Component and the name of the corner Info box. It fixes what the command acts on when the picker opens, searches, highlights a result and runs the command with it. Our own command, so agents can fill the picker as a person does; not a reference menu item."
+ref = "Reusing Shapes › Components › Building Composites; Corner Components › Using Corner Components"
+status = "inferred"
+own = true
+notes = "M6.11: `ui-egui/src/dialogs/glyph_picker_component.rs`. A pick that the command refuses leaves the picker open with the message."
 
 [[panel]]
 id = "dialog.componentFromSelection"
@@ -138,7 +157,10 @@ milestone = "M6"
 summary = "Asks for the name of the glyph that will hold the selected shapes. The field starts with a name suggested from context and accepts any other name; an underscore-prefixed name makes the new glyph a non-exporting part."
 ref = "Reusing Shapes › Components › Turning Paths into Components"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 16:09–16:21: the dialog is titled Name of the Component Glyph, says that it applies to all master layers, and has a text field with Cancel and OK. Not shown: whether the field is pre-filled, an underscore name."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 16:09–16:21: the dialog is titled Name of the Component Glyph, says that it applies to all master layers, and has a text field with Cancel and OK. Not shown: whether the field is pre-filled, an underscore name. M6.11: `ui-egui/src/dialogs/component_from_selection.rs`, opened by Glyph › Component from Selection and the canvas context menu; nothing runs until OK, which runs glyph.componentFromSelection once, then puts the new glyph into the tab's text after the edited glyph and edits it. Cancel changes nothing."
+guesses = [
+  "The name field starts with the command's suggested name, `_part.` and the glyph name; the dialog of the reference app settles it.",
+]
 
 [[behavior]]
 id = "components.liveUpdateFromBaseGlyph"
@@ -321,7 +343,7 @@ milestone = "M6"
 summary = "Canvas context-menu item that displays every glyph containing the current glyph as a component. The handbook does not say whether the result opens in a new tab or replaces the current text."
 ref = "Reusing Shapes › Components › Moving between Base Glyphs and Composites"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. M6.11: a shell command in `ui-egui/src/shell/components.rs`, in the canvas section of the context menu. It lists the glyphs with glyph.listComposites (not recursive) and opens them in a new tab; a glyph no other glyph uses is refused with a message."
 guesses = [
   "The glyphs open in a new Edit View tab, one per line slot in glyph order; the reference app settles it.",
 ]
@@ -463,7 +485,7 @@ milestone = "M6"
 summary = "Beyond the fields listed for the component Info box in the Edit View inventory (infoBox.component: name, offset, scales, slant, rotation, arrow button), this chapter adds two conditional controls: an anchor menu, present only when the attached component has several candidate anchors, and a Smart badge on smart components. The box needs View › Show Info and at least one selected component."
 ref = "Reusing Shapes › Components › Editing Components; Components › Anchors; Smart Components › Using Smart Components"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. M6.11: the anchor menu and the Smart badge sit on the first row of the component Info box, between the name and the arrow button (`panels/info_box_component.rs`)."
 guesses = [
   "The arrow button sits at the top right of the component Info box, as the Measuring page says; the Components page says top left. A screenshot of the reference app settles it.",
 ]
@@ -751,6 +773,10 @@ milestone = "M6"
 summary = "The anchor chooser in the component Info box is hidden unless the selected attached component has more than one anchor it could attach to."
 ref = "Reusing Shapes › Components › Anchors"
 status = "handbook"
+notes = "Documented, not yet observed. M6.11: the menu lists the anchors of the components before the selected one named X or X_suffix, where _X is an attaching anchor of the component's own glyph, and shows when there are two or more; choosing one runs component.setAnchor."
+guesses = [
+  "The menu shows the stored anchor, else the plain name of the anchor the component attaches to, and choosing an entry stores its name, the plain one included; the reference app's menu after choosing the plain anchor settles it.",
+]
 
 [[behavior]]
 id = "components.ligatureNumberedAnchors"
@@ -1201,6 +1227,7 @@ milestone = "M6"
 summary = "The Info box of a smart component shows a Smart badge that marks it as smart and opens its settings when clicked."
 ref = "Reusing Shapes › Smart Components › Using Smart Components"
 status = "handbook"
+notes = "Documented, not yet observed. M6.11: a Smart button in the component Info box of a component whose glyph has smart properties; it runs smartComponent.showSettings for that component (the window is M6.12's)."
 
 [[behavior]]
 id = "smart.propertyNamesFree"
@@ -1408,6 +1435,10 @@ milestone = "M6"
 summary = "The arrow button of the corner Info box: adds the corner glyph to the Edit View text and activates it."
 ref = "Reusing Shapes › Corner Components › Using Corner Components"
 status = "handbook"
+notes = "Documented, not yet observed. M6.11: a shell command in `ui-egui/src/shell/components.rs`; the corner glyph goes in just before the edited glyph, as component.editBaseGlyph does, and becomes the edited glyph. A hint that is not a corner, or a corner glyph that does not exist, is refused."
+guesses = [
+  "The corner glyph joins the text left of the current glyph, as the base glyph of a component does; the reference app settles it.",
+]
 
 [[panel]]
 id = "infoBox.cornerComponent"
@@ -1425,6 +1456,10 @@ milestone = "M6"
 summary = "Shown for a selected corner component when View › Show Info is on."
 ref = "Reusing Shapes › Corner Components › Using Corner Components"
 status = "handbook"
+notes = "Documented, not yet observed. M6.11: `ui-egui/src/panels/info_box_corner.rs`, beside the selection box. The name opens the corner glyph picker for cornerComponent.setGlyph, the arrow runs cornerComponent.editGlyph, the fields cornerComponent.setScale and the four buttons cornerComponent.setAlignment."
+guesses = [
+  "Corner components cannot be selected yet, so the box describes the corner on the first selected node that holds one; selecting the corner itself, as the reference app does, settles it.",
+]
 
 [[panel]]
 id = "dialog.cornerPicker"
@@ -1436,6 +1471,10 @@ milestone = "M6"
 summary = "Glyph picker opened by Add Corner Component, showing the font's corner glyphs."
 ref = "Reusing Shapes › Corner Components › Using Corner Components"
 status = "handbook"
+notes = "Documented, not yet observed. M6.11: the glyph picker with purpose addCorner (`editView.chooseGlyph`), opened by Add Corner Component in the node context menu; Return runs cornerComponent.add on the nodes selected when it opened."
+guesses = [
+  "The list shows every corner glyph of the font while the field is empty and narrows to names that contain every typed word; the reference app settles it.",
+]
 
 [[behavior]]
 id = "corner.highlightAndSelection"

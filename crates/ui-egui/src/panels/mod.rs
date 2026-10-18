@@ -11,6 +11,7 @@
 //! | [`info_box`] | the Info box over the canvas: the selection part, or the annotation palette |
 //! | [`info_box_metrics`] | the glyph Info box under the current glyph: name, sidebearings, width |
 //! | [`info_box_kerning`] | the Info box's kerning part and the preceding glyph's box |
+//! | [`info_box_component`], [`info_box_corner`] | the component and corner component Info boxes beside the selection box |
 //! | [`bottom_bar`] | the zoom controls along the lower edge of an Edit View tab |
 //! | [`widgets`] | fields with the Info box editing rules, buttons, the nine-point grid |
 //! | [`selection_info`] | the Selection Info window: the selected glyphs' properties |
@@ -30,6 +31,8 @@ pub mod fit_curve;
 pub mod hinting_waterfall;
 pub mod info_box;
 pub mod info_box_attach;
+pub mod info_box_component;
+pub mod info_box_corner;
 pub mod info_box_kerning;
 pub mod info_box_metrics;
 pub mod info_box_ps_hint;
@@ -119,6 +122,7 @@ pub struct PanelState {
     pub attach: crate::shell::attach::AttachState,
     pub reference_font: reference_font::ReferenceFontState,
     pub compare_table: crate::dialogs::compare_fonts::CompareTableState,
+    pub component_picker: crate::dialogs::glyph_picker_component::PickerState,
 }
 
 impl Default for PanelState {
@@ -150,6 +154,7 @@ impl Default for PanelState {
             attach: Default::default(),
             reference_font: Default::default(),
             compare_table: Default::default(),
+            component_picker: Default::default(),
         }
     }
 }

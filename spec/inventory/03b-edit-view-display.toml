@@ -90,6 +90,11 @@ milestone = "M6"
 summary = "Second Info box that appears to the right of the main one while a component is selected and describes the glyph the component references. Position edits are ignored while the component is automatically aligned."
 ref = "Edit View › Measuring › Measuring with the Info box"
 status = "handbook"
+notes = "Documented, not yet observed. M6.11: `ui-egui/src/panels/info_box_component.rs`. The box sits to the right of the selection box while Show Info is on and a component is selected. The name opens the glyph picker for component.setBaseGlyph; the fields run component.setTransform; the arrow runs component.editBaseGlyph. X and Y are greyed out on an aligned component (only X when it is aligned horizontally) and every field on a locked one."
+guesses = [
+  "With several components selected the box describes the first in shape order and shows how many more are selected beside its name; the reference app with two components selected settles it.",
+  "A component whose transform is a matrix with slant that cannot be shown as scale and rotation shows only X and Y, the other fields empty and greyed out; a component with such a matrix in the reference app settles it.",
+]
 
 [[panel]]
 id = "infoBox.componentGlyphPicker"
@@ -101,6 +106,7 @@ milestone = "M6"
 summary = "Pop-up glyph list opened by clicking the base glyph name in the component Info box. Picking a glyph makes the selected component reference it instead. The handbook only says it is a glyph list in a pop-up window, so the search field is our assumption."
 ref = "Edit View › Measuring › Measuring with the Info box"
 status = "handbook"
+notes = "Documented, not yet observed. M6.11: the component glyph picker (`dialogs/glyph_picker_component.rs`, `editView.chooseGlyph` with purpose baseGlyph) titled Choose Base Glyph; Return runs component.setBaseGlyph on the component that was selected when it opened."
 
 [[panel]]
 id = "infoBox.image"
