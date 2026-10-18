@@ -1724,6 +1724,7 @@ milestone = "M12"
 summary = "For CID-keyed fonts makeotf takes encodings from Adobe CMap resources chosen by ROS: a Macintosh CMap, a UTF-32 horizontal CMap and a UTF-32 vertical CMap (for example UniJIS-UTF32-H/V for Adobe-Japan1); only glyphs named in them are encoded. Options -cm, -ch, -cv override the files. Our CID path reads codepoints from the source glyphs and can import a CMap resource to fill them."
 ref = "AFDKO docs/MakeOTFUserGuide.md (Adobe character code map)"
 status = "docs"
+notes = "CMap resources are files the user gives by path, as makeotf's -cm, -ch and -cv take them; FontCraft ships none (docs/plans/M12.md § 7, question 6 (a)). The ROS parameter's standard collections therefore need those files to encode their glyphs; without them a CID-keyed export encodes the code points of the source glyphs only. Whether to bundle the collections' data is left to export.cidMapping."
 
 [[behavior]]
 id = "compile.makeotfReleaseMode"
