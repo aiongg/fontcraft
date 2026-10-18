@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1198 rows to check: 1771 guesses and 440 observe steps.**
+**1200 rows to check: 1797 guesses and 440 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,20 +48,20 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 40 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 4 |
-| **Later milestones (after M6)** | all | **727** |
+| **Later milestones (after M6)** | all | **729** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 43 |
 | Later milestones (after M6) | Edit View: text mode and preview | 14 |
 | Later milestones (after M6) | Components and anchors | 37 |
 | Later milestones (after M6) | Filters | 5 |
 | Later milestones (after M6) | Spacing and metrics keys | 3 |
 | Later milestones (after M6) | Kerning and the Kerning window | 4 |
-| Later milestones (after M6) | Font View | 15 |
+| Later milestones (after M6) | Font View | 16 |
 | Later milestones (after M6) | Font Info and features | 270 |
 | Later milestones (after M6) | Interpolation | 58 |
 | Later milestones (after M6) | Hinting | 90 |
 | Later milestones (after M6) | Colour fonts | 49 |
 | Later milestones (after M6) | Files: open, import, export | 47 |
-| Later milestones (after M6) | Settings and the window | 12 |
+| Later milestones (after M6) | Settings and the window | 13 |
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 61 |
 | Later milestones (after M6) | Elsewhere | 19 |
 
@@ -1342,7 +1342,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (727)
+## Later milestones (after M6) (729)
 
 ### Edit View: drawing, guides, layers and the Palette (43)
 
@@ -1380,6 +1380,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The layer bounds are the rectangle from 0 to the advance width and from the master's descender to its ascender. Settled by Set Crop to Layer Bounds on an image larger than the glyph in the reference.
   - Observe: Image font: choose Set Crop to Layer Bounds on H's image; note the rectangle used (advance width by the vertical metrics, or the outline bounds).
 - [ ] `palette.pluginSections` (behavior, M13, handbook): Plug-ins can register their own Palette sections, which appear alongside the built-in…
+  - Guess: Module sections follow the built-in sections in the order of the modules' names; the handbook does not say where plug-in sections go.
+  - Guess: Values typed into a module's form are kept for the session only, and a module replaced by another version starts again from its defaults.
   - Observe: Install a palette plug-in from the Plugin Manager, relaunch and note where its section appears among the built-in Palette sections and whether it collapses like them.
 - [ ] `path.selectTunniLines` (M13, docs, live): Edit Tunni Lines
   - Guess: A segment counts as inside the selection when one of its handles is selected, both its end nodes are, or the segment itself is, as for Fit Curve; FontLab does not define it, and selecting nodes in FontLab with Tunni lines on would settle it.
@@ -1712,7 +1714,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `kerning.buildGroups` (M13, docs): Build Kerning Groups…
   - Guess: Two glyphs fall in one group while the root mean square of their side profiles' differences over the band stays under maxDifference; FontForge does not describe its grouping rule.
 
-### Font View (15)
+### Font View (16)
 
 - [ ] `smartFilter.rule.custom` (behavior, M8, handbook): Rule Custom holds a free-form glyph predicate written in the same expression…
   - Guess: The language adds matches (a regular expression over the whole value), which fea-rs refuses, because the Glyph Name rule offers matches and compiles to this language; && and || stand for AND and OR, and a yes-or-no attribute alone means == true. A comparison on tags holds when it holds for one tag. Settled by trying these forms in the reference's Custom rule.
@@ -1732,6 +1734,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: Image font: in Font View, Add Image with H.png, I.png, J.png and a.png; note whether a.png goes to a only or also to A.
 - [ ] `fontView.image.showImageOption` (behavior, M11, handbook): View → Show Image controls whether placed images are drawn in Font…
   - Observe: Image font: in Font View turn Show Image off; note whether H (which has paths) is drawn without its image and I (empty) with its image.
+- [ ] `fontView.batch.pluginsAndScripts` (behavior, M13, handbook): Plug-ins and scripts may operate on the Font View glyph selection, so…
+  - Guess: A filter module run from Font View acts on the selected glyphs' layers of Font View's master only, not on every master; observing a filter plug-in run on a Font View selection in a font with two masters would settle it.
 - [ ] `view.filterByEncodingFile` (M13, docs, live): Filter by Encoding File
   - Guess: Encoding files are read in three line forms (`name slot`, `0xSlot 0xCodePoint`, and one name or code point for the next slot) with `%%FONTLAB ENCODING:` and `%%FONTLAB CODEPAGE:` titles; FontLab's own encoding and code page files would settle the forms it accepts.
   - Guess: Without `path`, `name` picks a built-in code page (ASCII, Latin 1, Windows 1252, Mac OS Roman); with `path` it names the filter. FontLab's list of bundled encodings would settle which ones ship.
@@ -2571,6 +2575,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Without a glyph set the compiler's messages about glyphs missing from the font are left out and hyphenated names are read as ranges; addfeatures always checks against a font. A request to check names against the code's own classes would change it.
 - [ ] `filter.customParameter.thirdParty` (behavior, M13, handbook): Plug-in filters define their own argument strings and are not guaranteed to…
   - Guess: FontCraft applies include and exclude itself for module filters, where the reference leaves it to each plug-in; settled by nothing in the reference, since our modules cannot see glyph lists.
+  - Guess: A filter string whose name matches no built-in filter and no installed module refuses the export instead of being skipped with a warning, since the font would come out without a filter its source asks for; settled by exporting from the reference app a font whose Filter parameter names a plug-in that is not installed.
+  - Guess: A module that fails on one glyph at export leaves every glyph of that string unchanged and reports a warning, as the Filter menu's run changes nothing when a module fails; settled by nothing in the reference, whose plug-ins run their own code.
+  - Guess: Bare values go to the parameters named 0, 1 and so on when the manifest declares such names, and otherwise to the parameters in declaration order; settled by the reference's plug-in documentation once a manifest-like declaration exists there.
   - Observe: Open that filter plug-in's dialog and, if it has a gear menu, copy its export string and paste it into a text file: compare it with the built-in filters' export strings (separator, key spelling).
 - [ ] `features.opticalBoundsFromGuides` (behavior, M13, docs): Optical margin alignment: a per-master pair of global offsets, overridden per glyph…
   - Guess: A glyph without outlines or components (a space) takes no global offset, only its own guides; settled by exporting a font with a non-zero offset and a space glyph from the reference app.
@@ -3393,7 +3400,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Every item starts ticked, so Accept Selected with no change of the ticks takes everything; the reference's manual does not say which state the ticks start in, and opening the window there settles it.
   - Guess: The stored-text view on double-click shows the glyph in FontCraft's native JSON form rather than as a .glif file, since the comparison is between models; the reference shows the file text, and a file-per-glyph text view would follow it more closely.
 
-### Settings and the window (12)
+### Settings and the window (13)
 
 - [ ] `addons.repo.httpBasicAuth` (behavior, M13, handbook): An alternate repository URL may require a user name and password, sent…
   - Guess: Credentials are taken from the URL itself and stored with the setting, not in the operating system's keychain; the reference's storage is not described.
@@ -3402,6 +3409,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: Screenshot Settings › Addons in the trial and list its controls in order, with defaults.
 - [ ] `addons.useSystemConsoleForScriptOutput` (setting, M13, handbook): Use system console for script output
   - Guess: With the setting on, the log still shows in the Command Console as well as on standard error, where the handbook says the reference sends it to the system console instead; keeping both loses nothing and the switch stays off by default.
+- [ ] `addons.alternatePluginRepos` (setting, M13, handbook): Alternate Plugin Repos
+  - Guess: The per-index automatic-updates switch is kept in the same text as a `manual ` prefix, so the list stays one setting; the reference has no such switch.
 - [ ] `window.macroPanel` (M13, inferred, live): Macro Panel
   - Guess: A run-style line with several commands runs them as one transaction and one undo step, and may name engine commands only, so a failing line changes nothing; the command-line tool runs them one by one and simply does not save after a failure.
   - Guess: Clear empties the console's pane but keeps the session's command log, which other readers use; the reference's clear behaviour is not described.
@@ -3428,6 +3437,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 ### Scripts, plug-ins and URLs (61)
 
 - [ ] `app.launchWithoutPlugins` (behavior, M13, handbook): Holding Option and Shift while the application starts launches it with every…
+  - Guess: The launch keys are read on the window's first frame, since the toolkit reports modifier keys only once the window exists; whether the reference also offers a way back without relaunching would settle Load Extensions.
   - Observe: Hold Option and Shift while launching: note any dialog or message, and whether plug-ins can be turned back on without relaunching.
 - [ ] `filter.menu.pluginFiltersListed` (behavior, M13, handbook): Filters installed through the Plugin Manager appear in the Filter menu next…
   - Observe: Install a free filter plug-in from the Plugin Manager and relaunch: note where it appears in the Filter menu (below a separator, sorted with the built-in filters, or in a submenu) and whether its item ends with an ellipsis.
@@ -3472,7 +3482,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `pluginManager.scriptsLoadWithoutRelaunch` (behavior, M13, inferred): Newly installed scripts appear without relaunching once the Script menu is reloaded…
   - Guess: Folders are checked by comparing file names, sizes and modification times when the window regains focus and every 5 seconds, rather than with an operating-system file watcher, so the same code works on every platform; a reference behaviour is not involved.
 - [ ] `pluginManager.automaticUpdates` (behavior, M13, inferred): Installed extensions are updated to newer versions automatically
-  - Guess: Updates are offered, not installed silently, unless the user turns automatic updates on per index; the reference installs them automatically and does not say whether that can be turned off (open question in docs/spec/17-extensions.md).
+  - Guess: Automatic updates can be turned off per index, and are then offered with an Update button; the reference installs them automatically and does not say whether that can be turned off (open question in docs/spec/17-extensions.md).
+  - Guess: Any version other than the installed one counts as an update, so an index can also roll a module back; the reference's version comparison is not documented.
   - Observe: In Settings › Addons and the Plugin Manager, look for any switch that turns automatic extension updates off, globally or per extension.
 - [ ] `pluginManager.repositories` (behavior, M13, inferred): The catalogue is the main public repository plus any alternate repositories entered…
   - Guess: When two indexes list the same id, the index listed first in the settings wins; the reference does not say how it merges entries.
@@ -3506,13 +3517,13 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `plugin.kind.filter` (behavior, M13, inferred): Filter plug-ins (.glyphsFilter) process glyph layers and are listed in the Filter…
   - Open (our design, not confirmed): Filter plug-ins (.glyphsFilter) process glyph layers and are listed in the Filter menu (and usable as export-time filter parameters). FontCraft: a filter module receives one layer as JSON with its parameters and returns the layer's new paths, components and anchors; plugin.runFilter calls it once per target layer and applies all results as one undo step. Installed filters are listed in the Filter menu and can be named in the Filter export parameter.
 - [ ] `plugin.kind.palette` (behavior, M13, inferred): Palette plug-ins (.glyphsPalette) add sections to the Palette sidebar (Window › Palette,…
-  - Open (our design, not confirmed): Palette plug-ins (.glyphsPalette) add sections to the Palette sidebar (Window › Palette, Cmd+Shift+P). FontCraft: no module kind runs interface code; a filter module that declares parameters can be shown as a Palette section holding its parameter form and an Apply button, drawn by the app.
+  - Guess: A filter module's Filter menu item runs it at once with its default parameters; other values are given in its Palette section or by agents in plugin.runFilter's `params`.
 - [ ] `plugin.loadedAtLaunch` (behavior, M13, inferred): Plug-ins are loaded once when the app starts, hence the relaunch after…
   - Open (our design, not confirmed): Plug-ins are loaded once when the app starts, hence the relaunch after installing. FontCraft: modules in the modules folder are validated and compiled at launch and whenever the folder changes; each run uses a fresh instance, so nothing needs a relaunch.
 - [ ] `plugin.pluginsFolder` (behavior, M13, inferred): Installed plug-ins live in a Plugins folder that sits beside the Scripts…
-  - Guess: The folders are `Macros` and `Modules` in the per-user application data folder; the reference's folder names and location are not given in the handbook (open question).
+  - Guess: The folders are `Macros` and `Modules` in FontCraft's settings folder (the per-user application data folder); the reference's folder names and location are not given in the handbook (open question).
 - [ ] `plugin.noManualMove` (behavior, M13, inferred): Plug-ins must not be copied into the Plugins folder by hand because…
-  - Open (our design, not confirmed): Plug-ins must not be copied into the Plugins folder by hand because that conflicts with the operating system's security checks; installation has to go through the app. FontCraft: copying a module into the Modules folder is allowed; a module the app has not seen before is listed as new and stays off until the user turns it on in the Extension Manager or runs plugin.installFromFile on it.
+  - Guess: Each module file's switch is kept in a hidden `.switches.json` in the Modules folder; a manual copy is recorded as off the first time it is seen, so at the next launch it is off but no longer marked new.
 - [ ] `plugin.uninstall` (behavior, M13, inferred): Plug-ins from the manager are removed there; any plug-in can also be…
   - Open (our design, not confirmed): Plug-ins from the manager are removed there; any plug-in can also be removed by deleting its file in the Plugins folder. FontCraft: both ways work; deleting the file removes the module's menu entries at the next folder check.
   - Observe: Install a plug-in by dropping it on the Dock icon, then open the Plugin Manager: note whether it is listed as installed and whether its Remove button works.
@@ -3526,26 +3537,27 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Open (our design, not confirmed): Authors are pointed to API references, a scripting tutorial series, a plug-in writing tutorial, existing scripts as examples and the vendor's forum. FontCraft: generated command reference, module SDK guide with worked examples, and a porting table from common reference-API tasks to commands.
 - [ ] `extensions.sandboxCapabilities` (behavior, M13, inferred): The chapter mentions no permission model for extensions beyond the operating system's…
   - Open (our design, not confirmed): The chapter mentions no permission model for extensions beyond the operating system's check on installed plug-ins. FontCraft: a module may import nothing (no files, network, clock, randomness or interface) and sees only the JSON passed to it; each run has an instruction budget, a memory cap and a time limit, and a module that breaks a limit fails with a message and changes nothing. ABI version 1 grants no capabilities; the manifest's `capabilities` list must be empty.
-- [ ] `window.pluginManager` (M13, inferred): Plugin Manager
-  - Open (our design, not confirmed): Opens the Plugin Manager window, the catalogue of installable scripts, plug-ins and modules. FontCraft: opens an Extension Manager listing WebAssembly modules and command macros from the registry index; every action in it is also a command.
+- [ ] `window.pluginManager` (M13, inferred, live): Extension Manager
+  - Guess: The window and its menu item are called Extension Manager, since it lists modules and macros rather than plug-ins; the reference calls it Plugin Manager.
   - Observe: Open Window › Plugin Manager in the trial: note the window's default size, whether it is a separate window or a sheet, which filter buttons are selected at first, and whether the Window menu item has a shortcut.
-- [ ] `pluginManager.filterByInstallState` (M13, inferred): All / Installed / Not Installed
-  - Open (our design, not confirmed): Restricts the catalogue by whether an extension is installed. FontCraft: same filter in the Extension Manager, also available as an argument of the listing query.
-- [ ] `pluginManager.filterByType` (M13, inferred): Plugins / Scripts / Modules
-  - Open (our design, not confirmed): Shows one extension type at a time: plug-ins, scripts or modules. FontCraft: Filters, Reporters, Checks or Macros; there is no modules type because each WebAssembly module is self-contained.
-- [ ] `pluginManager.search` (M13, inferred): Search
-  - Open (our design, not confirmed): Filters the catalogue by a keyword matched against extension name, description and vendor name. FontCraft: same three fields are searched.
+- [ ] `pluginManager.filterByInstallState` (M13, inferred, live): All / Installed / Not Installed
+  - Guess: The catalogue opens showing every extension (All), and the choice is not remembered across launches; watching the reference app open the Plugin Manager would settle both.
+- [ ] `pluginManager.filterByType` (M13, inferred, live): All / Filters / Reporters / Checks / Macros
+  - Guess: The type buttons pick one type at a time, with an All button to show every type; the handbook names the buttons but not whether several can be on together or how all types are shown again.
+- [ ] `pluginManager.search` (M13, inferred, live): Search
+  - Guess: The search ignores case and matches inside words, and also matches the id; the reference's matching is not documented.
   - Observe: Type part of a vendor name into the Plugin Manager's search field: confirm entries match on vendor, and note whether matching is case-insensitive and whether it matches inside words.
-- [ ] `pluginManager.install` (M13, inferred): Install
+- [ ] `pluginManager.install` (M13, inferred, live): Install
   - Guess: An install from an index entry whose checksum does not match the downloaded bytes is refused and nothing is written; the reference's handling of a failed download is not documented.
-- [ ] `pluginManager.remove` (M13, inferred): Remove
-  - Open (our design, not confirmed): Uninstalls an extension that was installed through the manager. FontCraft: unloads the module or forgets the macro, removes its menu entries and moves its file out of the folder; documents that use a removed filter in an export parameter report it at export.
-- [ ] `pluginManager.enlargePreview` (M13, inferred): Enlarge Preview
-  - Open (our design, not confirmed): Clicking an entry's preview image shows it at full size. FontCraft: same, as a view-only action.
-- [ ] `pluginManager.openWebsite` (M13, inferred): Open Website
-  - Open (our design, not confirmed): The grey link under an entry's description opens the extension's website. FontCraft: same, opening the URL from the registry entry in the system browser.
-- [ ] `pluginManager.openDonationPage` (M13, inferred): Donate
-  - Open (our design, not confirmed): Entries whose vendor accepts donations show PayPal or Ko-fi icons that open the donation page. FontCraft: one generic `funding` link per index entry, shown as a Donate button and opened in the system browser.
+  - Guess: A macro installed from an index is saved in the Macros folder as `<id>.fcmacro`, so the listing and Remove find it by the entry's id; the reference's scripts keep their repository's file names.
+- [ ] `pluginManager.remove` (M13, inferred, live): Remove
+  - Guess: A removed module or macro file is moved into a `Removed` folder beside the Modules and Macros folders rather than deleted, so a removal can be undone by hand; the reference's Remove is not documented in that detail.
+- [ ] `pluginManager.enlargePreview` (M13, inferred, live): Enlarge Preview
+  - Guess: The enlarged screenshot opens in its own window and closes from that window or by running the command without an id; the reference app's full-size view would settle where it appears and how it closes.
+- [ ] `pluginManager.openWebsite` (M13, inferred, live): Open Website
+  - Guess: The Website button shows on every index entry and the command fails with a message when the entry has no `homepage`; the reference app with an entry that lacks a website would settle whether the link is hidden instead.
+- [ ] `pluginManager.openDonationPage` (M13, inferred, live): Donate
+  - Guess: One Donate button stands for every donation service, opening the entry's single `funding` link; an index entry in the reference format that lists several services would settle whether one button is enough.
 - [ ] `script.run` (M13, inferred, live): (script name)
   - Guess: A macro runs as one undo step that is undone as a whole, like command.batch; the reference undoes script edits per glyph and does not say how a script's changes group.
   - Guess: One top-level macro run executes at most 1,000,000 steps, the steps of the macros it runs included, and reads at most 256 MiB of macro files; past either it fails as a whole. Our own limit; no source describes one for scripts in the reference.
@@ -3558,12 +3570,17 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `script.reloadScripts` (M13, inferred, live): Reload Scripts
   - Guess: It is always shown in the Script menu and returns the new list, since the folder is also watched; files that cannot be read stay listed with their error. Holding Option over the reference app's Script menu settles only where the item shows.
   - Observe: Open the Script menu without and then with Option held: note whether Reload Scripts replaces Open Scripts Folder or is added below it, and where it sits in the menu.
-- [ ] `plugin.installFromFile` (M13, inferred): Install Plug-in from File
-  - Open (our design, not confirmed): A plug-in outside the catalogue is installed by dropping its bundle on the app's Dock icon; the app moves it into the Plugins folder. FontCraft: dropping a `.wasm` or `.fcmacro` file on the window, opening it with File › Open, or calling this command with a path validates it (manifest, ABI version, no imports, limits) and copies it into its folder; on the web the file's bytes are stored in the browser.
-- [ ] `view.showReporter` (M13, inferred): Show (reporter name)
+- [ ] `plugin.installFromFile` (M13, inferred, live): Install Plug-in from File
+  - Guess: A module keeps the file name it had (or `<id>.wasm`); installing the same module again only turns it on, and a different module with an installed id needs `replace`; the reference's handling of a second copy is not documented.
+- [ ] `view.showReporter` (M13, inferred, live): Show (reporter name)
   - Guess: Reporter entries are listed at the foot of the View menu in the order of their names, below a separator; the handbook does not give the order.
+  - Guess: Reporters draw only the glyph being edited (with `active` true), not the other glyphs of the Edit View text; observing a reporter plug-in on a line of several glyphs would settle it.
+  - Guess: A reporter that fails is not run again until its layer, scale or module changes, and its error is written at the top left of the canvas; the reference's handling of a failing reporter is not documented.
+  - Guess: Reporters run with their default parameters; there is no form for reporter parameters.
   - Observe: Install two reporter plug-ins from the Plugin Manager, relaunch and open the View menu: note where their Show entries are, their order, and whether they have check marks.
 - [ ] `window.pluginManager` (panel, M13, inferred): Plugin Manager
+  - Guess: Screenshots are shown only when the entry's Preview button is pressed, not in the list, so opening the window downloads no images; the reference shows preview images in the list.
+  - Guess: Entries are listed in index order (first index first), then installed modules no index lists, then macros of the Macros folder; the reference's order is not documented.
   - Guess: The type buttons are Filters, Reporters, Checks and Macros in place of Plugins, Scripts and Modules, because FontCraft has no Python modules; settled by nothing in the reference (our own extension model, decision 0005).
   - Observe: Screenshot the Plugin Manager with All and Plugins selected and an entry that has a preview image and donation icons: record the order of title, description, link, image and buttons in an entry.
 - [ ] `script.runActionSet` (M13, docs, live): Run Action Set

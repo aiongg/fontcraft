@@ -125,7 +125,7 @@ fn field(app: &FontcraftApp, ui: &mut egui::Ui, key: egui::Id, name: &str, spec:
 /// Draws the module sections below the built-in ones.
 pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     for section in sections(&app.session) {
-        let expanded = !app.state.panels.collapsed.iter().any(|c| *c == section.id);
+        let expanded = !app.state.panels.collapsed.contains(&section.id);
         if widgets::section_header(ui, &app.tokens, &section.id, &section.name, expanded) {
             pending.push(("palette.toggleSection", json!({"section": section.id, "expanded": !expanded})));
         }

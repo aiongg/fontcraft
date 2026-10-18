@@ -928,10 +928,11 @@ mod tests {
         let ctx = egui::Context::default();
         for tab in ["extensions", "indexes"] {
             app.run("window.pluginManager", &json!({"tab": tab})).unwrap();
-            let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
+            let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
                 let mut pending = Vec::new();
                 show(&mut app, ui, &mut pending);
             });
+            output.textures_delta.clear();
         }
         assert!(state(&mut app).open);
         assert_eq!(state(&mut app).indexes[0]["automaticUpdates"], false);

@@ -241,7 +241,7 @@ fn is_timeout(e: &io::Error) -> bool {
 }
 
 /// Fills the buffer, waiting at most until `deadline`. `Ok(None)`: the deadline passed.
-fn fill_until<'a>(reader: &'a mut BufReader<TcpStream>, deadline: Instant) -> Result<Option<&'a [u8]>, ReadError> {
+fn fill_until(reader: &mut BufReader<TcpStream>, deadline: Instant) -> Result<Option<&[u8]>, ReadError> {
     loop {
         let remaining = deadline.saturating_duration_since(Instant::now());
         if remaining.is_zero() {
