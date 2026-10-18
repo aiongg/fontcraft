@@ -198,6 +198,7 @@ ref = "Interpolation › Setting up Instances"
 status = "inferred"
 guesses = [
   "`coordinates: external` converts the location through Axis Location and Axis Mappings first; the default is internal, as the coordinate fields of the reference take internal values.",
+  "Axes the location leaves out take the origin master's coordinate, and `model` defaults to the font's Font Type setting; settle by comparing with the reference's preview of an instance that sets only one of two axes.",
 ]
 
 [[command]]
@@ -377,6 +378,7 @@ status = "inferred"
 guesses = [
   "The 20° warning measures the angle of each segment's chord from its start node to its end node; settle with the Master Compatibility view on a segment that turns by 19° and 21°.",
 ]
+notes = "FontCraft does not yet warn about crossing shape correspondences; the command reports shape count and kind, node count, segment type, component glyph and anchor differences, and the angle warnings."
 observe = [
   "In F5 (incompatible), open the glyphs whose segment turns by 19° and by 21° between masters: note the segment colours of each.",
 ]
@@ -1314,6 +1316,9 @@ milestone = "M9"
 summary = "Adds a control point to an axis's mapping (plus button, or a click on the line in the graph). When external is omitted the point is placed on the current mapping line so the mapping is unchanged until the point is moved."
 ref = "Interpolation › Variable Font Options › Axis Mappings"
 status = "handbook"
+guesses = [
+  "A variable font setting without an Axis Mappings parameter of its own gets a copy of the font's on its first mapping edit, so its other axes keep their mappings; settle by editing a setting's mappings in the reference app and reading the saved file.",
+]
 
 [[command]]
 id = "axisMappings.setPoint"
@@ -1340,7 +1345,7 @@ label = "Nudge Mapping Point"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{axis: tag, index: int, dInternal?: number, dExternal?: number}"
+params = "{axis: tag, index: int, dInternal?: number, dExternal?: number, variableFontSetting?: id|name}"
 area = "interpolation"
 milestone = "M9"
 summary = "Inside the Axis Mappings dialog the Up, Down, Left and Right keys move the selected control point; holding Shift moves in steps of 10 and Cmd in steps of 100. The base step (presumably 1) and which key pair moves the internal and which the external coordinate are not stated, so no global shortcut is recorded."

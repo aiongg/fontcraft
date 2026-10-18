@@ -68,6 +68,7 @@ mod hint_upkeep;
 mod image;
 mod instances;
 mod interaction;
+mod interpolation;
 mod kerning_groups;
 mod kerning_maintain;
 mod kerning_pairs;
