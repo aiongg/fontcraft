@@ -289,6 +289,8 @@ pub const DIALOGS: &[Dialog] = &[
     axis_location::DIALOG,
     virtual_master::DIALOG,
     add_other_font::DIALOG,
+    crate::panels::special_layer_popover::INTERMEDIATE,
+    crate::panels::special_layer_popover::ALTERNATE,
 ];
 
 /// The shell commands of this module.

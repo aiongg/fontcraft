@@ -413,6 +413,7 @@ ref = "Interpolation › Outline Compatibility › Master Compatibility"
 status = "inferred"
 guesses = [
   "A drag that ends on no other line end changes nothing; settle by observing the drag in the Master Compatibility view.",
+  "Swapping a shape with itself is refused instead of making an empty undo step; settle by dropping a line end on its own start in the Master Compatibility view.",
 ]
 observe = [
   "In F5 (incompatible), in Show Master Compatibility, drag a line end onto empty space: note what happens to the shape order.",
@@ -569,6 +570,7 @@ status = "handbook"
 id = "layers.setIntermediate"
 label = "Intermediate"
 menu = []
+context = ["layers.row"]
 shortcut = ""
 kind = "engine"
 params = "{glyph: name, layer: id, coordinates: {tag: number|null}}"
@@ -579,6 +581,7 @@ ref = "Interpolation › Intermediate Layers › Intermediate Layer Setup"
 status = "handbook"
 guesses = [
   "Coordinates outside the axis range of the masters and virtual masters are refused with a message; settle by typing one in the reference app's popover.",
+  "Coordinates that put the layer where another layer of the glyph already interpolates from are refused, including all fields left empty, which puts it on its master's own layer; settle by confirming such coordinates in the reference app's popover.",
 ]
 observe = [
   "In F2 (special layers), type 2000 into the intermediate layer's coordinate popover: note whether it is accepted, clamped or refused.",
@@ -588,6 +591,7 @@ observe = [
 id = "layers.clearIntermediate"
 label = "Remove Intermediate Status"
 menu = []
+context = ["layers.row"]
 shortcut = ""
 kind = "engine"
 params = "{glyph: name, layer: id}"
@@ -617,6 +621,15 @@ milestone = "M9"
 summary = "Small editor shown after choosing Intermediate, and again on double-clicking the brace label. Fields take internal axis coordinates; the displayed range is that of the masters; an empty field inherits from the parent master."
 ref = "Interpolation › Intermediate Layers › Intermediate Layer Setup"
 status = "handbook"
+notes = "Documented, not yet observed. A dialog that previews layers.setIntermediate while it is open; OK keeps the change, Cancel puts the font back. Each field holds the text of a number, so that it can be left empty, and is labelled with the axis name and the masters' range, `Weight (100 to 900)`."
+guesses = [
+  "The editor is a dialog in the middle of the window, not a popover attached to the row; settle by choosing Intermediate on a layer in the reference app and noting where the fields appear.",
+  "Return in a field takes the typed value and a second Return confirms; settle by typing a coordinate and pressing Return once in the reference app.",
+  "The axis range is written after the axis name as `(100 to 900)`; settle by reading the range beside the fields in the reference app.",
+]
+observe = [
+  "In F2 (special layers), choose Intermediate on a backup layer of `e`: note where the fields appear, how the axis range is written, and whether one Return confirms.",
+]
 
 [[behavior]]
 id = "intermediateLayer.purpose"
@@ -641,6 +654,11 @@ milestone = "M9"
 summary = "The Layers palette labels an intermediate layer with its coordinates, comma-separated in axis order inside curly braces, e.g. {110} or {65, 140}; hence the name brace layer. Special-layer labels are bold and indented under their master."
 ref = "Interpolation › Intermediate Layers › Intermediate Layer Setup; Palette › Layers › Special Layers"
 status = "handbook"
+guesses = [
+  "An empty coordinate shows the master value it inherits; settle by leaving a field empty in the reference app's popover and reading the label.",
+  "Coordinates with a fraction show it, rounded to three decimals (`{90.5}`); settle by entering 90.25 and reading the label.",
+  "The label takes the place of the layer's name in its row; a name the layer has is kept in the file but not shown; settle by opening a file whose brace layer has another name in the reference app.",
+]
 
 [[behavior]]
 id = "intermediateLayer.mustBeCompatible"
@@ -719,6 +737,7 @@ observe = [
 id = "layers.setAlternate"
 label = "Alternate"
 menu = []
+context = ["layers.row"]
 shortcut = ""
 kind = "engine"
 params = "{glyph: name, layer: id, ranges: {tag: {min?: number, max?: number}}}"
@@ -729,6 +748,7 @@ ref = "Interpolation › Switching Shapes › Alternate Layers"
 status = "handbook"
 guesses = [
   "Choosing Alternate on a master layer with no `[]` partner under the same master adds no partner layer; the partner is made by hand as the handbook describes. Settle in the reference app.",
+  "Choosing Alternate with every field empty on a master layer is refused, because the handbook describes the `[]` partner only as a separate layer under the master; settle by confirming empty fields on a master layer in the reference app.",
 ]
 observe = [
   "In F1 (two masters), choose Alternate on a master layer: note whether a `[]` layer is added by itself.",
@@ -738,6 +758,7 @@ observe = [
 id = "layers.clearAlternate"
 label = "Remove Alternate Status"
 menu = []
+context = ["layers.row"]
 shortcut = ""
 kind = "engine"
 params = "{glyph: name, layer: id}"
@@ -765,6 +786,10 @@ milestone = "M9"
 summary = "Double-clicking the {…} or the […] part of a special layer's label reopens the coordinate editor or the range editor respectively. On a layer that is both, each part is clicked separately."
 ref = "Interpolation › Switching Shapes › Alternate Layers"
 status = "handbook"
+notes = "Documented, not yet observed. The command opens popover.intermediateLayer or popover.alternateLayer on the layer, filled with its present values; double-clicking a part of the label in the Layers palette runs it, and so does choosing Intermediate or Alternate in a row's context menu when the layer does not have that status yet."
+guesses = [
+  "Choosing Intermediate or Alternate in a row's context menu opens the same editor as double-clicking that part of the label; settle by choosing Intermediate on a backup layer in the reference app.",
+]
 
 [[panel]]
 id = "popover.alternateLayer"
@@ -779,6 +804,14 @@ milestone = "M9"
 summary = "Editor shown after choosing Alternate. Values are internal axis coordinates. Example from the source: on a Weight axis running 44–130, min 90 with max empty switches the shape from 90 upward."
 ref = "Interpolation › Switching Shapes › Alternate Layers"
 status = "handbook"
+notes = "Documented, not yet observed. A dialog that previews layers.setAlternate while it is open; OK keeps the change, Cancel puts the font back. Each axis has a heading with its name and the masters' range, and a min and a max field holding the text of a number; an empty field leaves that bound open."
+guesses = [
+  "The editor is a dialog in the middle of the window with a heading per axis over its min and max fields, not a popover attached to the row; settle by choosing Alternate on a layer in the reference app.",
+  "Return in a field takes the typed value and a second Return confirms; settle by typing a bound and pressing Return once in the reference app.",
+]
+observe = [
+  "In F2 (special layers), choose Alternate on a backup layer of `dollar`: note how the min and max fields of each axis are laid out, whether an axis range is shown, and whether one Return confirms.",
+]
 
 [[behavior]]
 id = "alternateLayer.definition"
@@ -804,6 +837,11 @@ milestone = "M9"
 summary = "An alternate layer's palette label is bold: square brackets holding its axis ranges, separated by commas, written with the ‹ sign around an axis abbreviation: [120‹wg] for a lower bound, [140‹wg, 60‹wd‹85] for a lower bound on one axis and both bounds on another; hence the name bracket layer."
 ref = "Interpolation › Switching Shapes › Alternate Layers"
 status = "handbook"
+guesses = [
+  "A range with only a maximum reads `[wg‹140]`, the axis before the bound; settle by leaving min empty in the reference app's range popover.",
+  "A layer that is both alternate and intermediate shows the bracket part first, then the brace part, separated by a space; settle by reading such a layer's label in the reference app.",
+  "A master layer with a range shows the master's name in bold followed by its bracket label; settle by giving a master layer a range in the reference app and reading its row.",
+]
 
 [[behavior]]
 id = "alternateLayer.axisAbbreviations"
@@ -942,9 +980,10 @@ status = "handbook"
 id = "layers.reInterpolate"
 label = "Re-Interpolate"
 menu = []
+context = ["layers.row"]
 shortcut = ""
 kind = "engine"
-params = "{glyphs?: [name], layer?: id, location?: {tag: number}}"
+params = "{glyph: name | glyphs: [name], layer?: id | layers?: [id], location?: {tag: number}}"
 area = "interpolation"
 milestone = "M9"
 summary = "Replaces the content of a master, intermediate or backup layer with the interpolation of the glyph's other sources at that layer's location, as one undo step; used to seed a new master or intermediate layer. Our own command: the handbook copy has no such item."
@@ -955,6 +994,8 @@ notes = "Verified by the M9 planning pass: the handbook copy names no Re-Interpo
 guesses = [
   "The layer's own drawing is left out of the sources it is interpolated from; settle by observing an item of this name in the reference app's Layers palette, if it has one.",
   "With no location given, a master layer uses its master's location and an intermediate layer its coordinates; a backup layer needs a location and is refused without one.",
+  "An alternate layer is interpolated from the other layers of its range set at its location, the way static instances switch to that set; settle with the reference app's item, if it has one.",
+  "The interpolation uses the font's Font Type model and extrapolates beyond the masters, as static instances do; settle with the reference app's item, if it has one.",
 ]
 observe = [
   "In any font, look for a Re-Interpolate item in the Layers palette's context menu and actions menu: note where it exists.",
@@ -967,6 +1008,7 @@ milestone = "M3"
 summary = "The Layers palette lists every master as a layer of the current glyph; intermediate and alternate layers appear indented below the master they belong to."
 ref = "Interpolation › Editing Multiple Masters; Palette › Layers"
 status = "handbook"
+notes = "Documented, not yet observed. Master rows are bold; backup and special layers are indented under their master, special layers with their bold `[…]` and `{…}` label in place of the name."
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Higher-order interpolation (HOI)
