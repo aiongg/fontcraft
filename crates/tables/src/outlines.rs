@@ -1478,6 +1478,9 @@ fn directed(outline: &[Vec<Pt>], truetype: bool) -> std::result::Result<Outline,
     Ok(out)
 }
 
+#[path = "outlines_curves.rs"]
+pub(crate) mod curve_work;
+
 #[cfg(test)]
 #[path = "outlines_tests.rs"]
 mod tests;
