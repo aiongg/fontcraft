@@ -50,6 +50,8 @@ mod draw_tests;
 #[cfg(test)]
 mod e2e_tests;
 #[cfg(test)]
+mod edit_aids_tests;
+#[cfg(test)]
 mod edit_background_tests;
 #[cfg(test)]
 mod extensions_menu_tests;

@@ -286,6 +286,7 @@ fn key_typing(app: &mut FontcraftApp, ev: KeyEvent, types: bool) -> Option<Vec<S
 
 /// Carries out a tool's actions in order. Returns the errors; each also goes to the status bar.
 pub fn apply(app: &mut FontcraftApp, out: Output) -> Vec<String> {
+    let out = crate::shell::edit_aids::unless_locked(app, out);
     let mut errors = Vec::new();
     for action in out.actions {
         let result = match action {
