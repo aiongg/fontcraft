@@ -207,6 +207,7 @@ pub fn row_with(ui: &mut egui::Ui, tokens: &Tokens, row: &Row, opts: &RowOptions
             return;
         }
         let edited = match opts.kind {
+            _ if crate::dialogs::ttf_zones::value_field(ui, opts.id.with("value"), row) => None,
             Some(kind) => param_value::editor_with_id(ui, tokens, opts.id.with("value"), kind, &row.value, opts.mixed),
             None => {
                 let text = plain_text(&row.value).unwrap_or_default();
