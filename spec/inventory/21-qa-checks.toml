@@ -3590,6 +3590,10 @@ status = "docs"
 notes = "M3 fixes the open document. `results` takes ids of the kept run and cannot be combined with the filters; a result whose glyph changed since the run is skipped. Fixes run through path.closeOpenPaths, path.tidyUpPaths, path.removeOverlap, path.correctPathDirection, path.addExtremes, path.makeNodeFirst and path.roundCoordinates; a fix without a command (the auditor fixes of docs/spec/21-qa.md § 5, and addInflections until path.addInflections exists) is skipped with the reason. The result cap does not hide findings from a fix. `decimal`, `keepContourOrder` and file targets wait for M12; `output` is refused."
 guesses = [
   "An outline fix on a composite glyph only reports unless `safeOnly` is false (21-qa question 4).",
+  "The fixes of M12 run in the three stages and the order of docs/spec/21-qa.md § 5 › Fix calls (glyph data, then layers, then kerning, feature code and hints); no reference tool fixes all of these, so a case where the order changes the result would settle it.",
+  "alignHandles turns both handles onto the line that bisects their two directions, keeping their lengths; a type designer's review of fixed kinks would settle whether one handle should stay put instead.",
+  "setGdefClasses makes a glyph that must not be a mark a Symbol when the glyph database classes it as a mark; a review of the fixed glyphs' categories would settle it.",
+  "cleanKerning leaves a tabular glyph that is kerned through a group shared with other glyphs in the report, because removing the group pair would change their kerning; an exception pair of zero is the other choice, which a review of fixed fonts would settle.",
 ]
 
 [[command]]
@@ -4097,7 +4101,7 @@ milestone = "M3"
 summary = "Outline fixes run in a fixed order: coincident points, flat curves and collinear lines first, then overlap removal, then tiny-contour removal, then collinear lines once more, because overlap removal can create new collinear nodes and slivers."
 ref = "AFDKO checkoutlinesufo (do_overlap_removal, do_cleanup)"
 status = "docs"
-notes = "M3 order: close open paths, Tidy up Paths, Remove Overlap, Tidy up Paths again (only after an overlap removal), Correct Path Direction, Add Extremes, add inflections, start points, Round Coordinates. Tiny-contour removal has no command yet. The layer is checked again before each step."
+notes = "M3 order: close open paths, Tidy up Paths, Remove Overlap, Tidy up Paths again (only after an overlap removal), Correct Path Direction, Add Extremes, add inflections, start points, Round Coordinates. Tiny-contour removal has no command yet. The layer is checked again before each step. The order with every fix of M12 is docs/spec/21-qa.md § 5 › Fix calls: tiny contours are deleted right after Remove Overlap, before the second Tidy up Paths."
 
 [[behavior]]
 id = "audit.outlineFixRounding"
@@ -4246,10 +4250,10 @@ label = "Erase Open Corners"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph: name, layer?: id, side?: foreground|background, points?: [[shape, node]]} → {erased: count, selection}"
+params = "{glyph: name, layer?: id, side?: foreground|background, points?: [[shape, node]]} → {erased: count, skipped: [[shape, node]], selection}"
 area = "path-ops"
 milestone = "M12"
-summary = "Trims each open corner (two segments that cross just before they meet at a node, leaving a small loop outside the outline) back to the crossing point, so the corner is one node again. Without points, every open corner on the layer is trimmed."
+summary = "Trims each open corner (two segments that cross just before they meet at a node, leaving a small loop outside the outline) back to the crossing point, so the corner is one node again. `points` names the corner nodes; without it, every open corner on the layer is trimmed. The corner node is replaced by a corner node at the crossing point: the two segments are split there (curves keep their shape), and the parts beyond the crossing are dropped, so the path keeps its number of on-curve nodes. A named node whose two segments do not cross is left as it is and listed in `skipped`."
 ref = "Our design; docs/spec/21-qa.md § 5 (fix eraseOpenCorners)"
 status = "inferred"
 own = true
@@ -4264,7 +4268,7 @@ kind = "engine"
 params = "{glyph?: name, layer?: id, components?: [indices]} → {replaced: count, skipped: [index]}"
 area = "components"
 milestone = "M12"
-summary = "Replaces each nested component (one whose base glyph is itself made only of components) by components of the innermost glyphs, with the transformations combined, so the drawn outline stays the same. A component whose base glyph also has paths is left as it is and listed in `skipped`."
+summary = "Replaces each nested component (one whose base glyph is itself made only of components) by components of the innermost glyphs, with the transformations combined, so the drawn outline stays the same. The new components take the nested component's place in the shape list, in the order of its base glyph's components, and follow nesting to any depth up to `model::MAX_COMPONENT_DEPTH` (32). A component whose base glyph also has paths is left as it is and listed in `skipped`. Without `components`, every nested component of the layer is flattened."
 ref = "Our design; ufo2ft flattenComponents filter; docs/spec/21-qa.md § 5 (fix flattenComponents)"
 status = "inferred"
 own = true
@@ -4359,6 +4363,21 @@ ref = "Our design; docs/spec/21-qa.md § 5 (fix cleanInstances)"
 status = "inferred"
 own = true
 notes = "The audit fix cleanInstances runs it on compiled fonts; added by the M12 spec pass."
+
+[[command]]
+id = "tables.recompileLayout"
+label = "Recompile Contextual Positioning"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{font: path, face?: int|name, output?: path, inPlace?: bool} → {converted: [lookup index]}"
+area = "cli-tools"
+milestone = "M12"
+summary = "Rewrites each contextual positioning lookup of GPOS (type 7, also when it sits inside an extension lookup) as a chained contextual lookup (type 8) with empty backtrack and lookahead sequences, which applies the same rules. Formats 1, 2 and 3 become the same formats of type 8; lookup indices, lookup flags, mark filtering sets and every other table stay as they were. A font without such lookups is left unchanged."
+ref = "Our design; OpenType GPOS specification (lookup types 7 and 8); fontbakery gpos7; docs/spec/21-qa.md § 5 (fix recompileLayout)"
+status = "inferred"
+own = true
+notes = "The audit fix recompileLayout runs it on compiled fonts (check.layout.gpos7); added by the M12 spec pass. Sources need no such fix: the feature compiler writes contextual positioning as type 8."
 
 [[command]]
 id = "tables.dropAxis"
