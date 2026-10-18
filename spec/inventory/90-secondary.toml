@@ -1695,7 +1695,12 @@ summary = "A work list for kerning and spacing: stepping through the rows puts e
 ref = "FontLab 7 manual › Pairs and Phrases panel; FontLab 8 What's new › Metrics & kerning"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2). Built in M13.22 as a Palette section. Documented, not yet observed."
+guesses = [
+  "Automatic mode shows the pairs list while the showing tab is in text mode and the phrases list otherwise; the reference switches by its kerning tool, which FontCraft does not have.",
+  "A loaded list lasts for the session and is not stored with the window state.",
+  "Pair rows show the value stored for exactly that pair in the showing tab's master, not the value that applies through groups.",
+]
 
 [[command]]
 id = "kerning.loadPairList"
@@ -1703,14 +1708,19 @@ label = "Load Pair List…"
 menu = ["Font", "Kerning"]
 shortcut = ""
 kind = "ui"
-params = "{path: path}"
+params = '{path?: path, text?: string, reset?: bool, list?: "pairs" | "phrases"}'
 area = "spacing-kerning"
 milestone = "M13"
 summary = "Loads a plain-text list with one pair or phrase per line (glyph names separated by spaces) as the current work list."
 ref = "FontLab 7 manual › Pairs and Phrases panel (Importing lists)"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2). Built in M13.22 as a shell command; `text`, `reset` and `list` are our additions for agents and the section's Reset button. Without any of them the command opens the Pairs and Phrases section, where the path is typed. Documented, not yet observed."
+guesses = [
+  "Lines starting with # or %% are skipped, and the two characters \\n break a phrase into lines; the documentation does not describe comments or multi-line rows, and a sample list exported from the reference app would settle it.",
+  "A word that is neither a glyph name nor an @group is read as characters, and a single character in a pair as the glyph that encodes it; loading a list of plain words in the reference app would settle it.",
+  "The built-in lists are our own: about thirty Latin pairs and seven spacing strings.",
+]
 
 [[command]]
 id = "kerning.stepPairList"
@@ -1718,14 +1728,66 @@ label = "Next / Previous Pair"
 menu = ["Font", "Kerning"]
 shortcut = ""
 kind = "ui"
-params = "{direction: 'next' | 'previous'}"
+params = '{direction?: "next" | "previous", index?: number, select?: [number], list?: "pairs" | "phrases"}'
 area = "spacing-kerning"
 milestone = "M13"
 summary = "Moves to the next or previous row of the pair list and shows it in the Edit View; for a multi-line text it steps through the lines first."
 ref = "FontLab 7 manual › Pairs and Phrases panel (Lists and navigation)"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2). Built in M13.22 as a shell command; `index` and `select` are what a click and a Cmd- or Shift-click in the section run. Documented, not yet observed."
+guesses = [
+  "A pair goes in place of the pair at the current glyph and keeps the rest of the tab's text, while a phrase replaces the whole text; watching the reference app step from a pair to a phrase would settle it.",
+  "Next on the last row and previous on the first leave the list where it is instead of wrapping round.",
+]
+
+[[command]]
+id = "kerning.setPairListMode"
+label = "Pair List Mode"
+menu = []
+shortcut = ""
+kind = "ui"
+params = '{mode: "pairs" | "phrases" | "auto"}'
+area = "spacing-kerning"
+milestone = "M13"
+summary = "Chooses the list the Pairs and Phrases section shows: pairs, phrases, or automatic."
+ref = "FontLab 7 manual › Pairs and Phrases panel"
+status = "docs"
+origin = "fontlab"
+notes = "The mode selector of `palette.pairsAndPhrases` as a command (M13.22)."
+
+[[command]]
+id = "kerning.stepGroupMember"
+label = "Next / Previous Group Member"
+menu = ["Font", "Kerning"]
+shortcut = ""
+kind = "ui"
+params = '{side: "left" | "right", direction?: "next" | "previous", tab?: id}'
+area = "spacing-kerning"
+milestone = "M13"
+summary = "Replaces the left or right glyph of the pair at the current glyph with the next or previous member of its kerning group, so a class value can be judged on every member."
+ref = "FontLab 8 What's new › Metrics & kerning › Kerning (Representative glyphs)"
+status = "docs"
+origin = "fontlab"
+notes = "The command behind `kerning.representativeGlyph` (M13.22)."
+
+[[command]]
+id = "kerning.autoKernPairList"
+label = "Auto Kern Pair List"
+menu = []
+shortcut = ""
+kind = "ui"
+params = '{rows?: [number], apply?: bool, discard?: bool, list?: "pairs" | "phrases", options?: object}'
+area = "spacing-kerning"
+milestone = "M13"
+summary = "Proposes auto-kerning values for the pair rows of the work list, shows them in the Pairs and Phrases section for review, and stores them on Apply."
+ref = "FontLab 7 manual › Pairs and Phrases panel; FontLab 8 What's new › Metrics & kerning"
+status = "docs"
+origin = "fontlab"
+notes = "The auto-kern button of `palette.pairsAndPhrases` (M13.22), through `kerning.autoKern` without and then with `apply`."
+guesses = [
+  "The values are proposed for review and stored only on Apply, refused when the font changed in between; the reference applies them at once as far as its documentation says.",
+]
 
 [[behavior]]
 id = "kerning.representativeGlyph"
@@ -1735,7 +1797,11 @@ summary = "While a class pair is being kerned, a key steps the displayed left or
 ref = "FontLab 8 What's new › Metrics & kerning › Kerning (Representative glyphs)"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2). Built in M13.22 as `kerning.stepGroupMember`, with Ctrl+Up/Down and Alt+Up/Down while the Pairs and Phrases list has the keyboard. Documented, not yet observed."
+guesses = [
+  "Members are stepped in glyph order and wrap round from the last to the first.",
+  "The keys work only while the Pairs and Phrases list has the keyboard, so they never clash with the Edit View's own keys; elsewhere the command runs from Font › Kerning or the control channel.",
+]
 
 [[behavior]]
 id = "features.opticalBoundsFromGuides"
@@ -3300,6 +3366,21 @@ origin = "fontforge"
 # FontForge — kerning views, classes, layout tables, encodings, CID
 # =====================================================================================================
 
+[[command]]
+id = "window.kerningPairsPreview"
+label = "Kerning Pairs Preview"
+menu = ["Window"]
+shortcut = ""
+kind = "ui"
+params = '{open?: bool, master?: id | null, glyph?: name | null, sort?: "first" | "second" | "value", size?: number, select?: {left, right} | null, jump?: string}'
+area = "spacing-kerning"
+milestone = "M13"
+summary = "Opens or closes the Kerning Pairs Preview and sets its master, glyph filter, sort order, render size and selected pair."
+ref = "FontForge dialogs › The Kerning Pairs dialog"
+status = "docs"
+origin = "fontforge"
+notes = "The command behind the panel row of the same id (M13.22). `master`, `select` and `jump` let agents do what the window's controls do."
+
 [[panel]]
 id = "window.kerningPairsPreview"
 label = "Kerning Pairs Preview"
@@ -3311,7 +3392,14 @@ summary = "A visual list of all kerning pairs for reviewing a whole font's kerni
 ref = "FontForge dialogs › The Kerning Pairs dialog; FontForge View menu › Combinations › Kern Pairs"
 status = "docs"
 origin = "fontforge"
-notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2). Built in M13.22. Documented, not yet observed."
+guesses = [
+  "Pairs are drawn as outlines, one pair per row, in left-to-right text only; vertical and right-to-left pairs are not listed.",
+  "Changed values are those that differ from the values the window found when it opened.",
+  "Double-clicking a pair shows it in Edit View, which stands in for the enlarged view.",
+  "A drag changes the value by the distance dragged in font units, rounded to whole units; Left and Right change it by 1, with Shift by 10.",
+  "Sorting by value orders by the size of the value, largest first, ties in stored order; typing a character scrolls to the first pair whose sorted-by glyph encodes it, else whose name starts with it.",
+]
 
 [[command]]
 id = "kerning.buildGroups"
@@ -3335,6 +3423,21 @@ guesses = [
   "Without `replaceExisting`, glyphs that have a group on a side keep it and are left out of that side; `apply` defaults to false, so the call proposes until told to apply.",
 ]
 
+[[command]]
+id = "dialog.kerningGroupsEditor"
+label = "Kerning Groups Editor"
+menu = ["Window"]
+shortcut = ""
+kind = "ui"
+params = '{open?: bool, side?: "left" | "right", group?: name | null, view?: "cells" | "list" | "stacked", propose?: object | null, apply?: bool}'
+area = "spacing-kerning"
+milestone = "M13"
+summary = "Opens or closes the Kerning Groups Editor and sets its side, current group and view; proposes kerning groups for review and applies them."
+ref = "RoboFont reference › Groups Editor"
+status = "docs"
+origin = "robofont"
+notes = "The command behind the panel row of the same id (M13.22). Members change through `kerning.setLeftGroup` and `kerning.setRightGroup`; `propose` and `apply` go through `kerning.buildGroups`."
+
 [[panel]]
 id = "dialog.kerningGroupsEditor"
 label = "Kerning Groups Editor"
@@ -3346,7 +3449,11 @@ summary = "Builds and inspects kerning groups by drag and drop. The stacked view
 ref = "RoboFont reference › Groups Editor; FontLab 8 What's new › Metrics & kerning (Set Kerning Class dialog)"
 status = "docs"
 origin = "robofont"
-notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2). Built in M13.22. Documented, not yet observed."
+guesses = [
+  "The stacked view aligns the members on their origin for a left group and on their advance width for a right group, where the kerning applies.",
+  "Propose (kerning.buildGroups without applying) and Apply are our additions, so built groups are reviewed before they are stored; a proposal made before the font changed is refused.",
+]
 
 [[command]]
 id = "kerning.verticalFromHorizontal"
@@ -3628,7 +3735,7 @@ summary = "Selecting a group-to-group pair in a kerning list previews every glyp
 ref = "RoboFont reference › Kern Center (Preview)"
 status = "docs"
 origin = "robofont"
-notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2). Built in M13.22 in the Kerning Pairs Preview: selecting a pair with a group side lists every combination it covers (at most 2,500) with the stored pair that applies. Documented, not yet observed."
 
 [[command]]
 id = "guide.setAppearance"

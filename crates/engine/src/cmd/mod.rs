@@ -142,7 +142,7 @@ pub mod math_base;
 pub mod measurements;
 mod metrics_files;
 mod nonlinear;
-mod pair_list;
+pub mod pair_list;
 mod pixel;
 mod plugin;
 mod plugin_manager;

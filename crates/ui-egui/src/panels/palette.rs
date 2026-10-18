@@ -20,6 +20,7 @@ fn drawer(section: &str) -> Option<Draw> {
         "referenceFont" => Some(super::reference_font::show),
         "selections" => Some(super::selections::show),
         "measurements" => Some(super::measurements::show),
+        "pairsAndPhrases" => Some(super::pairs_and_phrases::show),
         _ => None,
     }
 }

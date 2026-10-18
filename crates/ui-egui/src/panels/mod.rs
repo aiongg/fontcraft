@@ -64,7 +64,7 @@ use crate::tools_glue;
 pub type Pending = Vec<(&'static str, Value)>;
 
 /// The Palette sections, in order: (id, title).
-pub const SECTIONS: [(&str, &str); 8] = [
+pub const SECTIONS: [(&str, &str); 9] = [
     ("dimensions", "Dimensions"),
     ("fitCurve", "Fit Curve"),
     ("layers", "Layers"),
@@ -73,6 +73,7 @@ pub const SECTIONS: [(&str, &str); 8] = [
     ("referenceFont", "Reference Font"),
     ("selections", "Selections"),
     ("measurements", "Measurements"),
+    ("pairsAndPhrases", "Pairs & Phrases"),
 ];
 /// The metric lines a Transformations origin can sit on.
 pub const METRICS: [&str; 5] = ["baseline", "halfXHeight", "xHeight", "halfCapHeight", "capHeight"];
