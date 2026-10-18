@@ -668,3 +668,218 @@ pub fn menu_order(a: &MacroEntry, b: &MacroEntry) -> Ordering {
     }
     natural_cmp(&a.title, &b.title).then_with(|| a.path.cmp(&b.path))
 }
+
+// ── Check modules in the audit (M13.5) ──────────────────────────────────────────────────────────
+//
+// `audit.run` runs every turned-on check module on the layers it examines, next to the built-in
+// layer checks. A module's findings join the result document under the check ids
+// `check.plugin.<module id>.<finding name>`, with no fix; the canvas markers read them like any
+// other result. A module that fails on a layer is reported once, as a check with status `error`,
+// and is not run on the remaining layers of that run.
+
+pub use module_checks::{
+    MAX_MODULE_CHECK_IDS, MAX_MODULE_FINDINGS_PER_RUN, MODULE_CHECK_GROUP, MODULE_CHECK_PREFIX, MODULE_FINDING_CODE, ModuleChecks, ModuleRun,
+    module_check_id, names_module_checks,
+};
+
+mod module_checks {
+    use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+    use std::sync::{Arc, Mutex, OnceLock, PoisonError};
+
+    use fontcraft_audit::{Finding as AuditFinding, Location, Severity as AuditSeverity, matches_pattern};
+    use fontcraft_model::{Font, Glyph, Layer};
+    use fontcraft_plugins::check::{Severity as ModuleSeverity, parse_findings};
+    use fontcraft_plugins::layer_json::LayerInput;
+    use fontcraft_plugins::{Kind, Plugin};
+    use serde_json::{Value, json};
+
+    use super::ExtensionState;
+
+    /// The start of every check id a check module reports under.
+    pub const MODULE_CHECK_PREFIX: &str = "check.plugin.";
+    /// The audit group of module checks (`groups: ["plugin"]`).
+    pub const MODULE_CHECK_GROUP: &str = "plugin";
+    /// The `code` of every module finding: the finding's name is already part of its check id.
+    pub const MODULE_FINDING_CODE: &str = "module";
+    /// Most distinct module check ids one process names. Each is kept for the life of the process,
+    /// like the built-in ids, so a module that invents a new name on every run cannot grow memory
+    /// without bound.
+    pub const MAX_MODULE_CHECK_IDS: usize = 65_536;
+    /// Most module findings one audit run keeps; the rest are counted in `summary.truncated`.
+    pub const MAX_MODULE_FINDINGS_PER_RUN: usize = 100_000;
+
+    static MODULE_CHECK_IDS: OnceLock<Mutex<HashSet<&'static str>>> = OnceLock::new();
+
+    /// The check id of the finding `name` of module `module`: `check.plugin.<module>.<name>`. `None`
+    /// once the process has named [`MAX_MODULE_CHECK_IDS`] distinct ids.
+    pub fn module_check_id(module: &str, name: &str) -> Option<&'static str> {
+        let id = format!("{MODULE_CHECK_PREFIX}{module}.{name}");
+        let mut ids = MODULE_CHECK_IDS.get_or_init(Default::default).lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(&known) = ids.get(id.as_str()) {
+            return Some(known);
+        }
+        if ids.len() >= MAX_MODULE_CHECK_IDS {
+            return None;
+        }
+        let kept: &'static str = Box::leak(id.into_boxed_str());
+        ids.insert(kept);
+        Some(kept)
+    }
+
+    /// Whether the check id or `prefix*` pattern `pattern` can match a module check id, so the audit
+    /// accepts it although no built-in check matches.
+    pub fn names_module_checks(pattern: &str) -> bool {
+        match pattern.strip_suffix('*') {
+            Some(prefix) => prefix.starts_with(MODULE_CHECK_PREFIX) || MODULE_CHECK_PREFIX.starts_with(prefix),
+            None => pattern.starts_with(MODULE_CHECK_PREFIX),
+        }
+    }
+
+    /// The check modules one audit run uses, with the `checks` and `exclude` patterns that narrow
+    /// their findings.
+    #[derive(Clone, Debug, Default)]
+    pub struct ModuleChecks {
+        /// Each module with its parameters (the manifest's defaults) as JSON.
+        modules: Vec<(Arc<Plugin>, Vec<u8>)>,
+        include: Vec<String>,
+        exclude: Vec<String>,
+    }
+
+    impl ModuleChecks {
+        /// The turned-on check modules of `extensions` (none in safe mode) whose checks `include` and
+        /// `exclude` (check ids and `prefix*` patterns, as `audit.run` takes them) leave room for.
+        pub fn select(extensions: &ExtensionState, include: &[&str], exclude: &[&str]) -> ModuleChecks {
+            if !extensions.modules_run() {
+                return ModuleChecks::default();
+            }
+            let modules = extensions
+                .registry
+                .enabled_of_kind(Kind::Check)
+                .filter(|m| {
+                    let own = format!("{MODULE_CHECK_PREFIX}{}.", m.plugin.id());
+                    let may_match = |pat: &&str| match pat.strip_suffix('*') {
+                        Some(prefix) => prefix.starts_with(&own) || own.starts_with(prefix),
+                        None => pat.starts_with(&own),
+                    };
+                    let all_excluded = exclude.iter().any(|pat| pat.strip_suffix('*').is_some_and(|prefix| own.starts_with(prefix)));
+                    (include.is_empty() || include.iter().any(may_match)) && !all_excluded
+                })
+                .filter_map(|m| {
+                    let params = serde_json::to_vec(&Value::Object(m.plugin.manifest().defaults())).ok()?;
+                    Some((m.plugin.clone(), params))
+                })
+                .collect();
+            ModuleChecks {
+                modules,
+                include: include.iter().map(|s| (*s).to_string()).collect(),
+                exclude: exclude.iter().map(|s| (*s).to_string()).collect(),
+            }
+        }
+
+        pub fn is_empty(&self) -> bool {
+            self.modules.is_empty()
+        }
+
+        fn selects(&self, check: &str) -> bool {
+            (self.include.is_empty() || self.include.iter().any(|pat| matches_pattern(check, pat)))
+                && !self.exclude.iter().any(|pat| matches_pattern(check, pat))
+        }
+
+        /// Runs each module on `layer` of `glyph` and adds its findings to `out`; a module that
+        /// failed earlier in the run is not run again.
+        pub fn run_layer(&self, font: &Font, glyph: &Glyph, layer: &Layer, state: &mut ModuleRun, out: &mut Vec<AuditFinding>) {
+            for (plugin, params) in &self.modules {
+                let module = plugin.id();
+                if state.errors.contains_key(module) {
+                    continue;
+                }
+                state.ran.insert(module.to_string());
+                let found = LayerInput::from_layer(font, glyph, layer)
+                    .and_then(|input| input.to_json())
+                    .and_then(|input| plugin.call(&input, params))
+                    .and_then(|output| parse_findings(&output));
+                let findings = match found {
+                    Ok(findings) => findings,
+                    Err(e) => {
+                        state.errors.insert(module.to_string(), format!("glyph {}, layer {}: {e}", glyph.name, layer.id));
+                        continue;
+                    }
+                };
+                for f in findings {
+                    let Some(check) = module_check_id(module, &f.name) else {
+                        state.errors.insert(module.to_string(), format!("more than {MAX_MODULE_CHECK_IDS} module check names in this session"));
+                        break;
+                    };
+                    if !self.selects(check) {
+                        continue;
+                    }
+                    if state.kept >= MAX_MODULE_FINDINGS_PER_RUN {
+                        state.truncated = state.truncated.saturating_add(1);
+                        continue;
+                    }
+                    state.kept += 1;
+                    state.modules_of.insert(check, module.to_string());
+                    out.push(AuditFinding {
+                        check,
+                        code: MODULE_FINDING_CODE,
+                        severity: match f.severity {
+                            ModuleSeverity::Error => AuditSeverity::Fail,
+                            ModuleSeverity::Warning => AuditSeverity::Warn,
+                            ModuleSeverity::Info => AuditSeverity::Info,
+                        },
+                        message: f.message,
+                        location: Location { glyph: glyph.name.clone(), layer: layer.id.clone(), point: f.position, ..Location::default() },
+                        data: BTreeMap::new(),
+                        fix: None,
+                    });
+                }
+            }
+        }
+    }
+
+    /// What the check modules did in one audit run.
+    #[derive(Debug, Default)]
+    pub struct ModuleRun {
+        /// The modules that ran on at least one layer.
+        ran: BTreeSet<String>,
+        /// The first failure of each module that failed.
+        errors: BTreeMap<String, String>,
+        /// The module behind each check id reported.
+        modules_of: BTreeMap<&'static str, String>,
+        kept: usize,
+        /// Findings dropped past [`MAX_MODULE_FINDINGS_PER_RUN`].
+        pub truncated: usize,
+    }
+
+    impl ModuleRun {
+        /// The result document's `checks` entries for the modules: each module check id with results
+        /// (`results` and the worst severity as `status`, from `results`, the counts of the listed
+        /// results by check id), each module that failed (`check.plugin.<module>`, status `error`,
+        /// with `message`), and, with `include_passed`, each module that ran and reported nothing
+        /// (status `pass`). Returns the entries, the passes and the errors.
+        pub fn entries(&self, results: &HashMap<&str, (usize, AuditSeverity)>, include_passed: bool) -> (Vec<Value>, usize, usize) {
+            let mut out = Vec::new();
+            let mut reported: BTreeSet<&str> = BTreeSet::new();
+            for (check, module) in &self.modules_of {
+                if let Some((n, worst)) = results.get(check) {
+                    reported.insert(module.as_str());
+                    out.push(json!({"id": check, "status": worst.as_str(), "results": n}));
+                }
+            }
+            let (mut passed, mut errors) = (0, 0);
+            for module in &self.ran {
+                let id = format!("{MODULE_CHECK_PREFIX}{module}");
+                if let Some(message) = self.errors.get(module) {
+                    errors += 1;
+                    out.push(json!({"id": id, "status": "error", "results": 0, "message": message}));
+                } else if !reported.contains(module.as_str()) {
+                    passed += 1;
+                    if include_passed {
+                        out.push(json!({"id": id, "status": "pass", "results": 0}));
+                    }
+                }
+            }
+            (out, passed, errors)
+        }
+    }
+}

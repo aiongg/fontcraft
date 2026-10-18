@@ -38,7 +38,7 @@ const MAX_CONFIG_ENTRIES: usize = 1024;
 const MAX_MAX_RESULTS: i64 = 1_000_000;
 /// Most results one document lists; the rest are counted in `summary.truncated`.
 const MAX_REPORTED: usize = 100_000;
-const GROUPS: [&str; 17] = [
+const GROUPS: [&str; 18] = [
     "outlines",
     "components",
     "anchors",
@@ -56,6 +56,7 @@ const GROUPS: [&str; 17] = [
     "color",
     "vendor",
     "cid",
+    crate::extensions::MODULE_CHECK_GROUP,
 ];
 const SCOPES: [&str; 3] = ["source", "binary", "family"];
 /// `audit.outlineFixOrder`: clean-up first, then overlap removal, then clean-up again for what the
@@ -84,7 +85,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Run Audit",
             [],
             None,
-            "{target?: \"document\" | path | [paths] (default the open document; several files or a folder of compiled fonts are also one family), profile?: id (default the document's default profile, else the application's, else universal), checks?: [id | prefix*], exclude?: [id | prefix*], groups?: [group], scope?: [\"source\" | \"binary\" | \"family\"], glyphs?: [names, indexes, first-last ranges, /CID] (entries that match nothing are warned about), glyphFile?: path (the same entries in a file), masters?: [ids], layers?: [ids], minSeverity?: \"info\" | \"warn\" | \"fail\", config?: {checkId: {threshold: number}}, maxResults?: count = 100, includePassed?: bool = false, includeIgnored?: bool = false, network?: bool = false} runs the checks of every scope and changes nothing: layer checks on every layer of the selected glyphs except backup layers (or the layers in `layers`), glyph and source checks on the source, binary checks on each compiled font (a source's exporting instances and variable font are compiled in memory and their findings name the source field behind a compiled value), family checks on two or more fonts. On a compiled font the outline checks read the decoded file and checks that need source data are skipped. A check whose preconditions do not hold is skipped with the reason. A pattern that matches no check is an error. A capped check with more than maxResults results in one font gives one info result with the count instead. Results on the source's ignore list are counted in summary.ignored and listed only with includeIgnored. A run on the open document is kept for audit.results and audit.fix → {schema, tool, target: {kind, path, fonts: [{id, name, path, instance, format}]}, document?: {title, revision}, profile, config, summary: {fail, warn, info, passed, skipped, ignored, errors, truncated}, checks: [{id, status, results, reason?}], results: [{id, check, code, severity, message, location: {font, glyph, master, layer, shapes?, points?, segments?, point?, bounds?, table?, field?, sourceField?, instance?, fonts?, masters?}, data, fix: {available, id?, safe?, description?, command?, params?, via?}, ignored, stale}], warnings?: [text]}",
+            "{target?: \"document\" | path | [paths] (default the open document; several files or a folder of compiled fonts are also one family), profile?: id (default the document's default profile, else the application's, else universal), checks?: [id | prefix*], exclude?: [id | prefix*], groups?: [group], scope?: [\"source\" | \"binary\" | \"family\"], glyphs?: [names, indexes, first-last ranges, /CID] (entries that match nothing are warned about), glyphFile?: path (the same entries in a file), masters?: [ids], layers?: [ids], minSeverity?: \"info\" | \"warn\" | \"fail\", config?: {checkId: {threshold: number}}, maxResults?: count = 100, includePassed?: bool = false, includeIgnored?: bool = false, network?: bool = false} runs the checks of every scope and changes nothing: layer checks on every layer of the selected glyphs except backup layers (or the layers in `layers`), glyph and source checks on the source, binary checks on each compiled font (a source's exporting instances and variable font are compiled in memory and their findings name the source field behind a compiled value), family checks on two or more fonts. Turned-on check modules (none in safe mode) run on the same layers under any profile with layer checks; their results have the check id check.plugin.<module>.<name>, group plugin and no fix, and a module that fails is listed once in checks with status error and a message. On a compiled font the outline checks read the decoded file and checks that need source data are skipped. A check whose preconditions do not hold is skipped with the reason. A pattern that matches no check is an error. A capped check with more than maxResults results in one font gives one info result with the count instead. Results on the source's ignore list are counted in summary.ignored and listed only with includeIgnored. A run on the open document is kept for audit.results and audit.fix → {schema, tool, target: {kind, path, fonts: [{id, name, path, instance, format}]}, document?: {title, revision}, profile, config, summary: {fail, warn, info, passed, skipped, ignored, errors, truncated}, checks: [{id, status, results, reason?, message?}], results: [{id, check, code, severity, message, location: {font, glyph, master, layer, shapes?, points?, segments?, point?, bounds?, table?, field?, sourceField?, instance?, fonts?, masters?}, data, fix: {available, id?, safe?, description?, command?, params?, via?}, ignored, stale}], warnings?: [text]}",
             always,
             run
         )
@@ -158,6 +159,8 @@ struct Run {
     network: bool,
     /// Glyph selection entries that matched nothing.
     warnings: Vec<String>,
+    /// The check modules that run on the same layers as the layer checks.
+    modules: crate::extensions::ModuleChecks,
 }
 
 /// Only the open document can be audited so far.
@@ -179,7 +182,7 @@ fn patterns<'a>(p: &Params<'a>, key: &str) -> Result<Vec<&'a str>> {
         if pat.is_empty() || pat.len() > MAX_PATTERN_LEN {
             return Err(p.bad(format!("`{key}`: a check id or pattern has 1 to {MAX_PATTERN_LEN} bytes")));
         }
-        if !CHECKS.iter().any(|c| audit::matches_pattern(c.id, pat)) {
+        if !CHECKS.iter().any(|c| audit::matches_pattern(c.id, pat)) && !crate::extensions::names_module_checks(pat) {
             return Err(p.bad(format!("`{key}`: no check matches `{pat}` (a pattern is an id, or a prefix followed by `*`)")));
         }
     }
@@ -285,6 +288,16 @@ fn read_run(p: &Params, s: &Session, font: &Font, settings: &DocumentSettings) -
         .filter(|c| groups.as_ref().is_none_or(|g| g.contains(&group_of(c.id))))
         .filter(|c| scopes.as_ref().is_none_or(|s| s.contains(&c.scope.row_scope())))
         .collect();
+    // Check modules are layer checks of the source scope: they run under any profile that runs
+    // layer checks.
+    let modules = if resolved.checks.iter().any(|c| c.scope == CheckScope::Layer)
+        && groups.as_ref().is_none_or(|g| g.contains(&crate::extensions::MODULE_CHECK_GROUP))
+        && scopes.as_ref().is_none_or(|s| s.contains(&CheckScope::Layer.row_scope()))
+    {
+        crate::extensions::ModuleChecks::select(s.extensions(), &include, &exclude)
+    } else {
+        crate::extensions::ModuleChecks::default()
+    };
     let mut warnings: Vec<String> = note.into_iter().collect();
     let glyphs = glyph_param(p, font, &mut warnings)?;
     let masters = id_set(p, "masters", |id| font.master(id).is_ok())?;
@@ -322,6 +335,7 @@ fn read_run(p: &Params, s: &Session, font: &Font, settings: &DocumentSettings) -
         include_ignored: p.bool_or("includeIgnored", false)?,
         network: p.bool_or("network", false)?,
         warnings,
+        modules,
     })
 }
 
@@ -394,6 +408,7 @@ struct Hit {
 struct Examined {
     hits: Vec<Hit>,
     tally: audit::run::Tally,
+    modules: crate::extensions::ModuleRun,
 }
 
 /// The layers a run examines, in font order.
@@ -446,6 +461,13 @@ fn examine_font(font: &Font, fi: usize, run: &Run, facts: &audit::run::Facts, ex
             place.layers.insert((g.name.clone(), layer.id.clone()), (li, layer.master.clone()));
             ex.tally.absorb(&layer_checks, report);
         }
+    }
+    if !run.modules.is_empty() {
+        for (_, g, li, layer) in layers_of(font, run) {
+            place.layers.insert((g.name.clone(), layer.id.clone()), (li, layer.master.clone()));
+            run.modules.run_layer(font, g, layer, &mut ex.modules, &mut ex.tally.findings);
+        }
+        ex.tally.truncated = ex.tally.truncated.saturating_add(std::mem::take(&mut ex.modules.truncated));
     }
     audit::run::run_glyphs(&ctx, &services, &run.checks, &run.config, facts, run.glyphs.as_ref(), &mut ex.tally);
     audit::run::run_source(&ctx, &services, &run.checks, &run.config, facts, &mut ex.tally);
@@ -554,7 +576,11 @@ fn examine(font: &Font, run: &Run, cap: bool) -> Examined {
     let mut ex = Examined::default();
     let (mut raw, mut places) = (Raw::new(), HashMap::new());
     let facts = audit::run::Facts { source: true, variable: font.masters.len() > 1, network: run.network, ..Default::default() };
-    let layer_run = Run { checks: run.checks.iter().copied().filter(|c| c.scope == CheckScope::Layer).collect(), ..run.clone() };
+    let layer_run = Run {
+        checks: run.checks.iter().copied().filter(|c| c.scope == CheckScope::Layer).collect(),
+        modules: crate::extensions::ModuleChecks::default(),
+        ..run.clone()
+    };
     examine_font(font, 0, &layer_run, &facts, &mut ex, &mut raw, &mut places);
     let none = prof::IgnoreIndex::new(&[]);
     finish(raw, run, &places, &none, cap, &mut ex);
@@ -988,6 +1014,9 @@ fn document(t: &Target, run: &Run, ex: &Examined, how: FixParams, all_results: b
             checks.push(Value::Object(m));
         }
     }
+    let (module_checks, module_passed, errors) = ex.modules.entries(&per_check, run.include_passed);
+    passed += module_passed;
+    checks.extend(module_checks);
     let [fail, warn, info] = counts;
     let mut out = json!({
         "schema": SCHEMA,
@@ -995,7 +1024,7 @@ fn document(t: &Target, run: &Run, ex: &Examined, how: FixParams, all_results: b
         "target": {"kind": t.kind, "path": t.path, "fonts": t.fonts},
         "profile": run.profile,
         "config": run.config_json,
-        "summary": {"fail": fail, "warn": warn, "info": info, "passed": passed, "skipped": skipped, "ignored": ignored, "errors": 0, "truncated": ex.tally.truncated},
+        "summary": {"fail": fail, "warn": warn, "info": info, "passed": passed, "skipped": skipped, "ignored": ignored, "errors": errors, "truncated": ex.tally.truncated},
         "checks": checks,
         "results": results,
     });

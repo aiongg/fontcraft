@@ -652,7 +652,12 @@ summary = "The reference has no check plug-in kind; checks come from scripts and
 ref = "Extensions › Plug-ins"
 status = "inferred"
 own = true
-notes = "Decision 0005 lists checks among the module kinds."
+notes = "Decision 0005 lists checks among the module kinds. Module checks belong to the audit group `plugin` and the `source` scope, carry no fix, and are listed in `checks` by their ids; a module that ran and reported nothing is a pass under `check.plugin.<module id>`. None run in safe mode."
+guesses = [
+  "Module checks run under every profile that runs layer checks (outlines, universal, strict, and custom profiles with outline checks) and not under opentype; user feedback on which profiles should include them would settle it.",
+  "A module that fails on a layer is listed once as `check.plugin.<module id>` with status `error` and is not run on the remaining layers of that audit run, so a slow or broken module costs one time-out per run; user feedback would settle it.",
+  "Check modules run with their manifest's parameter defaults, since audit.run has no way to set module parameters; a request for per-run module parameters would settle it.",
+]
 
 [[behavior]]
 id = "plugin.lockedPathsAndGlyphs"
