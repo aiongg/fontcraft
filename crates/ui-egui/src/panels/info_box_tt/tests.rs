@@ -233,3 +233,35 @@ fn info_box_tt_pixel_size_intent_and_direction_queue_the_view_commands() {
     let b = TtBox::read(&app, &view).unwrap();
     assert_eq!(b.command(&Control::Intent(Intent::GdiClearType)), Some(("hint.tt.setRenderingIntent", json!({"intent": "cleartype"}))));
 }
+
+#[test]
+fn info_box_tt_view_commands_run_and_the_box_shows_the_instructor_state() {
+    let mut app = app(&[snap(0), stem(0, 1)]);
+    app.run("tool.select", &json!({"tool": TOOL})).unwrap();
+    let w = Window::new();
+    let click = |app: &mut FontcraftApp, id: egui::Id| {
+        let view = view(app);
+        for (command, params) in w.click(app, &view, id) {
+            app.run(command, &params).unwrap();
+        }
+    };
+    click(&mut app, larger_id());
+    assert_eq!(view(&app).ppm, DEFAULT_PPM + 1);
+    click(&mut app, smaller_id());
+    click(&mut app, smaller_id());
+    assert_eq!(view(&app).ppm, DEFAULT_PPM - 1);
+    click(&mut app, direction_id());
+    assert_eq!(view(&app).direction, Direction::Horizontal);
+    click(&mut app, direction_id());
+    assert_eq!(view(&app).direction, Direction::Vertical);
+
+    let b = TtBox::read(&app, &view(&app)).unwrap();
+    let (command, params) = b.command(&Control::Intent(Intent::DirectWrite)).unwrap();
+    app.run(command, &params).unwrap();
+    assert_eq!(view(&app).intent, Intent::DirectWrite);
+
+    app.run("hint.tt.selectInstructions", &json!({"instructions": [1]})).unwrap();
+    assert_eq!(view(&app).selected, BTreeSet::from([1]), "the box reads the selection of the edited layer");
+    let b = TtBox::read(&app, &view(&app)).unwrap();
+    assert!(b.command(&Control::Stem(Choice::None)).is_some(), "a selected Stem offers the stem pop-up");
+}

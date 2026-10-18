@@ -41,11 +41,11 @@ pub const MAX_GLYPHS: usize = 32;
 /// Widest and tallest row image, in device pixels; a longer line is cut at the right.
 pub const MAX_ROW_PIXELS: f64 = 4096.0;
 /// The tool whose activity turns the Preview Area into the waterfall.
-pub const INSTRUCTOR_TOOL: &str = "trueTypeInstructor";
+pub const INSTRUCTOR_TOOL: &str = fontcraft_tools::tt_instructor::ID;
 /// Shortest time between two builds while the font keeps changing, in seconds.
 pub const REBUILD_INTERVAL: f64 = 0.25;
-/// Sizes asked of `hint.tt.renderPreview` at once (its own limit).
-const SIZES_PER_QUERY: usize = 64;
+/// Sizes asked of `hint.tt.renderPreview` at once (its own limit): every row in one query.
+const SIZES_PER_QUERY: usize = 80;
 /// Most points read back for one row.
 const MAX_ROW_POINTS: usize = 1_000_000;
 
@@ -97,11 +97,10 @@ pub fn active(app: &FontcraftApp) -> bool {
     app.tools.toolbox.active_id() == INSTRUCTOR_TOOL
 }
 
-/// The rendering intent the rows are grid-fitted for, as `hint.tt.renderPreview` names it.
-/// Grayscale until the Instructor's intent choice (`hint.tt.setRenderingIntent`) has a state to
-/// read.
-fn intent(_app: &FontcraftApp) -> &'static str {
-    "grayscale"
+/// The rendering intent the rows are grid-fitted for, as `hint.tt.renderPreview` names it: the
+/// Instructor's choice (`hint.tt.setRenderingIntent`).
+fn intent(app: &FontcraftApp) -> &'static str {
+    app.state.tt_instructor.intent.as_str()
 }
 
 /// Draws the Preview Area as the waterfall at the right edge of Edit View, when the showing tab
@@ -452,10 +451,11 @@ mod tests {
         let tab = app.state.tab().cloned().unwrap();
         let input = egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1280.0, 800.0))), ..Default::default() };
         let mut pending = Pending::new();
-        let output = ctx.run_ui(input, |ui| {
+        let mut output = ctx.run_ui(input, |ui| {
             let rect = ui.max_rect();
             draw(app, ui, rect, &tab, &mut pending);
         });
+        output.textures_delta.clear();
         let mut out = Vec::new();
         let mut shapes: Vec<Shape> = output.shapes.into_iter().map(|c| c.shape).collect();
         while let Some(shape) = shapes.pop() {
@@ -514,6 +514,26 @@ mod tests {
         assert!(row.image.pixel(46, y).unwrap()[0] > 192, "the space between A and V is filled at 80 PPM");
     }
 
+    /// `cargo test -p fontcraft-ui-egui hinting_waterfall_timings -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "prints timings"]
+    fn hinting_waterfall_timings() {
+        let mut app = waterfall_app();
+        let ctx = egui::Context::default();
+        let start = std::time::Instant::now();
+        frame(&ctx, &mut app);
+        let built = start.elapsed();
+        let mut times: Vec<_> = (0..21)
+            .map(|_| {
+                let start = std::time::Instant::now();
+                frame(&ctx, &mut app);
+                start.elapsed()
+            })
+            .collect();
+        times.sort();
+        println!("waterfall: first frame (73 rows built) {built:?}; cached frame {:?}", times[10]);
+    }
+
     #[test]
     fn preview_tt_hinting_waterfall_draws_cached_rows_at_each_scale() {
         let mut app = waterfall_app();
@@ -534,8 +554,15 @@ mod tests {
         // An edit rebuilds the rows once the pause between builds is over.
         app.run("path.addRectangle", &json!({"glyph": "V", "x": 0, "y": 0, "width": 50, "height": 50})).unwrap();
         let input = egui::RawInput { time: Some(REBUILD_INTERVAL * 4.0), ..Default::default() };
-        let _ = ctx.run_ui(input, |_| {});
+        ctx.run_ui(input, |_| {}).textures_delta.clear();
         frame(&ctx, &mut app);
         assert_ne!(texture_ids(&ctx), textures, "an edit did not rebuild the rows");
+        // The Instructor's rendering intent grid-fits the rows anew.
+        let edited = texture_ids(&ctx);
+        app.run("hint.tt.setRenderingIntent", &json!({"intent": "cleartype"})).unwrap();
+        let input = egui::RawInput { time: Some(REBUILD_INTERVAL * 8.0), ..Default::default() };
+        ctx.run_ui(input, |_| {}).textures_delta.clear();
+        frame(&ctx, &mut app);
+        assert_ne!(texture_ids(&ctx), edited, "a new rendering intent did not rebuild the rows");
     }
 }

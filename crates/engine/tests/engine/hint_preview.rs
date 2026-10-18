@@ -98,7 +98,7 @@ fn hint_tt_render_preview_gives_grid_fitted_outlines_and_pixels_per_size_and_int
         json!({"ppem": 12}),
         json!({"text": "\u{4E00}", "ppem": 12}),
         json!({"glyphs": ["I"], "ppem": 12, "instance": "Bold"}),
-        json!({"glyphs": ["I"], "ppem": (1..=65).collect::<Vec<u32>>()}),
+        json!({"glyphs": ["I"], "ppem": (1..=81).collect::<Vec<u32>>()}),
     ] {
         assert!(s.execute("hint.tt.renderPreview", &bad).is_err(), "{bad}");
     }

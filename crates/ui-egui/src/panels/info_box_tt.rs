@@ -45,9 +45,9 @@ use crate::dialogs::tt_deltas::{self, Cell, Click, Column, DeltaTable, Outcome};
 use crate::theme::Tokens;
 
 /// The tool whose Info box this is.
-pub const TOOL: &str = "trueTypeInstructor";
+pub const TOOL: &str = fontcraft_tools::tt_instructor::ID;
 /// The pixel size shown before the person picks one.
-pub const DEFAULT_PPM: u16 = 12;
+pub const DEFAULT_PPM: u16 = crate::canvas::tt_badges::DEFAULT_PPM;
 
 /// The Instructor's view state that the box shows and changes through UI commands.
 #[derive(Clone, Debug, PartialEq)]
@@ -65,10 +65,18 @@ impl Default for InstructorView {
     }
 }
 
-/// The Instructor's view state.
-// M10.25: return the tool's direction, pixel size, intent and selected instructions.
-pub fn view(_app: &FontcraftApp) -> InstructorView {
-    InstructorView::default()
+/// The Instructor's view state; the selection counts only in the edited glyph's active layer.
+pub fn view(app: &FontcraftApp) -> InstructorView {
+    let tt = &app.state.tt_instructor;
+    let selected = app
+        .session
+        .font()
+        .ok()
+        .zip(app.state.tab())
+        .and_then(|(font, tab)| Some((tab.edited_glyph()?, crate::canvas::view::active_layer(font, tab)?)))
+        .map(|(glyph, layer)| tt.selected_in(glyph, &layer.id).clone())
+        .unwrap_or_default();
+    InstructorView { direction: crate::canvas::tt_badges::hinting_direction(tt.direction), ppm: tt.ppm, intent: tt.intent.hinted(), selected }
 }
 
 /// A choice in the zone or stem pop-up.

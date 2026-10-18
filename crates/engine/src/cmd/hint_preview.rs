@@ -21,7 +21,7 @@ use crate::EngineError;
 use crate::params::Params;
 
 /// Most pixel sizes in one request.
-pub const MAX_SIZES: usize = 64;
+pub const MAX_SIZES: usize = 80;
 /// Most glyphs (from `glyphs` and `text` together) in one request.
 pub const MAX_PREVIEW_GLYPHS: usize = 1_000;
 /// Most glyph renderings (glyphs times sizes) in one request.
@@ -34,7 +34,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Render Hinted Preview",
             [],
             None,
-            "{instance?: name (a static instance by name, `#n` for an unnamed one, or a master id; default: the first master), glyphs?: [names], text?: string (the glyphs of its characters, after `glyphs`; one of the two is required), ppem: number or [numbers] (whole pixel sizes 1 to 400, at most 64), intent?: 'grayscale'|'cleartype'|'directwrite' (default 'grayscale'), output?: 'outline'|'bitmap' (default 'outline'), autohint?: bool (default false)} builds the instance as TrueType in memory, runs its instructions at each size in the rendering intent and returns the grid-fitted outlines (pixels, y up) or the pixels; a glyph whose program fails is drawn unhinted with a message → {instance, format: 'ttf', intent, sizes: [{ppem, glyphs: [{glyph, gid, instructed, hinted, message?, advance, contours?: [[[x, y, onCurve]]], bitmap?: {width, height, left, top, png (base64; black ink, alpha = coverage)}}]}], warnings}",
+            "{instance?: name (a static instance by name, `#n` for an unnamed one, or a master id; default: the first master), glyphs?: [names], text?: string (the glyphs of its characters, after `glyphs`; one of the two is required), ppem: number or [numbers] (whole pixel sizes 1 to 400, at most 80), intent?: 'grayscale'|'cleartype'|'directwrite' (default 'grayscale'), output?: 'outline'|'bitmap' (default 'outline'), autohint?: bool (default false)} builds the instance as TrueType in memory, runs its instructions at each size in the rendering intent and returns the grid-fitted outlines (pixels, y up) or the pixels; a glyph whose program fails is drawn unhinted with a message → {instance, format: 'ttf', intent, sizes: [{ppem, glyphs: [{glyph, gid, instructed, hinted, message?, advance, contours?: [[[x, y, onCurve]]], bitmap?: {width, height, left, top, png (base64; black ink, alpha = coverage)}}]}], warnings}",
             has_doc,
             tt_render_preview
         ),
@@ -43,7 +43,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Render Hinted Preview",
             [],
             None,
-            "{instance?: name (a static instance by name, `#n` for an unnamed one, or a master id; default: the first master), text: string, ppem: number or [numbers] (whole pixel sizes 1 to 400, at most 64), hinted?: bool (default true; false renders the same text unhinted, for comparison), format?: 'png'|'json' (default 'png'), autohint?: bool (default false)} builds the instance as CFF in memory and renders the text on one line at each size with its PostScript hints applied; 'png' returns the line's pixels, 'json' each glyph's outline in pixels → {instance, format: 'otf', hinted, sizes: [{ppem, width, height, left, top, png? (base64; black ink, alpha = coverage), glyphs?: [{glyph, gid, hinted, message?, advance, contours}]}], warnings}",
+            "{instance?: name (a static instance by name, `#n` for an unnamed one, or a master id; default: the first master), text: string, ppem: number or [numbers] (whole pixel sizes 1 to 400, at most 80), hinted?: bool (default true; false renders the same text unhinted, for comparison), format?: 'png'|'json' (default 'png'), autohint?: bool (default false)} builds the instance as CFF in memory and renders the text on one line at each size with its PostScript hints applied; 'png' returns the line's pixels, 'json' each glyph's outline in pixels → {instance, format: 'otf', hinted, sizes: [{ppem, width, height, left, top, png? (base64; black ink, alpha = coverage), glyphs?: [{glyph, gid, hinted, message?, advance, contours}]}], warnings}",
             has_doc,
             ps_render_preview
         ),
