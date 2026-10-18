@@ -116,6 +116,7 @@ pub const MODULES: &[(&[UiCommand], Handler)] = &[
     (crate::canvas::tt_badges::COMMANDS, crate::canvas::tt_badges::run),
     (crate::canvas::tt_pixels::COMMANDS, crate::canvas::tt_pixels::run),
     (crate::panels::hinting_waterfall::COMMANDS, crate::panels::hinting_waterfall::run),
+    (crate::dialogs::tt_preview_address::COMMANDS, crate::dialogs::tt_preview_address::run),
 ];
 
 /// The shell commands' parameters that name files, declared as engine commands declare theirs
@@ -162,6 +163,7 @@ pub fn windows(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'s
     project_window::show(app, ui, pending);
     compare_fonts::show(app, ui, pending);
     compare_family::show(app, ui, pending);
+    crate::dialogs::tt_preview_address::show(app, ui, pending);
 }
 
 pub fn is_ui_command(id: &str) -> bool {

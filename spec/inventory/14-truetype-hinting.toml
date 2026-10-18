@@ -1040,28 +1040,40 @@ label = "Show Preview Address…"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{}"
+context = ["canvas"]
+params = "{close?: bool, text?: string, instance?: name, thisComputerOnly?: bool}"
 area = "hinting-tt"
 milestone = "M10"
 summary = "Edit View context-menu item that starts a local web server serving a page with the font laid out like the Hinting Preview, and opens a dialog showing the page's address with a Copy button. The page is meant to be opened on a Windows machine or VM on the same network, since macOS does not apply TrueType hinting."
 ref = "TrueType Hinting › Web Preview"
 status = "handbook"
-guesses = ["The server listens on a free port of the local network interfaces, serves only the preview page and the font, and stops when the dialog closes (decided in M10 § 7, question 5); the reference app would settle lifetime and port."]
+notes = "Documented in the handbook, not yet observed. The font is the instance built as File › Export writes it, with TrueType outlines; the page sets the showing tab's glyphs, by their characters, once per pixel size from 8 to 80, in plain HTML and CSS without a script. Running the command again while the dialog is open serves the font as it is then at the same address. Desktop app only: the browser build has no server. The server answers GET and HEAD for two paths under a random token, one request per connection, at most 4 connections, 64 KB of request head, 100 headers and 50 requests a second."
+guesses = [
+  "The server listens on a free port of the local network interfaces, serves only the preview page and the font, and stops when the dialog closes (decided in M10 § 7, question 5); the reference app would settle lifetime and port.",
+  "The page and font live under a random 32-digit path in the address, so a device that only finds the port cannot read the font; the reference app's address format would settle whether it does the same.",
+  "The served instance is the first exported static instance (or the one named by `instance`), else the first master, since the export path builds instances, not the master the tab draws in; the reference app would settle which instance its page shows.",
+  "Glyphs of the tab without a Unicode value are left out of the page, which can only set characters; the reference app's page would settle how it shows them.",
+]
 observe = [
   "T3: choose Show Preview Address…, open the address from another device on the same network, close the dialog, then quit the app; note the port, whether the page was reachable, and at which of these moments the server stopped.",
+  "T3: open the preview page and note its layout (sizes, labels, text), the address's path, and which instance it shows when the tab shows another master.",
 ]
 
 [[panel]]
 id = "dialog.ttPreviewAddress"
 label = "Preview Address"
 location = "dialog"
-controls = ["web address of the preview page (read-only)", "Copy button"]
+controls = ["web address of the preview page (read-only)", "Copy button", "Only this computer checkbox", "Update button"]
 area = "hinting-tt"
 milestone = "M10"
 summary = "Dialog shown by Show Preview Address… with the URL of the running preview server. When the server stops (closing the dialog, the document or the app) is not stated."
 ref = "TrueType Hinting › Web Preview"
 status = "handbook"
-guesses = ["Closing the dialog stops the server; the reference app would settle it."]
+notes = "The address and Copy button are documented in the handbook, not yet observed. The dialog says that devices on the local network can load the font while it is open. Only this computer and Update are ours."
+guesses = [
+  "Closing the dialog stops the server; the reference app would settle it.",
+  "An Only this computer checkbox serves the page on loopback instead of the local network, and Update serves the font as it is now at the same address; the reference dialog shows neither as far as the handbook says, and seeing it would settle whether to keep them.",
+]
 observe = [
   "T3: choose Show Preview Address…, open the address from another device on the same network, close the dialog, then quit the app; note the port, whether the page was reachable, and at which of these moments the server stopped.",
 ]

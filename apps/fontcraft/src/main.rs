@@ -221,6 +221,10 @@ fn run() -> Result<(), String> {
         }
     }
     app.picker = Some(Box::new(pickers::SystemPicker));
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        app.preview_address.host = Some(Box::new(preview_server::Host::default()));
+    }
     app.state.start.reveal = start_window::Reveal(Some(pickers::reveal));
     app.state.panels.extensions.manager.platform =
         fontcraft_ui_egui::shell::extensions::manager::Platform { fetch: Some(net::fetch), open_url: Some(net::open_url) };
