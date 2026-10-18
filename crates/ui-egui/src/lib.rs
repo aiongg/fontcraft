@@ -46,6 +46,8 @@ mod context_menu_tests;
 #[cfg(test)]
 mod dialog_tests;
 #[cfg(test)]
+mod drag_aids_tests;
+#[cfg(test)]
 mod draw_tests;
 #[cfg(test)]
 mod e2e_tests;

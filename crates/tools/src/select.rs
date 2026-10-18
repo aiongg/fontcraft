@@ -20,7 +20,9 @@
 //! | click or drag a PostScript hint's badge or marker; `Tab`, `Delete` with hints selected | see [`crate::hint_drag`] |
 //! | `Escape` during a gesture | cancel it |
 //!
-//! Presses on the bounding box's knobs and just outside it go to [`crate::bbox`] first.
+//! Presses on the bounding box's knobs and just outside it go to [`crate::bbox`] first, then
+//! Tunni lines and `Shift`+`Alt` presses on nodes to [`crate::drag_aids`], which also gives
+//! drags the lever (`Cmd`) and the points that follow a move.
 
 use fontcraft_geom::Point;
 use serde_json::{Value, json};
@@ -97,6 +99,8 @@ struct Drag {
     snap: Option<Snap>,
     /// The open end being dragged, when the drag may close or join paths.
     end: Option<(usize, usize)>,
+    lever: crate::drag_aids::Lever,
+    followers: crate::drag_aids::Followers,
 }
 
 #[derive(Clone, Debug)]
@@ -210,6 +214,8 @@ pub struct SelectTool {
     hover: Option<HitResult>,
     /// A press or drag on the bounding box's knobs ([`crate::bbox`]).
     knobs: Option<crate::bbox::BoxDrag>,
+    /// A Tunni line drag or a slide ([`crate::drag_aids`]).
+    aid: Option<crate::drag_aids::AidDrag>,
 }
 
 impl SelectTool {
@@ -307,6 +313,11 @@ impl SelectTool {
                 let nudge_at_start = mods.alt && mods.ctrl;
                 let only = press.selection.points.iter().next().copied().filter(|_| press.selection.len() == 1);
                 let end = only.filter(|&(s, n)| !duplicate && cx.scene.is_open_end(s, n));
+                let followers = if duplicate {
+                    Default::default()
+                } else {
+                    crate::drag_aids::Followers::new(cx.scene, &press.selection, cx.settings.power_nudge)
+                };
                 let drag = Drag {
                     down: press.down,
                     grab: press.grab,
@@ -319,6 +330,8 @@ impl SelectTool {
                     last_sent: None,
                     snap: None,
                     end,
+                    lever: crate::drag_aids::Lever::new(press.down),
+                    followers,
                 };
                 out.push(Action::Begin { label: if duplicate { "Duplicate".into() } else { "Move".into() } });
                 let mut drag = Box::new(drag);
@@ -451,6 +464,7 @@ impl Drag {
             return None;
         }
         self.last_pos = pos;
+        let pos = self.lever.apply(cx, pos, mods);
         let target = Point::new(self.grab.x + pos.x - self.down.x, self.grab.y + pos.y - self.down.y);
         self.snap = if mods.ctrl { None } else { Some(snap(cx.scene, &cx.view, target, &self.moving, cx.settings.snap_distance)) };
         let to = self.snap.as_ref().map_or(target, |s| s.point);
@@ -464,7 +478,8 @@ impl Drag {
             return None;
         }
         self.last_sent = Some(sent);
-        Some(Invocation::new("selection.move", move_params(cx.scene, &self.selection, dx, dy, mode, self.duplicate)))
+        let inv = Invocation::new("selection.move", move_params(cx.scene, &self.selection, dx, dy, mode, self.duplicate));
+        Some(if mode == MoveMode::Normal { self.followers.attach(cx.scene, inv, dx, dy) } else { inv })
     }
 }
 
@@ -478,6 +493,9 @@ impl Tool for SelectTool {
             return Output::default();
         }
         if let Some(out) = crate::bbox::route(&mut self.knobs, cx, ev) {
+            return out;
+        }
+        if let Some(out) = crate::drag_aids::route(&mut self.aid, cx, ev) {
             return out;
         }
         match ev.kind {
@@ -539,6 +557,7 @@ impl Tool for SelectTool {
 
     fn cancel(&mut self) -> Output {
         let mut out = crate::bbox::cancel(&mut self.knobs);
+        out.extend(crate::drag_aids::cancel(&mut self.aid));
         self.hover = None;
         match std::mem::take(&mut self.state) {
             State::Dragging(_) | State::Guide(_) => out.push(Action::Cancel),
@@ -556,7 +575,7 @@ impl Tool for SelectTool {
     }
 
     fn busy(&self) -> bool {
-        self.knobs.is_some() || !matches!(self.state, State::Idle)
+        self.knobs.is_some() || self.aid.is_some() || !matches!(self.state, State::Idle)
     }
 
     fn overlays(&self) -> Vec<Overlay> {

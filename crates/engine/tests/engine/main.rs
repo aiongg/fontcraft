@@ -44,6 +44,7 @@ mod decompose;
 mod derived_glyphs;
 mod detect;
 mod determinism;
+mod drag_aids;
 mod encodings;
 mod engine;
 mod export;

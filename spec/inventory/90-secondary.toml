@@ -65,6 +65,17 @@ summary = "Dragging a Tunni line (or Shift-dragging its control dot) lengthens o
 ref = "FontLab 7 manual › Tunni Lines"
 status = "docs"
 origin = "fontlab"
+notes = "FontCraft: the Select tool takes these drags while Tunni lines are showing; a press on a node, handle or anchor keeps its usual meaning. The drag is one interaction of handle moves (one undo step), and Cmd slows it down like any drag (drag.leverPrecision). Documented, not yet observed in the reference app."
+guesses = [
+  "Both handles gain the same share of their own distance to the Tunni point, the share being how far the pointer moves across the chord over the Tunni point's height above it, so the Tunni line follows the pointer; FontLab does not say how the two lengths relate, and dragging an unbalanced segment's Tunni line in FontLab would settle it.",
+  "A Tunni line counts as selected when both its handles are selected, so clicking a Tunni line selects its two handles and Shift-click toggles them; FontLab keeps a separate Tunni line selection, and selecting a line there and then a node would show whether the two interact.",
+  "The control dot is drawn and hit at the Tunni point itself (where the handle lines meet); the FontLab manual does not say where on the line the dot sits, and a screenshot of FontLab with Tunni lines on would settle it.",
+  "A dragged handle stays between 1 unit long and four times its node's distance to the Tunni point; FontLab documents no limit.",
+]
+observe = [
+  "Draw an unbalanced curve (tensions 40% and 70%), drag its Tunni line in FontLab, and note both tensions afterwards: equal change in percent, or equal ratio?",
+  "Turn on Tunni lines in FontLab and note where the control dot sits: at the lines' meeting point or on the Tunni line.",
+]
 
 [[behavior]]
 id = "tunni.dragPointAsymmetric"
@@ -74,6 +85,13 @@ summary = "Alt-dragging a Tunni line, or dragging its control dot without Shift,
 ref = "FontLab 7 manual › Tunni Lines"
 status = "docs"
 origin = "fontlab"
+notes = "FontCraft: the handle keeps its direction and its length follows the pointer's movement along it. Documented, not yet observed in the reference app."
+guesses = [
+  "Alt-dragging a Tunni line moves the handle whose end is nearer the press; dragging the dot moves the handle whose direction is nearer the drag's first movement; FontLab says only that one handle moves, and trying both in FontLab would settle which.",
+]
+observe = [
+  "Alt-drag a Tunni line in FontLab near one end, then near the other, and note which handle moves each time.",
+]
 
 [[command]]
 id = "path.setCurveTension"
@@ -173,7 +191,7 @@ id = "path.togglePowerNudge"
 label = "Power Nudge"
 menu = ["Path"]
 shortcut = ""
-kind = "ui"
+kind = "engine"
 params = "{on?: bool}"
 area = "drawing"
 milestone = "M13"
@@ -181,6 +199,15 @@ summary = "Switches the node-dragging mode in which the unselected neighbours of
 ref = "FontLab 8 What's new › Edit & refine › Contour tool"
 status = "docs"
 origin = "fontlab"
+notes = "FontCraft: an engine command that flips the user setting editing.powerNudge, which the Select tool reads when a move starts; the setting lasts across sessions, as FontLab's toggle does. Holding C for temporary use and the per-node status display are not built. Documented, not yet observed in the reference app."
+guesses = [
+  "From each moved node the walk goes both ways along the contour over unselected smooth nodes that are not extremes (a handle horizontal or vertical) and stops at the first corner node, extreme or locked node, which stays fixed; FontLab does not document how it sorts fixed from servant points, and moving one node of a contour with intermediate smooth nodes in FontLab would settle it.",
+  "A servant moves by the drag times its position between the fixed node and the moved node on each axis (by length along the contour where the two share that coordinate), its handles with it; between two moved nodes, or towards an open end, servants move by the whole drag; FontLab says only that servants move proportionally.",
+  "Power Nudge acts on plain moves only: duplicating drags and nudge drags (Alt) move no servants.",
+]
+observe = [
+  "Turn on Power Nudge in FontLab, move the top node of a stem whose curve has two intermediate smooth nodes, and note which nodes move and by how much.",
+]
 
 [[command]]
 id = "path.setServantNode"
@@ -188,13 +215,18 @@ label = "Set Servant Node"
 menu = ["Path", "Nodes"]
 shortcut = ""
 kind = "engine"
-params = "{nodes?: [nodeRef], axis: 'x' | 'y' | 'none'}"
+params = "{glyph, layer?, side?, points: [[shape, node]], axis: 'x' | 'y' | 'both' | 'none'}"
 area = "drawing"
 milestone = "M13"
 summary = "Declares the selected nodes as servants on the x or y axis so they always follow neighbouring edits proportionally on that axis, or clears the declaration with axis none. An optional status display marks every node as x-servant, y-servant or static."
 ref = "FontLab 8 What's new › Edit & refine › Contour tool (Servant declarations; Clear Genius & Servant)"
 status = "docs"
 origin = "fontlab"
+notes = "FontCraft: the link is stored in the node's user data (com.fontcraft.servant), so .glyphs and UFO keep it. A declared servant follows moves of its neighbours in the Select tool with Power Nudge on or off, as FontLab documents, and is placed by the same walk and proportions as Power Nudge's servants. The per-node status display is not built. Documented, not yet observed in the reference app."
+guesses = [
+  "axis both declares a servant on both axes; FontLab offers only X-Servant and Y-Servant, and turning both on for one node in FontLab would show whether that is possible.",
+  "A declared servant follows only when it is reached from a moved node over other servants (or Power Nudge's smooth nodes), not from anywhere on the contour; FontLab does not say which edits count as neighbouring.",
+]
 
 [[behavior]]
 id = "nodes.slideAlongCurve"
@@ -204,6 +236,14 @@ summary = "A slide drag moves a node along its existing curve without changing t
 ref = "FontLab 8 What's new › Edit & refine › Contour tool (Slide); RoboFont reference › Editing Tool"
 status = "docs"
 origin = "fontlab"
+notes = "FontCraft: Shift+Alt-drag on a node in the Select tool, one interaction and one undo step. The segment slid into is cut at the new place exactly; at a smooth node between two curves the other segment and the slid-over piece become one curve, which is exact when the two came from cutting one curve; past an open end the end curve is extended. The Slide toggle in the toolbox and sliding with arrow keys are not built. Documented, not yet observed in the reference app."
+guesses = [
+  "Only an open end slides past the end; FontLab also extends at a sharp node, which needs a curve where FontCraft has a corner, and sliding past a sharp node in FontLab would show what it adds.",
+  "At a corner node, or next to a line, the other segment keeps its far handle and its near handle moves with the node, so that segment changes shape; FontLab says the shape is preserved without saying how in this case.",
+]
+observe = [
+  "Shift+Alt-drag a corner node between a curve and a line in FontLab and note how the curve on the other side changes.",
+]
 
 [[behavior]]
 id = "drag.leverPrecision"
@@ -213,6 +253,13 @@ summary = "With the lever modifier held, a dragged node, handle, sidebearing or 
 ref = "FontLab 8 What's new › Edit & refine › Contour lever; Metrics & kerning › lever precision dragging"
 status = "docs"
 origin = "fontlab"
+notes = "FontCraft: the lever modifier is Cmd (Control off the Mac), as FontLab documents; it applies to the Select tool's moves, Tunni line drags and slides. Pressing or releasing it during a drag continues from where the drag stands. Sidebearing and kerning drags and the toolbox toggle that keeps the lever on are not built. Documented, not yet observed in the reference app."
+guesses = [
+  "The drag follows 1/ratio of the pointer's movement over the first 50 screen points and the pointer's full speed beyond; FontLab says only that short drags are slowed and longer ones gradually match the pointer, and timing a long lever drag in FontLab would settle the curve.",
+]
+observe = [
+  "Hold Cmd and drag a node 200 screen points in FontLab with the ratio 6; note how far the node moved.",
+]
 
 [[setting]]
 id = "editing.leverRatio"
@@ -221,9 +268,23 @@ section = "Editing"
 kind = "number"
 values = "1 (off) to 100"
 area = "drawing"
-milestone = "M14"
+milestone = "M13"
 summary = "Divisor applied to pointer movement during lever dragging. The reference defaults to 6 for contours and suggests 4 to 10 for spacing; 1 disables the lever."
 ref = "FontLab 8 What's new › Edit & refine (Preferences › Distances › Contour lever); Metrics & kerning"
+status = "docs"
+origin = "fontlab"
+notes = "FontCraft: the user setting editing.leverRatio, default 6; settings.set changes it until the M14 settings window offers it."
+
+[[setting]]
+id = "editing.powerNudge"
+label = "Power Nudge"
+section = "Editing"
+kind = "bool"
+values = "on or off"
+area = "drawing"
+milestone = "M13"
+summary = "Whether Power Nudge is on; path.togglePowerNudge switches it. It lasts across sessions."
+ref = "FontLab 8 What's new › Edit & refine › Contour tool"
 status = "docs"
 origin = "fontlab"
 
