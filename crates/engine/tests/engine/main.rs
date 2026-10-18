@@ -58,6 +58,7 @@ mod glyph_info;
 mod glyph_search;
 mod glyph_set;
 mod guides;
+mod hint_import;
 mod hint_node_order;
 mod hint_points;
 mod hint_preview;

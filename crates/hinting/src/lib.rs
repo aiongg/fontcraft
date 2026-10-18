@@ -21,6 +21,7 @@
 //! | [`tt_glyph`] | M10.18 | [`glyph_program`]: instructions plus point map to bytecode, with its `maxp` needs |
 //! | [`tt_auto`] | M10.21 | [`autohint_tt`] and the TTFAutohint options |
 //! | [`control`] | M10.21 | [`control::parse`]: TTFAutohint control instructions |
+//! | [`imported`] | M10.22 | glyph programs of an opened font, kept while the outline is unchanged |
 //!
 //! How hints are stored: as the source wrote them, in [`fontcraft_model::LayerInfo::hints`], so
 //! `.glyphs` files round-trip unchanged. This crate parses them into typed values and writes
@@ -38,6 +39,7 @@
 
 pub mod control;
 pub mod error;
+pub mod imported;
 pub mod noderef;
 pub mod point_map;
 pub mod ps;

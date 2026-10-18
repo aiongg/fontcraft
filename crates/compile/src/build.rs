@@ -251,8 +251,19 @@ struct Boxes {
 }
 
 /// `glyf` and `loca`, with the boxes and `maxp` that follow from them.
-fn truetype(order: &[ResolvedGlyph], outlines: &[Prepared], builder: &mut FontBuilder) -> Result<(Boxes, Maxp), CompileError> {
-    let built = build_glyphs(order, outlines)?;
+/// `composite_programs`: the programs of composite glyphs, by index in the glyph order.
+fn truetype(
+    order: &[ResolvedGlyph],
+    outlines: &[Prepared],
+    composite_programs: &[(usize, Vec<u8>)],
+    builder: &mut FontBuilder,
+) -> Result<(Boxes, Maxp), CompileError> {
+    let mut built = build_glyphs(order, outlines)?;
+    for (gid, program) in composite_programs {
+        if let Some(Built { glyph: TtGlyph::Composite(c), .. }) = built.get_mut(*gid) {
+            c.set_instructions(program);
+        }
+    }
     let (mut max_points, mut max_contours, mut max_elements) = (0u16, 0u16, 0u16);
     let mut boxes = Boxes { glyphs: Vec::with_capacity(built.len()), extents: Vec::with_capacity(built.len()), font: Bbox::default(), loc_format: 0 };
     let mut font_box: Option<Bbox> = None;
@@ -441,7 +452,7 @@ pub fn assemble(
     });
     let outlines = instructed.as_deref().unwrap_or(outlines);
     let (boxes, mut maxp) = match flavour {
-        Flavour::TrueType => truetype(order, outlines, &mut builder)?,
+        Flavour::TrueType => truetype(order, outlines, tt_hinting.as_ref().map_or(&[][..], |h| h.composites.as_slice()), &mut builder)?,
         Flavour::Cff => match &extra.cff2 {
             Some(built) => cff2_table(built, order.len(), &mut builder)?,
             None => {

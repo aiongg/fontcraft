@@ -593,8 +593,9 @@ milestone = "M10"
 summary = "Opening a hinted TrueType font adds three custom parameters to the masters: CVT Table, prep Table Assembly and fpgm Table Assembly, holding the font's control values and the assembly source of its control-value and font programs. They exist so that the original hinting survives a re-export and are rarely edited by hand; at export they are written to the cvt, prep and fpgm tables."
 ref = "TrueType Hinting › Advanced TrueType Hinting › Control Value Program"
 status = "handbook"
-notes = "M10.19: at export the cvt Table values and the assembled prep and fpgm Table Assembly programs are written as they are, and maxp takes what the analysis finds in them (a stack of 1024 when it cannot follow them). Glyph programs from imported fonts wait for M10.22."
+notes = "Documented, not yet observed. M10.19: at export the cvt Table values and the assembled prep and fpgm Table Assembly programs are written as they are, and maxp takes what the analysis finds in them and in the imported glyph programs (a stack of 1024 when it cannot follow them). M10.22: opening a hinted TrueType font sets the three parameters on every master; when one of the tables cannot be read or is past a limit (4,096 cvt values, 1 MB of assembly), none is kept and neither are the glyph programs. Re-exporting an unchanged opened font gives byte-equal cvt, fpgm, prep and glyph programs. gasp becomes the font's gasp Table parameter."
 guesses = [
+  "The cvt Table parameter an opened font gets holds the values as text separated by commas, as the handbook gives its type as text; a .glyphs file saved by the reference app after opening a hinted TrueType font would show its form.",
   "No corpus source holds the prep or fpgm Table Assembly parameter, so FontCraft writes and reads them in its own assembly syntax (one instruction per line, mnemonics with bracketed flags as fontTools prints them, push values on the push's line; fontTools' layout with the values on the following lines and /* */ comments is read too); a file saved by the reference app after opening a hinted TrueType font would show its syntax, and the reader would then accept both.",
   "When a master carries any of the three parameters, manual instructions are not compiled, since they call functions of FontCraft's own fpgm, and a warning says to remove the parameters (the handbook says to remove them before instructing afresh); a reference export of a font with both would show what it does.",
 ]
@@ -609,7 +610,12 @@ milestone = "M10"
 summary = "The handbook describes how cvt, prep and fpgm of an opened font are preserved but does not say how the per-glyph instruction programs are kept. For the preserved tables to be of any use, each imported glyph's instructions must be stored on its layer (as assembly text) and written back unchanged when the glyph's outline is untouched and no editor instructions replace them."
 ref = "TrueType Hinting › Advanced TrueType Hinting › Control Value Program"
 status = "inferred"
-guesses = ["Imported glyph programs are kept per layer as assembly text with a fingerprint of the outline; they are written back while the outline is unchanged and the layer has no editor instructions, editor instructions win, and a changed outline drops the program with a warning; opening a hinted TTF in the reference app would settle how it stores them."]
+notes = "M10.22: each simple or composite glyph program goes to the layer's user data as assembly text (com.fontcraft.ttGlyphProgram) with a fingerprint of the outline (com.fontcraft.ttGlyphProgramOutline: paths and nodes in order, on-curve flags, coordinates rounded to whole units, components and their transforms). Export writes a program back when the master carries the imported cvt, prep or fpgm parameters and the fingerprint still matches; a simple glyph is then written from its layer's nodes as they are (no overlap removal, no direction change), so the program's point numbers hold. A glyph not read exactly (a component placed by point matching, a contour the model could not draw) keeps no program. Variable fonts get none."
+guesses = [
+  "Imported glyph programs are kept per layer as assembly text with a fingerprint of the outline; they are written back while the outline is unchanged and the layer has no editor instructions, editor instructions win, and a changed outline drops the program with a warning; opening a hinted TTF in the reference app would settle how it stores them.",
+  "A composite glyph's fingerprint covers its own components and transforms, not the outlines of the glyphs they point to, so editing a base glyph keeps the composite's program; editing the base of a hinted composite in the reference app and exporting would show whether it keeps that program.",
+  "Glyph programs are kept only when the font has a cvt, fpgm or prep table, since export writes them only beside those tables; a reference export of a font opened with glyph programs and none of the tables would show otherwise.",
+]
 observe = [
   "Open a hinted TTF that FontCraft exported from T3 and look at a glyph with the TrueType Instructor; note how the imported program is shown. Add an instruction, export, and note whether the glyph program holds both the imported and the new instructions.",
 ]
@@ -627,6 +633,8 @@ summary = "Deletes the hinting brought in from an opened binary font: the CVT Ta
 ref = "TrueType Hinting › Advanced TrueType Hinting › Control Value Program"
 status = "inferred"
 own = true
+notes = "M10.22: glyphPrograms and controlValueProgram default to true, gasp to false; each parameter is removed wherever it is set (font, masters, instances), since export reads it at each scope. One undo step; nothing to remove makes no step."
+guesses = ["The gasp Table parameter stays unless gasp is true, since an unhinted font may still want its rendering ranges; whether the owner wants it removed by default would settle it."]
 
 # ---------------------------------------------------------------------------------------------
 # gasp

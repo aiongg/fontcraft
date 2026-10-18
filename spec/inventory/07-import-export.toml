@@ -712,6 +712,8 @@ milestone = "M10"
 summary = "From a CFF or Type 1 font, most glyph-level stem hints, the alignment zones and the standard stems are kept. Imported glyph hints are mostly positional and no longer attached to outline nodes; in a multi-master font the user re-attaches them by dragging each hint's two handles (drawn as a blue circle and a blue triangle) onto matching nodes."
 ref = "Import & Export › Opening Font Files › Importing PostScript Hints"
 status = "handbook"
+notes = "M10.22: documented, not yet observed. Opening an OpenType font with a CFF table reads the table as a bare CFF font program: each glyph's distinct stems (at most 96) become numeric hints on its layer, widths of -20 and -21 top and bottom ghost hints; hint replacement and counter hints are dropped, since export builds the masks again. BlueValues become metric overshoots where a zone starts at a metric (the baseline zone at 0) and alignment zones otherwise, OtherBlues likewise at the descender; StemSnapH and StemSnapV (else StdHW and StdVW) become the font's stems; BlueScale, BlueShift and BlueFuzz become master parameters when set. Type 1 and bare CFF files were read this way already. CFF2 hints are not read."
+guesses = ["Imported stem hints are numbers, none linked to nodes, and a stem repeated by hint replacement is kept once; opening a CFF font with hint replacement in the reference app would show whether it keeps repeats or links edges to nodes."]
 
 # ───────────────────────────── Importing font data ─────────────────────────────
 
