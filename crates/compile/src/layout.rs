@@ -78,7 +78,7 @@ impl LayoutTables {
     /// The layout tables to add to the font, by tag.
     pub fn tables(&self) -> Vec<(fontcraft_fea::Tag, &[u8])> {
         let c = &self.compiled;
-        [(b"GDEF", &c.gdef), (b"GPOS", &c.gpos), (b"GSUB", &c.gsub)]
+        [(b"BASE", &c.base), (b"GDEF", &c.gdef), (b"GPOS", &c.gpos), (b"GSUB", &c.gsub)]
             .into_iter()
             .filter_map(|(tag, bytes)| Some((fontcraft_fea::Tag::new(tag), bytes.as_deref()?)))
             .collect()

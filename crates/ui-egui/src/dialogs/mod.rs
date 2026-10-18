@@ -294,6 +294,8 @@ pub const DIALOGS: &[Dialog] = &[
     find_outline::DIALOG,
     find_outline::FIND,
     find_outline::FOUND,
+    math_table::DIALOG,
+    baselines::DIALOG,
 ];
 
 /// The shell commands of this module.

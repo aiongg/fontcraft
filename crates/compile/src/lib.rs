@@ -52,6 +52,7 @@ mod kern;
 pub mod kern_table;
 pub mod layout;
 mod marks;
+pub mod math;
 pub mod names;
 pub mod order;
 pub mod outline;
@@ -428,6 +429,8 @@ pub(crate) struct Extra {
     pub names: Vec<(u16, String)>,
     /// The `CFF2` table of a CFF2 variable font, which replaces the static `CFF ` table.
     pub cff2: Option<fontcraft_cff::cff2::Cff2Built>,
+    /// The source's math data, written to `MATH` with the glyph boxes.
+    pub math: Option<math::MathPlan>,
 }
 
 /// The outline stage of a variable compile: given the origin's final glyphs, the outlines to
@@ -490,7 +493,7 @@ pub(crate) fn compile_stages_with(
         remove_overlap: options.remove_overlap,
         overlap_time_limit: options.overlap_time_limit,
     };
-    let (outlines, extra, kern_table) = match var {
+    let (outlines, mut extra, kern_table) = match var {
         Some(stage) => {
             let (outlines, extra) = stage(&resolved, &glyphs, &settings, &mut warnings)?;
             (outlines, extra, None)
@@ -501,6 +504,7 @@ pub(crate) fn compile_stages_with(
             (outlines, Extra::default(), kern_table)
         }
     };
+    extra.math = math::plan(font, &resolved, &edits);
     let color_tables = color::build(font, &color_plan, &color::GlyphOrder::new(&glyphs, &made)?, options, &mut warnings)?;
     let bytes = build::assemble(
         font,
