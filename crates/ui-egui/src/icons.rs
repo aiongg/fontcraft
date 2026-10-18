@@ -168,6 +168,7 @@ pub fn for_tool(id: &str) -> Option<Icon> {
         "measurement" => Icon::Measure,
         "thickness" => Icon::Thickness,
         "magnet" => Icon::Magnet,
+        "rapid" | "spiro" => Icon::Draw,
         "text" => Icon::Text,
         "annotationSelect" => Icon::AnnotationSelect,
         "annotationText" => Icon::AnnotationText,
