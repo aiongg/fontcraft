@@ -43,6 +43,7 @@ pub mod measurements;
 pub mod pairs_and_phrases;
 pub mod palette;
 pub mod palette_modules;
+pub mod palette_smart;
 pub mod reference_font;
 pub mod related_glyphs;
 pub mod selection_info;
@@ -129,6 +130,8 @@ pub struct PanelState {
     pub axis_mappings: crate::dialogs::axis_mappings::AxisMappingsState,
     pub cross_axis: crate::dialogs::cross_axis::CrossAxisState,
     pub component_picker: crate::dialogs::glyph_picker_component::PickerState,
+    pub smart_glyph: crate::dialogs::smart_glyph_settings::SmartGlyphState,
+    pub smart_component: crate::dialogs::smart_component_settings::SmartComponentState,
 }
 
 impl Default for PanelState {
@@ -165,6 +168,8 @@ impl Default for PanelState {
             axis_mappings: Default::default(),
             cross_axis: Default::default(),
             component_picker: Default::default(),
+            smart_glyph: Default::default(),
+            smart_component: Default::default(),
         }
     }
 }

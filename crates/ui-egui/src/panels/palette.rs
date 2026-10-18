@@ -29,7 +29,10 @@ type Shown = fn(&FontcraftApp) -> bool;
 
 /// The contextual sections, shown at the foot of the Palette while Show Info is on and their
 /// `Shown` holds (id, title, shown, contents).
-const CONTEXTUAL: &[(&str, &str, Shown, Draw)] = &[("stroke", "Stroke", stroke::shown, stroke::show)];
+const CONTEXTUAL: &[(&str, &str, Shown, Draw)] = &[
+    ("stroke", "Stroke", stroke::shown, stroke::show),
+    ("smartComponent", "Smart Component", super::palette_smart::shown, super::palette_smart::show),
+];
 
 pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     let frame = egui::Frame::NONE.fill(app.tokens.panel).inner_margin(app.tokens.palette_margin);
