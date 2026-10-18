@@ -120,10 +120,10 @@ label = "Install"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{id: string, version?: string}"
+params = "{id: string, version?: string, index?: path, dataBase64?: string}"
 area = "extensions"
 milestone = "M13"
-summary = "Downloads and installs the extension whose green Install button is clicked; plug-ins and modules become usable after a relaunch, scripts after reloading the Script menu. FontCraft: copies a module or macro named by an index entry into its folder after checking its checksum, and makes it usable at once, with no relaunch. An entry is fetched from a local path, or over HTTPS by the desktop app (docs/plans/M13.md § 7 question 5); a local index needs no network."
+summary = "Downloads and installs the extension whose green Install button is clicked; plug-ins and modules become usable after a relaunch, scripts after reloading the Script menu. FontCraft: copies a module or macro named by an index entry into its folder after checking its size and SHA-256, and makes it usable at once, with no relaunch. The entry's file is read from a path (beside a local index), or downloaded over HTTPS by the desktop app and handed over as `dataBase64` (docs/plans/M13.md § 7 question 5); an installed copy is replaced."
 ref = "Extensions › Plugin Manager"
 status = "inferred"
 guesses = [
@@ -142,6 +142,9 @@ milestone = "M13"
 summary = "Uninstalls an extension that was installed through the manager. FontCraft: unloads the module or forgets the macro, removes its menu entries and moves its file out of the folder; documents that use a removed filter in an export parameter report it at export."
 ref = "Extensions › Plugin Manager"
 status = "inferred"
+guesses = [
+  "A removed module or macro file is moved into a `Removed` folder beside the Modules and Macros folders rather than deleted, so a removal can be undone by hand; the reference's Remove is not documented in that detail.",
+]
 
 [[command]]
 id = "pluginManager.enlargePreview"
@@ -502,6 +505,9 @@ milestone = "M13"
 summary = "A plug-in outside the catalogue is installed by dropping its bundle on the app's Dock icon; the app moves it into the Plugins folder. FontCraft: dropping a `.wasm` or `.fcmacro` file on the window, opening it with File › Open, or calling this command with a path validates it (manifest, ABI version, no imports, limits) and copies it into its folder; on the web the file's bytes are stored in the browser."
 ref = "Extensions › Plug-ins › Installing Plug-ins"
 status = "inferred"
+guesses = [
+  "A module keeps the file name it had (or `<id>.wasm`); installing the same module again only turns it on, and a different module with an installed id needs `replace`; the reference's handling of a second copy is not documented.",
+]
 
 [[behavior]]
 id = "plugin.pluginsFolder"
@@ -511,7 +517,7 @@ summary = "Installed plug-ins live in a Plugins folder that sits beside the Scri
 ref = "Extensions › Plug-ins › Installing Plug-ins"
 status = "inferred"
 guesses = [
-  "The folders are `Macros` and `Modules` in the per-user application data folder; the reference's folder names and location are not given in the handbook (open question).",
+  "The folders are `Macros` and `Modules` in FontCraft's settings folder (the per-user application data folder); the reference's folder names and location are not given in the handbook (open question).",
 ]
 
 [[behavior]]
@@ -521,6 +527,9 @@ milestone = "M13"
 summary = "Plug-ins must not be copied into the Plugins folder by hand because that conflicts with the operating system's security checks; installation has to go through the app. FontCraft: copying a module into the Modules folder is allowed; a module the app has not seen before is listed as new and stays off until the user turns it on in the Extension Manager or runs plugin.installFromFile on it."
 ref = "Extensions › Plug-ins › Installing Plug-ins"
 status = "inferred"
+guesses = [
+  "Each module file's switch is kept in a hidden `.switches.json` in the Modules folder; a manual copy is recorded as off the first time it is seen, so at the next launch it is off but no longer marked new.",
+]
 
 [[behavior]]
 id = "plugin.uninstall"
@@ -594,7 +603,7 @@ milestone = "M13"
 summary = "Filters, plug-ins and scripts can change paths that are hidden by focusing or locked, but never a locked glyph. FontCraft: filter modules and macros follow the engine's lock rules: a locked glyph refuses the edit with a message, while locked and hidden paths are passed to a filter module and may be changed."
 ref = "Editing Paths › Focusing & Locking"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. plugin.runFilter refuses a run that includes a locked glyph and changes nothing."
 
 [[command]]
 id = "plugin.runFilter"
@@ -602,13 +611,17 @@ label = "(filter module name)"
 menu = ["Filter"]
 shortcut = ""
 kind = "engine"
-params = "{id: string, params?: object, glyphs?: [name], layers?: [id], selectionOnly?: bool}"
+params = "{id: string, params?: object, glyph?: name, glyphs?: [name], layer?: id, layers?: [id], points?: [[shape, node]], selectionOnly?: bool}"
 area = "extensions"
 milestone = "M13"
 summary = "The reference runs a filter plug-in from the Filter menu on the layer in Edit View or on every selected glyph in Font View. FontCraft: runs an installed filter module on each target layer (the Edit View layer with its selection, or every master layer of the given glyphs) with validated parameters, checks every result against the model's limits and applies them all as one undo step; a module that fails or breaks a limit changes nothing."
 ref = "Extensions › Plug-ins"
 status = "inferred"
 own = true
+guesses = [
+  "Without `layer` or `layers` the module runs on every master layer of each glyph; a locked glyph among `glyphs` refuses the whole run rather than being skipped.",
+  "With `selectionOnly`, only the paths that hold a selected node take the module's result, and the module must return the layer's shapes in their order; the reference leaves selection handling to each plug-in.",
+]
 
 [[command]]
 id = "plugin.info"
@@ -621,6 +634,20 @@ area = "extensions"
 milestone = "M13"
 summary = "The reference shows extension details only in the Plugin Manager. FontCraft: a read-only query returning an installed module's manifest, parameter schema and defaults, size, checksum, whether it is on, and its last error."
 ref = "Extensions › Plugin Manager"
+status = "inferred"
+own = true
+
+[[command]]
+id = "app.loadExtensions"
+label = "Load Extensions"
+menu = ["Help"]
+shortcut = ""
+kind = "engine"
+params = "{}"
+area = "extensions"
+milestone = "M13"
+summary = "The handbook documents no way back from a launch without plug-ins other than relaunching. FontCraft: leaves safe mode (`--safe-mode` or the launch keys, `app.launchWithoutPlugins`), so the modules that are turned on run again for the rest of the session."
+ref = "Glyphs › Issues"
 status = "inferred"
 own = true
 

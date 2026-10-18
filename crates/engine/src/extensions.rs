@@ -3,11 +3,25 @@
 //! lives on the [`crate::Session`] (per process), not in documents. Plan: `docs/plans/M13.md`
 //! § 3 (where installed modules live, folder watching), § 4 › M13.3, M13.5, M13.7, M13.9.
 //!
-//! The engine does no folder I/O here: the desktop app polls the Modules and Macros folders on
-//! focus and every 5 seconds ([`FolderStamps`]), and when they changed reads the files and hands
-//! the bytes to `ExtensionState::sync_modules` (M13.3) and `ExtensionState::sync_macros`
-//! (M13.7). In safe mode (`--safe-mode`, the launch keys) modules are listed but none runs until
-//! Help › Load Extensions turns them on for the session.
+//! The desktop app polls the Modules and Macros folders on focus and every 5 seconds
+//! ([`poll_folders`]): only the files' names, sizes and modification times ([`FolderStamps`])
+//! are read, and the files themselves only when those changed. The folder contents reach the
+//! session as bytes ([`ExtensionState::sync_modules`], [`ExtensionState::sync_macros`]), so
+//! tests and the web build hand them over without a folder. In safe mode (`--safe-mode`, the
+//! launch keys) modules are listed but none runs until Help › Load Extensions
+//! (`app.loadExtensions`) turns them on for the session.
+//!
+//! The module half, for the packages built on it (M13.4 to M13.6, M13.10):
+//!
+//! | API | What it does |
+//! |---|---|
+//! | [`ExtensionState::sync_modules`] | the Modules folder's files in, the registry in line with them; manual copies new and off |
+//! | [`ExtensionState::runnable`] | the module `id` if it may run now: installed, turned on, of the kind asked, not in safe mode |
+//! | [`ExtensionState::set_module_enabled`] | turns a module on or off and keeps the switch for its file |
+//! | [`ExtensionState::forget_module`] | uninstalls a module (its file is the caller's: [`move_out_of_folder`]) |
+//! | [`ExtensionState::note_module_error`] | the last error of a module, which `plugin.info` reports |
+//! | [`open_folders`], [`poll_folders`] | the desktop app's launch step and its poll |
+//! | `module_switches` | the switch per file name, kept in [`SWITCHES_FILE`] in the Modules folder |
 //!
 //! Owners: M13.3 the module half (folder sync, switches, safe mode); M13.5 the check ids
 //! (`check.plugin.<module>.<name>`); M13.7 the macro listing and polling; M13.9 the log. The
@@ -16,13 +30,14 @@
 
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
-use std::path::PathBuf;
+use std::io::Read as _;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use fontcraft_plugins::Registry;
 use fontcraft_plugins::reporter::ReporterCache;
+use fontcraft_plugins::{FolderReport, Kind, Plugin, Registry};
 use serde::Serialize;
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use crate::log::CommandLog;
 use crate::macros::{
@@ -35,6 +50,23 @@ pub const MAX_FOLDER_FILES: usize = 10_000;
 pub const MAX_MACRO_FOLDER_DEPTH: usize = 8;
 /// How often the desktop app polls the extension folders while it has focus, in milliseconds.
 pub const FOLDER_POLL_MS: u64 = 5_000;
+/// The extension of module files.
+pub const MODULE_EXTENSION: &str = "wasm";
+/// The Modules folder's name in the per-user data folder (`plugin.pluginsFolder`).
+pub const MODULES_FOLDER: &str = "Modules";
+/// The Macros folder's name beside it.
+pub const MACROS_FOLDER: &str = "Macros";
+/// Where removed extensions go, beside the two folders, so a removal can be taken back by hand.
+pub const REMOVED_FOLDER: &str = "Removed";
+/// The file in the Modules folder that keeps the switch per module file (a hidden file, so
+/// folder listings skip it).
+pub const SWITCHES_FILE: &str = ".switches.json";
+/// Most bytes of module files read from the Modules folder in one sync.
+pub const MAX_MODULES_FOLDER_BYTES: u64 = 512 << 20;
+/// Largest switches file read.
+const MAX_SWITCHES_BYTES: u64 = 1 << 20;
+/// Longest error kept per module for `plugin.info`, in characters.
+const MAX_MODULE_ERROR_CHARS: usize = 1_000;
 
 /// One macro file in the Macros folder.
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -105,6 +137,14 @@ pub struct LoadedMacro {
     pub m: Arc<Macro>,
 }
 
+/// An extension index the session has read, and where from.
+#[derive(Clone, Debug, Default)]
+pub struct LoadedIndex {
+    /// The index file's path or URL; an entry's relative `url` is a path beside a local index.
+    pub source: String,
+    pub index: crate::extension_index::Index,
+}
+
 /// Everything about extensions a session keeps.
 #[derive(Debug, Default)]
 pub struct ExtensionState {
@@ -138,6 +178,24 @@ pub struct ExtensionState {
     /// The two folders' stamps at the last poll.
     pub modules_stamps: FolderStamps,
     pub macros_stamps: FolderStamps,
+    /// The user's switch per module file name in the Modules folder: on, or off. A file not
+    /// listed has not been seen yet, so its module is listed as new and off
+    /// (`plugin.noManualMove`). Kept in [`SWITCHES_FILE`].
+    pub module_switches: BTreeMap<String, bool>,
+    /// The files of the Modules folder that failed to load at the last sync, with the reason.
+    pub module_failures: Vec<(String, String)>,
+    /// The last error of each module (a failed run or a refused output), by module id.
+    pub module_errors: BTreeMap<String, String>,
+    /// When the app started, in seconds since the Unix epoch (`app.info`); `None` when the
+    /// shell did not say.
+    pub started_at: Option<i64>,
+    /// The extension indexes the session knows, first listed first: for an id in several, the
+    /// first wins (`pluginManager.list`, `pluginManager.install`). The shell fills it from the
+    /// user's list of indexes (M13.10).
+    pub indexes: Vec<LoadedIndex>,
+    /// What the shell's other surfaces are doing, by name (`control`, `mcp`), in a few words
+    /// (`listening on 127.0.0.1:7985`), for `app.info`.
+    pub surfaces: BTreeMap<String, String>,
     /// The commands run and module log lines.
     pub log: CommandLog,
     /// Reporter drawings.
@@ -181,6 +239,311 @@ impl ExtensionState {
             }
         }
     }
+}
+
+/// The module half: the Modules folder, switches, safe mode.
+impl ExtensionState {
+    /// Brings the installed modules in line with the files read from the Modules folder
+    /// (`(file name, bytes)`, as [`read_modules_folder`] gives them) and keeps `stamps` for the
+    /// next poll. A file seen for the first time is installed off, listed as new, and its switch
+    /// recorded as off, so it is no longer new at the next launch; a file that is gone
+    /// uninstalls its module; a file that cannot be read or loaded is kept in
+    /// [`ExtensionState::module_failures`]. In safe mode the modules are listed all the same.
+    pub fn sync_modules(&mut self, files: Vec<FolderFile>, stamps: FolderStamps) -> FolderReport {
+        let mut failed = Vec::new();
+        let mut read = Vec::new();
+        for (name, bytes) in files.into_iter().take(MAX_FOLDER_FILES) {
+            match bytes {
+                Ok(bytes) => read.push((name, bytes)),
+                Err(e) => failed.push((name, e)),
+            }
+        }
+        let refs: Vec<(&str, &[u8])> = read.iter().map(|(name, bytes)| (name.as_str(), bytes.as_slice())).collect();
+        let mut report = self.registry.sync_folder(&refs, &self.module_switches);
+        for id in &report.new {
+            if let Some(file) = self.registry.get(id).and_then(|m| m.file.clone()) {
+                self.module_switches.insert(file, false);
+            }
+        }
+        // Switches of files that are gone are dropped with them.
+        let listed: std::collections::BTreeSet<&str> =
+            read.iter().map(|(name, _)| name.as_str()).chain(failed.iter().map(|(name, _)| name.as_str())).collect();
+        self.module_switches.retain(|file, _| listed.contains(file.as_str()));
+        for id in &report.removed {
+            self.module_errors.remove(id);
+        }
+        failed.extend(report.failed.iter().cloned());
+        report.failed = failed.clone();
+        self.module_failures = failed;
+        self.modules_stamps = stamps;
+        self.retain_reporter_drawings();
+        report
+    }
+
+    /// The module `id` if it may run now: installed, turned on, of `kind`, and the session not
+    /// in safe mode. The error says which of these failed, in words for the user.
+    pub fn runnable(&self, id: &str, kind: Kind) -> Result<Arc<Plugin>, String> {
+        let m = self.registry.get(id).ok_or_else(|| format!("no module {id:?} is installed"))?;
+        if m.plugin.kind() != kind {
+            return Err(format!("module {id:?} is a {} module, not a {} module", m.plugin.kind().name(), kind.name()));
+        }
+        if self.safe_mode {
+            return Err("extensions are off in safe mode: Help › Load Extensions turns them on for this session".into());
+        }
+        if !m.enabled {
+            return Err(format!("module {id:?} is turned off: turn it on in the Extension Manager"));
+        }
+        Ok(m.plugin.clone())
+    }
+
+    /// Turns the module `id` on or off; the switch is kept for its file in the Modules folder
+    /// (written by [`save_switches`]).
+    pub fn set_module_enabled(&mut self, id: &str, enabled: bool) -> Result<(), String> {
+        self.registry.set_enabled(id, enabled).map_err(|e| e.to_string())?;
+        if let Some(file) = self.registry.get(id).and_then(|m| m.file.clone()) {
+            self.module_switches.insert(file, enabled);
+        }
+        Ok(())
+    }
+
+    /// Uninstalls the module `id`: it leaves the registry, its switch, its last error and its
+    /// cached drawings. Returns the file it came from; moving that file out of the Modules
+    /// folder is the caller's ([`move_out_of_folder`]). `None` when no such module is installed.
+    pub fn forget_module(&mut self, id: &str) -> Option<Option<String>> {
+        let file = self.registry.get(id)?.file.clone();
+        self.registry.remove(id);
+        if let Some(file) = &file {
+            self.module_switches.remove(file);
+        }
+        self.module_errors.remove(id);
+        self.retain_reporter_drawings();
+        Some(file)
+    }
+
+    /// Keeps `error` as the last error of the module `id` (cut to a readable length).
+    pub fn note_module_error(&mut self, id: &str, error: &str) {
+        self.module_errors.insert(id.to_string(), error.chars().take(MAX_MODULE_ERROR_CHARS).collect());
+    }
+
+    /// Leaves safe mode: the modules that are turned on run again (`app.loadExtensions`).
+    pub fn leave_safe_mode(&mut self) {
+        self.safe_mode = false;
+    }
+
+    /// Drops reporter drawings of modules that are no longer installed.
+    fn retain_reporter_drawings(&self) {
+        let serials: Vec<u64> = self.registry.list().iter().map(|m| m.plugin.serial()).collect();
+        self.reporter_cache.retain_modules(&serials);
+    }
+
+    /// The installed modules as `app.info` and `pluginManager.list` describe them.
+    pub fn modules_json(&self) -> Vec<Value> {
+        self.registry
+            .list()
+            .iter()
+            .map(|m| {
+                let man = m.plugin.manifest();
+                json!({
+                    "id": man.id, "name": man.name, "kind": man.kind.name(), "version": man.version, "author": man.author,
+                    "enabled": m.enabled, "new": m.new, "file": m.file, "size": m.plugin.size(), "sha256": m.sha256,
+                })
+            })
+            .collect()
+    }
+}
+
+/// Whether `name` is a module file (`.wasm`, any case).
+pub fn is_module_file(name: &str) -> bool {
+    Path::new(name).extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case(MODULE_EXTENSION))
+}
+
+/// The stamps of the module files directly in `dir` (the Modules folder has no subfolders), at
+/// most [`MAX_FOLDER_FILES`], sorted by name. Hidden files and other files are skipped; a missing
+/// folder has none.
+pub fn stamp_modules_folder(dir: &Path) -> FolderStamps {
+    let mut out = Vec::new();
+    let Ok(entries) = std::fs::read_dir(dir) else { return FolderStamps(out) };
+    for (seen, entry) in entries.flatten().enumerate() {
+        if seen >= crate::macros::MAX_FOLDER_ENTRIES || out.len() >= MAX_FOLDER_FILES {
+            break;
+        }
+        let Ok(name) = entry.file_name().into_string() else { continue };
+        if name.starts_with('.') || !is_module_file(&name) {
+            continue;
+        }
+        let Ok(meta) = std::fs::metadata(entry.path()) else { continue };
+        if !meta.is_file() {
+            continue;
+        }
+        let modified_ms = meta
+            .modified()
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX));
+        out.push(FileStamp { path: name, size: meta.len(), modified_ms });
+    }
+    out.sort_by(|a, b| a.path.cmp(&b.path));
+    FolderStamps(out)
+}
+
+/// Reads a module file, refusing one over the module size limit without reading the rest.
+pub fn read_module_file(path: &Path) -> Result<Vec<u8>, String> {
+    let max = fontcraft_plugins::error::MAX_MODULE_BYTES;
+    let file = std::fs::File::open(path).map_err(|e| e.to_string())?;
+    let mut bytes = Vec::new();
+    let cap = u64::try_from(max).unwrap_or(u64::MAX).saturating_add(1);
+    file.take(cap).read_to_end(&mut bytes).map_err(|e| e.to_string())?;
+    if bytes.len() > max {
+        return Err(format!("the file is larger than the module limit of {} MiB", max >> 20));
+    }
+    Ok(bytes)
+}
+
+/// Reads the module files directly in `dir`: their stamps and contents, at most
+/// [`MAX_MODULES_FOLDER_BYTES`] in all and [`fontcraft_plugins::error::MAX_INSTALLED`] files.
+pub fn read_modules_folder(dir: &Path) -> (FolderStamps, Vec<FolderFile>) {
+    let stamps = stamp_modules_folder(dir);
+    let mut left = MAX_MODULES_FOLDER_BYTES;
+    let files = stamps
+        .0
+        .iter()
+        .enumerate()
+        .map(|(i, stamp)| {
+            let bytes = if i >= fontcraft_plugins::error::MAX_INSTALLED {
+                Err(format!("not read: at most {} modules can be installed", fontcraft_plugins::error::MAX_INSTALLED))
+            } else if stamp.size > left {
+                Err(format!("not read: the Modules folder holds more than {} MiB of modules", MAX_MODULES_FOLDER_BYTES >> 20))
+            } else {
+                read_module_file(&dir.join(&stamp.path)).inspect(|b| left = left.saturating_sub(u64::try_from(b.len()).unwrap_or(u64::MAX)))
+            };
+            (stamp.path.clone(), bytes)
+        })
+        .collect();
+    (stamps, files)
+}
+
+/// The switches kept in the Modules folder `dir`: `{"version": 1, "modules": {file: bool}}`. A
+/// missing file has none; an unreadable one is an error and is left as it is.
+pub fn read_switches(dir: &Path) -> Result<BTreeMap<String, bool>, String> {
+    let path = dir.join(SWITCHES_FILE);
+    let file = match std::fs::File::open(&path) {
+        Ok(file) => file,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(BTreeMap::new()),
+        Err(e) => return Err(format!("{}: {e}", path.display())),
+    };
+    let mut bytes = Vec::new();
+    file.take(MAX_SWITCHES_BYTES.saturating_add(1)).read_to_end(&mut bytes).map_err(|e| format!("{}: {e}", path.display()))?;
+    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > MAX_SWITCHES_BYTES {
+        return Err(format!("{}: larger than {} KiB", path.display(), MAX_SWITCHES_BYTES >> 10));
+    }
+    let value: Value = serde_json::from_slice(&bytes).map_err(|e| format!("{}: {e}", path.display()))?;
+    let modules = value.get("modules").and_then(Value::as_object).ok_or_else(|| format!("{}: no `modules` object", path.display()))?;
+    Ok(modules
+        .iter()
+        .filter(|(file, _)| is_module_file(file) && !file.contains(['/', '\\']))
+        .filter_map(|(file, on)| on.as_bool().map(|on| (file.clone(), on)))
+        .take(MAX_FOLDER_FILES)
+        .collect())
+}
+
+/// Writes `switches` to the Modules folder `dir` (creating it when missing).
+pub fn save_switches(dir: &Path, switches: &BTreeMap<String, bool>) -> Result<(), String> {
+    std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let text = serde_json::to_string_pretty(&json!({"version": 1, "modules": switches})).map_err(|e| e.to_string())?;
+    write_file(&dir.join(SWITCHES_FILE), text.as_bytes())
+}
+
+/// Writes `bytes` to `path` in one step where the platform allows it.
+pub fn write_file(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    #[cfg(not(target_arch = "wasm32"))]
+    let written = fontcraft_format::write_atomic(path, bytes).map_err(|e| e.to_string());
+    // The web build has no folders; a plain write keeps it compiling.
+    #[cfg(target_arch = "wasm32")]
+    let written = std::fs::write(path, bytes).map_err(|e| e.to_string());
+    written.map_err(|e| format!("{}: {e}", path.display()))
+}
+
+/// Moves `file` (a path relative to `dir`) into the [`REMOVED_FOLDER`] beside `dir`, under a free name
+/// (`name 2.wasm`, `name 3.wasm`…). Returns where it went.
+pub fn move_out_of_folder(dir: &Path, file: &str) -> Result<PathBuf, String> {
+    let from = dir.join(file);
+    let removed = dir.parent().unwrap_or(dir).join(REMOVED_FOLDER);
+    std::fs::create_dir_all(&removed).map_err(|e| format!("{}: {e}", removed.display()))?;
+    // A macro in a subfolder lands directly in the Removed folder.
+    let name = file.rsplit(['/', '\\']).next().unwrap_or(file);
+    let (stem, ext) = match name.rsplit_once('.') {
+        Some((stem, ext)) if !stem.is_empty() => (stem, format!(".{ext}")),
+        _ => (name, String::new()),
+    };
+    let mut to = removed.join(name);
+    let mut n = 2u32;
+    while to.exists() {
+        if n > 10_000 {
+            return Err(format!("{} holds too many copies of {file}", removed.display()));
+        }
+        to = removed.join(format!("{stem} {n}{ext}"));
+        n += 1;
+    }
+    std::fs::rename(&from, &to).map_err(|e| format!("cannot move {} to {}: {e}", from.display(), to.display()))?;
+    Ok(to)
+}
+
+/// Re-reads the session's Modules folder when its files changed since the last poll; `None`
+/// when nothing changed or the session has none. Switches of files seen for the first time
+/// are written back to the folder.
+pub fn poll_modules(ext: &mut ExtensionState) -> Option<Result<FolderReport, String>> {
+    let dir = ext.modules_dir.clone()?;
+    if !ext.modules_stamps.changed(&stamp_modules_folder(&dir)) {
+        return None;
+    }
+    let (stamps, files) = read_modules_folder(&dir);
+    let switches = ext.module_switches.clone();
+    let report = ext.sync_modules(files, stamps);
+    if ext.module_switches != switches
+        && let Err(e) = save_switches(&dir, &ext.module_switches)
+    {
+        return Some(Err(e));
+    }
+    Some(Ok(report))
+}
+
+/// Sets the session's extension folders inside the per-user data folder `data_dir`
+/// ([`MODULES_FOLDER`], [`MACROS_FOLDER`]) and reads the module switches; `safe_mode` keeps
+/// every module from running. The folders are read by the first [`poll_folders`]. Returns the
+/// problems found, one line each.
+pub fn open_folders(ext: &mut ExtensionState, data_dir: Option<&Path>, safe_mode: bool) -> Vec<String> {
+    ext.safe_mode = safe_mode;
+    ext.modules_dir = data_dir.map(|d| d.join(MODULES_FOLDER));
+    ext.macros_dir = data_dir.map(|d| d.join(MACROS_FOLDER));
+    let mut problems = Vec::new();
+    if let Some(dir) = &ext.modules_dir {
+        match read_switches(dir) {
+            Ok(switches) => ext.module_switches = switches,
+            Err(e) => problems.push(format!("module switches: {e}")),
+        }
+    }
+    problems
+}
+
+/// Polls both extension folders (the desktop app calls it on focus and every
+/// [`FOLDER_POLL_MS`]); returns what the user should hear about: files that failed to load and
+/// switches that could not be saved, one line each.
+pub fn poll_folders(ext: &mut ExtensionState) -> Vec<String> {
+    let mut problems = Vec::new();
+    crate::macros::poll(ext);
+    match poll_modules(ext) {
+        Some(Ok(report)) => {
+            for (file, e) in &report.failed {
+                problems.push(format!("module {file}: {e}"));
+            }
+            for id in &report.new {
+                problems.push(format!("new module {id} found in the Modules folder: it stays off until you turn it on"));
+            }
+        }
+        Some(Err(e)) => problems.push(format!("module switches: {e}")),
+        None => {}
+    }
+    problems
 }
 
 /// Parameters that name something by its id in this session only, as the app passes them: left
@@ -247,6 +610,19 @@ impl ExtensionState {
         self.macro_files.insert(path, m);
         self.index_titles();
         self.macros_revision = self.macros_revision.wrapping_add(1);
+    }
+
+    /// Drops one macro of the Macros folder from the listing, as removing its file does; the
+    /// next poll reads the folder again anyway. Returns whether it was listed.
+    pub fn forget_macro(&mut self, path: &str) -> bool {
+        let before = self.macros.len();
+        self.macros.retain(|e| e.path != path);
+        let removed = self.macro_files.remove(path).is_some() || self.macros.len() != before;
+        if removed {
+            self.index_titles();
+            self.macros_revision = self.macros_revision.wrapping_add(1);
+        }
+        removed
     }
 
     fn index_titles(&mut self) {

@@ -86,6 +86,7 @@ mod metrics_report;
 mod native_corpus;
 mod nodes;
 mod pathops;
+mod plugins;
 mod projects;
 mod proof;
 mod realign;
