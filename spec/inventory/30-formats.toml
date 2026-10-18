@@ -604,7 +604,18 @@ milestone = "M13"
 summary = "Imports the path-construction operators of the first page's content stream as outlines; stroke width is kept as a stroke attribute on the path, while fill colour and other styling are dropped. Text, images, shadings and clipping are ignored."
 ref = "Import & Export › Importing Outlines"
 status = "handbook"
-notes = "M13.58, on the `lopdf` crate (MIT; docs/plans/M13.md § 7 question 7), with FontCraft's PDF limits checked before each call."
+notes = "Built (M13.58) in `crates/io-pdf` (`read_pdf`, `looks_like_pdf`) on the `lopdf` crate (MIT; docs/plans/M13.md § 7 question 7) for the file structure; the content stream is read by our own tokenizer. It runs path construction (m l c v y h re), painting (f F f* S s B B* b b* n), q Q cm w, `gs` (its LW line width), colours (read and dropped), and form XObjects through `Do` with their /Matrix and resources; text objects, inline images, image XObjects and shadings are skipped and counted. A filled path gives closed contours; a stroked one keeps its subpaths open unless closed, and its line width (scaled by the transform and the placement) becomes the path's stroke width; a path both filled and stroked is closed, with the stroke width and the fill flag. The frame is the crop box, else the media box (inherited through the page tree), else the drawing's bounds, and /Rotate turns the page first. Limits: 256 MiB file, 10,000 streams, each stream decoded to at most 100 times its size (64 KiB for short streams) and 256 MiB in all (object streams are charged while the file loads), 8 filters a stream, nesting 64 (page tree, saved states, forms), 100,000 page tree nodes, 10,000,000 operators, 1 GiB of content read, 10,000 operands, 1,000,000 segments, numbers within ±1e9, 10,000 paths and 200,000 nodes. `file.importOutlines` reads SVG and EPS; routing `.pdf` files to `read_pdf` is a change in `crates/engine/src/cmd/clipboard.rs` (and a dependency of the engine on `fontcraft-io-pdf`). The handbook documents PDF import and the stroke style; behaviour on real files from drawing applications is not yet observed."
+guesses = [
+  "The frame for placement is the crop box, else the media box, with one point per unit and its top edge at the given top, matching EPS and SVG import; importing a PDF of known geometry in the reference app would settle it.",
+  "A hairline stroke (line width 0) is given a stroke width of one unit; a reference import of a hairline would settle it.",
+  "A path both filled and stroked keeps its stroke width and is marked as filled; a reference import of such a path would show which style it gets.",
+  "Paths that only clip, or end without painting, are left out and counted as dropped, as for EPS; a reference import of a file with a clipping path would settle it.",
+  "Only the first page is read, and its /Rotate is applied before placing; importing a two-page, rotated PDF in the reference app would settle both.",
+]
+observe = [
+  "Import a one-page PDF with a filled square, a 4-point stroked line and a hairline into an empty glyph; note each path's position and stroke style.",
+  "Import a PDF whose page has /Rotate 90; note whether the outlines are turned.",
+]
 
 [[format]]
 id = "eps-outline"
@@ -747,7 +758,11 @@ milestone = "M13"
 summary = "The reference accepts every image type its operating system can draw, which includes PDF and PSD. We keep the reference for any file type, and render a PDF's first page as a template once a renderer is available; until then, and always for PSD, the missing-image marker is shown and the reference survives saving."
 ref = "Edit View › Images › Adding Images"
 status = "handbook"
-notes = "M13.58, with PDF outlines; it uses M11's image references."
+notes = "M13.58: `crates/io-pdf` draws a PDF's first page (`render_pdf`): its filled and stroked paths in their colours on a transparent background, anti-aliased, at a chosen resolution lowered to fit a pixel budget; text, images and shadings are not drawn. Showing it in Edit View and using it in bitmap exports is a change in the engine's and the editor's image code, which still show the missing-image marker for PDF. It uses M11's image references; the reference app's drawing of a placed PDF is documented but not yet observed."
+guesses = [
+  "The page is drawn on a transparent background, not white, so the glyph shows through around the artwork; placing a PDF in the reference app would show which it uses.",
+  "Text and images inside the PDF are not drawn; the reference draws them through the operating system, and a PDF with text placed in the reference app would show the difference.",
+]
 
 # ───────────────────────────── Proof output ─────────────────────────────
 

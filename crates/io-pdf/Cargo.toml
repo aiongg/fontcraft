@@ -11,5 +11,6 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+fontcraft-imagery.workspace = true
 fontcraft-model.workspace = true
 lopdf.workspace = true
