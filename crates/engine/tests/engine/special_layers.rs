@@ -1,0 +1,185 @@
+//! Special layer commands: layers.setIntermediate, layers.clearIntermediate,
+//! layers.setAlternate, layers.clearAlternate, layers.reInterpolate, glyph.setShapeOrder and
+//! glyph.swapShapes, on fonts built in code.
+// Integration tests may unwrap and panic, unlike shipped code (AGENTS.md › Never crash).
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
+
+use std::sync::Arc;
+
+use fontcraft_engine::interp::instance::interpolate_layer;
+use fontcraft_engine::interp::{Designspace, GlyphSources, InterpOptions, Location};
+use fontcraft_engine::model::{Axis, Font, Glyph, GlyphTable, Layer, Master, Path, Shape};
+use fontcraft_engine::{EngineError, Session};
+use serde_json::{Value, json};
+
+fn run(s: &mut Session, id: &str, p: Value) -> Value {
+    s.execute(id, &p).unwrap_or_else(|e| panic!("{id}: {e}"))
+}
+
+/// The refusal message; panics when the command succeeds or the font changed.
+fn refused(s: &mut Session, id: &str, p: Value) -> String {
+    let before = s.documents()[0].font.clone();
+    let message = match s.execute(id, &p) {
+        Err(EngineError::BadParams { message, .. }) => message,
+        other => panic!("{id} {p}: expected a refusal, got {other:?}"),
+    };
+    assert!(Arc::ptr_eq(&before, &s.documents()[0].font), "{id}: a refused command changed the font");
+    message
+}
+
+fn rect(x0: f64, w: f64) -> Shape {
+    Shape::Path(Path::rect(x0, 0.0, x0 + w, 700.0))
+}
+
+fn layer(master: &str, id: &str, shapes: Vec<Shape>) -> Layer {
+    let mut l = Layer::new(master, 500.0);
+    l.id = id.into();
+    l.shapes = shapes;
+    l
+}
+
+/// A weight axis with `masters` (id, weight) and the glyph `e`, whose layers are `layers`.
+fn session(masters: &[(&str, f64)], layers: Vec<Layer>) -> Session {
+    let mut f = Font::new("Special");
+    f.axes = Arc::new(vec![Axis { name: "Weight".into(), tag: "wght".into(), ..Axis::default() }]);
+    f.masters =
+        Arc::new(masters.iter().map(|(id, w)| Master { id: (*id).into(), name: (*id).into(), location: vec![*w], ..Master::default() }).collect());
+    let mut e = Glyph::new("e");
+    e.layers = layers;
+    f.glyphs = GlyphTable::from_glyphs(vec![Arc::new(e)]);
+    let mut s = Session::new();
+    s.add_document(f, None).unwrap();
+    s
+}
+
+/// Thin (100) and Black (900), `e` a box 100 wide on Thin and 300 on Black, and a backup layer
+/// `b` under Thin.
+fn two_masters() -> Session {
+    session(
+        &[("thin", 100.0), ("black", 900.0)],
+        vec![
+            layer("thin", "thin", vec![rect(0.0, 100.0)]),
+            layer("black", "black", vec![rect(0.0, 300.0)]),
+            layer("thin", "b", vec![rect(0.0, 10.0)]),
+        ],
+    )
+}
+
+fn e_layer(s: &Session, id: &str) -> Layer {
+    s.font().unwrap().glyph("e").unwrap().layers.iter().find(|l| l.id == id).unwrap().clone()
+}
+
+fn right_edge(l: &Layer) -> f64 {
+    match l.shapes.first() {
+        Some(Shape::Path(p)) => p.nodes.iter().map(|n| n.x).fold(f64::NEG_INFINITY, f64::max),
+        other => panic!("expected a path, got {other:?}"),
+    }
+}
+
+#[test]
+fn layers_set_intermediate_and_clear_intermediate() {
+    let mut s = two_masters();
+    let out = run(&mut s, "layers.setIntermediate", json!({"glyph": "e", "layer": "b", "coordinates": {"wght": 400}}));
+    assert_eq!(out["label"], "{400}");
+    assert_eq!(out["coordinates"], json!({"wght": 400.0}));
+    assert_eq!(e_layer(&s, "b").info.attrs.coordinates, vec![Some(400.0)]);
+
+    let m = refused(&mut s, "layers.setIntermediate", json!({"glyph": "e", "layer": "b", "coordinates": {"wght": 2000}}));
+    assert!(m.contains("outside the range"), "{m}");
+    let m = refused(&mut s, "layers.setIntermediate", json!({"glyph": "e", "layer": "b", "coordinates": {"wght": null}}));
+    assert!(m.contains("same location"), "an empty coordinate lands on Thin's own layer: {m}");
+    refused(&mut s, "layers.setIntermediate", json!({"glyph": "e", "layer": "b", "coordinates": {"wdth": 50}}));
+    refused(&mut s, "layers.setIntermediate", json!({"glyph": "e", "layer": "thin", "coordinates": {"wght": 400}}));
+
+    let out = run(&mut s, "layers.clearIntermediate", json!({"glyph": "e", "layer": "b"}));
+    assert_eq!(out["label"], Value::Null, "a backup layer again");
+    assert!(e_layer(&s, "b").info.attrs.coordinates.is_empty());
+    refused(&mut s, "layers.clearIntermediate", json!({"glyph": "e", "layer": "b"}));
+}
+
+#[test]
+fn layers_set_alternate_and_clear_alternate() {
+    let mut s = two_masters();
+    let out = run(&mut s, "layers.setAlternate", json!({"glyph": "e", "layer": "b", "ranges": {"wght": {"min": 600}}}));
+    assert_eq!(out["label"], "[600‹wg]");
+    let rule = e_layer(&s, "b").info.attrs.axis_rules.clone();
+    assert_eq!((rule.len(), rule[0].min, rule[0].max), (1, Some(600.0), None));
+
+    let m = refused(&mut s, "layers.setAlternate", json!({"glyph": "e", "layer": "b", "ranges": {"wght": {"min": 700, "max": 300}}}));
+    assert!(m.contains("minimum"), "{m}");
+    refused(&mut s, "layers.setAlternate", json!({"glyph": "e", "layer": "b", "ranges": {"wght": {"low": 1}}}));
+    refused(&mut s, "layers.setAlternate", json!({"glyph": "e", "layer": "thin", "ranges": {}}));
+    // A master layer may carry a range; an intermediate layer keeps its coordinates.
+    assert_eq!(run(&mut s, "layers.setAlternate", json!({"glyph": "e", "layer": "black", "ranges": {"wght": {"max": 800}}}))["label"], "[wg‹800]");
+    run(&mut s, "layers.setIntermediate", json!({"glyph": "e", "layer": "b", "coordinates": {"wght": 400}}));
+    assert_eq!(run(&mut s, "layers.clearAlternate", json!({"glyph": "e", "layer": "b"}))["label"], "{400}");
+    assert!(e_layer(&s, "b").info.attrs.axis_rules.is_empty());
+    refused(&mut s, "layers.clearAlternate", json!({"glyph": "e", "layer": "b"}));
+}
+
+#[test]
+fn layers_re_interpolate_equals_the_interpolation_at_the_layer_location() {
+    // A backup layer at weight 500: what the glyph interpolates to there.
+    let mut s = two_masters();
+    let expected = {
+        let font = s.font().unwrap();
+        let sources = GlyphSources::of(font, &Designspace::new(font).unwrap(), "e").unwrap();
+        interpolate_layer(font, &sources, &Location(vec![500.0]), &InterpOptions::default()).unwrap()
+    };
+    let m = refused(&mut s, "layers.reInterpolate", json!({"glyph": "e", "layer": "b"}));
+    assert!(m.contains("location"), "a backup layer needs a location: {m}");
+    let out = run(&mut s, "layers.reInterpolate", json!({"glyph": "e", "layer": "b", "location": {"wght": 500}}));
+    assert_eq!(out, json!({"glyphs": ["e"], "skipped": []}));
+    let b = e_layer(&s, "b");
+    assert_eq!((b.shapes.clone(), b.width), (expected.shapes, expected.width));
+    assert_eq!(right_edge(&b), 200.0);
+    assert_eq!(b.info.name, None, "the layer keeps its own id and attributes");
+
+    // A master layer is interpolated from the other masters, leaving its own drawing out, in one
+    // undo step.
+    let mut s = session(
+        &[("thin", 100.0), ("regular", 500.0), ("black", 900.0)],
+        vec![
+            layer("thin", "thin", vec![rect(0.0, 100.0)]),
+            layer("regular", "regular", vec![rect(0.0, 999.0)]),
+            layer("black", "black", vec![rect(0.0, 300.0)]),
+        ],
+    );
+    run(&mut s, "layers.reInterpolate", json!({"glyphs": ["e"], "layer": "regular"}));
+    assert_eq!(right_edge(&e_layer(&s, "regular")), 200.0);
+    run(&mut s, "edit.undo", json!({}));
+    assert_eq!(right_edge(&e_layer(&s, "regular")), 999.0);
+
+    // An intermediate layer is interpolated at its coordinates.
+    let mut s = two_masters();
+    run(&mut s, "layers.setIntermediate", json!({"glyph": "e", "layer": "b", "coordinates": {"wght": 300}}));
+    run(&mut s, "layers.reInterpolate", json!({"glyph": "e", "layer": "b"}));
+    assert_eq!(right_edge(&e_layer(&s, "b")), 150.0);
+}
+
+#[test]
+fn glyph_set_shape_order_and_swap_shapes() {
+    let mut s = session(&[("m", 400.0)], vec![layer("m", "m", vec![rect(0.0, 10.0), rect(100.0, 20.0), rect(200.0, 30.0)])]);
+    let edges = |s: &Session| -> Vec<f64> {
+        e_layer(s, "m")
+            .shapes
+            .iter()
+            .map(|sh| match sh {
+                Shape::Path(p) => p.nodes.iter().map(|n| n.x).fold(f64::NEG_INFINITY, f64::max),
+                _ => f64::NAN,
+            })
+            .collect()
+    };
+    let out = run(&mut s, "glyph.setShapeOrder", json!({"glyph": "e", "layer": "m", "order": [2, 0, 1]}));
+    assert_eq!(out["order"], json!([2, 0, 1]));
+    assert_eq!(edges(&s), [230.0, 10.0, 120.0]);
+    for bad in [json!([0, 0, 1]), json!([0, 1]), json!([0, 1, 3])] {
+        let m = refused(&mut s, "glyph.setShapeOrder", json!({"glyph": "e", "layer": "m", "order": bad}));
+        assert!(m.contains("not a permutation"), "{m}");
+    }
+
+    run(&mut s, "glyph.swapShapes", json!({"glyph": "e", "layer": "m", "a": 0, "b": 2}));
+    assert_eq!(edges(&s), [120.0, 10.0, 230.0]);
+    refused(&mut s, "glyph.swapShapes", json!({"glyph": "e", "layer": "m", "a": 1, "b": 1}));
+    refused(&mut s, "glyph.swapShapes", json!({"glyph": "e", "layer": "m", "a": 0, "b": 3}));
+}
