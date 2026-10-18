@@ -2159,6 +2159,11 @@ summary = "Fourth tab of Font Info: the font's feature code organised as prefixe
 ref = "Font Info › Features"
 status = "handbook"
 notes = "Documented, not yet observed."
+guesses = [
+  "With no entry selected, the tab selects the first entry of the sidebar; the reference app's tab opened on a font with features settles it.",
+  "The plus button beside Classes adds a class named NewClass (NewClass1, NewClass2… when taken), renamed by double-clicking it; adding a class in the reference app settles the name and whether it asks for one.",
+  "Entries are renamed by double-clicking them and reordered by dragging them within their group; trying both in the reference app settles it.",
+]
 
 [[panel]]
 id = "fontInfo.featurePicker"
@@ -2171,6 +2176,9 @@ summary = "Picker opened by the plus button beside the Features heading. Typing 
 ref = "Font Info › Features › Editing Feature Code"
 status = "handbook"
 notes = "Documented, not yet observed."
+guesses = [
+  "A feature added from the picker is generated automatically when Update could write its code for the font, else it starts empty and manual; adding smcp to a font with and without .sc glyphs in the reference app settles it.",
+]
 
 [[command]]
 id = "font.features.list"
@@ -2647,6 +2655,9 @@ summary = "Code that fails to compile is flagged inline. Clicking the error icon
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
 notes = "Documented, not yet observed. The markers, messages, wrench and sidebar icons read `font.features.listErrors` (and the `errors` flag of `font.features.list`) for the last compile while the font is unchanged since."
+guesses = [
+  "Error ranges are underlined in the code and each error is listed under the code with its line and an icon, not drawn between the code lines; a screenshot of an error in the reference app settles it.",
+]
 
 [[behavior]]
 id = "fontInfo.features.notesDivider"
@@ -2656,6 +2667,9 @@ summary = "The notes field under the editor is resized by dragging the gray divi
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
 notes = "Documented, not yet observed."
+guesses = [
+  "The notes field starts four rows tall and the divider keeps it between two rows and half the tab's height; dragging the divider in the reference app settles the limits.",
+]
 
 [[behavior]]
 id = "fontInfo.features.stylisticSetNames"
@@ -2667,6 +2681,7 @@ status = "handbook"
 notes = "Documented, not yet observed. The names are written as a `featureNames` block at the start of the feature, the default language as `name \"…\";` and the others as Windows names in their language, as glyphsLib writes them."
 guesses = [
   "A name in a language without a Windows language id is left out, as fontc does (glyphsLib stops with an error), and text tokens in names are not expanded yet; a name in such a language exported from the reference app settles it.",
+  "Choosing another language for a name row removes the name and adds it in the new language, as two undo steps; changing a row's language in the reference app settles whether it is one step.",
 ]
 
 [[behavior]]

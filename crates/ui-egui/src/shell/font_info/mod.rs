@@ -12,6 +12,7 @@
 //! | [`font_tab`] | M7.16 | Family Name, Units per Em, Version, Date, General fields, Axes, Custom Parameters |
 //! | [`masters_tab`] | M7.17 | the master list and its General, Metrics, Stems and Custom Parameters sections |
 //! | [`exports_tab`] | M7.18 | the export list, the instance preview, the instance fields |
+//! | [`features_tab`] | M8.17 | the prefixes, classes and features, the code editor ([`code_editor`]), the Add Feature picker |
 //! | [`other_tab`] | M7.16 | Other Settings |
 //! | [`notes_tab`] | M7.16 | the font note with Markdown highlighting |
 //!
@@ -27,7 +28,9 @@
 //! Rows: `fontInfo`, `font.info`, `font.info.selectTab`, `fontInfo.fieldPicker`,
 //! `fontInfo.customParameterPicker` (M7.15) and the tab rows of each package.
 
+pub mod code_editor;
 pub mod exports_tab;
+pub mod features_tab;
 pub mod font_tab;
 pub mod masters_tab;
 pub mod notes_tab;
@@ -39,7 +42,7 @@ mod tests;
 
 use std::collections::HashSet;
 
-use egui::{Align2, Id, RichText};
+use egui::{Align2, Id};
 use fontcraft_engine::fontinfo::Scope;
 use fontcraft_engine::fontinfo::rows::RowKind;
 use fontcraft_model::Font;
@@ -77,8 +80,6 @@ const REMOVE_FIELD: &str = "font.info.removeField";
 /// The window's default size, in list columns and list rows of the theme.
 const WINDOW_COLUMNS: f32 = 16.0;
 const WINDOW_ROWS: f32 = 26.0;
-/// Most feature snippets the read-only Features tab lists per group.
-const MAX_SNIPPETS_SHOWN: usize = 512;
 
 /// The tabs, in order.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -129,13 +130,12 @@ impl Tab {
 /// Draws one tab's contents inside the window.
 pub type TabFn = fn(&mut FontcraftApp, &mut egui::Ui, &mut Pending);
 
-/// The function that draws each tab: a tab's package mounts it by naming its `show` here. The
-/// Features tab shows the stored feature code read-only until its own widget takes this slot.
+/// The function that draws each tab: a tab's package mounts it by naming its `show` here.
 pub const TABS: &[(Tab, TabFn)] = &[
     (Tab::Font, font_tab::show),
     (Tab::Masters, masters_tab::show),
     (Tab::Exports, exports_tab::show),
-    (Tab::Features, features_read_only),
+    (Tab::Features, features_tab::show),
     (Tab::Other, other_tab::show),
     (Tab::Notes, notes_tab::show),
 ];
@@ -180,6 +180,9 @@ pub struct FontInfoState {
     /// The Masters tab's icon picker or metric editor was open at the end of the last frame.
     #[serde(skip)]
     pub popup: bool,
+    /// The Features tab's view state.
+    #[serde(skip)]
+    pub features: features_tab::FeaturesState,
 }
 
 impl FontInfoState {
@@ -352,28 +355,6 @@ fn tab_bar(ui: &mut egui::Ui, current: Tab) -> Option<Tab> {
         }
     });
     picked
-}
-
-/// The Features tab until its own widget mounts: the stored prefixes, classes and features by
-/// name, read-only.
-fn features_read_only(app: &mut FontcraftApp, ui: &mut egui::Ui, _pending: &mut Pending) {
-    let Ok(font) = app.session.font() else { return };
-    let tokens = &app.tokens;
-    let features = &font.features;
-    for (title, list) in [("Prefixes", &features.prefixes), ("Classes", &features.classes), ("Features", &features.features)] {
-        ui.add_space(tokens.dialog_spacing);
-        ui.label(RichText::new(title).strong().size(tokens.section_header_size));
-        if list.is_empty() {
-            ui.label(RichText::new("None").color(tokens.text_dim));
-        }
-        for snippet in list.iter().take(MAX_SNIPPETS_SHOWN) {
-            let color = if snippet.disabled { tokens.text_dim } else { tokens.text };
-            ui.label(RichText::new(snippet.name.as_str()).monospace().color(color));
-        }
-        if list.len() > MAX_SNIPPETS_SHOWN {
-            ui.label(RichText::new(format!("and {} more", list.len() - MAX_SNIPPETS_SHOWN)).color(tokens.text_dim));
-        }
-    }
 }
 
 /// Whether the window has the keyboard: it is open, the last press landed in it, and no text

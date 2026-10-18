@@ -37,6 +37,9 @@ summary = "Suggestion menu that appears while a glyph name, class name or lookup
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
 notes = "Documented, not yet observed."
+guesses = [
+  "The list opens after a name character, @, $ or { is typed, follows the keyboard only (Up, Down, Return or Tab to insert, Escape to close) and closes on a click; using it in the reference app settles mouse clicks and Tab.",
+]
 
 [[panel]]
 id = "fontInfo.featureNamePreview"
@@ -52,6 +55,9 @@ summary = "Popover opened by Option-clicking a glyph name or class name in the c
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
 notes = "Documented, not yet observed."
+guesses = [
+  "The glyph is drawn as it is in the master of the active Edit View tab, else the master Font View shows; Option-clicking a glyph name with another master active in the reference app settles it.",
+]
 
 [[panel]]
 id = "fontInfo.featureTokenPreview"
