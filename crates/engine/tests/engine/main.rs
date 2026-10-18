@@ -65,6 +65,7 @@ mod hint_tt;
 mod hint_tt_more;
 mod hint_upkeep;
 mod image;
+mod instance_masters;
 mod instances;
 mod interaction;
 mod kerning_groups;
