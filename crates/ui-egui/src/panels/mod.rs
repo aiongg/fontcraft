@@ -40,6 +40,7 @@ pub mod measurements;
 pub mod pairs_and_phrases;
 pub mod palette;
 pub mod palette_modules;
+pub mod palette_smart;
 pub mod reference_font;
 pub mod related_glyphs;
 pub mod selection_info;
@@ -119,6 +120,8 @@ pub struct PanelState {
     pub attach: crate::shell::attach::AttachState,
     pub reference_font: reference_font::ReferenceFontState,
     pub compare_table: crate::dialogs::compare_fonts::CompareTableState,
+    pub smart_glyph: crate::dialogs::smart_glyph_settings::SmartGlyphState,
+    pub smart_component: crate::dialogs::smart_component_settings::SmartComponentState,
 }
 
 impl Default for PanelState {
@@ -150,6 +153,8 @@ impl Default for PanelState {
             attach: Default::default(),
             reference_font: Default::default(),
             compare_table: Default::default(),
+            smart_glyph: Default::default(),
+            smart_component: Default::default(),
         }
     }
 }

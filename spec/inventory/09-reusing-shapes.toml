@@ -1034,12 +1034,16 @@ label = "Show Smart Glyph Settings"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{glyph?: name}"
+params = "{glyph?: name, tab?: \"properties\" | \"layers\", layer?: id, open?: bool}"
 area = "components"
 milestone = "M6"
 summary = "Opens the Smart Glyph Settings (tabs Properties and Layers) for a smart glyph. Reached from the component context menu, or with Edit › Info for Selection (Cmd+Alt+I) while in the smart glyph."
 ref = "Reusing Shapes › Smart Components › Setting up Smart Glyphs"
 status = "handbook"
+notes = "Documented, not yet observed. A window that blocks nothing; open: false closes it. Edit › Info for Selection opens the Selection Info window; routing it here for a smart glyph is a follow-up in the Selection Info code."
+guesses = [
+  "With no glyph given, the window shows the edited glyph, else the first glyph selected in Font View; using Info for Selection in the reference app with nothing selected in a smart glyph settles it.",
+]
 
 [[command]]
 id = "smartGlyph.addProperty"
@@ -1127,12 +1131,16 @@ label = "Smart Component Settings"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{glyph?: name, layer?: id, components?: [indices]}"
+params = "{glyph?: name, layer?: id, side?: \"foreground\" | \"background\", components?: [indices], open?: bool}"
 area = "components"
 milestone = "M6"
 summary = "Opens the settings of the selected smart components, one control per property of their smart glyph. Reached by clicking the Smart badge in the component Info box or with Edit › Info for Selection (Cmd+Alt+I)."
 ref = "Reusing Shapes › Smart Components › Using Smart Components"
 status = "handbook"
+notes = "Documented, not yet observed. Without `glyph` it acts on the selected smart components of the edited layer; with `glyph`, `components` is required. Edit › Info for Selection opens the Selection Info window; routing it here for a selected smart component is a follow-up in the Selection Info code. The Smart badge belongs to the component Info box."
+guesses = [
+  "With smart components of different smart glyphs selected, the window lists the properties of all their glyphs by name and sets each on the components whose glyph has it; selecting two such components in the reference app settles it.",
+]
 
 [[command]]
 id = "smartComponent.setValue"
@@ -1167,6 +1175,13 @@ milestone = "M6"
 summary = "Defines the local axes of a smart glyph and maps its layers onto them. For each layer and property at most one of minimum or maximum is ticked; neither means the layer does not take part in that property."
 ref = "Reusing Shapes › Smart Components › Setting up Smart Glyphs"
 status = "handbook"
+notes = "Documented, not yet observed. Every control runs one command: the name, minimum and maximum fields `smartGlyph.setProperty`, the plus button `smartGlyph.addProperty`, a minus button `smartGlyph.removeProperty`, the Layers checkboxes `smartGlyph.setLayerPole`. A refused edit changes nothing and shows its message in the status bar."
+guesses = [
+  "The plus button names a new property Property, then Property 2, Property 3 and so on, with the range 0 to 100; adding a property in the reference app settles the name.",
+  "Each property row has a minus button that removes it, because the handbook names no way to remove a property; the reference app's settings window settles it.",
+  "The Layers tab lists every layer of the glyph, master layers in bold and, in a font with several masters, other layers with their master's name; whether the reference app hides backup or other masters' layers settles it.",
+  "The window stays open beside the Edit View and blocks nothing; whether the reference app shows a modal sheet settles it.",
+]
 
 [[panel]]
 id = "dialog.smartComponentSettings"
@@ -1182,6 +1197,12 @@ milestone = "M6"
 summary = "Per-instance property values of the selected smart components. Opened from the Smart badge or Info for Selection."
 ref = "Reusing Shapes › Smart Components › Using Smart Components"
 status = "handbook"
+notes = "Documented, not yet observed. Every control runs smartComponent.setValue; with several components one command.batch sets them all as one undo step. The window keeps the components it opened for and blocks nothing."
+guesses = [
+  "A component without a stored value shows the value its glyph's default pole layer draws (the master layer's end of the range); opening the settings of a new smart component in the reference app settles it.",
+  "With components whose values differ, the number field is empty and the checkbox shows a mixed state, and a value typed or ticked sets all of them; selecting two components with different values in the reference app settles it.",
+  "The slider sets the value when the drag ends, so a drag is one undo step and the outline follows on release; dragging the slider in the reference app shows whether it previews during the drag.",
+]
 
 [[panel]]
 id = "palette.smartComponent"
@@ -1193,6 +1214,7 @@ milestone = "M6"
 summary = "The same per-instance controls shown at the bottom of the Palette. They are present only while the Palette is open, View › Show Info is checked and a smart component is selected."
 ref = "Reusing Shapes › Smart Components › Using Smart Components"
 status = "handbook"
+notes = "Documented, not yet observed. The section shares its controls with the Smart Component settings window and acts on the selected smart components of the edited layer."
 
 [[behavior]]
 id = "smart.badgeInInfoBox"
