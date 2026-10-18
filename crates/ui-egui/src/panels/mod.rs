@@ -132,6 +132,8 @@ pub struct PanelState {
     pub component_picker: crate::dialogs::glyph_picker_component::PickerState,
     pub smart_glyph: crate::dialogs::smart_glyph_settings::SmartGlyphState,
     pub smart_component: crate::dialogs::smart_component_settings::SmartComponentState,
+    pub compare_fonts: crate::shell::compare_fonts::CompareFontsState,
+    pub compare_family: crate::shell::compare_family::CompareFamilyState,
 }
 
 impl Default for PanelState {
@@ -170,6 +172,8 @@ impl Default for PanelState {
             component_picker: Default::default(),
             smart_glyph: Default::default(),
             smart_component: Default::default(),
+            compare_fonts: Default::default(),
+            compare_family: Default::default(),
         }
     }
 }

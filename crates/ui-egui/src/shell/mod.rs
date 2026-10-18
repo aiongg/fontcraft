@@ -109,6 +109,8 @@ pub const MODULES: &[(&[UiCommand], Handler)] = &[
     (crate::dialogs::cross_axis::COMMANDS, crate::dialogs::cross_axis::run),
     (crate::dialogs::smart_glyph_settings::COMMANDS, crate::dialogs::smart_glyph_settings::run),
     (crate::dialogs::smart_component_settings::COMMANDS, crate::dialogs::smart_component_settings::run),
+    (compare_fonts::COMMANDS, compare_fonts::run),
+    (compare_family::COMMANDS, compare_family::run),
 ];
 
 /// The shell commands' parameters that name files, declared as engine commands declare theirs
@@ -152,6 +154,8 @@ pub fn windows(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'s
     crate::dialogs::smart_glyph_settings::show(app, ui, pending);
     crate::dialogs::smart_component_settings::show(app, ui, pending);
     project_window::show(app, ui, pending);
+    compare_fonts::show(app, ui, pending);
+    compare_family::show(app, ui, pending);
 }
 
 pub fn is_ui_command(id: &str) -> bool {
