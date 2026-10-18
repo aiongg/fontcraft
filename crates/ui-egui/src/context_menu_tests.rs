@@ -304,3 +304,34 @@ fn a_layers_row_has_a_context_menu_that_acts_on_that_row() {
     assert_eq!(layers(&app), before - 1, "the backup row's Delete Layer deletes that layer");
     assert_eq!(app.session.journal().last().map(|(id, _)| id.as_str()), Some("layers.delete"));
 }
+
+#[test]
+fn the_instructor_adds_its_view_items_and_other_tools_leave_them_out() {
+    use context_menu::{INSTRUCTOR, PREVIEW_SCALES};
+    let mut app = edit_app();
+    let at = Point::new(600.0, 600.0);
+    context_menu::open(&mut app, at, tools_glue::Space::Font).unwrap();
+    assert_eq!(contexts(&menu(&app)), ["canvas"], "the Select tool's menu has no Instructor items");
+    assert!(menu(&app).item("hint.tt.showPixelPreview").is_none());
+
+    app.run("tool.select", &json!({"tool": fontcraft_tools::tt_instructor::ID})).unwrap();
+    app.tools.context_menu = None;
+    context_menu::open(&mut app, at, tools_glue::Space::Font).unwrap();
+    let open = menu(&app);
+    assert_eq!(contexts(&open).last(), Some(&INSTRUCTOR));
+    let last = open.sections.len() - 1;
+    let scales: Vec<&str> = PREVIEW_SCALES.iter().map(|s| s.0).collect();
+    let mut expected = vec!["hint.tt.showPixelPreview"];
+    expected.extend(&scales);
+    expected.extend(["hint.tt.showPreviewAddress", "hint.tt.showPointIndexes"]);
+    assert_eq!(commands(&open, last), expected);
+    assert_eq!(open.item(scales[0]).unwrap().checked, Some(true), "1x is the starting scale");
+    assert_eq!(open.item("hint.tt.showPixelPreview").unwrap().checked, Some(true));
+
+    context_menu::invoke(&mut app, scales[2]).unwrap();
+    assert_eq!(app.state.panels.hinting_waterfall.scale, 4);
+    context_menu::open(&mut app, at, tools_glue::Space::Font).unwrap();
+    assert_eq!(menu(&app).item(scales[2]).unwrap().checked, Some(true));
+    context_menu::invoke(&mut app, "hint.tt.showPixelPreview").unwrap();
+    assert!(!app.state.tt_instructor.pixel_preview, "the item toggles the outlines");
+}

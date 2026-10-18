@@ -30,6 +30,9 @@
 //!   (`editView.contextMenu`): they set the edited glyph's colour, or with Alt held the active
 //!   layer's. It offers Exports, Locked and Show Glyph in Font View, and ends with the Copy
 //!   Glyph Names submenu.
+//! - While the TrueType Instructor is the active tool, a last section ([`INSTRUCTOR`]) offers its
+//!   view items: Show Pixel Preview, the Hinting Preview's three scales, Show Preview Address…
+//!   and Show Point Indexes. Other tools' menus leave them out.
 //!
 //! The Font View glyph menu (`fontView.glyphContextMenu`, [`font_view`]) opens on a right-click
 //! on a cell or a List View row. A glyph that is not selected becomes the selection first; on a
@@ -66,6 +69,20 @@ pub const COMPONENT: &str = "canvas.component";
 pub const GUIDE: &str = "canvas.guide";
 /// A PostScript hint's badge or marker, while Show Hints is on.
 pub const HINT: &str = "canvas.hint";
+
+/// The TrueType Instructor's section, shown while that tool is active.
+pub const INSTRUCTOR: &str = "canvas.ttInstructor";
+
+/// The Hinting Preview scale items: (item id, label, `hint.tt.setPreviewScale` scale).
+pub const PREVIEW_SCALES: [(&str, &str, u8); 3] = [
+    ("contextMenu.hintingPreviewScale1x", "Hinting Preview 1×", 1),
+    ("contextMenu.hintingPreviewScale2x", "Hinting Preview 2×", 2),
+    ("contextMenu.hintingPreviewScale4x", "Hinting Preview 4×", 4),
+];
+
+/// The Instructor section's shell commands, before and after the scale items.
+const INSTRUCTOR_BEFORE: &[&str] = &["hint.tt.showPixelPreview"];
+const INSTRUCTOR_AFTER: &[&str] = &[crate::dialogs::tt_preview_address::ID, "hint.tt.showPointIndexes"];
 
 /// The PostScript hint commands the menus show while Show Hints is on, with the menus that show
 /// them (their rows name no `context`: these menus exist only while hints are shown).
@@ -226,7 +243,10 @@ pub fn open(app: &mut FontcraftApp, at: Point, space: Space) -> Result<(), Strin
     let scene = tools_glue::scene(font, tab).ok_or("the edited glyph has no layer in the active master")?;
     let kinds = if hint.is_some() { vec![HINT, CANVAS] } else { kinds(&scene, &tab.selection, hit.as_ref()) };
     let (id, glyph) = (tab.id, tab.edited_glyph().unwrap_or_default().to_string());
-    let sections = sections(&app.session, &app.state, &kinds);
+    let mut sections = sections(&app.session, &app.state, &kinds);
+    if app.tools.toolbox.active_id() == fontcraft_tools::tt_instructor::ID {
+        sections.push(instructor_section(&app.state));
+    }
     app.tools.context_menu = Some(ContextMenu { tab: id, glyph, screen, at: pos, hit, sections });
     Ok(())
 }
@@ -319,6 +339,31 @@ pub fn sections(session: &Session, state: &UiState, kinds: &[&'static str]) -> V
         }
     }
     out
+}
+
+/// The TrueType Instructor's view items, checked as their state is.
+fn instructor_section(state: &UiState) -> Section {
+    let tt = &state.tt_instructor;
+    let scale = state.panels.hinting_waterfall.scale();
+    let command = |id: &&'static str| {
+        let label = UI_COMMANDS.iter().find(|c| c.0 == *id).map_or(*id, |c| c.1);
+        let checked = match *id {
+            "hint.tt.showPixelPreview" => Some(tt.pixel_preview),
+            "hint.tt.showPointIndexes" => Some(tt.point_indexes),
+            _ => None,
+        };
+        ContextItem { command: id, label, enabled: true, disabled_reason: None, checked, alternate: false }
+    };
+    let scales = PREVIEW_SCALES.iter().map(|&(id, label, s)| ContextItem {
+        command: id,
+        label,
+        enabled: true,
+        disabled_reason: None,
+        checked: Some(s == scale),
+        alternate: false,
+    });
+    let items = INSTRUCTOR_BEFORE.iter().map(command).chain(scales).chain(INSTRUCTOR_AFTER.iter().map(command)).collect();
+    Section { context: INSTRUCTOR, items }
 }
 
 fn item(session: &Session, state: &UiState, at: Option<(&Scene, &Selection)>, c: &Candidate) -> ContextItem {
@@ -470,6 +515,9 @@ pub fn steps_for(app: &FontcraftApp, menu: &ContextMenu, id: &'static str) -> Ve
     let params = params_for(app, menu, id);
     if id == GUIDE_PROPERTIES {
         return vec![("dialog.open", params)];
+    }
+    if let Some((_, _, scale)) = PREVIEW_SCALES.iter().find(|s| s.0 == id) {
+        return vec![("hint.tt.setPreviewScale", json!({ "scale": scale }))];
     }
     if id == SHOW_IN_FONT_VIEW {
         return vec![("fontView.setSelection", json!({"glyphs": [menu.glyph]})), ("fontView.show", json!({}))];

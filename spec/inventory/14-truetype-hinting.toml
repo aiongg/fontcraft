@@ -803,7 +803,7 @@ summary = "Edit View context-menu toggle that shows or hides the blue (unhinted 
 ref = "TrueType Hinting › Hinting Outlines"
 status = "handbook"
 guesses = ["The toggle hides only the blue and red outlines, as the handbook says; the pixel backdrop stays while the Instructor is active. Choosing an instance turns the preview on. The reference app would settle whether the backdrop goes with the outlines."]
-notes = "M10.26, crates/ui-egui/src/canvas/tt_pixels.rs: {on?: bool, instance?: name or #n or \"master\"}; the outlines are on when the Instructor starts. The context-menu item is not wired yet. Documented, not yet observed."
+notes = "M10.26, crates/ui-egui/src/canvas/tt_pixels.rs: {on?: bool, instance?: name or #n or \"master\"}; the outlines are on when the Instructor starts. The canvas context menu offers it, checked while the outlines show, in its Instructor section (shell/context_menu.rs). Documented, not yet observed."
 
 [[command]]
 id = "hint.tt.setRenderingIntent"
@@ -959,8 +959,8 @@ milestone = "M10"
 summary = "Edit View context-menu toggle that labels every on-curve node with its point index in the exported TrueType outline. These are the numbers used in TTFAutohint control instructions."
 ref = "TrueType Hinting › Show Point Indexes"
 status = "handbook"
-guesses = ["The point numbers show with every tool, not only the TrueType Instructor, since the handbook puts the toggle in the Edit View context menu; the reference app would settle it."]
-notes = "M10.25, crates/ui-egui/src/canvas/tt_badges.rs: labels each on-curve node with the number hint.tt.getPointIndexes gives for the edited layer master, overlaps removed; the numbers are cached per document revision. Not yet in the context menu. Documented, not yet observed."
+guesses = ["The point numbers show with every tool, not only the TrueType Instructor, since the handbook puts the toggle in the Edit View context menu; the reference app would settle it.", "The canvas context menu offers the toggle only while the TrueType Instructor is active, so other tools' menus stay short; the reference app would settle whether every tool's menu has it."]
+notes = "M10.25, crates/ui-egui/src/canvas/tt_badges.rs: labels each on-curve node with the number hint.tt.getPointIndexes gives for the edited layer master, overlaps removed; the numbers are cached per document revision. The canvas context menu offers it in its Instructor section. Documented, not yet observed."
 
 [[command]]
 id = "hint.tt.selectInstructions"
@@ -1031,7 +1031,7 @@ milestone = "M10"
 summary = "Edit View context-menu choice of the magnification at which the Hinting Preview draws its pixels: no scaling (1x), 2x or 4x."
 ref = "TrueType Hinting › Hinting Preview"
 status = "handbook"
-notes = "Documented in the handbook, not yet observed. The waterfall's own context menu offers the three scales too."
+notes = "Documented in the handbook, not yet observed. The canvas context menu's Instructor section offers the three scales as Hinting Preview 1×, 2× and 4×, the current one checked; the waterfall's own context menu offers them too."
 guesses = ["The waterfall starts at 1x and the scale is one setting for the Preview Area and the Preview Panel; the reference app would settle the default and whether the two keep separate scales."]
 
 [[command]]
@@ -1053,6 +1053,7 @@ guesses = [
   "The page and font live under a random 32-digit path in the address, so a device that only finds the port cannot read the font; the reference app's address format would settle whether it does the same.",
   "The served instance is the first exported static instance (or the one named by `instance`), else the first master, since the export path builds instances, not the master the tab draws in; the reference app would settle which instance its page shows.",
   "Glyphs of the tab without a Unicode value are left out of the page, which can only set characters; the reference app's page would settle how it shows them.",
+  "The canvas context menu offers the item only while the TrueType Instructor is active, so other tools' menus stay short; the reference app would settle whether every tool's menu has it.",
 ]
 observe = [
   "T3: choose Show Preview Address…, open the address from another device on the same network, close the dialog, then quit the app; note the port, whether the page was reachable, and at which of these moments the server stopped.",
