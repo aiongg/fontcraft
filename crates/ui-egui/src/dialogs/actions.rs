@@ -243,7 +243,7 @@ fn field_widget(ui: &mut egui::Ui, field: &Field, value: &Value, tokens: &Tokens
             });
             changed
         }
-        Kind::Folder | Kind::Order { .. } | Kind::List { .. } | Kind::Rules => None,
+        Kind::Folder | Kind::Order { .. } | Kind::List { .. } | Kind::Rules | Kind::Palettes { .. } | Kind::Color => None,
     }
 }
 

@@ -109,7 +109,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "hint.ps.deleteHints",
             "Delete Hints",
             [],
-            Some("Delete"),
+            None,
             "{glyph: name, layer?: id (default: the main master's layer), hints: [index]} remove the listed PostScript hints from the layer; the ones after them move up in the list → {removed: count, selection: {glyph, layer}}",
             has_doc,
             delete

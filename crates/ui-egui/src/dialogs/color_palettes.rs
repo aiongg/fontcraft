@@ -469,7 +469,10 @@ mod tests {
             let mut out = ctx.run_ui(input, |ui| app.ui(ui));
             out.textures_delta.clear();
         };
+        // A modal whose content changed size is centred again over the next two frames.
         let click = |app: &mut FontcraftApp, id: egui::Id| {
+            frame(app, Vec::new());
+            frame(app, Vec::new());
             let at = ctx.read_response(id).unwrap_or_else(|| panic!("{id:?} was not drawn")).rect.center();
             let button = |pressed| Input::PointerButton { pos: at, button: PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
             frame(app, vec![Input::PointerMoved(at)]);

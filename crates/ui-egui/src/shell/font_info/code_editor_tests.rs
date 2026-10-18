@@ -19,8 +19,10 @@ fn stretches(code: &str, errors: &[std::ops::Range<usize>]) -> Vec<(String, egui
         .collect()
 }
 
+/// The colour of the stretch that holds `part`; glyph names share the plain text's colour, so
+/// they join the spaces around them in one stretch.
 fn colour_of(code: &str, part: &str) -> egui::Color32 {
-    stretches(code, &[]).into_iter().find(|(t, _, _)| t == part).unwrap_or_else(|| panic!("`{part}` is a stretch of `{code}`")).1
+    stretches(code, &[]).into_iter().find(|(t, _, _)| t.trim() == part).unwrap_or_else(|| panic!("`{part}` is a stretch of `{code}`")).1
 }
 
 #[test]

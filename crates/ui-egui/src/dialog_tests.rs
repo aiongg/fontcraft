@@ -307,8 +307,11 @@ fn file_export_opens_the_export_dialog_which_runs_on_ok() {
     call(&mut app, "ui.key", json!({"key": "Escape"}));
     assert_eq!(call(&mut app, "ui.dialog.inspect", json!({}))["open"], false);
 
-    let variable = fails(&mut app, "engine.execute", json!({"command": "file.export", "params": {"tab": "variable"}}));
-    assert!(variable.contains("not built"), "{variable}");
+    // The Variable Fonts tab opens its own dialog.
+    call(&mut app, "engine.execute", json!({"command": "file.export", "params": {"tab": "variable"}}));
+    let variable = call(&mut app, "ui.dialog.inspect", json!({}));
+    assert_eq!((variable["dialog"].clone(), variable["mode"].clone()), (json!("dialog.exportVariable"), json!("runOnOk")), "{variable}");
+    call(&mut app, "ui.dialog.cancel", json!({}));
 }
 
 #[test]

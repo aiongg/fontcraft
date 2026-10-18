@@ -75,8 +75,8 @@ fn features_sidebar_groups_and_buttons_give_the_font_their_commands_give() {
     let pending = tab.click(&mut app, compile_id());
     assert_eq!(pending, vec![("font.features.compile", json!({"master": "m01"}))], "Compile names the master shown");
 
-    // Update adds liga for f_i, as an automatic entry with its update button.
-    app.run("glyph.newGlyph", &json!({"name": "f_i"})).unwrap();
+    // Update adds liga for f_f (f_i would go to dlig), as an automatic entry with its update button.
+    app.run("glyph.newGlyph", &json!({"name": "f_f"})).unwrap();
     let pending = tab.click(&mut app, update_all_id());
     let f = same_as_command(&mut app, pending, "font.features.update", json!({}));
     let liga = f.features.features.iter().position(|e| e.name == "liga").expect("Update adds liga");
@@ -95,7 +95,7 @@ fn features_sidebar_groups_and_buttons_give_the_font_their_commands_give() {
 #[test]
 fn features_automatic_checkbox_turns_generation_off_and_automatic_code_is_read_only() {
     let mut app = app();
-    app.run("glyph.newGlyph", &json!({"name": "f_i"})).unwrap();
+    app.run("glyph.newGlyph", &json!({"name": "f_f"})).unwrap();
     app.run("font.features.update", &json!({})).unwrap();
     let liga = font(&app).features.features.iter().position(|e| e.name == "liga").unwrap();
     let tab = Tab::new(show);
@@ -186,6 +186,16 @@ fn feature_picker_adds_the_highlighted_feature_and_cancel_changes_nothing() {
     tab.frame(&mut app, Vec::new());
     let picker = state(&app).picker.clone().unwrap();
     assert!(picker.choices.iter().find(|c| c.tag == "smcp").is_some_and(|c| c.in_font), "a tag the font has is marked");
+    // The modal is centred again over several frames as its list fills; click Cancel once it stays put.
+    let mut last = None;
+    for _ in 0..120 {
+        tab.frame(&mut app, Vec::new());
+        let now = tab.ctx.read_response(cancel_id()).map(|r| r.rect);
+        if now.is_some() && now == last {
+            break;
+        }
+        last = now;
+    }
     assert!(tab.click(&mut app, cancel_id()).is_empty());
     assert!(state(&app).picker.is_none());
     assert_eq!(font(&app), before, "Cancel changes nothing");
@@ -311,6 +321,8 @@ fn features_inline_errors_mark_the_entry_and_the_fix_gives_the_font_apply_fix_gi
         app.run(id, params).unwrap();
     }
     assert_eq!(font(&app).features.features[1].code, "sub f i by f_i;");
+    // `read_response` falls back to the pass before, so a widget is gone after two frames.
+    tab.frame(&mut app, Vec::new());
     tab.frame(&mut app, Vec::new());
     assert!(state(&app).popover.is_none());
     assert!(tab.ctx.read_response(error_id(error)).is_none(), "the font changed: the markers go");

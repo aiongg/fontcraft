@@ -448,7 +448,7 @@ observe = ["T1: drag a linked hint marker off its node to empty space, then move
 id = "hint.ps.deleteHints"
 label = "Delete Hints"
 menu = []
-shortcut = "Delete"
+shortcut = ""
 when = "editView"
 kind = "engine"
 params = "{glyph: name, layer?: id, hints: [hintIndex]}"
@@ -457,7 +457,7 @@ milestone = "M10"
 summary = "Removes the selected hints from the layer. In the UI the Delete key does this while hint badges are selected."
 ref = "PostScript Hinting › Stem Hints"
 status = "handbook"
-notes = "M10.4: crates/engine/src/cmd/hint_ps.rs. Documented, not yet observed in the reference app."
+notes = "M10.4: crates/engine/src/cmd/hint_ps.rs. No default shortcut of its own: Delete belongs to edit.delete in Edit View, and the Select tool sends Delete to this command while hints are selected (crates/tools/src/hint_drag.rs). Documented, not yet observed in the reference app."
 
 [[command]]
 id = "hint.ps.clearGlyphHints"

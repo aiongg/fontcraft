@@ -239,8 +239,13 @@ mod tests {
             }
         }
 
+        /// Clicks `id` `clicks` times where the last of two plain frames drew it, left of its
+        /// centre: the palette's scroll bar takes clicks at the panel's right edge, where a row's
+        /// swatch can end.
         fn press(&self, app: &mut FontcraftApp, id: egui::Id, clicks: usize) {
-            let at = self.ctx.read_response(id).unwrap_or_else(|| panic!("{id:?} was not drawn")).rect.center();
+            self.frame(app, Vec::new());
+            self.frame(app, Vec::new());
+            let at = self.ctx.read_response(id).unwrap_or_else(|| panic!("{id:?} was not drawn")).rect.lerp_inside(egui::vec2(0.25, 0.5));
             let button = |pressed| Event::PointerButton { pos: at, button: PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
             self.frame(app, vec![Event::PointerMoved(at)]);
             for _ in 0..clicks {
@@ -295,6 +300,8 @@ mod tests {
         w.settle(&mut app);
         w.press(&mut app, label_id(&layer), 2);
         assert!(w.ctx.memory(|m| m.has_focus(size_field(&layer))), "the size field takes the keyboard");
+        // The field is drawn from the frame after the double click.
+        w.frame(&mut app, Vec::new());
         w.frame(&mut app, vec![Event::Text("64".into())]);
         w.frame(&mut app, vec![Event::Key { key: egui::Key::Enter, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::NONE }]);
         let (id, params) = last(&app);

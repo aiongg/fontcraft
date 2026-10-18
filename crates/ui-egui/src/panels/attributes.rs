@@ -468,7 +468,11 @@ mod tests {
             }
         }
 
+        /// Clicks `id` where the last of two plain frames drew it: the panel's rows move when
+        /// the command before changed what it shows.
         fn click(&self, app: &mut FontcraftApp, id: egui::Id) {
+            self.frame(app, Vec::new());
+            self.frame(app, Vec::new());
             let at = self.ctx.read_response(id).unwrap_or_else(|| panic!("{id:?} was not drawn")).rect.center();
             let button = |pressed| Event::PointerButton { pos: at, button: PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
             self.frame(app, vec![Event::PointerMoved(at)]);
