@@ -92,7 +92,7 @@ fn skip(list: &mut Vec<Value>, glyph: Option<&str>, layer: Option<&str>, reason:
 }
 
 /// A number parameter that must lie in `range` when given.
-fn opt_in(p: &Params, key: &str, range: std::ops::RangeInclusive<f64>) -> Result<Option<f64>> {
+pub(super) fn opt_in(p: &Params, key: &str, range: std::ops::RangeInclusive<f64>) -> Result<Option<f64>> {
     match p.opt_f64(key)? {
         Some(v) if !(v.is_finite() && range.contains(&v)) => {
             Err(p.bad(format!("`{key}` must be between {} and {}, got {v}", range.start(), range.end())))
@@ -169,7 +169,7 @@ fn is_capital(g: &Glyph, data: &GlyphData) -> bool {
 }
 
 /// Every exported letter and figure, in font order.
-fn default_glyphs(font: &Font, data: &GlyphData) -> Vec<String> {
+pub(super) fn default_glyphs(font: &Font, data: &GlyphData) -> Vec<String> {
     font.glyphs
         .iter()
         .filter(|g| g.export)
@@ -179,7 +179,7 @@ fn default_glyphs(font: &Font, data: &GlyphData) -> Vec<String> {
 }
 
 /// `masters`: master ids, repeats dropped; every master by default.
-fn master_ids(p: &Params, font: &Font) -> Result<Vec<String>> {
+pub(super) fn master_ids(p: &Params, font: &Font) -> Result<Vec<String>> {
     let Some(ids) = p.opt_strings("masters")? else {
         return Ok(font.masters.iter().map(|m| m.id.clone()).collect());
     };

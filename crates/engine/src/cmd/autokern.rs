@@ -46,6 +46,7 @@ use fontcraft_spacing::profile::{self, Band, SideProfile};
 use fontcraft_spacing::{self as spacing, SIDEBEARING_RANGE, metrics_source, round_half_up};
 use serde_json::{Map, Value, json};
 
+use super::autospace::{default_glyphs, master_ids, opt_in};
 use super::common::master_metrics;
 use super::kerning::{MAX_KERN_VALUE, direction as any_direction};
 use super::*;
@@ -124,37 +125,6 @@ pub fn specs() -> Vec<CommandSpec> {
 
 // ── Shared ─────────────────────────────────────────────────────────────────────────────────────
 
-/// A number parameter that must lie in `range` when given.
-fn opt_in(p: &Params, key: &str, range: std::ops::RangeInclusive<f64>) -> Result<Option<f64>> {
-    match p.opt_f64(key)? {
-        Some(v) if !(v.is_finite() && range.contains(&v)) => {
-            Err(p.bad(format!("`{key}` must be between {} and {}, got {v}", range.start(), range.end())))
-        }
-        other => Ok(other),
-    }
-}
-
-/// `masters`: master ids, repeats dropped; every master by default.
-fn master_ids(p: &Params, font: &Font) -> Result<Vec<String>> {
-    let Some(ids) = p.opt_strings("masters")? else {
-        return Ok(font.masters.iter().map(|m| m.id.clone()).collect());
-    };
-    if ids.is_empty() {
-        return Err(p.bad("`masters` is empty"));
-    }
-    let mut seen = HashSet::new();
-    let mut out = Vec::new();
-    for id in ids {
-        if !font.masters.iter().any(|m| m.id == id) {
-            return Err(p.bad(format!("`masters`: there is no master `{id}`")));
-        }
-        if seen.insert(id) {
-            out.push(id.to_string());
-        }
-    }
-    Ok(out)
-}
-
 /// Why `master` cannot have kerning of its own, when it takes it from another master.
 fn linked(font: &Font, m: &Master) -> Option<String> {
     let source = metrics_source(font, &m.id)?;
@@ -174,16 +144,6 @@ fn horizontal(p: &Params) -> Result<Direction> {
 fn band_of(g: &Glyph, data: &GlyphData) -> usize {
     let props = glyph_props(g, data, false);
     if props.case.as_deref() == Some("upper") || props.category.as_deref() == Some("Number") { CAPS } else { LOWER }
-}
-
-/// Every exported letter and figure, in font order.
-fn default_glyphs(font: &Font, data: &GlyphData) -> Vec<String> {
-    font.glyphs
-        .iter()
-        .filter(|g| g.export)
-        .filter(|g| matches!(glyph_props(g, data, false).category.as_deref(), Some("Letter" | "Number")))
-        .map(|g| g.name.clone())
-        .collect()
 }
 
 /// The sampled band from the baseline less its overshoot to `height` plus its overshoot, and
