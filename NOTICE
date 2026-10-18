@@ -267,6 +267,7 @@ bundled, the file says so in its header and the project is listed here with its 
   (https://github.com/simoncozens/opentypespec-py, Apache License 2.0), which types the OpenType
   tag registry.
   The collection layout of crates/tables/src/collection.rs (M12.3) follows otf2otc.py in AFDKO 5.0.1, Apache License 2.0, Copyright 2014, 2017 Adobe.
+  The normalised dump (crates/tables/src/text/ttxn.rs and ttxn_otl.rs, M12.10) is ported from ttxn.py in AFDKO 5.0.1, Apache License 2.0, Copyright 2014 Adobe; the abstract-font dump (text/txdump.rs) follows the output of AFDKO's tx -dump.
   crates/tables/src/features.rs follows fontTools' TTFont glyph naming (MIT License).
 
   The font-wide metrics checks (crates/audit/src/checks/metrics_font.rs) follow the rules of

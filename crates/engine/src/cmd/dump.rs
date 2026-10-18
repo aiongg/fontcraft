@@ -19,7 +19,7 @@ fn ttx_specs() -> Vec<CommandSpec> {
         "Dump Tables",
         [],
         None,
-        "{font: path, face?: number, tables?: [tag | {tag, view?}], excludeTables?: [tag], format?: \"ttx\"|\"json\"|\"hex\"|\"text\", split?: \"tables\", output?: path, outputDir?: path, noClobber?: bool, disassemble?: bool, strict?: bool, newline?: \"lf\"|\"cr\"|\"crlf\"} the tables of a compiled font, collection face, WOFF or WOFF2 file as TTX (the XML of the reference dump tool), the same tree as JSON, or hex; tables that cannot be read are written as hex unless strict; tables leaves the glyph order out; split writes one file per table beside the main file → {format, text} or {format, json} without an output, {format, paths} with one",
+        "{font: path, face?: number, tables?: [tag | {tag, view?}], excludeTables?: [tag], format?: \"ttx\"|\"json\"|\"hex\"|\"text\", split?: \"tables\", output?: path, outputDir?: path, noClobber?: bool, disassemble?: bool, strict?: bool, newline?: \"lf\"|\"cr\"|\"crlf\", normalize?: bool, version?: bool, hints?: bool, showExtensions?: bool, glyphs?: [name] | string, glyphDetail?: \"short\"|\"medium\"|\"long\"} the tables of a compiled font, collection face, WOFF or WOFF2 file as TTX (the XML of the reference dump tool), the same tree as JSON, or hex; tables that cannot be read are written as hex unless strict; tables leaves the glyph order out; split writes one file per table beside the main file. Text views: a table with a view ({tag: \"GPOS\", view: \"fea\"|\"normalized\"}), the pseudo-tables @font (the font program's DICTs) and @glyphs (index, name, encoding and, with glyphDetail medium or long, the path with hints unless hints is false), written as text. normalize writes the normalised dump: tables sorted, values that always differ zeroed, outlines as text paths, GSUB and GPOS as rules (version false also blanks the version fields, showExtensions marks extension lookups) → {format, text} or {format, json} without an output, {format, paths} with one",
         super::always,
         ttx::run
     ).files(const { &[FileParam::read("font"), FileParam::write("output"), FileParam::write("outputDir")] }).writes_files()]
@@ -37,6 +37,9 @@ mod ttx {
     use crate::{EngineError, Result, Session};
 
     pub(super) fn run(_: &mut Session, params: &Value) -> Result<Value> {
+        if let Some(result) = super::views::run(params)? {
+            return Ok(result);
+        }
         let p = Params::new("font.dumpTables", params)?;
         let path = Path::new(p.str("font")?);
         let face = p.opt_int("face", 0, 255)?.unwrap_or(0) as u32;
@@ -199,8 +202,215 @@ mod ttx {
     }
 }
 
-/// The text views, `@font`, `@glyphs` and `--normalize` (M12.10).
+/// The text views, `@font`, `@glyphs` and `--normalize` (M12.10). They are options of
+/// `font.dumpTables`, which [`ttx::run`] hands to [`views::run`] first; no command of their own.
 fn view_specs() -> Vec<CommandSpec> {
-    // M12.10
     Vec::new()
+}
+
+/// `font.dumpTables` with `format: "text"`, a table view, `@font`, `@glyphs` or `normalize`.
+mod views {
+    use std::path::Path;
+
+    use fontcraft_tables::sfnt::parse_tag;
+    use fontcraft_tables::text::{FONT_VIEW, GLYPHS_VIEW, GlyphDetail, ViewOptions, view};
+    use serde_json::{Value, json};
+
+    use super::super::file_io::{OutputRequest, output_path, read_input, write_output};
+    use crate::params::Params;
+    use crate::{EngineError, Result};
+
+    /// One item of `tables`: a tag or pseudo-table and its view.
+    struct Item {
+        name: String,
+        view: Option<String>,
+    }
+
+    /// The result of the request when it asks for a text view or the normalised dump; `None`
+    /// leaves it to the TTX, JSON and hex dump.
+    pub(super) fn run(params: &Value) -> Result<Option<Value>> {
+        let p = Params::new("font.dumpTables", params)?;
+        let mut items = Vec::new();
+        for item in p.opt_array("tables")?.map(Vec::as_slice).unwrap_or_default() {
+            let (name, view) = match item {
+                Value::String(s) => (s.clone(), None),
+                Value::Object(o) => (
+                    o.get("tag").and_then(Value::as_str).ok_or_else(|| p.bad("each item of `tables` needs a `tag`"))?.to_string(),
+                    o.get("view").and_then(Value::as_str).filter(|v| !v.is_empty()).map(str::to_string),
+                ),
+                _ => return Err(p.bad("`tables` holds tags or {tag, view} objects")),
+            };
+            items.push(Item { name, view });
+        }
+        let normalize = p.bool_or("normalize", false)?;
+        let format = p.opt_str("format")?.unwrap_or("ttx");
+        let viewed = items.iter().any(|i| i.name.starts_with('@') || i.view.as_deref().is_some_and(|v| v != "raw"));
+        if !normalize && !viewed && format != "text" {
+            return Ok(None);
+        }
+        match (normalize, format) {
+            (true, "ttx") => {}
+            (true, _) => return Err(p.bad("the normalised dump is written as TTX: leave `format` out or give \"ttx\"")),
+            (false, "ttx" | "text") => {}
+            (false, _) => return Err(p.bad("table views, @font and @glyphs are text: give `format` \"text\"")),
+        }
+        if p.opt_str("split")?.is_some() {
+            return Err(EngineError::Unsupported("splitting the text views or the normalised dump into files is not built yet".into()));
+        }
+        if p.opt_array("excludeTables")?.is_some_and(|v| !v.is_empty()) && !items.is_empty() {
+            return Err(p.bad("give the tables to write or the tables to leave out, not both"));
+        }
+        let glyphs: Vec<String> = match p.get("glyphs") {
+            None | Some(Value::Null) => Vec::new(),
+            Some(Value::String(s)) => s.split(',').map(str::trim).filter(|s| !s.is_empty()).map(str::to_string).collect(),
+            Some(Value::Array(a)) => {
+                a.iter().map(|v| v.as_str().map(str::to_string).ok_or_else(|| p.bad("`glyphs` holds glyph names"))).collect::<Result<_>>()?
+            }
+            Some(_) => return Err(p.bad("`glyphs` is a list of glyph names or a comma-separated string")),
+        };
+        let glyph_detail = match p.opt_str("glyphDetail")?.unwrap_or("short") {
+            "short" => GlyphDetail::Short,
+            "medium" => GlyphDetail::Medium,
+            "long" => GlyphDetail::Long,
+            other => return Err(p.bad(format!("`glyphDetail` must be \"short\", \"medium\" or \"long\", got \"{other}\""))),
+        };
+        let base = ViewOptions {
+            glyphs,
+            glyph_detail,
+            no_version: !p.bool_or("version", true)?,
+            no_hints: !p.bool_or("hints", true)?,
+            show_extensions: p.bool_or("showExtensions", false)?,
+            ..ViewOptions::default()
+        };
+        let newline = match p.opt_str("newline")?.unwrap_or("lf") {
+            "lf" => "\n",
+            "cr" => "\r",
+            "crlf" => "\r\n",
+            other => return Err(p.bad(format!("`newline` must be \"lf\", \"cr\" or \"crlf\", got \"{other}\""))),
+        };
+        let request = OutputRequest::from_params(&p)?;
+        if request.in_place {
+            return Err(p.bad("a dump never replaces its input: give `output` or `outputDir`"));
+        }
+
+        let path = Path::new(p.str("font")?);
+        let face = p.opt_int("face", 0, 255)?.unwrap_or(0) as u32;
+        let input = read_input(path)?;
+        if !input.kind.is_font() {
+            return Err(p.bad(format!("{} is not a compiled font ({})", path.display(), input.kind.name())));
+        }
+        let font = fontcraft_tables::read(&input.bytes, face)?;
+
+        let mut text = String::new();
+        if normalize {
+            let mut tables = Vec::new();
+            for item in &items {
+                if item.name.starts_with('@') || item.view.as_deref().is_some_and(|v| v != "raw") {
+                    return Err(p.bad("the normalised dump takes tables without views"));
+                }
+                tables.push(parse_tag(&item.name).map_err(|e| p.bad(format!("`tables`: {e}")))?);
+            }
+            if tables.is_empty() {
+                let mut skip = Vec::new();
+                for tag in p.opt_strings("excludeTables")?.unwrap_or_default() {
+                    skip.push(parse_tag(tag).map_err(|e| p.bad(format!("`excludeTables`: {e}")))?);
+                }
+                if !skip.is_empty() {
+                    tables = font.tables.keys().copied().filter(|t| !skip.contains(t)).collect();
+                }
+            }
+            text = view(&font, &ViewOptions { normalize: true, tables, ..base })?;
+        } else {
+            if items.is_empty() {
+                return Err(p.bad("the text format writes table views: name the tables, with views, or @font and @glyphs"));
+            }
+            for item in &items {
+                let options = match item.name.as_str() {
+                    FONT_VIEW | GLYPHS_VIEW => ViewOptions { view: item.name.clone(), ..base.clone() },
+                    name if name.starts_with('@') => return Err(p.bad(format!("`{name}` is not a pseudo-table: give @font or @glyphs"))),
+                    name => ViewOptions {
+                        view: item.view.clone().unwrap_or_else(|| "raw".into()),
+                        tables: vec![parse_tag(name).map_err(|e| p.bad(format!("`tables`: {e}")))?],
+                        ..base.clone()
+                    },
+                };
+                text.push_str(&view(&font, &options)?);
+            }
+        }
+        let text = if newline == "\n" { text } else { text.replace('\n', newline) };
+        let format_name = if normalize { "ttx" } else { "text" };
+        if request.output.is_some() || request.output_dir.is_some() {
+            let ext = if normalize { "ttx" } else { "txt" };
+            let target = output_path(path, &request, "", Some(ext))?;
+            write_output(&target, text.as_bytes(), &request)?;
+            return Ok(Some(json!({ "format": format_name, "paths": [target.display().to_string()] })));
+        }
+        Ok(Some(json!({ "format": format_name, "text": text })))
+    }
+
+    #[cfg(test)]
+    #[cfg(not(target_arch = "wasm32"))]
+    mod tests {
+        use std::path::PathBuf;
+
+        use crate::Session;
+        use serde_json::json;
+
+        /// A TrueType font with one empty glyph and a `name` table, written to `dir`.
+        fn font_file(dir: &std::path::Path) -> PathBuf {
+            let mut font = fontcraft_tables::SfntFont::new(fontcraft_tables::Flavour::TrueType);
+            let mut head = vec![0u8; 54];
+            head[0..4].copy_from_slice(&0x0001_0000u32.to_be_bytes());
+            head[4..8].copy_from_slice(&0x0001_0000u32.to_be_bytes());
+            head[18..20].copy_from_slice(&1000u16.to_be_bytes());
+            head[50..52].copy_from_slice(&1u16.to_be_bytes());
+            font.insert(*b"head", head);
+            font.insert(*b"maxp", vec![0, 0, 0x50, 0, 0, 1]);
+            font.insert(*b"loca", vec![0, 0, 0, 0, 0, 0, 0, 0]);
+            font.insert(*b"glyf", Vec::new());
+            let bytes = fontcraft_tables::write(&font, &fontcraft_tables::WriteOptions::default()).unwrap();
+            let path = dir.join("Views.ttf");
+            std::fs::write(&path, bytes).unwrap();
+            path
+        }
+
+        #[test]
+        fn font_dump_tables_writes_text_views_and_the_normalised_dump() {
+            let dir = std::env::temp_dir().join(format!("fontcraft-views-{}", std::process::id()));
+            std::fs::create_dir_all(&dir).unwrap();
+            let f = font_file(&dir).display().to_string();
+            let mut s = Session::new();
+
+            let font = s.execute("font.dumpTables", &json!({"font": f, "tables": [{"tag": "@font"}], "format": "text"})).unwrap();
+            assert_eq!(font["format"], "text");
+            assert!(font["text"].as_str().unwrap().starts_with("## Top Dict\nversion             \"1.000\"\n"), "{font}");
+
+            let glyphs = s.execute("font.dumpTables", &json!({"font": f, "tables": ["@glyphs"], "glyphDetail": "long"})).unwrap();
+            assert_eq!(glyphs["text"], "## glyph[tag] {name,encoding,path}\nglyph[0] {.notdef,-,\n  0 width\n  endchar}\n");
+
+            let normalized = s.execute("font.dumpTables", &json!({"font": f, "normalize": true, "tables": ["head"]})).unwrap();
+            let text = normalized["text"].as_str().unwrap();
+            assert!(text.contains("  <head>") && !text.contains("<maxp>") && !text.contains("<GlyphOrder>"), "{text}");
+            assert!(text.contains("<magicNumber value=\"0x0\"/>"), "{text}");
+
+            let out = dir.join("views.txt");
+            let written = s
+                .execute("font.dumpTables", &json!({"font": f, "tables": ["@font"], "format": "text", "output": out.display().to_string()}))
+                .unwrap();
+            assert_eq!(written["paths"][0], out.display().to_string());
+            assert!(std::fs::read_to_string(&out).unwrap().starts_with("## Top Dict"));
+
+            for bad in [
+                json!({"font": f, "normalize": true, "format": "json"}),
+                json!({"font": f, "tables": ["@nothing"], "format": "text"}),
+                json!({"font": f, "format": "text"}),
+                json!({"font": f, "tables": ["@glyphs"], "glyphDetail": "huge"}),
+                json!({"font": f, "tables": [{"tag": "GPOS", "view": "fea"}], "format": "hex"}),
+                json!({"font": f, "normalize": true, "split": "tables", "outputDir": dir.display().to_string()}),
+            ] {
+                assert!(s.execute("font.dumpTables", &bad).is_err(), "{bad}");
+            }
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+    }
 }
