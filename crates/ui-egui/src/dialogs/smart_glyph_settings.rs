@@ -204,7 +204,9 @@ fn properties(app: &FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending, g: &
                             && n != value
                         {
                             let mut params = json!({"glyph": g.name, "property": p.name});
-                            params[kind] = json!(n);
+                            if let Some(m) = params.as_object_mut() {
+                                m.insert(kind.to_string(), json!(n));
+                            }
                             pending.push(("smartGlyph.setProperty", params));
                         }
                     }

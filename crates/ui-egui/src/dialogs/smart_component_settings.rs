@@ -147,8 +147,10 @@ pub fn rows(font: &Font, t: &Targets) -> Vec<Row> {
 pub fn value_command(t: &Targets, row: &Row, value: f64) -> (&'static str, Value) {
     let step = |component: usize| {
         let mut params = json!({"glyph": t.glyph, "layer": t.layer, "component": component, "property": row.name, "value": value});
-        if t.side == LayerSide::Background {
-            params["side"] = json!("background");
+        if t.side == LayerSide::Background
+            && let Some(m) = params.as_object_mut()
+        {
+            m.insert("side".into(), json!("background"));
         }
         params
     };

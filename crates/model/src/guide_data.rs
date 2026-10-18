@@ -89,7 +89,7 @@ fn array(items: Vec<Value>) -> Value {
 
 fn as_index(v: &Value) -> Option<usize> {
     let n = v.as_num()?.as_f64();
-    (n.is_finite() && n >= 0.0 && n.fract() == 0.0 && n <= u32::MAX as f64).then(|| n as usize)
+    (n.is_finite() && n >= 0.0 && n.fract() == 0.0 && n <= u32::MAX as f64).then_some(n as usize)
 }
 
 /// Whether `t` can be a guide's thickness: finite, not zero, at most [`MAX_GUIDE_THICKNESS`]

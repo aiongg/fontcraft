@@ -326,7 +326,8 @@ fn corner_angle(nodes: &[Node], closed: bool, i: usize) -> Option<f64> {
 /// is not ink.
 fn counters(stems: &[&Stem], direction: StemDirection, outline: &BezPath) -> Vec<Value> {
     // Across: the coordinate the width is measured along; along: the other one.
-    let (x, y): (fn(Point) -> f64, fn(Point) -> f64) = match direction {
+    type Coord = fn(Point) -> f64;
+    let (x, y): (Coord, Coord) = match direction {
         StemDirection::Vertical => (|p| p.x, |p| p.y),
         _ => (|p| p.y, |p| p.x),
     };
@@ -342,7 +343,7 @@ fn counters(stems: &[&Stem], direction: StemDirection, outline: &BezPath) -> Vec
         let pad = if s.round { s.width / 2.0 } else { 0.0 };
         (lo(x), hi(x), lo(y) - pad, hi(y) + pad)
     };
-    let boxes: Vec<(f64, f64, f64, f64)> = stems.iter().take(MAX_COUNTER_STEMS).map(|s| extent(*s)).collect();
+    let boxes: Vec<(f64, f64, f64, f64)> = stems.iter().take(MAX_COUNTER_STEMS).map(|s| extent(s)).collect();
     let mut out = Vec::new();
     for (i, a) in boxes.iter().enumerate() {
         // The nearest stem beyond this one whose extent along the stem overlaps it.

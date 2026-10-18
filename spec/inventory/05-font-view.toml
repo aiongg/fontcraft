@@ -382,7 +382,7 @@ milestone = "M4"
 summary = "Opens the Selection Info window for the selected glyphs, where name, Unicode values, production name, script, category, subcategory and sort name can be read and overridden."
 ref = "Font View › Glyph Properties"
 status = "handbook"
-notes = "Documented, not yet observed. The window describes the Font View selection, or in Edit View the edited glyph; its close button runs the command with `open: false`."
+notes = "Documented, not yet observed. The window describes the Font View selection, or in Edit View the edited glyph; its close button runs the command with `open: false`. In Edit View it opens the Smart Component Settings when smart components are selected, and the Smart Glyph Settings in a smart glyph."
 guesses = [
   "The menu item opens the window and does not toggle it; `open: false` closes it. Settled by observation.",
   "In Edit View the window describes the edited glyph. Settled by observation.",

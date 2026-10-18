@@ -132,7 +132,7 @@ fn a_stroked_open_path_fills_as_its_outline() {
 #[test]
 fn the_stroke_section_runs_set_stroke_on_the_selected_paths() {
     let mut app = line_app(None);
-    collapse(&mut app, &["dimensions", "fitCurve", "layers", "transformations"]);
+    collapse(&mut app, &["dimensions", "fitCurve", "layers", "transformations", "measurements"]);
     let mut w = Window::default();
     w.settle(&mut app);
     let width = widgets::id("stroke.width");

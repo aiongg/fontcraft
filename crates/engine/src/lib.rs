@@ -61,8 +61,8 @@ pub use fontcraft_interp as interp;
 pub use fontcraft_model as model;
 use fontcraft_model::glyphdata::GlyphData;
 use fontcraft_model::{Font, Glyph, PropsCache};
-pub use fontcraft_plugins as plugins;
 pub use fontcraft_pathops as pathops;
+pub use fontcraft_plugins as plugins;
 use serde_json::{Value, json};
 
 #[derive(Debug, thiserror::Error)]

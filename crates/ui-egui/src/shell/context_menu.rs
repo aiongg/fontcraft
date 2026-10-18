@@ -80,8 +80,16 @@ pub const HINT_ITEMS: &[(&str, &[&str])] = &[
 
 /// Shell commands that context menus show, with their rows' `context` (engine commands carry
 /// theirs in `CommandSpec::context`).
-const UI_CONTEXT: &[(&str, &[&str])] =
-    &[("path.focusOnSelectedPath", &[NODE, PATH]), ("path.clearFocusOnPaths", &[CANVAS]), ("glyph.showGlyphsUsingAsComponent", &[CANVAS])];
+const UI_CONTEXT: &[(&str, &[&str])] = &[
+    ("path.focusOnSelectedPath", &[NODE, PATH]),
+    ("path.clearFocusOnPaths", &[CANVAS]),
+    ("glyph.showGlyphsUsingAsComponent", &[CANVAS]),
+    (SMART_GLYPH_SETTINGS, &[COMPONENT]),
+];
+
+/// The component section's Show Smart Glyph Settings: the settings of the clicked component's
+/// glyph.
+const SMART_GLYPH_SETTINGS: &str = crate::dialogs::smart_glyph_settings::ID;
 
 /// Engine commands the object sections show, whose registry entries list no context.
 const OBJECT_ITEMS: &[(&str, &[&str])] = &[("cornerComponent.add", &[NODE]), ("cornerComponent.decompose", &[NODE])];
@@ -465,6 +473,17 @@ pub fn steps_for(app: &FontcraftApp, menu: &ContextMenu, id: &'static str) -> Ve
     }
     if id == SHOW_IN_FONT_VIEW {
         return vec![("fontView.setSelection", json!({"glyphs": [menu.glyph]})), ("fontView.show", json!({}))];
+    }
+    if id == SMART_GLYPH_SETTINGS {
+        let base = match menu.hit.as_ref().map(|h| &h.hit) {
+            Some(Hit::Component { shape }) => with_scene(app, |scene, _| match scene.layer.shapes.get(*shape) {
+                Some(fontcraft_model::Shape::Component(c)) => Some(c.glyph.clone()),
+                _ => None,
+            })
+            .flatten(),
+            _ => None,
+        };
+        return vec![(id, base.map_or_else(|| json!({}), |glyph| json!({ "glyph": glyph })))];
     }
     if ASKS.contains(&id) {
         return vec![ask(id, params)];

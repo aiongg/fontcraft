@@ -152,7 +152,7 @@ mod script;
 mod selections;
 pub mod status;
 mod stem_filters;
-mod tension;
+pub mod tension;
 mod thickness;
 mod tt_assembly;
 mod tt_debug;

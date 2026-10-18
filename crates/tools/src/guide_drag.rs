@@ -4,6 +4,7 @@
 //! | Gesture | Result |
 //! |---|---|
 //! | drag a guide's knob | `guide.setProperties` with the knob's new `x`, `y`, in one interaction; the knob snaps like a node unless `Ctrl` is held |
+//! | drag a power guide's knob | the same with `guide.movePowerGuide`, which moves its linked nodes too |
 //! | drag the guide elsewhere | `guide.setProperties` with a new `angle`: the guide turns about its knob, following the pointer |
 //! | drag an angle-locked guide elsewhere | it moves, as a knob drag does |
 //! | double-click the knob | the guide turns by 90° (an angle-locked guide does not) |
@@ -202,7 +203,10 @@ impl GuideDrag {
             return None;
         }
         self.last_sent = Some(sent);
-        Some(Invocation::new("guide.setProperties", Value::Object(params)))
+        // A power guide carries its linked nodes along, which only `guide.movePowerGuide` does.
+        let power = self.mode == Mode::Move && guide(cx.scene, self.guide).is_some_and(fontcraft_model::guide_data::is_power_guide);
+        let id = if power { "guide.movePowerGuide" } else { "guide.setProperties" };
+        Some(Invocation::new(id, Value::Object(params)))
     }
 }
 

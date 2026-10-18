@@ -158,7 +158,9 @@ fn near(a: (f64, f64), b: (f64, f64)) -> bool {
     (a.0 - b.0).abs() < 1e-6 && (a.1 - b.1).abs() < 1e-6
 }
 
-fn assert_moves(h: &Harness, expected: &[((usize, usize), (f64, f64))]) {
+type Moved = ((usize, usize), (f64, f64));
+
+fn assert_moves(h: &Harness, expected: &[Moved]) {
     let got = h.moved();
     let got: Vec<_> = got.into_iter().filter(|(_, d)| !near(*d, (0.0, 0.0))).collect();
     assert_eq!(got.len(), expected.len(), "{got:?}");

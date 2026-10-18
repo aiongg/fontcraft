@@ -111,6 +111,9 @@ pub struct Dragged<'a> {
     pub moving: &'a Moving,
     /// Where the grabbed point was when the drag began.
     pub grab: Point,
+    /// How far the scene already shows the dragged points moved: the shift of the drag's last
+    /// preview, which the session applies before the next event arrives.
+    pub shown: (f64, f64),
 }
 
 /// `snapped`, the plain snap of the grabbed point dragged to `target`, refined by the
@@ -477,8 +480,15 @@ fn stem_suggestion(scene: &Scene, dragged: Dragged<'_>, target: Point, tol: f64)
     if scene.suggest.stems.is_empty() {
         return None;
     }
-    let ends: Vec<Point> =
-        dragged.selection.points.iter().filter_map(|&(s, n)| scene.node(s, n)).filter(|n| n.on_curve()).map(Node::point).take(MAX_SEGMENTS).collect();
+    let ends: Vec<Point> = dragged
+        .selection
+        .points
+        .iter()
+        .filter_map(|&(s, n)| scene.node(s, n))
+        .filter(|n| n.on_curve())
+        .map(|n| Point::new(n.x - dragged.shown.0, n.y - dragged.shown.1))
+        .take(MAX_SEGMENTS)
+        .collect();
     if ends.len() < 2 {
         return None;
     }
@@ -547,9 +557,10 @@ mod tests {
 
     /// Presses at `from`, drags to `to` with the Select tool and returns the last move preview's
     /// (dx, dy), with the overlays drawn at the end.
+    /// Drags with the Select tool. Each preview is applied to the layer the next event sees, as
+    /// the session does: the selected points move by the preview's shift.
     fn drag(layer: &Layer, suggest: &Suggest, from: (f64, f64), to: (f64, f64)) -> ((f64, f64), usize) {
-        let mut scene = Scene::new("A", "m01", layer);
-        scene.suggest = suggest.clone();
+        let mut shown = layer.clone();
         let mut selection = Selection::new();
         let mut tool = SelectTool::default();
         let mut last = None;
@@ -557,16 +568,31 @@ mod tests {
         let mid = ((from.0 + to.0) / 2.0, (from.1 + to.1) / 2.0);
         steps.extend([(Drag, mid), (Drag, to)]);
         for (kind, (x, y)) in steps {
+            let mut scene = Scene::new("A", "m01", &shown);
+            scene.suggest = suggest.clone();
             let cx = Context { scene: &scene, view: View::default(), selection: &selection, settings: ToolSettings::default() };
             let out = tool.pointer(&cx, &PointerEvent::new(kind, x, y, NONE));
+            let mut moved = None;
             for a in out.actions {
                 match a {
                     Action::Select { selection: s } => selection = s,
                     Action::Preview { invocation } => {
                         let n = |k: &str| invocation.params.get(k).and_then(Value::as_f64).unwrap_or(0.0);
                         last = Some((n("dx"), n("dy")));
+                        moved = last;
                     }
                     _ => {}
+                }
+            }
+            if let Some((dx, dy)) = moved {
+                shown = layer.clone();
+                for &(s, n) in &selection.points {
+                    if let Some(Shape::Path(path)) = shown.shapes.get_mut(s)
+                        && let Some(node) = path.nodes.get_mut(n)
+                    {
+                        node.x += dx;
+                        node.y += dy;
+                    }
                 }
             }
         }

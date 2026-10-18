@@ -250,3 +250,23 @@ fn a_zero_to_one_property_is_a_toggle_and_new_names_are_free() {
     assert_eq!(toggle["toggle"], json!(true));
     assert_eq!(new_property_name(&glyph(&app, "_part.bar")), "Property 2");
 }
+
+#[test]
+fn info_for_selection_opens_the_smart_windows_in_edit_view() {
+    let mut app = smart_app();
+    // A smart component is selected: its settings.
+    let r = app.run("edit.infoForSelection", &json!({})).unwrap();
+    assert_eq!(r["components"], json!([0]), "{r}");
+    assert!(app.state.panels.smart_component.open && !app.state.panels.selection_info);
+    // In the smart glyph itself: the Smart Glyph Settings.
+    app.run("view.editSelectedGlyphs", &json!({"glyphs": ["_part.bar"]})).unwrap();
+    let r = app.run("edit.infoForSelection", &json!({})).unwrap();
+    assert_eq!(r["glyph"], "_part.bar", "{r}");
+    assert!(app.state.panels.smart_glyph.open && !app.state.panels.selection_info);
+    // Nothing smart: the Selection Info window.
+    app.run("selection.set", &json!({"shapes": []})).unwrap();
+    app.run("view.editSelectedGlyphs", &json!({"glyphs": ["bars"]})).unwrap();
+    app.run("selection.set", &json!({"shapes": []})).unwrap();
+    app.run("edit.infoForSelection", &json!({})).unwrap();
+    assert!(app.state.panels.selection_info);
+}

@@ -1066,7 +1066,7 @@ milestone = "M6"
 summary = "Opens the Smart Glyph Settings (tabs Properties and Layers) for a smart glyph. Reached from the component context menu, or with Edit › Info for Selection (Cmd+Alt+I) while in the smart glyph."
 ref = "Reusing Shapes › Smart Components › Setting up Smart Glyphs"
 status = "handbook"
-notes = "Documented, not yet observed. A window that blocks nothing; open: false closes it. Edit › Info for Selection opens the Selection Info window; routing it here for a smart glyph is a follow-up in the Selection Info code."
+notes = "Documented, not yet observed. A window that blocks nothing; open: false closes it. In Edit View, Edit › Info for Selection in a smart glyph opens this window when no smart component is selected; the component context menu's Show Smart Glyph Settings opens it for the clicked component's glyph."
 guesses = [
   "With no glyph given, the window shows the edited glyph, else the first glyph selected in Font View; using Info for Selection in the reference app with nothing selected in a smart glyph settles it.",
 ]
@@ -1163,7 +1163,7 @@ milestone = "M6"
 summary = "Opens the settings of the selected smart components, one control per property of their smart glyph. Reached by clicking the Smart badge in the component Info box or with Edit › Info for Selection (Cmd+Alt+I)."
 ref = "Reusing Shapes › Smart Components › Using Smart Components"
 status = "handbook"
-notes = "Documented, not yet observed. Without `glyph` it acts on the selected smart components of the edited layer; with `glyph`, `components` is required. Edit › Info for Selection opens the Selection Info window; routing it here for a selected smart component is a follow-up in the Selection Info code. The Smart badge belongs to the component Info box."
+notes = "Documented, not yet observed. Without `glyph` it acts on the selected smart components of the edited layer; with `glyph`, `components` is required. In Edit View, Edit › Info for Selection opens this window when smart components are selected. The Smart badge belongs to the component Info box."
 guesses = [
   "With smart components of different smart glyphs selected, the window lists the properties of all their glyphs by name and sets each on the components whose glyph has it; selecting two such components in the reference app settles it.",
 ]

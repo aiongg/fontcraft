@@ -64,7 +64,7 @@ pub const COMMANDS: &[UiCommand] = &[
         "Info for Selection",
         &["Edit"],
         "Cmd+Alt+I",
-        "{open?: bool (default true)} open the Selection Info window on the selected glyphs (in Edit View: the edited glyph); false closes it → {open}",
+        "{open?: bool (default true)} open the Selection Info window on the selected glyphs (in Edit View: the edited glyph); false closes it. In Edit View with smart components selected it opens their Smart Component Settings instead, and in a smart glyph its Smart Glyph Settings, replying as those commands do → {open}",
     ),
 ];
 
@@ -83,11 +83,32 @@ pub fn run(app: &mut FontcraftApp, id: &str, args: &Args) -> Result<Value, Strin
         }
         "edit.infoForSelection" => {
             let open = args.flag("open")?.unwrap_or(true);
-            panels.selection_info = open;
+            if open && let Some(reply) = smart_window(app)? {
+                return Ok(reply);
+            }
+            app.state.panels.selection_info = open;
             Ok(json!({ "open": open }))
         }
         other => Err(format!("unknown command `{other}`")),
     }
+}
+
+/// In Edit View, Info for Selection opens the settings of the selected smart components, or in a
+/// smart glyph with no smart component selected, its Smart Glyph Settings. `None` elsewhere.
+fn smart_window(app: &mut FontcraftApp) -> Result<Option<Value>, String> {
+    use crate::dialogs::{smart_component_settings, smart_glyph_settings};
+    let Some(glyph) = app.state.tab().and_then(|t| t.edited_glyph()).map(str::to_string) else { return Ok(None) };
+    let none = Value::Null;
+    if smart_component_settings::selected(app).is_some() {
+        let args = Args::new(smart_component_settings::ID, &none)?;
+        return smart_component_settings::run(app, smart_component_settings::ID, &args).map(Some);
+    }
+    if app.session.font().ok().and_then(|f| f.glyph(&glyph)).is_some_and(|g| !g.info.parts.is_empty()) {
+        let params = json!({ "glyph": glyph });
+        let args = Args::new(smart_glyph_settings::ID, &params)?;
+        return smart_glyph_settings::run(app, smart_glyph_settings::ID, &args).map(Some);
+    }
+    Ok(None)
 }
 
 /// What a field shows for the glyphs it describes.

@@ -5,10 +5,11 @@
 
 use serde_json::{Map, Value};
 
-use super::{After, Dialog, Fields};
+use super::{After, Dialog, Fields, Mode};
 
 pub const DIALOG: Dialog = Dialog {
     follow_up: true,
+    mode: Mode::RunOnOk,
     after: Some(After { command: "pixel.setPixels", params: follow_up }),
     buttons: ["Add", "Cancel"],
     message: "The Pixel tool paints with the glyph named pixel, which this font does not have. Add it?",

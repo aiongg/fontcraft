@@ -686,7 +686,8 @@ fn move_power_guide(s: &mut Session, v: &Value) -> Result<Value> {
     let delta = (Point::new(nx, ny) - knob(&old)).dot(normal(&old));
     let links = guide_data::links(&old);
     // The layers the move reshapes: (glyph, layer id, side, the moved guide's nodes in it).
-    let mut layers: Vec<(String, String, LayerSide, Vec<(usize, usize)>)> = Vec::new();
+    type Reshaped = (String, String, LayerSide, Vec<(usize, usize)>);
+    let mut layers: Vec<Reshaped> = Vec::new();
     match r.scope {
         GuideScope::Local => {
             let nodes = links.iter().filter(|l| l.glyph.is_none()).map(|l| (l.shape, l.node)).collect();

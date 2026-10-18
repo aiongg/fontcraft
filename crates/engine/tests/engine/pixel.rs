@@ -53,7 +53,9 @@ fn pixels_are_painted_toggled_and_removed_on_the_grid() {
     let before = snapshot(&s);
     let r = run(&mut s, "pixel.setPixels", json!({"glyph": "A", "stroke": [[10, 10]]}));
     assert_eq!(r["pixelGlyphMissing"], true);
-    assert_eq!(snapshot(&s), before);
+    // The command succeeded, so the journal records it; the fonts and history stay as they were.
+    let after = snapshot(&s);
+    assert_eq!((&after["fonts"], &after["inspect"]), (&before["fonts"], &before["inspect"]));
 
     // The default pixel is a square as large as the grid spacing, on every master.
     let r = run(&mut s, "pixel.addPixelGlyph", json!({}));
@@ -90,7 +92,8 @@ fn pixels_are_painted_toggled_and_removed_on_the_grid() {
     let before = snapshot(&s);
     run(&mut s, "pixel.setPixels", paint(json!([[9, 9]]), "remove"));
     run(&mut s, "pixel.setPixels", paint(json!([[1, 0]]), "add"));
-    assert_eq!(snapshot(&s), before);
+    let after = snapshot(&s);
+    assert_eq!((&after["fonts"], &after["inspect"]), (&before["fonts"], &before["inspect"]));
 
     // Refusals.
     assert!(run_err(&mut s, "pixel.setPixels", json!({"glyph": "pixel", "cells": [[0, 0]], "mode": "add"})).contains("contain itself"));

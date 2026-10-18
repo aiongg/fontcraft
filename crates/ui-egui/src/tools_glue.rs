@@ -184,8 +184,15 @@ fn with_tool<R>(app: &mut FontcraftApp, f: impl FnOnce(&mut Toolbox, &Context<'_
     scene.guides_shown = state.display.guides;
     scene.suggest = crate::canvas::suggestions::suggest(session, font, tab, state.panels.edit_aids.suggest);
     let view = view::tools_view(&tab.view, view::edited_origin(session, layouts, tab), center);
-    let settings = ToolSettings { bounding_box: state.display.bounding_box, reference: state.transform.reference(), ..settings(tokens, font) }
-        .with_drag_aids(|id| session.settings().get(id).ok());
+    let settings = ToolSettings {
+        bounding_box: state.display.bounding_box,
+        reference: state.transform.reference(),
+        tunni_lines: state.panels.edit_aids.tunni_lines,
+        curve_tension: view::active_master(font, tab)
+            .map_or(fontcraft_tools::rapid::DEFAULT_TENSION, |m| fontcraft_engine::cmd::tension::master_tension(font, &m.id)),
+        ..settings(tokens, font)
+    }
+    .with_drag_aids(|id| session.settings().get(id).ok());
     let cx = Context { scene: &scene, view, selection: &tab.selection, settings };
     Ok(f(&mut tools.toolbox, &cx))
 }

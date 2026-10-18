@@ -23,8 +23,8 @@
 //! **Tension.** The contour is added as one `command.batch`: `path.addPath` with the handles
 //! drawn, then `path.setCurveTension` without a `tension` for every segment that has a Tunni
 //! point and no tension of its own, so the engine sets them to the master's `curveTension`
-//! parameter. The preview uses [`RapidTool::set_default_tension`], which the shell sets to that
-//! same parameter. A segment whose tension point was dragged keeps the dragged value.
+//! parameter. The preview uses the same parameter, which the shell passes in
+//! [`ToolSettings::curve_tension`](crate::tool::ToolSettings::curve_tension). A segment whose tension point was dragged keeps the dragged value.
 
 use std::f64::consts::SQRT_2;
 
@@ -408,6 +408,7 @@ impl Tool for RapidTool {
         }
         self.target = cx.scene.target();
         self.shapes = cx.scene.layer.shapes.len();
+        self.set_default_tension(cx.settings.curve_tension);
         match ev.kind {
             PointerKind::Down => {
                 if cx.scene.locked {

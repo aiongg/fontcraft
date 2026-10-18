@@ -174,7 +174,7 @@ fn tunni(c: &Painting, cb: CubicBez) {
     let stroke = Stroke::new(t.handle_line_width, t.measure_off_curve);
     let dash = t.handle_radius * 2.0;
     c.painter.extend(egui::Shape::dashed_line(&[a, b], stroke, dash, dash));
-    if let Some(p) = fontcraft_engine::pathops::tension::tunni_point(cb).and_then(|p| screen(c.view, p)) {
+    if let Some(p) = fontcraft_tools::drag_aids::tunni_point(cb).and_then(|p| screen(c.view, p)) {
         c.painter.circle_filled(p, t.handle_radius, t.measure_off_curve);
     }
 }

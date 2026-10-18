@@ -721,6 +721,10 @@ milestone = "M13"
 summary = "Query behind the auto-meter: the stems of a layer side with their widths and class against the master's stem values, the counters between neighbouring stems, and the angles at sharp nodes."
 ref = "FontLab 8 What's new › Consistency & precision › Auto-meter"
 status = "inferred"
+guesses = [
+  "A stem counts from 20 to 250 units wide and as uncommon within 5 units of a master stem value by default; measuring a thin hairline and a heavy stem in the reference app with its default detection range would settle it.",
+  "Diagonal stems compare with the vertical stem values; measuring a slanted stem next to declared vertical stems in the reference app would settle it.",
+]
 origin = "fontlab"
 notes = "Headless form of view.showStemWidths, view.showCounterWidths and view.showCornerAngles."
 
@@ -736,6 +740,9 @@ milestone = "M13"
 summary = "Query behind Quick Measurement: the distance from the outline's nearest segment through a point to the segment opposite, or across the outline along one axis."
 ref = "FontLab 8 What's new › Consistency & precision › Quick measurement"
 status = "inferred"
+guesses = [
+  "Without an axis the distance runs from the nearest outline point through the given point to the next segment beyond; Quick Measurement over a bowl in the reference app would settle whether it measures along the normal instead.",
+]
 origin = "fontlab"
 
 [[command]]
@@ -750,6 +757,9 @@ milestone = "M13"
 summary = "Gives one stem found by autometer.measure a new width, or the nearest stem value, by moving the nodes on its edges; one undo step."
 ref = "FontLab 8 What's new › Consistency & precision › Auto-meter (Editing stems numerically)"
 status = "inferred"
+guesses = [
+  "Both edges move by half the change unless one edge lies on a metric line, which stays; editing a stem number of a stem standing on the baseline in the reference app would settle it.",
+]
 origin = "fontlab"
 notes = "The command behind autometer.editStemNumerically."
 

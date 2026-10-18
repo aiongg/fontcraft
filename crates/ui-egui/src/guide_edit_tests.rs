@@ -79,6 +79,23 @@ fn dragging_the_knob_is_set_properties_with_the_same_coordinates_in_one_undo_ste
 }
 
 #[test]
+fn dragging_a_power_guides_knob_moves_its_linked_nodes_as_move_power_guide_does() {
+    let power = || {
+        let mut app = guide_app();
+        // The knob sits off the square, so the press hits the guide, not the top edge.
+        app.run("guide.add", &json!({"glyph": "A", "x": 500, "y": 300})).unwrap();
+        app.run("guide.makePowerGuide", &json!({"glyph": "A", "guides": [{"scope": "local", "index": 1}]})).unwrap();
+        app
+    };
+    let mut app = power();
+    drag(&mut app, (500.0, 300.0), (500.0, 350.0));
+    let mut headless = power();
+    headless.run("guide.movePowerGuide", &json!({"glyph": "A", "guide": {"scope": "local", "index": 1}, "y": 350})).unwrap();
+    assert_eq!(layer(&app), layer(&headless), "the drag gives the font the command gives");
+    assert_eq!(layer(&app).info.guides[1].y, 350.0);
+}
+
+#[test]
 fn dragging_the_line_turns_the_guide_about_its_knob_unless_the_angle_is_locked() {
     let mut app = guide_app();
     let steps = undo_steps(&app);

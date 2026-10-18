@@ -470,7 +470,12 @@ impl Drag {
             None
         } else {
             let plain = snap(cx.scene, &cx.view, target, &self.moving, cx.settings.snap_distance);
-            let dragged = crate::suggestions::Dragged { selection: &self.selection, moving: &self.moving, grab: self.grab };
+            // A copy leaves the dragged points where they were.
+            let shown = match self.last_sent {
+                Some((dx, dy, _)) if !self.duplicate => (dx, dy),
+                _ => (0.0, 0.0),
+            };
+            let dragged = crate::suggestions::Dragged { selection: &self.selection, moving: &self.moving, grab: self.grab, shown };
             Some(crate::suggestions::refine(cx.scene, &cx.view, dragged, target, plain, cx.settings.snap_distance))
         };
         let to = self.snap.as_ref().map_or(target, |s| s.point);

@@ -424,10 +424,13 @@ impl Side {
     }
 }
 
+/// A point that moves: its `(shape, node)` address, where it was and where it goes.
+pub type PointMove = ((usize, usize), Point, Point);
+
 /// Where each point goes when the node `node` of `path` (the shape at `shape`) slides as near as
 /// it can to `target`: `(address, from, to)` for every point that moves. `None` when the node
 /// cannot slide.
-pub fn slide_moves(shape: usize, path: &Path, node: usize, target: Point) -> Option<Vec<((usize, usize), Point, Point)>> {
+pub fn slide_moves(shape: usize, path: &Path, node: usize, target: Point) -> Option<Vec<PointMove>> {
     let n = path.nodes.get(node)?;
     if !n.on_curve() || !finite(target) {
         return None;

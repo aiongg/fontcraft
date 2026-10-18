@@ -35,6 +35,9 @@ pub struct ToolSettings {
     pub power_nudge: bool,
     /// Tunni lines are showing (`view.showTunniLines`), so their lines and points can be dragged.
     pub tunni_lines: bool,
+    /// The active master's `curveTension` parameter, in percent: the tension the Rapid tool
+    /// previews new segments with.
+    pub curve_tension: f64,
 }
 
 impl Default for ToolSettings {
@@ -49,6 +52,7 @@ impl Default for ToolSettings {
             lever_ratio: crate::drag_aids::DEFAULT_LEVER_RATIO,
             power_nudge: false,
             tunni_lines: false,
+            curve_tension: crate::rapid::DEFAULT_TENSION,
         }
     }
 }

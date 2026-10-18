@@ -96,8 +96,9 @@ fn the_component_info_box_reads_the_selected_component_and_its_name_repoints_it(
     let ctx = egui::Context::default();
     let input = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 800.0))), ..Default::default() };
     // The first frame measures the boxes; the second draws them in place.
-    let _ = ctx.run_ui(input.clone(), |ui| app.ui(ui));
-    let out = ctx.run_ui(input, |ui| app.ui(ui));
+    ctx.run_ui(input.clone(), |ui| app.ui(ui)).textures_delta.clear();
+    let mut out = ctx.run_ui(input, |ui| app.ui(ui));
+    out.textures_delta.clear();
     let mut shapes: Vec<egui::Shape> = out.shapes.into_iter().map(|c| c.shape).collect();
     let mut texts = Vec::new();
     while let Some(s) = shapes.pop() {
@@ -134,6 +135,8 @@ fn the_anchor_menu_lists_only_anchors_the_mark_can_attach_to() {
         g.layers.push(l);
         g
     };
+    // The new font's own a and o have no anchors.
+    font.glyphs.retain(|g| g.name != "a" && g.name != "o");
     font.glyphs.push(glyph("a", &[("top", 500.0), ("top_viet", 600.0), ("bottom", 0.0)], Vec::new()));
     font.glyphs.push(glyph("o", &[("top", 500.0)], Vec::new()));
     font.glyphs.push(glyph("acutecomb", &[("_top", 500.0), ("top", 700.0)], Vec::new()));
@@ -183,7 +186,8 @@ fn the_corner_picker_lists_corner_glyphs_and_the_corner_info_box_follows_the_nod
     app.run("selection.set", &json!({"points": [[0, 1]]})).unwrap();
     assert!(info_box_corner::read(&app).is_none(), "no corner on the node yet");
     let r = app.run(PICK, &json!({"purpose": "addCorner"})).unwrap();
-    assert_eq!(r["results"], json!(["_corner.serif", "_corner.round"]), "only corner glyphs, all of them while the field is empty");
+    // In font order: glyph.newGlyph files the two names alphabetically.
+    assert_eq!(r["results"], json!(["_corner.round", "_corner.serif"]), "only corner glyphs, all of them while the field is empty");
     let r = app.run(PICK, &json!({"query": "ser"})).unwrap();
     assert_eq!(r["results"], json!(["_corner.serif"]));
     app.run(PICK, &json!({"pick": true})).unwrap();
@@ -231,6 +235,11 @@ fn context_menu_items_that_need_a_choice_ask_for_it() {
     assert_eq!(menu.sections[0].context, "canvas.component");
     assert!(menu.item("component.setAnchor").is_none());
     assert!(menu.item("glyph.showGlyphsUsingAsComponent").is_some(), "the canvas section offers the composites of the glyph");
+    // Show Smart Glyph Settings shows the clicked component's glyph.
+    let r = context_menu::invoke(&mut app, "smartGlyph.showSettings").unwrap();
+    assert_eq!((r["open"].clone(), r["glyph"].clone()), (json!(true), json!("base")));
+    app.run("smartGlyph.showSettings", &json!({"open": false})).unwrap();
+    context_menu::open(&mut app, Point::new(500.0, 100.0), Space::Font).unwrap();
     let r = context_menu::invoke(&mut app, "component.setBaseGlyph").unwrap();
     assert_eq!(r["purpose"], "baseGlyph");
     assert_eq!(app.state.panels.component_picker.targets["component"], 1);
