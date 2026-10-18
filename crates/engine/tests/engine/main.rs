@@ -16,6 +16,7 @@ mod autohint_reports;
 mod autohint_tt;
 mod automation_roots;
 mod axes;
+mod autotrace;
 mod background_layers;
 mod clipboard;
 mod clipboard_scale;

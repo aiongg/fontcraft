@@ -2424,7 +2424,14 @@ summary = "Converts the placed image of each glyph into outlines. FontForge dele
 ref = "FontForge Element menu › AutoTrace; FontLab 8 What's new › Draft & draw (Autotrace); Explore & prepare › Element menu (Optically Separate)"
 status = "docs"
 origin = "fontforge"
-notes = "M13.30 writes its own tracer from published descriptions of outline tracing; GPL tracers, potrace among them, are not read."
+notes = "Our tracer is written from published descriptions of outline tracing; GPL tracers, potrace among them, are not read. It walks the pixel boundaries, straightens staircases, finds corners on a simplified polygon and fits cubic curves between them. The image is decoded within 64 megapixels and a trace keeps at most 100,000 contours. The traced paths land where the image is drawn (its transform, and its crop when it has one)."
+guesses = [
+  "A pixel is ink when its darkness, laid on white, is above the threshold (default 0.5); transparent pixels count as white. Settled by tracing a grey and a semi-transparent scan in a reference app that has an autotracer.",
+  "Smoothness runs from 0 to 1 (default 0.25): a vertex is a corner when the path turns by more than 30° + 120° × smoothness there, and curves stay within 0.3 + 1.2 × smoothness pixels of the boundary. Settled by comparing corner counts with a reference tracer on our own scans.",
+  "Ink pixels that touch only at a corner make separate contours, and contours under 2.5 square pixels (specks) are dropped. Settled by tracing a checkerboard and a dotted scan in a reference tracer.",
+  "Traced contours are added after the layer's existing shapes, and the image stays unless `removeImage` is true; a locked image is never removed. Settled by autotracing a glyph that already has paths in a reference app.",
+  "Without `glyphs`, every glyph whose layer has an image is traced. Settled by running the reference command with no glyphs selected.",
+]
 
 [[tool]]
 id = "spiro"
