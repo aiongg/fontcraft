@@ -39,11 +39,13 @@ mod capped;
 pub mod check;
 pub mod error;
 pub mod export_filter;
+pub mod fixtures;
 pub mod layer_json;
 pub mod manifest;
 pub mod registry;
 pub mod reporter;
 pub mod runtime;
+pub mod sha256;
 pub mod wat;
 
 pub use error::{Error, LIMITS_TABLE, Result};

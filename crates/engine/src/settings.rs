@@ -96,6 +96,7 @@ pub struct SettingDef {
 /// The settings FontCraft implements. Add a row here when its `[[setting]]` row's behaviour
 /// lands; the test `live_settings_have_rows` checks that the row exists.
 pub const SETTINGS: &[SettingDef] = &[
+    SettingDef { id: "addons.alternatePluginRepos", kind: Kind::Text, default: DefaultValue::Text("") },
     SettingDef { id: "addons.useSystemConsoleForScriptOutput", kind: Kind::Bool, default: DefaultValue::Bool(false) },
     SettingDef { id: "appearance.displayUnicodeValue", kind: Kind::Bool, default: DefaultValue::Bool(false) },
     SettingDef { id: "start.showAtLaunch", kind: Kind::Bool, default: DefaultValue::Bool(true) },

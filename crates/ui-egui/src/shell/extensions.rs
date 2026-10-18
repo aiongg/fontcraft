@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 pub mod external_changes;
+pub mod manager;
 
 use super::{Args, UiCommand};
 use crate::app::FontcraftApp;
@@ -20,13 +21,28 @@ pub struct ExtensionsState {
     /// The External Changes dialog (session only).
     #[serde(skip)]
     pub external: external_changes::ExternalChangesState,
+    /// The Extension Manager (session only).
+    #[serde(skip)]
+    pub manager: manager::ManagerState,
 }
 
-pub const COMMANDS: &[UiCommand] = &[external_changes::COMMAND];
+pub const COMMANDS: &[UiCommand] = &[
+    external_changes::COMMAND,
+    manager::OPEN,
+    manager::FILTER_STATE,
+    manager::FILTER_TYPE,
+    manager::SEARCH,
+    manager::ENLARGE,
+    manager::WEBSITE,
+    manager::DONATE,
+];
 
 pub fn run(app: &mut FontcraftApp, id: &str, args: &Args) -> Result<Value, String> {
     if id == external_changes::COMMAND.0 {
         return external_changes::run(app, args);
+    }
+    if manager::COMMANDS.iter().any(|c| c.0 == id) {
+        return manager::run(app, id, args);
     }
     let _ = (app, args);
     Err(format!("unknown command `{id}`"))
@@ -35,4 +51,5 @@ pub fn run(app: &mut FontcraftApp, id: &str, args: &Args) -> Result<Value, Strin
 /// Draws this module's windows while they are open.
 pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     external_changes::show(app, ui, pending);
+    manager::show(app, ui, pending);
 }

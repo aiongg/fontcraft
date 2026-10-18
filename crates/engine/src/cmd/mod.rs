@@ -144,6 +144,7 @@ mod metrics_files;
 mod nonlinear;
 mod pair_list;
 mod plugin;
+mod plugin_manager;
 mod power_guides;
 pub mod related;
 mod script;
@@ -409,6 +410,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(audit_fix_glyph::specs());
         v.extend(audit_fix_info::specs());
         v.extend(plugin::specs());
+        v.extend(plugin_manager::specs());
         v.extend(script::specs());
         v.extend(url::specs());
         v.extend(detect::specs());

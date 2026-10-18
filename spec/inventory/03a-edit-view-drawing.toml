@@ -12,11 +12,15 @@
 id = "app.launchWithoutPlugins"
 area = "extensions"
 milestone = "M13"
-summary = "Holding Option and Shift while the application starts launches it with every plug-in disabled, as a way out when a plug-in makes the app crash. FontCraft: the same keys, or `fontcraft --safe-mode`, start the app with no module enabled and no folder scan; Help › Load Extensions turns them back on for the session."
+summary = "Holding Option and Shift while the application starts launches it with every plug-in disabled, as a way out when a plug-in makes the app crash. FontCraft: the same keys (Alt and Shift on other platforms), or `fontcraft --safe-mode`, start the app with every module listed but none run; Help › Load Extensions (`app.loadExtensions`) turns them back on for the session."
 ref = "Glyphs › Issues"
 status = "handbook"
 observe = [
   "Hold Option and Shift while launching: note any dialog or message, and whether plug-ins can be turned back on without relaunching.",
+]
+notes = "The keys are documented, not yet observed. Listing a module loads it in the sandbox (its manifest is read under the instruction and memory limits), which cannot crash the app, so safe mode still reads the Modules folder."
+guesses = [
+  "The launch keys are read on the window's first frame, since the toolkit reports modifier keys only once the window exists; whether the reference also offers a way back without relaunching would settle Load Extensions.",
 ]
 
 [[behavior]]
