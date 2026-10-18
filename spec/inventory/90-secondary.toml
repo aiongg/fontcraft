@@ -3014,13 +3014,21 @@ label = "Convert to CID-Keyed…"
 menu = ["Font", "CID"]
 shortcut = ""
 kind = "engine"
-params = "{registry: string, ordering: string, supplement: number, cmap?: path}"
+params = "{registry: string, ordering: string, supplement: whole number 0..65535, cmap?: path}"
 area = "font-info"
 milestone = "M13"
 summary = "Turns an ordinary font into a CID-keyed one with a single sub-font, assigning CIDs from a named character collection or from a CMap file."
 ref = "FontForge CID menu › Convert to CID, Convert By CMap"
 status = "docs"
 origin = "fontforge"
+notes = "Documented, not yet observed. The CID-keyed state is kept in the lib keys and FDArraySelect groups AFDKO uses for CID-keyed UFOs (com.adobe.type.ROS, .CIDFontName, .postscriptCIDMap, .postscriptFDArray), read with tx 4.0 from a font built by mergefonts; crates/model/src/cid.rs describes the layout. A CMap file follows the CMap resource format (CIDSystemInfo, CMapName, cidrange and cidchar blocks); usecmap is reported, not followed."
+guesses = [
+  "Without a CMap file only the Identity ordering is accepted, with .notdef at CID 0 and the other exporting glyphs from 1 in glyph order; bundled data for the public collections (M7's ROS row) would allow the others.",
+  "Glyphs the CMap does not reach, and a second glyph on a CID already taken, get CIDs after the highest mapped one in glyph order, as the reference's export appends glyphs its ROS does not cover; converting such a font in the reference would settle the order.",
+  "Non-exporting glyphs get no CID, and glyph names and the glyph order do not change.",
+  "The CID font name and the single sub-font's name are the family name without spaces and PostScript delimiters.",
+  "CMap codes are read as UTF-8 or UTF-16 when the CMap's name says so and as the code point otherwise; CMaps whose name does not start with Uni are refused, since glyphs are encoded by code point.",
+]
 
 [[command]]
 id = "cid.flatten"
@@ -3035,6 +3043,11 @@ summary = "Merges all sub-fonts of a CID-keyed font into one ordinary font in CI
 ref = "FontForge CID menu › Flatten, Flatten By CMap"
 status = "docs"
 origin = "fontforge"
+notes = "Documented, not yet observed. Removes the CID keys and the FDArraySelect groups; the sub-fonts' own hinting values are dropped. A glyphOrder parameter, when present, is rewritten to the new order."
+guesses = [
+  "Glyphs without a CID follow the glyphs in CID order, in their old order.",
+  "With a CMap, a glyph whose CID it reaches gets exactly the code points the CMap maps to that CID, replacing its own, and other glyphs lose those code points; the documentation does not say whether existing code points stay.",
+]
 
 [[command]]
 id = "cid.editSubfonts"
@@ -3042,25 +3055,21 @@ label = "Edit CID Sub-fonts"
 menu = ["Font", "CID"]
 shortcut = ""
 kind = "engine"
-params = "{insert?: fontRef | path | 'blank', remove?: name, show?: name, supplement?: number}"
+params = "{insert?: 'blank' | open document title | path, name?: string, remove?: name, show?: name, supplement?: number, private?: {subfont: name, values: {key: number | [number] | bool | null}}}"
 area = "font-info"
 milestone = "M13"
 summary = "Manages the sub-fonts (font dictionaries) of a CID-keyed font: adds an existing font or an empty one as a sub-font, removes one, switches which one Font View shows, and changes the supplement number. Each sub-font carries its own hinting settings."
 ref = "FontForge CID menu › Insert Font, Insert Blank, Remove Font, Change Supplement, sub font list"
 status = "docs"
 origin = "fontforge"
-
-[[check]]
-id = "check.cid.definedTwiceOrMissing"
-severity = "info"
-scope = "source"
-fixable = false
-area = "qa"
-milestone = "M13"
-summary = "A CID has glyphs in more than one sub-font, or has no glyph in any. The reference notes that undefined CIDs are common and the second half should be used with care."
-ref = "FontForge Find Problems › Check for CIDs defined twice, Check for undefined CIDs"
-status = "docs"
-origin = "fontforge"
+notes = "Documented, not yet observed. One action per call. show returns the sub-font's glyphs in CID order and changes nothing; narrowing Font View to them is the shell's part and not built yet. private sets a sub-font's hinting values in its PrivateDict under the UFO font-info names tx writes there (postscriptBlueValues, postscriptBlueScale, postscriptBlueShift, postscriptBlueFuzz, ExpansionFactor seen in tx 4.0 output)."
+guesses = [
+  "An inserted font's glyphs whose names the font already has get .001, .002… (references inside the inserted font follow), code points the font already uses are dropped, and exporting glyphs take CIDs after the highest; the documentation does not say how name and code point clashes are resolved.",
+  "An inserted font needs as many masters as the font, matched in order.",
+  "Removing a sub-font removes its glyphs, and is refused when glyphs that stay use one of them as a component, or when it is the last sub-font.",
+  "A new sub-font is named after the inserted font's family name without spaces, or FD followed by its index for a blank one, with -1, -2… when taken.",
+  "postscriptOtherBlues, the family blues, the stem snaps and postscriptForceBold use the same naming as the keys seen in tx output; a CID-keyed font with those values converted by tx would settle it.",
+]
 
 [[command]]
 id = "file.importMetricsFile"

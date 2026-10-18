@@ -22,8 +22,10 @@
 //! | `kerning`, `color` | `check.kerning.*`, `check.color.*` | M12.56 |
 //! | `files`, `sources` | `check.files.*`, `check.sources.*` | M12.57 |
 //! | `family` | `check.family.*` | M12.58 |
+//! | `cid` | `check.cid.*` | M13.50 |
 
 mod anchors;
+mod cid;
 mod color;
 mod components;
 mod family;
@@ -62,6 +64,7 @@ const PARTS: &[&[CheckSpec]] = &[
     files::CHECKS,
     sources::CHECKS,
     color::CHECKS,
+    cid::CHECKS,
 ];
 
 /// Every check, in registry order.

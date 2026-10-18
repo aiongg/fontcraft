@@ -15,6 +15,7 @@
 mod address;
 pub mod attach;
 pub mod axes;
+pub mod cid;
 pub mod corner;
 mod extra;
 pub mod fc_keys;

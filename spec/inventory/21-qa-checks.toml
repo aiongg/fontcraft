@@ -3377,6 +3377,27 @@ status = "docs"
 notes = "Follows FontBakery 1.1.0 googlefonts/colorfont_tables, with its message codes drop-svg, add-svg, variable-svg and add-colr."
 
 # ---------------------------------------------------------------------------
+# cid: CID-keyed fonts
+# ---------------------------------------------------------------------------
+
+[[check]]
+id = "check.cid.definedTwiceOrMissing"
+severity = "info"
+scope = "source"
+fixable = false
+area = "qa"
+milestone = "M13"
+summary = "A CID has glyphs in more than one sub-font, or has no glyph in any. The reference notes that undefined CIDs are common and the second half should be used with care."
+ref = "FontForge Find Problems › Check for CIDs defined twice, Check for undefined CIDs"
+status = "docs"
+origin = "fontforge"
+notes = "Documented, not yet observed. Registry group cid. Reads the CID-keyed state of crates/model/src/cid.rs; skipped on fonts that are not CID-keyed. Message codes: defined-twice (a CID mapped from two glyphs, or a glyph in two sub-fonts), no-subfont (a glyph with a CID in no FDArraySelect group), missing (a run of CIDs from 0 to the highest that has no glyph)."
+guesses = [
+  "Two glyphs mapped to one CID count as the CID defined twice, as a glyph in two sub-fonts does; a glyph with a CID in no sub-font is reported with its own code, because the source formats can say that and the reference's sub-font model cannot.",
+  "Missing CIDs are reported as runs between CID 0 and the highest CID that has a glyph, one result per run; a CID mapped to a name the font has no glyph for counts as missing.",
+]
+
+# ---------------------------------------------------------------------------
 # vendor: Vendor groups (summarised, not built in)
 # ---------------------------------------------------------------------------
 

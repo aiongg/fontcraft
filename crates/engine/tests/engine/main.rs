@@ -15,6 +15,7 @@ mod autohint_ps;
 mod autohint_reports;
 mod automation_roots;
 mod background_layers;
+mod cid;
 mod clipboard;
 mod clipboard_scale;
 mod color_layers;

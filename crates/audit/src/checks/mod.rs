@@ -2,6 +2,7 @@
 //! `contour`, `contours`, `handles`, `metrics` and `points` modules.
 
 pub(crate) mod anchors;
+pub(crate) mod cid;
 pub(crate) mod color;
 pub(crate) mod compat;
 pub(crate) mod components;

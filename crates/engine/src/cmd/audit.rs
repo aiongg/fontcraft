@@ -38,7 +38,7 @@ const MAX_CONFIG_ENTRIES: usize = 1024;
 const MAX_MAX_RESULTS: i64 = 1_000_000;
 /// Most results one document lists; the rest are counted in `summary.truncated`.
 const MAX_REPORTED: usize = 100_000;
-const GROUPS: [&str; 16] = [
+const GROUPS: [&str; 17] = [
     "outlines",
     "components",
     "anchors",
@@ -55,6 +55,7 @@ const GROUPS: [&str; 16] = [
     "sources",
     "color",
     "vendor",
+    "cid",
 ];
 const SCOPES: [&str; 3] = ["source", "binary", "family"];
 /// `audit.outlineFixOrder`: clean-up first, then overlap removal, then clean-up again for what the
