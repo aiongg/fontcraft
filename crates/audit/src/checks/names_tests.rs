@@ -267,6 +267,24 @@ fn each_name_check_fires_on_its_fault() {
 }
 
 #[test]
+fn legal_and_credits_compares_the_url_and_vendor_with_the_project() {
+    let bytes = font(&clean(), 1.001, 0x40);
+    let spec = find("check.names.legalAndCredits").unwrap();
+    let with_values = |url: &str, vendor: &str| {
+        let values = std::collections::BTreeMap::from([
+            ("defaultUrl".to_string(), crate::profile::ProjectValue::Text(url.to_string())),
+            ("vendorId".to_string(), crate::profile::ProjectValue::Text(vendor.to_string())),
+        ]);
+        let services = NoServices;
+        let ctx = BinaryCtx::new("f0", &bytes, 0, &services).unwrap().with_values(&values);
+        audit_binary(&ctx, &[spec], &Config::default()).findings.iter().map(|f| f.code).collect::<Vec<_>>()
+    };
+    assert_eq!(with_values("https://example.org", "ABCD"), vec!["url-mismatch", "vendor-id-mismatch"]);
+    assert!(with_values("https://example.com", "TEST").is_empty());
+    assert!(codes("check.names.legalAndCredits", &bytes).is_empty(), "no comparison without the values");
+}
+
+#[test]
 fn style_bits_and_severities_follow_the_rows() {
     let bold_italic = font(&records(vec![win(2, "Bold Italic"), win(4, "Example Sans Bold Italic")], &[]), 1.001, 0x21);
     assert!(codes("check.names.subfamilyMatchesStyleBits", &bold_italic).is_empty());

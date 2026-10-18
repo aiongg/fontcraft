@@ -30,8 +30,12 @@ const BASE: CheckSpec = CheckSpec {
 };
 
 /// The Font Info fix of `docs/spec/21-qa.md` § 5; report-only until the Font Info commands exist.
-const SYNC_FAMILY_VALUES: Option<FixSpec> =
-    Some(FixSpec { id: "syncFamilyValues", command: None, safe: false, description: "Copy the regular face's value to every font of the family." });
+const SYNC_FAMILY_VALUES: Option<FixSpec> = Some(FixSpec {
+    id: "syncFamilyValues",
+    command: Some("font.info.syncFamilyValues"),
+    safe: false,
+    description: "Copy the regular face's value to every font of the family.",
+});
 
 /// Turns on the stricter rules of the legacy family comparison.
 const STRICT: &[Threshold] = &[Threshold {

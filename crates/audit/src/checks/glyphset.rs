@@ -14,7 +14,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use fontcraft_model::glyphdata::{GlyphData, Via, parse_code_point_name};
+use fontcraft_model::glyphdata::{self, GlyphData, Via, parse_code_point_name};
 use read_fonts::ps::cff::dict::{Entry, entries};
 use read_fonts::tables::cmap::{CmapIterLimits, CmapSubtable, PlatformId};
 use read_fonts::tables::colr::Paint;
@@ -32,6 +32,7 @@ use super::components::Names;
 use super::kerning::{cmap_mappings, glyph_label};
 use crate::data::{chars, code_pages, contours, glyphs};
 use crate::name_records::{self, MAX_NAME_TEXT_BYTES};
+use crate::profile::ProjectValue;
 use crate::services::ShapeRequest;
 use crate::{BinaryCtx, Hit, Location, Params, Sink, SourceCtx};
 
@@ -1236,11 +1237,39 @@ pub(crate) fn private_use_codepoints(ctx: &BinaryCtx<'_>, _: &Params<'_>, sink: 
     }
 }
 
-/// `check.glyphset.minimumCoverage`: the font lacks code points of the project's `glyphSet`.
-/// The binary context does not carry project values, so the check skips even when the value is
-/// set.
-pub(crate) fn minimum_coverage(_: &BinaryCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
-    sink.skip("the run does not pass the project's glyph set to compiled-font checks");
+/// `check.glyphset.minimumCoverage`: the font lacks code points of the project's `glyphSet`, a
+/// built-in glyph set named by its id (`latin-core`) or its name (`Latin Core`).
+pub(crate) fn minimum_coverage(ctx: &BinaryCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
+    let Some(ProjectValue::Text(wanted)) = ctx.value("glyphSet") else {
+        sink.skip("the project value `glyphSet` is not set");
+        return;
+    };
+    let sets = match glyphdata::sets::builtin() {
+        Ok(sets) => sets,
+        Err(e) => {
+            sink.skip(format!("the built-in glyph sets cannot be read: {e}"));
+            return;
+        }
+    };
+    let key = wanted.trim();
+    let Some(set) = sets.glyph_set(key).or_else(|| sets.glyph_sets.iter().find(|s| s.name.eq_ignore_ascii_case(key))) else {
+        sink.skip(format!("`{key}` is not the id or name of a built-in glyph set"));
+        return;
+    };
+    let cmap = best_cmap(&ctx.font);
+    let mut missing: Vec<u32> = set.glyphs.iter().filter_map(|g| g.code_point).filter(|c| !cmap.contains_key(c)).collect();
+    missing.sort_unstable();
+    missing.dedup();
+    if !missing.is_empty() {
+        sink.push(
+            Hit::new(
+                "missing-codepoints",
+                format!("The font does not map {} characters of the glyph set {}: {}.", missing.len(), set.name, cp_list(&missing)),
+            )
+            .data("count", missing.len() as f64)
+            .place(table_place("cmap")),
+        );
+    }
 }
 
 /// `check.glyphset.rendersOwnName`: the Windows English family name (name ID 1) shapes to

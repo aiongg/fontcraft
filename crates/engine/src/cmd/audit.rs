@@ -6,7 +6,9 @@
 //! document of § 4. The last run of each document is kept for `audit.results` and for
 //! `audit.fix {results}`; a glyph edited since then makes its results `stale`.
 //!
-//! `audit.fix` carries each fix out with the engine command its check names, in the order of
+//! `audit.fix` works in the stages of `docs/spec/21-qa.md` § 5 "Fix calls". First the Font Info
+//! fixes, each run once through its command (`audit_fix_info`), for findings of any scope. Then
+//! each layer: every fix with the engine command its check names, in the order of
 //! `audit.outlineFixOrder`, re-checking the layer before every step so each command gets the
 //! current addresses. The unfixed layer is first copied to a backup layer of its master
 //! (decision D12), and the whole call is one undo step.
@@ -15,7 +17,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
 
 use fontcraft_audit::profile::{self as prof, DocumentSettings};
-use fontcraft_audit::{self as audit, AuditContext, CHECKS, CheckScope, CheckSpec, Config, CurveType, Finding, Profile, Severity};
+use fontcraft_audit::{self as audit, AuditContext, CHECKS, CheckScope, CheckSpec, Config, CurveType, Finding, FixSpec, Profile, Severity};
 use fontcraft_model::{Font, Glyph, Layer, Path, Shape};
 use serde_json::{Map, Value, json};
 
@@ -59,19 +61,27 @@ const GROUPS: [&str; 18] = [
     crate::extensions::MODULE_CHECK_GROUP,
 ];
 const SCOPES: [&str; 3] = ["source", "binary", "family"];
-/// `audit.outlineFixOrder`: clean-up first, then overlap removal, then clean-up again for what the
-/// union left, then direction, extremes, start points, and rounding last.
-const FIX_ORDER: [&str; 9] = [
+/// `audit.outlineFixOrder`, the layer steps `audit.fix` builds calls for, in the order of § 5
+/// "Fix calls": clean-up first, then overlap removal, then clean-up again for what the union
+/// left, then direction, extremes, curve type, node types, start points, and rounding last.
+const FIX_ORDER: [&str; 14] = [
     "closePaths",
+    "removeDuplicateContours",
     "tidyPaths",
     "removeOverlap",
+    "deleteTinyContours",
     "tidyPaths",
     "correctPathDirection",
     "addExtremes",
     "addInflections",
+    "convertCurveType",
+    "setSmooth",
+    "harmonize",
     "setStartPoint",
     "roundCoordinates",
 ];
+/// Why a fix with no call `audit.fix` can make is left out.
+const NO_FIX_CALL: &str = "audit.fix cannot carry this fix out yet";
 /// Added to the largest deviation the almost-straight check reported, so the reported curves fall
 /// strictly inside Tidy up Paths' `straighten` limit.
 const STRAIGHTEN_MARGIN: f64 = 1e-6;
@@ -122,7 +132,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Fix Issues",
             [],
             None,
-            "{results?: [result id] (from the last audit.run; not with the other filters), profile?, checks?: [id | prefix*], exclude?, groups?, glyphs?: [names], masters?: [ids], layers?: [ids], minSeverity?, config?, safeOnly?: bool = true, dryRun?: bool = false, keepOriginal?: \"backupLayer\" | \"none\" = \"backupLayer\", maxResults?: count = 100, target?: \"document\"} repairs each selected layer that a check with a fix command reports, by running the commands path.closeOpenPaths, path.tidyUpPaths, path.removeOverlap, path.correctPathDirection, path.addExtremes, path.makeNodeFirst and path.roundCoordinates, in that order, on the paths involved. The unfixed layer is first copied to a backup layer of its master unless keepOriginal is \"none\". All of it is one undo step. safeOnly skips fixes that change the design and layers with components. A locked glyph, a stale result and a layer whose fix fails are skipped and left as they were → {applied: [{fix, glyph, layer, master, command, params}], backups: [{glyph, layer, backup}], skipped: [{glyph?, layer?, check?, fix?, reason}], planned?: [{fix, glyph, layer, master, command, params, results}] (dryRun), remaining: the result document of the selected checks on the glyphs involved}",
+            "{results?: [result id] (from the last audit.run; not with the other filters), profile?, checks?: [id | prefix*], exclude?, groups?, glyphs?: [names], masters?: [ids], layers?: [ids], minSeverity?, config?, safeOnly?: bool = true, dryRun?: bool = false, keepOriginal?: \"backupLayer\" | \"none\" = \"backupLayer\", maxResults?: count = 100, target?: \"document\"} repairs what the selected results report. First each selected Font Info fix runs once, whatever the scope of its findings: font.info.syncVerticalMetrics, font.info.syncVersion, font.instance.syncStyleLinking, font.info.syncFamilyValues, font.info.sortZones, font.info.clearGeneratedFields, font.info.cleanNames and font.instance.cleanUp, in that order (with filters, their checks run on the source and its compiled instances). Then each selected layer, by running path.closeOpenPaths, edit.delete (duplicate contours), path.tidyUpPaths, path.removeOverlap, edit.delete (tiny contours), path.correctPathDirection, path.addExtremes, path.addInflections, path.convertToCubic or path.convertToQuadratic, path.toggleNodeType, path.harmonizeNodes, path.makeNodeFirst and path.roundCoordinates, in that order, on the paths involved. The unfixed layer is first copied to a backup layer of its master unless keepOriginal is \"none\". All of it is one undo step. safeOnly skips fixes that change the design and layers with components. A locked glyph, a stale result, a fix audit.fix cannot carry out yet and a step that fails are skipped and left as they were → {applied: [{fix, glyph?, layer?, master?, command, params, checks?, changed?}], backups: [{glyph, layer, backup}], skipped: [{glyph?, layer?, check?, fix?, reason}], planned?: [{fix, glyph?, layer?, master?, command, params, results?, checks?, changed?}] (dryRun), remaining: the result document of the selected checks on the glyphs involved, and of the Font Info fixes' checks on the whole font}",
             has_doc,
             fix
         ),
@@ -474,15 +484,25 @@ fn examine_font(font: &Font, fi: usize, run: &Run, facts: &audit::run::Facts, ex
     raw.extend(ex.tally.findings.drain(..).map(|f| (fi, f)));
 }
 
-/// Runs the binary checks on each compiled font and the family checks on all of them.
-fn examine_binaries(bins: &[Bin], ids: &[String], run: &Run, facts: &audit::run::Facts, ex: &mut Examined, raw: &mut Raw) {
+/// Runs the binary checks on each compiled font and the family checks on all of them, with the
+/// target source's project values.
+fn examine_binaries(
+    bins: &[Bin],
+    ids: &[String],
+    values: &BTreeMap<String, prof::ProjectValue>,
+    run: &Run,
+    facts: &audit::run::Facts,
+    ex: &mut Examined,
+    raw: &mut Raw,
+) {
     let services = super::audit_services::EngineServices;
     let mut ctxs = Vec::with_capacity(bins.len());
     let mut at = Vec::with_capacity(bins.len());
     for b in bins {
         let id = ids.get(b.font).map_or("", String::as_str);
         match audit::BinaryCtx::new(id, &b.bytes, b.face, &services) {
-            Ok(mut ctx) => {
+            Ok(ctx) => {
+                let mut ctx = ctx.with_values(values);
                 ctx.source = b.map.as_ref();
                 if let Some(path) = &b.path {
                     ctx = ctx.with_file(path.clone(), b.size);
@@ -880,7 +900,7 @@ fn examine_target(t: &mut Target, run: &Run) -> Examined {
         examine_font(&src.model, src.font, run, &facts(src.source, &src.model), &mut ex, &mut raw, &mut places);
     }
     let base = audit::run::Facts { source: false, variable: false, network: run.network, values: values.clone() };
-    examine_binaries(&t.bins, &t.ids(), run, &base, &mut ex, &mut raw);
+    examine_binaries(&t.bins, &t.ids(), &t.settings.values, run, &base, &mut ex, &mut raw);
     let ignore = t.settings.ignore_index();
     finish(raw, run, &places, &ignore, true, &mut ex);
     t.notes.append(&mut ex.tally.notes);
@@ -901,7 +921,7 @@ enum FixParams {
 fn fix_json(f: &Finding, id: &str, how: FixParams) -> Value {
     let Some(fx) = f.fix else { return json!({"available": false}) };
     let mut m = Map::new();
-    let via = fx.command.filter(|c| find_command(c).is_some());
+    let via = fix_via(&fx);
     m.insert("available".into(), json!(via.is_some()));
     m.insert("id".into(), json!(fx.id));
     m.insert("safe".into(), json!(fx.safe));
@@ -910,6 +930,7 @@ fn fix_json(f: &Finding, id: &str, how: FixParams) -> Value {
         Some(via) => {
             let params = match how {
                 FixParams::ById => json!({"results": [id]}),
+                FixParams::BySelection if f.location.glyph.is_empty() => json!({"checks": [f.check]}),
                 FixParams::BySelection => json!({"checks": [f.check], "glyphs": [f.location.glyph], "layers": [f.location.layer]}),
             };
             m.insert("command".into(), json!("audit.fix"));
@@ -917,7 +938,7 @@ fn fix_json(f: &Finding, id: &str, how: FixParams) -> Value {
             m.insert("via".into(), json!(via));
         }
         None => {
-            m.insert("reason".into(), json!("no command carries this fix out yet"));
+            m.insert("reason".into(), json!(NO_FIX_CALL));
         }
     }
     Value::Object(m)
@@ -1195,6 +1216,26 @@ struct Group {
     checks: BTreeSet<&'static str>,
 }
 
+/// The Font Info fixes a call selected, by fix id, with the checks that asked for each.
+type InfoFixes = BTreeMap<&'static str, Vec<&'static CheckSpec>>;
+
+/// Is `fix` one of the Font Info fixes of the first stage?
+fn is_info_fix(fix: &str) -> bool {
+    super::audit_fix_info::source_command(fix).is_some()
+}
+
+/// The command `audit.fix` runs for `fx` on the open document: the Font Info command of a fix
+/// of the first stage, or the check's command for a layer step `audit.fix` builds calls for.
+/// `None` when the call cannot be made yet.
+fn fix_via(fx: &FixSpec) -> Option<&'static str> {
+    let command = match super::audit_fix_info::source_command(fx.id) {
+        Some(command) => command,
+        None if FIX_ORDER.contains(&fx.id) => fx.command?,
+        None => return None,
+    };
+    find_command(command).is_some().then_some(command)
+}
+
 /// What `audit.fix` reports.
 #[derive(Default)]
 struct FixReport {
@@ -1234,6 +1275,7 @@ fn fix(s: &mut Session, v: &Value) -> Result<Value> {
         Some(_) => return Err(p.bad("`keepOriginal` must be \"backupLayer\" or \"none\"")),
     };
     let mut report = FixReport::default();
+    let mut info = InfoFixes::new();
     let (mut run, groups) = match p.opt_array("results")? {
         Some(ids) => {
             if let Some(key) = FILTER_KEYS.iter().find(|k| p.get(k).is_some()) {
@@ -1246,7 +1288,7 @@ fn fix(s: &mut Session, v: &Value) -> Result<Value> {
             let font = s.font()?;
             let settings = DocumentSettings::read(font).0;
             let mut run = read_run(&p, s, font, &settings)?;
-            let groups = groups_from_ids(s, &p, &ids, &mut run, &mut report)?;
+            let groups = groups_from_ids(s, &p, &ids, &mut run, &mut info, &mut report)?;
             (run, groups)
         }
         None => {
@@ -1256,6 +1298,18 @@ fn fix(s: &mut Session, v: &Value) -> Result<Value> {
             // Every finding counts here: a check over the result cap is still fixed.
             let ex = examine(&doc.font, &run, false);
             let groups = groups_from_hits(&doc.font, &ex.hits);
+            // The Font Info fixes answer findings of every scope, so those checks run in full,
+            // compiling the source when they read compiled fonts.
+            let info_checks: Vec<&'static CheckSpec> = run.checks.iter().copied().filter(|c| c.fix.is_some_and(|f| is_info_fix(f.id))).collect();
+            if !info_checks.is_empty() {
+                let info_run = Run { checks: info_checks, modules: crate::extensions::ModuleChecks::default(), ..run.clone() };
+                let ex = examine_target(&mut document_target_of(doc), &info_run);
+                for h in ex.hits.iter().filter(|h| !h.ignored) {
+                    if let (Some(fx), Some(spec)) = (h.finding.fix, audit::find(h.finding.check)) {
+                        add_info(&mut info, fx.id, spec);
+                    }
+                }
+            }
             (run, groups)
         }
     };
@@ -1266,16 +1320,30 @@ fn fix(s: &mut Session, v: &Value) -> Result<Value> {
     };
     let how = How { safe_only, dry, backup, facts };
     one_step(s, |s| {
+        fix_info(s, &info, &how, &mut report);
         for group in &groups {
             fix_layer(s, &run, group, &how, &mut report)?;
         }
         Ok(())
     })?;
-    // `remaining`: the same checks on the glyphs involved, as they are now.
+    // `remaining`: the same checks on the glyphs involved, as they are now, and the checks of
+    // the Font Info fixes on the whole font.
     run.glyphs = Some(touched);
     let doc = s.doc()?;
-    let ex = examine(&doc.font, &run, true);
-    let remaining = document(&document_target_of(doc), &run, &ex, FixParams::BySelection, false)?;
+    let mut target = document_target_of(doc);
+    let ex = if info.is_empty() {
+        examine(&doc.font, &run, true)
+    } else {
+        let mut checks: Vec<&'static CheckSpec> = run.checks.iter().copied().filter(|c| c.scope == CheckScope::Layer).collect();
+        for &spec in info.values().flatten() {
+            if !checks.iter().any(|c| c.id == spec.id) {
+                checks.push(spec);
+            }
+        }
+        run.checks = CHECKS.iter().filter(|c| checks.iter().any(|k| k.id == c.id)).collect();
+        examine_target(&mut target, &run)
+    };
+    let remaining = document(&target, &run, &ex, FixParams::BySelection, false)?;
     let mut out = json!({
         "applied": report.applied,
         "backups": report.backups,
@@ -1290,7 +1358,7 @@ fn fix(s: &mut Session, v: &Value) -> Result<Value> {
 }
 
 /// The layers and checks named by result ids of the kept run.
-fn groups_from_ids(s: &Session, p: &Params, ids: &[&str], run: &mut Run, report: &mut FixReport) -> Result<Vec<Group>> {
+fn groups_from_ids(s: &Session, p: &Params, ids: &[&str], run: &mut Run, info: &mut InfoFixes, report: &mut FixReport) -> Result<Vec<Group>> {
     let doc = s.doc()?;
     let last = kept_run(doc).ok_or_else(|| p.bad(NO_RUN))?;
     let (then, refs) = (last.font.clone(), last.refs.clone());
@@ -1299,6 +1367,13 @@ fn groups_from_ids(s: &Session, p: &Params, ids: &[&str], run: &mut Run, report:
     let mut checks: Vec<&'static CheckSpec> = Vec::new();
     for id in ids {
         let r = index.get(id).ok_or_else(|| p.bad(format!("`results`: the last audit has no result `{id}`")))?;
+        if let Some(spec) = audit::find(r.check)
+            && let Some(fx) = spec.fix
+            && is_info_fix(fx.id)
+        {
+            add_info(info, fx.id, spec);
+            continue;
+        }
         if r.glyph.is_empty() {
             report.skip(None, None, Some(r.check), None, format!("{id} sums up many results and names no layer: fix by check instead"));
             continue;
@@ -1344,7 +1419,7 @@ fn groups_from_ids(s: &Session, p: &Params, ids: &[&str], run: &mut Run, report:
 /// it. Findings without a fix stay in `remaining` and are not listed as skipped.
 fn groups_from_hits(font: &Font, hits: &[Hit]) -> Vec<Group> {
     let mut groups: BTreeMap<(usize, usize), Group> = BTreeMap::new();
-    for h in hits.iter().filter(|h| !h.finding.location.glyph.is_empty() && h.finding.fix.is_some()) {
+    for h in hits.iter().filter(|h| !h.finding.location.glyph.is_empty() && h.finding.fix.is_some_and(|f| !is_info_fix(f.id))) {
         if font.glyph(&h.finding.location.glyph).is_none() {
             continue;
         }
@@ -1360,6 +1435,51 @@ fn groups_from_hits(font: &Font, hits: &[Hit]) -> Vec<Group> {
             .insert(h.finding.check);
     }
     groups.into_values().collect()
+}
+
+fn add_info(info: &mut InfoFixes, fix: &'static str, spec: &'static CheckSpec) {
+    let checks = info.entry(fix).or_default();
+    if !checks.iter().any(|c| c.id == spec.id) {
+        checks.push(spec);
+    }
+}
+
+/// The first stage: each selected Font Info fix runs once, in the order of § 5, through its
+/// command with that command's defaults. With `dryRun` the command runs as a dry run too and its
+/// planned edits are listed. Each command is one edit, so one that fails changes nothing and is
+/// listed in `skipped`.
+fn fix_info(s: &mut Session, info: &InfoFixes, how: &How, report: &mut FixReport) {
+    for (fix, command) in super::audit_fix_info::SOURCE_FIXES {
+        let Some(checks) = info.get(fix) else { continue };
+        let mut allowed = Vec::new();
+        for c in checks {
+            if how.safe_only && !c.fix.is_some_and(|f| f.safe) {
+                report.skip(None, None, Some(c.id), Some(fix), "the fix changes the design: give safeOnly: false");
+            } else {
+                allowed.push(c.id);
+            }
+        }
+        if allowed.is_empty() {
+            continue;
+        }
+        if find_command(command).is_none() {
+            report.skip(None, None, None, Some(fix), NO_FIX_CALL);
+            continue;
+        }
+        let params = json!({});
+        let call = if how.dry { json!({"dryRun": true}) } else { params.clone() };
+        match s.execute(command, &call) {
+            Ok(r) => {
+                let changed = r.get("changed").cloned().unwrap_or_else(|| json!([]));
+                if how.dry {
+                    report.planned.push(json!({"fix": fix, "command": command, "params": params, "checks": allowed, "changed": changed}));
+                } else if changed.as_array().is_some_and(|a| !a.is_empty()) {
+                    report.applied.push(json!({"fix": fix, "command": command, "params": params, "checks": allowed, "changed": changed}));
+                }
+            }
+            Err(e) => report.skip(None, None, None, Some(fix), format!("the fix failed and changed nothing: {e}")),
+        }
+    }
 }
 
 /// Runs `f` as one undo step, as `command.batch` does; inside a batch it is part of that batch.
@@ -1424,10 +1544,19 @@ fn calls_for(
     glyph: &Glyph,
     layer: &Layer,
     findings: &[Finding],
+    main_curve: Option<CurveType>,
     report: &mut FixReport,
 ) -> Vec<(&'static str, Value)> {
     let (g, l) = (glyph.name.as_str(), layer.id.as_str());
     let whole = || vec![(command, json!({"glyph": g, "layer": l}))];
+    let delete = |shapes: BTreeSet<usize>| {
+        let shapes: Vec<usize> = shapes.into_iter().filter(|&i| matches!(layer.shapes.get(i), Some(Shape::Path(_)))).collect();
+        if shapes.is_empty() { Vec::new() } else { vec![(command, json!({"glyph": g, "layer": l, "shapes": shapes}))] }
+    };
+    let points = || {
+        let set: BTreeSet<[usize; 2]> = findings.iter().flat_map(|f| f.location.points.iter().copied()).collect();
+        set.into_iter().collect::<Vec<_>>()
+    };
     let some = |shapes: Vec<usize>, extra: Option<(&str, Value)>| {
         if shapes.is_empty() {
             return Vec::new();
@@ -1448,6 +1577,26 @@ fn calls_for(
         "addExtremes" | "addInflections" => some(paths_of(layer, findings, |_| true), None),
         "removeOverlap" => some(paths_of(layer, findings, |_| true), Some(("keepOpenPaths", json!(true)))),
         "correctPathDirection" | "roundCoordinates" => whole(),
+        // Each finding names the first path and its copy; the copies go.
+        "removeDuplicateContours" => delete(findings.iter().flat_map(|f| f.location.shapes.iter().skip(1).copied()).collect()),
+        "deleteTinyContours" => delete(findings.iter().flat_map(|f| f.location.shapes.iter().copied()).collect()),
+        "convertCurveType" => match main_curve {
+            Some(CurveType::Quadratic) => vec![("path.convertToQuadratic", json!({"glyph": g, "layer": l}))],
+            Some(CurveType::Cubic) => vec![("path.convertToCubic", json!({"glyph": g, "layer": l}))],
+            None => Vec::new(),
+        },
+        "setSmooth" => {
+            let points = points();
+            if points.is_empty() {
+                Vec::new()
+            } else {
+                vec![(command, json!({"glyph": g, "layer": l, "points": points, "to": "smooth", "keepOutline": true}))]
+            }
+        }
+        "harmonize" => {
+            let points = points();
+            if points.is_empty() { Vec::new() } else { vec![(command, json!({"glyph": g, "layer": l, "points": points}))] }
+        }
         "setStartPoint" => {
             let masters: Vec<&Layer> = glyph.layers.iter().filter(|x| x.is_master_layer()).collect();
             let mut calls = Vec::new();
@@ -1497,7 +1646,7 @@ fn fix_layer(s: &mut Session, run: &Run, group: &Group, how: &How, report: &mut 
         let Some(spec) = run.checks.iter().find(|c| c.id == id) else { continue };
         let reason = match spec.fix {
             None => Some("the check has no automatic fix"),
-            Some(fx) if !fx.command.is_some_and(|c| find_command(c).is_some()) => Some("no command carries this fix out yet"),
+            Some(fx) if fix_via(&fx).is_none() => Some(NO_FIX_CALL),
             Some(fx) if safe_only && !fx.safe => Some("the fix changes the design: give safeOnly: false"),
             Some(_) => None,
         };
@@ -1538,7 +1687,7 @@ fn fix_layer(s: &mut Session, run: &Run, group: &Group, how: &How, report: &mut 
                 if found.is_empty() {
                     continue;
                 }
-                let calls = calls_for(fix, command, glyph, layer, &found, report);
+                let calls = calls_for(fix, command, glyph, layer, &found, facts.1, report);
                 if dry {
                     for (command, params) in &calls {
                         report.planned.push(json!({"fix": fix, "glyph": g, "layer": l, "master": group.master, "command": command, "params": params, "results": found.len()}));
@@ -1592,7 +1741,7 @@ fn context(font: &Font, (grid_step, main_curve, variable): Facts) -> AuditContex
 // ── audit.list, audit.describe, audit.profile.list ─────────────────────────────────────────────
 
 fn fix_available(c: &CheckSpec) -> bool {
-    c.fix.and_then(|f| f.command).is_some_and(|cmd| find_command(cmd).is_some())
+    c.fix.as_ref().and_then(fix_via).is_some()
 }
 
 fn list(_: &mut Session, v: &Value) -> Result<Value> {

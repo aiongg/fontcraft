@@ -79,6 +79,19 @@ fn each_fix_leaves_its_check_silent() {
     add(&mut s, "K", json!([line(0.0, 0.0), off(30.0, 1.0), off(70.0, 1.0), curve(100.0, 0.0), line(100.0, 100.0), line(0.0, 100.0)]), true);
     add(&mut s, "L", json!([line(0.0, 0.0), off(0.0, 0.0), off(100.0, 0.0), curve(100.0, 0.0), line(50.0, 80.0)]), true);
     add(&mut s, "M", lines(&[(0.0, 0.0), (100.0, 0.0), (100.0, 0.5), (100.0, 100.0), (0.0, 100.0)]), true);
+    // The same square twice.
+    add(&mut s, "N", rect(0.0, 0.0, 100.0, 100.0), true);
+    add(&mut s, "N", rect(0.0, 0.0, 100.0, 100.0), true);
+    // A closed path along one line: it encloses nothing.
+    add(&mut s, "O", rect(0.0, 0.0, 100.0, 100.0), true);
+    add(&mut s, "O", lines(&[(200.0, 0.0), (300.0, 0.0), (250.0, 0.0)]), true);
+    // A corner node at (100, 100) between two curves whose handles lie on one horizontal line.
+    add(
+        &mut s,
+        "P",
+        json!([line(0.0, 0.0), off(0.0, 50.0), off(50.0, 100.0), curve(100.0, 100.0), off(150.0, 100.0), off(200.0, 50.0), curve(200.0, 0.0)]),
+        true,
+    );
     s.edit("fractional coordinates", |font| {
         let mut g = font.glyph_mut("I")?;
         if let Some(Shape::Path(p)) = g.layers[0].shapes.first_mut() {
@@ -108,6 +121,9 @@ fn each_fix_leaves_its_check_silent() {
         ("check.outlines.zeroLengthHandle", "L", "path.tidyUpPaths"),
         ("check.outlines.nearCoincidentPoints", "M", "path.tidyUpPaths"),
         ("check.outlines.almostStraightCurve", "K", "path.tidyUpPaths"),
+        ("check.outlines.duplicateContour", "N", "edit.delete"),
+        ("check.outlines.zeroAreaContour", "O", "edit.delete"),
+        ("check.outlines.unflaggedSmoothNode", "P", "path.toggleNodeType"),
     ];
     for (check, glyph, command) in cases {
         let select = json!({"profile": "strict", "checks": [check], "glyphs": [glyph]});
@@ -305,7 +321,8 @@ fn the_registry_is_listed_and_described() {
     assert!(listed.iter().all(|id| registered.contains(id)));
     let by_id = |id: &str| checks.iter().find(|c| c["id"] == id).unwrap().clone();
     assert_eq!(by_id("check.outlines.missingExtremes")["fixAvailable"], json!(true));
-    assert_eq!(by_id("check.outlines.tinyContour")["fixAvailable"], json!(false), "no command deletes contours yet");
+    assert_eq!(by_id("check.outlines.tinyContour")["fixAvailable"], json!(true));
+    assert_eq!(by_id("check.outlines.openCorners")["fixAvailable"], json!(false), "no command trims open corners yet");
     assert_eq!(by_id("check.outlines.noContours")["fixable"], json!(false));
     let fixable = run(&mut s, "audit.list", json!({"fixable": true}));
     assert!(fixable["checks"].as_array().unwrap().iter().all(|c| c["fixable"] == json!(true)));

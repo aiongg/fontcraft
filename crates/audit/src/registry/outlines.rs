@@ -14,6 +14,8 @@ const fn fix(id: &'static str, command: Option<&'static str>, safe: bool, descri
 const REMOVE_OVERLAP: Option<FixSpec> =
     fix("removeOverlap", Some("path.removeOverlap"), true, "Replace the contours with their union, then restore contour order and start points.");
 const TIDY: Option<&str> = Some("path.tidyUpPaths");
+const DELETE: Option<&str> = Some("edit.delete");
+const SET_POSITION: Option<&str> = Some("selection.setPosition");
 
 /// The outline checks, in the order of the inventory.
 pub(super) const CHECKS: &[CheckSpec] = &[
@@ -85,7 +87,7 @@ pub(super) const CHECKS: &[CheckSpec] = &[
         severity: Warn,
         profile: Outlines,
         thresholds: &[contours::TINY_MIN_AREA],
-        fix: fix("deleteTinyContours", None, false, "Delete the contour."),
+        fix: fix("deleteTinyContours", DELETE, false, "Delete the contour."),
         skip_variable: false,
         capped: false,
         codes: &["tiny"],
@@ -130,7 +132,7 @@ pub(super) const CHECKS: &[CheckSpec] = &[
         severity: Warn,
         profile: Outlines,
         thresholds: &[metrics::ALIGNMENT_MAX_DISTANCE],
-        fix: fix("snapToMetric", None, false, "Move the point and its handles onto the metric line."),
+        fix: fix("snapToMetric", Some("selection.move"), false, "Move the point and its handles onto the metric line."),
         skip_variable: false,
         capped: true,
         codes: &["alignment-miss"],
@@ -205,7 +207,8 @@ pub(super) const CHECKS: &[CheckSpec] = &[
         severity: Warn,
         profile: Universal,
         thresholds: &[],
-        fix: fix("convertCurveType", None, false, "Convert every contour to the font's main curve type."),
+        // `audit.fix` runs path.convertToCubic or path.convertToQuadratic, by the main curve type.
+        fix: fix("convertCurveType", Some("path.convertToCubic"), false, "Convert every contour to the font's main curve type."),
         skip_variable: false,
         capped: false,
         codes: &["mixed-in-layer", "differs-from-font"],
@@ -220,7 +223,7 @@ pub(super) const CHECKS: &[CheckSpec] = &[
         severity: Info,
         profile: Strict,
         thresholds: &[contours::OPEN_CORNER_MAX_LENGTH],
-        fix: fix("eraseOpenCorners", None, false, "Trim the corner to the crossing point."),
+        fix: fix("eraseOpenCorners", Some("path.eraseOpenCorners"), false, "Trim the corner to the crossing point."),
         skip_variable: false,
         capped: true,
         codes: &["open-corner"],
@@ -280,7 +283,7 @@ pub(super) const CHECKS: &[CheckSpec] = &[
         severity: Warn,
         profile: Outlines,
         thresholds: &[handles::HANDLE_MAX_ANGLE, handles::HANDLE_MAX_OFFSET],
-        fix: fix("snapHandles", None, false, "Snap the handle to the axis, keeping its length."),
+        fix: fix("snapHandles", SET_POSITION, false, "Snap the handle to the axis, keeping its length."),
         skip_variable: false,
         capped: true,
         codes: &["almost-orthogonal"],
@@ -325,7 +328,7 @@ pub(super) const CHECKS: &[CheckSpec] = &[
         severity: Warn,
         profile: Outlines,
         thresholds: &[],
-        fix: fix("removeDuplicateContours", None, true, "Delete the extra copies."),
+        fix: fix("removeDuplicateContours", DELETE, true, "Delete the extra copies."),
         skip_variable: false,
         capped: false,
         codes: &["duplicate"],
@@ -355,7 +358,7 @@ pub(super) const CHECKS: &[CheckSpec] = &[
         severity: Warn,
         profile: Outlines,
         thresholds: &[],
-        fix: fix("deleteTinyContours", None, true, "Delete the path."),
+        fix: fix("deleteTinyContours", DELETE, true, "Delete the path."),
         skip_variable: false,
         capped: false,
         codes: &["empty", "single-node", "off-curve-only"],
@@ -370,7 +373,7 @@ pub(super) const CHECKS: &[CheckSpec] = &[
         severity: Warn,
         profile: Outlines,
         thresholds: &[],
-        fix: fix("deleteTinyContours", None, true, "Delete the path."),
+        fix: fix("deleteTinyContours", DELETE, true, "Delete the path."),
         skip_variable: false,
         capped: false,
         codes: &["zero-area"],
@@ -452,7 +455,7 @@ pub(super) const CHECKS: &[CheckSpec] = &[
         severity: Warn,
         profile: Outlines,
         thresholds: &[handles::KINK_MAX_ANGLE],
-        fix: fix("alignHandles", None, false, "Rotate the handles onto a common line, keeping their lengths."),
+        fix: fix("alignHandles", SET_POSITION, false, "Rotate the handles onto a common line, keeping their lengths."),
         skip_variable: false,
         capped: true,
         codes: &["kinked"],
@@ -467,7 +470,7 @@ pub(super) const CHECKS: &[CheckSpec] = &[
         severity: Info,
         profile: Strict,
         thresholds: &[],
-        fix: fix("setSmooth", None, true, "Set the smooth flag."),
+        fix: fix("setSmooth", Some("path.toggleNodeType"), true, "Set the smooth flag."),
         skip_variable: false,
         capped: true,
         codes: &["collinear-handles"],
@@ -512,7 +515,7 @@ pub(super) const CHECKS: &[CheckSpec] = &[
         severity: Info,
         profile: Strict,
         thresholds: &[handles::CURVATURE_MAX_RATIO],
-        fix: fix("harmonize", None, false, "Move the node along its handle line until the curvatures match."),
+        fix: fix("harmonize", Some("path.harmonizeNodes"), false, "Move the node along its handle line until the curvatures match."),
         skip_variable: false,
         capped: true,
         codes: &["curvature-break"],

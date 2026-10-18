@@ -42,22 +42,21 @@ const SORT_ZONES: &str = "font.info.sortZones";
 const CLEAR_FIELDS: &str = "font.info.clearGeneratedFields";
 
 /// The fix ids of `docs/spec/21-qa.md` § 5 that this module carries out on a source, and the
-/// command for each. `audit.fix` runs these for source findings without a glyph; a fix id of a
-/// compiled-font fix (`cleanNameRecords`, `cleanInstances`) names its `tables.*` command in the
-/// registry and this command when the target is a source.
+/// command for each, in the order `audit.fix` runs them (§ 5 "Fix calls", first stage). A fix id
+/// of a compiled-font fix (`cleanNameRecords`, `cleanInstances`) names its `tables.*` command in
+/// the registry and this command when the target is a source.
 pub(crate) const SOURCE_FIXES: [(&str, &str); 8] = [
     ("syncVerticalMetrics", SYNC_VERTICAL),
     ("syncVersion", SYNC_VERSION),
     ("syncStyleLinking", SYNC_STYLE_LINKING),
     ("syncFamilyValues", SYNC_FAMILY),
-    ("cleanNameRecords", CLEAN_NAMES),
-    ("cleanInstances", CLEAN_INSTANCES),
     ("sortZones", SORT_ZONES),
     ("clearInfoFields", CLEAR_FIELDS),
+    ("cleanNameRecords", CLEAN_NAMES),
+    ("cleanInstances", CLEAN_INSTANCES),
 ];
 
 /// The command that carries out the fix `id` on a source, if this module has one.
-#[allow(dead_code)] // `audit.fix` (M12.44) calls it once it fixes source findings.
 pub(crate) fn source_command(id: &str) -> Option<&'static str> {
     SOURCE_FIXES.iter().find(|(fix, _)| *fix == id).map(|(_, command)| *command)
 }

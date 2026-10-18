@@ -136,7 +136,7 @@ pub(super) const CHECKS: &[CheckSpec] = &[
         id: "check.hinting.blueValuesOrder",
         label: "Alignment zone order",
         description: "In an alignment-zone pair the first value is larger than the second.",
-        fix: fix("sortZones", None, true, "Sort each alignment-zone pair."),
+        fix: fix("sortZones", Some("font.info.sortZones"), true, "Sort each alignment-zone pair."),
         codes: &["unordered-pair"],
         preconditions: &[Table("CFF ")],
         run: Runner::Binary(h::blue_values_order),

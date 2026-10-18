@@ -581,6 +581,33 @@ fn minimum_coverage_skips_without_the_glyph_set() {
 }
 
 #[test]
+fn minimum_coverage_compares_the_cmap_with_the_project_glyph_set() {
+    let bytes = clean().build();
+    let set = fontcraft_model::glyphdata::sets::builtin()
+        .unwrap()
+        .glyph_sets
+        .iter()
+        .find(|s| s.glyphs.iter().any(|g| g.code_point.is_some_and(|c| c > 0x7F)))
+        .expect("a built-in glyph set with characters beyond ASCII");
+    let spec = find("check.glyphset.minimumCoverage").unwrap();
+    let with_set = |value: &str| {
+        let values = std::collections::BTreeMap::from([("glyphSet".to_string(), crate::profile::ProjectValue::Text(value.to_string()))]);
+        let services = NoServices;
+        let ctx = BinaryCtx::new("f0", &bytes, 0, &services).unwrap().with_values(&values);
+        audit_binary(&ctx, &[spec], &Config::default())
+    };
+    for value in [set.id.as_str(), set.name.as_str()] {
+        let r = with_set(value);
+        assert!(r.skipped.is_empty(), "{value}: {:?}", r.skipped);
+        assert_eq!(r.findings.iter().map(|f| f.code).collect::<Vec<_>>(), vec!["missing-codepoints"], "{value}");
+        assert!(r.findings[0].data.get("count").is_some_and(|n| *n >= 1.0));
+    }
+    let r = with_set("no such set");
+    assert!(r.findings.is_empty());
+    assert!(r.skipped.iter().any(|s| s.reason.contains("built-in glyph set")), "{:?}", r.skipped);
+}
+
+#[test]
 fn the_family_name_must_render() {
     let bytes = with(|s| s.family = "Ab\u{20AC}".into());
     let r = report("check.glyphset.rendersOwnName", &bytes);

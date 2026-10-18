@@ -14,7 +14,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use read_fonts::TableProvider;
 use read_fonts::ps::cff::dict::{self, Entry};
 
+use super::tables::{field, padded_tag};
 use crate::name_records::{self, MAX_NAME_TEXT_BYTES};
+use crate::profile::ProjectValue;
 use crate::{BinaryCtx, Hit, Location, Params, Sink, Threshold};
 
 /// Most family-and-instance name pairs `familyAndStyleLength` builds.
@@ -675,8 +677,9 @@ fn has_patent_number(s: &str) -> bool {
     })
 }
 
-/// `check.names.legalAndCredits` (comparefamily test 6 and its name loader). The comparisons
-/// with the house URL and vendor id need project values, which this context does not carry yet.
+/// `check.names.legalAndCredits` (comparefamily test 6 and its name loader). The Windows URL
+/// record and OS/2.achVendID are compared with the project values `defaultUrl` and `vendorId`
+/// when they are set.
 pub(crate) fn legal_and_credits(ctx: &BinaryCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
     let Some(names) = Names::read(ctx, sink) else { return };
     let mut keys = vec![WIN];
@@ -700,6 +703,24 @@ pub(crate) fn legal_and_credits(ctx: &BinaryCtx<'_>, _: &Params<'_>, sink: &mut 
         && has_patent_number(t)
     {
         sink.push(Hit::new("patent-number", format!("The copyright '{t}' contains what looks like a patent number.")).place(at(ctx, 0, WIN)));
+    }
+    if let Some(ProjectValue::Text(url)) = ctx.value("defaultUrl") {
+        let wanted = url.trim();
+        if let Some(found) = names.win(11).filter(|t| t.trim() != wanted) {
+            let msg = format!("The foundry URL (name ID 11) is '{found}' but the project's URL is '{wanted}'.");
+            sink.push(Hit::new("url-mismatch", msg).place(at(ctx, 11, WIN)));
+        }
+    }
+    if let Some(ProjectValue::Text(id)) = ctx.value("vendorId")
+        && let Some(wanted) = padded_tag(id)
+        && let Ok(os2) = ctx.font.os2()
+    {
+        let found = os2.ach_vend_id().to_be_bytes().map(|b| if b == 0 { b' ' } else { b });
+        if found != wanted {
+            let (found, wanted) = (String::from_utf8_lossy(&found).into_owned(), String::from_utf8_lossy(&wanted).into_owned());
+            let msg = format!("OS/2.achVendID is '{found}' but the project's vendor ID is '{wanted}'.");
+            sink.push(Hit::new("vendor-id-mismatch", msg).place(field(ctx, "OS/2", "achVendID")));
+        }
     }
 }
 

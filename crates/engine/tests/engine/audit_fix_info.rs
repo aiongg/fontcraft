@@ -250,3 +250,49 @@ fn font_info_clear_generated_fields_clears_the_source_check() {
     assert_eq!(r["changed"].as_array().unwrap().len(), 3);
     assert_eq!(found(&mut s, "check.sources.unnecessaryInfoFields", json!({})), 0);
 }
+
+#[test]
+fn audit_fix_runs_a_font_info_fix_once_as_one_undo_step() {
+    let mut s = document();
+    s.edit("setup", |font| {
+        let info = Arc::make_mut(&mut font.info);
+        info.params.set("year", int(2026));
+        info.properties.set("versionString", "Version 1.0", false);
+        Ok(())
+    })
+    .unwrap();
+    let check = "check.sources.unnecessaryInfoFields";
+    assert_eq!(found(&mut s, check, json!({})), 2);
+    let font_json = |s: &Session| serde_json::to_value(s.font().unwrap()).unwrap();
+    let before = font_json(&s);
+
+    // The fix changes the design: safeOnly keeps it from running.
+    let safe = run(&mut s, "audit.fix", json!({"checks": [check]}));
+    assert_eq!(safe["applied"], json!([]));
+    let skipped = safe["skipped"].as_array().unwrap();
+    assert!(skipped.iter().any(|x| x["fix"] == "clearInfoFields" && x["reason"].as_str().unwrap().contains("safeOnly")), "{safe}");
+
+    // A dry run lists the edits and changes nothing.
+    let dry = run(&mut s, "audit.fix", json!({"checks": [check], "safeOnly": false, "dryRun": true}));
+    assert_eq!(dry["planned"][0]["command"], "font.info.clearGeneratedFields", "{dry}");
+    assert_eq!(dry["planned"][0]["changed"].as_array().unwrap().len(), 2);
+    assert_eq!(font_json(&s), before);
+
+    // Both results of the kept run make one call, as one undo step.
+    let doc = run(&mut s, "audit.run", json!({"checks": [check]}));
+    let ids: Vec<Value> = doc["results"].as_array().unwrap().iter().map(|r| r["id"].clone()).collect();
+    assert_eq!(ids.len(), 2);
+    assert_eq!(doc["results"][0]["fix"]["available"], true);
+    assert_eq!(doc["results"][0]["fix"]["via"], "font.info.clearGeneratedFields");
+    let steps = s.doc().unwrap().history.undo.len();
+    let r = run(&mut s, "audit.fix", json!({"results": ids, "safeOnly": false}));
+    let applied = r["applied"].as_array().unwrap();
+    assert_eq!(applied.len(), 1, "{r}");
+    assert_eq!(applied[0]["fix"], "clearInfoFields");
+    assert_eq!(s.doc().unwrap().history.undo.len(), steps + 1);
+    assert!(r["remaining"]["results"].as_array().unwrap().iter().all(|x| x["check"] != check), "{r}");
+    assert_eq!(found(&mut s, check, json!({})), 0);
+
+    run(&mut s, "edit.undo", json!({}));
+    assert_eq!(found(&mut s, check, json!({})), 2, "one undo restores both fields");
+}

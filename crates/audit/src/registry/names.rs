@@ -135,7 +135,12 @@ pub(super) const CHECKS: &[CheckSpec] = &[
         label: "Version string",
         description: "The version string can be read and matches head.fontRevision.",
         profile: Opentype,
-        fix: Some(FixSpec { id: "syncVersion", command: None, safe: false, description: "Write the version string from the font revision." }),
+        fix: Some(FixSpec {
+            id: "syncVersion",
+            command: Some("font.info.syncVersion"),
+            safe: false,
+            description: "Write the version string from the font revision.",
+        }),
         codes: &["missing", "parse", "mismatch", "near-mismatch", "development", "version-format", "version-decimals", "version-not-above-one"],
         code_severities: &[
             ("near-mismatch", Warn),
@@ -162,7 +167,7 @@ pub(super) const CHECKS: &[CheckSpec] = &[
         description: "The Windows subfamily name is the one the bold and italic bits call for.",
         fix: Some(FixSpec {
             id: "syncStyleLinking",
-            command: None,
+            command: Some("font.instance.syncStyleLinking"),
             safe: false,
             description: "Derive fsSelection, macStyle and the subfamily name from the style-linking settings.",
         }),
@@ -203,9 +208,17 @@ pub(super) const CHECKS: &[CheckSpec] = &[
     CheckSpec {
         id: "check.names.legalAndCredits",
         label: "Legal and credits",
-        description: "Copyright, trademark, designer note and foundry URL are present, and the copyright holds no patent number.",
+        description: "Copyright, trademark, designer note and foundry URL are present, the copyright holds no patent number, and the URL and vendor ID match the project's values when they are set.",
         profile: Strict,
-        codes: &["missing-copyright", "missing-trademark", "missing-designer-note", "missing-vendor-url", "patent-number"],
+        codes: &[
+            "missing-copyright",
+            "missing-trademark",
+            "missing-designer-note",
+            "missing-vendor-url",
+            "patent-number",
+            "url-mismatch",
+            "vendor-id-mismatch",
+        ],
         code_severities: &[("missing-copyright", Warn), ("missing-trademark", Warn)],
         run: Runner::Binary(names::legal_and_credits),
         ..NAMES

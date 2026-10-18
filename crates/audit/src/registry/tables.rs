@@ -170,7 +170,7 @@ pub(super) const CHECKS: &[CheckSpec] = &[
         profile: Opentype,
         fix: Some(FixSpec {
             id: "syncStyleLinking",
-            command: None,
+            command: Some("font.instance.syncStyleLinking"),
             safe: false,
             description: "Derive fsSelection, macStyle and the subfamily name from the style-linking settings.",
         }),

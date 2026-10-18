@@ -34,10 +34,9 @@ const fn patch(safe: bool, description: &'static str) -> Option<FixSpec> {
     Some(FixSpec { id: "patchTable", command: Some("tables.recalculate"), safe, description })
 }
 
-/// Report-only until the Font Info fixes (M12.63) and the table fixes (M12.61) carry it out.
 const SYNC_VERTICAL: Option<FixSpec> = Some(FixSpec {
     id: "syncVerticalMetrics",
-    command: None,
+    command: Some("font.info.syncVerticalMetrics"),
     safe: false,
     description: "Recompute the typo, hhea and win vertical metrics from one scheme.",
 });

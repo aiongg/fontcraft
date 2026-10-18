@@ -675,6 +675,31 @@ fn style_bits_follow_the_names_and_agree_with_mac_style() {
 }
 
 #[test]
+fn project_values_reach_the_table_checks() {
+    let bytes = build(&clean());
+    let allowed = ["cmap", "head", "hhea", "hmtx", "maxp", "name", "OS/2", "post", "glyf", "loca"].map(String::from).to_vec();
+    let values = BTreeMap::from([
+        ("allowedTables".to_string(), ProjectValue::List(allowed)),
+        ("fsType".to_string(), ProjectValue::Number(8.0)),
+        ("vendorId".to_string(), ProjectValue::Text("ABCD".into())),
+    ]);
+    let services = NoServices;
+    let ctx = BinaryCtx::new("f0", &bytes, 0, &services).unwrap().with_values(&values);
+    let checks: Vec<&CheckSpec> =
+        ["check.tables.unsupportedTables", "check.tables.fsType", "check.tables.vendorId"].iter().filter_map(|id| find(id)).collect();
+    let r = audit_binary(&ctx, &checks, &Config::default());
+    assert!(r.skipped.is_empty(), "{:?}", r.skipped);
+    let found: BTreeSet<(&str, &str)> = r.findings.iter().map(|f| (f.check, f.code)).collect();
+    for expected in [
+        ("check.tables.unsupportedTables", "unsupported-table"),
+        ("check.tables.fsType", "unexpected-value"),
+        ("check.tables.vendorId", "bad-vendor-id"),
+    ] {
+        assert!(found.contains(&expected), "{expected:?} in {found:?}");
+    }
+}
+
+#[test]
 fn vendor_ids_are_compared_with_the_project_or_the_registry() {
     let with = |vendor: [u8; 4]| build(&Tt { os2: Os2 { vendor, ..clean().os2 }, ..clean() });
     assert_eq!(codes(&with(*b"UKWN"), "check.tables.vendorId"), vec!["placeholder"]);
