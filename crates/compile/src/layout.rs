@@ -34,6 +34,7 @@ use std::path::Path;
 use fontcraft_fea::{CompileRequest, Compiled as FeaCompiled, Diagnostic, GlyphOrder, Severity};
 use fontcraft_features::implicit::{ImplicitRequest, generated};
 use fontcraft_features::marks::{MarkLimits, MarkRequest};
+use fontcraft_features::optical::BoundsTarget;
 use fontcraft_features::{EntryDiagnostic, EntryKind, FEATURE_WRITERS_KEY, KernRequest, MasterValues, SourceMap, Target, append_tags};
 use fontcraft_model::glyphdata::GlyphData;
 use fontcraft_model::{Features, Font, Resolved, ResolvedGlyph, is_ufo_family, param_flag};
@@ -194,10 +195,21 @@ pub fn build(input: &LayoutInput, opts: &LayoutOptions, warnings: &mut Vec<Strin
     // Steps 1 and 2: the assembled code, when the source has any.
     let mut entries = Features::default();
     let mut assembly = None;
-    if let Some(font) = input.font.filter(|f| !f.features.is_empty()) {
+    // The optical bounds (`lfbd`, `rtbd`), added as entries unless the code writes them.
+    let optical = match input.font.filter(|_| opts.gpos && opts.implicit) {
+        Some(font) => {
+            let sources = input.edits.source_names();
+            let glyphs: Vec<(&str, &str)> = names.iter().map(|n| (n.as_str(), sources.get(n.as_str()).copied().unwrap_or(n.as_str()))).collect();
+            let target = if input.variable.is_some() { BoundsTarget::Variable } else { BoundsTarget::Master(&resolved.master) };
+            fontcraft_features::optical::bounds_features(font, &glyphs, target, warnings)
+        }
+        None => Vec::new(),
+    };
+    if let Some(font) = input.font.filter(|f| !f.features.is_empty() || !optical.is_empty()) {
         match input.data {
             Some(data) => {
                 entries = self::entries(input, font, opts, warnings)?;
+                fontcraft_features::optical::add_missing(&mut entries, optical);
                 let mut values = MasterValues::new(font, data, &resolved.master).map_err(|e| request_error(e.to_string()))?;
                 if let Some((axes, location)) = input.feature_axes {
                     values = values.with_feature_axes(axes.clone(), location.clone());

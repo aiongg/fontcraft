@@ -1424,6 +1424,20 @@ summary = "Optical margin alignment: a per-master pair of global offsets, overri
 ref = "FontLab 8 What's new › Metrics & kerning › Optical bounds"
 status = "docs"
 origin = "fontlab"
+notes = "Documented in the FontLab 8.2 release notes, not yet observed. FontCraft (fontcraft_features::optical): every exporting glyph gets `pos g <-L 0 -L 0>;` in lfbd and `pos g <0 0 -R 0>;` in rtbd, where L is the distance from the origin to the layer's `ol` guide and R the distance from its `or` guide to the advance width, each falling back to the master's opticalOffset; zero bounds are left out. The rules are added as entries at export unless the feature code already writes the feature. Opening a compiled font does not yet read lfbd, rtbd or opbd back into offsets or guides."
+guesses = [
+  "A glyph without outlines or components (a space) takes no global offset, only its own guides; settled by exporting a font with a non-zero offset and a space glyph from the reference app.",
+  "A guide is read where it crosses the baseline, so a slanted guide in an italic works; guides closer than 30° to horizontal are not read; settled by exporting a glyph with a slanted `ol` guide.",
+  "Bounds are rounded half up to whole units, and a bound beyond a 16-bit value leaves the glyph out with a warning; settled by exporting a guide at a fractional position.",
+  "Only glyph-layer guides count, not master-wide guides named ol or or; settled by adding a master guide named ol in the reference app and exporting.",
+  "In a variable font a bound that differs between masters is written as a variable value, one per master; settled by exporting a variable font with different offsets per master.",
+  "A hand-written lfbd or rtbd feature, enabled or not, replaces the generated one; settled by exporting a font that has its own lfbd feature.",
+]
+observe = [
+  "Set Font Info › Other Values › Optical offset to left 20, right 15 on our own two-glyph font (H drawn, space empty), export OTF and decompile GPOS: which glyphs have lfbd and rtbd rules and with which value records.",
+  "Add a vertical glyph guide named ol at x 35 and one named or at x 560 to a 600-wide glyph, export, and check that lfbd gives -35 and rtbd -40.",
+  "Open the exported font again and check what Optical offset and guides the import produces.",
+]
 
 [[parameter]]
 name = "opticalOffset"
@@ -1435,6 +1449,7 @@ summary = "Global left and right optical-margin offsets ({left, right}) subtract
 ref = "FontLab 8 What's new › Metrics & kerning › Optical bounds (Font Info › Other Values › Optical offset)"
 status = "docs"
 origin = "fontlab"
+notes = "Documented in the FontLab 8.2 release notes, not yet observed. FontCraft reads a master parameter dictionary with the numbers `left` and `right` in font units (a number written as a string is read too); a missing or unreadable side is 0."
 
 # =====================================================================================================
 # FontLab — masters and variation
