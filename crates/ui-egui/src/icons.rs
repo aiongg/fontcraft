@@ -26,6 +26,7 @@ pub enum Icon {
     Scale,
     Measure,
     Thickness,
+    TrueTypeInstructor,
     Text,
     AnnotationSelect,
     AnnotationText,
@@ -98,6 +99,7 @@ pub const ALL: &[Icon] = &[
     Icon::Scale,
     Icon::Measure,
     Icon::Thickness,
+    Icon::TrueTypeInstructor,
     Icon::Text,
     Icon::AnnotationSelect,
     Icon::AnnotationText,
@@ -165,6 +167,7 @@ pub fn for_tool(id: &str) -> Option<Icon> {
         "scale" => Icon::Scale,
         "measurement" => Icon::Measure,
         "thickness" => Icon::Thickness,
+        "trueTypeInstructor" => Icon::TrueTypeInstructor,
         "text" => Icon::Text,
         "annotationSelect" => Icon::AnnotationSelect,
         "annotationText" => Icon::AnnotationText,
@@ -448,6 +451,13 @@ fn draw(pen: &mut Pen, icon: Icon) {
         Icon::Thickness => {
             pen.fill(&[(0.15, 0.79), (0.19, 0.83), (0.90, 0.31), (0.71, 0.12)]);
             pen.dot((0.17, 0.81), 0.06);
+        }
+        // A pixel grid with an arrow snapping up to a grid line.
+        Icon::TrueTypeInstructor => {
+            pen.closed(&[(0.12, 0.12), (0.88, 0.12), (0.88, 0.88), (0.12, 0.88)]);
+            pen.line(&[(0.12, 0.5), (0.88, 0.5)]);
+            pen.line(&[(0.5, 0.12), (0.5, 0.88)]);
+            pen.arrow((0.31, 0.8), (0.31, 0.5));
         }
         Icon::Text => {
             pen.line(&[(0.22, 0.3), (0.22, 0.18), (0.78, 0.18), (0.78, 0.3)]);

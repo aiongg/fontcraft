@@ -29,11 +29,21 @@ pub struct ToolSettings {
     pub bounding_box: bool,
     /// The reference point placed with the Rotate or Scale tool (`transform.setOrigin`).
     pub reference: Option<Point>,
+    /// The TrueType Instructor's hinting direction (`hint.tt.toggleDirection`).
+    pub tt_direction: crate::tt_instructor::TtDirection,
 }
 
 impl Default for ToolSettings {
     fn default() -> Self {
-        Self { hit_tolerance: 6.0, snap_distance: 4.0, drag_threshold: 3.0, increments: [1.0, 10.0, 100.0], bounding_box: false, reference: None }
+        Self {
+            hit_tolerance: 6.0,
+            snap_distance: 4.0,
+            drag_threshold: 3.0,
+            increments: [1.0, 10.0, 100.0],
+            bounding_box: false,
+            reference: None,
+            tt_direction: Default::default(),
+        }
     }
 }
 
@@ -123,6 +133,7 @@ pub const TOOLS: &[ToolInfo] = &[
     ToolInfo { id: "scale", label: "Scale", shortcut: "S", group: "" },
     ToolInfo { id: "measurement", label: "Measurement", shortcut: "L", group: "" },
     ToolInfo { id: "thickness", label: "Thickness", shortcut: "", group: "" },
+    ToolInfo { id: "trueTypeInstructor", label: "TrueType Instructor", shortcut: "I", group: "" },
     ToolInfo { id: "annotationSelect", label: "Annotation Selection", shortcut: "A", group: "annotation" },
     ToolInfo { id: "annotationText", label: "Text Annotation", shortcut: "A", group: "annotation" },
     ToolInfo { id: "annotationArrow", label: "Arrow Annotation", shortcut: "A", group: "annotation" },
@@ -148,6 +159,7 @@ pub fn make_tool(id: &str) -> Option<Box<dyn Tool>> {
         "scale" => Box::new(ScaleTool::default()),
         "measurement" => Box::new(MeasureTool::default()),
         "thickness" => Box::new(crate::thickness::ThicknessTool::default()),
+        "trueTypeInstructor" => Box::new(crate::tt_instructor::TtInstructorTool::default()),
         _ if id.starts_with("annotation") => Box::new(AnnotateTool::new(id)?),
         _ => return None,
     };

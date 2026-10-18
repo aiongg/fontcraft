@@ -181,7 +181,12 @@ fn with_tool<R>(app: &mut FontcraftApp, f: impl FnOnce(&mut Toolbox, &Context<'_
     scene.background_shown = state.display.background;
     scene.guides_shown = state.display.guides;
     let view = view::tools_view(&tab.view, view::edited_origin(session, layouts, tab), center);
-    let settings = ToolSettings { bounding_box: state.display.bounding_box, reference: state.transform.reference(), ..settings(tokens, font) };
+    let settings = ToolSettings {
+        bounding_box: state.display.bounding_box,
+        reference: state.transform.reference(),
+        tt_direction: state.tt_instructor.direction,
+        ..settings(tokens, font)
+    };
     let cx = Context { scene: &scene, view, selection: &tab.selection, settings };
     Ok(f(&mut tools.toolbox, &cx))
 }
