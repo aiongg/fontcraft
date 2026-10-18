@@ -253,14 +253,9 @@ fn master_list(ui: &mut egui::Ui, tokens: &Tokens, fi: &mut FontInfoState, font:
                 fi.selected_masters = vec![count];
                 fi.clear_selection();
             }
-            widgets::button(
-                ui,
-                menu_item_id("addOtherFont"),
-                "Add Other Font…",
-                "Adding masters from another open font is not available yet",
-                false,
-                false,
-            );
+            if widgets::button(ui, menu_item_id("addOtherFont"), "Add Other Font…", "Copy masters of the open fonts into this font", true, false) {
+                pending.push(("dialog.open", json!({"dialog": "fontInfo.addOtherFont"})));
+            }
             if widgets::button(
                 ui,
                 menu_item_id("duplicate"),

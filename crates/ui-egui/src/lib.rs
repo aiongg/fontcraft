@@ -68,6 +68,8 @@ mod info_box_metrics_tests;
 #[cfg(test)]
 mod inspector_tests;
 #[cfg(test)]
+mod interp_dialogs_tests;
+#[cfg(test)]
 mod kerning_dialogs_tests;
 #[cfg(test)]
 mod kerning_window_tests;

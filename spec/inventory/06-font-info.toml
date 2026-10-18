@@ -983,6 +983,10 @@ milestone = "M9"
 summary = "Sheet shown by the Add Other Font entry of the masters plus menu, used to choose which masters of other open documents are copied into this font."
 ref = "Font Info › Masters › Managing Masters"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/dialogs/add_other_font.rs, opened from Font Info › Masters › + › Add Other Font… or dialog.open {dialog: \"fontInfo.addOtherFont\"}. The masters are checkboxes labelled with the document and master names; OK runs font.master.addFromOtherFont once with the ticked masters, as one undo step."
+guesses = [
+  "The list includes the masters of the active font as well as the other open fonts, as the handbook's wording says; opening the sheet in the reference app would show whether the active font is left out.",
+]
 
 [[command]]
 id = "font.master.duplicate"

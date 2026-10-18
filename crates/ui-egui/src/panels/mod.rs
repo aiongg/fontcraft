@@ -119,6 +119,9 @@ pub struct PanelState {
     pub attach: crate::shell::attach::AttachState,
     pub reference_font: reference_font::ReferenceFontState,
     pub compare_table: crate::dialogs::compare_fonts::CompareTableState,
+    pub shape_order_window: crate::dialogs::shape_order_window::ShapeOrderWindowState,
+    #[serde(skip)]
+    pub axis_mappings: crate::dialogs::axis_mappings::AxisMappingsState,
 }
 
 impl Default for PanelState {
@@ -150,6 +153,8 @@ impl Default for PanelState {
             attach: Default::default(),
             reference_font: Default::default(),
             compare_table: Default::default(),
+            shape_order_window: Default::default(),
+            axis_mappings: Default::default(),
         }
     }
 }

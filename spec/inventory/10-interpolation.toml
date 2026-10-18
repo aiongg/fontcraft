@@ -432,6 +432,11 @@ milestone = "M9"
 summary = "Shows every path and component of every layer of the current glyph and lets the shapes be rearranged until all layers use the same order. The exact layout and whether it colours shapes like Master Compatibility view are not described."
 ref = "Interpolation › Outline Compatibility › Reordering Shapes"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/dialogs/shape_order_window.rs, shown by window.shapeOrder. One column per master layer, each followed by its master's intermediate and alternate layers; numbered thumbnails in stacking order, each shape in a colour that follows its index over the dim layer. Dropping a thumbnail on another in the same column runs filter.shapeOrder for that layer. The window follows the glyph being edited unless it is opened on a named glyph."
+guesses = [
+  "The window opens from Window › Shape Order; Filter › Shape Order keeps the one-layer dialog. Choosing Filter › Shape Order in the reference app opens the all-layers window, so the two may have to merge.",
+  "Columns run left to right, one per layer, thumbnails top to bottom with shape 0 on top; seeing the window would settle the layout.",
+]
 observe = [
   "In F5 (incompatible), open Filter › Shape Order: note the layout, whether special layers appear, and how a drag reorders shapes.",
 ]
@@ -698,6 +703,10 @@ milestone = "M9"
 summary = "Editor opened by clicking the value of a Virtual Master parameter; coordinates are entered as for a real master and confirmed with OK. Several virtual masters need several parameters."
 ref = "Interpolation › Intermediate Layers › Virtual Masters"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/dialogs/virtual_master.rs, a dialog of font.customParameters.set on an existing Virtual Master row of the font (dialog.open {dialog: \"dialog.virtualMaster\", params: {index}}; index picks the row when there are several). One number field per axis, keyed by the axis name; OK writes an entry for every axis, ordered by axis name. The parameter list does not open it from a click on the value yet."
+guesses = [
+  "An axis the stored value leaves out starts at the first master's coordinate; adding a Virtual Master in the reference app would show its starting values.",
+]
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Alternate (bracket) layers and switching shapes
@@ -1232,6 +1241,10 @@ milestone = "M9"
 summary = "Editor opened by clicking the value of an Axis Location parameter on a master; assigns each axis the coordinate the master represents in variable fonts. Layout is not described beyond that."
 ref = "Interpolation › Variable Font Options › Axis Location"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/dialogs/axis_location.rs, a dialog of font.customParameters.set on an existing Axis Location row of a master or instance (dialog.open {dialog: \"dialog.axisLocation\", params: {scope, targets}}). It has one number field per axis, keyed by the axis name; OK writes an entry for every axis, ordered by axis name. The parameter list does not open it from a click on the value yet."
+guesses = [
+  "An axis the stored value leaves out starts at the master's or instance's internal coordinate; opening an empty Axis Location in the reference app would show its starting values.",
+]
 observe = [
   "In F1 (two masters), open an Axis Location value on a master: note the dialog's layout and fields.",
 ]
@@ -1306,6 +1319,13 @@ milestone = "M9"
 summary = "Three-pane editor opened by clicking the value of an Axis Mappings parameter: axes, the mapping table of the selected axis, and a graphical editor of the same points."
 ref = "Interpolation › Variable Font Options › Axis Mappings"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/dialogs/axis_mappings.rs, opened by axisMappings.showDialog (the font's mappings, or a variable font setting's). Every edit is one axisMappings.* command; the edits made while the dialog is open are previewed together as one command.batch, OK keeps them as one undo step and Cancel gives back the font it opened on. Repeated moves of one point merge into one step."
+guesses = [
+  "The graph puts internal coordinates across and external ones up, so dragging a point up or down changes its external value; seeing the dialog would settle the orientation.",
+  "A point dragged in the graph lands on a whole number; dragging a point in the reference app would show whether it keeps fractions.",
+  "Plus adds a point halfway between the selected point and the next one, on the current mapping line; pressing plus in the reference app would show where its new point goes.",
+  "Return is OK and Escape is Cancel while no value is being typed, as in the other dialogs.",
+]
 
 [[command]]
 id = "axisMappings.addPoint"
@@ -1636,3 +1656,61 @@ guesses = [
 # Parameters introduced by this chapter (may duplicate the appendix inventory)
 # ───────────────────────────────────────────────────────────────────────────────
 
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Shell commands of the interpolation dialogs (M9.23)
+# ───────────────────────────────────────────────────────────────────────────────
+
+[[command]]
+id = "window.shapeOrder"
+label = "Shape Order"
+menu = ["Window"]
+shortcut = ""
+kind = "ui"
+params = "{open?: bool = true, glyph?: name}"
+area = "interpolation"
+milestone = "M9"
+summary = "Shows or hides the Shape Order window on a glyph, by default the one being edited."
+ref = "Interpolation › Outline Compatibility › Reordering Shapes"
+status = "inferred"
+notes = "Our shell command for the window.shapeOrder window. Its reply lists each layer's shapes, so agents can read the order before running filter.shapeOrder."
+
+[[command]]
+id = "axisMappings.showDialog"
+label = "Axis Mappings…"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{variableFontSetting?: id|name|index, axis?: tag}"
+area = "interpolation"
+milestone = "M9"
+summary = "Opens the Axis Mappings dialog on the font's mappings or on a variable font setting's, the given axis selected."
+ref = "Interpolation › Variable Font Options › Axis Mappings"
+status = "inferred"
+notes = "Our shell command for dialog.axisMappings; the reference opens the dialog from a click on the value of an Axis Mappings parameter."
+
+[[command]]
+id = "axisMappings.dialogEdit"
+label = "Edit in Axis Mappings Dialog"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{axis?: tag, point?: integer|null, command?: \"axisMappings.addPoint\"|\"axisMappings.setPoint\"|\"axisMappings.nudgePoint\"|\"axisMappings.removePoint\", params?: object}"
+area = "interpolation"
+milestone = "M9"
+summary = "Selects an axis and a point in the open Axis Mappings dialog and applies one mapping edit to its preview, as a click, a drag or an arrow key does."
+ref = "Interpolation › Variable Font Options › Axis Mappings"
+status = "inferred"
+
+[[command]]
+id = "axisMappings.closeDialog"
+label = "Close Axis Mappings Dialog"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{confirm?: bool = false}"
+area = "interpolation"
+milestone = "M9"
+summary = "Closes the Axis Mappings dialog: OK keeps its edits as one undo step, Cancel gives back the font it opened on."
+ref = "Interpolation › Variable Font Options › Axis Mappings"
+status = "inferred"
