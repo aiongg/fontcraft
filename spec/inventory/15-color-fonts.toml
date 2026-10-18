@@ -1293,7 +1293,7 @@ status = "handbook"
 guesses = [
   "Each bitmap becomes an `<image>` element with embedded PNG data, placed where the image sits on its iColor layer. Settled by exporting the sbix test font with SBIX to SVG from the reference.",
 ]
-notes = "Documented but not yet observed. `fontcraft_color::svg::bitmap_document` writes the `<image>` element with the iColor layer's image transform after a flip at the image height; JPEG data is embedded as JPEG. A TIFF image is left out with a warning until the compiler can convert it to PNG (it does not depend on the image decoder yet)."
+notes = "Documented but not yet observed. `fontcraft_color::svg::bitmap_document` writes the `<image>` element with the iColor layer's image transform after a flip at the image height; JPEG data is embedded as JPEG. A TIFF image is converted to PNG first; one that cannot be decoded is left out with a warning."
 observe = ["sbix font: export an instance with SBIX to SVG set to 100 and read the SVG table; note how each document places its <image> element (position, size, transform)."]
 
 [[behavior]]

@@ -17,6 +17,7 @@ use fontcraft_color::svg::{BitmapPlacement, bitmap_document, bitmap_size, docume
 use fontcraft_color::svg_import::import;
 use fontcraft_color::{AssetStore, MAX_SVG_FILE_BYTES, Rgba};
 use fontcraft_geom::{Affine, BezPath};
+use fontcraft_imagery::{ImageFormat, MAX_PIXELS, decode_rgba, sniff, to_png};
 use fontcraft_model::{Font, Glyph, Image, MAX_OUTLINE_ELEMENTS, Shape};
 use fontcraft_pathops::{Cap, Join, StrokeStyle, stroke_outline};
 
@@ -97,7 +98,14 @@ fn svg_layer_document(font: &Font, name: &str, layer: &str, path: &str, gid: u16
 fn bitmap_layer_document(font: &Font, name: &str, layer: &str, ppem: u16, gid: u16, assets: &dyn AssetStore) -> Result<String, String> {
     let image = layer_image(font, name, layer)?.ok_or_else(|| format!("its iColor layer of {ppem} pixels per em has no image"))?;
     let path = image.path.as_deref().ok_or_else(|| format!("its iColor layer of {ppem} pixels per em has no image"))?;
-    let bytes = assets.read(path).map_err(|e| e.to_string())?;
+    let mut bytes = assets.read(path).map_err(|e| e.to_string())?;
+    // SVG renderers draw PNG and JPEG only, so a TIFF goes in as PNG.
+    if sniff(&bytes).is_ok_and(|info| matches!(info.format, ImageFormat::Tiff)) {
+        let png = decode_rgba(&bytes, MAX_PIXELS)
+            .and_then(|image| to_png(&image))
+            .map_err(|e| format!("the TIFF image `{path}` cannot be converted to PNG: {e}"))?;
+        bytes = png.into();
+    }
     let (width, height) =
         bitmap_size(&bytes).ok_or_else(|| format!("the image `{path}` is not PNG or JPEG data, which is all SBIX to SVG writes"))?;
     let placement = BitmapPlacement { transform: image.transform.affine(), width, height };
@@ -250,7 +258,7 @@ mod tests {
         let mut png = b"\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR".to_vec();
         png.extend_from_slice(&[0, 0, 0, 2, 0, 0, 0, 3, 8, 6, 0, 0, 0]);
         assets.insert("rainbow.png", png);
-        assets.insert("tiff.tif", b"II*\0\x08\0\0\0".to_vec());
+        assets.insert("tiff.tif", super::super::sbix::tests::tiff(1, 1, &[255, 0, 0, 255]));
 
         let bitmap = |glyph: &str, layer: &str, ppem| SvgDocument { glyph: glyph.into(), source: SvgSource::Bitmap { layer: layer.into(), ppem } };
         let plan = SvgPlan {
@@ -268,17 +276,18 @@ mod tests {
         let bytes = build(&font, &plan, &order, &assets, &mut warnings).unwrap().unwrap();
 
         let svg = Svg::read(FontData::new(&bytes)).unwrap();
-        assert_eq!(svg.svg_document_list().unwrap().num_entries(), 2);
+        assert_eq!(svg.svg_document_list().unwrap().num_entries(), 3);
         let doc = |gid| std::str::from_utf8(svg.glyph_data(GlyphId::new(gid)).unwrap()).unwrap().to_string();
         let smile = doc(1);
         assert!(smile.contains(r#"<g id="glyph1" transform="matrix(1 0 0 -1 0 0)"><g transform="matrix(2 0 0 -2 100 -30)">"#), "{smile}");
         let rainbow = doc(2);
         assert!(rainbow.contains(r#"<image width="2" height="3" transform="matrix(7.8125 0 0 -7.8125 0 -76.5625)""#), "{rainbow}");
         assert!(rainbow.contains("data:image/png;base64,"), "{rainbow}");
-        // A missing file and a TIFF leave their glyphs out, each with a warning.
-        assert!(svg.glyph_data(GlyphId::new(3)).is_none() && svg.glyph_data(GlyphId::new(4)).is_none());
+        // A TIFF goes in as PNG; a missing file leaves its glyph out, with a warning.
+        let tiff = doc(4);
+        assert!(tiff.contains(r#"<image width="1" height="1""#) && tiff.contains("data:image/png;base64,"), "{tiff}");
+        assert!(svg.glyph_data(GlyphId::new(3)).is_none());
         assert!(warnings.iter().any(|w| w.starts_with("glyph `frown`") && w.contains("frown.png")), "{warnings:?}");
-        assert!(warnings.iter().any(|w| w.starts_with("glyph `tiff`") && w.contains("not PNG or JPEG")), "{warnings:?}");
-        assert_eq!(warnings.len(), 2, "{warnings:?}");
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
     }
 }

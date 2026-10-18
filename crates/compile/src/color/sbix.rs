@@ -217,7 +217,7 @@ fn write(strikes: &[(u16, Vec<Record>)], num_glyphs: usize) -> Result<Vec<u8>, C
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use fontcraft_color::layers::with_kind;
     use fontcraft_color::{ColorLayerKind, MemoryAssets};
     use fontcraft_imagery::Rgba8;
@@ -239,7 +239,7 @@ mod tests {
     }
 
     /// An uncompressed little-endian RGBA TIFF, one strip.
-    fn tiff(width: u32, height: u32, pixels: &[u8]) -> Vec<u8> {
+    pub(crate) fn tiff(width: u32, height: u32, pixels: &[u8]) -> Vec<u8> {
         // Header 8 bytes, a directory of 10 entries (2 + 120 + 4), then the bits per sample at
         // 134 and the pixels at 142.
         let entries: [(u16, u16, u32, u32); 10] = [
