@@ -143,6 +143,7 @@ bundled, the file says so in its header and the project is listed here with its 
   crates/tables/src/ttx (mod.rs, core.rs, core/) ports ttLib's TTX writer for the core tables and ttProgram's opcode table and disassembly.
   crates/tables/src/ttx/cff.rs and cff/ (M12.5) port cffLib's CFF and CFF2 reading and XML writing, psCharStrings' DICT and Type 2 charstring decompilers, the VarStore XML form of otData, and the VORG table's XML writer.
   crates/tables/src/ttx/otdata.rs and otdata/ port ttLib's TTX writer for the structured tables (otBase, otConverters, otTables, _f_v_a_r, _a_v_a_r, _m_e_t_a); otdata/schema.rs is generated from otData.py.
+  crates/tables/src/ttx (var.rs, color.rs, misc.rs) ports the TTX writers of _g_v_a_r, _c_v_a_r, TupleVariation, C_O_L_R_ (version 0), C_P_A_L_, S_V_G_, _s_b_i_x, sbixStrike, sbixGlyph, _k_e_r_n, D_S_I_G_, F_F_T_M_, L_T_S_H_ and V_D_M_X_, and the VarStore, VarIdxMap, HVAR, VVAR, MVAR, prop and AATLookup parts of otData, otConverters and otTables.
   crates/tables/src/variations.rs ports varLib.avar.map, the avar table's renormalizeLocation, VarStoreInstancer, _add_avar and designspaceLib's get_validated_map.
   crates/features/src/fea_variable.rs ports misc/fixedTools.py's nearestMultipleShortestRepr,
   which writes a user coordinate with the fewest decimals a 16.16 fixed-point number keeps.
