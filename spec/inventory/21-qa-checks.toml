@@ -4374,3 +4374,138 @@ ref = "Our design; docs/spec/21-qa.md § 5 (fix dropAxis)"
 status = "inferred"
 own = true
 notes = "The audit fix dropAxis runs it on compiled fonts; added by the M12 spec pass."
+
+# ───────────────────────────── Font Info fixes (M12.63) ─────────────────────────────
+[[command]]
+id = "font.info.syncVerticalMetrics"
+label = "Sync Vertical Metrics"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{masters?: [id|name], dryRun?: bool} → {changed: [{scope, target, field, old, new}], dryRun}"
+area = "font-info"
+milestone = "M12"
+summary = "Gives each master one consistent set of vertical metrics without changing its line height: the typo and hhea ascenders become the hhea ascender plus the hhea line gap the master compiles to, both descenders its hhea descender, both line gaps 0, and winAscent and winDescent the highest and lowest point of any glyph of any master. The eight values are written as master custom parameters; without `masters`, the instances' own values of them are removed."
+ref = "Our design; docs/spec/21-qa.md § 5 (fix syncVerticalMetrics)"
+status = "inferred"
+own = true
+notes = "The source side of the audit fix syncVerticalMetrics (check.metrics.hheaMatchesTypo, winAscentDescent, lineGaps); added by M12.63. The glyph extents come from compiling each master, as the checks read them."
+guesses = [
+  "The line gap moves into the ascenders so the hhea line height stays as it was; a reference tool that recommends vertical metrics would settle it.",
+  "winAscent and winDescent take the extremes of all masters, so every instance between them is covered; a reference tool's recommendation would settle it.",
+]
+
+[[command]]
+id = "font.info.syncVersion"
+label = "Sync Version String"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{dryRun?: bool} → {changed: [{scope, target, field, old, new}], dryRun}"
+area = "font-info"
+milestone = "M12"
+summary = "Rewrites every version string the source sets (the font's and the instances' versionString, and the versionString and openTypeNameVersion parameters) to `Version <major>.<minor>` from the font's version, the minor with three digits, keeping whatever follows the first semicolon. Strings with a placeholder the compiler fills in are left alone."
+ref = "Our design; docs/spec/21-qa.md § 5 (fix syncVersion)"
+status = "inferred"
+own = true
+notes = "The source side of the audit fix syncVersion (check.names.versionString); added by M12.63."
+
+[[command]]
+id = "font.instance.syncStyleLinking"
+label = "Sync Style Linking"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{dryRun?: bool} → {changed: [{scope, target, field, old, new}], dryRun}"
+area = "font-info"
+milestone = "M12"
+summary = "Sets the style linking of each static instance from its style name: Bold, Italic and Bold Italic link to Regular with their Bold and Italic flags, Regular has neither flag and no link, and another style with the word Italic becomes the italic of the same style without that word. Other styles keep their settings. The compiler derives fsSelection, macStyle and the subfamily name from these settings."
+ref = "Handbook: Font Info › Exports › Style Linking (the recommended linking strategy); docs/spec/21-qa.md § 5 (fix syncStyleLinking)"
+status = "handbook"
+own = true
+notes = "The source side of the audit fix syncStyleLinking (check.names.subfamilyMatchesStyleBits, check.tables.fsSelection); added by M12.63. The scheme is the handbook's recommendation, documented but not yet observed in the running reference app."
+guesses = [
+  "An italic style whose Bold flag was set by hand keeps its flag and its link, since the handbook allows linking bolds to other styles; nothing in the reference settles it.",
+  "A link is made only to a style the font exports as a static instance; otherwise the link stays as it was.",
+]
+
+[[command]]
+id = "font.info.syncFamilyValues"
+label = "Sync Family Values"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{values?: ['verticalMetrics'|'underline'], dryRun?: bool} → {changed: [{scope, target, field, old, new}], dryRun}"
+area = "font-info"
+milestone = "M12"
+summary = "Makes every font the source exports share its vertical metrics and underline values, for each group whose values differ between masters or that an instance overrides. The eight vertical metrics take the widest value of any master and are written to every master; underlinePosition and underlineThickness take the first master's value and are written to the font. The instances' own values (and for the underline the masters' own values) are removed."
+ref = "Our design; docs/spec/21-qa.md § 5 (fix syncFamilyValues)"
+status = "inferred"
+own = true
+notes = "The source side of the audit fix syncFamilyValues (check.family.underlineConsistency, check.family.verticalMetrics); added by M12.63."
+guesses = [
+  "The first master stands for the regular face whose underline values the family takes; a family-level recommendation in a reference tool would settle it.",
+]
+
+[[command]]
+id = "font.info.cleanNames"
+label = "Clean Up Names"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{keepLineBreaks?: bool, dryRun?: bool} → {changed: [{scope, target, field, old, new}], dryRun}"
+area = "font-info"
+milestone = "M12"
+summary = "Tidies every name the source sets (the family name, instance names, the name properties of the font, masters and instances in every language, and the name parameters): line breaks become spaces unless `keepLineBreaks`, white space at either end goes, runs of white space inside menu names become one space, and values left empty are deleted. An empty family or instance name keeps its old value."
+ref = "Our design; docs/spec/21-qa.md § 5 (fix cleanNameRecords)"
+status = "inferred"
+own = true
+notes = "The source side of the audit fix cleanNameRecords (check.names.emptyRecords, whitespace, lineBreaks); compiled fonts use tables.cleanNameRecords. A source has no Macintosh name records and one PostScript name field per instance, so noMacRecords and postScriptNameConsistency have nothing to fix in it. Added by M12.63."
+guesses = [
+  "Line breaks become spaces in every name, the licence text included, because check.names.lineBreaks reports them anywhere; `keepLineBreaks` keeps them.",
+]
+
+[[command]]
+id = "font.instance.cleanUp"
+label = "Clean Up Instances"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{dryRun?: bool} → {changed: [{scope, target, field, old, new}], dryRun}"
+area = "font-info"
+milestone = "M12"
+summary = "Removes each static instance that repeats an earlier one (same name, location and export setting) and sorts the static instances by their weight coordinate, then their other coordinates in axis order, so a variable font's named instances come in rising weight. Other instances keep their places."
+ref = "Our design; docs/spec/21-qa.md § 5 (fix cleanInstances)"
+status = "inferred"
+own = true
+notes = "The source side of the audit fix cleanInstances (check.variations.instanceRecords, instancesInOrder); compiled fonts use tables.cleanInstances. The names of the instance at the default location (defaultInstanceNames) are a design choice and stay as they are. Added by M12.63."
+
+[[command]]
+id = "font.info.sortZones"
+label = "Sort Alignment Zones"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{dryRun?: bool} → {changed: [{scope, target, field, old, new}], dryRun}"
+area = "font-info"
+milestone = "M12"
+summary = "Puts the lower value first in each pair of the postscriptBlueValues, postscriptOtherBlues, postscriptFamilyBlues and postscriptFamilyOtherBlues parameters of the font, masters and instances. Master alignment zones are always compiled in order and need no fix. A list holding a value that is not a number is left alone."
+ref = "Our design; docs/spec/21-qa.md § 5 (fix sortZones)"
+status = "inferred"
+own = true
+notes = "The source side of the audit fix sortZones (check.hinting.blueValuesOrder); added by M12.63."
+
+[[command]]
+id = "font.info.clearGeneratedFields"
+label = "Clear Generated Font Info"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{dryRun?: bool} → {changed: [{scope, target, field, old, new}], dryRun}"
+area = "font-info"
+milestone = "M12"
+summary = "Removes from the font and its masters the values the compiler generates itself (unique ID, version string and PostScript unique ID, as properties or parameters) and the obsolete year."
+ref = "Our design; docs/spec/21-qa.md § 5 (fix clearInfoFields)"
+status = "inferred"
+own = true
+notes = "The source side of the audit fix clearInfoFields (check.sources.unnecessaryInfoFields); added by M12.63."
