@@ -582,7 +582,7 @@ decide when FontCraft's variable font is compared with each:
 | A generated `.notdef`, and `MVAR` where masters' metrics differ | `.notdef` the same at every location; `MVAR` deltas 0 | `.notdef` and the `cpht`, `hasc`, `hcla` deltas vary with the masters (up to 800 units) | 3 (`MasterNames`, `MasterNames-Italic`, `TheBestV2NamesInAV3File`) |
 | A generated `.notdef` at a midpoint | rounded one way | one unit off | 2 (`wght_var`, `wght_var_wide_axis`) |
 | Pairs with alternate (bracket) glyphs (`BracketTestFontKerning`) | `x x.BRACKET.varAlt01` −50 | no pair | 1 |
-| Colour layer glyphs | marks attach to `A.color0`; `B.color0` advance 500 | no attachment; advance 600 | 2 (`COLRv0-component-anchors`, `color-and-bracket-glyph-order`) |
+| Colour layer glyphs | marks attach to `A.color0`; `B.color0` advance 500, the colour layer's; the layer glyph of a glyph with a production name is named after it (`uni0311.color0`) | no attachment; advance 600, the base glyph's (0 for a non-spacing mark); the layer glyph keeps its own name (`mymark.color0`) | 3 (`COLRv0-component-anchors`, `color-and-bracket-glyph-order`, `COLRv0-marks`); FontCraft writes them as fontc does |
 | Kerning of a linked master at the midpoint (`KerningLinkedMaster`) | `A B` −3.333 | −40 | 1 |
 
 ---

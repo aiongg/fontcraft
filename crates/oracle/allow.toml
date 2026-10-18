@@ -705,6 +705,20 @@ sources = ["/COLRv0-component-anchors.glyphs"]
 theirs = "*.color0*"
 reason = "Follows from fontc's attachment of marks to the colour layer glyphs (see the entry above): its mark-to-base rule names them as bases."
 
+[[allow]]
+table = "hmtx"
+key = "hmtx *.color0 advance"
+oracle = "fontmake"
+sources = ["/COLRv0-marks.glyphs"]
+reason = "A colour layer glyph takes its colour layer's advance, as fontc writes it; fontmake gives it the base glyph's exported advance, 0 for a non-spacing mark (docs/spec/40-compile.md § 4)."
+
+[[allow]]
+table = "post"
+key = "post glyphName *.color0"
+oracle = "fontmake"
+sources = ["/COLRv0-marks.glyphs"]
+reason = "The colour layer glyph of a glyph with a production name is named after that name, as fontc names it; fontmake keeps the layer glyph's own name (docs/spec/40-compile.md § 4)."
+
 # --- Static instances beyond the masters (M9.4) --------------------------------------------------
 # FontCraft extrapolates a static instance that lies beyond the masters, as the reference app's
 # handbook says; fontmake clamps it to the nearest master (docs/spec/40-compile.md § 4a,
