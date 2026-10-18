@@ -382,7 +382,7 @@ fn ttx_text(font: &SfntFont, tag: Tag) -> Result<String> {
 
 /// The normalised dump of one table ([`crate::text::view`] with `normalize`).
 fn dump_text(font: &SfntFont, tag: Tag) -> Result<String> {
-    let options = crate::text::ViewOptions { view: String::new(), tables: vec![tag], glyphs: Vec::new(), normalize: true };
+    let options = crate::text::ViewOptions { tables: vec![tag], normalize: true, ..Default::default() };
     crate::text::view(font, &options)
 }
 
