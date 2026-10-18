@@ -1153,6 +1153,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "fontcraft-io-bitmap"
+version = "0.0.1"
+dependencies = [
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "fontcraft-io-glyphs"
 version = "0.0.1"
 dependencies = [
