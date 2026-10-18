@@ -81,6 +81,9 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
         frame(ui, &tokens, "infoBox.annotations", |ui| annotations(ui, tool, pending));
         return;
     }
+    if tool == super::info_box_tt::TOOL {
+        return super::info_box_tt::show(app, ui, pending);
+    }
     super::info_box_metrics::show(app, ui, pending);
     super::info_box_component::show(app, ui, pending);
     super::info_box_corner::show(app, ui, pending);

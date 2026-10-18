@@ -348,8 +348,13 @@ milestone = "M10"
 summary = "Pop-up table used in three places: the delta button of a TT zone, the delta button of a TT stem, and the Delta icon in the Info box for selected Delta instructions. The PPM range of the rows is not stated."
 ref = "TrueType Hinting › TrueType Zones › Deltas; Delta (E)"
 status = "handbook"
-guesses = ["The table has one row per PPM from 8 to 80, the waterfall's range; its columns are the masters for zone and stem deltas and the static instances for Delta instructions; the reference app would settle both."]
+guesses = [
+  "The table has one row per PPM from 8 to 80, the waterfall's range; its columns are the masters for zone and stem deltas and the static instances for Delta instructions; the reference app would settle both.",
+  "A font without static instances gets one column per master in the Delta table of an instruction, and instances or masters at one location share a column; the reference app would show what it offers then.",
+  "One table serves every selected Delta instruction: a click sets that cell on all of them, and a cell where they differ shows a dash whose first click sets one pixel up; the reference app would show whether the table opens for several instructions.",
+]
 observe = ["T3: open the Delta table of a zone and of a Delta instruction; note which PPM rows it offers and whether its columns are masters or instances."]
+notes = "M10.27, crates/ui-egui/src/dialogs/tt_deltas.rs: rows 8 to 80 PPM; for Delta instructions the columns are the static instances (the masters when the font has none) plus any stored column that matches neither, captioned with its key so it can be cleared. A click cycles the cell none, up, down, none and runs hint.tt.setDeltas on the selected Delta instructions; the table shows the stored cells again on the next frame. Done, Escape or a click outside closes it. The zone and stem editors (M10.28) reuse the table with their own command. Documented, not yet observed."
 
 [[behavior]]
 id = "hinting.tt.zones.filter"
@@ -819,6 +824,13 @@ milestone = "M10"
 summary = "State of the Edit View Info box (View › Show Info, Cmd+Shift+I) while the TrueType Instructor tool is active. Pixel size and direction are always present; the remaining controls depend on the kind of the selected instruction."
 ref = "TrueType Hinting › Pixel Size; Hint Direction; Instructions"
 status = "handbook"
+notes = "M10.27, crates/ui-egui/src/panels/info_box_tt.rs: the PPM field with − and + (Up and Down step it; a typed value is kept to 4 to 400), the rendering intent pop-up and the direction button run hint.tt.setPixelSize, hint.tt.decreasePixelSize, hint.tt.increasePixelSize, hint.tt.setRenderingIntent and hint.tt.toggleDirection; the zone pop-up, stem pop-up, rounding buttons and Delta table run hint.tt.setSnapZone, hint.tt.setStemReference, hint.tt.setRounding and hint.tt.setDeltas on the selected instructions of the kinds each takes, in the edited glyph's active layer. Documented, not yet observed."
+guesses = [
+  "The five rounding modes are text buttons (Round, Up, Down, None, GDI) that act on the selected Snap, Stem, Shift and Interpolate instructions and leave selected Delta instructions alone; the reference app would show its icons and what a mixed selection does.",
+  "With several instructions selected, a pop-up or rounding button shows the value they share and nothing when they differ; the reference app would show how it marks a mixed selection.",
+  "The zone pop-up lists the TT zones whose filter takes the glyph, only for vertical Snaps, and the stem pop-up the TT stems that suit the direction of the selected Stems; the reference app would show whether it lists every zone and stem.",
+]
+observe = ["T3: select a Snap and a Delta instruction together; note which controls the Info box shows and what the rounding buttons then change."]
 
 [[command]]
 id = "hint.tt.setPixelSize"
