@@ -17,7 +17,7 @@ use fontcraft_color::paint::{ColorLine, ColorRef, Paint, is_solid_stack, shape_r
 use fontcraft_color::palette::FOREGROUND_INDEX;
 use fontcraft_color::{MAX_PAINT_DEPTH, MAX_PALETTE_ROWS, Rgba};
 use fontcraft_geom::{Rect, Shape as _};
-use fontcraft_model::{Extend, MAX_COMPONENT_DEPTH};
+use fontcraft_model::{Extend, Font, MAX_COMPONENT_DEPTH};
 use write_fonts::tables::colr::{
     BaseGlyph, BaseGlyphList, BaseGlyphPaint, Clip, ClipBox, ClipList, ColorLine as WColorLine, ColorStop as WColorStop, Colr, Extend as WExtend,
     Layer, Paint as WPaint,
@@ -51,7 +51,8 @@ const MAX_LAYERS_PER_PAINT: usize = u8::MAX as usize;
 /// (`compile.colrClipBoxes`): the bounds of its layer glyphs widened to multiples of a tenth of
 /// the em rounded to 10 units, consecutive glyphs with the same box sharing one range. Nothing is
 /// shared between glyphs.
-pub fn build(plan: &ColrPlan, order: &GlyphOrder, palette_rows: usize, units_per_em: u16) -> Result<ColrOutput, CompileError> {
+pub fn build(plan: &ColrPlan, order: &GlyphOrder, palette_rows: usize, font: Option<&Font>) -> Result<ColrOutput, CompileError> {
+    let units_per_em = font.map_or(1000, |f| f.units_per_em);
     // The layer glyphs `super::layer_glyphs` made, by base glyph and colour layer, in the order
     // it appended them, which is the order of the paint's shape references.
     let mut made: HashMap<(&str, &str), VecDeque<u16>> = HashMap::new();
@@ -67,6 +68,19 @@ pub fn build(plan: &ColrPlan, order: &GlyphOrder, palette_rows: usize, units_per
     glyphs.dedup_by_key(|(gid, _)| *gid);
 
     let mut colors = AddedColors { rows: palette_rows, added: Vec::new() };
+    // New colours are numbered in the colour glyphs' source order (the order of the font's
+    // glyph list, before a glyph order parameter), as both oracles number them; the records go
+    // in glyph id order.
+    let source: HashMap<&str, usize> =
+        font.map(|f| f.glyphs.as_arcs().iter().enumerate().map(|(i, g)| (g.name.as_str(), i)).collect()).unwrap_or_default();
+    let mut by_source: Vec<&ColorGlyph> = plan.glyphs.iter().collect();
+    by_source.sort_by_key(|g| source.get(g.glyph.as_str()).copied().unwrap_or(usize::MAX));
+    let mut seen = std::collections::HashSet::new();
+    for g in by_source {
+        if order.gid(&g.glyph).is_some_and(|gid| seen.insert(gid)) {
+            colors.register(&g.paint, 0)?;
+        }
+    }
     let mut records: Vec<(u16, Vec<Layer>)> = Vec::new();
     let mut paints: Vec<BaseGlyphPaint> = Vec::new();
     let mut layer_list: Vec<WPaint> = Vec::new();
@@ -351,8 +365,8 @@ fn solid_layers(paint: &Paint) -> Option<Vec<ColorRef>> {
     }
 }
 
-/// Colours that are not palette references, numbered after the palette rows in the order COLR
-/// first uses them, once each.
+/// Colours that are not palette references, numbered after the palette rows in the order
+/// [`AddedColors::register`] meets them, once each.
 struct AddedColors {
     rows: usize,
     added: Vec<Rgba>,
@@ -368,6 +382,22 @@ impl AddedColors {
             ColorRef::Foreground { alpha: a } => (FOREGROUND_INDEX, alpha(a)),
             ColorRef::Rgba(_) => (self.index(color)?, alpha(1.0)),
         })
+    }
+
+    /// Numbers the colours of `paint` that are not palette references, in the order the
+    /// writer meets them.
+    fn register(&mut self, paint: &Paint, depth: usize) -> Result<(), CompileError> {
+        if depth > MAX_PAINT_DEPTH {
+            return Ok(());
+        }
+        match paint {
+            Paint::Layers(list) => list.iter().try_for_each(|p| self.register(p, depth + 1)),
+            Paint::Glyph { paint, .. } => self.register(paint, depth + 1),
+            Paint::Solid(c) => self.index(*c).map(|_| ()),
+            Paint::Linear { line, .. } | Paint::Radial { line, .. } | Paint::Sweep { line, .. } => {
+                line.stops.iter().try_for_each(|s| self.index(s.color).map(|_| ()))
+            }
+        }
     }
 
     /// The palette index of `color`. Version 0 has no alpha of its own: a palette reference's

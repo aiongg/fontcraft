@@ -81,19 +81,19 @@ reason = "fontc merges the names of the variable font's export settings (an inst
 table = "maxp"
 key = "maxp.numGlyphs"
 keys = ["maxp.maxPoints", "maxp.maxComposite*", "maxp.maxComponent*"]
-sources = ["/Alexandria-bracketglyphs", "/AlumniSans-wononly", "/BracketTestFontKerning", "/WorkSans-minimal-bracketlayer", "/BlankAlternateLayers", "/LibreFranklin-bracketlayer", "/ReverseBracketLayers", "/bracket-glyph-order", "/bracket-rules-processed", "/color-and-bracket-glyph-order", "/glyph-with-bracket-component", "/manual_bracket_layer_and_component", "decreasing_axis/axis.glyphs", "/PropagateAnchorsTest", "/COLRv0-2masters-brace", "/COLRv1-"]
+sources = ["/Alexandria-bracketglyphs", "/AlumniSans-wononly", "/BracketTestFontKerning", "/WorkSans-minimal-bracketlayer", "/BlankAlternateLayers", "/LibreFranklin-bracketlayer", "/ReverseBracketLayers", "/bracket-glyph-order", "/bracket-rules-processed", "/color-and-bracket-glyph-order", "/glyph-with-bracket-component", "/manual_bracket_layer_and_component", "decreasing_axis/axis.glyphs", "/PropagateAnchorsTest", "/COLRv0-2masters-brace"]
 reason = "Source reading: the reference compiler makes a glyph of each alternate (bracket) layer (`*.BRACKET.*`) and of each colour layer (`*.color0`); FontCraft compiles the master layers and keeps the others for feature variations (M8, M9) and colour tables (M11). The glyph set differs, and with it the glyph count and the maxima over all glyphs."
 
 [[allow]]
 table = "post"
 key = "post.numGlyphs"
-sources = ["/Alexandria-bracketglyphs", "/AlumniSans-wononly", "/BracketTestFontKerning", "/WorkSans-minimal-bracketlayer", "/BlankAlternateLayers", "/LibreFranklin-bracketlayer", "/ReverseBracketLayers", "/bracket-glyph-order", "/bracket-rules-processed", "/color-and-bracket-glyph-order", "/glyph-with-bracket-component", "/manual_bracket_layer_and_component", "decreasing_axis/axis.glyphs", "/PropagateAnchorsTest", "/COLRv0-2masters-brace", "/COLRv1-"]
+sources = ["/Alexandria-bracketglyphs", "/AlumniSans-wononly", "/BracketTestFontKerning", "/WorkSans-minimal-bracketlayer", "/BlankAlternateLayers", "/LibreFranklin-bracketlayer", "/ReverseBracketLayers", "/bracket-glyph-order", "/bracket-rules-processed", "/color-and-bracket-glyph-order", "/glyph-with-bracket-component", "/manual_bracket_layer_and_component", "decreasing_axis/axis.glyphs", "/PropagateAnchorsTest", "/COLRv0-2masters-brace"]
 reason = "Source reading: the glyphs the reference makes of alternate and colour layers (see maxp); M8, M9, M11."
 
 [[allow]]
 table = "OS/2"
 key = "OS/2.xAvgCharWidth"
-sources = ["/color-and-bracket-glyph-order", "glyphs2/AxisRules.glyphs", "/Alexandria-bracketglyphs", "/AlumniSans-wononly", "/BracketTestFontKerning", "/WorkSans-minimal-bracketlayer", "/LibreFranklin-bracketlayer", "/bracket-glyph-order", "/bracket-rules-processed", "/glyph-with-bracket-component", "/manual_bracket_layer_and_component", "decreasing_axis/axis.glyphs", "/PropagateAnchorsTest", "/COLRv0-2masters-brace", "/COLRv1-"]
+sources = ["/color-and-bracket-glyph-order", "glyphs2/AxisRules.glyphs", "/Alexandria-bracketglyphs", "/AlumniSans-wononly", "/BracketTestFontKerning", "/WorkSans-minimal-bracketlayer", "/LibreFranklin-bracketlayer", "/bracket-glyph-order", "/bracket-rules-processed", "/glyph-with-bracket-component", "/manual_bracket_layer_and_component", "decreasing_axis/axis.glyphs", "/PropagateAnchorsTest", "/COLRv0-2masters-brace"]
 reason = "Source reading: the average advance counts the glyphs the reference makes of alternate and colour layers (see maxp); M8, M9, M11."
 
 [[allow]]
@@ -718,6 +718,36 @@ key = "post glyphName *.color0"
 oracle = "fontmake"
 sources = ["/COLRv0-marks.glyphs"]
 reason = "The colour layer glyph of a glyph with a production name is named after that name, as fontc names it; fontmake keeps the layer glyph's own name (docs/spec/40-compile.md § 4)."
+
+# --- Colour glyphs of one run (M11.7) ------------------------------------------------------------
+# Both references paint a full-colour glyph whose shapes form one run of equal paints with the base
+# glyph itself; FontCraft makes a layer glyph `<base>.color0` for it, as for every colour glyph,
+# so the base glyph stays the fallback outline (docs/spec/40-compile.md § 4a).
+
+[[allow]]
+table = "maxp"
+key = "maxp.numGlyphs"
+keys = ["maxp.maxPoints", "maxp.maxComposite*", "maxp.maxComponent*"]
+sources = ["/COLRv0-reordered.glyphs", "/COLRv1-cliprun.glyphs", "/COLRv1-gradient.glyphs", "/COLRv1-grayscale.glyphs", "/COLRv1-reordered.glyphs", "/COLRv1-solid.glyphs", "/COLRv1-var.glyphs"]
+reason = "FontCraft makes a layer glyph for a colour glyph of one run, where the references paint the base glyph (`color.fallback.masterLayerColr`, § 4a)."
+
+[[allow]]
+table = "post"
+key = "post.numGlyphs"
+sources = ["/COLRv0-reordered.glyphs", "/COLRv1-cliprun.glyphs", "/COLRv1-gradient.glyphs", "/COLRv1-grayscale.glyphs", "/COLRv1-reordered.glyphs", "/COLRv1-solid.glyphs", "/COLRv1-var.glyphs"]
+reason = "The layer glyphs FontCraft makes for colour glyphs of one run (see maxp, § 4a)."
+
+[[allow]]
+table = "OS/2"
+key = "OS/2.xAvgCharWidth"
+sources = ["/COLRv0-reordered.glyphs", "/COLRv1-cliprun.glyphs", "/COLRv1-gradient.glyphs", "/COLRv1-grayscale.glyphs", "/COLRv1-reordered.glyphs", "/COLRv1-solid.glyphs", "/COLRv1-var.glyphs"]
+reason = "The average advance counts the layer glyphs FontCraft makes for colour glyphs of one run (see maxp, § 4a)."
+
+[[allow]]
+table = "COLR"
+key = "bytes"
+sources = ["/COLRv0-reordered.glyphs", "/COLRv1-cliprun.glyphs", "/COLRv1-gradient.glyphs", "/COLRv1-grayscale.glyphs", "/COLRv1-reordered.glyphs", "/COLRv1-solid.glyphs", "/COLRv1-var.glyphs"]
+reason = "The paints name the layer glyphs FontCraft makes for colour glyphs of one run, where the references name the base glyph (§ 4a). In COLRv1-gradient a gradient point also follows the curve bounds of the layer glyph's outline, not its rounded glyf box (`compile.colrGradientGeometry`, § 4a). fontmake writes a glyph that is a stack of solid layers as version 1 paints; FontCraft keeps version 0 records for it, as fontc does."
 
 # --- Static instances beyond the masters (M9.4) --------------------------------------------------
 # FontCraft extrapolates a static instance that lies beyond the masters, as the reference app's

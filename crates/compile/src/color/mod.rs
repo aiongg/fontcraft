@@ -332,7 +332,7 @@ pub fn build(
         && colr_plan.glyphs.iter().any(|g| order.gid(&g.glyph).is_some())
     {
         let cpal_plan = plan.cpal.clone().unwrap_or_default();
-        let built = colr::build(colr_plan, order, cpal_plan.palettes.rows(), font.map_or(1000, |f| f.units_per_em))?;
+        let built = colr::build(colr_plan, order, cpal_plan.palettes.rows(), font)?;
         let cpal_table = cpal::build(&cpal_plan, &built.added)?;
         out.tables.push((Tag::new(b"COLR"), built.table));
         out.tables.push((Tag::new(b"CPAL"), cpal_table));
