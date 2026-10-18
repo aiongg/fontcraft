@@ -32,6 +32,7 @@ mod corpus_propagation;
 mod cross_format;
 mod custom_params;
 mod decompose;
+mod derived_glyphs;
 mod detect;
 mod determinism;
 mod encodings;

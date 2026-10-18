@@ -2327,13 +2327,25 @@ label = "Add Small Caps…"
 menu = ["Glyph"]
 shortcut = ""
 kind = "engine"
-params = "{glyphs?, masters?: [id], suffix?: string, height?: number, stemScale?: {h: number, v: number}, petite?: bool, includeSymbols?: bool}"
+params = "{glyphs?, masters?: [id], suffix?: string, height?: number, stemScale?: {h?: number, v?: number}, petite?: bool, includeSymbols?: bool}"
 area = "components"
 milestone = "M13"
 summary = "Creates a small-capital glyph for each selected letter by scaling the capital to the target height and thickening stems to lowercase weight, without touching the originals, and adds the substitution features from capitals and from lowercase. Covers Latin, Greek and Cyrillic; a petite-caps variant uses its own suffix and features. A drafting aid whose results need review."
 ref = "FontForge dialogs › Stylistic Transformations › Add Small Caps"
 status = "docs"
 origin = "fontforge"
+notes = "Documented in the reference's user manual, not yet observed: selecting A or a both make a.sc from A's outlines; capitals scale from the cap height to the small-cap height (x-height by default); stems scale so the capital's stem matches the lowercase stem; features c2sc and smcp, or c2pc and pcap for petite caps with the same default sizes; symbols, when asked for, get both mappings under their own suffix; an existing small cap is changed rather than duplicated. FontCraft: the height default is the master's smallCapHeight parameter, else its x-height; stems are measured on H (else I) and n (else l) and changed with Change Weight (lcg, zones kept) and Adjust Stems for horizontal stems; any cased letter with a one-letter case pair qualifies, so Greek and Cyrillic are covered by their case mapping; the lines go into a hand-written feature, a new one, or an automatic feature's regeneration, never twice."
+guesses = [
+  "Petite caps use the suffix .pc, as the handbook's naming rules expect, where the reference uses its own extension; making petite caps with the reference app would settle it.",
+  "Symbols take the same suffix as the letters (nine.sc), where the reference documents an old-style figure extension; the reference's naming for other symbols would settle it.",
+  "Horizontal stems scale by the vertical stem ratio unless stemScale.h is given, because there is no lowercase horizontal stem to measure against; the reference's default horizontal stem value would settle it.",
+  "Without glyphs, every glyph with a character is considered and those that give no small cap are left out quietly; the reference always works on the Font View selection.",
+  "An automatic feature with the tag is regenerated rather than edited, so substitutions to a suffix the feature generator does not know are not written there; a test with the reference's automatic features would settle whether it should warn.",
+]
+observe = [
+  "Select A and a in a test font, run Add Small Caps with default settings, and record the new glyph names, their heights and stem widths, and the c2sc and smcp lookups.",
+  "Run Add Small Caps twice and check whether the lookups gain duplicate entries.",
+]
 
 [[command]]
 id = "glyph.addSubSuperscripts"
@@ -2348,6 +2360,16 @@ summary = "Creates scaled and vertically shifted copies of the selected glyphs u
 ref = "FontForge dialogs › Stylistic Transformations › Add Subscripts/Superscripts"
 status = "docs"
 origin = "fontforge"
+notes = "Documented in the reference's user manual, not yet observed: the originals stay; each copy takes the indicated extension (zero.superior); one lookup in the chosen feature maps each original to its copy; defaults scale 2/3, stems 3/4, raise 450 units. FontCraft: stems change by (stemScale − scale) × the reference stem of H (else I) for capitals and figures, of n (else l) for lowercase, with Change Weight (lcg) keeping the copy's baseline and top; the substitution lines go into a hand-written feature, a new one, or an automatic feature's regeneration, never twice."
+guesses = [
+  "The raise of 450 units is read per 1000 units of the em and scaled to the font's units per em; running the command on a 2048-unit font in the reference would settle it.",
+  "subs and sinf default to a drop of 150 units per 1000 and dnom to no shift, where the reference has one raise for every feature; the reference documents no subscript default.",
+  "Without glyphs, the figures zero to nine are used, as in the reference's example; the reference always works on the Font View selection.",
+  "A suffix without a leading dot gets one (sups gives one.sups); the reference's handling of a bare extension would settle it.",
+]
+observe = [
+  "Select the figures of a test font, run Add Subscripts/Superscripts with the defaults and feature sups, and record the copies' names, heights, offsets and stem widths, and the lookup.",
+]
 
 [[command]]
 id = "filter.nonLinearTransform"
