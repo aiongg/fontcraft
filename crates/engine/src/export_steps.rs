@@ -20,6 +20,13 @@
 //! have inherited from its components, so mark attachment survives the decomposition (not for
 //! UFO-family sources, whose propagation follows their own filter list).
 //!
+//! `Autohinting`, the app function the handbook lists among the filter strings, is not a filter
+//! of the Filter menu and changes no outline: a Filter or PreFilter string that names it, at any
+//! level, turns autohinting on for an instance's export as the instance's Autohint parameter
+//! would, whatever that parameter or the export option says, and so applies to the outlines
+//! every other filter string leaves ([`AUTOHINTING`]). A master has no Autohint parameter, so a
+//! master's export reports the string as not used.
+//!
 //! A parameter that cannot be used is reported as a warning and skipped; a Scale to UPM that
 //! cannot be applied refuses the export, since the font would come out at the wrong size. Export
 //! Folder ([`export_folder`]) names the sub-folder of the destination the job's files go to.
@@ -29,8 +36,8 @@
 //! File › Export, `font.compile`, the CLI, the control channel and the oracle harness all build
 //! through `cmd::compile::build`, which calls [`linked`] once and [`prepare`] for every job.
 //!
-//! Rows: `Filter`, `PreFilter`, the `filter.customParameter.*` rows, `export.instanceExportFolder`
-//! (M7.10); `Import Font`, `Import Master` (M7.12); `Scale to UPM` (M7.4 scales, M7.10 runs it).
+//! Rows: `Filter`, `PreFilter`, the `filter.customParameter.*` rows (`.autohinting`: M10.31),
+//! `export.instanceExportFolder` (M7.10); `Import Font`, `Import Master` (M7.12); `Scale to UPM` (M7.4 scales, M7.10 runs it).
 
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -40,7 +47,7 @@ use std::sync::Arc;
 use fontcraft_compile::Options;
 use fontcraft_geom::{Affine, Point};
 use fontcraft_model::glyphdata::GlyphData;
-use fontcraft_model::plist::{Num, Value as PValue};
+use fontcraft_model::plist::{Num, Number, Value as PValue};
 use fontcraft_model::{Anchor, Font, MAX_COMPONENT_DEPTH, MAX_OUTLINE_ELEMENTS, Params, Resolved, Shape, Target, Transform};
 use serde_json::Value;
 
@@ -51,6 +58,10 @@ const FILTER: &str = "Filter";
 const PRE_FILTER: &str = "PreFilter";
 const SCALE_TO_UPM: &str = "Scale to UPM";
 const EXPORT_FOLDER: &str = "Export Folder";
+/// The filter string of the app function that runs the autohinter (`filter.customParameter.autohinting`).
+const AUTOHINTING: &str = "Autohinting";
+/// The instance parameter Autohinting turns on (`fontcraft_hinting::settings::AUTOHINT`).
+const AUTOHINT: &str = "Autohint";
 
 /// Most nodes and components decomposition for Filter may write for one job, over all glyphs.
 /// Each layer has [`MAX_OUTLINE_ELEMENTS`] of its own; glyphs past this keep their components.
@@ -81,8 +92,9 @@ pub(crate) fn prepare<'f>(font: &'f Font, job: &Job, ctx: &StepContext, warnings
     let mut font = Cow::Borrowed(font);
     // A target that is not a static instance at a master is left to the compiler to report.
     let Some(master) = target_master(&font, &job.target) else { return Ok(font) };
-    let (pre, post, upm) = {
+    let (pre, post, upm, autohinting) = {
         let levels = levels(&font, &master, &job.target);
+        let autohinting = autohinting_asked(&levels, warnings);
         let mut pre = filter_strings(&levels, PRE_FILTER, warnings);
         let mut post = filter_strings(&levels, FILTER, warnings);
         let total = pre.len().saturating_add(post.len());
@@ -95,8 +107,11 @@ pub(crate) fn prepare<'f>(font: &'f Font, job: &Job, ctx: &StepContext, warnings
                 fontcraft_fontinfo::MAX_FILTER_STRINGS
             ));
         }
-        (usable(pre, warnings), usable(post, warnings), scale_target(&levels, warnings))
+        (usable(pre, warnings), usable(post, warnings), scale_target(&levels, warnings), autohinting)
     };
+    if autohinting {
+        font = Cow::Owned(autohint_on(font.into_owned(), job, warnings));
+    }
 
     if !pre.is_empty() {
         font = Cow::Owned(run_filters(font.into_owned(), &master, &pre, warnings)?);
@@ -144,13 +159,13 @@ fn levels<'a>(font: &'a Font, master: &str, target: &Target) -> [Option<&'a Para
 }
 
 /// Every enabled `name` string of `levels`, in order. A value that is not text is skipped with a
-/// warning; an empty one is skipped silently.
+/// warning; an empty one, and an [`AUTOHINTING`] one, silently.
 fn filter_strings(levels: &[Option<&Params>; 3], name: &'static str, warnings: &mut Vec<String>) -> Vec<(&'static str, String)> {
     let mut out = Vec::new();
     for params in levels.iter().flatten() {
         for value in params.all(name) {
             match value.as_str() {
-                Some(text) if text.trim().is_empty() => {}
+                Some(text) if text.trim().is_empty() || autohinting_name(text) => {}
                 Some(text) => out.push((name, text.to_string())),
                 None => warnings.push(format!("a {name} parameter that is not text was not used")),
             }
@@ -186,6 +201,46 @@ fn scale_target(levels: &[Option<&Params>; 3], warnings: &mut Vec<String>) -> Op
             None
         }
     }
+}
+
+// ── Autohinting ─────────────────────────────────────────────────────────────────────────────────
+
+/// Whether the filter string `text` names [`AUTOHINTING`].
+fn autohinting_name(text: &str) -> bool {
+    text.split(';').next().is_some_and(|name| name.trim() == AUTOHINTING)
+}
+
+/// Whether a Filter or PreFilter string of `levels` names [`AUTOHINTING`]. It takes no
+/// arguments; any it is given are ignored with a warning.
+fn autohinting_asked(levels: &[Option<&Params>; 3], warnings: &mut Vec<String>) -> bool {
+    let mut asked = false;
+    for params in levels.iter().flatten() {
+        for name in [PRE_FILTER, FILTER] {
+            for text in params.all(name).filter_map(|v| v.as_str()).filter(|t| autohinting_name(t)) {
+                asked = true;
+                if text.split(';').skip(1).any(|item| !item.trim().is_empty()) {
+                    warnings.push(format!("the {name} parameter \"{text}\" takes no arguments; they were ignored"));
+                }
+            }
+        }
+    }
+    asked
+}
+
+/// `font` with the Autohint parameter of `job`'s instance on. A master's export has no such
+/// parameter: the request is reported and `font` returned as it was.
+fn autohint_on(mut font: Font, job: &Job, warnings: &mut Vec<String>) -> Font {
+    let Target::Instance(i) = &job.target else {
+        warnings.push(format!(
+            "the {AUTOHINTING} filter string was not used for {}: it turns on the Autohint parameter of an instance, and a master has none; turn on Autohint in the export options instead",
+            job.label
+        ));
+        return font;
+    };
+    if let Some(instance) = Arc::make_mut(&mut font.instances).get_mut(*i) {
+        instance.params.set(AUTOHINT, PValue::Number(Number::int(1)));
+    }
+    font
 }
 
 // ── running filter strings ──────────────────────────────────────────────────────────────────────

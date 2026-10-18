@@ -535,3 +535,44 @@ fn component_rules_read_the_shown_masters_layer() {
     let reread = parse_predicate(&compiled.to_string()).unwrap();
     assert_eq!(with_expr(&font, &data, m01, &reread), names(&["E"]));
 }
+
+/// Has Hints, Has PostScript Hints and Has TrueType Hints read the layer of the shown master
+/// (`smartFilter.rule.hasHints` and the two after it). Stems and ghosts count as PostScript hints
+/// by name or by the number older files store; TrueType instructions count when they name their
+/// points; corner components and detached instructions count as neither.
+#[test]
+fn hint_rules_read_the_shown_masters_layer() {
+    use fontcraft_plist::{Dict, Number, Value as P};
+    let hint = |pairs: &[(&str, P)]| {
+        let mut d = Dict::new();
+        for (k, v) in pairs {
+            d.insert(*k, v.clone());
+        }
+        fontcraft_model::Hint { family: fontcraft_model::Family::Glyphs, value: P::Dict(d) }
+    };
+    let s = |t: &str| P::String(t.into());
+    let node = s("{0, 0}");
+    let (mut font, data) = (font(), data());
+    let mut put = |glyph: &str, layer: usize, h: fontcraft_model::Hint| font.glyph_mut(glyph).unwrap().layers[layer].info.hints.push(h);
+    put("A", 0, hint(&[("type", s("Stem")), ("horizontal", P::Number(Number::int(1))), ("place", s("{100, 80}"))]));
+    put("B", 0, hint(&[("type", P::Number(Number::int(-1))), ("place", s("{700, -20}"))]));
+    put("C", 0, hint(&[("type", s("TTSnap")), ("origin", node.clone())]));
+    put("C", 1, hint(&[("type", s("TTStem")), ("origin", node.clone())]));
+    put("D", 0, hint(&[("type", s("Corner")), ("origin", node.clone())]));
+    put("E", 1, hint(&[("type", s("TTDelta")), ("target", node.clone())]));
+    let names = |list: &[&str]| list.iter().map(|s| s.to_string()).collect::<Vec<String>>();
+    let rule = |master: &str, property: &str| with_rules(&font, &data, Some(master), one(property, "is", json!(true)));
+    assert_eq!(rule("m01", "hasHints"), names(&["A", "B", "C"]));
+    assert_eq!(rule("m01", "hasPostScriptHints"), names(&["A", "B"]));
+    assert_eq!(rule("m01", "hasTrueTypeHints"), names(&["C"]));
+    assert_eq!(rule("m02", "hasHints"), names(&["E"]), "C's stem on m02 names one point only");
+    assert!(rule("m02", "hasPostScriptHints").is_empty());
+    let unhinted = with_rules(&font, &data, Some("m01"), one("hasHints", "isNot", json!(true)));
+    assert_eq!(unhinted.len(), font.glyphs.len() - 3);
+    // The predicate spellings: per layer, and over every layer of the glyph.
+    let spelled = parse_predicate("layer.hasTrueTypeHints OR layer.hasPostScriptHints").unwrap();
+    assert_eq!(with_expr(&font, &data, Some("m01"), &spelled), names(&["A", "B", "C"]));
+    assert_eq!(with_expr(&font, &data, None, &parse_predicate("hasTrueTypeHints").unwrap()), names(&["C", "E"]));
+    let compiled = RuleTree::from_json(&one("hasPostScriptHints", "is", json!(true))).unwrap().compile().unwrap();
+    assert_eq!(with_expr(&font, &data, Some("m01"), &parse_predicate(&compiled.to_string()).unwrap()), names(&["A", "B"]));
+}

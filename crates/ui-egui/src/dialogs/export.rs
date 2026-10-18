@@ -2,6 +2,10 @@
 //! document. Built: the OTF tab (`file.exportStatic`), the UFO tab (`file.exportUfo`) and the
 //! Metrics tab (`file.exportMetrics`).
 //!
+//! The OTF tab's options are the command's: Autohint is one checkbox whose effect follows the
+//! outline flavour (`export.autohintCff`, `export.autohintTrueType`), off by default since hinting
+//! is optional (`hinting.ps.hintingIsOptional`).
+//!
 //! Exporting writes files, so nothing runs until OK, which reads Next… as in the handbook. Each
 //! tab has an export folder: Choose… picks it, and Next… with no folder asks for one
 //! (`export.promptWhenNoDestination`); over the control channel a missing folder is an error.
@@ -66,7 +70,12 @@ fn otf_fields(_: &Session) -> Vec<Field> {
             "The containers to write each font in: the plain .otf or .ttf file, WOFF, WOFF2",
         ),
         Field::bool("removeOverlap", "Remove Overlap", true, "Merge overlapping paths and components in every exported glyph"),
-        Field::bool("autohint", "Autohint", false, "Add automatic hints to the exported fonts"),
+        Field::bool(
+            "autohint",
+            "Autohint",
+            false,
+            "PostScript/CFF: hint every glyph without manual PostScript hints; TrueType: hint the whole font, in place of any manual TrueType hints. An instance's Autohint parameter overrides this",
+        ),
         destination(),
     ]
 }
@@ -215,12 +224,41 @@ mod tests {
 
         // A refused option keeps the dialog open with the message.
         open(&mut app, &dir);
-        call(&mut app, "ui.click", json!({"id": "autohint"}));
+        call(&mut app, "ui.dialog.set", json!({"field": "containers", "value": []}));
         let r = control::handle(&mut app, &json!({"id": 1, "method": "ui.dialog.confirm", "params": {}}));
         assert_eq!(r["ok"], false, "{r}");
         assert_eq!(call(&mut app, "ui.dialog.inspect", json!({}))["open"], true);
         call(&mut app, "ui.dialog.cancel", json!({}));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Autohint off by default; on, the dialog writes for each flavour the very file
+    /// `file.exportStatic` writes with `autohint` (`export.flavorsDifferInHinting`).
+    #[test]
+    fn the_export_dialog_autohints_as_the_command_does_in_both_flavours() {
+        for (outlines, file) in [("cff", "Untitled-Regular.otf"), ("truetype", "Untitled-Regular.ttf")] {
+            let (by_dialog, direct_dir) = (temp(&format!("autohint-{outlines}")), temp(&format!("autohint-direct-{outlines}")));
+            let mut app = drawn();
+            let opened = open(&mut app, &by_dialog);
+            assert_eq!(opened["params"]["autohint"], false, "hinting is optional: off until ticked");
+            call(&mut app, "ui.dialog.set", json!({"field": "outlines", "value": outlines}));
+            call(&mut app, "ui.dialog.set", json!({"field": "autohint", "value": true}));
+            let done = call(&mut app, "ui.dialog.confirm", json!({}));
+            assert_eq!(done["params"]["autohint"], true, "{outlines}");
+
+            let mut direct = drawn();
+            direct
+                .run(
+                    "file.exportStatic",
+                    &json!({"outlines": outlines, "removeOverlap": true, "autohint": true, "destination": direct_dir, "timestamp": 0}),
+                )
+                .unwrap();
+            let (wrote, expected) = (files(&by_dialog), files(&direct_dir));
+            assert!(expected.contains_key(file), "{outlines}: {:?}", expected.keys());
+            assert_eq!(wrote, expected, "{outlines}: the dialog wrote what the command wrote");
+            let _ = std::fs::remove_dir_all(&by_dialog);
+            let _ = std::fs::remove_dir_all(&direct_dir);
+        }
     }
 
     /// A folder chooser that answers `folder` and records the titles it was shown with.

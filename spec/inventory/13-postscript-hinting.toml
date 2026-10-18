@@ -33,6 +33,7 @@ milestone = "M10"
 summary = "Hinting is never required: a font can be exported with no glyph-level hints, and existing hinting can be left out. The reference recommends this for irregular designs (handwriting, ornament, grunge), for connected scripts and icon fonts where shape fidelity matters more than crisp pixels, and for fonts used only where hints are ignored, because the hint data only adds file size there."
 ref = "PostScript Hinting › introduction"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: Autohint is off by default in the export dialog and in `file.exportStatic`, so a font without manual hints exports with no glyph-level hints; the Export PostScript Hints and Export TrueType Hints parameters off leave the manual hints out (`get_hints_from_master_and_export_postscript_hints` in the compiler's tests)."
 
 [[behavior]]
 id = "hinting.ps.standardStems"

@@ -32,7 +32,7 @@ const VALUE_CHARS: usize = 1024;
 pub const MATCH: [(&str, &str); 3] = [("all", "All"), ("any", "Any"), ("none", "None")];
 
 /// The rule properties with their labels, in the pop-up's order.
-pub const PROPERTIES: [(&str, &str); 22] = [
+pub const PROPERTIES: [(&str, &str); 25] = [
     ("glyphName", "Glyph Name"),
     ("countOfPaths", "Count of Paths"),
     ("countOfComponents", "Count of Components"),
@@ -43,6 +43,9 @@ pub const PROPERTIES: [(&str, &str); 22] = [
     ("exportGlyph", "Export Glyph"),
     ("hasUnicode", "Has Unicode"),
     ("hasComponents", "Has Components"),
+    ("hasHints", "Has Hints"),
+    ("hasPostScriptHints", "Has PostScript Hints"),
+    ("hasTrueTypeHints", "Has TrueType Hints"),
     ("hasCorners", "Has Corners"),
     ("hasAnchors", "Has Anchors"),
     ("containsComponent", "Contains Component"),
@@ -101,6 +104,9 @@ fn value_kind(property: &str) -> ValueKind {
         "exportGlyph"
         | "hasUnicode"
         | "hasComponents"
+        | "hasHints"
+        | "hasPostScriptHints"
+        | "hasTrueTypeHints"
         | "hasCorners"
         | "hasAnchors"
         | "hasCustomGlyphInfo"

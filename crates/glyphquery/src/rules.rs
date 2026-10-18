@@ -78,6 +78,10 @@ pub enum Property {
     HasUnicode,
     /// The rules from Has Components to Is Auto-Aligned read the layer of the shown master.
     HasComponents,
+    /// Manual hints of either kind, PostScript hints, TrueType hints.
+    HasHints,
+    HasPostScriptHints,
+    HasTrueTypeHints,
     HasCorners,
     HasAnchors,
     /// A component of the glyph named by the rule's value.
@@ -135,6 +139,9 @@ impl Property {
         Property::ExportGlyph,
         Property::HasUnicode,
         Property::HasComponents,
+        Property::HasHints,
+        Property::HasPostScriptHints,
+        Property::HasTrueTypeHints,
         Property::HasCorners,
         Property::HasAnchors,
         Property::ContainsComponent,
@@ -161,6 +168,9 @@ impl Property {
             Property::ExportGlyph => "exportGlyph",
             Property::HasUnicode => "hasUnicode",
             Property::HasComponents => "hasComponents",
+            Property::HasHints => "hasHints",
+            Property::HasPostScriptHints => "hasPostScriptHints",
+            Property::HasTrueTypeHints => "hasTrueTypeHints",
             Property::HasCorners => "hasCorners",
             Property::HasAnchors => "hasAnchors",
             Property::ContainsComponent => "containsComponent",
@@ -189,6 +199,9 @@ impl Property {
             Property::ExportGlyph
             | Property::HasUnicode
             | Property::HasComponents
+            | Property::HasHints
+            | Property::HasPostScriptHints
+            | Property::HasTrueTypeHints
             | Property::HasCorners
             | Property::HasAnchors
             | Property::HasCustomGlyphInfo
@@ -557,6 +570,9 @@ impl Rule {
                     Property::MetricsKeysOutOfSync => Attr::MetricsKeysOutOfSync,
                     Property::HasKerningGroups => Attr::HasKerningGroups,
                     Property::HasComponents => Attr::Layer(LayerAttr::HasComponents),
+                    Property::HasHints => Attr::Layer(LayerAttr::HasHints),
+                    Property::HasPostScriptHints => Attr::Layer(LayerAttr::HasPostScriptHints),
+                    Property::HasTrueTypeHints => Attr::Layer(LayerAttr::HasTrueTypeHints),
                     Property::HasCorners => Attr::Layer(LayerAttr::HasCorners),
                     Property::HasAnchors => Attr::Layer(LayerAttr::HasAnchors),
                     Property::IsAutoAligned => Attr::Layer(LayerAttr::IsAligned),

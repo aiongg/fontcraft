@@ -61,7 +61,14 @@ fn font() -> Font {
     edit(&mut font, "B", &|g| {
         g.layers[0].shapes = vec![Shape::Component(Component::new("A", 0.0, 0.0)), Shape::Path(Path::rect(0.0, 0.0, 10.0, 10.0))];
     });
-    edit(&mut font, "C", &|g| g.layers[0].info.hints.push(hint("TTStem")));
+    edit(&mut font, "C", &|g| {
+        let mut stem = hint("TTStem");
+        if let Value::Dict(d) = &mut stem.value {
+            d.insert("origin", Value::String("{0, 0}".into()));
+            d.insert("target", Value::String("{0, 1}".into()));
+        }
+        g.layers[0].info.hints.push(stem);
+    });
     edit(&mut font, "D", &|g| g.layers[0].info.hints.push(hint("Corner")));
     edit(&mut font, "E", &|g| {
         let mut l = extra_layer("colour0", "m01");

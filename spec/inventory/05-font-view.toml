@@ -2986,6 +2986,8 @@ milestone = "M10"
 summary = "Rule Has Hints is true when the layer of the selected master carries any manually placed hint, of either kind."
 ref = "Font View › Filtering Font View › Smart Filters"
 status = "handbook"
+notes = "Documented, not yet observed. Implemented (M10.31) as property `hasHints` in the rule JSON, operators is and is not, value true or false; predicate spelling `layer.hasHints` (the glyph-wide `hasHints` holds when any layer has one). True when the shown master's layer holds a PostScript hint or a TrueType hint as Has PostScript Hints and Has TrueType Hints count them; corner components, caps and other drawing parts stored among the hints do not count."
+observe = ["T1: in a font with one glyph hinted by hand on master 1 only and one glyph with only a corner component, add a smart filter Has Hints is true; note which glyphs it shows with master 1 selected and with master 2 selected."]
 
 [[behavior]]
 id = "smartFilter.rule.hasPostScriptHints"
@@ -2994,6 +2996,7 @@ milestone = "M10"
 summary = "Rule Has PostScript Hints is true when the layer of the selected master carries manually placed PostScript hints."
 ref = "Font View › Filtering Font View › Smart Filters"
 status = "handbook"
+notes = "Documented, not yet observed. Implemented (M10.31) as property `hasPostScriptHints`, predicate spelling `layer.hasPostScriptHints`. A PostScript hint is a stored hint whose type is a stem, a top ghost or a bottom ghost, by name or by the number older files store: the hints the CFF export writes for the glyph (`fontcraft_hinting::ps::has_ps_hints`)."
 
 [[behavior]]
 id = "smartFilter.rule.hasTrueTypeHints"
@@ -3002,6 +3005,9 @@ milestone = "M10"
 summary = "Rule Has TrueType Hints is true when the layer of the selected master carries manually placed TrueType hints."
 ref = "Font View › Filtering Font View › Smart Filters"
 status = "handbook"
+notes = "Documented, not yet observed. Implemented (M10.31) as property `hasTrueTypeHints`, predicate spelling `layer.hasTrueTypeHints`. A TrueType hint is a stored Snap, Stem, Shift, Interpolate or Delta instruction that names the points its type needs: the instructions the Instructor and the TrueType export read (`fontcraft_hinting::tt::tt_instructions`)."
+guesses = ["A TrueType hint left without its points (its nodes were deleted, so it is never compiled) does not count; a reference font with such a hint, filtered by this rule, would show whether it does."]
+observe = ["T3: add a TrueType Stem to a glyph, delete one of its two nodes, then add a smart filter Has TrueType Hints is true; note whether the glyph is shown."]
 
 [[behavior]]
 id = "smartFilter.rule.hasCorners"

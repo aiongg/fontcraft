@@ -770,8 +770,10 @@ Behaviour left unclear
 - `Filter` > `Transformations`: `LSB` and `RSB` shifts carry an asterisk in the source that is
   never explained (possibly a percentage or relative form). **Settled by M3.12**'s parser.
 - `Filter` > `Autohinting`: listed as a filter value without saying what it does per instance or how
-  it relates to the `Autohint` parameter. **Open for M10**; until then the filter is refused at
-  export with a message.
+  it relates to the `Autohint` parameter. **Answered (guess, M10.31):** a Filter or PreFilter
+  string `Autohinting` turns autohinting on for the instance's export in either flavour, even
+  against an Autohint parameter that is off; a master's export reports it as not used
+  (`filter.customParameter.autohinting`).
 - `Grid Spacing`: behaviour at exactly 1.0 is stated twice with slightly different bounds; treated
   as "below 1 = hundredths, 1 or more = whole units". **Open for M2's row.**
 - `Scale to UPM`: does it scale kerning, metrics, hint values and guides as well as outlines, and
