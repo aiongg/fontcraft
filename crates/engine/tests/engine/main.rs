@@ -14,6 +14,7 @@ mod audit_runner;
 mod autohint_ps;
 mod autohint_reports;
 mod automation_roots;
+mod axes;
 mod background_layers;
 mod clipboard;
 mod clipboard_scale;

@@ -40,6 +40,7 @@ ref = "Interpolation › Setting up Axes"
 status = "inferred"
 guesses = [
   "Reordering permutes every master, instance, virtual master and special-layer coordinate list with the axes, so no location changes; settle by dragging axes in the reference app's Font Info, if it allows it.",
+  "The entries of Axis Location, Virtual Master and Axis Mappings are put in the new axis order too; settle by reordering axes in a font with those parameters in the reference app and saving.",
 ]
 observe = [
   "In F2 (special layers) with two axes, try to reorder the axes: note whether a drag or a button does it, and how the layer labels read afterwards.",
