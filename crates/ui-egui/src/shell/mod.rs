@@ -108,6 +108,7 @@ pub const MODULES: &[(&[UiCommand], Handler)] = &[
     (crate::dialogs::shape_order_window::COMMANDS, crate::dialogs::shape_order_window::run),
     (crate::panels::special_layer_popover::COMMANDS, crate::panels::special_layer_popover::run),
     (crate::dialogs::cross_axis::COMMANDS, crate::dialogs::cross_axis::run),
+    (crate::dialogs::tt_debugger::COMMANDS, crate::dialogs::tt_debugger::run),
     (crate::dialogs::smart_glyph_settings::COMMANDS, crate::dialogs::smart_glyph_settings::run),
     (crate::dialogs::smart_component_settings::COMMANDS, crate::dialogs::smart_component_settings::run),
     (compare_fonts::COMMANDS, compare_fonts::run),
@@ -158,6 +159,7 @@ pub fn windows(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'s
     crate::dialogs::shape_order_window::show(app, ui, pending);
     crate::dialogs::axis_mappings::show(app, ui, pending);
     crate::dialogs::cross_axis::show(app, ui, pending);
+    crate::dialogs::tt_debugger::show(app, ui, pending);
     crate::dialogs::smart_glyph_settings::show(app, ui, pending);
     crate::dialogs::smart_component_settings::show(app, ui, pending);
     project_window::show(app, ui, pending);
