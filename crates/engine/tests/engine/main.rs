@@ -72,6 +72,7 @@ mod kerning_maintain;
 mod kerning_pairs;
 mod kerning_window;
 mod languages;
+mod layout_compile;
 mod layout_features;
 mod layout_normalize;
 mod linked_sources;
