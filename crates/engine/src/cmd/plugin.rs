@@ -23,6 +23,7 @@ use std::sync::Arc;
 use base64::Engine as _;
 use fontcraft_model::{Font, Layer};
 use fontcraft_plugins::error::{LIMITS_TABLE, MAX_INSTALLED, MAX_MODULE_BYTES};
+use fontcraft_plugins::export_filter;
 use fontcraft_plugins::layer_json::{FilterOutput, LayerInput, NodeRef};
 use fontcraft_plugins::{Kind, Limits, ParamSpec, Plugin, sha256};
 use serde_json::{Map, Value, json};
@@ -611,7 +612,6 @@ fn run_filter(s: &mut Session, v: &Value) -> Result<Value> {
     let plugin = s.extensions().runnable(id, Kind::Filter).map_err(|e| p.bad(e))?;
     let given = p.get("params").cloned().unwrap_or(Value::Null);
     let params = plugin.manifest().validate_params(&given).map_err(|e| p.bad(e.to_string()))?;
-    let params = serde_json::to_vec(&params).map_err(|e| EngineError::Internal(e.to_string()))?;
     let scope = scope(&p, s.font()?)?;
     let computed = compute(s.font()?, &plugin, &params, &scope);
     let computed = match computed {
@@ -705,7 +705,8 @@ fn scope(p: &Params, font: &Font) -> Result<Scope> {
 }
 
 /// Runs the module on every target layer and checks each result; changes nothing.
-fn compute(font: &Font, plugin: &Arc<Plugin>, params: &[u8], scope: &Scope) -> std::result::Result<Computed, Failure> {
+fn compute(font: &Font, plugin: &Arc<Plugin>, params: &Map<String, Value>, scope: &Scope) -> std::result::Result<Computed, Failure> {
+    let bytes_of_params = serde_json::to_vec(params).map_err(|e| Failure::Params(e.to_string()))?;
     let mut out = Computed { layers: Vec::new(), skipped: Vec::new(), log: Vec::new() };
     let id = plugin.id();
     for name in &scope.glyphs {
@@ -727,12 +728,15 @@ fn compute(font: &Font, plugin: &Arc<Plugin>, params: &[u8], scope: &Scope) -> s
         };
         for layer in targets {
             let failed = |e: String| Failure::Module(format!("module {id:?} on glyph `{name}`, layer `{}`: {e}", layer.id));
-            let mut input = LayerInput::from_layer(font, glyph, layer).map_err(|e| failed(e.to_string()))?;
-            if !scope.selection.is_empty() {
-                input = input.with_selection(scope.selection.clone());
+            if scope.selection.is_empty() {
+                let (new, log) = export_filter::run_on_layer(plugin, font, glyph, layer, params).map_err(|e| failed(e.to_string()))?;
+                out.log.extend(log);
+                out.layers.push((name.clone(), layer.id.clone(), new));
+                continue;
             }
+            let input = LayerInput::from_layer(font, glyph, layer).map_err(|e| failed(e.to_string()))?.with_selection(scope.selection.clone());
             let bytes = input.to_json().map_err(|e| failed(e.to_string()))?;
-            let result = plugin.call(&bytes, params).and_then(|o| FilterOutput::parse(&o)).map_err(|e| failed(e.to_string()))?;
+            let result = plugin.call(&bytes, &bytes_of_params).and_then(|o| FilterOutput::parse(&o)).map_err(|e| failed(e.to_string()))?;
             let new =
                 if scope.selection_only { keep_selected(&result, layer, &scope.selection) } else { result.apply(layer).map_err(|e| e.to_string()) };
             let new = new.map_err(failed)?;

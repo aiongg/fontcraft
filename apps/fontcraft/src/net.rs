@@ -2,22 +2,22 @@
 //! and screenshots, and opening links in the system browser (`docs/plans/M13.md` § 7
 //! question 5: local files and HTTPS indexes, fetched by the desktop app only).
 //!
-//! Downloads run the system's `curl` (shipped with macOS, Windows 10 and later, and nearly every
-//! Linux system), so the app links no TLS stack of its own. Only `https://` is allowed, for the
-//! request and for every redirect. The configuration, user name and password included, goes to
-//! curl on its standard input, so the credentials of an index URL never appear on a command
-//! line. Each download has a size cap, a connection timeout and an overall timeout.
+//! Downloads use a Rust HTTPS client (rustls). Only `https://` is allowed, for the request and
+//! for every redirect. The user name and password of an index URL go in the `Authorization`
+//! header, never in the address the client sees, so no error text or log line carries them; a
+//! redirect keeps them only to the same host. Each download has a size cap, a connection timeout
+//! and an overall timeout.
 
-use std::io::{Read as _, Write as _};
-use std::process::{Command, Stdio};
+use std::process::Command;
+use std::time::Duration;
 
 /// Seconds allowed to connect.
-const CONNECT_TIMEOUT_S: u32 = 15;
+const CONNECT_TIMEOUT_S: u64 = 15;
 /// Seconds allowed for a whole download.
-const TOTAL_TIMEOUT_S: u32 = 120;
+const TOTAL_TIMEOUT_S: u64 = 120;
 /// Most redirects followed.
 const MAX_REDIRECTS: u32 = 5;
-/// Longest error text kept from curl.
+/// Longest error text kept from the HTTPS client.
 const MAX_ERROR_CHARS: usize = 500;
 
 /// Downloads `url` (an `https://` URL, which may carry `user:password@`) and returns its body,
@@ -26,53 +26,25 @@ pub fn fetch(url: &str, max: usize, language: &str) -> Result<Vec<u8>, String> {
     let shown = fontcraft_engine::extension_index::redact(url);
     let rest = url.strip_prefix("https://").ok_or_else(|| format!("{shown}: only https:// is fetched"))?;
     let (credentials, address) = split_credentials(rest);
-    let mut config = String::new();
-    config.push_str(&format!("url = {}\n", quote(&format!("https://{address}"))));
+    let config = ureq::Agent::config_builder()
+        .https_only(true)
+        .max_redirects(MAX_REDIRECTS)
+        .redirect_auth_headers(ureq::config::RedirectAuthHeaders::SameHost)
+        .timeout_connect(Some(Duration::from_secs(CONNECT_TIMEOUT_S)))
+        .timeout_global(Some(Duration::from_secs(TOTAL_TIMEOUT_S)))
+        .build();
+    let agent = ureq::Agent::new_with_config(config);
+    let mut request = agent.get(format!("https://{address}")).header("Accept-Language", language);
     if let Some(user) = credentials {
-        config.push_str(&format!("user = {}\n", quote(&percent_decode(user))));
+        request = request.header("Authorization", format!("Basic {}", base64(percent_decode(user).as_bytes())));
     }
-    config.push_str(&format!("header = {}\n", quote(&format!("Accept-Language: {language}"))));
-    let mut child = Command::new("curl")
-        .args(["--silent", "--show-error", "--fail", "--location", "--proto", "=https", "--proto-redir", "=https"])
-        .args(["--max-redirs", &MAX_REDIRECTS.to_string(), "--connect-timeout", &CONNECT_TIMEOUT_S.to_string()])
-        .args(["--max-time", &TOTAL_TIMEOUT_S.to_string(), "--max-filesize", &max.to_string(), "--config", "-"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("{shown}: cannot start curl to download it: {e}"))?;
-    if let Some(mut stdin) = child.stdin.take()
-        && let Err(e) = stdin.write_all(config.as_bytes())
-    {
-        let _ = child.kill();
-        let _ = child.wait();
-        return Err(format!("{shown}: {e}"));
-    }
-    let mut body = Vec::new();
-    if let Some(stdout) = child.stdout.take() {
-        let limit = u64::try_from(max).unwrap_or(u64::MAX).saturating_add(1);
-        stdout.take(limit).read_to_end(&mut body).map_err(|e| format!("{shown}: {e}"))?;
-    }
-    if body.len() > max {
-        let _ = child.kill();
-        let _ = child.wait();
-        return Err(format!("{shown}: larger than {max} bytes"));
-    }
-    let mut errors = String::new();
-    if let Some(mut stderr) = child.stderr.take() {
-        let _ = stderr.read_to_string(&mut errors);
-    }
-    let status = child.wait().map_err(|e| format!("{shown}: {e}"))?;
-    if !status.success() {
-        let message: String = errors.trim().chars().take(MAX_ERROR_CHARS).collect();
-        // curl may repeat the URL it was given; never show its credentials.
-        let message = match credentials {
-            Some(user) => message.replace(user, "…"),
-            None => message,
-        };
-        return Err(format!("{shown}: {}", if message.is_empty() { format!("the download failed ({status})") } else { message }));
-    }
-    Ok(body)
+    let failed = |e: ureq::Error| format!("{shown}: {}", e.to_string().chars().take(MAX_ERROR_CHARS).collect::<String>());
+    let mut response = request.call().map_err(failed)?;
+    let limit = u64::try_from(max).unwrap_or(u64::MAX);
+    response.body_mut().with_config().limit(limit).read_to_vec().map_err(|e| match e {
+        ureq::Error::BodyExceedsLimit(_) => format!("{shown}: larger than {max} bytes"),
+        e => failed(e),
+    })
 }
 
 /// Opens an `https://` or `http://` link in the system browser.
@@ -109,19 +81,18 @@ fn split_credentials(rest: &str) -> (Option<&str>, &str) {
     }
 }
 
-/// A curl configuration string: double quotes, with `\` and `"` escaped and no line breaks.
-fn quote(text: &str) -> String {
-    let mut out = String::with_capacity(text.len().saturating_add(2));
-    out.push('"');
-    for c in text.chars() {
-        match c {
-            '\\' => out.push_str("\\\\"),
-            '"' => out.push_str("\\\""),
-            c if c.is_control() => {}
-            c => out.push(c),
+/// Standard base64 with padding (RFC 4648), for the Basic `Authorization` header.
+fn base64(bytes: &[u8]) -> String {
+    const DIGITS: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3).saturating_mul(4));
+    for chunk in bytes.chunks(3) {
+        let byte = |i: usize| u32::from(chunk.get(i).copied().unwrap_or(0));
+        let n = (byte(0) << 16) | (byte(1) << 8) | byte(2);
+        for k in 0..4usize {
+            let digit = usize::try_from((n >> (18 - 6 * k)) & 63).ok().and_then(|d| DIGITS.get(d));
+            out.push(if k <= chunk.len() { digit.map_or('=', |d| char::from(*d)) } else { '=' });
         }
     }
-    out.push('"');
     out
 }
 
@@ -156,11 +127,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn credentials_are_split_decoded_and_quoted_for_curl() {
+    fn credentials_are_split_decoded_and_encoded() {
         assert_eq!(split_credentials("u:p%40ss@host/a@b.json"), (Some("u:p%40ss"), "host/a@b.json"));
         assert_eq!(split_credentials("host/a@b.json"), (None, "host/a@b.json"));
         assert_eq!(percent_decode("u:p%40ss%zz"), "u:p@ss%zz");
-        assert_eq!(quote("a\"b\\c\nd"), "\"a\\\"b\\\\cd\"");
+        assert_eq!(base64(b"u:p@ss"), "dTpwQHNz");
+        assert_eq!(base64(b"ab"), "YWI=");
+        assert_eq!(base64(b"a"), "YQ==");
         assert!(fetch("http://example.com/index.json", 10, "en").unwrap_err().contains("https"));
         assert!(open_url("file:///etc/passwd").is_err());
     }

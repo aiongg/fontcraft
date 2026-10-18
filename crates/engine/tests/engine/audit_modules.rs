@@ -12,88 +12,10 @@ fn run(s: &mut Session, id: &str, p: Value) -> Value {
     s.execute(id, &p).unwrap_or_else(|e| panic!("{id}: {e}"))
 }
 
-fn uleb(out: &mut Vec<u8>, mut v: u64) {
-    loop {
-        let byte = (v & 0x7f) as u8;
-        v >>= 7;
-        if v == 0 {
-            out.push(byte);
-            return;
-        }
-        out.push(byte | 0x80);
-    }
-}
-
-fn sleb(out: &mut Vec<u8>, mut v: i64) {
-    loop {
-        let byte = (v & 0x7f) as u8;
-        v >>= 7;
-        let last = (v == 0 && byte & 0x40 == 0) || (v == -1 && byte & 0x40 != 0);
-        out.push(if last { byte } else { byte | 0x80 });
-        if last {
-            return;
-        }
-    }
-}
-
-fn section(m: &mut Vec<u8>, id: u8, body: &[u8]) {
-    m.push(id);
-    uleb(m, body.len() as u64);
-    m.extend_from_slice(body);
-}
-
-/// The binary of a module (ABI v1) with `manifest` whose `fc_run` returns `output` whatever it is
-/// given. The manifest sits at 16, the output at 1024; `fc_alloc` hands out fresh pages, so the
-/// host's copies never overwrite either.
-fn module(manifest: &str, output: &str) -> Vec<u8> {
-    const OUT_AT: u64 = 1024;
-    assert!(manifest.len() < 1000);
-    let packed = |len: usize, at: u64| ((len as i64) << 32) | at as i64;
-    let mut m = b"\0asm\x01\0\0\0".to_vec();
-    // () -> i32, () -> i64, (i32) -> i32, (i32 i32 i32 i32) -> i64.
-    section(&mut m, 1, &[4, 0x60, 0, 1, 0x7f, 0x60, 0, 1, 0x7e, 0x60, 1, 0x7f, 1, 0x7f, 0x60, 4, 0x7f, 0x7f, 0x7f, 0x7f, 1, 0x7e]);
-    section(&mut m, 3, &[4, 0, 1, 2, 3]);
-    let mut memory = vec![1, 0];
-    uleb(&mut memory, (OUT_AT + output.len() as u64) / 0x1_0000 + 1);
-    section(&mut m, 5, &memory);
-    let mut exports = vec![5];
-    for (name, kind, index) in [("memory", 2u8, 0u8), ("fc_abi_version", 0, 0), ("fc_manifest", 0, 1), ("fc_alloc", 0, 2), ("fc_run", 0, 3)] {
-        uleb(&mut exports, name.len() as u64);
-        exports.extend_from_slice(name.as_bytes());
-        exports.extend([kind, index]);
-    }
-    section(&mut m, 7, &exports);
-    let mut man = vec![0x42];
-    sleb(&mut man, packed(manifest.len(), 16));
-    // memory.grow by ceil(n / 65536) pages, and the old size as an address.
-    let alloc = vec![0x20, 0, 0x41, 0xff, 0xff, 0x03, 0x6a, 0x41, 16, 0x76, 0x40, 0, 0x41, 16, 0x74];
-    let mut out = vec![0x42];
-    sleb(&mut out, packed(output.len(), OUT_AT));
-    let mut code = vec![4];
-    for body in [vec![0x41, 1], man, alloc, out] {
-        let mut b = vec![0];
-        b.extend(body);
-        b.push(0x0b);
-        uleb(&mut code, b.len() as u64);
-        code.extend(b);
-    }
-    section(&mut m, 10, &code);
-    let mut data = vec![2];
-    for (at, bytes) in [(16, manifest.as_bytes()), (OUT_AT, output.as_bytes())] {
-        data.extend([0, 0x41]);
-        sleb(&mut data, at as i64);
-        data.push(0x0b);
-        uleb(&mut data, bytes.len() as u64);
-        data.extend_from_slice(bytes);
-    }
-    section(&mut m, 11, &data);
-    m
-}
-
 /// Installs a check module `id` that reports `output` on every layer.
 fn install_check(s: &mut Session, id: &str, output: Value) {
     let manifest = json!({"id": id, "name": format!("Test {id}"), "version": "1", "kind": "check", "params": {}}).to_string();
-    s.extensions_mut().registry.install_bytes(&module(&manifest, &output.to_string()), None).unwrap();
+    s.extensions_mut().registry.install_bytes(&fontcraft_plugins::fixtures::returning(&manifest, &output.to_string()), None).unwrap();
 }
 
 /// A document whose `A` has one square, with the id of `A`'s master layer.

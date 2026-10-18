@@ -676,7 +676,7 @@ notes = "Documented, not yet observed. plugin.runFilter refuses a run that inclu
 [[command]]
 id = "plugin.runFilter"
 label = "(filter module name)"
-menu = ["Filter"]
+menu = []
 shortcut = ""
 kind = "engine"
 params = "{id: string, params?: object, glyph?: name, glyphs?: [name], layer?: id, layers?: [id], points?: [[shape, node]], selectionOnly?: bool}"

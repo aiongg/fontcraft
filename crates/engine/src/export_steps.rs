@@ -316,9 +316,7 @@ fn usable(strings: Vec<(&'static str, String)>, warnings: &mut Vec<String>) -> R
 /// Whether `name` is a built-in filter, with an export string form or without one, or the
 /// [`AUTOHINTING`] app function.
 fn is_builtin(name: &str) -> bool {
-    autohinting_name(name)
-        || crate::cmd::filter::parse_filter_string(name).is_ok()
-        || fontcraft_pathops::filters::find(name).is_some()
+    autohinting_name(name) || crate::cmd::filter::parse_filter_string(name).is_ok() || fontcraft_pathops::filters::find(name).is_some()
 }
 
 /// The installed filter module `name` names (its id, else its name exactly, else its name with

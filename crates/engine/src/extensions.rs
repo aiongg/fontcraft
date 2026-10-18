@@ -549,8 +549,12 @@ pub fn poll_folders(ext: &mut ExtensionState) -> Vec<String> {
 /// Parameters that name something by its id in this session only, as the app passes them, or
 /// that may hold index bytes and credentials: left out of the log, whose lines can be copied and
 /// run again in another session.
-const SESSION_PARAMS: &[(&str, &str)] =
-    &[("file.save", "document"), ("pluginManager.reloadIndexes", "fetched"), ("pluginManager.reloadIndexes", "indexes")];
+const SESSION_PARAMS: &[(&str, &str)] = &[
+    ("file.save", "document"),
+    ("pluginManager.reloadIndexes", "fetched"),
+    ("pluginManager.reloadIndexes", "indexes"),
+    ("pluginManager.install", "dataBase64"),
+];
 
 /// `params` without the [`SESSION_PARAMS`] of `command`.
 fn without_session_params<'a>(command: &str, params: &'a Value) -> std::borrow::Cow<'a, Value> {
@@ -749,12 +753,11 @@ mod module_checks {
         /// The turned-on check modules of `extensions` (none in safe mode) whose checks `include` and
         /// `exclude` (check ids and `prefix*` patterns, as `audit.run` takes them) leave room for.
         pub fn select(extensions: &ExtensionState, include: &[&str], exclude: &[&str]) -> ModuleChecks {
-            if !extensions.modules_run() {
-                return ModuleChecks::default();
-            }
             let modules = extensions
                 .registry
-                .enabled_of_kind(Kind::Check)
+                .list()
+                .iter()
+                .filter(|m| extensions.runnable(m.plugin.id(), Kind::Check).is_ok())
                 .filter(|m| {
                     let own = format!("{MODULE_CHECK_PREFIX}{}.", m.plugin.id());
                     let may_match = |pat: &&str| match pat.strip_suffix('*') {

@@ -1,6 +1,6 @@
 [package]
 name = "fontcraft-mcp"
-description = "FontCraft Model Context Protocol server: agents run every command over stdio (L6)"
+description = "FontCraft Model Context Protocol server: agents run every command over stdio or HTTP (L6)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
