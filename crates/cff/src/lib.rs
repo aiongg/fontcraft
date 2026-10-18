@@ -8,7 +8,8 @@
 //!
 //! - **Charstrings** (Type 2): coordinates rounded with the reference's tolerance rule, then
 //!   specialised into the short operators (`hlineto`, `hvcurveto`, `rcurveline` …) within the
-//!   48-operand stack ([`specialize`] is a port of fontTools' specialiser). No subroutines.
+//!   48-operand stack ([`specialize`] is a port of fontTools' specialiser). No subroutines:
+//!   [`subr::subroutinize_table`] adds them to a built table.
 //! - **Hints**: a glyph's stem hints, hint masks, counter masks and flex ([`hints`]); a glyph
 //!   without them gets an unhinted charstring.
 //! - **Widths**: `defaultWidthX` and `nominalWidthX` chosen by the reference's method unless the
@@ -22,9 +23,10 @@
 //!   layout until no position changes.
 //!
 //! Out of scope: CID-keyed fonts (ROS, FDArray, FDSelect), custom encodings (the standard
-//! encoding is implied), subroutinisation, and the seldom-used Top
+//! encoding is implied), and the seldom-used Top
 //! DICT entries (UniqueID, XUID, PostScript, BaseFontName, SyntheticBase). The `CFF2` table of a
-//! variable font, with blends, is [`cff2`]'s.
+//! variable font, with blends, is [`cff2`]'s. The subroutiniser, which works on any `CFF ` or
+//! `CFF2` table, is [`subr`]'s.
 //!
 //! Every input is untrusted: counts, lengths and numbers are checked against the limits below, and
 //! anything out of range returns an [`Error`]; nothing panics.
@@ -41,6 +43,7 @@ mod index;
 mod number;
 mod specialize;
 mod strings;
+pub mod subr;
 mod width;
 
 use std::collections::HashSet;
