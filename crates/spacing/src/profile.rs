@@ -1,18 +1,37 @@
-//! Side profiles of an outline and the measures auto-spacing and auto-kerning take from them
-//! (M13.20 fills the bodies; M13.21, M13.22 and M13.23 use them). Plan: `docs/plans/M13.md` § 3
-//! (auto-spacing and auto-kerning, decision D11).
+//! Side profiles of an outline and the measures auto-spacing and auto-kerning take from them.
+//! Plan: `docs/plans/M13.md` § 3 (auto-spacing and auto-kerning, decision D11). Users:
+//! `spacing.autoSpace` (M13.20), auto-kerning and Kern to Distance (M13.21), the pair tools and
+//! Space Center (M13.22, M13.23).
 //!
 //! A profile samples, every `step` units over a horizontal band, the outline's horizontal
 //! extreme on one side: the leftmost ink for the left side, the rightmost for the right. Rows of
 //! the band with no ink have no sample. [`clip_depth`] limits each sample to `depth` inward from
 //! the side's extreme, so deep counters (the inside of `c`, the gap of `T`) count only so far.
-//! [`white_area`] is the area between a clipped profile and a sidebearing line; auto-spacing makes
-//! it equal to a target scaled by band height. [`optical_gap`] is the mean horizontal distance
-//! between the right profile of one glyph and the left profile of the next.
+//! [`white_area`] is the area between a clipped profile and a sidebearing line; [`mean_white`]
+//! divides it by the inked height, which gives the mean width of white per row. Auto-spacing
+//! makes that mean equal to a target. [`optical_gap`] is the mean horizontal distance between the
+//! right profile of one glyph and the left profile of the next.
 //!
-//! Profiles are in the glyph's own coordinates; the caller places glyphs by passing offsets.
+//! Profiles are in the coordinates of the outline they were taken from; the caller places glyphs
+//! by passing offsets. For an italic master, pass the outline slanted back
+//! ([`crate::measure::measured_outline`]) so profiles agree with the measured sidebearings.
+//!
+//! The rows lie at the centres of equal slices of the band, so a band from 0 to 500 with step 5
+//! samples heights 2.5, 7.5 … 497.5: no row falls exactly on a baseline or a flat top, where a
+//! horizontal segment meets the sampling line along its whole length. Two profiles taken over
+//! the same band with the same step have the same rows, which [`optical_gap`] relies on.
+//!
+//! ```text
+//! profiles(outline: &BezPath, band: Band, step: f64) -> Result<(SideProfile, SideProfile), ProfileError>
+//! clip_depth(profile: &SideProfile, depth: f64) -> SideProfile
+//! white_area(profile: &SideProfile, x: f64) -> f64
+//! mean_white(profile: &SideProfile, x: f64) -> Option<f64>
+//! optical_gap(right: &SideProfile, left: &SideProfile, offset: f64) -> Option<f64>
+//! SideProfile::extreme(&self) -> Option<f64>;  SideProfile::inked_rows(&self) -> usize
+//! SideProfile::height(&self, i: usize) -> f64;  SideProfile::mean_x(&self) -> Option<f64>
+//! ```
 
-use fontcraft_geom::BezPath;
+use fontcraft_geom::{BezPath, Line, ParamCurve, ParamCurveExtrema, Point};
 
 /// Smallest sampling step, in font units.
 pub const MIN_PROFILE_STEP: f64 = 1.0;
@@ -56,6 +75,22 @@ impl SideProfile {
             Side::Right => xs.reduce(f64::max),
         }
     }
+
+    /// How many rows have ink.
+    pub fn inked_rows(&self) -> usize {
+        self.samples.iter().flatten().count()
+    }
+
+    /// The height of row `i`.
+    pub fn height(&self, i: usize) -> f64 {
+        self.bottom + i as f64 * self.step
+    }
+
+    /// The mean x of the rows with ink; `None` without ink.
+    pub fn mean_x(&self) -> Option<f64> {
+        let n = self.inked_rows();
+        (n > 0).then(|| self.samples.iter().flatten().sum::<f64>() / n as f64)
+    }
 }
 
 /// Why profiles cannot be taken.
@@ -71,33 +106,103 @@ pub enum ProfileError {
     Unsupported(String),
 }
 
-/// The left and right profiles of `outline` (a glyph's resolved outline, components decomposed)
-/// over `band`, sampled every `step` units.
-pub fn profiles(outline: &BezPath, band: Band, step: f64) -> Result<(SideProfile, SideProfile), ProfileError> {
+/// The heights the rows of `band` are sampled at, every `step` units: the first height and the
+/// row count.
+fn rows(band: Band, step: f64) -> Result<(f64, usize), ProfileError> {
     if !(step.is_finite() && step >= MIN_PROFILE_STEP) {
         return Err(ProfileError::Step);
     }
     if !(band.bottom.is_finite() && band.top.is_finite() && band.bottom <= band.top) {
         return Err(ProfileError::Band);
     }
-    let _ = outline;
-    // M13.20.
-    Err(ProfileError::Unsupported("side profiles".into()))
+    let span = band.top - band.bottom;
+    let slices = (span / step).floor();
+    if !slices.is_finite() || slices >= MAX_PROFILE_SAMPLES as f64 {
+        return Err(ProfileError::TooManySamples);
+    }
+    // At least one row; the rows sit centred in the band.
+    let count = (slices as usize).max(1);
+    let first = band.bottom + (span - (count - 1) as f64 * step) / 2.0;
+    Ok((first, count))
 }
 
-/// `profile` with every sample limited to `depth` units inward from the side's extreme.
+/// The left and right profiles of `outline` (a glyph's resolved outline, components decomposed)
+/// over `band`, sampled every `step` units.
+pub fn profiles(outline: &BezPath, band: Band, step: f64) -> Result<(SideProfile, SideProfile), ProfileError> {
+    let (first, count) = rows(band, step)?;
+    // Each segment with its vertical extent, so a row tests only the segments that reach it.
+    let segs: Vec<_> = outline
+        .segments()
+        .filter_map(|seg| {
+            let b = seg.bounding_box();
+            [b.x0, b.y0, b.x1, b.y1].iter().all(|v| v.is_finite()).then_some((seg, b))
+        })
+        .collect();
+    let mut left = Vec::with_capacity(count);
+    let mut right = Vec::with_capacity(count);
+    for i in 0..count {
+        let y = first + i as f64 * step;
+        let mut lo = f64::INFINITY;
+        let mut hi = f64::NEG_INFINITY;
+        for (seg, b) in &segs {
+            if y < b.y0 || y > b.y1 {
+                continue;
+            }
+            let line = Line::new(Point::new(b.x0 - 1.0, y), Point::new(b.x1 + 1.0, y));
+            for hit in seg.intersect_line(line) {
+                let x = seg.eval(hit.segment_t).x;
+                if x.is_finite() {
+                    lo = lo.min(x);
+                    hi = hi.max(x);
+                }
+            }
+        }
+        if lo <= hi {
+            left.push(Some(lo));
+            right.push(Some(hi));
+        } else {
+            left.push(None);
+            right.push(None);
+        }
+    }
+    Ok((SideProfile { side: Side::Left, bottom: first, step, samples: left }, SideProfile { side: Side::Right, bottom: first, step, samples: right }))
+}
+
+/// `profile` with every sample limited to `depth` units inward from the side's extreme. A
+/// negative depth counts as zero; a depth that is not finite leaves the profile as it is.
 pub fn clip_depth(profile: &SideProfile, depth: f64) -> SideProfile {
-    let _ = depth;
-    // M13.20.
-    profile.clone()
+    let (Some(extreme), true) = (profile.extreme(), depth.is_finite()) else {
+        return profile.clone();
+    };
+    let depth = depth.max(0.0);
+    let clip = |x: f64| match profile.side {
+        Side::Left => x.min(extreme + depth),
+        Side::Right => x.max(extreme - depth),
+    };
+    SideProfile { samples: profile.samples.iter().map(|s| s.map(clip)).collect(), ..profile.clone() }
 }
 
 /// The white area between `profile` and the vertical line at `x` (a sidebearing line), over the
-/// rows that have ink, in square font units.
+/// rows that have ink, in square font units. Rows where the ink crosses the line count
+/// negatively.
 pub fn white_area(profile: &SideProfile, x: f64) -> f64 {
-    let _ = (profile, x);
-    // M13.20.
-    0.0
+    let sum: f64 = profile
+        .samples
+        .iter()
+        .flatten()
+        .map(|s| match profile.side {
+            Side::Left => s - x,
+            Side::Right => x - s,
+        })
+        .sum();
+    sum * profile.step
+}
+
+/// The mean width of white per inked row between `profile` and the line at `x`: the white area
+/// divided by the inked height. `None` without ink.
+pub fn mean_white(profile: &SideProfile, x: f64) -> Option<f64> {
+    let n = profile.inked_rows();
+    (n > 0).then(|| white_area(profile, x) / (n as f64 * profile.step))
 }
 
 /// The mean horizontal distance between `right` (the right profile of the first glyph) and
@@ -105,7 +210,117 @@ pub fn white_area(profile: &SideProfile, x: f64) -> f64 {
 /// advance plus any kerning), over the rows where both have ink; `None` when no row has both.
 /// Both profiles must share bottom and step.
 pub fn optical_gap(right: &SideProfile, left: &SideProfile, offset: f64) -> Option<f64> {
-    let _ = (right, left, offset);
-    // M13.20.
-    None
+    if !offset.is_finite() {
+        return None;
+    }
+    let same = |a: f64, b: f64| (a - b).abs() <= 1e-9 * a.abs().max(b.abs()).max(1.0);
+    if !same(right.bottom, left.bottom) || !same(right.step, left.step) {
+        return None;
+    }
+    let mut sum = 0.0;
+    let mut n = 0usize;
+    for (r, l) in right.samples.iter().zip(&left.samples) {
+        if let (Some(r), Some(l)) = (r, l) {
+            sum += l + offset - r;
+            n += 1;
+        }
+    }
+    (n > 0).then(|| sum / n as f64)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fontcraft_geom::Shape as _;
+
+    fn rect(x0: f64, y0: f64, x1: f64, y1: f64) -> BezPath {
+        fontcraft_geom::Rect::new(x0, y0, x1, y1).to_path(0.1)
+    }
+
+    /// An ellipse of four cubic curves.
+    fn oval(cx: f64, cy: f64, rx: f64, ry: f64) -> BezPath {
+        let k = 0.552_284_75;
+        let mut p = BezPath::new();
+        p.move_to((cx + rx, cy));
+        p.curve_to((cx + rx, cy + ry * k), (cx + rx * k, cy + ry), (cx, cy + ry));
+        p.curve_to((cx - rx * k, cy + ry), (cx - rx, cy + ry * k), (cx - rx, cy));
+        p.curve_to((cx - rx, cy - ry * k), (cx - rx * k, cy - ry), (cx, cy - ry));
+        p.curve_to((cx + rx * k, cy - ry), (cx + rx, cy - ry * k), (cx + rx, cy));
+        p.close_path();
+        p
+    }
+
+    #[test]
+    fn a_rectangle_has_straight_profiles_and_no_ink_outside_it() {
+        let (l, r) = profiles(&rect(50.0, 0.0, 450.0, 500.0), Band { bottom: -20.0, top: 520.0 }, 10.0).unwrap();
+        assert_eq!(l.samples.len(), 54);
+        assert_eq!((l.bottom, l.step), (-15.0, 10.0));
+        assert_eq!((l.bottom, l.step), (r.bottom, r.step));
+        // Rows at -15 and -5 and at 505 and 515 miss the rectangle.
+        assert_eq!(&l.samples[..2], &[None, None]);
+        assert_eq!(&l.samples[52..], &[None, None]);
+        assert!(l.samples[2..52].iter().all(|s| *s == Some(50.0)), "{l:?}");
+        assert!(r.samples[2..52].iter().all(|s| *s == Some(450.0)), "{r:?}");
+        assert_eq!((l.extreme(), r.extreme()), (Some(50.0), Some(450.0)));
+        assert_eq!(l.inked_rows(), 50);
+        // 50 rows of 10 units, 50 units of white each to the line at 0.
+        assert_eq!(white_area(&l, 0.0), 25_000.0);
+        assert_eq!(mean_white(&l, 0.0), Some(50.0));
+        assert_eq!(mean_white(&r, 500.0), Some(50.0));
+        // Clipping changes nothing on a straight side.
+        assert_eq!(clip_depth(&l, 15.0), l);
+    }
+
+    #[test]
+    fn an_o_has_round_profiles_and_clipping_limits_its_white() {
+        let (l, r) = profiles(&oval(250.0, 250.0, 200.0, 260.0), Band { bottom: -10.0, top: 510.0 }, 5.0).unwrap();
+        let (el, er) = (l.extreme().unwrap(), r.extreme().unwrap());
+        // The sampled extremes lie within a fraction of a unit of the true ones (50 and 450).
+        assert!((el - 50.0).abs() < 0.1 && (er - 450.0).abs() < 0.1, "{el} {er}");
+        // Symmetric: the right profile mirrors the left.
+        for (a, b) in l.samples.iter().zip(&r.samples) {
+            let (a, b) = (a.unwrap(), b.unwrap());
+            assert!((a + b - 500.0).abs() < 1e-6, "{a} {b}");
+        }
+        // Rows near the top and bottom curve in further than near the middle.
+        assert!(l.samples[0].unwrap() > l.samples[l.samples.len() / 2].unwrap() + 100.0);
+        let clipped = clip_depth(&l, 30.0);
+        assert!(clipped.samples.iter().flatten().all(|x| *x <= el + 30.0 + 1e-9));
+        assert!(white_area(&clipped, 0.0) < white_area(&l, 0.0));
+        let mean = mean_white(&clipped, 0.0).unwrap();
+        assert!(mean > 50.0 && mean < 80.0, "{mean}");
+        // The other side clips toward the right extreme.
+        let cr = clip_depth(&r, 30.0);
+        assert!(cr.samples.iter().flatten().all(|x| *x >= er - 30.0 - 1e-9));
+        assert!((mean_white(&cr, 500.0).unwrap() - mean).abs() < 1e-6);
+    }
+
+    #[test]
+    fn the_optical_gap_is_the_mean_distance_where_both_have_ink() {
+        let band = Band { bottom: 0.0, top: 500.0 };
+        let (_, r) = profiles(&rect(50.0, 0.0, 450.0, 500.0), band, 5.0).unwrap();
+        let (l, _) = profiles(&rect(30.0, 0.0, 400.0, 250.0), band, 5.0).unwrap();
+        // The second glyph starts at 500 + 30; only its lower half has ink.
+        assert_eq!(optical_gap(&r, &l, 500.0), Some(80.0));
+        assert_eq!(optical_gap(&r, &l, 460.0), Some(40.0));
+        let (other, _) = profiles(&rect(30.0, 0.0, 400.0, 250.0), band, 10.0).unwrap();
+        assert_eq!(optical_gap(&r, &other, 500.0), None, "different steps");
+        let (empty, _) = profiles(&BezPath::new(), band, 5.0).unwrap();
+        assert_eq!(optical_gap(&r, &empty, 500.0), None);
+        assert_eq!(empty.extreme(), None);
+        assert_eq!(mean_white(&empty, 0.0), None);
+    }
+
+    #[test]
+    fn hostile_bands_and_steps_are_refused() {
+        let p = rect(0.0, 0.0, 10.0, 10.0);
+        assert_eq!(profiles(&p, Band { bottom: 0.0, top: 10.0 }, 0.5), Err(ProfileError::Step));
+        assert_eq!(profiles(&p, Band { bottom: 0.0, top: 10.0 }, f64::NAN), Err(ProfileError::Step));
+        assert_eq!(profiles(&p, Band { bottom: 10.0, top: 0.0 }, 1.0), Err(ProfileError::Band));
+        assert_eq!(profiles(&p, Band { bottom: 0.0, top: f64::INFINITY }, 1.0), Err(ProfileError::Band));
+        assert_eq!(profiles(&p, Band { bottom: -1e6, top: 1e6 }, 1.0), Err(ProfileError::TooManySamples));
+        // A band of zero height has one row.
+        let (l, _) = profiles(&p, Band { bottom: 5.0, top: 5.0 }, 1.0).unwrap();
+        assert_eq!(l.samples, vec![Some(0.0)]);
+    }
 }

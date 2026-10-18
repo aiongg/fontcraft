@@ -49,7 +49,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Set Left Sidebearing",
             [],
             None,
-            "{glyphs: [names], layer?: layer id (default: the first master), value: number or metrics key} set the left sidebearing of each glyph's layer. A number moves the layer's outlines, components, anchors, guides and background sideways and changes the width by the same amount, and removes the key the field holds. A key (`n`, `=n`, `=h+8`, `=|n`, `=|`, `=64`, `=H@200`, `==u` for this layer only) is stored and applied at once. Empty layers are skipped. On a layer aligned automatically the field takes only an offset, `=+N` or `=-N` (`==+N` for this layer only), which alignment adds to the derived value; `=+0` removes it; a number or another key is refused → {glyphs: [names changed], layer, values: {glyph: left sidebearing}, key?: text as shown, skipped: [names]}",
+            "{glyphs: [names], layer?: layer id (default: the first master), value: number or metrics key, beam?: height} set the left sidebearing of each glyph's layer. With `beam`, a number is the distance from the left edge to where the outline first meets the horizontal line at that height (the metrics beam), and layers the line misses are skipped. A number moves the layer's outlines, components, anchors, guides and background sideways and changes the width by the same amount, and removes the key the field holds. A key (`n`, `=n`, `=h+8`, `=|n`, `=|`, `=64`, `=H@200`, `==u` for this layer only) is stored and applied at once. Empty layers are skipped. On a layer aligned automatically the field takes only an offset, `=+N` or `=-N` (`==+N` for this layer only), which alignment adds to the derived value; `=+0` removes it; a number or another key is refused → {glyphs: [names changed], layer, values: {glyph: left sidebearing}, key?: text as shown, skipped: [names]}",
             has_doc,
             set_left
         )
@@ -59,7 +59,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Set Right Sidebearing",
             [],
             None,
-            "{glyphs: [names], layer?: layer id (default: the first master), value: number or metrics key} set the right sidebearing of each glyph's layer. A number changes the width and removes the key the field holds; a key (`n`, `=n`, `=o-10`, `=|n`, `=|`, `=64`, `==u` for this layer only) is stored and applied at once. Empty layers are skipped. On a layer aligned automatically the field takes only an offset, `=+N` or `=-N` (`==+N` for this layer only), which alignment adds to the derived value; `=+0` removes it; a number or another key is refused → {glyphs: [names changed], layer, values: {glyph: right sidebearing}, key?: text as shown, skipped: [names]}",
+            "{glyphs: [names], layer?: layer id (default: the first master), value: number or metrics key, beam?: height} set the right sidebearing of each glyph's layer. With `beam`, a number is the distance from where the outline last meets the horizontal line at that height (the metrics beam) to the right edge, and layers the line misses are skipped. A number changes the width and removes the key the field holds; a key (`n`, `=n`, `=o-10`, `=|n`, `=|`, `=64`, `==u` for this layer only) is stored and applied at once. Empty layers are skipped. On a layer aligned automatically the field takes only an offset, `=+N` or `=-N` (`==+N` for this layer only), which alignment adds to the derived value; `=+0` removes it; a number or another key is refused → {glyphs: [names changed], layer, values: {glyph: right sidebearing}, key?: text as shown, skipped: [names]}",
             has_doc,
             set_right
         )
@@ -154,6 +154,7 @@ fn set_metric(s: &mut Session, v: &Value, id: &'static str, label: &str, field: 
     if let Entry::Number(n) = entry {
         check_value(&p, field, n)?;
     }
+    let beam = beam_height(&p, field, &entry)?;
     let key = match &entry {
         Entry::Key(k) => Some(k),
         Entry::Number(_) => None,
@@ -174,7 +175,13 @@ fn set_metric(s: &mut Session, v: &Value, id: &'static str, label: &str, field: 
                 changed.push(name.clone());
                 continue;
             }
-            let current = spacing::metric(font, l, field).map_err(|e| p.bad(format!("glyph `{name}`: {e}")))?;
+            let current = match beam {
+                Some(y) => {
+                    spacing::sidebearings_at_height(font, l, y).map(|at| at.map(|(left, right)| if field == Field::Left { left } else { right }))
+                }
+                None => spacing::metric(font, l, field),
+            };
+            let current = current.map_err(|e| p.bad(format!("glyph `{name}`: {e}")))?;
             let Some(current) = current else {
                 skipped.push(name.clone());
                 continue;
@@ -268,6 +275,22 @@ fn set_offset(p: &Params, font: &mut Font, name: &str, layer: &str, field: Field
         Field::Right => d.rsb,
         Field::Width | Field::Top | Field::Bottom => Some(d.width),
     }))
+}
+
+/// `beam`: the height a left or right sidebearing given as a number is measured at (the metrics
+/// beam) instead of the outline's bounds. A layer whose outline does not reach it is skipped.
+fn beam_height(p: &Params, field: Field, entry: &Entry) -> Result<Option<f64>> {
+    let Some(y) = p.opt_f64("beam")? else { return Ok(None) };
+    if !matches!(field, Field::Left | Field::Right) {
+        return Err(p.bad("`beam` applies to the left and right sidebearings"));
+    }
+    if matches!(entry, Entry::Key(_)) {
+        return Err(p.bad("`beam` takes a number `value`; a metrics key measures at the bounds"));
+    }
+    if !in_range(y) {
+        return Err(p.bad(format!("`beam` must be a height within ±{MAX_COORDINATE}, got {y}")));
+    }
+    Ok(Some(y))
 }
 
 /// A typed number must lie in the field's range.
