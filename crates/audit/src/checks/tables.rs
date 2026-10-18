@@ -144,7 +144,7 @@ fn table_at(tag: [u8; 4]) -> Location {
 
 /// The location of one field of one table, with the source field behind it when the font was
 /// compiled from a source in this run.
-fn field(ctx: &BinaryCtx<'_>, table: &str, name: &str) -> Location {
+pub(crate) fn field(ctx: &BinaryCtx<'_>, table: &str, name: &str) -> Location {
     let key = format!("{}.{name}", table.trim_end());
     Location {
         table: Some(table.to_string()),
@@ -211,21 +211,19 @@ fn code_point_list(points: impl IntoIterator<Item = u32>) -> String {
     out.join(", ")
 }
 
-/// A project value as a binary check reads it (`audit.projectValues`). The binary context does
-/// not carry the document's project values yet, so every value reads as unset; the checks that
-/// need one name it in a `ProjectValue` precondition and skip with [`value_not_passed`] when it
-/// does not arrive.
+/// A project value as a binary check reads it (`audit.projectValues`). The checks that need one
+/// name it in a `ProjectValue` precondition and skip with [`value_not_passed`] when it is unset
+/// or the run passes no values.
 fn project_value<'a>(ctx: &BinaryCtx<'a>, name: &str) -> Option<&'a ProjectValue> {
-    let _ = (ctx, name);
-    None
+    ctx.value(name)
 }
 
 fn value_not_passed(name: &str) -> String {
-    format!("the project value `{name}` does not reach the compiled-font checks")
+    format!("the project value `{name}` is not set")
 }
 
 /// A tag as a project value spells it, padded with spaces to four bytes.
-fn padded_tag(s: &str) -> Option<[u8; 4]> {
+pub(crate) fn padded_tag(s: &str) -> Option<[u8; 4]> {
     let bytes = s.as_bytes();
     if bytes.is_empty() || bytes.len() > 4 {
         return None;

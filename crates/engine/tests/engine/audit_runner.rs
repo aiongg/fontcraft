@@ -91,6 +91,20 @@ fn binary_findings_on_a_source_name_the_source_field() {
 }
 
 #[test]
+fn project_values_reach_the_compiled_font_checks() {
+    let mut s = Session::with_document();
+    run(&mut s, "path.addPath", json!({"glyph": "A", "nodes": rect(60.0, 0.0, 560.0, 700.0)}));
+    let select = json!({"profile": "strict", "checks": ["check.tables.fsType"], "scope": ["binary"]});
+    let before = run(&mut s, "audit.run", select.clone());
+    assert_eq!(check(&before, "check.tables.fsType").unwrap()["status"], "skipped", "no fsType value yet");
+    run(&mut s, "audit.config.set", json!({"values": {"fsType": 12}}));
+    let after = run(&mut s, "audit.run", select);
+    let found: Vec<&Value> = results(&after).iter().filter(|x| x["check"] == "check.tables.fsType").collect();
+    assert_eq!(found.len(), 1, "{after}");
+    assert_eq!(found[0]["code"], "unexpected-value");
+}
+
+#[test]
 fn ignored_results_are_counted_apart_and_hidden() {
     let mut s = Session::with_document();
     run(&mut s, "path.addPath", json!({"glyph": "A", "nodes": rect(0.0, 0.0, 100.0, 100.0)}));

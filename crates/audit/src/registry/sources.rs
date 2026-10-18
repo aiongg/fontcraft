@@ -101,7 +101,12 @@ pub(super) const CHECKS: &[CheckSpec] = &[
         label: "Unnecessary font info",
         description: "The font info sets values the compiler generates or that are obsolete: the unique ID, the version string, the PostScript unique ID or the year.",
         severity: Warn,
-        fix: Some(FixSpec { id: "clearInfoFields", command: None, safe: false, description: "Remove the values so the compiler generates them." }),
+        fix: Some(FixSpec {
+            id: "clearInfoFields",
+            command: Some("font.info.clearGeneratedFields"),
+            safe: false,
+            description: "Remove the values so the compiler generates them.",
+        }),
         codes: &["unnecessary-fields"],
         run: Runner::Source(sources::unnecessary_info_fields),
         ..SOURCES
