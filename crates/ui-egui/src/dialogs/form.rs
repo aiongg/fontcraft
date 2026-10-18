@@ -78,6 +78,11 @@ pub enum Kind {
     /// A smart filter's rule tree, `{all | any | none: [rule or group]}`, edited as rows (see
     /// [`super::rule_tree`]).
     Rules,
+    /// Edits of the colour palettes `palettes` (`#RRGGBBAA`, one list per palette), drawn as the
+    /// staged table (see [`super::color_palettes`]).
+    Palettes { palettes: Vec<Vec<String>> },
+    /// A colour `#RRGGBBAA`, drawn as a swatch that opens a colour picker with opacity.
+    Color,
 }
 
 /// One field: a parameter of the dialog's command.
@@ -290,6 +295,8 @@ impl Field {
                 Ok(json!(rows.iter().filter(|r| chosen.contains(r.as_str())).collect::<Vec<_>>()))
             }
             Kind::Rules => super::rule_tree::check(key, value),
+            Kind::Palettes { palettes } => super::color_palettes::check(key, palettes, value),
+            Kind::Color => super::master_color::check(key, value),
         }
     }
 
@@ -406,6 +413,8 @@ pub fn draw(ui: &mut egui::Ui, dialog: &OpenDialog, tokens: &Tokens, can_choose:
                 Kind::Text { .. } => text_field(ui, dialog, field, &value, tokens.dialog_field_width * TEXT_WIDTH_FIELDS, events),
                 Kind::List { rows, select } => list(ui, field, rows, *select, &value, tokens, events),
                 Kind::Rules => super::rule_tree::draw(ui, field, &value, tokens, events),
+                Kind::Palettes { palettes } => super::color_palettes::draw(ui, field, palettes, &value, tokens, events),
+                Kind::Color => super::master_color::draw(ui, field, &value, tokens, events),
                 Kind::Bool => {
                     let mut on = value.as_bool().unwrap_or(false);
                     let r = ui.add(egui::Checkbox::without_text(&mut on)).on_hover_text(&field.doc);

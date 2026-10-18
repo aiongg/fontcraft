@@ -48,7 +48,7 @@ pub mod attach_picker;
 mod axis_location;
 mod axis_mappings;
 pub mod baselines;
-mod color_palettes;
+pub mod color_palettes;
 pub mod compare_fonts;
 pub mod cross_axis;
 pub mod custom_parameter_picker;
@@ -69,7 +69,7 @@ pub mod kerning_groups_editor;
 pub mod kerning_pairs_preview;
 mod languages_list;
 mod list_filter_editor;
-mod master_color;
+pub mod master_color;
 pub mod master_icon_picker;
 pub mod math_table;
 pub mod metric_editor;
@@ -285,6 +285,8 @@ pub const DIALOGS: &[Dialog] = &[
     export_profiles::DIALOG,
     export_profiles::EXPORT,
     export_profiles::ARTWORK,
+    color_palettes::DIALOG,
+    master_color::DIALOG,
 ];
 
 /// The shell commands of this module.
@@ -1001,6 +1003,8 @@ pub fn click(app: &mut FontcraftApp, id: &str) -> Result<Value, String> {
         Kind::List { select: true, .. } => Err(format!("`{id}` is a list: give the selected rows with ui.dialog.set")),
         Kind::List { select: false, .. } => Err(format!("`{id}` only shows its rows")),
         Kind::Rules => Err(format!("`{id}` is a rule tree: give the rules with ui.dialog.set")),
+        Kind::Palettes { .. } => Err(format!("`{id}` is a palette table: give the edits with ui.dialog.set")),
+        Kind::Color => Err(format!("`{id}` is a colour: give it with ui.dialog.set")),
     }
 }
 
