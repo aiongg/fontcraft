@@ -99,6 +99,7 @@ pub const MODULES: &[(&[UiCommand], Handler)] = &[
     (url::COMMANDS, url::run),
     (font_view::encoding::COMMANDS, font_view::encoding::run),
     (crate::dialogs::compare_fonts::COMMANDS, crate::dialogs::compare_fonts::run),
+    (crate::dialogs::cross_axis::COMMANDS, crate::dialogs::cross_axis::run),
 ];
 
 /// The shell commands' parameters that name files, declared as engine commands declare theirs
@@ -135,6 +136,7 @@ pub fn windows(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'s
     space_center::show(app, ui, pending);
     kerning_review::show(app, ui, pending);
     crate::dialogs::compare_fonts::show(app, ui, pending);
+    crate::dialogs::cross_axis::show(app, ui, pending);
 }
 
 pub fn is_ui_command(id: &str) -> bool {

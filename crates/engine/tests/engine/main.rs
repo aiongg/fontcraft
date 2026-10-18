@@ -27,6 +27,7 @@ mod corpus_alignment;
 mod corpus_composition;
 mod corpus_instance_names;
 mod corpus_propagation;
+mod cross_axis;
 mod cross_format;
 mod custom_params;
 mod decompose;

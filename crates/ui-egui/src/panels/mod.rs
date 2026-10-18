@@ -119,6 +119,7 @@ pub struct PanelState {
     pub attach: crate::shell::attach::AttachState,
     pub reference_font: reference_font::ReferenceFontState,
     pub compare_table: crate::dialogs::compare_fonts::CompareTableState,
+    pub cross_axis: crate::dialogs::cross_axis::CrossAxisState,
 }
 
 impl Default for PanelState {
@@ -150,6 +151,7 @@ impl Default for PanelState {
             attach: Default::default(),
             reference_font: Default::default(),
             compare_table: Default::default(),
+            cross_axis: Default::default(),
         }
     }
 }

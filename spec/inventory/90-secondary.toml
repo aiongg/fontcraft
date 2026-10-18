@@ -2444,13 +2444,20 @@ label = "Interpolate Fonts…"
 menu = ["Font"]
 shortcut = ""
 kind = "engine"
-params = "{a: fontRef | path, b: fontRef | path, amount: percent}"
+params = "{a: fontRef | path, b: fontRef | path, amount: percent} → {title, glyphs, amount}"
 area = "interpolation"
 milestone = "M13"
 summary = "Builds a new font between, or beyond, two compatible single-master fonts: 50 gives the midpoint, values above 100 or below 0 extrapolate. Both fonts need the same glyphs with matching contours, points and components."
 ref = "FontForge Element menu › Interpolate Fonts"
 status = "docs"
 origin = "fontforge"
+notes = "Documented in the secondary reference's manual, not yet observed. Built (M13.48): a fontRef is an open document's title or path, anything else is read as a font file. The new font opens as an untitled document: a copy of the first font with each glyph's master layer (width, nodes, component placement, smart values, anchors), the master's metrics, stems and zones, and the kerning interpolated as a·(1 − t) + b·t. Fonts with another number of masters, other units per em, another glyph set, or a glyph whose shapes or anchors do not correspond are refused with the first difference, and nothing opens. The menu item has no dialog yet: from the menu it reports the missing parameters."
+guesses = [
+  "Fonts that differ anywhere are refused with the first difference, rather than leaving out the glyphs that do not match; the secondary reference's handling of a partly compatible pair would settle it.",
+  "The new font keeps only the master layer of each glyph, and its family name, Font Info, features and other data are the first font's; the secondary reference's result on two fonts with different names and extra layers would settle it.",
+  "Interpolated numbers are not rounded; the secondary reference's result at 50 between odd coordinates would settle it.",
+  "A kerning pair only one font has counts as 0 in the other; the secondary reference's result on fonts with different pairs would settle it.",
+]
 
 [[command]]
 id = "glyph.listDependencies"
@@ -3418,6 +3425,25 @@ summary = "Edits mappings in which the position on one axis changes the effectiv
 ref = "Fontra reference › Font menu › Cross-axis mapping"
 status = "docs"
 origin = "fontra"
+notes = "Documented in the secondary reference's manual, not yet observed. Built (M13.48) as a window opened by `window.crossAxisMappings` (Font menu): the cards are a draft of the active font's mappings, written by Apply with `font.setCrossAxisMappings` as one undo step; Revert drops the draft."
+guesses = [
+  "Edits collect in a draft that Apply writes, rather than each edit changing the font at once; watching the secondary reference's undo after editing a card would settle it.",
+  "A new mapping starts with no axis ticked and each value at the default master's location; the secondary reference's new card would settle it.",
+]
+
+[[command]]
+id = "window.crossAxisMappings"
+label = "Cross-Axis Mappings"
+menu = ["Font"]
+shortcut = ""
+kind = "ui"
+params = "{open?: bool (default true)} → {open, description?, mappings: [{description?, input, output}]}"
+area = "interpolation"
+milestone = "M13"
+summary = "Shows or hides the Cross-Axis Mappings window of the active font."
+ref = "Fontra reference › Font menu › Cross-axis mapping"
+status = "docs"
+origin = "fontra"
 
 [[command]]
 id = "font.setCrossAxisMappings"
@@ -3425,13 +3451,17 @@ label = "Set Cross-Axis Mappings"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{mappings: [{input: {axisTag: number}, output: {axisTag: number}, description?: string}]}"
+params = "{mappings: [{input: {axisTag: number}, output: {axisTag: number}, description?: string}], description?: string} → {description?, mappings}"
 area = "interpolation"
 milestone = "M13"
 summary = "Replaces the font's list of cross-axis mappings; the compiler writes them as a version 2 avar table. A view option applies the mappings to the axis sliders while previewing."
 ref = "Fontra reference › Font menu › Cross-axis mapping; Editor › Panels › Designspace (View options)"
 status = "docs"
 origin = "fontra"
+notes = "Documented in the secondary reference's manual, not yet observed. Built (M13.48): the mappings are kept in the font's user data under `com.fontcraft.crossAxisMappings`, so `.glyphs`, UFO and designspace keep them (a designspace keeps them in its `<lib>`; reading and writing the designspace's own `<mappings>` element is not built yet). Locations are design coordinates by axis tag, each side naming at least one of the font's axes; the optional `description` describes the whole list. Not built yet: compiling them into the avar table (waits for the variable-font compiler, M9) and the view option that applies them to the axis sliders."
+guesses = [
+  "Locations are design coordinates, as the designspace format stores them, not user coordinates; the secondary reference's fields on a font whose axes have a user-to-design map would settle it.",
+]
 
 [[panel]]
 id = "palette.referenceFont"
