@@ -63,6 +63,25 @@ fn one_page(content: &str) -> Vec<u8> {
     save(document(&[content.as_bytes()], Dictionary::new(), Dictionary::new(), false))
 }
 
+/// A PDF of `objects` (object 1 the catalog) with a classic cross-reference table.
+fn raw_pdf(objects: &[Vec<u8>]) -> Vec<u8> {
+    let mut out = b"%PDF-1.5\n".to_vec();
+    let mut offsets = Vec::new();
+    for (i, body) in objects.iter().enumerate() {
+        offsets.push(out.len());
+        out.extend_from_slice(format!("{} 0 obj\n", i + 1).as_bytes());
+        out.extend_from_slice(body);
+        out.extend_from_slice(b"\nendobj\n");
+    }
+    let xref = out.len();
+    out.extend_from_slice(format!("xref\n0 {}\n0000000000 65535 f \n", objects.len() + 1).as_bytes());
+    for o in offsets {
+        out.extend_from_slice(format!("{o:010} 00000 n \n").as_bytes());
+    }
+    out.extend_from_slice(format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n", objects.len() + 1).as_bytes());
+    out
+}
+
 fn nodes(p: &Path) -> Vec<(f64, f64, NodeKind)> {
     p.nodes.iter().map(|n| (n.x, n.y, n.kind)).collect()
 }
@@ -126,10 +145,19 @@ fn pdf_compressed_stream_bomb_is_refused() {
     assert_eq!(err(&content), PdfError::StreamTooLarge);
     assert_eq!(render_pdf(&content, 1.0, 1 << 20).unwrap_err(), PdfError::StreamTooLarge);
 
-    // An object stream is decoded while the file loads; it is held to the same allowance.
-    let mut doc = document(&[b"0 0 10 10 re f"], Dictionary::new(), Dictionary::new(), false);
-    doc.add_object(stream(dictionary! { "Type" => name("ObjStm"), "N" => 1, "First" => 0 }, &vec![b'0'; 10 << 20], true));
-    let object_stream = save(doc);
+    // An object stream is decoded while the file loads; it is held to the same allowance. The
+    // writer drops object streams it did not make, so this file is put together by hand.
+    let packed = stream(Dictionary::new(), &vec![b'0'; 10 << 20], true).content;
+    let mut objstm = format!("<< /Type /ObjStm /N 1 /First 0 /Filter /FlateDecode /Length {} >>\nstream\n", packed.len()).into_bytes();
+    objstm.extend_from_slice(&packed);
+    objstm.extend_from_slice(b"\nendstream");
+    let object_stream = raw_pdf(&[
+        b"<< /Type /Catalog /Pages 2 0 R >>".to_vec(),
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 200 200] >>".to_vec(),
+        b"<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>".to_vec(),
+        b"<< /Length 14 >>\nstream\n0 0 10 10 re f\nendstream".to_vec(),
+        objstm,
+    ]);
     assert_eq!(err(&object_stream), PdfError::StreamTooLarge);
     assert!(PdfError::StreamTooLarge.to_string().contains("100 times"));
 }

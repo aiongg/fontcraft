@@ -109,7 +109,10 @@ fn bdf_reads_and_writes_grey_pixels() {
     let written = write_bdf(&font).unwrap();
     assert!(written.starts_with("STARTFONT 2.3\n") && written.contains("SIZE 8 72 72 2\n"), "{written}");
     let back = read_bdf(written.as_bytes()).unwrap().font;
-    assert_eq!((back.glyphs, back.depth, back.ascent, back.descent), (font.glyphs.clone(), 2, 2, 0));
+    // The writer gives every glyph the SWIDTH line BDF requires: 5 px at 8 px per em.
+    let mut want = font.glyphs.clone();
+    want[0].scalable_width = Some(625);
+    assert_eq!((back.glyphs, back.depth, back.ascent, back.descent), (want, 2, 2, 0));
     assert!(matches!(write_pcf(&font, PcfLayout::default()), Err(BitmapError::Write(_))));
 }
 
