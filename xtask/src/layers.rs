@@ -52,6 +52,7 @@ pub const TABLE: &[(&str, Class)] = &[
     ("io-svg", Class::Layer(3)),
     ("io-sfd", Class::Layer(3)),
     ("io-pdf", Class::Layer(3)),
+    ("io-bitmap", Class::Layer(3)),
     ("decompile", Class::Layer(3)),
     ("oracle", Class::Layer(3)),
     ("render", Class::Layer(3)),
