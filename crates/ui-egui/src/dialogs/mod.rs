@@ -291,6 +291,9 @@ pub const DIALOGS: &[Dialog] = &[
     add_other_font::DIALOG,
     crate::panels::special_layer_popover::INTERMEDIATE,
     crate::panels::special_layer_popover::ALTERNATE,
+    find_outline::DIALOG,
+    find_outline::FIND,
+    find_outline::FOUND,
 ];
 
 /// The shell commands of this module.
