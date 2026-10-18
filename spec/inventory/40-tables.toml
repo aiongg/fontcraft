@@ -1110,6 +1110,8 @@ milestone = "M8"
 summary = "Name records declared in a feature-file name table block replace generated records with the same platform, encoding, language and name id, and the merged list is sorted. Name ids that feature code allocates for stylistic set or character variant labels are renumbered to start after the highest id already used. makeotf only lets feature code override menu names with -overrideMenuNames, and never IDs 2 and 6."
 ref = "fontc fontbe/src/name.rs (merge_name_records), fontbe/src/features.rs; AFDKO python/afdko/makeotf.py (-overrideMenuNames)"
 status = "docs"
+notes = "M8.8: the code's name IDs of 256 and above start one above the highest ID of 256 or more among the source's names (`info::first_free_name_id`, passed to fea-rs as the first free ID, so the feature parameters and `STAT` follow), then the records are merged as fontc merges them (`layout_tables::merge_names`). Reserved IDs below 256 are replaced as fontc and fea-rs allow; makeotf's restriction is not followed. To confirm on `CustomNameTableInFea.ufo` against fontmake."
+guesses = ["In a variable font, whose axis and instance names are allocated after the layout stage, a code name whose ID meets one of them is left out with a warning, so the axis names stay right; allocating the variable names before the layout stage, as fontc does, would settle it."]
 
 [[behavior]]
 id = "compile.nameIdAllocation"
@@ -1219,6 +1221,7 @@ milestone = "M8"
 summary = "usMaxContext is the longest glyph context any GSUB or GPOS lookup needs, computed from the compiled lookups (0 when there is no layout); the OS/2 builder therefore runs after layout compilation."
 ref = "fontc fontbe/src/os2.rs (apply_max_context), fontbe/src/os2/max_context.rs"
 status = "docs"
+notes = "M8.8: `fontcraft_compile::layout_tables::max_context` reads the compiled `GSUB` and `GPOS` back and measures them as fontTools' maxContextCalc does (fontc ports the same code); mark, mark-to-mark and cursive attachment count 0, so a font with mark attachment only has 0. `fontcraft_tables::layout_install::max_context` (M12.14) calls the same function. To confirm against fontc and fontmake on the corpus sources with feature code."
 
 [[behavior]]
 id = "compile.ascenderDescenderDefaults"
@@ -1347,6 +1350,8 @@ milestone = "M8"
 summary = "Table blocks in feature code override computed values after the builders run: head (FontRevision only), hhea (Ascender, Descender, LineGap, CaretOffset), vhea (the three vertical typo values), OS/2 (only the fields actually written in the block, including an explicit zero), name (per record), and whole BASE and STAT tables."
 ref = "fontc fontbe/src/head.rs, metrics_and_limits.rs, vertical_metrics.rs, os2.rs (merge_fea_os2), name.rs, stat.rs, orchestration.rs (ExtraFeaTables)"
 status = "docs"
+notes = "M8.8 (`crates/compile/src/layout_tables.rs`), applied in `build::assemble` after the table builders. `hhea` and `vhea` change only the metrics the block writes, as feaLib does; fontc writes the default of fea-rs's table, zero, for an `hhea` or `vhea` metric the block leaves out, which no corpus source exercises. A `vhea` block in a font without vertical metrics is left out with a warning. The code's `STAT` replaces a variable font's own, as fontc does. To confirm on `FeaTableOverrides.ufo` against fontmake."
+guesses = ["An `OS/2` block with only one optical size writes the other as 0, the zero feaLib leaves in the fields a raised version adds; a fontmake build of a source with only `UpperOpSize` would settle it."]
 
 # ---------------------------------------------------------------------------------------------------
 # Behaviours: assembly and containers

@@ -26,8 +26,8 @@
 //!
 //! A compile error in steps 2, 3 or 5 stops the export with the diagnostics mapped to the
 //! entries ([`CompileError::Features`]), as fontc stops. A writer that reaches one of its caps is
-//! left out with a warning. M8.8 applies the table-block values after the table builders and
-//! moves the code's name ids above the source's.
+//! left out with a warning. The code's name IDs start above the source's, and the table-block
+//! values are applied after the table builders (`crate::layout_tables`).
 
 use std::path::Path;
 
@@ -75,10 +75,11 @@ pub struct LayoutTables {
 }
 
 impl LayoutTables {
-    /// The layout tables to add to the font, by tag.
+    /// The tables to add to the font as compiled, by tag: the layout tables and the code's whole
+    /// `BASE` and `STAT` blocks.
     pub fn tables(&self) -> Vec<(fontcraft_fea::Tag, &[u8])> {
         let c = &self.compiled;
-        [(b"BASE", &c.base), (b"GDEF", &c.gdef), (b"GPOS", &c.gpos), (b"GSUB", &c.gsub)]
+        [(b"BASE", &c.base), (b"GDEF", &c.gdef), (b"GPOS", &c.gpos), (b"GSUB", &c.gsub), (b"STAT", &c.stat)]
             .into_iter()
             .filter_map(|(tag, bytes)| Some((fontcraft_fea::Tag::new(tag), bytes.as_deref()?)))
             .collect()
@@ -111,6 +112,9 @@ pub struct LayoutInput<'a> {
     pub order: &'a [ResolvedGlyph],
     /// The export parameters' renames, so the kerning finds renamed glyphs.
     pub edits: &'a ExportEdits,
+    /// The first name ID free in the source's names: the code's name IDs of 256 and above move
+    /// up to start there (M8.8). 256 moves nothing.
+    pub first_name_id: u16,
     /// The folder `include` statements are read from (the source's folder).
     pub include_dir: Option<&'a Path>,
     /// Which included files on disk may be read; `None` reads any.
@@ -263,6 +267,7 @@ pub fn build(input: &LayoutInput, opts: &LayoutOptions, warnings: &mut Vec<Strin
     // Step 3: what the writers read from the code.
     let mut request = CompileRequest::new(&files, &glyph_order);
     request.gpos = opts.gpos;
+    request.first_name_id = input.first_name_id;
     request.variations = variable_features.as_ref().map(|v| v as &dyn fontcraft_fea::FeaVariations);
     let first = match &assembly {
         Some(_) => fontcraft_fea::first_pass(&request).map_err(mapped)?,

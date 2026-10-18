@@ -51,6 +51,7 @@ pub mod info;
 mod kern;
 pub mod kern_table;
 pub mod layout;
+pub mod layout_tables;
 mod marks;
 pub mod math;
 pub mod names;
@@ -521,7 +522,7 @@ pub(crate) fn compile_stages_with(
         &outlines,
         flavour,
         synthesised_notdef,
-        &layout.tables(),
+        &layout,
         kern_table.as_deref(),
         &color_tables.tables,
         &extra,
@@ -547,12 +548,18 @@ pub(crate) fn layout_tables(
     if options.skip_features {
         return Ok(layout::LayoutTables::default());
     }
+    // The code's own name IDs start above the source's (`compile.nameFeaOverrides`).
+    let first_name_id = match font {
+        Some(f) if !f.features.is_empty() => info::first_free_name_id(resolved, &options.style_name),
+        _ => 256,
+    };
     let input = layout::LayoutInput {
         font,
         data,
         resolved,
         order,
         edits,
+        first_name_id,
         include_dir: options.feature_dir.as_deref(),
         include_check: options.include_check.as_ref(),
         variable,

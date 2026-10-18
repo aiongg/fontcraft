@@ -8,19 +8,18 @@
 //!   a later `OS/2` version holds raises the table to that version, the fields it adds zero.
 //! - The code's names replace the records with the same platform, encoding, language and name id
 //!   and are added otherwise; records stay sorted.
-//! - `usMaxContext` is the longest context of the `GSUB` and `GPOS` lookups, ported from
-//!   fontTools' `otlLib/maxContextCalc.py` (MIT License).
+//! - `usMaxContext` is the longest context of the `GSUB` and `GPOS` lookups, measured as the
+//!   compiler measures it (`fontcraft_compile::layout_tables::max_context`, a port of fontTools'
+//!   `otlLib/maxContextCalc.py`).
 //!
 //! Also the glyph names a compiler sees for the font, and the lint's mark-attachment note.
 
 use std::collections::BTreeSet;
 
 use read_fonts::tables::gpos::PositionSubtables;
-use read_fonts::tables::gsub::SubstitutionSubtables;
-use read_fonts::tables::layout::{ChainedSequenceContext, ExtensionLookup, SequenceContext, Subtables};
-use read_fonts::{FontData, FontRead, TableProvider};
+use read_fonts::{FontData, FontRead};
 
-use crate::features::{Budget, Provider, glyph_names, read_err};
+use crate::features::{Budget, MAX_LAYOUT_WORK, Provider, glyph_names, read_err};
 use crate::sfnt::{SfntFont, Tag, tag_str};
 use crate::{Result, TablesError};
 
@@ -343,28 +342,11 @@ fn write_name(records: &[NameRecord], tags: &[Vec<u8>]) -> Result<Vec<u8>> {
 /// contextual rule, 1 plus the look-ahead length of a reverse chaining rule. Attachment lookups
 /// count nothing.
 pub fn max_context(font: &SfntFont) -> Result<u16> {
-    let p = Provider(font);
-    let mut budget = Budget::new();
-    let mut max = 0u32;
-    if font.get(GSUB).is_some() {
-        let gsub = p.gsub().map_err(|e| read_err("GSUB", e))?;
-        let list = gsub.lookup_list().map_err(|e| read_err("GSUB lookup list", e))?;
-        for lookup in list.lookups().iter() {
-            let lookup = lookup.map_err(|e| read_err("GSUB lookup", e))?;
-            let subtables = lookup.subtables().map_err(|e| read_err("GSUB lookup", e))?;
-            max = max.max(gsub_context(&subtables, &mut budget)?);
-        }
-    }
-    if font.get(GPOS).is_some() {
-        let gpos = p.gpos().map_err(|e| read_err("GPOS", e))?;
-        let list = gpos.lookup_list().map_err(|e| read_err("GPOS lookup list", e))?;
-        for lookup in list.lookups().iter() {
-            let lookup = lookup.map_err(|e| read_err("GPOS lookup", e))?;
-            let subtables = lookup.subtables().map_err(|e| read_err("GPOS lookup", e))?;
-            max = max.max(gpos_context(&subtables, &mut budget)?);
-        }
-    }
-    Ok(u16::try_from(max).unwrap_or(u16::MAX))
+    use fontcraft_compile::layout_tables::{self, ContextError};
+    layout_tables::max_context(font.get(GSUB), font.get(GPOS), MAX_LAYOUT_WORK).map_err(|e| match e {
+        ContextError::TooLarge(limit) => TablesError::TooLarge { what: "the layout tables (units of work to read them)", limit },
+        e => TablesError::invalid(e.to_string()),
+    })
 }
 
 /// Sets `OS/2.usMaxContext` from the layout tables when the font has `GSUB` or `GPOS` and an
@@ -384,119 +366,6 @@ pub fn update_max_context(font: &mut SfntFont) -> Result<bool> {
     put(&mut data, 94, &value.to_be_bytes());
     font.insert(OS2, data);
     Ok(true)
-}
-
-/// The largest of `f` over the subtables, each charged to the budget.
-fn each<'a, T, E>(s: &Subtables<'a, T, E>, what: &str, budget: &mut Budget, mut f: impl FnMut(T, &mut Budget) -> Result<u32>) -> Result<u32>
-where
-    T: FontRead<'a, Args = ()> + 'a,
-    E: ExtensionLookup<'a, T> + 'a,
-{
-    let mut max = 0;
-    for t in s.iter() {
-        budget.charge(1)?;
-        let t = t.map_err(|e| read_err(what, e))?;
-        max = max.max(f(t, budget)?);
-    }
-    Ok(max)
-}
-
-fn gsub_context(s: &SubstitutionSubtables, budget: &mut Budget) -> Result<u32> {
-    let what = "GSUB subtable";
-    match s {
-        SubstitutionSubtables::Single(t) => each(t, what, budget, |_, _| Ok(1)),
-        SubstitutionSubtables::Multiple(t) => each(t, what, budget, |_, _| Ok(1)),
-        SubstitutionSubtables::Alternate(t) => each(t, what, budget, |_, _| Ok(1)),
-        SubstitutionSubtables::Ligature(t) => each(t, what, budget, |st, budget| {
-            let mut max = 0;
-            for set in st.ligature_sets().iter() {
-                let set = set.map_err(|e| read_err("ligature set", e))?;
-                for lig in set.ligatures().iter() {
-                    budget.charge(1)?;
-                    let lig = lig.map_err(|e| read_err("ligature", e))?;
-                    max = max.max(u32::from(lig.component_count()));
-                }
-            }
-            Ok(max)
-        }),
-        SubstitutionSubtables::Contextual(t) => each(t, what, budget, |st, budget| sequence_context(&st, budget)),
-        SubstitutionSubtables::ChainContextual(t) => each(t, what, budget, |st, budget| chained_context(&st, budget)),
-        SubstitutionSubtables::Reverse(t) => each(t, what, budget, |st, _| Ok(1 + u32::from(st.lookahead_glyph_count()))),
-        SubstitutionSubtables::EmptyExtension => Ok(0),
-    }
-}
-
-fn gpos_context(s: &PositionSubtables, budget: &mut Budget) -> Result<u32> {
-    let what = "GPOS subtable";
-    match s {
-        PositionSubtables::Single(t) => each(t, what, budget, |_, _| Ok(1)),
-        PositionSubtables::Pair(t) => each(t, what, budget, |_, _| Ok(2)),
-        PositionSubtables::Contextual(t) => each(t, what, budget, |st, budget| sequence_context(&st, budget)),
-        PositionSubtables::ChainContextual(t) => each(t, what, budget, |st, budget| chained_context(&st, budget)),
-        PositionSubtables::Cursive(_)
-        | PositionSubtables::MarkToBase(_)
-        | PositionSubtables::MarkToLig(_)
-        | PositionSubtables::MarkToMark(_)
-        | PositionSubtables::EmptyExtension => Ok(0),
-    }
-}
-
-/// The longest input sequence of a contextual subtable.
-fn sequence_context(st: &SequenceContext, budget: &mut Budget) -> Result<u32> {
-    let mut max = 0u32;
-    match st {
-        SequenceContext::Format1(t) => {
-            for set in t.seq_rule_sets().iter().flatten() {
-                let set = set.map_err(|e| read_err("contextual rule set", e))?;
-                for rule in set.seq_rules().iter() {
-                    budget.charge(1)?;
-                    let rule = rule.map_err(|e| read_err("contextual rule", e))?;
-                    max = max.max(u32::from(rule.glyph_count()));
-                }
-            }
-        }
-        SequenceContext::Format2(t) => {
-            for set in t.class_seq_rule_sets().iter().flatten() {
-                let set = set.map_err(|e| read_err("contextual rule set", e))?;
-                for rule in set.class_seq_rules().iter() {
-                    budget.charge(1)?;
-                    let rule = rule.map_err(|e| read_err("contextual rule", e))?;
-                    max = max.max(u32::from(rule.glyph_count()));
-                }
-            }
-        }
-        SequenceContext::Format3(t) => max = u32::from(t.glyph_count()),
-    }
-    Ok(max)
-}
-
-/// The longest input plus look-ahead sequence of a chaining subtable.
-fn chained_context(st: &ChainedSequenceContext, budget: &mut Budget) -> Result<u32> {
-    let mut max = 0u32;
-    match st {
-        ChainedSequenceContext::Format1(t) => {
-            for set in t.chained_seq_rule_sets().iter().flatten() {
-                let set = set.map_err(|e| read_err("chaining rule set", e))?;
-                for rule in set.chained_seq_rules().iter() {
-                    budget.charge(1)?;
-                    let rule = rule.map_err(|e| read_err("chaining rule", e))?;
-                    max = max.max(u32::from(rule.input_glyph_count()) + u32::from(rule.lookahead_glyph_count()));
-                }
-            }
-        }
-        ChainedSequenceContext::Format2(t) => {
-            for set in t.chained_class_seq_rule_sets().iter().flatten() {
-                let set = set.map_err(|e| read_err("chaining rule set", e))?;
-                for rule in set.chained_class_seq_rules().iter() {
-                    budget.charge(1)?;
-                    let rule = rule.map_err(|e| read_err("chaining rule", e))?;
-                    max = max.max(u32::from(rule.input_glyph_count()) + u32::from(rule.lookahead_glyph_count()));
-                }
-            }
-        }
-        ChainedSequenceContext::Format3(t) => max = u32::from(t.input_glyph_count()) + u32::from(t.lookahead_glyph_count()),
-    }
-    Ok(max)
 }
 
 /// Glyphs that one mark-to-base or mark-to-ligature subtable of `gpos` lists both as a mark and
