@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1288 rows to check: 1975 guesses and 466 observe steps.**
+**1296 rows to check: 2002 guesses and 471 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,7 +48,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 40 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 4 |
-| **Later milestones (after M6)** | all | **803** |
+| **Later milestones (after M6)** | all | **811** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 80 |
 | Later milestones (after M6) | Edit View: text mode and preview | 15 |
 | Later milestones (after M6) | Components and anchors | 37 |
@@ -58,7 +58,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Font View | 16 |
 | Later milestones (after M6) | Font Info and features | 278 |
 | Later milestones (after M6) | Interpolation | 71 |
-| Later milestones (after M6) | Hinting | 90 |
+| Later milestones (after M6) | Hinting | 98 |
 | Later milestones (after M6) | Colour fonts | 54 |
 | Later milestones (after M6) | Files: open, import, export | 52 |
 | Later milestones (after M6) | Settings and the window | 13 |
@@ -1378,7 +1378,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (803)
+## Later milestones (after M6) (811)
 
 ### Edit View: drawing, guides, layers and the Palette (80)
 
@@ -3035,7 +3035,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Edits collect in a draft that Apply writes, rather than each edit changing the font at once; watching the secondary reference's undo after editing a card would settle it.
   - Guess: A new mapping starts with no axis ticked and each value at the default master's location; the secondary reference's new card would settle it.
 
-### Hinting (90)
+### Hinting (98)
 
 - [ ] `hinting.ps.standardStems.privateDictMapping` (behavior, M10, docs): At export the first horizontal stem becomes StdHW and the first vertical…
   - Guess: More than twelve stems in one direction: the export writes the first twelve in list order and warns, and hint.ps.validateFontHints reports it; an export from the reference app with thirteen stems would settle it.
@@ -3199,6 +3199,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `hinting.tt.gasp.flagMapping` (behavior, M10, inferred): Proposed gasp records for the three ranges, to verify against a reference…
   - Guess: Without a gasp Table parameter a font with TrueType instructions gets three records: up to 8 PPM DOGRAY + SYMMETRIC_SMOOTHING, up to 20 GRIDFIT + SYMMETRIC_GRIDFIT, up to 65535 all four bits; an unhinted font gets no gasp table, as fontc and fontmake write none; an export from the reference app without the parameter would settle both.
   - Observe: T3: export as TTF with a gasp Table parameter, without it, and an uninstructed copy without it; read each gasp table and note its ranges and flags, and whether the unhinted font gets a gasp table at all.
+- [ ] `hinting.tt.tool.instanceOutline` (behavior, M10, handbook): A blue outline shows the currently previewed instance before hinting
+  - Guess: The previewed instance is held by the Instructor and chosen with the `instance` parameter of hint.tt.showPixelPreview, since the Preview Area's instance menu (preview.setInstance) does not exist yet; the blue outline is the instance compiled as TrueType and drawn unhinted, so it shows the exported quadratic outline; the reference app would show whether its blue outline is the cubic instance.
 - [ ] `hinting.tt.tool.gridFittedOutline` (behavior, M10, handbook): A red outline shows the previewed instance after its instructions have been…
   - Guess: The grid-fitted outline comes from skrifa's TrueType interpreter (FreeType's v40 interpreter in Rust), not from the Windows rasterizer the handbook names (decided in M10 § 7, question 4); comparing red outlines with the reference app at a few sizes would show the difference.
   - Observe: T3: instruct n and take screenshots of the red grid-fitted outline at 12 and 16 PPM in each rendering intent; compare them with FontCraft's preview of the same font and note where the outlines differ.
@@ -3215,6 +3217,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: T3: drag an instruction badge, save, reopen, and note what the drag changed and whether it was saved; then drag a badge onto another node and note whether the instruction moves to that node.
 - [ ] `hinting.tt.instructions.badgeColours` (behavior, M10, handbook): Each instruction is drawn with a clickable badge whose colour identifies its…
   - Guess: Delta badges are orange, a colour no other instruction uses; the reference app would settle it.
+  - Guess: Badges are plain discs placed beside the point (left of it for vertical instructions, below it for horizontal ones) or on the arrow of Stem and Shift; the reference app would show their shape, placement and icons.
   - Observe: T3: add a Delta instruction; note its badge colour and the icons of the rounding modes, next to the badges of the other instruction types.
 - [ ] `hinting.tt.snap.zoneAuto` (behavior, M10, handbook): Snap with zone Auto, in vertical mode: if the point lies inside…
   - Guess: In horizontal mode Auto ignores zones and rounds to the nearest pixel edge, since zones are vertical; the reference app would settle it.
@@ -3275,15 +3278,29 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `hint.tt.setStemDefinition` (M10, inferred, live): Edit Stem
   - Guess: One command edits any property of a TT stem, as the sheet's row does, and refuses deltas and filters outside the main master; the reference app's sheet would settle whether other masters show those buttons at all.
   - Guess: Turning a stem's orientation turns the Stem instructions it no longer suits to Auto; the reference app would settle it by switching a stem that a Stem instruction names.
-- [ ] `hint.tt.setRenderingIntent` (M10, inferred): Set Rendering Intent
+- [ ] `hint.tt.showPixelPreview` (M10, handbook, live): Show Pixel Preview
+  - Guess: The toggle hides only the blue and red outlines, as the handbook says; the pixel backdrop stays while the Instructor is active. Choosing an instance turns the preview on. The reference app would settle whether the backdrop goes with the outlines.
+- [ ] `hint.tt.setRenderingIntent` (M10, inferred, live): Set Rendering Intent
   - Guess: The rendering intent is a pop-up in the TrueType Instructor's Info box beside the pixel size; Grayscale maps to skrifa's smooth normal target, ClearType to its LCD target without symmetric rendering (no vertical oversampling), DirectWrite to LCD with symmetric rendering; the reference app would settle the control and the comparison of outlines.
   - Observe: T3: with the TrueType Instructor active, look for the Grayscale, ClearType and DirectWrite choice; note where it is (Info box, toolbar or menu) and what kind of control it is.
-- [ ] `hint.tt.setPixelSize` (M10, handbook): Set Preview Pixel Size
+- [ ] `hint.tt.setPixelSize` (M10, handbook, live): Set Preview Pixel Size
   - Guess: The pixel size field accepts whole numbers from 4 to 400 PPM; the reference app would settle the limits.
   - Observe: T3: type 2, then 500, into the TrueType Instructor's pixel size field; note the smallest and the largest value it accepts.
-- [ ] `hint.tt.showPreviewAddress` (M10, handbook): Show Preview Address…
+- [ ] `hint.tt.increasePixelSize` (M10, handbook, live): Increase Pixel Size
+  - Guess: The pixel size starts at 12 PPM, the handbook example; the reference app would show its starting value.
+- [ ] `hint.tt.showPointIndexes` (M10, handbook, live): Show Point Indexes
+  - Guess: The point numbers show with every tool, not only the TrueType Instructor, since the handbook puts the toggle in the Edit View context menu; the reference app would settle it.
+  - Guess: The canvas context menu offers the toggle only while the TrueType Instructor is active, so other tools' menus stay short; the reference app would settle whether every tool's menu has it.
+- [ ] `hint.tt.setPreviewScale` (M10, handbook, live): Preview Scale
+  - Guess: The waterfall starts at 1x and the scale is one setting for the Preview Area and the Preview Panel; the reference app would settle the default and whether the two keep separate scales.
+- [ ] `hint.tt.showPreviewAddress` (M10, handbook, live): Show Preview Address…
   - Guess: The server listens on a free port of the local network interfaces, serves only the preview page and the font, and stops when the dialog closes (decided in M10 § 7, question 5); the reference app would settle lifetime and port.
+  - Guess: The page and font live under a random 32-digit path in the address, so a device that only finds the port cannot read the font; the reference app's address format would settle whether it does the same.
+  - Guess: The served instance is the first exported static instance (or the one named by `instance`), else the first master, since the export path builds instances, not the master the tab draws in; the reference app would settle which instance its page shows.
+  - Guess: Glyphs of the tab without a Unicode value are left out of the page, which can only set characters; the reference app's page would settle how it shows them.
+  - Guess: The canvas context menu offers the item only while the TrueType Instructor is active, so other tools' menus stay short; the reference app would settle whether every tool's menu has it.
   - Observe: T3: choose Show Preview Address…, open the address from another device on the same network, close the dialog, then quit the app; note the port, whether the page was reachable, and at which of these moments the server stopped.
+  - Observe: T3: open the preview page and note its layout (sizes, labels, text), the address's path, and which instance it shows when the tab shows another master.
 - [ ] `hint.tt.autohintGlyph` (M10, handbook, live): Autohint
   - Guess: The Instructor's Autohint writes vertical Snap on every extreme in a TT zone and vertical Stem for each horizontal stem the PostScript stem analysis finds, and nothing horizontal, as ttfautohint hints heights only; a glyph hinted by the reference app would show which points and directions it picks.
 - [ ] `hint.tt.removeHints` (M10, handbook, live): Remove Hints
@@ -3316,17 +3333,40 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: T3: select a Delta instruction, open its Delta table from the Info box and note whether the columns are masters or instances.
 - [ ] `hint.tt.setDeltas` (M10, handbook, live): Set Delta Cells
   - Guess: Set Delta Cells changes only the cells it names and keeps the rest, as clicking single cells of the table does; the reference app's table would settle it.
+- [ ] `dialog.ttfZones` (panel, M10, handbook): TTFZones editor
+  - Guess: Each edit takes effect at once as its own undo step, and Done closes the editor; the reference app's sheet would show whether its edits wait until it closes.
+  - Guess: The plus button adds `zone N` at position 0, 16 units per 1000 units per em high, to every master; the reference app would show what a new zone holds.
+  - Guess: A row is selected by a click on its number; the reference app would show how its list selects a row.
+  - Guess: The glyph filter offers every Smart Filter rule, not only Name, Category, Subcategory and Script, and a stored filter reopens as one Custom rule holding its predicate; the reference app's filter sheet would show its rule list.
+  - Observe: T3: in the TTFZones editor click plus; note the new zone's name, position and size, and whether Font Info shows the change before the sheet closes.
+  - Observe: T3: click the globe of a zone on the main master; note which properties the rule pop-up offers.
 - [ ] `dialog.ttDeltas` (panel, M10, handbook): Delta table
   - Guess: The table has one row per PPM from 8 to 80, the waterfall's range; its columns are the masters for zone and stem deltas and the static instances for Delta instructions; the reference app would settle both.
+  - Guess: A font without static instances gets one column per master in the Delta table of an instruction, and instances or masters at one location share a column; the reference app would show what it offers then.
+  - Guess: One table serves every selected Delta instruction: a click sets that cell on all of them, and a cell where they differ shows a dash whose first click sets one pixel up; the reference app would show whether the table opens for several instructions.
   - Observe: T3: open the Delta table of a zone and of a Delta instruction; note which PPM rows it offers and whether its columns are masters or instances.
+- [ ] `dialog.ttfStems` (panel, M10, handbook): TTFStems editor
+  - Guess: The plus button adds `stem N`, an X stem 80 units per 1000 units per em wide, to every master; the reference app would show what a new stem holds.
+  - Observe: T3: in the TTFStems editor click plus; note the new stem's orientation, name and size.
+- [ ] `infoBox.ttInstructor` (panel, M10, handbook): Info box: TrueType Instructor
+  - Guess: The five rounding modes are text buttons (Round, Up, Down, None, GDI) that act on the selected Snap, Stem, Shift and Interpolate instructions and leave selected Delta instructions alone; the reference app would show its icons and what a mixed selection does.
+  - Guess: With several instructions selected, a pop-up or rounding button shows the value they share and nothing when they differ; the reference app would show how it marks a mixed selection.
+  - Guess: The zone pop-up lists the TT zones whose filter takes the glyph, only for vertical Snaps, and the stem pop-up the TT stems that suit the direction of the selected Stems; the reference app would show whether it lists every zone and stem.
+  - Observe: T3: select a Snap and a Delta instruction together; note which controls the Info box shows and what the rounding buttons then change.
 - [ ] `preview.ttHintingWaterfall` (panel, M10, handbook): Hinting Preview
   - Guess: Each waterfall row is one PPM from 8 to 80 with the tab's text set in the current instance at that size; the reference app would settle spacing and labels.
+  - Guess: The rows set the tab's master, since choosing a preview instance (preview.setInstance) is not built yet; the reference app's instance pop-up would settle what the waterfall follows when an instance is picked.
+  - Guess: A row holds at most 32 of the tab's glyphs, centred on the edited one, and leaves out glyphs that do not export; a long text in the reference app would settle how much of the line it shows.
+  - Guess: The rows are rebuilt at most four times a second while the font changes and not while the mouse button is down; the reference app would settle whether its waterfall follows a node drag live.
   - Observe: T3: open the Hinting Preview and switch through each scale; note the row labels and the spacing between rows.
 - [ ] `dialog.ttPreviewAddress` (panel, M10, handbook): Preview Address
   - Guess: Closing the dialog stops the server; the reference app would settle it.
+  - Guess: An Only this computer checkbox serves the page on loopback instead of the local network, and Update serves the font as it is now at the same address; the reference dialog shows neither as far as the handbook says, and seeing it would settle whether to keep them.
   - Observe: T3: choose Show Preview Address…, open the address from another device on the same network, close the dialog, then quit the app; note the port, whether the page was reachable, and at which of these moments the server stopped.
 - [ ] `trueTypeInstructor` (tool, M10, handbook): TrueType Instructor
-  - Guess: The tool sits after the Measurement tool in the toolbar and node selection works as with the Select tool (click, Shift+click, rubber band, Select All on the layer); the custom-parameter descriptions give its shortcut as I; the reference app would settle the rest.
+  - Guess: The tool sits after the Measurement and Thickness tools in the toolbar and node selection works as with the Select tool (click, Shift+click, rubber band, Select All on the layer); the custom-parameter descriptions give its shortcut as I; the reference app would settle the rest.
+  - Guess: S pairs the selected points along the stems: for vertical hinting by x, then y, each pair from the lower point (the origin) to the upper one; for horizontal hinting by y, then x, from left to right; the reference app would show how it pairs four or more points.
+  - Guess: Arrow keys, Return, Delete and Backspace do nothing in the Instructor, so the outline cannot be edited by accident; the reference app would settle whether they move nodes there.
   - Observe: T3: find the TrueType Instructor in the toolbar and note its position and shortcut; select nodes by rubber band, by Shift+click and with Select All, and note which of these gestures work.
 - [ ] `dialog.stemHistogram` (panel, M13, memory): Stem Histogram
   - Open (recalled, not confirmed): Charts the distribution returned by the stem report (autohint.ps.reportStems) so standard stems and alignment zones can be picked from its peaks and written to Font Info in one step. The pages read confirm the three histogram kinds; the chart controls listed are recalled.
