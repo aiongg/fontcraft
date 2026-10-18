@@ -417,7 +417,7 @@ pub fn plan_master(font: &Font, master_id: &str, switches: &Switches) -> ExportP
         if !strikes.is_empty() {
             if switches.export_sbix {
                 plan.sbix = Some(SbixPlan { strikes: strikes.clone() });
-                // TODO(M11.8 integration): plan.problems.extend(strike::strike_problems(font, master_id));
+                plan.problems.extend(strike::strike_problems(font, master_id));
             }
             if switches.cbdt {
                 plan.cbdt = Some(CbdtPlan { strikes });

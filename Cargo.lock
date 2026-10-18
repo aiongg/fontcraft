@@ -1085,6 +1085,7 @@ dependencies = [
  "fontcraft-fontinfo",
  "fontcraft-geom",
  "fontcraft-hinting",
+ "fontcraft-imagery",
  "fontcraft-interp",
  "fontcraft-model",
  "fontcraft-pathops",
