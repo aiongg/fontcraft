@@ -198,6 +198,7 @@ summary = "Read-only query that checks the stems and zones of each master agains
 ref = "PostScript Hinting › Alignment Zones; Standard Stems"
 status = "inferred"
 own = true
+notes = "M10.4: lists the findings of fontcraft_hinting::validate_font_hints for each master, with the rule id and the severity; the rules are in crates/hinting/src/validate.rs."
 
 [[command]]
 id = "hint.ps.getFontHints"
@@ -212,6 +213,7 @@ summary = "Read-only query returning the values that would be written to the Pri
 ref = "PostScript Hinting › Font-Wide Hints"
 status = "inferred"
 own = true
+notes = "M10.4: the values come from the CFF export's own Private dict code (fontcraft_compile::cff::private_dict_entries), so they cannot drift from what an export writes. Without `master` or `instance` it reports the first master; `instance` takes an index or a name and must be a static instance."
 
 # ---------------------------------------------------------------------------------------------
 # Autohinting at export
@@ -346,13 +348,17 @@ label = "Add Horizontal Hint"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, nodes?: [[nodeRef, nodeRef]] | [nodeRef], origin?: number, size?: number}"
+params = "{glyph: name, layer?: id, nodes?: [nodeRef] | [[nodeRef, nodeRef]], origin?: number, size?: number}"
 area = "hinting-ps"
 milestone = "M10"
 summary = "Edit View context-menu item that adds a horizontal stem hint (a band between two Y positions) to the layer. With two nodes selected the hint is linked to that pair; with several pairs selected, each on its own contour, one linked hint is made per pair. Invoked on exactly one node it creates a ghost hint attached to that node instead."
 ref = "PostScript Hinting › Stem Hints; Ghost Hints"
 status = "handbook"
-guesses = ["With no node selected the new hint sits at the vertical centre of the glyph's bounding box with the master's first horizontal stem as its size (50 units without stems); doing it in the reference app would settle it."]
+notes = "M10.4: crates/engine/src/cmd/hint_ps.rs. `nodes` lists the selected nodes; one node makes a ghost hint, two nodes one hint linked to both (the first is the origin), more nodes one hint per path, each path holding exactly two. Explicit pairs in `nodes` are our addition for headless use and may span paths. `layer` defaults to the main master's layer. New hints go to the end of the layer's list. Documented, not yet observed in the reference app."
+guesses = [
+  "With no node selected the new hint sits at the vertical centre of the bounding box of the layer's on-curve nodes with the master's first horizontal stem as its size (50 units without stems), and on an empty layer it starts at the baseline; doing it in the reference app would settle it.",
+  "Two selected nodes make one hint even when they lie on different paths (the stem of an O); selecting the outer and inner nodes of an O's stem in the reference app would settle it.",
+]
 observe = ["T1: open n with nothing selected and choose Add Horizontal Hint; note where the new hint starts and how wide it is (centred on the bounding box, the first stem's width, or something else)."]
 
 [[command]]
@@ -361,13 +367,14 @@ label = "Add Vertical Hint"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, nodes?: [[nodeRef, nodeRef]], origin?: number, size?: number}"
+params = "{glyph: name, layer?: id, nodes?: [nodeRef] | [[nodeRef, nodeRef]], origin?: number, size?: number}"
 area = "hinting-ps"
 milestone = "M10"
 summary = "Edit View context-menu item that adds a vertical stem hint (a band between two X positions) to the layer. Node-pair linking works as for the horizontal command; vertical hints have no ghost form."
 ref = "PostScript Hinting › Stem Hints"
 status = "handbook"
-guesses = ["With no node selected the new hint sits at the horizontal centre of the glyph's bounding box with the master's first vertical stem as its size (50 units without stems); doing it in the reference app would settle it."]
+notes = "M10.4: nodes as for hint.ps.addHorizontalHint; a single node is refused, since only horizontal hints have a ghost form. Documented, not yet observed in the reference app."
+guesses = ["With no node selected the new hint sits at the horizontal centre of the bounding box of the layer's on-curve nodes with the master's first vertical stem as its size (50 units without stems), and on an empty layer it is centred on the advance width; doing it in the reference app would settle it."]
 observe = ["T1: open n with nothing selected and choose Add Vertical Hint; note where the new hint starts and how wide it is (centred on the bounding box, the first stem's width, or something else)."]
 
 [[command]]
@@ -376,13 +383,14 @@ label = "Make Ghost Hint"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, hints?: [hintIndex], direction?: 'top'|'bottom'}"
+params = "{glyph: name, layer?: id, hints: [hintIndex], direction?: 'top'|'bottom'}"
 area = "hinting-ps"
 milestone = "M10"
 summary = "Context-menu item on the badge of an existing hint that converts it into a ghost hint: the hint keeps its origin and loses its size in favour of a top or bottom orientation. Which orientation the conversion picks by default is not stated."
 ref = "PostScript Hinting › Ghost Hints"
 status = "handbook"
-guesses = ["Make Ghost Hint keeps the hint's origin edge and makes a top ghost when that edge is the upper one of a stem that reaches a top zone, else a bottom ghost; a ghost hint becomes a stem hint again when hint.ps.setHintValues gives it a size; the reference app would settle both."]
+notes = "M10.4: a vertical hint is refused; hints are named by their position in hint.ps.listHints. Documented, not yet observed in the reference app."
+guesses = ["Make Ghost Hint keeps the hint's origin edge with its node link and makes a top ghost when that edge lies in or nearer to a top zone than to a bottom zone (the baseline zone counts as a bottom zone), else a bottom ghost; a ghost hint becomes a stem hint again when hint.ps.setHintValues gives it a size; the reference app would settle both."]
 observe = [
   "T1: in n, select the hint on the x-height stem and choose Make Ghost Hint; note whether it becomes a top or a bottom ghost. Then type a size for the ghost in the Info box and note whether it turns back into a stem hint.",
 ]
@@ -393,12 +401,13 @@ label = "Set Ghost Hint Direction"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, hints?: [hintIndex], direction: 'top'|'bottom'}"
+params = "{glyph: name, layer?: id, hints: [hintIndex], direction: 'top'|'bottom'}"
 area = "hinting-ps"
 milestone = "M10"
 summary = "Sets whether the selected ghost hint marks a top edge or a bottom edge. In the UI this is the pair of up/down icon buttons shown in the Info box while a ghost hint is selected."
 ref = "PostScript Hinting › Ghost Hints"
 status = "handbook"
+notes = "M10.4: a stem hint in the list is refused. Documented, not yet observed in the reference app."
 
 [[command]]
 id = "hint.ps.setHintValues"
@@ -406,13 +415,17 @@ label = "Set Hint Values"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, hint: hintIndex, origin?: number, size?: number}"
+params = "{glyph: name, layer?: id, hint: hintIndex, origin?: number, size?: number}"
 area = "hinting-ps"
 milestone = "M10"
 summary = "Changes the origin and/or size of a hint numerically; this is what typing into the Info box fields does while a hint is selected. How a typed value interacts with a node link (whether the link is dropped) is not stated."
 ref = "PostScript Hinting › Stem Hints"
 status = "handbook"
-guesses = ["Typing a value for a linked end unlinks that end and keeps the typed number; the reference app would settle it."]
+notes = "M10.4: the size field sets the other end at origin + size; a negative size is kept, as the source allows. Documented, not yet observed in the reference app."
+guesses = [
+  "Typing a value for a linked end unlinks that end and keeps the typed number; the reference app would settle it.",
+  "A typed origin leaves a linked other end on its node and, when the other end is a number, keeps the hint's size; typing an origin for a hint linked at one end in the reference app would settle it.",
+]
 observe = ["T1: select a hint linked to two nodes, type a new origin in the Info box, then move one of the nodes; note whether the hint follows the node (link kept) or stays at the typed value (link broken)."]
 
 [[command]]
@@ -421,7 +434,7 @@ label = "Attach Hint to Node"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, hint: hintIndex, end: 'origin'|'target', node: nodeRef | null}"
+params = "{glyph: name, layer?: id, hint: hintIndex, end: 'origin'|'target', node: nodeRef | null}"
 area = "hinting-ps"
 milestone = "M10"
 summary = "Links one end of a hint to a node so that the hint edge follows the node's coordinate; passing null detaches it and keeps the current number. In the UI this happens by dropping the hint's origin circle or size triangle on a node; the command form is our addition for headless use."
@@ -437,12 +450,13 @@ menu = []
 shortcut = "Delete"
 when = "editView"
 kind = "engine"
-params = "{glyph?: name, layer?: id, hints?: [hintIndex]}"
+params = "{glyph: name, layer?: id, hints: [hintIndex]}"
 area = "hinting-ps"
 milestone = "M10"
 summary = "Removes the selected hints from the layer. In the UI the Delete key does this while hint badges are selected."
 ref = "PostScript Hinting › Stem Hints"
 status = "handbook"
+notes = "M10.4: crates/engine/src/cmd/hint_ps.rs. Documented, not yet observed in the reference app."
 
 [[command]]
 id = "hint.ps.clearGlyphHints"
@@ -450,13 +464,14 @@ label = "Remove PostScript Hints"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyphs?: [names], layers?: [id] | 'all'}"
+params = "{glyphs?: [names], layers?: [layerId] | 'all'}"
 area = "hinting-ps"
 milestone = "M10"
 summary = "Removes every PostScript hint from the given layers so that the glyphs are autohinted at export again. The PostScript chapter names no such command (only deleting selected hints); added so the step is scriptable."
 ref = "PostScript Hinting › Manual hinting"
 status = "inferred"
 own = true
+notes = "M10.4: without `glyphs` it acts on every glyph and skips locked ones; a named locked glyph is refused. `layers` defaults to every layer of each glyph, since the export takes hints from any master layer when the main master has none."
 
 [[command]]
 id = "hint.ps.listHints"
@@ -471,6 +486,7 @@ summary = "Read-only query returning the layer's hints in order: direction, kind
 ref = "PostScript Hinting › Manual hinting"
 status = "inferred"
 own = true
+notes = "M10.4: each hint also lists its warnings (hinting.ps.manual.horizontalHintsNeedExactY, hinting.ps.manual.linkToExtremes, a link to a node the layer does not have); the list positions are the hint indexes the other hint.ps commands take."
 
 [[command]]
 id = "hint.ps.selectNextHint"
@@ -539,6 +555,7 @@ milestone = "M10"
 summary = "A horizontal stem or ghost hint only aligns nodes whose Y coordinate equals one of the hint's edges; nodes one unit off are not affected. One hint covers every node at that height, so a single hint per height per glyph is enough."
 ref = "PostScript Hinting › Manual hinting"
 status = "handbook"
+notes = "M10.4: hint.ps.listHints and the add commands warn when a numeric edge of a horizontal hint has no node of the layer's paths at exactly its y (on- or off-curve); a linked edge always has one. Components are not looked into. Documented, not yet observed in the reference app."
 
 [[behavior]]
 id = "hinting.ps.manual.display"
@@ -592,6 +609,8 @@ milestone = "M10"
 summary = "Hints give the best results when linked to extremum nodes; a UI may warn when a hint is linked to a node that is not an extreme in the hint's direction. The warning is our addition; the recommendation is the reference's."
 ref = "PostScript Hinting › Stem Hints"
 status = "handbook"
+notes = "M10.4: hint.ps.listHints, the add commands and hint.ps.attachHintToNode warn; the link is kept. Documented, not yet observed in the reference app."
+guesses = ["A linked node counts as an extreme when it is on-curve and its two neighbouring points (handles included) both lie on one side of it along the hint's axis, within half a unit; the reference app shows no such warning, so its Add Extremes on a test outline, which adds a node wherever it finds an extreme missing, is the nearest check."]
 
 [[behavior]]
 id = "hinting.ps.manual.overlapAllowed"
@@ -600,6 +619,7 @@ milestone = "M10"
 summary = "The editor accepts stem hints that overlap one another in the same direction; no error is shown. They are separated into hint-replacement groups at export (see hinting.ps.export.hintReplacement)."
 ref = "PostScript Hinting › Manual hinting"
 status = "handbook"
+notes = "M10.4: the add and edit commands accept overlapping hints without a warning. Documented, not yet observed in the reference app."
 
 [[behavior]]
 id = "hinting.ps.manual.ghostFromSingleNode"
@@ -608,7 +628,8 @@ milestone = "M10"
 summary = "Control-click or right-click on exactly one node and choosing Add Horizontal Hint creates a ghost hint attached to that node rather than a stem hint. Whether it starts as top or bottom is not stated; picking the side from the outline direction at the node is a reasonable default to verify."
 ref = "PostScript Hinting › Ghost Hints"
 status = "handbook"
-guesses = ["A ghost hint made from one node is a top ghost when the node lies in a top zone or nearer to a top zone than to a bottom zone, else a bottom ghost; doing it in the reference app on a node at the cap height and one at the baseline would settle it."]
+notes = "M10.4: hint.ps.addHorizontalHint with one node. Documented, not yet observed in the reference app."
+guesses = ["A ghost hint made from one node is a top ghost when the node lies in a top zone or nearer to a top zone than to a bottom zone (the baseline zone counts as a bottom zone), else a bottom ghost; a master without zones makes a top ghost above the middle of the layer's outline; doing it in the reference app on a node at the cap height and one at the baseline would settle it."]
 
 # ---------------------------------------------------------------------------------------------
 # Multiple masters and variable CFF2
