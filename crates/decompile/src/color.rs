@@ -194,7 +194,18 @@ impl Fill {
                 extend: extend(*e),
             },
             Brush::SweepGradient { c0, start_angle, end_angle, color_stops, extend: e } => {
-                Fill::Sweep { center: pt(*c0), start: finite(*start_angle), end: finite(*end_angle), stops: stops(color_stops)?, extend: extend(*e) }
+                // The brush turns clockwise, with the font's angles and stops reversed when it
+                // turned them around; the model counts counter-clockwise, as the font does.
+                let (mut start, mut end) = (360.0 - finite(*start_angle), 360.0 - finite(*end_angle));
+                let mut stops = stops(color_stops)?;
+                if start > end {
+                    std::mem::swap(&mut start, &mut end);
+                    stops.reverse();
+                    for s in &mut stops {
+                        s.offset = 1.0 - s.offset;
+                    }
+                }
+                Fill::Sweep { center: pt(*c0), start, end, stops, extend: extend(*e) }
             }
         })
     }
@@ -873,6 +884,11 @@ mod tests {
         // A curve whose top (75) lies below its control points (100).
         let n = Node::new;
         let curved = linear((0.0, 0.0), (1.0, 1.0), 1);
+        let conic = Gradient {
+            kind: GradientKind::Conic { center: fontcraft_geom::Point::new(0.5, 0.5), start_angle: 30.0, angle: 90.0, control_radius: 0.5 },
+            stops: vec![ColorStop { offset: 0.0, color: color(0, 1.0) }, ColorStop { offset: 1.0, color: color(1, 0.5) }],
+            extend: Extend::Pad,
+        };
         let shapes = {
             let mut a = Path::rect(100.0, 100.0, 500.0, 400.0);
             a.info.attrs.gradient = Some(shaded.clone());
@@ -888,7 +904,9 @@ mod tests {
                 ],
             );
             c.info.attrs.gradient = Some(curved.clone());
-            vec![Shape::Path(a), Shape::Path(b), Shape::Path(c)]
+            let mut d = Path::rect(200.0, 0.0, 400.0, 200.0);
+            d.info.attrs.gradient = Some(conic.clone());
+            vec![Shape::Path(a), Shape::Path(b), Shape::Path(c), Shape::Path(d)]
         };
         {
             let mut a = f.glyph_mut("A").unwrap();
@@ -914,7 +932,7 @@ mod tests {
                 other => panic!("{other:?}"),
             })
             .collect();
-        assert_eq!(paths.len(), 3);
+        assert_eq!(paths.len(), 4);
         assert_eq!(paths[0].1, [100.0, 100.0, 500.0, 400.0]);
         assert_eq!((paths[0].0.gradient.as_ref(), paths[0].0.fill_color), (Some(&shaded), None));
         assert_eq!((paths[1].0.gradient.as_ref(), paths[1].0.fill_color), (None, Some(color(1, 1.0))));
@@ -922,5 +940,12 @@ mod tests {
         let near = |a: f64, b: f64| (a - b).abs() < 0.02;
         assert!(near(start.x, 0.0) && near(start.y, 0.0) && near(end.x, 1.0) && near(end.y, 1.0), "{start:?} {end:?}");
         assert_eq!((stops, *extend), (&curved.stops, Extend::Reflect));
+        // The sweep keeps its counter-clockwise direction and its stop order.
+        let Some(Gradient { kind: GradientKind::Conic { center, start_angle, angle, .. }, stops, extend }) = &paths[3].0.gradient else {
+            panic!("{:?}", paths[3].0)
+        };
+        assert!(near(center.x, 0.5) && near(center.y, 0.5), "{center:?}");
+        assert!((start_angle - 30.0).abs() < 0.05 && (angle - 90.0).abs() < 0.05, "{start_angle} {angle}");
+        assert_eq!((stops, *extend), (&conic.stops, Extend::Pad));
     }
 }

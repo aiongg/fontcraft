@@ -76,6 +76,12 @@ pub fn kind(layer: &Layer) -> Option<ColorLayerKind> {
     }
 }
 
+/// The colour kind `layer` has in an export: [`kind`], and a master layer marked full colour is
+/// painted as a full-colour layer, as both oracles read it.
+pub fn export_kind(layer: &Layer) -> Option<ColorLayerKind> {
+    if layer.is_master_layer() { layer.info.attrs.full_color.then_some(ColorLayerKind::FullColor) } else { kind(layer) }
+}
+
 /// The colour layers of `glyph` associated with `master_id`, in paint order (bottom first), at
 /// most [`crate::MAX_COLOR_LAYERS`].
 pub fn color_layers<'a>(glyph: &'a Glyph, master_id: &str) -> Vec<(&'a Layer, ColorLayerKind)> {

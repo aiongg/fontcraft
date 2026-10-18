@@ -24,7 +24,7 @@
 use fontcraft_model::plist::Value;
 use fontcraft_model::{Font, Glyph, ModelError, Params, Target, param_flag};
 
-use crate::layers::{ColorLayerKind, ICOLOR_SIZES, color_layers, kind};
+use crate::layers::{ColorLayerKind, ICOLOR_SIZES, color_layers, export_kind};
 use crate::paint::{ColorRef, Paint, ShapeRef, drawn_shapes, glyph_paint};
 use crate::palette::{self, FOREGROUND_INDEX};
 use crate::strike::{self, Strike};
@@ -314,9 +314,10 @@ pub fn plan_between_masters(font: &Font, instance: &str, switches: &Switches) ->
     }
 }
 
-/// Whether any exported glyph has a colour layer, on any master.
+/// Whether any exported glyph has a colour layer, or a master layer marked full colour, on any
+/// master.
 pub fn has_color_layers(font: &Font) -> bool {
-    font.glyphs.as_arcs().iter().any(|g| g.export && g.layers.iter().any(|l| kind(l).is_some()))
+    font.glyphs.as_arcs().iter().any(|g| g.export && g.layers.iter().any(|l| export_kind(l).is_some()))
 }
 
 /// Whether `switches` would write a table from the font's colour layers or layered masters.
@@ -324,7 +325,7 @@ fn writes_color(font: &Font, switches: &Switches) -> bool {
     let layered = ((switches.color_layers_to_colr && switches.export_colr) || (switches.color_layers_to_svg && switches.export_svg))
         && font.masters.iter().any(|m| m.params.get(MASTER_COLOR).is_some());
     layered
-        || font.glyphs.as_arcs().iter().filter(|g| g.export).flat_map(|g| g.layers.iter()).filter_map(kind).any(|k| match k {
+        || font.glyphs.as_arcs().iter().filter(|g| g.export).flat_map(|g| g.layers.iter()).filter_map(export_kind).any(|k| match k {
             ColorLayerKind::Palette(_) | ColorLayerKind::FullColor => switches.export_colr || (switches.color_layers_to_svg && switches.export_svg),
             ColorLayerKind::IColor(_) => switches.export_sbix || switches.cbdt || (switches.sbix_to_svg.is_some() && switches.export_svg),
             ColorLayerKind::Svg => switches.export_svg,
@@ -712,6 +713,13 @@ mod tests {
         Arc::make_mut(&mut f.instances)[0].params.0.push(Param::new(EXPORT_COLR_TABLE, Value::Bool(false)));
         assert_eq!(plan(&f, &Target::Instance(0)), ExportPlan::default());
         assert!(has_color_layers(&f) && !has_color_layers(&Font::new("Plain")));
+
+        // A master layer marked full colour is a colour layer for the export.
+        let mut full = Font::new("Full");
+        full.glyph_mut("A").unwrap().layers[0].info.attrs.full_color = true;
+        Arc::make_mut(&mut full.instances).push(Instance { name: "Between".into(), location: vec![500.0], ..Default::default() });
+        assert!(has_color_layers(&full));
+        assert!(plan(&full, &Target::Instance(0)).refused());
     }
 
     #[test]

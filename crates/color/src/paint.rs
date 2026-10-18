@@ -27,7 +27,7 @@
 use fontcraft_geom::{BezPath, Point, Rect, Shape as _};
 use fontcraft_model::{Color, Dimension, Extend, Font, Glyph, Gradient, GradientKind, Layer, PaletteEntry, Shape, ShapeAttrs};
 
-use crate::layers::{ColorLayerKind, kind};
+use crate::layers::{ColorLayerKind, export_kind};
 use crate::palette::FOREGROUND_INDEX;
 use crate::{ColorError, MAX_LAYER_GLYPHS, Palettes};
 
@@ -137,12 +137,7 @@ pub const DEFAULT_STROKE: Color = Color::Rgba([0.0, 0.0, 0.0, 1.0]);
 pub fn glyph_paint(font: &Font, glyph: &Glyph, master_id: &str, palettes: &Palettes) -> Result<Option<Paint>, ColorError> {
     let _ = palettes;
     let mut layers = Vec::new();
-    let painted = glyph
-        .layers
-        .iter()
-        .filter(|l| l.master == master_id)
-        .filter_map(|l| if l.is_master_layer() { l.info.attrs.full_color.then_some((l, ColorLayerKind::FullColor)) } else { kind(l).map(|k| (l, k)) })
-        .take(crate::MAX_COLOR_LAYERS);
+    let painted = glyph.layers.iter().filter(|l| l.master == master_id).filter_map(|l| export_kind(l).map(|k| (l, k))).take(crate::MAX_COLOR_LAYERS);
     for (layer, kind) in painted {
         if !layer.info.attrs.coordinates.is_empty() {
             continue;
