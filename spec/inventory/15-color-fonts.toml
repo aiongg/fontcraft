@@ -1151,6 +1151,7 @@ milestone = "M11"
 summary = "sbix glyphs are made from bitmap files, not vectors. PNG, JPEG and TIFF sources are accepted."
 ref = "Color Fonts › sbix Fonts › Standard Bitmap Graphics"
 status = "handbook"
+notes = "Documented, not yet observed. A file of another kind (PDF, Photoshop, SVG) on an iColor layer leaves the glyph out of that strike, with a warning naming the file."
 guesses = [
   "PNG and JPEG data are stored as read, with the graphic types `png ` and `jpg `; TIFF is converted to PNG. Settled by exporting the sbix test font from the reference and reading the graphic types.",
 ]
@@ -1163,6 +1164,9 @@ milestone = "M11"
 summary = "A glyph has one image per pixel size and may have several sizes (for example 512, 128, 32, 16) so a renderer can pick the closest. Small sizes can be redrawn for clarity and spare the renderer from downscaling; above the largest size the image is scaled up and looks soft."
 ref = "Color Fonts › sbix Fonts › Standard Bitmap Graphics"
 status = "handbook"
+guesses = [
+  "When a glyph has two iColor layers of one size for a master, the first in the file is exported and the second is reported in a warning. Settled by exporting a glyph with two iColor 64 layers from the reference.",
+]
 
 [[behavior]]
 id = "color.sbix.sizeIsPixels"
@@ -1181,6 +1185,7 @@ ref = "Color Fonts › sbix Fonts › Preparing Images"
 status = "handbook"
 guesses = [
   "Unequal ratios are exported as they are, with a warning from export and from `color.describeExport`. Settled by exporting the non-square image in the sbix test font from the reference.",
+  "Two images count as the same ratio when the smaller one's width is within one pixel of the larger one's ratio at the smaller one's height. Settled by exporting images that differ by one pixel from the reference.",
 ]
 observe = ["sbix font: export and read sbix; note what happens to the non-square PNG (written, scaled, refused) and any message."]
 
@@ -1237,6 +1242,9 @@ milestone = "M11"
 summary = "The image on an iColor layer is drawn at image pixels divided by the layer's pixel size, in ems. A layer size larger than the image makes it appear smaller and a smaller size makes it appear larger; changing the size is the way to scale it."
 ref = "Color Fonts › sbix Fonts › Adding Images to Glyphs"
 status = "handbook"
+guesses = [
+  "An image scaled, rotated or flipped on its iColor layer is exported at its pixel size, with a warning, and its box's bottom-left corner gives the origin offsets. Settled by scaling an image on an iColor layer in the reference, exporting, and reading sbix.",
+]
 observe = ["sbix font: double-click an iColor layer entry and type 256; note whether the image is drawn half as large as at 128."]
 
 [[behavior]]
@@ -1262,6 +1270,8 @@ status = "handbook"
 notes = "Neither oracle builds sbix (both ignore `sbixSize` layers silently) and no corpus source has an iColor layer; nanoemoji's sbix output gives the table layout (version 1, flags 1, 72 pixels per inch). write-fonts' sbix types leave the strike layout to the caller, so FontCraft serialises the table itself."
 guesses = [
   "A glyph whose image file is missing at export is left out of that strike, with a warning naming the glyph and the file. Settled by exporting the sbix test font from the reference with one file moved away.",
+  "The origin offsets are the bottom-left corner of the image's box on the iColor layer, in strike pixels from the glyph origin, rounded; the advance width comes from the master layer. Settled by reading sbix from the reference export of a glyph whose image was moved.",
+  "The whole image file is written; a crop set on an iColor layer's image is not applied. Settled by cropping an image on an iColor layer in the reference and exporting.",
 ]
 observe = ["sbix font: export with no colour parameters and read the result; note whether sbix is written, the origin offsets, and what happens to a glyph whose image file is missing."]
 
