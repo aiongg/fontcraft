@@ -1,0 +1,15 @@
+[package]
+name = "fontcraft-io-pdf"
+description = "FontCraft PDF import: outlines and images from PDF pages (L3)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+fontcraft-model.workspace = true
+lopdf.workspace = true

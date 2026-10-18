@@ -51,10 +51,14 @@ fontcraft-imagery = { path = "crates/imagery" }
 fontcraft-tables = { path = "crates/tables" }
 fontcraft-proof = { path = "crates/proof" }
 fontcraft-plugins = { path = "crates/plugins" }
+fontcraft-io-pdf = { path = "crates/io-pdf" }
 
 # The Craft suite's shared libraries (MIT OR Apache-2.0), pinned to one commit of craft-libs.
 # Bump the rev in its own commit, with the gate (docs/decisions/0008-shared-suite-libraries.md).
 craft-atomic = { git = "https://github.com/storytold/craft-libs", rev = "e9546e191dd62f2bc1d61eca45dbdc2f1b3c1d8e" }
+# The system print spooler (CUPS on macOS and Linux, the XPS print API on Windows), for printing
+# PDF proofs (M12.36).
+craft-print = { git = "https://github.com/storytold/craft-libs", rev = "e9546e191dd62f2bc1d61eca45dbdc2f1b3c1d8e" }
 
 # foundation (all MIT OR Apache-2.0 unless noted)
 kurbo = { version = "0.13", features = ["serde"] }
@@ -98,6 +102,10 @@ harfrust = { version = "0.14", default-features = false, features = ["std"] }
 unicode-bidi = { version = "0.3", default-features = false }
 # PDF writing for proof sheets (MIT OR Apache-2.0). Pure Rust, builds for wasm.
 pdf-writer = "0.15"
+# PDF reading for `io-pdf` (MIT): the parser, Flate streams and content-stream operations. Without
+# its default features: no rayon, no clock. `wasm_js` lets its random-number source build for the
+# browser and does nothing on native targets.
+lopdf = { version = "0.45", default-features = false, features = ["wasm_js"] }
 
 # Rasterising for `render` (BSD-3-Clause): nonzero fills, anti-aliased, PNG output. Builds for wasm.
 tiny-skia = "0.12"
@@ -120,6 +128,9 @@ eframe = { version = "0.36", default-features = false }
 # The system file and folder choosers of the desktop app (MIT). On Linux through the desktop
 # portal only, so the build needs no GTK.
 rfd = { version = "0.17", default-features = false, features = ["xdg-portal"] }
+# HTTPS for the desktop app's network extension indexes (MIT OR Apache-2.0). rustls with the ring
+# provider and the bundled Mozilla root certificates: no OpenSSL. Never in a crate that builds for wasm.
+ureq = { version = "3.4", default-features = false, features = ["rustls"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

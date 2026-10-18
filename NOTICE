@@ -49,9 +49,15 @@ compiled into the desktop app through the epaint_default_fonts crate, are Ubuntu
 Font Licence 1.0), Hack (MIT and the Bitstream Vera licence), Noto Emoji (SIL Open Font License 1.1) and emoji-icon-font (MIT);
 their licence texts ship with that crate.
 
-craft-atomic, the Craft suite's atomic file writer, is fetched from git
-(https://github.com/storytold/craft-libs, at the commit pinned in Cargo.toml) under MIT OR
-Apache-2.0.
+The io-pdf crate reads PDF through lopdf and nom (MIT); lopdf also brings in encoding_rs (MIT or
+Apache-2.0, with BSD-3-Clause data). The desktop app fetches HTTPS through ureq (MIT OR
+Apache-2.0) on rustls (Apache-2.0, ISC or MIT), ring (Apache-2.0 and ISC), rustls-webpki and
+untrusted (ISC) and subtle (BSD-3-Clause), with Mozilla's root certificates from webpki-roots
+(CDLA-Permissive-2.0).
+
+craft-atomic, the Craft suite's atomic file writer, and craft-print, its system print spooler, are
+fetched from git (https://github.com/storytold/craft-libs, at the commit pinned in Cargo.toml)
+under MIT OR Apache-2.0.
 
 References
 
