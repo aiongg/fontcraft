@@ -7,7 +7,10 @@
 //! - The menu has a section for the object, then a section for the glyph (`canvas`), split by a
 //!   separator. The object section is `canvas.node`, `canvas.segment`, `canvas.anchor`,
 //!   `canvas.component` or `canvas.guide` for the clicked object, and `canvas.path` when that
-//!   object's path is wholly selected. On empty canvas it follows the selection.
+//!   object's path is wholly selected. On empty canvas it follows the selection. On a placed
+//!   image where no other object lies it is `canvas.image` (`editView.imageContextMenu`): Unlock
+//!   Image on a locked image, Set Crop to Layer Bounds and Reset Crop on an unlocked one, which
+//!   the click selects (`canvas::images`).
 //! - Items keep the order of their inventory rows ([`ORDER`]) and are greyed out as menu bar
 //!   items are (`tools_glue::selection_supplies`). The selection also hides items that do not
 //!   apply (Unlock Path on an unlocked path) and checks checkable ones ([`super::item_state`]).
@@ -69,6 +72,8 @@ pub const COMPONENT: &str = "canvas.component";
 pub const GUIDE: &str = "canvas.guide";
 /// A PostScript hint's badge or marker, while Show Hints is on.
 pub const HINT: &str = "canvas.hint";
+/// A placed image, locked or not (`editView.imageContextMenu`).
+pub const IMAGE: &str = "canvas.image";
 
 /// The TrueType Instructor's section, shown while that tool is active.
 pub const INSTRUCTOR: &str = "canvas.ttInstructor";
@@ -225,6 +230,7 @@ pub fn open(app: &mut FontcraftApp, at: Point, space: Space) -> Result<(), Strin
     let hint = crate::canvas::hints_ps::hint_at(app, at, space);
     let (pos, hit) = tools_glue::hit_at(app, at, space)?;
     let hit = if hint.is_some() { None } else { hit };
+    let on_image = hint.is_none() && hit.is_none() && crate::canvas::images::context_hit(app, pos);
     let screen = match space {
         Space::Screen => at,
         Space::Font => tools_glue::current_view(app).map_or(at, |v| v.to_screen(at)),
@@ -241,7 +247,13 @@ pub fn open(app: &mut FontcraftApp, at: Point, space: Space) -> Result<(), Strin
         tab.selection = Selection::from_items(h.items());
     }
     let scene = tools_glue::scene(font, tab).ok_or("the edited glyph has no layer in the active master")?;
-    let kinds = if hint.is_some() { vec![HINT, CANVAS] } else { kinds(&scene, &tab.selection, hit.as_ref()) };
+    let kinds = if hint.is_some() {
+        vec![HINT, CANVAS]
+    } else if on_image {
+        vec![IMAGE, CANVAS]
+    } else {
+        kinds(&scene, &tab.selection, hit.as_ref())
+    };
     let (id, glyph) = (tab.id, tab.edited_glyph().unwrap_or_default().to_string());
     let mut sections = sections(&app.session, &app.state, &kinds);
     if app.tools.toolbox.active_id() == fontcraft_tools::tt_instructor::ID {
@@ -321,6 +333,7 @@ pub fn sections(session: &Session, state: &UiState, kinds: &[&'static str]) -> V
     let visible = |id: &str| match (&scene, selection) {
         _ if on_guide && matches!(id, "guide.add" | "guide.addGlobal") => false,
         _ if HIDDEN.contains(&id) => false,
+        _ if id.starts_with("image.") => crate::canvas::images::menu_visible(session, state, id),
         (Some(scene), Some(selection)) if id == "cornerComponent.decompose" => !selected_corners(scene, selection).is_empty(),
         (Some(scene), Some(selection)) => item_state::visible(scene, selection, id),
         _ => id != GUIDE_PROPERTIES,

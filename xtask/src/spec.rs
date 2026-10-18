@@ -12,8 +12,18 @@ const MODIFIERS: &[&str] = &["Cmd", "Ctrl", "Alt", "Shift"];
 /// Focus scopes a `when` may name besides `tool:<id>` and `panel:<id>` (decision 0004).
 const SCOPES: &[&str] = &["editView", "textMode", "fontView", "dialog"];
 /// Context menus a command's `context` may list.
-const CONTEXTS: &[&str] =
-    &["canvas", "canvas.node", "canvas.segment", "canvas.path", "canvas.guide", "canvas.anchor", "canvas.component", "layers.row", "toolbar"];
+const CONTEXTS: &[&str] = &[
+    "canvas",
+    "canvas.node",
+    "canvas.segment",
+    "canvas.path",
+    "canvas.guide",
+    "canvas.anchor",
+    "canvas.component",
+    "canvas.image",
+    "layers.row",
+    "toolbar",
+];
 
 pub struct Area {
     pub id: String,

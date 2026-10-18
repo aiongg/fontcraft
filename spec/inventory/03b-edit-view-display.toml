@@ -124,6 +124,13 @@ milestone = "M11"
 summary = "Info box contents while a placed image is selected: position, displayed dimensions, rotation, a reveal-file button and a lock button."
 ref = "Edit View › Images › Manipulating Images"
 status = "handbook"
+notes = "Documented, not yet observed. Shown in place of the selection part while the edited side's image is selected. X and Y run `image.setTransform` with `x` or `y`; width and height with `width` or `height` (each on its own: the box's proportion lock is not used); the angle with `rotation`; the arrow runs `image.revealFile`; the lock button runs `image.lock`, after which the image can no longer be selected and the box closes. A sheared image shows X and Y only."
+guesses = [
+  "Width and height are edited independently, without a proportion lock. Settled by typing a new width for a selected image in the reference's Info box and reading its height.",
+]
+observe = [
+  "Image font: select H's image, type a width in the Info box; note whether the height follows.",
+]
 
 [[panel]]
 id = "infoBox.annotations"
@@ -647,6 +654,14 @@ milestone = "M11"
 summary = "Toggles the display of images placed on glyph layers. Glyphs that have no paths and no components show their image regardless of this switch."
 ref = "Edit View › Glyph Display › View Options; Edit View › Images › Adding Images"
 status = "handbook"
+notes = "Documented, not yet observed. A display toggle, on by default. It covers the edited glyph's image in Edit View; Font View cells are M11.16's. A layer side with no paths and no components shows its image whatever the toggle says."
+guesses = [
+  "Show Image is on in a new window. Settled by opening a file with a placed image in a fresh reference installation and reading the View menu.",
+  "Edit View draws the image of the edited glyph only, not the images of the other glyphs in the line. Settled by typing two glyphs with images in one Edit View tab in the reference.",
+]
+observe = [
+  "Image font: open H in Edit View, turn View › Show Image off; note whether H's image disappears and I's (an empty glyph) stays.",
+]
 
 [[command]]
 id = "view.showMeasurementLine"
@@ -2049,6 +2064,7 @@ milestone = "M11"
 summary = "Shows the image's source file in the system file manager. It is the right-pointing arrow in the image Info box."
 ref = "Edit View › Images › Manipulating Images"
 status = "handbook"
+notes = "Documented, not yet observed. Reached from the image Info box's arrow button. The stored path is resolved against the document's folder; a file that cannot be found is refused with a message, and a window without a file manager (the browser, tests) says it cannot show files."
 
 [[command]]
 id = "image.lock"
@@ -2068,6 +2084,7 @@ notes = "Documented, not yet observed. Locking a locked image changes nothing an
 id = "image.unlock"
 label = "Unlock Image"
 menu = []
+context = ["canvas.image"]
 shortcut = ""
 kind = "engine"
 params = "{glyph: name, layer?: id, side?: \"foreground\" | \"background\"}"
@@ -2099,6 +2116,7 @@ observe = ["Image font: Option-Control-drag a handle of H's image to crop it and
 id = "image.setCropToLayerBounds"
 label = "Set Crop to Layer Bounds"
 menu = []
+context = ["canvas.image"]
 shortcut = ""
 kind = "engine"
 params = "{glyph: name, layer?: id, side?: \"foreground\" | \"background\"}"
@@ -2117,6 +2135,7 @@ observe = ["Image font: choose Set Crop to Layer Bounds on H's image; note the r
 id = "image.resetCrop"
 label = "Reset Crop"
 menu = []
+context = ["canvas.image"]
 shortcut = ""
 kind = "engine"
 params = "{glyph: name, layer?: id, side?: \"foreground\" | \"background\"}"
@@ -2150,6 +2169,13 @@ milestone = "M11"
 summary = "Entries added to the canvas context menu when it is opened on a placed image."
 ref = "Edit View › Images › Manipulating Images"
 status = "handbook"
+notes = "Documented, not yet observed. The image section (`canvas.image`) shows when a right-click lands on the edited side's image where no node, segment, anchor, component or guide lies: Unlock Image on a locked image, Set Crop to Layer Bounds and Reset Crop on an unlocked one. The click selects an unlocked image. The glyph section follows, as on empty canvas."
+guesses = [
+  "A locked image's menu offers only Unlock Image, and an unlocked image's only the crop items. Settled by right-clicking a locked and an unlocked image in the reference.",
+]
+observe = [
+  "Image font: lock H's image and right-click it; note the items. Unlock it and right-click again.",
+]
 
 [[behavior]]
 id = "image.supportedFormats"
@@ -2171,6 +2197,14 @@ milestone = "M11"
 summary = "Dropping an image file on a glyph cell in Font View or on a glyph in Edit View places it on that glyph's layer, the same as Glyph > Add Image…."
 ref = "Edit View › Images › Adding Images"
 status = "handbook"
+notes = "Documented, not yet observed. On the canvas (Font View cells are M11.16's): one dropped file runs `glyph.addImage` on the edited glyph's active layer, on the side being edited; several files run it once with the files matched to glyph names. Files dropped in the web build carry no path and are not placed yet."
+guesses = [
+  "A file dropped anywhere on the canvas goes on the edited glyph, not on the glyph under the pointer. Settled by dropping an image on a glyph of the line that is not being edited in the reference.",
+  "Several files dropped on the canvas are matched to glyph names, as several files given to Add Image are. Settled by dropping two files on Edit View in the reference.",
+]
+observe = [
+  "Image font: drag H.png onto Edit View showing H; note the image's place. Drag H.png and I.png together; note where each lands.",
+]
 
 [[behavior]]
 id = "image.storedAsRelativePath"
@@ -2179,7 +2213,7 @@ milestone = "M11"
 summary = "The document records only the image's path relative to the font file. If the file has moved or the path no longer resolves, the canvas shows a missing-image symbol in its place."
 ref = "Edit View › Images › Adding Images"
 status = "handbook"
-notes = "Documented, not yet observed. Every save into another folder, the first save included, rewrites the image paths relative to the new file; undo and redo afterwards give the steps they restore paths relative to the new file too. The missing-image marker is M11.13's."
+notes = "Documented, not yet observed. Every save into another folder, the first save included, rewrites the image paths relative to the new file; undo and redo afterwards give the steps they restore paths relative to the new file too. Edit View draws a stored path that does not resolve, or a file that cannot be decoded, as a square with a cross at the image's position; a format kept as a reference but not decoded (PSD) as the square with the format's name."
 guesses = [
   "A file outside the document's folder is stored with a path that climbs out of it (`../scans/A.png`), as the handbook says only a relative path is stored. Settled by adding an image from another folder in the reference and reading the saved path.",
   "An image added to a document that has never been saved keeps its absolute path until the first save, which rewrites it relative to the new file. Settled by adding an image to an untitled document in the reference and saving it.",
@@ -2197,6 +2231,7 @@ milestone = "M11"
 summary = "A glyph with neither paths nor components shows its image even when View > Show Image is off."
 ref = "Edit View › Images › Adding Images"
 status = "handbook"
+notes = "Documented, not yet observed. Read per layer side: the edited side shows its image when it has no paths and no components, whatever Show Image says. Image shapes and shapes the model keeps unread do not count."
 
 [[behavior]]
 id = "image.ignoredAtExport"
@@ -2226,6 +2261,18 @@ milestone = "M11"
 summary = "A selected image can be dragged to move it, resized with the bounding box or the Scale tool, rotated with the Rotate tool and transformed with the Transformations palette. Ctrl+Alt+dragging a handle crops instead of resizing."
 ref = "Edit View › Images › Manipulating Images"
 status = "handbook"
+notes = "Documented, not yet observed. A click on the image with the Select tool selects it alone, where no other object lies. Dragging it runs `image.setTransform` with `x` and `y`; its knobs (shown while Show Bounding Box is on, as for other selections) run it with `x`, `y`, `width` and `height` about the opposite knob (Shift: proportional; Alt: about the centre); Ctrl+Alt on a knob runs `image.setCrop`, in whole pixels within the image. With the image selected and nothing else, the Rotate tool turns it about the centre of its shown part (Shift: steps of 90°) and the Scale tool scales it about that centre (Shift: proportional). Each drag is one undo step. Scaling along the image's own axes keeps a rotated image rectangular. Not yet: the Transformations palette, nudging with the arrow keys, and the Scale and Rotate tools' reference point."
+guesses = [
+  "The image's knobs are the bounding box's, so they show only while Show Bounding Box is on, and cropping needs them too. Settled by selecting an image in the reference with Show Bounding Box off and Ctrl+Alt-dragging its corner.",
+  "Shift while moving the image keeps the larger of the horizontal and vertical moves. Settled by Shift-dragging an image in the reference.",
+  "A crop drag snaps the crop to whole image pixels. Settled by cropping an image in the reference and reading the saved crop.",
+  "The Rotate and Scale tools turn and scale a selected image about the centre of its shown part, ignoring a placed reference point. Settled by placing a reference point and rotating an image with the Rotate tool in the reference.",
+]
+observe = [
+  "Image font: select H's image and drag it; drag a corner knob with and without Shift; note what stays fixed.",
+  "Image font: Ctrl+Alt-drag a corner of H's image; note the crop and whether it snaps to pixels.",
+  "Image font: rotate H's image with the Rotate tool; note the pivot.",
+]
 
 [[behavior]]
 id = "image.lockedNotSelectable"
@@ -2234,7 +2281,7 @@ milestone = "M11"
 summary = "A locked image ignores clicks and drags and is skipped by selection and transformation; only the context menu's Unlock Image reaches it."
 ref = "Edit View › Images › Manipulating Images"
 status = "handbook"
-notes = "Documented, not yet observed. On the command side: every image command except `image.unlock`, and Add Image on that layer, refuses a locked image. The canvas gestures are M11.13's."
+notes = "Documented, not yet observed. On the command side: every image command except `image.unlock`, and Add Image on that layer, refuses a locked image. On the canvas: a click or drag on a locked image passes through it to what lies under it (a marquee, or nothing), its knobs are never offered, and the Rotate and Scale tools leave it alone; a right-click on it opens the image section with Unlock Image."
 
 # ───────────────────────────── Previewing & testing ─────────────────────────────
 

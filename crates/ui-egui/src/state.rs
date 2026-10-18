@@ -544,6 +544,9 @@ pub struct DisplayOptions {
     pub master_compatibility: bool,
     /// Switching masters keeps the selection, by index (`edit.keepLayerSelectionInSync`).
     pub keep_layer_selection_in_sync: bool,
+    /// Placed images on glyph layers (`view.showImage`); a layer with no paths and no
+    /// components shows its image regardless.
+    pub show_image: bool,
 }
 
 impl Default for DisplayOptions {
@@ -565,6 +568,7 @@ impl Default for DisplayOptions {
             hints: false,
             master_compatibility: false,
             keep_layer_selection_in_sync: false,
+            show_image: true,
         }
     }
 }

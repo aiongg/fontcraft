@@ -17,6 +17,9 @@
 //! While PostScript hints are selected, the box shows the first of them instead
 //! ([`super::info_box_ps_hint`]).
 //!
+//! While a placed image is selected, the box shows the image's position, size and rotation
+//! instead ([`super::info_box_image`]).
+//!
 //! While one of the Annotation tools is the chosen tool, the box shows the annotation palette
 //! instead (`infoBox.annotations`): one button per sub-tool, in the order of
 //! `fontcraft_tools::annotate::SUB_TOOLS`, each running `annotation.setTool`.
@@ -87,7 +90,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     super::info_box_metrics::show(app, ui, pending);
     super::info_box_component::show(app, ui, pending);
     super::info_box_corner::show(app, ui, pending);
-    if super::info_box_ps_hint::show(app, ui, pending) {
+    if super::info_box_image::show(app, ui, pending) || super::info_box_ps_hint::show(app, ui, pending) {
         return;
     }
     let Some(info) = read(app) else { return };
