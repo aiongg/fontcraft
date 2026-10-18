@@ -122,6 +122,7 @@ pub struct PanelState {
     pub shape_order_window: crate::dialogs::shape_order_window::ShapeOrderWindowState,
     #[serde(skip)]
     pub axis_mappings: crate::dialogs::axis_mappings::AxisMappingsState,
+    pub cross_axis: crate::dialogs::cross_axis::CrossAxisState,
 }
 
 impl Default for PanelState {
@@ -155,6 +156,7 @@ impl Default for PanelState {
             compare_table: Default::default(),
             shape_order_window: Default::default(),
             axis_mappings: Default::default(),
+            cross_axis: Default::default(),
         }
     }
 }

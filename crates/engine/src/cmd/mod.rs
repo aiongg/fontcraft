@@ -127,7 +127,7 @@ mod cid;
 mod construction;
 mod corner;
 mod corner_helpers;
-mod cross_axis;
+pub mod cross_axis;
 mod derived_glyphs;
 mod detect;
 mod drag_aids;

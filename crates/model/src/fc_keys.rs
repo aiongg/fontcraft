@@ -65,6 +65,9 @@ pub const LINKED_SOURCE: &str = "com.fontcraft.linkedSource";
 /// "values"?: {name: value}, "ignored"?: [{"check", "glyph"?, "master"?, "location"?, "reason"?,
 /// "date"?}], "profiles"?: [profile]}` (M12.59, `fontcraft_audit::profile`).
 pub const AUDIT: &str = "com.fontcraft.audit";
+/// The font's cross-axis mappings: `{"description"?, "mappings": [{"description"?, "input": {tag:
+/// number}, "output": {tag: number}}]}` in design coordinates (M13.48, `font.setCrossAxisMappings`).
+pub const CROSS_AXIS_MAPPINGS: &str = "com.fontcraft.crossAxisMappings";
 
 /// Every key with the object it is stored on.
 pub const ALL: &[(&str, Owner)] = &[
@@ -84,6 +87,7 @@ pub const ALL: &[(&str, Owner)] = &[
     (EXPORT_PROFILES, Owner::Settings),
     (LINKED_SOURCE, Owner::Glyph),
     (AUDIT, Owner::Font),
+    (CROSS_AXIS_MAPPINGS, Owner::Font),
 ];
 
 /// Whether `key` is one of FontCraft's own keys.
