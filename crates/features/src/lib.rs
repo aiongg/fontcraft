@@ -64,6 +64,7 @@ pub mod implicit;
 mod kern;
 pub mod lower;
 pub mod marks;
+pub mod optical;
 pub mod params;
 mod properties;
 pub mod registry;
