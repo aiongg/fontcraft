@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ttFont sfntVersion="OTTO" ttLibVersion="4.66">
+
+  <GlyphOrder>
+    <GlyphID id="0" name=".notdef"/>
+    <GlyphID id="1" name="cid00001"/>
+    <GlyphID id="2" name="cid00002"/>
+    <GlyphID id="3" name="cid00003"/>
+    <GlyphID id="4" name="cid00004"/>
+  </GlyphOrder>
+
+  <maxp>
+    <tableVersion value="0x5000"/>
+    <numGlyphs value="5"/>
+  </maxp>
+
+  <CFF>
+    <major value="1"/>
+    <minor value="0"/>
+    <CFFFont name="Test-CID">
+      <ROS Registry="Adobe" Order="Identity" Supplement="0"/>
+      <isFixedPitch value="0"/>
+      <ItalicAngle value="0"/>
+      <UnderlinePosition value="-100"/>
+      <UnderlineThickness value="50"/>
+      <PaintType value="0"/>
+      <CharstringType value="2"/>
+      <FontMatrix value="0.001 0 0 0.001 0 0"/>
+      <FontBBox value="-50 -120 1000 880"/>
+      <StrokeWidth value="0"/>
+      <CIDFontVersion value="0"/>
+      <CIDFontRevision value="0"/>
+      <CIDFontType value="0"/>
+      <CIDCount value="5"/>
+      <FDSelect format="3"/>
+      <FDArray>
+        <FontDict index="0">
+          <FontName value="Test-CID-Alpha"/>
+          <FontMatrix value="0.001 0 0 0.001 0 0"/>
+          <Private>
+            <BlueValues value="-20 0 600 620"/>
+            <BlueScale value="0.039625"/>
+            <BlueShift value="7"/>
+            <BlueFuzz value="1"/>
+            <StdHW value="40"/>
+            <ForceBold value="0"/>
+            <LanguageGroup value="0"/>
+            <ExpansionFactor value="0.06"/>
+            <initialRandomSeed value="0"/>
+            <defaultWidthX value="0"/>
+            <nominalWidthX value="0"/>
+            <Subrs>
+              <CharString index="0">
+                0 100 rlineto
+                return
+              </CharString>
+            </Subrs>
+          </Private>
+        </FontDict>
+        <FontDict index="1">
+          <FontName value="Test-CID-Beta"/>
+          <Weight value="Regular"/>
+          <Private>
+            <BlueScale value="0.039625"/>
+            <BlueShift value="7"/>
+            <BlueFuzz value="1"/>
+            <ForceBold value="0"/>
+            <LanguageGroup value="0"/>
+            <ExpansionFactor value="0.06"/>
+            <initialRandomSeed value="0"/>
+            <defaultWidthX value="300"/>
+            <nominalWidthX value="0"/>
+            <Subrs>
+              <CharString index="0">
+                100 0 rlineto
+                return
+              </CharString>
+              <CharString index="1" raw="1">
+                9292050b   
+              </CharString>
+            </Subrs>
+          </Private>
+        </FontDict>
+      </FDArray>
+      <CharStrings>
+        <CharString name=".notdef" fdSelectIndex="0">
+          endchar
+        </CharString>
+        <CharString name="cid00001" fdSelectIndex="0">
+          100 100 rmoveto
+          -107 callsubr
+          endchar
+        </CharString>
+        <CharString name="cid00002" fdSelectIndex="0">
+          50 50 rmoveto
+          endchar
+        </CharString>
+        <CharString name="cid00003" fdSelectIndex="1">
+          200 0 0 rmoveto
+          -107 callsubr
+          endchar
+        </CharString>
+        <CharString name="cid00004" fdSelectIndex="1">
+          endchar
+        </CharString>
+      </CharStrings>
+    </CFFFont>
+
+    <GlobalSubrs>
+    </GlobalSubrs>
+  </CFF>
+
+</ttFont>
