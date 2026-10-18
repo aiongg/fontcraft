@@ -1876,6 +1876,11 @@ milestone = "M12"
 summary = "Translates layout source between syntaxes without compiling into a font: a VOLT project or a font carrying VOLT source tables to feature code, and FontDame text to feature code or to an XML table dump."
 ref = "fontTools voltLib.voltToFea, mtiLib (main)"
 status = "docs"
+notes = "VOLT: a port of voltToFea that writes the text fontTools writes; the tests compare it with fontTools' output, including the oracle's test projects Nutso and NamdhinggoSIL1006; a font input is read through its TSIV table and its glyph order renames the project's glyphs by id, as voltToFea does. FontDame: the reader ports mtiLib; mtiLib builds binary tables, so the feature-code form is ours: one lookup block per lookup named GSUB_<name> or GPOS_<name>, `subtable;` between the file's subtables, a called lookup defined before the lookups that call it (a warning names the lookups that move), languagesystem statements and one feature block per tag. Several FontDame files convert together, so GSUB and GPOS lookup flags can name the mark attachment classes and mark filtering sets of the GDEF file. --to ttx compiles the feature code against --font and prints the GDEF, GSUB and GPOS it builds; without --font it is refused. What feature code cannot hold is printed as a warning and left out: features no language system lists, class 0 without a glyph order, mark attachment classes without their GDEF file. A FontDame cmap file is refused: it is not layout."
+guesses = [
+  "FontDame backtrack sequences (glyph, class and coverage rules, reverse chaining) are read nearest glyph first, as the binary stores them, and reversed for feature code; a FontDame file with a multi-glyph backtrack and the table the reference tool compiles from it would settle it.",
+  "A FontDame `U XXXX` glyph reference becomes uniXXXX (uXXXXX above U+FFFF), where mtiLib takes the Adobe Glyph List name when there is one; a glyph-list lookup in the tables crate would match it.",
+]
 
 [[cli]]
 id = "features normalize"
@@ -2744,12 +2749,13 @@ label = "Convert Layout Source Syntax"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{input: path | [path], to: \"fea\"|\"ttx\", tables?: [tag], font?: path, output?: path}"
+params = "{input: path | [path], to?: \"fea\"|\"ttx\", tables?: [\"GDEF\"|\"GSUB\"|\"GPOS\"], font?: path, face?: number, output?: path, noClobber?: bool}"
 area = "features"
 milestone = "M12"
 summary = "Translates VOLT or FontDame layout source to feature code or to an XML dump of the tables it describes, and returns the text or path with a list of constructs that could not be expressed."
 ref = "docs/spec/20-cli.md › features"
 status = "docs"
+notes = "The engine side of `features convert`; see that row for the conversion. Returns {text, syntax, warnings} or, with output, {output, syntax, warnings}; syntax is \"volt\" or \"fontdame\", told from the input (a font with a TSIV table, a VOLT keyword first, a FontDame header or block keyword first). to: \"ttx\" needs font. Journaled, not a query, because output writes a file."
 
 [[command]]
 id = "layout.normalize"
