@@ -476,8 +476,8 @@ mod tests {
     /// The path and the socket address of `address` (`http://ip:port/token/`).
     fn split(address: &str) -> (SocketAddr, String) {
         let rest = address.strip_prefix("http://").unwrap();
-        let slash = rest.find('/').unwrap();
-        (rest[..slash].parse().unwrap(), rest[slash..].to_string())
+        let (host, path) = rest.split_once('/').unwrap();
+        (host.parse().unwrap(), format!("/{path}"))
     }
 
     /// Sends `request` as is and returns the status code and the body.
@@ -508,7 +508,7 @@ mod tests {
         assert_eq!(page, (200, site().page.into_bytes()));
         let (_, path) = split(&server.address);
         assert_eq!(get(at, &format!("{path}{FONT_FILE}")), (200, site().font));
-        assert_eq!(get(at, &path[..path.len() - 1]).0, 301, "the page's address without its final slash redirects");
+        assert_eq!(get(at, path.strip_suffix('/').unwrap()).0, 301, "the page's address without its final slash redirects");
         assert_eq!(get(at, "/").0, 404, "nothing is served outside the token");
         assert_eq!(get(at, &format!("/{FONT_FILE}")).0, 404);
         assert_eq!(get(at, "/0123456789abcdef0123456789abcdef/").0, 404);

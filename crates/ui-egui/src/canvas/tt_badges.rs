@@ -483,11 +483,13 @@ fn draw_nodes(c: &Painting, scene: &Scene) {
 
 /// The point numbers of a glyph's layer: `paths[path][node]`, paths counted without components.
 type PointNumbers = Vec<Vec<Option<u16>>>;
+/// Point numbers with the document revision, glyph and layer they belong to.
+type NumbersFor = ((u64, u64), String, String, PointNumbers);
 
 thread_local! {
     /// The numbers last computed, with the document revision, glyph and layer they belong to:
     /// numbering runs the export's outline preparation, too slow for every frame.
-    static NUMBERS: RefCell<Option<((u64, u64), String, String, PointNumbers)>> = const { RefCell::new(None) };
+    static NUMBERS: RefCell<Option<NumbersFor>> = const { RefCell::new(None) };
 }
 
 /// The point numbers of the edited layer's master outline, as `hint.tt.getPointIndexes` gives
@@ -553,7 +555,8 @@ mod tests {
         fn frame(&self, app: &mut FontcraftApp, events: Vec<Event>) -> Vec<Shape> {
             let input =
                 egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(1280.0, 800.0))), events, ..Default::default() };
-            let output = self.ctx.run_ui(input, |ui| app.ui(ui));
+            let mut output = self.ctx.run_ui(input, |ui| app.ui(ui));
+            output.textures_delta.clear();
             let mut out: Vec<Shape> = output.shapes.into_iter().map(|c| c.shape).collect();
             let mut flat = Vec::new();
             while let Some(shape) = out.pop() {
@@ -673,7 +676,8 @@ mod tests {
         let marks = badges(&layer(&app), &list, view, &app.tokens.tt, TtDirection::Vertical);
         let points = app.state.tab().unwrap().selection.clone();
         let click = |app: &mut FontcraftApp, at: Pos2, modifiers: Modifiers| {
-            w.frame(app, vec![Event::PointerMoved(at)]);
+            // Backends report held modifiers as their own event; the input state keeps them.
+            w.frame(app, vec![Event::ModifiersChanged(modifiers), Event::PointerMoved(at)]);
             w.frame(app, vec![Event::PointerButton { pos: at, button: PointerButton::Primary, pressed: true, modifiers }]);
             w.frame(app, vec![Event::PointerButton { pos: at, button: PointerButton::Primary, pressed: false, modifiers }]);
             w.frame(app, Vec::new());

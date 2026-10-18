@@ -324,7 +324,7 @@ impl Built {
         let bitmap = hinted.pixels(gid, ppm).map_err(|e| e.to_string())?;
         let instance = if at_master { None } else { Some(to_units * self.plain.outline(gid, ppm).map_err(|e| e.to_string())?.path) };
         // Black ink: the coverage is the alpha.
-        let alpha = bitmap.image.pixels.chunks_exact(4).map(|p| p.get(3).copied().unwrap_or(0)).collect();
+        let alpha = bitmap.image.pixels.as_chunks::<4>().0.iter().map(|p| p[3]).collect();
         let pixels = Pixels { width: bitmap.image.width, height: bitmap.image.height, alpha, left: bitmap.left, top: bitmap.top, unit };
         let fitted_path = hinted.has_instructions(gid).then(|| to_units * fitted.path);
         Ok(PixelPreview { instance, fitted: fitted_path, pixels, message: fitted.message })
@@ -473,7 +473,8 @@ mod tests {
     /// One frame of `app` in a 1280 × 800 window; the shapes it drew, nested lists flattened.
     fn frame(ctx: &egui::Context, app: &mut FontcraftApp) -> Vec<Shape> {
         let input = egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(1280.0, 800.0))), ..Default::default() };
-        let output = ctx.run_ui(input, |ui| app.ui(ui));
+        let mut output = ctx.run_ui(input, |ui| app.ui(ui));
+        output.textures_delta.clear();
         let mut out: Vec<Shape> = output.shapes.into_iter().map(|c| c.shape).collect();
         let mut flat = Vec::new();
         while let Some(shape) = out.pop() {
@@ -532,6 +533,41 @@ mod tests {
     /// The y values of `path`'s points.
     fn ys(path: &BezPath) -> Vec<f64> {
         path.elements().iter().filter_map(|el| el.end_point()).map(|p| p.y).collect()
+    }
+
+    /// The median of `n` timed runs of `f`.
+    fn median(n: usize, mut f: impl FnMut()) -> std::time::Duration {
+        let mut times: Vec<_> = (0..n)
+            .map(|_| {
+                let start = std::time::Instant::now();
+                f();
+                start.elapsed()
+            })
+            .collect();
+        times.sort();
+        times[n / 2]
+    }
+
+    /// `cargo test -p fontcraft-ui-egui instructor_timings -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "prints timings"]
+    fn instructor_timings() {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        frame(&ctx, &mut app);
+        let cached = median(21, || drop(frame(&ctx, &mut app)));
+        let mut fitted: Vec<_> = (0..21)
+            .map(|i| {
+                let rounding = if i % 2 == 0 { "up" } else { "down" };
+                app.run("hint.tt.setRounding", &json!({"glyph": "A", "instructions": [0], "rounding": rounding})).unwrap();
+                let start = std::time::Instant::now();
+                assert!(preview(&app).fitted.is_some());
+                start.elapsed()
+            })
+            .collect();
+        fitted.sort();
+        let fitted = fitted[10];
+        println!("Instructor cached frame {cached:?}; grid-fitted outline after an instruction edit {fitted:?}");
     }
 
     #[test]
