@@ -1254,6 +1254,7 @@ options = [
   "--face-a N, --face-b N: member to use when A or B is a collection",
   "--show-mtime: print each file's modification time in the header",
   "--output-dir DIR: write the per-table texts that were compared (A.TAG.txt and B.TAG.txt), for inspection with other tools",
+  "--all: list every difference instead of stopping at 1000 removed or added lines (64 KiB of hex) per table",
   "[global options]: -o/--output, --output-dir, --in-place, --no-clobber, --face, --json, -q/--quiet, -v/--verbose, --log, --log-file, --color, -j/--jobs, --timing, --trace, --backtrace, --options, --save-options, --dry-run, --timestamp, @FILE, -h/--help, --version (behavior rows cli.global.*)",
 ]
 command = "font.diff"
@@ -1268,6 +1269,13 @@ milestone = "M12"
 summary = "Compares two fonts table by table and says which tables differ and how: presence, byte equality, the first differing offset, a hex diff, or a text diff of the decoded tables. Normalisation modes hide differences that do not change behaviour, for comparing two versions of a font or the output of two compilers. A and B may also be two folders, or a font and a folder, in which case fonts with the same file name are paired."
 ref = "AFDKO sfntdiff (usage and help), ttxn.py; fontTools diff; fontc ttx_diff core.py"
 status = "docs"
+notes = "Built in M12.32. The fields text is each table's TTX; a table no TTX writer reads is compared as its TTX hex. Hex dumps are compared in rows of 16 bytes. Every diff is a unified diff with --context lines. --normalize compiler ports fontc's ttx_diff except three steps that stay open: filling in gvar deltas left to interpolation, matching contour order and start points, and renumbering the classes of class-based contextual rules. --normalize dump compares the normalised dump of `dump --normalize` and fails until that view exists. --tool is refused: --output-dir writes the texts for an external program. -t and -x take comma-separated lists; a repeated option replaces the earlier list."
+guesses = [
+  "Without --all a table lists at most 1000 removed or added lines, or 4096 hex rows; none of the reference tools caps its output, so the cap is ours.",
+  "In compiler mode the index sorting, name-ID resolution and the removal of a one-sided name ID 25 apply to both fonts alike, where ttx_diff applies some only to the fontmake side; comparing verdicts on corpus pairs would show whether this matters.",
+  "The off-by-one budget is counted on B's coordinates (ttx_diff's fontmake side) and A's values are set to B's; ttx_diff's own pairing of the two sides is not symmetric either.",
+  "The hex detail prints offset, bytes and ASCII per 16-byte row as a unified diff; the exact layout of sfntdiff -d 2 has not been compared.",
+]
 
 [[cli]]
 id = "outlines"
@@ -2525,12 +2533,13 @@ label = "Compare Fonts"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{a: path, b: path, faceA?: int|name, faceB?: int|name, detail?: \"tables\"|\"offset\"|\"hex\"|\"fields\"|\"verbose\", tables?: [tag], excludeTables?: [tag], compareIdentical?: bool, context?: int, normalize?: \"none\"|\"dump\"|\"compiler\", hints?: bool, version?: bool, unwrapExtensions?: bool, offByOneBudget?: number, sizeThreshold?: number, similarity?: bool, tool?: {command: string, args?: string}, outputDir?: path}"
+params = "{a: path, b: path, faceA?: int|name, faceB?: int|name, detail?: \"tables\"|\"offset\"|\"hex\"|\"fields\"|\"verbose\", tables?: [tag], excludeTables?: [tag], compareIdentical?: bool, context?: int, normalize?: \"none\"|\"dump\"|\"compiler\", hints?: bool, version?: bool, unwrapExtensions?: bool, offByOneBudget?: number, sizeThreshold?: number, similarity?: bool, all?: bool, tool?: {command: string, args?: string}, outputDir?: path}"
 area = "cli-tools"
 milestone = "M12"
 summary = "Read-only query comparing two binary fonts (or two folders of fonts) table by table at the requested level of detail and normalisation, returning per table its presence on each side, byte equality, sizes, and where requested the first differing offset, a similarity ratio or the diff text."
 ref = "docs/spec/20-cli.md › diff"
 status = "docs"
+notes = "Built in M12.32. Each table entry also carries tag, status (same, different, onlyA, onlyB), identical (the verdict after normalisation, where equal is byte equality), oversized, and in the hex and text details the unified diff lines with the count left out (truncated); all lifts the per-table limits; with outputDir the result lists the files written. tool is refused. The compiler normalisation adds the pseudo-tables GPOS=normalized and GDEF=normalized (the layout normaliser's text)."
 
 [[command]]
 id = "outlines.removeOverlaps"

@@ -216,6 +216,9 @@ bundled, the file says so in its header and the project is listed here with its 
   The layout normaliser (crates/tables/src/normalize.rs and normalize/, M12.11) is ported from
   fontc's otl-normalizer 1.0.0 (MIT OR Apache-2.0), with its text format kept.
 
+  The compiler normalisation of the font diff (crates/tables/src/diff/compiler.rs, M12.32) is
+  ported from fontc's ttx_diff (ttx_diff/src/ttx_diff/core.py, Apache License 2.0).
+
   Corner components fitted into outlines (crates/model/src/corner.rs, M6.4) are ported from
   fontc's glyphs-reader/src/corner_components.rs at commit
   4504578c3f74c2739f7e55cae133bbfe773f6d8c, which is based on glyphsLib's
