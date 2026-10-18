@@ -267,6 +267,8 @@ bundled, the file says so in its header and the project is listed here with its 
   License) for its curve maths, which crates/autohint/src/bezier.rs ports with it;
   crates/autohint/src/glyph.rs also ports the quadratic-to-cubic step of fontTools' BasePen.
 
+  The CBDT and CBLC writer (crates/compile/src/color/cbdt.rs, M11.11) lays the tables out in the order fontTools' E_B_L_C_ and E_B_D_T_ compilers write them (MIT License), with the strike settings of nanoemoji's bitmap_tables.py (Apache License 2.0, Copyright 2022 Google LLC): version 3, index subtable format 1, glyph bitmap format 17, bit depth 32, horizontal metrics flag.
+
   Hint removal (crates/tables/src/dehint, M12.27) follows the --no-hinting rules of fontTools' subset module (MIT License): the hinting-table list, the maxp limits, the GPOS device-table and anchor pruning, and the Private DICT keys.
 
   The subsetter (crates/tables/src/subset, M12.17) ports fontTools' subset module (MIT License, Copyright 2013 Google, Inc.): the option defaults, the glyph closure over cmap, glyf components and CFF seac, and the table rules for cmap, glyf, CFF, hmtx, vmtx, post, name, OS/2 and maxp. Its bidirectional mirroring pairs (crates/tables/src/subset/mirror.rs) are the Unicode Character Database's BidiMirroring.txt 18.0.0 (Unicode License v3, LICENSE-Unicode.txt) as fontTools' unicodedata.Mirrored lists them.
