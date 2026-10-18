@@ -181,6 +181,7 @@ milestone = "M12"
 summary = "For encoded glyphs with a known shape, the number of contours differs from the set of counts expected for that character (for example two for a double quote); a zero count where ink is expected is a failure. Needs our own expected-count table; static TrueType only, private-use codepoints excluded."
 ref = "fontbakery contour_count"
 status = "docs"
+notes = "Expected counts are looked up by code point only; the reference also looks them up by glyph name. Composites count the contours of their components; components named .ttfautohint are left out, as the reference leaves them out."
 
 [[check]]
 id = "check.outlines.mixedCurveTypes"
@@ -688,6 +689,10 @@ milestone = "M12"
 summary = "The .notdef glyph is missing, is not the first glyph, has a codepoint (all warnings) or is blank (failure). The fix adds a standard .notdef drawing as glyph 0 and removes its codepoint."
 ref = "fontbakery mandatory_glyphs; comparefamily single-face test 26 (glyph 0)"
 status = "docs"
+guesses = [
+  "A font that stores no glyph names has .notdef as glyph 0, as the reference reads such fonts; a font with stored names whose .notdef is missing is settled by the reference on a TTF with a version 3 post table.",
+  "A cmap entry pointing at glyph 0 means \"no glyph\" in cmap, so only a .notdef placed elsewhere is reported as having a code point; the reference on a font mapping a character to glyph 0 would settle it.",
+]
 observe = ["Glyph-order font (A, B and space, no .notdef, space last in the glyph order): export a TTF and read its glyph order; note whether .notdef is added and placed first."]
 
 [[check]]
@@ -722,6 +727,7 @@ milestone = "M12"
 summary = "A TrueType font maps control characters in U+0001-U+001F other than U+000D; only .null (U+0000) and CR are acceptable. The fix removes the mappings."
 ref = "fontbakery control_chars"
 status = "docs"
+notes = "Reports mapped control characters (the fix removes the mapping) and, as the reference does, glyphs named uni0001 to uni001F other than uni000D (no fix)."
 
 [[check]]
 id = "check.glyphset.truetypeLeadingGlyphs"
@@ -733,6 +739,7 @@ milestone = "M12"
 summary = "In a TrueType font the first four glyphs are not .notdef, NULL, CR and space in that order, or NULL, CR and space are not mapped from U+0000, U+000D and U+0020; the names .null and nonmarkingreturn draw a warning. Also reports an OS/2 default character other than 0."
 ref = "comparefamily single-face test 26 (glyph IDs 0-3, usDefaultChar)"
 status = "docs"
+notes = "The OS/2 default character is checked in every font, as comparefamily does; the glyph order only in fonts with glyf outlines. A font that stores no glyph names is checked only for the mappings of glyphs 1 to 3. The code point compared is the lowest one the Unicode subtable gives the glyph."
 observe = ["Glyph-order font (A, B and space, no .notdef, space last in the glyph order): export a TTF and read its glyph order; note which glyphs follow .notdef and where space ends up."]
 
 [[check]]
@@ -770,6 +777,7 @@ milestone = "M12"
 summary = "The glyph names together exceed 32767 bytes, a limit that crashed old Mac OS X versions; a warning is given when the total comes close."
 ref = "comparefamily single-face test 26 (total glyph name size)"
 status = "docs"
+notes = "Only CFF fonts are measured, as comparefamily measures them; CID-keyed fonts are skipped. Each name counts with two bytes, and the warning comes when the total plus two bytes per glyph passes 32767."
 observe = [
   "Fault font (one master: an open path, a glyph named with a space, two glyphs with U+0041, a component of a missing glyph, two glyphs that use each other as components, a glyph name of 70 characters): export OTF and TTF; note the export result message for the 70-character glyph name, its wording, and whether the export stops or continues.",
 ]
@@ -784,6 +792,7 @@ milestone = "M12"
 summary = "A glyph (or a part of a ligature name) still uses a working name where the glyph database defines a different final name, or uses a name that is neither in the database nor a uniXXXX/uXXXXX name, so it cannot be mapped back to Unicode. The fix renames to production names."
 ref = "comparefamily single-face test 26 (working vs final names, unmappable names)"
 status = "docs"
+notes = "The glyph database replaces the reference's glyph dictionary: a name the database has as a nice name with a different production name is a working name; a name it knows in any form, or a uni or u name, maps to Unicode. Names starting with a period and CID-keyed fonts are skipped."
 
 [[check]]
 id = "check.glyphset.unreachableGlyphs"
@@ -795,6 +804,7 @@ milestone = "M12"
 summary = "A glyph cannot be reached: it has no codepoint, no substitution produces it, and no composite, COLR, MATH or variation-selector entry refers to it. The fix removes such glyphs from the export."
 ref = "fontbakery unreachable_glyphs"
 status = "docs"
+notes = "Components of reachable composites are followed to any depth; the reference looks one level down in glyph order, so a component of a component listed before its user is unreachable there. That difference is deliberate. JSTF extender glyphs are exempt, as in the reference."
 
 [[check]]
 id = "check.glyphset.caseMapping"
@@ -817,6 +827,7 @@ milestone = "M12"
 summary = "An encoded letter (Unicode categories Lu, Ll, Lt, Lm, Lo) has no ink. The Hangul filler characters are exempt and empty Hangul syllables only warn."
 ref = "fontbakery empty_letters"
 status = "docs"
+notes = "A CFF glyph counts as empty when it draws no segment; the reference counts a charstring of at most one byte as empty, so a glyph that only moves the pen differs."
 
 [[check]]
 id = "check.glyphset.softHyphen"
@@ -869,9 +880,10 @@ scope = "binary"
 fixable = true
 area = "qa"
 milestone = "M12"
-summary = "One of the spacing Arabic symbols that show a dot or mark on its own (U+FBB2-U+FBC1 range) is classed as a mark in GDEF. The fix moves it to the base class."
+summary = "One of the spacing Arabic symbols that show a dot or mark on its own (U+FBB2-U+FBC2 range) is classed as a mark in GDEF. The fix moves it to the base class."
 ref = "fontbakery arabic_spacing_symbols"
 status = "docs"
+notes = "The range runs to U+FBC2 ARABIC SYMBOL WASLA ABOVE, as the reference's list does."
 
 [[check]]
 id = "check.glyphset.unicodeCmapMissing"
@@ -905,6 +917,7 @@ milestone = "M12"
 summary = "Glyphs are encoded in the Private Use Area (or, wrongly, at surrogate codepoints, which is a failure). PUA text breaks when copied, searched or set in another font."
 ref = "fontbakery typenetwork/PUA_encoded_glyphs; fontbakery notofonts/cmap/alien_codepoints; MS Font Validator W0307 (afdko MSFontValidatorIssues.md 4.b)"
 status = "docs"
+notes = "Private-use code points give warnings, except U+F8FF, which one reference exempts; surrogate code points give failures."
 
 [[check]]
 id = "check.glyphset.minimumCoverage"
@@ -916,6 +929,7 @@ milestone = "M12"
 summary = "The font does not cover every character of a chosen reference set (`glyphSet` parameter; no set is required by default). The result lists the missing codepoints."
 ref = "fontbakery googlefonts/glyph_coverage; fontbakery typenetwork/glyph_coverage"
 status = "docs"
+notes = "Skips with a reason until the compiled-font context carries the project values: the runner cannot read glyphSet yet."
 
 [[check]]
 id = "check.glyphset.rendersOwnName"
@@ -927,6 +941,7 @@ milestone = "M12"
 summary = "The font cannot display its own family name (name ID 1) with its own glyphs."
 ref = "fontbakery googlefonts/render_own_name"
 status = "docs"
+notes = "Shapes the family name with the shaping service; without one, every character of the name must be in the cmap subtable a shaper uses."
 
 [[check]]
 id = "check.glyphset.duplicateCodepoint"
@@ -938,6 +953,9 @@ milestone = "M12"
 summary = "Two exporting glyphs of a source claim the same codepoint, so only one can be reached."
 ref = "Editor audit convention (duplicate Unicode values)"
 status = "inferred"
+guesses = [
+  "The finding sits on the later glyph in glyph order and names the others; the reference app's export message for two glyphs with one code point would settle it.",
+]
 observe = [
   "Fault font (one master: an open path, a glyph named with a space, two glyphs with U+0041, a component of a missing glyph, two glyphs that use each other as components, a glyph name of 70 characters): export OTF and TTF; note the export result message for the two glyphs with U+0041, its wording, and whether the export stops or continues.",
 ]
@@ -952,6 +970,9 @@ milestone = "M12"
 summary = "A glyph's codepoint differs from the one its name implies (a uniXXXX or uXXXXX name, or a glyph-data name). The fix resets the codepoint from the name."
 ref = "Editor audit convention (glyph info out of sync)"
 status = "inferred"
+guesses = [
+  "Only exporting glyphs are checked, and a glyph with no code point whose name implies one is reported too; the reference app's glyph info on such glyphs would settle it.",
+]
 
 # ---------------------------------------------------------------------------
 # metrics: Metrics
