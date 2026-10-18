@@ -32,6 +32,7 @@ type Shown = fn(&FontcraftApp) -> bool;
 const CONTEXTUAL: &[(&str, &str, Shown, Draw)] = &[
     ("stroke", "Stroke", stroke::shown, stroke::show),
     ("smartComponent", "Smart Component", super::palette_smart::shown, super::palette_smart::show),
+    ("attributes", "Attributes", super::attributes::shown, super::attributes::show),
 ];
 
 pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {

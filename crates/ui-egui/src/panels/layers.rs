@@ -251,6 +251,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     let renaming: Option<String> = ctx.data(|d| d.get_temp(renaming_id()));
     let tokens = app.tokens.clone();
     let row_menu_sections = context_menu::sections(&app.session, &app.state, &[ROW_CONTEXT]);
+    let colors = super::layers_color::ColorEntries::read(app, &glyph);
     for row in &shown {
         // A selected row is filled across the section's full width, behind the eye and the kind.
         let fill = ui.painter().add(egui::Shape::Noop);
@@ -303,7 +304,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
                         parts.push((label_part(ui, id, style(egui::RichText::new(label).strong())), Some(part)));
                     }
                 }
-            } else if !master_row && row.kind != "backup" {
+            } else if !master_row && row.kind != "backup" && !colors.show(ui, &tokens, &row.id, is_selected, pending) {
                 ui.label(egui::RichText::new(&row.kind).strong().color(if is_selected { tokens.selected_text } else { tokens.text_dim }));
             }
             for (response, part) in &parts {

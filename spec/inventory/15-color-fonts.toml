@@ -28,6 +28,10 @@ area = "color"
 milestone = "M11"
 summary = "Opens the palette editor for the font-level Color Palettes parameter; in the reference this happens when the parameter's value cell is clicked in Font Info › Font. Edits made in the editor are applied to the font only when it is confirmed with OK."
 ref = "Color Fonts › COLR/CPAL Fonts › Defining the Color Palette"
+notes = "Built in M11.15. Opens the editor (`dialog.colorPalettes`) on the font's palettes with optional staged `edits`; OK runs them as one `command.batch`. Font Info does not open it from the parameter's value yet. Documented, not yet observed."
+guesses = [
+  "The editor edits the font-level Color Palettes only; a master's own palettes are edited with the colorPalette commands and their `master` parameter. Settled by clicking a master's Color Palettes value in the reference.",
+]
 status = "handbook"
 
 [[command]]
@@ -569,6 +573,10 @@ area = "color"
 milestone = "M11"
 summary = "Editor for the font-level Color Palettes parameter, opened by clicking the parameter value in Font Info › Font. All changes are staged: OK commits them as one edit, Cancel leaves the palettes exactly as they were."
 ref = "Color Fonts › COLR/CPAL Fonts › Defining the Color Palette"
+notes = "Built in M11.15. Nothing touches the font while it is open; its one field holds the staged colorPalette commands, and a step the font refuses on OK (a colour a layer uses) keeps it open with the message. Documented, not yet observed."
+guesses = [
+  "A click on a row's number selects the row that minus removes, and a click on a palette's heading opens a menu with Remove Palette. Settled by removing a row and a palette in the reference's editor.",
+]
 status = "handbook"
 
 [[panel]]
@@ -586,6 +594,10 @@ area = "color"
 milestone = "M11"
 summary = "How colour layers appear in the Layers palette (Window › Palette, Cmd+Alt+P): as special layers indented under their master, with a type-specific label and controls. They are created by adding a layer with the plus button and then picking a colour type from the entry's context menu."
 ref = "Color Fonts › COLR/CPAL Fonts › Color Palette Layers; sbix Fonts › Adding Images to Glyphs; SVG Color Fonts"
+notes = "Built in M11.15. The kind label follows the layer name in bold; the swatch, the disc and the size field act through the layer commands. Documented, not yet observed."
+guesses = [
+  "Double-clicking the bold kind label of an iColor row edits its size, while double-clicking the name still renames the layer. Settled by double-clicking an iColor entry in the reference.",
+]
 status = "handbook"
 observe = [
   "Palette font: add a layer to a glyph and choose each colour kind from its context menu in turn; note the entry's label, indent, bold text and swatch or size, and whether a later kind replaces the earlier one.",
@@ -624,6 +636,11 @@ area = "color"
 milestone = "M11"
 summary = "Style inspector for the selected paths of a full-colour layer, shown at the bottom of the Palette and toggled together with the Info display by View › Show Info (Cmd+Shift+I). Stroke and Fill are present from the start; the other controls appear once added with the plus button."
 ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs"
+notes = "Built in M11.15. Shown while a path of a full-colour layer is selected; every control runs an attributes command on the selected paths, and a colour picked in a swatch runs once, when its picker closes. Documented, not yet observed."
+guesses = [
+  "The stroke alignment buttons read Centre, Left and Right, and shadows show as read-only lines (blur and offset) because no command removes them yet. Settled by adding a shadow in the reference's inspector.",
+  "With several paths selected the bar shows the first path's gradient and the other controls show a value only when every path has it. Settled by selecting two paths with different gradients in the reference.",
+]
 status = "handbook"
 
 [[panel]]
@@ -640,6 +657,10 @@ area = "color"
 milestone = "M11"
 summary = "The stop editor inside the Gradient row of the Attributes inspector. It never holds fewer than two stops."
 ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs › Gradient"
+notes = "Built in M11.15. A click on the bar adds a stop at that offset, a click on a knob opens its colour picker, a knob dragged along the bar moves the stop. Documented, not yet observed."
+guesses = [
+  "A knob released more than two bar heights above or below the bar removes its stop. Settled by dragging a stop away in the reference and noting the distance.",
+]
 status = "handbook"
 
 [[panel]]
@@ -651,6 +672,11 @@ area = "color"
 milestone = "M11"
 summary = "Colour picker used for the value of the Master Color and Master Color Dark parameters in Font Info › Masters. Lowering Opacity gives a semi-transparent preview colour, useful for seeing stacked layers through each other."
 ref = "Color Fonts › Layered Color Fonts › Initial Setup"
+notes = "Built in M11.15. Opened with `dialog.open` on masters that already have the parameter; each colour previews `font.customParameters.set`, OK keeps it as one undo step. Font Info does not open it from the parameter's value yet. Documented, not yet observed."
+guesses = [
+  "The colour is stored as the text `R,G,B,A` with components from 0 to 255 (the picker also reads `#RRGGBBAA` and a list of numbers). Settled by saving a font with a Master Color from the reference and reading the stored value.",
+  "Opacity is the alpha slider of the colour picker. Settled by opening the picker in the reference.",
+]
 status = "handbook"
 
 # ───────────────────────────── Behaviours: common to all colour fonts ─────────────────────────────
@@ -876,6 +902,7 @@ area = "color"
 milestone = "M11"
 summary = "Changes in the palette editor take effect only on OK; Cancel throws all of them away. In FontCraft the editor therefore produces one undoable change."
 ref = "Color Fonts › COLR/CPAL Fonts › Defining the Color Palette"
+notes = "Built in M11.15: OK runs the staged edits as one `command.batch`, one undo step; Cancel leaves the font as it was. Documented, not yet observed."
 status = "handbook"
 observe = ["Palette font: make several edits in the Color Palettes editor and press Cancel; note whether the palettes are unchanged and whether anything appears in Undo."]
 
