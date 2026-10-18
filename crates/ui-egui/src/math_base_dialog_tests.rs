@@ -60,8 +60,10 @@ fn math_table_dialog_opens_on_the_glyph_and_sets_its_data() {
 
     // A typo is the command's message, and OK keeps the dialog open.
     open(&mut app, "dialog.mathTable", json!({}));
-    let shown = call(&mut app, "ui.dialog.set", json!({"field": "constants", "value": "AxisHight 1"}));
-    assert!(shown["error"].as_str().is_some_and(|e| e.contains("AxisHight")), "{shown}");
+    call(&mut app, "ui.dialog.set", json!({"field": "constants", "value": "AxisHight 1"}));
+    let r = control::handle(&mut app, &json!({"id": 1, "method": "ui.dialog.confirm", "params": {}}));
+    assert!(r["error"].as_str().is_some_and(|e| e.contains("AxisHight")), "{r}");
+    assert!(app.dialog.is_some());
 }
 
 #[test]

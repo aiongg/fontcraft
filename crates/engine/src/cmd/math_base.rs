@@ -200,7 +200,7 @@ fn assembly(p: &Params, font: &Font, what: &str, v: &Value) -> Result<Vec<Part>>
         let flags = match flags {
             Value::Bool(b) => u16::from(*b),
             other => {
-                other.as_u64().filter(|f| *f <= 1).map(|f| f as u16).ok_or_else(|| p.bad(format!("{at}: the flags must be 0 or 1 (1 = extender)")))?
+                other.as_f64().filter(|f| *f == 0.0 || *f == 1.0).map(|f| u16::from(f == 1.0)).ok_or_else(|| p.bad(format!("{at}: the flags must be 0 or 1 (1 = extender)")))?
             }
         };
         out.push(Part {
@@ -707,7 +707,8 @@ fn set_baselines(s: &mut Session, v: &Value) -> Result<Value> {
     let current = baselines(font).map_err(|e| p.bad(format!("the feature code's BASE block cannot be edited here: {e}")))?;
     let mut base = current.as_ref().map(|(_, b)| b.clone()).unwrap_or_default();
     for (key, slot) in [("horizontal", &mut base.horizontal), ("vertical", &mut base.vertical)] {
-        match p.get(key) {
+        // `Params::get` reads null as absent, and null here removes the axis.
+        match v.get(key) {
             None => {}
             Some(Value::Null) => *slot = None,
             Some(value) => *slot = Some(axis_param(&p, key, value)?),

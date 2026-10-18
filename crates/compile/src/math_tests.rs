@@ -23,6 +23,8 @@ fn math_font() -> Font {
         ("integral.ext", vec![], 400.0, (0.0, 0.0, 300.0, 200.0)),
         ("integral.top", vec![], 400.0, (0.0, 0.0, 300.0, 500.0)),
     ] {
+        // Font::new already has the basic Latin letters; the test wants its own.
+        let _ = f.remove_glyph(name);
         f.add_glyph(name, cps, width).unwrap();
         f.glyph_mut(name).unwrap().layers[0].shapes.push(Shape::Path(Path::rect(x0, y0, x1, y1)));
     }
@@ -157,6 +159,7 @@ fn compiled_math_table_reads_back_equal() {
 #[test]
 fn a_font_without_math_data_has_no_math_table() {
     let mut f = Font::new("Plain");
+    f.remove_glyph("a").unwrap();
     f.add_glyph("a", vec![0x61], 500.0).unwrap();
     f.glyph_mut("a").unwrap().layers[0].anchors.push(Anchor::new(ITALIC_ANCHOR, 550.0, 0.0));
     let out = compile_ttf(&f, &Options::default()).unwrap();

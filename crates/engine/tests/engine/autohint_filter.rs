@@ -123,7 +123,7 @@ fn an_autohinting_filter_autohints_the_instance_in_both_flavours() {
         assert_eq!(vstems(of(&fonts, name)), vec![(100, 180)], "{name}: {warnings}");
     }
     assert!(!warnings.contains("was not used"), "Autohinting is not an unknown filter: {warnings}");
-    assert!(warnings.contains("\"Autohinting; 20\" takes no arguments"), "{warnings}");
+    assert!(warnings.contains(r#"Autohinting; 20\" takes no arguments"#), "{warnings}");
 
     let (fonts, warnings) = export(&mut s, "truetype");
     assert!(program(of(&fonts, "Plain")).is_empty(), "{warnings}");

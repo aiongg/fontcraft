@@ -40,6 +40,7 @@ pub fn import(svg: &[u8], transform: Affine, gid: u16) -> Result<String, ColorEr
         return Err(ColorError::BadSvg("compressed SVG files are not read; save it uncompressed".to_string()));
     }
     let text = std::str::from_utf8(svg).map_err(|_| ColorError::BadSvg("it is not UTF-8 text".to_string()))?;
+    check_text_depth(text)?;
     let xml_options = roxmltree::ParsingOptions { allow_dtd: true, nodes_limit: MAX_SVG_NODES, ..roxmltree::ParsingOptions::default() };
     let xml = roxmltree::Document::parse_with_options(text, xml_options).map_err(|e| ColorError::BadSvg(e.to_string()))?;
     check_depth(&xml)?;
@@ -108,6 +109,71 @@ fn root_content(written: &str) -> Option<(bool, &str)> {
     }
     let content = rest.get(open_end + 1..)?.trim_end().strip_suffix("</svg>")?;
     Some((xlink, content))
+}
+
+/// Refuses text whose elements nest deeper than [`MAX_SVG_DEPTH`], and entity declarations that
+/// hold markup, before the XML parser sees it: the parser recurses on nesting and would run out
+/// of stack on a deep file before [`check_depth`] could refuse it. The scan counts start and end
+/// tags without recursion, skipping comments, CDATA, processing instructions and quoted
+/// attribute values.
+fn check_text_depth(text: &str) -> Result<(), ColorError> {
+    let bytes = text.as_bytes();
+    // The index just past the first `end` at or after `from`, or the end of the text.
+    let past = |from: usize, end: &[u8]| -> usize {
+        bytes.get(from..).and_then(|rest| rest.windows(end.len()).position(|w| w == end)).map_or(bytes.len(), |at| from + at + end.len())
+    };
+    // The index just past the `>` that closes a declaration or tag opened before `from`, with
+    // quoted text skipped, and whether the quoted text held a `<`.
+    let close = |from: usize, stop_at_bracket: bool| -> (usize, bool) {
+        let mut quote = None;
+        let mut markup = false;
+        for (i, &b) in bytes.iter().enumerate().skip(from) {
+            match (quote, b) {
+                (Some(q), _) if b == q => quote = None,
+                (Some(_), b'<') => markup = true,
+                (Some(_), _) => {}
+                (None, b'"' | b'\'') => quote = Some(b),
+                (None, b'>') => return (i + 1, markup),
+                (None, b'[') if stop_at_bracket => return (i + 1, markup),
+                (None, _) => {}
+            }
+        }
+        (bytes.len(), markup)
+    };
+    let mut depth = 0usize;
+    let mut i = 0;
+    while let Some(at) = bytes.get(i..).and_then(|rest| rest.iter().position(|&b| b == b'<')) {
+        let start = i + at;
+        let rest = bytes.get(start..).unwrap_or_default();
+        i = if rest.starts_with(b"<!--") {
+            past(start + 4, b"-->")
+        } else if rest.starts_with(b"<![CDATA[") {
+            past(start + 9, b"]]>")
+        } else if rest.starts_with(b"<?") {
+            past(start + 2, b"?>")
+        } else if rest.starts_with(b"<!DOCTYPE") {
+            close(start + 9, true).0
+        } else if rest.starts_with(b"<!") {
+            let (end, markup) = close(start + 2, false);
+            if markup && rest.starts_with(b"<!ENTITY") {
+                return Err(ColorError::BadSvg("it declares an entity that holds markup".to_string()));
+            }
+            end
+        } else if rest.starts_with(b"</") {
+            depth = depth.saturating_sub(1);
+            close(start + 2, false).0
+        } else {
+            let (end, _) = close(start + 1, false);
+            if end < 2 || bytes.get(end - 2) != Some(&b'/') {
+                depth += 1;
+                if depth > MAX_SVG_DEPTH {
+                    return Err(ColorError::BadSvg(format!("its elements are nested more than {MAX_SVG_DEPTH} deep")));
+                }
+            }
+            end
+        };
+    }
+    Ok(())
 }
 
 /// Refuses elements nested deeper than [`MAX_SVG_DEPTH`]. Nodes come in document order, so a
@@ -229,6 +295,12 @@ mod tests {
         // Nested 10,000 deep.
         let deep = format!(r#"<svg xmlns="http://www.w3.org/2000/svg">{}{}</svg>"#, "<g>".repeat(10_000), "</g>".repeat(10_000));
         assert!(bad(deep.as_bytes()));
+        // Nesting built from entities is refused before it is expanded.
+        let entities = r#"<!DOCTYPE svg [<!ENTITY a "<g><g></g></g>">]><svg xmlns="http://www.w3.org/2000/svg">&a;</svg>"#;
+        assert!(bad(entities.as_bytes()));
+        // Comments, CDATA and quoted `>` do not count as tags.
+        let quoted = r#"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><!-- <g> --><g id="a>b"><rect width="5" height="5"/></g></svg>"#;
+        assert!(import(quoted.as_bytes(), Affine::IDENTITY, 1).is_ok());
         // A file over the limit is refused before it is parsed.
         let mut big = SQUARE.as_bytes().to_vec();
         big.resize(MAX_SVG_FILE_BYTES + 1, b' ');

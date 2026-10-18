@@ -229,8 +229,10 @@ fn info_box_edits_run_set_hint_values_and_set_ghost_direction() {
     let mut app = hinted_app();
     let layer = app.session.font().unwrap().masters[0].id.clone();
     app.run("view.showHints", &json!({"on": true})).unwrap();
-    app.state.tab_mut().unwrap().selection = Selection::from_items([Item::Hint(0)]);
+    // A frame first: the first one drops a selection made before the tab's glyph was synced.
     let w = Window::new();
+    w.settle(&mut app);
+    app.state.tab_mut().unwrap().selection = Selection::from_items([Item::Hint(0)]);
     w.settle(&mut app);
     w.enter(&mut app, info_box_ps_hint::field("origin"), "10");
     let (id, params) = app.session.journal().last().cloned().unwrap();

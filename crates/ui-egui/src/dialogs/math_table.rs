@@ -14,9 +14,9 @@ use fontcraft_engine::cmd::math_base::{AssemblyPart, GlyphMath, glyph_math, math
 use serde_json::{Map, Value, json};
 
 use super::form::Field;
-use super::{Dialog, Fields, Shaped};
+use super::{Dialog, Fields, Mode, Shaped};
 
-pub const DIALOG: Dialog = Dialog::new("dialog.mathTable", "Math Table", "font.setMathData", Fields::Shaped(Shaped { fields, given, params, link }));
+pub const DIALOG: Dialog = Dialog { mode: Mode::RunOnOk, ..Dialog::new("dialog.mathTable", "Math Table", "font.setMathData", Fields::Shaped(Shaped { fields, given, params, link })) };
 
 /// Most characters of one text box.
 const MAX_TEXT: usize = 64 * 1024;

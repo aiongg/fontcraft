@@ -100,9 +100,10 @@ fn optical_bounds_from_offsets_and_guides_compile_to_lfbd_and_rtbd() {
     let mut warnings = Vec::new();
     let entries = bounds_features(&f, &glyphs(), BoundsTarget::Master("m01"), &mut warnings);
     assert!(warnings.is_empty(), "{warnings:?}");
-    // The empty `space` and `A` take no global offset; the guides override it for `O`.
-    assert_eq!(code(&entries, LEFT_FEATURE), "pos H <-20 0 -20 0>;\npos I <-20 0 -20 0>;\npos O <-35 0 -35 0>;\n");
-    assert_eq!(code(&entries, RIGHT_FEATURE), "pos H <0 0 -15 0>;\npos I <0 0 -15 0>;\npos O <0 0 -40 0>;\n");
+    // Every glyph with an outline (`.notdef` too) takes the global offset; the empty `space`
+    // and `A` take none; the guides override it for `O`.
+    assert_eq!(code(&entries, LEFT_FEATURE), "pos .notdef <-20 0 -20 0>;\npos H <-20 0 -20 0>;\npos I <-20 0 -20 0>;\npos O <-35 0 -35 0>;\n");
+    assert_eq!(code(&entries, RIGHT_FEATURE), "pos .notdef <0 0 -15 0>;\npos H <0 0 -15 0>;\npos I <0 0 -15 0>;\npos O <0 0 -40 0>;\n");
     assert!(entries.iter().all(|e| e.automatic));
 
     // Read back from the compiled tables.
@@ -111,8 +112,8 @@ fn optical_bounds_from_offsets_and_guides_compile_to_lfbd_and_rtbd() {
     let order = GlyphOrder::new(ORDER.iter().map(|g| g.to_string()).collect()).unwrap();
     let compiled = fontcraft_fea::compile(&CompileRequest::new(&files, &order)).unwrap_or_else(|d| panic!("{text}\n{d:?}"));
     let gpos = compiled.gpos.unwrap();
-    assert_eq!(single_positions(&gpos, b"lfbd"), vec![(3, -20, -20), (4, -20, -20), (5, -35, -35)]);
-    assert_eq!(single_positions(&gpos, b"rtbd"), vec![(3, 0, -15), (4, 0, -15), (5, 0, -40)]);
+    assert_eq!(single_positions(&gpos, b"lfbd"), vec![(0, -20, -20), (3, -20, -20), (4, -20, -20), (5, -35, -35)]);
+    assert_eq!(single_positions(&gpos, b"rtbd"), vec![(0, 0, -15), (3, 0, -15), (4, 0, -15), (5, 0, -40)]);
 }
 
 #[test]
