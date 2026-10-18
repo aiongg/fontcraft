@@ -449,10 +449,11 @@ status = "docs"
 tag = "CBDT"
 flavour = ["ttf"]
 read = "read-fonts"
-write = "none-yet"
+write = "own"
 area = "compile"
 milestone = "M11"
 summary = "Colour bitmap data with its companion location table CBLC (strike list, index subtables, glyph metrics). read-fonts reads both; write-fonts has neither, so the index subtable formats and bitmap data formats are ours."
+notes = "FontCraft writes both at version 3.0 when the CBDT export option is on (`color.export.cbdtNotInReference`): one strike per iColor size up to 255 pixels per em, one index subtable of format 1 per run of consecutive glyph ids, glyph bitmap format 17 (small metrics, PNG data), laid out in the order fontTools compiles them. Images wider or higher than 255 pixels, and placements or advances that small metrics cannot state, are left out with a warning; JPEG and TIFF images are converted to PNG."
 ref = "read-fonts src/tables/cbdt.rs, cblc.rs, bitmap.rs; write-fonts src/tables.rs"
 status = "docs"
 

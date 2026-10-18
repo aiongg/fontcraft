@@ -1351,7 +1351,13 @@ summary = "The chapter has no CBDT/CBLC workflow; the only bitmap output it desc
 ref = "Color Fonts › sbix Fonts"
 status = "inferred"
 own = true
-notes = "Decided in docs/plans/M11.md § 7, question 2 (a): built, at the lowest priority, in the plan's last wave (package M11.11). nanoemoji's `cbdt` output (CBLC and CBDT version 3, index subtable format 1, glyph bitmap format 17) is the layout oracle."
+notes = "Decided in docs/plans/M11.md § 7, question 2 (a), package M11.11 (crates/compile/src/color/cbdt.rs). nanoemoji's `cbdt` output (CBLC and CBDT version 3, index subtable format 1, glyph bitmap format 17) is the layout oracle; the writer's test compares its bytes with what fontTools compiles from the objects nanoemoji builds. The strikes are the sbix strikes; the metrics follow each image's placement on its layer as sbix's origin offsets do. The dialog checkbox and command-line flag that set the option are not wired yet: `color.describeExport` takes `cbdt` and the compiler takes `Options::cbdt`."
+guesses = [
+  "Each iColor size is one CBLC strike holding one index subtable per run of consecutive glyph ids, where nanoemoji writes a separate strike per run; a renderer test with glyphs that are not consecutive would settle which renderers draw.",
+  "A strike's line metrics span its bitmaps (the highest top as ascender, the lowest bottom as descender, the widest advance as widthMax), where nanoemoji derives them from the font's ascender and descender; comparing line spacing on Android at the strike size would settle it.",
+  "JPEG and TIFF images are converted to PNG, because glyph bitmap format 17 holds PNG only; nanoemoji makes its bitmaps from SVG and never meets them.",
+  "CBDT export gives no warning when one glyph's images differ in width ÷ height, since each CBDT strike is drawn on its own and the handbook's aspect rule is about sbix; nothing in a reference decides this.",
+]
 
 # ───────────────────────────── Behaviours: SVG colour glyphs ─────────────────────────────
 
