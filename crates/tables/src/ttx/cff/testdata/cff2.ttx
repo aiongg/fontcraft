@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ttFont sfntVersion="OTTO" ttLibVersion="4.66">
+
+  <GlyphOrder>
+    <GlyphID id="0" name=".notdef"/>
+    <GlyphID id="1" name="glyph00001"/>
+    <GlyphID id="2" name="glyph00002"/>
+  </GlyphOrder>
+
+  <maxp>
+    <tableVersion value="0x5000"/>
+    <numGlyphs value="3"/>
+  </maxp>
+
+  <post>
+    <formatType value="3.0"/>
+    <italicAngle value="0.0"/>
+    <underlinePosition value="-100"/>
+    <underlineThickness value="50"/>
+    <isFixedPitch value="0"/>
+    <minMemType42 value="0"/>
+    <maxMemType42 value="0"/>
+    <minMemType1 value="0"/>
+    <maxMemType1 value="0"/>
+  </post>
+
+  <CFF2>
+    <major value="2"/>
+    <minor value="0"/>
+    <CFFFont name="CFF2Font">
+      <FontMatrix value="0.001 0 0 0.001 0 0"/>
+      <FDArray>
+        <FontDict index="0">
+          <Private>
+            <BlueValues>
+                <blend value="-10 5"/>
+                <blend value="0 0"/>
+                <blend value="500 10"/>
+                <blend value="510 0"/>
+            </BlueValues>
+            <BlueScale value="0.039625"/>
+            <BlueShift value="7"/>
+            <BlueFuzz value="1"/>
+            <StdHW>
+                <blend value="50 6"/>
+            </StdHW>
+            <StdVW value="80"/>
+            <LanguageGroup value="0"/>
+            <ExpansionFactor value="0.06"/>
+            <Subrs>
+              <CharString index="0">
+                100 0 rlineto
+              </CharString>
+            </Subrs>
+          </Private>
+        </FontDict>
+      </FDArray>
+      <CharStrings>
+        <CharString name=".notdef">
+          100 100 rmoveto
+          200 hlineto
+        </CharString>
+        <CharString name="glyph00001">
+          1 vsindex
+          10 20 5 6 7 8 2 blend
+          rmoveto
+          -107 callgsubr
+          rmoveto
+        </CharString>
+        <CharString name="glyph00002">
+          5 10 20 1 blend
+          hstemhm
+          hintmask 10000000
+          0 0 rmoveto
+          -107 callsubr
+        </CharString>
+      </CharStrings>
+      <VarStore Format="1">
+        <Format value="1"/>
+        <VarRegionList>
+          <Region index="0">
+            <VarRegionAxis index="0">
+              <StartCoord value="0.0"/>
+              <PeakCoord value="1.0"/>
+              <EndCoord value="1.0"/>
+            </VarRegionAxis>
+          </Region>
+          <Region index="1">
+            <VarRegionAxis index="0">
+              <StartCoord value="0.0"/>
+              <PeakCoord value="0.5"/>
+              <EndCoord value="1.0"/>
+            </VarRegionAxis>
+          </Region>
+        </VarRegionList>
+        <VarData index="0">
+          <NumShorts value="0"/>
+          <VarRegionIndex index="0" value="0"/>
+        </VarData>
+        <VarData index="1">
+          <NumShorts value="0"/>
+          <VarRegionIndex index="0" value="0"/>
+          <VarRegionIndex index="1" value="1"/>
+        </VarData>
+      </VarStore>
+    </CFFFont>
+
+    <GlobalSubrs>
+      <CharString index="0">
+        10 20</CharString>
+      <CharString index="1" raw="1">
+        8c8d8e   
+      </CharString>
+    </GlobalSubrs>
+  </CFF2>
+
+</ttFont>

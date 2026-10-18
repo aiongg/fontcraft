@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ttFont sfntVersion="OTTO" ttLibVersion="4.66">
+
+  <GlyphOrder>
+    <GlyphID id="0" name=".notdef"/>
+    <GlyphID id="1" name="space"/>
+    <GlyphID id="2" name="A"/>
+    <GlyphID id="3" name="B"/>
+    <GlyphID id="4" name="A.1"/>
+    <GlyphID id="5" name="a.alt"/>
+  </GlyphOrder>
+
+  <maxp>
+    <tableVersion value="0x5000"/>
+    <numGlyphs value="6"/>
+  </maxp>
+
+  <CFF>
+    <major value="1"/>
+    <minor value="0"/>
+    <CFFFont name="Test-Regular">
+      <version value="1.000"/>
+      <Notice value="Notice text"/>
+      <Copyright value="Copyright line one line two
+end"/>
+      <FullName value="Test Regular"/>
+      <FamilyName value="Test"/>
+      <Weight value="Regular"/>
+      <isFixedPitch value="1"/>
+      <ItalicAngle value="-12.5"/>
+      <UnderlinePosition value="-150"/>
+      <UnderlineThickness value="60"/>
+      <PaintType value="0"/>
+      <CharstringType value="2"/>
+      <FontMatrix value="0.0005 0 0.00015 0.0005 0 0"/>
+      <UniqueID value="4000000"/>
+      <FontBBox value="-10 -250 1100 900"/>
+      <StrokeWidth value="0"/>
+      <XUID value="1 2 3"/>
+      <PostScript value="/OrigFontType /TrueType def"/>
+      <Encoding>
+        <map code="0x20" name="space"/>
+        <map code="0x41" name="A"/>
+        <map code="0x42" name="B"/>
+        <map code="0xc0" name="A"/>
+      </Encoding>
+      <Private>
+        <BlueValues value="-15 0 500 515"/>
+        <OtherBlues value="-250 -240"/>
+        <BlueScale value="0.0375"/>
+        <BlueShift value="7"/>
+        <BlueFuzz value="1"/>
+        <StdHW value="50"/>
+        <StdVW value="80"/>
+        <StemSnapH value="50 55"/>
+        <ForceBold value="1"/>
+        <LanguageGroup value="0"/>
+        <ExpansionFactor value="0.06"/>
+        <initialRandomSeed value="0"/>
+        <defaultWidthX value="500"/>
+        <nominalWidthX value="600"/>
+        <Subrs>
+          <CharString index="0">
+            100 0 rlineto
+            return
+          </CharString>
+          <CharString index="1" raw="1">
+            9090050b   
+          </CharString>
+          <CharString index="2">
+            0 100 rlineto
+            return
+          </CharString>
+        </Subrs>
+      </Private>
+      <CharStrings>
+        <CharString name=".notdef">
+          500 50 50 rmoveto
+          400 hlineto
+          -105 callsubr
+          -105 callsubr
+          endchar
+        </CharString>
+        <CharString name="A">
+          0 50 300 50 hstemhm
+          100 80 vstemhm
+          hintmask 11100000
+          50 50 rmoveto
+          -107 callsubr
+          hintmask 01000000
+          0 300 rlineto
+          1.5 -0.25 rlineto
+          -107 callgsubr
+          endchar
+        </CharString>
+        <CharString name="A.1">
+          0 10 20 10 40 10 60 10 80 10 hstemhm
+          0 10 20 10 40 10 60 10 vstemhm
+          hintmask 1111111110000000
+          10 10 rmoveto
+          5</CharString>
+        <CharString name="B">
+          10 20 hstem
+          30 40 cntrmask 11000000
+          0 0 rmoveto
+          -105 callsubr
+          0.1 -2.0 rlineto
+          1 2 3 4 5 6 7 8 9 10 11 12 50 flex
+          endchar
+        </CharString>
+        <CharString name="a.alt">
+          50 50 rmoveto
+          100 200</CharString>
+        <CharString name="space">
+          -100 endchar
+        </CharString>
+      </CharStrings>
+    </CFFFont>
+
+    <GlobalSubrs>
+      <CharString index="0">
+        10 20 rlineto
+        return
+      </CharString>
+      <CharString index="1" raw="1">
+        a9b3050b   
+      </CharString>
+    </GlobalSubrs>
+  </CFF>
+
+  <VORG>
+    <majorVersion value="1"/>
+    <minorVersion value="0"/>
+    <defaultVertOriginY value="880"/>
+    <numVertOriginYMetrics value="4"/>
+    <VOriginRecord>
+      <glyphName value="space"/>
+      <vOrigin value="875"/>
+    </VOriginRecord>
+    <VOriginRecord>
+      <glyphName value="A.1"/>
+      <vOrigin value="900"/>
+    </VOriginRecord>
+    <VOriginRecord>
+      <glyphName value="glyph00009"/>
+      <vOrigin value="860"/>
+    </VOriginRecord>
+  </VORG>
+
+</ttFont>

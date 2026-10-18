@@ -617,8 +617,8 @@ fn cff_glyph_order(data: &[u8]) -> Result<Vec<String>> {
     let mut names: Vec<String> = Vec::with_capacity(count);
     match charset {
         0 => {
-            // fontTools takes the whole ISOAdobe charset, whatever the glyph count.
-            for sid in 0..229 {
+            // The ISOAdobe charset, cut to the glyph count as fontTools cuts it.
+            for sid in 0..229.min(count) {
                 names.push(sid_name(sid)?);
             }
             return Ok(names);

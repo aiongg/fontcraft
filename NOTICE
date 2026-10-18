@@ -135,6 +135,7 @@ bundled, the file says so in its header and the project is listed here with its 
   crates/io-glyphs/src/lib.rs (quadratic_roots) the quadratic solver of misc/bezierTools.py.
   crates/interp/src/overlay.rs ports the same three functions, and crates/compile/src/var/featvar.rs the GSUB of addFeatureVariations, with the alternate glyph names and order of fontc's glyphs2fontir/src/source.rs and glyphsLib's builder/bracket_layers.py (the bracket glyphs, their component renaming and the copying of kerning to them) and builder/transformations/align_alternate_layers.py, and the merging of the feature variations into the feature code's GSUB of fontc's fontbe/src/features/feature_variations.rs (crates/fea/src/provider.rs) (Apache License 2.0).
   crates/tables/src/ttx (mod.rs, core.rs, core/) ports ttLib's TTX writer for the core tables and ttProgram's opcode table and disassembly.
+  crates/tables/src/ttx/cff.rs and cff/ (M12.5) port cffLib's CFF and CFF2 reading and XML writing, psCharStrings' DICT and Type 2 charstring decompilers, the VarStore XML form of otData, and the VORG table's XML writer.
   crates/tables/src/variations.rs ports varLib.avar.map, the avar table's renormalizeLocation, VarStoreInstancer, _add_avar and designspaceLib's get_validated_map.
   crates/features/src/fea_variable.rs ports misc/fixedTools.py's nearestMultipleShortestRepr,
   which writes a user coordinate with the fewest decimals a 16.16 fixed-point number keeps.
