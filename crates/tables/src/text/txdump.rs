@@ -197,6 +197,10 @@ impl<'a> Source<'a> {
                     if seen >= MAX_TTX_CMAP_ENTRIES {
                         return Err(TablesError::TooLarge { what: "the cmap mappings", limit: MAX_TTX_CMAP_ENTRIES });
                     }
+                    // tx prints a glyph mapped only to .notdef's code points as unencoded.
+                    if gid.to_u32() == 0 {
+                        continue;
+                    }
                     if let Some(slot) = codes.get_mut(gid.to_u32() as usize)
                         && slot.is_none_or(|c| code < c)
                     {

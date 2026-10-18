@@ -42,6 +42,21 @@ struct Points {
     ends: Vec<usize>,
 }
 
+/// Whether each of the `n` points has the cubic flag, from the flag bytes at the start of
+/// `data` (a simple glyph's data after its instructions).
+fn cubic_bits(data: &[u8], n: usize) -> Vec<bool> {
+    let mut out = Vec::with_capacity(n);
+    let mut bytes = data.iter().copied();
+    while out.len() < n {
+        let Some(flag) = bytes.next() else { break };
+        let count = if flag & 0x08 != 0 { usize::from(bytes.next().unwrap_or(0)) + 1 } else { 1 };
+        let count = count.min(n - out.len());
+        out.extend(std::iter::repeat_n(flag & CUBIC != 0, count));
+    }
+    out.resize(n, false);
+    out
+}
+
 impl Points {
     fn read(bytes: &[u8]) -> std::result::Result<Self, String> {
         let g = RawSimple::read(FontData::new(bytes)).map_err(|e| format!("unreadable glyph: {e}"))?;
@@ -63,12 +78,15 @@ impl Points {
             last = Some(e);
         }
         let points = raw.iter().map(|p| (f64::from(p.x), f64::from(p.y))).collect();
+        // read-fonts keeps only the on-curve bit; the cubic bit comes from the flag bytes.
+        let cubic = cubic_bits(g.glyph_data(), n);
         let flags = raw_flags
             .iter()
-            .map(|f| {
+            .zip(cubic)
+            .map(|(f, cubic)| {
                 if f.is_on_curve() {
                     ON
-                } else if f.is_off_curve_cubic() {
+                } else if cubic {
                     CUBIC
                 } else {
                     0

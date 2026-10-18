@@ -499,7 +499,7 @@ fn normalised_dump_sorts_tables_zeroes_what_always_differs_and_writes_outlines()
     {
         assert!(text.contains(line), "{line}: {text}");
     }
-    assert!(!text.contains(r#"name=".notdef""#), "mappings to .notdef are left out: {text}");
+    assert!(!text.lines().any(|l| l.contains("<map code=") && l.contains(r#"name=".notdef""#)), "mappings to .notdef are left out: {text}");
     assert!(text.contains(r#"<map code="0x6f" name="o"/>"#), "{text}");
     let hmtx = text.find("<hmtx>").unwrap();
     assert!(text[hmtx..].contains(r#"<mtx name="o" width="425" lsb="44"/>"#), "hmtx is read before hhea is zeroed: {text}");

@@ -186,8 +186,10 @@ fn volt_bad_projects_fail_with_a_place_and_never_panic() {
     for i in 1..40 {
         project.push_str(&format!("DEF_GROUP \"g{i}\" ENUM GROUP \"g{}\" GROUP \"g{}\" END_ENUM END_GROUP\n", i - 1, i - 1));
     }
+    project.push_str("DEF_ANCHOR \"MARK_top\" ON 2 GLYPH m COMPONENT 1 AT POS END_POS END_ANCHOR\n");
     project.push_str("DEF_LOOKUP \"m\" AS_POSITION ATTACH GROUP \"g39\" TO GLYPH \"m\" AT ANCHOR \"top\" END_ATTACH END_POSITION");
-    assert!(matches!(volt_to_fea(&project), Err(TablesError::TooLarge { .. })));
+    let result = volt_to_fea(&project);
+    assert!(matches!(result, Err(TablesError::TooLarge { .. })), "{:.300}", format!("{result:?}"));
     assert!(looks_like_volt("\u{feff}  DEF_GLYPH \"a\" ID 0 END_GLYPH"));
     assert!(!looks_like_volt("feature liga { } liga;"));
 }

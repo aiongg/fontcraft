@@ -38,6 +38,10 @@ fn font_with(glyphs: Vec<(&str, Vec<u8>, u16)>) -> SfntFont {
     for (_, bytes, _) in &glyphs {
         loca.extend_from_slice(&(glyf.len() as u32).to_be_bytes());
         glyf.extend_from_slice(bytes);
+        // Padded to an even length, as the font writer pads them.
+        if glyf.len() % 2 == 1 {
+            glyf.push(0);
+        }
     }
     loca.extend_from_slice(&(glyf.len() as u32).to_be_bytes());
     let mut maxp = vec![0u8; 32];

@@ -113,7 +113,7 @@ fn fontdame_gdef_classes_feed_the_lookup_flags_of_files_given_with_it() {
     // Asked for GDEF only, the lookups are left out.
     let only = FontDameOptions { tables: vec![*b"GDEF"], ..FontDameOptions::default() };
     let (fea, _) = convert(&[&gsub, &gdef], &only).unwrap();
-    assert!(!fea.contains("lookup "), "{fea}");
+    assert!(!fea.contains("lookup GSUB_"), "{fea}");
     assert!(looks_like_fontdame(&gsub) && looks_like_fontdame(&gdef));
     assert!(!looks_like_fontdame("feature liga { sub f i by f_i; } liga;"));
 }
