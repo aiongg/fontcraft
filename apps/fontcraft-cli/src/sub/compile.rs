@@ -12,7 +12,7 @@ const USAGE: &str = "\
   fontcraft-cli compile SOURCE... [--format ttf|otf]... [--container plain|woff|woff2]...
                         [-o FILE | --output-dir DIR] [--instances[=NAME,...]] [--masters-as-instances]
                         [--keep-overlaps] [--keep-direction] [--conversion-error EM]
-                        [--timestamp SECS|now] [--plan]
+                        [--timestamp SECS|now] [--ttfautohint PATH] [--plan]
   fontcraft-cli compile SOURCE... --variable [--format ttf|otf] [--settings NAME,...] [--container plain|woff|woff2]...
                         [-o FILE | --output-dir DIR] [--timestamp SECS|now]
       Compile each SOURCE to static fonts: every exportable instance (or the named ones; a font
@@ -21,7 +21,9 @@ const USAGE: &str = "\
       name in DIR (default: the current folder); with both formats each goes into a ttf or otf
       subfolder. -o names the one file a single SOURCE builds. Instances between masters are
       skipped until interpolation exists. Overlapping contours are merged unless --keep-overlaps is
-      given. --plan prints what would be built, without building.
+      given. --ttfautohint PATH names the trusted ttfautohint program: a source whose TTFAutohint
+      binary path parameter names that same file is autohinted by it (default: none runs).
+      --plan prints what would be built, without building.
       --variable builds variable fonts instead: one per variable font setting (or the settings
       --settings names), or one for the whole designspace when the source has none, with
       TrueType outlines, or CFF2 outlines with --format otf; files are named by the setting's file
@@ -41,6 +43,7 @@ fn compile(args: &[String]) -> Outcome {
     let mut plan = false;
     let mut variable = false;
     let mut settings: Option<Vec<String>> = None;
+    let mut autohinter: Option<&String> = None;
     let mut it = args.iter();
     let list = |v: &str| -> Vec<String> { v.split(',').map(str::trim).filter(|s| !s.is_empty()).map(str::to_string).collect() };
     while let Some(arg) = it.next() {
@@ -82,6 +85,7 @@ fn compile(args: &[String]) -> Outcome {
                 };
                 params.insert("timestamp".into(), t);
             }
+            "--ttfautohint" => autohinter = Some(it.next().ok_or_else(|| usage("--ttfautohint needs the path of a ttfautohint program"))?),
             "--plan" => plan = true,
             "--variable" => variable = true,
             "--settings" => settings = Some(list(it.next().ok_or_else(|| usage("--settings needs setting names"))?)),
@@ -169,6 +173,12 @@ fn compile(args: &[String]) -> Outcome {
     let params = Value::Object(params);
     let build = |source: &str| -> Result<Value, Failure> {
         let mut session = Session::new();
+        if let Some(path) = autohinter {
+            session
+                .settings_mut()
+                .set(fontcraft_engine::external_autohint::SETTING, json!(path))
+                .map_err(|e| usage(format!("--ttfautohint: {e}")))?;
+        }
         open(&mut session, source)?;
         execute(&mut session, command, &params)
     };

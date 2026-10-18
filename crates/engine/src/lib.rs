@@ -694,7 +694,9 @@ impl Session {
         };
         let params = checked.as_ref().unwrap_or(params);
         if self.depth > 0 {
-            // A step of another command: the outer call owns the snapshot and the journal.
+            // A step of another command: the outer call owns the snapshot and the journal. The
+            // modules are read again, so a step sees what an earlier step installed or removed.
+            let _modules = export_steps::ModuleScope::enter(&self.extensions);
             self.depth += 1;
             let r = (spec.run)(self, params);
             self.depth -= 1;

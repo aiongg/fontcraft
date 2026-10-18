@@ -772,11 +772,14 @@ enum Val {
     Pt { x: f64, y: f64, tuple_only: bool },
 }
 
+/// Deepest tree [`eval_node`] walks. A chain `1+1+…` nests one node per operator, unlike the
+/// parentheses that [`MAX_EXPR_DEPTH`] counts, so the tree is at most as deep as the source is
+/// long, which the parser has already bounded.
+const MAX_EVAL_DEPTH: usize = MAX_EXPR_BYTES;
+
 fn eval_node(n: &PNode, env: &HashMap<String, Val>, depth: usize) -> Result<Val, String> {
-    // A chain `1+1+…` nests one node per operator, so the tree is at most as deep as the source
-    // is long; the parser has already bounded that.
-    if depth > MAX_EXPR_BYTES {
-        return Err(format!("a position is nested more than {MAX_EXPR_DEPTH} deep"));
+    if depth > MAX_EVAL_DEPTH {
+        return Err(format!("a position is nested more than {MAX_EVAL_DEPTH} deep"));
     }
     let d = depth.saturating_add(1);
     match n {

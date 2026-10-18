@@ -25,7 +25,7 @@
 //! it: the font would come out without a filter its source asks for. Parameters the module cannot
 //! take, and a module that fails on a glyph, are warnings, and that string changes nothing. The
 //! session's modules reach this stage through [`ModuleScope`], which `Session::execute` enters
-//! for each top-level command.
+//! for each command, also for each step of a command that runs others.
 //!
 //! Before Filter decomposes, each composite of the target master is given the anchors it would
 //! have inherited from its components, so mark attachment survives the decomposition (not for
@@ -424,8 +424,8 @@ thread_local! {
     static MODULES: RefCell<Option<Rc<ModuleSet>>> = const { RefCell::new(None) };
 }
 
-/// Makes a session's filter modules visible to the export filter step while one top-level
-/// command runs, and puts back what it replaced when dropped (also when the command panics).
+/// Makes a session's filter modules visible to the export filter step while one command (or one
+/// step of a command) runs, and puts back what it replaced when dropped (also when the command panics).
 /// Export builds run deep inside commands that have no other way to the session's
 /// `ExtensionState`; the sessions the steps open for built-in filters enter their own, empty,
 /// scope and restore this one.

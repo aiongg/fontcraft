@@ -127,7 +127,7 @@ fn read_index(location: &str, fetched: Option<&Value>) -> std::result::Result<In
 }
 
 /// Reads an index file, refusing one over [`MAX_INDEX_BYTES`] without reading the rest.
-fn read_index_file(path: &Path) -> std::result::Result<Vec<u8>, String> {
+pub(super) fn read_index_file(path: &Path) -> std::result::Result<Vec<u8>, String> {
     let file = std::fs::File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let mut bytes = Vec::new();
     let limit = u64::try_from(MAX_INDEX_BYTES).unwrap_or(u64::MAX).saturating_add(1);

@@ -508,6 +508,7 @@ fn export_with_profiles(s: &mut Session, v: &Value) -> Result<Value> {
                 options: options.clone(),
                 dest: Dest::Folder(dest_path.clone()),
                 first_only: false,
+                autohinter: crate::external_autohint::trusted(s),
             };
             let mut sink = Sink::new(&req.dest, false, s.export_outside())?;
             for (k, i) in members {

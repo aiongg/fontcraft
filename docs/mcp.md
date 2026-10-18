@@ -257,7 +257,7 @@ Errors carry a JSON-RPC error without an id in the body, so a client can show th
 |---|---|
 | Malformed request line or header, missing `Host`, two different `Content-Length` values | `400` (connection closed) |
 | A body that is not JSON or not UTF-8 (`-32700`), or a JSON array: batches are not supported (`-32600`) | `400` |
-| `Host` that is not `localhost` or a loopback address, while listening on loopback | `403` |
+| `Host` that is not `localhost` or a loopback address, while listening on loopback; on any other address, a `Host` that is a name rather than `localhost` or an IP address (a page could have rebound that name to this machine) | `403` |
 | `Origin` other than the server's own (`http://` plus the `Host` value): a web page on another site | `403` |
 | Path other than `/mcp` | `404` |
 | `Accept` that allows neither JSON nor an event stream | `406` |
@@ -272,7 +272,7 @@ Errors carry a JSON-RPC error without an id in the body, so a client can show th
 | A 17th connection while 16 are open | `503` |
 
 A connection stays open for further requests (HTTP/1.1 keep-alive) and closes after 60 seconds
-without one. There is no authentication: a `--listen` address that is not loopback lets anyone who
+without one, or after the first reply once it has been open for 10 minutes. There is no authentication: a `--listen` address that is not loopback lets anyone who
 can reach the port edit the document, and the server warns about it at start.
 
 Transport: `crates/mcp/src/http.rs`, with the limits as named constants at the top.

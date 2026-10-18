@@ -48,14 +48,16 @@ USAGE:
   fontcraft-cli compile SOURCE... [--format ttf|otf]... [--container plain|woff|woff2]...
                         [-o FILE | --output-dir DIR] [--instances[=NAME,...]] [--masters-as-instances]
                         [--keep-overlaps] [--keep-direction] [--conversion-error EM]
-                        [--timestamp SECS|now] [--plan]
+                        [--timestamp SECS|now] [--ttfautohint PATH] [--plan]
       Compile each SOURCE to static fonts: every exportable instance (or the named ones; a font
       without instances builds its first master), plus each master with --masters-as-instances,
       once per format (default ttf) and container (default plain). Files are named by PostScript
       name in DIR (default: the current folder); with both formats each goes into a ttf or otf
       subfolder. -o names the one file a single SOURCE builds. Instances between masters are
       skipped until interpolation exists. Overlapping contours are merged unless --keep-overlaps is
-      given. --plan prints what would be built, without building.
+      given. --ttfautohint PATH names the trusted ttfautohint program: a source whose TTFAutohint
+      binary path parameter names that same file is autohinted by it (default: none runs).
+      --plan prints what would be built, without building.
       One JSON line per SOURCE.
 
   fontcraft-cli info FILE [--section NAME,...] [--all-names] [--face N]

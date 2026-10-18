@@ -27,6 +27,9 @@ use crate::{HintingError, MAX_CONTROL_LINES, MAX_CONTROL_TEXT, MAX_DELTA_PPM};
 pub const MAX_CONTROL_POINTS: usize = 65_536;
 /// Highest point index an entry may name (the TrueType point limit).
 const MAX_POINT_INDEX: u32 = 65_535;
+/// Points and sizes all parsed lines hold together: an entry's numbers are copied once per glyph
+/// it names, so the text's size alone does not bound them.
+pub const MAX_CONTROL_NUMBERS: usize = 1 << 22;
 
 /// What one line asks for.
 #[derive(Clone, Debug, PartialEq)]
@@ -88,6 +91,7 @@ pub fn parse(text: &str) -> Result<ControlInstructions, HintingError> {
         return Err(HintingError::LimitExceeded { what: "lines of control instructions", limit: MAX_CONTROL_LINES });
     }
     let mut out = ControlInstructions::default();
+    let mut budget = MAX_CONTROL_NUMBERS;
     // Entries: (first line, text), comments removed and continued lines joined.
     let mut entry = String::new();
     let mut entry_line = 1;
@@ -104,7 +108,7 @@ pub fn parse(text: &str) -> Result<ControlInstructions, HintingError> {
         };
         for (k, part) in code.split(';').enumerate() {
             if k > 0 {
-                parse_entry(&entry, entry_line, &mut out)?;
+                parse_entry(&entry, entry_line, &mut out, &mut budget)?;
                 entry.clear();
                 entry_line = line_no;
             }
@@ -113,11 +117,11 @@ pub fn parse(text: &str) -> Result<ControlInstructions, HintingError> {
         }
         continued = more;
         if !more {
-            parse_entry(&entry, entry_line, &mut out)?;
+            parse_entry(&entry, entry_line, &mut out, &mut budget)?;
             entry.clear();
         }
     }
-    parse_entry(&entry, entry_line, &mut out)?;
+    parse_entry(&entry, entry_line, &mut out, &mut budget)?;
     Ok(out)
 }
 
@@ -150,7 +154,33 @@ fn tokens(text: &str) -> Vec<String> {
     out
 }
 
-fn parse_entry(text: &str, line: usize, out: &mut ControlInstructions) -> Result<(), HintingError> {
+/// Adds one line per glyph to `out`, each holding `points` and `ppems`, within the line limit
+/// and the running `budget` of numbers.
+#[allow(clippy::too_many_arguments)]
+fn push_lines(
+    out: &mut ControlInstructions,
+    budget: &mut usize,
+    glyphs: &[String],
+    line: usize,
+    font_index: u32,
+    kind: &ControlKind,
+    points: &[u32],
+    ppems: &[u16],
+) -> Result<(), HintingError> {
+    let per_line = points.len().saturating_add(ppems.len());
+    for g in glyphs {
+        if out.lines.len() >= MAX_CONTROL_LINES {
+            return Err(HintingError::LimitExceeded { what: "control instructions", limit: MAX_CONTROL_LINES });
+        }
+        *budget = budget
+            .checked_sub(per_line)
+            .ok_or(HintingError::LimitExceeded { what: "points and sizes in control instructions", limit: MAX_CONTROL_NUMBERS })?;
+        out.lines.push(ControlLine { line, font_index, glyph: g.clone(), kind: kind.clone(), points: points.to_vec(), ppems: ppems.to_vec() });
+    }
+    Ok(())
+}
+
+fn parse_entry(text: &str, line: usize, out: &mut ControlInstructions, budget: &mut usize) -> Result<(), HintingError> {
     let err = |message: String| HintingError::Control { line, message };
     let t = tokens(text);
     if t.is_empty() {
@@ -248,22 +278,10 @@ fn parse_entry(text: &str, line: usize, out: &mut ControlInstructions) -> Result
             }
             let ppems: Vec<u16> = ppems.into_iter().filter_map(|p| u16::try_from(p).ok()).collect();
             let kind = if kind_word == "touch" { ControlKind::Touch { x_shift, y_shift } } else { ControlKind::Point { x_shift, y_shift } };
-            if out.lines.len() >= MAX_CONTROL_LINES {
-                return Err(HintingError::LimitExceeded { what: "control instructions", limit: MAX_CONTROL_LINES });
-            }
-            for g in &glyphs {
-                out.lines.push(ControlLine { line, font_index, glyph: g.clone(), kind: kind.clone(), points: points.clone(), ppems: ppems.clone() });
-            }
-            return Ok(());
+            return push_lines(out, budget, &glyphs, line, font_index, &kind, &points, &ppems);
         }
     };
-    if out.lines.len() >= MAX_CONTROL_LINES {
-        return Err(HintingError::LimitExceeded { what: "control instructions", limit: MAX_CONTROL_LINES });
-    }
-    for g in &glyphs {
-        out.lines.push(ControlLine { line, font_index, glyph: g.clone(), kind: kind.clone(), points: points.clone(), ppems: Vec::new() });
-    }
-    Ok(())
+    push_lines(out, budget, &glyphs, line, font_index, &kind, &points, &[])
 }
 
 /// Reads comma-separated numbers and `a-b` ranges from the start of `t`, at most `limit` in
@@ -339,5 +357,16 @@ mod tests {
             }
         }
         assert!(matches!(parse(&"a n 1\n".repeat(MAX_CONTROL_LINES + 1)), Err(HintingError::LimitExceeded { .. })));
+    }
+
+    #[test]
+    fn many_glyphs_on_one_entry_stay_within_the_limits() {
+        // One short entry naming many glyphs copies its points once per glyph.
+        let text = format!("{} nodir 0-65535", vec!["a"; 100].join(","));
+        let e = parse(&text).unwrap_err();
+        assert!(matches!(e, HintingError::LimitExceeded { limit: MAX_CONTROL_NUMBERS, .. }), "{e:?}");
+        assert!(e.to_string().contains("points and sizes"), "{e}");
+        let text = format!("{} nodir 1", vec!["a"; MAX_CONTROL_LINES + 1].join(","));
+        assert!(matches!(parse(&text), Err(HintingError::LimitExceeded { limit: MAX_CONTROL_LINES, .. })));
     }
 }

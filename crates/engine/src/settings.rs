@@ -101,6 +101,7 @@ pub const SETTINGS: &[SettingDef] = &[
     SettingDef { id: "appearance.displayUnicodeValue", kind: Kind::Bool, default: DefaultValue::Bool(false) },
     SettingDef { id: "editing.leverRatio", kind: Kind::Number { min: 1.0, max: 100.0 }, default: DefaultValue::Number(6.0) },
     SettingDef { id: "editing.powerNudge", kind: Kind::Bool, default: DefaultValue::Bool(false) },
+    SettingDef { id: "export.ttfAutohintBinary", kind: Kind::Text, default: DefaultValue::Text("") },
     SettingDef { id: "start.showAtLaunch", kind: Kind::Bool, default: DefaultValue::Bool(true) },
     SettingDef { id: "user.disableAutomaticAlignmentForImportedFiles", kind: Kind::Bool, default: DefaultValue::Bool(false) },
 ];

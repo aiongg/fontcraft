@@ -2042,8 +2042,11 @@ effect = "hinting"
 summary = "File path of a precompiled ttfautohint binary to run in place of the built-in one, to pin or update the version."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "M10.21, crates/engine/src/external_autohint.rs: FontCraft has no built-in ttfautohint (M10 § 7, question 2); when this parameter names a program, an autohinted TrueType export runs it on the finished font (font on standard input, hinted font on standard output), with the TTFAutohint options split on spaces and the control instructions in a temporary file given as --control-file; it may run 120 s and write 256 MB. A missing or failing program, or one that writes no font, keeps the built-in autohinter's result with a warning. Desktop only; the web app reports the parameter."
-guesses = ["A failing external autohinter keeps the built-in autohinter's font with a warning instead of refusing the export; the reference app with a binary path that does not exist would show what it does."]
+notes = "M10.21, crates/engine/src/external_autohint.rs: FontCraft has no built-in ttfautohint (M10 § 7, question 2). The parameter only asks for the external run: an autohinted TrueType export runs the user's trusted program (setting export.ttfAutohintBinary, or fontcraft-cli compile --ttfautohint PATH), and only when the parameter names that same file; otherwise nothing runs and a warning says why. Nothing runs while automation roots are in force. The program reads the font on standard input and writes the hinted font to standard output. The TTFAutohint options are split on spaces and must all be ttfautohint option flags (long or short, with their values), passed on as long options; a word that is not an option, and the options that name files (--reference, --control-file), refuse the run. The control instructions go in a file in a new private temporary folder, given as --control-file. The program may run 120 s and write 256 MB. A refused, missing or failing program, or one that writes no font, keeps the built-in autohinter's result with a warning. Desktop only; the web app reports the parameter."
+guesses = [
+  "A failing external autohinter keeps the built-in autohinter's font with a warning instead of refusing the export; the reference app with a binary path that does not exist would show what it does.",
+  "The parameter only selects the program the user trusted in the settings, and the options are limited to ttfautohint's option flags; this departs from the reference app, which runs whatever the parameter names, because a document from elsewhere could otherwise run any program with any arguments.",
+]
 
 [[parameter]]
 name = "TTFAutohint control instructions"

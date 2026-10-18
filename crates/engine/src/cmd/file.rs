@@ -491,7 +491,7 @@ fn export_static(s: &mut Session, p: &Value) -> Result<Value> {
         return Err(p.bad("`destination` is one file, but several instances are named: give a folder"));
     }
     let first_only = matches!(dest, Dest::File(_));
-    let req = Request { flavours: vec![flavour], containers, options, dest, first_only };
+    let req = Request { flavours: vec![flavour], containers, options, dest, first_only, autohinter: crate::external_autohint::trusted(s) };
     compile::check_size(&req, jobs.len())?;
     let mut report = Report::default();
     compile::check_glyph_names(font)?;
@@ -559,7 +559,7 @@ fn export_all(s: &mut Session, p: &Value) -> Result<Value> {
     }
     let containers = compile::containers(&p, "containers", &dest)?;
     let options = export_options(&p)?;
-    let req = Request { flavours, containers, options, dest, first_only: false };
+    let req = Request { flavours, containers, options, dest, first_only: false, autohinter: crate::external_autohint::trusted(s) };
     let mut jobs = Vec::with_capacity(chosen.len());
     for &i in &chosen {
         let doc = docs.get(i).ok_or(EngineError::NoDocument)?;
