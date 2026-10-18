@@ -1361,8 +1361,31 @@ summary = "One dialog for running any batch operation on a chosen glyph and laye
 ref = "FontLab 7 manual › Actions; FontLab 8 What's new › Test & adjust › Actions"
 status = "docs"
 origin = "fontlab"
+notes = "Documented in the FontLab manuals, not yet observed. FontCraft (M13.8): a floating window, not a modal dialog, so the font stays editable beside it. The list holds every editing command that takes `glyphs`, grouped by its menu path instead of FontLab's own groups. The form is drawn from the command's own dialog when that dialog's fields are numbers, checkboxes, locks, pop-ups, check lists or one-line text; any other command gets the JSON editor. The preview runs the action on one glyph (the scope's first, or `previewGlyph`) in an interaction that is cancelled at once, and shows it before and after at one scale, filled or as outlines. The status line names the action, the glyph count, the layers and the step count. Actions that keep masters compatible are not marked yet: no command declares it."
 guesses = [
   "Each action's parameter form is the command's own dialog when it has one, and otherwise a JSON editor checked against the command's params doc; FontLab's dialog lists only its own actions, each with a form.",
+  "Visible layers are the active layer plus every layer marked visible in any glyph of the scope, sent as one `layers` list, so a glyph without one of those layers skips it; how FontLab picks visible layers per glyph would settle it.",
+  "A command that takes only one `layer` runs once per layer of the scope, and one that takes `allMasters` gets it when the scope is every master; FontLab's actions all take a layer scope of their own.",
+  "Set steps take the scope through the macro arguments `glyphs` and `layers` when the command takes a `layers` list; for other commands the layer is fixed when the step is added. Running a saved FontLab action set on another layer scope would settle it.",
+  "The scope starts as the selected glyphs and the active layer; FontLab's starting scope is not documented.",
+]
+
+[[command]]
+id = "dialog.actions"
+label = "Actions"
+menu = ["Script"]
+shortcut = ""
+kind = "ui"
+params = "{open?: bool, search?: string, command?: id, params?: object, set?: object, scope?: \"glyph\" | \"selected\" | \"category\" | \"font\", category?: string, layers?: \"active\" | \"visible\" | \"masters\", previewGlyph?: name, preview?: bool, wireframe?: bool, run?: bool, add?: bool, remove?: index, clear?: bool, title?: string, openSet?: name | path, save?: name, savePath?: path, replace?: bool, runSet?: bool}"
+area = "automation"
+milestone = "M13"
+summary = "Opens the Actions window, where any batch operation runs on a chosen glyph and layer scope with a before and after preview, and where several operations are chained into a saved action set. FontCraft: the actions are the editing commands that take `glyphs`; the set is a macro whose `glyphs` and `layers` are filled from the scope when it runs."
+ref = "FontLab 7 manual › Actions; FontLab 8 What's new › Test & adjust › Actions"
+status = "docs"
+origin = "fontlab"
+notes = "Documented in the FontLab manuals, not yet observed. FontCraft (M13.8): every call shows the window unless `open` is false; the other parameters drive it as its controls do, so an agent can choose an action, set its fields, preview, run, and build, save, open and run a set. A run is one undo step: one command, or `command.batch` when a command that takes one layer runs once per layer. Run Set runs the set as `script.run` runs a macro. At most one of run, runSet, openSet, save and savePath per call; a refused call leaves the window and the font as they were."
+guesses = [
+  "Actions sits in the Script menu beside the action-set commands, without a shortcut; FontLab's menu place and shortcut are not documented in the sources read.",
 ]
 
 [[command]]

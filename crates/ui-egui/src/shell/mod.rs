@@ -120,6 +120,7 @@ pub const UI_FILE_PARAMS: &[(&str, &[fontcraft_engine::cmd::FileParam])] = &[
     ("file.showInFinder", &[fontcraft_engine::cmd::FileParam::read("path")]),
     ("view.setReferenceFont", &[fontcraft_engine::cmd::FileParam::read("path")]),
     ("view.filterByEncodingFile", &[fontcraft_engine::cmd::FileParam::read("path")]),
+    ("dialog.actions", &[fontcraft_engine::cmd::FileParam::read("openSet"), fontcraft_engine::cmd::FileParam::write("savePath")]),
 ];
 
 /// The file parameters [`UI_FILE_PARAMS`] declares for the shell command `id`.
