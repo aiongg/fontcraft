@@ -119,6 +119,7 @@ pub struct PanelState {
     pub attach: crate::shell::attach::AttachState,
     pub reference_font: reference_font::ReferenceFontState,
     pub compare_table: crate::dialogs::compare_fonts::CompareTableState,
+    pub hinting_waterfall: hinting_waterfall::WaterfallState,
 }
 
 impl Default for PanelState {
@@ -150,6 +151,7 @@ impl Default for PanelState {
             attach: Default::default(),
             reference_font: Default::default(),
             compare_table: Default::default(),
+            hinting_waterfall: Default::default(),
         }
     }
 }
