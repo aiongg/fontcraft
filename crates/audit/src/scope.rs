@@ -51,11 +51,12 @@ pub enum CheckGroup {
     Sources,
     Color,
     Vendor,
+    Cid,
 }
 
 impl CheckGroup {
     /// Every group, in the order of `docs/spec/21-qa.md` § 1.
-    pub const ALL: [CheckGroup; 16] = [
+    pub const ALL: [CheckGroup; 17] = [
         CheckGroup::Outlines,
         CheckGroup::Components,
         CheckGroup::Anchors,
@@ -72,6 +73,7 @@ impl CheckGroup {
         CheckGroup::Sources,
         CheckGroup::Color,
         CheckGroup::Vendor,
+        CheckGroup::Cid,
     ];
 
     /// The name in ids and filters (`check.<name>.*`).
@@ -93,6 +95,7 @@ impl CheckGroup {
             CheckGroup::Sources => "sources",
             CheckGroup::Color => "color",
             CheckGroup::Vendor => "vendor",
+            CheckGroup::Cid => "cid",
         }
     }
 

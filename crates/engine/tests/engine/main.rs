@@ -20,6 +20,7 @@ mod automation_roots;
 mod autotrace;
 mod axes;
 mod background_layers;
+mod cid;
 mod clipboard;
 mod clipboard_scale;
 mod color_layers;
