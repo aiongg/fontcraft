@@ -1424,12 +1424,16 @@ label = "Compare Fonts…"
 menu = ["Edit"]
 shortcut = ""
 kind = "ui"
-params = "{left?: {document, master}, right?: {document, master}}"
+params = "{left?: {document?: index|title|path, master?: id|name}, right?: {document?, master?}}"
 area = "interpolation"
 milestone = "M9"
 summary = "Opens the Compare Fonts window, which sets two masters, from the same or from two open documents, side by side."
 ref = "Interpolation › Working with Multiple Fonts › Compare Fonts"
 status = "handbook"
+notes = "Documented, not yet observed. Returns what compareFonts.diff returns for the two sides. A side not given keeps the window's last one; a document given without a master takes its first master."
+guesses = [
+  "The window first opens with the active document on the left and the next open document on the right, or the active document's second master on the right when no other document is open. Settle by opening Compare Fonts with one and with two documents open.",
+]
 
 [[panel]]
 id = "window.compareFonts"
@@ -1449,6 +1453,11 @@ milestone = "M9"
 summary = "Compares one master against another. Picking the same document on both sides compares two of its masters. Whether rows show only differing values or all values is not stated."
 ref = "Interpolation › Working with Multiple Fonts › Compare Fonts"
 status = "handbook"
+notes = "Documented, not yet observed. The rows are compareFonts.diff's; Use Left and Use Right run compareFonts.useLeft and compareFonts.useRight on the selected row and stay greyed out until a row is selected."
+guesses = [
+  "Each grey heading shows its category's row count, and a glyph row's name lists what differs (width, shapes, anchors, missing). Settle by looking at the headings and glyph rows of the reference app's window.",
+  "A glyph row shows each side as a one-line summary (width, path and node counts, component names, anchors) rather than a drawing. Settle by comparing two masters whose glyph outlines differ.",
+]
 
 [[command]]
 id = "compareFonts.useLeft"
@@ -1540,6 +1549,11 @@ milestone = "M9"
 summary = "Shows the chosen attribute for every glyph in every open document. An empty value prints as two dashes, a glyph absent from a document as (missing glyph); with the Glyphs attribute the cell shows the glyph image, and a struck-through red ring where it is missing. The table does not refresh by itself."
 ref = "Interpolation › Working with Multiple Fonts › Compare Family"
 status = "handbook"
+notes = "Documented, not yet observed. The table is compareFamily.report's, read when the window opens, when the attribute or filter changes and on Update."
+guesses = [
+  "Values of a row that differ between documents are drawn in the accent colour. Settle by comparing two documents whose anchors differ on one glyph.",
+  "Changing the attribute or the filter reads the documents again, as Update does. Settle by editing a glyph, then switching the attribute without pressing Update.",
+]
 
 [[command]]
 id = "compareFamily.setAttribute"
@@ -1553,6 +1567,10 @@ milestone = "M9"
 summary = "Chooses which glyph attribute the Compare Family table displays."
 ref = "Interpolation › Working with Multiple Fonts › Compare Family"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "The window first shows Component Names, the first entry of the menu. Settle by opening Compare Family for the first time.",
+]
 
 [[command]]
 id = "compareFamily.setFilter"
@@ -1566,6 +1584,7 @@ milestone = "M9"
 summary = "Filters the rows: All shows every glyph that has relevant data, Missing in One only glyphs absent from at least one document, Ignore If Missing in One only glyphs present in all of them."
 ref = "Interpolation › Working with Multiple Fonts › Compare Family"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[command]]
 id = "compareFamily.togglePin"
@@ -1579,6 +1598,7 @@ milestone = "M9"
 summary = "The pin button: keeps the Compare Family window floating above all document windows."
 ref = "Interpolation › Working with Multiple Fonts › Compare Family"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[command]]
 id = "compareFamily.update"
@@ -1592,6 +1612,7 @@ milestone = "M9"
 summary = "Re-reads glyph information from all open documents into the Compare Family table after they have been edited."
 ref = "Interpolation › Working with Multiple Fonts › Compare Family"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[command]]
 id = "compareFamily.openGlyph"
@@ -1599,12 +1620,16 @@ label = "Open Glyph from Compare Family"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{document: path|documentId, glyph: name}"
+params = "{document: index|title|path, glyph: name}"
 area = "interpolation"
 milestone = "M9"
 summary = "Double-clicking a cell opens that glyph in an Edit View of the document the column stands for."
 ref = "Interpolation › Working with Multiple Fonts › Compare Family"
 status = "handbook"
+notes = "Documented, not yet observed. The document is named by its position among the open documents, its title or its path; a glyph the document lacks is refused."
+guesses = [
+  "The glyph opens in a new Edit View tab of that document, which becomes the active one. Settle by double-clicking a cell twice and counting the tabs.",
+]
 
 [[command]]
 id = "compareFamily.report"
