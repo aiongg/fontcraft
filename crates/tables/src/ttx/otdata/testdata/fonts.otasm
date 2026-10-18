@@ -1,0 +1,969 @@
+# Two fonts built for the structured-table writer, in the assembly the tests read
+# (directives in tests.rs). `layout` has every lookup type, GDEF, BASE, JSTF, MATH and meta;
+# `variable` has fvar, avar 2, STAT, GDEF 1.3 with a variation store and GSUB 1.1 with feature
+# variations and an extension lookup.
+
+font layout
+
+table maxp
+  u32 0x00005000
+  u16 15
+
+table post
+  u32 0x00020000 0 0 0 0 0 0 0
+  u16 15
+  u16 0 258 259 260 261 262 263 264 265 266 267 268 269 270 271
+  pstr a b c d e f i f_i a.alt a.sc acute grave parenleft parenleft.ext
+
+table name
+@name
+  u16 0 4
+  o16 strings name
+  u16 3 1 0x409 256 10
+  o16 s256 strings
+  u16 3 1 0x409 263 16
+  o16 s263 strings
+  u16 1 0 0 257 6
+  o16 s257 strings
+  u16 3 1 0x40C 257 8
+  o16 s257fr strings
+@strings
+@s256
+  utf16 Alt a
+@s263
+  utf16 Ligature
+@s257
+  ascii Weight
+@s257fr
+  utf16 Gras
+
+table GSUB
+@gsub
+  u32 0x00010000
+  o16 scripts gsub
+  o16 features gsub
+  o16 lookups gsub
+@scripts
+  u16 2
+  tag DFLT
+  o16 dflt scripts
+  tag latn
+  o16 latn scripts
+@dflt
+  o16 dflt_default dflt
+  u16 0
+@dflt_default
+  u16 0 0xFFFF 3 0 1 2
+@latn
+  o16 latn_default latn
+  u16 1
+  tag TRK_
+  o16 latn_trk latn
+@latn_default
+  u16 0 0xFFFF 2 0 1
+@latn_trk
+  u16 0 2 1 3
+@features
+  u16 5
+  tag aalt
+  o16 f_aalt features
+  tag cv01
+  o16 f_cv01 features
+  tag liga
+  o16 f_liga features
+  tag smcp
+  o16 f_smcp features
+  tag ss01
+  o16 f_ss01 features
+@f_aalt
+  u16 0 1 3
+@f_cv01
+  o16 cv01_params f_cv01
+  u16 1 1
+@cv01_params
+  u16 0 263 0 0 0 0
+  u16 2
+  u24 0x61 0x1D41A
+@f_liga
+  u16 0 1 4
+@f_smcp
+  u16 0 2 0 7
+@f_ss01
+  o16 ss01_params f_ss01
+  u16 1 1
+@ss01_params
+  u16 0 256
+@lookups
+  u16 10
+  o16 l0 lookups
+  o16 l1 lookups
+  o16 l2 lookups
+  o16 l3 lookups
+  o16 l4 lookups
+  o16 l5 lookups
+  o16 l6 lookups
+  o16 l7 lookups
+  o16 l8 lookups
+  o16 l9 lookups
+# Single substitution by a delta, coverage by range.
+@l0
+  u16 1 0 1
+  o16 l0s0 l0
+@l0s0
+  u16 1
+  o16 l0cov l0s0
+  u16 9
+@l0cov
+  u16 2 1 1 2 0
+# Single substitution by a list.
+@l1
+  u16 1 0 1
+  o16 l1s0 l1
+@l1s0
+  u16 2
+  o16 l1cov l1s0
+  u16 2 9 5
+@l1cov
+  u16 1 2 1 3
+# Multiple substitution.
+@l2
+  u16 2 0 1
+  o16 l2s0 l2
+@l2s0
+  u16 1
+  o16 l2cov l2s0
+  u16 2
+  o16 l2seq0 l2s0
+  o16 l2seq1 l2s0
+@l2cov
+  u16 1 2 1 8
+@l2seq0
+  u16 2 1 9
+@l2seq1
+  u16 2 6 7
+# Alternate substitution.
+@l3
+  u16 3 0 1
+  o16 l3s0 l3
+@l3s0
+  u16 1
+  o16 l3cov l3s0
+  u16 1
+  o16 l3set l3s0
+@l3cov
+  u16 1 1 1
+@l3set
+  u16 2 9 10
+# Ligature substitution.
+@l4
+  u16 4 0 1
+  o16 l4s0 l4
+@l4s0
+  u16 1
+  o16 l4cov l4s0
+  u16 2
+  o16 l4set_a l4s0
+  o16 l4set_f l4s0
+@l4cov
+  u16 1 2 1 6
+@l4set_a
+  u16 1
+  o16 l4lig_ab l4set_a
+@l4lig_ab
+  u16 10 2 2
+@l4set_f
+  u16 2
+  o16 l4lig_ffi l4set_f
+  o16 l4lig_fi l4set_f
+@l4lig_ffi
+  u16 5 3 6 7
+@l4lig_fi
+  u16 8 2 7
+# Contextual substitution by classes.
+@l5
+  u16 5 0 1
+  o16 l5s0 l5
+@l5s0
+  u16 2
+  o16 l5cov l5s0
+  o16 l5cls l5s0
+  u16 3
+  u16 0
+  o16 l5set l5s0
+  u16 0
+@l5cov
+  u16 1 3 1 2 3
+@l5cls
+  u16 2 2 1 3 1 4 4 2
+@l5set
+  u16 1
+  o16 l5rule l5set
+@l5rule
+  u16 2 1 2 0 1
+# Chained contextual substitution by glyphs.
+@l6
+  u16 6 0 1
+  o16 l6s0 l6
+@l6s0
+  u16 1
+  o16 l6cov l6s0
+  u16 1
+  o16 l6set l6s0
+@l6cov
+  u16 1 1 1
+@l6set
+  u16 1
+  o16 l6rule l6set
+@l6rule
+  u16 1 3
+  u16 2 2
+  u16 0
+  u16 1 0 0
+# Extension lookup holding a single substitution.
+@l7
+  u16 7 0 1
+  o16 l7s0 l7
+@l7s0
+  u16 1 1
+  o32 l7sub l7s0
+@l7sub
+  u16 2
+  o16 l7cov l7sub
+  u16 1 5
+@l7cov
+  u16 1 1 4
+# Reverse chained single substitution.
+@l8
+  u16 8 0 1
+  o16 l8s0 l8
+@l8s0
+  u16 1
+  o16 l8cov l8s0
+  u16 1
+  o16 l8back l8s0
+  u16 0
+  u16 2 9 10
+@l8cov
+  u16 1 2 1 2
+@l8back
+  u16 1 1 3
+# Flags with a mark filtering set; a subtable with no coverage.
+@l9
+  u16 1 0x0318 1
+  o16 l9s0 l9
+  u16 0
+@l9s0
+  u16 1 0 1
+
+table GPOS
+@gpos
+  u32 0x00010000
+  o16 gpos_scripts gpos
+  o16 gpos_features gpos
+  o16 gpos_lookups gpos
+@gpos_scripts
+  u16 0
+@gpos_features
+  u16 1
+  tag kern
+  o16 gpos_kern gpos_features
+@gpos_kern
+  u16 0 2 2 3
+@gpos_lookups
+  u16 10
+  o16 p0 gpos_lookups
+  o16 p1 gpos_lookups
+  o16 p2 gpos_lookups
+  o16 p3 gpos_lookups
+  o16 p4 gpos_lookups
+  o16 p5 gpos_lookups
+  o16 p6 gpos_lookups
+  o16 p7 gpos_lookups
+  o16 p8 gpos_lookups
+  o16 p9 gpos_lookups
+# Single positioning, one value record with a device table.
+@p0
+  u16 1 0 1
+  o16 p0s p0
+@p0s
+  u16 1
+  o16 p0cov p0s
+  u16 0x0015
+  i16 10 -20
+  o16 p0dev p0s
+@p0cov
+  u16 1 1 1
+@p0dev
+  u16 11 13 1 0xC400
+# Single positioning, a value per glyph, with a reserved bit.
+@p1
+  u16 1 0 1
+  o16 p1s p1
+@p1s
+  u16 2
+  o16 p1cov p1s
+  u16 0x0104 2
+  i16 30 7 -30 8
+@p1cov
+  u16 1 2 2 3
+# Pair positioning by glyphs.
+@p2
+  u16 2 0 1
+  o16 p2s p2
+@p2s
+  u16 1
+  o16 p2cov p2s
+  u16 4 1 1
+  o16 p2set p2s
+@p2cov
+  u16 1 1 1
+@p2set
+  u16 2
+  u16 2
+  i16 -50 5
+  u16 3
+  i16 -40 0
+# Pair positioning by classes.
+@p3
+  u16 2 0 1
+  o16 p3s p3
+@p3s
+  u16 2
+  o16 p3cov p3s
+  u16 5 0
+  o16 p3cd1 p3s
+  o16 p3cd2 p3s
+  u16 3 2
+  i16 0 0 0 0
+  i16 1 2 3 4
+  i16 -5 -6 -7 -8
+@p3cov
+  u16 1 2 3 4
+@p3cd1
+  u16 1 3 2 1 2
+@p3cd2
+  u16 2 1 5 6 1
+# Cursive attachment.
+@p4
+  u16 3 0 1
+  o16 p4s p4
+@p4s
+  u16 1
+  o16 p4cov p4s
+  u16 2
+  o16 p4en0 p4s
+  o16 p4ex0 p4s
+  u16 0
+  o16 p4ex1 p4s
+@p4cov
+  u16 1 2 1 2
+@p4en0
+  u16 1
+  i16 0 0
+@p4ex0
+  u16 1
+  i16 500 10
+@p4ex1
+  u16 3
+  i16 400 0
+  u16 0
+  o16 p4dev p4ex1
+@p4dev
+  u16 9 10 3 0x01FF
+# Mark to base.
+@p5
+  u16 4 0 1
+  o16 p5s p5
+@p5s
+  u16 1
+  o16 p5mcov p5s
+  o16 p5bcov p5s
+  u16 2
+  o16 p5marks p5s
+  o16 p5bases p5s
+@p5mcov
+  u16 1 2 11 12
+@p5bcov
+  u16 1 2 1 2
+@p5marks
+  u16 2
+  u16 0
+  o16 p5ma0 p5marks
+  u16 1
+  o16 p5ma1 p5marks
+@p5ma0
+  u16 1
+  i16 100 500
+@p5ma1
+  u16 2
+  i16 120 -20
+  u16 4
+@p5bases
+  u16 2
+  o16 p5b00 p5bases
+  o16 p5b01 p5bases
+  o16 p5b10 p5bases
+  u16 0
+@p5b00
+  u16 1
+  i16 250 600
+@p5b01
+  u16 1
+  i16 250 -10
+@p5b10
+  u16 1
+  i16 260 610
+# Mark to ligature, with a component that has no anchor.
+@p6
+  u16 5 0 1
+  o16 p6s p6
+@p6s
+  u16 1
+  o16 p6mcov p6s
+  o16 p6lcov p6s
+  u16 1
+  o16 p6marks p6s
+  o16 p6ligs p6s
+@p6mcov
+  u16 1 1 11
+@p6lcov
+  u16 1 1 8
+@p6marks
+  u16 1
+  u16 0
+  o16 p6ma p6marks
+@p6ma
+  u16 1
+  i16 100 500
+@p6ligs
+  u16 1
+  o16 p6att p6ligs
+@p6att
+  u16 2
+  o16 p6c0 p6att
+  u16 0
+@p6c0
+  u16 1
+  i16 100 600
+# Mark to mark.
+@p7
+  u16 6 0 1
+  o16 p7s p7
+@p7s
+  u16 1
+  o16 p7m1cov p7s
+  o16 p7m2cov p7s
+  u16 1
+  o16 p7m1 p7s
+  o16 p7m2 p7s
+@p7m1cov
+  u16 1 1 11
+@p7m2cov
+  u16 1 1 12
+@p7m1
+  u16 1
+  u16 0
+  o16 p7m1a p7m1
+@p7m1a
+  u16 1
+  i16 100 500
+@p7m2
+  u16 1
+  o16 p7m2a p7m2
+@p7m2a
+  u16 2
+  i16 100 700
+  u16 2
+# Contextual positioning by coverages.
+@p8
+  u16 7 0 1
+  o16 p8s p8
+@p8s
+  u16 3
+  u16 2 1
+  o16 p8c0 p8s
+  o16 p8c1 p8s
+  u16 1 2
+@p8c0
+  u16 1 1 1
+@p8c1
+  u16 1 1 2
+# Chained contextual positioning by coverages.
+@p9
+  u16 8 0 1
+  o16 p9s p9
+@p9s
+  u16 3
+  u16 0
+  u16 1
+  o16 p9in p9s
+  u16 1
+  o16 p9la p9s
+  u16 1 0 2
+@p9in
+  u16 1 1 1
+@p9la
+  u16 1 1 2
+
+table GDEF
+@gdef
+  u32 0x00010002
+  o16 gdef_classes gdef
+  o16 gdef_attach gdef
+  o16 gdef_carets gdef
+  o16 gdef_markattach gdef
+  o16 gdef_marksets gdef
+@gdef_classes
+  u16 1 1 12 1 1 1 1 1 1 1 2 1 1 3 3
+@gdef_attach
+  o16 att_cov gdef_attach
+  u16 1
+  o16 att_pt gdef_attach
+@att_cov
+  u16 1 1 1
+@att_pt
+  u16 2 0 3
+@gdef_carets
+  o16 car_cov gdef_carets
+  u16 1
+  o16 lig_glyph gdef_carets
+@car_cov
+  u16 1 1 8
+@lig_glyph
+  u16 3
+  o16 cv1 lig_glyph
+  o16 cv2 lig_glyph
+  o16 cv3 lig_glyph
+@cv1
+  u16 1
+  i16 250
+@cv2
+  u16 2 4
+@cv3
+  u16 3
+  i16 300
+  o16 cv3dev cv3
+@cv3dev
+  u16 12 12 2 0x5000
+@gdef_markattach
+  u16 2 1 11 12 1
+@gdef_marksets
+  u16 1 2
+  o32 ms0 gdef_marksets
+  o32 ms1 gdef_marksets
+@ms0
+  u16 1 1 11
+@ms1
+  u16 1 2 11 12
+
+table BASE
+@base
+  u32 0x00010000
+  o16 haxis base
+  u16 0
+@haxis
+  o16 btags haxis
+  o16 bscripts haxis
+@btags
+  u16 2
+  tag ideo romn
+@bscripts
+  u16 1
+  tag latn
+  o16 bscript bscripts
+@bscript
+  o16 bvalues bscript
+  o16 bminmax bscript
+  u16 1
+  tag TRK_
+  o16 bminmax2 bscript
+@bvalues
+  u16 1 3
+  o16 bc1 bvalues
+  o16 bc2 bvalues
+  o16 bc3 bvalues
+@bc1
+  u16 1
+  i16 -120
+@bc2
+  u16 2
+  i16 0
+  u16 1 3
+@bc3
+  u16 3
+  i16 700
+  o16 bc3dev bc3
+@bc3dev
+  u16 10 11 3 0x01FF
+@bminmax
+  o16 mm_min bminmax
+  o16 mm_max bminmax
+  u16 1
+  tag kern
+  o16 mm_fmin bminmax
+  u16 0
+@mm_min
+  u16 1
+  i16 -200
+@mm_max
+  u16 1
+  i16 800
+@mm_fmin
+  u16 1
+  i16 -150
+@bminmax2
+  u16 0 0 0
+
+table JSTF
+@jstf
+  u32 0x00010000
+  u16 1
+  tag latn
+  o16 jscript jstf
+@jscript
+  o16 jext jscript
+  o16 jdef jscript
+  u16 0
+@jext
+  u16 2 13 14
+@jdef
+  u16 1
+  o16 jprio jdef
+@jprio
+  o16 jmod jprio
+  u16 0 0 0
+  o16 jmax jprio
+  u16 0 0 0 0 0
+@jmod
+  u16 2 0 4
+@jmax
+  u16 1
+  o16 jlookup jmax
+@jlookup
+  u16 1 0 1
+  o16 jsp jlookup
+@jsp
+  u16 1
+  o16 jsp_cov jsp
+  u16 4
+  i16 -10
+@jsp_cov
+  u16 1 1 13
+
+table MATH
+@math
+  u32 0x00010000
+  o16 mconst math
+  o16 mginfo math
+  o16 mvariants math
+@mconst
+  i16 80 60
+  u16 1500 1300
+  i16 150 0
+  i16 250
+  o16 mconst_dev mconst
+  i16 300 0 310 0 320 0 330 0 340 0 350 0 360 0 370 0 380 0 390 0
+  i16 400 0 410 0 420 0 430 0 440 0 450 0 460 0 470 0 480 0 490 0
+  i16 500 0 510 0 520 0 530 0 540 0 550 0 560 0 570 0 580 0 590 0
+  i16 600 0 610 0 620 0 630 0 640 0 650 0 660 0 670 0 680 0 690 0
+  i16 700 0 710 0 720 0 730 0 740 0 750 0 760 0 770 0 780 0
+  u16 60
+@mconst_dev
+  u16 12 13 2 0x12F0
+@mginfo
+  o16 mitalic mginfo
+  o16 maccent mginfo
+  o16 mext mginfo
+  o16 mkerninfo mginfo
+@mitalic
+  o16 mitalic_cov mitalic
+  u16 2
+  i16 40 0 60 0
+@mitalic_cov
+  u16 1 2 6 7
+@maccent
+  o16 maccent_cov maccent
+  u16 1
+  i16 250 0
+@maccent_cov
+  u16 1 1 1
+@mext
+  u16 1 1 14
+@mkerninfo
+  o16 mkern_cov mkerninfo
+  u16 1
+  o16 mk_tr mkerninfo
+  u16 0 0 0
+@mkern_cov
+  u16 1 1 6
+@mk_tr
+  u16 1
+  i16 300 0
+  i16 -20 0 -40 0
+@mvariants
+  u16 50
+  o16 mv_vcov mvariants
+  u16 0
+  u16 1 0
+  o16 mv_vcon mvariants
+@mv_vcov
+  u16 1 1 13
+@mv_vcon
+  o16 mv_asm mv_vcon
+  u16 2
+  u16 13 1000 14 2000
+@mv_asm
+  i16 0 0
+  u16 2
+  u16 14 0 100 1000 1
+  u16 13 100 0 1000 0
+
+table meta
+@meta
+  u32 1 0
+  o32 mdata meta
+  u32 4
+  tag slng
+  o32 m_slng meta
+  u32 14
+  tag appl
+  o32 m_appl meta
+  u32 5
+  tag dlng
+  o32 m_dlng meta
+  u32 9
+  tag bin_
+  o32 m_bin meta
+  u32 3
+@mdata
+@m_slng
+  ascii Latn,Cyrl,Grek
+@m_appl
+  ascii hello
+@m_dlng
+  ascii Latn,Grek
+@m_bin
+  u8 0 1 2
+
+
+font variable
+
+table maxp
+  u32 0x00005000
+  u16 15
+
+table post
+  u32 0x00020000 0 0 0 0 0 0 0
+  u16 15
+  u16 0 258 259 260 261 262 263 264 265 266 267 268 269 270 271
+  pstr a b c d e f i f_i a.alt a.sc acute grave parenleft parenleft.ext
+
+table name
+@name
+  u16 0 6
+  o16 strings name
+  u16 3 1 0x409 257 12
+  o16 s257 strings
+  u16 3 1 0x409 258 10
+  o16 s258 strings
+  u16 3 1 0x409 259 14
+  o16 s259 strings
+  u16 3 1 0x409 260 8
+  o16 s260 strings
+  u16 3 1 0x409 261 18
+  o16 s261 strings
+  u16 3 1 0x409 262 14
+  o16 s262 strings
+@strings
+@s257
+  utf16 Weight
+@s258
+  utf16 Width
+@s259
+  utf16 Regular
+@s260
+  utf16 Bold
+@s261
+  utf16 Condensed
+@s262
+  utf16 Bold-PS
+
+table fvar
+@fvar
+  u32 0x00010000
+  u16 16 2 2 20 2 14
+  tag wght
+  fixed 100 400 900
+  u16 0 257
+  tag wdth
+  fixed 75 100 100
+  u16 1 258
+  u16 259 0
+  fixed 400 100
+  u16 0xFFFF
+  u16 260 0
+  fixed 700 87.5
+  u16 262
+
+table avar
+@avar
+  u32 0x00020000
+  u16 0 2
+  u16 3
+  f2 -1 -1 0 0 1 1
+  u16 4
+  f2 -1 -1 0 0 0.5 0.25 1 1
+  o32 av_map avar
+  o32 av_store avar
+@av_map
+  u8 0 0x3F
+  u16 2
+  u32 0x00000001 0xFFFFFFFF
+@av_store
+  u16 1
+  o32 av_regions av_store
+  u16 2
+  o32 av_vd0 av_store
+  o32 av_vd1 av_store
+@av_regions
+  u16 2 2
+  f2 0 1 1 0 0 0
+  f2 -1 -1 0 0 0 0
+@av_vd0
+  u16 2 1 2 0 1
+  i16 100
+  i8 -5
+  i16 -300
+  i8 7
+@av_vd1
+  u16 1 0x8001 1 0
+  i32 70000
+
+table STAT
+@stat
+  u32 0x00010001
+  u16 10 2
+  o32 stat_axes stat
+  u16 5
+  o32 stat_values stat
+  u16 2
+@stat_axes
+  tag wght
+  u16 257 0 0xABCD
+  tag wdth
+  u16 258 1 0x0102
+@stat_values
+  o16 sv0 stat_values
+  o16 sv1 stat_values
+  o16 sv2 stat_values
+  o16 sv3 stat_values
+  u16 0
+@sv0
+  u16 1 0 2 259
+  fixed 400
+@sv1
+  u16 2 0 0 260
+  fixed 700 600 900
+@sv2
+  u16 3 0 0 259
+  fixed 400 700
+@sv3
+  u16 4 2 1 261
+  u16 0
+  fixed 700
+  u16 1
+  fixed 87.5
+
+table GDEF
+@gdef
+  u32 0x00010003
+  u16 0 0
+  o16 vg_carets gdef
+  u16 0 0
+  o32 vg_store gdef
+@vg_carets
+  o16 vg_cov vg_carets
+  u16 1
+  o16 vg_lig vg_carets
+@vg_cov
+  u16 1 1 8
+@vg_lig
+  u16 1
+  o16 vg_cv vg_lig
+@vg_cv
+  u16 3
+  i16 300
+  o16 vg_dev vg_cv
+@vg_dev
+  u16 0 1 0x8000
+@vg_store
+  u16 1
+  o32 vg_regions vg_store
+  u16 1
+  o32 vg_vd vg_store
+@vg_regions
+  u16 2 1
+  f2 0 1 1 0 0 0
+@vg_vd
+  u16 2 0 1 0
+  i8 10 -10
+
+table GSUB
+@gsub
+  u32 0x00010001
+  o16 vs_scripts gsub
+  o16 vs_features gsub
+  o16 vs_lookups gsub
+  o32 vs_fv gsub
+@vs_scripts
+  u16 1
+  tag DFLT
+  o16 vs_dflt vs_scripts
+@vs_dflt
+  o16 vs_ls vs_dflt
+  u16 0
+@vs_ls
+  u16 0 0xFFFF 1 0
+@vs_features
+  u16 1
+  tag rvrn
+  o16 vs_f0 vs_features
+@vs_f0
+  u16 0 0
+@vs_lookups
+  u16 1
+  o16 vs_l0 vs_lookups
+@vs_l0
+  u16 7 0 1
+  o16 vs_ext vs_l0
+@vs_ext
+  u16 1 4
+  o32 vs_lig vs_ext
+@vs_lig
+  u16 1
+  o16 vs_ligcov vs_lig
+  u16 1
+  o16 vs_ligset vs_lig
+@vs_ligcov
+  u16 1 1 6
+@vs_ligset
+  u16 1
+  o16 vs_lig0 vs_ligset
+@vs_lig0
+  u16 8 2 7
+@vs_fv
+  u32 0x00010000 1
+  o32 vs_cs vs_fv
+  o32 vs_fts vs_fv
+@vs_cs
+  u16 1
+  o32 vs_cond vs_cs
+@vs_cond
+  u16 1 0
+  f2 0.5 1
+@vs_fts
+  u32 0x00010000
+  u16 1 0
+  o32 vs_fsub vs_fts
+@vs_fsub
+  u16 0 1 0
