@@ -2713,7 +2713,7 @@ before implementation.
    **Answered (M12 plan, our decision):** not carried over; nothing in the corpus or the rows needs it.
 13. **TrueType autohinter options.** fontmake passes a ttfautohint argument string. Whether
     `--tt-options` accepts that syntax unchanged depends on the TrueType autohinter design.
-   **Open, for M10:** depends on the TrueType autohinter's design; it blocks only `autohint --tt-options` (package M12.39).
+   **Answered (M12.39):** yes. `--tt-options` hands the string unchanged to the TrueType autohinter, which reads ttfautohint's long command-line options, as fontmake passes them.
 14. **fontmake output layout.** `--output-layout by-format` must reproduce fontmake's folder and file
     naming exactly to be a drop-in; the rules need to be observed for each format.
    **Not M12:** `--output-layout` belongs to the `compile` row (M2); the rules are observed when that option is built.
