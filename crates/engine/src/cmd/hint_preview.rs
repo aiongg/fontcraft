@@ -75,7 +75,14 @@ fn build(s: &Session, p: &Params, flavour: Flavour) -> Result<Built> {
     let font = s.font()?;
     let job = job(font, p)?;
     let options = Options { hinting: HintingOptions { autohint: p.bool_or("autohint", false)?, ..Default::default() }, ..Default::default() };
-    let req = Request { flavours: vec![flavour], containers: vec![Container::Plain], options, dest: Dest::Memory, first_only: false };
+    let req = Request {
+        flavours: vec![flavour],
+        containers: vec![Container::Plain],
+        options,
+        dest: Dest::Memory,
+        first_only: false,
+        autohinter: crate::external_autohint::trusted(s),
+    };
     let mut sink = Sink::new(&req.dest, true, s.export_outside())?;
     let mut report = Report::default();
     let doc = s.doc()?;

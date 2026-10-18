@@ -246,17 +246,24 @@ fn install_module(s: &mut Session, p: &Params, bytes: &[u8], name: Option<&str>,
         return Err(p.bad(format!("{} exists: pass replace: true to overwrite it", dir.join(&file).display())));
     }
     let other = ext.registry.by_file(&file).filter(|m| m.plugin.id() != id).map(|m| m.plugin.id().to_string());
+    let manifest = plugin.manifest().clone();
+    // The registry changes are made on a copy and the file is written before any of them takes
+    // effect, so a refusal at any step leaves the installed modules as they were.
+    let mut registry = ext.registry.clone();
+    if let Some(other) = &other {
+        registry.remove(other);
+    }
+    registry.install(plugin, Some(file.clone())).map_err(|e| p.bad(e.to_string()))?;
+    registry.set_file(&id, Some(file.clone()), hash).map_err(|e| p.bad(e.to_string()))?;
     std::fs::create_dir_all(&dir).map_err(|e| EngineError::Io(format!("{}: {e}", dir.display())))?;
     let target = dir.join(&file);
     extensions::write_file(&target, bytes).map_err(EngineError::Io)?;
-    let manifest = plugin.manifest().clone();
     let ext = s.extensions_mut();
     // The module the overwritten file held is gone with it.
     if let Some(other) = other {
         ext.forget_module(&other);
     }
-    ext.registry.install(plugin, Some(file.clone())).map_err(|e| p.bad(e.to_string()))?;
-    ext.registry.set_file(&id, Some(file.clone()), hash).map_err(|e| p.bad(e.to_string()))?;
+    ext.registry = registry;
     ext.module_switches.insert(file.clone(), true);
     let mut warning = None;
     if let Some(old) = old_file.filter(|old| *old != file) {
@@ -333,7 +340,7 @@ pub(crate) fn install_from_index(s: &mut Session, v: &Value) -> Result<Value> {
     let version = p.opt_str("version")?;
     let (entry, source) = match p.opt_str("index")? {
         Some(path) => {
-            let bytes = std::fs::read(path).map_err(|e| p.bad(format!("{path}: {e}")))?;
+            let bytes = super::plugin_manager::read_index_file(Path::new(path)).map_err(|e| p.bad(e))?;
             let index = crate::extension_index::Index::parse(&bytes).map_err(|e| p.bad(format!("{path}: {e}")))?;
             let entry = find_entry(std::slice::from_ref(&index), id, version).cloned();
             (entry, Some(path.to_string()))

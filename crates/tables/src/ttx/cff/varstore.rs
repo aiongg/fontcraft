@@ -82,7 +82,9 @@ fn read_var_data(data: &[u8], at: usize) -> Result<VarData> {
     let regions = usize::from(region_count);
     let (big, small) = (words.min(regions), words.max(regions));
     let row = if long { big * 4 + (small - big) * 2 } else { big * 2 + (small - big) };
-    if r.rest().len() < row * usize::from(item_count) {
+    // In 64 bits: the product overflows a 32-bit usize (wasm32).
+    let needed = u64::try_from(row).unwrap_or(u64::MAX).saturating_mul(u64::from(item_count));
+    if u64::try_from(r.rest().len()).unwrap_or(u64::MAX) < needed {
         return Err(bad("a VarData is cut short"));
     }
     let mut items = Vec::with_capacity(usize::from(item_count));
@@ -152,5 +154,17 @@ impl VarStore {
             w.close("VarData");
         }
         w.close("VarStore");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_var_data_whose_size_overflows_32_bits_is_refused() {
+        // 65,535 items of 32,767 long words: more bytes than a 32-bit usize counts.
+        let header = [0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00];
+        assert!(read_var_data(&header, 0).is_err());
     }
 }

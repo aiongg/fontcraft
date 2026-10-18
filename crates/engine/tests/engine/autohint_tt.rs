@@ -128,28 +128,79 @@ fn set_binary(s: &mut Session, path: &str) {
     .unwrap();
 }
 
+/// Names `path` as the user's trusted ttfautohint program.
+fn trust(s: &mut Session, path: &str) {
+    run(s, "settings.set", json!({"id": "export.ttfAutohintBinary", "value": path}));
+}
+
 #[test]
 fn a_missing_or_failing_external_autohinter_keeps_the_built_in_result_with_a_warning() {
     let mut s = session();
     let (built_in, _) = exported_program(&mut s, true);
+    trust(&mut s, "/nonexistent/fontcraft-test/ttfautohint");
     set_binary(&mut s, "/nonexistent/fontcraft-test/ttfautohint");
     let (program, warnings) = exported_program(&mut s, true);
     assert_eq!(program, built_in);
     assert!(warnings.to_string().contains("TTFAutohint binary path"), "{warnings}");
     #[cfg(unix)]
     {
+        trust(&mut s, "/bin/false");
         set_binary(&mut s, "/bin/false");
         let (program, warnings) = exported_program(&mut s, true);
         assert_eq!(program, built_in);
         assert!(warnings.to_string().contains("failed"), "{warnings}");
         // A program that hands the font back unchanged: the export writes what it returns.
+        trust(&mut s, "/bin/cat");
         set_binary(&mut s, "/bin/cat");
         let (program, warnings) = exported_program(&mut s, true);
         assert_eq!(program, built_in);
         assert!(!warnings.to_string().contains("TTFAutohint binary path"), "{warnings}");
         // Without Autohint the program does not run.
+        trust(&mut s, "/bin/false");
         set_binary(&mut s, "/bin/false");
         let (_, warnings) = exported_program(&mut s, false);
         assert!(!warnings.to_string().contains("TTFAutohint binary path"), "{warnings}");
     }
+}
+
+#[test]
+fn a_document_naming_an_untrusted_program_or_file_arguments_runs_nothing() {
+    let mut s = session();
+    let (built_in, _) = exported_program(&mut s, true);
+    // No trusted program: the document's binary is never started (`/bin/false` would fail).
+    set_binary(&mut s, "/bin/false");
+    let (program, warnings) = exported_program(&mut s, true);
+    assert_eq!(program, built_in);
+    let text = warnings.to_string();
+    assert!(text.contains("no trusted autohinter") && !text.contains("failed"), "{text}");
+    // A trusted program the document does not name is not run either.
+    trust(&mut s, "/bin/true");
+    let (_, warnings) = exported_program(&mut s, true);
+    let text = warnings.to_string();
+    assert!(text.contains("not the trusted autohinter") && !text.contains("failed"), "{text}");
+    // Words that are not ttfautohint options never reach the program as file names.
+    trust(&mut s, "/bin/false");
+    s.edit("options", |font| {
+        Arc::make_mut(&mut font.info).params.0.push(Param::new("TTFAutohint options", Plist::String("--dehint in.ttf out.ttf".into())));
+        Ok(())
+    })
+    .unwrap();
+    let (program, warnings) = exported_program(&mut s, true);
+    assert_eq!(program, built_in);
+    let text = warnings.to_string();
+    assert!(text.contains("cannot be passed to it") && !text.contains("failed"), "{text}");
+}
+
+#[test]
+fn autohint_tt_run_skips_a_locked_glyph_unless_it_is_named() {
+    let mut s = session();
+    s.edit("lock", |font| {
+        font.glyph_mut("l")?.info.locked = true;
+        Ok(())
+    })
+    .unwrap();
+    let r = run(&mut s, "autohint.tt.run", json!({}));
+    assert!(r["skipped"].as_array().unwrap().iter().any(|k| k["glyph"] == "l"), "{r}");
+    assert_eq!(hint_count(&s, "l"), 0);
+    assert!(s.execute("autohint.tt.run", &json!({"glyphs": ["l"]})).is_err());
 }

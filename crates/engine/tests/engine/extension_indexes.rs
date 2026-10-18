@@ -107,6 +107,16 @@ fn plugin_manager_reload_indexes_reads_the_list_and_the_first_index_wins() {
 }
 
 #[test]
+fn plugin_manager_install_refuses_an_index_file_over_the_limit_unread() {
+    let (mut s, _data, shelf) = setup("indexes-oversized");
+    // A sparse file: over the limit on disk without writing its bytes.
+    let index = shelf.join("huge.json");
+    std::fs::File::create(&index).unwrap().set_len(u64::try_from(fontcraft_engine::extension_index::MAX_INDEX_BYTES).unwrap() + 1).unwrap();
+    let e = err(&mut s, "pluginManager.install", json!({"id": ID, "index": index.display().to_string()}));
+    assert!(e.contains("larger than"), "{e}");
+}
+
+#[test]
 fn plugin_manager_install_with_a_wrong_checksum_writes_nothing() {
     let (mut s, data, shelf) = setup("indexes-checksum");
     let bytes = module(ID, "1");

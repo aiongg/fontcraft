@@ -923,6 +923,22 @@ guesses = [
   "The per-index automatic-updates switch is kept in the same text as a `manual ` prefix, so the list stays one setting; the reference has no such switch.",
 ]
 
+[[setting]]
+id = "export.ttfAutohintBinary"
+label = "Trusted ttfautohint program"
+kind = "string"
+section = "Export"
+values = ""
+area = "hinting-tt"
+milestone = "M10"
+summary = "FontCraft: the full path of the ttfautohint program that autohinted TrueType exports may run. A document's TTFAutohint binary path parameter asks for the run, and it runs only when the parameter names this same file."
+ref = "Appendix › Custom Parameters › TTFAutohint binary path"
+status = "inferred"
+notes = "FontCraft's own setting; the reference app has none. Empty by default, so no document runs a program until the user names one. Set with settings.set until the Settings window exists (M14); fontcraft-cli compile takes it as --ttfautohint PATH. settings.set refuses it while automation roots are in force (crates/engine/src/external_autohint.rs)."
+guesses = [
+  "A document may only ask for the user's trusted ttfautohint program, unlike the reference app, which runs the program the parameter names; we chose this for safety because a document from elsewhere could otherwise run any program on the user's machine.",
+]
+
 [[behavior]]
 id = "addons.repo.mainRepository"
 area = "extensions"

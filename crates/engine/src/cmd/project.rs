@@ -532,7 +532,7 @@ fn export(s: &mut Session, v: &Value) -> Result<Value> {
         version_stamp: p.bool_or("versionStamp", true)?,
         ..Options::default()
     };
-    let req = Request { flavours, containers, options, dest, first_only: false };
+    let req = Request { flavours, containers, options, dest, first_only: false, autohinter: crate::external_autohint::trusted(s) };
 
     let (mut font, mut warnings) = crate::project::read_font(&font_path)?;
     font.instances = instances;

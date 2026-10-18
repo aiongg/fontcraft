@@ -21,7 +21,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Set Setting",
             [],
             None,
-            "{id: string, value: any} set one preference, checked against its kind (true or false, a choice, a number in range, text); null returns it to its default. Unknown ids, and the ids other commands write, are refused → {id, value}",
+            "{id: string, value: any} set one preference, checked against its kind (true or false, a choice, a number in range, text); null returns it to its default. Unknown ids, and the ids other commands write, are refused; export.ttfAutohintBinary is refused while automation roots are in force → {id, value}",
             always,
             set
         ),
@@ -41,6 +41,10 @@ fn set(s: &mut Session, v: &Value) -> Result<Value> {
     let id = p.str("id")?.to_string();
     // `Params::get` reads null as absent; here null means "back to the default".
     let value = v.get("value").cloned().ok_or_else(|| p.bad("`value` is required (null returns the setting to its default)"))?;
+    // The trusted autohinter is a program the exports run; automation may not choose it.
+    if id == crate::external_autohint::SETTING && crate::file_access::current().is_some() {
+        return Err(p.bad(format!("{id} names a program to run and cannot be set while automation roots are in force")));
+    }
     s.settings_mut().set(&id, value).map_err(|e| p.bad(e.to_string()))?;
     let value = s.settings().get(&id).map_err(|e| p.bad(e.to_string()))?;
     Ok(json!({ "id": id, "value": value }))

@@ -36,7 +36,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Autohint TrueType",
             [],
             None,
-            "{glyphs?: [names] (default: every exporting glyph), excludeGlyphs?: [names], instance?: name (read its TTFAutohint options and control instructions), options?: string (TTFAutohint options as long command-line options; replaces the instance's), controlInstructions?: string (replaces the instance's)} run the TrueType autohinter on each glyph's main-master layer and store its Snap and Stem instructions there, replacing the layer's instructions; one undo step → {hinted: [{glyph, instructions}], skipped: [{glyph, reason}], ignoredOptions: [names], warnings}",
+            "{glyphs?: [names] (default: every exporting glyph; locked glyphs are then skipped, a named locked glyph is refused), excludeGlyphs?: [names], instance?: name (read its TTFAutohint options and control instructions), options?: string (TTFAutohint options as long command-line options; replaces the instance's), controlInstructions?: string (replaces the instance's)} run the TrueType autohinter on each glyph's main-master layer and store its Snap and Stem instructions there, replacing the layer's instructions; one undo step → {hinted: [{glyph, instructions}], skipped: [{glyph, reason}], ignoredOptions: [names], warnings}",
             has_doc,
             run
         ),
@@ -69,9 +69,10 @@ struct Outcome {
 fn run(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("autohint.tt.run", v)?;
     let font = s.font()?;
+    let named = p.opt_glyphs("glyphs", font)?;
+    let explicit = named.is_some();
     let excluded: HashSet<String> = p.opt_strings("excludeGlyphs")?.unwrap_or_default().into_iter().map(str::to_string).collect();
-    let glyphs: Vec<String> = p
-        .opt_glyphs("glyphs", font)?
+    let glyphs: Vec<String> = named
         .unwrap_or_else(|| font.glyphs.iter().filter(|g| g.export).map(|g| g.name.clone()).collect())
         .into_iter()
         .filter(|g| !excluded.contains(g))
@@ -91,7 +92,7 @@ fn run(s: &mut Session, v: &Value) -> Result<Value> {
     if let Some(text) = p.opt_str("controlInstructions")? {
         settings.tt_autohint_control = Some(text.to_string());
     }
-    let outcome = hint_layers(&p, font, &glyphs, &main, &settings)?;
+    let outcome = hint_layers(&p, font, &glyphs, &main, &settings, explicit)?;
     store(s, "Autohint TrueType", &main, outcome)
 }
 
@@ -104,12 +105,13 @@ fn autohint_glyph_cmd(s: &mut Session, v: &Value) -> Result<Value> {
         None => main_master(font),
     };
     let settings = HintSettings::for_master(font, &master).map_err(|e| p.bad(format!("the hinting parameters cannot be read: {e}")))?;
-    let outcome = hint_layers(&p, font, &glyphs, &master, &settings)?;
+    let outcome = hint_layers(&p, font, &glyphs, &master, &settings, true)?;
     store(s, "Autohint", &master, outcome)
 }
 
-/// Hints `glyphs` on their `master` layers without changing the font.
-fn hint_layers(p: &Params, font: &Font, glyphs: &[String], master: &str, settings: &HintSettings) -> Result<Outcome> {
+/// Hints `glyphs` on their `master` layers without changing the font. A locked glyph refuses the
+/// run when the glyphs were `explicit`ly named, and is skipped otherwise.
+fn hint_layers(p: &Params, font: &Font, glyphs: &[String], master: &str, settings: &HintSettings, explicit: bool) -> Result<Outcome> {
     if glyphs.len() > MAX_GLYPHS_PER_RUN {
         return Err(p.bad(format!("{} glyphs: one run hints at most {MAX_GLYPHS_PER_RUN}", glyphs.len())));
     }
@@ -131,7 +133,13 @@ fn hint_layers(p: &Params, font: &Font, glyphs: &[String], master: &str, setting
     let no_control = ControlInstructions::default();
     for name in glyphs {
         let glyph = font.glyph(name).ok_or_else(|| p.bad(format!("there is no glyph `{name}`")))?;
-        crate::check_unlocked(glyph)?;
+        if let Err(e) = crate::check_unlocked(glyph) {
+            if explicit {
+                return Err(e);
+            }
+            out.skipped.push(json!({"glyph": name, "reason": "the glyph is locked"}));
+            continue;
+        }
         let Some(layer) = glyph.layer(master) else {
             out.skipped.push(json!({"glyph": name, "reason": "the glyph has no layer for this master"}));
             continue;

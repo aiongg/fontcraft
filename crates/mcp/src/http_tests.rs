@@ -283,3 +283,25 @@ fn connections_sessions_and_messages_are_capped() {
     assert!(!refused.is_empty(), "twenty messages at once exceed five per second");
     assert!(refused.iter().all(|r| r.header("Retry-After") == Some("1")));
 }
+
+#[test]
+fn only_the_server_s_own_hosts_pass_on_any_listener() {
+    // Loopback listener: loopback names only.
+    assert!(host_allowed("127.0.0.1:7986", true) && host_allowed("localhost", true) && host_allowed("[::1]:7986", true));
+    assert!(!host_allowed("192.168.1.5:7986", true));
+    // Listening on every address: IP addresses pass, a name that may have been rebound does not.
+    assert!(host_allowed("192.168.1.5:7986", false) && host_allowed("[fe80::1]:7986", false) && host_allowed("localhost", false));
+    assert!(!host_allowed("evil.example:7986", false) && !host_allowed("", false));
+}
+
+#[test]
+fn a_connection_is_closed_after_its_time() {
+    let addr = start(Limits { connection_time: Duration::ZERO, ..Limits::default() });
+    let body = json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}).to_string();
+    let mut stream = connect(addr);
+    let raw = format!("POST /mcp HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}", body.len());
+    stream.write_all(raw.as_bytes()).unwrap();
+    assert_eq!(read_reply(&mut stream).status, 200);
+    let mut rest = [0u8; 16];
+    assert_eq!(stream.read(&mut rest).unwrap(), 0, "the connection is closed after the reply");
+}

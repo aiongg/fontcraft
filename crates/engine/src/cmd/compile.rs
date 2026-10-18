@@ -296,6 +296,8 @@ pub(super) struct Request {
     /// The destination is one file and no instance was named: build the first font that can be
     /// built and skip the rest.
     pub first_only: bool,
+    /// The user's trusted ttfautohint program (`crate::external_autohint::trusted`).
+    pub autohinter: Option<String>,
 }
 
 impl Request {
@@ -583,12 +585,13 @@ pub(super) fn build(
         for &flavour in &req.flavours {
             let mut compiled = fontcraft_compile::compile_resolved_from(font, resolved.clone(), flavour, &job_options)?;
             if flavour == Flavour::TrueType
-                && let Some(external) = crate::external_autohint::External::wanted(font, &resolved, job_options.hinting.autohint)
+                && let Some(external) =
+                    crate::external_autohint::External::wanted(font, &resolved, job_options.hinting.autohint, req.autohinter.as_deref())
             {
-                match external.run(&compiled.bytes) {
+                match external.and_then(|external| external.run(&compiled.bytes)) {
                     Ok(bytes) => compiled.bytes = bytes,
                     Err(e) => compiled.warnings.push(format!(
-                        "the TTFAutohint binary path parameter names an autohinter that could not hint the font: {e}; the built-in TrueType autohinter's result was written"
+                        "the TTFAutohint binary path parameter asks for an autohinter that did not hint the font: {e}; the built-in TrueType autohinter's result was written"
                     )),
                 }
             }
@@ -1112,7 +1115,7 @@ fn compile_request(s: &Session, p: &Params) -> Result<(Vec<Job>, Request)> {
     if dest.extension().is_some() {
         check_file_destination(p, &dest, &flavours, &containers)?;
     }
-    let req = Request { flavours, containers, options, dest, first_only: false };
+    let req = Request { flavours, containers, options, dest, first_only: false, autohinter: crate::external_autohint::trusted(s) };
     check_size(&req, jobs.len())?;
     Ok((jobs, req))
 }

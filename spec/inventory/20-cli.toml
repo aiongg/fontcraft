@@ -295,6 +295,7 @@ options = [
   "--name-by filename|postscript-name: default output name from the source file name or from the PostScript name of each font",
   "--instances[=NAME,...]: build the export instances (the default), or only those named; until interpolation (M9) an instance is built only where it sits at a master, and the others are listed as skipped",
   "--masters-as-instances: also build each master as a static font",
+  "--ttfautohint PATH: the trusted ttfautohint program; an autohinted TrueType font whose TTFAutohint binary path parameter names that same file is hinted by it, and no other program runs",
   "--variable-fonts REGEX: build only the variable fonts (designspace v5 variable-font entries or variable font settings) whose name or file name matches; default all",
   "--family-name NAME: use this family name for masters and keep only instances of this family",
   "--round-instances: round interpolated geometry to integers",

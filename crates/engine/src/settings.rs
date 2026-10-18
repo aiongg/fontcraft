@@ -99,6 +99,7 @@ pub const SETTINGS: &[SettingDef] = &[
     SettingDef { id: "addons.alternatePluginRepos", kind: Kind::Text, default: DefaultValue::Text("") },
     SettingDef { id: "addons.useSystemConsoleForScriptOutput", kind: Kind::Bool, default: DefaultValue::Bool(false) },
     SettingDef { id: "appearance.displayUnicodeValue", kind: Kind::Bool, default: DefaultValue::Bool(false) },
+    SettingDef { id: "export.ttfAutohintBinary", kind: Kind::Text, default: DefaultValue::Text("") },
     SettingDef { id: "start.showAtLaunch", kind: Kind::Bool, default: DefaultValue::Bool(true) },
     SettingDef { id: "user.disableAutomaticAlignmentForImportedFiles", kind: Kind::Bool, default: DefaultValue::Bool(false) },
 ];

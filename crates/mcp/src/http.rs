@@ -11,9 +11,10 @@
 //! loop does. The backend therefore never needs to be `Send`.
 //!
 //! Everything a peer sends is untrusted: request heads, bodies, connections, sessions and the
-//! message rate are capped by [`Limits`], a slow peer runs into a deadline, and a request that
-//! carries a foreign `Origin` (a web page) or, on a loopback address, a foreign `Host` (DNS
-//! rebinding) is refused before its body is looked at.
+//! message rate are capped by [`Limits`], a slow peer runs into a deadline, a connection is closed
+//! after [`MAX_CONNECTION_TIME`], and a request that carries a foreign `Origin` (a web page) or a
+//! `Host` that is not one of the server's own (DNS rebinding) is refused before its body is
+//! looked at.
 
 use std::collections::HashMap;
 use std::io::{self, BufRead, BufReader, Read, Write};
@@ -45,6 +46,9 @@ pub const MAX_SESSIONS: usize = 64;
 /// How long a connection may stay idle between requests, and how long one request may take to
 /// arrive in full.
 pub const IDLE_TIMEOUT: Duration = Duration::from_secs(60);
+/// How long one connection is kept: after the request that crosses it, the connection is closed,
+/// so a peer that sends a request now and then cannot hold a slot for good.
+pub const MAX_CONNECTION_TIME: Duration = Duration::from_secs(600);
 /// Most messages answered per second over all connections; more get 429.
 pub const MAX_MESSAGES_PER_SECOND: usize = 200;
 /// After an error reply the connection is closed; this much unread input is drained first so the
@@ -69,6 +73,7 @@ pub struct Limits {
     pub max_connections: usize,
     pub max_sessions: usize,
     pub idle_timeout: Duration,
+    pub connection_time: Duration,
     pub max_messages_per_second: usize,
 }
 
@@ -81,6 +86,7 @@ impl Default for Limits {
             max_connections: MAX_CONNECTIONS,
             max_sessions: MAX_SESSIONS,
             idle_timeout: IDLE_TIMEOUT,
+            connection_time: MAX_CONNECTION_TIME,
             max_messages_per_second: MAX_MESSAGES_PER_SECOND,
         }
     }
@@ -105,7 +111,7 @@ pub fn serve(server: Server, listener: TcpListener, limits: Limits) -> io::Resul
 /// What the connection threads share.
 struct Shared {
     limits: Limits,
-    /// The listener is on a loopback address, so `Host` must name one too.
+    /// The listener is on a loopback address, so `Host` must name one too ([`host_allowed`]).
     loopback: bool,
     /// Connections being served.
     active: AtomicUsize,
@@ -156,6 +162,7 @@ fn serve_connection(stream: TcpStream, shared: &Shared, jobs: &mpsc::Sender<Job>
         return;
     }
     let _ = stream.set_nodelay(true);
+    let opened = Instant::now();
     let mut reader = BufReader::new(stream);
     loop {
         let request = match read_request(&mut reader, limits) {
@@ -179,7 +186,7 @@ fn serve_connection(stream: TcpStream, shared: &Shared, jobs: &mpsc::Sender<Job>
                 }
             }
         };
-        let close = close || response.close;
+        let close = close || response.close || opened.elapsed() >= limits.connection_time;
         if write_response(reader.get_ref(), &response, close).is_err() {
             return;
         }
@@ -445,6 +452,15 @@ fn is_loopback_name(host: &str) -> bool {
     host.eq_ignore_ascii_case("localhost") || host.parse::<IpAddr>().is_ok_and(|ip| ip.is_loopback())
 }
 
+/// May a request carry `Host: host`? On a loopback listener only loopback names. On any other
+/// listener also an IP address, but never a DNS name: a web page whose own name was made to
+/// resolve to this machine (DNS rebinding) sends that name, and the server cannot tell which
+/// names really are its own.
+fn host_allowed(host: &str, loopback: bool) -> bool {
+    let host = host_of(host);
+    is_loopback_name(host) || (!loopback && host.parse::<IpAddr>().is_ok())
+}
+
 /// The media type of a header value, without parameters, lower-cased.
 fn media_type(value: &str) -> String {
     value.split(';').next().unwrap_or("").trim().to_ascii_lowercase()
@@ -455,9 +471,10 @@ fn check(request: &Request, shared: &Shared) -> Result<(), Response> {
         return Err(Response::refuse(404, format!("the MCP endpoint is {ENDPOINT}")));
     }
     let host = request.header("host").unwrap_or("");
-    // A page whose name resolves to 127.0.0.1 (DNS rebinding) still sends its own name as Host.
-    if shared.loopback && !is_loopback_name(host_of(host)) {
-        return Err(Response::refuse(403, "this server answers only requests addressed to localhost"));
+    // A page whose name resolves to this machine (DNS rebinding) still sends its own name as Host.
+    if !host_allowed(host, shared.loopback) {
+        let to = if shared.loopback { "localhost" } else { "localhost or an IP address" };
+        return Err(Response::refuse(403, format!("this server answers only requests addressed to {to}, not to a host name")));
     }
     // Browsers send Origin; MCP clients outside a browser do not. Only the server's own origin
     // passes, so a web page on another site cannot drive the editor.
