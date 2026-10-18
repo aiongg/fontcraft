@@ -44,6 +44,7 @@ pub mod actions;
 mod add_glyphs;
 mod add_glyphs_existing;
 mod add_other_font;
+mod add_pixel_glyph;
 pub mod attach_picker;
 mod axis_location;
 pub mod axis_mappings;
@@ -272,6 +273,7 @@ pub const DIALOGS: &[Dialog] = &[
     rename_kerning_group::DIALOG,
     paste_kerning_conflict::DIALOG,
     save_changed_on_disk::DIALOG,
+    add_pixel_glyph::DIALOG,
     transform_metrics::DIALOG,
     // Metrics export and import (the tab dialog first: the menu item opens it).
     export::METRICS,

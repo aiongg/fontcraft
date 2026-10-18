@@ -2130,6 +2130,11 @@ milestone = "M6"
 summary = "Paints glyphs out of pixel components snapped to the font grid, for pixel fonts and pixel symbols. Shortcut X; Shift+B switches to it while the Pencil tool is active, from which we take it that the two share a toolbar button (the group value is that reading, not a stated fact). Needs a grid spacing of 2 or more."
 ref = "Reusing Shapes › Pixel Tool"
 status = "handbook"
+notes = "Documented, not yet observed. Every gesture runs pixel.setPixels with the pointer positions as `stroke` and mode `paint`: previewed while the button is down, then run once on release (one undo step). X chooses the tool; Shift+B from the Pencil tool is not wired, because Shift with a tool letter steps only among tools that share that letter."
+guesses = [
+  "A drag paints every cell the straight line between successive pointer positions crosses, stepping into one neighbour where it passes exactly through a grid corner; the reference app settles whether a fast drag fills such gaps.",
+  "The Pixel tool paints on the foreground only and refuses on the background with a message; the reference app settles it.",
+]
 
 [[command]]
 id = "pixel.addPixelGlyph"
@@ -2143,6 +2148,10 @@ milestone = "M6"
 summary = "Creates the glyph named pixel containing a square whose side equals the font's grid spacing. Run from the Add button of the prompt the Pixel tool shows when the glyph is missing."
 ref = "Reusing Shapes › Pixel Tool › Setup"
 status = "handbook"
+notes = "Documented, not yet observed. `size` (above 0, at most 10,000) replaces the grid spacing; refused when the glyph exists, and when no size is given and the grid spacing is 0."
+guesses = [
+  "The pixel glyph gets a layer on every master, each as wide as the square, no Unicode value, and its place in the glyph order by the usual sorting; a pixel glyph added by the reference app settles it.",
+]
 
 [[command]]
 id = "pixel.setPixels"
@@ -2150,13 +2159,13 @@ label = "Set Pixels"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, cells: [[column, row]], mode: add | remove | toggle}"
+params = "{glyph: name, layer?: id, cells: [[column, row]] | stroke: [[x, y]], mode?: add | remove | toggle | paint = paint}"
 area = "drawing"
 milestone = "M6"
-summary = "Headless form of painting with the Pixel tool: adds, removes or toggles pixel components at grid cells given in grid units. The cell addressing is our design; the handbook describes only the mouse gestures."
+summary = "Headless form of painting with the Pixel tool: adds, removes or toggles pixel components at grid cells given in grid units, or at the cells a stroke of pointer positions crosses. Mode paint removes from every cell when the first holds a pixel and adds to every cell otherwise, which is what the tool's click and drag do. The cell addressing is our design; the handbook describes only the mouse gestures."
 ref = "Reusing Shapes › Pixel Tool › Drawing Pixels"
 status = "inferred"
-notes = "Our own headless form of the tool."
+notes = "Our own headless form of the tool. Repeated cells count once; at most 65,536 cells per call. Refused when the grid spacing is below 2 and when the painted glyph is pixel or a glyph pixel uses. When the font has no glyph named pixel nothing changes and the result has `pixelGlyphMissing: true`, which opens dialog.addPixelGlyph after a gesture."
 guesses = [
   "A pixel sits at the cell's lower left corner, at multiples of the grid spacing from the origin, and the tool finds an existing pixel by its exact offset; the reference app settles it.",
 ]
@@ -2172,6 +2181,10 @@ milestone = "M6"
 summary = "Shown on the first click with the Pixel tool in a font that has no glyph named pixel; Add creates the default square pixel glyph. The handbook names only the Add button."
 ref = "Reusing Shapes › Pixel Tool › Setup"
 status = "handbook"
+notes = "Documented, not yet observed. Opens after a click or drag whose pixel.setPixels reports `pixelGlyphMissing`; Add runs pixel.addPixelGlyph with its defaults."
+guesses = [
+  "The prompt has a Cancel button beside Add, and the click that asked paints nothing: the next click paints; the reference app settles both.",
+]
 
 [[behavior]]
 id = "pixel.requiresGridSpacingTwoOrMore"
@@ -2205,6 +2218,7 @@ milestone = "M6"
 summary = "The automatically created pixel glyph is a square with sides equal to the grid spacing in force when it is created."
 ref = "Reusing Shapes › Pixel Tool › Setup"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "pixel.customShape"
@@ -2213,3 +2227,4 @@ milestone = "M6"
 summary = "The pixel glyph may hold any shape (an x-mark for a stitched look). To draw detail finer than one pixel, lower the grid spacing temporarily (1 is the font default) and raise it again before painting with the Pixel tool."
 ref = "Reusing Shapes › Pixel Tool › Pixel Shape"
 status = "handbook"
+notes = "Documented, not yet observed. Pixels are components, so they show whatever the pixel glyph holds."

@@ -19,7 +19,7 @@
 //! | [`select`], [`lasso`], [`hand`], [`zoom`], [`knife`], [`rotate`], [`scale`], [`measure`], [`annotate`] | the tools, as state machines |
 //! | [`guide_drag`] | the Select tool's guide drags and double-clicks |
 //! | [`bbox`] | the selection's bounding box, its knobs, and the freehand transform drags |
-//! | [`draw`], [`pencil`], [`primitives`], [`rapid`], [`spiro`] | the drawing tools |
+//! | [`draw`], [`pencil`], [`primitives`], [`rapid`], [`spiro`], [`pixel`] | the drawing tools |
 //! | [`cycling`] | tool letters, and the tools that share a toolbar button |
 //! | [`keymap`] | the Edit View keys these tools answer |
 //! | [`toolbox`] | the active tool, temporary tools (Space, Cmd+Space) and key routing |
@@ -46,6 +46,7 @@ pub mod magnet;
 pub mod measure;
 pub mod output;
 pub mod pencil;
+pub mod pixel;
 pub mod primitives;
 pub mod rapid;
 pub mod rotate;

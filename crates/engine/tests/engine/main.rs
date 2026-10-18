@@ -111,6 +111,7 @@ mod native_corpus;
 mod nodes;
 mod pathops;
 mod plugins;
+mod pixel;
 mod projects;
 mod proof;
 mod realign;

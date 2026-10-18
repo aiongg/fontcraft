@@ -143,6 +143,7 @@ pub mod measurements;
 mod metrics_files;
 mod nonlinear;
 mod pair_list;
+mod pixel;
 mod plugin;
 mod plugin_manager;
 mod power_guides;
@@ -310,6 +311,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(edit::specs());
         v.extend(clipboard::specs());
         v.extend(corner::specs());
+        v.extend(pixel::specs());
         v.extend(glyph::specs());
         v.extend(decompose::specs());
         v.extend(glyph_set::specs());
