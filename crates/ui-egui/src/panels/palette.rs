@@ -19,6 +19,7 @@ fn drawer(section: &str) -> Option<Draw> {
         "transformations" => Some(transformations::show),
         "referenceFont" => Some(super::reference_font::show),
         "selections" => Some(super::selections::show),
+        "measurements" => Some(super::measurements::show),
         _ => None,
     }
 }

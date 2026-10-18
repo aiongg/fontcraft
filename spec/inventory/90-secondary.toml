@@ -524,6 +524,14 @@ summary = "Labels every detected stem of the visible glyphs with its width, meas
 ref = "FontLab 8 What's new › Consistency & precision › Auto-meter"
 status = "docs"
 origin = "fontlab"
+notes = "Documented, not yet observed. FontCraft: a View › Measure switch; each stem the engine query autometer.measure finds is labelled with its width at its middle, coloured by class (common: one of the master's stem values; uncommon: within the tolerance of one; other). The detection range is the query's minWidth and maxWidth, 20 to 250 units by default. The labels are drawn only while the stem is at least a few screen points wide."
+guesses = [
+  "The detection range is a view setting with the documented defaults, not stored in the font; the reference's per-font storage would settle where it lives.",
+  "Diagonal stems are compared with the vertical stem values; watching a slanted stem's label colour in the reference app would settle it.",
+]
+observe = [
+  "Turn on Show Stem Widths on an H and an o drawn with 80-unit stems: note which stems get labels and where the labels sit.",
+]
 
 [[command]]
 id = "view.showCounterWidths"
@@ -538,6 +546,10 @@ summary = "Labels the white space between adjacent stems (counter width or heigh
 ref = "FontLab 8 What's new › Consistency & precision › Auto-meter"
 status = "docs"
 origin = "fontlab"
+notes = "Documented, not yet observed. FontCraft: between each stem and the nearest stem of the same direction beyond it whose extent overlaps, where the space halfway between them is not ink; tried at the middle of the overlap first, then further out, so an H's counter is labelled beside the crossbar."
+guesses = [
+  "A counter is measured between neighbouring stems only, at the first place along their overlap that is white; the reference app's placement of the label would settle it.",
+]
 
 [[command]]
 id = "view.showCornerAngles"
@@ -552,6 +564,14 @@ summary = "Shows the angle at each sharp node once the view is zoomed in far eno
 ref = "FontLab 8 What's new › Consistency & precision › Auto-meter"
 status = "docs"
 origin = "fontlab"
+notes = "Documented, not yet observed. FontCraft: the angle between the two segments at each on-curve node that is not smooth and bends by more than one degree, from 0 to 180, drawn once the view scale fits the label (about 1.5 screen points per unit)."
+guesses = [
+  "The angle is the one between the two segments, so the inner and outer corners of a crossbar both read 90; whether the reference shows the ink side's angle (270 on a concave corner) is open.",
+  "The zoom at which labels appear is our choice.",
+]
+observe = [
+  "Zoom into an H with Show Corner Angles on: note the angle shown at a concave corner and the zoom at which labels appear.",
+]
 
 [[behavior]]
 id = "autometer.editStemNumerically"
@@ -561,6 +581,14 @@ summary = "A stem-width label on canvas is editable: clicking it accepts a typed
 ref = "FontLab 8 What's new › Consistency & precision › Auto-meter (Editing stems numerically; Automatic stem adjustment)"
 status = "docs"
 origin = "fontlab"
+notes = "Documented, not yet observed. FontCraft: clicking an editable stem label opens a field over it; Return applies the typed width, Up and Down add or remove one unit (Shift: ten) through autometer.setStemWidth. An uncommon stem shows a dot beside its label; clicking it snaps the stem to the nearest stem value. Both edges move by half the change, except that a horizontal stem's edge on a metric line stays."
+guesses = [
+  "Both edges move by half the change (as Adjust Stems does); the reference may move one edge only.",
+  "The irregular-stem tolerance is 5 units by default.",
+]
+observe = [
+  "Type a new width into a stem label of an H's left bar: note which nodes move and by how much.",
+]
 
 [[command]]
 id = "view.showQuickMeasurement"
@@ -575,6 +603,10 @@ summary = "While on, hovering between two opposite segments shows the distance b
 ref = "FontLab 8 What's new › Consistency & precision › Quick measurement"
 status = "docs"
 origin = "fontlab"
+notes = "Documented, not yet observed. FontCraft: while on, hovering over the edited layer shows the distance from the nearest segment through the pointer to the segment opposite (autometer.quickMeasure); Shift measures horizontally or vertically, whichever is closer to that direction. Distances from guides, metric lines and anchors are not built."
+guesses = [
+  "With Shift, the axis is the one closer to the unrestricted measurement's direction.",
+]
 
 [[panel]]
 id = "palette.measurements"
@@ -587,6 +619,54 @@ summary = "A per-master table of design measurements that can be typed in or rec
 ref = "FontLab 8 What's new › Consistency & precision › Measurements panel"
 status = "docs"
 origin = "fontlab"
+notes = "Documented, not yet observed. FontCraft: the Palette section lists the current master's heights with their overshoots and its stem values; each is a field that writes through font.master.setMetric or font.master.setStem, and Recalculate runs font.recalculateMeasurements for that master. Contrast and icons per feature are not shown."
+guesses = [
+  "The section shows the current master only, not a table of all masters, to fit the Palette's width.",
+]
+
+[[command]]
+id = "autometer.measure"
+label = "Measure Stems and Corners"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, layer?: id, side?: foreground|background, stems?, counters?, corners?: bool, minWidth?, maxWidth?, tolerance?: units} → {stems: [{index, direction, width, round, first, second, class, nearest?, editable}], counters, corners}"
+area = "guides-metrics"
+milestone = "M13"
+summary = "Query behind the auto-meter: the stems of a layer side with their widths and class against the master's stem values, the counters between neighbouring stems, and the angles at sharp nodes."
+ref = "FontLab 8 What's new › Consistency & precision › Auto-meter"
+status = "inferred"
+origin = "fontlab"
+notes = "Headless form of view.showStemWidths, view.showCounterWidths and view.showCornerAngles."
+
+[[command]]
+id = "autometer.quickMeasure"
+label = "Quick Measurement"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, layer?: id, side?: foreground|background, at: [x, y], axis?: horizontal|vertical} → {from, to, distance, dx, dy}"
+area = "guides-metrics"
+milestone = "M13"
+summary = "Query behind Quick Measurement: the distance from the outline's nearest segment through a point to the segment opposite, or across the outline along one axis."
+ref = "FontLab 8 What's new › Consistency & precision › Quick measurement"
+status = "inferred"
+origin = "fontlab"
+
+[[command]]
+id = "autometer.setStemWidth"
+label = "Set Stem Width"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, layer?: id, side?: foreground|background, stem: index, width? | by? | snap?: true, minWidth?, maxWidth?} → {was, width, moved}"
+area = "guides-metrics"
+milestone = "M13"
+summary = "Gives one stem found by autometer.measure a new width, or the nearest stem value, by moving the nodes on its edges; one undo step."
+ref = "FontLab 8 What's new › Consistency & precision › Auto-meter (Editing stems numerically)"
+status = "inferred"
+origin = "fontlab"
+notes = "The command behind autometer.editStemNumerically."
 
 [[command]]
 id = "font.recalculateMeasurements"
@@ -601,6 +681,11 @@ summary = "Measures the chosen design values (heights, overshoots, common stem w
 ref = "FontLab 8 What's new › Consistency & precision › Measurements panel (Auto-calculation)"
 status = "docs"
 origin = "fontlab"
+notes = "Documented, not yet observed. FontCraft: the measurements table is the master's metrics and stem values. Heights come from x, H, d and p, overshoots from o and O, the first vertical and horizontal stem value from the most frequent straight stem width of the lowercase samples and the second from the capitals (the handbook: the first stem values stand for the lowercase)."
+guesses = [
+  "The sample glyphs (x, H, d, p, o, O, n, H, e) and taking the most frequent stem width are our choice; the reference documents neither.",
+  "Stem values the font has no stem definition for are skipped, not added.",
+]
 
 [[command]]
 id = "view.showDetailsAcrossGlyphs"

@@ -78,6 +78,7 @@ mod linked_sources;
 mod macros;
 mod masters;
 mod measure_line;
+mod measurements;
 mod metric_defs;
 mod metrics_files;
 mod metrics_io;
