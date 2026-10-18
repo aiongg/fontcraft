@@ -78,6 +78,9 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
         frame(ui, &tokens, "infoBox.annotations", |ui| annotations(ui, tool, pending));
         return;
     }
+    if tool == super::info_box_tt::TOOL {
+        return super::info_box_tt::show(app, ui, pending);
+    }
     super::info_box_metrics::show(app, ui, pending);
     let Some(info) = read(app) else { return };
     frame(ui, &tokens, "infoBox", |ui| contents(ui, &tokens, &info, pending));

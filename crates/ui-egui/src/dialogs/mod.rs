@@ -92,7 +92,7 @@ pub mod stem_filters;
 mod transform_metrics;
 mod transformations;
 pub mod tt_debugger;
-mod tt_deltas;
+pub mod tt_deltas;
 pub mod tt_instructions;
 mod tt_preview_address;
 mod ttf_stems;
