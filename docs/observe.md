@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1194 rows to check: 1754 guesses and 440 observe steps.**
+**1195 rows to check: 1755 guesses and 440 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,7 +48,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 40 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 4 |
-| **Later milestones (after M6)** | all | **723** |
+| **Later milestones (after M6)** | all | **724** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 43 |
 | Later milestones (after M6) | Edit View: text mode and preview | 14 |
 | Later milestones (after M6) | Components and anchors | 37 |
@@ -56,7 +56,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Spacing and metrics keys | 3 |
 | Later milestones (after M6) | Kerning and the Kerning window | 4 |
 | Later milestones (after M6) | Font View | 15 |
-| Later milestones (after M6) | Font Info and features | 266 |
+| Later milestones (after M6) | Font Info and features | 267 |
 | Later milestones (after M6) | Interpolation | 58 |
 | Later milestones (after M6) | Hinting | 90 |
 | Later milestones (after M6) | Colour fonts | 49 |
@@ -1338,7 +1338,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (723)
+## Later milestones (after M6) (724)
 
 ### Edit View: drawing, guides, layers and the Palette (43)
 
@@ -1762,7 +1762,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The decomposition sections use Unicode's canonical decompositions, one level and full together, so U+1EA4 lists both U+00C2 and U+0041, and characters the font has no glyph for are listed dimmed.
   - Guess: Clicking an entry opens the glyph in a new tab; the reference's documentation does not say whether it replaces the current glyph instead.
 
-### Font Info and features (266)
+### Font Info and features (267)
 
 - [ ] `fontInfo.rows.selection` (behavior, M7, handbook): Clicking a row selects it and Cmd+click builds a selection of several…
   - Guess: Shift-click adds every row between the last row clicked and the clicked one; Shift-clicking in the reference app settles it.
@@ -2563,6 +2563,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A lookup a feature uses is named feature_script_language_index after the first language system that uses it, and any other lookup GSUB_index or GPOS_index; the round-trip measure on the corpus would show whether stabler names are needed.
   - Guess: Glyph sets of two or more glyphs used at least twice become named classes (@first_last); sets used once stay inline. Reading the decompiled text of a few corpus fonts would settle the threshold.
   - Guess: Mark classes are named @MC_lookup_subtable_class, one set per subtable, so a mark that has different anchors in two subtables of one lookup never collides.
+- [ ] `layout.lintFeatures` (M12, inferred, live): Check Feature Code
+  - Guess: Without a glyph set the compiler's messages about glyphs missing from the font are left out and hyphenated names are read as ranges; addfeatures always checks against a font. A request to check names against the code's own classes would change it.
 - [ ] `filter.customParameter.thirdParty` (behavior, M13, handbook): Plug-in filters define their own argument strings and are not guaranteed to…
   - Guess: FontCraft applies include and exclude itself for module filters, where the reference leaves it to each plug-in; settled by nothing in the reference, since our modules cannot see glyph lists.
   - Observe: Open that filter plug-in's dialog and, if it has a gear menu, copy its export string and paste it into a text file: compare it with the built-in filters' export strings (separator, key spelling).

@@ -223,7 +223,7 @@ fn fftm(data: &[u8], w: &mut XmlWriter) -> Result<()> {
         ("sourceCreated", timestamp(u64_at(data, 12)?)?),
         ("sourceModified", timestamp(u64_at(data, 20)?)?),
     ];
-    w.comment("FontForge's timestamp, font source creation and modification dates");
+    w.comment("FontForge's timestamp, font source creation and modification dates"); // brand-ok: the comment ttx writes
     val(w, "version", version);
     for (name, text) in stamps {
         val(w, name, text);

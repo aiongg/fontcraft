@@ -2638,6 +2638,7 @@ summary = "Converts the curves of sources or fonts between cubic Béziers and qu
 ref = "docs/spec/20-cli.md › outlines"
 status = "inferred"
 notes = "Built in M12.29; see the `outlines to-quadratic` and `outlines to-cubic` rows."
+guesses = ["A compiled font's contours are never reversed, since glyf contours already run the TrueType way; a cubic glyf font with PostScript-direction contours would show whether reversing should follow keepDirection there too."]
 
 [[command]]
 id = "outlines.componentize"
@@ -2652,6 +2653,7 @@ summary = "Rebuilds TrueType glyphs as composites, using the component structure
 ref = "docs/spec/20-cli.md › outlines"
 status = "inferred"
 notes = "Built in M12.29; see the `outlines componentize` row."
+guesses = ["detect prefers components with more contours and, of two equal outlines, makes the later glyph refer to the earlier; no reference tool detects components, so this stands until a use case asks otherwise.", "detect sets USE_MY_METRICS on the first component when its advance equals the glyph's, the rule ttfcomponentizer applies to the source's advances."]
 
 [[command]]
 id = "outlines.decompose"
@@ -2755,6 +2757,7 @@ summary = "Read-only query that parses and validates feature code as the compile
 ref = "docs/spec/20-cli.md › features"
 status = "inferred"
 notes = "A glyph set comes from a font (the names a compiler sees for it), a glyph list file (the first word of each line, so a GOADB works) or a list of names; a path and a list of names are separate parameters so file-access rules can tell them apart. With a glyph set the code is compiled in memory and nothing is written; without one it is only validated. Lines and columns count from 1, columns in characters; a message about the request as a whole has no place. The result also counts errors, warnings and notes."
+guesses = ["Without a glyph set the compiler's messages about glyphs missing from the font are left out and hyphenated names are read as ranges; addfeatures always checks against a font. A request to check names against the code's own classes would change it."]
 
 [[command]]
 id = "layout.convertSyntax"
