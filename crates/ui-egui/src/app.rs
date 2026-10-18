@@ -31,6 +31,8 @@ pub struct FontcraftApp {
     pub dialog: Option<crate::dialogs::OpenDialog>,
     /// The platform's file choosers; `None` where there are none (the browser, MCP, tests).
     pub picker: Option<Box<dyn shell::pickers::Picker>>,
+    /// The web preview server and its dialog (`hint.tt.showPreviewAddress`).
+    pub preview_address: crate::dialogs::tt_preview_address::PreviewAddress,
     /// The folders control-channel requests may read and write (`--automation-read-root`,
     /// `--automation-write-root`); `None`: anywhere. What the person does in the window is not
     /// confined. See [`fontcraft_engine::file_access`].
@@ -68,6 +70,7 @@ impl FontcraftApp {
             tools: ToolsState::default(),
             dialog: None,
             picker: None,
+            preview_address: Default::default(),
             automation_roots: None,
             clipboard_out: None,
             menu_bar_rect: egui::Rect::NOTHING,

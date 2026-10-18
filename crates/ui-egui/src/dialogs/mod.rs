@@ -94,7 +94,7 @@ mod transformations;
 pub mod tt_debugger;
 mod tt_deltas;
 pub mod tt_instructions;
-mod tt_preview_address;
+pub mod tt_preview_address;
 mod ttf_stems;
 mod ttf_zones;
 mod virtual_master;

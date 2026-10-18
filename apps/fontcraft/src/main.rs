@@ -171,6 +171,10 @@ fn run() -> Result<(), String> {
         }
     }
     app.picker = Some(Box::new(pickers::SystemPicker));
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        app.preview_address.host = Some(Box::new(preview_server::Host::default()));
+    }
     app.state.start.reveal = start_window::Reveal(Some(pickers::reveal));
     if show_start {
         app.run("window.startWindow", &json!({}))?;
