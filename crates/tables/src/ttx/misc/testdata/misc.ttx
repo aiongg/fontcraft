@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ttFont sfntVersion="\x00\x01\x00\x00" ttLibVersion="4.66">
+
+  <kern>
+    <version value="0"/>
+    <kernsubtable coverage="1" format="0">
+      <pair l="A" r="B" v="-50"/>
+      <pair l="A" r="C" v="-10"/>
+      <pair l="B" r="A" v="30"/>
+    </kernsubtable>
+    <kernsubtable format="2">
+      0000000a 0201dead beef 
+    </kernsubtable>
+  </kern>
+
+  <DSIG>
+    <tableHeader flag="0x1" numSigs="1" version="1"/>
+    <SignatureRecord format="1">
+-----BEGIN PKCS7-----
+AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJygpKissLS4vMDEyMzQ1Njc4
+OTo7
+-----END PKCS7-----
+    </SignatureRecord>
+  </DSIG>
+
+  <FFTM>
+    <version value="1"/>
+    <FFTimeStamp value="Thu Dec 21 10:40:00 2023"/>
+    <sourceCreated value="Wed Mar 31 01:46:40 2021"/>
+    <sourceModified value="Thu Jan  1 00:00:00 1970"/>
+  </FFTM>
+
+  <LTSH>
+    <yPel name=".notdef" value="1"/>
+    <yPel name="A" value="12"/>
+    <yPel name="B" value="8"/>
+    <yPel name="C" value="255"/>
+  </LTSH>
+
+  <VDMX>
+    <version value="1"/>
+    <ratRanges>
+      <ratRange bCharSet="0" groupIndex="0" xRatio="0" yEndRatio="0" yStartRatio="0"/>
+      <ratRange bCharSet="1" groupIndex="0" xRatio="1" yEndRatio="1" yStartRatio="1"/>
+    </ratRanges>
+    <groups>
+      <group index="0">
+        <record yPelHeight="8" yMax="7" yMin="-2"/>
+        <record yPelHeight="9" yMax="8" yMin="-2"/>
+      </group>
+    </groups>
+  </VDMX>
+
+  <prop>
+    <Version value="2.0"/>
+    <GlyphProperties Format="1">
+      <DefaultProperties value="0"/>
+      <Properties>
+        <Lookup glyph="A" value="5"/>
+        <Lookup glyph="B" value="7"/>
+        <Lookup glyph="C" value="7"/>
+      </Properties>
+    </GlyphProperties>
+  </prop>
+
+</ttFont>

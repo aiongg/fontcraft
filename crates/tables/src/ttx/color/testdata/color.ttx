@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ttFont sfntVersion="\x00\x01\x00\x00" ttLibVersion="4.66">
+
+  <COLR>
+    <version value="0"/>
+    <ColorGlyph name="A">
+      <layer colorID="2" name="B"/>
+    </ColorGlyph>
+    <ColorGlyph name="C">
+      <layer colorID="0" name="A"/>
+      <layer colorID="1" name="B"/>
+    </ColorGlyph>
+  </COLR>
+
+  <CPAL>
+    <version value="1"/>
+    <numPaletteEntries value="2"/>
+    <palette index="0">
+      <color index="0" value="#FF0000FF"/>
+      <color index="1" value="#2080107F"/>
+    </palette>
+    <palette index="1" label="300" type="1">
+      <color index="0" value="#2080107F"/>
+      <color index="1" value="#FFFFFF00"/>
+    </palette>
+    <paletteEntryLabels>
+      <label index="1" value="301"/>
+    </paletteEntryLabels>
+  </CPAL>
+
+  <SVG>
+    <svgDoc endGlyphID="1" startGlyphID="1">
+      <![CDATA[<svg xmlns="http://www.w3.org/2000/svg" id="glyph1"><path d="M0 0h10v10z"/></svg>]]>
+    </svgDoc>
+    <svgDoc endGlyphID="3" startGlyphID="2">
+      <![CDATA[<svg xmlns="http://www.w3.org/2000/svg" id="glyph2">
+<text>a]]]]><![CDATA[>b &amp; c</text>
+</svg>]]>
+    </svgDoc>
+  </SVG>
+
+  <sbix>
+    <version value="1"/>
+    <flags value="00000000 00000001"/>
+    <strike>
+      <ppem value="10"/>
+      <resolution value="72"/>
+      <glyph name=".notdef"/>
+      <glyph graphicType="jpg " name="A" originOffsetX="-3" originOffsetY="4">
+        <hexdata>
+          ffd8ffe0   
+        </hexdata>
+      </glyph>
+      <glyph name="B"/>
+      <glyph name="C"/>
+    </strike>
+    <strike>
+      <ppem value="20"/>
+      <resolution value="72"/>
+      <glyph name=".notdef"/>
+      <glyph graphicType="png " name="A" originOffsetX="1" originOffsetY="-2">
+        <hexdata>
+          89504e47 0d0a1a0a 00010203 04050607
+          08090a0b   
+        </hexdata>
+      </glyph>
+      <glyph graphicType="dupe" name="B" originOffsetX="0" originOffsetY="0">
+        <ref glyphname="A"/>
+      </glyph>
+      <glyph name="C"/>
+    </strike>
+  </sbix>
+
+</ttFont>
