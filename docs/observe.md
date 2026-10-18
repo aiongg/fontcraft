@@ -2832,7 +2832,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The server listens on a free port of the local network interfaces, serves only the preview page and the font, and stops when the dialog closes (decided in M10 § 7, question 5); the reference app would settle lifetime and port.
   - Observe: T3: choose Show Preview Address…, open the address from another device on the same network, close the dialog, then quit the app; note the port, whether the page was reachable, and at which of these moments the server stopped.
 - [ ] `hint.tt.autohintGlyph` (M10, handbook, live): Autohint
-  - Guess: The Instructor's Autohint writes vertical Snap on every extreme in a TT zone, vertical Stem for each horizontal stem the PostScript stem analysis finds, and horizontal Stem for each vertical one; a glyph hinted by the reference app would show which points it picks.
+  - Guess: The Instructor's Autohint writes vertical Snap on every extreme in a TT zone and vertical Stem for each horizontal stem the PostScript stem analysis finds, and nothing horizontal, as ttfautohint hints heights only; a glyph hinted by the reference app would show which points and directions it picks.
 - [ ] `hint.tt.removeHints` (M10, handbook, live): Remove Hints
   - Guess: Remove Hints in the TrueType Instructor removes TrueType instructions only and leaves PostScript hints, since the handbook names it in the TrueType section; running it on a glyph with both in the reference app would settle it.
 - [ ] `hint.tt.deleteInstructions` (M10, inferred, live): Delete Instructions

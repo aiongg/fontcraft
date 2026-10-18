@@ -1034,7 +1034,7 @@ summary = "Context-menu item of the TrueType Instructor that generates editable 
 ref = "TrueType Hinting › Instructions"
 status = "handbook"
 notes = "M10.21, crates/engine/src/cmd/autohint_tt.rs: the built-in autohinter on the layer of the named master (default the main master), with the TT zones and stems that apply to the glyph; a glyph it cannot hint is listed under skipped, an unknown glyph or master refuses the run. Documented, not yet observed."
-guesses = ["The Instructor's Autohint writes vertical Snap on every extreme in a TT zone, vertical Stem for each horizontal stem the PostScript stem analysis finds, and horizontal Stem for each vertical one; a glyph hinted by the reference app would show which points it picks."]
+guesses = ["The Instructor's Autohint writes vertical Snap on every extreme in a TT zone and vertical Stem for each horizontal stem the PostScript stem analysis finds, and nothing horizontal, as ttfautohint hints heights only; a glyph hinted by the reference app would show which points and directions it picks."]
 
 [[command]]
 id = "hint.tt.removeHints"

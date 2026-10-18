@@ -9,17 +9,20 @@
 //!
 //! One glyph layer, in this order:
 //!
-//! 1. Vertical Snap on one on-curve node of every flat run that is a top extreme inside a top TT
+//! 1. Vertical Snap on every on-curve node of each flat run that is a top extreme inside a top TT
 //!    zone, or a bottom extreme inside a bottom zone (the zone widened by TTFBlueFuzz). Every
-//!    extreme is snapped, not one per height: IUP gives an untouched point the move of a touched
-//!    neighbour only when it lies at the end of the range its two touched neighbours span.
+//!    node is snapped, not one per height: IUP gives an untouched point the move of a touched
+//!    neighbour only when it lies at the end of the range its two touched neighbours span, and a
+//!    node next to a slanted line moves along that line.
 //! 2. Vertical Stem for every horizontal stem the PostScript autohinter finds (its `hstem`
 //!    list, ghosts left out, hint substitution off so no two stems overlap): between the
 //!    on-curve nodes on its two edges that lie closest together across, from the edge already
 //!    touched to the other. Stems with a touched edge go first; when none is left, the lowest
 //!    stem starts from its bottom edge, which the compiler rounds.
-//! 3. Horizontal Stem for every vertical stem the same way, from its left edge.
-//! 4. Vertical Delta for the `touch` and `point` control instructions.
+//! 3. Vertical Delta for the `touch` and `point` control instructions.
+//!
+//! Nothing is hinted horizontally except the `left` and `right` points of the control
+//! instructions.
 //!
 //! Control instructions: `nodir` points are never instructed; `left` and `right` points get a
 //! rounded horizontal Snap, which makes them an edge the hinting keeps on the grid.
@@ -530,10 +533,13 @@ pub fn autohint_glyph(input: &AutoGlyph) -> Result<AutoHints, HintingError> {
         }
     }
 
-    // 2 and 3. Stems from the PostScript analysis.
+    // 2. Stems from the PostScript analysis.
     let stems = ps_stems(input, &zones, &mut out.warnings);
     let usable = |p: &Pt| p.on && !control.nodir.contains(&p.r);
-    for (direction, edges, touched) in [(Direction::Vertical, &stems.0, &mut touched_y), (Direction::Horizontal, &stems.1, &mut touched_x)] {
+    // Heights only, as the reference's autohinter does: a rasterizer in ClearType modes ignores
+    // most horizontal moves, and leaving them out keeps the programs small.
+    {
+        let (direction, edges, touched) = (Direction::Vertical, &stems.0, &mut touched_y);
         let at = |v: f64| -> Vec<Pt> {
             all.iter()
                 .filter(|p| usable(p) && (if direction == Direction::Vertical { p.y } else { p.x } - v).abs() <= EDGE_TOLERANCE)
@@ -597,7 +603,7 @@ fn layer_paths(layer: &Layer, glyph: &str) -> Result<Vec<Vec<Pt>>, HintingError>
     Ok(out)
 }
 
-/// The y extremes of one closed path: one on-curve node of each flat run whose neighbours on
+/// The y extremes of one closed path: the on-curve nodes of each flat run whose neighbours on
 /// both sides lie below it (`true`, a top) or above it (`false`). A run made of off-curve nodes
 /// only gives none.
 fn extremes(path: &[Pt]) -> Vec<(bool, Pt)> {
@@ -622,10 +628,8 @@ fn extremes(path: &[Pt]) -> Vec<(bool, Pt)> {
         if let (Some(b), Some(a)) = (at((k + n - 1) % n), at((end + 1) % n)) {
             let top = b.y < first.y && a.y < first.y;
             let bottom = b.y > first.y && a.y > first.y;
-            if (top || bottom)
-                && let Some(p) = (k..=end).filter_map(at).find(|p| p.on)
-            {
-                out.push((top, *p));
+            if top || bottom {
+                out.extend((k..=end).filter_map(at).filter(|p| p.on).map(|p| (top, *p)));
             }
         }
         k = end + 1;
@@ -650,7 +654,7 @@ fn closest_pair(lo: &[Pt], hi: &[Pt], direction: Direction) -> Option<(Pt, Pt)> 
 }
 
 /// The PostScript autohinter's stems of the layer: horizontal stems as (bottom, top) and
-/// vertical stems as (left, right), ghosts left out.
+/// vertical stems as (left, right), ghosts left out. Only the horizontal ones are used.
 type StemEdges = (Vec<(f64, f64)>, Vec<(f64, f64)>);
 
 fn ps_stems(input: &AutoGlyph, zones: &[(f64, f64, bool)], warnings: &mut Vec<String>) -> StemEdges {

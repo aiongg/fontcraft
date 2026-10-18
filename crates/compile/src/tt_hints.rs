@@ -275,7 +275,15 @@ pub fn tt_hinting(
         if matches!(prepared, Prepared::Empty | Prepared::Composite(_)) {
             continue;
         }
-        let Some(built) = source.glyph(&g.name).and_then(|sg| sg.layer(&settings.master)) else { continue };
+        let Some(mut built) = source.glyph(&g.name).and_then(|sg| sg.layer(&settings.master)) else { continue };
+        let decomposed;
+        if auto.is_some() && built.shapes.iter().any(|s| !matches!(s, fontcraft_model::Shape::Path(_))) {
+            // A layer with components is hinted as the outline the export writes.
+            let Some(glyph) = source.glyph(&g.name) else { continue };
+            let Ok(outline) = source.outline_of(glyph, &settings.master) else { continue };
+            decomposed = outline_layer(built, &outline);
+            built = &decomposed;
+        }
         let zones = settings.tt_zones_for(source, &g.name);
         let stems = settings.tt_stems_for(source, &g.name);
         let autohinted;
@@ -361,6 +369,54 @@ pub fn tt_hinting(
         None => (None, None),
     };
     Ok(Some(TtHinting { cvt: programs.cvt, fpgm: programs.fpgm, prep: programs.prep, glyphs, limits, version_suffix, ttfa }))
+}
+
+/// A copy of `layer` whose shapes are the closed contours of `outline` (the layer's outline with
+/// its components drawn in), for the autohinter; the export's point map matches its nodes by
+/// position, as it does a layer's own.
+fn outline_layer(layer: &Layer, outline: &fontcraft_geom::BezPath) -> Layer {
+    use fontcraft_geom::PathEl;
+    use fontcraft_model::{Node, NodeKind, Path, Shape};
+    let mut out = layer.clone();
+    out.shapes.clear();
+    let mut nodes: Vec<Node> = Vec::new();
+    let mut start = None;
+    let finish = |nodes: &mut Vec<Node>, start: Option<fontcraft_geom::Point>, shapes: &mut Vec<Shape>| {
+        if let (Some(p), Some(last)) = (start, nodes.last()) {
+            // A contour that ends on its start point keeps that node once, at the end.
+            if (last.x, last.y) != (p.x, p.y) {
+                nodes.push(Node::new(p.x, p.y, NodeKind::Line));
+            }
+            if nodes.len() > 1 {
+                shapes.push(Shape::Path(Path::new(true, std::mem::take(nodes))));
+            }
+        }
+        nodes.clear();
+    };
+    for el in outline.elements() {
+        match *el {
+            PathEl::MoveTo(p) => {
+                finish(&mut nodes, start, &mut out.shapes);
+                start = Some(p);
+            }
+            PathEl::LineTo(p) => nodes.push(Node::new(p.x, p.y, NodeKind::Line)),
+            PathEl::QuadTo(a, p) => {
+                nodes.push(Node::new(a.x, a.y, NodeKind::OffCurve));
+                nodes.push(Node::new(p.x, p.y, NodeKind::QCurve));
+            }
+            PathEl::CurveTo(a, b, p) => {
+                nodes.push(Node::new(a.x, a.y, NodeKind::OffCurve));
+                nodes.push(Node::new(b.x, b.y, NodeKind::OffCurve));
+                nodes.push(Node::new(p.x, p.y, NodeKind::Curve));
+            }
+            PathEl::ClosePath => {
+                finish(&mut nodes, start, &mut out.shapes);
+                start = None;
+            }
+        }
+    }
+    finish(&mut nodes, start, &mut out.shapes);
+    out
 }
 
 /// The tables the cvt Table, prep Table Assembly and fpgm Table Assembly parameters hold.
