@@ -138,7 +138,7 @@ pub mod external_changes;
 mod file_helpers;
 mod find_outline;
 mod geometry_helpers;
-mod math_base;
+pub mod math_base;
 mod measurements;
 mod metrics_files;
 mod nonlinear;

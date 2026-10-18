@@ -2960,20 +2960,30 @@ summary = "Edits the data of the OpenType MATH table: font-wide constants and pe
 ref = "FontForge Element menu › MATH Info; FontForge dialogs › Math typesetting information"
 status = "docs"
 origin = "fontforge"
+notes = "Documented, not yet observed. Built (M13.47) as a form over font.setMathData for the first master: the constants as `Name value` lines, opening on the font's values, and one glyph's italic correction, top accent, extended-shape flag, variants, assemblies and math kerning as text, opening on the data of the glyph `dialog.open {glyph}` names. An empty glyph field leaves that value unchanged."
+guesses = [
+  "The dialog edits the first master and one glyph at a time, with the data as text fields rather than a table per glyph; the reference's math dialog would settle the layout.",
+]
 
 [[command]]
 id = "font.setMathData"
-label = "Set Math Data"
-menu = []
+label = "Set Math Data…"
+menu = ["Font"]
 shortcut = ""
 kind = "engine"
-params = "{master?: id, constants?: {name: number}, glyphs?: {name: {italicCorrection?: number, topAccent?: number, variants?: object, assembly?: object}}}"
+params = "{master?: id, constants?: {name: number | null}, glyphs?: {name: {italicCorrection?: number | null, topAccent?: number | null, extendedShape?: bool, kerning?: {topRight?|topLeft?|bottomRight?|bottomLeft?: [[kern, height]]}, hVariants?: [glyph], vVariants?: [glyph], hAssembly?: [[glyph, flags, start, end]], vAssembly?: [[glyph, flags, start, end]]}}}"
 area = "features"
 milestone = "M13"
 summary = "Sets math constants and per-glyph math data from a structured object; the compiler writes them to the MATH table."
-ref = "FontForge dialogs › Math typesetting information"
+ref = "FontForge dialogs › Math typesetting information; glyphsLib builder/user_data.py and ufo2ft outlineCompiler.py (setupTable_MATH) for where the data is stored"
 status = "docs"
 origin = "fontforge"
+notes = "Documented, not yet observed. Built (M13.47): the data is stored where glyphsLib and ufo2ft read it, so fontmake compiles the same table: the constants in the master's user data (a UFO's font lib) under com.nagwa.MATHPlugin.constants; extended shapes and variants in the glyph's user data (a UFO keeps the variants in the glyph lib and the extended shapes as a list in the font lib); italic correction, top accent and math kerning as the anchors math.ic, math.ta and math.tr1…, math.tl1…, math.br1…, math.bl1… on the master layer. Keys left out keep their values; null removes. The compiler (crates/compile/src/math.rs) writes MATH from it, with variant and part advances from the glyph boxes and an assembly's italic correction taken from its last part, as ufo2ft does."
+guesses = [
+  "A new math.ic or math.ta anchor is placed at height 0, and an existing one keeps its height; the plugin that defined these anchors would settle where it puts them.",
+  "Math kerning anchors are named with the corner's prefix and a number from 1 (math.tr1, math.tr2); ufo2ft reads any name with the prefix.",
+  "A master without constants gets an empty set when math data is set, so the font has a MATH table: ufo2ft builds MATH only when the font lib holds a math key.",
+]
 
 [[panel]]
 id = "dialog.baselines"
@@ -2986,6 +2996,25 @@ summary = "Edits the OpenType BASE table directly: which baseline each script si
 ref = "FontForge Element menu › Horizontal Baselines, Vertical Baselines; FontForge dialogs › The baseline dialog"
 status = "docs"
 origin = "fontforge"
+notes = "Documented, not yet observed. Built (M13.47) as a form over font.setBaselines: per direction the tags, one line per script (script, default baseline, a coordinate per tag) and one line per extent override (script, language, minimum, maximum), opening on the feature code's BASE block."
+
+[[command]]
+id = "font.setBaselines"
+label = "Set Baselines…"
+menu = ["Font"]
+shortcut = ""
+kind = "engine"
+params = "{horizontal?: axis | null, vertical?: axis | null} where axis = {tags: [tag], scripts: [{script, baseline, values: [number]}], extents?: [{script, language?, min, max}]}"
+area = "features"
+milestone = "M13"
+summary = "Sets the BASE table's baselines for each direction: the baseline tags, each script's default baseline and coordinates, and line-extent overrides. The data is the feature code's table BASE block, which every compiler reads."
+ref = "FontForge dialogs › The baseline dialog; OpenType feature file specification › table BASE"
+status = "docs"
+origin = "fontforge"
+notes = "Documented, not yet observed. Built (M13.47): the block is rewritten in the first feature entry that holds one, else added as a prefix named Baselines, which goes again when both directions are removed. Tags are written sorted, with each script's coordinates following them, and scripts sorted by tag, as the table stores them. A block with statements the command cannot keep (feature-specific MinMax values) is refused."
+guesses = [
+  "The baselines are stored as feature code rather than in custom parameters or user data, so the reference compilers build the same BASE table from the source; a reference app that edits BASE would settle where it keeps them.",
+]
 
 [[command]]
 id = "font.renameGlyphsByNamelist"

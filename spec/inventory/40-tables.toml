@@ -228,6 +228,7 @@ milestone = "M8"
 summary = "Baseline tags and per-script baseline coordinates and min/max extents. fontc only emits it when the feature code has a table BASE block and copies fea-rs's result unchanged; write-fonts supports BaseCoord formats 1 to 3 and bumps the version to 1.1 when an item variation store is attached."
 ref = "fontc fontbe/src/font.rs; write-fonts src/tables/base.rs, generated/generated_base.rs"
 status = "docs"
+notes = "The feature code's table BASE block is written as fea-rs compiles it, as fontc does (M13.47; the layout stage's tables). Variable values in the block are not built (fea.var.tableValues)."
 
 # ---------------------------------------------------------------------------------------------------
 # Tables: variations (M9)
@@ -542,9 +543,10 @@ read = "read-fonts"
 write = "write-fonts"
 area = "compile"
 milestone = "M12"
-summary = "Math constants, glyph info (italic corrections, top accent attachment, extended shapes, kern info) and variants/assemblies. Typed reader and writer both exist; no reference compiler here builds it from sources, so the source model for math data is ours."
-ref = "read-fonts src/tables/math.rs; write-fonts src/tables/math.rs, generated/generated_math.rs"
+summary = "Math constants, glyph info (italic corrections, top accent attachment, extended shapes, kern info) and variants/assemblies. Typed reader and writer both exist. fontmake builds it from the keys glyphsLib passes on (com.nagwa.MATHPlugin.* and math.* anchors); fontc does not build it."
+ref = "read-fonts src/tables/math.rs; write-fonts src/tables/math.rs, generated/generated_math.rs; ufo2ft outlineCompiler.py (setupTable_MATH); fontTools otlLib/builder.py (buildMathTable)"
 status = "docs"
+notes = "Built in M13.47 (crates/compile/src/math.rs), ported from ufo2ft and fontTools; static fonts from the compiled master, variable fonts from the origin, as fontmake builds it from the default source. One difference stays: write-fonts cannot write a null constants, glyph info or variants offset, so a part with no data is an empty subtable where fontTools writes a null offset."
 
 [[table]]
 tag = "JSTF"

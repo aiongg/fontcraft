@@ -72,6 +72,8 @@ mod kerning_dialogs_tests;
 #[cfg(test)]
 mod kerning_window_tests;
 #[cfg(test)]
+mod math_base_dialog_tests;
+#[cfg(test)]
 mod measurement_tests;
 #[cfg(test)]
 mod metrics_dialogs_tests;

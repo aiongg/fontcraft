@@ -166,6 +166,7 @@ bundled, the file says so in its header and the project is listed here with its 
   getDefaultAndNominalWidths, makeGlyphsBoundingBoxes, setupTable_maxp) and from the PostScript
   fallbacks of fontInfoData.py (normalizeStringForPostscript, postscriptFontNameFallback,
   postscriptBlueScaleFallback and the static defaults).
+  The MATH table writer (crates/compile/src/math.rs) ports setupTable_MATH, with fontTools' (MIT) otlLib buildMathTable.
 
   fontc (https://github.com/googlefonts/fontc), Apache License 2.0. The compiler's glyph rules
   are ported from its fontir and fontbe crates (1.0.0): pruning of missing components, inlining

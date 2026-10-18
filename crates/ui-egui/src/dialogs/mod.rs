@@ -285,6 +285,8 @@ pub const DIALOGS: &[Dialog] = &[
     export_profiles::DIALOG,
     export_profiles::EXPORT,
     export_profiles::ARTWORK,
+    math_table::DIALOG,
+    baselines::DIALOG,
 ];
 
 /// The shell commands of this module.

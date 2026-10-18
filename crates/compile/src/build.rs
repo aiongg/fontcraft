@@ -583,6 +583,9 @@ pub fn assemble(
         builder.add_table(&vhea).map_err(table("vhea"))?;
         builder.add_table(&vmtx).map_err(table("vmtx"))?;
     }
+    if let Some(plan) = &extra.math {
+        builder.add_raw(Tag::new(b"MATH"), crate::math::build(plan, order, &boxes.glyphs, warnings)?);
+    }
     for (tag, bytes) in color.iter().chain(&extra.tables) {
         builder.add_raw(*tag, bytes.as_slice());
     }
