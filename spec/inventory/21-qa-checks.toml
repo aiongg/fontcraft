@@ -114,7 +114,7 @@ milestone = "M3"
 summary = "An on-curve point sits within 2 units of, but not on, a vertical metric: baseline, x-height (lowercase letters only), cap height (uppercase only), ascender or descender. The report is dropped when more than 100 points match. The fix moves the point and its handles onto the metric line."
 ref = "fontbakery outline_alignment_miss"
 status = "docs"
-notes = "Report-only: the fix names selection.move, but audit.fix does not build its calls yet (docs/spec/21-qa.md § 5 › Fix calls)."
+notes = "audit.fix runs selection.move on each reported node with dy taking it onto the metric line (docs/spec/21-qa.md § 5 › Fix calls, step 26); its handles move with it."
 
 [[check]]
 id = "check.outlines.jaggySegments"
@@ -206,7 +206,7 @@ milestone = "M3"
 summary = "A contour contains an open corner: two segments that cross a short distance before a corner node, leaving a small triangular overlap outside the shape. Reported per layer; matters for sources that must round or offset cleanly. The fix trims the corner to the crossing point."
 ref = "fontbakery ufo_no_open_corners (not in any fontbakery profile)"
 status = "docs"
-notes = "Report-only: the fix names path.eraseOpenCorners, which does not exist yet, but audit.fix does not build its calls yet (docs/spec/21-qa.md § 5 › Fix calls)."
+notes = "audit.fix runs path.eraseOpenCorners on the reported corner nodes (docs/spec/21-qa.md § 5 › Fix calls, step 14)."
 
 [[check]]
 id = "check.outlines.missingExtremes"
@@ -258,7 +258,7 @@ milestone = "M3"
 summary = "A handle is within `maxAngle` degrees (default 2) of horizontal or vertical without being exact, or is less than `maxOffset` units (default 2) off the axis while within 10 degrees of it; the angle limit on the offset rule keeps short diagonal handles out. The fix snaps the handle to the axis, keeping its length."
 ref = "Editor audit convention (slightly slanted handles)"
 status = "inferred"
-notes = "Report-only: the fix names selection.setPosition, but audit.fix does not build its calls yet (docs/spec/21-qa.md § 5 › Fix calls)."
+notes = "audit.fix runs selection.setPosition on each reported handle, turning it onto the horizontal or vertical through its node, whichever is nearer, keeping its length (docs/spec/21-qa.md § 5 › Fix calls, step 25)."
 guesses = [
   "The defaults `maxAngle` 2° and `maxOffset` 2 units are first guesses to tune on real fonts (21-qa question 5).",
 ]
@@ -398,9 +398,10 @@ milestone = "M3"
 summary = "A node flagged smooth has incoming and outgoing directions that differ by more than `maxAngle` degrees (default 1), so the curve has a visible kink. The fix rotates the handles onto a common line, keeping their lengths."
 ref = "Editor audit convention (non-collinear smooth nodes)"
 status = "inferred"
-notes = "Report-only: the fix names selection.setPosition, but audit.fix does not build its calls yet (docs/spec/21-qa.md § 5 › Fix calls)."
+notes = "audit.fix runs selection.setPosition on each handle of the node: both turn about the node, keeping their lengths, onto the line along the mean of the incoming and outgoing directions (docs/spec/21-qa.md § 5 › Fix calls, step 23)."
 guesses = [
   "The default `maxAngle` of 1° is a first guess to tune on real fonts (21-qa question 5).",
+  "When one side of the smooth node is a straight segment, the fix turns only the handle onto the line's direction and leaves the line; running the reference's fix on such a node would settle it.",
 ]
 
 [[check]]
@@ -1277,6 +1278,7 @@ summary = "An accented glyph's advance differs from that of its base letter by m
 ref = "comparefamily single-face test 23 (-tolerance)"
 status = "docs"
 notes = "The base glyph name is found the way comparefamily finds it: each accent name part (accent, acute, bar, dot, ring, slash and the rest of its list) is removed wherever it occurs, in sorted order, and a trailing period is dropped; the check runs only when a glyph of that name exists. This is a heuristic (Hbar is compared with H, Lslash with L), so the check is capped."
+guesses = ["When the accented glyph has no width key, audit.fix keys its width to its first component's glyph, standing in for the base glyph the check derives from the name; a fix run in the reference on a glyph whose first component is not its base would settle it."]
 
 [[check]]
 id = "check.metrics.strikeoutAndScripts"
@@ -4202,7 +4204,8 @@ milestone = "M3"
 summary = "Outline fixes run in a fixed order: coincident points, flat curves and collinear lines first, then overlap removal, then tiny-contour removal, then collinear lines once more, because overlap removal can create new collinear nodes and slivers."
 ref = "AFDKO checkoutlinesufo (do_overlap_removal, do_cleanup)"
 status = "docs"
-notes = "The layer steps audit.fix builds run in the order of docs/spec/21-qa.md § 5 › Fix calls: close open paths, delete duplicate contours, Tidy up Paths, Remove Overlap, delete tiny contours, Tidy up Paths again (only after an overlap removal), Correct Path Direction, Add Extremes and inflections, convert the curve type, set smooth, harmonize, start points, Round Coordinates. The layer is checked again before each step. The component steps, erase open corners, align and snap handles, snap to metric lines and fixCompatibility are not built yet."
+notes = "The layer steps audit.fix builds run in the order of docs/spec/21-qa.md § 5 › Fix calls (steps 7 to 33): clear empty glyphs, the component steps (flatten, delete repeats, decompose, realign), close open paths, delete duplicate contours, erase open corners, Tidy up Paths, Remove Overlap, delete tiny contours, Tidy up Paths again (only after an overlap removal), Correct Path Direction, Add Extremes and inflections, convert the curve type, set smooth, align handles, harmonize, snap handles, snap to metric lines, start points, start points that differ between masters, Round Coordinates, then repeated anchors, default anchors, widths from keys and mark widths. Before each step the layer is checked again (glyph checks on the glyph); results of compiled instances are fixed on every master layer of their source glyph from the selection's findings, since a layer cannot be compiled on its own. The contour-order part of fixCompatibility is not built: its result does not carry the proposed order."
+guesses = ["The findings of binary checks are not computed again between layer steps; their calls (widths, anchors, emptying a glyph) do not depend on point addresses. Comparing with a run that recompiles before each step would settle whether it matters."]
 
 [[behavior]]
 id = "audit.outlineFixRounding"
@@ -4354,11 +4357,12 @@ kind = "engine"
 params = "{glyph: name, layer?: id, side?: foreground|background, points?: [[shape, node]]} → {erased: count, skipped: [[shape, node]], selection}"
 area = "path-ops"
 milestone = "M12"
-summary = "Trims each open corner (two segments that cross just before they meet at a node, leaving a small loop outside the outline) back to the crossing point, so the corner is one node again. `points` names the corner nodes; without it, every open corner on the layer is trimmed. The corner node is replaced by a corner node at the crossing point: the two segments are split there (curves keep their shape), and the parts beyond the crossing are dropped, so the path keeps its number of on-curve nodes. A named node whose two segments do not cross is left as it is and listed in `skipped`."
+summary = "Trims each open corner (two segments that cross just before they meet, joined by a short segment, leaving a small loop outside the outline) back to the crossing point, so the corner is one node again. `points` names either node of each corner; without it, every open corner on the layer is trimmed. The two segments are split at the crossing (curves keep their shape), the loop beyond it is dropped, and the corner's two nodes become one corner node at the crossing. A named node with no open corner is left as it is and listed in `skipped`."
 ref = "Our design; docs/spec/21-qa.md § 5 (fix eraseOpenCorners)"
 status = "inferred"
 own = true
 notes = "The audit fix eraseOpenCorners runs it; added by the M12 spec pass because no other chapter has the command."
+guesses = ["A corner counts only when the crossing lies in the later half of the first segment and the earlier half of the second, so the part dropped is the smaller one; watching the reference's Erase Open Corners on a corner with a long loop would settle it.", "The new corner node and the handles of the split curves are rounded to the font's grid; checking the coordinates the reference writes after erasing a corner on a curve would settle it."]
 
 [[command]]
 id = "component.flatten"
@@ -4366,14 +4370,15 @@ label = "Flatten Components"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, components?: [indices]} → {replaced: count, skipped: [index]}"
+params = "{glyph: name, layer?: id, components?: [indices]} → {replaced: count, skipped: [index], selection}"
 area = "components"
 milestone = "M12"
-summary = "Replaces each nested component (one whose base glyph is itself made only of components) by components of the innermost glyphs, with the transformations combined, so the drawn outline stays the same. The new components take the nested component's place in the shape list, in the order of its base glyph's components, and follow nesting to any depth up to `model::MAX_COMPONENT_DEPTH` (32). A component whose base glyph also has paths is left as it is and listed in `skipped`. Without `components`, every nested component of the layer is flattened."
+summary = "Replaces each nested component (one whose base glyph is itself made only of components) by components of the innermost glyphs, with the transformations combined, so the drawn outline stays the same. The new components take the nested component's place in the shape list, in the order of its base glyph's components, and follow nesting to any depth up to `model::MAX_COMPONENT_DEPTH` (32). A named component whose base glyph also has paths, or has no components, is left as it is and listed in `skipped`. Without `components`, every nested component of the layer is flattened. The new components have automatic alignment off, so they stay where they were drawn."
 ref = "Our design; ufo2ft flattenComponents filter; docs/spec/21-qa.md § 5 (fix flattenComponents)"
 status = "inferred"
 own = true
 notes = "The audit fix flattenComponents runs it; added by the M12 spec pass."
+guesses = ["The flattened components keep the inner components' settings but have automatic alignment off, so the drawn outline cannot move; comparing with the reference's flatten filter output on an automatically aligned composite would settle it."]
 
 [[command]]
 id = "path.setShapeOrder"
@@ -4388,7 +4393,7 @@ summary = "Reorders the shapes (paths and components) of a layer. `order` lists 
 ref = "Our design; docs/spec/21-qa.md § 5 (fix fixCompatibility)"
 status = "inferred"
 own = true
-notes = "The audit fix fixCompatibility uses it, with path.makeNodeFirst and path.reverseContours, to give a master the contour order of the reference master; added by the M12 spec pass."
+notes = "The audit fix fixCompatibility uses it, with path.makeNodeFirst and path.reverseContours, to give a master the contour order of the reference master; added by the M12 spec pass. audit.fix does not call it yet: a check.variations.contourOrder result names the shapes that move but not the proposed order, so that fix is reported as not available."
 
 [[command]]
 id = "tables.recalculate"

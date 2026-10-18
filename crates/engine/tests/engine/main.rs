@@ -9,6 +9,7 @@ mod anchors;
 mod annotation;
 mod attributes;
 mod audit;
+mod audit_fix_glyph;
 mod audit_fix_info;
 mod audit_modules;
 mod audit_profiles;
