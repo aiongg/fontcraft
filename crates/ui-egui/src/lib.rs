@@ -32,6 +32,8 @@ pub use app::FontcraftApp;
 pub use shell::UI_COMMANDS;
 
 #[cfg(test)]
+mod actions_tests;
+#[cfg(test)]
 mod active_layer_tests;
 #[cfg(test)]
 mod audit_markers_tests;
