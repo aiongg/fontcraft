@@ -1030,6 +1030,7 @@ version = "0.0.1"
 dependencies = [
  "fontcraft-geom",
  "fontcraft-model",
+ "fontcraft-spacing",
  "read-fonts 0.45.0",
  "serde",
  "serde_json",

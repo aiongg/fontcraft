@@ -13,6 +13,7 @@ workspace = true
 [dependencies]
 fontcraft-geom.workspace = true
 fontcraft-model.workspace = true
+fontcraft-spacing.workspace = true
 serde.workspace = true
 read-fonts.workspace = true
 skrifa.workspace = true

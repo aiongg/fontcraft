@@ -548,7 +548,7 @@ fn a_clean_truetype_font_passes_every_table_check() {
     let mut r = run(&bytes, "check.tables.*");
     let extra = run(&bytes, "check.outlines.pointsOutsideBBox");
     r.findings.extend(extra.findings);
-    let loud: Vec<_> = r.findings.iter().filter(|f| ours(f.check) && f.severity >= Severity::Warn).collect();
+    let loud: Vec<_> = r.findings.iter().filter(|f| ours(f.check) && f.severity <= Severity::Warn).collect();
     assert!(loud.is_empty(), "{loud:#?}");
     let info: BTreeSet<&str> = r.findings.iter().map(|f| f.code).collect();
     assert_eq!(info, BTreeSet::from(["optional-tables", "missing-recommended-table", "dlng-tag", "slng-tag"]));

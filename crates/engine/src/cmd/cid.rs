@@ -199,7 +199,7 @@ fn tokens(text: &str) -> std::result::Result<Vec<Token>, String> {
                         return Err(format!("the code at byte {at} is longer than 4 bytes"));
                     }
                 }
-                if digits.is_empty() || digits.len() % 2 != 0 {
+                if digits.is_empty() || !digits.len().is_multiple_of(2) {
                     return Err(format!("the code at byte {at} is not a whole number of bytes"));
                 }
                 let bytes = (0..digits.len() / 2)
@@ -442,14 +442,11 @@ fn convert_to_cid(s: &mut Session, v: &Value) -> Result<Value> {
         }
     }
     let mapped = if cmap.is_some() { cids.iter().filter(|(n, _)| n != ".notdef").count() } else { 0 };
-    let mut next = used.iter().max().map_or(1, |m| m.saturating_add(1)).max(1);
-    for name in &appended {
-        if next > MAX_CID {
-            return Err(p.bad(format!("the font needs more than {} CIDs", u64::from(MAX_CID) + 1)));
-        }
-        cids.push((name.clone(), next));
-        next += 1;
+    let first = used.iter().max().map_or(1, |m| m.saturating_add(1)).max(1);
+    if appended.len() > cids_left(first) {
+        return Err(p.bad(format!("the font needs more than {} CIDs", u64::from(MAX_CID) + 1)));
     }
+    cids.extend((first..=MAX_CID).zip(&appended).map(|(cid, name)| (name.clone(), cid)));
     if let Some((_, c)) = cids.iter().find(|(_, c)| *c > MAX_CID) {
         return Err(p.bad(format!("the CID {c} is above {MAX_CID}")));
     }
@@ -791,15 +788,14 @@ fn insert_subfont(s: &mut Session, p: &Params, mut state: CidFont) -> Result<Val
     if font.glyphs.len().saturating_add(glyphs.len()) > MAX_GLYPHS {
         return Err(p.bad(format!("the font would hold more than {MAX_GLYPHS} glyphs")));
     }
-    let mut next = state.max_cid().map_or(1, |m| m.saturating_add(1)).max(1);
+    let first = state.max_cid().map_or(1, |m| m.saturating_add(1)).max(1);
     let mut sub = SubFont::new(name);
-    for g in glyphs.iter().filter(|g| g.export) {
-        if next > MAX_CID {
-            return Err(p.bad(format!("the font would need more than {} CIDs", u64::from(MAX_CID) + 1)));
-        }
-        state.cids.push((g.name.clone(), next));
+    if glyphs.iter().filter(|g| g.export).count() > cids_left(first) {
+        return Err(p.bad(format!("the font would need more than {} CIDs", u64::from(MAX_CID) + 1)));
+    }
+    for (cid, g) in (first..=MAX_CID).zip(glyphs.iter().filter(|g| g.export)) {
+        state.cids.push((g.name.clone(), cid));
         sub.glyphs.push(g.name.clone());
-        next += 1;
     }
     state.subfonts.push(sub);
     let i = state.subfonts.len() - 1;
@@ -814,6 +810,11 @@ fn insert_subfont(s: &mut Session, p: &Params, mut state: CidFont) -> Result<Val
     more.insert("renamed".into(), json!(renames.iter().map(|(a, b)| json!({"from": a, "to": b})).collect::<Vec<_>>()));
     more.insert("droppedCodepoints".into(), json!(dropped));
     Ok(subfont_json(&state, i, more))
+}
+
+/// How many CIDs from `first` to [`MAX_CID`] are free to hand out.
+fn cids_left(first: u32) -> usize {
+    usize::try_from(u64::from(MAX_CID).saturating_add(1).saturating_sub(u64::from(first))).unwrap_or(usize::MAX)
 }
 
 #[cfg(test)]

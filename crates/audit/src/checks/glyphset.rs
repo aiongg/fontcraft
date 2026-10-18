@@ -185,14 +185,14 @@ impl OutlinePen for CountPen {
 /// components) or, for CFF and CFF2 outlines, by drawing them.
 enum Ink<'a> {
     Glyf(Glyf<'a>, Loca<'a>),
-    Drawn(OutlineGlyphCollection<'a>),
+    Drawn(Box<OutlineGlyphCollection<'a>>),
 }
 
 impl<'a> Ink<'a> {
     fn new(font: &FontRef<'a>) -> Self {
         match (font.glyf(), font.loca(None)) {
             (Ok(glyf), Ok(loca)) => Ink::Glyf(glyf, loca),
-            _ => Ink::Drawn(font.outline_glyphs()),
+            _ => Ink::Drawn(Box::new(font.outline_glyphs())),
         }
     }
 

@@ -70,7 +70,8 @@ pub const TABLE: &[(&str, Class)] = &[
 ];
 
 /// Explicit orderings within a layer: a crate may use the ones before it in its chain.
-/// `textlayout` and `features` read kerning through `spacing`; `textlayout` shapes through
+/// `textlayout` and `features` read kerning through `spacing`; `audit` runs the metrics-key
+/// scan of `spacing`; `textlayout` shapes through
 /// `shaping`; `features` evaluates glyph predicates through `glyphquery` and overlays condition
 /// regions through `interp`; `hinting` reads TT zone
 /// and stem filters through `glyphquery`. `tables` uses the glyph encoders of `compile` and the
@@ -79,6 +80,7 @@ pub const TABLE: &[(&str, Class)] = &[
 pub const INTRA_LAYER_ORDER: &[&[&str]] = &[
     &["spacing", "textlayout"],
     &["spacing", "features"],
+    &["spacing", "audit"],
     &["shaping", "textlayout"],
     &["glyphquery", "features"],
     &["interp", "features"],

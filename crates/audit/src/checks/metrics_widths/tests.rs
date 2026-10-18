@@ -460,3 +460,30 @@ fn negative_advance_reports_master_layers_and_ignores_backups() {
     assert_eq!(r.findings[0].location.glyph, "A");
     assert!(report("B").findings.is_empty());
 }
+
+#[test]
+fn metrics_key_out_of_sync_reports_through_the_spacing_scan() {
+    let mut font = Font::new("Test");
+    let master = font.masters[0].id.clone();
+    {
+        let mut a = font.glyph_mut("A").unwrap();
+        a.layers[0].width = 500.0;
+        a.info.metrics_keys.width = Some("=600".into());
+    }
+    font.glyph_mut("B").unwrap().info.metrics_keys.width = Some("=missing".into());
+    let audit = AuditContext::new(&font);
+    let spec = find("check.metrics.metricsKeyOutOfSync").unwrap();
+    let report = |name: &str| {
+        let ctx = GlyphCtx::new(&audit, font.glyph(name).unwrap(), &NoServices);
+        audit_glyph(&ctx, &[spec], &Config::default())
+    };
+    let a = report("A");
+    assert!(a.skipped.is_empty(), "{:?}", a.skipped);
+    assert_eq!(hits(&a.findings), vec![("out-of-sync", "A")]);
+    assert_eq!(a.findings[0].location.layer, master);
+    assert_eq!(a.findings[0].fix.map(|f| f.id), Some("updateMetrics"));
+    let b = report("B");
+    assert_eq!(hits(&b.findings), vec![("unlinked", "B")]);
+    assert!(b.findings[0].fix.is_none(), "an unlinked key has no update fix");
+    assert!(report("space").findings.is_empty());
+}

@@ -531,8 +531,11 @@ pub(crate) fn glyf_integrity(ctx: &BinaryCtx<'_>, _: &Params<'_>, sink: &mut Sin
 // cmap
 // ---------------------------------------------------------------------------------------------
 
-/// The readable encoding records of the cmap table: (platform, encoding, subtable).
-fn cmap_subtables<'a>(ctx: &BinaryCtx<'a>) -> Result<Vec<(u16, u16, Result<CmapSubtable<'a>, ReadError>)>, String> {
+/// One cmap encoding record: (platform, encoding, subtable).
+type CmapRecord<'a> = (u16, u16, Result<CmapSubtable<'a>, ReadError>);
+
+/// The readable encoding records of the cmap table.
+fn cmap_subtables<'a>(ctx: &BinaryCtx<'a>) -> Result<Vec<CmapRecord<'a>>, String> {
     let cmap = ctx.font.cmap().map_err(|e| format!("the cmap table cannot be read: {e}"))?;
     Ok(cmap
         .encoding_records()

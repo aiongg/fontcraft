@@ -305,9 +305,9 @@ pub(crate) fn whitespace_widths(ctx: &BinaryCtx<'_>, _: &Params<'_>, sink: &mut 
     }
     let em = f64::from(head.units_per_em());
     let of = |cp: u32| char_advance(&ctx.font, &adv, cp).map(|(_, w)| f64::from(w));
-    let expectations: [(u32, Option<Expected>); 14] = [
+    // The no-break space is left out: `different-widths` above already compares it with the space.
+    let expectations: [(u32, Option<Expected>); 13] = [
         (0x0009, of(0x20).map(Expected::Exact)),
-        (0x00A0, of(0x20).map(Expected::Exact)),
         (0x2000, Some(Expected::Exact(em / 2.0))),
         (0x2001, Some(Expected::Exact(em))),
         (0x2002, Some(Expected::Exact(em / 2.0))),
@@ -849,12 +849,30 @@ fn live_layers<'a>(ctx: &'a GlyphCtx<'_>) -> impl Iterator<Item = &'a fontcraft_
     ctx.glyph.layers.iter().filter(|l| l.is_master_layer() || !l.info.attrs.is_empty())
 }
 
-/// `check.metrics.metricsKeyOutOfSync`: reports through the spacing crate's out-of-sync scan,
-/// which the audit cannot reach yet; until it can, the check skips.
+/// `check.metrics.metricsKeyOutOfSync`: the spacing crate's out-of-sync scan of the glyph's
+/// master and attribute layers. Only a key whose value differs from the metric has the update fix;
+/// an unlinked or unreadable key needs a new key first.
 pub(crate) fn metrics_key_out_of_sync(ctx: &GlyphCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
-    let has_keys = !ctx.glyph.info.metrics_keys.is_empty() || ctx.glyph.layers.iter().any(|l| !l.info.metrics_keys.is_empty());
-    if has_keys {
-        sink.skip("the metrics-key scan is not available to the audit");
+    let font = ctx.audit.font;
+    for f in fontcraft_spacing::sync::scan_glyph(font, ctx.glyph) {
+        let field = f.field.name();
+        let hit = match &f.problem {
+            fontcraft_spacing::sync::Problem::OutOfSync { value, actual } => Hit::new(
+                "out-of-sync",
+                format!("The {field} key \"{}\" of {} gives {} but the {field} is {}.", f.key, f.glyph, num(*value), num(*actual)),
+            )
+            .data("expected", *value)
+            .data("actual", *actual),
+            fontcraft_spacing::sync::Problem::Unlinked { glyph } => {
+                Hit::new("unlinked", format!("The {field} key \"{}\" of {} names {glyph}, which the font does not have.", f.key, f.glyph))
+                    .without_fix()
+            }
+            fontcraft_spacing::sync::Problem::Error(e) => {
+                Hit::new("key-error", format!("The {field} key \"{}\" of {} cannot be used: {e}", f.key, f.glyph)).without_fix()
+            }
+        };
+        let master = ctx.glyph.layers.iter().find(|l| l.id == f.layer).map(|l| l.master.clone());
+        sink.push(hit.place(Location { layer: f.layer, master, ..Location::default() }));
     }
 }
 
