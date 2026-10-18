@@ -101,7 +101,7 @@ pub mod tt_deltas;
 pub mod tt_instructions;
 mod tt_preview_address;
 mod ttf_stems;
-mod ttf_zones;
+pub mod ttf_zones;
 mod virtual_master;
 
 use serde::Serialize;

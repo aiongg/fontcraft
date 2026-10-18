@@ -69,6 +69,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
         });
     });
     dialogs(&ctx, tokens, pending);
+    crate::dialogs::ttf_zones::show(&ctx, tokens, font, font.masters.get(target.first()).map(|m| m.id.as_str()), pending);
 }
 
 // ── Ids ─────────────────────────────────────────────────────────────────────────────────────────

@@ -296,6 +296,17 @@ milestone = "M10"
 summary = "Editor that opens from the value field of a master's TTFZones custom parameter in Font Info › Masters. It lists the master's TT zones for editing; the delta and filter buttons are meaningful on the main master only."
 ref = "TrueType Hinting › TrueType Zones"
 status = "handbook"
+notes = "M10.28, crates/ui-egui/src/dialogs/ttf_zones.rs: opens from the value field of a master's TTFZones parameter in Font Info › Masters, on the master the tab shows; the font's TTFZones (family zones) keeps the plain value field. Each control runs its hint.tt.* command at once. The delta and globe buttons show on the main master only, drawn pressed when the zone has a delta or a filter; the Delta table's columns are the masters, plus any stored column that names no master. The globe opens the Smart Filter rule editor, and OK stores its rules as a glyph predicate. Documented, not yet observed."
+guesses = [
+  "Each edit takes effect at once as its own undo step, and Done closes the editor; the reference app's sheet would show whether its edits wait until it closes.",
+  "The plus button adds `zone N` at position 0, 16 units per 1000 units per em high, to every master; the reference app would show what a new zone holds.",
+  "A row is selected by a click on its number; the reference app would show how its list selects a row.",
+  "The glyph filter offers every Smart Filter rule, not only Name, Category, Subcategory and Script, and a stored filter reopens as one Custom rule holding its predicate; the reference app's filter sheet would show its rule list.",
+]
+observe = [
+  "T3: in the TTFZones editor click plus; note the new zone's name, position and size, and whether Font Info shows the change before the sheet closes.",
+  "T3: click the globe of a zone on the main master; note which properties the rule pop-up offers.",
+]
 
 [[behavior]]
 id = "hinting.tt.zones.name"
@@ -464,6 +475,9 @@ milestone = "M10"
 summary = "Editor that opens from the value field of a master's TTFStems custom parameter in Font Info › Masters. It lists the master's TT stems for editing; the delta and filter buttons are meaningful on the main master only."
 ref = "TrueType Hinting › TrueType Stems"
 status = "handbook"
+notes = "M10.28, crates/ui-egui/src/dialogs/ttf_stems.rs, in the frame of dialog.ttfZones (ttf_zones.rs): opens from the value field of a master's TTFStems parameter; the double arrow switches between X (↔) and Y (↕). Selection, deltas, filter and the actions menu work as in dialog.ttfZones. Documented, not yet observed."
+guesses = ["The plus button adds `stem N`, an X stem 80 units per 1000 units per em wide, to every master; the reference app would show what a new stem holds."]
+observe = ["T3: in the TTFStems editor click plus; note the new stem's orientation, name and size."]
 
 [[behavior]]
 id = "hinting.tt.stems.orientation"
