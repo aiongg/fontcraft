@@ -2046,6 +2046,11 @@ summary = "Searches glyph outlines for a drawn shape and optionally replaces eve
 ref = "FontForge dialogs › Finding shapes within glyphs; FontLab 8 What's new › Edit & refine (Edit › Find Outline)"
 status = "docs"
 origin = "fontforge"
+notes = "Documented, not yet observed. Edit › Find Outline… opens the search (pattern glyph, Allow Flipped, Loose End Points, Tolerance); Find All lists the matches in a follow-up dialog whose Replace All takes a replacement glyph. Edit › Replace Outline… opens the same fields with the replacement and runs Replace All directly; its … menu copies the list of matches. Find Next and single Replace are not offered: Replace All is one undo step."
+guesses = [
+  "The pattern and the replacement are drawn in glyphs of their own and named in the dialog, in place of the reference's two small outline editors; drawing panes inside the dialog would settle it.",
+  "Restricting to selected glyphs is the selection itself: the selected glyphs, or every glyph when none is selected; an explicit checkbox would settle it.",
+]
 
 [[command]]
 id = "path.findOutlinePattern"
@@ -2053,15 +2058,19 @@ label = "Find Outline…"
 menu = ["Edit"]
 shortcut = ""
 kind = "engine"
-params = "{pattern: [path], glyphs?, layer?, allowRotated?: bool, allowFlipped?: bool, allowScaled?: bool, endpointsLoose?: bool, tolerance?: number}"
+params = "{pattern: [path] | patternGlyph: name, glyph? | glyphs?, layer? | layers?, allowFlipped?: bool, endpointsLoose?: bool, tolerance?: number, allowRotated?: false, allowScaled?: false}"
 area = "path-ops"
 milestone = "M13"
 summary = "Returns every place where the pattern occurs in the glyphs searched, with the transform under which it matched. Matching is point for point, so on-curve points and handles must correspond."
 ref = "FontForge dialogs › Finding shapes within glyphs"
 status = "docs"
 origin = "fontforge"
+notes = "Documented, not yet observed. Searches the unlocked paths of every master layer by default. Closed pattern paths match whole contours; an open pattern path matches a run of nodes inside a contour, its end nodes by position and on-curve status only."
 guesses = [
   "Matching is point for point only, as FontForge documents; shapes that are equal with another point structure do not match (open question 12).",
+  "Matches are found up to translation, and with allowFlipped up to mirroring and half turns; allowRotated and allowScaled are refused until the matcher supports them, which a matcher with rotation and scale would settle.",
+  "A pattern glyph gives its paths per layer id, so each master is searched with its own pattern; the reference's single pattern pane would settle it.",
+  "With endpointsLoose, an end node matches when the segment to it points the pattern's way within the tolerance at the pattern's length and is at least as long; the start end node needs the same on-curve status, the last the same kind. Observing the reference on a serif with longer stems would settle it.",
 ]
 
 [[command]]
@@ -2070,13 +2079,24 @@ label = "Replace Outline…"
 menu = ["Edit"]
 shortcut = ""
 kind = "engine"
-params = "{pattern: [path], replacement: [path], glyphs?, layer?, allowRotated?: bool, allowFlipped?: bool, allowScaled?: bool, endpointsLoose?: bool}"
+params = "{pattern: [path] | patternGlyph: name, replacement: [path] | replacementGlyph: name, glyph? | glyphs?, layer? | layers?, allowFlipped?: bool, endpointsLoose?: bool, tolerance?: number, allowRotated?: false, allowScaled?: false}"
 area = "path-ops"
 milestone = "M13"
 summary = "Replaces each match of the pattern with the replacement under the same transform. For an open pattern the replacement's first point takes the place of the pattern's first point, so both should span the same distance between their ends."
 ref = "FontForge dialogs › Finding shapes within glyphs (Replace, Replace All; Limitations)"
 status = "docs"
 origin = "fontforge"
+notes = "Documented, not yet observed. Replace All is one undo step; locked glyphs are skipped and listed; a pattern that mixes open and closed paths, or has several open paths, is refused."
+guesses = [
+  "For an open pattern, the replacement's first node keeps the kind and smoothness of the matched run's first node, and an end node that lands within the tolerance and a grid step of the run's end node takes its exact position so the contour stays joined; observing a replacement with slightly different ends would settle it.",
+  "With endpointsLoose, the replacement's end nodes take the positions of the contour's own end nodes, so stems keep their length; the reference's documentation does not say.",
+  "Closed patterns: the replacement paths take the place of the first matched contour and its attributes, and an empty replacement removes the matches; the reference's documentation does not say.",
+  "A replacement under a mirroring match is reversed so its direction stays correct, as a mirrored component decomposed with corrected direction would be.",
+]
+observe = [
+  "In the reference's Find/Replace dialog, replace an open serif pattern by one whose end nodes lie one unit from the pattern's, and note where the contour's end nodes land.",
+  "Replace with 'end points give minimum length and direction only' on a serif whose stems are longer than the pattern's, and note whether the stems keep their length.",
+]
 
 [[command]]
 id = "path.findIntersections"

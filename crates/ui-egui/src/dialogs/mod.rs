@@ -285,6 +285,9 @@ pub const DIALOGS: &[Dialog] = &[
     export_profiles::DIALOG,
     export_profiles::EXPORT,
     export_profiles::ARTWORK,
+    find_outline::DIALOG,
+    find_outline::FIND,
+    find_outline::FOUND,
 ];
 
 /// The shell commands of this module.
