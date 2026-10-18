@@ -134,6 +134,7 @@ pub struct PanelState {
     pub smart_component: crate::dialogs::smart_component_settings::SmartComponentState,
     pub compare_fonts: crate::shell::compare_fonts::CompareFontsState,
     pub compare_family: crate::shell::compare_family::CompareFamilyState,
+    pub hinting_waterfall: hinting_waterfall::WaterfallState,
 }
 
 impl Default for PanelState {
@@ -174,6 +175,7 @@ impl Default for PanelState {
             smart_component: Default::default(),
             compare_fonts: Default::default(),
             compare_family: Default::default(),
+            hinting_waterfall: Default::default(),
         }
     }
 }

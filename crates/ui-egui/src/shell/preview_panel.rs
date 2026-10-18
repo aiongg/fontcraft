@@ -32,6 +32,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
             let controls = Rect::from_min_max(pos2(full.min.x, full.max.y - row), full.max);
             let strip = Rect::from_min_max(full.min, pos2(full.max.x, controls.min.y));
             match &tab {
+                Some(tab) if crate::panels::hinting_waterfall::active(app) => crate::panels::hinting_waterfall::draw(app, ui, strip, tab, pending),
                 Some(tab) => preview::strip(app, ui, strip, Target::Panel, tab, pending),
                 None => {
                     ui.painter_at(strip).rect_filled(strip, 0.0, ground);

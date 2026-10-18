@@ -115,6 +115,7 @@ pub const MODULES: &[(&[UiCommand], Handler)] = &[
     (crate::dialogs::color_palettes::COMMANDS, crate::dialogs::color_palettes::run),
     (crate::canvas::tt_badges::COMMANDS, crate::canvas::tt_badges::run),
     (crate::canvas::tt_pixels::COMMANDS, crate::canvas::tt_pixels::run),
+    (crate::panels::hinting_waterfall::COMMANDS, crate::panels::hinting_waterfall::run),
 ];
 
 /// The shell commands' parameters that name files, declared as engine commands declare theirs

@@ -640,6 +640,9 @@ pub(crate) fn controls(ui: &mut egui::Ui, target: Target, options: &PreviewOptio
 /// separator (drag to change the height), the strip and the controls. Call before the canvas,
 /// which takes the space left.
 pub fn area(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
+    if crate::panels::hinting_waterfall::area(app, ui, pending) {
+        return;
+    }
     let Some(tab) = app.state.tab() else { return };
     if !app.state.panels.preview.area_tabs.contains(&tab.id) {
         return;

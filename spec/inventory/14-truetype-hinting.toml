@@ -1010,7 +1010,13 @@ milestone = "M10"
 summary = "While the TrueType Instructor is active, the Preview Area moves from the bottom to the right edge of Edit View and shows the tab's glyphs in the current instance as a waterfall of hinted renderings. The same waterfall can be shown in the separate Preview Panel (Window › Preview Panel)."
 ref = "TrueType Hinting › Hinting Preview"
 status = "handbook"
-guesses = ["Each waterfall row is one PPM from 8 to 80 with the tab's text set in the current instance at that size; the reference app would settle spacing and labels."]
+notes = "Documented in the handbook, not yet observed. Rows are grid-fitted by the TrueType build of the tab's master (hint.tt.renderPreview) and filled one image pixel per device pixel; the label at the left of each row is its PPM."
+guesses = [
+  "Each waterfall row is one PPM from 8 to 80 with the tab's text set in the current instance at that size; the reference app would settle spacing and labels.",
+  "The rows set the tab's master, since choosing a preview instance (preview.setInstance) is not built yet; the reference app's instance pop-up would settle what the waterfall follows when an instance is picked.",
+  "A row holds at most 32 of the tab's glyphs, centred on the edited one, and leaves out glyphs that do not export; a long text in the reference app would settle how much of the line it shows.",
+  "The rows are rebuilt at most four times a second while the font changes and not while the mouse button is down; the reference app would settle whether its waterfall follows a node drag live.",
+]
 observe = ["T3: open the Hinting Preview and switch through each scale; note the row labels and the spacing between rows."]
 
 [[command]]
@@ -1025,6 +1031,8 @@ milestone = "M10"
 summary = "Edit View context-menu choice of the magnification at which the Hinting Preview draws its pixels: no scaling (1x), 2x or 4x."
 ref = "TrueType Hinting › Hinting Preview"
 status = "handbook"
+notes = "Documented in the handbook, not yet observed. The waterfall's own context menu offers the three scales too."
+guesses = ["The waterfall starts at 1x and the scale is one setting for the Preview Area and the Preview Panel; the reference app would settle the default and whether the two keep separate scales."]
 
 [[command]]
 id = "hint.tt.showPreviewAddress"
