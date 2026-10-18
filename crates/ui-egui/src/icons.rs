@@ -155,6 +155,7 @@ pub fn for_tool(id: &str) -> Option<Icon> {
         "lasso" => Icon::Lasso,
         "draw" => Icon::Draw,
         "pencil" => Icon::Pencil,
+        "pixel" => Icon::GridView,
         "rectangle" => Icon::Rectangle,
         "ellipse" => Icon::Ellipse,
         "hand" => Icon::Hand,
