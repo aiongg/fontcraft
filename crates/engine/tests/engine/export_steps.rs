@@ -8,7 +8,9 @@ use std::sync::Arc;
 use base64::Engine as _;
 use fontcraft_engine::Session;
 use fontcraft_engine::model::plist::Value as PValue;
-use fontcraft_engine::model::{Alignment, Component, ComponentInfo, ComponentInfoBox, Instance, Node, NodeKind, Param, Params, Shape};
+use fontcraft_engine::model::{
+    Alignment, Component, ComponentInfo, ComponentInfoBox, Instance, Node, NodeKind, Param, Params, Path as Contour, Shape,
+};
 use serde_json::{Value, json};
 use skrifa::MetadataProvider;
 use skrifa::raw::TableProvider;
@@ -220,16 +222,17 @@ fn add_extremes_at_export() {
 }
 
 /// `filter.customParameter.extrudeUndocumented`: an Extrude Filter is not used, with a warning,
-/// and changes nothing; so is an unknown filter and a Scale to UPM that is not a number.
+/// and changes nothing; so is a built-in filter's string that cannot be read and a Scale to UPM
+/// that is not a number.
 #[test]
 fn extrude_and_unreadable_parameters_are_refused_with_a_warning() {
     let mut s = font();
     add_param(&mut s, false, "Filter", text("Extrude;10;45"));
-    add_param(&mut s, false, "Filter", text("NoSuchFilter;1"));
+    add_param(&mut s, false, "Filter", text("RoundCorner; 20; include:A; exclude:O"));
     add_param(&mut s, false, "Scale to UPM", text("big"));
     let (fonts, out) = export(&mut s, json!({"timestamp": 0}));
     let warnings = out["warnings"].to_string();
-    assert!(warnings.contains("Extrude") && warnings.contains("NoSuchFilter") && warnings.contains("Scale to UPM"), "{warnings}");
+    assert!(warnings.contains("Extrude") && warnings.contains("RoundCorner") && warnings.contains("Scale to UPM"), "{warnings}");
     let bytes = &fonts[0].1;
     assert_eq!(probe(bytes, 'A').x_min, 100.0);
     assert!(is_composite(bytes, 'B'), "no usable Filter, so nothing is decomposed");
@@ -342,4 +345,204 @@ fn linked_sources_are_read_once_per_export() {
     assert_eq!(out["fonts"].as_array().unwrap().len(), 2, "{out}");
     let missing = out["warnings"].as_array().unwrap().iter().filter_map(Value::as_str).filter(|w| w.contains("Missing.glyphs")).count();
     assert_eq!(missing, 1, "{out}");
+}
+
+// ── filter modules named by Filter and PreFilter (M13.4) ──────────────────────────────────────────
+
+/// A filter module of ABI version 1 with `manifest` whose `fc_run` returns `output` whatever it is
+/// given, encoded by hand (these tests have no WebAssembly text assembler). The manifest sits at
+/// address 16, the output at 64 KiB; `fc_alloc` grows memory by whole pages, so the host's copies
+/// never overlap either.
+fn returning_module(manifest: &str, output: &str) -> Vec<u8> {
+    const MANIFEST_AT: u32 = 16;
+    const OUTPUT_AT: u32 = 0x1_0000;
+    fn uleb(out: &mut Vec<u8>, mut v: u64) {
+        loop {
+            let b = u8::try_from(v & 0x7f).unwrap();
+            v >>= 7;
+            if v == 0 {
+                out.push(b);
+                return;
+            }
+            out.push(b | 0x80);
+        }
+    }
+    fn sleb(out: &mut Vec<u8>, mut v: i64) {
+        loop {
+            let b = u8::try_from(v & 0x7f).unwrap();
+            v >>= 7;
+            let done = (v == 0 && b & 0x40 == 0) || (v == -1 && b & 0x40 != 0);
+            out.push(if done { b } else { b | 0x80 });
+            if done {
+                return;
+            }
+        }
+    }
+    fn vec_of(out: &mut Vec<u8>, bytes: &[u8]) {
+        uleb(out, u64::try_from(bytes.len()).unwrap());
+        out.extend_from_slice(bytes);
+    }
+    fn section(m: &mut Vec<u8>, id: u8, body: &[u8]) {
+        m.push(id);
+        vec_of(m, body);
+    }
+    let packed = |len: usize, at: u32| (i64::try_from(len).unwrap() << 32) | i64::from(at);
+    let pages = (OUTPUT_AT + u32::try_from(output.len()).unwrap()) / 0x1_0000 + 1;
+
+    let mut m = b"\0asm\x01\0\0\0".to_vec();
+    // Types: () -> i32, () -> i64, (i32) -> i32, (i32 i32 i32 i32) -> i64.
+    section(&mut m, 1, &[4, 0x60, 0, 1, 0x7f, 0x60, 0, 1, 0x7e, 0x60, 1, 0x7f, 1, 0x7f, 0x60, 4, 0x7f, 0x7f, 0x7f, 0x7f, 1, 0x7e]);
+    // fc_abi_version, fc_manifest, fc_alloc, fc_run.
+    section(&mut m, 3, &[4, 0, 1, 2, 3]);
+    let mut memory = vec![1, 0];
+    uleb(&mut memory, u64::from(pages));
+    section(&mut m, 5, &memory);
+    let mut exports = vec![5];
+    for (name, kind, index) in [("memory", 2u8, 0u8), ("fc_abi_version", 0, 0), ("fc_manifest", 0, 1), ("fc_alloc", 0, 2), ("fc_run", 0, 3)] {
+        vec_of(&mut exports, name.as_bytes());
+        exports.extend([kind, index]);
+    }
+    section(&mut m, 7, &exports);
+    // Each body: no locals, the instructions, `end`.
+    let mut abi = vec![0, 0x41];
+    sleb(&mut abi, 1);
+    abi.push(0x0b);
+    let mut man = vec![0, 0x42];
+    sleb(&mut man, packed(manifest.len(), MANIFEST_AT));
+    man.push(0x0b);
+    // (memory.grow ((size + 0xffff) >> 16)) << 16: the old end of memory.
+    let mut alloc = vec![0, 0x20, 0, 0x41];
+    sleb(&mut alloc, 0xffff);
+    alloc.extend([0x6a, 0x41, 16, 0x76, 0x40, 0, 0x41, 16, 0x74, 0x0b]);
+    let mut run = vec![0, 0x42];
+    sleb(&mut run, packed(output.len(), OUTPUT_AT));
+    run.push(0x0b);
+    let mut code = vec![4];
+    for body in [abi, man, alloc, run] {
+        vec_of(&mut code, &body);
+    }
+    section(&mut m, 10, &code);
+    let mut data = vec![2];
+    for (at, content) in [(MANIFEST_AT, manifest), (OUTPUT_AT, output)] {
+        data.extend([0, 0x41]);
+        sleb(&mut data, i64::from(at));
+        data.push(0x0b);
+        vec_of(&mut data, content.as_bytes());
+    }
+    section(&mut m, 11, &data);
+    m
+}
+
+/// A filter module `Square` (named "Test Square", with an integer parameter `dx`) that turns any
+/// layer into one square from 0 to 300.
+fn square_module() -> Vec<u8> {
+    let n = |x: f64, y: f64| Node::new(x, y, NodeKind::Line);
+    let square = Shape::Path(Contour::new(true, vec![n(0.0, 0.0), n(300.0, 0.0), n(300.0, 300.0), n(0.0, 300.0)]));
+    let output = json!({"shapes": [square], "log": ["squared"]});
+    returning_module(&fontcraft_plugins::wat::manifest("Square", "filter", r#"{"dx":{"type":"int"}}"#), &output.to_string())
+}
+
+/// [`font`] with the `Square` module installed in the session.
+fn font_with_square() -> Session {
+    let mut s = font();
+    s.extensions_mut().registry.install_bytes(&square_module(), None).unwrap();
+    s
+}
+
+fn export_error(s: &mut Session) -> String {
+    match s.execute("file.exportStatic", &json!({"timestamp": 0})) {
+        Ok(out) => panic!("the export should be refused: {out}"),
+        Err(e) => e.to_string(),
+    }
+}
+
+fn span(bytes: &[u8], c: char) -> (f32, f32) {
+    let p = probe(bytes, c);
+    (p.x_min, p.x_max)
+}
+
+/// `filter.customParameter.thirdParty`, `filter.menu.pluginFiltersListed`: a Filter string names
+/// an installed filter module by id or by name, passes it its parameters, and runs it only on the
+/// glyphs `include:` names; a PreFilter runs it before decomposition, so a composite shows its
+/// component's new outline.
+#[test]
+fn filter_custom_parameter_third_party_a_module_filter_runs_only_on_included_glyphs() {
+    let mut s = font_with_square();
+    add_param(&mut s, false, "Filter", text("Square; dx:10; include:A,B"));
+    let (fonts, out) = export(&mut s, json!({"timestamp": 0}));
+    let bytes = &fonts[0].1;
+    assert!(!out["warnings"].to_string().contains("Square"), "{out}");
+    assert_eq!(span(bytes, 'A'), (0.0, 300.0));
+    assert_eq!(span(bytes, 'B'), (0.0, 300.0), "B is decomposed first, then filtered");
+    assert_eq!(span(bytes, 'O'), (50.0, 550.0), "O is not included");
+    let a = &s.font().unwrap().glyph("A").unwrap().layers[0];
+    assert!(matches!(&a.shapes[0], Shape::Path(p) if p.nodes[0].x == 100.0), "the source keeps its outline");
+
+    // By the module's name, ASCII case ignored, as a PreFilter on A alone.
+    let mut s = font_with_square();
+    add_param(&mut s, false, "PreFilter", text("test square; include:A"));
+    let (fonts, _) = export(&mut s, json!({"timestamp": 0}));
+    let bytes = &fonts[0].1;
+    assert_eq!(span(bytes, 'A'), (0.0, 300.0));
+    assert_eq!(span(bytes, 'O'), (50.0, 550.0));
+    assert!(is_composite(bytes, 'B'), "a PreFilter keeps the components");
+    assert_eq!(span(bytes, 'B'), (0.0, 300.0), "B shows its component's new outline");
+}
+
+/// A name that is neither a built-in filter nor an installed module, a module that is turned off,
+/// and modules in safe mode each refuse the export with a message naming them.
+#[test]
+fn filter_custom_parameter_third_party_an_unknown_or_unavailable_module_refuses_the_export() {
+    let mut s = font();
+    add_param(&mut s, false, "Filter", text("NoSuchFilter; 1"));
+    let e = export_error(&mut s);
+    assert!(e.contains("NoSuchFilter") && e.contains("neither a built-in filter nor an installed filter module"), "{e}");
+
+    let mut s = font_with_square();
+    add_param(&mut s, false, "Filter", text("Square"));
+    s.extensions_mut().registry.set_enabled("Square", false).unwrap();
+    let e = export_error(&mut s);
+    assert!(e.contains("Square") && e.contains("turned off"), "{e}");
+
+    s.extensions_mut().registry.set_enabled("Square", true).unwrap();
+    s.extensions_mut().safe_mode = true;
+    let e = export_error(&mut s);
+    assert!(e.contains("Square") && e.contains("safe mode"), "{e}");
+    s.extensions_mut().safe_mode = false;
+    let (fonts, _) = export(&mut s, json!({"timestamp": 0}));
+    assert_eq!(span(&fonts[0].1, 'A'), (0.0, 300.0));
+}
+
+/// Parameters a module cannot take, and a module that fails, are warnings, and that string changes
+/// nothing.
+#[test]
+fn filter_custom_parameter_third_party_bad_parameters_and_a_failing_module_are_warnings() {
+    let mut s = font_with_square();
+    let failing = returning_module(&fontcraft_plugins::wat::manifest("Broken", "filter", "{}"), r#"{"error":"cannot do this"}"#);
+    s.extensions_mut().registry.install_bytes(&failing, None).unwrap();
+    add_param(&mut s, false, "Filter", text("Square; size:3"));
+    add_param(&mut s, false, "Filter", text("Broken; include:O"));
+    let (fonts, out) = export(&mut s, json!({"timestamp": 0}));
+    let warnings = out["warnings"].to_string();
+    assert!(warnings.contains("no parameter `size`"), "{warnings}");
+    assert!(warnings.contains("Broken") && warnings.contains("cannot do this") && warnings.contains("`O`"), "{warnings}");
+    assert_eq!(span(&fonts[0].1, 'A'), (100.0, 500.0));
+    assert_eq!(span(&fonts[0].1, 'O'), (50.0, 550.0));
+}
+
+/// The same module run from the Filter menu (`plugin.runFilter`) gives the same outline as at
+/// export.
+#[test]
+fn filter_menu_plugin_filters_listed_a_module_gives_the_same_outline_from_the_menu_and_at_export() {
+    let mut menu = font_with_square();
+    run(&mut menu, "plugin.runFilter", json!({"id": "Square", "params": {"dx": 10}, "glyphs": ["A"]}));
+    let (from_menu, _) = export(&mut menu, json!({"timestamp": 0}));
+
+    let mut at_export = font_with_square();
+    add_param(&mut at_export, false, "Filter", text("Square; dx:10; include:A"));
+    let (exported, _) = export(&mut at_export, json!({"timestamp": 0}));
+
+    let (a, b) = (probe(&from_menu[0].1, 'A'), probe(&exported[0].1, 'A'));
+    assert_eq!((a.x_min, a.x_max, a.points, a.curves), (b.x_min, b.x_max, b.points, b.curves));
+    assert_eq!(a.x_max, 300.0);
 }

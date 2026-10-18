@@ -75,7 +75,7 @@ milestone = "M13"
 summary = "Filters installed through the Plugin Manager appear in the Filter menu next to the built-in ones and can be used as export-time custom parameters in the same way."
 ref = "Filters (chapter introduction)"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft (M13.4, M13.6): installed filter modules are listed in the Filter menu below a separator and are accepted by name or id in the Filter and PreFilter export parameters."
+notes = "Documented, not yet observed. FontCraft (M13.4, M13.6): installed filter modules are listed in the Filter menu below a separator and are accepted by id or name in the Filter and PreFilter export parameters (see `filter.customParameter.thirdParty`); the menu and the export run a module on a layer through the same code, so they give the same outline."
 observe = [
   "Install a free filter plug-in from the Plugin Manager and relaunch: note where it appears in the Filter menu (below a separator, sorted with the built-in filters, or in a submenu) and whether its item ends with an ellipsis.",
 ]
@@ -956,9 +956,12 @@ milestone = "M13"
 summary = "Plug-in filters define their own argument strings and are not guaranteed to understand include: and exclude:."
 ref = "Appendix › Custom Parameters › Filter"
 status = "handbook"
-notes = "FontCraft (M13.4): the export string's first item names the module; `key:value` items become named parameters and bare values become parameters `0`, `1`, … in order, as the reference's plug-in documentation describes (GlyphsSDK, Python Templates › Filter, Apache-2.0); `include:` and `exclude:` are applied by FontCraft before the module runs, so every module understands them."
+notes = "Documented, not yet observed. FontCraft (M13.4): the export string's first item names an installed filter module by id, else by name (exact, then ASCII case ignored); a built-in filter of the same name wins. `key:value` items become named parameters and bare values become parameters `0`, `1`, … in order, as the reference's plug-in documentation describes (GlyphsSDK, Python Templates › Filter, Apache-2.0); a module whose manifest declares no such names takes bare values in its declaration order. Values are typed by the manifest (booleans as 1 or 0) and clamped like any module parameters. `include:` and `exclude:` are applied by FontCraft before the module runs, so every module understands them. The module runs on the target master's layers through the same code as `plugin.runFilter`, all layers in one edit. A name that is neither a built-in filter nor an installed module, a module that is turned off, or modules in safe mode refuse the export with a message naming the module; parameters the module cannot take, or a module that fails on a glyph, are warnings and that string changes nothing."
 guesses = [
   "FontCraft applies include and exclude itself for module filters, where the reference leaves it to each plug-in; settled by nothing in the reference, since our modules cannot see glyph lists.",
+  "A filter string whose name matches no built-in filter and no installed module refuses the export instead of being skipped with a warning, since the font would come out without a filter its source asks for; settled by exporting from the reference app a font whose Filter parameter names a plug-in that is not installed.",
+  "A module that fails on one glyph at export leaves every glyph of that string unchanged and reports a warning, as the Filter menu's run changes nothing when a module fails; settled by nothing in the reference, whose plug-ins run their own code.",
+  "Bare values go to the parameters named 0, 1 and so on when the manifest declares such names, and otherwise to the parameters in declaration order; settled by the reference's plug-in documentation once a manifest-like declaration exists there.",
 ]
 observe = [
   "Open that filter plug-in's dialog and, if it has a gear menu, copy its export string and paste it into a text file: compare it with the built-in filters' export strings (separator, key spelling).",

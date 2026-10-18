@@ -699,6 +699,7 @@ impl Session {
         // Snapshot for rollback. It copies pointers and labels, no glyph data, but it does walk
         // each document's history, so queries (which change nothing) skip it.
         let snapshot = spec.journal.then(|| (self.docs.clone(), self.active, self.untitled, self.settings.clone(), self.projects.clone()));
+        let _modules = export_steps::ModuleScope::enter(&self.extensions);
         self.depth = 1;
         let outcome = guard::catch_panic(|| (spec.run)(self, params));
         self.depth = 0;
