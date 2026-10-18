@@ -1,9 +1,27 @@
 //! `font.instantiate` (M12.20–M12.22; `fontcraft_tables::instance`).
 //!
 //! Each package fills its own function below, so packages that share this module do not edit
-//! the same lines.
+//! the same lines. The command runs [`instantiate`]: a compiled font goes to the binary path
+//! (M12.20, M12.21); any other input is a source, for [`instantiate_source`] (M12.22).
+//!
+//! Whole-file commands follow [`super::file_io`]: paths in, the input never changed, the outputs
+//! built in memory and written at the end, a refusal on the web.
 
-use super::CommandSpec;
+use std::path::{Path, PathBuf};
+
+use fontcraft_tables::instance::{self, AxisLimit, InstanceOptions, NamedInstance};
+use fontcraft_tables::outlines::{OutlineAction, OutlineOptions};
+use fontcraft_tables::sfnt::{SfntFont, Tag, parse_tag, tag_str};
+use fontcraft_tables::{TableOrder, WriteOptions};
+use serde_json::{Map, Value, json};
+
+use super::file_io::{self, InputKind, OutputRequest};
+use super::{CommandSpec, FileParam, always, cmd};
+use crate::params::Params;
+use crate::{EngineError, Result, Session};
+
+/// Seconds from 1904-01-01 (the `head` epoch) to 1970-01-01.
+const HEAD_EPOCH_OFFSET: i64 = 2_082_844_800;
 
 /// The commands of this module, in package order.
 pub fn specs() -> Vec<CommandSpec> {
@@ -14,12 +32,373 @@ pub fn specs() -> Vec<CommandSpec> {
 
 /// `font.instantiate` on variable fonts: full instances (M12.20), then partial ones (M12.21) (M12.20).
 fn binary_specs() -> Vec<CommandSpec> {
-    // M12.20
-    Vec::new()
+    vec![cmd!(
+        "font.instantiate",
+        "Instantiate",
+        [],
+        None,
+        "{input: path, face?: int, location?: {axis: number | {min?: number, default?: number, max?: number} | \"drop\"}, static?: bool, named?: regex, all?: bool, indices?: [int], to?: \"same\"|\"ttf\"|\"otf\", output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool, clamp?: bool, optimizeGvar?: bool, overlapFlag?: bool, removeOverlaps?: bool, ignoreOverlapErrors?: bool, updateNameTable?: bool, downgradeCff2?: bool, recalcBounds?: bool, round?: bool, timestamp?: \"keep\"|\"now\"|int} instances a variable font: every axis pinned (a number, \"drop\" for the default, or static to pin the axes not named at their default) gives a static font; named, all and indices build fvar named instances instead, each named after its PostScript name; locations are clamped to the axis ranges; the output defaults to <name>.instance.<ext> beside the input; a designspace or other source is instanced by the source path → {results: [{output, location: {axis: number}, static: bool, name?, postscriptName?}]}",
+        always,
+        instantiate
+    )
+    .files(const { &[FileParam::read("input"), FileParam::write("output"), FileParam::write("outputDir")] })
+    .writes_files()]
 }
 
 /// `font.instantiate` on designspace and multi-master sources (M12.22).
 fn source_specs() -> Vec<CommandSpec> {
     // M12.22
     Vec::new()
+}
+
+/// `font.instantiate` with a source as input (M12.22).
+fn instantiate_source(p: &Params<'_>, input: &file_io::Input) -> Result<Value> {
+    // M12.22
+    Err(p.bad(format!("{} is not a compiled font; instancing sources is not built yet", input.path.display())))
+}
+
+/// One font to build: its limits and how its result is described and named.
+struct Job {
+    limits: Vec<(Tag, AxisLimit)>,
+    named: Option<NamedInstance>,
+}
+
+fn instantiate(_: &mut Session, params: &Value) -> Result<Value> {
+    let p = Params::new("font.instantiate", params)?;
+    let path = p.str("input")?;
+    let req = OutputRequest::from_params(&p)?;
+    let face = p.opt_int("face", 0, i64::from(u32::MAX))?.and_then(|f| u32::try_from(f).ok()).unwrap_or(0);
+    let input = file_io::read_input(Path::new(path))?;
+    if !input.kind.is_font() {
+        return instantiate_source(&p, &input);
+    }
+    for key in ["autohint", "normalize", "strict", "ufoVersion", "layoutOnly", "masterFinder"] {
+        if p.get(key).is_some() {
+            return Err(p.bad(format!("`{key}` applies to sources only, and {path} is a compiled font")));
+        }
+    }
+    if !p.bool_or("clamp", true)? {
+        return Err(p.bad("a compiled variable font cannot be extrapolated: locations are clamped to the axis ranges"));
+    }
+    if !p.bool_or("round", true)? {
+        return Err(p.bad("the instance of a compiled font always has rounded coordinates"));
+    }
+    let extension = match (p.opt_str("to")?, input.kind) {
+        (None | Some("same"), _) => None,
+        (Some("ttf"), InputKind::TrueType) | (Some("otf"), InputKind::Cff) => None,
+        (Some(other @ ("ttf" | "otf")), _) => {
+            return Err(p.bad(format!("an instance keeps the outline format of its input: convert it to {other} afterwards")));
+        }
+        (Some("ufo"), _) => return Err(p.bad("`to: \"ufo\"` applies to sources only")),
+        (Some(other), _) => return Err(p.bad(format!("`to` must be \"same\", \"ttf\" or \"otf\", got \"{other}\""))),
+    };
+    let font = fontcraft_tables::read(&input.bytes, face)?;
+    let remove_overlaps = p.bool_or("removeOverlaps", false)?;
+    let ignore_overlap_errors = p.bool_or("ignoreOverlapErrors", false)?;
+    let options = InstanceOptions {
+        limits: Vec::new(),
+        update_names: p.bool_or("updateNameTable", false)?,
+        overlap_flags: p.bool_or("overlapFlag", true)? && !remove_overlaps,
+        downgrade_cff2: p.bool_or("downgradeCff2", false)?,
+        recalc_bounds: p.bool_or("recalcBounds", true)?,
+    };
+    let _ = p.bool_or("optimizeGvar", true)?;
+    let stamp = timestamp(&p)?;
+    let jobs = jobs(&p, &font)?;
+    if jobs.len() > 1 && req.output.is_some() {
+        return Err(p.bad("`output` names one file, and this run builds several instances: give `outputDir`"));
+    }
+    if jobs.len() > 1 && req.in_place {
+        return Err(p.bad("`inPlace` replaces one file, and this run builds several instances"));
+    }
+
+    let mut built: Vec<(PathBuf, Vec<u8>, Value)> = Vec::with_capacity(jobs.len());
+    for job in jobs {
+        let mut result = instance::instantiate(&font, &InstanceOptions { limits: job.limits.clone(), ..options.clone() })?;
+        let is_static = result.get(*b"fvar").is_none();
+        if remove_overlaps && is_static {
+            let outline =
+                OutlineOptions { keep_hinting: true, ignore_errors: ignore_overlap_errors, ..OutlineOptions::new(OutlineAction::RemoveOverlaps) };
+            result = fontcraft_tables::outlines::repair(&result, &outline)?.font;
+        }
+        if let Some(t) = stamp {
+            set_modified(&mut result, t);
+        }
+        let bytes = fontcraft_tables::write(&result, &WriteOptions { order: TableOrder::Recommended })?;
+        let out = match &job.named {
+            Some(named) if req.output.is_none() && !req.in_place => named_path(&input.path, &req, named, extension)?,
+            _ => file_io::output_path(&input.path, &req, ".instance", extension)?,
+        };
+        if built.iter().any(|(o, _, _)| *o == out) {
+            return Err(p.bad(format!("two instances would both be written to {}", out.display())));
+        }
+        let mut entry = json!({ "output": out.display().to_string(), "location": location_json(&job.limits), "static": is_static });
+        if let (Some(named), Some(obj)) = (&job.named, entry.as_object_mut()) {
+            obj.insert("location".into(), tagged(&named.coordinates));
+            if let Some(name) = &named.subfamily_name {
+                obj.insert("name".into(), json!(name));
+            }
+            if let Some(ps) = &named.postscript_name {
+                obj.insert("postscriptName".into(), json!(ps));
+            }
+        }
+        built.push((out, bytes, entry));
+    }
+    let mut written: Vec<&Path> = Vec::with_capacity(built.len());
+    for (out, bytes, _) in &built {
+        if let Err(e) = file_io::write_output(out, bytes, &req) {
+            remove_written(&written);
+            return Err(e);
+        }
+        written.push(out);
+    }
+    Ok(json!({ "results": built.into_iter().map(|(_, _, v)| v).collect::<Vec<_>>() }))
+}
+
+/// The instances the parameters ask for: the fvar named instances chosen by `named`, `all` or
+/// `indices`, else one instance at `location`.
+fn jobs(p: &Params<'_>, font: &SfntFont) -> Result<Vec<Job>> {
+    let pattern = p.opt_str("named")?;
+    let all = p.bool_or("all", false)?;
+    let indices = p.opt_array("indices")?;
+    let chosen = usize::from(pattern.is_some()) + usize::from(all) + usize::from(indices.is_some());
+    if chosen > 1 {
+        return Err(p.bad("give one of `named`, `all` and `indices`"));
+    }
+    if chosen == 0 {
+        let mut limits = location(p)?;
+        if p.bool_or("static", false)? {
+            for axis in fontcraft_tables::variations::fvar_axes(font)? {
+                if !limits.iter().any(|(t, _)| *t == axis.tag) {
+                    limits.push((axis.tag, AxisLimit::Drop));
+                }
+            }
+        }
+        return Ok(vec![Job { limits, named: None }]);
+    }
+    if p.get("location").is_some() {
+        return Err(p.bad("`location` cannot be combined with `named`, `all` or `indices`: a named instance has its own location"));
+    }
+    let list = instance::named_instances(font)?;
+    let picked: Vec<NamedInstance> = if let Some(source) = pattern {
+        // The pattern may match anywhere in the subfamily or PostScript name.
+        let re = fontcraft_glyphquery::Pattern::new(&format!(".*(?:{source}).*"), false).map_err(|e| p.bad(e.to_string()))?;
+        list.into_iter()
+            .filter(|n| n.subfamily_name.as_deref().is_some_and(|s| re.is_match(s)) || n.postscript_name.as_deref().is_some_and(|s| re.is_match(s)))
+            .collect()
+    } else if let Some(indices) = indices {
+        let mut out = Vec::with_capacity(indices.len());
+        for v in indices {
+            let i = v.as_u64().and_then(|i| usize::try_from(i).ok()).ok_or_else(|| p.bad("`indices` holds zero-based whole numbers"))?;
+            let n = list.get(i).ok_or_else(|| p.bad(format!("the font has {} named instances; there is no index {i}", list.len())))?;
+            out.push(n.clone());
+        }
+        out
+    } else {
+        list
+    };
+    if picked.is_empty() {
+        return Err(p.bad("no named instance matches"));
+    }
+    Ok(picked.into_iter().map(|n| Job { limits: n.coordinates.iter().map(|(t, v)| (*t, AxisLimit::Pin(*v))).collect(), named: Some(n) }).collect())
+}
+
+/// `location`: per axis a number (pin), "drop" (pin at the default) or {min, default, max}.
+fn location(p: &Params<'_>) -> Result<Vec<(Tag, AxisLimit)>> {
+    let Some(given) = p.opt_object("location")? else { return Ok(Vec::new()) };
+    if given.len() > fontcraft_tables::limits::MAX_AXES {
+        return Err(p.bad(format!("`location` names more than {} axes", fontcraft_tables::limits::MAX_AXES)));
+    }
+    let finite = |v: &Value, what: &str| v.as_f64().filter(|v| v.is_finite()).ok_or_else(|| p.bad(format!("{what} must be a finite number")));
+    let mut out = Vec::with_capacity(given.len());
+    for (axis, v) in given {
+        let tag = parse_tag(axis).map_err(|_| p.bad(format!("`{axis}` is not an axis tag")))?;
+        let limit = match v {
+            Value::String(s) if s == "drop" => AxisLimit::Drop,
+            Value::Number(_) => AxisLimit::Pin(finite(v, &format!("the value of `{axis}`"))?),
+            Value::Object(range) => {
+                let part = |k: &str| range.get(k).map(|v| finite(v, &format!("`{axis}.{k}`"))).transpose();
+                let (min, default, max) = (part("min")?, part("default")?, part("max")?);
+                AxisLimit::Range { min: min.unwrap_or(f64::NEG_INFINITY), default, max: max.unwrap_or(f64::INFINITY) }
+            }
+            _ => return Err(p.bad(format!("the value of `{axis}` must be a number, \"drop\" or {{min, default, max}}"))),
+        };
+        out.push((tag, limit));
+    }
+    Ok(out)
+}
+
+fn tagged(values: &[(Tag, f64)]) -> Value {
+    Value::Object(values.iter().map(|(t, v)| (tag_str(*t).trim_end().to_string(), json!(v))).collect())
+}
+
+fn location_json(limits: &[(Tag, AxisLimit)]) -> Value {
+    let mut m = Map::new();
+    for (tag, limit) in limits {
+        let v = match limit {
+            AxisLimit::Pin(v) => json!(v),
+            AxisLimit::Drop => json!("drop"),
+            AxisLimit::Range { min, default, max } => {
+                let mut r = Map::new();
+                if min.is_finite() {
+                    r.insert("min".into(), json!(min));
+                }
+                if let Some(d) = default {
+                    r.insert("default".into(), json!(d));
+                }
+                if max.is_finite() {
+                    r.insert("max".into(), json!(max));
+                }
+                Value::Object(r)
+            }
+        };
+        m.insert(tag_str(*tag).trim_end().to_string(), v);
+    }
+    Value::Object(m)
+}
+
+/// `<PostScript name>.<ext>` (else `<stem>-<subfamily>.<ext>`, spaces removed) in `outputDir`
+/// or beside the input.
+fn named_path(input: &Path, req: &OutputRequest, named: &NamedInstance, extension: Option<&str>) -> Result<PathBuf> {
+    let stem = input.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| "instance".into());
+    let base = match (&named.postscript_name, &named.subfamily_name) {
+        (Some(ps), _) if !ps.trim().is_empty() => ps.clone(),
+        (_, Some(sub)) => format!("{stem}-{}", sub.replace(' ', "")),
+        _ => format!("{stem}-instance{}", named.index),
+    };
+    let base: String = base.chars().map(|c| if matches!(c, '/' | '\\' | ':') || c.is_control() { '-' } else { c }).collect();
+    let ext = extension.map(str::to_string).or_else(|| input.extension().map(|e| e.to_string_lossy().into_owned())).unwrap_or_else(|| "ttf".into());
+    let dir = req.output_dir.clone().or_else(|| input.parent().map(Path::to_path_buf)).unwrap_or_default();
+    let path = dir.join(format!("{base}.{ext}"));
+    if path == input {
+        return Err(EngineError::Io(format!("the output {} would replace the input: give outputDir", path.display())));
+    }
+    Ok(path)
+}
+
+/// The `head.modified` time to set, in Unix seconds; `None` for "keep".
+fn timestamp(p: &Params<'_>) -> Result<Option<i64>> {
+    if p.get("timestamp").and_then(Value::as_str) == Some("keep") {
+        return Ok(None);
+    }
+    super::compile::timestamp(p).map(Some)
+}
+
+fn set_modified(font: &mut SfntFont, unix: i64) {
+    let stamp = unix.saturating_add(HEAD_EPOCH_OFFSET).max(0);
+    if let Some(slot) = font.tables.get_mut(b"head").and_then(|h| h.get_mut(28..36)) {
+        slot.copy_from_slice(&stamp.to_be_bytes());
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn remove_written(paths: &[&Path]) {
+    for path in paths {
+        let _ = std::fs::remove_file(path);
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn remove_written(_: &[&Path]) {}
+
+#[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
+mod tests {
+    use super::*;
+    use fontcraft_tables::sfnt::Flavour;
+
+    /// A TrueType variable font with no outlines: `head`, `maxp`, `hhea`, `hmtx` (one empty
+    /// glyph), `OS/2`, a `name` table and an `fvar` with wght 100–400–900 and two named
+    /// instances, Light (300, PostScript name "T-Light") and Bold (700).
+    fn variable_font() -> Vec<u8> {
+        let mut head = vec![0u8; 54];
+        head[12..16].copy_from_slice(&0x5F0F_3CF5u32.to_be_bytes());
+        head[18..20].copy_from_slice(&1000u16.to_be_bytes());
+        let mut maxp = vec![0u8; 6];
+        maxp[0..4].copy_from_slice(&0x0000_5000u32.to_be_bytes());
+        maxp[4..6].copy_from_slice(&1u16.to_be_bytes());
+        let mut hhea = vec![0u8; 36];
+        hhea[34..36].copy_from_slice(&1u16.to_be_bytes());
+        let hmtx = vec![1, 244, 0, 0];
+        let mut os2 = vec![0u8; 96];
+        os2[0..2].copy_from_slice(&4u16.to_be_bytes());
+        os2[4..6].copy_from_slice(&400u16.to_be_bytes());
+        let names = [(256u16, "Weight"), (257, "Light"), (258, "Bold"), (259, "T-Light")];
+        let mut name = Vec::new();
+        let mut strings = Vec::new();
+        for v in [0u16, names.len() as u16, (6 + 12 * names.len()) as u16] {
+            name.extend_from_slice(&v.to_be_bytes());
+        }
+        for (id, text) in names {
+            let bytes: Vec<u8> = text.encode_utf16().flat_map(|u| u.to_be_bytes()).collect();
+            for v in [3u16, 1, 0x409, id, bytes.len() as u16, strings.len() as u16] {
+                name.extend_from_slice(&v.to_be_bytes());
+            }
+            strings.extend(bytes);
+        }
+        name.extend(strings);
+        // fvar 1.0: one axis record of 20 bytes, two instance records of 10 (with a PostScript
+        // name ID; 0xFFFF for none).
+        let mut fvar = Vec::new();
+        for v in [1u16, 0, 16, 2, 1, 20, 2, 10] {
+            fvar.extend_from_slice(&v.to_be_bytes());
+        }
+        fvar.extend_from_slice(b"wght");
+        for v in [100i32, 400, 900] {
+            fvar.extend_from_slice(&(v << 16).to_be_bytes());
+        }
+        fvar.extend_from_slice(&[0, 0, 1, 0]);
+        for (sub, value, ps) in [(257u16, 300i32, 259u16), (258, 700, 0xFFFF)] {
+            fvar.extend_from_slice(&sub.to_be_bytes());
+            fvar.extend_from_slice(&[0, 0]);
+            fvar.extend_from_slice(&(value << 16).to_be_bytes());
+            fvar.extend_from_slice(&ps.to_be_bytes());
+        }
+        let mut font = SfntFont::new(Flavour::TrueType);
+        for (tag, data) in
+            [(*b"head", head), (*b"maxp", maxp), (*b"hhea", hhea), (*b"hmtx", hmtx), (*b"OS/2", os2), (*b"name", name), (*b"fvar", fvar)]
+        {
+            font.insert(tag, data);
+        }
+        fontcraft_tables::write(&font, &WriteOptions::default()).unwrap()
+    }
+
+    #[test]
+    fn instantiate_writes_static_and_named_instances() {
+        let dir = std::env::temp_dir().join(format!("fontcraft-instance-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let input = dir.join("V.ttf");
+        std::fs::write(&input, variable_font()).unwrap();
+        let before = std::fs::read(&input).unwrap();
+        let mut s = Session::new();
+
+        let r = s.execute("font.instantiate", &json!({ "input": input, "location": { "wght": 650 }, "timestamp": "keep" })).unwrap();
+        let out = dir.join("V.instance.ttf");
+        assert_eq!(r["results"][0]["output"], json!(out.display().to_string()), "the default output name");
+        assert_eq!(r["results"][0]["static"], json!(true));
+        let font = fontcraft_tables::read(&std::fs::read(&out).unwrap(), 0).unwrap();
+        assert!(font.get(*b"fvar").is_none(), "a static instance has no fvar");
+        assert_eq!(font.get(*b"OS/2").unwrap()[4..6], 650u16.to_be_bytes(), "usWeightClass follows wght");
+        assert_eq!(std::fs::read(&input).unwrap(), before, "the input is not changed");
+
+        let r = s.execute("font.instantiate", &json!({ "input": input, "all": true, "outputDir": dir.join("all") })).unwrap();
+        let results = r["results"].as_array().unwrap();
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0]["output"], json!(dir.join("all").join("T-Light.ttf").display().to_string()), "named after the PostScript name");
+        assert_eq!(results[0]["location"]["wght"], json!(300.0));
+        assert_eq!(results[1]["output"], json!(dir.join("all").join("V-Bold.ttf").display().to_string()), "no PostScript name: stem and subfamily");
+        let r = s.execute("font.instantiate", &json!({ "input": input, "named": "Bol", "outputDir": dir.join("one") })).unwrap();
+        assert_eq!(r["results"][0]["name"], json!("Bold"));
+
+        assert!(s.execute("font.instantiate", &json!({ "input": input, "location": { "opsz": 12 }, "static": true })).is_err(), "no such axis");
+        assert!(
+            s.execute("font.instantiate", &json!({ "input": input, "all": true, "output": dir.join("x.ttf") })).is_err(),
+            "one output for two fonts"
+        );
+        assert!(s.execute("font.instantiate", &json!({ "input": input, "indices": [5] })).is_err(), "no such named instance");
+        assert!(s.execute("font.instantiate", &json!({ "input": input, "location": { "wght": 500 }, "clamp": false })).is_err());
+        let refused = s.execute("font.instantiate", &json!({ "input": input, "location": { "wght": 650 }, "noClobber": true }));
+        assert!(refused.is_err(), "the output exists and noClobber is set");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
