@@ -51,6 +51,16 @@ const OPTIONS: &[OptSpec] = &[
     OptSpec::value("tolerance", "F", "", "round: only values within F of the grid"),
     OptSpec::switch("nested-only", false, "decompose: only flatten components of components"),
     OptSpec::switch("transformed-only", false, "decompose: only glyphs with a scaled, rotated or slanted component"),
+    // M12.29
+    OptSpec::value("max-error", "EM", "0.001", "to-quadratic, to-cubic: the largest deviation, as a fraction of the em"),
+    OptSpec::switch("mixed", false, "to-quadratic: keep a cubic curve that one quadratic curve cannot replace"),
+    OptSpec::switch("interpolatable", false, "to-quadratic: convert the masters of the input as one compatible set"),
+    OptSpec::switch("keep-direction", false, "to-quadratic: do not reverse the contours of a source"),
+    OptSpec::switch("all-cubic", false, "to-cubic: make every curve cubic"),
+    OptSpec::value("reference", "SOURCE", "", "componentize: the source whose composites are copied; default the .ufo beside the font"),
+    OptSpec::value("goadb", "FILE", "", "componentize: maps the source's glyph names to the font's"),
+    OptSpec::switch("detect", false, "componentize: find glyphs made of other glyphs without a source"),
+    OptSpec::switch("allow-transforms", false, "componentize: also use scaled, rotated or flipped components of the source"),
 ];
 
 fn run(args: &[String]) -> Outcome {
@@ -65,6 +75,8 @@ fn run(args: &[String]) -> Outcome {
         "extremes" => "outlines.addExtremes",
         "round" => "outlines.roundCoordinates",
         "decompose" => "outlines.decompose",
+        "to-quadratic" | "to-cubic" => "outlines.convertCurves",
+        "componentize" => "outlines.componentize",
         _ => return super::not_built(&SUBCOMMAND, args),
     };
     let parsed = args::parse(OPTIONS, rest)?;
@@ -84,6 +96,40 @@ fn run(args: &[String]) -> Outcome {
             params.insert("keepContourOrder".into(), json!(parsed.switch("keep-contour-order")));
             params.insert("minArea".into(), json!(number(&parsed, "min-area")?));
             params.insert("input".into(), json!(first));
+            let result = execute(&mut session, command, &Value::Object(params))?;
+            out_json_line(&result)
+        }
+        "to-quadratic" | "to-cubic" => {
+            let quadratic = action == "to-quadratic";
+            params.insert("to".into(), json!(if quadratic { "quadratic" } else { "cubic" }));
+            params.insert("maxError".into(), json!(number(&parsed, "max-error")?));
+            if quadratic {
+                params.insert("mixed".into(), json!(parsed.switch("mixed")));
+                params.insert("interpolatable".into(), json!(parsed.switch("interpolatable")));
+                params.insert("keepDirection".into(), json!(parsed.switch("keep-direction")));
+            } else {
+                params.insert("allCubic".into(), json!(parsed.switch("all-cubic")));
+            }
+            params.insert("inputs".into(), json!(parsed.positional));
+            let result = execute(&mut session, command, &Value::Object(params))?;
+            for r in result.get("results").and_then(Value::as_array).into_iter().flatten() {
+                out_json_line(r)?;
+            }
+            Ok(())
+        }
+        "componentize" => {
+            if parsed.positional.len() > 1 {
+                return Err(usage("outlines componentize takes one font"));
+            }
+            params.remove("ignoreErrors");
+            for (option, key) in [("reference", "reference"), ("goadb", "goadb")] {
+                if let Some(v) = parsed.value(option) {
+                    params.insert(key.into(), json!(v));
+                }
+            }
+            params.insert("detect".into(), json!(parsed.switch("detect")));
+            params.insert("allowTransforms".into(), json!(parsed.switch("allow-transforms")));
+            params.insert("font".into(), json!(first));
             let result = execute(&mut session, command, &Value::Object(params))?;
             out_json_line(&result)
         }
@@ -179,8 +225,12 @@ mod tests {
         assert_eq!(e.exit_code(), 2, "an input is required");
         let e = run(&args(&["round", "x.ttf", "--grid", "fine"])).unwrap_err();
         assert_eq!(e.exit_code(), 2);
-        let e = run(&args(&["to-cubic", "x.ttf"])).unwrap_err();
-        assert_eq!(e.exit_code(), 4, "the curve actions belong to another package");
+        let e = run(&args(&["to-cubic", "x.ttf", "--max-error", "much"])).unwrap_err();
+        assert_eq!(e.exit_code(), 2);
+        let e = run(&args(&["componentize", "a.ttf", "b.ttf"])).unwrap_err();
+        assert_eq!(e.exit_code(), 2, "componentize takes one font");
+        let e = run(&args(&["to-cubic", "/nonexistent/x.ttf", "-o", "/nonexistent/y.ttf"])).unwrap_err();
+        assert_eq!(e.exit_code(), 4);
         let e = run(&args(&["round", "/nonexistent/x.ttf", "-o", "/nonexistent/y.ttf"])).unwrap_err();
         assert_eq!(e.exit_code(), 4);
         assert!(run(&args(&["--help"])).is_ok());
