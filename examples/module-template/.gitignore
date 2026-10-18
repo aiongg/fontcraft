@@ -1,0 +1,3 @@
+# Build output and lock files of the templates, which are crates of their own.
+target/
+Cargo.lock

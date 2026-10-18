@@ -1,0 +1,14 @@
+{
+  "id": "org.example.shift",
+  "name": "Shift Outline",
+  "version": "0.1.0",
+  "kind": "filter",
+  "author": "Your Name",
+  "description": "Moves the outline, components and anchors by a distance. With nodes selected in Edit View, moves only those nodes.",
+  "params": {
+    "dx": { "type": "number", "min": -1000, "max": 1000, "default": 10 },
+    "dy": { "type": "number", "min": -1000, "max": 1000, "default": 0 },
+    "anchors": { "type": "bool", "default": true }
+  },
+  "capabilities": []
+}

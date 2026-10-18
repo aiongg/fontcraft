@@ -1,0 +1,13 @@
+{
+  "id": "org.example.outline-check",
+  "name": "Open Paths and Off-Grid Nodes",
+  "version": "0.1.0",
+  "kind": "check",
+  "author": "Your Name",
+  "description": "Reports open paths, and nodes whose coordinates are not multiples of the grid step.",
+  "params": {
+    "grid": { "type": "int", "min": 1, "max": 100, "default": 1 },
+    "openPaths": { "type": "bool", "default": true }
+  },
+  "capabilities": []
+}
