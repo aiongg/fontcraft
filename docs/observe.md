@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1279 rows to check: 1937 guesses and 463 observe steps.**
+**1288 rows to check: 1975 guesses and 466 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,19 +48,19 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 40 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 4 |
-| **Later milestones (after M6)** | all | **794** |
-| Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 79 |
+| **Later milestones (after M6)** | all | **803** |
+| Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 80 |
 | Later milestones (after M6) | Edit View: text mode and preview | 15 |
 | Later milestones (after M6) | Components and anchors | 37 |
 | Later milestones (after M6) | Filters | 5 |
 | Later milestones (after M6) | Spacing and metrics keys | 5 |
-| Later milestones (after M6) | Kerning and the Kerning window | 4 |
+| Later milestones (after M6) | Kerning and the Kerning window | 6 |
 | Later milestones (after M6) | Font View | 16 |
-| Later milestones (after M6) | Font Info and features | 276 |
+| Later milestones (after M6) | Font Info and features | 278 |
 | Later milestones (after M6) | Interpolation | 71 |
 | Later milestones (after M6) | Hinting | 90 |
 | Later milestones (after M6) | Colour fonts | 54 |
-| Later milestones (after M6) | Files: open, import, export | 48 |
+| Later milestones (after M6) | Files: open, import, export | 52 |
 | Later milestones (after M6) | Settings and the window | 13 |
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 62 |
 | Later milestones (after M6) | Elsewhere | 19 |
@@ -1378,9 +1378,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (794)
+## Later milestones (after M6) (803)
 
-### Edit View: drawing, guides, layers and the Palette (79)
+### Edit View: drawing, guides, layers and the Palette (80)
 
 - [ ] `anchors.ccmpAlongsideMark` (behavior, M8, handbook): When the mark feature is generated and glyphs such as idotless and…
   - Guess: ccmp follows from the glyph names alone, whether or not the marks carry anchors for the mark feature; Update in the reference app on a font with idotless and an anchorless acutecomb would settle it.
@@ -1419,6 +1419,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Module sections follow the built-in sections in the order of the modules' names; the handbook does not say where plug-in sections go.
   - Guess: Values typed into a module's form are kept for the session only, and a module replaced by another version starts again from its defaults.
   - Observe: Install a palette plug-in from the Plugin Manager, relaunch and note where its section appears among the built-in Palette sections and whether it collapses like them.
+- [ ] `image-pdf` (format, M13, handbook): PDF page placed as an image
+  - Guess: The page is drawn on a transparent background, not white, so the glyph shows through around the artwork; placing a PDF in the reference app would show which it uses.
+  - Guess: Text and images inside the PDF are not drawn; the reference draws them through the operating system, and a PDF with text placed in the reference app would show the difference.
 - [ ] `tunni.dragLineSymmetric` (behavior, M13, docs): Dragging a Tunni line (or Shift-dragging its control dot) lengthens or shortens…
   - Guess: Both handles gain the same share of their own distance to the Tunni point, the share being how far the pointer moves across the chord over the Tunni point's height above it, so the Tunni line follows the pointer; FontLab does not say how the two lengths relate, and dragging an unbalanced segment's Tunni line in FontLab would settle it.
   - Guess: A Tunni line counts as selected when both its handles are selected, so clicking a Tunni line selects its two handles and Shift-click toggles them; FontLab keeps a separate Tunni line selection, and selecting a line there and then a node would show whether the two interact.
@@ -1675,8 +1678,10 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: In F1 (Latin features), write a contextual rule in a hand-written kern feature, compile and view the pair in Edit View: note whether the contextual value shows.
 - [ ] `textPreview.shaping` (behavior, M8, handbook): Text Preview shapes its text as an application would: every feature that…
   - Guess: The preview's font is rebuilt from the current feature code, kerning and anchors after edits, once editing pauses for half a second, without pressing Compile; editing a feature without compiling while the reference app's Text Preview is open would settle it.
+  - Guess: Text is split into script runs by Script_Extensions, and characters without a script (Common, Inherited, unassigned and private-use) stay in the run around them, so a glyph typed by name is shaped with its neighbours; typing a glyph name between two letters that form a contextual substitution in the reference app would settle it.
   - Observe: In F1 (Latin features), edit a feature without pressing Compile while Text Preview shows text the feature affects: note whether the preview follows the edit, and when.
 - [ ] `textPreview.unicodeBidi` (behavior, M8, handbook): Text Preview orders mixed right-to-left and left-to-right text by the Unicode Bidirectional…
+  - Guess: A paragraph separator inside a line (U+2029) starts a new bidirectional paragraph whose runs follow the line's earlier runs, each paragraph ordered on its own; pasting text with U+2029 into the reference app's Text Preview would settle it.
   - Observe: In F2 (Arabic), type "12 34" inside right-to-left text in Text Preview: note the order of the digits.
 - [ ] `editView.setLocalizedForms` (M8, handbook): Localized Forms
   - Guess: The menu offers the script and language pairs that the font's enabled locl entries name in their `script` and `language` statements, in order of appearance; the menu's entries in the reference app would settle it.
@@ -1874,16 +1879,37 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: FontCraft copies straight from `from` to the glyphs in `to` in one command, layer by layer with the same layer id (the first master by default); without `to` it only returns the values. FontForge copies to a clipboard and pastes later; commands take explicit targets, so the two steps are one.
   - Guess: The values apply in the order width, lsb, rsb, vertical advance, so copying lsb and rsb together decides the width. A copied value removes the metrics key its field showed, as typing a number does.
 
-### Kerning and the Kerning window (4)
+### Kerning and the Kerning window (6)
 
 - [ ] `kerning.groupClassNames` (behavior, M8, handbook): Every kerning group is available in feature code as a glyph class…
   - Guess: Only the `@MMK_L_`/`@MMK_R_` classes the code refers to and no class entry defines are written, before the first entry, with the glyphs the target exports in font order, and a group without such glyphs stays undefined so the compiler names the reference; the expanded code of a reference export settles it.
-- [ ] `kerning.autoKern` (M13, docs): Auto Kern
+- [ ] `kerning.autoKern` (M13, docs, live): Auto Kern
   - Guess: The proposed value is the target separation minus the pair's optical gap, the mean horizontal distance between the left glyph's right profile and the right glyph's left profile over the same band and depth clipping as auto-spacing, rounded to the nearest 5 units by default; the target separation defaults to the optical gap of a reference pair (n n for lowercase, H H for capitals) without kerning. FontLab documents neither K1 nor K2 (open decision D11).
-- [ ] `kerning.kernToDistance` (M13, docs): Kern to Distance
+  - Guess: A pair mixing a capital or figure with any other glyph is measured over the x-height band, and its target is the mean of the two glyphs' reference gaps (n n and H H); comparing proposals for To, Av and the like with a font kerned in the reference app would settle it.
+  - Guess: A group side is measured on one member: the glyph named like the group, else the group's first member in glyph order; FontLab's page does not say how class pairs are measured.
+  - Guess: With `touching`, the gap and the reference gap are both measured at the outlines' closest approach, as Kern to Distance measures them; FontForge's Lookups page names the Touching option without describing its measure in detail.
+  - Guess: A value of 0, a value smaller in size than `minKern`, or a positive value with `onlyCloser` stores nothing; when `keepExisting` is false such a value also removes the stored pair. `minKern` defaults to 0.
+  - Guess: `keepExisting` (default true) leaves every pair whose sides are stored already in that master, whatever its value; pairs that apply through groups do not count as stored.
+  - Guess: `apply: false` returns the proposals without storing them, for the pair review windows.
+- [ ] `kerning.kernToDistance` (M13, docs, live): Kern to Distance
   - Guess: The gap is the smallest horizontal distance between the two outlines at any height, measured on the decomposed and overlap-removed outlines; FontLab says only that the pair's minimum horizontal gap becomes the value.
-- [ ] `kerning.buildGroups` (M13, docs): Build Kerning Groups…
+  - Guess: The smallest distance is found on rows at most one unit apart, then refined between the neighbouring rows by a golden-section search on the outlines' exact crossings; the value is rounded to a whole unit.
+  - Guess: Without `pairs` or glyph lists, every pair stored in the master is set; FontLab applies the command to the pairs selected in its window.
+  - Guess: A group side is measured on the member named like the group, else its first member, not on every member; a pair whose value is 0 is stored only where another pair would otherwise apply.
+- [ ] `kerning.removePairsByRule` (M13, docs, live): Remove Pairs…
+  - Guess: An exception is a stored pair with a glyph side whose glyph has a kerning group on the side facing the pair; its class value is the value that applies once it is removed (glyph–group, then group–glyph, then group–group; 0 when none applies). FontLab does not define either term on its page.
+  - Guess: Every pair is judged on the kerning as it stood before the call, so removing a small group pair does not change which exceptions are removed.
+  - Guess: `glyphs` keeps the pairs that name one of the glyphs, or a group one of them belongs to on the side facing the pair.
+- [ ] `kerning.buildGroups` (M13, docs, live): Build Kerning Groups…
   - Guess: Two glyphs fall in one group while the root mean square of their side profiles' differences over the band stays under maxDifference; FontForge does not describe its grouping rule.
+  - Guess: Each profile is compared as its depth inward from the side's extreme, clipped like auto-spacing's; rows inside the x-height (cap height) where only one glyph has ink count as the full clipping depth, rows in the overshoot zones where only one has ink are left out. Over several masters the largest difference counts.
+  - Guess: Glyphs are taken in glyph order; each joins the group whose members all lie within maxDifference (the closest such group), else starts one, and lowercase never shares a group with capitals and figures.
+  - Guess: A group of two or more glyphs is named after its first member (`.2`, `.3`… when another glyph keeps that name); a glyph left alone gets no group and keeps what it has.
+  - Guess: Without `replaceExisting`, glyphs that have a group on a side keep it and are left out of that side; `apply` defaults to false, so the call proposes until told to apply.
+- [ ] `kerning.verticalFromHorizontal` (M13, docs, live): Vertical Kerning from Horizontal
+  - Guess: A glyph's vertical alternate is the glyph named with the `.vert` suffix, the suffix the primary reference's automatic `vert` feature uses; FontForge takes the `vrt2` substitution, which FontCraft does not read from feature code.
+  - Guess: A group side stands for each of its members that has an alternate, and each vertical pair gets the kerning that applies between the two horizontal glyphs; the first glyph's alternate is the top one.
+  - Guess: Vertical kerning is cleared only in the masters the call names; masters that take their kerning from another are skipped.
 
 ### Font View (16)
 
@@ -1941,7 +1967,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The decomposition sections use Unicode's canonical decompositions, one level and full together, so U+1EA4 lists both U+00C2 and U+0041, and characters the font has no glyph for are listed dimmed.
   - Guess: Clicking an entry opens the glyph in a new tab; the reference's documentation does not say whether it replaces the current glyph instead.
 
-### Font Info and features (276)
+### Font Info and features (278)
 
 - [ ] `fontInfo.rows.selection` (behavior, M7, handbook): Clicking a row selects it and Cmd+click builds a selection of several…
   - Guess: Shift-click adds every row between the last row clicked and the clicked one; Shift-clicking in the reference app settles it.
@@ -2729,10 +2755,13 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `autohint.tt.controlInstructions.syntax` (behavior, M10, handbook): The control instructions are lines of text, one instruction each, starting with…
   - Guess: The built-in autohinter turns a touch or point correction into a vertical Delta at its sizes, one cell up or down by the sign of the y shift; shifts under half a pixel and x shifts give none and are reported; both act before IUP. The external program applies them as its manual describes.
   - Guess: The built-in autohinter makes left and right points a rounded horizontal Snap and keeps nodir points out of every instruction; the style forms (script feature @ glyphs, script feature width) are read and left out.
+- [ ] `export.ttfAutohintBinary` (setting, M10, inferred): Trusted ttfautohint program
+  - Guess: A document may only ask for the user's trusted ttfautohint program, unlike the reference app, which runs the program the parameter names; we chose this for safety because a document from elsewhere could otherwise run any program on the user's machine.
 - [ ] `Ignore Vertical Hints` (parameter, M10, handbook): In TrueType export, leaves out every manual stem hint linked to a…
   - Guess: A horizontal Stem instruction set to No Stem stays under Ignore Vertical Hints, since it is linked to no stem definition; the reference app would settle it.
 - [ ] `TTFAutohint binary path` (parameter, M10, handbook): File path of a precompiled ttfautohint binary to run in place of…
   - Guess: A failing external autohinter keeps the built-in autohinter's font with a warning instead of refusing the export; the reference app with a binary path that does not exist would show what it does.
+  - Guess: The parameter only selects the program the user trusted in the settings, and the options are limited to ttfautohint's option flags; this departs from the reference app, which runs whatever the parameter names, because a document from elsewhere could otherwise run any program with any arguments.
 - [ ] `TTFAutohint options` (parameter, M10, handbook): Option string for ttfautohint, edited through a dialog: hint set range, default…
   - Guess: No corpus source holds the parameter; FontCraft stores and reads it as ttfautohint command-line options in one string, which is how fontmake reads it from an instance (split on spaces); a file saved by the reference app with the options sheet filled in would show the real form.
   - Observe: T3: fill in the TTFAutohint options sheet on an instance and save; note how the parameter's value is stored in the .glyphs file (one string, long or short options, or a dictionary).
@@ -2747,6 +2776,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The Master Colors become palette rows after the font's own palettes, the same rows in every palette, numbered in the order the layers first use them; without palettes they are the one palette. Settled by reading CPAL of the layered test font exported from the reference.
   - Guess: A glyph that has palette or full-colour layers of its own keeps them; only glyphs without such layers are converted from the masters, and a master layer without outlines adds no layer. Settled by exporting a layered font in which one glyph also has palette layers.
   - Observe: Layered font: export an instance with Color Layers to COLR and read COLR and CPAL; note the paint order, the master whose outline becomes the fallback glyph, and the colours used.
+- [ ] `color.export.glyphFilterTokens` (behavior, M11, handbook): Export glyph filters can test colour properties: colorIndex (palette index of layers),…
+  - Guess: `isAnyColorGlyph` also holds for a glyph whose only colour layer is an svg layer, which the handbook's list (COLR/CPAL, sbix, full colour) leaves out. Settled by exporting a font with Remove Glyphs `isAnyColorGlyph=1` and a glyph that has only an svg layer.
+  - Observe: Remove Glyphs `colorIndex=1` on a palette font: export and read COLR with fontTools; note whether the base glyphs, their layer records for entry 1 or only the layer glyphs are gone.
 - [ ] `Color Palettes` (parameter, M11, handbook): List of colour palettes exported as the CPAL table of a COLR/CPAL…
   - Guess: An edited Color Palettes keeps the form it was stored in; a new one is written as version 3 integer lists, or as the version 4 dictionary in a document read from version 4. Settled by editing the palettes in the reference and reading the saved file.
   - Guess: A CMYK palette colour is converted to RGB without a colour profile, as (1 − c)(1 − k) and so on. Settled by exporting a CMYK palette from the reference and reading CPAL.
@@ -3460,7 +3492,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The colour is stored as the text `R,G,B,A` with components from 0 to 255 (the picker also reads `#RRGGBBAA` and a list of numbers). Settled by saving a font with a Master Color from the reference and reading the stored value.
   - Guess: Opacity is the alpha slider of the colour picker. Settled by opening the picker in the reference.
 
-### Files: open, import, export (48)
+### Files: open, import, export (52)
 
 - [ ] `export.instanceExportFolder` (behavior, M7, handbook): An instance carrying the Export Folder custom parameter is written to that…
   - Guess: The sub-path is used as written, `..` segments included, as the handbook says; an absolute path, an empty segment, a folder name with a character such as `:` or `\`, or a path of more than 32 segments makes export skip that instance with the reason, one trailing `/` is ignored, and the warnings name every file written outside the export destination; an Export Folder of `../x` and one of `/tmp/x` in the reference app settle it.
@@ -3546,10 +3578,13 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Imported stem hints are numbers, none linked to nodes, and a stem repeated by hint replacement is kept once; opening a CFF font with hint replacement in the reference app would show whether it keeps repeats or links edges to nodes.
 - [ ] `color.export.fullColorToColrV1` (behavior, M11, docs): Full-colour layers are compiled to COLR version 1 when any of them…
   - Guess: A full-colour Color layer exports as COLR version 1 without any parameter, as both oracles do; the handbook names only SVG for these layers. Settled by exporting the full-colour test font from the reference with no parameters.
+  - Guess: A path on a full-colour layer with neither a fill colour nor a gradient, and not a stroke alone, is painted 50 % gray, the colour a new shape gets, and a fill or stroke colour with zero opacity paints nothing; fontc refuses such a path and fontmake strokes it 1 unit wide. Settled by exporting a full-colour path without paint attributes from the reference.
   - Observe: Full-colour font: export with no colour parameters and read it with fontTools; note whether COLR version 1, an SVG table or neither is written.
 - [ ] `color.export.colrVersionChoice` (behavior, M11, docs): The compiler writes COLR version 0 when every colour glyph is a…
   - Guess: Solid-only full-colour layers export as COLR version 0, as fontc does, not version 1 as fontmake does. Settled by exporting the full-colour test font with only solid fills from the reference.
   - Observe: Full-colour font with the gradient and stroke paths deleted (solid fills only): export and read COLR; note whether it is version 0 or version 1.
+- [ ] `compile.colrGradientGeometry` (behavior, M11, docs): Glyphs gradient coordinates are fractions of the layer's bounding box and are…
+  - Guess: The ellipse angle of a version 4 radial gradient is not written: COLR circles cannot be squashed without a transform paint. Settled by exporting a radial gradient on a wide path from the reference and reading its paint.
 - [ ] `type1` (format, M12, docs): Adobe Type 1 (PFB binary, PFA text)
   - Guess: Vertical metrics are measured on the glyphs d, H, x and p (falling back to the FontBBox), since a Type 1 font has no such fields; the reference app's import of a .pfb would settle it.
   - Guess: Ghost hints become TopGhost and BottomGhost hints with place (edge, 0), the edge being y for a top ghost and y + dy for a bottom ghost as tx reports them; the reference app's import of a hinted .pfb would settle it.
@@ -3576,6 +3611,13 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A word before the pair list equal to `etmKernPairs` is a count and is skipped (and gives the count when `etmKernPairs` is 0); the DDK describes no such word, but files made for PostScript printers are said to have it. A PFM file from a font vendor would settle it.
   - Guess: Character codes of a font whose `dfCharSet` is not 2 (symbol) are read as Windows-1252; a symbol font's code c is looked up as U+F000 + c, then as c. PFM files of symbol fonts from a vendor would settle it.
   - Guess: Kerning amounts are in `etmMasterUnits` per em (1,000 when the field is 0, as the DDK says PostScript drivers assume) and are scaled to the font's units per em, rounded half up.
+- [ ] `bdf` (format, M13, docs): Glyph Bitmap Distribution Format
+  - Guess: Glyph codes count as Unicode code points when `CHARSET_REGISTRY` is ISO10646, or ISO8859 with `CHARSET_ENCODING` 1, or missing; other registries match glyphs by name only. Importing a BDF in another registry into the reference app would settle it.
+  - Guess: A glyph with no `DWIDTH` and no font-wide default advances by its bitmap's right edge, with a warning. The note requires `DWIDTH`, so only a malformed file reaches this.
+  - Guess: Grey BDF is read from and written as `STARTFONT 2.3` with bits per pixel as the fourth `SIZE` value; TN 5005 covers 1 bit per pixel only. A grey BDF exported by the reference app would settle it.
+- [ ] `pcf` (format, M13, docs): Portable Compiled Format (X11 bitmap font)
+  - Guess: A PCF file without a glyph names table names its glyphs `glyph0`, `glyph1`…; opening such a file in the reference app would show what it calls them.
+  - Guess: When several codes of the encodings table point at one glyph, the glyph keeps the lowest and a warning counts the rest; the reference may add copies instead. A PCF with a shared glyph opened in the reference app would settle it.
 - [ ] `sfd` (format, M13, docs): FontForge Spline Font Database
   - Guess: A contour is closed when its last point equals its first and open otherwise; the page does not say how an open contour is written. A file from the originating editor with an open path would settle it.
   - Guess: In a quadratic layer a `c` line is read as a quadratic segment when both controls are the same point or are exactly two thirds of the way to one point; the page does not say how quadratic splines are written. A quadratic file from the editor would settle it.
@@ -3593,6 +3635,14 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A TrueType instruction block (`TtTable`, `TtInstrs`) ends at a line starting `EndTt` or at the first line that is neither a mnemonic nor numbers; the page names no end line.
   - Guess: A glyph layer the font does not declare (the multi-layered Type 3 form) is merged into the master layer.
   - Guess: A glyph listed in more than one class on one side of a class kerning table belongs to the first of them; the later listings are skipped and reported. A table from the originating editor with such a repeat would settle which class it keeps.
+- [ ] `pdf-outline` (format, M13, handbook): PDF artwork (glyph outline import)
+  - Guess: The frame for placement is the crop box, else the media box, with one point per unit and its top edge at the given top, matching EPS and SVG import; importing a PDF of known geometry in the reference app would settle it.
+  - Guess: A hairline stroke (line width 0) is given a stroke width of one unit; a reference import of a hairline would settle it.
+  - Guess: A path both filled and stroked keeps its stroke width and is marked as filled; a reference import of such a path would show which style it gets.
+  - Guess: Paths that only clip, or end without painting, are left out and counted as dropped, as for EPS; a reference import of a file with a clipping path would settle it.
+  - Guess: Only the first page is read, and its /Rotate is applied before placing; importing a two-page, rotated PDF in the reference app would settle both.
+  - Observe: Import a one-page PDF with a filled square, a 4-point stroked line and a hairline into an empty glyph; note each path's position and stroke style.
+  - Observe: Import a PDF whose page has /Rotate 90; note whether the outlines are turned.
 - [ ] `eps-outline` (format, M13, handbook): Encapsulated PostScript artwork (glyph outline import)
   - Guess: Unscaled placement keeps one point per unit and puts the top edge of the bounding box (else of the drawing) at the given top, matching how SVG files are placed; importing an EPS of known geometry in the reference app would settle it.
   - Guess: Paths that are only used to clip, or ended without painting, are left out and counted as dropped; the reference may import every path, which importing a file with a clipping path and an unpainted path would settle.
