@@ -1152,6 +1152,8 @@ milestone = "M12"
 summary = "An encoded glyph that is not a mark and not an invisible space has an advance width of zero."
 ref = "fontbakery base_has_width"
 status = "docs"
+notes = "Characters that may draw nothing are FontBakery's: separators (Zs, Zl, Zp), format and control characters, non-spacing marks (Mn) and the private-use planes. A glyph mapped from several code points is judged by the highest, as FontBakery's reversed cmap does."
+guesses = ["Glyphs that GDEF classes as marks are left out by glyph id; FontBakery compares glyph ids with mark glyph names, so its own mark exclusion never applies. A font with a zero-width enclosing mark (Me) not in GDEF would settle whether the reference warns."]
 
 [[check]]
 id = "check.metrics.markWidths"
@@ -1163,6 +1165,7 @@ milestone = "M12"
 summary = "A non-spacing combining mark has a non-zero advance, or a spacing mark has none. The fix zeroes the advance of non-spacing marks."
 ref = "fontbakery typenetwork/marks_width"
 status = "docs"
+notes = "FontBakery reports both cases under one message code; here a spacing modifier without width has its own code (`spacing-zero`) and no fix, since the fix only zeroes non-spacing marks."
 observe = ["Mark font (acutecomb U+0301 with width 200, a, aacute): export and read hmtx; note whether acutecomb keeps its 200 advance or is written with 0."]
 
 [[check]]
@@ -1172,9 +1175,11 @@ scope = "binary"
 fixable = true
 area = "qa"
 milestone = "M12"
-summary = "The space and the no-break space have different advances, or the space has none. The fix copies the space's advance to the no-break space."
+summary = "The space has no advance, or the no-break space has a different one. In a font that does not seem monospaced, the other encoded spaces are also compared with their conventional advances (a warning): tab and no-break space as the space, en and em quads and spaces, third-, fourth- and sixth-em spaces, figure space as the zero, punctuation space as the period, thin space within a sixth to a fifth of the em, hair space within a sixteenth to a tenth, zero width space 0. The fix copies the space's advance to the no-break space."
 ref = "fontbakery whitespace_widths; fontbakery notofonts/hmtx/whitespace_advances"
 status = "docs"
+notes = "Skipped when the font lacks the space or the no-break space, as FontBakery's condition does. The conventional advances are the rule of FontBakery's notofonts/hmtx/whitespace_advances, with its monospace test (glyph_metrics_stats); an advance whose reference character (space, zero, period) is not encoded is not compared."
+guesses = ["The conventional advances of the other space characters come from a vendor profile's check and are reported as warnings under this universal check rather than as a separate strict check; running the reference conformance checker's vendor profile on the corpus would show whether failures there are common enough to deserve their own check."]
 
 [[check]]
 id = "check.metrics.mathSignWidths"
@@ -1186,6 +1191,7 @@ milestone = "M12"
 summary = "The mathematical operators and relations (plus, minus, equals, less-than and the rest of a fixed list) do not all share one advance; the result names the most common width and the glyphs that depart from it."
 ref = "fontbakery math_signs_width"
 status = "docs"
+notes = "One finding per glyph off the most common width. As in FontBakery, the first width in list order wins a tie, and a most common width of 0 passes."
 
 [[check]]
 id = "check.metrics.tabularWidths"
@@ -1194,9 +1200,11 @@ scope = "binary"
 fixable = false
 area = "qa"
 milestone = "M12"
-summary = "Glyphs meant to be tabular do not share one advance: the targets of the tnum feature, or, going by name, each of the tabular lining, tabular old-style and tabular numerator groups once more than half the group agrees on a width."
+summary = "Glyphs meant to be tabular do not share one advance: the encoded figures 0-9 after the single substitutions of the tnum feature (at every named instance of a variable font); or, going by name, the tabular lining, tabular old-style and tabular numerator groups, each once ten or more of its glyphs are present and more than half agree on a width; or figurespace differs from one.tab (else one.taboldstyle)."
 ref = "fontbakery tnum_glyphs_equal_widths; comparefamily single-face test 17; comparefamily single-face test 26 (tabular widths)"
 status = "docs"
+notes = "FontBakery shapes the figures with the tnum feature on; this check reads the tnum feature's single substitutions from GSUB instead and measures advances with HVAR at each named instance. Figures the font does not encode are left out rather than shaped as .notdef. comparefamily's fixed-pitch exception list of three PostScript names is not carried over."
+guesses = ["The tnum targets are found by applying the feature's single substitutions directly instead of shaping, so contextual or default-feature substitutions are ignored; comparing with the reference checker on corpus fonts whose tnum feature is contextual would settle it."]
 
 [[check]]
 id = "check.metrics.digitWidths"
@@ -1208,6 +1216,7 @@ milestone = "M12"
 summary = "The default digits 0-9 do not all have the same advance, or comma and period differ in advance."
 ref = "fontbakery notofonts/hmtx/encoded_latin_digits; fontbakery notofonts/hmtx/comma_period"
 status = "docs"
+notes = "Skipped when the font maps neither the zero nor both comma and period, as the two FontBakery checks skip."
 
 [[check]]
 id = "check.metrics.fixedFractionWidths"
@@ -1216,9 +1225,11 @@ scope = "binary"
 fixable = false
 area = "qa"
 milestone = "M12"
-summary = "A glyph whose name marks it as half-width or full-width does not have an advance of half the em or of the em."
+summary = "The en dash or one of the one-, two- and three-dot leaders is not half the em wide, or the em dash is not one em wide (found by glyph name)."
 ref = "comparefamily single-face test 26 (half-width and full-width glyph names)"
 status = "docs"
+notes = "comparefamily's list spells the en dash with a trailing space, so it never checks it; this check does."
+guesses = ["The en dash is held to half the em like the dot leaders, although comparefamily's typo means it never checks it; running comparefamily with the typo fixed on the Oswald families would show whether the rule misfires."]
 
 [[check]]
 id = "check.metrics.ligatureWidths"
@@ -1230,6 +1241,7 @@ milestone = "M12"
 summary = "A ligature (from liga, clig, dlig, hlig or rlig) is not wider than its first component, or its left and right sidebearings differ from those of its first and last components by more than `tolerance` units."
 ref = "comparefamily single-face test 22 (-tolerance)"
 status = "docs"
+notes = "Ligatures come from the ligature substitutions (type 4) of the five features; comparefamily also reads ligatures out of contextual lookups through spot's listing, which this check does not. Sidebearings are measured from the rounded exact bounds of the outline at the default location; an empty glyph has its edges at 0, as tx reports it."
 
 [[check]]
 id = "check.metrics.accentedWidths"
@@ -1241,6 +1253,7 @@ milestone = "M12"
 summary = "An accented glyph's advance differs from that of its base letter by more than `tolerance` units. The fix copies the base letter's width."
 ref = "comparefamily single-face test 23 (-tolerance)"
 status = "docs"
+notes = "The base glyph name is found the way comparefamily finds it: each accent name part (accent, acute, bar, dot, ring, slash and the rest of its list) is removed wherever it occurs, in sorted order, and a trailing period is dropped; the check runs only when a glyph of that name exists. This is a heuristic (Hbar is compared with H, Lslash with L), so the check is capped."
 
 [[check]]
 id = "check.metrics.strikeoutAndScripts"
@@ -1263,6 +1276,7 @@ milestone = "M12"
 summary = "A glyph's sidebearings or width no longer match the metrics key or formula stored for them. The fix recomputes the metrics from the keys."
 ref = "Editor audit convention (metrics keys out of sync)"
 status = "inferred"
+notes = "Reported through the spacing crate's out-of-sync scan (spacing.scan_glyph): out-of-sync, unlinked and unreadable keys. Until the audit depends on the spacing crate, the check skips glyphs that have keys, with a reason."
 
 [[check]]
 id = "check.metrics.negativeAdvance"
@@ -1274,6 +1288,7 @@ milestone = "M12"
 summary = "A glyph has a negative advance width, which cannot be compiled."
 ref = "Editor audit convention (advance widths)"
 status = "inferred"
+notes = "Master layers and layers with attributes (intermediate, alternate, colour) are checked; backup layers are not."
 
 # ---------------------------------------------------------------------------
 # names: Name table
