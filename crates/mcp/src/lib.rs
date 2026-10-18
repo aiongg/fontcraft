@@ -1,5 +1,5 @@
 //! FontCraft MCP server (L6): the [Model Context Protocol](https://modelcontextprotocol.io) over
-//! stdio, newline-delimited JSON-RPC 2.0. See `docs/mcp.md`.
+//! stdio, newline-delimited JSON-RPC 2.0, or over HTTP ([`http`]). See `docs/mcp.md`.
 //!
 //! Two backends answer the tools:
 //! - [`Headless`]: an engine session inside this process.
@@ -18,6 +18,7 @@
 #![forbid(unsafe_code)]
 
 mod backend;
+pub mod http;
 pub mod policy;
 mod prompts;
 mod resources;

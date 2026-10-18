@@ -1,7 +1,7 @@
 # MCP server
 
 `fontcraft-cli mcp` runs a [Model Context Protocol](https://modelcontextprotocol.io) server on
-stdio: newline-delimited JSON-RPC 2.0, protocol revision `2025-06-18` (`2024-11-05` is also accepted; `initialize` answers with the one
+stdio (or over HTTP: [HTTP transport](#http-transport)): newline-delimited JSON-RPC 2.0, protocol revision `2025-06-18` (`2024-11-05` is also accepted; `initialize` answers with the one
 the client asked for when it is one of the two, else with the newest). Logs go
 to stderr; stdout carries only protocol messages.
 
@@ -222,9 +222,63 @@ Notifications go out before the reply to the request that caused them; at most 1
   cancellation, resource subscriptions and server-to-client requests therefore do not exist yet (the
   sibling apps have the same limit, for the same reason).
 
+## HTTP transport
+
+`fontcraft-cli mcp --transport http [--listen ADDR]` serves the protocol's streamable HTTP
+transport (revision `2025-06-18`) at `http://ADDR/mcp`. `ADDR` defaults to `127.0.0.1:7986`, which
+only this computer can reach. The other options (backend, roots, command restrictions) work as on
+stdio. Register it with a client that speaks HTTP:
+
+```sh
+fontcraft-cli mcp --transport http --headless &
+claude mcp add --transport http fontcraft http://127.0.0.1:7986/mcp
+```
+
+| Request | Answer |
+|---|---|
+| `POST /mcp`, one JSON-RPC request | `200` with `application/json`; `text/event-stream` instead when the request produced log notifications and `Accept` lists the stream type (the notifications, then the reply) |
+| `POST /mcp`, a notification or a client response | `202`, no body |
+| `POST /mcp` with `initialize` | as a request, plus an `Mcp-Session-Id` header. Every later request sends it back |
+| `DELETE /mcp` with `Mcp-Session-Id` | `200`; the session ends |
+| `GET /mcp`, other methods | `405`: the server never opens a stream of its own |
+
+Sessions:
+
+- A request without `Mcp-Session-Id` (other than `initialize`) gets `400`; an unknown or ended
+  session gets `404`, and the client starts again with `initialize`.
+- An `MCP-Protocol-Version` header that names a revision this server does not speak gets `400`.
+- Each session has its own log level. All sessions share one backend, so they edit the same
+  document, one request at a time in arrival order.
+- At most 64 sessions are open; a new one ends the session unused for longest.
+
+Errors carry a JSON-RPC error without an id in the body, so a client can show the reason.
+
+| Refused request | Status |
+|---|---|
+| Malformed request line or header, missing `Host`, two different `Content-Length` values | `400` (connection closed) |
+| A body that is not JSON or not UTF-8 (`-32700`), or a JSON array: batches are not supported (`-32600`) | `400` |
+| `Host` that is not `localhost` or a loopback address, while listening on loopback | `403` |
+| `Origin` other than the server's own (`http://` plus the `Host` value): a web page on another site | `403` |
+| Path other than `/mcp` | `404` |
+| `Accept` that allows neither JSON nor an event stream | `406` |
+| A head or body that does not arrive in full within 60 seconds | `408` (connection closed) |
+| `POST` without `Content-Length` | `411` |
+| Body over 4 MiB | `413`, before the body is read |
+| `Content-Type` other than `application/json` | `415` |
+| More than 200 messages in one second, over all clients | `429` with `Retry-After: 1` |
+| Request line and headers over 16 KiB, or more than 100 headers | `431` |
+| `Transfer-Encoding` (chunked bodies) | `501` |
+| An HTTP version other than 1.0 and 1.1 | `505` |
+| A 17th connection while 16 are open | `503` |
+
+A connection stays open for further requests (HTTP/1.1 keep-alive) and closes after 60 seconds
+without one. There is no authentication: a `--listen` address that is not loopback lets anyone who
+can reach the port edit the document, and the server warns about it at start.
+
+Transport: `crates/mcp/src/http.rs`, with the limits as named constants at the top.
+
 ## Planned
 
 | What | Milestone |
 |---|---|
 | Task-level tools over common command sequences: `open_font`, `draw_path`, `set_metrics`, `export_font`, `render_glyphs` (returns an image), `screenshot` | M3 |
-| HTTP transport: `--transport http --listen ADDR` | M13 |

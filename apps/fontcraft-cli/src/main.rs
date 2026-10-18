@@ -8,7 +8,7 @@
 //! fontcraft-cli info FILE [--section NAME,...] [--all-names] [--face N]
 //! fontcraft-cli tables list FONT [--sort file|tag|size] [--face N|all]
 //! fontcraft-cli glyphs list FONT [--face N]
-//! fontcraft-cli mcp [--connect ADDR | --headless] [--automation-read-root DIR] [--automation-write-root DIR] [--read-only] [--allow P]... [--deny P]...
+//! fontcraft-cli mcp [--connect ADDR | --headless] [--transport stdio|http] [--listen ADDR] [--automation-read-root DIR] [--automation-write-root DIR] [--read-only] [--allow P]... [--deny P]...
 //! fontcraft-cli oracle (SOURCE... | --corpus [DIR]) [--against fontc|fontmake] [--format ttf|otf] [--variable | --instances] [--json] …
 //! ```
 //! Every subcommand is a thin shell over engine commands (`spec/inventory/20-cli.toml` lists the
@@ -66,10 +66,12 @@ USAGE:
   fontcraft-cli glyphs list FONT [--face N]
       Print the glyphs of FONT (a compiled font or a source) in glyph order as JSON.
 
-  fontcraft-cli mcp [--connect ADDR | --headless] [--automation-read-root DIR]
-                    [--automation-write-root DIR] [--read-only] [--allow PATTERN]... [--deny PATTERN]...
+  fontcraft-cli mcp [--connect ADDR | --headless] [--transport stdio|http] [--listen ADDR]
+                    [--automation-read-root DIR] [--automation-write-root DIR] [--read-only]
+                    [--allow PATTERN]... [--deny PATTERN]...
       Run the MCP server on stdio. Default: attach to a running app at 127.0.0.1:7985
       (fontcraft --control 7985), falling back to a headless session with a new font.
+      --transport http --listen ADDR serves HTTP instead (default 127.0.0.1:7986).
       --automation-read-root and --automation-write-root confine the files commands read and
       write (headless only); --read-only, --allow and --deny restrict the commands an agent may run.
 
