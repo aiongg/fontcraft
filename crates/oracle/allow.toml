@@ -7,11 +7,6 @@
 # A difference that FontCraft is meant to fix is not listed here: it stays "different" until the
 # compiler matches. Every entry names the package that removes it, where one does.
 
-[[allow]]
-table = "OS/2"
-key = "OS/2.usMaxContext"
-reason = "usMaxContext is the longest context of the GSUB and GPOS lookups. FontCraft compiles the feature code from M8.7 and writes 2 whenever the font has layout tables; computing it from the compiled lookups is M8.8."
-
 # --- The reference builds a variable font (M9) -------------------------------------------------
 # fontc has no option for a static build of one master: from a multi-master source it builds a
 # variable font, compared at its default location, where FontCraft builds the origin master.
@@ -390,34 +385,6 @@ oracle = "fontmake"
 ours = "0x000b"
 theirs = "0x0009"
 reason = "The source's `openTypeHeadFlags` leaves out bit 1 (left side bearings at x = 0). fontc sets that bit in every font, since its left side bearings are the glyphs' xMin (FontCraft follows fontc)."
-
-[[allow]]
-table = "OS/2"
-key = "OS/2.*"
-sources = ["/FeaTableOverrides.ufo"]
-oracle = "fontmake"
-reason = "The feature file's `table` blocks override fields of OS/2, hhea and head. fontmake compiles features; FontCraft compiles them from M8, and fontc is run without them."
-
-[[allow]]
-table = "hhea"
-key = "hhea.*"
-sources = ["/FeaTableOverrides.ufo"]
-oracle = "fontmake"
-reason = "Feature-file table overrides (see OS/2); M8."
-
-[[allow]]
-table = "head"
-key = "head.fontRevision"
-sources = ["/FeaTableOverrides.ufo"]
-oracle = "fontmake"
-reason = "Feature-file table overrides (see OS/2); M8."
-
-[[allow]]
-table = "name"
-key = "name *"
-sources = ["/CustomNameTableInFea.ufo"]
-oracle = "fontmake"
-reason = "The feature file's `name` table block (see OS/2); M8."
 
 [[allow]]
 table = "OS/2"

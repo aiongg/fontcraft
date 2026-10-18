@@ -1078,6 +1078,7 @@ milestone = "M8"
 summary = "`table TAG { ... } TAG;` sets or overrides fields of BASE, GDEF, head, hhea, name, OS/2, vhea, vmtx and STAT. Any other tag is an error. fea-rs: yes for these nine tables."
 ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9"
 status = "docs"
+notes = "Output side (M8.8): the values reach the compiled font as `compile.feaTableOverrides` and `compile.nameFeaOverrides` describe; `BASE` and `STAT` are written whole, `GDEF` is the layout stage's."
 
 [[behavior]]
 id = "fea.table.base.tagList"
@@ -1158,7 +1159,7 @@ milestone = "M8"
 summary = "`FontRevision 1.001;` sets the font version as a decimal with three fraction digits, stored as 16.16 fixed and also used for the version name string; fewer digits are accepted with a warning about how the value will be read. fea-rs: yes; a later statement overrides an earlier one with a warning."
 ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9.c"
 status = "docs"
-notes = "FontCraft refuses a `table head` block without a FontRevision statement, on which fea-rs panics."
+notes = "FontCraft refuses a `table head` block without a FontRevision statement, on which fea-rs panics. Output (M8.8): the value goes into `head` only, as fontc and feaLib write it; the version name string keeps the source's version. A revision outside the 16.16 range is left out with a warning."
 
 [[behavior]]
 id = "fea.table.hhea"

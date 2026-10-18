@@ -995,6 +995,16 @@ fn names(
     out
 }
 
+/// The first name ID the feature code's own names may take (M8.8, `compile.nameFeaOverrides`):
+/// one above the highest ID of 256 or more among the names [`derive`] gives `font`, else 256, as
+/// fontc moves them (`fontbe/src/features.rs`). Never above 32,767.
+pub(crate) fn first_free_name_id(font: &Resolved, style: &str) -> u16 {
+    const FIRST_FONT_NAME_ID: u16 = 256;
+    const LAST_NAME_ID: u16 = 32_767;
+    let names = derive(font, style, &mut Vec::new()).names;
+    names.iter().map(|r| r.id).filter(|id| *id >= FIRST_FONT_NAME_ID).max().map_or(FIRST_FONT_NAME_ID, |id| id.saturating_add(1).min(LAST_NAME_ID))
+}
+
 /// What [`stamp_version`] appends to name ID 5.
 pub fn version_stamp() -> String {
     format!(";FontCraft {}", fontcraft_fontinfo::tokens::APP_VERSION)
