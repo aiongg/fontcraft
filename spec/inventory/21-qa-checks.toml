@@ -1796,6 +1796,7 @@ milestone = "M12"
 summary = "GSUB or GPOS uses a feature tag that is not registered and is not a private tag (private tags are up to four uppercase letters)."
 ref = "fontbakery opentype/layout_valid_feature_tags"
 status = "docs"
+notes = "A private tag is one to four capital letters A-Z padded with spaces, as the reference checker's rationale says; its code also accepts digits beside capitals."
 
 [[check]]
 id = "check.layout.validScriptTags"
@@ -1807,6 +1808,7 @@ milestone = "M12"
 summary = "GSUB or GPOS uses a script tag that is not registered."
 ref = "fontbakery opentype/layout_valid_script_tags; comparefamily family test 12 (unknown script tag); comparefamily single-face test 11 (BASE script tags)"
 status = "docs"
+notes = "Reads the script lists of GSUB, GPOS and both BASE axes."
 
 [[check]]
 id = "check.layout.validLanguageTags"
@@ -1818,6 +1820,7 @@ milestone = "M12"
 summary = "GSUB or GPOS uses a language-system tag that is not registered. The common slip of TUR for Turkish instead of TRK is named explicitly, and the fix corrects that case."
 ref = "fontbakery opentype/layout_valid_language_tags; comparefamily family test 12 (unknown language tag, TUR vs TRK)"
 status = "docs"
+notes = "The rename fix is report-only until the feature-code commands of M8 exist; other unregistered tags carry no fix."
 
 [[check]]
 id = "check.layout.defaultLanguageSystems"
@@ -1829,6 +1832,9 @@ milestone = "M12"
 summary = "GSUB or GPOS lacks the script/language pair DFLT/dflt, or latn/dflt in a font with Latin features."
 ref = "comparefamily family test 12 (DFLT/dflt and latn/dflt)"
 status = "docs"
+guesses = [
+  "latn/dflt is asked for only in fonts whose character map holds a basic Latin letter (A-Z, a-z); the legacy family comparison asks for it in every font with features, and its findings on non-Latin fonts would settle it.",
+]
 
 [[check]]
 id = "check.layout.defaultLanguagesystemStatement"
@@ -1840,6 +1846,7 @@ milestone = "M12"
 summary = "The feature code declares language systems but `languagesystem DFLT dflt` is not the first of them, so the compiler will not add it and default-script behaviour may be lost. The fix inserts the statement at the top."
 ref = "fontbakery ufo_features_default_languagesystem"
 status = "docs"
+notes = "Reads the language-system statements of the switched-on prefixes, classes and features in that order, comments left out. The fix is report-only until the feature-code commands of M8 exist."
 
 [[check]]
 id = "check.layout.gdefMarkClass"
@@ -1873,6 +1880,9 @@ milestone = "M12"
 summary = "The font has smcp or c2sc but the lookups do not provide a small-cap glyph for every letter they should cover; the result lists the letters left out."
 ref = "fontbakery missing_small_caps_glyphs"
 status = "docs"
+guesses = [
+  "The letters smcp must cover are the mapped lowercase letters with an uppercase partner (uppercase with a lowercase partner for c2sc), limited to the scripts of the letters the feature does cover; the reference checker only reports substituted glyphs that do not exist (also reported here), and its results on fonts with partial small caps would settle it.",
+]
 
 [[check]]
 id = "check.layout.smallCapsBeforeLigatures"
@@ -1884,6 +1894,7 @@ milestone = "M12"
 summary = "The first liga lookup runs before the first smcp lookup, so ligatures form before small caps are applied and survive in small-cap text. The fix reorders the features."
 ref = "fontbakery smallcaps_before_ligatures"
 status = "docs"
+notes = "Skipped when the font has no smcp or no liga lookups. The reorder fix is report-only until the feature-code commands of M8 exist."
 
 [[check]]
 id = "check.layout.stylisticSetNames"
@@ -1895,6 +1906,7 @@ milestone = "M12"
 summary = "A stylistic set feature (ss01-ss20) has no descriptive name, so applications can only show its number."
 ref = "fontbakery stylisticset_description"
 status = "docs"
+notes = "Also reports a stylistic set whose name ID is not in the name table, which the reference checker leaves as a to-do."
 
 [[check]]
 id = "check.layout.gpos7"
@@ -1906,6 +1918,7 @@ milestone = "M12"
 summary = "GPOS contains a type 7 (contextual, non-chaining) lookup, which at least one major shaping engine does not apply. The fix recompiles the rules as chaining context lookups (type 8)."
 ref = "fontbakery gpos7"
 status = "docs"
+notes = "Finds type 7 lookups directly and inside extension lookups. The recompile fix is report-only until a command carries it out."
 
 [[check]]
 id = "check.layout.cjkSpacingFeatures"
@@ -1917,6 +1930,7 @@ milestone = "M12"
 summary = "A CJK font lacks the contextual half-width spacing features chws and vchw."
 ref = "fontbakery cjk_chws_feature"
 status = "docs"
+notes = "A CJK font maps more than 150 characters in the CJK blocks; other fonts skip."
 
 [[check]]
 id = "check.layout.dottedCircle"
@@ -1928,6 +1942,7 @@ milestone = "M12"
 summary = "The font has non-spacing marks but no U+25CC DOTTED CIRCLE (a warning; a failure for scripts that use a complex shaper), or the dotted circle lacks attachment anchors for marks that attach to other bases."
 ref = "fontbakery dotted_circle"
 status = "docs"
+notes = "Runs on CFF fonts too; the reference checker runs it on TrueType fonts only. The scripts that need a complex shaper are the Indic and USE scripts of ufo2ft with Khmer and Myanmar."
 
 [[check]]
 id = "check.layout.softDotted"
@@ -1939,6 +1954,7 @@ milestone = "M12"
 summary = "Shaping a soft-dotted letter (i, j and similar) followed by a mark above leaves the dot in place. The result separates the sequences a known orthography needs from the rest."
 ref = "fontbakery soft_dotted"
 status = "docs"
+notes = "Shapes through the audit's shaping service and skips while no shaper is available."
 
 [[check]]
 id = "check.layout.sizeFeature"
@@ -1950,6 +1966,7 @@ milestone = "M12"
 summary = "The GPOS size feature is inconsistent: the design size lies outside its own range, or the menu name ID it refers to is not in the name table."
 ref = "comparefamily single-face test 24"
 status = "docs"
+notes = "The range is checked only when the parameters name a menu name, as the legacy comparison does."
 
 [[check]]
 id = "check.layout.shapingRegression"
@@ -1961,6 +1978,7 @@ milestone = "M12"
 summary = "A project-supplied shaping test suite does not pass: the shaped output differs from the expected glyph sequence and positions, a forbidden glyph such as .notdef appears, or listed glyph pairs collide. Runs only when the project names test files."
 ref = "fontbakery shaping/regression; fontbakery shaping/forbidden; fontbakery shaping/collides"
 status = "docs"
+notes = "Skipped with a reason until M8 brings the shaping engine and a reader for shaping test files."
 
 [[check]]
 id = "check.layout.languageShaping"
@@ -1972,6 +1990,7 @@ milestone = "M12"
 summary = "For the languages of each glyph set the font claims to cover, a rule from a shaping-expectations database fails (missing mark attachment, missing locl form, unreachable letter). Needs our own or a licensed rule database."
 ref = "fontbakery googlefonts/glyphsets/shape_languages"
 status = "docs"
+notes = "Skipped with a reason: no shaping-expectations database is available."
 
 [[check]]
 id = "check.layout.undefinedGlyphInFeatures"
@@ -1983,6 +2002,7 @@ milestone = "M12"
 summary = "The feature code names a glyph or class member that does not exist or does not export, so the features cannot compile."
 ref = "Editor audit convention (feature code references)"
 status = "inferred"
+notes = "Skipped with a reason until M8's feature-code parser can tell glyph names from other tokens."
 
 # ---------------------------------------------------------------------------
 # variations: Variations and master compatibility
