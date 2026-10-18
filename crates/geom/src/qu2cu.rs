@@ -431,7 +431,10 @@ mod tests {
         );
 
         let one = vec![(0.0, 0.0), (50.0, 100.0), (100.0, 0.0)];
-        assert_eq!(quadratic_to_curves(&[one.clone()], 1.0, false).unwrap(), vec![Curve::Quadratic([(0.0, 0.0), (50.0, 100.0), (100.0, 0.0)])]);
+        assert_eq!(
+            quadratic_to_curves(std::slice::from_ref(&one), 1.0, false).unwrap(),
+            vec![Curve::Quadratic([(0.0, 0.0), (50.0, 100.0), (100.0, 0.0)])]
+        );
         assert_eq!(
             quadratic_to_curves(&[one], 1.0, true).unwrap(),
             vec![Curve::Cubic([(0.0, 0.0), (33.33333333333333, 66.66666666666666), (66.66666666666666, 66.66666666666666), (100.0, 0.0)])]
@@ -447,7 +450,7 @@ mod tests {
     #[test]
     fn bad_input_is_refused() {
         let s = vec![(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)];
-        assert_eq!(quadratic_to_curves(&[s.clone()], 0.0, false), Err(Qu2CuError::BadTolerance));
+        assert_eq!(quadratic_to_curves(std::slice::from_ref(&s), 0.0, false), Err(Qu2CuError::BadTolerance));
         assert_eq!(quadratic_to_curves(&[vec![(0.0, 0.0), (1.0, 1.0)]], 1.0, false), Err(Qu2CuError::BadSpline));
         assert_eq!(quadratic_to_curves(&[vec![(0.0, 0.0), (f64::NAN, 1.0), (2.0, 0.0)]], 1.0, false), Err(Qu2CuError::BadSpline));
         assert_eq!(quadratic_to_curves(&[s.clone(), s], 1.0, false), Err(Qu2CuError::NotConnected));

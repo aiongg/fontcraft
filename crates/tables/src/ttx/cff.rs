@@ -1062,12 +1062,11 @@ fn write_encoding(cff: &Cff, w: &mut XmlWriter) -> Result<()> {
             let ranges = r.u8()?;
             let mut gid = 1usize;
             for _ in 0..ranges {
-                let mut code = usize::from(r.u8()?);
+                let first = usize::from(r.u8()?);
                 let left = usize::from(r.u8()?);
-                for _ in 0..=left {
+                for code in first..=first + left {
                     let name = glyph(gid)?;
                     *codes.get_mut(code).ok_or_else(|| bad("an encoding range runs past code 255"))? = Some(name);
-                    code += 1;
                     gid += 1;
                 }
             }

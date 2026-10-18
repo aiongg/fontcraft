@@ -1,6 +1,7 @@
 //! Text views and the normalised dump on fonts built in code. The expected text is the output of
 //! AFDKO 4 (`ttxn`, `tx -dump`) and fontTools 4.66.1 on fonts built with fontTools to the same
 //! structure, glyph order and values.
+#![allow(clippy::string_slice)]
 
 use super::*;
 use crate::sfnt::Flavour;

@@ -178,6 +178,7 @@ pub(super) enum Subtable {
     /// anchor).
     Mark {
         marks: Vec<(String, u16, AnchorPt)>,
+        #[allow(clippy::type_complexity)]
         bases: Vec<(String, u16, Option<(u16, u16)>, AnchorPt)>,
         line: usize,
     },

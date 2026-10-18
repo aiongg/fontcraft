@@ -217,6 +217,7 @@ fn svg(data: &[u8], w: &mut XmlWriter) -> Result<()> {
 struct SbixGlyph {
     gid: u32,
     /// Origin offsets, graphic type and either the image or the glyph it refers to (`dupe`).
+    #[allow(clippy::type_complexity)]
     image: Option<(i16, i16, String, Result<u16, Vec<u8>>)>,
 }
 

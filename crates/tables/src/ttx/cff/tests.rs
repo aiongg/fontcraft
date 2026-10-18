@@ -228,6 +228,7 @@ fn assemble(blocks: &[(&str, &str, &str)]) -> Vec<u8> {
 }
 
 fn font_from_spec(spec: &str) -> SfntFont {
+    #[allow(clippy::type_complexity)]
     let mut tables: Vec<(Tag, Vec<(&str, &str, &str)>)> = Vec::new();
     for line in spec.lines() {
         if line.trim().is_empty() || line.trim_start().starts_with('#') {

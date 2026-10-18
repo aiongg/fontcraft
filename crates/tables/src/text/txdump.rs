@@ -341,10 +341,10 @@ impl CommandSink for Recorder {
 fn stem(vertical: bool, a: f64, b: f64) -> String {
     let w = b - a;
     match (vertical, w) {
-        (false, w) if w == -21.0 => format!("{} bottomedge", num(b)),
-        (false, w) if w == -20.0 => format!("{} topedge", num(a)),
-        (true, w) if w == -21.0 => format!("{} leftedge", num(b)),
-        (true, w) if w == -20.0 => format!("{} rightedge", num(a)),
+        (false, -21.0) => format!("{} bottomedge", num(b)),
+        (false, -20.0) => format!("{} topedge", num(a)),
+        (true, -21.0) => format!("{} leftedge", num(b)),
+        (true, -20.0) => format!("{} rightedge", num(a)),
         (false, _) => format!("{} {} hstem", num(a), num(b)),
         (true, _) => format!("{} {} vstem", num(a), num(b)),
     }
@@ -488,6 +488,7 @@ fn tt_contour(pts: &[(f64, f64, bool)], ops: &mut Vec<String>) {
     // The points after the start point, ending back at the start.
     let first = pts.first().copied().unwrap_or_default();
     let last = pts.last().copied().unwrap_or_default();
+    #[allow(clippy::type_complexity)]
     let (start, rest): ((f64, f64), Vec<(f64, f64, bool)>) = if first.2 {
         let mut rest: Vec<(f64, f64, bool)> = pts.iter().skip(1).copied().collect();
         rest.push(first);

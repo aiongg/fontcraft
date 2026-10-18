@@ -324,7 +324,7 @@ fn resolve_name_ids(t: &mut Element, element: &str, attribute: Option<&str>, nam
     };
     each_named(t, element, 0, &mut |e| match attribute {
         Some(a) => {
-            if let Some(name) = e.attribute(a).and_then(&lookup) {
+            if let Some(name) = e.attribute(a).and_then(lookup) {
                 set_attribute(e, a, &name);
             }
         }

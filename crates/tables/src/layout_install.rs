@@ -588,7 +588,7 @@ mod tests {
         let keys: Vec<(u16, u16, u16, u16)> = records.iter().map(|r| (r.platform, r.encoding, r.language, r.name_id)).collect();
         assert_eq!(keys, vec![(1, 0, 0, 257), (3, 1, 0x409, 1), (3, 1, 0x409, 256), (3, 1, 0x409, 300)], "sorted, 256 replaced");
         let text =
-            |r: &NameRecord| String::from_utf16(&r.bytes.chunks_exact(2).map(|c| u16::from_be_bytes([c[0], c[1]])).collect::<Vec<_>>()).unwrap();
+            |r: &NameRecord| String::from_utf16(&r.bytes.as_chunks::<2>().0.iter().map(|c| u16::from_be_bytes(*c)).collect::<Vec<_>>()).unwrap();
         assert_eq!(text(&records[2]), "New");
     }
 

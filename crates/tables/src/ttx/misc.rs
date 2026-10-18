@@ -113,7 +113,7 @@ fn kern_format0(data: &[u8], apple: bool, order: &[String], w: &mut XmlWriter) -
         return Err(TablesError::invalid("the 'kern' pairs are cut short"));
     }
     let mut table: BTreeMap<(String, String), i16> = BTreeMap::new();
-    for chunk in values.chunks_exact(6) {
+    for chunk in values.as_chunks::<6>().0 {
         let left = glyph_name(order, u32::from(u16_at(chunk, 0)?));
         let right = glyph_name(order, u32::from(u16_at(chunk, 2)?));
         table.insert((left, right), i16_at(chunk, 4)?);

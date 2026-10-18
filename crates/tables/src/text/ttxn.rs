@@ -101,7 +101,7 @@ fn zeroed_font(font: &SfntFont, no_version: bool) -> SfntFont {
     }
     for tag in [HHEA, VHEA] {
         if let Some(data) = font.get(tag) {
-            copy.insert(tag, zero(data, &[34..36]));
+            copy.insert(tag, zero(data, std::slice::from_ref(&(34..36))));
         }
     }
     // The writers of these tables read the glyph count and names from the rest of the font.

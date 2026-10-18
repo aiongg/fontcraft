@@ -876,6 +876,7 @@ impl<'m> Converter<'m> {
             }
             self.classes_by_class_name.insert(name, names);
         }
+        #[allow(clippy::type_complexity)]
         let defs: Vec<(Vec<(Vec<String>, String)>, Vec<ClassKey>)> = std::mem::take(&mut self.marks_by_defs).into_iter().collect();
         for (def, recs) in defs {
             let all: Vec<&String> = def.iter().flat_map(|(gs, _)| gs.iter()).collect();

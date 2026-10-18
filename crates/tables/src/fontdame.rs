@@ -746,7 +746,7 @@ impl<'a> Writer<'a> {
                         for (pos, class) in seq.iter().enumerate() {
                             let first_input = slot == 1 && pos == 0;
                             let key = (slot, *class, first_input);
-                            if !named.contains_key(&key) {
+                            if let std::collections::hash_map::Entry::Vacant(e) = named.entry(key) {
                                 let def = class_defs.get(slot).and_then(Option::as_ref);
                                 let glyphs = match (def, *class) {
                                     (Some(d), 0) if first_input => {
@@ -772,7 +772,7 @@ impl<'a> Writer<'a> {
                                         None
                                     }
                                 };
-                                named.insert(key, name);
+                                e.insert(name);
                             }
                             match named.get(&key) {
                                 Some(Some(n)) => out.push(format!("@{n}")),

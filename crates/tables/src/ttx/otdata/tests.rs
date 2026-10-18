@@ -21,6 +21,7 @@ use crate::ttx::{DumpFormat, DumpOptions, dump};
 const TABLES: [&[u8; 4]; 10] = [b"GDEF", b"GSUB", b"GPOS", b"BASE", b"JSTF", b"MATH", b"STAT", b"fvar", b"avar", b"meta"];
 
 /// The fonts of the description, by name, each a list of tables.
+#[allow(clippy::type_complexity)]
 fn parse(text: &str) -> BTreeMap<String, Vec<(Tag, Vec<Vec<String>>)>> {
     let mut fonts: BTreeMap<String, Vec<(Tag, Vec<Vec<String>>)>> = BTreeMap::new();
     let mut font = String::new();

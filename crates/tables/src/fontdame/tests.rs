@@ -1,6 +1,7 @@
 //! FontDame to feature code. The texts are ours (mtiLib builds binary tables, not feature
 //! code); the corpus test reads fontTools' mtiLib test files, and the integration measure
 //! compiles the result and compares it with mtiLib's tables.
+#![allow(clippy::string_slice)]
 
 use super::*;
 
