@@ -240,10 +240,10 @@ impl MasterSpacing {
                 values.extend(profile::mean_white(&left, 0.0));
                 values.extend(profile::mean_white(&right, l.width));
             }
-            if !values.is_empty() {
-                if let Some(slot) = found.get_mut(i) {
-                    *slot = Some(values.iter().sum::<f64>() / values.len() as f64);
-                }
+            if !values.is_empty()
+                && let Some(slot) = found.get_mut(i)
+            {
+                *slot = Some(values.iter().sum::<f64>() / values.len() as f64);
             }
         }
         let [lower, upper] = found;

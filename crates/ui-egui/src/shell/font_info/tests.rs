@@ -305,3 +305,35 @@ fn param_value_commands_carry_the_kind_and_the_row() {
     assert_eq!(commands, vec![("font.customParameters.set", expected)]);
     assert_eq!(rows::param_kind("typoAscender", &row.value), fontcraft_engine::fontinfo::ParamKind::Number);
 }
+
+/// A parameter whose value has a dialog of its own shows an Edit button that opens it on the
+/// row's targets (Master Color on the Masters tab); the others map to their dialogs the same way.
+#[test]
+fn param_values_with_dialogs_open_them_from_the_row() {
+    let mut app = FontcraftApp::default();
+    let color = json!({"scope": "master", "targets": [0], "name": "Master Color", "value": "255,0,0,255"});
+    app.run("font.customParameters.add", &color).unwrap();
+    app.run("font.info", &json!({"tab": "masters"})).unwrap();
+    let w = Window::new();
+    w.click(&mut app, row_id(Scope::Master, RowKind::Param, "Master Color", 0).with("dialog"));
+    let r = crate::control::handle(&mut app, &json!({"id": 1, "method": "ui.dialog.inspect", "params": {}}));
+    assert_eq!(r["result"]["dialog"], "dialog.masterColorPicker", "{r}");
+
+    let row = |key: &str| fontcraft_engine::fontinfo::rows::Row {
+        scope: Scope::Font,
+        kind: RowKind::Param,
+        key: key.into(),
+        value: fontcraft_model::plist::Value::String(fontcraft_model::plist::Str::new("")),
+        enabled: true,
+    };
+    let open = |target: &Target, key: &str, occurrence: usize| rows::action_commands(target, &row(key), occurrence, &rows::RowAction::OpenDialog);
+    let master = Target { scope: Scope::Master, indices: vec![1, 2] };
+    assert_eq!(
+        open(&master, "Axis Location", 0),
+        vec![("dialog.open", json!({"dialog": "dialog.axisLocation", "params": {"scope": "master", "targets": 1}}))]
+    );
+    assert_eq!(open(&Target::font(), "Virtual Master", 2), vec![("dialog.open", json!({"dialog": "dialog.virtualMaster", "params": {"index": 2}}))]);
+    assert_eq!(open(&Target::font(), "Color Palettes", 0), vec![("colorPalette.edit", json!({}))]);
+    assert_eq!(open(&Target::font(), "Axis Mappings", 0), vec![("axisMappings.showDialog", json!({}))]);
+    assert!(open(&Target::font(), "Master Color", 0).is_empty(), "Master Color belongs to masters");
+}

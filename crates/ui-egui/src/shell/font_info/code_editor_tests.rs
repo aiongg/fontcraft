@@ -1,6 +1,8 @@
 //! The code editor's layout: colours by class, error underlines, previewable names, and offsets
 //! in text with characters of several bytes.
 
+#![allow(clippy::indexing_slicing, clippy::string_slice, clippy::reversed_empty_ranges, clippy::single_range_in_vec_init)]
+
 use egui::FontId;
 use fontcraft_engine::features::edit::HighlightKind;
 

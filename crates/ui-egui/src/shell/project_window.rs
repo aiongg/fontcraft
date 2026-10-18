@@ -35,12 +35,12 @@ use fontcraft_engine::fontinfo::fields;
 use fontcraft_engine::fontinfo::rows::{Row, RowKind, property_value};
 use fontcraft_engine::fontinfo::value as fv;
 use fontcraft_engine::project::ProjectDoc;
+use fontcraft_model::Instance;
 use fontcraft_model::axes::design_value;
 use fontcraft_model::plist::Value as PlistValue;
-use fontcraft_model::{Instance, StyleClass};
 use serde_json::{Value, json};
 
-use super::font_info::exports_tab::{WEIGHT_CLASSES, WIDTH_CLASSES, class_value, icon_color, is_variable};
+use super::font_info::exports_tab::{WEIGHT_CLASSES, WEIGHT_NAMES, WIDTH_CLASSES, WIDTH_NAMES, class_value, icon_color, is_variable};
 use super::font_info::param_value::{self, MULTIPLE_VALUES};
 use super::font_info::rows::{self, RowAction, RowOptions, Target};
 use crate::app::FontcraftApp;
@@ -599,11 +599,11 @@ fn editor(ui: &mut egui::Ui, tokens: &Tokens, doc: &ProjectDoc, view: &mut Proje
         }
     });
     if !is_variable(first) {
-        let weight = |i: &Instance| class_number(i.weight_class.as_ref(), &WEIGHT_CLASSES, DEFAULT_WEIGHT_CLASS);
+        let weight = |i: &Instance| class_value(i.weight_class.as_ref(), WEIGHT_NAMES, DEFAULT_WEIGHT_CLASS);
         if let Some(v) = class_row(ui, tokens, project, "Weight Class", "weightClass", &all, weight, &WEIGHT_CLASSES) {
             push(pending, "weightClass", whole(v));
         }
-        let width = |i: &Instance| class_number(i.width_class.as_ref(), &WIDTH_CLASSES, DEFAULT_WIDTH_CLASS);
+        let width = |i: &Instance| class_value(i.width_class.as_ref(), WIDTH_NAMES, DEFAULT_WIDTH_CLASS);
         if let Some(v) = class_row(ui, tokens, project, "Width Class", "widthClass", &all, width, &WIDTH_CLASSES) {
             push(pending, "widthClass", whole(v));
         }
@@ -638,19 +638,6 @@ fn field_row(ui: &mut egui::Ui, tokens: &Tokens, label: &str, content: impl FnOn
         rows::label_cell(ui, tokens, None, label, false, true);
         content(ui);
     });
-}
-
-/// Letters and digits only, lower case: how class names are compared.
-fn squashed(name: &str) -> String {
-    name.chars().filter(char::is_ascii_alphanumeric).map(|c| c.to_ascii_lowercase()).collect()
-}
-
-/// A class as the field shows it: its number, the number of a standard name, or `default` when
-/// the source states none.
-pub fn class_number(class: Option<&StyleClass>, standard: &[(u16, &str)], default: f64) -> Option<f64> {
-    let names: Vec<(String, u16)> = standard.iter().map(|(n, name)| (squashed(name), *n)).collect();
-    let names: Vec<(&str, u16)> = names.iter().map(|(s, n)| (s.as_str(), *n)).collect();
-    class_value(class, &names, default)
 }
 
 /// A class number as the commands take it: an integer when it is whole (a fraction is passed on
@@ -818,6 +805,8 @@ fn check(ui: &mut egui::Ui, id: Id, on: bool, mixed: bool, text: &str, hover: &s
 mod tests {
     use egui::{Event, Key, Modifiers, PointerButton};
     use serde_json::json;
+
+    use fontcraft_model::StyleClass;
 
     use super::*;
     use crate::FontcraftApp;
@@ -1055,9 +1044,10 @@ mod tests {
 
     #[test]
     fn class_names_of_older_sources_show_as_their_numbers() {
-        assert_eq!(class_number(None, &WEIGHT_CLASSES, 400.0), Some(400.0), "no class is the default");
-        assert_eq!(class_number(Some(&StyleClass::Name("SemiBold".into())), &WEIGHT_CLASSES, 400.0), Some(600.0));
-        assert_eq!(class_number(Some(&StyleClass::Name("Medium (normal)".into())), &WIDTH_CLASSES, 5.0), Some(5.0));
-        assert_eq!(class_number(Some(&StyleClass::Number(300.0)), &WEIGHT_CLASSES, 400.0), Some(300.0));
+        assert_eq!(class_value(None, WEIGHT_NAMES, 400.0), Some(400.0), "no class is the default");
+        assert_eq!(class_value(Some(&StyleClass::Name("SemiBold".into())), WEIGHT_NAMES, 400.0), Some(600.0));
+        assert_eq!(class_value(Some(&StyleClass::Name("DemiBold".into())), WEIGHT_NAMES, 400.0), Some(600.0), "an alias");
+        assert_eq!(class_value(Some(&StyleClass::Name("Medium (normal)".into())), WIDTH_NAMES, 5.0), Some(5.0));
+        assert_eq!(class_value(Some(&StyleClass::Number(300.0)), WEIGHT_NAMES, 400.0), Some(300.0));
     }
 }

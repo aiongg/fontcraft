@@ -302,7 +302,7 @@ pub static ACTIONS: LazyLock<Vec<ActionEntry>> = LazyLock::new(|| {
             (order(s), ActionEntry { id: s.id, label: s.label, group })
         })
         .collect();
-    list.sort_by(|(a, x), (b, y)| a.cmp(b).then_with(|| x.group.cmp(&y.group)).then_with(|| x.label.cmp(&y.label)).then_with(|| x.id.cmp(&y.id)));
+    list.sort_by(|(a, x), (b, y)| a.cmp(b).then_with(|| x.group.cmp(&y.group)).then_with(|| x.label.cmp(y.label)).then_with(|| x.id.cmp(y.id)));
     list.into_iter().map(|(_, e)| e).collect()
 });
 

@@ -121,7 +121,7 @@ pub fn multiline(ui: &mut egui::Ui, id: Id, shown: &str, width: f32) -> Option<S
 }
 
 /// A value no editor shows, as a greyed one-line summary.
-fn summary(ui: &mut egui::Ui, tokens: &Tokens, value: &Value) {
+pub(crate) fn summary(ui: &mut egui::Ui, tokens: &Tokens, value: &Value) {
     let text = match value {
         Value::Array(a) => format!("{} items", a.items.len()),
         Value::Dict(d) => format!("{} entries", d.entries.len()),

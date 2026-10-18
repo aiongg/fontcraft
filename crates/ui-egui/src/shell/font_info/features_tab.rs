@@ -1353,7 +1353,7 @@ fn perform(app: &mut FontcraftApp, ctx: &egui::Context, master: Option<&str>, ac
                 })
                 .collect();
             let st = &mut app.state.panels.font_info.features;
-            st.completions = (!items.is_empty()).then(|| Completions { key, items, highlighted: 0, at });
+            st.completions = (!items.is_empty()).then_some(Completions { key, items, highlighted: 0, at });
         }
         Act::Preview { name, at } => {
             let mut p = Map::new();

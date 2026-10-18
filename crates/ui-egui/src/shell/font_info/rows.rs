@@ -55,6 +55,8 @@ pub enum RowAction {
     EditLanguage { language: String, text: String },
     /// Another language picked in a sub-row's language menu.
     ChangeLanguage { from: String, to: String },
+    /// The Edit button of a value that has a dialog of its own.
+    OpenDialog,
 }
 
 /// The font, or the masters or exports a tab's rows act on (several when several are selected;
@@ -133,6 +135,8 @@ pub struct RowOptions {
     pub localizable: bool,
     /// The row has a minus button.
     pub removable: bool,
+    /// The value is edited in a dialog of its own: the row shows a summary and an Edit button.
+    pub dialog: bool,
 }
 
 impl RowOptions {
@@ -148,7 +152,7 @@ impl RowOptions {
             ),
             RowKind::Param => (row.key.clone(), Some(param_kind(&row.key, &row.value)), false, true),
         };
-        Self { id, label, kind, selected, mixed: false, localizable, removable }
+        Self { id, label, kind, selected, mixed: false, localizable, removable, dialog: false }
     }
 }
 
@@ -203,6 +207,16 @@ pub fn row_with(ui: &mut egui::Ui, tokens: &Tokens, row: &Row, opts: &RowOptions
         if opts.localizable {
             if let Some(a) = languages(ui, tokens, row, opts, mods.alt) {
                 action = Some(a);
+            }
+            return;
+        }
+        if opts.dialog {
+            param_value::summary(ui, tokens, &row.value);
+            if widgets::button(ui, opts.id.with("dialog"), "Edit…", "Edit the value in its dialog", true, false) {
+                action = Some(RowAction::OpenDialog);
+            }
+            if opts.removable && widgets::flat_button(ui, opts.id.with("minus"), "−", "Remove this row") {
+                action = Some(RowAction::Remove);
             }
             return;
         }
@@ -345,6 +359,29 @@ pub fn action_commands(target: &Target, row: &Row, occurrence: usize, action: &R
             out.extend(each("font.info.removeLocalizedValue", vec![("language", json!(from))]));
             out
         }
+        (RowAction::OpenDialog, _) => dialog_command(target, row, occurrence).into_iter().collect(),
+    }
+}
+
+/// The command that opens the dialog of a parameter whose value has one, on `target`; `None`
+/// for a value edited in the row.
+pub fn dialog_command(target: &Target, row: &Row, occurrence: usize) -> Option<(&'static str, Json)> {
+    if row.kind != RowKind::Param {
+        return None;
+    }
+    let open = |dialog: &str, params: Json| ("dialog.open", json!({"dialog": dialog, "params": params}));
+    match (row.key.as_str(), target.scope) {
+        ("Axis Location", Scope::Master | Scope::Instance) => {
+            Some(open("dialog.axisLocation", json!({"scope": target.scope.name(), "targets": target.first()})))
+        }
+        ("Virtual Master", Scope::Font) => Some(open("dialog.virtualMaster", json!({"index": occurrence}))),
+        ("Axis Mappings", Scope::Font) => Some(("axisMappings.showDialog", json!({}))),
+        ("Axis Mappings", Scope::Instance) => Some(("axisMappings.showDialog", json!({"variableFontSetting": target.first()}))),
+        ("Color Palettes", Scope::Font) => Some(("colorPalette.edit", json!({}))),
+        ("Master Color" | "Master Color Dark", Scope::Master) => {
+            Some(open("dialog.masterColorPicker", json!({"targets": target.indices, "name": row.key})))
+        }
+        _ => None,
     }
 }
 
@@ -459,6 +496,7 @@ fn draw(
     let id = row_id(target.scope, row.kind, &row.key, occurrence);
     let mut opts = RowOptions::for_row(id, row, state.selected_rows.contains(&index));
     opts.mixed = mixed;
+    opts.dialog = dialog_command(target, row, occurrence).is_some();
     state.shown_rows.push(ShownRow { scope: target.scope, kind: row.kind, key: row.key.clone(), occurrence, built_in: !opts.removable });
     match row_with(ui, tokens, row, &opts) {
         Some(RowAction::Select { extend, range }) => state.select(index, extend, range),

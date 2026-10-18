@@ -88,7 +88,7 @@ pub const WIDTH_CLASSES: [(u16, &str); 9] = [
     (9, "Ultra-expanded"),
 ];
 /// Class names older sources store instead of numbers, letters and digits only, lower case.
-const WEIGHT_NAMES: &[(&str, u16)] = &[
+pub const WEIGHT_NAMES: &[(&str, u16)] = &[
     ("thin", 100),
     ("hairline", 100),
     ("extralight", 200),
@@ -105,7 +105,7 @@ const WEIGHT_NAMES: &[(&str, u16)] = &[
     ("black", 900),
     ("heavy", 900),
 ];
-const WIDTH_NAMES: &[(&str, u16)] = &[
+pub const WIDTH_NAMES: &[(&str, u16)] = &[
     ("ultracondensed", 1),
     ("extracondensed", 2),
     ("condensed", 3),
