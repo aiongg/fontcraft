@@ -9,6 +9,7 @@ use serde_json::Value;
 
 pub mod external_changes;
 pub mod manager;
+pub mod reporters;
 
 use super::{Args, UiCommand};
 use crate::app::FontcraftApp;
@@ -18,6 +19,9 @@ use crate::panels::Pending;
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct ExtensionsState {
+    /// The reporter modules Edit View draws, by module id, in the order they were switched on
+    /// (`view.showReporter`); remembered across launches.
+    pub reporters: Vec<String>,
     /// The External Changes dialog (session only).
     #[serde(skip)]
     pub external: external_changes::ExternalChangesState,
@@ -35,6 +39,7 @@ pub const COMMANDS: &[UiCommand] = &[
     manager::ENLARGE,
     manager::WEBSITE,
     manager::DONATE,
+    reporters::COMMAND,
 ];
 
 pub fn run(app: &mut FontcraftApp, id: &str, args: &Args) -> Result<Value, String> {
@@ -43,6 +48,9 @@ pub fn run(app: &mut FontcraftApp, id: &str, args: &Args) -> Result<Value, Strin
     }
     if manager::COMMANDS.iter().any(|c| c.0 == id) {
         return manager::run(app, id, args);
+    }
+    if id == reporters::COMMAND.0 {
+        return reporters::run(app, args);
     }
     let _ = (app, args);
     Err(format!("unknown command `{id}`"))

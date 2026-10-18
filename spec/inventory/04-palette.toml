@@ -58,7 +58,11 @@ milestone = "M13"
 summary = "Plug-ins can register their own Palette sections, which appear alongside the built-in ones and collapse the same way."
 ref = "Palette"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft (M13.6): a filter module that declares parameters may be shown as a Palette section with its parameter form and an Apply button; modules run no interface code (plugin.kind.palette)."
+notes = "Documented, not yet observed. Built in M13.6: every installed filter module that declares parameters has a Palette section after the built-in ones, titled with the module's name, with one field per parameter and an Apply button; it collapses with palette.toggleSection like the built-in sections. Modules run no interface code (plugin.kind.palette)."
+guesses = [
+  "Module sections follow the built-in sections in the order of the modules' names; the handbook does not say where plug-in sections go.",
+  "Values typed into a module's form are kept for the session only, and a module replaced by another version starts again from its defaults.",
+]
 observe = [
   "Install a palette plug-in from the Plugin Manager, relaunch and note where its section appears among the built-in Palette sections and whether it collapses like them.",
 ]

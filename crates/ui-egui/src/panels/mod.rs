@@ -210,7 +210,7 @@ pub const COMMANDS: &[UiCommand] = &[
         "Collapse / Expand Section",
         &[],
         "",
-        "{section: \"dimensions\" | \"fitCurve\" | \"layers\" | \"transformations\" | \"referenceFont\" | \"selections\", expanded?: bool (omitted: toggle)} collapse a Palette section to its title row or expand it → {section, expanded}",
+        "{section: \"dimensions\" | \"fitCurve\" | \"layers\" | \"transformations\" | \"referenceFont\" | \"selections\" | a filter module's id (its section), expanded?: bool (omitted: toggle)} collapse a Palette section to its title row or expand it → {section, expanded}",
     ),
     (
         "infoBox.setReferencePoint",
@@ -255,7 +255,8 @@ pub fn run(app: &mut FontcraftApp, id: &str, args: &Args) -> Result<Value, Strin
     let panels = &mut app.state.panels;
     match id {
         "palette.toggleSection" => {
-            let ids: Vec<&str> = SECTIONS.iter().map(|s| s.0).collect();
+            let ids: Vec<&str> =
+                SECTIONS.iter().map(|s| s.0).chain(args.string("section")?.filter(|s| palette_modules::is_section(&app.session, s))).collect();
             let section = one_of(args, "section", &ids)?.ok_or_else(|| args.err("give `section`"))?;
             let was = !panels.collapsed.contains(&section);
             let expanded = args.flag("expanded")?.unwrap_or(!was);

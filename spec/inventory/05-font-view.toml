@@ -2730,7 +2730,10 @@ milestone = "M13"
 summary = "Plug-ins and scripts may operate on the Font View glyph selection, so the selection must be exposed to extensions as the default target set."
 ref = "Font View › Batch-Processing › Plug-ins & Scripts"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft (M13.6): the shell passes the Font View selection as the `glyphs` of plugin.runFilter and as the `glyphs` argument of script.run."
+notes = "Documented, not yet observed. Built in M13.6: in Font View the selection is the `glyphs` of plugin.runFilter (in Font View's master as `layer`) and the `glyphs` argument of script.run; in Edit View the edited glyph and layer (with the selected nodes for filters) take their place, and in text mode the selected glyphs in the tab's master. A filter module's item is greyed out while nothing is selected; a macro runs without `glyphs` then."
+guesses = [
+  "A filter module run from Font View acts on the selected glyphs' layers of Font View's master only, not on every master; observing a filter plug-in run on a Font View selection in a font with two masters would settle it.",
+]
 
 [[behavior]]
 id = "findReplace.plainMode"
