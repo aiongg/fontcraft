@@ -444,7 +444,7 @@ Oracle summaries: static against fontmake, TrueType 2,370 compared and 2,212 the
 differing; CFF 2,371 compared and 1,848 the same, with 38 of 354 differing. Colour glyphs add 10 glyphs to the
 TrueType counts. `COLR` against fontc: 10 identical, 7 allowed, 0 different; against fontmake: 11, 7, 0. Round trips:
 `.glyphs` 122/1/118/4 (native and model), UFO 133/7, designspace 112, `.glyphspackage` 22/0/7/0. The gate passes all
-eleven steps with TESTCOUNT tests.
+eleven steps with 3,729 passed, 0 failed, 42 skipped tests.
 
 Decisions: a trusted external ttfautohint binary runs only when it comes from the `export.ttfAutohintBinary`
 setting or `--ttfautohint`, never from the document (a departure from the reference, for safety); CFF import keeps

@@ -6,7 +6,7 @@ _Updated: 2026-10-18, after the batch of 75 packages of M6 to M13 (and the fixes
 
 ## State of the tree
 
-- `cargo xtask ci` passes all eleven steps (TESTCOUNT tests pass). The test step runs on cargo
+- `cargo xtask ci` passes all eleven steps (3,729 passed, 0 failed, 42 skipped tests pass). The test step runs on cargo
   nextest. Built and run on Linux x86-64 with Rust 1.97.
 - `master` is `06d06e9` ("X.integ5: regenerated parity, guesses and observe lists") plus the
   documentation commit X.docs11, merged and green. It is **not pushed**: the push follows the gate. 191 commits sit on top of `56ec463`.
@@ -24,8 +24,8 @@ _Updated: 2026-10-18, after the batch of 75 packages of M6 to M13 (and the fixes
 
   | Measure | Result |
   |---|---|
-  | Static oracle against fontmake, TrueType | 2,370 compared, 2,212 the same; 139 and 19 in the other two columns of the summary; 39 of 354 sources differ |
-  | Static oracle against fontmake, CFF | 2,371 compared, 1,848 the same; 511 and 12 in the other two columns; 38 of 354 sources differ |
+  | Static oracle against fontmake, TrueType | 2,370 compared, 2,212 the same, 139 coverage-equal, 19 different; 39 of 354 sources differ |
+  | Static oracle against fontmake, CFF | 2,371 compared, 1,848 the same, 511 coverage-equal, 12 different; 38 of 354 sources differ |
   | `COLR` against fontc | 10 identical, 7 allowed, 0 different |
   | `COLR` against fontmake | 11 identical, 7 allowed, 0 different |
   | Round trips | `.glyphs` 122/1/118/4 (native and model); UFO 133/7; designspace 112; `.glyphspackage` 22/0/7/0 |
@@ -1106,5 +1106,5 @@ Append one terse entry per session: what landed, numbers, what is still open.
   the shaping crate; `io-bitmap` and `io-pdf`. Numbers: 852 of 985 commands live (was 680 of 960);
   218 of 277 packages (was 143); oracle, `COLR`, round-trip, TTX and `corpus_import` baselines under
   "State of the tree". Missed: TrueType autohinter x-height (61.7%) and cap-height (93.2%) rows,
-  auto-spacing median error, auto-kerning sign on Inter Thin, FontDame 19 of 28. Gate: TESTCOUNT tests
+  auto-spacing median error, auto-kerning sign on Inter Thin, FontDame 19 of 28. Gate: 3,729 passed, 0 failed, 42 skipped tests
   pass. Open: everything under "Where to start"; the push waits for the owner.
