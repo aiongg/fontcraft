@@ -1,5 +1,6 @@
-//! `fontcraft-cli features` (M12.11–M12.14). `list`, `decompile` and `normalize` run
-//! `layout.listFeatures`, `layout.decompileFeatures` and `layout.normalize`; an action whose
+//! `fontcraft-cli features` (M12.11–M12.14). `list`, `decompile`, `convert` and `normalize`
+//! run `layout.listFeatures`, `layout.decompileFeatures`, `layout.convertSyntax` and
+//! `layout.normalize`; an action whose
 //! package has not landed prints its usage with `--help` and exits 4 with "not built yet" otherwise.
 
 use fontcraft_engine::Session;
@@ -68,11 +69,22 @@ const DECOMPILE_OPTIONS: &[OptSpec] = &[
     OptSpec::switch("no-clobber", false, "refuse to replace an existing output file"),
 ];
 
+/// The options of `features convert` (M12.13).
+const CONVERT_OPTIONS: &[OptSpec] = &[
+    OptSpec::value("to", "fea|ttx", "fea", "feature code, or the TTX text of the tables that code compiles to (needs --font)"),
+    OptSpec::list("table", "TAG", "", "only these of GDEF, GSUB, GPOS; for one FontDame file without a header line, the table it describes"),
+    OptSpec::value("font", "FONT", "", "the font whose glyph order FontDame `# N` references and class 0 use; required by --to ttx"),
+    OptSpec::value("face", "N", "", "the face of a collection given as --font"),
+    OptSpec::value("output", "FILE", "", "write the result to FILE instead of stdout").short('o'),
+    OptSpec::switch("no-clobber", false, "refuse to replace an existing output file"),
+];
+
 fn run(args: &[String]) -> Outcome {
     match args.first().map(String::as_str) {
         Some("normalize") => normalize(args.get(1..).unwrap_or_default()),
         Some("list") => list(args.get(1..).unwrap_or_default()),
         Some("decompile") => decompile(args.get(1..).unwrap_or_default()),
+        Some("convert") => convert(args.get(1..).unwrap_or_default()),
         // M12.13–M12.14: the other actions.
         _ => super::not_built(&SUBCOMMAND, args),
     }
@@ -185,6 +197,42 @@ fn decompile(args: &[String]) -> Outcome {
     }
 }
 
+/// `features convert INPUT...`: a VOLT project or FontDame layout text as feature code or TTX
+/// (`layout.convertSyntax`).
+fn convert(args: &[String]) -> Outcome {
+    let parsed = args::parse(CONVERT_OPTIONS, args)?;
+    if parsed.help {
+        return out(&format!("{}\n{}", super::help(&SUBCOMMAND), args::help("", CONVERT_OPTIONS)));
+    }
+    if parsed.positional.is_empty() {
+        return Err(usage("features convert needs at least one INPUT"));
+    }
+    let mut params = serde_json::Map::new();
+    params.insert("input".into(), json!(parsed.positional));
+    let tables = parsed.list("table");
+    if !tables.is_empty() {
+        params.insert("tables".into(), json!(tables));
+    }
+    for (option, key) in [("to", "to"), ("font", "font")] {
+        if let Some(v) = parsed.value(option) {
+            params.insert(key.into(), json!(v));
+        }
+    }
+    face_param(&mut params, parsed.value("face"))?;
+    if let Some(output) = parsed.value("output") {
+        params.insert("output".into(), json!(output));
+        params.insert("noClobber".into(), json!(parsed.switch("no-clobber")));
+    }
+    let result = execute("layout.convertSyntax", params)?;
+    for warning in result.get("warnings").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str) {
+        io::note(warning);
+    }
+    match result.get("text").and_then(Value::as_str) {
+        Some(text) if !text.is_empty() => out(text.strip_suffix('\n').unwrap_or(text)),
+        _ => Ok(()),
+    }
+}
+
 /// `features normalize FONT`: the layout rules as canonical text (`layout.normalize`).
 fn normalize(args: &[String]) -> Outcome {
     let parsed = args::parse(NORMALIZE_OPTIONS, args)?;
@@ -245,5 +293,16 @@ mod tests {
             let e = (SUBCOMMAND.run)(&a(&[action, &missing.to_string_lossy()])).unwrap_err();
             assert_eq!(e.exit_code(), 3, "{action}: {}", e.message());
         }
+    }
+
+    #[test]
+    fn features_convert_exit_statuses() {
+        let a = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert!((SUBCOMMAND.run)(&a(&["convert", "--help"])).is_ok());
+        assert_eq!((SUBCOMMAND.run)(&a(&["convert"])).unwrap_err().exit_code(), 2, "no INPUT is a usage error");
+        assert_eq!((SUBCOMMAND.run)(&a(&["convert", "x.vtp", "--to", "pdf"])).unwrap_err().exit_code(), 2);
+        let missing = std::env::temp_dir().join(format!("fontcraft-no-such-project-{}.vtp", std::process::id()));
+        let e = (SUBCOMMAND.run)(&a(&["convert", &missing.to_string_lossy()])).unwrap_err();
+        assert_eq!(e.exit_code(), 3, "{}", e.message());
     }
 }

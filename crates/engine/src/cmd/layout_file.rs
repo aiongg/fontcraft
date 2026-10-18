@@ -283,10 +283,19 @@ mod m12_12 {
     }
 }
 
+mod m12_13;
+
 /// `layout.convertSyntax` (M12.13).
 fn convert_specs() -> Vec<CommandSpec> {
-    // M12.13
-    Vec::new()
+    vec![super::cmd!(
+        "layout.convertSyntax",
+        "Convert Layout Source Syntax",
+        [],
+        None,
+        "{input: path | [path] (a VOLT project, a font holding one in its TSIV table, or FontDame layout text, one file per table), to?: \"fea\"|\"ttx\" (default fea), tables?: [\"GDEF\"|\"GSUB\"|\"GPOS\"] (default all; with one FontDame file whose first line names no table, a single entry says which table it is), font?: path (its glyph names by glyph id, for FontDame `# N` references and class 0; required for ttx), face?: number (of font), output?: path, noClobber?: bool} translates the layout source to feature code, or with ttx to the TTX text of the tables that code compiles to against the font; without output the text is returned; what feature code cannot hold is listed in warnings → {text, syntax: \"volt\"|\"fontdame\", warnings: [string]} | {output, syntax, warnings}",
+        super::always,
+        m12_13::convert_syntax
+    ).files(const { &[FileParam::read("input"), FileParam::read("font"), FileParam::write("output")] }).writes_files()]
 }
 
 /// `layout.compileFeatures` (M12.14).
