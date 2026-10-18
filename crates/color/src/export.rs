@@ -18,14 +18,16 @@
 //! - COLR version 0 when every colour glyph is a stack of solid layers, version 1 as soon as one
 //!   needs a gradient.
 //! - A master's own `Color Palettes` wins over the font's.
-//! - An instance between masters with colour layers is refused with a [`ProblemKind::Refusal`]
-//!   naming the instance, and the plan holds no tables (until M11.19).
+//! - An instance between masters writes the tables of the origin master's colour layers; the
+//!   compiler interpolates the palette and full-colour layers into the instance font first
+//!   (M11.19). iColor and svg layers do not interpolate: the instance takes the origin's.
+//! - A variable font's plan carries a [`PaintVariation`], filled by the compiler.
 
 use fontcraft_model::plist::Value;
 use fontcraft_model::{Font, Glyph, ModelError, Params, Target, param_flag};
 
 use crate::layers::{ColorLayerKind, ICOLOR_SIZES, color_layers, export_kind};
-use crate::paint::{ColorRef, Paint, ShapeRef, drawn_shapes, glyph_paint};
+use crate::paint::{ColorRef, Paint, PaintVariation, ShapeRef, drawn_shapes, glyph_paint};
 use crate::palette::{self, FOREGROUND_INDEX};
 use crate::strike::{self, Strike};
 use crate::{ColorError, Palettes, Rgba};
@@ -179,6 +181,8 @@ pub struct ExportPlan {
     pub svg: Option<SvgPlan>,
     pub cbdt: Option<CbdtPlan>,
     pub problems: Vec<Problem>,
+    /// The paints at the other sources of a variable font; `None` for a static font.
+    pub variation: Option<PaintVariation>,
 }
 
 impl ExportPlan {
@@ -299,37 +303,29 @@ pub fn plan(font: &Font, target: &Target) -> ExportPlan {
     }
 }
 
-/// The plan of an instance interpolated from the masters (`instance` names it): refused when
-/// `switches` would write a colour table from the font's colour layers, because colour layers
-/// do not interpolate yet; empty otherwise.
+/// The plan of an instance interpolated from the masters (`instance` names it): the tables the
+/// origin master's colour layers give with `switches`, with the origin's paints. The compiler
+/// writes the instance's own paints from its interpolated colour layers. iColor and svg layers
+/// do not interpolate, so the instance takes the origin master's, with a warning naming it.
 pub fn plan_between_masters(font: &Font, instance: &str, switches: &Switches) -> ExportPlan {
-    if !writes_color(font, switches) {
-        return ExportPlan::default();
+    let Some(origin) = fontcraft_model::axes::origin(font).or_else(|| font.masters.first()) else { return ExportPlan::default() };
+    let mut plan = plan_master(font, &origin.id, switches);
+    let bitmaps = plan.sbix.is_some()
+        || plan.cbdt.is_some()
+        || plan.svg.as_ref().is_some_and(|s| s.documents.iter().any(|d| !matches!(d.source, SvgSource::Paint(_))));
+    if bitmaps {
+        plan.problems.push(warning(
+            None,
+            format!("instance `{instance}` is interpolated from the masters; its iColor and svg layers are those of master `{}`", origin.name),
+        ));
     }
-    ExportPlan {
-        problems: vec![refusal(format!(
-            "instance `{instance}` is interpolated from the masters, and colour layers cannot be exported for such an instance yet; export it with Export COLR Table, Export sbix Table and Export SVG Table off, or from a master"
-        ))],
-        ..ExportPlan::default()
-    }
+    plan
 }
 
 /// Whether any exported glyph has a colour layer, or a master layer marked full colour, on any
 /// master.
 pub fn has_color_layers(font: &Font) -> bool {
     font.glyphs.as_arcs().iter().any(|g| g.export && g.layers.iter().any(|l| export_kind(l).is_some()))
-}
-
-/// Whether `switches` would write a table from the font's colour layers or layered masters.
-fn writes_color(font: &Font, switches: &Switches) -> bool {
-    let layered = ((switches.color_layers_to_colr && switches.export_colr) || (switches.color_layers_to_svg && switches.export_svg))
-        && font.masters.iter().any(|m| m.params.get(MASTER_COLOR).is_some());
-    layered
-        || font.glyphs.as_arcs().iter().filter(|g| g.export).flat_map(|g| g.layers.iter()).filter_map(export_kind).any(|k| match k {
-            ColorLayerKind::Palette(_) | ColorLayerKind::FullColor => switches.export_colr || (switches.color_layers_to_svg && switches.export_svg),
-            ColorLayerKind::IColor(_) => switches.export_sbix || switches.cbdt || (switches.sbix_to_svg.is_some() && switches.export_svg),
-            ColorLayerKind::Svg => switches.export_svg,
-        })
 }
 
 /// The plan of an export of the layers of `master_id` with `switches`, which is what the
@@ -702,24 +698,26 @@ mod tests {
     }
 
     #[test]
-    fn an_instance_between_masters_with_colour_layers_is_refused() {
+    fn an_instance_between_masters_plans_the_origin_masters_tables() {
         let mut f = palette_font();
         Arc::make_mut(&mut f.instances).push(Instance { name: "Between".into(), location: vec![500.0], ..Default::default() });
-        let refused = plan(&f, &Target::Instance(0));
-        assert!(refused.refused() && refused.tables().is_empty());
-        assert!(refused.problems[0].message.contains("Between"), "{}", refused.problems[0].message);
+        let between = plan(&f, &Target::Instance(0));
+        assert!(!between.refused(), "{:?}", between.problems);
+        assert_eq!(between.tables(), ["COLR", "CPAL"]);
+        assert_eq!(between.colr, plan_master(&f, "m01", &Switches::default()).colr, "the origin master's paints");
 
-        // Nothing to refuse when no colour table would be written.
+        // An instance's switches still apply.
         Arc::make_mut(&mut f.instances)[0].params.0.push(Param::new(EXPORT_COLR_TABLE, Value::Bool(false)));
-        assert_eq!(plan(&f, &Target::Instance(0)), ExportPlan::default());
+        assert!(plan(&f, &Target::Instance(0)).tables().is_empty());
         assert!(has_color_layers(&f) && !has_color_layers(&Font::new("Plain")));
 
         // A master layer marked full colour is a colour layer for the export.
         let mut full = Font::new("Full");
         full.glyph_mut("A").unwrap().layers[0].info.attrs.full_color = true;
+        full.glyph_mut("A").unwrap().layers[0].shapes.push(Shape::Path(Path::rect(0.0, 0.0, 100.0, 100.0)));
         Arc::make_mut(&mut full.instances).push(Instance { name: "Between".into(), location: vec![500.0], ..Default::default() });
         assert!(has_color_layers(&full));
-        assert!(plan(&full, &Target::Instance(0)).refused());
+        assert_eq!(plan(&full, &Target::Instance(0)).tables(), ["COLR", "CPAL"]);
     }
 
     #[test]

@@ -400,6 +400,7 @@ fn instance_source(font: &Font, index: usize, warnings: &mut Vec<String>) -> Res
     let staged = tt_hints::with_tt_values(font);
     let (mut out, notes) = fontcraft_interp::instance::instance_font_with_notes(staged.as_ref().unwrap_or(font), index, &options)?;
     warnings.extend(notes);
+    color::variable::interpolate_color_layers(font, index, &options, &mut out, warnings)?;
     tt_hints::finish_instance(font, &mut out);
     Ok(out)
 }
@@ -483,6 +484,7 @@ pub(crate) fn compile_stages_with(
             font,
             &resolved.master,
             &fontcraft_color::export::Switches { cbdt: options.cbdt, ..fontcraft_color::export::Switches::from_params(&resolved.params) },
+            var_layout.map_or(&[][..], |v| v.layout.masters()),
         )
     } else {
         color::plan(font, &resolved, options)

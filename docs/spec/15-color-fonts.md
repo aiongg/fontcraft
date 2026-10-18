@@ -417,7 +417,9 @@ Settle these by observing the reference app or its exported fonts.
     **Answered for M11 (oracle, to observe):** fontmake writes variable COLR for fontc's COLRv1-var
     source (PaintVarLinearGradient, an ItemVariationStore and a DeltaSetIndexMap); fontc writes it
     static. Palette-layer glyphs vary through their own outline variations in both. FontCraft
-    follows fontmake in M11.19, after M9 (`color.export.variableColr`).
+    follows fontmake (`color.export.variableColr`): colour layers match across masters by
+    position, numbers that differ become `PaintVar*` paints, and a static instance between masters
+    interpolates its colour layers.
 22. In a layered-to-SVG or layered-to-COLR conversion, which master supplies the fallback outline,
     and is the master order (first on top) the paint order?
     **Answered for M11 (ours):** the instance's own master supplies the fallback outline; the first

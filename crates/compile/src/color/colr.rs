@@ -9,19 +9,30 @@
 //! [`super::layer_glyphs`] appended, found by name in the [`GlyphOrder`]. `*` (the text colour)
 //! is palette index 0xFFFF. Colours that are not palette references become new rows, added once
 //! to every palette, with their alpha in CPAL only.
+//!
+//! Variable fonts ([`build_variable`]), as fontmake's variation merger writes them: a number of
+//! a paint or colour stop that differs between the masters gets a delta set in an
+//! `ItemVariationStore`; a paint or stop with one such number becomes its `PaintVar*` or
+//! `VarColorStop` form, whose `varIndexBase` points into a `DeltaSetIndexMap` holding one entry
+//! per number of the paint (0xFFFFFFFF for the numbers that do not vary). A gradient whose stops
+//! vary is variable too, with the base 0xFFFFFFFF when its own numbers do not vary. Runs of
+//! entries are shared between paints as fontTools shares them. A variable table has no clip list.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use fontcraft_color::export::{ColorGlyph, ColrPlan, ColrVersion};
-use fontcraft_color::paint::{ColorLine, ColorRef, Paint, is_solid_stack, shape_refs};
+use fontcraft_color::paint::{ColorLine, ColorRef, Paint, PaintVariation, is_solid_stack, shape_refs};
 use fontcraft_color::palette::FOREGROUND_INDEX;
 use fontcraft_color::{MAX_PAINT_DEPTH, MAX_PALETTE_ROWS, Rgba};
+use fontcraft_geom::variation::VariationModel;
 use fontcraft_geom::{Rect, Shape as _};
 use fontcraft_model::{Extend, Font, MAX_COMPONENT_DEPTH};
 use write_fonts::tables::colr::{
     BaseGlyph, BaseGlyphList, BaseGlyphPaint, Clip, ClipBox, ClipList, ColorLine as WColorLine, ColorStop as WColorStop, Colr, Extend as WExtend,
-    Layer, Paint as WPaint,
+    Layer, Paint as WPaint, VarColorLine, VarColorStop,
 };
+use write_fonts::tables::variations::ivs_builder::VariationStoreBuilder;
+use write_fonts::tables::variations::{DeltaSetIndexMap, ItemVariationStore};
 use write_fonts::types::{F2Dot14, FWord, GlyphId16, UfWord};
 
 use super::GlyphOrder;
@@ -52,6 +63,29 @@ const MAX_LAYERS_PER_PAINT: usize = u8::MAX as usize;
 /// the em rounded to 10 units, consecutive glyphs with the same box sharing one range. Nothing is
 /// shared between glyphs.
 pub fn build(plan: &ColrPlan, order: &GlyphOrder, palette_rows: usize, font: Option<&Font>) -> Result<ColrOutput, CompileError> {
+    build_variable(plan, None, order, palette_rows, font)
+}
+
+/// [`build`] for a variable font when `variation` gives the paints at its other sources: a glyph
+/// whose paints vary there is written with version 1 paints, its varying numbers as `PaintVar*`
+/// paints with their deltas, even when it is a stack of solid layers. Layer glyphs the variable
+/// compile made glyphs of ([`PaintVariation::layer_glyphs`]) are found by their name.
+pub fn build_variable(
+    plan: &ColrPlan,
+    variation: Option<&PaintVariation>,
+    order: &GlyphOrder,
+    palette_rows: usize,
+    font: Option<&Font>,
+) -> Result<ColrOutput, CompileError> {
+    let variation = variation.filter(|v| !v.locations.is_empty());
+    let split: HashSet<&str> = variation.map(|v| v.layer_glyphs.iter().map(String::as_str).collect()).unwrap_or_default();
+    let mut store = match variation {
+        Some(v) => {
+            let axes = v.locations.first().map_or(0, Vec::len);
+            Some(VarStore::new(u16::try_from(axes).map_err(|_| table_error("too many axes".to_string()))?))
+        }
+        None => None,
+    };
     let units_per_em = font.map_or(1000, |f| f.units_per_em);
     // The layer glyphs `super::layer_glyphs` made, by base glyph and colour layer, in the order
     // it appended them, which is the order of the paint's shape references.
@@ -95,15 +129,18 @@ pub fn build(plan: &ColrPlan, order: &GlyphOrder, palette_rows: usize, font: Opt
             .iter()
             .enumerate()
             .filter_map(|(i, s)| {
-                made.get_mut(&(g.glyph.as_str(), s.layer.as_str()))
-                    .and_then(VecDeque::pop_front)
-                    .or_else(|| order.gid(&format!("{}.color{i}", g.glyph)))
+                let name = format!("{}.color{i}", g.glyph);
+                if split.contains(name.as_str()) {
+                    return order.gid(&name);
+                }
+                made.get_mut(&(g.glyph.as_str(), s.layer.as_str())).and_then(VecDeque::pop_front).or_else(|| order.gid(&name))
             })
             .collect();
         if refs.len() != gids.len() {
             return Err(table_error(format!("glyph `{}` has {} colour layers but {} layer glyphs", g.glyph, refs.len(), gids.len())));
         }
-        if plan.version == ColrVersion::V0 || is_solid_stack(&g.paint) {
+        let varies = variation.is_some_and(|v| v.varies(&g.glyph, &g.paint));
+        if !varies && (plan.version == ColrVersion::V0 || is_solid_stack(&g.paint)) {
             let solids = solid_layers(&g.paint).ok_or_else(|| table_error(format!("glyph `{}` needs COLR version 1", g.glyph)))?;
             let layers = gids
                 .iter()
@@ -113,9 +150,21 @@ pub fn build(plan: &ColrPlan, order: &GlyphOrder, palette_rows: usize, font: Opt
             records.push((base, layers));
             continue;
         }
-        let mut writer = PaintWriter { glyph: &g.glyph, gids: gids.iter(), colors: &mut colors, layers: &mut layer_list };
-        let paint = writer.paint(&g.paint, 0)?;
+        let (others, model) = match variation {
+            Some(v) if varies => glyph_sources(v, &g.glyph)?,
+            _ => (Vec::new(), None),
+        };
+        let var = match (store.as_mut(), model.as_ref()) {
+            (Some(store), Some(model)) => Some(VarCtx { store, model }),
+            _ => None,
+        };
+        let others = if var.is_some() { others } else { Vec::new() };
+        let mut writer = PaintWriter { glyph: &g.glyph, gids: gids.iter(), colors: &mut colors, layers: &mut layer_list, var };
+        let paint = writer.paint(&g.paint, &others, 0)?;
         paints.push(BaseGlyphPaint::new(GlyphId16::new(base), paint));
+        if store.is_some() {
+            continue;
+        }
         if let Some(b) = gids.iter().filter_map(|&gid| bounds.of(gid, 0)).reduce(|a, b| a.union(b)) {
             add_clip(&mut clips, base, quantize(b, quantum));
         }
@@ -148,6 +197,10 @@ pub fn build(plan: &ColrPlan, order: &GlyphOrder, palette_rows: usize, font: Opt
             colr.clip_list = ClipList::new(1, count(clips.len())?, clips).into();
         }
     }
+    if let Some((item_store, map)) = store.map(VarStore::finish).transpose()?.flatten() {
+        colr.var_index_map = map.into();
+        colr.item_variation_store = item_store.into();
+    }
     let table = write_fonts::dump_table(&colr).map_err(|e| table_error(e.to_string()))?;
     Ok(ColrOutput { table, added: colors.added })
 }
@@ -155,26 +208,39 @@ pub fn build(plan: &ColrPlan, order: &GlyphOrder, palette_rows: usize, font: Opt
 /// Turns one glyph's paint graph into version 1 paints, taking its layer glyphs in the order
 /// [`shape_refs`] lists them and appending the layers of every `PaintColrLayers` to the layer
 /// list.
+///
+/// With a variation context, `others` are the same paint at the glyph's other sources, in the
+/// order of the context's model after the default; numbers that differ become `PaintVar*` forms.
 struct PaintWriter<'a, 'b> {
     glyph: &'a str,
     gids: std::slice::Iter<'a, u16>,
     colors: &'b mut AddedColors,
     layers: &'b mut Vec<WPaint>,
+    var: Option<VarCtx<'b>>,
+}
+
+/// The store a variable table's deltas go to, and the variation model of the glyph being written.
+struct VarCtx<'b> {
+    store: &'b mut VarStore,
+    model: &'b VariationModel,
 }
 
 impl PaintWriter<'_, '_> {
-    fn paint(&mut self, paint: &Paint, depth: usize) -> Result<WPaint, CompileError> {
+    fn paint(&mut self, paint: &Paint, others: &[&Paint], depth: usize) -> Result<WPaint, CompileError> {
         if depth > MAX_PAINT_DEPTH {
             return Err(table_error(format!("the paints of glyph `{}` nest more than {MAX_PAINT_DEPTH} deep", self.glyph)));
         }
+        if !others.is_empty() && self.var.is_some() {
+            return self.var_paint(paint, others, depth);
+        }
         Ok(match paint {
             Paint::Layers(list) => {
-                let paints = list.iter().map(|p| self.paint(p, depth + 1)).collect::<Result<Vec<_>, _>>()?;
+                let paints = list.iter().map(|p| self.paint(p, &[], depth + 1)).collect::<Result<Vec<_>, _>>()?;
                 self.colr_layers(paints, depth)?
             }
             Paint::Glyph { paint, .. } => {
                 let gid = self.gids.next().copied().ok_or_else(|| table_error(format!("glyph `{}` has too few layer glyphs", self.glyph)))?;
-                WPaint::glyph(self.paint(paint, depth + 1)?, GlyphId16::new(gid))
+                WPaint::glyph(self.paint(paint, &[], depth + 1)?, GlyphId16::new(gid))
             }
             Paint::Solid(c) => {
                 let (index, alpha) = self.colors.paint_color(*c)?;
@@ -191,6 +257,145 @@ impl PaintWriter<'_, '_> {
                 WPaint::sweep_gradient(self.line(line)?, fword(center.x), fword(center.y), start, end)
             }
         })
+    }
+
+    /// [`PaintWriter::paint`] of `paint` at the default and at `others`, which have its
+    /// structure.
+    fn var_paint(&mut self, paint: &Paint, others: &[&Paint], depth: usize) -> Result<WPaint, CompileError> {
+        Ok(match paint {
+            Paint::Layers(list) => {
+                let mut paints = Vec::with_capacity(list.len());
+                for (k, p) in list.iter().enumerate() {
+                    paints.push(self.paint(p, &children(others, Some(k)), depth + 1)?);
+                }
+                self.colr_layers(paints, depth)?
+            }
+            Paint::Glyph { paint: inner, .. } => {
+                let gid = self.gids.next().copied().ok_or_else(|| table_error(format!("glyph `{}` has too few layer glyphs", self.glyph)))?;
+                WPaint::glyph(self.paint(inner, &children(others, None), depth + 1)?, GlyphId16::new(gid))
+            }
+            Paint::Solid(c) => {
+                let (index, alpha) = self.colors.paint_color(*c)?;
+                let mut alphas = vec![i32::from(alpha.to_bits())];
+                for o in others {
+                    if let Paint::Solid(d) = o {
+                        alphas.push(i32::from(self.colors.paint_color(*d)?.1.to_bits()));
+                    }
+                }
+                match self.var_base(&[alphas])? {
+                    NO_VARIATION => WPaint::solid(index, alpha),
+                    base => WPaint::var_solid(index, alpha, base),
+                }
+            }
+            Paint::Linear { p0, p1, p2, line } => {
+                let lines = Self::lines(others);
+                let (stops, stops_vary) = self.var_stops(line, &lines)?;
+                let own = |p: &Paint| match p {
+                    Paint::Linear { p0, p1, p2, .. } => Some([p0.x, p0.y, p1.x, p1.y, p2.x, p2.y].map(|v| i32::from(fword(v).to_i16()))),
+                    _ => None,
+                };
+                let base = self.var_base(&fields(own, paint, others))?;
+                let (x0, y0, x1, y1, x2, y2) = (fword(p0.x), fword(p0.y), fword(p1.x), fword(p1.y), fword(p2.x), fword(p2.y));
+                if base == NO_VARIATION && !stops_vary {
+                    WPaint::linear_gradient(static_line(line, &stops)?, x0, y0, x1, y1, x2, y2)
+                } else {
+                    WPaint::var_linear_gradient(var_line(line, stops)?, x0, y0, x1, y1, x2, y2, base)
+                }
+            }
+            Paint::Radial { c0, r0, c1, r1, line } => {
+                let lines = Self::lines(others);
+                let (stops, stops_vary) = self.var_stops(line, &lines)?;
+                let own = |p: &Paint| match p {
+                    Paint::Radial { c0, r0, c1, r1, .. } => Some([
+                        i32::from(fword(c0.x).to_i16()),
+                        i32::from(fword(c0.y).to_i16()),
+                        i32::from(ufword(*r0).to_u16()),
+                        i32::from(fword(c1.x).to_i16()),
+                        i32::from(fword(c1.y).to_i16()),
+                        i32::from(ufword(*r1).to_u16()),
+                    ]),
+                    _ => None,
+                };
+                let base = self.var_base(&fields(own, paint, others))?;
+                let (x0, y0, x1, y1) = (fword(c0.x), fword(c0.y), fword(c1.x), fword(c1.y));
+                if base == NO_VARIATION && !stops_vary {
+                    WPaint::radial_gradient(static_line(line, &stops)?, x0, y0, ufword(*r0), x1, y1, ufword(*r1))
+                } else {
+                    WPaint::var_radial_gradient(var_line(line, stops)?, x0, y0, ufword(*r0), x1, y1, ufword(*r1), base)
+                }
+            }
+            Paint::Sweep { center, start, end, line } => {
+                let lines = Self::lines(others);
+                let (stops, stops_vary) = self.var_stops(line, &lines)?;
+                let own = |p: &Paint| match p {
+                    Paint::Sweep { center, start, end, .. } => {
+                        let (s, e) = sweep_angles(*start, *end);
+                        Some([
+                            i32::from(fword(center.x).to_i16()),
+                            i32::from(fword(center.y).to_i16()),
+                            i32::from(s.to_bits()),
+                            i32::from(e.to_bits()),
+                        ])
+                    }
+                    _ => None,
+                };
+                let base = self.var_base(&fields(own, paint, others))?;
+                let (s, e) = sweep_angles(*start, *end);
+                if base == NO_VARIATION && !stops_vary {
+                    WPaint::sweep_gradient(static_line(line, &stops)?, fword(center.x), fword(center.y), s, e)
+                } else {
+                    WPaint::var_sweep_gradient(var_line(line, stops)?, fword(center.x), fword(center.y), s, e, base)
+                }
+            }
+        })
+    }
+
+    /// The colour lines of gradient paints, in order.
+    fn lines<'p>(paints: &[&'p Paint]) -> Vec<&'p ColorLine> {
+        paints
+            .iter()
+            .filter_map(|p| match p {
+                Paint::Linear { line, .. } | Paint::Radial { line, .. } | Paint::Sweep { line, .. } => Some(line),
+                Paint::Layers(_) | Paint::Glyph { .. } | Paint::Solid(_) => None,
+            })
+            .collect()
+    }
+
+    /// The stops of `line` with their variation index bases, given the same line at the other
+    /// sources, and whether one of them varies. Offsets are clamped to 0..1 as [`Self::line`]
+    /// writes them.
+    fn var_stops(&mut self, line: &ColorLine, others: &[&ColorLine]) -> Result<(Vec<VarColorStop>, bool), CompileError> {
+        if line.stops.len() > usize::from(u16::MAX) {
+            return Err(table_error(format!("a gradient of glyph `{}` has too many stops", self.glyph)));
+        }
+        let offset = |v: f64| f2dot14(if v.is_finite() { v.clamp(0.0, 1.0) } else { 0.0 });
+        let mut out = Vec::with_capacity(line.stops.len());
+        let mut varies = false;
+        for (k, s) in line.stops.iter().enumerate() {
+            let (index, alpha) = self.colors.paint_color(s.color)?;
+            let mut offsets = vec![i32::from(offset(s.offset).to_bits())];
+            let mut alphas = vec![i32::from(alpha.to_bits())];
+            for o in others {
+                if let Some(t) = o.stops.get(k) {
+                    offsets.push(i32::from(offset(t.offset).to_bits()));
+                    alphas.push(i32::from(self.colors.paint_color(t.color)?.1.to_bits()));
+                }
+            }
+            let base = self.var_base(&[offsets, alphas])?;
+            varies |= base != NO_VARIATION;
+            out.push(VarColorStop::new(offset(s.offset), index, alpha, base));
+        }
+        Ok((out, varies))
+    }
+
+    /// The variation index base of a paint whose numbers at the default and the other sources are
+    /// `fields` (one list per number, the default first); [`NO_VARIATION`] when none varies or
+    /// the writer has no variation context.
+    fn var_base(&mut self, fields: &[Vec<i32>]) -> Result<u32, CompileError> {
+        match self.var.as_mut() {
+            Some(var) => var.store.base(var.model, fields),
+            None => Ok(NO_VARIATION),
+        }
     }
 
     /// One paint for `paints`: the paint itself when there is one, else a `PaintColrLayers`
@@ -345,6 +550,173 @@ impl Bounds<'_> {
     }
 }
 
+/// The children of `paints` at the other sources: layer `k` of each [`Paint::Layers`], or with
+/// `None` the paint of each [`Paint::Glyph`]. Empty when one source has no such child, which
+/// ends the variation below.
+fn children<'p>(paints: &[&'p Paint], k: Option<usize>) -> Vec<&'p Paint> {
+    let picked: Vec<&'p Paint> = paints
+        .iter()
+        .filter_map(|p| match (*p, k) {
+            (Paint::Layers(list), Some(k)) => list.get(k),
+            (Paint::Glyph { paint, .. }, None) => Some(paint.as_ref()),
+            _ => None,
+        })
+        .collect();
+    if picked.len() == paints.len() { picked } else { Vec::new() }
+}
+
+/// The variation index of a number that does not vary.
+const NO_VARIATION: u32 = 0xFFFF_FFFF;
+
+/// The numbers `own` reads from `paint` and from each of `others`, one list per number with the
+/// default's first.
+fn fields<const N: usize>(own: impl Fn(&Paint) -> Option<[i32; N]>, paint: &Paint, others: &[&Paint]) -> Vec<Vec<i32>> {
+    let rows: Vec<[i32; N]> = std::iter::once(paint).chain(others.iter().copied()).filter_map(own).collect();
+    (0..N).map(|k| rows.iter().filter_map(|r| r.get(k).copied()).collect()).collect()
+}
+
+fn stop_count(line: &ColorLine) -> Result<u16, CompileError> {
+    u16::try_from(line.stops.len()).map_err(|_| table_error("a gradient has too many stops".to_string()))
+}
+
+fn extend(line: &ColorLine) -> WExtend {
+    match line.extend {
+        Extend::Pad => WExtend::Pad,
+        Extend::Repeat => WExtend::Repeat,
+        Extend::Reflect => WExtend::Reflect,
+    }
+}
+
+/// The static colour line of `stops` (their bases unused).
+fn static_line(line: &ColorLine, stops: &[VarColorStop]) -> Result<WColorLine, CompileError> {
+    let stops = stops.iter().map(|s| WColorStop::new(s.stop_offset, s.palette_index, s.alpha)).collect();
+    Ok(WColorLine::new(extend(line), stop_count(line)?, stops))
+}
+
+fn var_line(line: &ColorLine, stops: Vec<VarColorStop>) -> Result<VarColorLine, CompileError> {
+    Ok(VarColorLine::new(extend(line), stop_count(line)?, stops))
+}
+
+/// The paints of `glyph` at the sources of `variation` that vary it, each source at a location
+/// of its own away from the default, and the variation model of those locations after the
+/// default; no model when no source is left.
+fn glyph_sources<'v>(variation: &'v PaintVariation, glyph: &str) -> Result<(Vec<&'v Paint>, Option<VariationModel>), CompileError> {
+    let axes = variation.locations.first().map_or(0, Vec::len);
+    let mut locations: Vec<Vec<f64>> = vec![vec![0.0; axes]];
+    let mut paints = Vec::new();
+    for (paint, location) in variation.sources(glyph).iter().zip(&variation.locations) {
+        if let Some(paint) = paint
+            && location.len() == axes
+            && location.iter().all(|v| v.is_finite())
+            && !locations.contains(location)
+        {
+            locations.push(location.clone());
+            paints.push(paint);
+        }
+    }
+    if paints.is_empty() {
+        return Ok((paints, None));
+    }
+    let model = VariationModel::new(&locations, false).map_err(|e| table_error(format!("glyph `{glyph}`: {e}")))?;
+    Ok((paints, Some(model)))
+}
+
+/// The deltas of a variable `COLR` table and the entries of its `DeltaSetIndexMap`.
+struct VarStore {
+    builder: VariationStoreBuilder,
+    axis_count: u16,
+    /// Per map entry, the delta set of a number that varies; `None` for one that does not.
+    entries: Vec<Option<u32>>,
+    /// Bases already given out, by their entries.
+    bases: HashMap<Vec<Option<u32>>, u32>,
+}
+
+impl VarStore {
+    fn new(axis_count: u16) -> Self {
+        Self { builder: VariationStoreBuilder::new(axis_count), axis_count, entries: Vec::new(), bases: HashMap::new() }
+    }
+
+    /// The variation index base of a paint whose numbers are `fields` (each the default's value
+    /// first, then the other sources' in `model`'s order): a delta set for each number that
+    /// differs, and a run of map entries, reused where the same run is already in the map or
+    /// overlaps its end, as fontTools' variation merger places them. [`NO_VARIATION`] when no
+    /// number differs.
+    fn base(&mut self, model: &VariationModel, fields: &[Vec<i32>]) -> Result<u32, CompileError> {
+        let mut ids = Vec::with_capacity(fields.len());
+        for values in fields {
+            let Some(first) = values.first() else {
+                ids.push(None);
+                continue;
+            };
+            if values.iter().all(|v| v == first) || values.len() != model.master_count() {
+                ids.push(None);
+                continue;
+            }
+            let rows: Vec<Vec<f64>> = values.iter().map(|&v| vec![f64::from(v)]).collect();
+            let deltas = crate::var::gvar::region_deltas(model, &rows).map_err(table_error)?;
+            let mut set = Vec::with_capacity(deltas.len());
+            for (region, d) in deltas {
+                let d = d.first().copied().unwrap_or(0.0);
+                if !(d.is_finite() && d.abs() <= f64::from(i32::MAX)) {
+                    return Err(table_error(format!("a delta of {d} does not fit the table")));
+                }
+                // Rounded by `region_deltas` and within the i32 range.
+                #[allow(clippy::cast_possible_truncation)]
+                set.push((crate::var::hvar::variation_region(&region, self.axis_count, "COLR")?, d as i32));
+            }
+            ids.push(Some(self.builder.add_deltas(set)));
+        }
+        if ids.iter().all(Option::is_none) {
+            return Ok(NO_VARIATION);
+        }
+        self.place(ids)
+    }
+
+    /// Where the run `ids` sits in the map, appending what is missing.
+    fn place(&mut self, ids: Vec<Option<u32>>) -> Result<u32, CompileError> {
+        if let Some(&base) = self.bases.get(&ids) {
+            return Ok(base);
+        }
+        let too_many = || table_error("more than 2^32 variation indices".to_string());
+        let n = ids.len();
+        let len = self.entries.len();
+        let start = if n > 0
+            && let Some(i) = self.entries.windows(n).position(|w| w == ids.as_slice())
+        {
+            i
+        } else if let Some(k) = (1..n).rev().find(|&k| k <= len && self.entries.get(len - k..) == ids.get(..k)) {
+            self.entries.extend(ids.iter().skip(k).copied());
+            len - k
+        } else {
+            self.entries.extend(ids.iter().copied());
+            len
+        };
+        let base = u32::try_from(start).map_err(|_| too_many())?;
+        if base == NO_VARIATION {
+            return Err(too_many());
+        }
+        self.bases.insert(ids, base);
+        Ok(base)
+    }
+
+    /// The store and the map; `None` when nothing varies.
+    fn finish(self) -> Result<Option<(ItemVariationStore, DeltaSetIndexMap)>, CompileError> {
+        if self.entries.is_empty() {
+            return Ok(None);
+        }
+        let (store, remap) = self.builder.build();
+        let entries = self
+            .entries
+            .iter()
+            .map(|e| match e {
+                None => Ok(NO_VARIATION),
+                Some(id) => remap.get(*id).map(u32::from).ok_or_else(|| table_error("a delta set was lost while building the store".to_string())),
+            })
+            .collect::<Result<Vec<u32>, CompileError>>()?;
+        Ok(Some((store, entries.into_iter().collect())))
+    }
+}
+
 fn table_error(message: String) -> CompileError {
     CompileError::Table { table: "COLR", message }
 }
@@ -430,4 +802,33 @@ fn to_rgba(c: [f64; 4]) -> Rgba {
     let byte = |v: f64| if v.is_finite() { (v.clamp(0.0, 1.0) * 255.0).round() as u8 } else { 0 };
     let [r, g, b, a] = c;
     Rgba::new(byte(r), byte(g), byte(b), byte(a))
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
+
+    use super::*;
+
+    #[test]
+    fn variation_index_runs_are_shared_as_fonttools_shares_them() {
+        let mut store = VarStore::new(1);
+        // A run is appended, found again whole, and overlapped at the end of the map.
+        assert_eq!(store.place(vec![Some(100), None, Some(101)]).unwrap(), 0);
+        assert_eq!(store.place(vec![None, Some(101)]).unwrap(), 1);
+        assert_eq!(store.place(vec![Some(101), Some(102)]).unwrap(), 2);
+        assert_eq!(store.entries, [Some(100), None, Some(101), Some(102)]);
+        assert_eq!(store.place(vec![Some(100), None, Some(101)]).unwrap(), 0, "a run given out before");
+
+        // Numbers equal at every source store nothing; a number that differs gets a delta set.
+        let mut store = VarStore::new(1);
+        let model = VariationModel::new(&[vec![0.0], vec![1.0]], false).unwrap();
+        assert_eq!(store.base(&model, &[vec![5, 5], vec![-3, -3]]).unwrap(), NO_VARIATION);
+        assert_eq!(store.base(&model, &[vec![5, 9], vec![-3, -3]]).unwrap(), 0);
+        // Its run starts with the entry that ends the map.
+        assert_eq!(store.base(&model, &[vec![-3, -3], vec![7, 8]]).unwrap(), 1);
+        assert_eq!(store.entries.len(), 3);
+        let (_, map) = store.finish().unwrap().unwrap();
+        assert!(!write_fonts::dump_table(&map).unwrap().is_empty());
+    }
 }

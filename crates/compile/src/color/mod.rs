@@ -8,6 +8,7 @@
 //! | [`sbix`] | M11.8 | `sbix` version 1, serialised here and added raw |
 //! | [`svg`] | M11.9, M11.10 | the `SVG ` table, one document per glyph |
 //! | [`cbdt`] | M11.11 | `CBDT` and `CBLC`, glyph bitmap format 17 |
+//! | [`variable`] | M11.19 | colour layers in interpolated instances and variable fonts |
 //!
 //! How they join the pipeline (`lib.rs`, `plan.rs`): [`plan`] reads the export plan from
 //! `fontcraft_color::export` once per compile; [`append_layer_glyphs`] adds the layer glyphs
@@ -23,10 +24,13 @@ pub mod colr;
 pub mod cpal;
 pub mod sbix;
 pub mod svg;
+pub mod variable;
 
 use std::collections::{HashMap, HashSet};
 
-use fontcraft_color::export::{ExportPlan, Problem, ProblemKind, Switches, has_color_layers, plan_between_masters, plan_master, read_switches};
+use fontcraft_color::export::{
+    ColrVersion, ExportPlan, Problem, ProblemKind, Switches, has_color_layers, plan_between_masters, plan_master, read_switches,
+};
 use fontcraft_color::paint::{ShapeRef, shape_refs};
 use fontcraft_color::{AssetStore, MemoryAssets};
 use fontcraft_model::{Font, Glyph, Layer, Resolved, ResolvedComponent, ResolvedGlyph, Shape, Target};
@@ -68,8 +72,10 @@ pub struct ColorTables {
 }
 
 /// The export plan of a compile of `resolved`, read from `font`; empty without a source font
-/// (a compile of a resolved font alone has no colour layers). An instance between masters is
-/// refused when it would write colour tables ([`plan_between_masters`]).
+/// (a compile of a resolved font alone has no colour layers). The instance font of an instance
+/// between masters holds its interpolated colour layers ([`variable::interpolate_color_layers`]);
+/// read from the source font, such an instance gets the origin master's tables
+/// ([`plan_between_masters`]).
 pub fn plan(font: Option<&Font>, resolved: &Resolved, options: &Options) -> ExportPlan {
     let Some(font) = font else { return ExportPlan::default() };
     let switches = Switches { cbdt: options.cbdt, ..Switches::from_params(&resolved.params) };
@@ -85,67 +91,59 @@ pub fn plan(font: Option<&Font>, resolved: &Resolved, options: &Options) -> Expo
     plan_master(font, &resolved.master, &switches)
 }
 
-/// Refuses a static instance the compile interpolates ([`crate::needs_instance_font`]) when it
-/// would write colour tables from the font's colour layers: colour layers do not interpolate
-/// yet (M11.19).
+/// Checks the colour switches of a static instance the compile interpolates
+/// ([`crate::needs_instance_font`]). Its colour layers are interpolated into the instance font
+/// ([`variable::interpolate_color_layers`]), so nothing else is refused.
 pub fn check_instance(font: &Font, target: &Target) -> Result<(), CompileError> {
-    let Some(i) = crate::needs_instance_font(font, target) else { return Ok(()) };
-    let switches = read_switches(font, target)?;
-    let label = match font.instances.get(i) {
-        Some(inst) if !inst.name.is_empty() => inst.name.clone(),
-        _ => format!("#{i}"),
-    };
-    match plan_between_masters(font, &label, &switches).problems.into_iter().find(|p| p.kind == ProblemKind::Refusal) {
-        Some(p) => Err(CompileError::ColorRefused(p.message)),
-        None => Ok(()),
+    if crate::needs_instance_font(font, target).is_some() {
+        read_switches(font, target)?;
     }
+    Ok(())
 }
 
-/// The plan of a variable compile, at the default master `master`: no colour tables until colour
-/// layers interpolate (M11.19), with a warning when the font has colour layers. The exception is a
-/// font whose colour layers are all layer glyphs the source already has
-/// ([`existing_layer_glyph`]): those glyphs vary as any glyph does, so the default master's `COLR`
-/// and `CPAL` hold at every location, as both oracles write them.
-pub fn variable_plan(font: Option<&Font>, master: &str, switches: &Switches) -> ExportPlan {
-    let mut plan = ExportPlan::default();
-    let Some(font) = font.filter(|f| has_color_layers(f)) else { return plan };
-    let default = plan_master(font, master, switches);
-    if let Some(colr) = &default.colr
-        && !default.refused()
-        && default.sbix.is_none()
-        && default.svg.is_none()
-        && default.cbdt.is_none()
-        && all_existing(font, colr, master)
-    {
-        return ExportPlan { cpal: default.cpal, colr: default.colr, problems: default.problems, ..Default::default() };
+/// The plan of a variable compile at the default master `master`, `masters` being the variable
+/// font's master sources with their normalized locations (the default's all zeros).
+///
+/// `COLR` and `CPAL` are the default master's, with the [`fontcraft_color::paint::PaintVariation`]
+/// of the other masters ([`variable::variation`]): its layer glyphs are glyphs of the font that
+/// vary as any glyph does ([`variable::split_layer_glyphs`]), and the paints' numbers that
+/// differ become `PaintVar*` paints, so a glyph whose paints vary needs `COLR` version 1. `sbix`,
+/// `SVG ` and `CBDT` are static and are not written into a variable font, with a warning.
+pub fn variable_plan(font: Option<&Font>, master: &str, switches: &Switches, masters: &[fontcraft_features::var_layout::VarMaster]) -> ExportPlan {
+    let Some(font) = font.filter(|f| has_color_layers(f)) else { return ExportPlan::default() };
+    let mut plan = plan_master(font, master, switches);
+    if plan.refused() {
+        return plan;
     }
-    plan.problems.push(Problem {
-        kind: ProblemKind::Warning,
-        glyph: None,
-        message: "the variable font is written without colour tables: colour layers do not interpolate yet".to_string(),
-    });
+    let mut dropped = Vec::new();
+    if plan.sbix.take().is_some() {
+        dropped.push("sbix");
+    }
+    if plan.svg.take().is_some() {
+        dropped.push("SVG");
+    }
+    if plan.cbdt.take().is_some() {
+        dropped.push("CBDT and CBLC");
+    }
+    if !dropped.is_empty() {
+        plan.problems.push(Problem {
+            kind: ProblemKind::Warning,
+            glyph: None,
+            message: format!("the variable font is written without the {} tables: they are written into static fonts only", dropped.join(", ")),
+        });
+    }
+    if plan.colr.is_none() {
+        plan.cpal = None;
+    }
+    if let Some(colr) = plan.colr.as_mut() {
+        let others: Vec<(String, Vec<f64>)> = masters.iter().filter(|m| m.id != master).map(|m| (m.id.clone(), m.location.clone())).collect();
+        let variation = variable::variation(font, colr, master, &others, &mut plan.problems);
+        if colr.glyphs.iter().any(|g| variation.varies(&g.glyph, &g.paint)) {
+            colr.version = ColrVersion::V1;
+        }
+        plan.variation = Some(variation);
+    }
     plan
-}
-
-/// Whether every layer glyph of `colr` (planned at `master`) is a source glyph, and every colour
-/// layer of the other masters one of that form too.
-fn all_existing(font: &Font, colr: &fontcraft_color::export::ColrPlan, master: &str) -> bool {
-    let planned = colr.glyphs.iter().all(|cg| {
-        font.glyph(&cg.glyph).is_some_and(|source| {
-            shape_refs(&cg.paint)
-                .into_iter()
-                .enumerate()
-                .all(|(i, s)| existing_layer_glyph(source, &cg.glyph, i, s, master).is_some_and(|name| font.glyph(&name).is_some_and(|g| g.export)))
-        })
-    });
-    let others =
-        font.glyphs.as_arcs().iter().flat_map(|g| g.layers.iter()).filter(|l| l.master != master && fontcraft_color::layers::kind(l).is_some()).all(
-            |l| {
-                l.info.attrs.color_palette.is_some()
-                    && matches!(l.shapes.as_slice(), [Shape::Component(c)] if c.transform.is_identity() && font.glyph(&c.glyph).is_some())
-            },
-        );
-    planned && others
 }
 
 /// `glyphs` with the layer glyphs `plan` needs appended, and their descriptions.
@@ -165,7 +163,8 @@ pub fn append_layer_glyphs(
 /// production name in place of its name where it has one, outlines resolved at the resolved
 /// master, never shared between base glyphs. `glyphs` are the final source glyphs: a base glyph
 /// that is not among them gets no layer glyphs. A layer glyph the source already has
-/// ([`existing_layer_glyph`]) is not made again.
+/// ([`existing_layer_glyph`]), or that a variable compile made a glyph of
+/// ([`variable::split_layer_glyphs`]), is not made again.
 ///
 /// A layer glyph takes the advance of its colour layer, as fontc writes it (the editor keeps
 /// colour layers at their master layer's width, but a mark's master layer loses its advance at
@@ -184,12 +183,18 @@ pub fn layer_glyphs(
         return Ok(Vec::new());
     }
     let by_name: HashMap<&str, &ResolvedGlyph> = glyphs.iter().map(|g| (g.name.as_str(), g)).collect();
+    // A variable compile has made glyphs of these already, so they vary.
+    let split: HashSet<&str> =
+        plan.variation.iter().flat_map(|v| v.layer_glyphs.iter()).map(String::as_str).filter(|n| by_name.contains_key(n)).collect();
     let mut taken: HashSet<String> = glyphs.iter().map(|g| g.name.clone()).collect();
     let mut out = Vec::new();
     for cg in &colr.glyphs {
         let (Some(base), Some(source)) = (by_name.get(cg.glyph.as_str()), font.glyph(&cg.glyph)) else { continue };
         for (i, shape) in shape_refs(&cg.paint).into_iter().enumerate() {
             if existing_layer_glyph(source, &cg.glyph, i, shape, &resolved.master).is_some_and(|name| by_name.contains_key(name.as_str())) {
+                continue;
+            }
+            if split.contains(format!("{}.color{i}", cg.glyph).as_str()) {
                 continue;
             }
             if glyphs.len().saturating_add(out.len()) >= MAX_FONT_GLYPHS {
@@ -332,7 +337,7 @@ pub fn build(
         && colr_plan.glyphs.iter().any(|g| order.gid(&g.glyph).is_some())
     {
         let cpal_plan = plan.cpal.clone().unwrap_or_default();
-        let built = colr::build(colr_plan, order, cpal_plan.palettes.rows(), font)?;
+        let built = colr::build_variable(colr_plan, plan.variation.as_ref(), order, cpal_plan.palettes.rows(), font)?;
         let cpal_table = cpal::build(&cpal_plan, &built.added)?;
         out.tables.push((Tag::new(b"COLR"), built.table));
         out.tables.push((Tag::new(b"CPAL"), cpal_table));
@@ -426,6 +431,24 @@ mod tests {
         let font = FontRef::new(&out.bytes).unwrap();
         let colr = font.colr().unwrap();
         assert_eq!(colr.version(), 0);
+        let layers = colr.layer_records().unwrap().unwrap();
+        let name = |g: skrifa::raw::types::GlyphId16| out.glyph_order[usize::from(g.to_u16())].clone();
+        colr.base_glyph_records()
+            .unwrap()
+            .unwrap()
+            .iter()
+            .map(|b| {
+                let first = usize::from(b.first_layer_index());
+                let own = layers.get(first..first + usize::from(b.num_layers())).unwrap();
+                (name(b.glyph_id()), own.iter().map(|l| (name(l.glyph_id()), l.palette_index())).collect())
+            })
+            .collect()
+    }
+
+    /// [`colr_records`] of a table of any version.
+    fn colr_records_any(out: &Compiled) -> Vec<(String, Vec<(String, u16)>)> {
+        let font = FontRef::new(&out.bytes).unwrap();
+        let colr = font.colr().unwrap();
         let layers = colr.layer_records().unwrap().unwrap();
         let name = |g: skrifa::raw::types::GlyphId16| out.glyph_order[usize::from(g.to_u16())].clone();
         colr.base_glyph_records()
@@ -770,13 +793,115 @@ mod tests {
         assert_eq!(cpal_palettes(&out), [vec![(255, 0, 0, 255), (0, 0, 255, 255), (0, 255, 0, 128), (255, 255, 0, 255)]]);
     }
 
+    /// `A`'s master layers, marked full colour, paint a rectangle with a linear gradient from 10 %
+    /// to 90 % of its box: 63–542 by 0–500 at weight 400 (the origin), 63–842 by 0–700 at weight
+    /// 700, as fontc's test source COLRv1-var has it. `B` has one palette layer per master, a
+    /// square in colour 0 that grows with the weight.
+    fn variable_colour_font() -> Font {
+        let mut f = Font::new("Var Colour");
+        let palettes = Palettes::new(vec![vec![Rgba::new(255, 0, 0, 255), Rgba::new(0, 0, 255, 255)]]).unwrap();
+        Arc::make_mut(&mut f.info).params.0.push(to_param(&palettes));
+        f.axes = Arc::new(vec![fontcraft_model::Axis { name: "Weight".into(), tag: "wght".into(), ..Default::default() }]);
+        let masters = Arc::make_mut(&mut f.masters);
+        masters[0].location = vec![400.0];
+        let mut bold = masters[0].clone();
+        bold.id = "m02".into();
+        bold.name = "Bold".into();
+        bold.location = vec![700.0];
+        masters.push(bold);
+        for i in 0..f.glyphs.len() {
+            let mut g = f.glyphs.get_mut_at(i).unwrap();
+            let mut layer = g.layers[0].clone();
+            layer.id = "m02".into();
+            layer.master = "m02".into();
+            g.layers.push(layer);
+        }
+        let gradient = Gradient {
+            kind: GradientKind::Linear { start: Point::new(0.1, 0.1), end: Point::new(0.9, 0.9) },
+            stops: vec![
+                GradientStop { offset: 0.0, color: Color::Rgba([1.0, 0.0, 0.0, 1.0]) },
+                GradientStop { offset: 1.0, color: Color::Rgba([0.0, 0.0, 1.0, 1.0]) },
+            ],
+            extend: Extend::Pad,
+        };
+        let mut a = f.glyph_mut("A").unwrap();
+        for (k, right, top, width) in [(0, 542.0, 500.0, 600.0), (1, 842.0, 700.0, 900.0)] {
+            let mut p = Path::rect(63.0, 0.0, right, top);
+            p.info.attrs.gradient = Some(gradient.clone());
+            a.layers[k].width = width;
+            a.layers[k].info.attrs.full_color = true;
+            a.layers[k].shapes = vec![Shape::Path(p)];
+        }
+        drop(a);
+        let mut b = f.glyph_mut("B").unwrap();
+        b.layers[0].shapes.push(Shape::Path(Path::rect(0.0, 0.0, 400.0, 700.0)));
+        b.layers[1].shapes.push(Shape::Path(Path::rect(0.0, 0.0, 600.0, 700.0)));
+        b.layers.push(colour_layer("B-1", "m01", PaletteEntry::Index(0), vec![Shape::Path(Path::rect(100.0, 100.0, 300.0, 300.0))]));
+        b.layers.push(colour_layer("B-2", "m02", PaletteEntry::Index(0), vec![Shape::Path(Path::rect(100.0, 100.0, 500.0, 500.0))]));
+        drop(b);
+        f
+    }
+
     #[test]
-    fn a_variable_build_plans_no_colour_tables() {
-        let switches = Switches::default();
-        let plan = variable_plan(Some(&palette_font()), "m01", &switches);
-        assert!(plan.tables().is_empty());
-        assert_eq!(plan.problems.len(), 1);
-        assert!(variable_plan(Some(&Font::new("Plain")), "m01", &switches).problems.is_empty());
+    fn a_variable_build_varies_colour_layer_glyphs_and_gradients() {
+        let f = variable_colour_font();
+        let var = crate::var::compile_variable(&f, None, &Options::default(), &crate::var::VariableOptions::default()).unwrap();
+        let out = &var.compiled;
+        let n = out.glyph_order.len();
+        assert_eq!(&out.glyph_order[n - 2..], ["A.color0", "B.color0"], "{:?}", out.warnings);
+        let font = FontRef::new(&out.bytes).unwrap();
+        let colr = font.colr().unwrap();
+        assert_eq!(colr.version(), 1);
+        assert!(colr.clip_list().is_none(), "a variable COLR has no clip list, as fontmake writes it");
+        assert!(colr.var_index_map().is_some() && colr.item_variation_store().is_some());
+
+        // The gradient follows the rectangle: 10 % and 90 % of its box at each master, and the
+        // layer glyph's outline varies with it.
+        let paint_at = |wght: f32| {
+            let coords = [skrifa::instance::NormalizedCoord::from_f32((wght - 400.0) / 300.0)];
+            let a = GlyphId::new(u32::from(gid(out, "A")));
+            let glyph = font.color_glyphs().get_with_format(a, ColorGlyphFormat::ColrV1).unwrap();
+            let mut log = PaintLog { names: &out.glyph_order, events: Vec::new() };
+            glyph.paint(LocationRef::new(&coords), &mut log).unwrap();
+            let metrics = font.glyph_metrics(Size::unscaled(), LocationRef::new(&coords));
+            let b = metrics.bounds(GlyphId::new(u32::from(gid(out, "A.color0")))).unwrap();
+            (log.events, (b.x_min, b.y_min, b.x_max, b.y_max))
+        };
+        let (events, bounds) = paint_at(400.0);
+        assert_eq!(events, ["glyph A.color0", "linear 111 50 494 450 [0 2 1, 1 3 1]"]);
+        assert_eq!(bounds, (63.0, 0.0, 542.0, 500.0));
+        let (events, bounds) = paint_at(700.0);
+        assert_eq!(events, ["glyph A.color0", "linear 141 70 764 630 [0 2 1, 1 3 1]"]);
+        assert_eq!(bounds, (63.0, 0.0, 842.0, 700.0));
+
+        // B is a solid stack: a version 0 record, its layer glyph varying through its outline.
+        assert_eq!(colr_records_any(out), [("B".to_string(), vec![("B.color0".to_string(), 0)])]);
+        let coords = [skrifa::instance::NormalizedCoord::from_f32(1.0)];
+        let metrics = font.glyph_metrics(Size::unscaled(), LocationRef::new(&coords));
+        let b = metrics.bounds(GlyphId::new(u32::from(gid(out, "B.color0")))).unwrap();
+        assert_eq!((b.x_min, b.y_min, b.x_max, b.y_max), (100.0, 100.0, 500.0, 500.0));
+
+        // Without colour layers nothing is planned.
+        assert_eq!(variable_plan(Some(&Font::new("Plain")), "m01", &Switches::default(), &[]), ExportPlan::default());
+    }
+
+    #[test]
+    fn an_instance_between_masters_exports_its_interpolated_colour_layers() {
+        let mut f = variable_colour_font();
+        Arc::make_mut(&mut f.instances).push(Instance { name: "Medium".into(), location: vec![550.0], ..Default::default() });
+        let out = compile(&f, &Target::Instance(0), Flavour::TrueType, &Options::default()).unwrap();
+        let font = FontRef::new(&out.bytes).unwrap();
+        // Halfway: the rectangle is 63–692 by 0–600, the gradient at 10 % and 90 % of it.
+        let a = GlyphId::new(u32::from(gid(&out, "A")));
+        let glyph = font.color_glyphs().get_with_format(a, ColorGlyphFormat::ColrV1).unwrap();
+        let mut log = PaintLog { names: &out.glyph_order, events: Vec::new() };
+        glyph.paint(LocationRef::default(), &mut log).unwrap();
+        assert_eq!(log.events, ["glyph A.color0", "linear 126 60 629 540 [0 2 1, 1 3 1]"], "{:?}", out.warnings);
+        // B's palette layer is interpolated with its masters: a square from 100 to 400.
+        let metrics = font.glyph_metrics(Size::unscaled(), LocationRef::default());
+        let b = metrics.bounds(GlyphId::new(u32::from(gid(&out, "B.color0")))).unwrap();
+        assert_eq!((b.x_min, b.y_min, b.x_max, b.y_max), (100.0, 100.0, 400.0, 400.0));
+        assert_eq!(colr_records_any(&out), [("B".to_string(), vec![("B.color0".to_string(), 0)])]);
     }
 
     #[test]
