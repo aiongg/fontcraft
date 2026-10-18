@@ -29,11 +29,27 @@ pub struct ToolSettings {
     pub bounding_box: bool,
     /// The reference point placed with the Rotate or Scale tool (`transform.setOrigin`).
     pub reference: Option<Point>,
+    /// The lever's divisor of pointer movement (`editing.leverRatio`); 1 turns the lever off.
+    pub lever_ratio: f64,
+    /// Power Nudge is on (`path.togglePowerNudge`).
+    pub power_nudge: bool,
+    /// Tunni lines are showing (`view.showTunniLines`), so their lines and points can be dragged.
+    pub tunni_lines: bool,
 }
 
 impl Default for ToolSettings {
     fn default() -> Self {
-        Self { hit_tolerance: 6.0, snap_distance: 4.0, drag_threshold: 3.0, increments: [1.0, 10.0, 100.0], bounding_box: false, reference: None }
+        Self {
+            hit_tolerance: 6.0,
+            snap_distance: 4.0,
+            drag_threshold: 3.0,
+            increments: [1.0, 10.0, 100.0],
+            bounding_box: false,
+            reference: None,
+            lever_ratio: crate::drag_aids::DEFAULT_LEVER_RATIO,
+            power_nudge: false,
+            tunni_lines: false,
+        }
     }
 }
 

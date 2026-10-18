@@ -32,6 +32,7 @@ mod custom_params;
 mod decompose;
 mod detect;
 mod determinism;
+mod drag_aids;
 mod encodings;
 mod engine;
 mod export;

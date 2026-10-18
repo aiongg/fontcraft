@@ -98,6 +98,8 @@ pub struct SettingDef {
 pub const SETTINGS: &[SettingDef] = &[
     SettingDef { id: "addons.useSystemConsoleForScriptOutput", kind: Kind::Bool, default: DefaultValue::Bool(false) },
     SettingDef { id: "appearance.displayUnicodeValue", kind: Kind::Bool, default: DefaultValue::Bool(false) },
+    SettingDef { id: "editing.leverRatio", kind: Kind::Number { min: 1.0, max: 100.0 }, default: DefaultValue::Number(6.0) },
+    SettingDef { id: "editing.powerNudge", kind: Kind::Bool, default: DefaultValue::Bool(false) },
     SettingDef { id: "start.showAtLaunch", kind: Kind::Bool, default: DefaultValue::Bool(true) },
     SettingDef { id: "user.disableAutomaticAlignmentForImportedFiles", kind: Kind::Bool, default: DefaultValue::Bool(false) },
 ];
@@ -487,8 +489,12 @@ mod tests {
 
     #[test]
     fn live_settings_have_rows() {
-        let spec =
-            [include_str!("../../../spec/inventory/16-settings.toml"), include_str!("../../../spec/inventory/03a-edit-view-drawing.toml")].concat();
+        let spec = [
+            include_str!("../../../spec/inventory/16-settings.toml"),
+            include_str!("../../../spec/inventory/03a-edit-view-drawing.toml"),
+            include_str!("../../../spec/inventory/90-secondary.toml"),
+        ]
+        .concat();
         for def in SETTINGS {
             assert!(spec.contains(&format!("[[setting]]\nid = \"{}\"", def.id)), "{} has no [[setting]] row", def.id);
         }
