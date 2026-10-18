@@ -101,6 +101,7 @@ mod macros;
 mod masters;
 mod math_base;
 mod measure_line;
+mod measurements;
 mod metric_defs;
 mod metrics_files;
 mod metrics_io;

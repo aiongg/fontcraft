@@ -139,7 +139,7 @@ mod file_helpers;
 mod find_outline;
 mod geometry_helpers;
 pub mod math_base;
-mod measurements;
+pub mod measurements;
 mod metrics_files;
 mod nonlinear;
 mod pair_list;

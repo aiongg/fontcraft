@@ -36,6 +36,8 @@ mod active_layer_tests;
 #[cfg(test)]
 mod audit_markers_tests;
 #[cfg(test)]
+mod autometer_tests;
+#[cfg(test)]
 mod canvas_layers_tests;
 #[cfg(test)]
 mod command_console_tests;

@@ -60,7 +60,7 @@ use crate::tools_glue;
 pub type Pending = Vec<(&'static str, Value)>;
 
 /// The Palette sections, in order: (id, title).
-pub const SECTIONS: [(&str, &str); 7] = [
+pub const SECTIONS: [(&str, &str); 8] = [
     ("dimensions", "Dimensions"),
     ("fitCurve", "Fit Curve"),
     ("layers", "Layers"),
@@ -68,6 +68,7 @@ pub const SECTIONS: [(&str, &str); 7] = [
     ("relatedGlyphs", "Related Glyphs & Characters"),
     ("referenceFont", "Reference Font"),
     ("selections", "Selections"),
+    ("measurements", "Measurements"),
 ];
 /// The metric lines a Transformations origin can sit on.
 pub const METRICS: [&str; 5] = ["baseline", "halfXHeight", "xHeight", "halfCapHeight", "capHeight"];
@@ -116,6 +117,7 @@ pub struct PanelState {
     pub space_center: crate::shell::space_center::SpaceCenterState,
     pub kerning_review: crate::shell::kerning_review::KerningReviewState,
     pub edit_aids: crate::shell::edit_aids::EditAidsState,
+    pub autometer: crate::canvas::autometer::AutometerState,
     pub attach: crate::shell::attach::AttachState,
     pub reference_font: reference_font::ReferenceFontState,
     pub compare_table: crate::dialogs::compare_fonts::CompareTableState,
@@ -151,6 +153,7 @@ impl Default for PanelState {
             space_center: Default::default(),
             kerning_review: Default::default(),
             edit_aids: Default::default(),
+            autometer: Default::default(),
             attach: Default::default(),
             reference_font: Default::default(),
             compare_table: Default::default(),
@@ -210,7 +213,7 @@ pub const COMMANDS: &[UiCommand] = &[
         "Collapse / Expand Section",
         &[],
         "",
-        "{section: \"dimensions\" | \"fitCurve\" | \"layers\" | \"transformations\" | \"referenceFont\" | \"selections\" | a filter module's id (its section), expanded?: bool (omitted: toggle)} collapse a Palette section to its title row or expand it → {section, expanded}",
+        "{section: \"dimensions\" | \"fitCurve\" | \"layers\" | \"transformations\" | \"referenceFont\" | \"selections\" | \"measurements\" | a filter module's id (its section), expanded?: bool (omitted: toggle)} collapse a Palette section to its title row or expand it → {section, expanded}",
     ),
     (
         "infoBox.setReferencePoint",
