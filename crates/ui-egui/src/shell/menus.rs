@@ -119,6 +119,7 @@ fn cache_key(session: &Session, state: &UiState) -> u64 {
     session.extensions().revision().hash(&mut h);
     state.active_tab.hash(&mut h);
     state.selected_glyphs.hash(&mut h);
+    super::menus_dynamic::cache_key(state).hash(&mut h);
     if let Some(tab) = state.tab() {
         tab.text.revision().hash(&mut h);
         tab.focus.hash(&mut h);

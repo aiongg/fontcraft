@@ -331,6 +331,7 @@ milestone = "M13"
 summary = "The Script menu is a picture of the Scripts folder: one item per script file. FontCraft: the Script menu mirrors the macros folder in the same way."
 ref = "Extensions › Scripts › The Scripts Folder"
 status = "inferred"
+notes = "Built in M13.6: the Script menu's fixed items come first, then a separator and one item per macro of the Macros folder, labelled with its title (the file name without extension when it has none), running script.run with the macro's path. A file that cannot be read is listed greyed out with the reason as its tooltip."
 guesses = [
   "Script menu items are sorted by title, case-insensitively and with numbers in numeric order, folders before items; the handbook does not give the order.",
 ]
@@ -345,6 +346,7 @@ milestone = "M13"
 summary = "Subfolders of the Scripts folder become submenus, which is how scripts are grouped. FontCraft: same rule for the macros folder."
 ref = "Extensions › Scripts › Creating Scripts"
 status = "inferred"
+notes = "Built in M13.6: each subfolder is a submenu, nested up to 8 levels; macros deeper than that are listed in the eighth level's submenu."
 observe = [
   "Give two scripts in different subfolders the same MenuTitle, and two in one folder the same MenuTitle: note how the menu shows each clash.",
 ]
@@ -356,6 +358,7 @@ milestone = "M13"
 summary = "Hovering briefly over a script in the menu shows the script's short description, when it has one. FontCraft: a macro's description field is shown as the tooltip and returned as the command's params doc."
 ref = "Extensions › Scripts › Run Scripts"
 status = "inferred"
+notes = "Built in M13.6: the Script menu item's tooltip is the macro's description; a macro without one has no tooltip."
 observe = [
   "Rest the pointer on a script item that has a __doc__ string and time how long the tooltip takes to appear; check whether a multi-line description keeps its line breaks.",
 ]
@@ -482,6 +485,10 @@ milestone = "M13"
 summary = "Palette plug-ins (.glyphsPalette) add sections to the Palette sidebar (Window › Palette, Cmd+Shift+P). FontCraft: no module kind runs interface code; a filter module that declares parameters can be shown as a Palette section holding its parameter form and an Apply button, drawn by the app."
 ref = "Extensions › Plug-ins"
 status = "inferred"
+notes = "Built in M13.6: the form is drawn from the manifest's parameter schema (number and whole-number fields held to their range, a checkbox, a pop-up menu of choices); Apply runs plugin.runFilter with the form's values on what the module's Filter menu item would act on."
+guesses = [
+  "A filter module's Filter menu item runs it at once with its default parameters; other values are given in its Palette section or by agents in plugin.runFilter's `params`.",
+]
 
 # --- Installing and removing plug-ins ---
 
@@ -654,7 +661,7 @@ own = true
 [[command]]
 id = "view.showReporter"
 label = "Show (reporter name)"
-menu = ["View"]
+menu = []
 shortcut = ""
 kind = "ui"
 params = "{id: string, on?: bool}"
@@ -663,7 +670,13 @@ milestone = "M13"
 summary = "Each reporter plug-in of the reference has a Show entry at the foot of the View menu. FontCraft: one View menu entry per installed reporter module, switching its drawing in Edit View on or off; the switch is view state and is remembered per user."
 ref = "Extensions › Plug-ins; Edit View › Glyph Display › View Options"
 status = "inferred"
-guesses = ["Reporter entries are listed at the foot of the View menu in the order of their names, below a separator; the handbook does not give the order."]
+notes = "Built in M13.6: the command has no fixed menu item; the View menu gets one entry per installed reporter module (\"Show\" and the module's name, checked while shown) that runs this command with the module's id. Only installed reporter modules can be switched on. Edit View draws each shown reporter on the edited layer, background primitives behind the outline and foreground primitives in front; a module that is turned off or in safe mode keeps its entry and draws nothing."
+guesses = [
+  "Reporter entries are listed at the foot of the View menu in the order of their names, below a separator; the handbook does not give the order.",
+  "Reporters draw only the glyph being edited (with `active` true), not the other glyphs of the Edit View text; observing a reporter plug-in on a line of several glyphs would settle it.",
+  "A reporter that fails is not run again until its layer, scale or module changes, and its error is written at the top left of the canvas; the reference's handling of a failing reporter is not documented.",
+  "Reporters run with their default parameters; there is no form for reporter parameters.",
+]
 observe = ["Install two reporter plug-ins from the Plugin Manager, relaunch and open the View menu: note where their Show entries are, their order, and whether they have check marks."]
 
 [[command]]

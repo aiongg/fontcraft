@@ -45,6 +45,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
                 }
                 ui.separator();
             }
+            super::palette_modules::show(app, ui, pending);
             if app.state.display.info {
                 for (id, title, shown, draw) in CONTEXTUAL {
                     if !shown(app) {
