@@ -51,6 +51,7 @@ pub mod axis_mappings;
 pub mod baselines;
 mod color_palettes;
 pub mod compare_fonts;
+mod component_from_selection;
 pub mod cross_axis;
 pub mod custom_parameter_picker;
 mod export;
@@ -61,6 +62,7 @@ mod find_and_replace;
 pub mod find_glyphs;
 pub mod find_outline;
 pub mod form;
+pub mod glyph_picker_component;
 mod guide_properties;
 mod import_features;
 mod import_metrics;
@@ -298,6 +300,7 @@ pub const DIALOGS: &[Dialog] = &[
     find_outline::FOUND,
     math_table::DIALOG,
     baselines::DIALOG,
+    component_from_selection::DIALOG,
 ];
 
 /// The shell commands of this module.

@@ -128,6 +128,7 @@ impl FontcraftApp {
         let opened = id == "file.open" && result.as_ref().is_ok_and(|r| r.get("alreadyOpen").is_none());
         let warnings = if opened { self.open_display_strings() } else { Vec::new() };
         shell::start_window::after_run(self, id, &result);
+        shell::components::after_run(self, id, &result);
         shell::font_view::remember_node_selection(self);
         if result.is_ok() && matches!(id, "audit.run" | "audit.fix") {
             self.state.audit.reread = true;
@@ -204,6 +205,9 @@ impl FontcraftApp {
         }
         let empty = params.is_null() || params.as_object().is_some_and(serde_json::Map::is_empty);
         if empty && let Some(result) = shell::text::menu_command(self, id) {
+            return result;
+        }
+        if empty && let Some(result) = crate::dialogs::glyph_picker_component::menu_command(self, id) {
             return result;
         }
         if empty && let Some(dialog) = crate::dialogs::for_command(id) {

@@ -18,6 +18,11 @@
 //!   selected nodes, see `canvas::hints_ps::targets`), Autohint and Remove PostScript Hints on
 //!   the glyph, and Make Ghost Hint and Delete Hints on a hint (`canvas.hint`): a right-click on
 //!   a hint's badge or marker selects that hint first, as a click on an object does.
+//! - Items that need a choice first ask for it: Add Component and Change Component Glyph open the
+//!   glyph picker, Add Corner Component the corner glyph picker
+//!   (`dialogs::glyph_picker_component`), and Component from Selection its name dialog. A node
+//!   that holds a corner component offers Decompose Corner. The attachment anchor is chosen in
+//!   the component Info box, not here.
 //! - An item runs through `run_from_shell` with its targets from the selection
 //!   (`tools_glue::with_targets`), plus what the click adds: the clicked segment, node or guide,
 //!   and the click position for the commands that place something.
@@ -75,7 +80,18 @@ pub const HINT_ITEMS: &[(&str, &[&str])] = &[
 
 /// Shell commands that context menus show, with their rows' `context` (engine commands carry
 /// theirs in `CommandSpec::context`).
-const UI_CONTEXT: &[(&str, &[&str])] = &[("path.focusOnSelectedPath", &[NODE, PATH]), ("path.clearFocusOnPaths", &[CANVAS])];
+const UI_CONTEXT: &[(&str, &[&str])] =
+    &[("path.focusOnSelectedPath", &[NODE, PATH]), ("path.clearFocusOnPaths", &[CANVAS]), ("glyph.showGlyphsUsingAsComponent", &[CANVAS])];
+
+/// Engine commands the object sections show, whose registry entries list no context.
+const OBJECT_ITEMS: &[(&str, &[&str])] = &[("cornerComponent.add", &[NODE]), ("cornerComponent.decompose", &[NODE])];
+
+/// Commands whose registry entries list a context but that the menus leave out: the
+/// attachment anchor is chosen from the anchor menu of the component Info box.
+const HIDDEN: &[&str] = &["component.setAnchor"];
+
+/// Items that open a picker or a dialog for their choice instead of running at once.
+const ASKS: &[&str] = &["glyph.addComponent", "component.setBaseGlyph", "cornerComponent.add", "glyph.componentFromSelection"];
 
 /// Engine commands the glyph section shows, whose registry entries list no context.
 const GLYPH_ITEMS: &[&str] = &["glyph.setExport"];
@@ -253,6 +269,11 @@ pub fn sections(session: &Session, state: &UiState, kinds: &[&'static str]) -> V
     for spec in GLYPH_ITEMS.iter().filter_map(|id| find_command(id)) {
         all.push(Candidate { id: spec.id, label: spec.label, context: &[CANVAS], spec: Some(spec) });
     }
+    for (id, context) in OBJECT_ITEMS {
+        if let Some(spec) = find_command(id).filter(|s| s.context.is_empty()) {
+            all.push(Candidate { id: spec.id, label: spec.label, context, spec: Some(spec) });
+        }
+    }
     all.push(Candidate { id: SHOW_IN_FONT_VIEW, label: "Show Glyph in Font View", context: &[CANVAS], spec: None });
     if state.display.hints {
         for (id, context) in HINT_ITEMS {
@@ -271,6 +292,8 @@ pub fn sections(session: &Session, state: &UiState, kinds: &[&'static str]) -> V
     let on_guide = kinds.contains(&GUIDE);
     let visible = |id: &str| match (&scene, selection) {
         _ if on_guide && matches!(id, "guide.add" | "guide.addGlobal") => false,
+        _ if HIDDEN.contains(&id) => false,
+        (Some(scene), Some(selection)) if id == "cornerComponent.decompose" => !selected_corners(scene, selection).is_empty(),
         (Some(scene), Some(selection)) => item_state::visible(scene, selection, id),
         _ => id != GUIDE_PROPERTIES,
     };
@@ -393,6 +416,11 @@ pub fn params_for(app: &FontcraftApp, menu: &ContextMenu, id: &str) -> Value {
                 m.insert("guide".into(), json!({"scope": g.scope.as_str(), "index": g.index}));
             }
         }
+        "cornerComponent.decompose" => {
+            if let Some(corners) = with_scene(app, selected_corners) {
+                m.insert("corners".into(), json!(corners));
+            }
+        }
         "glyph.setExport" => {
             let exports = edited_exports(&app.session, &app.state).unwrap_or(true);
             m.insert("glyphs".into(), json!([menu.glyph]));
@@ -411,6 +439,11 @@ pub fn params_for(app: &FontcraftApp, menu: &ContextMenu, id: &str) -> Value {
         _ => {}
     }
     Value::Object(m)
+}
+
+/// The corner components on the selected nodes, by hint index.
+fn selected_corners(scene: &Scene, selection: &Selection) -> Vec<usize> {
+    crate::dialogs::glyph_picker_component::corners_on_nodes(&scene.layer, selection.points.iter().copied())
 }
 
 /// The `dialog.open` parameters of Guide Properties… for the one selected guide.
@@ -433,6 +466,9 @@ pub fn steps_for(app: &FontcraftApp, menu: &ContextMenu, id: &'static str) -> Ve
     if id == SHOW_IN_FONT_VIEW {
         return vec![("fontView.setSelection", json!({"glyphs": [menu.glyph]})), ("fontView.show", json!({}))];
     }
+    if ASKS.contains(&id) {
+        return vec![ask(id, params)];
+    }
     let new_guide = match id {
         "guide.add" => with_scene(app, |scene, _| json!({"scope": "local", "index": scene.local_guides().len()})),
         "guide.addGlobal" => with_scene(app, |scene, _| json!({"scope": "global", "index": scene.global_guides.len()})),
@@ -443,6 +479,19 @@ pub fn steps_for(app: &FontcraftApp, menu: &ContextMenu, id: &'static str) -> Ve
         out.push(("selection.set", json!({ "guides": [guide] })));
     }
     out
+}
+
+/// The picker or dialog an item of [`ASKS`] opens, with the item's targets: the picker takes the
+/// rest from the selection the click made.
+fn ask(id: &'static str, params: Value) -> (&'static str, Value) {
+    use crate::dialogs::glyph_picker_component::{COMMAND, Purpose};
+    let purpose = match id {
+        "glyph.addComponent" => Purpose::AddComponent,
+        "component.setBaseGlyph" => Purpose::BaseGlyph,
+        "cornerComponent.add" => Purpose::AddCorner,
+        _ => return ("dialog.open", json!({"command": id, "params": params})),
+    };
+    (COMMAND, json!({"purpose": purpose.name()}))
 }
 
 /// Runs `f` with the edited glyph's scene and the selection.
@@ -460,14 +509,13 @@ pub fn invoke(app: &mut FontcraftApp, id: &str) -> Result<Value, String> {
     if !item.enabled {
         return Err(item.disabled_reason.clone().unwrap_or_else(|| format!("`{id}` is not available now")));
     }
-    let mut result = Value::Null;
+    let mut result = None;
     for (command, params) in steps_for(app, &menu, item.command) {
         let value = app.run_from_shell(command, &params)?;
-        if command == item.command || command == "dialog.open" {
-            result = value;
-        }
+        // The first step is the item's command, or the picker or dialog that asks for it.
+        result.get_or_insert(value);
     }
-    Ok(result)
+    Ok(result.unwrap_or(Value::Null))
 }
 
 /// Draws the open context menu, and queues the command of the item picked in it.

@@ -96,6 +96,7 @@ pub const MODULES: &[(&[UiCommand], Handler)] = &[
     (crate::canvas::autometer::COMMANDS, crate::canvas::autometer::run),
     (attach::COMMANDS, attach::run),
     (components::COMMANDS, components::run),
+    (crate::dialogs::glyph_picker_component::COMMANDS, crate::dialogs::glyph_picker_component::run),
     (crate::panels::reference_font::COMMANDS, crate::panels::reference_font::run),
     (crate::panels::selections::COMMANDS, crate::panels::selections::run),
     (url::COMMANDS, url::run),
@@ -134,6 +135,7 @@ pub fn windows(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'s
     text_preview::show(app, ui, pending);
     crate::dialogs::sample_strings::show(app, ui, pending);
     crate::dialogs::find_glyphs::show(app, ui, pending);
+    crate::dialogs::glyph_picker_component::show(app, ui, pending);
     font_info::show(app, ui, pending);
     extensions::show(app, ui, pending);
     command_console::show(app, ui, pending);
