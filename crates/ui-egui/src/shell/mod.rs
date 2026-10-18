@@ -34,6 +34,7 @@ pub mod palette;
 pub mod pickers;
 pub mod preview;
 pub mod preview_panel;
+pub mod project_window;
 pub mod selection;
 pub mod space_center;
 pub mod start_window;
@@ -150,6 +151,7 @@ pub fn windows(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'s
     crate::dialogs::cross_axis::show(app, ui, pending);
     crate::dialogs::smart_glyph_settings::show(app, ui, pending);
     crate::dialogs::smart_component_settings::show(app, ui, pending);
+    project_window::show(app, ui, pending);
 }
 
 pub fn is_ui_command(id: &str) -> bool {
