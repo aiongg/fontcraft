@@ -3352,14 +3352,24 @@ label = "Build Glyphs from Constructions…"
 menu = ["Glyph"]
 shortcut = ""
 kind = "engine"
-params = "{rules: string | path, glyphs?: [names], masters?: [id], overwrite?: bool, preview?: bool}"
+params = "{rules?: string, path?: path (one of the two), glyphs?: [names], masters?: [id], overwrite?: bool, autoUnicodes?: bool, markColor?: [r, g, b, a] | false, preview?: bool}"
 area = "components"
 milestone = "M13"
 summary = "Builds or rebuilds composite glyphs from a text file of construction rules. Beyond anchor-to-anchor attachment a rule can position a part against a guideline, at a distance or percentage of a metric, at a named reference point of another glyph, or through a transform matrix, and can set width and vertical metrics. With preview it returns the results without storing them."
 ref = "RoboFont topics › Accented glyphs (Glyph Construction positioning); RoboFont technical specification (embedded libraries: glyphConstruction)"
 status = "docs"
 origin = "robofont"
-notes = "Moved from M6 to M13 by the M6 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3 and M5 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5). M13.17; rules follow constructions.ruleGrammar; anchors come from M6's propagation."
+notes = "Moved from M6 to M13 by the M6 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3 and M5 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5). M13.17; rules follow constructions.ruleGrammar; anchors come from M6's propagation. Implemented on fontcraft_components::construction. As the extension's builder does, the rules run in file order and each built glyph is visible to the rules after it; a line or rule that fails is listed and the others still run; overwrite and automatic code points default to on, as the builder's sheet does on first use, and the file's option comments preset them. Taken from the project's README and source, not yet observed in the running extension."
+guesses = [
+  "Components a rule places are stored with automatic alignment off, so the realignment after every edit keeps the rule's positions; the original runs where there is no automatic alignment, so nothing there settles it.",
+  "Built glyphs get a colour label only when a rule, the file's `# MarkGlyphs:` line or `markColor` gives one; the extension's sheet marks them red by default. Building with the extension's first-use settings would show whether that default stands.",
+  "A rule without a `#` note leaves an existing glyph's note as it is; the extension writes the rule's note, empty or not.",
+  "A new glyph gets a layer for every master; `masters` limits only which master layers of existing glyphs are rebuilt.",
+  "Kerning applied with a backslash also moves the marks placed over the kerned base; the original measures them from where the unkerned base would be, which looks like an oversight.",
+]
+observe = [
+  "Build `Aacute = A + acute` with the extension's first-use settings and note whether the new glyph gets a mark colour.",
+]
 
 [[behavior]]
 id = "constructions.ruleGrammar"
@@ -3369,7 +3379,13 @@ summary = "A construction rule names a target glyph, an equals sign and the part
 ref = "Glyph Construction README (github.com/typemytype/GlyphConstruction, MIT), linked from RoboFont topics › Accented glyphs"
 status = "docs"
 origin = "robofont"
-notes = "Moved from M6 to M13 by the M6 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3 and M5 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5). Verified by the M13 planning pass against the project's README. M13.17 ports the project's parser (MIT) to Rust with credit in the file header and NOTICE; the README's examples become tests."
+notes = "Moved from M6 to M13 by the M6 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3 and M5 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5). Verified by the M13 planning pass against the project's README. M13.17 ports the project's parser (MIT) to Rust with credit in the file header and NOTICE; the README's examples become tests. Ported from Lib/glyphConstruction.py (crates/components/src/construction.rs); the README examples, rebuilt with our own glyphs, and the library's own test values are tests. The option comments (OverwriteExistingGlyphs, AutoUnicodes, MarkGlyphs) come from the extension's builder."
+guesses = [
+  "A part whose suffixed name the font lacks falls back to the name before the first dot wherever it appears, as the README says; the library itself does this only for parts with a position.",
+  "Variable values may use other variables (at most 16 deep) and a `#` ends a value; the original replaces variables in one pass and keeps a trailing comment in the value, which breaks its own README example.",
+  "A code point or colour that cannot be read makes the rule an error; the original drops it silently.",
+  "A number before a position name works with + and * (`10+top`), and position names may hold dots (`top.alt`); the original fails on both.",
+]
 
 [[command]]
 id = "app.openPreferencesEditor"
