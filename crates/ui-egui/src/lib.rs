@@ -62,6 +62,8 @@ mod glyph_set_dialog_tests;
 #[cfg(test)]
 mod guide_edit_tests;
 #[cfg(test)]
+mod hints_ps_tests;
+#[cfg(test)]
 mod info_box_kerning_tests;
 #[cfg(test)]
 mod info_box_metrics_tests;

@@ -175,9 +175,11 @@ fn with_tool<R>(app: &mut FontcraftApp, f: impl FnOnce(&mut Toolbox, &Context<'_
     sync(app);
     let center = app.tools.center(app.state.canvas_size);
     let FontcraftApp { session, state, tools, tokens, layouts, .. } = app;
+    let hints = crate::canvas::hints_ps::marks(session, state, tokens);
     let font = session.font().map_err(|e| e.to_string())?;
     let tab = state.tab().ok_or("no Edit View tab is showing (open a glyph first)")?;
     let mut scene = shown_scene(session, font, tab).ok_or("the edited glyph has no layer in the active master")?;
+    scene.ps_hints = hints;
     scene.background_shown = state.display.background;
     scene.guides_shown = state.display.guides;
     let view = view::tools_view(&tab.view, view::edited_origin(session, layouts, tab), center);
@@ -220,6 +222,7 @@ pub fn sync(app: &mut FontcraftApp) {
         if let (Some(valid), Some(tab)) = (valid, app.state.tab_mut()) {
             tab.selection = valid;
         }
+        crate::canvas::hints_ps::retain(app);
     }
     // A tab shown in text mode has the Text tool, and the Text tool needs a tab in text mode.
     crate::shell::text::tool_follows_tab(app);
@@ -569,6 +572,9 @@ pub fn takes_param(spec: &CommandSpec, param: &str) -> bool {
 /// View selection when the command takes targets and was given no parameters.
 pub fn with_targets(app: &FontcraftApp, id: &str, params: Value) -> Value {
     let empty = params.is_null() || params.as_object().is_some_and(Map::is_empty);
+    if empty && let Some(hint) = crate::canvas::hints_ps::targets(app, id) {
+        return hint;
+    }
     let Some(spec) = fontcraft_engine::find_command(id) else { return params };
     if !empty || spec.targets.is_empty() {
         return params;

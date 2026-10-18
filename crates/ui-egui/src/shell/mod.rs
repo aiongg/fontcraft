@@ -78,6 +78,7 @@ pub const MODULES: &[(&[UiCommand], Handler)] = &[
     (start_window::COMMANDS, start_window::run),
     (text::COMMANDS, text::run),
     (crate::canvas::group_members::COMMANDS, crate::canvas::group_members::run),
+    (crate::canvas::hints_ps::COMMANDS, crate::canvas::hints_ps::run),
     (kerning_window::COMMANDS, kerning_window::run),
     (font_view::metrics::COMMANDS, font_view::metrics::run),
     (preview::COMMANDS, preview::run),

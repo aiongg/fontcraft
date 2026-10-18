@@ -337,6 +337,44 @@ pub(crate) fn private_dict(font: &Resolved, settings: Option<&HintSettings>, war
     p
 }
 
+/// The Private dict entries a CFF export of `target` writes, by operator name (`BlueValues`,
+/// `OtherBlues`, `FamilyBlues`, `FamilyOtherBlues`, `StdHW`, `StdVW`, `StemSnapH`, `StemSnapV`,
+/// `BlueScale`, `BlueShift`, `BlueFuzz`), each as its numbers. A list or stem the dict leaves out
+/// has none; BlueScale, BlueShift and BlueFuzz hold the value that applies, whether written or
+/// the CFF default the writer leaves out. For queries that show the values without compiling.
+pub fn private_dict_entries(
+    font: &Font,
+    target: &fontcraft_model::Target,
+    warnings: &mut Vec<String>,
+) -> Result<Vec<(&'static str, Vec<f64>)>, CompileError> {
+    let instance_font = match crate::needs_instance_font(font, target) {
+        Some(index) => Some(crate::instance_source(font, index, warnings)?),
+        None => None,
+    };
+    let source = instance_font.as_ref().unwrap_or(font);
+    let resolved = crate::drawing::resolve(source, target)?;
+    let settings = hint_settings(source, &resolved, warnings);
+    let p = private_dict(&resolved, settings.as_ref(), warnings);
+    let value = |n: Number| match n {
+        Number::Int(i) => i as f64,
+        Number::Real(r) => r,
+    };
+    let list = |v: &[Number]| v.iter().map(|n| value(*n)).collect::<Vec<f64>>();
+    Ok(vec![
+        ("BlueValues", list(&p.blue_values)),
+        ("OtherBlues", list(&p.other_blues)),
+        ("FamilyBlues", list(&p.family_blues)),
+        ("FamilyOtherBlues", list(&p.family_other_blues)),
+        ("StdHW", p.std_hw.map(value).into_iter().collect()),
+        ("StdVW", p.std_vw.map(value).into_iter().collect()),
+        ("StemSnapH", list(&p.stem_snap_h)),
+        ("StemSnapV", list(&p.stem_snap_v)),
+        ("BlueScale", vec![value(p.blue_scale)]),
+        ("BlueShift", vec![value(p.blue_shift)]),
+        ("BlueFuzz", vec![value(p.blue_fuzz)]),
+    ])
+}
+
 /// Warns when BlueScale is too large for the tallest alignment zone: the handbook requires
 /// (largest point size at 300 dpi − 0.49) × largest zone < 240, and BlueScale is that point size
 /// less 0.49, over 240, so BlueScale × largest zone must stay below 1.

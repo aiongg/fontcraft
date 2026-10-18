@@ -69,6 +69,7 @@ mod guides;
 mod hint_node_order;
 mod hint_points;
 mod hint_preview;
+mod hint_ps;
 mod hint_tt;
 mod hint_tt_more;
 mod hint_upkeep;

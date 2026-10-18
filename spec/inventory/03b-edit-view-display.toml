@@ -583,6 +583,8 @@ milestone = "M10"
 summary = "Toggles the display of PostScript hints on the glyph. TrueType hints are not covered by this switch; they are seen through the TrueType Instructor tool."
 ref = "Edit View › Glyph Display › View Options"
 status = "handbook"
+notes = "Off by default. While it is on, the Select tool hits and drags the hints and the context menu offers the hint commands (crates/ui-egui/src/canvas/hints_ps.rs); turning it off deselects the hints. Documented in the handbook, not yet observed."
+guesses = ["Show Hints starts off in a new window; the reference app would settle its default."]
 
 [[command]]
 id = "view.showAnchors"

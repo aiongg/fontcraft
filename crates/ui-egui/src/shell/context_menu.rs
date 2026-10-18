@@ -13,6 +13,11 @@
 //!   apply (Unlock Path on an unlocked path) and checks checkable ones ([`super::item_state`]).
 //! - Add Global Guide replaces Add Guide while Alt is held ([`ContextItem::alternate`]).
 //! - A guide's menu ends with Guide Properties…, which opens that guide's dialog.
+//! - While Show Hints is on, the PostScript hint items join the menu ([`HINT_ITEMS`]): Add
+//!   Horizontal Hint and Add Vertical Hint on nodes, paths and empty canvas (linked to the
+//!   selected nodes, see `canvas::hints_ps::targets`), Autohint and Remove PostScript Hints on
+//!   the glyph, and Make Ghost Hint and Delete Hints on a hint (`canvas.hint`): a right-click on
+//!   a hint's badge or marker selects that hint first, as a click on an object does.
 //! - An item runs through `run_from_shell` with its targets from the selection
 //!   (`tools_glue::with_targets`), plus what the click adds: the clicked segment, node or guide,
 //!   and the click position for the commands that place something.
@@ -34,7 +39,7 @@ use fontcraft_engine::params::TargetKind;
 use fontcraft_engine::{CommandSpec, Session, command_specs, find_command};
 use fontcraft_geom::Point;
 use fontcraft_model::ColorLabel;
-use fontcraft_tools::{Hit, HitResult, Scene, Selection};
+use fontcraft_tools::{Hit, HitResult, Item, Scene, Selection};
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 
@@ -54,6 +59,19 @@ pub const PATH: &str = "canvas.path";
 pub const ANCHOR: &str = "canvas.anchor";
 pub const COMPONENT: &str = "canvas.component";
 pub const GUIDE: &str = "canvas.guide";
+/// A PostScript hint's badge or marker, while Show Hints is on.
+pub const HINT: &str = "canvas.hint";
+
+/// The PostScript hint commands the menus show while Show Hints is on, with the menus that show
+/// them (their rows name no `context`: these menus exist only while hints are shown).
+pub const HINT_ITEMS: &[(&str, &[&str])] = &[
+    ("hint.ps.addHorizontalHint", &[NODE, PATH, CANVAS]),
+    ("hint.ps.addVerticalHint", &[NODE, PATH, CANVAS]),
+    ("hint.ps.makeGhostHint", &[HINT]),
+    ("hint.ps.deleteHints", &[HINT]),
+    ("hint.ps.autohintGlyph", &[CANVAS]),
+    ("hint.ps.clearGlyphHints", &[CANVAS]),
+];
 
 /// Shell commands that context menus show, with their rows' `context` (engine commands carry
 /// theirs in `CommandSpec::context`).
@@ -97,6 +115,12 @@ const ORDER: &[&str] = &[
     "guide.unlock",
     "guide.remove",
     "guide.toggleMeasurement",
+    "hint.ps.addHorizontalHint",
+    "hint.ps.addVerticalHint",
+    "hint.ps.makeGhostHint",
+    "hint.ps.deleteHints",
+    "hint.ps.autohintGlyph",
+    "hint.ps.clearGlyphHints",
 ];
 
 /// One entry of a context menu.
@@ -157,20 +181,26 @@ pub fn open(app: &mut FontcraftApp, at: Point, space: Space) -> Result<(), Strin
     if app.tools.toolbox.busy() || app.dialog.is_some() {
         return Ok(());
     }
+    let hint = crate::canvas::hints_ps::hint_at(app, at, space);
     let (pos, hit) = tools_glue::hit_at(app, at, space)?;
+    let hit = if hint.is_some() { None } else { hit };
     let screen = match space {
         Space::Screen => at,
         Space::Font => tools_glue::current_view(app).map_or(at, |v| v.to_screen(at)),
     };
     let font = app.session.font().map_err(|e| e.to_string())?;
     let tab = app.state.tab_mut().ok_or("no Edit View tab is showing")?;
-    if let Some(h) = &hit
+    if let Some(index) = hint {
+        if !tab.selection.hints.contains(&index) {
+            tab.selection = Selection::from_items([Item::Hint(index)]);
+        }
+    } else if let Some(h) = &hit
         && !h.selected_in(&tab.selection)
     {
         tab.selection = Selection::from_items(h.items());
     }
     let scene = tools_glue::scene(font, tab).ok_or("the edited glyph has no layer in the active master")?;
-    let kinds = kinds(&scene, &tab.selection, hit.as_ref());
+    let kinds = if hint.is_some() { vec![HINT, CANVAS] } else { kinds(&scene, &tab.selection, hit.as_ref()) };
     let (id, glyph) = (tab.id, tab.edited_glyph().unwrap_or_default().to_string());
     let sections = sections(&app.session, &app.state, &kinds);
     app.tools.context_menu = Some(ContextMenu { tab: id, glyph, screen, at: pos, hit, sections });
@@ -192,6 +222,7 @@ pub fn kinds(scene: &Scene, selection: &Selection, hit: Option<&HitResult>) -> V
         None if !selection.guides.is_empty() => Some(GUIDE),
         None if !selection.anchors.is_empty() => Some(ANCHOR),
         None if !selection.shapes.is_empty() => Some(COMPONENT),
+        None if !selection.hints.is_empty() => Some(HINT),
         None => None,
     };
     object.into_iter().chain([CANVAS]).collect()
@@ -223,6 +254,13 @@ pub fn sections(session: &Session, state: &UiState, kinds: &[&'static str]) -> V
         all.push(Candidate { id: spec.id, label: spec.label, context: &[CANVAS], spec: Some(spec) });
     }
     all.push(Candidate { id: SHOW_IN_FONT_VIEW, label: "Show Glyph in Font View", context: &[CANVAS], spec: None });
+    if state.display.hints {
+        for (id, context) in HINT_ITEMS {
+            if let Some(spec) = find_command(id) {
+                all.push(Candidate { id: spec.id, label: spec.label, context, spec: Some(spec) });
+            }
+        }
+    }
     let rank = |id: &str| ORDER.iter().position(|o| *o == id).unwrap_or(ORDER.len());
     all.sort_by_key(|c| rank(c.id));
     let font = session.font().ok();
@@ -254,7 +292,9 @@ pub fn sections(session: &Session, state: &UiState, kinds: &[&'static str]) -> V
 
 fn item(session: &Session, state: &UiState, at: Option<(&Scene, &Selection)>, c: &Candidate) -> ContextItem {
     let check = match c.spec {
-        Some(spec) => (spec.enabled)(session).and_then(|()| tools_glue::selection_supplies(session, state, spec)),
+        Some(spec) => {
+            (spec.enabled)(session).and_then(|()| tools_glue::selection_supplies(session, state, spec)).and_then(|()| hint_ready(state, c.id))
+        }
         None => ui_enabled(state, c.id),
     };
     ContextItem {
@@ -267,6 +307,16 @@ fn item(session: &Session, state: &UiState, at: Option<(&Scene, &Selection)>, c:
             _ => at.and_then(|(scene, selection)| item_state::checked(scene, selection, c.id)),
         },
         alternate: ALTERNATES.contains(&c.id),
+    }
+}
+
+/// The hint items that act on selected hints need one.
+fn hint_ready(state: &UiState, id: &str) -> Result<(), String> {
+    match id {
+        "hint.ps.makeGhostHint" | "hint.ps.deleteHints" if state.tab().is_none_or(|t| t.selection.hints.is_empty()) => {
+            Err("select a hint first".into())
+        }
+        _ => Ok(()),
     }
 }
 
