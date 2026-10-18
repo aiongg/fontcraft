@@ -56,10 +56,8 @@ fn layout_convert_syntax_writes_volt_and_fontdame_as_feature_code() {
 #[test]
 fn layout_convert_syntax_to_ttx_compiles_against_the_font() {
     let dir = temp("ttx");
+    // The new document has the glyphs a and b.
     let mut s = Session::with_document();
-    for name in ["a", "b"] {
-        run(&mut s, "glyph.newGlyph", json!({ "name": name }));
-    }
     let ttf = dir.join("Font.ttf");
     run(&mut s, "file.exportStatic", json!({ "destination": ttf, "timestamp": 0 }));
     let txt = dir.join("smcp.txt");

@@ -53,7 +53,7 @@ fn outlines_convert_curves_on_a_source_and_a_binary() {
     let r = session.execute("outlines.convertCurves", &json!({"input": source, "to": "quadratic"})).unwrap();
     let result = &r["results"][0];
     assert_eq!(result["kind"], json!("source"));
-    assert_eq!(result["changed"], json!(["O", "L"]), "the contours of both are reversed as TrueType wants them");
+    assert_eq!(result["changed"], json!([".notdef", "L", "O"]), "the contours of all three are reversed as TrueType wants them");
     let out = std::path::PathBuf::from(result["output"].as_str().unwrap());
     assert_eq!(out, dir.join("in.quadratic.fontcraft"));
     let (font, _) = crate::io::open(&out, None).unwrap();
@@ -62,12 +62,15 @@ fn outlines_convert_curves_on_a_source_and_a_binary() {
     let (input, _) = crate::io::open(&source, None).unwrap();
     assert!(kinds(&input, "O").contains(&NodeKind::Curve), "the input is never changed");
 
-    // A compiled font: the quadratic run comes back as one cubic curve in glyf.
+    // A compiled font: the quadratic run comes back as cubic curves in glyf. Its points are
+    // rounded, so without allCubic qu2cu keeps it quadratic, as fontTools' qu2cu does.
     let out = dir.join("cubic.ttf");
-    let r = session.execute("outlines.convertCurves", &json!({"inputs": [binary], "to": "cubic", "output": out})).unwrap();
+    let kept = session.execute("outlines.convertCurves", &json!({"inputs": [binary], "to": "cubic", "output": dir.join("kept.ttf")})).unwrap();
+    assert_eq!(kept["results"][0]["changed"], json!([]), "{kept}");
+    let r = session.execute("outlines.convertCurves", &json!({"inputs": [binary], "to": "cubic", "allCubic": true, "output": out})).unwrap();
     let result = &r["results"][0];
     assert_eq!(result["kind"], json!("ttf"));
-    assert!(result["changed"].as_array().unwrap().contains(&json!("O")));
+    assert!(result["changed"].as_array().unwrap().contains(&json!("O")), "{result}");
     assert_eq!(result["maxError"], json!(1.0));
     let after = fontcraft_tables::read(&std::fs::read(&out).unwrap(), 0).unwrap();
     assert_eq!(after.get(*b"head").unwrap()[52..54], [0, 1], "glyphDataFormat 1: glyf holds cubic curves");
@@ -102,6 +105,9 @@ fn outlines_componentize_with_a_reference_and_by_detection() {
     let dir = scratch("componentize");
     let mut s = Session::with_document();
     let square = |y: i64| json!([{"x": 0, "y": y}, {"x": 0, "y": y + 100}, {"x": 100, "y": y + 100}, {"x": 100, "y": y}]);
+    for name in ["period", "dothigh"] {
+        s.execute("glyph.newGlyph", &json!({"name": name})).unwrap();
+    }
     s.execute("path.addPath", &json!({"glyph": "period", "nodes": square(0)})).unwrap();
     s.execute("path.addPath", &json!({"glyph": "dothigh", "nodes": square(300)})).unwrap();
     s.execute("glyph.newGlyph", &json!({"name": "colon"})).unwrap();
@@ -132,7 +138,7 @@ fn outlines_componentize_with_a_reference_and_by_detection() {
 
     // Without a source, matching contours: dothigh is period moved up, and colon two periods.
     let r = session.execute("outlines.componentize", &json!({"font": flat, "detect": true, "output": dir.join("detected.ttf")})).unwrap();
-    assert_eq!(r["changed"], json!(["dothigh", "colon"]));
+    assert_eq!(r["changed"], json!(["colon", "dothigh"]), "in the compiled font's glyph order");
 
     // No source beside the font, and none named: refused, nothing written.
     let alone = dir.join("alone.ttf");
