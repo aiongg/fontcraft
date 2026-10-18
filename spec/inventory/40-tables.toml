@@ -1787,6 +1787,7 @@ milestone = "M11"
 summary = "COLR clip boxes are the colour glyph's bounds expanded outward to multiples of a quantum equal to a tenth of the em rounded to the nearest 10 units (100 at 1000 units per em, 200 at 2048), so that many glyphs share a box; consecutive glyphs with the same box are stored as one range."
 ref = "fontc fontbe/src/colr.rs"
 status = "docs"
+notes = "The colour glyph's bounds are the union of its layer glyphs' outlines, curve extremes included. Only glyphs in the BaseGlyphList get a clip box. FontCraft rounds the minimum down and the maximum up, as fontTools' quantizeRect does for fontmake; fontc 1.0.0 divides integers, which rounds a negative minimum toward zero, so its box can cut a glyph that reaches below the baseline."
 
 [[behavior]]
 id = "compile.colrGradientGeometry"
@@ -1795,7 +1796,10 @@ milestone = "M11"
 summary = "Glyphs gradient coordinates are fractions of the layer's bounding box and are scaled to font units at compile time. A radial gradient without an explicit radius uses the largest distance from its centre to the four box corners. A linear gradient's third point is obtained by rotating the start-to-end vector by -90 degrees around the start point."
 ref = "fontc fontbe/src/colr.rs"
 status = "docs"
-notes = "Checked in the M11 planning pass: glyphsLib's `color_layers.py` and fontc's `colr.rs` compute the same geometry, relative to the bounds of the run of shapes that forms one layer glyph, and both oracles give identical gradients on fontc's COLRv1 test sources."
+notes = "Checked in the M11 planning pass: glyphsLib's `color_layers.py` and fontc's `colr.rs` compute the same geometry, relative to the bounds of the run of shapes that forms one layer glyph, and both oracles give identical gradients on fontc's COLRv1 test sources. FontCraft takes the bounds from the curves of the run's outline (`fontcraft_color::paint`); fontc takes the layer glyph's `glyf` box, made from rounded control points, so the two differ only for curves whose extremes lie inside their control points. Opening a compiled font reads gradients back against the same curve bounds. A version 4 radial gradient with radii writes both centres and both radii (fractions of the box width); a conic gradient is a PaintSweepGradient around its centre from its start angle through its sweep."
+guesses = [
+  "The ellipse angle of a version 4 radial gradient is not written: COLR circles cannot be squashed without a transform paint. Settled by exporting a radial gradient on a wide path from the reference and reading its paint.",
+]
 
 [[behavior]]
 id = "compile.subsetOnExport"

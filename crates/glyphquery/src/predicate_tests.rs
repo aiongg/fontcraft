@@ -242,3 +242,34 @@ fn alignment_follows_the_font_setting_and_the_component_rule() {
     Arc::make_mut(&mut font.info).settings.disables_automatic_alignment = Some(true);
     assert_eq!(run(&font, &data, "layer.isAligned OR isAligned"), Vec::<String>::new());
 }
+
+/// The colour tokens (`color.export.glyphFilterTokens`): `isColorGlyph` for palette layers,
+/// `isAnyColorGlyph` for every kind, `isAppleColorGlyph` for iColor layers; `colorIndex` in a
+/// predicate is the glyph's colour label, as the feature-code tokens document it.
+#[test]
+fn colour_tokens_select_glyphs_by_their_colour_layers() {
+    let mut font = Font::new("Colour");
+    let master = font.masters[0].id.clone();
+    let with_layer = |font: &mut Font, name: &str, set: &dyn Fn(&mut Layer)| {
+        let mut l = extra_layer(&format!("{name}-colour"), &master);
+        set(&mut l);
+        font.glyph_mut(name).unwrap().layers.push(l);
+    };
+    with_layer(&mut font, "E", &|l| l.info.attrs.color_palette = Some(fontcraft_model::PaletteEntry::Index(2)));
+    with_layer(&mut font, "G", &|l| l.info.attrs.sbix_size = Some(64));
+    with_layer(&mut font, "H", &|l| l.info.attrs.full_color = true);
+    with_layer(&mut font, "S", &|l| l.info.attrs.svg = true);
+    font.glyph_mut("K").unwrap().info.color = Some(fontcraft_model::ColorLabel::Index(3));
+    let data = data();
+    let cases: &[(&str, &[&str])] = &[
+        ("isColorGlyph", &["E"]),
+        ("isColorGlyph == false AND name == \"E\"", &[]),
+        ("isAnyColorGlyph", &["E", "G", "H", "S"]),
+        ("isAppleColorGlyph == true", &["G"]),
+        ("isAppleColorGlyph AND isAnyColorGlyph", &["G"]),
+        ("colorIndex == 3", &["K"]),
+    ];
+    for (text, want) in cases {
+        assert_eq!(run(&font, &data, text), *want, "{text}");
+    }
+}

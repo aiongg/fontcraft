@@ -249,12 +249,32 @@ fn unique_name(wanted: String, taken: &mut HashSet<String>, warnings: &mut Vec<S
 }
 
 /// Draws the shapes `shape` names of `layer` into `out`.
+///
+/// On a full-colour layer a path's fill and its stroke are separate layer glyphs
+/// (`color.export.strokeInColr`): the fill is the path's own outline, and the stroke is the
+/// stroke alone, expanded with the path's width, position, caps and joins by the stroke code
+/// every other layer uses.
 fn draw_shapes(font: &Font, layer: &Layer, shape: &ShapeRef, master: &str, out: &mut ResolvedGlyph) -> Result<(), String> {
-    if shape.stroke.is_some() {
-        // M11.7: strokes expanded to outlines.
-        return Err("the strokes of full-colour layers are not exported yet".to_string());
+    let mut shapes: Vec<Shape> = shape.shapes.iter().filter_map(|&i| layer.shapes.get(i).cloned()).collect();
+    if layer.info.attrs.full_color {
+        if shape.stroke.is_some() {
+            shapes.retain(|s| matches!(s, Shape::Path(_)));
+            for s in &mut shapes {
+                if let Shape::Path(p) = s {
+                    p.info.attrs.fill = false;
+                }
+            }
+            out.contours = shapes_outline(font, &shapes, &layer.master)?.into_iter().filter(|c| !c.elements().is_empty()).collect();
+            return Ok(());
+        }
+        for s in &mut shapes {
+            if let Shape::Path(p) = s {
+                p.info.attrs.stroke_width = None;
+            }
+        }
+    } else if shape.stroke.is_some() {
+        return Err("only full-colour layers have stroke layers".to_string());
     }
-    let shapes: Vec<Shape> = shape.shapes.iter().filter_map(|&i| layer.shapes.get(i).cloned()).collect();
     if layer.master != master || has_strokes_or_masks(&shapes, format_version(font)) {
         out.contours = shapes_outline(font, &shapes, &layer.master)?.into_iter().filter(|c| !c.elements().is_empty()).collect();
         return Ok(());
@@ -312,7 +332,7 @@ pub fn build(
         && colr_plan.glyphs.iter().any(|g| order.gid(&g.glyph).is_some())
     {
         let cpal_plan = plan.cpal.clone().unwrap_or_default();
-        let built = colr::build(colr_plan, order, cpal_plan.palettes.rows())?;
+        let built = colr::build(colr_plan, order, cpal_plan.palettes.rows(), font.map_or(1000, |f| f.units_per_em))?;
         let cpal_table = cpal::build(&cpal_plan, &built.added)?;
         out.tables.push((Tag::new(b"COLR"), built.table));
         out.tables.push((Tag::new(b"CPAL"), cpal_table));
@@ -344,11 +364,16 @@ mod tests {
     use fontcraft_color::paint::Paint;
     use fontcraft_color::palette::to_param;
     use fontcraft_color::{ColorLayerKind, Palettes, Rgba};
+    use fontcraft_geom::Point;
     use fontcraft_model::plist::{Number, Str, Value};
-    use fontcraft_model::{Component, Font, Instance, Layer, LayerAttrs, Master, PaletteEntry, Param, Path, ResolvedGlyph, Shape, Target};
+    use fontcraft_model::{
+        Color, ColorStop as GradientStop, Component, Dimension, Extend, Font, Gradient, GradientKind, Instance, Layer, LayerAttrs, Master,
+        PaletteEntry, Param, Path, ResolvedGlyph, Shape, Target,
+    };
+    use skrifa::color::{Brush, ColorGlyphFormat, ColorPainter, CompositeMode, Transform};
     use skrifa::instance::{LocationRef, Size};
     use skrifa::raw::TableProvider;
-    use skrifa::raw::types::GlyphId;
+    use skrifa::raw::types::{BoundingBox, GlyphId};
     use skrifa::{FontRef, MetadataProvider};
     use write_fonts::types::Tag;
 
@@ -570,6 +595,87 @@ mod tests {
         f
     }
 
+    /// The paints of a version 1 colour glyph as text: `glyph <name>` for each clip by a layer
+    /// glyph, then the fill under it.
+    struct PaintLog<'a> {
+        names: &'a [String],
+        events: Vec<String>,
+    }
+
+    impl ColorPainter for PaintLog<'_> {
+        fn push_transform(&mut self, t: Transform) {
+            self.events.push(format!("transform {t:?}"));
+        }
+        fn pop_transform(&mut self) {}
+        fn push_clip_glyph(&mut self, glyph_id: GlyphId) {
+            self.events.push(format!("glyph {}", self.names[glyph_id.to_u32() as usize]));
+        }
+        fn push_clip_box(&mut self, _: BoundingBox<f32>) {}
+        fn pop_clip(&mut self) {}
+        fn fill(&mut self, brush: Brush<'_>) {
+            let stops = |s: &[skrifa::color::ColorStop]| {
+                s.iter().map(|s| format!("{} {} {}", s.offset, s.palette_index, s.alpha)).collect::<Vec<_>>().join(", ")
+            };
+            self.events.push(match brush {
+                Brush::Solid { palette_index, alpha } => format!("solid {palette_index} {alpha}"),
+                Brush::LinearGradient { p0, p1, color_stops, .. } => format!("linear {} {} {} {} [{}]", p0.x, p0.y, p1.x, p1.y, stops(color_stops)),
+                other => format!("{other:?}"),
+            });
+        }
+        fn push_layer(&mut self, _: CompositeMode) {}
+    }
+
+    /// `A` has a full-colour layer: a square with a linear gradient, two half-transparent green
+    /// squares (one run), and a rectangle with only a 20-unit stroke in palette colour 1. `B`'s
+    /// full-colour layer is one square in palette colour 0.
+    fn full_colour_font() -> Font {
+        let mut f = Font::new("Full Colour");
+        let palettes = Palettes::new(vec![vec![Rgba::new(255, 0, 0, 255), Rgba::new(0, 0, 255, 255)]]).unwrap();
+        Arc::make_mut(&mut f.info).params.0.push(to_param(&palettes));
+        let full = |id: &str, shapes: Vec<Shape>| {
+            let mut l = Layer::new("m01", 600.0);
+            l.id = id.to_string();
+            l.info.attrs = with_kind(&LayerAttrs::default(), Some(ColorLayerKind::FullColor));
+            l.shapes = shapes;
+            l
+        };
+        let styled = |rect: [f64; 4], style: &dyn Fn(&mut fontcraft_model::ShapeAttrs)| {
+            let mut p = Path::rect(rect[0], rect[1], rect[2], rect[3]);
+            style(&mut p.info.attrs);
+            Shape::Path(p)
+        };
+        let green = Color::Rgba([0.0, 1.0, 0.0, 128.0 / 255.0]);
+        let gradient = Gradient {
+            kind: GradientKind::Linear { start: Point::new(0.25, 0.5), end: Point::new(0.75, 1.0) },
+            stops: vec![
+                GradientStop { offset: 0.0, color: Color::Palette { index: 0, alpha: 1.0 } },
+                GradientStop { offset: 1.0, color: Color::Palette { index: 1, alpha: 0.5 } },
+            ],
+            extend: Extend::Pad,
+        };
+        let mut a = f.glyph_mut("A").unwrap();
+        a.layers[0].width = 600.0;
+        a.layers[0].shapes.push(Shape::Path(Path::rect(0.0, 0.0, 500.0, 600.0)));
+        a.layers.push(full(
+            "A-full",
+            vec![
+                styled([100.0, 100.0, 500.0, 400.0], &|s| s.gradient = Some(gradient.clone())),
+                styled([0.0, 0.0, 100.0, 100.0], &|s| s.fill_color = Some(green)),
+                styled([200.0, 0.0, 300.0, 100.0], &|s| s.fill_color = Some(green)),
+                styled([100.0, 500.0, 300.0, 600.0], &|s| {
+                    s.stroke_width = Some(Dimension::Number(20.0));
+                    s.stroke_color = Some(Color::Palette { index: 1, alpha: 1.0 });
+                }),
+            ],
+        ));
+        drop(a);
+        let mut b = f.glyph_mut("B").unwrap();
+        b.layers[0].width = 600.0;
+        b.layers.push(full("B-full", vec![styled([0.0, 0.0, 400.0, 400.0], &|s| s.fill_color = Some(Color::Palette { index: 0, alpha: 1.0 }))]));
+        drop(b);
+        f
+    }
+
     #[test]
     fn colour_layers_drawn_by_source_glyphs_use_those_glyphs() {
         let f = listed_font();
@@ -599,6 +705,56 @@ mod tests {
         let var = crate::var::compile_variable(&v, None, &Options::default(), &crate::var::VariableOptions::default()).unwrap();
         assert_eq!(colr_records(&var.compiled), want, "{:?}", var.compiled.warnings);
         assert_eq!(cpal_palettes(&var.compiled), [vec![(255, 0, 0, 255), (0, 0, 255, 255)]]);
+    }
+
+    #[test]
+    fn full_colour_layers_compile_to_colr_version_1_with_strokes_outlined_and_clip_boxes() {
+        let f = full_colour_font();
+        let out = compile(&f, &f.default_target().unwrap(), Flavour::TrueType, &Options::default()).unwrap();
+        let n = out.glyph_order.len();
+        assert_eq!(&out.glyph_order[n - 4..], ["A.color0", "A.color1", "A.color2", "B.color0"], "one layer glyph per run, the stroke its own");
+        let font = FontRef::new(&out.bytes).unwrap();
+        let colr = font.colr().unwrap();
+        assert_eq!(colr.version(), 1, "A's gradient needs version 1");
+
+        // B is a stack of solid layers, so it keeps a version 0 record, as fontc writes it.
+        let name = |g: skrifa::raw::types::GlyphId16| out.glyph_order[usize::from(g.to_u16())].clone();
+        let records: Vec<(String, u16)> = colr.base_glyph_records().unwrap().unwrap().iter().map(|b| (name(b.glyph_id()), b.num_layers())).collect();
+        assert_eq!(records, [("B".to_string(), 1)]);
+        let layers = colr.layer_records().unwrap().unwrap();
+        assert_eq!((name(layers[0].glyph_id()), layers[0].palette_index()), ("B.color0".to_string(), 0));
+
+        // A paints its layer glyphs bottom first; the green is a new palette row with its alpha in
+        // CPAL, the gradient keeps the palette reference's own alpha.
+        let a = GlyphId::new(u32::from(gid(&out, "A")));
+        let glyph = font.color_glyphs().get_with_format(a, ColorGlyphFormat::ColrV1).unwrap();
+        let mut log = PaintLog { names: &out.glyph_order, events: Vec::new() };
+        glyph.paint(LocationRef::default(), &mut log).unwrap();
+        assert_eq!(
+            log.events,
+            ["glyph A.color0", "linear 200 250 400 400 [0 0 1, 1 1 0.5]", "glyph A.color1", "solid 2 1", "glyph A.color2", "solid 1 1",]
+        );
+        assert_eq!(cpal_palettes(&out), [vec![(255, 0, 0, 255), (0, 0, 255, 255), (0, 255, 0, 128)]]);
+
+        // The clip box is the layer glyphs' bounds widened to multiples of 100 units.
+        let clip = glyph.bounding_box(LocationRef::default(), Size::unscaled()).unwrap();
+        assert_eq!((clip.x_min, clip.y_min, clip.x_max, clip.y_max), (0.0, 0.0, 500.0, 700.0));
+
+        // The stroke layer glyph is the centred stroke alone; the fill layer glyphs are the paths.
+        let metrics = font.glyph_metrics(Size::unscaled(), LocationRef::default());
+        let bounds = |name: &str| {
+            let b = metrics.bounds(GlyphId::new(u32::from(gid(&out, name)))).unwrap();
+            (b.x_min, b.y_min, b.x_max, b.y_max)
+        };
+        assert_eq!(bounds("A.color1"), (0.0, 0.0, 300.0, 100.0));
+        assert_eq!(bounds("A.color2"), (90.0, 490.0, 310.0, 610.0));
+
+        // Without the gradient every glyph is a solid stack: version 0.
+        let mut solid = f.clone();
+        solid.glyph_mut("A").unwrap().layers[1].shapes.remove(0);
+        let out = compile(&solid, &solid.default_target().unwrap(), Flavour::TrueType, &Options::default()).unwrap();
+        let records = colr_records(&out);
+        assert_eq!(records.iter().map(|(base, layers)| (base.as_str(), layers.len())).collect::<Vec<_>>(), [("A", 2), ("B", 1)]);
     }
 
     #[test]
