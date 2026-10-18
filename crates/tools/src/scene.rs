@@ -70,6 +70,9 @@ pub struct Scene<'a> {
     pub smart_sizes: Vec<SmartSize>,
     /// The layer's PostScript hints while Show Hints is on, resolved by the caller.
     pub ps_hints: crate::hint_drag::HintMarks,
+    /// The snapping suggestions that are on and what they read from the document, resolved by
+    /// the caller.
+    pub suggest: crate::suggestions::Suggest,
     components: Vec<ComponentGeom>,
     component_points: usize,
 }
@@ -157,6 +160,7 @@ impl<'a> Scene<'a> {
             smart_handles: Vec::new(),
             smart_sizes: Vec::new(),
             ps_hints: crate::hint_drag::HintMarks::default(),
+            suggest: crate::suggestions::Suggest::default(),
             component_points: 0,
         }
     }

@@ -40,6 +40,8 @@ pub struct EditAidsState {
     /// The beam's height per document id, in font units. A document without an entry uses
     /// [`default_beam_height`].
     pub beam_heights: BTreeMap<u64, f64>,
+    /// The snapping suggestions that are on (View › Suggest).
+    pub suggest: fontcraft_tools::suggestions::Switches,
 }
 
 /// Which elements `view.showIndexes` labels.
@@ -113,6 +115,34 @@ pub const COMMANDS: &[UiCommand] = &[
         "",
         "{on?: bool, y?: number} show a horizontal line at height `y` (font units, kept per document; by default half the x-height) with the sidebearings measured where it meets the edited glyph's outline; giving `y` without `on` also shows it (omitted: toggle) → {on, y}",
     ),
+    (
+        "view.suggestHandles",
+        "Suggest Handles",
+        &["View", "Suggest"],
+        "",
+        "{on?: bool} while one handle is dragged, snap it flat, upright, parallel to the segment's other handle or square to it (omitted: toggle)",
+    ),
+    (
+        "view.suggestLines",
+        "Suggest Lines",
+        &["View", "Suggest"],
+        "",
+        "{on?: bool} while nodes are dragged, snap to the continuations of nearby straight segments and handles, perpendiculars of diagonal guides, and centrelines between facing edges (omitted: toggle)",
+    ),
+    (
+        "view.suggestDistance",
+        "Suggest Distance",
+        &["View", "Suggest"],
+        "",
+        "{on?: bool} while nodes are dragged, snap to outlines parallel to the other segments at the master's suggestDistance (omitted: toggle)",
+    ),
+    (
+        "view.suggestStems",
+        "Suggest Stems",
+        &["View", "Suggest"],
+        "",
+        "{on?: bool} while a straight edge is dragged, snap it one of the master's declared stems away from a facing edge (omitted: toggle)",
+    ),
 ];
 
 /// Most documents whose beam height is kept; past it, the oldest document's height is dropped.
@@ -148,6 +178,13 @@ const FREE_COMMANDS: &[&str] = &[
 const OUTLINE_TARGETS: &[&str] = &["points", "shapes", "paths", "segments", "components", "component"];
 
 pub fn run(app: &mut FontcraftApp, id: &str, args: &Args) -> Result<Value, String> {
+    if let Some(current) = app.state.panels.edit_aids.suggest.get_mut(id).map(|on| *on) {
+        let on = args.toggle(current)?;
+        if let Some(flag) = app.state.panels.edit_aids.suggest.get_mut(id) {
+            *flag = on;
+        }
+        return Ok(json!({"on": on}));
+    }
     let aids = &mut app.state.panels.edit_aids;
     match id {
         "view.showTunniLines" => toggle(args, &mut aids.tunni_lines),

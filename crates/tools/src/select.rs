@@ -466,7 +466,13 @@ impl Drag {
         self.last_pos = pos;
         let pos = self.lever.apply(cx, pos, mods);
         let target = Point::new(self.grab.x + pos.x - self.down.x, self.grab.y + pos.y - self.down.y);
-        self.snap = if mods.ctrl { None } else { Some(snap(cx.scene, &cx.view, target, &self.moving, cx.settings.snap_distance)) };
+        self.snap = if mods.ctrl {
+            None
+        } else {
+            let plain = snap(cx.scene, &cx.view, target, &self.moving, cx.settings.snap_distance);
+            let dragged = crate::suggestions::Dragged { selection: &self.selection, moving: &self.moving, grab: self.grab };
+            Some(crate::suggestions::refine(cx.scene, &cx.view, dragged, target, plain, cx.settings.snap_distance))
+        };
         let to = self.snap.as_ref().map_or(target, |s| s.point);
         let (dx, dy) = (to.x - self.grab.x, to.y - self.grab.y);
         if !(dx.is_finite() && dy.is_finite()) {

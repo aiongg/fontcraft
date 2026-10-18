@@ -102,6 +102,8 @@ mod start_window_tests;
 #[cfg(test)]
 mod stroke_tests;
 #[cfg(test)]
+mod suggestions_tests;
+#[cfg(test)]
 mod tests;
 #[cfg(test)]
 mod text_keys_tests;

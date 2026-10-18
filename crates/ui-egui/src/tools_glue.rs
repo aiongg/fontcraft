@@ -182,6 +182,7 @@ fn with_tool<R>(app: &mut FontcraftApp, f: impl FnOnce(&mut Toolbox, &Context<'_
     scene.ps_hints = hints;
     scene.background_shown = state.display.background;
     scene.guides_shown = state.display.guides;
+    scene.suggest = crate::canvas::suggestions::suggest(session, font, tab, state.panels.edit_aids.suggest);
     let view = view::tools_view(&tab.view, view::edited_origin(session, layouts, tab), center);
     let settings = ToolSettings { bounding_box: state.display.bounding_box, reference: state.transform.reference(), ..settings(tokens, font) }
         .with_drag_aids(|id| session.settings().get(id).ok());
