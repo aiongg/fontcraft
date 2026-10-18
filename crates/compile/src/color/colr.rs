@@ -10,7 +10,7 @@
 //! is palette index 0xFFFF. Colours that are not palette references become new rows, added once
 //! to every palette, with their alpha in CPAL only.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 use fontcraft_color::export::{ColrPlan, ColrVersion};
 use fontcraft_color::paint::{ColorRef, Paint, shape_refs};
@@ -39,14 +39,14 @@ pub fn build(plan: &ColrPlan, order: &GlyphOrder, palette_rows: usize) -> Result
         // M11.7: version 1.
         return Err(CompileError::NotYetImplemented("COLR version 1"));
     }
-    // The layer glyphs of each base glyph, in the order `super::layer_glyphs` appended them,
-    // which is the order of the paint's shape references.
-    let mut layer_gids: HashMap<&str, Vec<u16>> = HashMap::new();
+    // The layer glyphs `super::layer_glyphs` made, by base glyph and colour layer, in the order
+    // it appended them, which is the order of the paint's shape references.
+    let mut made: HashMap<(&str, &str), VecDeque<u16>> = HashMap::new();
     for m in order.made {
-        if let MadeFrom::ColorLayer { glyph, .. } = &m.source
+        if let MadeFrom::ColorLayer { glyph, layer } = &m.source
             && let Some(gid) = order.gid(&m.name)
         {
-            layer_gids.entry(glyph.as_str()).or_default().push(gid);
+            made.entry((glyph.as_str(), layer.as_str())).or_default().push_back(gid);
         }
     }
     let mut colors = AddedColors { rows: palette_rows, added: Vec::new() };
@@ -54,8 +54,19 @@ pub fn build(plan: &ColrPlan, order: &GlyphOrder, palette_rows: usize) -> Result
     for g in &plan.glyphs {
         let Some(base) = order.gid(&g.glyph) else { continue };
         let solids = solid_layers(&g.paint).ok_or_else(|| table_error(format!("glyph `{}` needs COLR version 1", g.glyph)))?;
-        let gids = layer_gids.get(g.glyph.as_str()).map_or(&[][..], Vec::as_slice);
-        if gids.len() != solids.len() || shape_refs(&g.paint).len() != solids.len() {
+        let refs = shape_refs(&g.paint);
+        // A shape reference without a made glyph is drawn by a source glyph of the name a made
+        // one would have had (`super::existing_layer_glyph`).
+        let gids: Vec<u16> = refs
+            .iter()
+            .enumerate()
+            .filter_map(|(i, s)| {
+                made.get_mut(&(g.glyph.as_str(), s.layer.as_str()))
+                    .and_then(VecDeque::pop_front)
+                    .or_else(|| order.gid(&format!("{}.color{i}", g.glyph)))
+            })
+            .collect();
+        if gids.len() != solids.len() || refs.len() != solids.len() {
             return Err(table_error(format!("glyph `{}` has {} colour layers but {} layer glyphs", g.glyph, solids.len(), gids.len())));
         }
         let layers = gids

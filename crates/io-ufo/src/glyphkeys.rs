@@ -897,7 +897,7 @@ fn image_key(img: &mut fontcraft_model::Image, k: &str, v: &Value) -> Option<()>
 }
 
 /// The colour layer mapping's entries: UFO layer name and palette entry.
-fn palette_entries(v: &Value) -> Option<Vec<(String, PaletteEntry)>> {
+pub(crate) fn palette_entries(v: &Value) -> Option<Vec<(String, PaletteEntry)>> {
     v.as_array()?
         .items
         .iter()

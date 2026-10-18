@@ -10,7 +10,7 @@
 //!
 //! | In the font | In the document |
 //! |---|---|
-//! | the stems of a glyph's charstring (`hstem`, `vstem`, their `hm` forms, the stems a `hintmask` implies) | the glyph's distinct stems as numeric hints on its layer, in first-seen order; a width of −20 or −21 as a top or bottom ghost hint. Hint replacement and counter hints are not kept: export builds the masks again |
+//! | the stems a glyph's charstring declares (`hstem`, `vstem`, their `hm` forms, the stems a `hintmask` implies), whether or not a hint mask selects them | the glyph's distinct stems as numeric hints on its layer, in declaration order, at most [`MAX_IMPORTED_STEMS`]; a width of −20 or −21 as a top or bottom ghost hint. Hint replacement and counter hints are not kept: export builds the masks again |
 //! | BlueValues | the first zone that holds the baseline as the baseline's overshoot; a zone starting at the ascender, cap height or x-height as that metric's overshoot; any other as an alignment zone of the master |
 //! | OtherBlues | a zone ending at the descender as its overshoot; any other as an alignment zone |
 //! | StemSnapH, StemSnapV (else StdHW, StdVW) | the font's stems, `hStem0`… and `vStem0`…, with the master's widths |
@@ -51,7 +51,7 @@ pub fn import(sfnt: &FontRef, font: &mut Font, warnings: &mut Vec<String>) -> Re
     if ps.glyphs.len() == font.glyphs.as_arcs().len() {
         let mut cut = 0usize;
         for (gid, g) in ps.glyphs.iter().enumerate() {
-            let mut hints = layer_hints(&g.ops);
+            let mut hints = layer_hints(g);
             if hints.is_empty() {
                 continue;
             }

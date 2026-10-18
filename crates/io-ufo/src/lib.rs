@@ -26,6 +26,7 @@ use std::collections::BTreeMap;
 
 use fontcraft_model::ModelError;
 
+mod colorkeys;
 mod design;
 pub mod designspace;
 pub mod features;

@@ -985,6 +985,7 @@ pub fn read(files: &Files) -> Result<Font> {
     };
     glyphkeys::read(&mut font, &master_id);
     libkeys::read(&mut font, false, &master_id);
+    crate::colorkeys::read(&mut font);
     crate::gdef::strip_derived(&mut font, &master_id);
     font.check()?;
     Ok(font)
@@ -1301,11 +1302,18 @@ pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
     let layer_names: Vec<String> = layers.iter().map(|(n, _)| n.clone()).collect();
     let read_lib = lib.clone();
     let in_layer = |k: &str| glyphkeys::in_layer_lib(k, &layer_names, &read_lib);
+    // The font-wide colour layer list, unless the user data holds one as it was read.
+    let color_layers = crate::colorkeys::value(font, &master.id).filter(|_| master.user_data.get(crate::colorkeys::COLOR_LAYERS).is_none());
     let stale: Vec<String> = lib
         .entries
         .iter()
         .map(|(k, _)| k.as_str())
-        .filter(|k| !TYPED_LIB.contains(k) && (master.user_data.get(k).is_none() || in_layer(k)) && !glyphs_keys.contains_key(*k))
+        .filter(|k| {
+            !TYPED_LIB.contains(k)
+                && (master.user_data.get(k).is_none() || in_layer(k))
+                && !glyphs_keys.contains_key(*k)
+                && !(*k == crate::colorkeys::COLOR_LAYERS && color_layers.is_some())
+        })
         .map(str::to_string)
         .collect();
     for k in stale {
@@ -1320,6 +1328,12 @@ pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
         if master.user_data.get(&k).is_none() {
             patch(&mut lib, &k, Some(v));
         }
+    }
+    // The list as read stays while it says the same, in its own key order.
+    if let Some(v) = color_layers
+        && lib.get(crate::colorkeys::COLOR_LAYERS).map(|k| libkeys::sorted_keys(k.clone())) != Some(libkeys::sorted_keys(v.clone()))
+    {
+        patch(&mut lib, crate::colorkeys::COLOR_LAYERS, Some(v));
     }
     // The kept list stays while it names the same glyphs, in whatever order, and in a master that
     // read a list of its own (often none) while the default master's is unchanged. A glyph whose
@@ -2092,12 +2106,12 @@ fn plan_add<'a>(plan: &mut Plan<'a>, name: String, g: &'a Glyph, part: Part<'a>,
 /// colour palette layer to `color.<index>` (65535 for the text colour), an intermediate layer
 /// of a version 3 or 4 document to its coordinates in braces (`{550, 100}`; version 2's name
 /// already says them), any other to its name. `None` for an alternate layer (glyphsLib makes
-/// those separate glyphs with designspace rules) and for a layer without a name, which a UFO
-/// cannot hold.
+/// those separate glyphs with designspace rules), for a layer without a name, which a UFO
+/// cannot hold, and for a colour layer the lib's font-wide list holds ([`crate::colorkeys`]).
 pub fn ufo_layer_name(font: &Font, l: &Layer) -> Option<String> {
     use fontcraft_model::PaletteEntry;
     let a = &l.info.attrs;
-    if !a.axis_rules.is_empty() {
+    if !a.axis_rules.is_empty() || crate::colorkeys::listed(font, l).is_some() {
         return None;
     }
     if let Some(p) = a.color_palette {
@@ -2151,6 +2165,7 @@ pub fn layers_left_out(font: &Font, designspace: bool) -> usize {
             !l.is_master_layer()
                 && (ufo_layer_name(font, l).is_none() || layer_master(&l.master))
                 && !(designspace && crate::designspace::alternate_comes_back(font, l))
+                && crate::colorkeys::listed(font, l).is_none()
         })
         .count()
 }
