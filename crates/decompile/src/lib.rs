@@ -7,8 +7,9 @@
 //! opens with its axes, masters, intermediate layers and named instances ([`variable`]). TrueType outlines stay quadratic and composite glyphs stay
 //! components (`open.truetypeKeepsQuadratic`, `open.truetypeKeepsComponents`); CFF outlines come
 //! back cubic. Pair kerning and kerning groups come back from the GPOS `kern` feature
-//! (`gpos_kern`); the rest of the layout, hinting and every other table are not read, and
-//! [`Decompiled::warnings`] lists them. The glyph order is recorded in a `glyphOrder` custom parameter, so a later export keeps
+//! (`gpos_kern`). Hinting comes back too: CFF stems, zones and stems ([`cff_hints`]), and
+//! TrueType `cvt `, `fpgm`, `prep`, `gasp` and glyph programs ([`tt_hints`]). The rest of the
+//! layout and every other table are not read, and [`Decompiled::warnings`] lists them. The glyph order is recorded in a `glyphOrder` custom parameter, so a later export keeps
 //! the glyph ids (`open.recordsGlyphOrder`).
 //!
 //! Input is untrusted: every offset and size is checked, WOFF and WOFF2 data is decompressed only up

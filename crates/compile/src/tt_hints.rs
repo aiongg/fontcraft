@@ -20,9 +20,11 @@
 //! A variable font gets the default master's programs without Delta instructions, and no
 //! `cvar` (a warning says so).
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use fontcraft_hinting::control::ControlInstructions;
+use fontcraft_hinting::imported::{ImportedProgram, imported_program};
 use fontcraft_hinting::settings::{TTF_STEMS, TTF_ZONES, family_tt_zones, main_master};
 use fontcraft_hinting::tt::delta_column_key;
 use fontcraft_hinting::{
@@ -31,7 +33,8 @@ use fontcraft_hinting::{
 use fontcraft_model::plist::{Array, Dict, Number, Value};
 use fontcraft_model::{Font, Layer, Param, Resolved, ResolvedGlyph};
 use fontcraft_ttasm::{FunctionTable, ProgramLimits, analyse};
-use write_fonts::tables::glyf::SimpleGlyph;
+use read_fonts::tables::glyf::CurvePoint;
+use write_fonts::tables::glyf::{Contour, SimpleGlyph};
 
 use crate::outline::Prepared;
 use crate::points::exported;
@@ -51,6 +54,9 @@ pub struct TtHinting {
     pub prep: Vec<u8>,
     /// Glyphs written with a program, by index in the glyph order, each with its points.
     pub glyphs: Vec<(usize, SimpleGlyph)>,
+    /// Composite glyphs written with a program, by index in the glyph order (imported programs
+    /// only).
+    pub composites: Vec<(usize, Vec<u8>)>,
     /// The merged needs for `maxp`.
     pub limits: ProgramLimits,
     /// Appended to the version string (name ID 5): the autohinter's Detailed info.
@@ -217,7 +223,7 @@ pub fn tt_hinting(
         Some(auto)
     } else {
         if imported(&settings) {
-            return Ok(imported_tables(&settings, &instructed, order, warnings));
+            return Ok(imported_tables(source, &settings, &instructed, order, outlines, variable, warnings));
         }
         None
     };
@@ -368,7 +374,7 @@ pub fn tt_hinting(
         ),
         None => (None, None),
     };
-    Ok(Some(TtHinting { cvt: programs.cvt, fpgm: programs.fpgm, prep: programs.prep, glyphs, limits, version_suffix, ttfa }))
+    Ok(Some(TtHinting { cvt: programs.cvt, fpgm: programs.fpgm, prep: programs.prep, glyphs, composites: Vec::new(), limits, version_suffix, ttfa }))
 }
 
 /// A copy of `layer` whose shapes are the closed contours of `outline` (the layer's outline with
@@ -419,11 +425,15 @@ fn outline_layer(layer: &Layer, outline: &fontcraft_geom::BezPath) -> Layer {
     out
 }
 
-/// The tables the cvt Table, prep Table Assembly and fpgm Table Assembly parameters hold.
+/// The tables the cvt Table, prep Table Assembly and fpgm Table Assembly parameters hold, with
+/// the glyph programs an opened font brought ([`imported_glyph_programs`]).
 fn imported_tables(
+    source: &Font,
     settings: &HintSettings,
     instructed: &[(usize, Vec<fontcraft_hinting::TtInstruction>)],
     order: &[ResolvedGlyph],
+    outlines: &[Prepared],
+    variable: bool,
     warnings: &mut Vec<String>,
 ) -> Option<TtHinting> {
     let program = |text: &Option<String>, name: &str, warnings: &mut Vec<String>| -> Option<Vec<u8>> {
@@ -446,7 +456,9 @@ fn imported_tables(
             names(&list)
         ));
     }
-    if fpgm.is_empty() && prep.is_empty() && cvt.is_empty() {
+    let edited: HashSet<usize> = instructed.iter().map(|(gid, _)| *gid).collect();
+    let mut imported = imported_glyph_programs(source, settings, order, outlines, &edited, variable, warnings);
+    if fpgm.is_empty() && prep.is_empty() && cvt.is_empty() && imported.is_empty() {
         return None;
     }
     let mut limits = ProgramLimits::default();
@@ -457,9 +469,135 @@ fn imported_tables(
             Err(_) => limits.uncertain = true,
         }
     }
+    // `maxSizeOfInstructions` counts glyph programs only.
     limits.max_size_of_instructions = 0;
+    for p in imported.glyphs.iter().map(|(_, g)| &g.instructions).chain(imported.composites.iter().map(|(_, b)| b)) {
+        match analyse(p, &functions) {
+            Ok(l) => limits.merge(&l),
+            Err(_) => limits.uncertain = true,
+        }
+        limits.max_size_of_instructions = limits.max_size_of_instructions.max(u16::try_from(p.len()).unwrap_or(u16::MAX));
+    }
     finish(&mut limits, warnings);
-    Some(TtHinting { cvt, fpgm, prep, glyphs: Vec::new(), limits, version_suffix: None, ttfa: None })
+    Some(TtHinting { cvt, fpgm, prep, glyphs: std::mem::take(&mut imported.glyphs), composites: std::mem::take(&mut imported.composites), limits, version_suffix: None, ttfa: None })
+}
+
+/// Glyph programs kept from an opened font, ready to write.
+#[derive(Default)]
+struct Imported {
+    glyphs: Vec<(usize, SimpleGlyph)>,
+    composites: Vec<(usize, Vec<u8>)>,
+}
+
+impl Imported {
+    fn is_empty(&self) -> bool {
+        self.glyphs.is_empty() && self.composites.is_empty()
+    }
+}
+
+/// The imported glyph programs (`fontcraft_hinting::imported`) of the layers being built, for
+/// the glyphs whose outline is unchanged since the font was opened and that have no instructions
+/// of the editor (`edited`), which win. A simple glyph is written from its layer's nodes as they
+/// are, in their order and without overlap removal or a change of direction, since the program
+/// numbers those points; a composite keeps the components the outline stage made. A variable
+/// font gets none, since its points must match the other masters', and neither does an instance
+/// away from its master, whose outline is not the layer's.
+fn imported_glyph_programs(
+    source: &Font,
+    settings: &HintSettings,
+    order: &[ResolvedGlyph],
+    outlines: &[Prepared],
+    edited: &HashSet<usize>,
+    variable: bool,
+    warnings: &mut Vec<String>,
+) -> Imported {
+    let mut out = Imported::default();
+    let at_master = match settings.instance.and_then(|i| source.instances.get(i)) {
+        None => true,
+        Some(instance) => source.master(&settings.master).is_ok_and(|m| m.location == instance.location),
+    };
+    let (mut stale, mut overruled, mut unwritable, mut dropped) = (Vec::new(), Vec::new(), Vec::new(), 0usize);
+    for (gid, g) in order.iter().enumerate() {
+        let Some(layer) = source.glyph(&g.name).and_then(|sg| sg.layer(&settings.master)) else { continue };
+        let text = match imported_program(layer) {
+            ImportedProgram::Absent => continue,
+            ImportedProgram::Stale => {
+                stale.push(g.name.clone());
+                continue;
+            }
+            ImportedProgram::Current(text) => text,
+        };
+        if variable || !at_master {
+            dropped += 1;
+            continue;
+        }
+        if edited.contains(&gid) {
+            overruled.push(g.name.clone());
+            continue;
+        }
+        let bytes = match fontcraft_ttasm::assemble(text) {
+            Ok(b) if b.len() <= fontcraft_ttasm::MAX_GLYPH_PROGRAM_BYTES => b,
+            Ok(_) => {
+                unwritable.push(format!("{} (the program is too long)", g.name));
+                continue;
+            }
+            Err(e) => {
+                unwritable.push(format!("{} ({e})", g.name));
+                continue;
+            }
+        };
+        if bytes.is_empty() {
+            continue;
+        }
+        match outlines.get(gid) {
+            Some(Prepared::Composite(_)) => out.composites.push((gid, bytes)),
+            Some(Prepared::Simple(_) | Prepared::Points(_)) => match layer_points(layer) {
+                Some(mut glyph) => {
+                    glyph.instructions = bytes;
+                    out.glyphs.push((gid, glyph));
+                }
+                None => unwritable.push(format!("{} (its outline is not the font's quadratic points)", g.name)),
+            },
+            _ => {}
+        }
+    }
+    if !stale.is_empty() {
+        warnings.push(format!("the imported TrueType programs of {} were left out, since their outlines changed", names(&stale)));
+    }
+    if !overruled.is_empty() {
+        warnings
+            .push(format!("the imported TrueType programs of {} were left out, since the glyphs have instructions of their own", names(&overruled)));
+    }
+    if !unwritable.is_empty() {
+        warnings.push(format!("the imported TrueType programs of these glyphs cannot be written, so they were left out: {}", unwritable.join(", ")));
+    }
+    if dropped > 0 {
+        let what = if variable { "the variable font" } else { "an instance away from its master" };
+        warnings.push(format!("{dropped} imported glyph programs were left out of {what}"));
+    }
+    out
+}
+
+/// The `glyf` entry of a layer's paths as they are: one contour per closed path, its nodes in
+/// order, rounded half up. `None` when the layer holds anything but closed quadratic paths or a
+/// coordinate does not fit.
+fn layer_points(layer: &Layer) -> Option<SimpleGlyph> {
+    let mut contours = Vec::with_capacity(layer.shapes.len());
+    for shape in &layer.shapes {
+        let fontcraft_model::Shape::Path(p) = shape else { return None };
+        if !p.closed || p.nodes.is_empty() || p.nodes.iter().any(|n| n.kind == fontcraft_model::NodeKind::Curve) {
+            return None;
+        }
+        let coordinate = |v: f64| i16::try_from(crate::ot_round(v) as i64).ok();
+        let points = p.nodes.iter().map(|n| Some(CurvePoint::new(coordinate(n.x)?, coordinate(n.y)?, n.on_curve()))).collect::<Option<Vec<_>>>()?;
+        contours.push(Contour::from(points));
+    }
+    if contours.is_empty() {
+        return None;
+    }
+    let mut glyph = SimpleGlyph { contours, ..SimpleGlyph::default() };
+    glyph.recompute_bounding_box();
+    Some(glyph)
 }
 
 /// Makes `limits` safe to write when the analysis could not follow every program.

@@ -1408,7 +1408,7 @@ fn hint(horizontal: bool, kind: &str, place: (f64, f64)) -> Hint {
 }
 
 /// The distinct stems of a glyph as layer hints, in first-seen order; counter hints are left out.
-fn layer_hints(ops: &[PsOp]) -> Vec<Hint> {
+pub(crate) fn layer_hints(ops: &[PsOp]) -> Vec<Hint> {
     let mut seen = HashSet::new();
     let mut out = Vec::new();
     for op in ops {
