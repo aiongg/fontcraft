@@ -291,12 +291,42 @@ fn convert_specs() -> Vec<CommandSpec> {
 
 /// `layout.compileFeatures` (M12.14).
 fn compile_specs() -> Vec<CommandSpec> {
-    // M12.14
-    Vec::new()
+    vec![super::cmd!(
+        "layout.compileFeatures",
+        "Compile Features into Font",
+        [],
+        None,
+        "{source: path | [path] (feature code; FontDame text, one file per table; a VOLT project, or a font holding one in its TSIV table), font: path, face?: number|name, syntax?: \"fea\"|\"mti\"|\"volt\" (default: told from the first line), tables?: [\"BASE\"|\"GDEF\"|\"GPOS\"|\"GSUB\"|\"OS/2\"|\"head\"|\"hhea\"|\"name\"|\"vhea\"|\"STAT\"] (default all: a layout table the code leaves empty is removed), includeDir?: path (default: the source's folder), goadb?: path (the code names glyphs by the source names this file maps to the font's), emitFea?: path (FontDame or VOLT input: also write the feature code it became), ship?: bool (remove the VOLT tables TSIV, TSIS, TSIP, TSID), to?: \"font\"|\"ttx\" (ttx: the built tables as TTX text), debugLookups?: bool (not built yet), output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool} compiles the code against the font's glyph names and writes the font with the tables it builds, leaving the others as they are; a table block changes only the fields it sets; without output the file is the font's name with .features; code with errors writes nothing and fails with the errors and their places → {output, syntax, tables: [tag] (written), removed: [tag], features: [{tag, table: \"GSUB\"|\"GPOS\", languageSystems: [[script, language]], lookups: n}], diagnostics: [{severity, message, file, line, column}] (the compiler's warnings), warnings: [string], emitFea?: path}",
+        super::always,
+        m12_14::compile_features
+    )
+    .files(const {
+        &[
+            FileParam::read("source"),
+            FileParam::read("font"),
+            FileParam::read("includeDir"),
+            FileParam::read("goadb"),
+            FileParam::write("emitFea"),
+            FileParam::write("output"),
+            FileParam::write("outputDir"),
+        ]
+    })
+    .writes_files()]
 }
 
 /// `layout.lintFeatures` (M12.14).
 fn lint_specs() -> Vec<CommandSpec> {
-    // M12.14
-    Vec::new()
+    vec![super::cmd!(
+        query "layout.lintFeatures",
+        "Check Feature Code",
+        [],
+        None,
+        "{source: path, font?: path, face?: number|name, glyphOrder?: path (a glyph list or GOADB: the first word of each line), glyphNames?: [name], includeDir?: path (default: the source's folder), warnings?: \"default\"|\"all\"} checks feature code as the compiler reads it and writes nothing; with a glyph set (font, glyphOrder or glyphNames) glyph names are checked and the tables are built in memory, so lookups too large for their offsets are found too; without one glyph names are not checked; all adds notes on usually harmless conditions (a glyph one attachment lookup uses both as a mark and as a base) → {errors: n, warnings: n, notes: n, glyphsChecked: bool, diagnostics: [{severity: \"error\"|\"warning\"|\"note\", message, file, line, column (from 1, in characters; null without a place)}]}",
+        super::always,
+        m12_14::lint_features
+    )
+    .files(const { &[FileParam::read("source"), FileParam::read("font"), FileParam::read("glyphOrder"), FileParam::read("includeDir")] })]
 }
+
+/// The runners of M12.14.
+mod m12_14;

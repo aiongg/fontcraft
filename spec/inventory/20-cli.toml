@@ -1780,7 +1780,7 @@ usage = "fontcraft-cli features compile FEATURES --font FONT [-o OUT] [--tables 
 options = [
   "FEATURES: feature file, FontDame .txt file(s), or VOLT project (.vtp); or a font containing VOLT source tables",
   "--font FONT: font that supplies the glyph set and receives the tables",
-  "--tables TAG,...: build only these of GSUB, GPOS, GDEF, BASE, OS/2, head, hhea, name, vhea, STAT; default every table the source defines",
+  "--tables TAG,...: build only these of GSUB, GPOS, GDEF, BASE, OS/2, head, hhea, name, vhea, STAT; default all of them, so a layout table the source leaves empty is removed from the font",
   "--debug-lookups: add a Debg table recording the source location of each lookup",
   "--include-dir DIR: base directory for relative include() paths; default the feature file's folder",
   "--syntax fea|mti|volt: source syntax; default detected from content",
@@ -1804,6 +1804,10 @@ milestone = "M12"
 summary = "Compiles layout source into the tables of an existing font, replacing the tables it builds and leaving the rest of the font alone. Source is OpenType feature code by default; Monotype FontDame text and Microsoft VOLT projects are also accepted."
 ref = "fontTools feaLib __main__, mtiLib __init__ (main), voltLib __main__; AFDKO addfeatures; fontmake --mti-source"
 status = "docs"
+notes = "Checked with fontTools feaLib 4.66.1 on a font built in code: by default every supported table is built; GSUB, GPOS, GDEF and BASE are replaced, or removed when the code leaves them empty; head, hhea, vhea and OS/2 change only the fields the code's table blocks set, and a field of a later OS/2 version raises the table's version; the code's names replace records with the same platform, encoding, language and id; usMaxContext is recomputed whenever the font has GSUB or GPOS. Glyph names are the ones fontTools gives the font (CFF charset, post, then cmap names). Code with errors writes nothing; the errors print as file:line:column. --syntax mti and volt run the conversions of features convert. --debug-lookups is not built yet. A WOFF, WOFF2 or collection input gives a plain font of the face compiled."
+guesses = [
+  "Without -o the result goes beside the font as NAME.features.EXT, where feaLib's command line writes NAME#1.EXT; a request for the reference's naming would change it.",
+]
 
 [[cli]]
 id = "features decompile"
@@ -1846,6 +1850,11 @@ milestone = "M12"
 summary = "Parses and validates feature code without writing a font: syntax, unknown glyphs and classes, rules a lookup type cannot hold, unreachable rules, lookups too large for their offsets, glyphs given conflicting GDEF classes. Exit status 1 when there are errors."
 ref = "AFDKO addfeatures (-V warnings), Feature_Parser_Notes.md; fontTools feaLib (parser errors)"
 status = "inferred"
+notes = "The messages are the feature compiler's (fea-rs), each as file:line:column: severity: message, lines and columns from 1, columns in characters; a message in an included file names that file. With --font or --glyph-order the tables are also built in memory, so errors of the building stage (offset overflow) are found too. --warnings all adds notes; --json prints the result of layout.lintFeatures."
+guesses = [
+  "Without --font or --glyph-order the compiler's messages about glyphs missing from the font are left out and hyphenated names are read as ranges; addfeatures always checks against a font. A request to check names against the code's own classes would change it.",
+  "--warnings all adds one kind of note so far, a glyph that one mark-to-base or mark-to-ligature subtable lists both as a mark and as a base; running addfeatures -V on the same code would list the other notes worth adding.",
+]
 
 [[cli]]
 id = "features convert"
@@ -2692,12 +2701,13 @@ label = "Compile Features into Font"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{source: path | [path], font: path, face?: int|name, output?: path, inPlace?: bool, tables?: [tag], debugLookups?: bool, includeDir?: path, syntax?: \"fea\"|\"mti\"|\"volt\", goadb?: path, emitFea?: path, ship?: bool, to?: \"font\"|\"ttx\"}"
+params = "{source: path | [path], font: path, face?: int|name, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool, tables?: [tag], debugLookups?: bool, includeDir?: path, syntax?: \"fea\"|\"mti\"|\"volt\", goadb?: path, emitFea?: path, ship?: bool, to?: \"font\"|\"ttx\"}"
 area = "features"
 milestone = "M12"
 summary = "Compiles feature code, FontDame text or a VOLT project against the glyph set of an existing binary font and replaces the tables the source defines; returns the tables written and the diagnostics with source positions."
 ref = "docs/spec/20-cli.md › features"
 status = "docs"
+notes = "Tables are put into the font as fontTools feaLib 4.66.1 puts them (see the features compile row). Name ids of 256 and above that the code declares move above the highest id the font already uses, as fontc moves them; feaLib keeps an explicit nameid and gives feature names the first unused id, so the two differ only for a font that already has ids of 256 and above. Code with errors fails with the first errors as file:line:column and writes nothing. The result lists the tables written and removed, the features with their language systems and lookup counts, and the compiler's warnings with their places. debugLookups is refused as not built yet. The compile is static: variable syntax in the code is refused for a variable font."
 
 [[command]]
 id = "layout.decompileFeatures"
@@ -2720,12 +2730,13 @@ label = "Check Feature Code"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{source: path, font?: path, glyphOrder?: path | [name], includeDir?: path, warnings?: \"default\"|\"all\"}"
+params = "{source: path, font?: path, face?: int|name, glyphOrder?: path, glyphNames?: [name], includeDir?: path, warnings?: \"default\"|\"all\"}"
 area = "features"
 milestone = "M12"
 summary = "Read-only query that parses and validates feature code as the compiler would, without building tables, and returns diagnostics as {severity, message, file, line, column}."
 ref = "docs/spec/20-cli.md › features"
 status = "inferred"
+notes = "A glyph set comes from a font (the names a compiler sees for it), a glyph list file (the first word of each line, so a GOADB works) or a list of names; a path and a list of names are separate parameters so file-access rules can tell them apart. With a glyph set the code is compiled in memory and nothing is written; without one it is only validated. Lines and columns count from 1, columns in characters; a message about the request as a whole has no place. The result also counts errors, warnings and notes."
 
 [[command]]
 id = "layout.convertSyntax"
