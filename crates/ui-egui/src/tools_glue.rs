@@ -190,6 +190,7 @@ fn with_tool<R>(app: &mut FontcraftApp, f: impl FnOnce(&mut Toolbox, &Context<'_
         tunni_lines: state.panels.edit_aids.tunni_lines,
         curve_tension: view::active_master(font, tab)
             .map_or(fontcraft_tools::rapid::DEFAULT_TENSION, |m| fontcraft_engine::cmd::tension::master_tension(font, &m.id)),
+        tt_direction: state.tt_instructor.direction,
         ..settings(tokens, font)
     }
     .with_drag_aids(|id| session.settings().get(id).ok());

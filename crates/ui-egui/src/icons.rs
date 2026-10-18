@@ -27,6 +27,7 @@ pub enum Icon {
     Measure,
     Thickness,
     Magnet,
+    TrueTypeInstructor,
     Text,
     AnnotationSelect,
     AnnotationText,
@@ -100,6 +101,7 @@ pub const ALL: &[Icon] = &[
     Icon::Measure,
     Icon::Thickness,
     Icon::Magnet,
+    Icon::TrueTypeInstructor,
     Icon::Text,
     Icon::AnnotationSelect,
     Icon::AnnotationText,
@@ -170,6 +172,7 @@ pub fn for_tool(id: &str) -> Option<Icon> {
         "thickness" => Icon::Thickness,
         "magnet" => Icon::Magnet,
         "rapid" | "spiro" => Icon::Draw,
+        "trueTypeInstructor" => Icon::TrueTypeInstructor,
         "text" => Icon::Text,
         "annotationSelect" => Icon::AnnotationSelect,
         "annotationText" => Icon::AnnotationText,
@@ -473,6 +476,13 @@ fn draw(pen: &mut Pen, icon: Icon) {
             ]);
             pen.thick((0.18, 0.2), (0.34, 0.2), 1.6);
             pen.thick((0.66, 0.2), (0.82, 0.2), 1.6);
+        }
+        // A pixel grid with an arrow snapping up to a grid line.
+        Icon::TrueTypeInstructor => {
+            pen.closed(&[(0.12, 0.12), (0.88, 0.12), (0.88, 0.88), (0.12, 0.88)]);
+            pen.line(&[(0.12, 0.5), (0.88, 0.5)]);
+            pen.line(&[(0.5, 0.12), (0.5, 0.88)]);
+            pen.arrow((0.31, 0.8), (0.31, 0.5));
         }
         Icon::Text => {
             pen.line(&[(0.22, 0.3), (0.22, 0.18), (0.78, 0.18), (0.78, 0.3)]);

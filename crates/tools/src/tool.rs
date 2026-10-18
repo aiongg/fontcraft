@@ -38,6 +38,8 @@ pub struct ToolSettings {
     /// The active master's `curveTension` parameter, in percent: the tension the Rapid tool
     /// previews new segments with.
     pub curve_tension: f64,
+    /// The TrueType Instructor's hinting direction (`hint.tt.toggleDirection`).
+    pub tt_direction: crate::tt_instructor::TtDirection,
 }
 
 impl Default for ToolSettings {
@@ -53,6 +55,7 @@ impl Default for ToolSettings {
             power_nudge: false,
             tunni_lines: false,
             curve_tension: crate::rapid::DEFAULT_TENSION,
+            tt_direction: Default::default(),
         }
     }
 }
@@ -147,6 +150,7 @@ pub const TOOLS: &[ToolInfo] = &[
     ToolInfo { id: "magnet", label: "Magnet", shortcut: "", group: "" },
     ToolInfo { id: "rapid", label: "Rapid", shortcut: "", group: "" },
     ToolInfo { id: "spiro", label: "Spiro", shortcut: "", group: "" },
+    ToolInfo { id: "trueTypeInstructor", label: "TrueType Instructor", shortcut: "I", group: "" },
     ToolInfo { id: "annotationSelect", label: "Annotation Selection", shortcut: "A", group: "annotation" },
     ToolInfo { id: "annotationText", label: "Text Annotation", shortcut: "A", group: "annotation" },
     ToolInfo { id: "annotationArrow", label: "Arrow Annotation", shortcut: "A", group: "annotation" },
@@ -176,6 +180,7 @@ pub fn make_tool(id: &str) -> Option<Box<dyn Tool>> {
         "magnet" => Box::new(crate::magnet::MagnetTool::default()),
         "rapid" => Box::new(crate::rapid::RapidTool::default()),
         "spiro" => Box::new(crate::spiro::SpiroTool::default()),
+        "trueTypeInstructor" => Box::new(crate::tt_instructor::TtInstructorTool::default()),
         _ if id.starts_with("annotation") => Box::new(AnnotateTool::new(id)?),
         _ => return None,
     };

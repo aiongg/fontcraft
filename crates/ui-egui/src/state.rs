@@ -55,6 +55,8 @@ pub struct UiState {
     pub glyph_info: crate::shell::glyph_info::GlyphInfoState,
     /// The Start Window: open, the selected recent document and the script chooser.
     pub start: crate::shell::start_window::StartState,
+    /// The TrueType Instructor: direction, pixel size, point numbers, selected instructions.
+    pub tt_instructor: crate::canvas::tt_badges::InstructorState,
     /// The document `tabs`, `active_tab` and `closed_tabs` belong to (`None`: none yet; the
     /// active document takes them).
     pub tabs_document: Option<u64>,
@@ -90,6 +92,7 @@ impl Default for UiState {
             font_view: Default::default(),
             glyph_info: Default::default(),
             start: Default::default(),
+            tt_instructor: Default::default(),
             tabs_document: None,
             other_documents: BTreeMap::new(),
         }

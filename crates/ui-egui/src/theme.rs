@@ -340,6 +340,8 @@ pub struct Tokens {
     pub console_height: f32,
     pub console_row_height: f32,
     pub console_completion_height: f32,
+    /// The TrueType Instructor's badges, node discs and point numbers.
+    pub tt: TtTokens,
 }
 
 impl Tokens {
@@ -567,6 +569,7 @@ impl Tokens {
             console_height: 400.0,
             console_row_height: 18.0,
             console_completion_height: 140.0,
+            tt: TtTokens::dark(),
         }
     }
 
@@ -655,6 +658,72 @@ impl PsHintTokens {
             badge_size: [64.0, 16.0],
             marker_radius: 5.0,
             gap: 6.0,
+        }
+    }
+}
+
+/// The TrueType Instructor's colours and sizes (`hinting.tt.instructions.badgeColours`,
+/// `hinting.tt.tool.masterOutline`, `hint.tt.showPointIndexes`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct TtTokens {
+    /// Badge fills by instruction type: Snap purple, Stem sky blue, a Stem of a triple hint
+    /// purple, Shift dark blue, Interpolate green, Delta orange.
+    pub snap: Color32,
+    pub stem: Color32,
+    pub triple: Color32,
+    pub shift: Color32,
+    pub interpolate: Color32,
+    pub delta: Color32,
+    /// Badges and lines of the direction that is not current.
+    pub dimmed: Color32,
+    /// The gray discs the nodes are drawn as.
+    pub node: Color32,
+    pub node_radius: f32,
+    pub badge_radius: f32,
+    /// How far a badge sits from its point, and how far apart badges on one point stack.
+    pub badge_offset: f32,
+    pub line_width: f32,
+    pub arrow_size: f32,
+    /// The ring around a selected badge, outside the badge.
+    pub selected_gap: f32,
+    /// Point numbers beside the on-curve nodes.
+    pub index_text: Color32,
+    pub index_size: f32,
+    pub index_gap: f32,
+    /// The previewed instance before hinting (`hinting.tt.tool.instanceOutline`).
+    pub instance_outline: Color32,
+    /// The grid-fitted outline (`hinting.tt.tool.gridFittedOutline`).
+    pub fitted_outline: Color32,
+    pub preview_outline_width: f32,
+    /// Full coverage in the pixel backdrop (`hinting.tt.tool.pixelBackdrop`); partly covered
+    /// pixels take a share of its alpha.
+    pub pixel: Color32,
+}
+
+impl TtTokens {
+    pub fn dark() -> Self {
+        Self {
+            snap: Color32::from_rgb(0x9b, 0x4d, 0xd6),
+            stem: Color32::from_rgb(0x4a, 0xb4, 0xf0),
+            triple: Color32::from_rgb(0x9b, 0x4d, 0xd6),
+            shift: Color32::from_rgb(0x1d, 0x3c, 0x9e),
+            interpolate: Color32::from_rgb(0x2f, 0xa0, 0x4b),
+            delta: Color32::from_rgb(0xf2, 0x8a, 0x1f),
+            dimmed: Color32::from_rgba_unmultiplied(0x9a, 0x9a, 0x9a, 0x90),
+            node: Color32::from_rgb(0x80, 0x80, 0x80),
+            node_radius: 5.5,
+            badge_radius: 6.0,
+            badge_offset: 16.0,
+            line_width: 1.5,
+            arrow_size: 8.0,
+            selected_gap: 2.5,
+            index_text: Color32::from_rgb(0xc0, 0x39, 0x2b),
+            index_size: 10.0,
+            index_gap: 4.0,
+            instance_outline: Color32::from_rgb(0x3a, 0x7b, 0xe8),
+            fitted_outline: Color32::from_rgb(0xe0, 0x3c, 0x31),
+            preview_outline_width: 1.25,
+            pixel: Color32::from_rgba_unmultiplied(0x9a, 0x9a, 0x9a, 0x70),
         }
     }
 }

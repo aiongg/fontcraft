@@ -716,8 +716,8 @@ milestone = "M10"
 summary = "Edit View tool for placing glyph-level TrueType instructions on the main master's nodes. While it is active the layer shows three outlines (master, unhinted instance, grid-fitted instance), the Info box shows pixel size and hinting direction, and the preview area becomes a size waterfall at the right. The appendix gives I as its shortcut, the same key the handbook gives the Higher-Order Interpolation tool; which one wins when both exist is open."
 ref = "TrueType Hinting › Glyph-level Hints"
 status = "handbook"
-guesses = ["The tool sits after the Measurement tool in the toolbar and node selection works as with the Select tool (click, Shift+click, rubber band, Select All on the layer); the custom-parameter descriptions give its shortcut as I; the reference app would settle the rest."]
-notes = "The custom-parameter descriptions (TTFStems, TTFZones) name the tool with the shortcut I (checked by the M10 planning pass)."
+guesses = ["The tool sits after the Measurement and Thickness tools in the toolbar and node selection works as with the Select tool (click, Shift+click, rubber band, Select All on the layer); the custom-parameter descriptions give its shortcut as I; the reference app would settle the rest.", "S pairs the selected points along the stems: for vertical hinting by x, then y, each pair from the lower point (the origin) to the upper one; for horizontal hinting by y, then x, from left to right; the reference app would show how it pairs four or more points.", "Arrow keys, Return, Delete and Backspace do nothing in the Instructor, so the outline cannot be edited by accident; the reference app would settle whether they move nodes there."]
+notes = "The custom-parameter descriptions (TTFStems, TTFZones) name the tool with the shortcut I (checked by the M10 planning pass). M10.25, crates/tools/src/tt_instructor.rs: the tool sits after the Thickness tool; a click selects a node or handle and Shift+click toggles it, a drag selects by rectangle, nodes never move; A, S, F, G and E run hint.tt.snapPoint, addStemHint, shiftPoints, interpolate and addDelta on the selected points in the current direction; X, Period, Plus, Comma and Minus run the view commands; the Autohint shortcut runs through the menus. Badge clicks (crates/ui-egui/src/canvas/tt_badges.rs) run hint.tt.selectInstructions. Not yet: dragging badges, the context menu, extra nodes, and Delete on selected instructions. Documented, not yet observed."
 observe = ["T3: find the TrueType Instructor in the toolbar and note its position and shortcut; select nodes by rubber band, by Shift+click and with Select All, and note which of these gestures work."]
 
 [[behavior]]
@@ -727,6 +727,7 @@ milestone = "M10"
 summary = "While the TrueType Instructor is active, unmodified letter keys add instructions and do not switch tools (A adds a Snap instruction rather than selecting the Annotation tool). Leaving the tool is done with the toolbar."
 ref = "TrueType Hinting › Glyph-level Hints"
 status = "handbook"
+notes = "M10.25, crates/tools/src/tt_instructor.rs: the Instructor takes every character key without Cmd, Ctrl or Alt (with or without Shift); unbound ones do nothing, so no letter switches tools while it is active. Documented, not yet observed."
 
 [[behavior]]
 id = "hinting.tt.tool.masterOutline"
@@ -735,6 +736,7 @@ milestone = "M10"
 summary = "The current master's outline is drawn in black and is the only one whose nodes and handles can be selected. All nodes are drawn as gray discs (not the usual green circles and blue squares), and extra nodes at path intersections are always shown, whatever View › Show Nodes › Extra Nodes is set to."
 ref = "TrueType Hinting › Hinting Outlines"
 status = "handbook"
+notes = "M10.25, crates/ui-egui/src/canvas/tt_badges.rs: with the Instructor active the on-curve nodes of the edited layer are drawn as gray discs, the selected ones in the selection colour, and only they and their handles can be selected. Extra nodes at path intersections are not drawn yet. Documented, not yet observed."
 
 [[behavior]]
 id = "hinting.tt.tool.instanceOutline"
@@ -743,6 +745,8 @@ milestone = "M10"
 summary = "A blue outline shows the currently previewed instance before hinting. The instance is the one chosen in the instance menu beside the eye icon at the bottom left of Edit View (clicking the eye reveals the menu). When that instance coincides with the current master the blue outline is omitted because it would lie under the black one."
 ref = "TrueType Hinting › Hinting Outlines"
 status = "handbook"
+guesses = ["The previewed instance is held by the Instructor and chosen with the `instance` parameter of hint.tt.showPixelPreview, since the Preview Area's instance menu (preview.setInstance) does not exist yet; the blue outline is the instance compiled as TrueType and drawn unhinted, so it shows the exported quadratic outline; the reference app would show whether its blue outline is the cubic instance."]
+notes = "M10.26, crates/ui-egui/src/canvas/tt_pixels.rs: drawn while the Instructor is active and Show Pixel Preview is on; left out when the previewed instance sits at the edited master (Font::master_at), and when no instance is chosen. Documented, not yet observed."
 
 [[behavior]]
 id = "hinting.tt.tool.gridFittedOutline"
@@ -752,6 +756,7 @@ summary = "A red outline shows the previewed instance after its instructions hav
 ref = "TrueType Hinting › Hinting Outlines"
 status = "handbook"
 guesses = ["The grid-fitted outline comes from skrifa's TrueType interpreter (FreeType's v40 interpreter in Rust), not from the Windows rasterizer the handbook names (decided in M10 § 7, question 4); comparing red outlines with the reference app at a few sizes would show the difference."]
+notes = "M10.26, crates/ui-egui/src/canvas/tt_pixels.rs: the previewed instance is compiled in memory as TrueType with only the edited glyph and the glyphs it uses (no layout tables), so its fpgm, prep, cvt and glyph program are the export's; skrifa runs them at the pixel size in the rendering intent. Not drawn for a glyph without a glyph program. The preview font is rebuilt per document revision, glyph and instance; outlines and pixels are kept per size and intent. Documented, not yet observed."
 observe = [
   "T3: instruct n and take screenshots of the red grid-fitted outline at 12 and 16 PPM in each rendering intent; compare them with FontCraft's preview of the same font and note where the outlines differ.",
 ]
@@ -764,6 +769,7 @@ summary = "Behind the outlines a pixel rendering at the current size is shown. I
 ref = "TrueType Hinting › Hinting Outlines"
 status = "handbook"
 guesses = ["The backdrop shows grey coverage of the grid-fitted outline, sampled 6 times across each pixel in the two ClearType intents and once down it in GDI ClearType, not coloured subpixels; screenshots of the reference app's backdrop in each intent would settle it."]
+notes = "M10.26, crates/ui-egui/src/canvas/tt_pixels.rs: the coverage of the grid-fitted outline of the previewed instance, in a grey token colour, one texture pixel per device pixel scaled to the canvas without smoothing; drawn whenever the Instructor is active, also with Show Pixel Preview off. Documented, not yet observed."
 
 [[command]]
 id = "hint.tt.showPixelPreview"
@@ -771,12 +777,14 @@ label = "Show Pixel Preview"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{on?: bool}"
+params = "{on?: bool, instance?: name}"
 area = "hinting-tt"
 milestone = "M10"
 summary = "Edit View context-menu toggle that shows or hides the blue (unhinted instance) and red (grid-fitted) outlines of the TrueType Instructor."
 ref = "TrueType Hinting › Hinting Outlines"
 status = "handbook"
+guesses = ["The toggle hides only the blue and red outlines, as the handbook says; the pixel backdrop stays while the Instructor is active. Choosing an instance turns the preview on. The reference app would settle whether the backdrop goes with the outlines."]
+notes = "M10.26, crates/ui-egui/src/canvas/tt_pixels.rs: {on?: bool, instance?: name or #n or \"master\"}; the outlines are on when the Instructor starts. The context-menu item is not wired yet. Documented, not yet observed."
 
 [[command]]
 id = "hint.tt.setRenderingIntent"
@@ -791,6 +799,7 @@ summary = "Chooses which Windows rendering mode the grid-fitted outline and the 
 ref = "TrueType Hinting › Hinting Outlines"
 status = "inferred"
 guesses = ["The rendering intent is a pop-up in the TrueType Instructor's Info box beside the pixel size; Grayscale maps to skrifa's smooth normal target, ClearType to its LCD target without symmetric rendering (no vertical oversampling), DirectWrite to LCD with symmetric rendering; the reference app would settle the control and the comparison of outlines."]
+notes = "M10.26, crates/ui-egui/src/canvas/tt_pixels.rs: the intent is Instructor state (RenderingIntent, default grayscale) that the grid-fitted outline, the pixel backdrop, the Info box pop-up (M10.27) and the hinting waterfall (M10.29) read; fontcraft_render::hinted maps it to skrifa's targets."
 observe = ["T3: with the TrueType Instructor active, look for the Grayscale, ClearType and DirectWrite choice; note where it is (Info box, toolbar or menu) and what kind of control it is."]
 
 [[panel]]
@@ -824,6 +833,7 @@ summary = "Sets the pixels-per-em value used for the grid-fitted outline and pix
 ref = "TrueType Hinting › Pixel Size"
 status = "handbook"
 guesses = ["The pixel size field accepts whole numbers from 4 to 400 PPM; the reference app would settle the limits."]
+notes = "M10.26, crates/ui-egui/src/canvas/tt_pixels.rs: a whole number from 4 to 400 is taken; anything else is refused and changes nothing. Documented, not yet observed."
 observe = ["T3: type 2, then 500, into the TrueType Instructor's pixel size field; note the smallest and the largest value it accepts."]
 
 [[command]]
@@ -839,6 +849,8 @@ milestone = "M10"
 summary = "Raises the preview pixel size by one. Keys: Period or Plus while the pixel size field is not focused; Up while it is focused; also the stepper button."
 ref = "TrueType Hinting › Pixel Size"
 status = "handbook"
+guesses = ["The pixel size starts at 12 PPM, the handbook example; the reference app would show its starting value."]
+notes = "M10.25, crates/ui-egui/src/canvas/tt_badges.rs: steps the Instructor pixel size by one within 4 to 400 PPM; Period, Plus and Equals run it through the tool. Documented, not yet observed."
 
 [[command]]
 id = "hint.tt.decreasePixelSize"
@@ -853,6 +865,7 @@ milestone = "M10"
 summary = "Lowers the preview pixel size by one. Keys: Comma or Minus while the pixel size field is not focused; Down while it is focused; also the stepper button."
 ref = "TrueType Hinting › Pixel Size"
 status = "handbook"
+notes = "M10.25, crates/ui-egui/src/canvas/tt_badges.rs: steps the Instructor pixel size down by one, not below 4 PPM; Comma and Minus run it through the tool. Documented, not yet observed."
 
 [[command]]
 id = "hint.tt.toggleDirection"
@@ -867,6 +880,7 @@ milestone = "M10"
 summary = "Switches the tool between vertical hinting (points move in Y; used for horizontal stems) and horizontal hinting (points move in X; used for vertical stems). The Info box offers the same switch as its wavy-arrow button. New instructions are created in the current direction."
 ref = "TrueType Hinting › Hint Direction"
 status = "handbook"
+notes = "M10.25, crates/ui-egui/src/canvas/tt_badges.rs: a shell command on the Instructor view state; a change clears the instruction selection. The X key runs it through the tool. Documented, not yet observed."
 
 [[behavior]]
 id = "hinting.tt.tool.otherDirectionDimmed"
@@ -875,6 +889,7 @@ milestone = "M10"
 summary = "Instructions of the direction that is not current stay visible, dimmed and gray, as background reference; they cannot be selected or edited until the direction is switched."
 ref = "TrueType Hinting › Hint Direction"
 status = "handbook"
+notes = "M10.25, crates/ui-egui/src/canvas/tt_badges.rs: badges and lines of the other direction are drawn in a translucent gray behind the current ones and take no clicks; hint.tt.selectInstructions refuses them. Documented, not yet observed."
 
 [[behavior]]
 id = "hinting.tt.hintOrder"
@@ -918,6 +933,23 @@ milestone = "M10"
 summary = "Edit View context-menu toggle that labels every on-curve node with its point index in the exported TrueType outline. These are the numbers used in TTFAutohint control instructions."
 ref = "TrueType Hinting › Show Point Indexes"
 status = "handbook"
+guesses = ["The point numbers show with every tool, not only the TrueType Instructor, since the handbook puts the toggle in the Edit View context menu; the reference app would settle it."]
+notes = "M10.25, crates/ui-egui/src/canvas/tt_badges.rs: labels each on-curve node with the number hint.tt.getPointIndexes gives for the edited layer master, overlaps removed; the numbers are cached per document revision. Not yet in the context menu. Documented, not yet observed."
+
+[[command]]
+id = "hint.tt.selectInstructions"
+label = "Select Instructions"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{instructions: [index], mode?: 'replace'|'add'|'remove'|'toggle'}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Selects TrueType instructions of the edited glyph's layer by list position, as clicking their badges in the TrueType Instructor does (Shift+click toggles). Only instructions of the current direction can be selected. The Info box shows the options of the selected instructions."
+ref = "TrueType Hinting › Instructions; Hint Direction"
+status = "inferred"
+own = true
+notes = "M10.25, crates/ui-egui/src/canvas/tt_badges.rs: our command for the badge clicks, so agents and tests can select instructions; the selection is view state, kept per glyph and layer, and cleared when the direction changes. Not documented; inferred."
 
 [[command]]
 id = "hint.tt.getPointIndexes"
@@ -1036,7 +1068,8 @@ milestone = "M10"
 summary = "Each instruction is drawn with a clickable badge whose colour identifies its type: Snap purple, Stem sky blue, Shift dark blue, Interpolate green; Stem instructions joined into a triple hint turn purple. The colour of Delta badges is not stated."
 ref = "TrueType Hinting › Instructions"
 status = "handbook"
-guesses = ["Delta badges are orange, a colour no other instruction uses; the reference app would settle it."]
+notes = "M10.25, crates/ui-egui/src/canvas/tt_badges.rs and theme::TtTokens: Snap and the Stems of a triple hint purple, Stem sky blue, Shift dark blue, Interpolate green, Delta orange. Snap, Delta and Interpolate badges sit beside their point with a leader line (Interpolate also has thin lines to its references); Stem and Shift badges sit halfway along an arrow from origin to target; badges on one spot stack. A selected badge has a ring in the selection colour. Documented, not yet observed."
+guesses = ["Delta badges are orange, a colour no other instruction uses; the reference app would settle it.", "Badges are plain discs placed beside the point (left of it for vertical instructions, below it for horizontal ones) or on the arrow of Stem and Shift; the reference app would show their shape, placement and icons."]
 observe = ["T3: add a Delta instruction; note its badge colour and the icons of the rounding modes, next to the badges of the other instruction types."]
 
 [[command]]

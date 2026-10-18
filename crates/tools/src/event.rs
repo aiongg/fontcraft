@@ -108,7 +108,8 @@ pub enum Key {
 
 impl Key {
     /// A key from its name as `ui.key` spells it: `ArrowLeft` or `Left`, `Return` or `Enter`,
-    /// `Delete`, `Backspace`, `Tab`, `Escape` or `Esc`, `Space`, `Home`, `End`, or a single character.
+    /// `Delete`, `Backspace`, `Tab`, `Escape` or `Esc`, `Space`, `Home`, `End`, `Period`, `Comma`,
+    /// `Minus`, `Plus`, `Equals` (the punctuation keys as egui names them), or a single character.
     pub fn parse(name: &str) -> Option<Key> {
         let mut chars = name.chars();
         if let (Some(c), None) = (chars.next(), chars.next()) {
@@ -127,6 +128,11 @@ impl Key {
             "space" => Key::Space,
             "home" => Key::Home,
             "end" => Key::End,
+            "period" => Key::Char('.'),
+            "comma" => Key::Char(','),
+            "minus" => Key::Char('-'),
+            "plus" => Key::Char('+'),
+            "equals" => Key::Char('='),
             _ => return None,
         };
         Some(key)

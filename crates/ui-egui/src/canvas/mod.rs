@@ -91,6 +91,8 @@ pub struct Scene<'a> {
     pub layer: &'a fontcraft_model::Layer,
     /// The active document's id and revision.
     pub doc: (u64, u64),
+    /// The chosen pointer tool's id (`tool.select`), not a temporary one held with Space.
+    pub tool: &'static str,
 }
 
 /// Draws Edit View for the showing tab, and queues the view commands its input asks for.
@@ -147,11 +149,20 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'stat
             background::draw(&c, font, glyph, layer, &state.display);
         }
         let doc = session.active().map(|d| (d.id, d.revision)).unwrap_or_default();
-        let scene = edited.as_deref().filter(|_| !text_mode).map(|layer| Scene { session: &*session, state: &*state, tab: &tab, font, layer, doc });
+        let scene = edited.as_deref().filter(|_| !text_mode).map(|layer| Scene {
+            session: &*session,
+            state: &*state,
+            tab: &tab,
+            font,
+            layer,
+            doc,
+            tool: tools.toolbox.base_id(),
+        });
         if let Some(s) = &scene {
             status::draw(ui, &c, s, pending);
             reference_font::draw(ui, &c, s, pending);
             reporters::draw_back(ui, &c, s, pending);
+            tt_pixels::draw(ui, &c, s);
         }
         if text_mode && let Some(layout) = layout.as_deref() {
             text::draw_behind(&tc, layout, &tab, span.0);
@@ -237,6 +248,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'stat
         hints_ps::draw_marks(&c, &hints, &tab.selection);
         if let Some(s) = &scene {
             autometer::draw(ui, &c, s, pending);
+            tt_badges::draw(ui, &c, s, pending);
         }
         painter.extend(bbox::shapes(font, &tab, tools.toolbox.active_id(), state.display.bounding_box, &state.transform, v, tokens));
         annotations::draw(&c, layer, &tab.selection, &state.display);

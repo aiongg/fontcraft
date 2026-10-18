@@ -113,6 +113,8 @@ pub const MODULES: &[(&[UiCommand], Handler)] = &[
     (compare_fonts::COMMANDS, compare_fonts::run),
     (compare_family::COMMANDS, compare_family::run),
     (crate::dialogs::color_palettes::COMMANDS, crate::dialogs::color_palettes::run),
+    (crate::canvas::tt_badges::COMMANDS, crate::canvas::tt_badges::run),
+    (crate::canvas::tt_pixels::COMMANDS, crate::canvas::tt_pixels::run),
 ];
 
 /// The shell commands' parameters that name files, declared as engine commands declare theirs
