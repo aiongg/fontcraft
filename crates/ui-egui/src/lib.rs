@@ -98,6 +98,8 @@ mod metrics_dialogs_tests;
 #[cfg(test)]
 mod panels_tests;
 #[cfg(test)]
+mod preview_instance_tests;
+#[cfg(test)]
 mod preview_tests;
 #[cfg(test)]
 mod sample_strings_tests;

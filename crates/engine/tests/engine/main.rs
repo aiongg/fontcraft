@@ -118,6 +118,7 @@ mod nodes;
 mod pathops;
 mod pixel;
 mod plugins;
+mod preview_instances;
 mod projects;
 mod proof;
 mod realign;
