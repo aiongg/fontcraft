@@ -40,6 +40,7 @@ ref = "Interpolation › Setting up Axes"
 status = "inferred"
 guesses = [
   "Reordering permutes every master, instance, virtual master and special-layer coordinate list with the axes, so no location changes; settle by dragging axes in the reference app's Font Info, if it allows it.",
+  "The entries of Axis Location, Virtual Master and Axis Mappings are put in the new axis order too; settle by reordering axes in a font with those parameters in the reference app and saving.",
 ]
 observe = [
   "In F2 (special layers) with two axes, try to reorder the axes: note whether a drag or a button does it, and how the layer labels read afterwards.",
@@ -170,13 +171,16 @@ label = "Generate Instances"
 menu = ["File"]
 shortcut = ""
 kind = "engine"
-params = "{instances?: [id|name], open?: bool, saveTo?: path}"
+params = "{instances?: [id|name|index], open?: bool, destination?: path}"
 area = "interpolation"
 milestone = "M9"
 summary = "Interpolates the instances of the current document, turns each into a master and creates new source documents from them, so each instance can be edited as ordinary outlines. The chapter says a file per instance in one sentence and a new file holding those masters in the next; which it is must be observed."
 ref = "Interpolation › Working with Multiple Fonts › Glyphs Files, Masters, & Instances"
 status = "handbook"
+notes = "Documented, not yet observed. Every instance is interpolated before any document opens or any file is written."
 guesses = [
+  "Without a list, every active static instance is generated; settle with an inactive instance in F1 in the reference app.",
+  "The new document keeps the instance as its only export, without the parameters only interpolation reads, and saved files are named Family-Style; settle by running the command in the reference app.",
   "One new document per instance, as the Several Fonts section of the handbook says (a file per instance), holding one master with the instance's outlines, metrics, kerning and features and no special layers; settle by running the command in the reference app.",
 ]
 observe = [
@@ -197,6 +201,7 @@ ref = "Interpolation › Setting up Instances"
 status = "inferred"
 guesses = [
   "`coordinates: external` converts the location through Axis Location and Axis Mappings first; the default is internal, as the coordinate fields of the reference take internal values.",
+  "Axes the location leaves out take the origin master's coordinate, and `model` defaults to the font's Font Type setting; settle by comparing with the reference's preview of an instance that sets only one of two axes.",
 ]
 
 [[command]]
@@ -376,6 +381,7 @@ status = "inferred"
 guesses = [
   "The 20° warning measures the angle of each segment's chord from its start node to its end node; settle with the Master Compatibility view on a segment that turns by 19° and 21°.",
 ]
+notes = "FontCraft does not yet warn about crossing shape correspondences; the command reports shape count and kind, node count, segment type, component glyph and anchor differences, and the angle warnings."
 observe = [
   "In F5 (incompatible), open the glyphs whose segment turns by 19° and by 21° between masters: note the segment colours of each.",
 ]
@@ -426,6 +432,11 @@ milestone = "M9"
 summary = "Shows every path and component of every layer of the current glyph and lets the shapes be rearranged until all layers use the same order. The exact layout and whether it colours shapes like Master Compatibility view are not described."
 ref = "Interpolation › Outline Compatibility › Reordering Shapes"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/dialogs/shape_order_window.rs, shown by window.shapeOrder. One column per master layer, each followed by its master's intermediate and alternate layers; numbered thumbnails in stacking order, each shape in a colour that follows its index over the dim layer. Dropping a thumbnail on another in the same column runs filter.shapeOrder for that layer. The window follows the glyph being edited unless it is opened on a named glyph."
+guesses = [
+  "The window opens from Window › Shape Order; Filter › Shape Order keeps the one-layer dialog. Choosing Filter › Shape Order in the reference app opens the all-layers window, so the two may have to merge.",
+  "Columns run left to right, one per layer, thumbnails top to bottom with shape 0 on top; seeing the window would settle the layout.",
+]
 observe = [
   "In F5 (incompatible), open Filter › Shape Order: note the layout, whether special layers appear, and how a drag reorders shapes.",
 ]
@@ -692,6 +703,10 @@ milestone = "M9"
 summary = "Editor opened by clicking the value of a Virtual Master parameter; coordinates are entered as for a real master and confirmed with OK. Several virtual masters need several parameters."
 ref = "Interpolation › Intermediate Layers › Virtual Masters"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/dialogs/virtual_master.rs, a dialog of font.customParameters.set on an existing Virtual Master row of the font (dialog.open {dialog: \"dialog.virtualMaster\", params: {index}}; index picks the row when there are several). One number field per axis, keyed by the axis name; OK writes an entry for every axis, ordered by axis name. The parameter list does not open it from a click on the value yet."
+guesses = [
+  "An axis the stored value leaves out starts at the first master's coordinate; adding a Virtual Master in the reference app would show its starting values.",
+]
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Alternate (bracket) layers and switching shapes
@@ -882,7 +897,7 @@ milestone = "M9"
 summary = "A Rename Glyphs parameter on an instance or variable font setting lists one swap per line as name=othername, e.g. cent=cent.simple; the two glyphs trade places in that export. Adding Remove Glyphs with the names that now hold the unwanted normal outlines turns the swap into a replacement."
 ref = "Interpolation › Switching Shapes › Replacing Glyphs at Export"
 status = "handbook"
-notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 3:35–4:11 and 4:44–5:15: a Rename Glyphs parameter on an instance holds one rule per line (a=a.ss01, g=g.ss01) and the exported instance shows the alternate shapes as a and g. Not shown: Remove Glyphs."
+notes = "The static half is the compiler's Rename Glyphs export filter (M7); a document made by Generate Instances keeps the parameter. Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 3:35–4:11 and 4:44–5:15: a Rename Glyphs parameter on an instance holds one rule per line (a=a.ss01, g=g.ss01) and the exported instance shows the alternate shapes as a and g. Not shown: Remove Glyphs."
 
 [[behavior]]
 id = "switching.conditionalSubstitution"
@@ -1226,6 +1241,10 @@ milestone = "M9"
 summary = "Editor opened by clicking the value of an Axis Location parameter on a master; assigns each axis the coordinate the master represents in variable fonts. Layout is not described beyond that."
 ref = "Interpolation › Variable Font Options › Axis Location"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/dialogs/axis_location.rs, a dialog of font.customParameters.set on an existing Axis Location row of a master or instance (dialog.open {dialog: \"dialog.axisLocation\", params: {scope, targets}}). It has one number field per axis, keyed by the axis name; OK writes an entry for every axis, ordered by axis name. The parameter list does not open it from a click on the value yet."
+guesses = [
+  "An axis the stored value leaves out starts at the master's or instance's internal coordinate; opening an empty Axis Location in the reference app would show its starting values.",
+]
 observe = [
   "In F1 (two masters), open an Axis Location value on a master: note the dialog's layout and fields.",
 ]
@@ -1300,6 +1319,13 @@ milestone = "M9"
 summary = "Three-pane editor opened by clicking the value of an Axis Mappings parameter: axes, the mapping table of the selected axis, and a graphical editor of the same points."
 ref = "Interpolation › Variable Font Options › Axis Mappings"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/dialogs/axis_mappings.rs, opened by axisMappings.showDialog (the font's mappings, or a variable font setting's). Every edit is one axisMappings.* command; the edits made while the dialog is open are previewed together as one command.batch, OK keeps them as one undo step and Cancel gives back the font it opened on. Repeated moves of one point merge into one step."
+guesses = [
+  "The graph puts internal coordinates across and external ones up, so dragging a point up or down changes its external value; seeing the dialog would settle the orientation.",
+  "A point dragged in the graph lands on a whole number; dragging a point in the reference app would show whether it keeps fractions.",
+  "Plus adds a point halfway between the selected point and the next one, on the current mapping line; pressing plus in the reference app would show where its new point goes.",
+  "Return is OK and Escape is Cancel while no value is being typed, as in the other dialogs.",
+]
 
 [[command]]
 id = "axisMappings.addPoint"
@@ -1313,6 +1339,9 @@ milestone = "M9"
 summary = "Adds a control point to an axis's mapping (plus button, or a click on the line in the graph). When external is omitted the point is placed on the current mapping line so the mapping is unchanged until the point is moved."
 ref = "Interpolation › Variable Font Options › Axis Mappings"
 status = "handbook"
+guesses = [
+  "A variable font setting without an Axis Mappings parameter of its own gets a copy of the font's on its first mapping edit, so its other axes keep their mappings; settle by editing a setting's mappings in the reference app and reading the saved file.",
+]
 
 [[command]]
 id = "axisMappings.setPoint"
@@ -1339,7 +1368,7 @@ label = "Nudge Mapping Point"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{axis: tag, index: int, dInternal?: number, dExternal?: number}"
+params = "{axis: tag, index: int, dInternal?: number, dExternal?: number, variableFontSetting?: id|name}"
 area = "interpolation"
 milestone = "M9"
 summary = "Inside the Axis Mappings dialog the Up, Down, Left and Right keys move the selected control point; holding Shift moves in steps of 10 and Cmd in steps of 100. The base step (presumably 1) and which key pair moves the internal and which the external coordinate are not stated, so no global shortcut is recorded."
@@ -1627,3 +1656,61 @@ guesses = [
 # Parameters introduced by this chapter (may duplicate the appendix inventory)
 # ───────────────────────────────────────────────────────────────────────────────
 
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Shell commands of the interpolation dialogs (M9.23)
+# ───────────────────────────────────────────────────────────────────────────────
+
+[[command]]
+id = "window.shapeOrder"
+label = "Shape Order"
+menu = ["Window"]
+shortcut = ""
+kind = "ui"
+params = "{open?: bool = true, glyph?: name}"
+area = "interpolation"
+milestone = "M9"
+summary = "Shows or hides the Shape Order window on a glyph, by default the one being edited."
+ref = "Interpolation › Outline Compatibility › Reordering Shapes"
+status = "inferred"
+notes = "Our shell command for the window.shapeOrder window. Its reply lists each layer's shapes, so agents can read the order before running filter.shapeOrder."
+
+[[command]]
+id = "axisMappings.showDialog"
+label = "Axis Mappings…"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{variableFontSetting?: id|name|index, axis?: tag}"
+area = "interpolation"
+milestone = "M9"
+summary = "Opens the Axis Mappings dialog on the font's mappings or on a variable font setting's, the given axis selected."
+ref = "Interpolation › Variable Font Options › Axis Mappings"
+status = "inferred"
+notes = "Our shell command for dialog.axisMappings; the reference opens the dialog from a click on the value of an Axis Mappings parameter."
+
+[[command]]
+id = "axisMappings.dialogEdit"
+label = "Edit in Axis Mappings Dialog"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{axis?: tag, point?: integer|null, command?: \"axisMappings.addPoint\"|\"axisMappings.setPoint\"|\"axisMappings.nudgePoint\"|\"axisMappings.removePoint\", params?: object}"
+area = "interpolation"
+milestone = "M9"
+summary = "Selects an axis and a point in the open Axis Mappings dialog and applies one mapping edit to its preview, as a click, a drag or an arrow key does."
+ref = "Interpolation › Variable Font Options › Axis Mappings"
+status = "inferred"
+
+[[command]]
+id = "axisMappings.closeDialog"
+label = "Close Axis Mappings Dialog"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{confirm?: bool = false}"
+area = "interpolation"
+milestone = "M9"
+summary = "Closes the Axis Mappings dialog: OK keeps its edits as one undo step, Cancel gives back the font it opened on."
+ref = "Interpolation › Variable Font Options › Axis Mappings"
+status = "inferred"

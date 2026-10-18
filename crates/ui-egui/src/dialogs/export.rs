@@ -1,6 +1,9 @@
 //! File › Export…: one tab per output kind, each a dialog of its own command, for the active
-//! document. Built: the OTF tab (`file.exportStatic`), the UFO tab (`file.exportUfo`) and the
-//! Metrics tab (`file.exportMetrics`).
+//! document: the OTF tab (`file.exportStatic`), the Variable Fonts tab (`file.exportVariable`),
+//! the UFO tab (`file.exportUfo`) and the Metrics tab (`file.exportMetrics`).
+//!
+//! The Variable Fonts tab offers the file formats and the export folder of the OTF tab and no
+//! outline flavour: variable fonts are exported with TrueType outlines.
 //!
 //! Exporting writes files, so nothing runs until OK, which reads Next… as in the handbook. Each
 //! tab has an export folder: Choose… picks it, and Next… with no folder asks for one
@@ -16,8 +19,9 @@ use super::{Dialog, Fields, Mode, Tab};
 pub const DIALOG: Dialog = Dialog::new("dialog.export", "Export", "file.export", Fields::Tabs(&TABS));
 
 /// The tabs, by the id `file.export {tab}` takes.
-pub const TABS: [Tab; 3] = [
+pub const TABS: [Tab; 4] = [
     Tab { id: "otf", label: "OTF", dialog: OTF },
+    Tab { id: "variable", label: "Variable Fonts", dialog: VARIABLE },
     Tab { id: "ufo", label: "UFO", dialog: UFO },
     Tab { id: "metrics", label: "Metrics", dialog: METRICS },
 ];
@@ -27,6 +31,13 @@ pub const OTF: Dialog = Dialog {
     mode: Mode::RunOnOk,
     buttons: ["Next…", "Cancel"],
     ..Dialog::new("dialog.exportOtf", "Export", "file.exportStatic", Fields::Fixed(otf_fields))
+};
+
+/// One variable font per variable font setting, TrueType only.
+pub const VARIABLE: Dialog = Dialog {
+    mode: Mode::RunOnOk,
+    buttons: ["Next…", "Cancel"],
+    ..Dialog::new("dialog.exportVariable", "Export", "file.exportVariable", Fields::Fixed(variable_fields))
 };
 
 /// One UFO per master.
@@ -58,17 +69,26 @@ fn otf_fields(_: &Session) -> Vec<Field> {
             "cff",
             "cff: PostScript outlines in a .otf file; truetype: quadratic outlines in a .ttf file",
         ),
-        Field::multi(
-            "containers",
-            "File Format",
-            &[("plain", "OTF/TTF"), ("woff", "WOFF"), ("woff2", "WOFF2")],
-            &["plain"],
-            "The containers to write each font in: the plain .otf or .ttf file, WOFF, WOFF2",
-        ),
+        containers(),
         Field::bool("removeOverlap", "Remove Overlap", true, "Merge overlapping paths and components in every exported glyph"),
         Field::bool("autohint", "Autohint", false, "Add automatic hints to the exported fonts"),
         destination(),
     ]
+}
+
+/// The containers of the OTF tab, with the same words and labels.
+fn containers() -> Field {
+    Field::multi(
+        "containers",
+        "File Format",
+        &[("plain", "OTF/TTF"), ("woff", "WOFF"), ("woff2", "WOFF2")],
+        &["plain"],
+        "The containers to write each font in: the plain .otf or .ttf file, WOFF, WOFF2",
+    )
+}
+
+fn variable_fields(_: &Session) -> Vec<Field> {
+    vec![containers(), destination()]
 }
 
 fn ufo_fields(session: &Session) -> Vec<Field> {
@@ -295,7 +315,8 @@ mod tests {
         let asked = picker(&mut app, Some(&dir));
         let opened = call(&mut app, "engine.execute", json!({"command": "dialog.open", "params": {"dialog": "dialog.export"}}));
         assert_eq!(opened["tabs"][0], json!({"id": "dialog.exportOtf", "tab": "otf", "label": "OTF", "active": true}));
-        assert_eq!(opened["tabs"][1]["id"], "dialog.exportUfo");
+        assert_eq!(opened["tabs"][1]["id"], "dialog.exportVariable");
+        assert_eq!(opened["tabs"][2]["id"], "dialog.exportUfo");
         assert_eq!(opened["canChooseFolder"], true);
 
         // Choose… (a click on the folder field) asks the chooser.
@@ -306,7 +327,7 @@ mod tests {
 
         let ufo = call(&mut app, "ui.click", json!({"id": "dialog.exportUfo"}));
         assert_eq!((ufo["dialog"].clone(), ufo["command"].clone()), (json!("dialog.exportUfo"), json!("file.exportUfo")));
-        assert_eq!(ufo["tabs"][1]["active"], true);
+        assert_eq!(ufo["tabs"][2]["active"], true);
         assert_eq!(ufo["params"]["destination"], json!(dir), "the folder comes along to a tab shown first");
         let masters: Vec<String> = app.session.font().unwrap().masters.iter().map(|m| m.id.clone()).collect();
         assert_eq!(ufo["params"]["masters"], json!(masters));

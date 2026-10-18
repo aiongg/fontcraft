@@ -46,7 +46,7 @@ mod add_glyphs_existing;
 mod add_other_font;
 pub mod attach_picker;
 mod axis_location;
-mod axis_mappings;
+pub mod axis_mappings;
 pub mod baselines;
 mod color_palettes;
 pub mod compare_fonts;
@@ -85,7 +85,7 @@ pub mod rule_tree;
 pub mod sample_strings;
 pub mod save_changed_on_disk;
 mod shape_order;
-mod shape_order_window;
+pub mod shape_order_window;
 mod smart_filter_editor;
 pub mod space_center;
 pub mod stem_filters;
@@ -254,6 +254,7 @@ pub const DIALOGS: &[Dialog] = &[
     shape_order::DIALOG,
     export::DIALOG,
     export::OTF,
+    export::VARIABLE,
     export::UFO,
     guide_properties::DIALOG,
     // The editors of stored filters come before those of new ones: `find` gives the first.
@@ -285,6 +286,9 @@ pub const DIALOGS: &[Dialog] = &[
     export_profiles::DIALOG,
     export_profiles::EXPORT,
     export_profiles::ARTWORK,
+    axis_location::DIALOG,
+    virtual_master::DIALOG,
+    add_other_font::DIALOG,
 ];
 
 /// The shell commands of this module.
@@ -301,7 +305,7 @@ pub const COMMANDS: &[UiCommand] = &[
         "Export…",
         &["File"],
         "Cmd+E",
-        "{tab?: \"otf\" (default) | \"ufo\" | \"metrics\", params?: {…}} opens the export dialog of the active document on a tab: static OpenType (file.exportStatic), UFO (file.exportUfo) or metrics (file.exportMetrics); params set its first values. Nothing is written until OK; OK with no destination folder asks for one → ui.dialog.inspect's reply",
+        "{tab?: \"otf\" (default) | \"variable\" | \"ufo\" | \"metrics\", params?: {…}} opens the export dialog of the active document on a tab: static OpenType (file.exportStatic), variable fonts (file.exportVariable), UFO (file.exportUfo) or metrics (file.exportMetrics); params set its first values. Nothing is written until OK; OK with no destination folder asks for one → ui.dialog.inspect's reply",
     ),
 ];
 
@@ -329,7 +333,6 @@ pub fn run(app: &mut FontcraftApp, id: &str, args: &Args) -> Result<Value, Strin
             let tab = args.string("tab")?.unwrap_or("otf");
             match export::TABS.iter().position(|t| t.id == tab) {
                 Some(index) => open_tab(app, &export::TABS, index, &params, &Map::new()).map_err(|e| args.err(e)),
-                None if tab == "variable" => Err(args.err(format!("the `{tab}` tab is not built yet"))),
                 None => Err(args.err(format!("unknown tab `{tab}`: otf, variable, ufo or metrics"))),
             }
         }

@@ -609,6 +609,7 @@ milestone = "M9"
 summary = "Returns the design axes in order, each with name, tag and hidden flag."
 ref = "Font Info › Font › Axes"
 status = "inferred"
+notes = "A query of ours for the Axes list in Font Info › Font."
 
 [[command]]
 id = "font.axes.add"
@@ -623,8 +624,9 @@ summary = "Appends a design axis, as the plus button beside the Axes heading doe
 ref = "Font Info › Font › Axes"
 status = "handbook"
 guesses = [
-  "A new axis is named Weight with tag wght when the font has no such axis, else a private axis `Axis N` with tag `AXSN`; settle by pressing the plus button in the reference app.",
+  "A new axis is named Weight with tag wght when the font has no such axis, else a private axis `Axis N` (N its place in the list) with the first free tag of AXSA, AXSB…; settle by pressing the plus button in the reference app.",
   "Existing masters, instances and virtual masters get coordinate 0 on the new axis, and intermediate layers inherit it from their master; settle in the reference app's Masters tab after adding an axis.",
+  "A name or a tag (compared as exported, padded to four characters) that another axis already has is refused; settle by giving two axes the same tag or name in the reference app's Font Info.",
 ]
 observe = [
   "In F1 (two masters), press the plus button beside Axes in Font Info › Font once, then a second time: note each new axis's name and tag, and the coordinate the masters and instances get on it.",
@@ -636,12 +638,17 @@ label = "Edit Axis"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{axis: index|tag, name?: string, tag?: string, hidden?: bool}"
+params = "{axis: index|tag|name, name?: string, tag?: string, hidden?: bool}"
 area = "interpolation"
 milestone = "M9"
 summary = "Changes the name, the four-character tag or the Hidden flag of an axis. Choosing one of the predefined names also sets the matching tag."
 ref = "Font Info › Font › Axes"
 status = "handbook"
+notes = "Documented, not yet observed. The Axis Location and Virtual Master parameters name axes by name and the Axis Mappings parameter by tag, so their entries follow a rename or a new tag in the same step."
+guesses = [
+  "A tag must be one to four printable ASCII characters not starting with a space; a longer one is refused by the command, while a source's longer tag is kept and exports its first four characters. Settle by typing a five-character tag in the reference app's axis tag field.",
+  "Renaming an axis renames its entries in every Axis Location and Virtual Master parameter, and a new tag renames its Axis Mappings entry; settle by renaming an axis in a font with those parameters in the reference app and saving.",
+]
 
 [[command]]
 id = "font.axes.remove"
@@ -657,6 +664,7 @@ ref = "Font Info; Font Info › Font › Axes"
 status = "handbook"
 guesses = [
   "Removing an axis drops its coordinate from every master, instance, virtual master, intermediate layer and alternate range; an alternate range that becomes empty on every axis stays an alternate layer `[]`. Settle in the reference app.",
+  "The removed axis's entries in Axis Location, Virtual Master and Axis Mappings are dropped, and a parameter left without entries is removed; settle by removing an axis in a font with those parameters in the reference app and saving.",
 ]
 observe = [
   "In F2 (special layers) with a second axis added, remove that axis: note the intermediate layer's coordinates and the alternate layers' ranges afterwards.",
@@ -674,6 +682,10 @@ milestone = "M9"
 summary = "Returns the predefined axis names offered by the name field together with the tag each one sets. The chapter says such a list exists but does not enumerate it."
 ref = "Font Info › Font › Axes"
 status = "inferred"
+notes = "The handbook says the list combines the registered axes with axes proposed for registration, without listing them."
+guesses = [
+  "The list is the five registered axes (Weight, Width, Italic, Slant, Optical Size) followed by Grade and the eight parametric axes proposed for registration (XOPQ, YOPQ, XTRA, YTUC, YTLC, YTAS, YTDE, YTFI) with the names the public axis registry gives them; settle by opening the list in the reference app.",
+]
 observe = [
   "In any font, open the list of predefined axes in Font Info › Font: write down every name and tag offered.",
 ]
@@ -685,6 +697,10 @@ milestone = "M9"
 summary = "Picking a predefined axis name rewrites the tag field to the tag registered for that name; a free-form name leaves the tag for the user to enter."
 ref = "Font Info › Font › Axes"
 status = "handbook"
+notes = "Documented, not yet observed. `font.axes.set` and `font.axes.add` apply it when a name is given without a tag."
+guesses = [
+  "A predefined name is recognised without regard to case (`weight` sets wght); settle by typing a lowercase predefined name in the reference app's axis name field.",
+]
 
 [[behavior]]
 id = "fontInfo.axes.hidden"
@@ -693,6 +709,7 @@ milestone = "M9"
 summary = "An axis marked Hidden is still used for interpolation but is flagged so that font users are not shown it in exported variable fonts."
 ref = "Font Info › Font › Axes"
 status = "handbook"
+notes = "Documented, not yet observed. `font.axes.set` and `font.axes.add` write the flag; the variable font compile writes it as the fvar hidden-axis flag."
 
 # Custom parameters (shared by the Font, Masters and Exports tabs)
 
@@ -940,13 +957,16 @@ label = "Add Other Font"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{sources: [{font: path|documentId, master: id|name}]}"
+params = "{sources: [{font: index|title|path, master: id|name|index}]}"
 area = "interpolation"
 milestone = "M9"
 summary = "Imports one or more masters from other open fonts. The UI lists every master of every open document and imports the chosen ones on OK; Cancel imports nothing. How glyphs missing on either side are handled is not described."
 ref = "Font Info › Masters › Managing Masters"
 status = "handbook"
+notes = "Documented, not yet observed. The font is one of the open documents, named by its position, title or path."
 guesses = [
+  "Metrics are matched by kind and name, stems and numbers by name; a value the other font lacks takes the active font's first master's value. Settle with two fonts whose metrics differ in the reference app.",
+  "Only each glyph's master layer comes along, not the other font's special layers of that master; settle with F7 in the reference app.",
   "Glyphs missing in the imported master get an empty layer for it; glyphs only the other font has are not added; axis coordinates come from the other font's master by axis tag, 0 for tags it lacks. Settle by adding a master from a font with different glyphs in the reference app.",
 ]
 observe = [
@@ -963,6 +983,10 @@ milestone = "M9"
 summary = "Sheet shown by the Add Other Font entry of the masters plus menu, used to choose which masters of other open documents are copied into this font."
 ref = "Font Info › Masters › Managing Masters"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/dialogs/add_other_font.rs, opened from Font Info › Masters › + › Add Other Font… or dialog.open {dialog: \"fontInfo.addOtherFont\"}. The masters are checkboxes labelled with the document and master names; OK runs font.master.addFromOtherFont once with the ticked masters, as one undo step."
+guesses = [
+  "The list includes the masters of the active font as well as the other open fonts, as the handbook's wording says; opening the sheet in the reference app would show whether the active font is left out.",
+]
 
 [[command]]
 id = "font.master.duplicate"
@@ -1067,6 +1091,7 @@ milestone = "M9"
 summary = "Places a master in the designspace by giving it one coordinate per font axis. Axes not named in the call keep their current coordinate."
 ref = "Font Info › Masters › Axes Coordinates"
 status = "handbook"
+notes = "Documented, not yet observed. The result warns when masters end up sharing a location."
 
 [[parameter]]
 name = "master.name"
@@ -1706,6 +1731,10 @@ milestone = "M9"
 summary = "Adds one static instance per master, each named after its master and placed at the master's axis coordinates (a Thin master at weight 100 yields a Thin instance at weight 100). Whether existing instances at those locations are skipped is not stated."
 ref = "Font Info › Exports"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "Every chosen master gets an instance even when one already sits at its location, with no weight or width class of its own; settle by running the command twice on F1 in the reference app.",
+]
 observe = [
   "In F1 (two masters), choose Add Instance for each Master: note the names the new instances get.",
 ]
@@ -1722,6 +1751,13 @@ milestone = "M9"
 summary = "Creates a new master from the interpolated outlines and metrics of the selected instance and adds it to the Masters tab. Instances on either side then interpolate against the new master, and the source instance uses it directly."
 ref = "Font Info › Exports"
 status = "handbook"
+notes = "Documented, not yet observed. The new master holds what the instance exports: outlines, widths, metrics, stems, numbers and kerning, interpolated as static export interpolates them."
+guesses = [
+  "The new master goes to the end of the master list; settle with F1 in the reference app.",
+  "An instance on a master's location is refused, since two masters at one location cannot interpolate; settle by trying it in the reference app.",
+  "An intermediate layer at the instance's location is removed, the new master layer holding the same design; settle with a brace layer at the instance's location in the reference app.",
+  "The new master gets the main design of glyphs with alternate layers and no alternate layers of its own; settle with F1's alternate glyph in the reference app.",
+]
 observe = [
   "In F1 (two masters), select the Regular instance and choose Instance as Master: note the new master's name and position, and which instances now use it.",
 ]
@@ -1738,6 +1774,10 @@ milestone = "M9"
 summary = "Adds a variable-font entry to the export list; each such entry exports one variable font with its own settings and custom parameters. Its fields are detailed in the Interpolation chapter."
 ref = "Font Info › Exports"
 status = "handbook"
+notes = "Documented, not yet observed. A second setting with the same name is added with a warning, since the handbook asks for different names."
+guesses = [
+  "A new setting is called Regular and stores no coordinates; settle by adding one in the reference app.",
+]
 
 [[command]]
 id = "font.instance.remove"
@@ -1793,6 +1833,7 @@ milestone = "M9"
 summary = "Places an instance in the designspace with one coordinate per font axis. Locations between masters are interpolated; locations beyond the masters are extrapolated."
 ref = "Font Info › Exports › Axes Coordinates"
 status = "handbook"
+notes = "Documented, not yet observed. The result names each instance placed beyond the masters, which a static export extrapolates."
 
 [[command]]
 id = "font.instance.setStyleLinking"

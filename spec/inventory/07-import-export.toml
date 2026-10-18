@@ -155,6 +155,7 @@ milestone = "M9"
 summary = "Options for variable font export. The handbook only says file formats and destination are set as on the OTF tab; there is no flavour choice because the output is always TrueType. Whether Remove Overlap and Autohint appear here is not stated."
 ref = "Import & Export › Exporting Font Files › Exporting Variable Fonts"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: the Variable Fonts tab of the export dialog, crates/ui-egui/src/dialogs/export.rs, running file.exportVariable on Next…. It offers the OTF tab's File Format checkboxes and export folder and no outline flavour. FontCraft has no Test Install; Remove Overlap and Autohint are not offered."
 
 [[panel]]
 id = "dialog.exportUfo"
@@ -678,6 +679,7 @@ milestone = "M9"
 summary = "Several fonts are combined into one document by adding them as masters: Font Info › Masters › plus menu › Add Other Font (documented with the Masters tab) offers the masters of the other open fonts. Masters added this way must be outline-compatible before they can be interpolated."
 ref = "Import & Export › Opening Font Files › Importing Multiple Fonts Files into a Glyphs File"
 status = "handbook"
+notes = "Documented, not yet observed. Built as font.master.addFromOtherFont."
 
 [[behavior]]
 id = "open.reconstructsFeatures"
