@@ -53,9 +53,11 @@ pub fn strikes(font: &Font, master_id: &str) -> Vec<Strike> {
 /// The size SBIX to SVG takes for a glyph with iColor layers of `sizes` when `wanted` is asked:
 /// the exact size, else the smallest larger one, else the largest smaller one.
 pub fn pick_size(sizes: &[u16], wanted: u16) -> Option<u16> {
-    // M11.10
-    let _ = (sizes, wanted);
-    None
+    if sizes.contains(&wanted) {
+        return Some(wanted);
+    }
+    let larger = sizes.iter().copied().filter(|&s| s > wanted).min();
+    larger.or_else(|| sizes.iter().copied().filter(|&s| s < wanted).max())
 }
 
 /// A warning for each glyph whose images in `strikes` differ in width ÷ height. `image_size`

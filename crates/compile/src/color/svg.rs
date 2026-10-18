@@ -13,10 +13,11 @@ use std::collections::HashSet;
 
 use fontcraft_color::export::{SvgPlan, SvgSource};
 use fontcraft_color::paint::{Paint, ShapeRef, StrokeSpec};
-use fontcraft_color::svg::{document, has_sweep, is_native_stroke, table};
-use fontcraft_color::{AssetStore, Rgba};
-use fontcraft_geom::BezPath;
-use fontcraft_model::{Font, Glyph, MAX_OUTLINE_ELEMENTS, Shape};
+use fontcraft_color::svg::{BitmapPlacement, bitmap_document, bitmap_size, document, has_sweep, is_native_stroke, table};
+use fontcraft_color::svg_import::import;
+use fontcraft_color::{AssetStore, MAX_SVG_FILE_BYTES, Rgba};
+use fontcraft_geom::{Affine, BezPath};
+use fontcraft_model::{Font, Glyph, Image, MAX_OUTLINE_ELEMENTS, Shape};
 use fontcraft_pathops::{Cap, Join, StrokeStyle, stroke_outline};
 
 use super::GlyphOrder;
@@ -32,7 +33,6 @@ pub fn build(
     assets: &dyn AssetStore,
     warnings: &mut Vec<String>,
 ) -> Result<Option<Vec<u8>>, CompileError> {
-    let _ = assets; // M11.10: svg layer files and bitmaps.
     let mut docs: Vec<(u16, u16, Vec<u8>)> = Vec::with_capacity(plan.documents.len());
     let mut done = HashSet::new();
     for doc in &plan.documents {
@@ -44,7 +44,8 @@ pub fn build(
         }
         let made = match &doc.source {
             SvgSource::Paint(paint) => paint_document(font, &doc.glyph, paint, gid, &plan.palette, warnings),
-            SvgSource::SvgLayer { .. } | SvgSource::Bitmap { .. } => Err("SVG documents from svg layers and bitmaps are not written yet".to_string()),
+            SvgSource::SvgLayer { layer, path } => svg_layer_document(font, &doc.glyph, layer, path, gid, assets),
+            SvgSource::Bitmap { layer, ppem } => bitmap_layer_document(font, &doc.glyph, layer, *ppem, gid, assets),
         };
         match made {
             Ok(text) => docs.push((gid, gid, text.into_bytes())),
@@ -79,6 +80,35 @@ fn paint_document(font: &Font, name: &str, paint: &Paint, gid: u16, palette: &[R
         warnings.push(format!("glyph `{name}`: SVG has no conic gradient, so its conic gradient is drawn in its first colour"));
     }
     Ok(text)
+}
+
+/// The document of `name` drawing the SVG file of its svg layer `layer`, placed as the layer
+/// places it, or why it cannot be made.
+fn svg_layer_document(font: &Font, name: &str, layer: &str, path: &str, gid: u16, assets: &dyn AssetStore) -> Result<String, String> {
+    let image = layer_image(font, name, layer)?;
+    let transform = image.map_or(Affine::IDENTITY, |i| i.transform.affine());
+    // Reading one byte past the limit is enough to refuse a larger file without reading it all.
+    let bytes = assets.read_head(path, MAX_SVG_FILE_BYTES + 1).map_err(|e| e.to_string())?;
+    import(&bytes, transform, gid).map_err(|e| e.to_string())
+}
+
+/// The document of `name` showing the image of its iColor layer `layer` (SBIX to SVG at `ppem`
+/// pixels per em), placed as the layer places it, or why it cannot be made.
+fn bitmap_layer_document(font: &Font, name: &str, layer: &str, ppem: u16, gid: u16, assets: &dyn AssetStore) -> Result<String, String> {
+    let image = layer_image(font, name, layer)?.ok_or_else(|| format!("its iColor layer of {ppem} pixels per em has no image"))?;
+    let path = image.path.as_deref().ok_or_else(|| format!("its iColor layer of {ppem} pixels per em has no image"))?;
+    let bytes = assets.read(path).map_err(|e| e.to_string())?;
+    let (width, height) =
+        bitmap_size(&bytes).ok_or_else(|| format!("the image `{path}` is not PNG or JPEG data, which is all SBIX to SVG writes"))?;
+    let placement = BitmapPlacement { transform: image.transform.affine(), width, height };
+    bitmap_document(&bytes, &placement, gid).map_err(|e| e.to_string())
+}
+
+/// The placed image of `layer` in glyph `name`.
+fn layer_image<'f>(font: &'f Font, name: &str, layer: &str) -> Result<Option<&'f Image>, String> {
+    let glyph = font.glyph(name).ok_or_else(|| format!("there is no glyph called `{name}`"))?;
+    let layer = glyph.layers.iter().find(|l| l.id == layer).ok_or_else(|| format!("there is no layer `{layer}`"))?;
+    Ok(layer.info.image.as_ref())
 }
 
 /// The outline of `shape` in font units, as the SVG writer draws it: the shapes' contours for a
@@ -191,5 +221,64 @@ mod tests {
         let mut warnings = Vec::new();
         assert_eq!(build(&font, &failing, &order, &MemoryAssets::new(), &mut warnings).unwrap(), None);
         assert!(warnings.iter().any(|w| w.contains("no SVG table")), "{warnings:?}");
+    }
+
+    #[test]
+    fn svg_table_from_svg_layers_and_icolor_bitmaps() {
+        use fontcraft_model::{Image, Layer, Transform};
+
+        let mut font = Font::new("Svg Layers");
+        let master = font.masters[0].id.clone();
+        let mut add = |name: &str, layer_id: &str, path: &str, transform: Transform| {
+            font.add_glyph(name, Vec::new(), 600.0).unwrap();
+            let mut g = font.glyph_mut(name).unwrap();
+            let mut layer = Layer::new(master.clone(), 600.0);
+            layer.id = layer_id.into();
+            layer.info.image = Some(Image { path: Some(path.into()), transform, ..Image::default() });
+            g.layers.push(layer);
+        };
+        add("smile", "svg1", "smile.svg", Transform::Matrix([2.0, 0.0, 0.0, 2.0, 100.0, -50.0]));
+        add("rainbow", "ic128", "rainbow.png", Transform::Matrix([7.8125, 0.0, 0.0, 7.8125, 0.0, -100.0]));
+        add("frown", "ic64", "frown.png", Transform::default());
+        add("tiff", "ic32", "tiff.tif", Transform::default());
+
+        let mut assets = MemoryAssets::new();
+        assets.insert(
+            "smile.svg",
+            br##"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><circle cx="5" cy="5" r="4" fill="#fc0"/></svg>"##.to_vec(),
+        );
+        let mut png = b"\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR".to_vec();
+        png.extend_from_slice(&[0, 0, 0, 2, 0, 0, 0, 3, 8, 6, 0, 0, 0]);
+        assets.insert("rainbow.png", png);
+        assets.insert("tiff.tif", b"II*\0\x08\0\0\0".to_vec());
+
+        let bitmap = |glyph: &str, layer: &str, ppem| SvgDocument { glyph: glyph.into(), source: SvgSource::Bitmap { layer: layer.into(), ppem } };
+        let plan = SvgPlan {
+            palette: Vec::new(),
+            documents: vec![
+                SvgDocument { glyph: "smile".into(), source: SvgSource::SvgLayer { layer: "svg1".into(), path: "smile.svg".into() } },
+                bitmap("rainbow", "ic128", 128),
+                bitmap("frown", "ic64", 64),
+                bitmap("tiff", "ic32", 32),
+            ],
+        };
+        let glyphs: Vec<ResolvedGlyph> = [".notdef", "smile", "rainbow", "frown", "tiff"].into_iter().map(|n| ResolvedGlyph::new(n, 600.0)).collect();
+        let order = GlyphOrder::new(&glyphs, &[]).unwrap();
+        let mut warnings = Vec::new();
+        let bytes = build(&font, &plan, &order, &assets, &mut warnings).unwrap().unwrap();
+
+        let svg = Svg::read(FontData::new(&bytes)).unwrap();
+        assert_eq!(svg.svg_document_list().unwrap().num_entries(), 2);
+        let doc = |gid| std::str::from_utf8(svg.glyph_data(GlyphId::new(gid)).unwrap()).unwrap().to_string();
+        let smile = doc(1);
+        assert!(smile.contains(r#"<g id="glyph1" transform="matrix(1 0 0 -1 0 0)"><g transform="matrix(2 0 0 -2 100 -30)">"#), "{smile}");
+        let rainbow = doc(2);
+        assert!(rainbow.contains(r#"<image width="2" height="3" transform="matrix(7.8125 0 0 -7.8125 0 -76.5625)""#), "{rainbow}");
+        assert!(rainbow.contains("data:image/png;base64,"), "{rainbow}");
+        // A missing file and a TIFF leave their glyphs out, each with a warning.
+        assert!(svg.glyph_data(GlyphId::new(3)).is_none() && svg.glyph_data(GlyphId::new(4)).is_none());
+        assert!(warnings.iter().any(|w| w.starts_with("glyph `frown`") && w.contains("frown.png")), "{warnings:?}");
+        assert!(warnings.iter().any(|w| w.starts_with("glyph `tiff`") && w.contains("not PNG or JPEG")), "{warnings:?}");
+        assert_eq!(warnings.len(), 2, "{warnings:?}");
     }
 }

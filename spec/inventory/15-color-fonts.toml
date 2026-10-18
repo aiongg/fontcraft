@@ -1278,6 +1278,7 @@ status = "handbook"
 guesses = [
   "Each bitmap becomes an `<image>` element with embedded PNG data, placed where the image sits on its iColor layer. Settled by exporting the sbix test font with SBIX to SVG from the reference.",
 ]
+notes = "Documented but not yet observed. `fontcraft_color::svg::bitmap_document` writes the `<image>` element with the iColor layer's image transform after a flip at the image height; JPEG data is embedded as JPEG. A TIFF image is left out with a warning until the compiler can convert it to PNG (it does not depend on the image decoder yet)."
 observe = ["sbix font: export an instance with SBIX to SVG set to 100 and read the SVG table; note how each document places its <image> element (position, size, transform)."]
 
 [[behavior]]
@@ -1287,6 +1288,7 @@ milestone = "M11"
 summary = "For SBIX to SVG the layer is chosen per glyph: the iColor layer of exactly the requested size if present, otherwise the smallest one larger than it, otherwise the largest one below it."
 ref = "Color Fonts › sbix Fonts › Exporting"
 status = "handbook"
+notes = "Documented but not yet observed. `fontcraft_color::strike::pick_size` makes the choice; the export plan calls it per glyph."
 observe = ["sbix font: export an instance with SBIX to SVG set to 100 and read the SVG table; note which iColor size each glyph uses."]
 
 [[behavior]]
@@ -1324,6 +1326,10 @@ milestone = "M11"
 summary = "An svg layer holds one SVG file dropped onto it, which may contain vector and embedded bitmap content. In the Glyphs file format it is the boolean layer attribute svg."
 ref = "Color Fonts › SVG Color Fonts › Importing Existing SVG Files; GlyphsSDK GlyphsFileFormatv3.md › layerAttr"
 status = "handbook"
+notes = "Documented but not yet observed. At export the file is read through the asset store, parsed with usvg without text or system fonts, and written back with its ids prefixed `svg-`; embedded PNG, JPEG, GIF and WebP images are kept."
+guesses = [
+  "A compressed SVG file (svgz), a file with a link outside itself (an image file, another SVG, a style sheet), or one nested more than 256 elements deep is refused with a warning, and the glyph has no SVG document. Settled by dropping such files on an svg layer in the reference and exporting.",
+]
 
 [[behavior]]
 id = "color.svg.fileNamingTip"
@@ -1343,7 +1349,9 @@ ref = "Color Fonts › SVG Color Fonts › Importing Existing SVG Files; Edit Vi
 status = "handbook"
 guesses = [
   "The placed SVG's transform is written as a group transform inside the glyph's document, combined with the y flip at the baseline; the SVG's own content is kept as usvg normalises it. Settled by exporting the SVG test font with a moved and scaled svg layer from the reference.",
+  "The SVG file's bottom left sits at the image origin on the layer, one SVG user unit per font unit before the image transform, and content outside the file's width and height is not clipped. Settled by placing a file with content outside its view box on an svg layer in the reference and reading the exported document.",
 ]
+notes = "Documented but not yet observed. `fontcraft_color::svg_import::import` writes the file's content inside `<g transform=\"matrix(…)\">`, the layer's image transform after a flip at the file's height, within the `glyph<ID>` group."
 observe = ["SVG font: move and scale the svg layer's image, export and read F's SVG document; note how the placement appears in the document."]
 
 [[behavior]]

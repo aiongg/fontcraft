@@ -91,11 +91,120 @@ pub fn document(paint: &Paint, outlines: &dyn Fn(&ShapeRef) -> BezPath, gid: u16
 }
 
 /// The document of glyph `gid` showing a PNG image, embedded as a data URL in an `<image>`
-/// element.
+/// element. JPEG data is embedded as it is too, with its own media type; anything else is
+/// refused.
+///
+/// The `<image>` element draws the pixel grid y down from its top left, so its transform first
+/// flips the grid at the image's height and then applies `placement`; the glyph group's own flip
+/// takes the result into SVG's space.
 pub fn bitmap_document(png: &[u8], placement: &BitmapPlacement, gid: u16) -> Result<String, ColorError> {
-    // M11.10
-    let _ = (png, placement, gid);
-    Err(ColorError::NotYetImplemented("SVG documents for bitmaps"))
+    let media = bitmap_media_type(png).ok_or_else(|| ColorError::BadSvg("the bitmap is neither PNG nor JPEG data".to_string()))?;
+    if placement.width == 0 || placement.height == 0 {
+        return Err(ColorError::BadSvg(format!("the bitmap is {} by {} pixels", placement.width, placement.height)));
+    }
+    // Base64 takes four bytes for every three; the rest of the document is short.
+    let encoded = png.len().div_ceil(3).saturating_mul(4);
+    if encoded.saturating_add(512) > MAX_SVG_DOCUMENT_BYTES {
+        return Err(ColorError::LimitExceeded { what: "bytes in one SVG document", limit: MAX_SVG_DOCUMENT_BYTES });
+    }
+    let flip = Affine::new([1.0, 0.0, 0.0, -1.0, 0.0, f64::from(placement.height)]);
+    let transform = matrix(placement.transform * flip)?;
+    let mut out = String::with_capacity(encoded + 512);
+    out.push_str(r#"<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1">"#);
+    let _ = write!(out, r#"<g id="glyph{gid}" transform="matrix(1 0 0 -1 0 0)">"#);
+    let _ =
+        write!(out, r#"<image width="{}" height="{}" transform="{transform}" xlink:href="data:{media};base64,"#, placement.width, placement.height);
+    base64(png, &mut out);
+    out.push_str(r#""/></g></svg>"#);
+    Ok(out)
+}
+
+/// The width and height in pixels of PNG or JPEG data, read from its header; `None` for any
+/// other data or a header that cannot be read.
+pub fn bitmap_size(data: &[u8]) -> Option<(u32, u32)> {
+    let be16 = |at: usize| Some(u16::from_be_bytes([*data.get(at)?, *data.get(at + 1)?]));
+    let be32 = |at: usize| Some(u32::from_be_bytes([*data.get(at)?, *data.get(at + 1)?, *data.get(at + 2)?, *data.get(at + 3)?]));
+    match bitmap_media_type(data)? {
+        "image/png" => {
+            // The signature, then the IHDR chunk's length and type, then width and height.
+            if data.get(12..16)? != b"IHDR" {
+                return None;
+            }
+            Some((be32(16)?, be32(20)?))
+        }
+        _ => {
+            // JPEG: walk the marker segments to the first start-of-frame. Each step moves past
+            // at least one byte, so the walk ends.
+            let mut at = 2;
+            loop {
+                if *data.get(at)? != 0xFF {
+                    return None;
+                }
+                let marker = *data.get(at + 1)?;
+                match marker {
+                    0xFF => at += 1,
+                    0x01 | 0xD0..=0xD7 => at += 2,
+                    0xC0..=0xC3 | 0xC5..=0xC7 | 0xC9..=0xCB | 0xCD..=0xCF => {
+                        let (height, width) = (be16(at + 5)?, be16(at + 7)?);
+                        return Some((u32::from(width), u32::from(height)));
+                    }
+                    0xD9 | 0xDA => return None,
+                    _ => at = at.checked_add(2 + usize::from(be16(at + 2)?))?,
+                }
+            }
+        }
+    }
+}
+
+/// The media type of PNG or JPEG data, from its signature.
+fn bitmap_media_type(data: &[u8]) -> Option<&'static str> {
+    if data.starts_with(b"\x89PNG\r\n\x1a\n") {
+        Some("image/png")
+    } else if data.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        Some("image/jpeg")
+    } else {
+        None
+    }
+}
+
+/// Standard base64 with padding, appended to `out`.
+fn base64(data: &[u8], out: &mut String) {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let symbol = |v: u32| char::from(ALPHABET.get((v & 63) as usize).copied().unwrap_or(b'A'));
+    for chunk in data.chunks(3) {
+        let b = |i: usize| u32::from(chunk.get(i).copied().unwrap_or(0));
+        let v = (b(0) << 16) | (b(1) << 8) | b(2);
+        out.push(symbol(v >> 18));
+        out.push(symbol(v >> 12));
+        out.push(if chunk.len() > 1 { symbol(v >> 6) } else { '=' });
+        out.push(if chunk.len() > 2 { symbol(v) } else { '=' });
+    }
+}
+
+/// An SVG `matrix(…)` transform; refused when a coefficient is not finite or beyond
+/// ±[`MAX_COORDINATE`]. Six decimals keep small image scales exact enough.
+pub(crate) fn matrix(affine: Affine) -> Result<String, ColorError> {
+    let mut out = String::from("matrix(");
+    for (i, v) in affine.as_coeffs().into_iter().enumerate() {
+        if !(v.is_finite() && v.abs() <= MAX_COORDINATE) {
+            return Err(ColorError::BadSvg(format!("the placement has the number {v}, which is not within ±{MAX_COORDINATE}")));
+        }
+        if i > 0 {
+            out.push(' ');
+        }
+        let rounded = (v * 1e6).round() / 1e6;
+        let rounded = if rounded == 0.0 { 0.0 } else { rounded };
+        let mut s = format!("{rounded:.6}");
+        while s.ends_with('0') {
+            s.pop();
+        }
+        if s.ends_with('.') {
+            s.pop();
+        }
+        out.push_str(&s);
+    }
+    out.push(')');
+    Ok(out)
 }
 
 /// The `SVG ` table from documents given as (first glyph id, last glyph id, document bytes);
@@ -460,10 +569,10 @@ fn fmt(v: f64) -> String {
 
 #[cfg(test)]
 mod tests {
-    use fontcraft_geom::{BezPath, Point};
+    use fontcraft_geom::{Affine, BezPath, Point};
     use fontcraft_model::Extend;
 
-    use super::{document, table};
+    use super::{BitmapPlacement, bitmap_document, bitmap_size, document, table};
     use crate::paint::{ColorLine, ColorRef, ColorStop, Paint, ShapeRef, StrokeSpec};
     use crate::{ColorError, Rgba};
 
@@ -577,5 +686,44 @@ mod tests {
         assert!(table(&[(4, 2, a.clone())]).is_err());
         assert!(table(&[(1, 1, Vec::new())]).is_err());
         assert_eq!(table(&[]).unwrap().len(), 12);
+    }
+
+    /// A 2 × 3 PNG header: the signature and an IHDR chunk, enough for the size.
+    fn png_2x3() -> Vec<u8> {
+        let mut png = b"\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR".to_vec();
+        png.extend_from_slice(&2u32.to_be_bytes());
+        png.extend_from_slice(&3u32.to_be_bytes());
+        png.extend_from_slice(&[8, 6, 0, 0, 0]);
+        png
+    }
+
+    #[test]
+    fn bitmap_document_embeds_the_image_where_the_icolor_layer_places_it() {
+        let png = png_2x3();
+        assert_eq!(bitmap_size(&png), Some((2, 3)));
+        // A JPEG with an APP0 segment before its start of frame: 640 wide, 480 high.
+        let jpeg = [0xFF, 0xD8, 0xFF, 0xE0, 0, 4, 0, 0, 0xFF, 0xC0, 0, 11, 8, 0x01, 0xE0, 0x02, 0x80, 1, 0, 0, 0];
+        assert_eq!(bitmap_size(&jpeg), Some((640, 480)));
+        assert_eq!(bitmap_size(b"GIF89a"), None);
+        assert_eq!(bitmap_size(&[0xFF, 0xD8, 0xFF, 0xE0, 0xFF, 0xFF]), None);
+
+        // 1000 units per em at 128 pixels per em, the bottom left at (10, -20).
+        let k = 1000.0 / 128.0;
+        let placement = BitmapPlacement { transform: Affine::translate((10.0, -20.0)) * Affine::scale(k), width: 2, height: 3 };
+        let doc = bitmap_document(&png, &placement, 4).unwrap();
+        assert!(doc.contains(r#"<g id="glyph4" transform="matrix(1 0 0 -1 0 0)">"#), "{doc}");
+        // The image's top row lands at -20 + 3 × 7.8125 font units.
+        assert!(
+            doc.contains(
+                r#"<image width="2" height="3" transform="matrix(7.8125 0 0 -7.8125 10 3.4375)" xlink:href="data:image/png;base64,iVBORw0KGgo"#
+            ),
+            "{doc}"
+        );
+        assert!(doc.ends_with(r#""/></g></svg>"#), "{doc}");
+        assert!(usvg::Tree::from_str(&doc, &usvg::Options::default()).is_ok(), "{doc}");
+
+        assert!(bitmap_document(b"GIF89a", &placement, 4).is_err());
+        assert!(bitmap_document(&png, &BitmapPlacement { width: 0, ..placement }, 4).is_err());
+        assert!(bitmap_document(&png, &BitmapPlacement { transform: Affine::scale(f64::INFINITY), ..placement }, 4).is_err());
     }
 }
