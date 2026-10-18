@@ -236,6 +236,17 @@ summary = "Draws contours by clicking on-curve positions only; the tool supplies
 ref = "FontLab 8 What's new › Draft & draw › Drawing contours"
 status = "docs"
 origin = "fontlab"
+notes = "Documented, not yet observed in the reference app. FontCraft: a segment between two corner or tangent nodes is straight, every other one a curve; a curve node takes the direction from the node before it to the node after it, a tangent node the direction of its straight side, and a corner (or an open contour's end) aims its handle at the other end's handle. Handles are set to the tension as a share of the distance to the segment's Tunni point. The contour is added as one undo step: path.addPath, then path.setCurveTension without a value for the segments not adjusted by hand, so they take the master's curveTension parameter. Clicking the first node closes the contour; Return, Escape, a double-click or switching tools adds it open; Backspace removes the last node; dragging a node moves it."
+guesses = [
+  "With no sub-mode latched, a plain click adds a smooth curve node, Alt+click a corner and Cmd+Alt+click a tangent node; the reference's documentation of the tool's modifier keys would settle it.",
+  "A segment's tension point sits halfway between its two handles and is dragged towards or away from the Tunni point; a click on it without dragging returns the segment to the master's tension. Watching the reference's tension points would settle it.",
+  "A segment whose handle lines do not meet ahead of both nodes (an S-curve) gets handles of the tension times the chord length over √2, a quarter circle's proportion; the reference's handles on an S-shaped run of clicks would settle it.",
+]
+observe = [
+  "Draw four clicks around a circle with the Rapid tool and read the handle lengths: are they the master's curve tension of the distance to the Tunni point?",
+  "Alt+click and Cmd+Alt+click with no sub-mode latched: which node types do they add?",
+  "Click a segment's tension point without dragging: does it change the tension, and to what?",
+]
 
 [[tool]]
 id = "thickness"
@@ -2387,7 +2398,7 @@ label = "Spiro"
 shortcut = ""
 group = ""
 gestures = [
-  "click: add a spiro control point of the current kind (curve with continuous curvature, curve with continuous slope, corner, or left/right transition from line to curve)",
+  "click: add a spiro control point of the current kind (G4 curve, G2 curve, corner, or left/right transition between a curve and a straight line)",
   "drag a control point: the whole curve through the points is recomputed",
   "toggle spiro mode off: the contour becomes ordinary Bezier segments",
 ]
@@ -2397,7 +2408,17 @@ summary = "Draws a contour as a sequence of on-curve control points through whic
 ref = "FontForge main views › Outline Glyph View (Spiro point tools; Spiro mode toggle)"
 status = "docs"
 origin = "fontforge"
-notes = "M13.37 writes the curve fitting from Raph Levien's published thesis on spiral splines; libspiro (GPL) is not read."
+notes = "Documented, not yet observed in the reference app. The curve fitting is written from Raph Levien's published thesis on spiral splines (fontcraft_geom::spiro); libspiro (GPL) is not read. Each segment is a spiral whose curvature is a cubic in arc length, solved by Newton's method; with G2 points only it is the spline of Euler spirals, and points on a circle give the circle. Point kinds: G4 and G2 curve points, corner, left (curve, then a straight line) and right (straight line, then a curve). Clicking the first point closes the contour; Return, Escape, a double-click or switching tools adds it open; Backspace removes the last point. The contour is added with one path.addPath as cubic segments within 0.25 units of the spiral, at most 128 points a contour."
+guesses = [
+  "Plain click adds a G4 point, Shift+click G2, Alt+click a corner, Cmd+click a left point and Cmd+Shift+click a right point when no kind is latched; the reference's point tools have no modifier keys, so any mapping is ours.",
+  "At a G2 point the second derivative of curvature is zero on both sides, at a corner (and an open contour's end) the first two derivatives are zero on each side, and a curve meeting a straight line is tangent to it with a zero second derivative; the thesis's exact end conditions, compared on a shared test contour, would settle it.",
+  "A left point is followed by the straight line and a right point preceded by it; drawing a left point and a right point in the reference app would settle it.",
+  "Spiro points are not kept with the path: once added, the contour is ordinary cubic segments, so there is no spiro mode to toggle back. A contour key in the stored data would be needed to keep them.",
+]
+observe = [
+  "Draw four G2 points around a circle and convert to cubics: how many cubic segments result, and do they follow a circle?",
+  "Draw a left point then a right point: which side of each is the straight line on?",
+]
 
 # =====================================================================================================
 # FontForge — comparing, merging, interpolating whole fonts

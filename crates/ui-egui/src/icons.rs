@@ -165,6 +165,7 @@ pub fn for_tool(id: &str) -> Option<Icon> {
         "scale" => Icon::Scale,
         "measurement" => Icon::Measure,
         "thickness" => Icon::Thickness,
+        "rapid" | "spiro" => Icon::Draw,
         "text" => Icon::Text,
         "annotationSelect" => Icon::AnnotationSelect,
         "annotationText" => Icon::AnnotationText,
