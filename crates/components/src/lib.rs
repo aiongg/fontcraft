@@ -13,6 +13,7 @@
 //! | [`compose`] | M6.3 | the parts of a glyph name, a new composite glyph |
 //! | [`recipe`] | M6.3 | recipe parsing and part roles |
 //! | [`default_anchors`] | M6.3 | the anchors Set Anchors adds |
+//! | [`construction`] | M13.17 | construction rules: a rules file read, and the glyphs it builds |
 //! | [`auto_layer`], [`expressions`] | M13.16 | automatic layers, anchor expressions, the engine hook [`expressions::follow_changes`] |
 //!
 //! Who calls what: the engine runs [`expressions::follow_changes`] (which ends in [`metrics::realign`]) after every font-changing command, inside
@@ -49,6 +50,8 @@ mod align_tests;
 mod auto_layer_tests;
 #[cfg(test)]
 mod compose_tests;
+#[cfg(test)]
+mod construction_tests;
 #[cfg(test)]
 mod index_tests;
 #[cfg(test)]
