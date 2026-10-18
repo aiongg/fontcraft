@@ -457,11 +457,26 @@ fn looks_like_svg(b: &[u8]) -> bool {
     text.starts_with('<') && text.contains("<svg")
 }
 
-/// `image` as a PNG file (TIFF to PNG for sbix, bitmaps in SVG documents).
+/// `image` as a PNG file (TIFF to PNG for sbix, bitmaps in SVG documents). Refused when the
+/// pixel buffer does not hold `width × height` RGBA pixels or the size is beyond [`MAX_SIDE`]
+/// and [`MAX_PIXELS`].
 pub fn to_png(image: &Rgba8) -> Result<Vec<u8>, ImageError> {
-    // M11.8
-    let _ = image;
-    Err(ImageError::NotYetImplemented("writing PNG images"))
+    use image::ImageEncoder;
+    check_size(image.width, image.height, MAX_PIXELS)?;
+    let expected = u64::from(image.width) * u64::from(image.height) * 4;
+    if u64::try_from(image.pixels.len()).ok() != Some(expected) {
+        return Err(ImageError::Encode(format!(
+            "{} bytes of pixels for a {} × {} image, which needs {expected}",
+            image.pixels.len(),
+            image.width,
+            image.height
+        )));
+    }
+    let mut out = Vec::new();
+    image::codecs::png::PngEncoder::new(&mut out)
+        .write_image(&image.pixels, image.width, image.height, image::ExtendedColorType::Rgba8)
+        .map_err(|e| ImageError::Encode(e.to_string()))?;
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -522,6 +537,20 @@ mod tests {
 
         // The caller's pixel budget is checked before decoding.
         assert_eq!(decode_rgba(&png, 5), Err(ImageError::TooManyPixels { width: 3, height: 2, limit: 5 }));
+    }
+
+    #[test]
+    fn tiff_converts_to_png_with_the_same_pixels() {
+        let tif = encode(DynamicImage::ImageRgba8(sample()), Codec::Tiff);
+        let png = to_png(&decode_rgba(&tif, MAX_PIXELS).unwrap()).unwrap();
+        assert_eq!(sniff(&png).unwrap(), ImageInfo { format: ImageFormat::Png, width: 3, height: 2 });
+        assert_eq!(decode_rgba(&png, MAX_PIXELS).unwrap().pixels, sample().into_raw());
+
+        // A buffer that does not match its stated size is refused, not encoded.
+        let short = Rgba8 { width: 3, height: 2, pixels: vec![0; 20] };
+        assert!(matches!(to_png(&short), Err(ImageError::Encode(_))));
+        let huge = Rgba8 { width: MAX_SIDE + 1, height: 1, pixels: Vec::new() };
+        assert!(matches!(to_png(&huge), Err(ImageError::TooManyPixels { .. })));
     }
 
     #[test]

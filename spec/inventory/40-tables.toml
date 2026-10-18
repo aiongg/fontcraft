@@ -430,6 +430,7 @@ milestone = "M11"
 summary = "Bitmap strikes holding PNG or JPEG data per glyph and ppem. write-fonts has Sbix, Strike and GlyphData types but leaves the strike layout (offsets to glyph data) to the caller, so FontCraft serialises the table itself. Neither oracle builds the table; strike selection, origin offsets and the mapping from placed images are ours, and nanoemoji's output gives the layout."
 ref = "write-fonts src/tables/sbix.rs, generated/generated_sbix.rs; fontc fontbe/src/font.rs"
 status = "docs"
+notes = "Written by `crates/compile/src/color/sbix.rs` from the strikes of `crates/color/src/strike.rs`: version 1, flags 1 (outlines not drawn over the bitmaps), 72 pixels per inch, one strike per iColor size in increasing order, at most 64 strikes and 1 GiB. Origin offsets are the bottom-left corner of the image's box on the iColor layer, in strike pixels from the glyph origin, rounded."
 
 [[table]]
 tag = "SVG "
