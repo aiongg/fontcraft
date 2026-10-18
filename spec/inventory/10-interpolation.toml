@@ -171,13 +171,16 @@ label = "Generate Instances"
 menu = ["File"]
 shortcut = ""
 kind = "engine"
-params = "{instances?: [id|name], open?: bool, saveTo?: path}"
+params = "{instances?: [id|name|index], open?: bool, destination?: path}"
 area = "interpolation"
 milestone = "M9"
 summary = "Interpolates the instances of the current document, turns each into a master and creates new source documents from them, so each instance can be edited as ordinary outlines. The chapter says a file per instance in one sentence and a new file holding those masters in the next; which it is must be observed."
 ref = "Interpolation › Working with Multiple Fonts › Glyphs Files, Masters, & Instances"
 status = "handbook"
+notes = "Documented, not yet observed. Every instance is interpolated before any document opens or any file is written."
 guesses = [
+  "Without a list, every active static instance is generated; settle with an inactive instance in F1 in the reference app.",
+  "The new document keeps the instance as its only export, without the parameters only interpolation reads, and saved files are named Family-Style; settle by running the command in the reference app.",
   "One new document per instance, as the Several Fonts section of the handbook says (a file per instance), holding one master with the instance's outlines, metrics, kerning and features and no special layers; settle by running the command in the reference app.",
 ]
 observe = [
@@ -885,7 +888,7 @@ milestone = "M9"
 summary = "A Rename Glyphs parameter on an instance or variable font setting lists one swap per line as name=othername, e.g. cent=cent.simple; the two glyphs trade places in that export. Adding Remove Glyphs with the names that now hold the unwanted normal outlines turns the swap into a replacement."
 ref = "Interpolation › Switching Shapes › Replacing Glyphs at Export"
 status = "handbook"
-notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 3:35–4:11 and 4:44–5:15: a Rename Glyphs parameter on an instance holds one rule per line (a=a.ss01, g=g.ss01) and the exported instance shows the alternate shapes as a and g. Not shown: Remove Glyphs."
+notes = "The static half is the compiler's Rename Glyphs export filter (M7); a document made by Generate Instances keeps the parameter. Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 3:35–4:11 and 4:44–5:15: a Rename Glyphs parameter on an instance holds one rule per line (a=a.ss01, g=g.ss01) and the exported instance shows the alternate shapes as a and g. Not shown: Remove Glyphs."
 
 [[behavior]]
 id = "switching.conditionalSubstitution"

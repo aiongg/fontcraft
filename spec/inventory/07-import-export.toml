@@ -677,6 +677,7 @@ milestone = "M9"
 summary = "Several fonts are combined into one document by adding them as masters: Font Info › Masters › plus menu › Add Other Font (documented with the Masters tab) offers the masters of the other open fonts. Masters added this way must be outline-compatible before they can be interpolated."
 ref = "Import & Export › Opening Font Files › Importing Multiple Fonts Files into a Glyphs File"
 status = "handbook"
+notes = "Documented, not yet observed. Built as font.master.addFromOtherFont."
 
 [[behavior]]
 id = "open.reconstructsFeatures"
