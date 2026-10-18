@@ -68,6 +68,8 @@ pub struct Scene<'a> {
     /// The selected smart components and their Width and Height properties, resolved by the
     /// caller (`smart.widthHeightFollowBoundingBox`).
     pub smart_sizes: Vec<SmartSize>,
+    /// The layer's PostScript hints while Show Hints is on, resolved by the caller.
+    pub ps_hints: crate::hint_drag::HintMarks,
     components: Vec<ComponentGeom>,
     component_points: usize,
 }
@@ -154,6 +156,7 @@ impl<'a> Scene<'a> {
             components: Vec::new(),
             smart_handles: Vec::new(),
             smart_sizes: Vec::new(),
+            ps_hints: crate::hint_drag::HintMarks::default(),
             component_points: 0,
         }
     }

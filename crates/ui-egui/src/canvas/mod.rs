@@ -105,6 +105,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'stat
         let (rect, response) = ui.allocate_exact_size(ui.available_size(), Sense::click_and_drag());
         state.canvas_size = [f64::from(rect.width()), f64::from(rect.height())];
         let extras = guides::Extras::query(session, &tab, &state.display, tools.toolbox.active_id(), &tools.toolbox.overlays());
+        let hints = hints_ps::marks(session, state, tokens);
         let Ok(font) = session.font() else { return };
         let Some(master) = view::active_master(font, &tab) else { return };
         let layout = view::text_layout(session, layouts, &tab);
@@ -133,6 +134,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'stat
             metrics::draw(&c, &lines, &marks, (!text_mode).then_some(width), span, state.display.metrics_names);
         }
         guides::draw_lines(&c, &extras, &state.display);
+        hints_ps::draw_bars(&c, &hints);
         // The edited side as a layer: while the background is edited, its background is the
         // foreground, which `background::draw` shows as the reference outline.
         let edited = view::edited_layer(font, &tab);
@@ -228,6 +230,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'stat
         if state.display.anchors {
             anchors::draw(&c, layer, &tab.selection, &marks);
         }
+        hints_ps::draw_marks(&c, &hints, &tab.selection);
         if let Some(s) = &scene {
             autometer::draw(ui, &c, s, pending);
         }

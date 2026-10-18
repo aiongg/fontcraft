@@ -185,6 +185,7 @@ impl FontcraftApp {
             }
         };
         shell::clipboard::after_run(self, id, &result);
+        crate::canvas::hints_ps::adopt_result(self, id, &result);
         if self.dialog.is_none()
             && let Some((dialog, given)) = crate::dialogs::after(id, params, &result)
             && let Err(e) = crate::dialogs::open(self, &dialog, &given)

@@ -17,6 +17,7 @@
 //! | double-click a component | `component.editBaseGlyph`: its base glyph joins the tab text, edited |
 //! | drag a guide's knob, or the guide elsewhere; double-click it | see [`crate::guide_drag`] |
 //! | drag a smart handle of a selected smart component | `smartComponent.setValue` in one interaction |
+//! | click or drag a PostScript hint's badge or marker; `Tab`, `Delete` with hints selected | see [`crate::hint_drag`] |
 //! | `Escape` during a gesture | cancel it |
 //!
 //! Presses on the bounding box's knobs and just outside it go to [`crate::bbox`] first.
@@ -27,6 +28,7 @@ use serde_json::{Value, json};
 use crate::event::{Key, KeyEvent, Modifiers, PointerEvent, PointerKind};
 use crate::geometry::{dist, finite, rect_corners};
 use crate::guide_drag::GuideDrag;
+use crate::hint_drag::HintDrag;
 use crate::hit::{Hit, HitResult, hit_test};
 use crate::output::{Action, Invocation, Output, Overlay, OverlayKind};
 use crate::scene::Scene;
@@ -169,6 +171,7 @@ enum State {
     Marquee(Box<Marquee>),
     Guide(Box<GuideDrag>),
     Smart(Box<SmartDrag>),
+    Hint(Box<HintDrag>),
 }
 
 /// A smart handle being dragged: `smartComponent.setValue` previews in one interaction.
@@ -219,6 +222,13 @@ impl SelectTool {
             && let Some(handle) = scene.smart_handles.iter().find(|h| near(h.at))
         {
             self.state = State::Smart(Box::new(SmartDrag { handle: handle.clone(), begun: false, last: None }));
+            return out;
+        }
+        if let Some((pressed, drag)) = crate::hint_drag::press(cx, ev) {
+            out.extend(pressed);
+            if let Some(drag) = drag {
+                self.state = State::Hint(Box::new(drag));
+            }
             return out;
         }
         let Some(hit) = hit_test(scene, &cx.view, ev.pos, cx.settings.hit_tolerance) else {
@@ -336,6 +346,7 @@ impl SelectTool {
                 }
             }
             State::Smart(smart) => out.actions.extend(smart.update(cx, ev.pos).actions),
+            State::Hint(hint) => out.extend(hint.drag(cx, ev)),
         }
         out
     }
@@ -402,6 +413,7 @@ impl SelectTool {
                     out.push(Action::Commit);
                 }
             }
+            State::Hint(hint) => out.extend(hint.release(cx, ev)),
         }
         out
     }
@@ -482,10 +494,15 @@ impl Tool for SelectTool {
         }
     }
 
-    fn key(&mut self, _cx: &Context<'_>, ev: &KeyEvent) -> Output {
+    fn key(&mut self, cx: &Context<'_>, ev: &KeyEvent) -> Output {
         if ev.pressed && ev.key == Key::Escape && self.busy() {
             let mut out = self.cancel();
             out.handled = true;
+            return out;
+        }
+        if !self.busy()
+            && let Some(out) = crate::hint_drag::key(cx, ev)
+        {
             return out;
         }
         Output::default()
@@ -526,6 +543,7 @@ impl Tool for SelectTool {
         match std::mem::take(&mut self.state) {
             State::Dragging(_) | State::Guide(_) => out.push(Action::Cancel),
             State::Smart(smart) if smart.begun => out.push(Action::Cancel),
+            State::Hint(hint) => out.extend(hint.cancel()),
             State::Marquee(m) => {
                 let m = *m;
                 if m.last != m.base {
@@ -550,6 +568,7 @@ impl Tool for SelectTool {
                 Some(h) => vec![Overlay::Marker { kind: if h.locked { OverlayKind::HoverLocked } else { OverlayKind::Hover }, at: h.at }],
                 None => Vec::new(),
             },
+            State::Hint(hint) => hint.overlays(),
             State::Pressed(_) | State::Smart(_) => Vec::new(),
         }
     }

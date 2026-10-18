@@ -3,7 +3,8 @@
 //!
 //! The selection lives in the shell's UI state; the engine never stores it. Its lists use the
 //! same addresses as command targets: points as `[shape, node]`, shapes by index, anchors by
-//! name, guides as `{scope, index}`, annotations by index.
+//! name, guides as `{scope, index}`, annotations by index, PostScript hints by their position in
+//! the layer's hint list.
 
 use std::collections::BTreeSet;
 
@@ -50,6 +51,8 @@ pub enum Item {
     Anchor(String),
     Guide(GuideRef),
     Annotation(usize),
+    /// A PostScript hint, by its position in the layer's hint list.
+    Hint(usize),
 }
 
 /// How a list of items changes a selection.
@@ -77,6 +80,8 @@ pub struct Selection {
     pub guides: BTreeSet<GuideRef>,
     #[serde(skip_serializing_if = "BTreeSet::is_empty")]
     pub annotations: BTreeSet<usize>,
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    pub hints: BTreeSet<usize>,
 }
 
 impl Selection {
@@ -93,9 +98,9 @@ impl Selection {
     }
 
     /// A selection from a target-shaped JSON object (`points`, `shapes`, `anchors`, `guides`,
-    /// `annotations`; other keys are ignored). Each list is capped at [`MAX_SELECTION_LIST`].
+    /// `annotations`, `hints`; other keys are ignored). Each list is capped at [`MAX_SELECTION_LIST`].
     pub fn from_value(value: &Value) -> Result<Self, String> {
-        for key in ["points", "shapes", "anchors", "guides", "annotations"] {
+        for key in ["points", "shapes", "anchors", "guides", "annotations", "hints"] {
             if let Some(list) = value.get(key).and_then(Value::as_array)
                 && list.len() > MAX_SELECTION_LIST
             {
@@ -103,7 +108,7 @@ impl Selection {
             }
         }
         let mut object = Map::new();
-        for key in ["points", "shapes", "anchors", "guides", "annotations"] {
+        for key in ["points", "shapes", "anchors", "guides", "annotations", "hints"] {
             if let Some(v) = value.get(key) {
                 object.insert(key.to_string(), v.clone());
             }
@@ -112,11 +117,16 @@ impl Selection {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.points.is_empty() && self.shapes.is_empty() && self.anchors.is_empty() && self.guides.is_empty() && self.annotations.is_empty()
+        self.points.is_empty()
+            && self.shapes.is_empty()
+            && self.anchors.is_empty()
+            && self.guides.is_empty()
+            && self.annotations.is_empty()
+            && self.hints.is_empty()
     }
 
     pub fn len(&self) -> usize {
-        self.points.len() + self.shapes.len() + self.anchors.len() + self.guides.len() + self.annotations.len()
+        self.points.len() + self.shapes.len() + self.anchors.len() + self.guides.len() + self.annotations.len() + self.hints.len()
     }
 
     pub fn clear(&mut self) {
@@ -130,6 +140,7 @@ impl Selection {
             Item::Anchor(name) => self.anchors.contains(name),
             Item::Guide(g) => self.guides.contains(g),
             Item::Annotation(i) => self.annotations.contains(i),
+            Item::Hint(i) => self.hints.contains(i),
         }
     }
 
@@ -141,6 +152,7 @@ impl Selection {
             Item::Anchor(name) => self.anchors.insert(name),
             Item::Guide(g) => self.guides.insert(g),
             Item::Annotation(i) => self.annotations.insert(i),
+            Item::Hint(i) => self.hints.insert(i),
         }
     }
 
@@ -152,6 +164,7 @@ impl Selection {
             Item::Anchor(name) => self.anchors.remove(name),
             Item::Guide(g) => self.guides.remove(g),
             Item::Annotation(i) => self.annotations.remove(i),
+            Item::Hint(i) => self.hints.remove(i),
         }
     }
 
@@ -169,6 +182,7 @@ impl Selection {
         out.extend(self.anchors.iter().map(|a| Item::Anchor(a.clone())));
         out.extend(self.guides.iter().map(|&g| Item::Guide(g)));
         out.extend(self.annotations.iter().map(|&i| Item::Annotation(i)));
+        out.extend(self.hints.iter().map(|&i| Item::Hint(i)));
         out
     }
 
@@ -209,6 +223,9 @@ impl Selection {
         if !self.annotations.is_empty() {
             m.insert("annotations".into(), Value::Array(self.annotations.iter().map(|&i| json!(i)).collect()));
         }
+        if !self.hints.is_empty() {
+            m.insert("hints".into(), Value::Array(self.hints.iter().map(|&i| json!(i)).collect()));
+        }
         m
     }
 
@@ -225,6 +242,11 @@ impl Selection {
         });
         let annotations = layer.info.annotations.len();
         self.annotations.retain(|&i| i < annotations);
+        // Hints are known only while they are shown; otherwise the shell keeps them in step.
+        if scene.ps_hints.shown {
+            let hints = scene.ps_hints.hints.len();
+            self.hints.retain(|&i| i < hints);
+        }
     }
 
     /// The selected on-curve nodes.

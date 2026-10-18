@@ -534,6 +534,8 @@ pub struct DisplayOptions {
     pub anchors: bool,
     /// The other members of the edited pair's kerning groups (`view.showGroupMembers`).
     pub group_members: bool,
+    /// The edited layer's PostScript hints (`view.showHints`).
+    pub hints: bool,
 }
 
 impl Default for DisplayOptions {
@@ -552,6 +554,7 @@ impl Default for DisplayOptions {
             fill_preview: true,
             anchors: true,
             group_members: false,
+            hints: false,
         }
     }
 }

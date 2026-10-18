@@ -238,6 +238,8 @@ pub struct Tokens {
     pub visible_layer_outline_width: f32,
     /// The reference font's glyph behind the outline (`view.setReferenceFont`).
     pub reference_font_outline: Color32,
+    /// PostScript hints in Edit View (`hinting.ps.manual.display`).
+    pub ps_hints: PsHintTokens,
     pub reference_font_outline_width: f32,
     /// Laid over the canvas while the background is the side being edited (`background.darkenedCanvas`).
     pub background_tint: Color32,
@@ -480,6 +482,7 @@ impl Tokens {
             visible_layer_outline: Color32::from_rgba_unmultiplied(0x2d, 0x8c, 0xeb, 0xb0),
             visible_layer_outline_width: 0.75,
             reference_font_outline: Color32::from_rgba_unmultiplied(0x30, 0xa0, 0x60, 0xa0),
+            ps_hints: PsHintTokens::dark(),
             reference_font_outline_width: 1.0,
             background_tint: Color32::from_rgba_unmultiplied(0x00, 0x00, 0x00, 0x18),
             annotation: Color32::from_rgb(0xe0, 0x30, 0x30),
@@ -572,5 +575,59 @@ impl Tokens {
         visuals.widgets.inactive.bg_fill = self.panel_darker;
         visuals.widgets.noninteractive.bg_stroke.color = self.border;
         ctx.set_visuals(visuals);
+    }
+}
+
+/// The look of PostScript hints in Edit View: bars tinted by kind, gray number badges, blue
+/// markers at the edges.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PsHintTokens {
+    /// Bars of horizontal stem hints (yellow), vertical stem hints (green) and ghost hints (blue).
+    pub horizontal: Color32,
+    pub vertical: Color32,
+    pub ghost: Color32,
+    /// How far a ghost hint's band reaches from its edge into the glyph, in screen points.
+    pub ghost_band: f32,
+    /// The number badge, the badge of a selected hint, and their text.
+    pub badge: Color32,
+    pub badge_selected: Color32,
+    pub badge_text: Color32,
+    pub badge_text_size: f32,
+    /// The ring around the badge of a hint that `hint.ps.listHints` warns about.
+    pub warning: Color32,
+    pub warning_width: f32,
+    /// The markers: a circle at the origin edge, a triangle at the other edge; filled when that
+    /// end is linked to a node.
+    pub marker: Color32,
+    pub marker_width: f32,
+    /// Where marks sit, in screen points (`fontcraft_tools::hint_drag::HintLayout`): the lane
+    /// between the glyph and the markers, a badge's width and height, a marker's radius, the
+    /// space between a marker and its badge.
+    pub lane: f32,
+    pub badge_size: [f32; 2],
+    pub marker_radius: f32,
+    pub gap: f32,
+}
+
+impl PsHintTokens {
+    pub fn dark() -> Self {
+        Self {
+            horizontal: Color32::from_rgba_unmultiplied(0xf2, 0xc9, 0x1f, 0x40),
+            vertical: Color32::from_rgba_unmultiplied(0x3c, 0xb4, 0x4b, 0x40),
+            ghost: Color32::from_rgba_unmultiplied(0x2d, 0x7d, 0xd2, 0x60),
+            ghost_band: 6.0,
+            badge: Color32::from_rgb(0x8a, 0x8a, 0x90),
+            badge_selected: Color32::from_rgb(0xf2, 0x96, 0x2a),
+            badge_text: Color32::WHITE,
+            badge_text_size: 10.0,
+            warning: Color32::from_rgb(0xe0, 0x40, 0x30),
+            warning_width: 1.5,
+            marker: Color32::from_rgb(0x2d, 0x7d, 0xd2),
+            marker_width: 1.5,
+            lane: 18.0,
+            badge_size: [64.0, 16.0],
+            marker_radius: 5.0,
+            gap: 6.0,
+        }
     }
 }

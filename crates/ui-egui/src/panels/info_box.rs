@@ -14,6 +14,9 @@
 //! half and the active layer's on its right half (`infoBox.showsColorLabels`), when either is
 //! set.
 //!
+//! While PostScript hints are selected, the box shows the first of them instead
+//! ([`super::info_box_ps_hint`]).
+//!
 //! While one of the Annotation tools is the chosen tool, the box shows the annotation palette
 //! instead (`infoBox.annotations`): one button per sub-tool, in the order of
 //! `fontcraft_tools::annotate::SUB_TOOLS`, each running `annotation.setTool`.
@@ -79,12 +82,15 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
         return;
     }
     super::info_box_metrics::show(app, ui, pending);
+    if super::info_box_ps_hint::show(app, ui, pending) {
+        return;
+    }
     let Some(info) = read(app) else { return };
     frame(ui, &tokens, "infoBox", |ui| contents(ui, &tokens, &info, pending));
 }
 
 /// The box itself: centred at the foot of the canvas.
-fn frame(ui: &mut egui::Ui, tokens: &Tokens, salt: &str, add: impl FnOnce(&mut egui::Ui)) {
+pub(super) fn frame(ui: &mut egui::Ui, tokens: &Tokens, salt: &str, add: impl FnOnce(&mut egui::Ui)) {
     let canvas = ui.available_rect_before_wrap();
     let pos = egui::pos2(canvas.center().x, canvas.bottom() - tokens.info_box_margin);
     egui::Area::new(widgets::id(salt)).order(egui::Order::Middle).fixed_pos(pos).pivot(egui::Align2::CENTER_BOTTOM).constrain_to(canvas).show(

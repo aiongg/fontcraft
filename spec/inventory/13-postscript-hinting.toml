@@ -492,7 +492,7 @@ notes = "M10.4: each hint also lists its warnings (hinting.ps.manual.horizontalH
 id = "hint.ps.selectNextHint"
 label = "Select Next Hint"
 menu = []
-shortcut = "Tab"
+shortcut = ""
 when = "editView"
 kind = "ui"
 params = "{}"
@@ -501,14 +501,18 @@ milestone = "M10"
 summary = "With a hint selected, moves the selection to the following hint of the layer so that its values can be edited in the Info box. Wrap-around at the last hint is not stated."
 ref = "PostScript Hinting › Stem Hints"
 status = "handbook"
-guesses = ["Tab wraps from the last hint to the first; the reference app would settle it."]
+notes = "Tab runs it while PostScript hints are selected and the Select tool is active (crates/tools/src/hint_drag.rs); otherwise Tab stays selection.selectNext, which owns the Tab shortcut, so the command itself carries none. Documented in the handbook, not yet observed."
+guesses = [
+  "Tab wraps from the last hint to the first; the reference app would settle it.",
+  "With several hints selected, Tab moves on from the one latest in list order and selects only the next hint; the reference app would settle it.",
+]
 observe = ["T1: in n, select the last hint and press Tab; note whether the selection wraps to the first hint. Then select two hints and press Tab; note which hint is selected next."]
 
 [[command]]
 id = "hint.ps.selectPreviousHint"
 label = "Select Previous Hint"
 menu = []
-shortcut = "Shift+Tab"
+shortcut = ""
 when = "editView"
 kind = "ui"
 params = "{}"
@@ -517,6 +521,8 @@ milestone = "M10"
 summary = "With a hint selected, moves the selection to the preceding hint of the layer."
 ref = "PostScript Hinting › Stem Hints"
 status = "handbook"
+notes = "Shift+Tab runs it while PostScript hints are selected and the Select tool is active; otherwise Shift+Tab stays selection.selectPrevious, which owns the shortcut. Documented in the handbook, not yet observed."
+guesses = ["Shift+Tab wraps from the first hint to the last and, with several hints selected, moves back from the one earliest in list order; the reference app would settle it."]
 
 # ---------------------------------------------------------------------------------------------
 # Manual hinting: panel and behaviour
@@ -536,6 +542,9 @@ milestone = "M10"
 summary = "State of the Edit View Info box (View › Show Info, Cmd+Shift+I) while one or more PostScript hints are selected. It shows the numbers of the selected hint for editing; for a ghost hint it shows the orientation buttons instead of a size."
 ref = "PostScript Hinting › Stem Hints; Ghost Hints"
 status = "handbook"
+notes = "crates/ui-egui/src/panels/info_box_ps_hint.rs: Origin runs hint.ps.setHintValues with origin, Size with size, the up and down buttons hint.ps.setGhostDirection; the warnings hint.ps.listHints gives for the hint show under the fields. Documented in the handbook, not yet observed."
+guesses = ["With several hints selected the box shows the first of them in list order, with the count; the reference app would settle which one it shows."]
+observe = ["T1: in n, Shift-click two hint badges and note which hint's values the Info box shows."]
 
 [[behavior]]
 id = "hinting.ps.manual.hintKinds"
@@ -564,8 +573,17 @@ milestone = "M10"
 summary = "In Edit View a stem hint is drawn as a gray bar across the glyph with a number badge showing its origin and size; the reference's figures tint vertical hints green, horizontal hints yellow and ghost hints blue. A ghost hint's badge shows only the position plus an arrow: up for a top ghost hint, down for a bottom one."
 ref = "PostScript Hinting › Stem Hints; Ghost Hints"
 status = "handbook"
-guesses = ["PostScript hints are shown and edited with the Select tool while View › Show Hints is on; whether another tool is needed would be settled in the reference app."]
-observe = ["T1: turn on View › Show Hints, open n and try to drag a hint marker with the Select tool, then with each other tool; note which tools can move or edit a hint."]
+notes = "crates/ui-egui/src/canvas/hints_ps.rs draws what hint.ps.listHints reports: translucent bars across the canvas tinted by kind, a ghost as a band on the inner side of its edge, gray number badges (origin / size; a ghost's position and an arrow) beside the glyph, orange when selected and ringed red when listHints warns, blue markers at the edges. The context menu offers Add Horizontal Hint and Add Vertical Hint (nodes, paths, empty canvas), Autohint and Remove PostScript Hints (the glyph), Make Ghost Hint and Delete Hints (a hint's badge or marker). Documented in the handbook, not yet observed."
+guesses = [
+  "PostScript hints are shown and edited with the Select tool while View › Show Hints is on; whether another tool is needed would be settled in the reference app.",
+  "Badges and markers of horizontal hints stand in a column left of the glyph's origin, those of vertical hints in a row below the descender; a reference-app screenshot of n with hints would settle where they sit.",
+  "A marker is drawn filled when its end is linked to a node and hollow when it is a number; the reference app would settle how a link shows.",
+  "The hint items join the canvas context menu only while Show Hints is on; the reference app would settle whether they show with hints hidden.",
+]
+observe = [
+  "T1: turn on View › Show Hints, open n and try to drag a hint marker with the Select tool, then with each other tool; note which tools can move or edit a hint.",
+  "T1: with Show Hints on and off, right-click a node of n and note whether Add Horizontal Hint is in the menu each time.",
+]
 
 [[behavior]]
 id = "hinting.ps.manual.select"
@@ -574,7 +592,11 @@ milestone = "M10"
 summary = "Clicking a hint's number badge selects the hint; Shift+click adds to or removes from the hint selection. The selected hint's values appear in the Info box."
 ref = "PostScript Hinting › Stem Hints"
 status = "handbook"
-guesses = ["Tab after the last hint wraps to the first and Shift+Tab before the first wraps to the last; with several hints selected Tab moves on from the last selected one; trying it in the reference app would settle it."]
+notes = "The hint selection is part of the Edit View selection (`hints`, by list position; crates/tools/src/selection.rs). A click on a badge or marker selects that hint alone, Shift+click toggles it, a click elsewhere replaces it; hiding hints deselects them. Delete removes the selected hints (hint.ps.deleteHints). Documented in the handbook, not yet observed."
+guesses = [
+  "Tab after the last hint wraps to the first and Shift+Tab before the first wraps to the last; with several hints selected Tab moves on from the one latest in list order; trying it in the reference app would settle it.",
+  "A click on a hint's marker selects the hint as a click on its badge does; the reference app would settle it.",
+]
 observe = ["T1: in n, select the last hint and press Tab; note whether the selection wraps to the first hint. Then select two hints and press Tab; note which hint is selected next."]
 
 [[behavior]]
@@ -584,6 +606,11 @@ milestone = "M10"
 summary = "A hint has two blue markers at its edges: a circle at the origin and a triangle at the far edge that also shows the hint's direction and size. Dragging a marker moves that edge. A hint may point either way in the source (negative size); the direction is normalised only at export."
 ref = "PostScript Hinting › Stem Hints"
 status = "handbook"
+notes = "crates/tools/src/hint_drag.rs: a drag of the circle runs hint.ps.setHintValues with the new origin, and with the size that keeps a numeric other edge where it is; a drag of the triangle runs it with the new size. One interaction, one undo step (Move Hint); Escape cancels. A locked glyph's hints can be selected but not dragged. Documented in the handbook, not yet observed."
+guesses = [
+  "Dragging the origin marker moves only that edge, and a dragged edge lands on whole units; the reference app would settle both.",
+]
+observe = ["T1: drag the circle of a stem hint of H whose ends are numbers and note whether the other edge stays or the whole hint moves; note whether the values are whole numbers."]
 
 [[behavior]]
 id = "hinting.ps.manual.linkOnDrop"
@@ -592,7 +619,7 @@ milestone = "M10"
 summary = "Dropping a hint marker on a node links that end of the hint to the node. A linked end has no number of its own: it takes the node's Y (horizontal hints) or X (vertical hints), so moving the node moves the hint. A ghost hint is linked by dropping its circle on a node."
 ref = "PostScript Hinting › Stem Hints; Ghost Hints"
 status = "handbook"
-notes = "M10.3 keeps links on their nodes after every outline edit, in the command's undo step (crates/hinting/src/remap.rs, run by the engine after each font-changing command): a node is found again by its index, then by its place and class, then by index when its path keeps the same node classes; inserting nodes, deleting others, reversing a contour, changing the start point, Remove Overlap and Expand Outline renumber the links. An end whose node is deleted becomes a number at the node's last position, and the command result counts it under hintUpkeep. The handbook says links make hints follow their nodes; what happens on deletion is our choice, from the format notes. Stored links count a closed path's nodes in the file's order, start node last, as `.glyphs` files write them and glyphsLib copies them into a UFO glyph's lib; the format 3 sample's `A` stem only lands on its nodes read this way. Typed hints count in the model's order, start node first, and convert on read and write (crates/hinting/src/noderef.rs), so every format stores the same indexes."
+notes = "M10.3 keeps links on their nodes after every outline edit, in the command's undo step (crates/hinting/src/remap.rs, run by the engine after each font-changing command): a node is found again by its index, then by its place and class, then by index when its path keeps the same node classes; inserting nodes, deleting others, reversing a contour, changing the start point, Remove Overlap and Expand Outline renumber the links. An end whose node is deleted becomes a number at the node's last position, and the command result counts it under hintUpkeep. The handbook says links make hints follow their nodes; what happens on deletion is our choice, from the format notes. Stored links count a closed path's nodes in the file's order, start node last, as `.glyphs` files write them and glyphsLib copies them into a UFO glyph's lib; the format 3 sample's `A` stem only lands on its nodes read this way. Typed hints count in the model's order, start node first, and convert on read and write (crates/hinting/src/noderef.rs), so every format stores the same indexes. In Edit View a marker dropped on a node runs hint.ps.attachHintToNode for that end, in the drag's undo step; while the pointer is over a node, the preview already shows the link (crates/tools/src/hint_drag.rs)."
 guesses = [
   "An edit that deletes the node a hint end is linked to turns that end into a number at the node's last position; deleting a linked node in the reference app would settle it.",
   "After an edit, a linked node is found again by index, then by place and on- or off-curve class within half a unit, then by index when its path keeps the same node classes; reversing a contour and changing its start point with linked hints in the reference app would settle whether links follow the node.",
