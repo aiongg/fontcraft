@@ -42,12 +42,14 @@ pub const GUIDE_THICKNESS: &str = "com.fontcraft.guideThickness";
 /// A guide's markers: an array of positions along the guide, in font units (M13.36,
 /// `guide.addMarkers`).
 pub const GUIDE_MARKERS: &str = "com.fontcraft.guideMarkers";
-/// A guide's appearance: `{"color"?: [r, g, b, a], "style"?: "solid"|"dashed"}` (M13.36,
-/// `guide.setAppearance`).
+/// A guide's appearance: `{"style"?: "solid"|"dashed"}`. Not written: a guide's colour is its own
+/// `color` field (M13.36, `guide.setAppearance`).
 pub const GUIDE_APPEARANCE: &str = "com.fontcraft.guideAppearance";
-/// Whether a guide pulls the Magnet tool's nodes: a boolean (M13.36, `magnet`).
+/// How strongly a guide pulls dragged points: the snapping distance in screen points (M13.36,
+/// `guide.setAppearance`; `crate::guide_data`).
 pub const GUIDE_MAGNETIC: &str = "com.fontcraft.guideMagnetic";
-/// A power guide's links: an array of `[shape, node]` it moves (M13.36, `guide.makePowerGuide`).
+/// A power guide's links: an array of `[shape, node]` it moves, `[glyph, shape, node]` for a
+/// global guide (M13.36, `guide.makePowerGuide`; `crate::guide_data`).
 pub const POWER_GUIDE_LINKS: &str = "com.fontcraft.powerGuideLinks";
 /// A glyph's status: the integer code of one of the font's status definitions (M13.39,
 /// `glyph.setStatus`).

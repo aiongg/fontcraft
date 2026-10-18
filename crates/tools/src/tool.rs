@@ -139,6 +139,7 @@ pub const TOOLS: &[ToolInfo] = &[
     ToolInfo { id: "scale", label: "Scale", shortcut: "S", group: "" },
     ToolInfo { id: "measurement", label: "Measurement", shortcut: "L", group: "" },
     ToolInfo { id: "thickness", label: "Thickness", shortcut: "", group: "" },
+    ToolInfo { id: "magnet", label: "Magnet", shortcut: "", group: "" },
     ToolInfo { id: "annotationSelect", label: "Annotation Selection", shortcut: "A", group: "annotation" },
     ToolInfo { id: "annotationText", label: "Text Annotation", shortcut: "A", group: "annotation" },
     ToolInfo { id: "annotationArrow", label: "Arrow Annotation", shortcut: "A", group: "annotation" },
@@ -164,6 +165,7 @@ pub fn make_tool(id: &str) -> Option<Box<dyn Tool>> {
         "scale" => Box::new(ScaleTool::default()),
         "measurement" => Box::new(MeasureTool::default()),
         "thickness" => Box::new(crate::thickness::ThicknessTool::default()),
+        "magnet" => Box::new(crate::magnet::MagnetTool::default()),
         _ if id.starts_with("annotation") => Box::new(AnnotateTool::new(id)?),
         _ => return None,
     };

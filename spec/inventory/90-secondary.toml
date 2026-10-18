@@ -918,6 +918,12 @@ summary = "Creates and removes links between nodes and guides (power guides) and
 ref = "FontLab 7 manual › Power Guides; FontLab 8 What's new › Test & adjust › Power guides; Consistency & precision › Ghost hints, Hint linking"
 status = "docs"
 origin = "fontlab"
+notes = "Documented in the secondary reference's manual and release notes, not yet observed. FontCraft: a drag from a node to a guide runs `guide.makePowerGuide` with that node, a drag of a linked node into empty space `guide.unlinkPowerGuides` with that node, a double-click on a guide makes it a power guide or unlinks it. Shift+click runs `hint.ps.addHorizontalHint` with one node (a ghost hint) and Shift+drag between two nodes `hint.ps.addHorizontalHint` or `hint.ps.addVerticalHint` with both. Metric lines and alignment zones take no links (`guide.powerGuideScope`). The tool has a toolbar button with an icon drawn in code and no shortcut letter."
+guesses = [
+  "A Shift+drag between two nodes adds a horizontal hint when the nodes are further apart vertically than horizontally, else a vertical one; watching the tool would settle it.",
+  "Nothing changes while a node is dragged: a line runs from the node to the pointer and the link is made on release; the node itself does not move.",
+]
+
 
 [[command]]
 id = "guide.makePowerGuide"
@@ -925,16 +931,20 @@ label = "Make Power Guide"
 menu = ["Path", "Guides"]
 shortcut = ""
 kind = "engine"
-params = "{guides?: [guideRef], nodes?: [nodeRef]}"
+params = "{glyph, layer?, side?, guides: [guideRef], nodes?: [nodeRef]}"
 area = "guides-metrics"
 milestone = "M13"
 summary = "Links the given nodes (or all nodes lying on the guide) to a guide, turning it into a power guide marked with a rhombus. Moving a power guide moves its linked nodes with it while unlinked nodes between power guides are repositioned proportionally."
 ref = "FontLab 7 manual › Power Guides; FontLab 8 What's new › Test & adjust › Power guides"
 status = "docs"
 origin = "fontlab"
+notes = "Documented in the secondary reference's manual, not yet observed. FontCraft keeps the links in the guide's `.glyphs` user data (`com.fontcraft.powerGuideLinks`): `[shape, node]` for a local guide, `[glyph, shape, node]` for a global one, whose links are to master layers' foregrounds. Moving is `guide.movePowerGuide`; the canvas marks a power guide with a rhombus at its knob and a dashed line from each linked node."
 guesses = [
+  "Without `nodes`, every on-curve node of an unlocked path within 0.5 units of the guide is linked; off-curve nodes are not linked and move with the on-curve node before them, else after them.",
+  "Links name nodes by index, so an edit that renumbers nodes leaves a link on another node; a link that no longer resolves is ignored.",
   "Moving a power guide is one undo step for every glyph it reshapes, and locked glyphs keep their outline while the rest move, with a warning naming them (open question 3).",
 ]
+
 
 [[command]]
 id = "guide.addPowerGuides"
@@ -942,13 +952,18 @@ label = "Add Power Guides"
 menu = ["Path", "Guides"]
 shortcut = ""
 kind = "engine"
-params = "{glyphs?, layers?: [id]}"
+params = "{glyph | glyphs, layer? | layers?}"
 area = "guides-metrics"
 milestone = "M13"
 summary = "Adds a power guide on each side of every detected horizontal and vertical stem, linked to the stem's nodes, so the glyph can then be widened, narrowed or re-proportioned by moving guides while stem widths are preserved."
 ref = "FontLab 7 manual › Power Guides (Creating Power guides, Scaling with Power guides); FontLab 8 What's new › Test & adjust"
 status = "docs"
 origin = "fontlab"
+notes = "Documented in the secondary reference's manual, not yet observed. FontCraft finds the stems with the shared stem detector (`fontcraft_pathops::stems`), adds a local vertical or horizontal guide on each edge of every vertical and horizontal stem, round stems included, and links the on-curve nodes lying on it. A parallel guide already at that place takes the links instead."
+guesses = [
+  "Diagonal stems get no power guides; the manual names horizontal and vertical stems only.",
+]
+
 
 [[command]]
 id = "guide.unlinkPowerGuides"
@@ -956,13 +971,38 @@ label = "Unlink Power Guides"
 menu = ["Path", "Guides"]
 shortcut = ""
 kind = "engine"
-params = "{glyphs?, layers?: [id], guides?: [guideRef]}"
+params = "{glyph | glyphs, layer? | layers?, side?, guides?: [guideRef], nodes?: [nodeRef]}"
 area = "guides-metrics"
 milestone = "M13"
 summary = "Removes all node links from the given power guides, or from every guide of the glyph, without changing outlines; the guides remain as ordinary guides."
 ref = "FontLab 7 manual › Power Guides (Removing links); FontLab 8 What's new › Test & adjust"
 status = "docs"
 origin = "fontlab"
+notes = "Documented in the secondary reference's manual, not yet observed. FontCraft adds `nodes` (the Magnet tool's drag of a linked node into empty space unlinks that node only). Without `guides` or `nodes` it removes each glyph's links from its local guides and its entries from its masters' global guides."
+guesses = [
+  "Unlinking with nothing to unlink fails with a message instead of adding an empty undo step.",
+]
+
+
+[[command]]
+id = "guide.movePowerGuide"
+label = "Move Power Guide"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph, layer?, side?, guide: guideRef, x?: number, y?: number}"
+area = "guides-metrics"
+milestone = "M13"
+summary = "Moves a guide's knob and reshapes the outlines its links hold: linked nodes move with the guide, unlinked nodes between two parallel power guides move in proportion to where they sit between them."
+ref = "FontLab 7 manual › Power Guides (Scaling with Power guides)"
+status = "docs"
+origin = "fontlab"
+notes = "Documented in the secondary reference's manual, not yet observed. FontCraft runs this command for a move of a power guide; a global guide reshapes every glyph it links as one undo step, and locked glyphs keep their outline and are listed in `skipped`. The Select tool's guide drag does not call it yet."
+guesses = [
+  "Unlinked nodes beyond the outermost power guides stay where they are; the manual speaks only of nodes between power guides.",
+  "Links to guides that are not parallel to the moved one play no part in the move, so nodes held by them move like unlinked nodes.",
+]
+
 
 [[behavior]]
 id = "guide.powerGuideScope"
@@ -972,6 +1012,8 @@ summary = "A power guide may be a glyph guide, a font-level guide, a metric line
 ref = "FontLab 7 manual › Power Guides (Cautions; View › Show › Node Links)"
 status = "docs"
 origin = "fontlab"
+notes = "Documented in the secondary reference's manual, partly built. FontCraft: local (glyph) and global (font-level) guides take links; moving a global power guide reshapes every glyph it links in one undo step, and locked glyphs keep their outline and are named in the result. Metric lines and alignment zones take no links yet, so there is no setting limiting the kinds. Links are always drawn while guides show; a View switch for them is not built."
+
 
 [[command]]
 id = "guide.setThickness"
@@ -986,6 +1028,11 @@ summary = "Gives a guide a second edge at the given distance so it shows as a ba
 ref = "FontLab 8 What's new › Consistency & precision › Snapping suggestions (Centerline snapping); Ghost hints (Guide conversion)"
 status = "docs"
 origin = "fontlab"
+notes = "Documented in the secondary reference's release notes, not yet observed. FontCraft stores the thickness in the guide's `.glyphs` user data (`com.fontcraft.guideThickness`) and draws the second edge and a dashed centre line. Centreline snapping, the conversion to a hint and the Shift+drag gesture on the canvas are not built yet."
+guesses = [
+  "A positive thickness puts the second edge on the left of the guide's direction, a negative one on the right.",
+]
+
 
 [[command]]
 id = "guide.addMarkers"
@@ -993,13 +1040,18 @@ label = "Add Guide Markers"
 menu = ["Path", "Guides"]
 shortcut = ""
 kind = "engine"
-params = "{guide: guideRef, positions?: [number], auto?: bool}"
+params = "{guide: guideRef, positions?: [number], auto?: bool, clear?: bool}"
 area = "guides-metrics"
 milestone = "M13"
 summary = "Places measurement markers along a guide, either at given positions or automatically where the guide crosses the outline; perpendicular snap lines are offered at markers. On canvas, Alt-click adds one marker and double-click adds automatic ones."
 ref = "FontLab 8 What's new › Consistency & precision › Snapping suggestions (Guide markers); Guides and hints in the Glyph window"
 status = "docs"
 origin = "fontlab"
+notes = "Documented in the secondary reference's release notes, not yet observed. FontCraft stores the markers as distances from the guide's knob in its `.glyphs` user data (`com.fontcraft.guideMarkers`), at most 256, and draws a tick across the guide at each. `auto` finds where the guide crosses the layer side's paths. Perpendicular snap lines at markers and the Alt-click and double-click gestures are not built yet."
+guesses = [
+  "Marker positions are measured along the guide from its knob, in the guide's direction; `clear: true` removes them all.",
+]
+
 
 [[setting]]
 id = "appearance.guideOpacity"
@@ -3491,13 +3543,18 @@ label = "Guide Colour and Magnetism"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{guide: guideRef, color?: color, magnetism?: number, showMeasurements?: bool}"
+params = "{guide: guideRef, color?: color | null, magnetism?: number, showMeasurements?: bool}"
 area = "guides-metrics"
 milestone = "M13"
 summary = "Sets per-guide display and snapping properties: an individual colour, how strongly dragged selections snap to the guide, and whether distances are shown where it crosses the outline."
 ref = "RoboFont reference › Guidelines (popover fields: Color, Magnetic, Show Measurements)"
 status = "docs"
 origin = "robofont"
+notes = "Documented in the secondary reference's manual, not yet observed. FontCraft writes the colour to the guide's own colour (the one `guide.setProperties` sets), `showMeasurements` to its measurement switch, and the magnetism, a snapping distance in screen points, to its `.glyphs` user data (`com.fontcraft.guideMagnetic`). Snapping a dragged selection with that distance is not built yet."
+guesses = [
+  "Magnetism is a distance in screen points from 0 to 100, 0 meaning not magnetic, as the manual's number field suggests.",
+]
+
 
 [[command]]
 id = "guide.sliceContours"
