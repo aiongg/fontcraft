@@ -337,13 +337,14 @@ fn read_cff_within(bytes: &[u8], warnings: &mut Vec<String>, mut budget: FontBud
         if let Err(e) = result.and(finished) {
             failed.push(format!("{} ({e})", names.get(gid).map_or("?", String::as_str)));
         }
-        budget.charge(run.ops.len(), run.work)?;
+        budget.charge(run.ops.len().saturating_add(run.declared.len()), run.work)?;
         let width = run.width.map_or(p.default_width, |w| p.nominal_width + w);
         font.glyphs.push(PsGlyph {
             name: names.get(gid).cloned().unwrap_or_default(),
             codes: codes.get(gid).cloned().unwrap_or_default(),
             width,
             ops: run.ops,
+            stems: run.declared,
         });
     }
     if !failed.is_empty() {
@@ -952,6 +953,34 @@ mod tests {
     fn the_test_font_reads() {
         let ps = read_cff(&font(&[lines(1), lines(2)], &[], &[]), &mut Vec::new()).unwrap();
         assert_eq!(ps.glyphs.iter().map(|g| g.ops.len()).collect::<Vec<_>>(), vec![2, 3]);
+    }
+
+    #[test]
+    fn stems_no_hint_mask_selects_are_imported_and_written_back() {
+        // `0 40 660 40 hstemhm`, `100 80 200 80 hintmask 0xC0` (the mask selects the two
+        // horizontal stems only), then a rectangle from x 100 to 180, 0 to 700 high.
+        let cs = vec![139, 179, 249, 40, 179, 18, 239, 219, 247, 92, 219, 19, 0xC0, 239, 139, 21, 219, 139, 139, 249, 80, 59, 139, 5, 14];
+        let bytes = font(&[lines(1), cs], &[], &[]);
+        let want = vec![
+            PsOp::HStem { y: 0.0, dy: 40.0, kind: StemKind::Stem },
+            PsOp::HStem { y: 700.0, dy: 40.0, kind: StemKind::Stem },
+            PsOp::VStem { x: 100.0, dx: 80.0, kind: StemKind::Stem },
+            PsOp::VStem { x: 380.0, dx: 80.0, kind: StemKind::Stem },
+        ];
+        let ps = read_cff(&bytes, &mut Vec::new()).unwrap();
+        assert_eq!(ps.glyphs[1].stems, want);
+        let name = ps.glyphs[1].name.clone();
+
+        let d = decompile_cff(&bytes).unwrap();
+        assert_eq!(d.font.glyph(&name).unwrap().layers[0].info.hints.len(), 4, "every declared stem is a layer hint");
+
+        let target = d.font.default_target().unwrap();
+        let out = fontcraft_compile::compile(&d.font, &target, fontcraft_compile::Flavour::Cff, &fontcraft_compile::Options::default()).unwrap();
+        let sfnt = skrifa::raw::FontRef::new(&out.bytes).unwrap();
+        let table = sfnt.table_data(skrifa::raw::types::Tag::new(b"CFF ")).unwrap();
+        let back = read_cff(table.as_bytes(), &mut Vec::new()).unwrap();
+        let g = back.glyphs.iter().find(|g| g.name == name).unwrap();
+        assert_eq!(g.stems, want, "the export writes the same stems back");
     }
 
     #[test]

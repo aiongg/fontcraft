@@ -10,8 +10,8 @@
 //!
 //! [`to_font`] makes a one-master document: cubic outlines (flex as its two curves), advance
 //! widths, code points from the glyph names (Adobe Glyph List), `seac` accents as two components,
-//! each glyph's distinct stems as numeric layer hints (hint replacement and counter hints are not
-//! kept), the Private dict as alignment zones, standard stems and the blue parameters. Multiple
+//! each glyph's distinct stems as numeric layer hints, a CFF glyph's including those no hint mask
+//! selects (hint replacement and counter hints are not kept), the Private dict as alignment zones, standard stems and the blue parameters. Multiple
 //! master fonts are read at their default charstrings; the decrypted text form that `detype1`
 //! writes is not read.
 //!
@@ -202,6 +202,9 @@ pub struct PsGlyph {
     pub codes: Vec<u8>,
     pub width: f64,
     pub ops: Vec<PsOp>,
+    /// Every stem the charstring declares, in order, whether or not a hint mask selects it
+    /// (CFF only: a Type 1 glyph's stems are all in `ops`).
+    pub stems: Vec<PsOp>,
 }
 
 /// A PostScript font as tx's abstract font holds it.
@@ -285,6 +288,7 @@ pub fn read_type1(bytes: &[u8], warnings: &mut Vec<String>) -> Result<PsFont, De
             codes: codes.get(name.as_str()).cloned().unwrap_or_default(),
             width: run.width,
             ops: run.ops,
+            stems: Vec::new(),
         });
     }
     if !failed.is_empty() {
@@ -1408,10 +1412,11 @@ fn hint(horizontal: bool, kind: &str, place: (f64, f64)) -> Hint {
 }
 
 /// The distinct stems of a glyph as layer hints, in first-seen order; counter hints are left out.
-pub(crate) fn layer_hints(ops: &[PsOp]) -> Vec<Hint> {
+/// `g.stems` come first, so a CFF glyph keeps the stems no hint mask selects.
+pub(crate) fn layer_hints(g: &PsGlyph) -> Vec<Hint> {
     let mut seen = HashSet::new();
     let mut out = Vec::new();
-    for op in ops {
+    for op in g.stems.iter().chain(&g.ops) {
         let (horizontal, pos, delta, kind) = match op {
             PsOp::HStem { y, dy, kind } => (true, *y, *dy, *kind),
             PsOp::VStem { x, dx, kind } => (false, *x, *dx, *kind),
@@ -1496,7 +1501,7 @@ pub fn to_font(ps: &PsFont, mut warnings: Vec<String>) -> Result<Decompiled, Dec
             }
         }
         layer.shapes.retain(|s| !matches!(s, Shape::Path(p) if p.to_bez().is_err()));
-        let hints = layer_hints(&g.ops);
+        let hints = layer_hints(g);
         if !hints.is_empty() {
             layer.info.hints = hints;
         }

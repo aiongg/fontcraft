@@ -477,7 +477,15 @@ pub(crate) fn compile_stages_with(
     let glyphs = order::final_order(glyphs, &resolved, &mut warnings)?;
     preflight::check_cmap(&glyphs)?;
     let glyph_data = font.and_then(|_| compile_glyph_data(options));
-    let color_plan = if var.is_some() { color::variable_plan(font) } else { color::plan(font, &resolved, options) };
+    let color_plan = if var.is_some() {
+        color::variable_plan(
+            font,
+            &resolved.master,
+            &fontcraft_color::export::Switches { cbdt: options.cbdt, ..fontcraft_color::export::Switches::from_params(&resolved.params) },
+        )
+    } else {
+        color::plan(font, &resolved, options)
+    };
     let (glyphs, made) = color::append_layer_glyphs(font, &color_plan, &resolved, glyphs, &mut warnings)?;
     let layout = layout_tables(font, glyph_data.as_deref(), &resolved, &glyphs, &edits, options, var_layout, &mut warnings)?;
     let upm = f64::from(resolved.units_per_em);

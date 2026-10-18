@@ -29,7 +29,7 @@ use std::collections::{HashMap, HashSet};
 use fontcraft_color::export::{ExportPlan, Problem, ProblemKind, Switches, has_color_layers, plan_between_masters, plan_master, read_switches};
 use fontcraft_color::paint::{ShapeRef, shape_refs};
 use fontcraft_color::{AssetStore, MemoryAssets};
-use fontcraft_model::{Font, Layer, Resolved, ResolvedComponent, ResolvedGlyph, Shape, Target};
+use fontcraft_model::{Font, Glyph, Layer, Resolved, ResolvedComponent, ResolvedGlyph, Shape, Target};
 use write_fonts::types::Tag;
 
 use crate::drawing::{format_version, has_strokes_or_masks, shapes_outline};
@@ -101,18 +101,51 @@ pub fn check_instance(font: &Font, target: &Target) -> Result<(), CompileError> 
     }
 }
 
-/// The plan of a variable compile: no colour tables until colour layers interpolate (M11.19),
-/// with a warning when the font has colour layers.
-pub fn variable_plan(font: Option<&Font>) -> ExportPlan {
+/// The plan of a variable compile, at the default master `master`: no colour tables until colour
+/// layers interpolate (M11.19), with a warning when the font has colour layers. The exception is a
+/// font whose colour layers are all layer glyphs the source already has
+/// ([`existing_layer_glyph`]): those glyphs vary as any glyph does, so the default master's `COLR`
+/// and `CPAL` hold at every location, as both oracles write them.
+pub fn variable_plan(font: Option<&Font>, master: &str, switches: &Switches) -> ExportPlan {
     let mut plan = ExportPlan::default();
-    if font.is_some_and(has_color_layers) {
-        plan.problems.push(Problem {
-            kind: ProblemKind::Warning,
-            glyph: None,
-            message: "the variable font is written without colour tables: colour layers do not interpolate yet".to_string(),
-        });
+    let Some(font) = font.filter(|f| has_color_layers(f)) else { return plan };
+    let default = plan_master(font, master, switches);
+    if let Some(colr) = &default.colr
+        && !default.refused()
+        && default.sbix.is_none()
+        && default.svg.is_none()
+        && default.cbdt.is_none()
+        && all_existing(font, colr, master)
+    {
+        return ExportPlan { cpal: default.cpal, colr: default.colr, problems: default.problems, ..Default::default() };
     }
+    plan.problems.push(Problem {
+        kind: ProblemKind::Warning,
+        glyph: None,
+        message: "the variable font is written without colour tables: colour layers do not interpolate yet".to_string(),
+    });
     plan
+}
+
+/// Whether every layer glyph of `colr` (planned at `master`) is a source glyph, and every colour
+/// layer of the other masters one of that form too.
+fn all_existing(font: &Font, colr: &fontcraft_color::export::ColrPlan, master: &str) -> bool {
+    let planned = colr.glyphs.iter().all(|cg| {
+        font.glyph(&cg.glyph).is_some_and(|source| {
+            shape_refs(&cg.paint)
+                .into_iter()
+                .enumerate()
+                .all(|(i, s)| existing_layer_glyph(source, &cg.glyph, i, s, master).is_some_and(|name| font.glyph(&name).is_some_and(|g| g.export)))
+        })
+    });
+    let others =
+        font.glyphs.as_arcs().iter().flat_map(|g| g.layers.iter()).filter(|l| l.master != master && fontcraft_color::layers::kind(l).is_some()).all(
+            |l| {
+                l.info.attrs.color_palette.is_some()
+                    && matches!(l.shapes.as_slice(), [Shape::Component(c)] if c.transform.is_identity() && font.glyph(&c.glyph).is_some())
+            },
+        );
+    planned && others
 }
 
 /// `glyphs` with the layer glyphs `plan` needs appended, and their descriptions.
@@ -131,7 +164,8 @@ pub fn append_layer_glyphs(
 /// `<base>.color<i>` by its position among the base glyph's layer glyphs, with the base glyph's
 /// production name in place of its name where it has one, outlines resolved at the resolved
 /// master, never shared between base glyphs. `glyphs` are the final source glyphs: a base glyph
-/// that is not among them gets no layer glyphs.
+/// that is not among them gets no layer glyphs. A layer glyph the source already has
+/// ([`existing_layer_glyph`]) is not made again.
 ///
 /// A layer glyph takes the advance of its colour layer, as fontc writes it (the editor keeps
 /// colour layers at their master layer's width, but a mark's master layer loses its advance at
@@ -155,6 +189,9 @@ pub fn layer_glyphs(
     for cg in &colr.glyphs {
         let (Some(base), Some(source)) = (by_name.get(cg.glyph.as_str()), font.glyph(&cg.glyph)) else { continue };
         for (i, shape) in shape_refs(&cg.paint).into_iter().enumerate() {
+            if existing_layer_glyph(source, &cg.glyph, i, shape, &resolved.master).is_some_and(|name| by_name.contains_key(name.as_str())) {
+                continue;
+            }
             if glyphs.len().saturating_add(out.len()) >= MAX_FONT_GLYPHS {
                 return Err(CompileError::TooManyGlyphs(glyphs.len().saturating_add(out.len()).saturating_add(1)));
             }
@@ -178,6 +215,21 @@ pub fn layer_glyphs(
         }
     }
     Ok(out)
+}
+
+/// The source glyph that already is layer glyph `i` of `base`: the glyph named `<base>.color<i>`,
+/// the name a new layer glyph would get, when `shape` is a whole colour layer of `master` holding
+/// nothing but that glyph as an unmoved component. A UFO's font-wide colour layer list opens this
+/// way, so its layer glyphs stay where the source has them, as both oracles write them.
+/// [`colr::build`] finds such a glyph by that name.
+pub fn existing_layer_glyph(source: &Glyph, base: &str, i: usize, shape: &ShapeRef, master: &str) -> Option<String> {
+    if shape.stroke.is_some() {
+        return None;
+    }
+    let layer = source.layers.iter().find(|l| l.id == shape.layer && l.master == master)?;
+    let ([k], [Shape::Component(c)]) = (shape.shapes.as_slice(), layer.shapes.as_slice()) else { return None };
+    let name = format!("{base}.color{i}");
+    (*k == 0 && c.glyph == name && c.transform.is_identity()).then_some(name)
 }
 
 /// `wanted`, or the first of `wanted_1`, `wanted_2`… that no glyph has, with a warning.
@@ -286,7 +338,7 @@ mod tests {
     use std::sync::Arc;
 
     use fontcraft_color::export::{
-        COLOR_LAYERS_TO_COLR, COLOR_PALETTE_FOR_CPAL, EXPORT_COLR_TABLE, ExportPlan, MASTER_COLOR, SvgDocument, SvgPlan, SvgSource,
+        COLOR_LAYERS_TO_COLR, COLOR_PALETTE_FOR_CPAL, EXPORT_COLR_TABLE, ExportPlan, MASTER_COLOR, SvgDocument, SvgPlan, SvgSource, Switches,
     };
     use fontcraft_color::layers::with_kind;
     use fontcraft_color::paint::Paint;
@@ -496,12 +548,66 @@ mod tests {
         assert!(!has_table(&plain, b"COLR"));
     }
 
+    /// `a` drawn in two palette colours by the source glyphs `a.color0` and `a.color1`, each held
+    /// by a colour layer as one unmoved component, as a UFO's font-wide colour layer list opens;
+    /// a second master at weight 200 has no colour layers.
+    fn listed_font() -> Font {
+        let mut f = Font::new("Listed");
+        let palettes = Palettes::new(vec![vec![Rgba::new(255, 0, 0, 255), Rgba::new(0, 0, 255, 255)]]).unwrap();
+        Arc::make_mut(&mut f.info).params.0.push(to_param(&palettes));
+        for (name, x) in [("a", 100.0), ("a.color0", 100.0), ("a.color1", 300.0)] {
+            if f.glyph(name).is_none() {
+                f.add_glyph(name, Vec::new(), 600.0).unwrap();
+            }
+            let mut g = f.glyph_mut(name).unwrap();
+            g.layers[0].width = 600.0;
+            g.layers[0].shapes.push(Shape::Path(Path::rect(x, 0.0, x + 200.0, 700.0)));
+        }
+        let mut a = f.glyph_mut("a").unwrap();
+        a.layers.push(colour_layer("a-0", "m01", PaletteEntry::Index(0), vec![Shape::Component(Component::new("a.color0", 0.0, 0.0))]));
+        a.layers.push(colour_layer("a-1", "m01", PaletteEntry::Index(1), vec![Shape::Component(Component::new("a.color1", 0.0, 0.0))]));
+        drop(a);
+        f
+    }
+
+    #[test]
+    fn colour_layers_drawn_by_source_glyphs_use_those_glyphs() {
+        let f = listed_font();
+        let want = [("a".to_string(), vec![("a.color0".to_string(), 0), ("a.color1".to_string(), 1)])];
+        let out = compile(&f, &f.default_target().unwrap(), Flavour::TrueType, &Options::default()).unwrap();
+        assert_eq!(out.glyph_order.len(), f.glyphs.len(), "no layer glyph is made: {:?}", out.glyph_order);
+        assert_eq!(colr_records(&out), want);
+        assert_eq!(cpal_palettes(&out), [vec![(255, 0, 0, 255), (0, 0, 255, 255)]]);
+
+        // A variable font: the layer glyphs vary as any glyph, so the tables are written.
+        let mut v = listed_font();
+        v.axes = Arc::new(vec![fontcraft_model::Axis { name: "Weight".into(), tag: "wght".into(), ..Default::default() }]);
+        let masters = Arc::make_mut(&mut v.masters);
+        masters[0].location = vec![400.0];
+        let mut bold = masters[0].clone();
+        bold.id = "m02".into();
+        bold.name = "Bold".into();
+        bold.location = vec![700.0];
+        masters.push(bold);
+        for i in 0..v.glyphs.len() {
+            let mut g = v.glyphs.get_mut_at(i).unwrap();
+            let mut layer = g.layers[0].clone();
+            layer.id = "m02".into();
+            layer.master = "m02".into();
+            g.layers.push(layer);
+        }
+        let var = crate::var::compile_variable(&v, None, &Options::default(), &crate::var::VariableOptions::default()).unwrap();
+        assert_eq!(colr_records(&var.compiled), want, "{:?}", var.compiled.warnings);
+        assert_eq!(cpal_palettes(&var.compiled), [vec![(255, 0, 0, 255), (0, 0, 255, 255)]]);
+    }
+
     #[test]
     fn a_variable_build_plans_no_colour_tables() {
-        let plan = variable_plan(Some(&palette_font()));
+        let switches = Switches::default();
+        let plan = variable_plan(Some(&palette_font()), "m01", &switches);
         assert!(plan.tables().is_empty());
         assert_eq!(plan.problems.len(), 1);
-        assert!(variable_plan(Some(&Font::new("Plain"))).problems.is_empty());
+        assert!(variable_plan(Some(&Font::new("Plain")), "m01", &switches).problems.is_empty());
     }
 
     #[test]

@@ -489,6 +489,7 @@ fn read_as(text: &str, ufos: &BTreeMap<String, Files>, convert: bool) -> Result<
     }
     crate::glyphkeys::read(&mut font, &default_id);
     crate::libkeys::read(&mut font, true, &default_id);
+    crate::colorkeys::read(&mut font);
     crate::gdef::strip_derived(&mut font, &default_id);
     let mut converted = intermediate.iter().any(|b| *b);
     if convert
