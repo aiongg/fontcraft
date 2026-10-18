@@ -121,3 +121,25 @@ fn bad_parameters_are_refused_and_change_nothing() {
     assert!(s.execute("hint.tt.removeImportedHinting", &json!({"gasp": "yes"})).is_err());
     assert!(Arc::ptr_eq(&s.doc().unwrap().font, &before));
 }
+
+/// A glyph of one point, like the `.ttfautohint` glyph the TrueType autohinter adds, keeps its
+/// point and its imported program: outline preparation alone would write it empty.
+#[test]
+fn a_one_point_glyph_keeps_its_imported_program() {
+    use fontcraft_engine::model::{Node, NodeKind};
+    let mut f = Font::new("One Point");
+    f.add_glyph(".ttfautohint", vec![], 0.0).unwrap();
+    {
+        let mut g = f.glyph_mut(".ttfautohint").unwrap();
+        g.layers[0].shapes = vec![Shape::Path(Path::new(true, vec![Node::new(0.0, 0.0, NodeKind::Line)]))];
+        set_imported_program(&mut g.layers[0], "PUSHB[ ] 0\nPOP[ ]".into());
+    }
+    Arc::make_mut(&mut f.masters)[0].params.set(CVT_TABLE, PValue::String(Str::new("10")));
+    let out = compile_ttf(&f, &Options::default()).unwrap();
+    let font = FontRef::new(&out.bytes).unwrap();
+    let gid = out.glyph_order.iter().position(|n| n == ".ttfautohint").unwrap();
+    let glyph = font.loca(None).unwrap().get_glyf(skrifa::GlyphId::new(gid as u32), &font.glyf().unwrap()).unwrap();
+    let Some(skrifa::raw::tables::glyf::Glyph::Simple(g)) = glyph else { panic!("not a simple glyph") };
+    assert_eq!(g.num_points(), 1);
+    assert_eq!(g.instructions(), [0xB0, 0x00, 0x21]);
+}

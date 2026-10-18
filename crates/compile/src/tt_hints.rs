@@ -560,11 +560,14 @@ fn imported_glyph_programs(
         }
         match outlines.get(gid) {
             Some(Prepared::Composite(_)) => out.composites.push((gid, bytes)),
-            Some(Prepared::Simple(_) | Prepared::Points(_)) => match layer_points(layer) {
+            // Outline preparation drops a contour of one point (the `.ttfautohint` glyph has
+            // one), so an empty outline is written from the layer's points too.
+            Some(prepared @ (Prepared::Simple(_) | Prepared::Points(_) | Prepared::Empty)) => match layer_points(layer) {
                 Some(mut glyph) => {
                     glyph.instructions = bytes;
                     out.glyphs.push((gid, glyph));
                 }
+                None if matches!(prepared, Prepared::Empty) => {}
                 None => unwritable.push(format!("{} (its outline is not the font's quadratic points)", g.name)),
             },
             _ => {}
