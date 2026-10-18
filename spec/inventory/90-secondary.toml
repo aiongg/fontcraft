@@ -34,6 +34,10 @@ summary = "Toggles Tunni lines: for every curve segment, a dotted line joining i
 ref = "FontLab 7 manual › Tunni Lines; FontLab 8 What's new › Explore & prepare › View panel"
 status = "docs"
 origin = "fontlab"
+notes = "Display only (M13.31): the dotted line and the dot are drawn; dragging them is the `tunni.*` rows. Documented, not yet observed in the reference app."
+guesses = [
+  "Tunni lines show for cubic segments only; quadratic segments get none. Watching the reference app on a font with quadratic curves would settle it.",
+]
 
 [[command]]
 id = "path.selectTunniLines"
@@ -106,6 +110,10 @@ summary = "Shows the tension of each curve segment next to it as a percentage of
 ref = "FontLab 8 What's new › Consistency & precision › Measuring details"
 status = "docs"
 origin = "fontlab"
+notes = "Documented, not yet observed in the reference app."
+guesses = [
+  "Each handle's tension prints as a whole percentage beside the handle's end, and the lengths-and-angles readout is not drawn with it. A screenshot of the reference app with the option on would settle both.",
+]
 
 [[parameter]]
 name = "curveTension"
@@ -508,6 +516,11 @@ summary = "Blocks pointer and keyboard editing of outlines in the window while l
 ref = "FontLab 8 What's new › Edit & refine › Nodes and handles (Lock outline)"
 status = "docs"
 origin = "fontlab"
+notes = "Documented, not yet observed in the reference app."
+guesses = [
+  "The lock drops the pointer and key edits whose command changes paths, nodes or components, and a drag that moves nodes and anchors together is refused whole. The reference app with a mixed selection would settle it.",
+  "Menu shortcuts run commands by name, so they still edit the outline while it is locked. The reference app's Delete key and transform shortcuts while locked would settle it.",
+]
 
 # --- measuring -----------------------------------------------------------------------------------
 
@@ -615,6 +628,10 @@ summary = "Draws nodes, measurements and other detail overlays for every glyph i
 ref = "FontLab 8 What's new › Explore & prepare › View menu (canvas); Test & adjust › Stem discovery methods"
 status = "docs"
 origin = "fontlab"
+notes = "Documented, not yet observed in the reference app."
+guesses = [
+  "The other glyphs on the edited glyph's line (at most 200) get their nodes, handles and the display aids that are on (indexes, Tunni lines, tensions, lengths, beam values); selection and metric-line highlights stay with the edited glyph. The reference app on a word would settle which details it draws.",
+]
 
 # --- snapping suggestions ---------------------------------------------------------------------------
 
@@ -1262,9 +1279,10 @@ summary = "Shows a draggable horizontal line and reports sidebearings where it c
 ref = "FontLab 8 What's new › Metrics & kerning › Metrics (Metrics line); RoboFont reference › Space Center › Display options"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2). Edit View (M13.31) draws the line across the canvas and the sidebearings where it meets the outline, set with the `y` parameter; dragging the line on the canvas is not offered yet. Documented, not yet observed in the reference app."
 guesses = [
   "The beam is one height per font, shared by Edit View and Space Center, and sidebearing commands take it as an optional `beam` parameter; FontLab's and RoboFont's pages do not say whether it is per font or per window.",
+  "The beam starts at half the x-height of the tab's master, like the measurement line, and giving only a height also shows it. The reference app's first use of the metrics line would settle the start height.",
 ]
 
 [[command]]
@@ -3230,6 +3248,11 @@ summary = "Labels points, segments, contours, components and anchors with their 
 ref = "RoboFont reference › Display options (Point, Segment, Contour, Component, Anchor Indexes); Fontra reference › Glyph editor appearance; FontForge View menu › Number Points"
 status = "docs"
 origin = "robofont"
+notes = "Documented, not yet observed in the reference apps."
+guesses = [
+  "Nodes and segments are numbered within their path, paths and components by their shape index in the layer, anchors by their index in the layer, so the numbers match the `[shape, node]` addresses commands take. The reference apps' numbering on a glyph with components would settle it.",
+  "Without parameters the command turns all five kinds off when any is on, else turns all five on. The reference app has one switch per kind, so nothing there settles it.",
+]
 
 [[command]]
 id = "view.showCurveLength"
@@ -3244,6 +3267,10 @@ summary = "Shows the arc length of each curve segment beside it."
 ref = "RoboFont reference › Display options (Curve Length)"
 status = "docs"
 origin = "robofont"
+notes = "Documented, not yet observed in the reference app."
+guesses = [
+  "The length prints with one decimal at the middle of every segment that has handles; straight segments get none. A screenshot of the reference app with the option on would settle it.",
+]
 
 [[panel]]
 id = "dialog.externalChanges"
@@ -3540,6 +3567,11 @@ summary = "While points or contours are dragged, the outline as it was before th
 ref = "Fontra reference › Glyph editor appearance (Drag ghost path; Drag crosshair)"
 status = "docs"
 origin = "fontra"
+notes = "Documented, not yet observed in the reference app."
+guesses = [
+  "The grey outline shows only the shapes the running interaction changed, and it also shows under a dialog's live preview, which runs as the same kind of interaction. The reference app during a dialog preview would settle the second part.",
+  "The dotted cross-hair through the pointer is not offered. The reference app's appearance settings would settle whether it is worth a switch.",
+]
 
 [[command]]
 id = "app.info"
