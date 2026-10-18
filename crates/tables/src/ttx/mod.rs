@@ -921,6 +921,22 @@ impl XmlWriter {
         self.attach(e);
     }
 
+    /// `<name a="v" …/>  <!-- comment -->`: the comment two spaces after the element, as ttx
+    /// writes it after name IDs and STAT flags.
+    pub fn simple_spaced_comment(&mut self, name: &str, attributes: &[(&str, &str)], comment: &str) {
+        if self.spent() {
+            return;
+        }
+        let before = self.out.len();
+        self.start(name, attributes);
+        self.out.push_str("/>  ");
+        self.comment_body(comment);
+        self.out.push('\n');
+        self.charge_text(before);
+        let e = self.element(name, attributes);
+        self.attach(e);
+    }
+
     /// A line of text at the current depth.
     pub fn text(&mut self, text: &str) {
         if self.spent() {

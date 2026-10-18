@@ -184,14 +184,14 @@ fn comments_name_the_flags_and_the_names() {
     let font = font("layout");
     let text = dump(&font, &DumpOptions { tables: vec![*b"GSUB"], ..DumpOptions::default() }).unwrap();
     assert!(text.contains("<LookupFlag value=\"792\"/><!-- ignoreMarks useMarkFilteringSet markAttachmentType[3] -->"), "{text}");
-    assert!(text.contains("<UINameID value=\"256\"/><!-- Alt a -->"));
+    assert!(text.contains("<UINameID value=\"256\"/>  <!-- Alt a -->"));
     assert!(text.contains("<!-- LookupCount=10 -->"));
     let variable = self::font("variable");
     let text = dump(&variable, &DumpOptions { tables: vec![*b"fvar", *b"STAT"], ..DumpOptions::default() }).unwrap();
     assert!(text.contains("\n    <!-- Weight -->\n    <Axis>"), "{text}");
     assert!(text.contains("<!-- PostScript: Bold-PS -->"));
-    assert!(text.contains("<ElidedFallbackNameID value=\"2\"/><!-- missing from name table -->"));
-    assert!(text.contains("<Flags value=\"2\"/><!-- ElidableAxisValueName -->"));
+    assert!(text.contains("<ElidedFallbackNameID value=\"2\"/>  <!-- missing from name table -->"));
+    assert!(text.contains("<Flags value=\"2\"/>  <!-- ElidableAxisValueName -->"));
 }
 
 #[test]

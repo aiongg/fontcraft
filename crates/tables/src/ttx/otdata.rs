@@ -8,11 +8,10 @@
 //! `_f_v_a_r`, `_a_v_a_r` and `_m_e_t_a`.
 //!
 //! Other packages reach the generic writer through [`write_layout_table`]: a table whose
-//! layout is in [`schema`] (HVAR, VVAR and MVAR are) is written by naming its tag.
+//! layout is in [`schema`] is written by naming its tag. HVAR, VVAR and MVAR have layouts
+//! there too, but [`super::var`] writes them.
 //!
 //! Known differences:
-//! - `ttx` puts two spaces between a name ID or STAT flags element and the comment after it;
-//!   here the comment follows the element directly. Comments carry no data.
 //! - Name comments decode UTF-16 records and ASCII Macintosh records only; a name found only
 //!   in another legacy encoding is reported as missing from the name table.
 //! - A coverage or class definition table whose ranges list more than

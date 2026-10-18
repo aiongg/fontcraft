@@ -536,7 +536,8 @@ impl<'a> Walker<'a> {
             _ => None,
         };
         match comment {
-            Some(c) => w.simple_comment(name, &attrs, &c),
+            Some(c) if matches!(ty, Ty::LookupFlag) => w.simple_comment(name, &attrs, &c),
+            Some(c) => w.simple_spaced_comment(name, &attrs, &c),
             None => w.simple(name, &attrs),
         }
     }
