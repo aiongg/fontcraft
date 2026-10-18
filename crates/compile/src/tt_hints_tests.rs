@@ -278,3 +278,69 @@ fn an_unhinted_variable_export_of_an_instructed_source_writes_the_plain_points()
     std::sync::Arc::make_mut(&mut off.info).params.0.push(Param::new("Export TrueType Hints", Value::Number(Number::int(0))));
     assert_eq!(glyf(&off, &Options::default()), expected, "Export TrueType Hints off");
 }
+
+/// The lowest and highest y a hinted glyph draws, in pixels.
+#[derive(Default)]
+struct Extent(Option<(f32, f32)>);
+impl OutlinePen for Extent {
+    fn move_to(&mut self, _: f32, y: f32) {
+        self.add(y);
+    }
+    fn line_to(&mut self, _: f32, y: f32) {
+        self.add(y);
+    }
+    fn quad_to(&mut self, _: f32, _: f32, _: f32, y: f32) {
+        self.add(y);
+    }
+    fn curve_to(&mut self, _: f32, _: f32, _: f32, _: f32, _: f32, y: f32) {
+        self.add(y);
+    }
+    fn close(&mut self) {}
+}
+impl Extent {
+    fn add(&mut self, y: f32) {
+        self.0 = Some(self.0.map_or((y, y), |(lo, hi)| (lo.min(y), hi.max(y))));
+    }
+}
+
+#[test]
+fn autohint_instructs_unhinted_glyphs_and_puts_zone_extremes_on_pixel_rows() {
+    let mut f = hinted_font();
+    for name in ["o", "H"] {
+        set_tt_instructions(&mut f.glyph_mut(name).unwrap().layers[0], &[]).unwrap();
+    }
+    let unhinted = compile_ttf(&f, &Options::default()).unwrap();
+    assert!(FontRef::new(&unhinted.bytes).unwrap().table_data(skrifa::Tag::new(b"fpgm")).is_none());
+
+    let options = Options { hinting: crate::HintingOptions { autohint: true, ..Default::default() }, ..Options::default() };
+    let out = compile_ttf(&f, &options).unwrap();
+    assert!(!out.warnings.iter().any(|w| w.contains("autohint")), "{:?}", out.warnings);
+    let font = FontRef::new(&out.bytes).unwrap();
+    for name in ["o", "H"] {
+        assert!(!program(&font, gid(&out, name)).is_empty(), "{name} has a program");
+    }
+    runs_everywhere(&out.bytes);
+    let outlines = font.outline_glyphs();
+    let target = Intent::Smooth { mode: SmoothMode::Normal, symmetric_rendering: true, preserve_linear_metrics: false };
+    for ppem in 9..=30u16 {
+        let instance = HintingInstance::new(
+            &outlines,
+            Size::new(f32::from(ppem)),
+            LocationRef::default(),
+            HintingOptions { engine: Engine::Interpreter, target },
+        )
+        .unwrap();
+        for name in ["o", "H"] {
+            let mut e = Extent::default();
+            outlines.get(gid(&out, name)).unwrap().draw(DrawSettings::hinted(&instance, true), &mut e).unwrap();
+            let (lo, hi) = e.0.unwrap();
+            for y in [lo, hi] {
+                assert!((y - y.round()).abs() < 0.02, "{name} at {ppem} PPM: an extreme at {y} is off the pixel grid");
+            }
+        }
+    }
+
+    // Manual instructions give way to the autohinter.
+    let manual = compile_ttf(&hinted_font(), &options).unwrap();
+    assert!(manual.warnings.iter().any(|w| w.contains("replaced the manual instructions")), "{:?}", manual.warnings);
+}

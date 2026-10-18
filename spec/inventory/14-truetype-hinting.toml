@@ -80,6 +80,7 @@ milestone = "M10"
 summary = "Automatic and manual TrueType hinting cannot be combined. Exporting a TrueType-flavour font with the export dialog's Autohint option on discards all manual TT instructions for that export and hints the whole font with the autohinter (TTF Autohint in the reference)."
 ref = "TrueType Hinting › Autohinting"
 status = "handbook"
+notes = "M10.21, crates/compile/src/tt_hints.rs: with Autohint on (the instance's Autohint parameter, else the export option) every simple glyph of the build gets the built-in autohinter's program, made from the layer being exported, and the manual instructions of the source are not compiled; a warning names the glyphs whose manual instructions were replaced. Imported cvt, prep and fpgm parameters are not written either. Documented, not yet observed."
 
 [[behavior]]
 id = "hinting.tt.export.manualWhenAutohintOff"
@@ -88,7 +89,7 @@ milestone = "M10"
 summary = "With the Autohint export option off, the manual instructions stored in the source are compiled into the exported font. Glyphs without instructions are exported unhinted."
 ref = "TrueType Hinting › Autohinting"
 status = "handbook"
-notes = "M10.19, crates/compile/src/tt_hints.rs: with Autohint off (the instance's Autohint parameter, else the export option) each glyph whose main-master layer has instructions gets its glyph program, and the font gets our cvt, fpgm and prep and maxp values that cover the analysed needs of every program; glyphs without instructions and composites get none. skrifa runs every glyph at 8 to 72 PPM in the three intents. With Autohint on the font is written without TrueType hints, with a warning, until the TrueType autohinter (M10.21) is built. Documented, not yet observed."
+notes = "M10.19, crates/compile/src/tt_hints.rs: with Autohint off (the instance's Autohint parameter, else the export option) each glyph whose main-master layer has instructions gets its glyph program, and the font gets our cvt, fpgm and prep and maxp values that cover the analysed needs of every program; glyphs without instructions and composites get none. skrifa runs every glyph at 8 to 72 PPM in the three intents. Documented, not yet observed."
 
 [[behavior]]
 id = "hinting.tt.param.ttfAutohintOptions"
@@ -112,14 +113,15 @@ label = "Autohint TrueType"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{font: path | instance: id, options?: {…autohint.tt.option.*}, controlInstructions?: string, output?: path}"
+params = "{glyphs?: [names], excludeGlyphs?: [names], instance?: name, options?: string, controlInstructions?: string}"
 area = "hinting-tt"
 milestone = "M10"
-summary = "Runs the TrueType autohinter over a whole compiled TrueType font or an instance being exported, replacing any existing instructions, with the options and control instructions of the instance. It is the engine behind the Autohint export option; exposing it as a command is our design."
+summary = "Runs the TrueType autohinter over the glyphs of the font (every exporting glyph unless some are named) and stores its Snap and Stem instructions on each glyph's main-master layer, replacing the instructions there, with the TTFAutohint options and control instructions of an instance or given as parameters. The export's Autohint option runs the same autohinter on the build; exposing it as a command is our design."
 ref = "TrueType Hinting › Autohinting"
 status = "inferred"
 guesses = ["The built-in TrueType autohinter is FontCraft's own (decided in M10 § 7, question 2): Snap and Stem instructions from the PostScript autohinter's zone and stem analysis, compiled with the manual-instruction compiler; ttfautohint runs instead when the TTFAutohint binary path parameter names one; the reference app's built-in autohinter is ttfautohint."]
 notes = "Facts from the ttfautohint manual and black-box runs (M10 planning pass): it accepts TrueType outlines only; it replaces cvt, fpgm and prep, always writes gasp with one record (65535: all four bits), removes hdmx, LTSH and VDMX and puts a dummy DSIG; on Oswald Italic it instructed 339 of 555 glyphs and none of the composites; on a static Inter (2,937 glyphs) it takes 0.09 s; rehinting a dehinted font with a later 1.8.4 build gave identical bytecode sizes, so it can serve as a byte-level oracle. fontmake runs it only for TrueType output, with -a or when an instance carries TTFAutohint options."
+observe = ["T3: export a TTF with Autohint on from a font whose glyphs carry TrueType instructions; render a hinted glyph at 12 PPM and note whether the manual instructions or the autohinter's result shows."]
 
 [[behavior]]
 id = "autohint.tt.option.hintingRange"
@@ -128,7 +130,7 @@ milestone = "M10"
 summary = "The hint set range (ttfautohint hinting-range-min and hinting-range-max, defaults 8 and 50 PPM) bounds the pixel sizes for which the autohinter computes its own hint set; sizes above the maximum, up to the hinting limit, use the set of the maximum. A wide range makes the font larger. The handbook names the setting and its file-size effect; the defaults come from the program's help text."
 ref = "Appendix › Custom Parameters › TTFAutohint options; ttfautohint 1.8 --help"
 status = "handbook"
-notes = "Verified by the M10 planning pass against the handbook's description of the TTFAutohint options parameter and the help text of the ttfautohint 1.8 program (run as a black box; its source was not read)."
+notes = "Verified by the M10 planning pass against the handbook's description of the TTFAutohint options parameter and the help text of the ttfautohint 1.8 program (run as a black box; its source was not read). Accepted and checked; FontCraft's built-in autohinter computes no per-size hint sets, so the option is reported as ignored. The external program gets it."
 
 [[behavior]]
 id = "autohint.tt.option.hintingLimit"
@@ -137,7 +139,7 @@ milestone = "M10"
 summary = "The hinting limit (ttfautohint hinting-limit, default 200 PPM) is the size above which the generated bytecode switches hinting off; 0 means no limit. It must be larger than the top of the hint set range. Raising it does not make the font larger."
 ref = "Appendix › Custom Parameters › TTFAutohint options; ttfautohint 1.8 --help"
 status = "handbook"
-notes = "Verified by the M10 planning pass against the handbook's description of the TTFAutohint options parameter and the help text of the ttfautohint 1.8 program (run as a black box; its source was not read)."
+notes = "Verified by the M10 planning pass against the handbook's description of the TTFAutohint options parameter and the help text of the ttfautohint 1.8 program (run as a black box; its source was not read). Applied by the built-in autohinter (M10.21): above the limit, `prep` switches glyph programs off with INSTCTRL."
 
 [[behavior]]
 id = "autohint.tt.option.increaseXHeight"
@@ -146,7 +148,8 @@ milestone = "M10"
 summary = "The x-height increase limit (ttfautohint increase-x-height, default 14) makes the x-height round up more readily for sizes from 6 PPM up to the given size; 0 turns this off. The x-height snapping exceptions (default none) list sizes and size ranges, comma-separated, that get no x-height snapping; a single dash exempts every size."
 ref = "Appendix › Custom Parameters › TTFAutohint options; ttfautohint 1.8 --help"
 status = "handbook"
-notes = "Verified by the M10 planning pass against the handbook's description of the TTFAutohint options parameter and the help text of the ttfautohint 1.8 program (run as a black box; its source was not read)."
+notes = "Verified by the M10 planning pass against the handbook's description of the TTFAutohint options parameter and the help text of the ttfautohint 1.8 program (run as a black box; its source was not read). Applied by the built-in autohinter (M10.21): from 6 PPM up to the limit, `prep` rounds the xHeight zone up once it lies an eighth of a pixel above a row; at the sizes of the exceptions it leaves the zone unrounded."
+guesses = ["From 6 PPM to the x-height increase limit the built-in autohinter rounds the xHeight zone up from an eighth of a pixel above a row; the ttfautohint manual says only that it rounds up much more often, and the x-height rows of the autohint measure compare the two."]
 
 [[behavior]]
 id = "autohint.tt.option.fallbackStemWidth"
@@ -155,7 +158,7 @@ milestone = "M10"
 summary = "The fallback stem width (ttfautohint fallback-stem-width) is the horizontal stem width, in font units, assumed for scripts whose standard characters the font lacks. Without it the program uses 50 units at 2,048 units per em, scaled to the font's units per em. Symbol fonts also need a fallback script for it to apply."
 ref = "Appendix › Custom Parameters › TTFAutohint options; ttfautohint 1.8 --help"
 status = "handbook"
-notes = "Verified by the M10 planning pass against the handbook's description of the TTFAutohint options parameter and the help text of the ttfautohint 1.8 program (run as a black box; its source was not read)."
+notes = "Verified by the M10 planning pass against the handbook's description of the TTFAutohint options parameter and the help text of the ttfautohint 1.8 program (run as a black box; its source was not read). Applied by the built-in autohinter (M10.21) as the vertical standard stem of the stem analysis when the master has no vertical TT stem."
 
 [[behavior]]
 id = "autohint.tt.option.stemWidthMode"
@@ -164,7 +167,7 @@ milestone = "M10"
 summary = "The stem width mode is chosen separately for three rendering targets, grayscale, GDI ClearType and DirectWrite ClearType: natural, quantized (widths and zone positions take a few discrete values) or strong (snapped to whole pixels as far as possible). The program's default is quantized, strong, quantized (ttfautohint stem-width-mode qsq). The handbook's dialog offers a Strong Stems choice per target."
 ref = "Appendix › Custom Parameters › TTFAutohint options; ttfautohint 1.8 --help"
 status = "handbook"
-notes = "Verified by the M10 planning pass against the handbook's description of the TTFAutohint options parameter and the help text of the ttfautohint 1.8 program (run as a black box; its source was not read)."
+notes = "Verified by the M10 planning pass against the handbook's description of the TTFAutohint options parameter and the help text of the ttfautohint 1.8 program (run as a black box; its source was not read). Accepted and checked (the older strong-stem-width form too); the built-in autohinter rounds stems as the TT stems say, so the option is reported as ignored."
 
 [[behavior]]
 id = "autohint.tt.option.scripts"
@@ -173,7 +176,7 @@ milestone = "M10"
 summary = "The default script (ttfautohint default-script, default latn) is used when handling OpenType features; the fallback script (fallback-script, default none) is given to glyphs that cannot be assigned a script. With fallback scaling (fallback-scaling) such glyphs are only scaled, not hinted. Fallback scaling is in the program's help text, not in the handbook."
 ref = "Appendix › Custom Parameters › TTFAutohint options; ttfautohint 1.8 --help"
 status = "handbook"
-notes = "Verified by the M10 planning pass against the handbook's description of the TTFAutohint options parameter and the help text of the ttfautohint 1.8 program (run as a black box; its source was not read)."
+notes = "Verified by the M10 planning pass against the handbook's description of the TTFAutohint options parameter and the help text of the ttfautohint 1.8 program (run as a black box; its source was not read). Accepted and checked; the built-in autohinter has no script analysis, so these options are reported as ignored."
 
 [[behavior]]
 id = "autohint.tt.option.windowsCompatibility"
@@ -182,7 +185,8 @@ milestone = "M10"
 summary = "Windows compatibility (ttfautohint windows-compatibility) adds two blue zones at the OS/2 usWinAscent and usWinDescent heights so that hinted glyphs stay inside the band Windows clips to."
 ref = "Appendix › Custom Parameters › TTFAutohint options; ttfautohint 1.8 --help"
 status = "handbook"
-notes = "Verified by the M10 planning pass against the handbook's description of the TTFAutohint options parameter and the help text of the ttfautohint 1.8 program (run as a black box; its source was not read)."
+notes = "Verified by the M10 planning pass against the handbook's description of the TTFAutohint options parameter and the help text of the ttfautohint 1.8 program (run as a black box; its source was not read). Applied by the built-in autohinter (M10.21): two TT zones, `winAscent` (1 unit up from usWinAscent) and `winDescent` (1 unit down from −usWinDescent), are added to the build, so extremes at those heights land on a pixel row."
+guesses = ["The built-in autohinter's Windows compatibility adds zones one unit high at usWinAscent and −usWinDescent, which snap extremes there to the nearest row rather than keeping them below the clipping line; a hinted export of a glyph that reaches usWinAscent, rendered under GDI, would settle it."]
 
 [[behavior]]
 id = "autohint.tt.option.composites"
@@ -191,7 +195,7 @@ milestone = "M10"
 summary = "Hint composites (ttfautohint composites) hints each composite glyph as one outline instead of hinting its components separately, and adds a helper component named .ttfautohint to every glyph. Adjust subglyphs (adjust-subglyphs, formerly pre-hinting) runs the font's existing bytecode before analysis, for fonts whose instructions move components."
 ref = "Appendix › Custom Parameters › TTFAutohint options; ttfautohint 1.8 --help"
 status = "handbook"
-notes = "Verified by the M10 planning pass against the handbook's description of the TTFAutohint options parameter and the help text of the ttfautohint 1.8 program (run as a black box; its source was not read)."
+notes = "Verified by the M10 planning pass against the handbook's description of the TTFAutohint options parameter and the help text of the ttfautohint 1.8 program (run as a black box; its source was not read). Accepted; the built-in autohinter hints no composite glyph and runs no existing bytecode, so both options are reported as ignored."
 
 [[behavior]]
 id = "autohint.tt.option.symbol"
@@ -200,7 +204,7 @@ milestone = "M10"
 summary = "Symbol font (ttfautohint symbol) makes the autohinter accept a font in which it finds no standard character for any script, using default stem values. Ignore restrictions (ignore-restrictions) lets it process a font whose OS/2 fsType has bit 1 set."
 ref = "Appendix › Custom Parameters › TTFAutohint options; ttfautohint 1.8 --help"
 status = "handbook"
-notes = "Verified by the M10 planning pass against the handbook's description of the TTFAutohint options parameter and the help text of the ttfautohint 1.8 program (run as a black box; its source was not read)."
+notes = "Verified by the M10 planning pass against the handbook's description of the TTFAutohint options parameter and the help text of the ttfautohint 1.8 program (run as a black box; its source was not read). The built-in autohinter never refuses a font for lacking standard characters, so Symbol font has nothing to change; Ignore restrictions is reported as ignored, since FontCraft reads no fsType restriction."
 
 [[behavior]]
 id = "autohint.tt.option.dehint"
@@ -209,7 +213,7 @@ milestone = "M10"
 summary = "Dehint (ttfautohint dehint) removes all hinting and overrides every other option; meant for testing."
 ref = "Appendix › Custom Parameters › TTFAutohint options; ttfautohint 1.8 --help"
 status = "handbook"
-notes = "Verified by the M10 planning pass against the handbook's description of the TTFAutohint options parameter and the help text of the ttfautohint 1.8 program (run as a black box; its source was not read)."
+notes = "Verified by the M10 planning pass against the handbook's description of the TTFAutohint options parameter and the help text of the ttfautohint 1.8 program (run as a black box; its source was not read). Applied (M10.21): the export writes no TrueType hinting, and autohint.tt.run stores no instruction."
 
 [[behavior]]
 id = "autohint.tt.option.info"
@@ -218,7 +222,7 @@ milestone = "M10"
 summary = "By default the autohinter appends its name and version to the version strings (name ID 5). Detailed info (detailed-info) appends the version and its options instead; no info (no-info) appends nothing. The two settings exclude each other."
 ref = "Appendix › Custom Parameters › TTFAutohint options; ttfautohint 1.8 --help"
 status = "handbook"
-notes = "Verified by the M10 planning pass against the handbook's description of the TTFAutohint options parameter and the help text of the ttfautohint 1.8 program (run as a black box; its source was not read)."
+notes = "Verified by the M10 planning pass against the handbook's description of the TTFAutohint options parameter and the help text of the ttfautohint 1.8 program (run as a black box; its source was not read). Applied (M10.21): with Detailed info the export appends the autohinter's name and options to name ID 5; otherwise it leaves the version string alone."
 guesses = ["With FontCraft's own TrueType autohinter (decided in M10 § 7, question 2) the name strings are left alone unless detailed or plain info is asked for; the reference app's choice between its default and No Autohint Info would settle it."]
 observe = ["T3: export as TTF with Autohint and the default TTFAutohint options; read name ID 5 and note whether autohinter version information was added to it."]
 
@@ -229,7 +233,7 @@ milestone = "M10"
 summary = "The ttfa table option (ttfautohint ttfa-table) adds a TTFA table that records every autohinter parameter, the control instructions included, so a later run can repeat it; renderers ignore the table."
 ref = "Appendix › Custom Parameters › TTFAutohint options; ttfautohint 1.8 --help"
 status = "handbook"
-notes = "Added by the M10 planning pass: the handbook's option list names it and no row covered it."
+notes = "Added by the M10 planning pass: the handbook's option list names it and no row covered it. Applied (M10.21): the export writes a TTFA table holding the options as long options, then the control instructions, as text."
 
 [[behavior]]
 id = "autohint.tt.controlInstructions.syntax"
@@ -243,6 +247,7 @@ notes = "Verified by the M10 planning pass against the handbook's description of
 # ---------------------------------------------------------------------------------------------
 # Font-level hints: zones
 # ---------------------------------------------------------------------------------------------
+guesses = ["The built-in autohinter turns a touch or point correction into a vertical Delta at its sizes, one cell up or down by the sign of the y shift; shifts under half a pixel and x shifts give none and are reported; both act before IUP. The external program applies them as its manual describes.", "The built-in autohinter makes left and right points a rounded horizontal Snap and keeps nodir points out of every instruction; the style forms (script feature @ glyphs, script feature width) are read and left out."]
 
 [[behavior]]
 id = "hinting.tt.zones.purpose"
@@ -1028,6 +1033,8 @@ milestone = "M10"
 summary = "Context-menu item of the TrueType Instructor that generates editable instructions for the glyph as a starting point: Snap and Stem instructions only, never Shift, Interpolate or Delta. The shortcut acts on all glyphs selected in Edit View and can be reassigned in the Commands section of the settings. For a glyph it cannot handle it reports 'There was a problem compiling TrueType instructions'."
 ref = "TrueType Hinting › Instructions"
 status = "handbook"
+notes = "M10.21, crates/engine/src/cmd/autohint_tt.rs: the built-in autohinter on the layer of the named master (default the main master), with the TT zones and stems that apply to the glyph; a glyph it cannot hint is listed under skipped, an unknown glyph or master refuses the run. Documented, not yet observed."
+guesses = ["The Instructor's Autohint writes vertical Snap on every extreme in a TT zone, vertical Stem for each horizontal stem the PostScript stem analysis finds, and horizontal Stem for each vertical one; a glyph hinted by the reference app would show which points it picks."]
 
 [[command]]
 id = "hint.tt.removeHints"

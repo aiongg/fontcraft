@@ -345,6 +345,7 @@ milestone = "M10"
 summary = "With Autohint on and the TrueType flavour, the TrueType autohinter is applied to the whole font and any manual TrueType hints in the source are ignored."
 ref = "Import & Export › Exporting Font Files › OpenType Export › Options"
 status = "handbook"
+notes = "M10.21: `file.exportStatic {autohint: true}` with TrueType outlines (or an instance's Autohint parameter) runs FontCraft's own TrueType autohinter (decided in M10 § 7, question 2) on every simple glyph and compiles its Snap and Stem instructions with the manual-instruction compiler; the TTFAutohint options that mean something to it apply and the others are listed in a warning."
 
 [[behavior]]
 id = "export.destinationFolder"

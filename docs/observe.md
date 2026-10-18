@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1147 rows to check: 1611 guesses and 422 observe steps.**
+**1151 rows to check: 1616 guesses and 423 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,7 +48,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 40 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 4 |
-| **Later milestones (after M6)** | all | **676** |
+| **Later milestones (after M6)** | all | **680** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 39 |
 | Later milestones (after M6) | Edit View: text mode and preview | 14 |
 | Later milestones (after M6) | Components and anchors | 33 |
@@ -56,9 +56,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Spacing and metrics keys | 3 |
 | Later milestones (after M6) | Kerning and the Kerning window | 4 |
 | Later milestones (after M6) | Font View | 13 |
-| Later milestones (after M6) | Font Info and features | 253 |
+| Later milestones (after M6) | Font Info and features | 256 |
 | Later milestones (after M6) | Interpolation | 44 |
-| Later milestones (after M6) | Hinting | 84 |
+| Later milestones (after M6) | Hinting | 85 |
 | Later milestones (after M6) | Colour fonts | 46 |
 | Later milestones (after M6) | Files: open, import, export | 46 |
 | Later milestones (after M6) | Settings and the window | 12 |
@@ -1338,7 +1338,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (676)
+## Later milestones (after M6) (680)
 
 ### Edit View: drawing, guides, layers and the Palette (39)
 
@@ -1708,7 +1708,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The decomposition sections use Unicode's canonical decompositions, one level and full together, so U+1EA4 lists both U+00C2 and U+0041, and characters the font has no glyph for are listed dimmed.
   - Guess: Clicking an entry opens the glyph in a new tab; the reference's documentation does not say whether it replaces the current glyph instead.
 
-### Font Info and features (253)
+### Font Info and features (256)
 
 - [ ] `fontInfo.rows.selection` (behavior, M7, handbook): Clicking a row selects it and Cmd+click builds a selection of several…
   - Guess: Shift-click adds every row between the last row clicked and the clicked one; Shift-clicking in the reference app settles it.
@@ -2448,9 +2448,16 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: In F1 (two masters), set Variation Font Origin naming Black and export the variable font: note whether the default outlines and the `fvar` default are Black's.
 - [ ] `variationsPostScriptNamePrefix` (parameter, M9, handbook): Sets name ID 25, the family prefix used when PostScript names of…
   - Guess: Without it no name ID 25 is written, as both oracles do; the typographic family fallback the description names is what a consumer computes. Settle by exporting without it and listing the name records.
+- [ ] `autohint.tt.option.increaseXHeight` (behavior, M10, handbook): The x-height increase limit (ttfautohint increase-x-height, default 14) makes the x-height round…
+  - Guess: From 6 PPM to the x-height increase limit the built-in autohinter rounds the xHeight zone up from an eighth of a pixel above a row; the ttfautohint manual says only that it rounds up much more often, and the x-height rows of the autohint measure compare the two.
+- [ ] `autohint.tt.option.windowsCompatibility` (behavior, M10, handbook): Windows compatibility (ttfautohint windows-compatibility) adds two blue zones at the OS/2 usWinAscent…
+  - Guess: The built-in autohinter's Windows compatibility adds zones one unit high at usWinAscent and −usWinDescent, which snap extremes there to the nearest row rather than keeping them below the clipping line; a hinted export of a glyph that reaches usWinAscent, rendered under GDI, would settle it.
 - [ ] `autohint.tt.option.info` (behavior, M10, handbook): By default the autohinter appends its name and version to the version…
   - Guess: With FontCraft's own TrueType autohinter (decided in M10 § 7, question 2) the name strings are left alone unless detailed or plain info is asked for; the reference app's choice between its default and No Autohint Info would settle it.
   - Observe: T3: export as TTF with Autohint and the default TTFAutohint options; read name ID 5 and note whether autohinter version information was added to it.
+- [ ] `autohint.tt.controlInstructions.syntax` (behavior, M10, handbook): The control instructions are lines of text, one instruction each, starting with…
+  - Guess: The built-in autohinter turns a touch or point correction into a vertical Delta at its sizes, one cell up or down by the sign of the y shift; shifts under half a pixel and x shifts give none and are reported; both act before IUP. The external program applies them as its manual describes.
+  - Guess: The built-in autohinter makes left and right points a rounded horizontal Snap and keeps nodir points out of every instruction; the style forms (script feature @ glyphs, script feature width) are read and left out.
 - [ ] `Ignore Vertical Hints` (parameter, M10, handbook): In TrueType export, leaves out every manual stem hint linked to a…
   - Guess: A horizontal Stem instruction set to No Stem stays under Ignore Vertical Hints, since it is linked to no stem definition; the reference app would settle it.
 - [ ] `TTFAutohint options` (parameter, M10, handbook): Option string for ttfautohint, edited through a dialog: hint set range, default…
@@ -2598,7 +2605,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `hoi.setControlPoints` (M13, inferred): Set Interpolation Control Points
   - Open (our design, not confirmed): Headless form of dragging a knob or handle: sets the intermediate point (one point), the two handles (two points) or the rotation centre (one point) of a node's interpolation curve.
 
-### Hinting (84)
+### Hinting (85)
 
 - [ ] `hinting.ps.standardStems.privateDictMapping` (behavior, M10, docs): At export the first horizontal stem becomes StdHW and the first vertical…
   - Guess: More than twelve stems in one direction: the export writes the first twelve in list order and warns, and hint.ps.validateFontHints reports it; an export from the reference app with thirteen stems would settle it.
@@ -2794,8 +2801,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: T3: add an Alternate layer for master 1 of n with instructions of its own, export as TTF and read n's glyph program; note which layer's instructions were used.
 - [ ] `hinting.tt.export.compileError` (behavior, M10, handbook): When a glyph's instructions cannot be compiled the reference reports 'There was…
   - Guess: A glyph whose instructions fail to compile is exported unhinted and the export goes on, with a warning naming the glyph; a reference export of a glyph with a broken instruction would show whether it stops instead.
-- [ ] `autohint.tt.run` (M10, inferred): Autohint TrueType
+- [ ] `autohint.tt.run` (M10, inferred, live): Autohint TrueType
   - Guess: The built-in TrueType autohinter is FontCraft's own (decided in M10 § 7, question 2): Snap and Stem instructions from the PostScript autohinter's zone and stem analysis, compiled with the manual-instruction compiler; ttfautohint runs instead when the TTFAutohint binary path parameter names one; the reference app's built-in autohinter is ttfautohint.
+  - Observe: T3: export a TTF with Autohint on from a font whose glyphs carry TrueType instructions; render a hinted glyph at 12 PPM and note whether the manual instructions or the autohinter's result shows.
 - [ ] `hint.tt.getPsZones` (M10, handbook): Get PS zones
   - Guess: Get PS zones replaces the TT zone list with the master's alignment zones, named after their metrics (xHeight for the x-height metric so that it gets the x-height rounding, else the metric's name, else zone1, zone2…); the reference app would settle replace or append and the names.
   - Observe: T3: on a master that already has two TT zones, choose Get PS zones; note whether the existing zones are replaced or kept, and which names the new zones get.
@@ -2821,6 +2829,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `hint.tt.showPreviewAddress` (M10, handbook): Show Preview Address…
   - Guess: The server listens on a free port of the local network interfaces, serves only the preview page and the font, and stops when the dialog closes (decided in M10 § 7, question 5); the reference app would settle lifetime and port.
   - Observe: T3: choose Show Preview Address…, open the address from another device on the same network, close the dialog, then quit the app; note the port, whether the page was reachable, and at which of these moments the server stopped.
+- [ ] `hint.tt.autohintGlyph` (M10, handbook, live): Autohint
+  - Guess: The Instructor's Autohint writes vertical Snap on every extreme in a TT zone, vertical Stem for each horizontal stem the PostScript stem analysis finds, and horizontal Stem for each vertical one; a glyph hinted by the reference app would show which points it picks.
 - [ ] `hint.tt.removeHints` (M10, handbook, live): Remove Hints
   - Guess: Remove Hints in the TrueType Instructor removes TrueType instructions only and leaves PostScript hints, since the handbook names it in the TrueType section; running it on a glyph with both in the reference app would settle it.
 - [ ] `hint.tt.deleteInstructions` (M10, inferred, live): Delete Instructions

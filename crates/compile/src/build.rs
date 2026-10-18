@@ -426,9 +426,18 @@ pub fn assemble(
     let names = if flavour == Flavour::Cff || order.len() <= MAX_POST_NAMES { crate::names::final_names(font, order, warnings) } else { Vec::new() };
     let variable = extra.tables.iter().any(|(tag, _)| *tag == Tag::new(b"gvar"));
     let tt_hinting = match (flavour, source) {
-        (Flavour::TrueType, Some(source)) => crate::tt_hints::tt_hinting(source, font, order, outlines, options, variable, warnings)?,
+        (Flavour::TrueType, Some(source)) => {
+            crate::tt_hints::tt_hinting(source, font, order, outlines, options, (m.win_ascent, m.win_descent), variable, warnings)?
+        }
         _ => None,
     };
+    if let Some(suffix) = tt_hinting.as_ref().and_then(|h| h.version_suffix.as_deref()) {
+        for r in info.names.iter_mut().filter(|r| r.id == 5) {
+            if r.text.chars().count() + suffix.chars().count() <= info::MAX_NAME_CHARS {
+                r.text.push_str(suffix);
+            }
+        }
+    }
     // Glyphs with a program are written from the points their program was compiled against.
     let instructed: Option<Vec<Prepared>> = tt_hinting.as_ref().filter(|h| !h.glyphs.is_empty()).map(|h| {
         let mut all = outlines.to_vec();
@@ -585,6 +594,9 @@ pub fn assemble(
     }
     for (tag, bytes) in color.iter().chain(&extra.tables) {
         builder.add_raw(*tag, bytes.as_slice());
+    }
+    if let Some(ttfa) = tt_hinting.as_ref().and_then(|h| h.ttfa.as_ref()) {
+        builder.add_raw(Tag::new(b"TTFA"), ttfa.as_slice());
     }
     Ok(builder.build())
 }

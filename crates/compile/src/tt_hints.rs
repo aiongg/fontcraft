@@ -8,7 +8,7 @@
 //! | Case | What the font gets |
 //! |---|---|
 //! | hints stripped, Export TrueType Hints off, or no glyph with instructions and no imported tables | no TrueType hinting |
-//! | Autohint on (the instance's Autohint parameter, else the export option) | the autohinter's programs, which replace every manual instruction |
+//! | Autohint on (the instance's Autohint parameter, else the export option) | our `cvt `, `fpgm` and `prep` with what the TTFAutohint options add, and the autohinter's program for every simple glyph ([`fontcraft_hinting::autohint_glyph`] on the layer being exported); manual instructions and imported tables are not written; with the Dehint option, no TrueType hinting |
 //! | cvt Table, prep Table Assembly or fpgm Table Assembly on the master or instance | those tables as they are; manual instructions are not compiled, with a warning, since they call functions of our own `fpgm` |
 //! | otherwise | our `cvt `, `fpgm` and `prep` for the zones and stems of the master or instance being built, and a glyph program for each glyph whose main-master layer has instructions |
 //!
@@ -22,9 +22,12 @@
 
 use std::sync::Arc;
 
+use fontcraft_hinting::control::ControlInstructions;
 use fontcraft_hinting::settings::{TTF_STEMS, TTF_ZONES, family_tt_zones, main_master};
 use fontcraft_hinting::tt::delta_column_key;
-use fontcraft_hinting::{FontPrograms, GlyphContext, GlyphOutline, HintSettings, glyph_program, tt_instructions};
+use fontcraft_hinting::{
+    AutoGlyph, FontPrograms, GlyphContext, GlyphOutline, HintSettings, TtAutohintOptions, autohint_glyph, glyph_program, tt_instructions,
+};
 use fontcraft_model::plist::{Array, Dict, Number, Value};
 use fontcraft_model::{Font, Layer, Param, Resolved, ResolvedGlyph};
 use fontcraft_ttasm::{FunctionTable, ProgramLimits, analyse};
@@ -50,6 +53,11 @@ pub struct TtHinting {
     pub glyphs: Vec<(usize, SimpleGlyph)>,
     /// The merged needs for `maxp`.
     pub limits: ProgramLimits,
+    /// Appended to the version string (name ID 5): the autohinter's Detailed info.
+    pub version_suffix: Option<String>,
+    /// The TTFA table the autohinter's TTFA table option asks for: its options and control
+    /// instructions as text.
+    pub ttfa: Option<Vec<u8>>,
 }
 
 /// The hint settings of the master or instance `resolved` was resolved at, or `None` with a
@@ -80,6 +88,62 @@ fn autohinted(settings: &HintSettings, options: &Options) -> bool {
     settings.autohint.unwrap_or(options.hinting.autohint)
 }
 
+/// The TTFAutohint options and control instructions of an autohinted build.
+struct AutoSetup {
+    options: TtAutohintOptions,
+    control: ControlInstructions,
+    /// The control instructions as given, for the TTFA table.
+    control_text: String,
+}
+
+impl AutoSetup {
+    /// The options and control instructions of `settings`, or `None` when Dehint is on (the
+    /// font then gets no TrueType hinting). Options or control instructions that cannot be read
+    /// are left out, with a warning.
+    fn new(settings: &HintSettings, warnings: &mut Vec<String>) -> Option<Self> {
+        let options = match settings.tt_autohint_options.as_deref().map(TtAutohintOptions::parse) {
+            None => TtAutohintOptions::default(),
+            Some(Ok((o, ignored))) => {
+                if !ignored.is_empty() {
+                    warnings.push(format!("the built-in TrueType autohinter ignores these TTFAutohint options: {}", ignored.join(", ")));
+                }
+                o
+            }
+            Some(Err(e)) => {
+                warnings.push(format!("the TTFAutohint options cannot be read ({e}); the defaults were used"));
+                TtAutohintOptions::default()
+            }
+        };
+        if options.dehint {
+            return None;
+        }
+        let control = match settings.tt_autohint_control.as_deref().map(fontcraft_hinting::control::parse) {
+            None => ControlInstructions::default(),
+            Some(Ok(c)) => c,
+            Some(Err(e)) => {
+                warnings.push(format!("the TTFAutohint control instructions cannot be read ({e}); they were left out"));
+                ControlInstructions::default()
+            }
+        };
+        Some(Self { options, control, control_text: settings.tt_autohint_control.clone().unwrap_or_default() })
+    }
+
+    /// The TTFA table: the options, then the control instructions, as text.
+    fn ttfa(&self) -> Vec<u8> {
+        let mut text = self.options.to_text();
+        if !self.control_text.is_empty() {
+            text.push('\n');
+            text.push_str(&self.control_text);
+        }
+        text.into_bytes()
+    }
+
+    /// Does the Dehint option of `settings` leave the font without TrueType hinting?
+    fn dehint(settings: &HintSettings) -> bool {
+        Self::new(settings, &mut Vec::new()).is_none()
+    }
+}
+
 /// Does the master carry imported tables (cvt Table, prep or fpgm Table Assembly)? They are
 /// written instead of glyph programs.
 fn imported(settings: &HintSettings) -> bool {
@@ -92,7 +156,8 @@ pub(crate) fn compiles_glyph_programs(source: &Font, resolved: &Resolved, option
     if options.hinting.strip {
         return false;
     }
-    settings_for(source, resolved, &mut Vec::new()).is_some_and(|s| s.export_tt_hints && !autohinted(&s, options) && !imported(&s))
+    settings_for(source, resolved, &mut Vec::new())
+        .is_some_and(|s| s.export_tt_hints && if autohinted(&s, options) { !AutoSetup::dehint(&s) } else { !imported(&s) })
 }
 
 /// The TrueType hinting for the glyphs of `order` with outlines `outlines`, or `None` when the
@@ -105,19 +170,20 @@ pub fn tt_hinting(
     order: &[ResolvedGlyph],
     outlines: &[Prepared],
     options: &Options,
+    win_metrics: (f64, f64),
     variable: bool,
     warnings: &mut Vec<String>,
 ) -> Result<Option<TtHinting>, CompileError> {
     if options.hinting.strip {
         return Ok(None);
     }
-    let Some(settings) = settings_for(source, resolved, warnings) else { return Ok(None) };
+    let Some(mut settings) = settings_for(source, resolved, warnings) else { return Ok(None) };
     if !settings.export_tt_hints {
         return Ok(None);
     }
 
     // The glyphs whose main-master layer has instructions, with them.
-    let mut instructed = Vec::new();
+    let mut instructed: Vec<(usize, Vec<fontcraft_hinting::TtInstruction>)> = Vec::new();
     let mut unreadable = Vec::new();
     for (gid, g) in order.iter().enumerate() {
         let Some(layer) = source.glyph(&g.name).and_then(|sg| sg.layer(&settings.main_master)) else { continue };
@@ -132,16 +198,29 @@ pub fn tt_hinting(
             .push(format!("the TrueType instructions of these glyphs cannot be read, so they were exported without them: {}", unreadable.join(", ")));
     }
 
-    if autohinted(&settings, options) {
-        // The TrueType autohinter replaces every manual instruction; until it is built the
-        // font is written unhinted.
-        warnings.push("TrueType autohinting is not available, so the font was written without TrueType hints".to_string());
-        return Ok(None);
-    }
-
-    if imported(&settings) {
-        return Ok(imported_tables(&settings, &instructed, order, warnings));
-    }
+    let auto = if autohinted(&settings, options) {
+        let Some(auto) = AutoSetup::new(&settings, warnings) else { return Ok(None) };
+        if !instructed.is_empty() {
+            let list: Vec<String> = instructed.iter().filter_map(|(gid, _)| order.get(*gid).map(|g| g.name.clone())).collect();
+            warnings.push(format!("Autohint is on, so the TrueType autohinter replaced the manual instructions of {}", names(&list)));
+        }
+        instructed = (0..order.len()).map(|gid| (gid, Vec::new())).collect();
+        if auto.options.windows_compatibility {
+            // Zones at the heights Windows clips to, so extremes there land on a pixel row.
+            let (ascent, descent) = win_metrics;
+            for (name, position, size) in [("winAscent", ascent, 1.0), ("winDescent", -descent, -1.0)] {
+                if position.is_finite() && !settings.tt_zones.iter().any(|z| z.name == name) {
+                    settings.tt_zones.push(fontcraft_hinting::TtZone { name: name.into(), position, size, ..Default::default() });
+                }
+            }
+        }
+        Some(auto)
+    } else {
+        if imported(&settings) {
+            return Ok(imported_tables(&settings, &instructed, order, warnings));
+        }
+        None
+    };
     if instructed.is_empty() {
         return Ok(None);
     }
@@ -170,9 +249,24 @@ pub fn tt_hinting(
             return Ok(None);
         }
     };
+    let mut programs = programs;
+    if let Some(auto) = &auto {
+        match fontcraft_hinting::autohint_prep(&auto.options, &settings, &programs.layout) {
+            Ok(extra) => {
+                match analyse(&extra, &functions) {
+                    Ok(l) => programs.limits.merge(&l),
+                    Err(_) => programs.limits.uncertain = true,
+                }
+                programs.prep.extend(extra);
+            }
+            Err(e) => warnings.push(format!("the TTFAutohint options cannot be applied to `prep` ({e}); they were left out")),
+        }
+    }
     let location = instance.map(|i| i.location.clone()).or_else(|| source.master(&settings.master).ok().map(|m| m.location.clone()));
     let delta_column = if variable { None } else { location.map(|l| delta_column_key(&l)) };
 
+    let per_glyph = auto.as_ref().map(|a| a.control.by_glyph()).unwrap_or_default();
+    let no_control = ControlInstructions::default();
     let mut limits = programs.limits;
     let mut glyphs = Vec::new();
     let mut deltas_dropped = false;
@@ -182,13 +276,46 @@ pub fn tt_hinting(
             continue;
         }
         let Some(built) = source.glyph(&g.name).and_then(|sg| sg.layer(&settings.master)) else { continue };
+        let zones = settings.tt_zones_for(source, &g.name);
+        let stems = settings.tt_stems_for(source, &g.name);
+        let autohinted;
+        let instructions: &[fontcraft_hinting::TtInstruction] = match &auto {
+            Some(auto) => {
+                let Some(e) = exported(built, &[], prepared, options.remove_overlap && !variable) else { continue };
+                let control = per_glyph.get(g.name.as_str()).unwrap_or(&no_control);
+                let input = AutoGlyph {
+                    glyph: &g.name,
+                    layer: built,
+                    settings: &settings,
+                    zones: Some(&zones),
+                    stems: Some(&stems),
+                    options: &auto.options,
+                    control,
+                    points: Some(&e.map),
+                    delta_column: delta_column.as_deref(),
+                };
+                match autohint_glyph(&input) {
+                    Ok(h) => {
+                        warnings.extend(h.warnings);
+                        autohinted = h.instructions;
+                    }
+                    Err(err) => {
+                        warnings.push(format!("glyph `{}`: the TrueType autohinter failed ({err}); it was exported without instructions", g.name));
+                        continue;
+                    }
+                }
+                if autohinted.is_empty() {
+                    continue;
+                }
+                &autohinted
+            }
+            None => instructions,
+        };
         let Some(e) = exported(built, instructions, prepared, options.remove_overlap && !variable) else {
             warnings.push(format!("glyph `{}`: its exported points cannot be numbered, so it was exported without TrueType instructions", g.name));
             continue;
         };
         deltas_dropped |= variable && instructions.iter().any(|t| matches!(t.kind, fontcraft_hinting::TtKind::Delta { .. }));
-        let zones = settings.tt_zones_for(source, &g.name);
-        let stems = settings.tt_stems_for(source, &g.name);
         let cx = GlyphContext {
             glyph: &g.name,
             instructions,
@@ -226,7 +353,14 @@ pub fn tt_hinting(
         warnings.push("Delta instructions are not written into a variable font".to_string());
     }
     finish(&mut limits, warnings);
-    Ok(Some(TtHinting { cvt: programs.cvt, fpgm: programs.fpgm, prep: programs.prep, glyphs, limits }))
+    let (version_suffix, ttfa) = match &auto {
+        Some(a) => (
+            a.options.detailed_info.then(|| format!("; FontCraft TrueType autohinter ({})", a.options.to_text())),
+            a.options.ttfa_table.then(|| a.ttfa()),
+        ),
+        None => (None, None),
+    };
+    Ok(Some(TtHinting { cvt: programs.cvt, fpgm: programs.fpgm, prep: programs.prep, glyphs, limits, version_suffix, ttfa }))
 }
 
 /// The tables the cvt Table, prep Table Assembly and fpgm Table Assembly parameters hold.
@@ -269,7 +403,7 @@ fn imported_tables(
     }
     limits.max_size_of_instructions = 0;
     finish(&mut limits, warnings);
-    Some(TtHinting { cvt, fpgm, prep, glyphs: Vec::new(), limits })
+    Some(TtHinting { cvt, fpgm, prep, glyphs: Vec::new(), limits, version_suffix: None, ttfa: None })
 }
 
 /// Makes `limits` safe to write when the analysis could not follow every program.
