@@ -329,6 +329,10 @@ milestone = "M9"
 summary = "In Edit View a glyph whose layers are incompatible shows a red bar above its ascender line."
 ref = "Interpolation › Outline Compatibility › Identifying Incompatible Outlines"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/canvas/compatibility.rs (draw_bars), over every glyph of the tab whose layers cannot interpolate, hidden while Enforce Compatibility Check is present and off."
+guesses = [
+  "The bar spans the glyph's advance a few screen points above the ascender, a few points high. Settle by measuring it in a screenshot of the reference app.",
+]
 
 [[behavior]]
 id = "compatibility.smartFilterIncompatibleMasters"
@@ -337,6 +341,10 @@ milestone = "M9"
 summary = "A built-in Smart Filter named Incompatible masters lists every glyph whose masters cannot interpolate. Requires a glyph predicate for master compatibility in the smart-filter engine."
 ref = "Interpolation › Outline Compatibility › Identifying Incompatible Outlines"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: fontcraft_glyphquery::default_filters gives the Filters section this filter (rule Master Compatible is false) until the user changes the section; the first change stores it with the rest, so it can be renamed or removed."
+guesses = [
+  "The filter lists incompatible glyphs even while Enforce Compatibility Check is off, which hides only the red indicators. Settle by turning the parameter off in the reference app and selecting the filter.",
+]
 
 [[behavior]]
 id = "compatibility.checkScope"
@@ -443,11 +451,12 @@ milestone = "M9"
 summary = "Toggles an Edit View mode that draws the current glyph's paths, components and anchors for all masters at once with correspondence lines and compatibility colours."
 ref = "Interpolation › Outline Compatibility › Master Compatibility"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph. The toggle is a shell command (crates/ui-egui/src/canvas/compatibility.rs)."
 guesses = [
-  "Shape tints cycle through eight theme colours by shape index; settle by observing the view with nine shapes.",
+  "Shape tints cycle through the twelve colour-label colours by shape index, as the Shape Order window's do; settle by observing the view with thirteen shapes.",
 ]
 observe = [
-  "In F5 (incompatible), open the glyph with nine shapes and choose Show Master Compatibility: note the tint of shape 9 next to shape 1.",
+  "In F5 (incompatible), open the glyph with thirteen shapes and choose Show Master Compatibility: note the tint of shape 12 next to shape 0.",
 ]
 
 [[panel]]
@@ -470,6 +479,14 @@ milestone = "M9"
 summary = "The Edit View overlay switched on by Show Master Compatibility. It visualises shape order, start nodes, anchors and per-segment compatibility across masters and allows fixing mismatched correspondences by dragging line ends."
 ref = "Interpolation › Outline Compatibility › Master Compatibility"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph."
+guesses = [
+  "The edited layer stays in place and every other source layer is drawn beside it in source order (master layers, then intermediate layers), each starting a quarter em after the previous layer's advance and a twelfth of an em higher, so the connecting lines slant. Settle by opening the view on a glyph with three masters.",
+  "Shape tints are drawn as wide translucent strokes along each shape's outline and components get a dashed tint in place of a checkered fill. Settle by comparing a screenshot of the reference app's view.",
+]
+observe = [
+  "In F5 (incompatible), open a glyph with three masters and choose Show Master Compatibility: note where the other masters are drawn relative to the current one.",
+]
 
 [[behavior]]
 id = "masterCompatibility.shapeColours"
@@ -478,6 +495,7 @@ milestone = "M9"
 summary = "Each path and component is tinted according to its position in the shape order, so the shape with index n has the same colour on every master; components additionally get a checkered pattern. The palette itself is not specified."
 ref = "Interpolation › Outline Compatibility › Master Compatibility"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph."
 
 [[behavior]]
 id = "masterCompatibility.indexLabels"
@@ -486,6 +504,10 @@ milestone = "M9"
 summary = "On the current layer only, each path shows its shape order index next to its start node, and each component shows its index at its centre."
 ref = "Interpolation › Outline Compatibility › Master Compatibility"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph."
+guesses = [
+  "Indices count from 0, as the Shape Order window numbers shapes. Settle by reading the first shape's label in the reference app.",
+]
 
 [[behavior]]
 id = "masterCompatibility.connectingLines"
@@ -494,6 +516,10 @@ milestone = "M9"
 summary = "Slanted lines join each start node, each shape centre and each anchor to its counterpart on the other masters; anchor lines are dashed. Selecting points draws the lines for those points too."
 ref = "Interpolation › Outline Compatibility › Master Compatibility"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph. Start nodes are each path's first on-curve node; a component's centre is the centre of its outline's bounds."
+guesses = [
+  "Lines join the layers of one group in the order they are drawn, one segment between each neighbouring pair. Settle by watching the lines with three masters.",
+]
 
 [[behavior]]
 id = "masterCompatibility.segmentColours"
@@ -502,6 +528,10 @@ milestone = "M9"
 summary = "Segments are green when compatible; yellow when compatible but their angle differs between masters by more than 20°, a hint that a node is missing; red when incompatible because the other master has no such segment or the types differ (curve against line). After a missing node all following segments of that path turn red."
 ref = "Interpolation › Outline Compatibility › Master Compatibility"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph. A segment is red when another layer of its group lacks the path or when the first node whose kind, count or closedness differs is the segment's end or one of its handles, so every later segment is red too; otherwise it is yellow when its chord turns by more than 20 degrees against another layer of the group."
+guesses = [
+  "The angle compared is the chord from the segment's first on-curve node to its last, with the threshold fixed at 20 degrees, as `fontcraft_interp::compat` measures its warnings. Settle by bending one segment's handles on one master and watching when it turns yellow.",
+]
 
 [[behavior]]
 id = "masterCompatibility.missingElementPointsToOrigin"
@@ -510,6 +540,7 @@ milestone = "M9"
 summary = "For a path, component or anchor that one master lacks, the connecting line runs to that master's (0, 0)."
 ref = "Interpolation › Outline Compatibility › Master Compatibility"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph."
 
 [[behavior]]
 id = "masterCompatibility.redMismatchLabels"
@@ -518,6 +549,7 @@ milestone = "M9"
 summary = "Components that reference different glyphs and anchors with different names across masters are labelled in red text."
 ref = "Interpolation › Outline Compatibility › Master Compatibility"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph. Component base glyphs are written in red on every layer when the layers of a group disagree on them; an anchor name is written in red on the layers that have it when another layer of the group lacks it."
 
 [[behavior]]
 id = "masterCompatibility.dragLineEnds"
@@ -526,6 +558,10 @@ milestone = "M9"
 summary = "The ends of connecting lines on layers other than the current one can be dragged onto the end of another line; the two correspondences swap, which reorders shapes (or start nodes) on that layer."
 ref = "Interpolation › Outline Compatibility › Master Compatibility"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph. Dropping an end within three end radii of another shape's line end on the same layer runs glyph.swapShapes on that layer with the two shapes' indices."
+guesses = [
+  "Only the ends of shape lines (start nodes and component centres) can be dragged; anchor and selected-point lines cannot, and start nodes are not moved within a path. Settle by dragging an anchor line's end in the reference app.",
+]
 
 [[behavior]]
 id = "masterCompatibility.selectionProbe"
@@ -534,6 +570,7 @@ milestone = "M9"
 summary = "Selecting nodes on the current layer shows where the corresponding nodes fall on the other masters, the stated way to locate the cause of a segment mismatch. No command adds or removes the missing node automatically."
 ref = "Interpolation › Outline Compatibility › Master Compatibility"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph. Each selected point of the edited layer gets a line to the node with the same shape and node index on the other layers of its group."
 
 [[behavior]]
 id = "masterCompatibility.shapeShifters"
@@ -542,6 +579,7 @@ milestone = "M9"
 summary = "Layers can be formally compatible yet interpolate badly when same-index shapes sit in different places on different masters; the view exposes this as crossing connecting lines. Fixes: Correct Path Direction, the Shape Order window, or dragging a line end to the right shape."
 ref = "Interpolation › Outline Compatibility › Master Compatibility"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph."
 
 [[behavior]]
 id = "masterCompatibility.alternateLayersOffset"
@@ -550,6 +588,7 @@ milestone = "M9"
 summary = "Master Compatibility view also shows intermediate and alternate layers; alternate layers form their own group, separated from the master layers by a gap, because they need only match each other."
 ref = "Interpolation › Switching Shapes › Alternate Layers"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph. Each alternate set is a group of its own, drawn after the main sources with three quarters of an em more gap; lines and colours compare a layer only with its own group."
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Intermediate (brace) layers and virtual masters
@@ -937,6 +976,10 @@ milestone = "M9"
 summary = "Toggle. While on, switching to another master keeps the corresponding nodes and shapes selected, matched by index. It has an effect only when the glyph's layers are compatible."
 ref = "Interpolation › Editing Multiple Masters › Keep Layer Selection in Sync"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/canvas/compatibility.rs (carry_selection), run before the tools see each frame."
+guesses = [
+  "The selection is carried only from one master layer to another of the same glyph, when the glyph is compatible; nodes, shapes and anchors that resolve on the new layer are kept, guides and annotations are dropped. Settle by switching from a master to an intermediate layer with the option on.",
+]
 
 [[command]]
 id = "layers.reInterpolate"

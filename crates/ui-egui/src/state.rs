@@ -534,6 +534,11 @@ pub struct DisplayOptions {
     pub anchors: bool,
     /// The other members of the edited pair's kerning groups (`view.showGroupMembers`).
     pub group_members: bool,
+    /// Every master, intermediate and alternate layer of the edited glyph drawn together
+    /// (`view.showMasterCompatibility`).
+    pub master_compatibility: bool,
+    /// Switching masters keeps the selection, by index (`edit.keepLayerSelectionInSync`).
+    pub keep_layer_selection_in_sync: bool,
 }
 
 impl Default for DisplayOptions {
@@ -552,6 +557,8 @@ impl Default for DisplayOptions {
             fill_preview: true,
             anchors: true,
             group_members: false,
+            master_compatibility: false,
+            keep_layer_selection_in_sync: false,
         }
     }
 }

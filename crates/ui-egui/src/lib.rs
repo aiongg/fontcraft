@@ -40,6 +40,8 @@ mod canvas_layers_tests;
 #[cfg(test)]
 mod command_console_tests;
 #[cfg(test)]
+mod compatibility_tests;
+#[cfg(test)]
 mod components_tests;
 #[cfg(test)]
 mod context_menu_tests;

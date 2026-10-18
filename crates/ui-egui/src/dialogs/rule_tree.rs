@@ -32,7 +32,7 @@ const VALUE_CHARS: usize = 1024;
 pub const MATCH: [(&str, &str); 3] = [("all", "All"), ("any", "Any"), ("none", "None")];
 
 /// The rule properties with their labels, in the pop-up's order.
-pub const PROPERTIES: [(&str, &str); 22] = [
+pub const PROPERTIES: [(&str, &str); 24] = [
     ("glyphName", "Glyph Name"),
     ("countOfPaths", "Count of Paths"),
     ("countOfComponents", "Count of Components"),
@@ -52,6 +52,8 @@ pub const PROPERTIES: [(&str, &str); 22] = [
     ("hasMetricsKeys", "Has Metrics Keys"),
     ("metricsKeysOutOfSync", "Metrics Keys Out of Sync"),
     ("hasKerningGroups", "Has Kerning Groups"),
+    ("masterCompatible", "Master Compatible"),
+    ("hasSpecialLayers", "Has Special Layers"),
     ("colorLabel", "Color Label"),
     ("layerColorLabel", "Layer Color Label"),
     ("custom", "Custom"),
@@ -108,7 +110,9 @@ fn value_kind(property: &str) -> ValueKind {
         | "isAutoAligned"
         | "hasMetricsKeys"
         | "metricsKeysOutOfSync"
-        | "hasKerningGroups" => ValueKind::Bool,
+        | "hasKerningGroups"
+        | "masterCompatible"
+        | "hasSpecialLayers" => ValueKind::Bool,
         "case" => ValueKind::Case,
         "colorLabel" | "layerColorLabel" => ValueKind::Color,
         _ => ValueKind::Text,

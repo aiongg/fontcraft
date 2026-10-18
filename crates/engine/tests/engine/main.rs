@@ -21,6 +21,7 @@ mod color_layers;
 mod color_palettes;
 mod command_sweep;
 mod compare;
+mod compatibility_indicators;
 mod corner;
 mod corner_helpers;
 mod corpus_alignment;

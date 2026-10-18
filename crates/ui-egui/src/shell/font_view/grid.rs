@@ -148,6 +148,8 @@ struct CellPaint<'a> {
     pixels_per_point: f32,
     /// The document's metrics keys that need attention (`Session::metrics_sync`).
     sync: Option<&'a SyncCache>,
+    /// The glyphs whose layers cannot interpolate, while the font shows the indicators.
+    incompatible: &'a HashSet<String>,
 }
 
 /// Whether a metrics key of `glyph`, on any layer the scan covers, is out of sync
@@ -161,6 +163,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     let Some(doc) = session.active() else { return };
     let font = doc.font.clone();
     let doc_key = (doc.id, doc.revision);
+    let incompatible = if session.compat_indicators() { session.incompatible_glyphs() } else { HashSet::new() };
     // Scans again only the glyphs an edit touched and the glyphs whose keys read them.
     let sync = session.metrics_sync().ok();
     let fv = &state.font_view;
@@ -182,6 +185,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
         display_unicode: cache.display_unicode,
         pixels_per_point: ui.ctx().pixels_per_point(),
         sync,
+        incompatible: &incompatible,
     };
     font_view.images.start_frame();
     let mut laid_out = Vec::new();
@@ -375,6 +379,9 @@ fn paint_cell(painter: &egui::Painter, ctx: &egui::Context, images: &mut CellIma
     }
     let out_of_sync = c.sync.is_some_and(|s| metrics_out_of_sync(s, &glyph.name));
     paint_badges(painter, t, art, glyph, c.master, row.props.has_custom_info, out_of_sync);
+    if c.incompatible.contains(&glyph.name) {
+        paint_incompatible(painter, t, rect);
+    }
     if c.labels {
         paint_label(painter, c, label_rect(rect), glyph, selected);
     }
@@ -453,6 +460,13 @@ fn paint_badges(painter: &egui::Painter, t: &Tokens, art: Rect, glyph: &Arc<Glyp
         painter.line_segment([pos2(x, r.top() + s * 0.35), pos2(x, r.top() + s * 0.7)], mark);
         painter.circle_filled(pos2(x, r.top() + s * 0.84), 0.75, t.font_view_badge_out_of_sync_mark);
     }
+}
+
+/// The red top-left corner of a glyph whose layers cannot interpolate
+/// (`fontView.cell.badgeIncompatible`).
+fn paint_incompatible(painter: &egui::Painter, t: &Tokens, rect: Rect) {
+    let s = t.badge_size;
+    painter.add(Shape::convex_polygon(vec![rect.min, rect.min + vec2(s, 0.0), rect.min + vec2(0.0, s)], t.compat_bad, Stroke::NONE));
 }
 
 /// CJK scripts, whose cells show the character itself as the Unicode marker

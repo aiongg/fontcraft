@@ -188,8 +188,9 @@ fn opt_list_names(p: &Params) -> Result<Option<Vec<String>>> {
 
 // ── The stored filters and scripts ──────────────────────────────────────────────────────────────
 
+/// The Filters section; until the user changes it, the built-in filters.
 fn stored_filters(s: &Session) -> Result<Vec<Filter>> {
-    Ok(s.settings().reserved::<Vec<Filter>>(Reserved::Filters)?.unwrap_or_default())
+    Ok(s.settings().reserved::<Vec<Filter>>(Reserved::Filters)?.unwrap_or_else(gq::default_filters))
 }
 
 /// Checks the whole tree and stores it; a refused tree changes nothing.
@@ -255,10 +256,12 @@ fn query_glyphs(s: &mut Session, v: &Value) -> Result<Value> {
     let sources = Sources::read(s, wants_filters)?;
     // Rules, ours or a smart filter's, may ask for out-of-sync metrics keys.
     let stale = if rules.is_some() || wants_filters { out_of_sync(s)? } else { HashSet::new() };
+    let incompatible = if rules.is_some() || wants_filters { s.incompatible_glyphs() } else { HashSet::new() };
     let props = s.effective_props()?;
     let data = s.glyph_data()?;
     let font = s.font()?;
-    let env = Env::new(font, &data, master).map_err(|e| bad(&p, "master", e))?.with_props(&props).with_out_of_sync(&stale);
+    let env =
+        Env::new(font, &data, master).map_err(|e| bad(&p, "master", e))?.with_props(&props).with_out_of_sync(&stale).with_incompatible(&incompatible);
     let catalog = sources.catalog(env)?;
     let glyphs = catalog.select(&Selection { entries, rules, search }).map_err(|e| p.bad(e.to_string()))?;
     let mut out = Map::new();

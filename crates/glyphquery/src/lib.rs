@@ -28,7 +28,8 @@ use fontcraft_model::{Font, Glyph, GlyphProps, Layer, PropsCache, glyph_props, k
 
 pub use classes::{ClassMembers, ClassResolver, MAX_CLASS_DEPTH, MAX_CLASS_GLYPH_TESTS, MAX_CLASS_MEMBERS, feature_classes};
 pub use filters::{
-    Filter, add_filter, check_filter_name, filter_at, list_names, move_filter, remove_filter, rename_filter, replace_filter, validate_filters,
+    Filter, INCOMPATIBLE_MASTERS_FILTER, add_filter, check_filter_name, default_filters, filter_at, list_names, move_filter, remove_filter,
+    rename_filter, replace_filter, validate_filters,
 };
 pub use predicate::{Attr, Expr, LayerAttr, Literal, Op, Pattern, Test, parse_predicate};
 pub use replace::Replacement;
@@ -123,6 +124,7 @@ pub struct Env<'a> {
     font_classes: OnceLock<ClassMembers>,
     props: Option<&'a PropsCache>,
     out_of_sync: Option<&'a HashSet<String>>,
+    incompatible: Option<&'a HashSet<String>>,
 }
 
 impl<'a> Env<'a> {
@@ -146,6 +148,7 @@ impl<'a> Env<'a> {
             font_classes: OnceLock::new(),
             props: None,
             out_of_sync: None,
+            incompatible: None,
         })
     }
 
@@ -175,6 +178,18 @@ impl<'a> Env<'a> {
 
     pub(crate) fn is_out_of_sync(&self, glyph: &str) -> bool {
         self.out_of_sync.is_some_and(|set| set.contains(glyph))
+    }
+
+    /// Names the glyphs whose layers cannot interpolate, which `masterCompatible` reads. The
+    /// caller computes the set (with `fontcraft_interp`, a crate beside this one); without it,
+    /// every glyph is compatible.
+    pub fn with_incompatible(mut self, glyphs: &'a HashSet<String>) -> Self {
+        self.incompatible = Some(glyphs);
+        self
+    }
+
+    pub(crate) fn is_incompatible(&self, glyph: &str) -> bool {
+        self.incompatible.is_some_and(|set| set.contains(glyph))
     }
 
     /// The master the layer rules read.

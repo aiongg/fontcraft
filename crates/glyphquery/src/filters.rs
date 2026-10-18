@@ -9,7 +9,7 @@ use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
-use crate::rules::RuleTree;
+use crate::rules::{GroupKind, Property, Rule, RuleNode, RuleOp, RuleTree, RuleValue};
 use crate::{MAX_FILTER_NAME_BYTES, MAX_FILTERS, MAX_FOLDER_DEPTH, MAX_LIST_NAMES, QueryError, fail, short};
 use fontcraft_glyphdata::MAX_NAME_BYTES;
 
@@ -48,6 +48,16 @@ impl Filter {
             Filter::Folder { .. } => "folder",
         }
     }
+}
+
+/// The name of the built-in smart filter that lists glyphs whose masters cannot interpolate
+/// (`compatibility.smartFilterIncompatibleMasters`).
+pub const INCOMPATIBLE_MASTERS_FILTER: &str = "Incompatible masters";
+
+/// The Filters section before the user changes it: the built-in Incompatible masters filter.
+pub fn default_filters() -> Vec<Filter> {
+    let rule = Rule { property: Property::MasterCompatible, op: RuleOp::Is, value: RuleValue::Bool(false) };
+    vec![Filter::Smart { name: INCOMPATIBLE_MASTERS_FILTER.to_string(), rules: RuleTree { kind: GroupKind::All, rules: vec![RuleNode::Rule(rule)] } }]
 }
 
 /// A usable filter or folder name: trimmed, not empty, no control characters.

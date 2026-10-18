@@ -1500,6 +1500,7 @@ milestone = "M9"
 summary = "A red top-left corner marks a glyph whose layers are not all compatible for interpolation."
 ref = "Font View › Grid View"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/shell/font_view/grid.rs (paint_incompatible), a triangle of one badge size in the cell's top-left corner, hidden while Enforce Compatibility Check is present and off."
 
 [[behavior]]
 id = "fontView.cell.badgeNonExporting"
@@ -2953,6 +2954,7 @@ milestone = "M9"
 summary = "Rule Master Compatible is true when the glyph's master layers can be interpolated."
 ref = "Font View › Filtering Font View › Smart Filters"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: the engine computes the incompatible glyphs with the same check as interpolation.checkCompatibility (its default scope, special layers included) and hands them to the rule (Env::with_incompatible); the predicate key masterCompatible reads the same set."
 
 [[behavior]]
 id = "smartFilter.rule.exportGlyph"
@@ -3043,6 +3045,7 @@ milestone = "M9"
 summary = "Rule Has Special Layers is true when the glyph has any special layer (the layer kinds beyond plain master and backup layers, as defined in the layers chapter)."
 ref = "Font View › Filtering Font View › Smart Filters"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: true when any layer is an intermediate, alternate, colour or smart-glyph layer, the same test as the predicate key hasSpecialLayers."
 
 [[behavior]]
 id = "smartFilter.rule.hasCustomGlyphInfo"

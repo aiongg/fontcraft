@@ -85,7 +85,8 @@ fn filters_live_in_the_settings_and_change_no_document() {
     run(&mut s, "fontView.addListFilter", json!({"name": "Order", "glyphs": ["C a", "B\nzz"]}));
     assert!(Arc::ptr_eq(&s.doc().unwrap().font, &font_before), "filters change no document");
     let stored: Value = s.settings().reserved(Reserved::Filters).unwrap().unwrap();
-    assert_eq!(stored[1]["glyphs"], json!(["C", "a", "B", "zz"]));
+    assert_eq!(stored[0]["name"], json!("Incompatible masters"), "the built-in filter comes first");
+    assert_eq!(stored[2]["glyphs"], json!(["C", "a", "B", "zz"]));
 
     let q = |s: &mut Session, entries: Value| names(&run(s, "fontView.queryGlyphs", json!({"entries": entries})));
     assert_eq!(q(&mut s, json!(["filters/Order"])), vec!["C", "a", "B"]);
@@ -120,7 +121,11 @@ fn filters_live_in_the_settings_and_change_no_document() {
     let r = run(&mut s, "fontView.removeFilter", json!({"filter": "Work"}));
     assert_eq!(r["kind"], json!("folder"));
     let stored: Value = s.settings().reserved(Reserved::Filters).unwrap().unwrap();
-    assert_eq!(stored, json!([]), "a folder takes its contents with it");
+    assert_eq!(
+        stored.as_array().map(|a| a.iter().all(|f| f["name"] != "Work" && f["name"] != "Order")),
+        Some(true),
+        "a folder takes its contents with it"
+    );
     assert!(Arc::ptr_eq(&s.doc().unwrap().font, &font_before));
 }
 
