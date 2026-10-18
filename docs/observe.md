@@ -32,14 +32,14 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1200 rows to check: 1797 guesses and 440 observe steps.**
+**1251 rows to check: 1883 guesses and 460 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
-| **Built milestones (M0 to M6)** | all | **471** |
-| Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 99 |
+| **Built milestones (M0 to M6)** | all | **485** |
+| Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 100 |
 | Built milestones (M0 to M6) | Edit View: text mode and preview | 32 |
-| Built milestones (M0 to M6) | Components and anchors | 70 |
+| Built milestones (M0 to M6) | Components and anchors | 83 |
 | Built milestones (M0 to M6) | Filters | 36 |
 | Built milestones (M0 to M6) | Spacing and metrics keys | 23 |
 | Built milestones (M0 to M6) | Kerning and the Kerning window | 42 |
@@ -48,9 +48,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 40 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 4 |
-| **Later milestones (after M6)** | all | **729** |
-| Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 43 |
-| Later milestones (after M6) | Edit View: text mode and preview | 14 |
+| **Later milestones (after M6)** | all | **766** |
+| Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 79 |
+| Later milestones (after M6) | Edit View: text mode and preview | 15 |
 | Later milestones (after M6) | Components and anchors | 37 |
 | Later milestones (after M6) | Filters | 5 |
 | Later milestones (after M6) | Spacing and metrics keys | 3 |
@@ -65,9 +65,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 61 |
 | Later milestones (after M6) | Elsewhere | 19 |
 
-## Built milestones (M0 to M6) (471)
+## Built milestones (M0 to M6) (485)
 
-### Edit View: drawing, guides, layers and the Palette (99)
+### Edit View: drawing, guides, layers and the Palette (100)
 
 - [ ] `dialog.fieldKeys` (behavior, M3, inferred): In a dialog's number field, Return takes the typed value, Escape drops…
   - Guess: Dialog number fields follow the Info box's editing and arrow-key rules (infoBox.fieldEditing, infoBox.arrowKeyStepping); the handbook documents them for the Info box only.
@@ -302,6 +302,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The command refuses a position edit on an aligned component (only `y` on one aligned horizontally) and any edit on a locked component, and accepts slants within ±89°, rotations within ±360° and scales from −10,000 % to 10,000 % except 0; typing such values into the Info box of the reference app settles it.
 - [ ] `view.showAnchors` (M6, handbook, live): Show Anchors
   - Guess: Show Anchors is on by default; the View menu of a fresh install of the reference app settles it.
+- [ ] `infoBox.component` (panel, M6, handbook): Info Box (component / base glyph)
+  - Guess: With several components selected the box describes the first in shape order and shows how many more are selected beside its name; the reference app with two components selected settles it.
+  - Guess: A component whose transform is a matrix with slant that cannot be shown as scale and rotation shows only X and Y, the other fields empty and greyed out; a component with such a matrix in the reference app settles it.
 - [ ] `components.swapBaseKeepsPlacement` (behavior, M6, inferred): Changing the glyph a component points to (component.setBaseGlyph, defined in the Edit…
   - Guess: Swapping the base glyph keeps the component's slot in the shape order, its transform, its alignment setting and its stored attachment anchor; swapping a component in the reference app settles it.
 
@@ -394,7 +397,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Up and Down move to the nearest place on the line above or below, and to the start or the end of the text from the first or the last line; in right-to-left text Left steps forward in the text; in top-to-bottom text Up and Down step along the column and Left and Right move between columns. Moving the cursor in such texts in the reference app settles it.
   - Guess: Backspace and Delete with Alt or Cmd do nothing (no word or line deletion); no source names them.
 
-### Components and anchors (70)
+### Components and anchors (83)
 
 - [ ] `export.underscoreGlyphsOmitted` (behavior, M2, inferred): Non-exporting glyphs, which underscore-named part glyphs are by default, are left out…
   - Guess: Components that use non-exporting glyphs are decomposed at export; our inference from the non-export rule.
@@ -472,6 +475,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A component whose underscore anchors find no plain anchor among the components before it is set after them as another base, as if typed; a mark added to a base without the matching anchor in the reference app settles it.
 - [ ] `components.alternativeAnchorSuffix` (behavior, M6, handbook): A layer may carry several anchors of one type, told apart by…
   - Guess: The component's anchor attribute is matched by its plain name, the part before the first underscore or period, against the mark's underscore anchor; the target is the attribute's anchor, else for a numbered name (top_2) the plain anchor of that base, else the plain anchor; a ligature with a mark set to top_1 after its second base in the reference app settles it.
+- [ ] `components.anchorMenuOnlyWhenChoiceExists` (behavior, M6, handbook): The anchor chooser in the component Info box is hidden unless the…
+  - Guess: The menu shows the stored anchor, else the plain name of the anchor the component attaches to, and choosing an entry stores its name, the plain one included; the reference app's menu after choosing the plain anchor settles it.
 - [ ] `components.autoAlignDefaultOnWhenComponentsOnly` (behavior, M6, handbook): Automatic alignment is on by default for a glyph layer whose shapes…
   - Guess: A component that is not aligned keeps its stored position but still counts: its anchors serve the marks after it and, as a base, it moves the next base to follow its stored place; a composite with one disabled base among aligned ones in the reference app settles it.
 - [ ] `components.fontWideDisableAutoAlign` (behavior, M6, handbook): The Font Info › Other option Disable Automatic Alignment turns off automatic…
@@ -556,7 +561,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `component.setAnchor` (M6, handbook, live): Choose Attachment Anchor
   - Guess: The anchor menu lists the anchors of the attachment target whose name is the mark anchor's name without its underscore or that name followed by an underscore and a suffix; when the stored name no longer exists, the component attaches to the plain name and keeps the stored value; the reference app settles it.
   - Guess: The command accepts only names the component can attach with: one of its own underscore anchors without the underscore (`top` for `_top`), or that name followed by an underscore and a suffix (`top_viet`, `top_2`); an empty name clears the choice; the anchor menu of the reference app settles it.
-- [ ] `glyph.showGlyphsUsingAsComponent` (M6, handbook): Show all glyphs that use this glyph as a component
+- [ ] `glyph.showGlyphsUsingAsComponent` (M6, handbook, live): Show all glyphs that use this glyph as a component
   - Guess: The glyphs open in a new Edit View tab, one per line slot in glyph order; the reference app settles it.
 - [ ] `component.enableAutomaticAlignment` (M6, handbook, live): Enable Automatic Alignment
   - Guess: Enable stores 0 (decided by the layer) on a layer of components only and 1 (forced) on a layer that has paths, so the item always aligns the component; enabling alignment on a component next to a path in the reference app settles it.
@@ -569,12 +574,16 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `component.decompose` (M6, handbook, live): Decompose
   - Guess: Decomposing one level adds no anchors to the layer; a smart component becomes its interpolated outline; corner, cap, segment and brush components inside the base glyph are applied before its paths are copied. Decomposing such components in the reference app settles it.
   - Guess: A smart component that cannot be interpolated is decomposed from its base layer, as the editor draws it, with a warning; the reference app with incompatible pole layers settles it.
+- [ ] `smartGlyph.showSettings` (M6, handbook, live): Show Smart Glyph Settings
+  - Guess: With no glyph given, the window shows the edited glyph, else the first glyph selected in Font View; using Info for Selection in the reference app with nothing selected in a smart glyph settles it.
 - [ ] `smartGlyph.addProperty` (M6, handbook, live): Add Smart Property
   - Guess: A name another property of the glyph already has is refused; adding a second property with the same name in the reference app's Properties tab settles it.
 - [ ] `smartGlyph.setProperty` (M6, handbook, live): Edit Smart Property
   - Guess: A rename carries the layers' poles and the values stored on every component of the glyph to the new name, and anchors named after the property keep their names; renaming a property in the reference app's settings window and saving settles it.
 - [ ] `smartGlyph.removeProperty` (M6, inferred, live): Remove Smart Property
   - Guess: Removing a property drops its pole on every layer and leaves values stored on components in place and ignored; a minus button in the Properties tab of the reference app settles it.
+- [ ] `smartComponent.showSettings` (M6, handbook, live): Smart Component Settings
+  - Guess: With smart components of different smart glyphs selected, the window lists the properties of all their glyphs by name and sets each on the components whose glyph has it; selecting two such components in the reference app settles it.
 - [ ] `smartComponent.setValue` (M6, handbook, live): Set Smart Component Value
   - Guess: A new smart component stores no values and draws with the poles of its master layer, as glyphsLib does with a missing value; a property removed from the glyph leaves the stored value in place and ignored; adding a smart component in the reference app and saving settles it.
   - Guess: A locked component refuses value changes; changing a value on a locked smart component in the reference app settles it.
@@ -587,6 +596,32 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A corner on an extra node, or one whose corner glyph does not exist, is refused instead of being removed without a trace; the reference app settles it.
 - [ ] `cornerComponent.setScale` (M6, handbook, live): Set Corner Scale
   - Guess: A scale of 0 percent is refused with a message, because it collapses the corner to a point; typing 0 in the reference app's scale field settles it.
+- [ ] `cornerComponent.editGlyph` (M6, handbook, live): Edit Corner Glyph
+  - Guess: The corner glyph joins the text left of the current glyph, as the base glyph of a component does; the reference app settles it.
+- [ ] `pixel.addPixelGlyph` (M6, handbook, live): Add Pixel Glyph
+  - Guess: The pixel glyph gets a layer on every master, each as wide as the square, no Unicode value, and its place in the glyph order by the usual sorting; a pixel glyph added by the reference app settles it.
+- [ ] `dialog.componentPicker` (panel, M6, handbook): Component picker
+  - Guess: The picker highlights one result and adds one component per Return, with no multiple selection; the reference app settles it.
+- [ ] `dialog.componentFromSelection` (panel, M6, handbook): Component from Selection
+  - Guess: The name field starts with the command's suggested name, `_part.` and the glyph name; the dialog of the reference app settles it.
+- [ ] `dialog.smartGlyphSettings` (panel, M6, handbook): Smart Glyph Settings
+  - Guess: The plus button names a new property Property, then Property 2, Property 3 and so on, with the range 0 to 100; adding a property in the reference app settles the name.
+  - Guess: Each property row has a minus button that removes it, because the handbook names no way to remove a property; the reference app's settings window settles it.
+  - Guess: The Layers tab lists every layer of the glyph, master layers in bold and, in a font with several masters, other layers with their master's name; whether the reference app hides backup or other masters' layers settles it.
+  - Guess: The window stays open beside the Edit View and blocks nothing; whether the reference app shows a modal sheet settles it.
+- [ ] `dialog.smartComponentSettings` (panel, M6, handbook): Smart Component settings
+  - Guess: A component without a stored value shows the value its glyph's default pole layer draws (the master layer's end of the range); opening the settings of a new smart component in the reference app settles it.
+  - Guess: With components whose values differ, the number field is empty and the checkbox shows a mixed state, and a value typed or ticked sets all of them; selecting two components with different values in the reference app settles it.
+  - Guess: The slider sets the value when the drag ends, so a drag is one undo step and the outline follows on release; dragging the slider in the reference app shows whether it previews during the drag.
+- [ ] `infoBox.cornerComponent` (panel, M6, handbook): Corner component Info box
+  - Guess: Corner components cannot be selected yet, so the box describes the corner on the first selected node that holds one; selecting the corner itself, as the reference app does, settles it.
+- [ ] `dialog.cornerPicker` (panel, M6, handbook): Corner glyph picker
+  - Guess: The list shows every corner glyph of the font while the field is empty and narrows to names that contain every typed word; the reference app settles it.
+- [ ] `dialog.addPixelGlyph` (panel, M6, handbook): Add pixel glyph prompt
+  - Guess: The prompt has a Cancel button beside Add, and the click that asked paints nothing: the next click paints; the reference app settles both.
+- [ ] `pixel` (tool, M6, handbook): Pixel
+  - Guess: A drag paints every cell the straight line between successive pointer positions crosses, stepping into one neighbour where it passes exactly through a grid corner; the reference app settles whether a fast drag fills such gaps.
+  - Guess: The Pixel tool paints on the foreground only and refuses on the background with a message; the reference app settles it.
 
 ### Filters (36)
 
@@ -1342,9 +1377,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (729)
+## Later milestones (after M6) (766)
 
-### Edit View: drawing, guides, layers and the Palette (43)
+### Edit View: drawing, guides, layers and the Palette (79)
 
 - [ ] `anchors.ccmpAlongsideMark` (behavior, M8, handbook): When the mark feature is generated and glyphs such as idotless and…
   - Guess: ccmp follows from the glyph names alone, whether or not the marks carry anchors for the mark feature; Update in the reference app on a font with idotless and an anchorless acutecomb would settle it.
@@ -1383,6 +1418,32 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Module sections follow the built-in sections in the order of the modules' names; the handbook does not say where plug-in sections go.
   - Guess: Values typed into a module's form are kept for the session only, and a module replaced by another version starts again from its defaults.
   - Observe: Install a palette plug-in from the Plugin Manager, relaunch and note where its section appears among the built-in Palette sections and whether it collapses like them.
+- [ ] `tunni.dragLineSymmetric` (behavior, M13, docs): Dragging a Tunni line (or Shift-dragging its control dot) lengthens or shortens…
+  - Guess: Both handles gain the same share of their own distance to the Tunni point, the share being how far the pointer moves across the chord over the Tunni point's height above it, so the Tunni line follows the pointer; FontLab does not say how the two lengths relate, and dragging an unbalanced segment's Tunni line in FontLab would settle it.
+  - Guess: A Tunni line counts as selected when both its handles are selected, so clicking a Tunni line selects its two handles and Shift-click toggles them; FontLab keeps a separate Tunni line selection, and selecting a line there and then a node would show whether the two interact.
+  - Guess: The control dot is drawn and hit at the Tunni point itself (where the handle lines meet); the FontLab manual does not say where on the line the dot sits, and a screenshot of FontLab with Tunni lines on would settle it.
+  - Guess: A dragged handle stays between 1 unit long and four times its node's distance to the Tunni point; FontLab documents no limit.
+  - Observe: Draw an unbalanced curve (tensions 40% and 70%), drag its Tunni line in FontLab, and note both tensions afterwards: equal change in percent, or equal ratio?
+  - Observe: Turn on Tunni lines in FontLab and note where the control dot sits: at the lines' meeting point or on the Tunni line.
+- [ ] `tunni.dragPointAsymmetric` (behavior, M13, docs): Alt-dragging a Tunni line, or dragging its control dot without Shift, moves…
+  - Guess: Alt-dragging a Tunni line moves the handle whose end is nearer the press; dragging the dot moves the handle whose direction is nearer the drag's first movement; FontLab says only that one handle moves, and trying both in FontLab would settle which.
+  - Observe: Alt-drag a Tunni line in FontLab near one end, then near the other, and note which handle moves each time.
+- [ ] `nodes.slideAlongCurve` (behavior, M13, docs): A slide drag moves a node along its existing curve without changing…
+  - Guess: Only an open end slides past the end; FontLab also extends at a sharp node, which needs a curve where FontCraft has a corner, and sliding past a sharp node in FontLab would show what it adds.
+  - Guess: At a corner node, or next to a line, the other segment keeps its far handle and its near handle moves with the node, so that segment changes shape; FontLab says the shape is preserved without saying how in this case.
+  - Observe: Shift+Alt-drag a corner node between a curve and a line in FontLab and note how the curve on the other side changes.
+- [ ] `drag.leverPrecision` (behavior, M13, docs): With the lever modifier held, a dragged node, handle, sidebearing or kerning…
+  - Guess: The drag follows 1/ratio of the pointer's movement over the first 50 screen points and the pointer's full speed beyond; FontLab says only that short drags are slowed and longer ones gradually match the pointer, and timing a long lever drag in FontLab would settle the curve.
+  - Observe: Hold Cmd and drag a node 200 screen points in FontLab with the ratio 6; note how far the node moved.
+- [ ] `autometer.editStemNumerically` (behavior, M13, docs): A stem-width label on canvas is editable: clicking it accepts a typed…
+  - Guess: Both edges move by half the change (as Adjust Stems does); the reference may move one edge only.
+  - Guess: The irregular-stem tolerance is 5 units by default.
+  - Observe: Type a new width into a stem label of an H's left bar: note which nodes move and by how much.
+- [ ] `drag.ghostOutline` (behavior, M13, docs): While points or contours are dragged, the outline as it was before…
+  - Guess: The grey outline shows only the shapes the running interaction changed, and it also shows under a dialog's live preview, which runs as the same kind of interaction. The reference app during a dialog preview would settle the second part.
+  - Guess: The dotted cross-hair through the pointer is not offered. The reference app's appearance settings would settle whether it is worth a switch.
+- [ ] `view.showTunniLines` (M13, docs, live): Tunni Lines
+  - Guess: Tunni lines show for cubic segments only; quadratic segments get none. Watching the reference app on a font with quadratic curves would settle it.
 - [ ] `path.selectTunniLines` (M13, docs, live): Edit Tunni Lines
   - Guess: A segment counts as inside the selection when one of its handles is selected, both its end nodes are, or the segment itself is, as for Fit Curve; FontLab does not define it, and selecting nodes in FontLab with Tunni lines on would settle it.
 - [ ] `path.setCurveTension` (M13, docs, live): Set Curve Tension
@@ -1391,6 +1452,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: With no segments named the command acts on every curve segment of the layer, and it also takes a list of glyphs; FontLab documents only the selection.
   - Guess: An absolute tension must be 1 to 100 percent and a relative step keeps each handle within 1 to 100; FontLab gives no range, and entering larger values in its Node panel would settle it.
   - Guess: A relative step is added to each handle's own tension, so unequal handles stay unequal; FontLab does not say whether it balances them first.
+- [ ] `view.showCurveTension` (M13, docs, live): Show Curve Tension
+  - Guess: Each handle's tension prints as a whole percentage beside the handle's end, and the lengths-and-angles readout is not drawn with it. A screenshot of the reference app with the option on would settle both.
 - [ ] `path.harmonizeNodes` (M13, docs, live): Harmonize Nodes
   - Guess: At an inflection (the far handles on opposite sides of the tangent) the two curvatures are made equal in size, since equal signed curvature is impossible there; running Harmonize on an S-curve in FontLab would settle it.
   - Guess: A smooth node with a straight side, or a selected node that is not between two curve segments, is left unchanged and listed in the result; FontLab does not say.
@@ -1398,6 +1461,14 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: G2 keeps the sum of the two handle lengths at the node and only divides it differently; FontLab does not say which lengths it keeps, and comparing handle lengths before and after Harmonize Handles in FontLab would settle it.
   - Guess: G3 changes the lengths of the two neighbouring handles along their own directions, by the smallest change found, so the neighbouring nodes keep their tangents; FontLab does not describe Superharmonize's method.
   - Guess: With no node selected both orders act on every smooth node of the layer, as Harmonize Nodes does; FontLab documents only the selection.
+- [ ] `path.togglePowerNudge` (M13, docs, live): Power Nudge
+  - Guess: From each moved node the walk goes both ways along the contour over unselected smooth nodes that are not extremes (a handle horizontal or vertical) and stops at the first corner node, extreme or locked node, which stays fixed; FontLab does not document how it sorts fixed from servant points, and moving one node of a contour with intermediate smooth nodes in FontLab would settle it.
+  - Guess: A servant moves by the drag times its position between the fixed node and the moved node on each axis (by length along the contour where the two share that coordinate), its handles with it; between two moved nodes, or towards an open end, servants move by the whole drag; FontLab says only that servants move proportionally.
+  - Guess: Power Nudge acts on plain moves only: duplicating drags and nudge drags (Alt) move no servants.
+  - Observe: Turn on Power Nudge in FontLab, move the top node of a stem whose curve has two intermediate smooth nodes, and note which nodes move and by how much.
+- [ ] `path.setServantNode` (M13, docs, live): Set Servant Node
+  - Guess: axis both declares a servant on both axes; FontLab offers only X-Servant and Y-Servant, and turning both on for one node in FontLab would show whether that is possible.
+  - Guess: A declared servant follows only when it is reached from a moved node over other servants (or Power Nudge's smooth nodes), not from anywhere on the contour; FontLab does not say which edits count as neighbouring.
 - [ ] `path.makeInkTrap` (M13, docs, live): Make Ink Trap
   - Guess: The two copies move half the width each, perpendicular to the corner's bisector, with the copy ending the incoming segment on that segment's side, and their neighbouring handles move with them; the reference only says the nodes move apart 'intelligently', so watching it trap an inside and an outside corner would settle it.
   - Guess: Without an inkTrapWidth parameter the width is 2% of the em; the reference's default for a new font would settle it.
@@ -1420,8 +1491,63 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A query that maps stored selections onto any layer is our addition for agents and scripts; FontLab has no such command.
 - [ ] `edit.recallSelection` (M13, docs, live): Recall Selection
   - Guess: On a layer where only part of a stored selection resolves (an incompatible master), the parts that resolve are selected and the reply counts the rest as missing; recalling where nothing resolves is refused. FontLab's panel on an incompatible master would settle it.
-- [ ] `guide.makePowerGuide` (M13, docs): Make Power Guide
+- [ ] `view.lockOutline` (M13, docs, live): Lock Outline
+  - Guess: The lock drops the pointer and key edits whose command changes paths, nodes or components, and a drag that moves nodes and anchors together is refused whole. The reference app with a mixed selection would settle it.
+  - Guess: Menu shortcuts run commands by name, so they still edit the outline while it is locked. The reference app's Delete key and transform shortcuts while locked would settle it.
+- [ ] `view.showStemWidths` (M13, docs, live): Show Stem Widths
+  - Guess: The detection range is a view setting with the documented defaults, not stored in the font; the reference's per-font storage would settle where it lives.
+  - Guess: Diagonal stems are compared with the vertical stem values; watching a slanted stem's label colour in the reference app would settle it.
+  - Observe: Turn on Show Stem Widths on an H and an o drawn with 80-unit stems: note which stems get labels and where the labels sit.
+- [ ] `view.showCounterWidths` (M13, docs, live): Show Counter Widths
+  - Guess: A counter is measured between neighbouring stems only, at the first place along their overlap that is white; the reference app's placement of the label would settle it.
+- [ ] `view.showCornerAngles` (M13, docs, live): Show Corner Angles
+  - Guess: The angle is the one between the two segments, so the inner and outer corners of a crossbar both read 90; whether the reference shows the ink side's angle (270 on a concave corner) is open.
+  - Guess: The zoom at which labels appear is our choice.
+  - Observe: Zoom into an H with Show Corner Angles on: note the angle shown at a concave corner and the zoom at which labels appear.
+- [ ] `view.showQuickMeasurement` (M13, docs, live): Quick Measurement
+  - Guess: With Shift, the axis is the one closer to the unrestricted measurement's direction.
+- [ ] `autometer.measure` (M13, inferred, live): Measure Stems and Corners
+  - Guess: A stem counts from 20 to 250 units wide and as uncommon within 5 units of a master stem value by default; measuring a thin hairline and a heavy stem in the reference app with its default detection range would settle it.
+  - Guess: Diagonal stems compare with the vertical stem values; measuring a slanted stem next to declared vertical stems in the reference app would settle it.
+- [ ] `autometer.quickMeasure` (M13, inferred, live): Quick Measurement
+  - Guess: Without an axis the distance runs from the nearest outline point through the given point to the next segment beyond; Quick Measurement over a bowl in the reference app would settle whether it measures along the normal instead.
+- [ ] `autometer.setStemWidth` (M13, inferred, live): Set Stem Width
+  - Guess: Both edges move by half the change unless one edge lies on a metric line, which stays; editing a stem number of a stem standing on the baseline in the reference app would settle it.
+- [ ] `font.recalculateMeasurements` (M13, docs, live): Recalculate Measurements
+  - Guess: The sample glyphs (x, H, d, p, o, O, n, H, e) and taking the most frequent stem width are our choice; the reference documents neither.
+  - Guess: Stem values the font has no stem definition for are skipped, not added.
+- [ ] `view.suggestHandles` (M13, docs, live): Suggest Handles
+  - Guess: Every suggestion switch starts off; the reference's defaults are not documented, and a fresh install of the reference app would settle it.
+  - Guess: Nodes, handles, guides and metric lines within reach win over a suggestion, and a suggestion wins over alignment with another node; dragging a handle near both in the reference app would settle it.
+  - Observe: With View › Suggest › Handles on, drag one handle of a curve near the horizontal through its node and see whether it snaps flat.
+  - Observe: Drag the same handle near the direction of the segment's other handle and near the right angle to it, and note which directions snap.
+- [ ] `view.suggestLines` (M13, docs, live): Suggest Lines
+  - Guess: A segment or handle counts as nearby when one of its ends is within 200 screen points of the pointer; the reference does not give a reach, and dragging a node at growing distances from a segment in the reference app would settle it.
+  - Guess: A diagonal guide's perpendicular passes through the guide's own point; the reference does not say where, and dragging a node across a diagonal guide's surroundings would settle it.
+  - Guess: Centrelines come from pairs of straight vertical or horizontal edges whose runs overlap; hints and thick guides add none of their own (a thick guide's centreline is the guide, which plain snapping covers); checking hinted glyphs and thick guides in the reference app would settle it.
+  - Observe: With View › Suggest › Lines on, drag a node near the extension of a straight segment and near the middle of a stem, and note the lines that appear.
+  - Observe: Add a guide at 30 degrees, drag a node across the area around it and note where perpendicular snap lines appear.
+- [ ] `view.suggestDistance` (M13, docs, live): Suggest Distance
+  - Guess: The distance across an edge running up and down is x, across one running left and right is y, and an edge at an angle gets |nx|·x + |ny|·y for its normal (nx, ny); parallels go round corners; drawing a diagonal stem with different x and y values in the reference app would settle it.
+  - Observe: Set Font Info › Other Values › Suggest distance to x 80 and y 40, turn View › Suggest › Distance on, and drag a node beside a vertical, a horizontal and a diagonal edge; measure where it snaps.
+- [ ] `view.suggestStems` (M13, docs, live): Suggest Stems
+  - Guess: Only straight edges that run up and down or left and right are matched, against straight edges; round and diagonal stems get no suggestion; dragging a bowl's side and a diagonal in the reference app would settle it.
+  - Observe: Declare a vertical stem of 80 for lowercase, turn View › Suggest › Stems on, drag the right edge of an n's stem towards 80 units from its left edge, and see whether it snaps; repeat in an uppercase glyph.
+- [ ] `guide.makePowerGuide` (M13, docs, live): Make Power Guide
+  - Guess: Without `nodes`, every on-curve node of an unlocked path within 0.5 units of the guide is linked; off-curve nodes are not linked and move with the on-curve node before them, else after them.
+  - Guess: Links name nodes by index, so an edit that renumbers nodes leaves a link on another node; a link that no longer resolves is ignored.
   - Guess: Moving a power guide is one undo step for every glyph it reshapes, and locked glyphs keep their outline while the rest move, with a warning naming them (open question 3).
+- [ ] `guide.addPowerGuides` (M13, docs, live): Add Power Guides
+  - Guess: Diagonal stems get no power guides; the manual names horizontal and vertical stems only.
+- [ ] `guide.unlinkPowerGuides` (M13, docs, live): Unlink Power Guides
+  - Guess: Unlinking with nothing to unlink fails with a message instead of adding an empty undo step.
+- [ ] `guide.movePowerGuide` (M13, docs, live): Move Power Guide
+  - Guess: Unlinked nodes beyond the outermost power guides stay where they are; the manual speaks only of nodes between power guides.
+  - Guess: Links to guides that are not parallel to the moved one play no part in the move, so nodes held by them move like unlinked nodes.
+- [ ] `guide.setThickness` (M13, docs, live): Set Guide Thickness
+  - Guess: A positive thickness puts the second edge on the left of the guide's direction, a negative one on the right.
+- [ ] `guide.addMarkers` (M13, docs, live): Add Guide Markers
+  - Guess: Marker positions are measured along the guide from its knob, in the guide's direction; `clear: true` removes them all.
 - [ ] `path.findOutlinePattern` (M13, docs, live): Find Outline…
   - Guess: Matching is point for point only, as FontForge documents; shapes that are equal with another point structure do not match (open question 12).
   - Guess: Matches are found up to translation, and with allowFlipped up to mirroring and half turns; allowRotated and allowScaled are refused until the matcher supports them, which a matcher with rotation and scale would settle.
@@ -1464,6 +1590,13 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `edit.copyLayerToLayer` (M13, docs, live): Copy Layer to Layer…
   - Guess: The mode defaults to replace, and replace keeps the target's images; widths, anchors and the background are not copied. The secondary reference's dialog defaults would settle it.
   - Guess: A glyph without one of the two layers is skipped and listed rather than refusing the command. The secondary reference has font-wide layers, so nothing there settles it.
+- [ ] `guide.setAppearance` (M13, docs, live): Guide Colour and Magnetism
+  - Guess: Magnetism is a distance in screen points from 0 to 100, 0 meaning not magnetic, as the manual's number field suggests.
+- [ ] `view.showIndexes` (M13, docs, live): Show Indexes
+  - Guess: Nodes and segments are numbered within their path, paths and components by their shape index in the layer, anchors by their index in the layer, so the numbers match the `[shape, node]` addresses commands take. The reference apps' numbering on a glyph with components would settle it.
+  - Guess: Without parameters the command turns all five kinds off when any is on, else turns all five on. The reference app has one switch per kind, so nothing there settles it.
+- [ ] `view.showCurveLength` (M13, docs, live): Show Curve Length
+  - Guess: The length prints with one decimal at the middle of every segment that has handles; straight segments get none. A screenshot of the reference app with the option on would settle it.
 - [ ] `view.setReferenceFont` (M13, docs, live): Set Reference Font
   - Guess: The language code picks a glyph named like the found one plus .locl and the code in capitals (A.loclTRK for TRK); applying the reference font's own locl substitutions through the shaper would settle what the reference app does.
   - Guess: Adding a path selects that font and turns the display on; the reference app's panel would settle whether adding also shows it.
@@ -1473,6 +1606,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The section sits after Transformations in the Palette and shows only the edited glyph's entries; FontLab's panel placement would settle it.
   - Guess: Add with a name that already exists replaces that entry rather than refusing; observing the panel's Add on a duplicate name would settle it.
   - Observe: In FontLab 8, store a selection named 'stem' in one master, switch to another master and click the entry: check whether the same node indexes are selected and whether a mismatched master selects part or nothing.
+- [ ] `palette.measurements` (panel, M13, docs): Measurements
+  - Guess: The section shows the current master only, not a table of all masters, to fit the Palette's width.
 - [ ] `dialog.findOutline` (panel, M13, docs): Find / Replace Outline
   - Guess: The pattern and the replacement are drawn in glyphs of their own and named in the dialog, in place of the reference's two small outline editors; drawing panes inside the dialog would settle it.
   - Guess: Restricting to selected glyphs is the selection itself: the selected glyphs, or every glyph when none is selected; an explicit checkbox would settle it.
@@ -1481,6 +1616,15 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The list keeps at most 16 fonts and loads only the selected one; the reference app does not document a limit.
 - [ ] `curveTension` (parameter, M13, docs): Default curve tension (percent) used by tension-driven drawing tools such as the…
   - Guess: A master without the parameter, or with a value outside 1 to 100, uses 55 percent, close to a circle's tension; FontLab's default value is not documented and a new FontLab font would show it.
+- [ ] `suggestDistance` (parameter, M13, docs): Horizontal and vertical distances ({x, y}) at which the Suggest Distance snapping…
+  - Guess: Read as a dictionary {x, y} where a missing key is 0, an array of two numbers, or one number for both; a source file from the reference app that sets it would settle the stored form.
+- [ ] `rapid` (tool, M13, docs): Rapid
+  - Guess: With no sub-mode latched, a plain click adds a smooth curve node, Alt+click a corner and Cmd+Alt+click a tangent node; the reference's documentation of the tool's modifier keys would settle it.
+  - Guess: A segment's tension point sits halfway between its two handles and is dragged towards or away from the Tunni point; a click on it without dragging returns the segment to the master's tension. Watching the reference's tension points would settle it.
+  - Guess: A segment whose handle lines do not meet ahead of both nodes (an S-curve) gets handles of the tension times the chord length over √2, a quarter circle's proportion; the reference's handles on an S-shaped run of clicks would settle it.
+  - Observe: Draw four clicks around a circle with the Rapid tool and read the handle lengths: are they the master's curve tension of the distance to the Tunni point?
+  - Observe: Alt+click and Cmd+Alt+click with no sub-mode latched: which node types do they add?
+  - Observe: Click a segment's tension point without dragging: does it change the tension, and to what?
 - [ ] `thickness` (tool, M13, docs): Thickness
   - Guess: A drag with no modifier changes the width on the dragged side only, at the dragged node or at every picked control point; the release notes list only the modified drags, and watching the tool would settle it.
   - Guess: Shift+drag changes the path's stroke width by twice the drag distance and adds the drag distance to both sides of every node with its own widths, so the modulation is kept; the release notes do not say what happens to nodes with their own widths.
@@ -1488,10 +1632,20 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Between two nodes the left and right widths change linearly with the curve parameter; the release notes do not describe the interpolation.
   - Guess: Once any node has its own widths the pen is round (the stroke height is not used), and round-inset and axis-aligned caps end the stroke as butt caps.
   - Guess: Delete clears the picked control points' per-node widths as Backspace does.
+- [ ] `magnet` (tool, M13, docs): Magnet
+  - Guess: A Shift+drag between two nodes adds a horizontal hint when the nodes are further apart vertically than horizontally, else a vertical one; watching the tool would settle it.
+  - Guess: Nothing changes while a node is dragged: a line runs from the node to the pointer and the link is made on release; the node itself does not move.
+- [ ] `spiro` (tool, M13, docs): Spiro
+  - Guess: Plain click adds a G4 point, Shift+click G2, Alt+click a corner, Cmd+click a left point and Cmd+Shift+click a right point when no kind is latched; the reference's point tools have no modifier keys, so any mapping is ours.
+  - Guess: At a G2 point the second derivative of curvature is zero on both sides, at a corner (and an open contour's end) the first two derivatives are zero on each side, and a curve meeting a straight line is tangent to it with a zero second derivative; the thesis's exact end conditions, compared on a shared test contour, would settle it.
+  - Guess: A left point is followed by the straight line and a right point preceded by it; drawing a left point and a right point in the reference app would settle it.
+  - Guess: Spiro points are not kept with the path: once added, the contour is ordinary cubic segments, so there is no spiro mode to toggle back. A contour key in the stored data would be needed to keep them.
+  - Observe: Draw four G2 points around a circle and convert to cubics: how many cubic segments result, and do they follow a circle?
+  - Observe: Draw a left point then a right point: which side of each is the straight line on?
 - [ ] `path.setPenPoint` (fidelity, inferred): Set Pen Point
   - Open (our design, not confirmed): Writes or clears the pen-point data of a node or of a free pen point, the action behind the pen-point fields of the Info box. Clearing the data is how a pen point on a node is removed. The reference exposes this only as Info box fields.
 
-### Edit View: text mode and preview (14)
+### Edit View: text mode and preview (15)
 
 - [ ] `textToken.syntax` (behavior, M7, handbook): In text fields that support them, `{{{token}}}` is replaced by a computed…
   - Guess: A token FontCraft cannot resolve stays in the text as written, and the compile report names it, as glyphsLib leaves it; a misspelt token in the reference app settles it.
@@ -1535,6 +1689,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Open (our design, not confirmed): Renders the preview line to an image so an agent can inspect what the Preview Area would show. Not a reference feature.
 - [ ] `proofing.webfontPreview` (behavior, M12, handbook): Checking .woff2 (and optionally .woff for old browsers) in the export dialog…
   - Observe: Any font: export WOFF2 alone, then WOFF2 with WOFF; note whether the app writes an HTML test page itself or only the font files.
+- [ ] `view.showDetailsAcrossGlyphs` (M13, docs, live): Details Across Glyphs
+  - Guess: The other glyphs on the edited glyph's line (at most 200) get their nodes, handles and the display aids that are on (indexes, Tunni lines, tensions, lengths, beam values); selection and metric-line highlights stay with the edited glyph. The reference app on a word would settle which details it draws.
 
 ### Components and anchors (37)
 
@@ -1700,8 +1856,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Space Center takes the reference spellings /name, /name@layer, /?, /!, /:group and \n unchanged; Edit View's text mode keeps the primary reference's escapes only.
 - [ ] `spacing.autoSpace` (M13, docs): Auto Space
   - Guess: Method optical is FontCraft's own (open decision D11, docs/plans/M13.md § 3): for each side, the white area between the glyph's side profile, clipped to a depth below its extreme, and the sidebearing line, measured over a band from the baseline to the reference height plus overshoot, is made equal to a target area; target, depth, band and sampling step are parameters, with defaults calibrated on the control glyphs n, o, H and O of the font itself. Neither FontLab nor FontForge documents its method.
-- [ ] `view.showMetricsBeam` (M13, docs): Metrics Beam
+- [ ] `view.showMetricsBeam` (M13, docs, live): Metrics Beam
   - Guess: The beam is one height per font, shared by Edit View and Space Center, and sidebearing commands take it as an optional `beam` parameter; FontLab's and RoboFont's pages do not say whether it is per font or per window.
+  - Guess: The beam starts at half the x-height of the tab's master, like the measurement line, and giving only a height also shows it. The reference app's first use of the metrics line would settle the start height.
 
 ### Kerning and the Kerning window (4)
 
