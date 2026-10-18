@@ -9,7 +9,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
-use crate::predicate::{Attr, CASE_VALUES, Expr, LayerAttr, Literal, Op, Test, parse_predicate};
+use crate::predicate::{Attr, CASE_VALUES, Expr, Flag, LayerAttr, Literal, Op, Test, parse_predicate};
 use crate::{MAX_GROUP_DEPTH, MAX_RULES, MAX_VALUE_BYTES, QueryError, fail, short};
 use fontcraft_glyphdata::{Category, SubCategory};
 
@@ -93,6 +93,10 @@ pub enum Property {
     /// Read from the set the caller gives `Env::with_out_of_sync`.
     MetricsKeysOutOfSync,
     HasKerningGroups,
+    /// Read from the set the caller gives `Env::with_incompatible`.
+    MasterCompatible,
+    /// Intermediate, alternate, colour or smart-glyph layers, on any layer of the glyph.
+    HasSpecialLayers,
     ColorLabel,
     LayerColorLabel,
     /// A glyph predicate as text.
@@ -151,6 +155,8 @@ impl Property {
         Property::HasMetricsKeys,
         Property::MetricsKeysOutOfSync,
         Property::HasKerningGroups,
+        Property::MasterCompatible,
+        Property::HasSpecialLayers,
         Property::ColorLabel,
         Property::LayerColorLabel,
         Property::Custom,
@@ -180,6 +186,8 @@ impl Property {
             Property::HasMetricsKeys => "hasMetricsKeys",
             Property::MetricsKeysOutOfSync => "metricsKeysOutOfSync",
             Property::HasKerningGroups => "hasKerningGroups",
+            Property::MasterCompatible => "masterCompatible",
+            Property::HasSpecialLayers => "hasSpecialLayers",
             Property::ColorLabel => "colorLabel",
             Property::LayerColorLabel => "layerColorLabel",
             Property::Custom => "custom",
@@ -209,7 +217,9 @@ impl Property {
             | Property::IsAutoAligned
             | Property::HasMetricsKeys
             | Property::MetricsKeysOutOfSync
-            | Property::HasKerningGroups => Kind::Bool,
+            | Property::HasKerningGroups
+            | Property::MasterCompatible
+            | Property::HasSpecialLayers => Kind::Bool,
             Property::ColorLabel | Property::LayerColorLabel => Kind::Color,
             Property::ContainsComponent => Kind::Glyph,
             Property::Custom => Kind::Custom,
@@ -569,6 +579,8 @@ impl Rule {
                     Property::HasMetricsKeys => Attr::HasMetricsKeys,
                     Property::MetricsKeysOutOfSync => Attr::MetricsKeysOutOfSync,
                     Property::HasKerningGroups => Attr::HasKerningGroups,
+                    Property::MasterCompatible => Attr::MasterCompatible,
+                    Property::HasSpecialLayers => Attr::Flag(Flag::HasSpecialLayers),
                     Property::HasComponents => Attr::Layer(LayerAttr::HasComponents),
                     Property::HasHints => Attr::Layer(LayerAttr::HasHints),
                     Property::HasPostScriptHints => Attr::Layer(LayerAttr::HasPostScriptHints),

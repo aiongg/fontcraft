@@ -23,6 +23,7 @@
 //! | [`hints_ps`] | PostScript hints: bars, badges, drag markers (M10.24) |
 //! | [`tt_badges`] | TrueType instruction badges of the Instructor (M10.25) |
 //! | [`tt_pixels`] | the Instructor's instance and grid-fitted outlines and pixel backdrop (M10.26) |
+//! | [`compatibility`] | the red bar over incompatible glyphs; Show Master Compatibility: every source layer of the edited glyph with its correspondences |
 //!
 //! Every colour and size comes from [`Tokens`]. Wheel and gestures act through `view.scrollTo`
 //! and `view.setZoom`, like every other input. Primary-button input goes to the pointer tools
@@ -95,6 +96,7 @@ pub struct Scene<'a> {
 /// Draws Edit View for the showing tab, and queues the view commands its input asks for.
 pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'static str, Value)>) {
     audit_markers::refresh(app);
+    let incompatible = compatibility::incompatible_in_tab(app);
     crate::shell::context_menu::show(app, ui, pending);
     crate::shell::preview::area(app, ui, pending);
     let FontcraftApp { session, state, tokens, fill_cache, preview_tool, tools, layouts, .. } = app;
@@ -159,6 +161,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'stat
         }
         let what = fill::Fill { doc, others: state.display.fill_preview, edited: state.display.fill_preview && (*preview_tool || text_mode) };
         fill::draw(&c, fill_cache, font, &tab, layout.as_deref(), origin, what);
+        compatibility::draw_bars(&c, font, layout.as_deref(), origin, &incompatible);
         if text_mode {
             if let Some(layout) = layout.as_deref() {
                 let overlay = text::Overlay { font, doc, descender: span.0, labels: state.display.metrics };
@@ -213,6 +216,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'stat
             components::draw(&c, font, glyph, layer, &tab.selection, tools.toolbox.busy());
         }
         if let Some(s) = &scene {
+            compatibility::draw(ui, &c, s, pending);
             attach::draw(ui, &c, s, pending);
             edit_aids::draw(ui, &c, s, pending);
             reporters::draw_front(ui, &c, s, pending);

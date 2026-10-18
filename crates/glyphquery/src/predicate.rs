@@ -184,6 +184,8 @@ pub enum Attr {
     HasMetricsKeys,
     /// The glyph is in the environment's out-of-sync set (`Env::with_out_of_sync`).
     MetricsKeysOutOfSync,
+    /// The glyph is not in the environment's incompatible set (`Env::with_incompatible`).
+    MasterCompatible,
     /// Any of the glyph's kerning groups is set.
     HasKerningGroups,
     /// A yes-or-no property read from the glyph's layers or metadata.
@@ -342,6 +344,7 @@ const PATHS: &[(&str, Attr)] = &[
     ("hasCustomGlyphInfo", Attr::HasCustomGlyphInfo),
     ("hasMetricsKeys", Attr::HasMetricsKeys),
     ("metricsKeysOutOfSync", Attr::MetricsKeysOutOfSync),
+    ("masterCompatible", Attr::MasterCompatible),
     ("hasKerningGroups", Attr::HasKerningGroups),
     ("isAligned", Attr::Flag(Flag::IsAligned)),
     ("hasHints", Attr::Flag(Flag::HasHints)),
@@ -449,6 +452,7 @@ impl Attr {
             | Attr::HasCustomGlyphInfo
             | Attr::HasMetricsKeys
             | Attr::MetricsKeysOutOfSync
+            | Attr::MasterCompatible
             | Attr::HasKerningGroups
             | Attr::Flag(_)
             | Attr::Layer(
@@ -802,6 +806,7 @@ impl Test {
             Attr::HasCustomGlyphInfo => Val::Bool(s.props(env).has_custom_info),
             Attr::HasMetricsKeys => Val::Bool(!g.info.metrics_keys.is_empty() || g.layers.iter().any(|l| !l.info.metrics_keys.is_empty())),
             Attr::MetricsKeysOutOfSync => Val::Bool(env.is_out_of_sync(&g.name)),
+            Attr::MasterCompatible => Val::Bool(!env.is_incompatible(&g.name)),
             Attr::HasKerningGroups => Val::Bool(!g.kern_groups.is_empty()),
             Attr::Flag(f) => Val::Bool(flag(*f, g, env.font)),
             Attr::CountOfUnicodes => count(g.unicodes.len()),

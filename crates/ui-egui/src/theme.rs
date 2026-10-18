@@ -289,6 +289,22 @@ pub struct Tokens {
     /// Font View's warning triangle for out-of-sync metrics keys, and its exclamation mark.
     pub font_view_badge_out_of_sync: Color32,
     pub font_view_badge_out_of_sync_mark: Color32,
+    /// Incompatible layers: the red bar above the ascender in Edit View, the red corner of a Font
+    /// View cell, and the Master Compatibility view's incompatible segments and mismatch labels.
+    pub compat_bad: Color32,
+    /// Master Compatibility view: segments compatible and turning more than the threshold; the
+    /// connecting lines; the width of the shape tints, the segment strokes and the lines; the
+    /// radius of a draggable line end; the bar's height; the size of index and mismatch labels.
+    pub compat_ok: Color32,
+    pub compat_warn: Color32,
+    pub compat_line: Color32,
+    pub compat_tint_alpha: u8,
+    pub compat_tint_width: f32,
+    pub compat_segment_width: f32,
+    pub compat_line_width: f32,
+    pub compat_end_radius: f32,
+    pub compat_bar_height: f32,
+    pub compat_label_size: f32,
     /// The previews (Preview Area, Preview Panel): text and ground before Invert, the area's
     /// default and smallest height, the separator's grab height, the room a flush line keeps
     /// from the edge, the controls row's height and the panel's first size.
@@ -515,6 +531,17 @@ impl Tokens {
             kerning_glyph_text: Color32::from_rgb(0xd9, 0xb2, 0x48),
             font_view_badge_out_of_sync: Color32::from_rgb(0xf2, 0xa1, 0x1d),
             font_view_badge_out_of_sync_mark: Color32::from_rgb(0x10, 0x10, 0x10),
+            compat_bad: Color32::from_rgb(0xe5, 0x48, 0x4d),
+            compat_ok: Color32::from_rgb(0x30, 0xa4, 0x6c),
+            compat_warn: Color32::from_rgb(0xf2, 0xc0, 0x1d),
+            compat_line: Color32::from_rgba_unmultiplied(0x8a, 0x8f, 0x98, 0xc0),
+            compat_tint_alpha: 0x60,
+            compat_tint_width: 5.0,
+            compat_segment_width: 1.5,
+            compat_line_width: 1.0,
+            compat_end_radius: 4.0,
+            compat_bar_height: 4.0,
+            compat_label_size: 11.0,
             preview_ink: Color32::BLACK,
             preview_paper: Color32::WHITE,
             preview_area_height: 140.0,

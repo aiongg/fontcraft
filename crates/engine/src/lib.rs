@@ -299,6 +299,8 @@ pub struct Session {
     language_index: Option<Arc<fontcraft_glyphquery::LanguageIndex>>,
     /// Each open document's metrics keys that need attention, by document id.
     metrics_sync: HashMap<u64, fontcraft_spacing::SyncCache>,
+    /// Each open document's interpolation results, by document id ([`interp_cache`]).
+    interp: HashMap<u64, interp_cache::InterpCache>,
     /// Each open document's kerning prepared for lookups, by document id.
     kern_index: HashMap<u64, Arc<fontcraft_spacing::kerning::KernIndex>>,
     /// Each open document's last feature compile, by document id ([`feature_state`]).

@@ -536,6 +536,11 @@ pub struct DisplayOptions {
     pub group_members: bool,
     /// The edited layer's PostScript hints (`view.showHints`).
     pub hints: bool,
+    /// Every master, intermediate and alternate layer of the edited glyph drawn together
+    /// (`view.showMasterCompatibility`).
+    pub master_compatibility: bool,
+    /// Switching masters keeps the selection, by index (`edit.keepLayerSelectionInSync`).
+    pub keep_layer_selection_in_sync: bool,
 }
 
 impl Default for DisplayOptions {
@@ -555,6 +560,8 @@ impl Default for DisplayOptions {
             anchors: true,
             group_members: false,
             hints: false,
+            master_compatibility: false,
+            keep_layer_selection_in_sync: false,
         }
     }
 }

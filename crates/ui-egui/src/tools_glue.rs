@@ -199,6 +199,7 @@ fn with_tool<R>(app: &mut FontcraftApp, f: impl FnOnce(&mut Toolbox, &Context<'_
 
 /// Brings the tools in line with the app before they see an event or a frame.
 pub fn sync(app: &mut FontcraftApp) {
+    crate::canvas::compatibility::carry_selection(app);
     let target = target(app);
     if let Some(tab) = app.state.tab_mut() {
         tab.sync_selection(target.as_ref().map(|t| t.2.as_str()));

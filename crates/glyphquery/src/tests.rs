@@ -576,3 +576,41 @@ fn hint_rules_read_the_shown_masters_layer() {
     let compiled = RuleTree::from_json(&one("hasPostScriptHints", "is", json!(true))).unwrap().compile().unwrap();
     assert_eq!(with_expr(&font, &data, Some("m01"), &parse_predicate(&compiled.to_string()).unwrap()), names(&["A", "B"]));
 }
+
+/// Master Compatible reads the incompatible set the caller gives; Has Special Layers holds for
+/// intermediate and alternate layers; the built-in Incompatible masters filter lists the set
+/// (`smartFilter.rule.masterCompatible`, `smartFilter.rule.hasSpecialLayers`,
+/// `compatibility.smartFilterIncompatibleMasters`).
+#[test]
+fn master_compatible_and_special_layer_rules_and_the_incompatible_masters_filter() {
+    let (mut font, data) = (font(), data());
+    {
+        let mut e = font.glyph_mut("E").unwrap();
+        let mut brace = Layer::new("m01", 600.0);
+        brace.id = "brace".into();
+        brace.info.attrs.coordinates.push(Some(400.0));
+        e.layers.push(brace);
+    }
+    let special = with_rules(&font, &data, None, one("hasSpecialLayers", "is", json!(true)));
+    assert_eq!(special, vec!["E".to_string()]);
+
+    let all = with_rules(&font, &data, None, one("masterCompatible", "is", json!(true)));
+    assert_eq!(all.len(), font.glyphs.len(), "no set given: every glyph is compatible");
+    let incompatible: HashSet<String> = ["B".to_string(), "missing".to_string()].into_iter().collect();
+    let env = Env::new(&font, &data, None).unwrap().with_incompatible(&incompatible);
+    let compatible = RuleTree::from_json(&one("masterCompatible", "is", json!(true))).unwrap().compile().unwrap();
+    let shown = Catalog::new(env).select(&Selection { rules: Some(compatible), ..Selection::default() }).unwrap();
+    assert_eq!(shown.len(), font.glyphs.len() - 1);
+    assert!(!shown.contains(&"B".to_string()));
+
+    let defaults = default_filters();
+    assert_eq!(defaults.len(), 1);
+    assert_eq!(defaults[0].name(), INCOMPATIBLE_MASTERS_FILTER);
+    validate_filters(&defaults).unwrap();
+    let env = Env::new(&font, &data, None).unwrap().with_incompatible(&incompatible);
+    let catalog = Catalog::new(env).with_filters(&defaults);
+    let entry = Selection { entries: vec![path("filters/Incompatible masters")], ..Selection::default() };
+    assert_eq!(catalog.select(&entry).unwrap(), vec!["B".to_string()]);
+    let predicate = with_expr(&font, &data, None, &parse_predicate("NOT masterCompatible").unwrap());
+    assert!(predicate.is_empty(), "the predicate key reads the same set, empty here");
+}

@@ -80,6 +80,7 @@ pub const MODULES: &[(&[UiCommand], Handler)] = &[
     (text::COMMANDS, text::run),
     (crate::canvas::group_members::COMMANDS, crate::canvas::group_members::run),
     (crate::canvas::hints_ps::COMMANDS, crate::canvas::hints_ps::run),
+    (crate::canvas::compatibility::COMMANDS, crate::canvas::compatibility::run),
     (kerning_window::COMMANDS, kerning_window::run),
     (font_view::metrics::COMMANDS, font_view::metrics::run),
     (preview::COMMANDS, preview::run),
