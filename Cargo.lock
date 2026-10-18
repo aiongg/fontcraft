@@ -1306,6 +1306,7 @@ dependencies = [
 name = "fontcraft-io-pdf"
 version = "0.0.1"
 dependencies = [
+ "fontcraft-imagery",
  "fontcraft-model",
  "lopdf",
 ]
