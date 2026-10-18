@@ -1595,16 +1595,22 @@ label = "Auto Kern"
 menu = ["Font", "Kerning"]
 shortcut = ""
 kind = "engine"
-params = "{pairs?: [[left, right]], glyphsLeft?: [names], glyphsRight?: [names], masters?: [id], separation?: number, minKern?: number, onlyCloser?: bool, touching?: bool, keepExisting?: bool}"
+params = "{pairs?: [[left, right]], glyphsLeft?: [names], glyphsRight?: [names], masters?: [id], direction?: 'ltr' | 'rtl', separation?: number, minKern?: number, onlyCloser?: bool, touching?: bool, keepExisting?: bool, round?: number, step?: number, depth?: number, apply?: bool}"
 area = "spacing-kerning"
 milestone = "M13"
 summary = "Proposes kerning values for the given pairs from the optical gap between the two glyph profiles, aiming at a target separation. Options drop values too small to matter, restrict results to tightening, or let glyphs touch; existing pairs are kept unless told otherwise (FontLab key in kerning mode: semicolon)."
 ref = "FontLab 8 What's new › Metrics & kerning › Kerning (autokerning); FontLab 7 manual › Pairs and Phrases panel; FontForge dialogs › Lookups (pair kerning subtable: Default Separation, Min Kern, Touching, Only kern closer)"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2). Built in M13.21 on the side profiles of `fontcraft_spacing::profile`, with the bands and clipping of `spacing.autoSpace`. Documented, not yet observed. The corpus measure (docs/plans/M13.md § 5) compares the proposals with Inter's and Oswald's stored kerning."
 guesses = [
   "The proposed value is the target separation minus the pair's optical gap, the mean horizontal distance between the left glyph's right profile and the right glyph's left profile over the same band and depth clipping as auto-spacing, rounded to the nearest 5 units by default; the target separation defaults to the optical gap of a reference pair (n n for lowercase, H H for capitals) without kerning. FontLab documents neither K1 nor K2 (open decision D11).",
+  "A pair mixing a capital or figure with any other glyph is measured over the x-height band, and its target is the mean of the two glyphs' reference gaps (n n and H H); comparing proposals for To, Av and the like with a font kerned in the reference app would settle it.",
+  "A group side is measured on one member: the glyph named like the group, else the group's first member in glyph order; FontLab's page does not say how class pairs are measured.",
+  "With `touching`, the gap and the reference gap are both measured at the outlines' closest approach, as Kern to Distance measures them; FontForge's Lookups page names the Touching option without describing its measure in detail.",
+  "A value of 0, a value smaller in size than `minKern`, or a positive value with `onlyCloser` stores nothing; when `keepExisting` is false such a value also removes the stored pair. `minKern` defaults to 0.",
+  "`keepExisting` (default true) leaves every pair whose sides are stored already in that master, whatever its value; pairs that apply through groups do not count as stored.",
+  "`apply: false` returns the proposals without storing them, for the pair review windows.",
 ]
 
 [[command]]
@@ -1613,16 +1619,19 @@ label = "Kern to Distance"
 menu = ["Font", "Kerning"]
 shortcut = ""
 kind = "engine"
-params = "{pairs?: [[left, right]], masters?: [id], distance: number}"
+params = "{distance: number, pairs?: [[left, right]], glyphsLeft?: [names], glyphsRight?: [names], masters?: [id], direction?: 'ltr' | 'rtl', apply?: bool}"
 area = "spacing-kerning"
 milestone = "M13"
 summary = "Sets each given pair so that the smallest gap between the two outlines equals the target distance."
 ref = "FontLab 8 What's new › Metrics & kerning › Kerning (Kern to Distance)"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2). Built in M13.21. Documented, not yet observed."
 guesses = [
   "The gap is the smallest horizontal distance between the two outlines at any height, measured on the decomposed and overlap-removed outlines; FontLab says only that the pair's minimum horizontal gap becomes the value.",
+  "The smallest distance is found on rows at most one unit apart, then refined between the neighbouring rows by a golden-section search on the outlines' exact crossings; the value is rounded to a whole unit.",
+  "Without `pairs` or glyph lists, every pair stored in the master is set; FontLab applies the command to the pairs selected in its window.",
+  "A group side is measured on the member named like the group, else its first member, not on every member; a pair whose value is 0 is stored only where another pair would otherwise apply.",
 ]
 
 [[command]]
@@ -1646,14 +1655,19 @@ label = "Remove Pairs…"
 menu = ["Font", "Kerning"]
 shortcut = ""
 kind = "engine"
-params = "{masters?: [id], smallerThan?: number, exceptionsWithin?: number, glyphs?: [names]}"
+params = "{masters?: [id], direction?: 'ltr' | 'rtl' | 'vertical', smallerThan?: number, exceptionsWithin?: number, glyphs?: [names]}"
 area = "spacing-kerning"
 milestone = "M13"
 summary = "Deletes kerning pairs by rule: values whose magnitude is below a limit, and exceptions that differ from their class value by no more than a given number of units."
 ref = "FontLab 8 What's new › Metrics & kerning › Kerning (Remove Pairs)"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2). Built in M13.21. Documented, not yet observed."
+guesses = [
+  "An exception is a stored pair with a glyph side whose glyph has a kerning group on the side facing the pair; its class value is the value that applies once it is removed (glyph–group, then group–glyph, then group–group; 0 when none applies). FontLab does not define either term on its page.",
+  "Every pair is judged on the kerning as it stood before the call, so removing a small group pair does not change which exceptions are removed.",
+  "`glyphs` keeps the pairs that name one of the glyphs, or a group one of them belongs to on the side facing the pair.",
+]
 
 [[command]]
 id = "kerning.matchAcrossMasters"
@@ -3305,16 +3319,20 @@ label = "Build Kerning Groups…"
 menu = ["Font", "Kerning"]
 shortcut = ""
 kind = "engine"
-params = "{glyphs?, masters?: [id], side?: 'left' | 'right' | 'both', maxDifference: number, replaceExisting?: bool}"
+params = "{glyphs?, masters?: [id], side?: 'left' | 'right' | 'both', maxDifference: number, replaceExisting?: bool, step?: number, depth?: number, apply?: bool}"
 area = "spacing-kerning"
 milestone = "M13"
 summary = "Proposes kerning groups by comparing the side profiles of the given glyphs and putting glyphs in one group while their accumulated profile difference stays under the limit. Returns the proposal for review before it is applied."
 ref = "FontForge dialogs › Manipulating OpenType Lookups (kerning classes: guess classes); FontForge main views › Metrics View (Kerning by class)"
 status = "docs"
 origin = "fontforge"
-notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2). Built in M13.21 on the side profiles of `fontcraft_spacing::profile`. Documented, not yet observed."
 guesses = [
   "Two glyphs fall in one group while the root mean square of their side profiles' differences over the band stays under maxDifference; FontForge does not describe its grouping rule.",
+  "Each profile is compared as its depth inward from the side's extreme, clipped like auto-spacing's; rows inside the x-height (cap height) where only one glyph has ink count as the full clipping depth, rows in the overshoot zones where only one has ink are left out. Over several masters the largest difference counts.",
+  "Glyphs are taken in glyph order; each joins the group whose members all lie within maxDifference (the closest such group), else starts one, and lowercase never shares a group with capitals and figures.",
+  "A group of two or more glyphs is named after its first member (`.2`, `.3`… when another glyph keeps that name); a glyph left alone gets no group and keeps what it has.",
+  "Without `replaceExisting`, glyphs that have a group on a side keep it and are left out of that side; `apply` defaults to false, so the call proposes until told to apply.",
 ]
 
 [[panel]]
@@ -3343,6 +3361,12 @@ summary = "Clears vertical kerning, then for every horizontal pair whose two gly
 ref = "FontForge Metrics menu › VKern From HKern"
 status = "docs"
 origin = "fontforge"
+notes = "Built in M13.21. Documented, not yet observed."
+guesses = [
+  "A glyph's vertical alternate is the glyph named with the `.vert` suffix, the suffix the primary reference's automatic `vert` feature uses; FontForge takes the `vrt2` substitution, which FontCraft does not read from feature code.",
+  "A group side stands for each of its members that has an alternate, and each vertical pair gets the kerning that applies between the two horizontal glyphs; the first glyph's alternate is the top one.",
+  "Vertical kerning is cleared only in the masters the call names; masters that take their kerning from another are skipped.",
+]
 
 [[panel]]
 id = "dialog.mathTable"
