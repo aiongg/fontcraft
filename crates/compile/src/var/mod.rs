@@ -369,7 +369,10 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
     let with_brackets = featvar::with_bracket_glyphs(font, &designspace)?;
     let font: &Font = with_brackets.as_ref().unwrap_or(font);
 
-    let prepared = crate::prepare_source(font, &mut notes);
+    // Colour layer glyphs become glyphs of the font here, so they vary as any glyph does.
+    let switches = fontcraft_color::export::read_switches(font, &Target::Master(origin.id.clone())).unwrap_or_default();
+    let split = crate::color::variable::split_layer_glyphs(font, &designspace, &switches, &mut notes)?;
+    let prepared = crate::prepare_source(split.as_ref().unwrap_or(font), &mut notes);
     let prepared: &Font = &prepared;
     let mut glyph_sources: HashMap<String, fontcraft_interp::GlyphSources> = HashMap::new();
     for g in prepared.glyphs.iter() {

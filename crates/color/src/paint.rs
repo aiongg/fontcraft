@@ -3,7 +3,8 @@
 //! writer and the COLR writer alike.
 //!
 //! Rows: `color.export.colrFromPaletteLayers`, `color.export.fullColorToColrV1`,
-//! `color.export.strokeInColr`, `compile.colrGradientGeometry`, `color.layered.stackingOrder`.
+//! `color.export.strokeInColr`, `compile.colrGradientGeometry`, `color.layered.stackingOrder`,
+//! `color.export.variableColr`.
 //!
 //! Contract (`docs/plans/M11.md` § 3):
 //! - [`glyph_paint`] gives `None` for a glyph without vector colour layers (palette or
@@ -23,6 +24,9 @@
 //! - Outlines are not drawn here: callers draw a [`ShapeRef`] with their own outline code, so
 //!   this crate needs no path operations.
 //! - Depth at most [`crate::MAX_PAINT_DEPTH`]; stops at most [`crate::MAX_STOPS`].
+//! - Variation: a variable font varies a glyph's paint between masters whose paint graphs have
+//!   the same structure ([`same_structure`], [`PaintVariation`]); an interpolated instance mixes
+//!   its colour layers' paint attributes with the master weights ([`interpolate_paint_attrs`]).
 
 use fontcraft_geom::{BezPath, Point, Rect, Shape as _};
 use fontcraft_model::{Color, Dimension, Extend, Font, Glyph, Gradient, GradientKind, Layer, PaletteEntry, Shape, ShapeAttrs};
@@ -384,6 +388,228 @@ pub fn shape_refs(paint: &Paint) -> Vec<&ShapeRef> {
     out
 }
 
+/// The paints of a variable font's colour glyphs at the font's sources other than the default
+/// master (`color.export.variableColr`).
+///
+/// Each master paints a glyph with its own [`glyph_paint`]; layer glyph `i` of a master matches
+/// layer glyph `i` of the default master, as both oracles match colour layers by position. A
+/// master whose paint differs in anything but its numbers ([`same_structure`]) does not vary the
+/// glyph's paints. The COLR writer turns the numbers that differ into `PaintVar*` paints.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct PaintVariation {
+    /// Normalized locations of the sources besides the default, one value per axis of the font.
+    pub locations: Vec<Vec<f64>>,
+    /// Each colour glyph's paint at each source, parallel to [`PaintVariation::locations`];
+    /// `None` where the source does not vary it.
+    pub glyphs: std::collections::BTreeMap<String, Vec<Option<Paint>>>,
+    /// The layer glyphs the variable compile made source glyphs of before the outlines, so their
+    /// outlines vary as any glyph's do. A COLR writer finds them by name.
+    pub layer_glyphs: Vec<String>,
+}
+
+impl PaintVariation {
+    /// The paints of `glyph` at the sources, parallel to [`PaintVariation::locations`].
+    pub fn sources(&self, glyph: &str) -> &[Option<Paint>] {
+        self.glyphs.get(glyph).map_or(&[], Vec::as_slice)
+    }
+
+    /// Whether some source paints `glyph` with numbers other than `default`'s.
+    pub fn varies(&self, glyph: &str, default: &Paint) -> bool {
+        let base = numbers(default);
+        self.sources(glyph).iter().flatten().any(|p| numbers(p) != base)
+    }
+}
+
+/// Whether `b` paints like `a` apart from its numbers: the same nodes, layer glyphs that are
+/// fills or strokes alike, the same palette rows and colours of their own, the same extend modes
+/// and number of stops. Such paints vary into each other; `CPAL` colours cannot vary.
+pub fn same_structure(a: &Paint, b: &Paint) -> bool {
+    fn same_color(a: &ColorRef, b: &ColorRef) -> bool {
+        match (a, b) {
+            (ColorRef::Palette { index: i, .. }, ColorRef::Palette { index: j, .. }) => i == j,
+            (ColorRef::Foreground { .. }, ColorRef::Foreground { .. }) => true,
+            (ColorRef::Rgba(x), ColorRef::Rgba(y)) => x == y,
+            _ => false,
+        }
+    }
+    fn same_line(a: &ColorLine, b: &ColorLine) -> bool {
+        a.extend == b.extend && a.stops.len() == b.stops.len() && a.stops.iter().zip(&b.stops).all(|(s, t)| same_color(&s.color, &t.color))
+    }
+    fn go(a: &Paint, b: &Paint, depth: usize) -> bool {
+        if depth > crate::MAX_PAINT_DEPTH {
+            return false;
+        }
+        match (a, b) {
+            (Paint::Layers(x), Paint::Layers(y)) => x.len() == y.len() && x.iter().zip(y).all(|(p, q)| go(p, q, depth + 1)),
+            (Paint::Glyph { shape: s, paint: p }, Paint::Glyph { shape: t, paint: q }) => {
+                s.stroke.is_some() == t.stroke.is_some() && go(p, q, depth + 1)
+            }
+            (Paint::Solid(c), Paint::Solid(d)) => same_color(c, d),
+            (Paint::Linear { line: l, .. }, Paint::Linear { line: m, .. })
+            | (Paint::Radial { line: l, .. }, Paint::Radial { line: m, .. })
+            | (Paint::Sweep { line: l, .. }, Paint::Sweep { line: m, .. }) => same_line(l, m),
+            _ => false,
+        }
+    }
+    go(a, b, 0)
+}
+
+/// The numbers of `paint` a variable font can vary, in tree order: the alpha of each palette
+/// reference, gradient geometry, and each stop's offset and alpha. Nothing below
+/// [`crate::MAX_PAINT_DEPTH`] is read.
+pub fn numbers(paint: &Paint) -> Vec<f64> {
+    fn alpha(c: &ColorRef, out: &mut Vec<f64>) {
+        match c {
+            ColorRef::Palette { alpha, .. } | ColorRef::Foreground { alpha } => out.push(*alpha),
+            ColorRef::Rgba(_) => {}
+        }
+    }
+    fn line(l: &ColorLine, out: &mut Vec<f64>) {
+        for s in &l.stops {
+            out.push(s.offset);
+            alpha(&s.color, out);
+        }
+    }
+    fn go(paint: &Paint, depth: usize, out: &mut Vec<f64>) {
+        if depth > crate::MAX_PAINT_DEPTH {
+            return;
+        }
+        match paint {
+            Paint::Layers(list) => list.iter().for_each(|p| go(p, depth + 1, out)),
+            Paint::Glyph { paint, .. } => go(paint, depth + 1, out),
+            Paint::Solid(c) => alpha(c, out),
+            Paint::Linear { p0, p1, p2, line: l } => {
+                out.extend([p0.x, p0.y, p1.x, p1.y, p2.x, p2.y]);
+                line(l, out);
+            }
+            Paint::Radial { c0, r0, c1, r1, line: l } => {
+                out.extend([c0.x, c0.y, *r0, c1.x, c1.y, *r1]);
+                line(l, out);
+            }
+            Paint::Sweep { center, start, end, line: l } => {
+                out.extend([center.x, center.y, *start, *end]);
+                line(l, out);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    go(paint, 0, &mut out);
+    out
+}
+
+/// The paint attributes of `out` (a colour layer of an interpolated instance) interpolated from
+/// `sources`, the same layer at each master with the master's weight: fill and stroke colours
+/// and gradients (geometry, stops, colours). A shape whose attributes differ in kind between
+/// the sources (a colour against a gradient, other palette rows, other stop counts) keeps what
+/// `out` has, which is the heaviest master's. Colour components are kept within 0 to 1.
+pub fn interpolate_paint_attrs(out: &mut [Shape], sources: &[(&[Shape], f64)]) {
+    for (i, shape) in out.iter_mut().enumerate() {
+        let Some(target) = attrs_mut(shape) else { continue };
+        let Some(attrs) = sources.iter().map(|(shapes, w)| shapes.get(i).and_then(shape_attrs).map(|a| (a, *w))).collect::<Option<Vec<_>>>() else {
+            continue;
+        };
+        if let Some(c) = mix_colors(attrs.iter().map(|(a, w)| a.fill_color.map(|c| (c, *w)))) {
+            target.fill_color = Some(c);
+        }
+        if let Some(c) = mix_colors(attrs.iter().map(|(a, w)| a.stroke_color.map(|c| (c, *w)))) {
+            target.stroke_color = Some(c);
+        }
+        if let Some(g) = attrs.iter().map(|(a, w)| a.gradient.as_ref().map(|g| (g, *w))).collect::<Option<Vec<_>>>().and_then(|g| mix_gradients(&g)) {
+            target.gradient = Some(g);
+        }
+    }
+}
+
+fn shape_attrs(shape: &Shape) -> Option<&ShapeAttrs> {
+    match shape {
+        Shape::Path(p) => Some(&p.info.attrs),
+        Shape::Component(c) => Some(&c.info.attrs),
+        Shape::Image(_) | Shape::Raw(_) => None,
+    }
+}
+
+fn attrs_mut(shape: &mut Shape) -> Option<&mut ShapeAttrs> {
+    match shape {
+        Shape::Path(p) => Some(&mut p.info.attrs),
+        Shape::Component(c) => Some(&mut c.info.attrs),
+        Shape::Image(_) | Shape::Raw(_) => None,
+    }
+}
+
+/// The weighted sum of colours of one kind (all RGBA, or all the same palette row); `None` when
+/// a source has none, the kinds differ, or the sum is not a number.
+fn mix_colors(colors: impl Iterator<Item = Option<(Color, f64)>>) -> Option<Color> {
+    let colors: Vec<(Color, f64)> = colors.collect::<Option<Vec<_>>>()?;
+    let (first, _) = colors.first()?;
+    let unit = |v: f64| v.is_finite().then(|| v.clamp(0.0, 1.0));
+    match *first {
+        Color::Rgba(_) => {
+            let mut sum = [0.0; 4];
+            for (c, w) in &colors {
+                let Color::Rgba(rgba) = c else { return None };
+                sum.iter_mut().zip(rgba).for_each(|(s, v)| *s += v * w);
+            }
+            let [r, g, b, a] = sum;
+            Some(Color::Rgba([unit(r)?, unit(g)?, unit(b)?, unit(a)?]))
+        }
+        Color::Palette { index, .. } => {
+            let mut alpha = 0.0;
+            for (c, w) in &colors {
+                match c {
+                    Color::Palette { index: i, alpha: a } if *i == index => alpha += a * w,
+                    _ => return None,
+                }
+            }
+            Some(Color::Palette { index, alpha: unit(alpha)? })
+        }
+    }
+}
+
+/// The weighted sum of gradients of one kind with the same number of stops; `None` otherwise.
+fn mix_gradients(gradients: &[(&Gradient, f64)]) -> Option<Gradient> {
+    let (first, _) = gradients.first()?;
+    let n = first.numbers().count();
+    if gradients.iter().any(|(g, _)| {
+        std::mem::discriminant(&g.kind) != std::mem::discriminant(&first.kind) || g.stops.len() != first.stops.len() || g.numbers().count() != n
+    }) {
+        return None;
+    }
+    let mut sum = vec![0.0; n];
+    for (g, w) in gradients {
+        sum.iter_mut().zip(g.numbers()).for_each(|(s, v)| *s += v * w);
+    }
+    if !sum.iter().all(|v| v.is_finite()) {
+        return None;
+    }
+    let mut it = sum.into_iter();
+    let mut next = || it.next().unwrap_or(0.0);
+    let kind = match first.kind {
+        GradientKind::Linear { .. } => {
+            let start = Point::new(next(), next());
+            GradientKind::Linear { start, end: Point::new(next(), next()) }
+        }
+        GradientKind::Radial { .. } => {
+            let (start, end) = (Point::new(next(), next()), Point::new(next(), next()));
+            GradientKind::Radial { start, end, start_radius: next(), end_radius: next(), angle: next() }
+        }
+        GradientKind::Conic { .. } => {
+            let center = Point::new(next(), next());
+            GradientKind::Conic { center, start_angle: next(), angle: next(), control_radius: next() }
+        }
+    };
+    let mut stops = Vec::with_capacity(first.stops.len());
+    for (k, stop) in first.stops.iter().enumerate() {
+        let offset = next();
+        // The colour is mixed on its own below, so its numbers are skipped here.
+        for _ in stop.color.numbers() {
+            next();
+        }
+        let color = mix_colors(gradients.iter().map(|(g, w)| g.stops.get(k).map(|s| (s.color, *w))))?;
+        stops.push(fontcraft_model::ColorStop { offset: offset.clamp(0.0, 1.0), color });
+    }
+    Some(Gradient { kind, stops, extend: first.extend })
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
@@ -537,5 +763,62 @@ mod tests {
             ])
         );
         assert!(is_solid_stack(&paint));
+    }
+
+    #[test]
+    fn paints_vary_only_in_their_numbers_and_instances_mix_paint_attributes() {
+        let line = |alpha: f64, extend: Extend| ColorLine {
+            stops: vec![
+                ColorStop { offset: 0.0, color: ColorRef::Palette { index: 0, alpha } },
+                ColorStop { offset: 1.0, color: ColorRef::Rgba([0.0, 0.0, 1.0, 1.0]) },
+            ],
+            extend,
+        };
+        let linear = |x: f64, alpha: f64, extend: Extend| {
+            Paint::Layers(vec![Paint::Glyph {
+                shape: ShapeRef { layer: format!("l{x}"), shapes: vec![0], stroke: None },
+                paint: Box::new(Paint::Linear {
+                    p0: Point::new(x, 0.0),
+                    p1: Point::new(100.0, 0.0),
+                    p2: Point::new(0.0, -100.0),
+                    line: line(alpha, extend),
+                }),
+            }])
+        };
+        let default = linear(0.0, 1.0, Extend::Pad);
+        // Another layer id and other numbers: the same structure.
+        assert!(same_structure(&default, &linear(10.0, 0.5, Extend::Pad)));
+        assert_eq!(numbers(&linear(10.0, 0.5, Extend::Pad)), [10.0, 0.0, 100.0, 0.0, 0.0, -100.0, 0.0, 0.5, 1.0]);
+        assert!(!same_structure(&default, &linear(0.0, 1.0, Extend::Reflect)), "another extend mode");
+        assert!(!same_structure(&default, &solid("l", vec![0], None, ColorRef::Palette { index: 0, alpha: 1.0 })));
+
+        let mut variation = PaintVariation { locations: vec![vec![1.0]], ..PaintVariation::default() };
+        variation.glyphs.insert("A".into(), vec![Some(linear(0.0, 1.0, Extend::Pad))]);
+        assert!(!variation.varies("A", &default), "equal numbers do not vary");
+        variation.glyphs.insert("A".into(), vec![Some(linear(10.0, 1.0, Extend::Pad))]);
+        assert!(variation.varies("A", &default));
+        assert!(!variation.varies("B", &default), "a glyph without sources");
+
+        // Halfway between two masters: colours, gradient positions and stops are mixed; a shape
+        // whose fill differs in kind keeps the heaviest master's.
+        let gradient = |x: f64, alpha: f64| Gradient {
+            kind: GradientKind::Linear { start: Point::new(x, 0.0), end: Point::new(1.0, 1.0) },
+            stops: vec![
+                Stop { offset: x, color: Color::Palette { index: 1, alpha } },
+                Stop { offset: 1.0, color: Color::Rgba([1.0, 0.0, 0.0, 1.0]) },
+            ],
+            extend: Extend::Pad,
+        };
+        let master = |x: f64, alpha: f64, fill: Color| {
+            vec![path([0.0, 0.0, 10.0, 10.0], |a| a.gradient = Some(gradient(x, alpha))), path([0.0, 0.0, 10.0, 10.0], |a| a.fill_color = Some(fill))]
+        };
+        let light = master(0.0, 1.0, Color::Rgba([0.0, 0.0, 0.0, 1.0]));
+        let bold = master(0.5, 0.5, Color::Palette { index: 0, alpha: 1.0 });
+        let mut out = bold.clone();
+        interpolate_paint_attrs(&mut out, &[(&light, 0.5), (&bold, 0.5)]);
+        let Shape::Path(p) = &out[0] else { panic!("a path") };
+        assert_eq!(p.info.attrs.gradient, Some(gradient(0.25, 0.75)));
+        let Shape::Path(p) = &out[1] else { panic!("a path") };
+        assert_eq!(p.info.attrs.fill_color, Some(Color::Palette { index: 0, alpha: 1.0 }), "kinds differ: the heaviest master's");
     }
 }
