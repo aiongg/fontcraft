@@ -10,6 +10,7 @@
 
 mod classes;
 mod filters;
+mod hints;
 pub mod predicate;
 mod replace;
 mod rules;

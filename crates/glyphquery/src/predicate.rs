@@ -25,6 +25,7 @@ use std::fmt;
 use fontcraft_model::{Alignment, Font, Glyph, Layer, Shape};
 use regex::{Regex, RegexBuilder};
 
+use crate::hints::{self, HintFamily};
 use crate::{
     Env, MAX_PATTERN_BYTES, MAX_PREDICATE_BYTES, MAX_PREDICATE_DEPTH, MAX_PREDICATE_TOKENS, MAX_REGEX_NESTING, QueryError, REGEX_SIZE_LIMIT, Subject,
     fail, short,
@@ -258,6 +259,10 @@ pub enum LayerAttr {
     HasComponents,
     /// Corner components on the layer.
     HasCorners,
+    /// Manual hints on the layer: PostScript or TrueType, or one kind (see the `hints` module).
+    HasHints,
+    HasPostScriptHints,
+    HasTrueTypeHints,
     HasAnchors,
     /// A component of the named glyph is on the layer.
     HasComponent(String),
@@ -365,6 +370,9 @@ const PATHS: &[(&str, Attr)] = &[
     ("layer.isAligned", Attr::Layer(LayerAttr::IsAligned)),
     ("layer.hasComponents", Attr::Layer(LayerAttr::HasComponents)),
     ("layer.hasCorners", Attr::Layer(LayerAttr::HasCorners)),
+    ("layer.hasHints", Attr::Layer(LayerAttr::HasHints)),
+    ("layer.hasPostScriptHints", Attr::Layer(LayerAttr::HasPostScriptHints)),
+    ("layer.hasTrueTypeHints", Attr::Layer(LayerAttr::HasTrueTypeHints)),
     ("layer.hasAnchors", Attr::Layer(LayerAttr::HasAnchors)),
     ("layer.countOfPaths", Attr::Layer(LayerAttr::CountOfPaths)),
     ("layer.countOfComponents", Attr::Layer(LayerAttr::CountOfComponents)),
@@ -448,6 +456,9 @@ impl Attr {
                 | LayerAttr::IsAligned
                 | LayerAttr::HasComponents
                 | LayerAttr::HasCorners
+                | LayerAttr::HasHints
+                | LayerAttr::HasPostScriptHints
+                | LayerAttr::HasTrueTypeHints
                 | LayerAttr::HasAnchors
                 | LayerAttr::HasComponent(_),
             ) => Kind::Bool,
@@ -646,22 +657,18 @@ fn layer_aligned(font: &Font, layer: &Layer) -> bool {
     })
 }
 
-/// Hint kinds that are drawing parts rather than hints.
-const NOT_HINTS: &[&str] = &["Corner", "Cap", "Brush", "Segment", "Line"];
-
 fn flag(f: Flag, g: &Glyph, font: &Font) -> bool {
     let any_layer = |test: &dyn Fn(&Layer) -> bool| g.layers.iter().any(test);
     let any_hint = |test: &dyn Fn(Option<&str>) -> bool| g.layers.iter().any(|l| l.info.hints.iter().any(|h| test(h.kind())));
-    let is_hint = |k: Option<&str>| k.is_none_or(|k| !NOT_HINTS.contains(&k));
-    let is_tt = |k: Option<&str>| k.is_some_and(|k| k.starts_with("TT"));
+    let any_manual = |want: Option<HintFamily>| g.layers.iter().any(|l| hints::layer_has(l, want));
     match f {
         Flag::IsAligned => {
             let mut masters = g.layers.iter().filter(|l| l.is_master_layer()).peekable();
             masters.peek().is_some() && masters.all(|l| layer_aligned(font, l))
         }
-        Flag::HasHints => any_hint(&is_hint),
-        Flag::HasPostScriptHints => any_hint(&|k| is_hint(k) && !is_tt(k)),
-        Flag::HasTrueTypeHints => any_hint(&is_tt),
+        Flag::HasHints => any_manual(None),
+        Flag::HasPostScriptHints => any_manual(Some(HintFamily::PostScript)),
+        Flag::HasTrueTypeHints => any_manual(Some(HintFamily::TrueType)),
         Flag::HasCorners => any_hint(&|k| k == Some("Corner")),
         Flag::HasComponents => any_layer(&|l| l.shapes.iter().any(|s| matches!(s, Shape::Component(_)))),
         Flag::HasAnnotations => any_layer(&|l| !l.info.annotations.is_empty()),
@@ -812,6 +819,9 @@ impl Test {
                     L::IsAligned => Val::Bool(layer.is_some_and(|l| layer_aligned(env.font, l))),
                     L::HasComponents => Val::Bool(layer.is_some_and(|l| components(l) > 0)),
                     L::HasCorners => Val::Bool(layer.is_some_and(|l| l.info.hints.iter().any(|h| h.kind() == Some("Corner")))),
+                    L::HasHints => Val::Bool(layer.is_some_and(|l| hints::layer_has(l, None))),
+                    L::HasPostScriptHints => Val::Bool(layer.is_some_and(|l| hints::layer_has(l, Some(HintFamily::PostScript)))),
+                    L::HasTrueTypeHints => Val::Bool(layer.is_some_and(|l| hints::layer_has(l, Some(HintFamily::TrueType)))),
                     L::HasAnchors => Val::Bool(layer.is_some_and(|l| !l.anchors.is_empty())),
                     L::HasComponent(n) => {
                         Val::Bool(layer.is_some_and(|l| l.shapes.iter().any(|s| matches!(s, Shape::Component(c) if &c.glyph == n))))

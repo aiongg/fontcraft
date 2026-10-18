@@ -12,6 +12,7 @@ mod audit_fix_info;
 mod audit_profiles;
 mod audit_reports;
 mod audit_runner;
+mod autohint_filter;
 mod autohint_ps;
 mod autohint_reports;
 mod autohint_tt;

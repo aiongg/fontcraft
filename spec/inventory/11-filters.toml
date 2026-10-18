@@ -980,7 +980,9 @@ milestone = "M10"
 summary = "Export string: Autohinting (no arguments) runs the autohinter as if it were a filter; it is an app function rather than a Filter menu entry."
 ref = "Appendix › Custom Parameters › Filter"
 status = "handbook"
-notes = "The function the filter calls is the export's autohint stage (`fontcraft_compile::cff_hints::autohinted`); the filter chain entry comes with the export filters."
+notes = "Documented, not yet observed. Implemented (M10.31) in the engine's export stage: a Filter or PreFilter string `Autohinting`, on the font, the master or the instance, turns autohinting on for that instance's export as the instance's Autohint parameter would, in either flavour (the PostScript autohinter for CFF, the TrueType autohinter for TrueType). It changes no outline itself, so the autohinter sees the outlines every other filter string leaves, wherever the string stands in the list. It is not a Filter menu entry and `filter.apply` does not take it."
+guesses = ["Autohinting turns autohinting on even when the instance's Autohint parameter is off: the string asks for the autohinter to run; a reference export of an instance with both would settle it.", "Arguments after `Autohinting` are ignored with a warning, since the handbook lists none.", "A master's export (a font without instances, or masters exported as fonts) has no Autohint parameter to turn on, so the string is reported as not used there; a reference export of a font without instances that carries the string would settle it."]
+observe = ["T5: give one of two instances a Filter parameter `Autohinting`, export both as CFF with Autohint unticked, and note which font has hints; repeat with the instance's Autohint parameter set off."]
 
 [[behavior]]
 id = "filter.customParameter.hatchOutline"
