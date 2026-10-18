@@ -276,7 +276,7 @@ summary = "TTFZones is a per-master custom parameter holding a list of zones of 
 ref = "TrueType Hinting › TrueType Zones"
 status = "handbook"
 notes = "Read per master (crates/hinting/src/settings.rs); a TTFZones parameter on the font is read as the family zones. Each entry is a dictionary with name, position (pos also read), size, align (a zone name), deltas and filter. Documented, not yet observed."
-guesses = ["No source holds a TTFZones value, so its entries are read as {name, position, size, align, deltas = {column: {PPM: shift}}, filter = predicate text}, the stem form of the corpus's TTFStems extended; a file saved by the reference app with zones, an alignment, a delta and a filter would show the real keys."]
+guesses = ["No source holds a TTFZones value, so its entries are read as {name, position, size, align, deltas = {column: {PPM: shift}}, filter = predicate text}, the stem form of the corpus's TTFStems extended, and a new delta cell is written as 1 (up) or -1 (down); a file saved by the reference app with zones, an alignment, a delta and a filter would show the real keys."]
 observe = ["T3: add two TT zones, align one to the other, set one delta and one filter, save as .glyphs and note how the TTFZones value is stored."]
 
 [[panel]]
@@ -371,7 +371,8 @@ milestone = "M10"
 summary = "Actions-menu item of the TTFZones editor: fills the master's TT zone list from its PostScript alignment zones. Whether it replaces or appends to existing TT zones, and how the imported zones are named, is not stated."
 ref = "TrueType Hinting › TrueType Zones"
 status = "handbook"
-guesses = ["Get PS zones replaces the TT zone list with the master's alignment zones, named after their metrics (xHeight for the x-height metric so that it gets the x-height rounding, else the metric's name, else zone1, zone2…); the reference app would settle replace or append and the names."]
+notes = "M10.5 (crates/engine/src/cmd/hint_tt_defs.rs): writes the master's TTFZones parameter with the zones a master without one uses. Documented, not yet observed."
+guesses = ["Get PS zones replaces the TT zone list with the master's alignment zones, named after their metrics (xHeight for the x-height metric so that it gets the x-height rounding, else the metric's name, else zone 1, zone 2…); the reference app would settle replace or append and the names.", "On the main master, Snap instructions keep their zone by name after Get PS zones, and those whose zone is gone turn to Auto; the reference app would settle it with a Snap on a custom zone."]
 observe = ["T3: on a master that already has two TT zones, choose Get PS zones; note whether the existing zones are replaced or kept, and which names the new zones get."]
 
 [[command]]
@@ -380,12 +381,14 @@ label = "Add Zone"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{master: id, name: string, position: number, size: number, align?: zoneName}"
+params = "{master: id, name?: string, position: number, size: number, align?: zoneName}"
 area = "hinting-tt"
 milestone = "M10"
 summary = "Plus button of the TTFZones editor: appends a zone to the master's TT zone list. Names must stay unique. To keep masters in step the command should offer to add the zone to every master."
 ref = "TrueType Hinting › TrueType Zones"
 status = "handbook"
+notes = "M10.5: adds the zone to every master with the same values; without a name it is called zone N, N one past the list's length. The names auto and none are refused because the instruction commands use them. Documented, not yet observed."
+guesses = ["Adding, removing or renaming a TT zone or stem writes the TTFZones or TTFStems parameter of every master, so a master that used its alignment zones or standard stems gets an explicit list; the reference app would show whether such a master gets the parameter."]
 
 [[command]]
 id = "hint.tt.removeZone"
@@ -399,6 +402,7 @@ milestone = "M10"
 summary = "Minus button of the TTFZones editor: deletes the selected zone. What happens to Snap instructions and zone alignments that refer to the removed zone is not stated."
 ref = "TrueType Hinting › TrueType Zones"
 status = "handbook"
+notes = "M10.5: removes the zone from every master; Snap instructions name zones by index, so later indexes move down. Documented, not yet observed."
 guesses = ["Snap instructions that name a removed zone fall back to Auto, and zones aligned to it lose their alignment; a rename updates both; the reference app would settle it."]
 observe = ["T3: remove a TT zone that a Snap instruction names; note what the instruction shows afterwards (Auto, another zone, or an error)."]
 
@@ -414,6 +418,7 @@ milestone = "M10"
 summary = "Changes any property of a TT zone: name, position, size, alignment target, per-master per-PPM deltas, glyph filter. Deltas and filter are accepted only for the main master's zones. Headless form of editing the zone list rows."
 ref = "TrueType Hinting › TrueType Zones"
 status = "inferred"
+notes = "M10.5: a new name applies in every master; position, size and alignment belong to the named master; an alignment that leads back to the zone is refused. Deltas take a master id or an instance name as the column; up and down set a cell, none clears it. The filter is a glyph predicate."
 guesses = ["One command edits any property of a TT zone, as the sheet's row does, and refuses deltas and filters outside the main master; the reference app's sheet would settle whether other masters show those buttons at all."]
 
 # ---------------------------------------------------------------------------------------------
@@ -470,6 +475,7 @@ milestone = "M10"
 summary = "A stem's name is free text used to label it (and to pick it in a Stem instruction's pop-up); descriptive names are advised, and uniqueness is not required by the text. Its size is the average stroke thickness in font units; in rendering, stems of similar size are drawn with the same pixel count."
 ref = "TrueType Hinting › TrueType Stems › Name; Size"
 status = "handbook"
+notes = "The TTFStems parameter description says names should be unique. FontCraft's commands refuse a duplicate stem name, since stems are matched across masters by name (guess on hinting.tt.zones.name)."
 
 [[behavior]]
 id = "hinting.tt.stems.deltas"
@@ -501,6 +507,7 @@ milestone = "M10"
 summary = "Actions-menu item of the TTFStems editor: fills the master's TT stem list from its PostScript standard stems, horizontal ones as Y-direction and vertical ones as X-direction stems. Whether existing TT stems are replaced is not stated."
 ref = "TrueType Hinting › TrueType Stems"
 status = "handbook"
+notes = "M10.5: writes the master's TTFStems parameter with the stems a master without one uses; on the main master, Stem instructions keep their stem by name, else turn to Auto. Documented, not yet observed."
 guesses = ["Get PS stems replaces the TT stem list, keeping the stems' names; the reference app would settle replace or append."]
 observe = ["T3: on a master that already has TT stems, choose Get PS stems; note whether the existing stems are replaced or kept, and which names the new stems get."]
 
@@ -510,12 +517,13 @@ label = "Add Stem"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{master: id, name: string, orientation: 'x'|'y', size: number}"
+params = "{master: id, name?: string, orientation: 'x'|'y', size: number}"
 area = "hinting-tt"
 milestone = "M10"
 summary = "Plus button of the TTFStems editor: appends a stem to the master's TT stem list."
 ref = "TrueType Hinting › TrueType Stems"
 status = "handbook"
+notes = "M10.5: adds the stem to every master with the same values (guess on hint.tt.addZone); without a name it is called stem N; the size must be above 0. Documented, not yet observed."
 
 [[command]]
 id = "hint.tt.removeStemDefinition"
@@ -529,6 +537,7 @@ milestone = "M10"
 summary = "Minus button of the TTFStems editor: deletes the selected stem. What happens to Stem instructions that name the removed stem is not stated."
 ref = "TrueType Hinting › TrueType Stems"
 status = "handbook"
+notes = "M10.5: removes the stem from every master; Stem instructions name stems by index, so later indexes move down. Documented, not yet observed."
 guesses = ["Stem instructions that name a removed stem fall back to Auto; a rename updates them; the reference app would settle it."]
 observe = ["T3: remove a TT stem that a Stem instruction names; note what the instruction shows afterwards (Auto, another stem, or an error)."]
 
@@ -544,7 +553,8 @@ milestone = "M10"
 summary = "Changes any property of a TT stem: orientation, name, size, per-master per-PPM deltas, glyph filter. Deltas and filter are accepted only for the main master's stems. Headless form of editing the stem list rows."
 ref = "TrueType Hinting › TrueType Stems"
 status = "inferred"
-guesses = ["One command edits any property of a TT stem, as the sheet's row does, and refuses deltas and filters outside the main master; the reference app's sheet would settle whether other masters show those buttons at all."]
+notes = "M10.5: a new name and the orientation apply in every master; the size belongs to the named master."
+guesses = ["One command edits any property of a TT stem, as the sheet's row does, and refuses deltas and filters outside the main master; the reference app's sheet would settle whether other masters show those buttons at all.", "Turning a stem's orientation turns the Stem instructions it no longer suits to Auto; the reference app would settle it by switching a stem that a Stem instruction names."]
 
 # ---------------------------------------------------------------------------------------------
 # Font-level hints: other settings
