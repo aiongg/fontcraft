@@ -2355,15 +2355,18 @@ label = "Non-Linear Transform…"
 menu = ["Filter"]
 shortcut = ""
 kind = "engine"
-params = "{glyphs?, layers?: [id], x: expression, y: expression}"
+params = "{glyph | glyphs, layer? | layers?: [id], x?: expression, y?: expression, tolerance?: number}"
 area = "path-ops"
 milestone = "M13"
 summary = "Maps every point through two expressions in x and y that give the new x and the new y, for warps that an affine transform cannot express. Segments must be subdivided first for a faithful result; the expression grammar is ours to define."
 ref = "FontForge Element menu › Transformations › Non-Linear Transform; FontForge dialogs › Transform Dialog"
 status = "docs"
 origin = "fontforge"
+notes = "Written from the reference's user documentation; not yet observed in the running app."
 guesses = [
-  "The expressions use anchor expressions' grammar (M13.16) with the variables x and y and the functions sin, cos, tan, sqrt, abs, min and max; segments are split so no segment covers more than 1/32 of the glyph's height before mapping. FontForge's grammar is not followed.",
+  "The expressions use the shared expression grammar (M13.16) with the names x, y, width, xHeight, capHeight, ascender, descender, unitsPerEm and pi; FontForge's own grammar is not followed. Settled by user demand for its syntax.",
+  "A segment is split in half, at most 10 times, until its mapped curve is within the tolerance (default 0.5 units) of the mapped outline at a quarter, half and three quarters, and a bent straight segment becomes a curve; an affine expression only moves points. Settled by comparing results with the reference on our own fonts.",
+  "Unlocked anchors move with the outline; locked paths and anchors, components and images stay. Settled by running the reference on a glyph with anchors and components.",
 ]
 
 [[command]]
