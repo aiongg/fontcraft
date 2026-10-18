@@ -1165,6 +1165,7 @@ dependencies = [
  "fontcraft-plugins",
  "fontcraft-proof",
  "fontcraft-render",
+ "fontcraft-shaping",
  "fontcraft-spacing",
  "fontcraft-tables",
  "fontcraft-testkit",
@@ -1481,6 +1482,7 @@ version = "0.0.1"
 dependencies = [
  "fontcraft-io-glyphs",
  "fontcraft-model",
+ "fontcraft-shaping",
  "fontcraft-spacing",
  "thiserror 2.0.21",
 ]

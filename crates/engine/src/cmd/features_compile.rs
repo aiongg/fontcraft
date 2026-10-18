@@ -226,9 +226,10 @@ fn feature_error(p: &Params, e: FeatureError) -> EngineError {
     }
 }
 
-/// The preview font of `master`, or `None` with the reason in `message`.
-fn build_preview(font: &Font, master: &str, message: &mut Option<String>) -> Option<Arc<PreviewFont>> {
-    match preview::layout_font(font, master, PreviewKind::GsubOnly) {
+/// The preview font of `master`, or `None` with the reason in `message`. `options` gives the
+/// glyph database and the folder included files are read from, as the compile read them.
+fn build_preview(font: &Font, master: &str, options: &fontcraft_compile::Options, message: &mut Option<String>) -> Option<Arc<PreviewFont>> {
+    match preview::layout_font_with(font, master, PreviewKind::GsubOnly, options) {
         Ok(built) => Some(Arc::new(built)),
         Err(e) => {
             *message = Some(e.to_string());
@@ -368,6 +369,12 @@ fn compile(s: &mut Session, raw: &Value) -> Result<Value> {
     let master = master_id(&p, font, p.opt_str("master")?)?;
     let values = MasterValues::new(font, &data, &master).map_err(|e| feature_error(&p, e))?;
     let previous = s.feature_state_of(doc_id);
+    let preview_options = fontcraft_compile::Options {
+        glyph_data: fontcraft_compile::DataRef(Some(data.clone())),
+        feature_dir: include_dir.clone(),
+        include_check: crate::file_access::include_check(),
+        ..fontcraft_compile::Options::default()
+    };
 
     let mut cached = false;
     let mut preview_message = None;
@@ -421,7 +428,7 @@ fn compile(s: &mut Session, raw: &Value) -> Result<Value> {
                     } else if prev.revision == revision {
                         prev.preview.clone()
                     } else {
-                        build_preview(font, &master, &mut preview_message)
+                        build_preview(font, &master, &preview_options, &mut preview_message)
                     };
                     FeatureState { revision, diagnostics, preview, ..prev.as_ref().clone() }
                 }
@@ -437,7 +444,7 @@ fn compile(s: &mut Session, raw: &Value) -> Result<Value> {
                         }
                     };
                     let errors = diagnostics.iter().any(|d: &EntryDiagnostic| d.diagnostic.is_error());
-                    let preview = if errors { None } else { build_preview(font, &master, &mut preview_message) };
+                    let preview = if errors { None } else { build_preview(font, &master, &preview_options, &mut preview_message) };
                     FeatureState { revision, master: master.clone(), preview, features, diagnostics, source_hash: hash }
                 }
             }

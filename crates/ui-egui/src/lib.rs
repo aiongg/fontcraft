@@ -66,6 +66,8 @@ mod edit_background_tests;
 #[cfg(test)]
 mod extensions_menu_tests;
 #[cfg(test)]
+mod features_menu_tests;
+#[cfg(test)]
 mod font_view_batch_tests;
 #[cfg(test)]
 mod font_view_spacing_tests;

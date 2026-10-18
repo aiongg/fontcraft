@@ -56,7 +56,7 @@ pub const COMMANDS: &[UiCommand] = &[
         "Set Text Cursor",
         &[],
         "",
-        "{tab?: id, index: integer, selectionLength?: integer, anchor?: integer} put the text cursor before item `index` and select the `selectionLength` items after it, or the items between `anchor` and the cursor; the glyph after the cursor becomes the current glyph",
+        "{tab?: id, index: integer, selectionLength?: integer, anchor?: integer, glyph?: string} put the text cursor before item `index` and select the `selectionLength` items after it, or the items between `anchor` and the cursor; the glyph after the cursor becomes the current glyph, or `glyph` when given (the glyph a preview feature shows there)",
     ),
     (
         "edit.addPlaceholder",
@@ -177,6 +177,12 @@ pub fn run(app: &mut FontcraftApp, id: &str, args: &Args) -> Result<Value, Strin
                 }
             };
             next.text.edit().select(anchor, at);
+            if let Some(glyph) = args.string("glyph")? {
+                if font.glyph(glyph).is_none() {
+                    return Err(args.err(format!("the font has no glyph `{glyph}`")));
+                }
+                next.text.edit().set_current_glyph(Some(glyph));
+            }
         }
         "edit.addPlaceholder" => {
             let range = match args.index("at")? {
