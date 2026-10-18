@@ -504,13 +504,16 @@ fn recommended_link(name: &str, inst: &Instance, styles: &[&str]) -> Option<(boo
     }
 }
 
+/// An instance's style linking: (is bold, is italic, linked style).
+type StyleLink = (bool, bool, Option<String>);
+
 fn sync_style_linking(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new(SYNC_STYLE_LINKING, v)?;
     let dry = p.bool_or("dryRun", false)?;
     apply(s, "Sync Style Linking", dry, |font, log| {
         let styles: Vec<String> = font.instances.iter().filter(|i| i.kind.is_none()).map(|i| i.name.trim().to_string()).collect();
         let styles: Vec<&str> = styles.iter().map(String::as_str).collect();
-        let plans: Vec<(usize, (bool, bool, Option<String>))> = font
+        let plans: Vec<(usize, StyleLink)> = font
             .instances
             .iter()
             .enumerate()
@@ -960,14 +963,11 @@ mod tests {
     #[test]
     fn sorted_pairs_swaps_only_reversed_pairs() {
         let list = |v: &[i64]| {
-            let mut a = fontcraft_model::plist::Array::default();
-            a.items = v.iter().map(|n| Plist::Number(Number::int(*n))).collect();
-            Plist::Array(a)
+            Plist::Array(fontcraft_model::plist::Array { items: v.iter().map(|n| Plist::Number(Number::int(*n))).collect(), ..Default::default() })
         };
         assert_eq!(sorted_pairs(&list(&[-15, 0, 715, 700, 500])), Some(list(&[-15, 0, 700, 715, 500])));
         assert_eq!(sorted_pairs(&list(&[-15, 0, 700, 715])), None);
-        let mut text = fontcraft_model::plist::Array::default();
-        text.items = vec![Plist::String(Str::new("x")), Plist::Number(Number::int(0))];
+        let text = fontcraft_model::plist::Array { items: vec![Plist::String(Str::new("x")), Plist::Number(Number::int(0))], ..Default::default() };
         assert_eq!(sorted_pairs(&Plist::Array(text)), None, "a list with text is left alone");
     }
 

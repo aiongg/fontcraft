@@ -384,11 +384,11 @@ fn a_rule_that_would_contain_itself_fails() {
     let mut f = readme_font();
     let err = build_rule(&f, None, &no_kern, &one("A = A + acute"), &["m01".to_string()]).unwrap_err();
     assert!(err.to_string().contains("itself"), "{err}");
-    let mut x = Glyph::new("X");
+    let mut x = Glyph::new("wrapsA");
     let mut l = Layer::new("m01", 100.0);
     l.shapes.push(Shape::Component(fontcraft_model::Component::new("A", 0.0, 0.0)));
     x.layers.push(l);
     f.glyphs.push(x);
-    let err = build_rule(&f, None, &no_kern, &one("A = X"), &["m01".to_string()]).unwrap_err();
+    let err = build_rule(&f, None, &no_kern, &one("A = wrapsA"), &["m01".to_string()]).unwrap_err();
     assert!(err.to_string().contains("itself"), "{err}");
 }

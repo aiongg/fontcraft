@@ -39,6 +39,8 @@ const MAX_CHAMFER: f64 = 0.75;
 const MIN_CHAMFER_SIDE: f64 = 1.5;
 /// Simplification gives up, keeping every point, after this many distance tests per point.
 const MAX_SIMPLIFY_WORK_PER_POINT: usize = 64;
+/// Passes of the [1, 2, 1] average run over the smoothed polygon before a curve is fitted to it.
+const SMOOTHING_PASSES: usize = 4;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum TraceError {
@@ -491,6 +493,30 @@ fn turn(prev: Point, p: Point, next: Point) -> f64 {
     a.cross(b).atan2(a.dot(b)).abs().to_degrees()
 }
 
+/// `pts` averaged with its neighbours, [1, 2, 1], [`SMOOTHING_PASSES`] times; an open run keeps
+/// its ends. The pixel staircase alternates from one point to the next, which this average
+/// removes, while the bend of a curve moves by a small fraction of a pixel. Without it the fit
+/// follows the staircase with many short curves.
+fn smooth(pts: &[Point], closed: bool) -> Vec<Point> {
+    let n = pts.len();
+    let mut cur = pts.to_vec();
+    if n < 3 {
+        return cur;
+    }
+    for _ in 0..SMOOTHING_PASSES {
+        let prev = cur.clone();
+        let at = |i: usize| prev.get(i % n).copied().unwrap_or_default();
+        for (i, p) in cur.iter_mut().enumerate() {
+            if !closed && (i == 0 || i + 1 == n) {
+                continue;
+            }
+            let (a, b, c) = (at(i + n - 1), at(i), at(i + 1));
+            *p = Point::new((a.x + 2.0 * b.x + c.x) / 4.0, (a.y + 2.0 * b.y + c.y) / 4.0);
+        }
+    }
+    cur
+}
+
 /// Appends `fitted`'s segments to `out`, its last one ending exactly at `end`.
 fn append(out: &mut BezPath, fitted: &BezPath, end: Point) {
     let mut els: Vec<PathEl> = fitted.elements().iter().copied().filter(|e| !matches!(e, PathEl::MoveTo(_) | PathEl::ClosePath)).collect();
@@ -530,7 +556,7 @@ fn fit_contour(corners: &[Point], s: &Settings) -> Option<BezPath> {
         .collect();
     if cuts.is_empty() {
         if n <= MAX_FIT_POINTS {
-            let fitted = fit_polyline(&pts, s.accuracy, true);
+            let fitted = fit_polyline(&smooth(&pts, true), s.accuracy, true);
             return (!fitted.is_empty()).then_some(fitted);
         }
         // Too long for one fit: start and end at the first point, as if it were a corner.
@@ -550,7 +576,7 @@ fn fit_contour(corners: &[Point], s: &Settings) -> Option<BezPath> {
         for from in (a..b).step_by(chunk) {
             let to = (from + chunk).min(b);
             let run: Vec<Point> = (from..=to).map(at).collect();
-            append(&mut out, &fit_polyline(&run, s.accuracy, false), at(to));
+            append(&mut out, &fit_polyline(&smooth(&run, false), s.accuracy, false), at(to));
         }
     }
     out.close_path();

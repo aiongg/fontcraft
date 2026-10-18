@@ -1015,9 +1015,9 @@ impl<'a> MasterCx<'a> {
                     {
                         let k = kern(&master, prev, &name);
                         if k != 0.0 && k.is_finite() {
-                            t = t * Affine::translate((k, 0.0));
+                            t *= Affine::translate((k, 0.0));
                             // Marks over this base follow it to its kerned place.
-                            unflipped = unflipped * Affine::translate((k, 0.0));
+                            unflipped *= Affine::translate((k, 0.0));
                             advance += k;
                         }
                     }

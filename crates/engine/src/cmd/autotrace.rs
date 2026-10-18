@@ -149,7 +149,7 @@ fn trace_image(store: &dyn AssetStore, image: &Image, options: &TraceOptions, st
     let mut place = image.transform.affine();
     if let Some((x, y, w, h)) = image.crop.and_then(|c| crop_box(c, bitmap.width(), bitmap.height())) {
         bitmap = bitmap.cropped(x, y, w, h).map_err(|e| e.to_string())?;
-        place = place * Affine::translate((f64::from(x), f64::from(y)));
+        place *= Affine::translate((f64::from(x), f64::from(y)));
     }
     let traced = trace::trace(&bitmap, options).map_err(|e| e.to_string())?;
     // A mirroring transform turns every contour round; turn them back.

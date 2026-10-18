@@ -235,7 +235,7 @@ mod tests {
 
         // A refused option keeps the dialog open with the message.
         open(&mut app, &dir);
-        call(&mut app, "ui.click", json!({"id": "autohint"}));
+        call(&mut app, "ui.dialog.set", json!({"field": "containers", "value": []}));
         let r = control::handle(&mut app, &json!({"id": 1, "method": "ui.dialog.confirm", "params": {}}));
         assert_eq!(r["ok"], false, "{r}");
         assert_eq!(call(&mut app, "ui.dialog.inspect", json!({}))["open"], true);

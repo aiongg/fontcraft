@@ -20,9 +20,7 @@ fn int(n: i64) -> Plist {
 }
 
 fn ints(v: &[i64]) -> Plist {
-    let mut a = Array::default();
-    a.items = v.iter().map(|n| int(*n)).collect();
-    Plist::Array(a)
+    Plist::Array(Array { items: v.iter().map(|n| int(*n)).collect(), ..Default::default() })
 }
 
 /// How many results `check` gives when `audit.run` runs it alone with `extra` parameters.

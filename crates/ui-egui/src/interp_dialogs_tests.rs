@@ -336,7 +336,7 @@ fn the_shape_order_window_lists_every_interpolating_layer_and_reorders_one() {
     // A drop of shape 1 on shape 0 of the intermediate layer runs this reorder.
     let order = crate::dialogs::form::moved(&[0, 1], 1, 0).unwrap();
     let before = font_of(&app).glyph("o").unwrap().layers[2].shapes.clone();
-    app.run("filter.shapeOrder", &json!({"glyph": "o", "layer": "o.mid", "order": order})).unwrap();
+    app.run("glyph.setShapeOrder", &json!({"glyph": "o", "layer": "o.mid", "order": order})).unwrap();
     let after = font_of(&app).glyph("o").unwrap().layers[2].shapes.clone();
     assert_eq!(after, [before[1].clone(), before[0].clone()]);
 

@@ -8,7 +8,7 @@
 //! stacking order, the first at the top. A thumbnail draws its shape in a colour that follows its
 //! index, over the whole layer in a dim colour, so the same index reads as the same colour in
 //! every column. Dropping a thumbnail on another moves it to that place in its own layer through
-//! `filter.shapeOrder`, an undo step like any edit. The window follows the glyph being edited
+//! `glyph.setShapeOrder`, an undo step like any edit. The window follows the glyph being edited
 //! unless it was opened on a named glyph.
 
 use egui::{Pos2, Rect, RichText, Sense, Shape as EguiShape, Stroke, Vec2};
@@ -34,7 +34,7 @@ pub const COMMANDS: &[UiCommand] = &[(
     "Shape Order",
     &["Window"],
     "",
-    "{open?: bool = true, glyph?: name} show or hide the Shape Order window: every path and component of every master layer and special layer of a glyph (default: the glyph being edited, followed as it changes) as numbered thumbnails in stacking order, one column per layer. Dropping a thumbnail on another reorders that layer with filter.shapeOrder {glyph, layer, order} → {open, glyph, layers: [{layer, name, shapes: [{index, kind, glyph?}]}]}",
+    "{open?: bool = true, glyph?: name} show or hide the Shape Order window: every path and component of every master layer and special layer of a glyph (default: the glyph being edited, followed as it changes) as numbered thumbnails in stacking order, one column per layer. Dropping a thumbnail on another reorders that layer with glyph.setShapeOrder {glyph, layer, order} → {open, glyph, layers: [{layer, name, shapes: [{index, kind, glyph?}]}]}",
 )];
 
 /// The window's state, kept in `UiState::panels`.
@@ -211,7 +211,7 @@ fn column(ui: &mut egui::Ui, tokens: &Tokens, font: &Font, glyph: &str, col: usi
                 && from.0 == col
                 && let Some(next) = moved(&order, from.1, at)
             {
-                pending.push(("filter.shapeOrder", json!({"glyph": glyph, "layer": layer.id, "order": next})));
+                pending.push(("glyph.setShapeOrder", json!({"glyph": glyph, "layer": layer.id, "order": next})));
             }
         }
         if layer.shapes.len() > MAX_SHAPES {

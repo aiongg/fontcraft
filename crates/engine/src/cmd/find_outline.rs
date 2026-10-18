@@ -672,8 +672,7 @@ fn apply(hit: &Hit, tol: f64, step: f64) -> std::result::Result<(Layer, usize), 
     let replacement = hit.prep.replacement.as_deref().unwrap_or(&[]);
     let mut out = layer.clone();
     let mut written = 0usize;
-    let map: Vec<Option<usize>>;
-    if hit.prep.closed {
+    let map: Vec<Option<usize>> = if hit.prep.closed {
         let mut first_of: BTreeMap<usize, usize> = BTreeMap::new();
         let mut gone: HashSet<usize> = HashSet::new();
         for (k, f) in hit.found.iter().enumerate() {
@@ -705,7 +704,7 @@ fn apply(hit: &Hit, tol: f64, step: f64) -> std::result::Result<(Layer, usize), 
             }
         }
         out.shapes = shapes;
-        map = moved;
+        moved
     } else {
         let Some(rep) = replacement.first() else { return Err("the replacement has no path".into()) };
         let mut by_contour: BTreeMap<usize, Vec<(MatchedRun, Vec<Node>)>> = BTreeMap::new();
@@ -724,8 +723,8 @@ fn apply(hit: &Hit, tol: f64, step: f64) -> std::result::Result<(Layer, usize), 
             written = written.saturating_add(path.nodes.len());
             changed.insert(slot);
         }
-        map = (0..layer.shapes.len()).map(|i| (!changed.contains(&i)).then_some(i)).collect();
-    }
+        (0..layer.shapes.len()).map(|i| (!changed.contains(&i)).then_some(i)).collect()
+    };
     let total = out.shapes.iter().fold(0usize, |n, s| match s {
         Shape::Path(p) => n.saturating_add(p.nodes.len()),
         _ => n,
