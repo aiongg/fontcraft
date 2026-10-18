@@ -81,26 +81,26 @@ reason = "fontc merges the names of the variable font's export settings (an inst
 table = "maxp"
 key = "maxp.numGlyphs"
 keys = ["maxp.maxPoints", "maxp.maxComposite*", "maxp.maxComponent*"]
-sources = ["/Alexandria-bracketglyphs", "/AlumniSans-wononly", "/BracketTestFontKerning", "/WorkSans-minimal-bracketlayer", "/BlankAlternateLayers", "/LibreFranklin-bracketlayer", "/ReverseBracketLayers", "/bracket-glyph-order", "/bracket-rules-processed", "/color-and-bracket-glyph-order", "/glyph-with-bracket-component", "/manual_bracket_layer_and_component", "decreasing_axis/axis.glyphs", "/PropagateAnchorsTest", "/COLRv0-", "/COLRv1-"]
+sources = ["/Alexandria-bracketglyphs", "/AlumniSans-wononly", "/BracketTestFontKerning", "/WorkSans-minimal-bracketlayer", "/BlankAlternateLayers", "/LibreFranklin-bracketlayer", "/ReverseBracketLayers", "/bracket-glyph-order", "/bracket-rules-processed", "/color-and-bracket-glyph-order", "/glyph-with-bracket-component", "/manual_bracket_layer_and_component", "decreasing_axis/axis.glyphs", "/PropagateAnchorsTest", "/COLRv0-2masters-brace", "/COLRv1-"]
 reason = "Source reading: the reference compiler makes a glyph of each alternate (bracket) layer (`*.BRACKET.*`) and of each colour layer (`*.color0`); FontCraft compiles the master layers and keeps the others for feature variations (M8, M9) and colour tables (M11). The glyph set differs, and with it the glyph count and the maxima over all glyphs."
 
 [[allow]]
 table = "post"
 key = "post.numGlyphs"
-sources = ["/Alexandria-bracketglyphs", "/AlumniSans-wononly", "/BracketTestFontKerning", "/WorkSans-minimal-bracketlayer", "/BlankAlternateLayers", "/LibreFranklin-bracketlayer", "/ReverseBracketLayers", "/bracket-glyph-order", "/bracket-rules-processed", "/color-and-bracket-glyph-order", "/glyph-with-bracket-component", "/manual_bracket_layer_and_component", "decreasing_axis/axis.glyphs", "/PropagateAnchorsTest", "/COLRv0-", "/COLRv1-"]
+sources = ["/Alexandria-bracketglyphs", "/AlumniSans-wononly", "/BracketTestFontKerning", "/WorkSans-minimal-bracketlayer", "/BlankAlternateLayers", "/LibreFranklin-bracketlayer", "/ReverseBracketLayers", "/bracket-glyph-order", "/bracket-rules-processed", "/color-and-bracket-glyph-order", "/glyph-with-bracket-component", "/manual_bracket_layer_and_component", "decreasing_axis/axis.glyphs", "/PropagateAnchorsTest", "/COLRv0-2masters-brace", "/COLRv1-"]
 reason = "Source reading: the glyphs the reference makes of alternate and colour layers (see maxp); M8, M9, M11."
 
 [[allow]]
 table = "OS/2"
 key = "OS/2.xAvgCharWidth"
-sources = ["/color-and-bracket-glyph-order", "glyphs2/AxisRules.glyphs", "/Alexandria-bracketglyphs", "/AlumniSans-wononly", "/BracketTestFontKerning", "/WorkSans-minimal-bracketlayer", "/LibreFranklin-bracketlayer", "/bracket-glyph-order", "/bracket-rules-processed", "/glyph-with-bracket-component", "/manual_bracket_layer_and_component", "decreasing_axis/axis.glyphs", "/PropagateAnchorsTest", "/COLRv0-", "/COLRv1-"]
+sources = ["/color-and-bracket-glyph-order", "glyphs2/AxisRules.glyphs", "/Alexandria-bracketglyphs", "/AlumniSans-wononly", "/BracketTestFontKerning", "/WorkSans-minimal-bracketlayer", "/LibreFranklin-bracketlayer", "/bracket-glyph-order", "/bracket-rules-processed", "/glyph-with-bracket-component", "/manual_bracket_layer_and_component", "decreasing_axis/axis.glyphs", "/PropagateAnchorsTest", "/COLRv0-2masters-brace", "/COLRv1-"]
 reason = "Source reading: the average advance counts the glyphs the reference makes of alternate and colour layers (see maxp); M8, M9, M11."
 
 [[allow]]
 table = "hhea"
 key = "hhea.advanceWidthMax"
 keys = ["hhea.xMaxExtent", "hhea.minRightSideBearing", "hhea.minLeftSideBearing"]
-sources = ["/color-and-bracket-glyph-order", "glyphs2/AxisRules.glyphs", "/Alexandria-bracketglyphs", "/AlumniSans-wononly", "/BlankAlternateLayers", "/LibreFranklin-bracketlayer", "/bracket-glyph-order", "/glyph-with-bracket-component", "decreasing_axis/axis.glyphs", "/PropagateAnchorsTest", "/COLRv0-"]
+sources = ["/color-and-bracket-glyph-order", "glyphs2/AxisRules.glyphs", "/Alexandria-bracketglyphs", "/AlumniSans-wononly", "/BlankAlternateLayers", "/LibreFranklin-bracketlayer", "/bracket-glyph-order", "/glyph-with-bracket-component", "decreasing_axis/axis.glyphs", "/PropagateAnchorsTest", "/COLRv0-2masters-brace"]
 reason = "Source reading: the extremes over all glyphs include the glyphs the reference makes of alternate and colour layers (see maxp); M8, M9, M11."
 
 [[allow]]

@@ -295,6 +295,7 @@ pub struct Compiled {
 /// Compiles `font` at `target` (a master, or a static instance anywhere) to a static font.
 pub fn compile(font: &Font, target: &Target, flavour: Flavour, options: &Options) -> Result<Compiled, CompileError> {
     font.check()?;
+    color::check_instance(font, target)?;
     let mut notes = Vec::new();
     let (source, prepared) = sources_at(font, target, &mut notes)?;
     let resolved = drawing::resolve(&prepared, target)?;
@@ -473,7 +474,7 @@ pub(crate) fn compile_stages_with(
     let glyphs = order::final_order(glyphs, &resolved, &mut warnings)?;
     preflight::check_cmap(&glyphs)?;
     let glyph_data = font.and_then(|_| compile_glyph_data(options));
-    let color_plan = color::plan(font, &resolved, options);
+    let color_plan = if var.is_some() { color::variable_plan(font) } else { color::plan(font, &resolved, options) };
     let (glyphs, made) = color::append_layer_glyphs(font, &color_plan, &resolved, glyphs, &mut warnings)?;
     let layout = layout_tables(font, glyph_data.as_deref(), &resolved, &glyphs, &edits, options, var_layout, &mut warnings)?;
     let upm = f64::from(resolved.units_per_em);
