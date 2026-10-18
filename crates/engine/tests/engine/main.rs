@@ -8,6 +8,7 @@ mod anchors;
 mod annotation;
 mod attributes;
 mod audit;
+mod audit_modules;
 mod audit_profiles;
 mod audit_reports;
 mod audit_runner;
