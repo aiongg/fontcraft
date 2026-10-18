@@ -9,10 +9,11 @@ use std::cell::RefCell;
 use std::sync::Arc;
 
 use fontcraft_engine::Session;
+use fontcraft_engine::compile::preview::PreviewFont;
 use fontcraft_geom::Point;
 use fontcraft_model::{Font, Layer, Master, metric};
 use fontcraft_spacing::kerning::KernIndex;
-use fontcraft_textlayout::{DEFAULT_LINE_WIDTH, KerningMode, Layout, Options};
+use fontcraft_textlayout::{DEFAULT_LINE_WIDTH, KerningMode, Layout, Options, PreviewShaper, Shaping};
 use fontcraft_tools::View;
 
 use crate::state::{Tab, TabView, WritingDirection};
@@ -67,6 +68,10 @@ struct LayoutKey {
     kerning: KerningMode,
     /// The layers picked for glyphs (`Tab::layers`).
     layers: std::collections::BTreeMap<String, String>,
+    /// The features the tab previews, and the feature compile it shapes with (its document
+    /// revision and source hash), when any feature is on.
+    features: crate::shell::features_menu::TabFeatures,
+    compile: Option<(u64, u64)>,
 }
 
 /// The tabs' text layouts, each kept while its document revision, text revision, master,
@@ -83,6 +88,8 @@ pub struct LayoutCache {
 struct LayoutCacheInner {
     kern: Option<Arc<KernIndex>>,
     entries: Vec<(LayoutKey, Arc<Layout>)>,
+    /// The shaper of the last preview font a layout shaped with, or why it could not be read.
+    shaper: Option<(Arc<PreviewFont>, Result<Arc<PreviewShaper>, String>)>,
 }
 
 impl LayoutCache {
@@ -112,7 +119,24 @@ fn key(session: &Session, font: &Font, tab: &Tab) -> Option<LayoutKey> {
         direction: tab.direction,
         kerning: tab.kerning,
         layers: tab.layers.clone(),
+        features: tab.features.clone(),
+        compile: if tab.features.any() { session.feature_state().map(|s| (s.revision, s.source_hash)) } else { None },
     })
+}
+
+/// The shaper of `preview`, kept in `inner` while the preview font stays the same.
+fn shaper_of(inner: &mut LayoutCacheInner, preview: &Arc<PreviewFont>) -> Result<Arc<PreviewShaper>, String> {
+    if let Some((font, shaper)) = &inner.shaper
+        && Arc::ptr_eq(font, preview)
+    {
+        return shaper.clone();
+    }
+    let tags: Vec<fontcraft_textlayout::shaping::Tag> = preview.features.iter().map(|f| f.tag).collect();
+    let shaper = PreviewShaper::new(Arc::from(preview.bytes.as_slice()), &preview.glyph_order, &preview.private_use, &tags)
+        .map(Arc::new)
+        .map_err(|e| e.to_string());
+    inner.shaper = Some((preview.clone(), shaper.clone()));
+    shaper
 }
 
 /// The layout of a tab's text in the tab's master and the layers picked for its glyphs, with its
@@ -134,15 +158,32 @@ pub fn text_layout(session: &Session, cache: &LayoutCache, tab: &Tab) -> Option<
         }
         _ => None,
     };
+    // The preview features shape the text through the document's last feature compile
+    // (`text.shaping`); without a compiled preview font the text is laid out by code point.
+    let preview = if tab.features.any() { session.feature_state().and_then(|s| s.preview.clone()) } else { None };
+    let shaper = preview.as_ref().map(|p| shaper_of(&mut inner, p));
+    let active = tab.features.active_tags();
+    let shaping = match &shaper {
+        Some(Ok(shaper)) => Some(Shaping { shaper: shaper.as_ref(), active: &active, localized: tab.features.localized_tags() }),
+        _ => None,
+    };
     let options = Options {
         direction: tab.direction.layout(),
         kerning: tab.kerning,
         line_width: DEFAULT_LINE_WIDTH,
         index: index.as_deref(),
         layers: Some(&tab.layers),
+        shaping,
+        cursive: true,
         ..Default::default()
     };
-    let layout = Arc::new(fontcraft_textlayout::layout(font, &key.master, &tab.text, &options).ok()?);
+    let mut layout = fontcraft_textlayout::layout(font, &key.master, &tab.text, &options).ok()?;
+    if let Some(Err(e)) = shaper {
+        layout.shaping_error.get_or_insert(e);
+    } else if tab.features.any() && preview.is_none() {
+        layout.shaping_error.get_or_insert_with(|| "the features have not been compiled, so the text is not shaped".to_string());
+    }
+    let layout = Arc::new(layout);
     inner.entries.retain(|(k, _)| k.tab != key.tab);
     if inner.entries.len() >= KEPT_LAYOUTS {
         inner.entries.remove(0);

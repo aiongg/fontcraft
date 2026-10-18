@@ -23,6 +23,14 @@
 //! vertical widths and origins, with columns from right to left. [`Layout::hit`] turns a point
 //! into a cursor index, [`Layout::caret`] a cursor index into a point.
 //!
+//! # Shaping ([`shape`], [`cursive`])
+//! With [`Options::shaping`] (Edit View), the items first go through the compiled preview font:
+//! the substitution features active in the tab replace their glyphs (a ligature shows on its first
+//! component, the others take no room; a glyph that becomes several shows them all on its item),
+//! while advances and kerning stay live from the model. With [`Options::cursive`], right-to-left
+//! text attaches each glyph's `entry` anchor to the previous glyph's `exit` anchor instead of
+//! kerning them.
+//!
 //! # Mixed directions ([`bidi`])
 //! With [`Options::bidi`] (Text Preview), horizontal text is split into runs of right-to-left
 //! and left-to-right script by a simple set of rules short of the Unicode bidirectional
@@ -52,31 +60,39 @@
 //! Options<'a> { direction: Direction, kerning: KerningMode, line_width: f64, line_height: Option<f64>,
 //!               single_line: bool, missing_advance: Option<f64>, index: Option<&'a KernIndex>,
 //!               layers: Option<&'a BTreeMap<String, String>> (glyph → layer id),
-//!               bidi: bool, embeddings: &'a [Embedding] }  (Default)
+//!               bidi: bool, embeddings: &'a [Embedding], shaping: Option<Shaping<'a>>, cursive: bool }  (Default)
+//! PreviewShaper::new(bytes: Arc<[u8]>, glyph_order: &[String], private_use: &[(u32, u16)], features: &[Tag]) -> Result<PreviewShaper, ShapeError>
+//! PreviewShaper::features(&self) -> &[Tag];  glyph_name(&self, gid: u16) -> Option<&Arc<str>>;  has_glyph(&self, name: &str) -> bool
+//! Shaping<'a> { shaper: &'a PreviewShaper, active: &'a [Tag], localized: Option<(Tag script, Tag language)> }
 //! Embedding { items: Range<usize>, rtl: bool };  bidi::MAX_EMBEDDINGS = 1_000;  bidi::Class::{Ltr, Rtl, Digit, Mark, Neutral}
 //! bidi::class(c: char) -> Class;  bidi::is_strong_rtl(c: char) -> bool
 //! layout(font: &Font, master: &str, text: &Text, options: &Options) -> Result<Layout, LayoutError>
 //! line_height(font: &Font, master: &Master) -> f64
-//! Layout { placed: Vec<Placed>, lines: Vec<Line>, direction, line_height: f64, ascender: f64 }
-//! Placed { glyph: Option<Arc<str>>, x: f64, y: f64, advance: f64, offset: f64, kern: f64, line: usize }
+//! Layout { placed: Vec<Placed>, lines: Vec<Line>, direction, line_height: f64, ascender: f64, shaping_error: Option<String> }
+//! Placed { glyph: Option<Arc<str>>, x: f64, y: f64, advance: f64, offset: f64, kern: f64, line: usize,
+//!          extra: Vec<(Arc<str>, f64, f64)>, cursive: bool }
 //! Line { items: Range<usize>, baseline: f64, length: f64 }
 //! Layout::hit(&self, x: f64, y: f64) -> usize;  Layout::caret(&self, index: usize) -> (f64, f64)
 //! ```
 #![forbid(unsafe_code)]
 
 pub mod bidi;
+pub mod cursive;
 pub mod layout;
+pub mod shape;
 pub mod text;
 
 #[cfg(test)]
 mod tests;
 
 pub use bidi::Embedding;
+pub use fontcraft_shaping as shaping;
 pub use fontcraft_spacing::kerning::Direction;
 pub use layout::{
     DEFAULT_LINE_WIDTH, KerningMode, LENGTH_RANGE, LINE_HEIGHT_PARAM, Layout, LayoutError, Line, MISSING_ADVANCE_RANGE, Options, Placed, layout,
     line_height,
 };
+pub use shape::{PreviewShaper, Shaping};
 pub use text::{Charmap, Item, PLACEHOLDER, Text, TextError, parse, parse_prefix, parse_with};
 
 /// Items in an Edit View tab.

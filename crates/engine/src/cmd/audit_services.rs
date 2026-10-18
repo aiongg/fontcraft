@@ -5,11 +5,12 @@
 //!
 //! Services: the in-memory compile of a source's instances, with the source map that lets
 //! binary findings name source glyphs and Font Info fields, and the master-compatibility report
-//! (`fontcraft_audit::structural_report`). The TTX round trip, shaping and rasterising answer
-//! "not available", which makes the checks that need them skip with the reason.
+//! (`fontcraft_audit::structural_report`), and shaping through `fontcraft_shaping`. The TTX
+//! round trip and rasterising answer "not available", which makes the checks that need them skip
+//! with the reason.
 
 use fontcraft_audit::run::MAX_SOURCE_INSTANCES;
-use fontcraft_audit::services::CompiledInstance;
+use fontcraft_audit::services::{CompiledInstance, MAX_SHAPED_GLYPHS, ShapeRequest, ShapedGlyph};
 use fontcraft_audit::{AuditServices, CompatibilityReport, SourceMap, Unavailable};
 use fontcraft_compile::var::VariableOptions;
 use fontcraft_compile::{Flavour, Options};
@@ -36,6 +37,68 @@ impl AuditServices for EngineServices {
     fn compatibility(&self, font: &Font) -> std::result::Result<CompatibilityReport, Unavailable> {
         Ok(fontcraft_audit::structural_report(font))
     }
+
+    fn shape(&self, bytes: &[u8], request: &ShapeRequest) -> std::result::Result<Vec<ShapedGlyph>, Unavailable> {
+        shape_compiled(bytes, request)
+    }
+}
+
+/// A tag from text: at most four bytes, padded with spaces; `None` when empty, longer than four
+/// bytes or not printable ASCII.
+fn tag_of(text: &str) -> Option<fontcraft_shaping::Tag> {
+    let bytes = text.as_bytes();
+    if bytes.is_empty() || bytes.len() > 4 || !bytes.iter().all(|b| (0x20..=0x7e).contains(b)) {
+        return None;
+    }
+    let mut out = [b' '; 4];
+    for (slot, b) in out.iter_mut().zip(bytes) {
+        *slot = *b;
+    }
+    Some(fontcraft_shaping::Tag::new(&out))
+}
+
+/// Shapes `request` with a compiled font (no private-use map: every glyph the checks shape is
+/// encoded), at its location when it is variable. Bad tags are refused with the reason; more
+/// than [`MAX_SHAPED_GLYPHS`] output glyphs are cut there.
+fn shape_compiled(bytes: &[u8], request: &ShapeRequest) -> std::result::Result<Vec<ShapedGlyph>, Unavailable> {
+    use fontcraft_shaping::{FeatureSetting, ShapingFont};
+    let unavailable = |e: fontcraft_shaping::ShapeError| Unavailable::new(e.to_string());
+    let font = ShapingFont::new(std::sync::Arc::from(bytes), &[]).map_err(unavailable)?;
+    let font = if request.location.is_empty() {
+        font
+    } else {
+        let mut location = Vec::new();
+        for (axis, value) in request.location.iter().take(fontcraft_shaping::MAX_LOCATION_AXES) {
+            let tag = tag_of(axis).ok_or_else(|| Unavailable::new(format!("`{axis}` is not an axis tag")))?;
+            location.push((tag, *value as f32));
+        }
+        font.at_location(&location)
+    };
+    let script = match request.script.as_deref() {
+        None => None,
+        Some(s) => Some(tag_of(s).ok_or_else(|| Unavailable::new(format!("`{s}` is not a script code")))?),
+    };
+    let mut features = Vec::new();
+    for (tag, on) in request.features.iter().take(fontcraft_shaping::MAX_FEATURES) {
+        features.push(FeatureSetting::global(tag_of(tag).ok_or_else(|| Unavailable::new(format!("`{tag}` is not a feature tag")))?, *on));
+    }
+    let mut shape_request = fontcraft_shaping::ShapeRequest::new(&request.text);
+    shape_request.script = script;
+    shape_request.language = request.language.as_deref().filter(|l| !l.is_empty());
+    shape_request.features = &features;
+    let shaped = fontcraft_shaping::shape(&font, &shape_request).map_err(unavailable)?;
+    Ok(shaped
+        .into_iter()
+        .take(MAX_SHAPED_GLYPHS)
+        .map(|g| ShapedGlyph {
+            glyph_id: u32::from(g.glyph),
+            cluster: g.cluster,
+            x_advance: g.x_advance,
+            y_advance: g.y_advance,
+            x_offset: g.x_offset,
+            y_offset: g.y_offset,
+        })
+        .collect())
 }
 
 impl EngineServices {
@@ -535,4 +598,33 @@ fn compare_family(s: &mut Session, v: &Value) -> Result<Value> {
         }
     }
     Ok(report)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The shaping service shapes text with a compiled font, applies the features asked for and
+    /// refuses a bad tag with the reason, so the checks that shape skip instead of failing.
+    #[test]
+    fn the_shaping_service_shapes_with_the_features_asked_for() {
+        let mut font = Font::new("Shaped");
+        std::sync::Arc::make_mut(&mut font.features).features.push(fontcraft_model::Snippet {
+            name: "liga".into(),
+            code: "sub f i by a;".into(),
+            ..Default::default()
+        });
+        let master = font.masters.first().map(|m| m.id.clone()).unwrap_or_default();
+        let compiled = fontcraft_compile::compile(&font, &Target::Master(master), Flavour::TrueType, &Options::default()).unwrap();
+        let gid = |name: &str| compiled.glyph_order.iter().position(|n| n == name).unwrap() as u32;
+        let request = |features: Vec<(String, bool)>| ShapeRequest { text: "fi".into(), features, ..ShapeRequest::default() };
+
+        let shaped = EngineServices.shape(&compiled.bytes, &request(vec![])).unwrap();
+        assert_eq!(shaped.iter().map(|g| g.glyph_id).collect::<Vec<_>>(), [gid("a")], "liga is on by default");
+        let off = EngineServices.shape(&compiled.bytes, &request(vec![("liga".into(), false)])).unwrap();
+        assert_eq!(off.iter().map(|g| g.glyph_id).collect::<Vec<_>>(), [gid("f"), gid("i")]);
+        assert_eq!(off.get(1).map(|g| g.cluster), Some(1));
+        assert!(EngineServices.shape(&compiled.bytes, &request(vec![("toolong".into(), true)])).is_err());
+        assert!(EngineServices.shape(b"not a font", &request(vec![])).is_err());
+    }
 }

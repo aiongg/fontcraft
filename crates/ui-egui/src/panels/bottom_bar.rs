@@ -1,8 +1,8 @@
 //! The Edit View bottom bar, at the right: the writing direction buttons
 //! (`editView.setWritingDirection`), the kerning mode button (`kerning.setMode`, a click goes to
 //! the next mode), then zoom out, the zoom field (screen points per 1000 units) and zoom in
-//! (`view.zoomOut`, `view.setZoom`, `view.zoomIn`). The features menu and the preview button
-//! have no commands yet and are not drawn.
+//! (`view.zoomOut`, `view.setZoom`, `view.zoomIn`). At the left: the Features menu
+//! (`crate::shell::features_menu`) and the Preview Area button.
 
 use fontcraft_textlayout::KerningMode;
 use serde_json::json;
@@ -34,6 +34,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     let frame = egui::Frame::NONE.fill(tokens.app_bar).inner_margin(tokens.bottom_bar_margin);
     egui::Panel::bottom("edit_view_bottom_bar").frame(frame).show(ui, |ui| {
         ui.horizontal(|ui| {
+            crate::shell::features_menu::bottom_bar_button(app, ui, pending);
             crate::shell::preview::bottom_bar_button(app, ui, pending);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if widgets::button(ui, widgets::id("bottomBar.zoomIn"), "+", "Zoom In", true, false) {

@@ -47,19 +47,29 @@ pub struct Fill {
 pub fn draw(c: &Painting, cache: &mut FillCache, font: &Font, tab: &Tab, layout: Option<&Layout>, origin: [f64; 2], what: Fill) {
     let mut filled = BezPath::new();
     let edited_index = tab.edited_index();
+    // What is drawn where: shaping can change the glyphs without changing the text.
+    let mut shown = std::collections::hash_map::DefaultHasher::new();
     for (i, placed) in layout.map(|l| l.placed.as_slice()).unwrap_or_default().iter().enumerate() {
-        let edited = Some(i) == edited_index;
-        let Some(name) = placed.glyph.as_deref() else { continue };
-        let Some(layer) = super::view::shown_layer(font, tab, name) else { continue };
-        let Some(composite) = cache.outlines.get(what.doc, font, name, layer) else { continue };
-        let mut outline = composite.outline.clone();
-        outline.apply_affine(Affine::translate((placed.x - origin[0], placed.y - origin[1])));
-        if (edited && what.edited) || (!edited && what.others) {
-            filled.extend(outline.elements().iter().copied());
-        } else if !edited {
-            let to_screen = Affine::translate(c.view.origin.to_vec2()) * Affine::scale_non_uniform(c.view.scale(), -c.view.scale());
-            for contour in flatten(&(to_screen * outline)) {
-                c.painter.add(egui::Shape::line(contour, Stroke::new(c.tokens.metric_line_width, c.tokens.glyph_fill)));
+        // The glyphs shaping gave the item after its first are never the edited one.
+        let glyphs = placed
+            .glyph
+            .as_deref()
+            .map(|g| (g, placed.x, placed.y, Some(i) == edited_index))
+            .into_iter()
+            .chain(placed.extra.iter().map(|(g, x, y)| (g.as_ref(), *x, *y, false)));
+        for (name, x, y, edited) in glyphs {
+            (name, x.to_bits(), y.to_bits()).hash(&mut shown);
+            let Some(layer) = super::view::shown_layer(font, tab, name) else { continue };
+            let Some(composite) = cache.outlines.get(what.doc, font, name, layer) else { continue };
+            let mut outline = composite.outline.clone();
+            outline.apply_affine(Affine::translate((x - origin[0], y - origin[1])));
+            if (edited && what.edited) || (!edited && what.others) {
+                filled.extend(outline.elements().iter().copied());
+            } else if !edited {
+                let to_screen = Affine::translate(c.view.origin.to_vec2()) * Affine::scale_non_uniform(c.view.scale(), -c.view.scale());
+                for contour in flatten(&(to_screen * outline)) {
+                    c.painter.add(egui::Shape::line(contour, Stroke::new(c.tokens.metric_line_width, c.tokens.glyph_fill)));
+                }
             }
         }
     }
@@ -69,7 +79,7 @@ pub fn draw(c: &Painting, cache: &mut FillCache, font: &Font, tab: &Tab, layout:
     let ppp = c.painter.ctx().pixels_per_point();
     let (w, h) = ((c.rect.width() * ppp).round(), (c.rect.height() * ppp).round());
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    (what, tab.text.revision(), tab.direction, tab.kerning, &tab.master, &tab.layers).hash(&mut hasher);
+    (what, tab.text.revision(), tab.direction, tab.kerning, &tab.master, &tab.layers, &tab.features, shown.finish()).hash(&mut hasher);
     for v in [
         c.view.scale(),
         c.view.origin.x,

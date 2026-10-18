@@ -38,6 +38,7 @@ fontcraft-render.workspace = true
 fontcraft-tables.workspace = true
 fontcraft-proof.workspace = true
 fontcraft-plugins.workspace = true
+fontcraft-shaping.workspace = true
 skrifa.workspace = true
 serde.workspace = true
 serde_json.workspace = true

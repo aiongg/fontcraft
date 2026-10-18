@@ -18,6 +18,7 @@ pub mod context_menu;
 pub mod drawing;
 pub mod edit_aids;
 pub mod extensions;
+pub mod features_menu;
 pub mod font_info;
 pub mod font_view;
 pub mod glyph_info;
@@ -78,6 +79,7 @@ pub const MODULES: &[(&[UiCommand], Handler)] = &[
     (glyph_info::COMMANDS, glyph_info::run),
     (start_window::COMMANDS, start_window::run),
     (text::COMMANDS, text::run),
+    (features_menu::COMMANDS, features_menu::run),
     (crate::canvas::group_members::COMMANDS, crate::canvas::group_members::run),
     (crate::canvas::hints_ps::COMMANDS, crate::canvas::hints_ps::run),
     (crate::canvas::compatibility::COMMANDS, crate::canvas::compatibility::run),

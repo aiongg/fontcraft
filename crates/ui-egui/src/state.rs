@@ -194,6 +194,8 @@ pub struct Tab {
     /// The tab edits the background of the active layer (`path.editBackground`). It stays set
     /// when another glyph, layer or master is edited.
     pub edit_background: bool,
+    /// The OpenType features the tab previews (the Features menu).
+    pub features: crate::shell::features_menu::TabFeatures,
 }
 
 impl Tab {
@@ -208,7 +210,11 @@ impl Tab {
         let current = self.text.current_glyph()?;
         let shows = |i: usize| self.item_glyph(i) == Some(current);
         let cursor = self.text.cursor();
-        [Some(cursor), cursor.checked_sub(1)].into_iter().flatten().find(|&i| shows(i)).or_else(|| (0..self.text.len()).find(|&i| shows(i)))
+        [Some(cursor), cursor.checked_sub(1)].into_iter().flatten().find(|&i| shows(i)).or_else(|| (0..self.text.len()).find(|&i| shows(i))).or_else(
+            // A glyph that a preview feature shows in place of the item after the cursor
+            // (`editView.setCursor` with `glyph`) is edited there.
+            || (!self.features.active.is_empty() && matches!(self.text.items().get(cursor), Some(Item::Glyph { .. }))).then_some(cursor),
+        )
     }
 
     /// The glyph item `index` shows: its own, or the current glyph for a placeholder.

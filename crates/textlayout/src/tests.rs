@@ -340,3 +340,35 @@ fn a_prefix_reads_the_first_items_only() {
     assert!(!parse_prefix(&map, "AB", 2).unwrap().1);
     assert!(parse_prefix(&map, &format!("A{bad}"), 2).is_err());
 }
+
+/// In right-to-left text, cursive attachment puts each glyph's `entry` anchor on the `exit`
+/// anchor of the glyph before it, replacing the kerning between them, and the rises add up
+/// along the chain; left-to-right text and layouts without the option are not attached.
+#[test]
+fn cursive_attachment_joins_entry_to_exit_in_right_to_left_text() {
+    let mut f = font();
+    kern(&mut f, Direction::Rtl, "a", "b", -40.0);
+    for (glyph, anchors) in
+        [("a", vec![("exit", 50.0, 100.0)]), ("b", vec![("entry", 550.0, 300.0), ("exit", 20.0, 120.0)]), ("c", vec![("entry", 580.0, 100.0)])]
+    {
+        let mut g = f.glyphs.get_mut(glyph).unwrap();
+        for (name, x, y) in anchors {
+            g.layers[0].anchors.push(fontcraft_model::Anchor::new(name, x, y));
+        }
+    }
+    let t = text(&f, "abc");
+    let options = Options { direction: Direction::Rtl, cursive: true, ..Options::default() };
+    let l = layout(&f, "m01", &t, &options).unwrap();
+    let (a, b, c) = (&l.placed[0], &l.placed[1], &l.placed[2]);
+    // Each entry anchor lands on the exit anchor before it.
+    assert_eq!((a.x + 50.0, a.y + 100.0), (b.x + 550.0, b.y + 300.0));
+    assert_eq!((b.x + 20.0, b.y + 120.0), (c.x + 580.0, c.y + 100.0));
+    assert!(b.cursive && c.cursive && !a.cursive);
+    assert_eq!(b.y, -200.0, "the rise follows the anchors");
+    assert_eq!(c.y, -180.0, "rises add up along the chain");
+
+    let plain = layout(&f, "m01", &t, &Options { direction: Direction::Rtl, ..Options::default() }).unwrap();
+    assert_eq!(plain.placed[1].kern, -40.0, "without the option the pair is kerned");
+    let ltr = layout(&f, "m01", &t, &Options { cursive: true, ..Options::default() }).unwrap();
+    assert!(ltr.placed.iter().all(|p| !p.cursive && p.y == 0.0), "left-to-right text is not attached");
+}

@@ -263,7 +263,13 @@ pub fn pointer(app: &mut FontcraftApp, ev: RawPointer) -> Option<Vec<String>> {
         PointerKind::DoubleClick => {
             app.tools.text_drag = TextDrag::default();
             if let Some(item) = item_at(&layout, at.x, at.y) {
-                run(app, &mut errors, "editView.setCursor", json!({"tab": tab.id, "index": item}));
+                // A glyph a preview feature shows in place of the item is the one edited.
+                let shown = layout.placed.get(item).and_then(|p| p.glyph.as_deref()).filter(|g| tab.item_glyph(item) != Some(*g));
+                let mut params = json!({"tab": tab.id, "index": item});
+                if let (Some(glyph), Some(obj)) = (shown, params.as_object_mut()) {
+                    obj.insert("glyph".into(), json!(glyph));
+                }
+                run(app, &mut errors, "editView.setCursor", params);
                 // Leaving text mode makes the Select tool active, as Escape does.
                 run(app, &mut errors, "editView.toggleTextMode", json!({"tab": tab.id, "mode": "edit"}));
             }

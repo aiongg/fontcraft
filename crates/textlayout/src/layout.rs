@@ -11,6 +11,8 @@ use fontcraft_spacing::kerning::{Direction, KernError, KernIndex, Table};
 use fontcraft_spacing::metrics_source;
 
 use crate::bidi::{self, Embedding};
+use crate::cursive;
+use crate::shape::{Shaping, shape_items};
 use crate::text::{Item, Text};
 
 /// The master parameter that sets the distance between lines.
@@ -77,6 +79,12 @@ pub struct Options<'a> {
     pub bidi: bool,
     /// With `bidi`: ranges of items with their own base direction.
     pub embeddings: &'a [Embedding],
+    /// Edit View: the substitutions of the compiled preview font, applied before the items are
+    /// placed ([`crate::shape`]). Not combined with `bidi`, which it ignores.
+    pub shaping: Option<Shaping<'a>>,
+    /// Edit View: in right-to-left text, attach each glyph's `entry` anchor to the `exit` anchor
+    /// of the glyph before it ([`crate::cursive`]).
+    pub cursive: bool,
 }
 
 impl Default for Options<'_> {
@@ -92,6 +100,8 @@ impl Default for Options<'_> {
             layers: None,
             bidi: false,
             embeddings: &[],
+            shaping: None,
+            cursive: false,
         }
     }
 }
@@ -121,9 +131,16 @@ pub struct Placed {
     pub advance: f64,
     /// The distance along the line from its start to the start of this item's advance.
     pub offset: f64,
-    /// The kerning applied between the previous item and this one.
+    /// The kerning applied between the previous item and this one; with [`Placed::cursive`], the
+    /// shift that cursive attachment applied instead.
     pub kern: f64,
     pub line: usize,
+    /// Shaping made this item several glyphs: the ones after [`Placed::glyph`], each with its
+    /// origin.
+    pub extra: Vec<(Arc<str>, f64, f64)>,
+    /// The glyph is attached to the one before it by cursive attachment, which replaces the
+    /// kerning between them.
+    pub cursive: bool,
 }
 
 /// One line (column) of a layout.
@@ -146,6 +163,8 @@ pub struct Layout {
     pub line_height: f64,
     /// The master's ascender: lines reach from it down by one line height.
     pub ascender: f64,
+    /// Why some of the text could not be shaped (it is laid out by code point there).
+    pub shaping_error: Option<String>,
     breaks: Vec<bool>,
 }
 
@@ -211,7 +230,18 @@ fn check(name: &'static str, value: f64, range: &std::ops::RangeInclusive<f64>) 
 /// What one item contributes before line breaking.
 struct Metrics {
     glyph: Option<Arc<str>>,
+    /// The kerning id of the item's first glyph (its left side) and of its last glyph (its right
+    /// side); they differ only when shaping made the item several glyphs.
     kern_id: Option<usize>,
+    kern_last: Option<usize>,
+    /// The glyphs after the first and their advances, when shaping made the item several glyphs.
+    extra: Vec<(Arc<str>, f64)>,
+    /// Shaping merged the item's glyph into an earlier item's.
+    merged: bool,
+    /// The first glyph's `entry` anchor and the last glyph's `exit` anchor, for cursive
+    /// attachment.
+    entry: Option<(f64, f64)>,
+    exit: Option<(f64, f64)>,
     advance: f64,
     width: f64,
     /// From the glyph's origin up to the top of its vertical advance box.
@@ -269,11 +299,37 @@ pub fn layout(font: &Font, master: &str, text: &Text, options: &Options<'_>) -> 
         let advance = if direction == Direction::Vertical { vw } else { width };
         let kern_id = index.and_then(|i| i.glyph_id(&name));
         let is_space = glyph.unicodes.first().is_some_and(|u| char::from_u32(*u).is_some_and(char::is_whitespace));
-        Metrics { glyph: Some(name), kern_id, advance, width, top: asc - vo, is_break: false, is_space }
+        let (entry, exit) = if options.cursive { cursive::anchors(layer) } else { (None, None) };
+        Metrics {
+            glyph: Some(name),
+            kern_id,
+            kern_last: kern_id,
+            extra: Vec::new(),
+            merged: false,
+            entry,
+            exit,
+            advance,
+            width,
+            top: asc - vo,
+            is_break: false,
+            is_space,
+        }
     };
-    let blank =
-        |is_break: bool, advance: f64, is_space: bool| Metrics { glyph: None, kern_id: None, advance, width: advance, top: 0.0, is_break, is_space };
-    let items: Vec<Metrics> = text
+    let blank = |is_break: bool, advance: f64, is_space: bool| Metrics {
+        glyph: None,
+        kern_id: None,
+        kern_last: None,
+        extra: Vec::new(),
+        merged: false,
+        entry: None,
+        exit: None,
+        advance,
+        width: advance,
+        top: 0.0,
+        is_break,
+        is_space,
+    };
+    let mut items: Vec<Metrics> = text
         .items()
         .iter()
         .map(|item| match item {
@@ -294,10 +350,61 @@ pub fn layout(font: &Font, master: &str, text: &Text, options: &Options<'_>) -> 
         })
         .collect();
 
+    // Shaping: an item shows the glyphs the preview font's substitutions give it.
+    let mut shaping_error = None;
+    if let Some(shaping) = options.shaping.as_ref() {
+        let (shaped, error) = shape_items(font, text, direction, shaping);
+        shaping_error = error;
+        for (m, glyphs) in items.iter_mut().zip(shaped) {
+            let Some(glyphs) = glyphs else { continue };
+            let mut found = glyphs.into_iter().filter_map(|name| font.glyph(&name).map(|g| metrics_of(name.clone(), g)));
+            let Some(mut first) = found.next() else {
+                *m = Metrics { merged: true, ..blank(false, 0.0, false) };
+                continue;
+            };
+            first.is_space = m.is_space;
+            for more in found {
+                first.advance += more.advance;
+                first.kern_last = more.kern_id;
+                first.exit = more.exit;
+                if let Some(name) = more.glyph {
+                    first.extra.push((name, more.advance));
+                }
+            }
+            *m = first;
+        }
+    }
+    // The nearest item before each one that is not merged into another: kerning and cursive
+    // attachment reach across a ligature's merged components.
+    let mut before: Vec<Option<usize>> = Vec::with_capacity(items.len());
+    let mut last = None;
+    for (i, m) in items.iter().enumerate() {
+        before.push(last);
+        if !m.merged {
+            last = Some(i);
+        }
+    }
+    let attaches = options.cursive && direction == Direction::Rtl;
+
+    // The cursive attachment of item `i` to the item before it: the shift along the line that
+    // puts its entry anchor on that item's exit anchor, and the rise from that anchor to its own.
+    let attachment = |i: usize| -> Option<(f64, f64)> {
+        if !attaches || items.get(i)?.merged {
+            return None;
+        }
+        let p = before.get(i).copied().flatten()?;
+        let (Some(exit), Some(entry)) = (items.get(p)?.exit, items.get(i)?.entry) else { return None };
+        let between = items.get(p + 1..i).map_or(0.0, |merged| merged.iter().map(|m| m.advance).sum::<f64>());
+        Some((cursive::shift(exit, entry, items.get(i)?.advance) - between, exit.1 - entry.1))
+    };
     // Kerning between item `i` and the one before it, when both are glyphs (and, with bidi, at
-    // the same level: two such items stand side by side in the same run).
+    // the same level: two such items stand side by side in the same run). Cursive attachment
+    // replaces it.
     let kern = |i: usize, levels: Option<&[u8]>| {
-        let Some(p) = i.checked_sub(1) else { return 0.0 };
+        if let Some((shift, _)) = attachment(i) {
+            return shift;
+        }
+        let Some(p) = (if options.shaping.is_some() { before.get(i).copied().flatten() } else { i.checked_sub(1) }) else { return 0.0 };
         let table = match levels {
             None => table,
             Some(levels) => {
@@ -311,7 +418,7 @@ pub fn layout(font: &Font, master: &str, text: &Text, options: &Options<'_>) -> 
                 }
             }
         };
-        match (table, items.get(p).and_then(|m| m.kern_id), items.get(i).and_then(|m| m.kern_id)) {
+        match (table, items.get(p).and_then(|m| m.kern_last), items.get(i).and_then(|m| m.kern_id)) {
             (Some(t), Some(a), Some(b)) => t.lookup(a, b).map_or(0.0, |applied| finite_or_zero(applied.value)),
             _ => 0.0,
         }
@@ -406,19 +513,58 @@ pub fn layout(font: &Font, master: &str, text: &Text, options: &Options<'_>) -> 
 
     // `+ 0.0` keeps the first line at 0 rather than −0.
     let base = |line: usize| -(line as f64 * lh) + 0.0;
+    // Cursive rises add up along a chain of attached glyphs on one line.
+    let mut rises = vec![0.0f64; n];
+    let mut attached = vec![false; n];
+    if attaches {
+        for i in 0..n {
+            let Some((_, rise)) = attachment(i) else { continue };
+            let Some(p) = before.get(i).copied().flatten() else { continue };
+            if line_of.get(p) != line_of.get(i) || line_of.get(i).and_then(|l| lines.get(*l)).is_some_and(|(r, _)| r.start == i) {
+                continue;
+            }
+            let from = rises.get(p).copied().unwrap_or(0.0);
+            if let (Some(r), Some(a)) = (rises.get_mut(i), attached.get_mut(i)) {
+                *r = finite_or_zero(from + rise);
+                *a = true;
+            }
+        }
+    }
     let placed = items
         .iter()
         .zip(offsets.iter().zip(used.iter()).zip(line_of.iter()))
-        .map(|(m, ((offset, kern), line))| {
+        .zip(rises.iter().zip(attached.iter()))
+        .map(|((m, ((offset, kern), line)), (rise, cursive))| {
             let (x, y) = match direction {
-                Direction::Ltr => (*offset, base(*line)),
-                Direction::Rtl => (-offset - m.advance, base(*line)),
+                Direction::Ltr => (*offset, base(*line) + rise),
+                Direction::Rtl => (-offset - m.advance, base(*line) + rise),
                 Direction::Vertical => (base(*line) - m.width / 2.0, -offset - m.top),
             };
-            Placed { glyph: m.glyph.clone(), x, y, advance: m.advance, offset: *offset, kern: *kern, line: *line }
+            // The first glyph of several stands at the start of the item's advance along the
+            // line: on the right in right-to-left text, at the top in vertical text.
+            let first_advance = m.advance - m.extra.iter().map(|(_, a)| a).sum::<f64>();
+            let (x, y) = match direction {
+                Direction::Rtl if !m.extra.is_empty() => (x + m.advance - first_advance, y),
+                _ => (x, y),
+            };
+            let mut along = first_advance;
+            let extra = m
+                .extra
+                .iter()
+                .map(|(name, advance)| {
+                    let at = match direction {
+                        Direction::Ltr => (x + along, y),
+                        Direction::Rtl => (x - along + first_advance - advance, y),
+                        Direction::Vertical => (x, y - along),
+                    };
+                    along += advance;
+                    (name.clone(), at.0, at.1)
+                })
+                .collect();
+            Placed { glyph: m.glyph.clone(), x, y, advance: m.advance, offset: *offset, kern: *kern, line: *line, extra, cursive: *cursive }
         })
         .collect();
     let lines = lines.into_iter().enumerate().map(|(l, (items, length))| Line { items, baseline: base(l), length }).collect();
     let ascender = font.metric_pos(drawn, metric::ASCENDER, upm * 0.8);
-    Ok(Layout { placed, lines, direction, line_height: lh, ascender, breaks: items.iter().map(|m| m.is_break && wrap).collect() })
+    Ok(Layout { placed, lines, direction, line_height: lh, ascender, shaping_error, breaks: items.iter().map(|m| m.is_break && wrap).collect() })
 }

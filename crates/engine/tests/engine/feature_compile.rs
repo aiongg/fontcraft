@@ -335,7 +335,6 @@ fn a_reused_compile_follows_included_files() {
 /// The preview font of a reused compile is built again after an edit elsewhere in the document
 /// (outlines and widths are not in the code).
 #[test]
-#[ignore = "M8.19: the preview font is not built yet"]
 fn a_reused_compile_rebuilds_the_preview_after_other_edits() {
     let (mut s, dir) = including_session("preview");
     let preview = |s: &Session| s.feature_state_of(s.doc().unwrap().id).unwrap().preview.clone().unwrap();

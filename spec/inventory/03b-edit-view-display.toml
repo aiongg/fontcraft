@@ -1004,7 +1004,7 @@ label = "Set Text Cursor"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{tab?: id, index: number, selectionLength?: number, anchor?: number}"
+params = "{tab?: id, index: number, selectionLength?: number, anchor?: number, glyph?: string}"
 area = "edit-text"
 milestone = "M5"
 summary = "Places the text cursor before the glyph at the given index, optionally selecting a run of glyphs, which also changes the current glyph. Headless form of clicking in the text or using the arrow keys."
@@ -2294,7 +2294,10 @@ milestone = "M8"
 summary = "Pop-up at the bottom left of Edit View that switches OpenType features on and off for the tab's text. Active features appear on the button as their four-letter tags, and the button takes the accent colour while any is on."
 ref = "Edit View › Previewing & Testing › Previewing OpenType Features"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Type-ahead moves the highlight to the first entry whose name starts with the typed text, ignoring case, and Return picks it; typed characters more than a second apart start a new search."
+guesses = [
+  "Type-ahead highlights the matching entry and Return picks it, rather than toggling the entry as soon as it matches; typing a tag with the menu open in the reference app would settle it.",
+]
 
 [[command]]
 id = "editView.toggleFeature"
@@ -2308,7 +2311,10 @@ milestone = "M8"
 summary = "Turns one OpenType feature on or off for the text of an Edit View tab. Several features can be active together; choosing an active feature again turns it off."
 ref = "Edit View › Previewing & Testing › Previewing OpenType Features"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. The active features are the tab's view state: no undo step, the document stays unmodified."
+guesses = [
+  "A tag the last feature compile does not have is accepted and kept, and applies once a compile has it, so automation can turn a feature on before compiling; the reference app only offers compiled features in its menu, so nothing there settles it.",
+]
 
 [[command]]
 id = "editView.clearFeatures"
@@ -2323,6 +2329,9 @@ summary = "Turns off every preview feature of the tab. It is the dash entry at t
 ref = "Edit View › Previewing & Testing › Previewing OpenType Features"
 status = "handbook"
 notes = "Documented, not yet observed."
+guesses = [
+  "The dash also turns Localized Forms off; choosing the dash with Localized Forms on in the reference app would settle it.",
+]
 
 [[command]]
 id = "editView.setLocalizedForms"
@@ -2338,7 +2347,8 @@ ref = "Edit View › Previewing & Testing › Previewing OpenType Features"
 status = "handbook"
 notes = "Documented, not yet observed."
 guesses = [
-  "The menu offers the script and language pairs that the font's enabled locl entries name in their `script` and `language` statements, in order of appearance; the menu's entries in the reference app would settle it.",
+  "The menu offers the script and language pairs the compiled locl feature is registered for, without the default language, in the compiled font's order; turned on without a pair, Localized Forms takes the first; the menu's entries in the reference app would settle it.",
+  "Localized Forms' script tag replaces the script of every run of the tab's text for the OpenType lookup, and its language tag applies to all of it; Localized Forms with Turkish on mixed Latin and Greek text in the reference app would settle it.",
 ]
 observe = [
   "In F1 (Latin features), turn on Localized Forms in Edit View, choose Turkish and type i: write down the menu's script and language entries and note the glyph shown.",
@@ -2356,6 +2366,7 @@ milestone = "M8"
 summary = "Query returning the features available in the Features menu, which are active in the tab, and the chosen script and language."
 ref = "Edit View › Previewing & Testing › Previewing OpenType Features"
 status = "inferred"
+notes = "Also returns whether the document has a feature compile, whether the font changed since, the pairs Localized Forms offers and the reason the text could not be shaped, if any."
 
 [[behavior]]
 id = "features.menuNeedsCompile"
@@ -2373,7 +2384,10 @@ milestone = "M8"
 summary = "Edit View applies substitution features, kerning and cursive attachment. Other positioning features are not previewed there and have to be tested with an exported font."
 ref = "Edit View › Previewing & Testing › Previewing OpenType Features"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. The preview font has no GPOS: kerning comes from the live kerning data by the tab's kerning mode, and cursive attachment from the live `exit` and `entry` anchors in right-to-left text, as the handbook's Cursive Attachment section says."
+guesses = [
+  "Cursive attachment replaces the kerning of the pair it joins, and only the glyph layer's own `exit` and `entry` anchors count, not anchors a component brings; a kerned pair of attached Arabic glyphs in the reference app would settle it.",
+]
 
 [[behavior]]
 id = "features.buttonShowsActiveTags"
@@ -2383,6 +2397,9 @@ summary = "The Features button displays the tags of all active features and is h
 ref = "Edit View › Previewing & Testing › Previewing OpenType Features"
 status = "handbook"
 notes = "Documented, not yet observed."
+guesses = [
+  "The button reads Features when no feature is on, and Localized Forms alone also gives it the accent colour; the button with only Localized Forms on in the reference app would settle it.",
+]
 
 [[behavior]]
 id = "text.shaping"
@@ -2391,7 +2408,7 @@ milestone = "M8"
 summary = "Edit View text is shaped with the compiled feature code: the substitution features active in the Features menu apply to the tab's text, kerning comes from the font's kerning data and cursive attachment from its exit and entry anchors, so kerning and anchor edits show at once while feature code changes show after Compile."
 ref = "Edit View › Previewing & Testing › Previewing OpenType Features"
 status = "handbook"
-notes = "Documented, not yet observed. The handbook lists what Edit View previews; how it combines the compiled code with live kerning is our design (M8 planning pass)."
+notes = "Documented, not yet observed. The handbook lists what Edit View previews; how it combines the compiled code with live kerning is our design (M8 planning pass). Shaping uses the preview font of the document's last feature compile (GSUB only); widths, outlines, kerning and anchors stay live. A glyph added since the compile, or not exported, keeps its own glyph and splits the run around it. A ligature shows on its first component and the other components take no room; a glyph that becomes several shows them all on its item. Double-clicking a substituted glyph edits the glyph shown."
 guesses = [
   "Only the features active in the Features menu apply, with no default features, so Arabic text shows its positional forms only when init, medi and fina are on; typing Arabic in an Edit View tab of the reference app with no feature active would settle it.",
   "A glyph typed by name is shaped as a private-use character that maps to that glyph, so substitutions apply to it as to typed characters; typing /a.sc next to a feature that substitutes it in the reference app would settle it.",
