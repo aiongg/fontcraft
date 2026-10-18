@@ -109,6 +109,7 @@ pub fn layout_font_with(font: &Font, master: &str, kind: PreviewKind, options: &
         resolved: &resolved,
         order: &glyphs,
         edits: &edits,
+        first_name_id: if source.features.is_empty() { 256 } else { crate::info::first_free_name_id(&resolved, &options.style_name) },
         include_dir: options.feature_dir.as_deref(),
         include_check: options.include_check.as_ref(),
         variable: None,
