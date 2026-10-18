@@ -170,6 +170,7 @@ milestone = "M12"
 summary = "In a `glyf` glyph a point (including an off-curve point) lies outside the bounding box stored for the glyph, or a coordinate exceeds 32766 in magnitude. Usually the source lacks extreme points; recomputing the stored box is the mechanical repair, adding extremes the design one."
 ref = "fontbakery opentype/points_out_of_bounds"
 status = "docs"
+notes = "Composite glyphs are compared through their drawn outline, which also yields the implied on-curve points between off-curve points; those lie inside the box whenever their neighbours do."
 
 [[check]]
 id = "check.outlines.contourCount"
@@ -1553,6 +1554,7 @@ milestone = "M12"
 summary = "A required table is missing: cmap, head, hhea, hmtx, maxp, name, OS/2 or post, plus glyf for TrueType-flavoured files, CFF or CFF2 for OTTO files, and STAT for variable fonts. The optional tables that are present are listed as information."
 ref = "fontbakery required_tables"
 status = "docs"
+notes = "One result per missing table, each naming its table. The optional tables present are listed in one informational result, from FontBakery's list."
 
 [[check]]
 id = "check.tables.recommendedTrueTypeTables"
@@ -1575,6 +1577,7 @@ milestone = "M12"
 summary = "The file carries tool-private tables that should not ship: FFTM, TTFA, the VTT sources TSI0-3, TSI5 and TSIC, the VOLT sources TSIV, TSIP, TSIS, TSID, TSIJ and TSIB, and Debg; also GSUB/GPOS features or language systems whose tags begin with zz, left by VOLT. The fix removes them."
 ref = "fontbakery unwanted_tables; fontbakery vtt_volt_data"
 status = "docs"
+notes = "Features and language systems whose tags begin with zz are reported without a fix: dropping tables cannot remove them."
 
 [[check]]
 id = "check.tables.unwantedAatTables"
@@ -1597,6 +1600,7 @@ milestone = "M12"
 summary = "The file contains a table outside a configured allow-list (`allowedTables`), for delivery pipelines that reject unknown tables."
 ref = "fontbakery adobefonts/unsupported_tables"
 status = "docs"
+notes = "Built in M12.51 without the project value: the compiled-font checks do not receive the document's project values yet, so the check is skipped with that reason until the binary context carries them (the allow-list logic is built and tested)."
 
 [[check]]
 id = "check.tables.dsig"
@@ -1619,6 +1623,7 @@ milestone = "M12"
 summary = "The post table format does not suit the font: CFF fonts must use format 3; TrueType fonts with format 3 lose glyph names (warning); formats 2.5 and 4 are not allowed."
 ref = "fontbakery opentype/post_table_version"
 status = "docs"
+notes = "As in FontBakery, every font without a CFF table counts as losing its glyph names with format 3, CFF2 fonts included."
 
 [[check]]
 id = "check.tables.glyfIntegrity"
@@ -1630,6 +1635,7 @@ milestone = "M12"
 summary = "The glyf table is damaged: loca points at data that is missing, there is unused data after the last glyph, or the number of loca entries does not match maxp.numGlyphs. This is a compiler fault. Trailing empty glyphs are a known source of false reports in other validators."
 ref = "fontbakery opentype/glyf_unused_data; fontbakery opentype/loca/maxp_num_glyphs; MS Font Validator E1703 (afdko MSFontValidatorIssues.md 5.a)"
 status = "docs"
+notes = "Up to 3 bytes after the last glyph are padding, not unused data. Codes: loca-too-short, offsets-decrease, missing-data, unreachable-data."
 
 [[check]]
 id = "check.tables.cmapFormat12"
@@ -1641,17 +1647,19 @@ milestone = "M12"
 summary = "A format 12 cmap subtable exists without a format 4 one, maps no codepoint that needs it, or (warning) leaves out characters that the format 4 subtable maps. The fix rebuilds the subtables from one mapping."
 ref = "fontbakery cmap/format_12"
 status = "docs"
+notes = "Departs from FontBakery in two places: no-cmap-4 is reported only when a format 12 subtable exists, and a format 12 subtable is pointless when it maps nothing beyond U+FFFF (FontBakery's test accepts any code point above U+0FFF)."
 
 [[check]]
 id = "check.tables.cmapSubtables"
-severity = "fail"
+severity = "warn"
 scope = "binary"
 fixable = false
 area = "qa"
 milestone = "M12"
-summary = "The cmap table has subtables other than the usual Unicode ones (format 4 for the BMP and format 12 for the full repertoire, plus format 14 for variation sequences)."
+summary = "The cmap table has subtables other than the usual ones: format 4 for the BMP and format 12 for the full repertoire on the Unicode and Windows platforms, format 14 for variation sequences, and the Mac Roman formats 0 and 6."
 ref = "fontbakery notofonts/cmap/unexpected_subtables"
 status = "docs"
+notes = "Severity is warn, as FontBakery's notofonts check reports it. The accepted subtables are FontBakery's list: Unicode formats 4, 12 and 14, Windows formats 4 and 12, Mac Roman formats 0 and 6, and for CJK fonts (more than 150 code points in the CJK blocks) the Mac format 6 placeholders for Japanese, Chinese and Korean."
 
 [[check]]
 id = "check.tables.fsSelection"
@@ -1663,6 +1671,7 @@ milestone = "M12"
 summary = "OS/2.fsSelection bits 0 (italic), 5 (bold) and 6 (regular) do not match the style, or disagree with the bold and italic bits of head.macStyle. The fix sets all of them from the style-linking settings."
 ref = "fontbakery opentype/fsselection; fontbakery opentype/mac_style; comparefamily single-face test 14"
 status = "docs"
+notes = "The style comes from the names, never the file name: italic when name ID 2 or 17 contains Italic, bold when name ID 2 begins with Bold or a variable font's default weight is 700 (FontBakery reads the file name). The fix is syncStyleLinking, which no command carries out yet."
 
 [[check]]
 id = "check.tables.vendorId"
@@ -1674,6 +1683,7 @@ milestone = "M12"
 summary = "OS/2.achVendID differs from the vendor ID configured for the project (`vendorId`); when none is configured, an empty, placeholder or unregistered ID is a warning."
 ref = "fontbakery opentype/vendor_id; fontbakery googlefonts/vendor_id"
 status = "docs"
+notes = "Built in M12.51 without the project value: the compiled-font checks do not receive the document's project values yet, so the ID is compared with the vendor registry only (empty, placeholder and unregistered IDs are warnings); the comparison with a configured ID is built and tested."
 
 [[check]]
 id = "check.tables.codePageRanges"
@@ -1685,6 +1695,7 @@ milestone = "M12"
 summary = "OS/2 ulCodePageRange1/2 are all zero or the table is missing, which makes some Windows applications treat the font as covering no character set. In the stricter variant each code page and Unicode range bit is compared with a coverage heuristic, and supplementary-plane bits require a 32-bit cmap. The fix recomputes the bits from the cmap."
 ref = "fontbakery opentype/code_pages; comparefamily single-face test 28; fontbakery notofonts/unicode_range_bits; MS Font Validator W2101 (afdko MSFontValidatorIssues.md 4.a)"
 status = "docs"
+notes = "The stricter variant is the threshold `strict` (off by default): each code page bit is compared with the coverage rule of the code page data set and each Unicode range bit with the code points the cmap maps; the OEM and Symbol code page bits are never compared. Bit 57 set without a format 12 subtable is reported in the strict variant."
 
 [[check]]
 id = "check.tables.os2Version"
@@ -1707,6 +1718,7 @@ milestone = "M12"
 summary = "OS/2.usWeightClass is below 250 in a static CFF font (old Windows renderers then smear the glyphs bolder), a face with the bold bit set has a weight below 500, or the value is not on the scale expected for its style name."
 ref = "comparefamily single-face test 9; comparefamily single-face test 10; fontbakery googlefonts/weightclass; fontbakery typenetwork/weightclass"
 status = "docs"
+notes = "The style-name scale follows FontBakery's typenetwork rule: Thin may be 100 or 250, ExtraLight 200 or 275, the other weights exact; an unknown weight word is an informational result. A variable font's value must equal its default weight (400 without a wght axis)."
 
 [[check]]
 id = "check.tables.fsType"
@@ -1718,6 +1730,7 @@ milestone = "M12"
 summary = "OS/2.fsType is not the configured embedding permission (`fsType`: 0 installable for open fonts, 8 editable for the Adobe and Microsoft conventions)."
 ref = "fontbakery googlefonts/fstype; fontbakery microsoft/fstype; comparefamily family test 14"
 status = "docs"
+notes = "Built in M12.51 without the project value: the compiled-font checks do not receive the document's project values yet, so the check is skipped with that reason until the binary context carries them (the comparison is built and tested)."
 
 [[check]]
 id = "check.tables.lowestRecPpem"
@@ -1729,6 +1742,8 @@ milestone = "M12"
 summary = "head.lowestRecPPEM is very small. Informational only: for CFF fonts a low value such as 3 is deliberate."
 ref = "MS Font Validator W1305 (afdko MSFontValidatorIssues.md 4.c)"
 status = "docs"
+notes = "The limit is the threshold `minimum`."
+guesses = ["We report head.lowestRecPPEM below 6 pixels per em; the validator note names 3 as the value it questions but gives no limit, so a survey of shipped TrueType fonts would settle it."]
 
 [[check]]
 id = "check.tables.cffCallDepth"
@@ -1740,6 +1755,7 @@ milestone = "M12"
 summary = "A CFF or CFF2 charstring nests subroutine calls more than 10 deep, or calls itself."
 ref = "fontbakery opentype/cff_call_depth; fontbakery opentype/cff2_call_depth"
 status = "docs"
+notes = "The charstrings are walked with the subroutine biases of the Type 2 format; walking stops after 20,000,000 charstring bytes per font and the check is then skipped with that reason."
 
 [[check]]
 id = "check.tables.cffAsciiStrings"
@@ -1751,6 +1767,7 @@ milestone = "M12"
 summary = "A string in the CFF top dictionary contains non-ASCII characters or cannot be decoded."
 ref = "fontbakery opentype/cff_ascii_strings"
 status = "docs"
+notes = "Reads the font name of the Name INDEX and the version, Notice, Copyright, FullName, FamilyName and Weight strings of each top dictionary; a string ID the String INDEX lacks is cannot-decode."
 
 [[check]]
 id = "check.tables.cffDeprecatedOperators"
@@ -1762,6 +1779,7 @@ milestone = "M12"
 summary = "A CFF charstring uses endchar with four arguments to build an accented glyph (seac; a failure, known to break rendering) or the dotsection operator (a warning). The fix decomposes seac glyphs and drops dotsection."
 ref = "fontbakery opentype/cff_deprecated_operators; comparefamily single-face test 7"
 status = "docs"
+notes = "An endchar with four or more operands counts as seac, inside subroutines too, as in FontBakery."
 
 [[check]]
 id = "check.tables.cffUniqueIds"
@@ -1784,6 +1802,7 @@ milestone = "M12"
 summary = "A CFF charstring is longer than 32 kB, a limit of some old interpreters."
 ref = "comparefamily single-face test 18 (charstring size)"
 status = "docs"
+notes = "Reads CFF2 charstrings as well; the limit is 32,767 bytes."
 
 [[check]]
 id = "check.tables.baseTable"
@@ -1795,6 +1814,7 @@ milestone = "M12"
 summary = "The BASE table is missing, structurally inconsistent (counts that do not match their lists), uses baseline or script tags that are not registered, has a non-zero offset for the default baseline, or (warning) has an ideographic baseline that does not centre the cap height in the em box."
 ref = "comparefamily single-face test 11 (-tolerance)"
 status = "docs"
+notes = "The tolerance is the threshold `tolerance` (0 by default, as comparefamily's). The ideographic baseline is compared only when it is not the default baseline, as in comparefamily."
 
 [[check]]
 id = "check.tables.metaScriptLangTags"
