@@ -2405,6 +2405,7 @@ status = "handbook"
 notes = "Documented, not yet observed. The reference uses the operating system's shaper; FontCraft uses its own (M8 planning pass, `docs/plans/M8.md` § 3)."
 guesses = [
   "The preview's font is rebuilt from the current feature code, kerning and anchors after edits, once editing pauses for half a second, without pressing Compile; editing a feature without compiling while the reference app's Text Preview is open would settle it.",
+  "Text is split into script runs by Script_Extensions, and characters without a script (Common, Inherited, unassigned and private-use) stay in the run around them, so a glyph typed by name is shaped with its neighbours; typing a glyph name between two letters that form a contextual substitution in the reference app would settle it.",
 ]
 observe = [
   "In F1 (Latin features), edit a feature without pressing Compile while Text Preview shows text the feature affects: note whether the preview follows the edit, and when.",
@@ -2418,6 +2419,9 @@ summary = "Text Preview orders mixed right-to-left and left-to-right text by the
 ref = "Edit View › Entering Text › Text Preview"
 status = "handbook"
 notes = "Documented, not yet observed. Settles the M5 guesses on `textPreview.setWritingDirection` about digits and neutral characters."
+guesses = [
+  "A paragraph separator inside a line (U+2029) starts a new bidirectional paragraph whose runs follow the line's earlier runs, each paragraph ordered on its own; pasting text with U+2029 into the reference app's Text Preview would settle it.",
+]
 observe = [
   "In F2 (Arabic), type \"12 34\" inside right-to-left text in Text Preview: note the order of the digits.",
 ]

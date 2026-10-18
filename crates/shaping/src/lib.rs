@@ -22,13 +22,23 @@
 //!   allocation is a [`ShapeError`], and the caller lays the line out by code point with a
 //!   message.
 //! - Builds for wasm: harfrust with `std` only, never its `icu` feature.
+//!
+//! How a caller shapes a line of mixed text (Text Preview, M8.20):
+//! 1. [`bidi::paragraph_runs`] splits the line into runs of one direction, in visual order.
+//! 2. [`script::itemize`] splits each run's text into runs of one script.
+//! 3. [`shape`] shapes each script run with that direction and script; for a right-to-left
+//!    bidi run, its script runs are drawn last to first.
+//!
+//! Edit View (M8.19) keeps one direction per line and shapes each script run of it with its
+//! active features, `GPOS` features off, live advances, and the glyphs typed by name passed as
+//! their private-use code points.
 #![forbid(unsafe_code)]
 
 pub mod bidi;
 mod font;
 pub mod script;
 
-pub use font::{Direction, FeatureSetting, ShapeRequest, ShapedGlyph, ShapingFont, shape};
+pub use font::{Direction, FeatureSetting, MAX_LANGUAGE_BYTES, MAX_LOCATION_AXES, ShapeRequest, ShapedGlyph, ShapingFont, shape};
 pub use read_fonts::types::Tag;
 
 /// Most bytes of text one [`shape`] call takes: Text Preview's item cap of a million characters
@@ -41,6 +51,8 @@ pub const MAX_PRIVATE_USE: usize = 65_535;
 /// Most shape plans cached per font; the least recently used goes first.
 pub const MAX_PLANS: usize = 64;
 
+/// Why a run could not be shaped. The caller lays the run out by code point and shows the
+/// message.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ShapeError {
     #[error("the preview font cannot be read: {0}")]
@@ -59,11 +71,4 @@ pub enum ShapeError {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn bytes_that_are_not_a_font_are_refused() {
-        assert!(matches!(ShapingFont::new(std::sync::Arc::from(&b"not a font"[..]), &[]), Err(ShapeError::Font(_))));
-    }
-}
+mod tests;
