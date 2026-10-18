@@ -1203,10 +1203,11 @@ bare font programs and for assembling CID-keyed fonts from per-row or per-script
 or `drop` selects it for sfnt input.
 
 *Font merge* (fontTools `pyftmerge`): whole OpenType fonts are combined. Glyph order is the first font's
-followed by the new glyphs of each later font; cmaps are united. When two fonts map the same character
-to glyphs that differ in outline or advance, the earlier font keeps the mapping, the later glyph is
-renamed with a numeric suffix, and a lookup added to the `locl` feature under the later font's scripts
-substitutes it (this needs a GSUB table). GSUB/GPOS script, feature and lookup lists are concatenated
+followed by every glyph of each later font; a name already used gets `.1`, `.2`… appended (`--duplicates`
+can keep the earlier glyph, keep the later one or refuse instead); cmaps are united. When two fonts map
+the same character, the earlier font keeps the mapping and a lookup added to the `locl` feature under
+the later font's scripts substitutes the later font's glyph (this needs a GSUB table). fontTools 4.66
+does this even when the two glyphs are identical, and so does `merge`. GSUB/GPOS script, feature and lookup lists are concatenated
 with indices renumbered; GDEF classes are united; vertical extents such as `hhea` ascent take the
 largest value; `OS/2` range bits are OR-ed; names and other metadata come from the first font. All fonts must share units per em (rescale with `transform --upem`
 first) and outline flavour (use `convert`).
