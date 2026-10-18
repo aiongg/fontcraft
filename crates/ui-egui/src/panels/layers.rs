@@ -8,13 +8,25 @@
 //! as Master restores a selected backup (`layers.useAsMaster`). The filter menu runs
 //! `layers.onlyShowLayersFromCurrentMaster` and `layers.hideBackupLayers`. A right-click on a
 //! row opens its context menu: the commands whose row names `layers.row`, acting on that row.
+//!
+//! Special layers (`mastersAsLayers.paletteListing`) show their label in bold in place of the
+//! name: `[…]` for an alternate layer, `{…}` for an intermediate one, both for a layer that is
+//! both (`fontcraft_interp::labels`). A master layer with a range shows its `[…]` after the
+//! master's name. Double-clicking a part of the label opens its editor
+//! (`layers.editSpecialLayerSettings`). In the context menu, Intermediate and Alternate are
+//! ticked while the layer has that status: choosing one opens its editor, unticking it removes
+//! the status (`layers.clearIntermediate`, `layers.clearAlternate`), so those two commands have
+//! no item of their own.
 
+use std::collections::{HashMap, HashSet};
+
+use fontcraft_engine::interp::labels::{brace_label, bracket_label};
 use serde_json::{Value, json};
 
 use super::{Pending, current_glyph, palette, widgets};
 use crate::app::FontcraftApp;
 use crate::canvas::view;
-use crate::shell::context_menu;
+use crate::shell::context_menu::{self, Section};
 
 /// Most rows the section lists.
 const MAX_ROWS: usize = 500;
@@ -96,7 +108,83 @@ fn row_refuses(id: &str, row: &Row) -> Option<String> {
     match id {
         "layers.delete" | "layers.rename" if row.kind == "master" => Some("a master layer goes with its master".into()),
         "layers.useAsMaster" if row.kind != "backup" => Some("only a backup layer can become the master layer".into()),
+        "layers.setIntermediate" if row.kind == "master" => Some("a master layer cannot be an intermediate layer".into()),
         _ => None,
+    }
+}
+
+/// The UI command that opens a special layer's editor.
+const EDIT_SPECIAL: &str = "layers.editSpecialLayerSettings";
+
+/// The row menu's ticked items: the command that sets a status, the one that removes it, and
+/// the part of the label it edits.
+const STATUSES: [(&str, &str, &str); 2] =
+    [("layers.setIntermediate", "layers.clearIntermediate", "intermediate"), ("layers.setAlternate", "layers.clearAlternate", "alternate")];
+
+/// The label parts of a special layer.
+struct Special {
+    /// `[…]`: the alternate layer's ranges.
+    bracket: Option<String>,
+    /// `{…}`: the intermediate layer's coordinates.
+    brace: Option<String>,
+}
+
+impl Special {
+    /// Whether the layer has the status `part` names.
+    fn has(&self, part: &str) -> bool {
+        match part {
+            "intermediate" => self.brace.is_some(),
+            "alternate" => self.bracket.is_some(),
+            _ => false,
+        }
+    }
+}
+
+/// A clickable part of a row's label: the text with a button's padding, under the stable `id`.
+fn label_part(ui: &mut egui::Ui, id: egui::Id, text: egui::RichText) -> egui::Response {
+    let galley = egui::WidgetText::from(text).into_galley(ui, Some(egui::TextWrapMode::Extend), f32::INFINITY, egui::TextStyle::Button);
+    let padding = ui.spacing().button_padding;
+    let (rect, _) = ui.allocate_exact_size(galley.size() + 2.0 * padding, egui::Sense::hover());
+    let response = ui.interact(rect, id, egui::Sense::click());
+    if ui.is_rect_visible(rect) {
+        if response.hovered() {
+            let visuals = ui.style().interact(&response);
+            ui.painter().rect_filled(rect, visuals.corner_radius, visuals.weak_bg_fill);
+        }
+        ui.painter().galley(rect.min + padding, galley, ui.visuals().text_color());
+    }
+    response
+}
+
+/// The context menu of `row`: the items of `sections`, acting on that row.
+fn row_menu(ui: &mut egui::Ui, sections: &[Section], row: &Row, special: Option<&Special>, glyph: &str, ctx: &egui::Context, pending: &mut Pending) {
+    for (index, section) in sections.iter().enumerate() {
+        if index > 0 {
+            ui.separator();
+        }
+        for item in section.items.iter().filter(|i| !STATUSES.iter().any(|(_, clear, _)| *clear == i.command)) {
+            let status = STATUSES.iter().find(|(set, _, _)| *set == item.command);
+            let ticked = status.map(|(_, _, part)| special.is_some_and(|s| s.has(part)));
+            let why = item.disabled_reason.clone().or_else(|| row_refuses(item.command, row));
+            let button = match ticked {
+                Some(on) => egui::Button::selectable(on, item.label),
+                None => egui::Button::new(item.label),
+            };
+            let response = ui.add_enabled(why.is_none(), button);
+            let response = match &why {
+                Some(why) => response.on_disabled_hover_text(why),
+                None => response,
+            };
+            if response.clicked() {
+                match (item.command, status, ticked) {
+                    ("layers.rename", _, _) => start_renaming(ctx, &row.id),
+                    (_, Some(&(_, clear, _)), Some(true)) => pending.push((clear, json!({"glyph": glyph, "layer": row.id}))),
+                    (_, Some(&(_, _, part)), _) => pending.push((EDIT_SPECIAL, json!({"glyph": glyph, "layer": row.id, "part": part}))),
+                    (id, _, _) => pending.push((id, row_params(id, glyph, &row.id))),
+                }
+                ui.close();
+            }
+        }
     }
 }
 
@@ -133,6 +221,23 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     };
     let shown_ids: Vec<String> = shown_rows(app, tab, &glyph).into_iter().map(|r| r.id).collect();
     let shown: Vec<&Row> = all.iter().filter(|r| shown_ids.contains(&r.id)).collect();
+    let specials: HashMap<String, Special> = app
+        .session
+        .font()
+        .ok()
+        .and_then(|font| {
+            let wanted: HashSet<&str> = shown.iter().map(|r| r.id.as_str()).collect();
+            let g = font.glyph(&glyph)?;
+            Some(
+                g.layers
+                    .iter()
+                    .filter(|l| wanted.contains(l.id.as_str()))
+                    .map(|l| (l.id.clone(), Special { bracket: bracket_label(font, l), brace: brace_label(font, l) }))
+                    .filter(|(_, s)| s.bracket.is_some() || s.brace.is_some())
+                    .collect(),
+            )
+        })
+        .unwrap_or_default();
     // Rows a command removed drop out; an Edit View tab with none selected shows the active one.
     let mut selected: Vec<String> = match app.state.tab() {
         Some(t) => t.layer_selection.clone(),
@@ -145,7 +250,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     let editing = tab.is_some();
     let renaming: Option<String> = ctx.data(|d| d.get_temp(renaming_id()));
     let tokens = app.tokens.clone();
-    let row_menu = context_menu::sections(&app.session, &app.state, &[ROW_CONTEXT]);
+    let row_menu_sections = context_menu::sections(&app.session, &app.state, &[ROW_CONTEXT]);
     for row in &shown {
         // A selected row is filled across the section's full width, behind the eye and the kind.
         let fill = ui.painter().add(egui::Shape::Noop);
@@ -172,64 +277,58 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
                 }
                 return;
             }
-            let mut text = egui::RichText::new(if row.name.is_empty() { "Untitled" } else { row.name.as_str() });
-            if master_row {
-                text = text.strong();
-            }
-            // On a selected row the active layer's name is underlined; elsewhere it is in the
+            let special = specials.get(&row.id);
+            // On a selected row the active layer's text is underlined; elsewhere it is in the
             // accent colour.
-            match (is_selected, row.id == active_layer) {
-                (true, active) => {
-                    text = text.color(tokens.selected_text);
-                    if active && selected.len() > 1 {
-                        text = text.underline();
+            let style = |text: egui::RichText| match (is_selected, row.id == active_layer) {
+                (true, true) if selected.len() > 1 => text.color(tokens.selected_text).underline(),
+                (true, _) => text.color(tokens.selected_text),
+                (false, true) => text.color(tokens.accent),
+                (false, false) => text,
+            };
+            // What the row shows, each with the part of a special layer's label it is (`None`:
+            // the name).
+            let mut parts: Vec<(egui::Response, Option<&'static str>)> = Vec::new();
+            if master_row || special.is_none() {
+                let mut text = egui::RichText::new(if row.name.is_empty() { "Untitled" } else { row.name.as_str() });
+                if master_row {
+                    text = text.strong();
+                }
+                parts.push((ui.add(egui::Button::selectable(false, style(text))), None));
+            }
+            if let Some(s) = special {
+                for (label, key, part) in [(&s.bracket, "layers.bracket", "alternate"), (&s.brace, "layers.brace", "intermediate")] {
+                    if let Some(label) = label {
+                        let id = widgets::id((key, &row.id));
+                        parts.push((label_part(ui, id, style(egui::RichText::new(label).strong())), Some(part)));
                     }
                 }
-                (false, true) => text = text.color(tokens.accent),
-                (false, false) => {}
-            }
-            let label = ui.add(egui::Button::selectable(false, text));
-            if !master_row && row.kind != "backup" {
+            } else if !master_row && row.kind != "backup" {
                 ui.label(egui::RichText::new(&row.kind).strong().color(if is_selected { tokens.selected_text } else { tokens.text_dim }));
             }
-            if label.clicked() {
-                if editing {
-                    let m = ui.input(|i| i.modifiers);
-                    let params = match (m.shift, m.command) {
-                        (true, _) => json!({"layer": row.id, "extend": "range"}),
-                        (false, true) => json!({"layer": row.id, "extend": "toggle"}),
-                        _ => json!({"layer": row.id}),
-                    };
-                    pending.push(("layers.select", params));
-                } else {
-                    ctx.data_mut(|d| d.insert_temp(picked_id(), row.id.clone()));
-                }
-            }
-            if label.double_clicked() && !master_row {
-                start_renaming(&ctx, &row.id);
-            }
-            label.context_menu(|ui| {
-                for (index, section) in row_menu.iter().enumerate() {
-                    if index > 0 {
-                        ui.separator();
-                    }
-                    for item in &section.items {
-                        let why = item.disabled_reason.clone().or_else(|| row_refuses(item.command, row));
-                        let response = ui.add_enabled(why.is_none(), egui::Button::new(item.label));
-                        let response = match &why {
-                            Some(why) => response.on_disabled_hover_text(why),
-                            None => response,
+            for (response, part) in &parts {
+                if response.clicked() {
+                    if editing {
+                        let m = ui.input(|i| i.modifiers);
+                        let params = match (m.shift, m.command) {
+                            (true, _) => json!({"layer": row.id, "extend": "range"}),
+                            (false, true) => json!({"layer": row.id, "extend": "toggle"}),
+                            _ => json!({"layer": row.id}),
                         };
-                        if response.clicked() {
-                            match item.command {
-                                "layers.rename" => start_renaming(&ctx, &row.id),
-                                id => pending.push((id, row_params(id, &glyph, &row.id))),
-                            }
-                            ui.close();
-                        }
+                        pending.push(("layers.select", params));
+                    } else {
+                        ctx.data_mut(|d| d.insert_temp(picked_id(), row.id.clone()));
                     }
                 }
-            });
+                if response.double_clicked() {
+                    match part {
+                        Some(part) => pending.push((EDIT_SPECIAL, json!({"glyph": glyph, "layer": row.id, "part": part}))),
+                        None if !master_row => start_renaming(&ctx, &row.id),
+                        None => {}
+                    }
+                }
+                response.context_menu(|ui| row_menu(ui, &row_menu_sections, row, special, &glyph, &ctx, pending));
+            }
         });
         if is_selected {
             let rect = egui::Rect::from_x_y_ranges(full_width, drawn.response.rect.y_range());

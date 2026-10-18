@@ -610,6 +610,15 @@ milestone = "M9"
 summary = "Small editor shown after choosing Intermediate, and again on double-clicking the brace label. Fields take internal axis coordinates; the displayed range is that of the masters; an empty field inherits from the parent master."
 ref = "Interpolation › Intermediate Layers › Intermediate Layer Setup"
 status = "handbook"
+notes = "Documented, not yet observed. A dialog that previews layers.setIntermediate while it is open; OK keeps the change, Cancel puts the font back. Each field holds the text of a number, so that it can be left empty, and is labelled with the axis name and the masters' range, `Weight (100 to 900)`."
+guesses = [
+  "The editor is a dialog in the middle of the window, not a popover attached to the row; settle by choosing Intermediate on a layer in the reference app and noting where the fields appear.",
+  "Return in a field takes the typed value and a second Return confirms; settle by typing a coordinate and pressing Return once in the reference app.",
+  "The axis range is written after the axis name as `(100 to 900)`; settle by reading the range beside the fields in the reference app.",
+]
+observe = [
+  "In F2 (special layers), choose Intermediate on a backup layer of `e`: note where the fields appear, how the axis range is written, and whether one Return confirms.",
+]
 
 [[behavior]]
 id = "intermediateLayer.purpose"
@@ -637,6 +646,7 @@ status = "handbook"
 guesses = [
   "An empty coordinate shows the master value it inherits; settle by leaving a field empty in the reference app's popover and reading the label.",
   "Coordinates with a fraction show it, rounded to three decimals (`{90.5}`); settle by entering 90.25 and reading the label.",
+  "The label takes the place of the layer's name in its row; a name the layer has is kept in the file but not shown; settle by opening a file whose brace layer has another name in the reference app.",
 ]
 
 [[behavior]]
@@ -761,6 +771,10 @@ milestone = "M9"
 summary = "Double-clicking the {…} or the […] part of a special layer's label reopens the coordinate editor or the range editor respectively. On a layer that is both, each part is clicked separately."
 ref = "Interpolation › Switching Shapes › Alternate Layers"
 status = "handbook"
+notes = "Documented, not yet observed. The command opens popover.intermediateLayer or popover.alternateLayer on the layer, filled with its present values; double-clicking a part of the label in the Layers palette runs it, and so does choosing Intermediate or Alternate in a row's context menu when the layer does not have that status yet."
+guesses = [
+  "Choosing Intermediate or Alternate in a row's context menu opens the same editor as double-clicking that part of the label; settle by choosing Intermediate on a backup layer in the reference app.",
+]
 
 [[panel]]
 id = "popover.alternateLayer"
@@ -775,6 +789,14 @@ milestone = "M9"
 summary = "Editor shown after choosing Alternate. Values are internal axis coordinates. Example from the source: on a Weight axis running 44–130, min 90 with max empty switches the shape from 90 upward."
 ref = "Interpolation › Switching Shapes › Alternate Layers"
 status = "handbook"
+notes = "Documented, not yet observed. A dialog that previews layers.setAlternate while it is open; OK keeps the change, Cancel puts the font back. Each axis has a heading with its name and the masters' range, and a min and a max field holding the text of a number; an empty field leaves that bound open."
+guesses = [
+  "The editor is a dialog in the middle of the window with a heading per axis over its min and max fields, not a popover attached to the row; settle by choosing Alternate on a layer in the reference app.",
+  "Return in a field takes the typed value and a second Return confirms; settle by typing a bound and pressing Return once in the reference app.",
+]
+observe = [
+  "In F2 (special layers), choose Alternate on a backup layer of `dollar`: note how the min and max fields of each axis are laid out, whether an axis range is shown, and whether one Return confirms.",
+]
 
 [[behavior]]
 id = "alternateLayer.definition"
@@ -803,6 +825,7 @@ status = "handbook"
 guesses = [
   "A range with only a maximum reads `[wg‹140]`, the axis before the bound; settle by leaving min empty in the reference app's range popover.",
   "A layer that is both alternate and intermediate shows the bracket part first, then the brace part, separated by a space; settle by reading such a layer's label in the reference app.",
+  "A master layer with a range shows the master's name in bold followed by its bracket label; settle by giving a master layer a range in the reference app and reading its row.",
 ]
 
 [[behavior]]
@@ -970,6 +993,7 @@ milestone = "M3"
 summary = "The Layers palette lists every master as a layer of the current glyph; intermediate and alternate layers appear indented below the master they belong to."
 ref = "Interpolation › Editing Multiple Masters; Palette › Layers"
 status = "handbook"
+notes = "Documented, not yet observed. Master rows are bold; backup and special layers are indented under their master, special layers with their bold `[…]` and `{…}` label in place of the name."
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Higher-order interpolation (HOI)

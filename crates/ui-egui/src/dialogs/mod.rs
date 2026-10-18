@@ -285,6 +285,8 @@ pub const DIALOGS: &[Dialog] = &[
     export_profiles::DIALOG,
     export_profiles::EXPORT,
     export_profiles::ARTWORK,
+    crate::panels::special_layer_popover::INTERMEDIATE,
+    crate::panels::special_layer_popover::ALTERNATE,
 ];
 
 /// The shell commands of this module.
