@@ -121,6 +121,14 @@ mod tests {
         ("file.exportWithProfiles", &["fonts"], "open documents' titles or paths; no file is opened"),
         ("file.reviewExternalChanges", &["font"], "an open document, whose own file is read again"),
         ("file.saveExportProfile", &["folder", "settings"], "a subfolder of a later export's destination, never climbing out of it"),
+        ("font.master.addFromOtherFont", &["sources", "font"], "an open document's position, title or path; no file is opened"),
+        ("hint.ps.*", &["nodes", "node"], "[outline path index, node index] pairs"),
+        ("path.replaceOutlinePattern", &["replacement"], "outline paths given inline"),
+        ("font.setCrossAxisMappings", &["input", "output"], "axis locations by tag"),
+        ("plugin.installFromFile", &["dataBase64"], "the file's bytes; `path` is the declared one"),
+        // Only a macro the session already lists in its Macros folder matches, and its file
+        // moves to the Removed folder beside it; a path naming anything else is refused.
+        ("pluginManager.remove", &["id"], "an installed module's id or a known macro's path or title"),
         // These run steps or open files the declarations cannot describe; a restricted MCP
         // server refuses them outright (its INDIRECT_COMMANDS).
         ("script.run", &["macro"], "refused whenever file access is restricted"),
