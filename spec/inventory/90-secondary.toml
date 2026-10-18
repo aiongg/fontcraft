@@ -631,6 +631,15 @@ summary = "While a handle is dragged, offers snap targets that make it horizonta
 ref = "FontLab 8 What's new › Consistency & precision › Snapping suggestions"
 status = "docs"
 origin = "fontlab"
+notes = "Documented in the secondary reference's release notes, not yet observed. FontCraft: a View › Suggest switch; while the Select tool drags one handle, the handle snaps to the horizontal or vertical through its node, to the direction of the segment's other handle, or to the right angle to it. Plain snap targets (nodes, handles, guides, metric lines) win over suggestions; suggestions win over alignment with other nodes. Holding Cmd to suppress suggestions belongs to the snapping.suggestActivation setting (M14)."
+guesses = [
+  "Every suggestion switch starts off; the reference's defaults are not documented, and a fresh install of the reference app would settle it.",
+  "Nodes, handles, guides and metric lines within reach win over a suggestion, and a suggestion wins over alignment with another node; dragging a handle near both in the reference app would settle it.",
+]
+observe = [
+  "With View › Suggest › Handles on, drag one handle of a curve near the horizontal through its node and see whether it snaps flat.",
+  "Drag the same handle near the direction of the segment's other handle and near the right angle to it, and note which directions snap.",
+]
 
 [[command]]
 id = "view.suggestLines"
@@ -645,6 +654,16 @@ summary = "While a node is dragged, shows temporary snap lines: the continuation
 ref = "FontLab 8 What's new › Consistency & precision › Snapping suggestions"
 status = "docs"
 origin = "fontlab"
+notes = "Documented in the secondary reference's release notes, not yet observed. FontCraft: while nodes are dragged, the grabbed point snaps to the continuation of a straight segment or handle that ends near the pointer, to the perpendicular of a diagonal guide, or to the centreline between neighbouring facing straight edges (the middles of stems and counters); where two such lines cross near the pointer, it snaps to the crossing."
+guesses = [
+  "A segment or handle counts as nearby when one of its ends is within 200 screen points of the pointer; the reference does not give a reach, and dragging a node at growing distances from a segment in the reference app would settle it.",
+  "A diagonal guide's perpendicular passes through the guide's own point; the reference does not say where, and dragging a node across a diagonal guide's surroundings would settle it.",
+  "Centrelines come from pairs of straight vertical or horizontal edges whose runs overlap; hints and thick guides add none of their own (a thick guide's centreline is the guide, which plain snapping covers); checking hinted glyphs and thick guides in the reference app would settle it.",
+]
+observe = [
+  "With View › Suggest › Lines on, drag a node near the extension of a straight segment and near the middle of a stem, and note the lines that appear.",
+  "Add a guide at 30 degrees, drag a node across the area around it and note where perpendicular snap lines appear.",
+]
 
 [[command]]
 id = "view.suggestDistance"
@@ -659,6 +678,13 @@ summary = "Shows snap outlines at fixed distances from existing contours and ope
 ref = "FontLab 8 What's new › Consistency & precision › Snapping suggestions; Draft & draw › Working with stroke"
 status = "docs"
 origin = "fontlab"
+notes = "Documented in the secondary reference's release notes, not yet observed. FontCraft: while nodes are dragged, the grabbed point snaps to the outline parallel to any segment that stays put, at the master's suggestDistance; while a drag runs the parallel outlines within 120 screen points of the pointer are drawn."
+guesses = [
+  "The distance across an edge running up and down is x, across one running left and right is y, and an edge at an angle gets |nx|·x + |ny|·y for its normal (nx, ny); parallels go round corners; drawing a diagonal stem with different x and y values in the reference app would settle it.",
+]
+observe = [
+  "Set Font Info › Other Values › Suggest distance to x 80 and y 40, turn View › Suggest › Distance on, and drag a node beside a vertical, a horizontal and a diagonal edge; measure where it snaps.",
+]
 
 [[parameter]]
 name = "suggestDistance"
@@ -671,6 +697,9 @@ ref = "FontLab 8 What's new › Consistency & precision (Font Info › Other Val
 status = "docs"
 origin = "fontlab"
 notes = "Moved from M7 to M13 by the M7 planning pass with the other secondary-reference rows (owner decision M3 § 7, question 3)."
+guesses = [
+  "Read as a dictionary {x, y} where a missing key is 0, an array of two numbers, or one number for both; a source file from the reference app that sets it would settle the stored form.",
+]
 
 [[command]]
 id = "view.suggestStems"
@@ -685,6 +714,13 @@ summary = "While an edge is dragged, snaps the thickness being formed to the mas
 ref = "FontLab 8 What's new › Draft & draw › Working with stroke (Suggest › Stems; Font Info › Stems)"
 status = "docs"
 origin = "fontlab"
+notes = "Documented in the secondary reference's release notes, not yet observed. FontCraft: while two or more on-curve nodes in a vertical (or horizontal) line are dragged, the edge snaps where it is one of the master's declared vertical (or horizontal) stems away from a straight parallel edge whose run overlaps it. The stems' glyph filters stand for the reference's stem tags: a stem whose filter leaves out the edited glyph is not suggested."
+guesses = [
+  "Only straight edges that run up and down or left and right are matched, against straight edges; round and diagonal stems get no suggestion; dragging a bowl's side and a diagonal in the reference app would settle it.",
+]
+observe = [
+  "Declare a vertical stem of 80 for lowercase, turn View › Suggest › Stems on, drag the right edge of an n's stem towards 80 units from its left edge, and see whether it snaps; repeat in an uppercase glyph.",
+]
 
 [[setting]]
 id = "snapping.suggestActivation"

@@ -68,6 +68,9 @@ pub struct Scene<'a> {
     /// The selected smart components and their Width and Height properties, resolved by the
     /// caller (`smart.widthHeightFollowBoundingBox`).
     pub smart_sizes: Vec<SmartSize>,
+    /// The snapping suggestions that are on and what they read from the document, resolved by
+    /// the caller.
+    pub suggest: crate::suggestions::Suggest,
     components: Vec<ComponentGeom>,
     component_points: usize,
 }
@@ -154,6 +157,7 @@ impl<'a> Scene<'a> {
             components: Vec::new(),
             smart_handles: Vec::new(),
             smart_sizes: Vec::new(),
+            suggest: crate::suggestions::Suggest::default(),
             component_points: 0,
         }
     }
