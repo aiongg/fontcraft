@@ -1,0 +1,14 @@
+{
+  "id": "org.example.node-dots",
+  "name": "Node Dots",
+  "version": "0.1.0",
+  "kind": "reporter",
+  "author": "Your Name",
+  "description": "Draws a dot on every on-curve node and a line at the x-height behind the outline, and writes the node count below the glyph being edited.",
+  "params": {
+    "size": { "type": "number", "min": 1, "max": 20, "default": 5 },
+    "color": { "type": "choice", "options": ["blue", "red", "grey"], "default": "blue" },
+    "count": { "type": "bool", "default": true }
+  },
+  "capabilities": []
+}

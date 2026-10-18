@@ -1,0 +1,24 @@
+[package]
+name = "fontcraft-reporter-template"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "MIT OR Apache-2.0"
+description = "A FontCraft reporter module that marks the on-curve nodes and the x-height"
+publish = false
+
+# A crate of its own, outside any enclosing workspace.
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+serde_json = "1"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

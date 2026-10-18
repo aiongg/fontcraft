@@ -407,6 +407,7 @@ milestone = "M13"
 summary = "Existing scripts are Python against the reference's API and cannot run elsewhere. FontCraft: they are not loadable; a porting guide maps common tasks of the reference's API to command ids, and the control-channel guide shows a short client in Python, among other languages, so authors can keep writing Python outside the app."
 ref = "Extensions › Scripts › Creating Scripts"
 status = "inferred"
+notes = "Porting guide: docs/porting.md (common reference-API tasks mapped to command ids, plug-in kinds mapped to module kinds, a worked example as a macro, a Python client and a command line). The Python, JavaScript, Rust and shell clients are in docs/control-protocol.md › Clients. The documented reference behaviour is not yet observed in the running app."
 guesses = [
   "The repository ships no Python client package, only documented examples, because the code base is Rust only; nothing in the reference decides it.",
 ]
@@ -542,6 +543,7 @@ milestone = "M13"
 summary = "The open-source Glyphs SDK supplies plug-in templates in two languages, Python and Objective-C, and plug-ins start from those. FontCraft: a module template in Rust for each module kind (filter, reporter, check) and the ABI documentation, so any language that compiles to WebAssembly can be used."
 ref = "Extensions › Plug-ins › Creating Plug-ins"
 status = "inferred"
+notes = "Templates: examples/module-template/ holds one standalone Rust crate per kind (filter, reporter, check), each with manifest.json, the ABI in src/abi.rs and a native unit test; built with cargo build --target wasm32-unknown-unknown. The ABI is documented in docs/plugins.md for other languages. The engine test author_docs checks that each template manifest loads with its kind."
 
 [[behavior]]
 id = "api.python"
@@ -550,6 +552,7 @@ milestone = "M13"
 summary = "A documented Python API exposes the application and its font objects to scripts and plug-ins; the chapter refers to that documentation rather than listing the API. FontCraft: the API is the command registry, documented from the same metadata (id, label, parameters, result) for the CLI, the control channel, MCP and macros; modules see the layer JSON of the native format."
 ref = "Extensions › Scripts › Creating Scripts; Extensions › Plug-ins › Creating Plug-ins"
 status = "inferred"
+notes = "The command reference is generated from the registry by commands.list and fontcraft-cli commands; the module input and output are documented in docs/plugins.md and the porting table in docs/porting.md."
 
 [[behavior]]
 id = "api.externalInterop"
@@ -558,6 +561,7 @@ milestone = "M13"
 summary = "The SDK also provides ways for a separate application to work with the running app. FontCraft: this is the primary model: the JSON control channel and the MCP server expose every command to other processes, with the same parameters as the UI."
 ref = "Extensions › Plug-ins › Creating Plug-ins"
 status = "inferred"
+notes = "Clients for the control channel in Python, JavaScript, Rust and the shell: docs/control-protocol.md › Clients; MCP: docs/mcp.md."
 
 [[behavior]]
 id = "extensions.authoringDocs"
@@ -566,6 +570,7 @@ milestone = "M13"
 summary = "Authors are pointed to API references, a scripting tutorial series, a plug-in writing tutorial, existing scripts as examples and the vendor's forum. FontCraft: generated command reference, module SDK guide with worked examples, and a porting table from common reference-API tasks to commands."
 ref = "Extensions › Scripts › Creating Scripts; Extensions › Plug-ins › Creating Plug-ins"
 status = "inferred"
+notes = "Author documentation: docs/plugins.md (modules), docs/macros.md (macros), docs/porting.md (porting table), docs/control-protocol.md › Clients, examples/module-template/. The engine test author_docs checks that every command the porting tables name is registered and that every macro example parses and names registered commands. The reference's forum and tutorial series have no counterpart in the repository."
 
 [[behavior]]
 id = "extensions.sandboxCapabilities"

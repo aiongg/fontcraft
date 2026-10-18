@@ -11,6 +11,7 @@ mod audit;
 mod audit_profiles;
 mod audit_reports;
 mod audit_runner;
+mod author_docs;
 mod autohint_ps;
 mod autohint_reports;
 mod automation_roots;

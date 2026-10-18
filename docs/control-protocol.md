@@ -176,6 +176,148 @@ pressing OK in the window is asked for the folder. Follow-up questions (`dialog.
 `revision` in `document.inspect` grows with every change to a document, whoever made it. Compare
 it to learn whether the font changed since you last looked.
 
+## Clients
+
+Any language with TCP sockets and JSON can drive the app. A client connects to
+`127.0.0.1:<port>`, writes one request per line and reads one reply per line. Send a request,
+then wait for its reply before sending the next. The clients below are complete; copy one and
+build on it. Each expects the app started with `fontcraft --control 7985`.
+
+`engine.execute` runs any command; `engine.commands` lists them with their parameters. For the
+reference app's usual script tasks, [`porting.md`](porting.md) names the commands to use. An
+agent that speaks MCP can use `fontcraft-cli mcp` instead ([`mcp.md`](mcp.md)); a script that
+works on files without the app can use `fontcraft-cli run`.
+
+### Python
+
+Python 3, standard library only:
+
+```python
+import json
+import socket
+
+
+class FontCraft:
+    def __init__(self, port=7985):
+        self.sock = socket.create_connection(("127.0.0.1", port))
+        self.file = self.sock.makefile("rw", encoding="utf-8", newline="\n")
+        self.next_id = 0
+
+    def request(self, method, params=None):
+        self.next_id += 1
+        self.file.write(json.dumps({"id": self.next_id, "method": method, "params": params or {}}) + "\n")
+        self.file.flush()
+        reply = json.loads(self.file.readline())
+        if not reply.get("ok"):
+            raise RuntimeError(reply.get("error"))
+        return reply.get("result")
+
+    def run(self, command, **params):
+        return self.request("engine.execute", {"command": command, "params": params})
+
+
+fc = FontCraft()
+fc.run("glyph.newGlyph", name="a.alt")
+print(fc.run("spacing.getMetrics", glyph="a.alt"))
+```
+
+### JavaScript
+
+Node.js, no packages (save as `fontcraft.mjs`):
+
+```js
+import net from "node:net";
+import readline from "node:readline";
+
+export function connect(port = 7985) {
+  const socket = net.connect(port, "127.0.0.1");
+  const waiting = new Map();
+  let nextId = 0;
+  readline.createInterface({ input: socket }).on("line", (line) => {
+    const reply = JSON.parse(line);
+    const pending = waiting.get(reply.id);
+    waiting.delete(reply.id);
+    if (pending) reply.ok ? pending.resolve(reply.result) : pending.reject(new Error(reply.error));
+  });
+  const request = (method, params = {}) =>
+    new Promise((resolve, reject) => {
+      const id = ++nextId;
+      waiting.set(id, { resolve, reject });
+      socket.write(JSON.stringify({ id, method, params }) + "\n");
+    });
+  return {
+    request,
+    run: (command, params = {}) => request("engine.execute", { command, params }),
+    close: () => socket.end(),
+  };
+}
+
+const fc = connect();
+await fc.run("glyph.newGlyph", { name: "a.alt" });
+console.log(await fc.run("spacing.getMetrics", { glyph: "a.alt" }));
+fc.close();
+```
+
+### Rust
+
+The standard library and `serde_json`:
+
+```rust
+use std::io::{BufRead, BufReader, Write};
+use std::net::TcpStream;
+
+use serde_json::{Value, json};
+
+struct FontCraft {
+    writer: TcpStream,
+    reader: BufReader<TcpStream>,
+    next_id: u64,
+}
+
+impl FontCraft {
+    fn connect(port: u16) -> std::io::Result<Self> {
+        let writer = TcpStream::connect(("127.0.0.1", port))?;
+        let reader = BufReader::new(writer.try_clone()?);
+        Ok(Self { writer, reader, next_id: 0 })
+    }
+
+    fn request(&mut self, method: &str, params: Value) -> Result<Value, String> {
+        self.next_id += 1;
+        let line = json!({ "id": self.next_id, "method": method, "params": params });
+        writeln!(self.writer, "{line}").map_err(|e| e.to_string())?;
+        let mut reply = String::new();
+        self.reader.read_line(&mut reply).map_err(|e| e.to_string())?;
+        let reply: Value = serde_json::from_str(&reply).map_err(|e| e.to_string())?;
+        match reply.get("ok") {
+            Some(Value::Bool(true)) => Ok(reply.get("result").cloned().unwrap_or(Value::Null)),
+            _ => Err(reply.get("error").and_then(Value::as_str).unwrap_or("no reply").to_string()),
+        }
+    }
+
+    fn run(&mut self, command: &str, params: Value) -> Result<Value, String> {
+        self.request("engine.execute", json!({ "command": command, "params": params }))
+    }
+}
+
+fn main() -> Result<(), String> {
+    let mut fc = FontCraft::connect(7985).map_err(|e| e.to_string())?;
+    fc.run("glyph.newGlyph", json!({ "name": "a.alt" }))?;
+    println!("{}", fc.run("spacing.getMetrics", json!({ "glyph": "a.alt" }))?);
+    Ok(())
+}
+```
+
+### Shell
+
+One request with `nc`, or an interactive session with `socat`:
+
+```sh
+printf '%s\n' '{"id": 1, "method": "engine.execute", "params": {"command": "glyph.newGlyph", "params": {"name": "a.alt"}}}' \
+  | nc -w 2 127.0.0.1 7985
+
+socat READLINE TCP:127.0.0.1:7985
+```
+
 ## Planned, in the order the milestones need them
 
 The names and shapes follow the sibling apps so their agents' habits carry over.
