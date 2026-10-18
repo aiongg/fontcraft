@@ -11,10 +11,21 @@
 //! Every job built here is a static font, so PreFilter always runs. Filter and PreFilter strings
 //! come from the font, the master and the instance, in that order, and all of them run; at most
 //! [`fontcraft_fontinfo::MAX_FILTER_STRINGS`] of both together. Scale to UPM is one value: the
-//! instance's, else the master's, else the font's. Each string runs through `filter.apply` in a
-//! session of its own that holds the copy, so export and the Filter menu share one implementation
-//! per filter. Locked glyphs and paths are unlocked in that copy first: a lock guards editing,
-//! not export.
+//! instance's, else the master's, else the font's. Each string that names a built-in filter runs
+//! through `filter.apply` in a session of its own that holds the copy, so export and the Filter
+//! menu share one implementation per filter. Locked glyphs and paths are unlocked in that copy
+//! first: a lock guards editing, not export.
+//!
+//! A string whose name is no built-in filter names an installed filter module, by id or by name
+//! (`fontcraft_plugins::export_filter`). The module runs on the target master's layer of every
+//! glyph that `include:` and `exclude:` let through, through the same
+//! `fontcraft_plugins::export_filter::run_on_layer` as `plugin.runFilter`, and all its layers
+//! change in one edit. A name that is neither a built-in filter nor an installed module, or a
+//! module that is turned off or not loaded (safe mode), refuses the export with a message naming
+//! it: the font would come out without a filter its source asks for. Parameters the module cannot
+//! take, and a module that fails on a glyph, are warnings, and that string changes nothing. The
+//! session's modules reach this stage through [`ModuleScope`], which `Session::execute` enters
+//! for each top-level command.
 //!
 //! Before Filter decomposes, each composite of the target master is given the anchors it would
 //! have inherited from its components, so mark attachment survives the decomposition (not for
@@ -30,21 +41,27 @@
 //! through `cmd::compile::build`, which calls [`linked`] once and [`prepare`] for every job.
 //!
 //! Rows: `Filter`, `PreFilter`, the `filter.customParameter.*` rows, `export.instanceExportFolder`
-//! (M7.10); `Import Font`, `Import Master` (M7.12); `Scale to UPM` (M7.4 scales, M7.10 runs it).
+//! (M7.10); `Import Font`, `Import Master` (M7.12); `Scale to UPM` (M7.4 scales, M7.10 runs it);
+//! `filter.customParameter.thirdParty`, `filter.menu.pluginFiltersListed` (M13.4, module filters).
 
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::sync::Arc;
 
 use fontcraft_compile::Options;
 use fontcraft_geom::{Affine, Point};
 use fontcraft_model::glyphdata::GlyphData;
 use fontcraft_model::plist::{Num, Value as PValue};
-use fontcraft_model::{Anchor, Font, MAX_COMPONENT_DEPTH, MAX_OUTLINE_ELEMENTS, Params, Resolved, Shape, Target, Transform};
-use serde_json::Value;
+use fontcraft_model::{Anchor, Font, Layer, MAX_COMPONENT_DEPTH, MAX_OUTLINE_ELEMENTS, Params, Resolved, Shape, Target, Transform};
+use fontcraft_plugins::export_filter::{self as module_filter, FilterCall};
+use fontcraft_plugins::{Kind, Plugin};
+use serde_json::{Map, Value};
 
 use crate::cmd::compile::Job;
+use crate::extensions::ExtensionState;
 use crate::{EngineError, Result};
 
 const FILTER: &str = "Filter";
@@ -95,7 +112,7 @@ pub(crate) fn prepare<'f>(font: &'f Font, job: &Job, ctx: &StepContext, warnings
                 fontcraft_fontinfo::MAX_FILTER_STRINGS
             ));
         }
-        (usable(pre, warnings), usable(post, warnings), scale_target(&levels, warnings))
+        (usable(pre, warnings)?, usable(post, warnings)?, scale_target(&levels, warnings))
     };
 
     if !pre.is_empty() {
@@ -190,35 +207,202 @@ fn scale_target(levels: &[Option<&Params>; 3], warnings: &mut Vec<String>) -> Op
 
 // ── running filter strings ──────────────────────────────────────────────────────────────────────
 
-/// The strings of `strings` that name a filter with an export string form; each other one is
-/// skipped with a warning (Extrude, which has none, among them).
-fn usable(strings: Vec<(&'static str, String)>, warnings: &mut Vec<String>) -> Vec<(&'static str, String)> {
-    strings
-        .into_iter()
-        .filter(|(param, text)| match crate::cmd::filter::parse_filter_string(text) {
-            Ok(_) => true,
-            Err(e) => {
-                warnings.push(format!("the {param} parameter \"{text}\" was not used: {e}"));
-                false
-            }
-        })
-        .collect()
+/// One Filter or PreFilter string to run.
+enum FilterStep {
+    /// A built-in filter, run through `filter.apply`.
+    BuiltIn { param: &'static str, text: String },
+    /// An installed filter module.
+    Module(ModuleStep),
 }
 
-/// `font` with each of `strings` run on the master layers of `master`, in order, through
-/// `filter.apply`. A string that cannot be read or run is skipped with a warning.
-fn run_filters(mut font: Font, master: &str, strings: &[(&'static str, String)], warnings: &mut Vec<String>) -> Result<Font> {
+/// A filter module named by a filter string, with its parameters resolved.
+struct ModuleStep {
+    param: &'static str,
+    text: String,
+    plugin: Arc<Plugin>,
+    call: FilterCall,
+    params: Map<String, Value>,
+}
+
+/// The strings of `strings` that can run, in order. A string naming a built-in filter that cannot
+/// be read, or one without an export string form (Extrude), is skipped with a warning, and so is
+/// a module string with parameters the module cannot take. A string whose name is neither a
+/// built-in filter nor an installed filter module that may run is an error.
+fn usable(strings: Vec<(&'static str, String)>, warnings: &mut Vec<String>) -> Result<Vec<FilterStep>> {
+    let modules = ModuleScope::current();
+    let mut out = Vec::with_capacity(strings.len());
+    for (param, text) in strings {
+        let builtin_error = match crate::cmd::filter::parse_filter_string(&text) {
+            Ok(_) => {
+                out.push(FilterStep::BuiltIn { param, text });
+                continue;
+            }
+            Err(e) => e,
+        };
+        let call = match module_filter::parse_filter_string(&text) {
+            Ok(call) if !is_builtin(&call.name) => call,
+            // Unreadable, or a built-in filter's string with a problem: the built-in reading
+            // says what is wrong.
+            _ => {
+                warnings.push(format!("the {param} parameter \"{text}\" was not used: {builtin_error}"));
+                continue;
+            }
+        };
+        let plugin = module_for(param, &text, &call.name, modules.as_deref())?;
+        match call.params_for(plugin.manifest()) {
+            Ok(params) => out.push(FilterStep::Module(ModuleStep { param, text, plugin, call, params })),
+            Err(e) => warnings.push(format!("the {param} parameter \"{text}\" was not used: {e}")),
+        }
+    }
+    Ok(out)
+}
+
+/// Whether `name` is a built-in filter, with an export string form or without one.
+fn is_builtin(name: &str) -> bool {
+    crate::cmd::filter::parse_filter_string(name).is_ok() || fontcraft_pathops::filters::find(name).is_some()
+}
+
+/// The installed filter module `name` names (its id, else its name exactly, else its name with
+/// ASCII case ignored), when it may run. Every other case refuses the export with a message
+/// naming it.
+fn module_for(param: &'static str, text: &str, name: &str, modules: Option<&ModuleSet>) -> Result<Arc<Plugin>> {
+    let refuse = |message: String| EngineError::BadParams { command: param.into(), message: format!("the {param} parameter \"{text}\" {message}") };
+    let filters = modules.map(|m| m.filters.as_slice()).unwrap_or_default();
+    let found = match filters.iter().find(|m| m.plugin.id() == name) {
+        Some(m) => Some(m),
+        None => {
+            let exact: Vec<&ModuleEntry> = filters.iter().filter(|m| m.plugin.manifest().name == name).collect();
+            let named =
+                if exact.is_empty() { filters.iter().filter(|m| m.plugin.manifest().name.eq_ignore_ascii_case(name)).collect() } else { exact };
+            match named.as_slice() {
+                [] => None,
+                [one] => Some(*one),
+                several => {
+                    let ids: Vec<&str> = several.iter().map(|m| m.plugin.id()).collect();
+                    return Err(refuse(format!("names `{name}`, which several filter modules are called: give the id of one ({})", ids.join(", "))));
+                }
+            }
+        }
+    };
+    let Some(module) = found else {
+        return Err(refuse(format!("names `{name}`, which is neither a built-in filter nor an installed filter module")));
+    };
+    if modules.is_some_and(|m| m.safe_mode) {
+        return Err(refuse(format!("names the filter module `{}`, and modules do not run in this session (safe mode)", module.plugin.id())));
+    }
+    if !module.enabled {
+        return Err(refuse(format!("names the filter module `{}`, which is turned off", module.plugin.id())));
+    }
+    Ok(Arc::clone(&module.plugin))
+}
+
+/// `font` with each of `steps` run on the master layers of `master`, in order. A string that
+/// cannot be run is skipped with a warning.
+fn run_filters(mut font: Font, master: &str, steps: &[FilterStep], warnings: &mut Vec<String>) -> Result<Font> {
     unlock(&mut font, master);
     let mut s = crate::Session::new();
     s.push_document(font, None);
     let layers = [master.to_string()];
-    for (param, text) in strings {
-        match crate::cmd::filter::run_filter_string(&mut s, text, &layers) {
-            Ok(result) => left_as_they_were(&result, param, text, warnings),
-            Err(e) => warnings.push(format!("the {param} parameter \"{text}\" was not used: {e}")),
+    for step in steps {
+        match step {
+            FilterStep::BuiltIn { param, text } => match crate::cmd::filter::run_filter_string(&mut s, text, &layers) {
+                Ok(result) => left_as_they_were(&result, param, text, warnings),
+                Err(e) => warnings.push(format!("the {param} parameter \"{text}\" was not used: {e}")),
+            },
+            FilterStep::Module(m) => run_module(&mut s, master, m, warnings)?,
         }
     }
     Ok(s.font()?.clone())
+}
+
+/// Runs the module of `step` on the `master` layer of every glyph its scope lets through, and
+/// applies every new layer in one edit. A module that fails on any glyph changes nothing, with a
+/// warning naming the glyph.
+fn run_module(s: &mut crate::Session, master: &str, step: &ModuleStep, warnings: &mut Vec<String>) -> Result<()> {
+    let mut changed: Vec<(String, Layer)> = Vec::new();
+    {
+        let font = s.font()?;
+        for glyph in font.glyphs.iter() {
+            if !step.call.applies_to(&glyph.name) {
+                continue;
+            }
+            let Some(layer) = glyph.layer(master) else { continue };
+            match module_filter::run_on_layer(&step.plugin, font, glyph, layer, &step.params) {
+                Ok((new, _log)) => changed.push((glyph.name.clone(), new)),
+                Err(e) => {
+                    warnings.push(format!("the {} parameter \"{}\" was not used: on `{}`, {e}", step.param, step.text, glyph.name));
+                    return Ok(());
+                }
+            }
+        }
+    }
+    if changed.is_empty() {
+        return Ok(());
+    }
+    s.edit(&step.plugin.manifest().name, |font| {
+        for (name, new) in changed {
+            let mut glyph = font.glyph_mut(&name)?;
+            if let Some(layer) = glyph.layer_mut(master) {
+                *layer = new;
+            }
+        }
+        Ok(())
+    })
+}
+
+// ── the session's modules ───────────────────────────────────────────────────────────────────────
+
+/// One installed filter module as the export filter step sees it.
+struct ModuleEntry {
+    plugin: Arc<Plugin>,
+    /// Turned on.
+    enabled: bool,
+}
+
+/// The filter modules of the session whose command runs on this thread.
+struct ModuleSet {
+    filters: Vec<ModuleEntry>,
+    /// Modules are listed but none runs.
+    safe_mode: bool,
+}
+
+thread_local! {
+    /// The modules in force on this thread ([`ModuleScope`]).
+    static MODULES: RefCell<Option<Rc<ModuleSet>>> = const { RefCell::new(None) };
+}
+
+/// Makes a session's filter modules visible to the export filter step while one top-level
+/// command runs, and puts back what it replaced when dropped (also when the command panics).
+/// Export builds run deep inside commands that have no other way to the session's
+/// `ExtensionState`; the sessions the steps open for built-in filters enter their own, empty,
+/// scope and restore this one.
+pub(crate) struct ModuleScope(Option<Rc<ModuleSet>>);
+
+impl ModuleScope {
+    /// Enters the filter modules of `ext`; none when it has none.
+    pub(crate) fn enter(ext: &ExtensionState) -> ModuleScope {
+        let filters: Vec<ModuleEntry> = ext
+            .registry
+            .list()
+            .iter()
+            .filter(|m| m.plugin.kind() == Kind::Filter)
+            .map(|m| ModuleEntry { plugin: Arc::clone(&m.plugin), enabled: m.enabled })
+            .collect();
+        let set = (!filters.is_empty()).then(|| Rc::new(ModuleSet { filters, safe_mode: !ext.modules_run() }));
+        ModuleScope(MODULES.with(|m| m.replace(set)))
+    }
+
+    /// The modules in force on this thread.
+    fn current() -> Option<Rc<ModuleSet>> {
+        MODULES.with(|m| m.borrow().clone())
+    }
+}
+
+impl Drop for ModuleScope {
+    fn drop(&mut self) {
+        let previous = self.0.take();
+        MODULES.with(|m| *m.borrow_mut() = previous);
+    }
 }
 
 /// Warns about the glyphs a filter run left as they were for a reason other than having no
