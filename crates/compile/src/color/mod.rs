@@ -24,15 +24,17 @@ pub mod cpal;
 pub mod sbix;
 pub mod svg;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use fontcraft_color::export::{ExportPlan, ProblemKind, Switches, plan_master};
+use fontcraft_color::export::{ExportPlan, Problem, ProblemKind, Switches, has_color_layers, plan_between_masters, plan_master, read_switches};
+use fontcraft_color::paint::{ShapeRef, shape_refs};
 use fontcraft_color::{AssetStore, MemoryAssets};
-use fontcraft_model::{Font, Resolved, ResolvedGlyph};
+use fontcraft_model::{Font, Layer, Resolved, ResolvedComponent, ResolvedGlyph, Shape, Target};
 use write_fonts::types::Tag;
 
-use crate::order::{MadeGlyph, append_made};
-use crate::{CompileError, Options};
+use crate::drawing::{format_version, has_strokes_or_masks, shapes_outline};
+use crate::order::{MadeFrom, MadeGlyph, append_made};
+use crate::{CompileError, MAX_FONT_GLYPHS, Options};
 
 /// The final glyph order with glyph ids by name: the source glyphs, then the made glyphs.
 pub struct GlyphOrder<'a> {
@@ -66,11 +68,51 @@ pub struct ColorTables {
 }
 
 /// The export plan of a compile of `resolved`, read from `font`; empty without a source font
-/// (a compile of a resolved font alone has no colour layers).
+/// (a compile of a resolved font alone has no colour layers). An instance between masters is
+/// refused when it would write colour tables ([`plan_between_masters`]).
 pub fn plan(font: Option<&Font>, resolved: &Resolved, options: &Options) -> ExportPlan {
     let Some(font) = font else { return ExportPlan::default() };
     let switches = Switches { cbdt: options.cbdt, ..Switches::from_params(&resolved.params) };
+    if let Some(i) = resolved.instance
+        && font.master_at(&resolved.location).is_none()
+    {
+        let label = match font.instances.get(i) {
+            Some(inst) if !inst.name.is_empty() => inst.name.clone(),
+            _ => format!("#{i}"),
+        };
+        return plan_between_masters(font, &label, &switches);
+    }
     plan_master(font, &resolved.master, &switches)
+}
+
+/// Refuses a static instance the compile interpolates ([`crate::needs_instance_font`]) when it
+/// would write colour tables from the font's colour layers: colour layers do not interpolate
+/// yet (M11.19).
+pub fn check_instance(font: &Font, target: &Target) -> Result<(), CompileError> {
+    let Some(i) = crate::needs_instance_font(font, target) else { return Ok(()) };
+    let switches = read_switches(font, target)?;
+    let label = match font.instances.get(i) {
+        Some(inst) if !inst.name.is_empty() => inst.name.clone(),
+        _ => format!("#{i}"),
+    };
+    match plan_between_masters(font, &label, &switches).problems.into_iter().find(|p| p.kind == ProblemKind::Refusal) {
+        Some(p) => Err(CompileError::ColorRefused(p.message)),
+        None => Ok(()),
+    }
+}
+
+/// The plan of a variable compile: no colour tables until colour layers interpolate (M11.19),
+/// with a warning when the font has colour layers.
+pub fn variable_plan(font: Option<&Font>) -> ExportPlan {
+    let mut plan = ExportPlan::default();
+    if font.is_some_and(has_color_layers) {
+        plan.problems.push(Problem {
+            kind: ProblemKind::Warning,
+            glyph: None,
+            message: "the variable font is written without colour tables: colour layers do not interpolate yet".to_string(),
+        });
+    }
+    plan
 }
 
 /// `glyphs` with the layer glyphs `plan` needs appended, and their descriptions.
@@ -81,21 +123,109 @@ pub fn append_layer_glyphs(
     glyphs: Vec<ResolvedGlyph>,
     warnings: &mut Vec<String>,
 ) -> Result<(Vec<ResolvedGlyph>, Vec<MadeGlyph>), CompileError> {
-    append_made(glyphs, layer_glyphs(font, plan, resolved, warnings)?)
+    let made = layer_glyphs(font, plan, resolved, &glyphs, warnings)?;
+    append_made(glyphs, made)
 }
 
 /// The layer glyphs of `plan`'s COLR paints: one per [`fontcraft_color::ShapeRef`], named
-/// `<base>.color<i>` from the base glyph's production name, outlines resolved (strokes expanded)
-/// at the resolved master, never shared between base glyphs.
+/// `<base>.color<i>` by its position among the base glyph's layer glyphs, with the base glyph's
+/// production name in place of its name where it has one, outlines resolved at the resolved
+/// master, never shared between base glyphs. `glyphs` are the final source glyphs: a base glyph
+/// that is not among them gets no layer glyphs.
+///
+/// A layer glyph takes the advance of its colour layer, as fontc writes it (the editor keeps
+/// colour layers at their master layer's width, but a mark's master layer loses its advance at
+/// export and its colour layers keep theirs), and no anchors, category or Unicode value. The
+/// shapes of the resolved master keep their components; shapes of another master (a layered
+/// font's) and shapes with strokes or masks become contours, drawn as Edit View draws them.
 pub fn layer_glyphs(
     font: Option<&Font>,
     plan: &ExportPlan,
     resolved: &Resolved,
+    glyphs: &[ResolvedGlyph],
     warnings: &mut Vec<String>,
 ) -> Result<Vec<(MadeGlyph, ResolvedGlyph)>, CompileError> {
-    // M11.6: palette layers; M11.7: strokes expanded.
-    let _ = (font, plan, resolved, warnings);
-    Ok(Vec::new())
+    let (Some(font), Some(colr)) = (font, &plan.colr) else { return Ok(Vec::new()) };
+    if plan.refused() {
+        return Ok(Vec::new());
+    }
+    let by_name: HashMap<&str, &ResolvedGlyph> = glyphs.iter().map(|g| (g.name.as_str(), g)).collect();
+    let mut taken: HashSet<String> = glyphs.iter().map(|g| g.name.clone()).collect();
+    let mut out = Vec::new();
+    for cg in &colr.glyphs {
+        let (Some(base), Some(source)) = (by_name.get(cg.glyph.as_str()), font.glyph(&cg.glyph)) else { continue };
+        for (i, shape) in shape_refs(&cg.paint).into_iter().enumerate() {
+            if glyphs.len().saturating_add(out.len()) >= MAX_FONT_GLYPHS {
+                return Err(CompileError::TooManyGlyphs(glyphs.len().saturating_add(out.len()).saturating_add(1)));
+            }
+            let name = unique_name(format!("{}.color{i}", base.name), &mut taken, warnings);
+            let mut g = ResolvedGlyph::new(name.clone(), base.width);
+            g.production_name = base.production_name.as_ref().map(|p| format!("{p}.color{i}"));
+            g.vert_width = base.vert_width;
+            g.vert_origin = base.vert_origin;
+            match source.layers.iter().find(|l| l.id == shape.layer) {
+                Some(layer) => {
+                    g.width = layer.width;
+                    if let Err(message) = draw_shapes(font, layer, shape, &resolved.master, &mut g) {
+                        warnings.push(format!("glyph `{}`: its colour layer glyph `{name}` was written empty: {message}", cg.glyph));
+                    }
+                }
+                None => warnings
+                    .push(format!("glyph `{}`: there is no layer `{}`; its colour layer glyph `{name}` was written empty", cg.glyph, shape.layer)),
+            }
+            let made = MadeGlyph { name, source: MadeFrom::ColorLayer { glyph: cg.glyph.clone(), layer: shape.layer.clone() } };
+            out.push((made, g));
+        }
+    }
+    Ok(out)
+}
+
+/// `wanted`, or the first of `wanted_1`, `wanted_2`… that no glyph has, with a warning.
+fn unique_name(wanted: String, taken: &mut HashSet<String>, warnings: &mut Vec<String>) -> String {
+    if taken.insert(wanted.clone()) {
+        return wanted;
+    }
+    let mut n = 1usize;
+    loop {
+        let name = format!("{wanted}_{n}");
+        if taken.insert(name.clone()) {
+            warnings.push(format!("a glyph called `{wanted}` exists, so the colour layer glyph of that name is called `{name}`"));
+            return name;
+        }
+        n = n.saturating_add(1);
+    }
+}
+
+/// Draws the shapes `shape` names of `layer` into `out`.
+fn draw_shapes(font: &Font, layer: &Layer, shape: &ShapeRef, master: &str, out: &mut ResolvedGlyph) -> Result<(), String> {
+    if shape.stroke.is_some() {
+        // M11.7: strokes expanded to outlines.
+        return Err("the strokes of full-colour layers are not exported yet".to_string());
+    }
+    let shapes: Vec<Shape> = shape.shapes.iter().filter_map(|&i| layer.shapes.get(i).cloned()).collect();
+    if layer.master != master || has_strokes_or_masks(&shapes, format_version(font)) {
+        out.contours = shapes_outline(font, &shapes, &layer.master)?.into_iter().filter(|c| !c.elements().is_empty()).collect();
+        return Ok(());
+    }
+    for s in &shapes {
+        match s {
+            Shape::Path(p) => {
+                let contour = p.to_contour()?;
+                if !contour.elements().is_empty() {
+                    out.contours.push(contour);
+                }
+            }
+            Shape::Component(c) => {
+                let transform = c.affine();
+                if !transform.as_coeffs().iter().all(|v| v.is_finite()) {
+                    return Err("a component transform is not a number".to_string());
+                }
+                out.components.push(ResolvedComponent { base: c.glyph.clone(), transform });
+            }
+            Shape::Image(_) | Shape::Raw(_) => {}
+        }
+    }
+    Ok(())
 }
 
 /// The colour tables `plan` names. A plan with a refusal fails here with its message.
@@ -123,11 +253,26 @@ pub fn build(
         Some(a) => a.as_ref(),
         None => &empty,
     };
-    // M11.6 to M11.11: each table builder in turn.
-    if plan.cpal.is_some() || plan.colr.is_some() || plan.sbix.is_some() || plan.cbdt.is_some() {
-        return Err(CompileError::NotYetImplemented("the colour tables"));
-    }
     let mut out = ColorTables::default();
+    // COLR and CPAL go together; a plan whose base glyphs were all left out of the font writes
+    // neither.
+    if let Some(colr_plan) = &plan.colr
+        && colr_plan.glyphs.iter().any(|g| order.gid(&g.glyph).is_some())
+    {
+        let cpal_plan = plan.cpal.clone().unwrap_or_default();
+        let built = colr::build(colr_plan, order, cpal_plan.palettes.rows())?;
+        let cpal_table = cpal::build(&cpal_plan, &built.added)?;
+        out.tables.push((Tag::new(b"COLR"), built.table));
+        out.tables.push((Tag::new(b"CPAL"), cpal_table));
+    }
+    if let (Some(sbix_plan), Some(font)) = (&plan.sbix, font) {
+        out.tables.push((Tag::new(b"sbix"), sbix::build(sbix_plan, order, assets, font.units_per_em, warnings)?));
+    }
+    if let (Some(cbdt_plan), Some(font)) = (&plan.cbdt, font) {
+        let built = cbdt::build(cbdt_plan, order, assets, font.units_per_em, warnings)?;
+        out.tables.push((Tag::new(b"CBDT"), built.cbdt));
+        out.tables.push((Tag::new(b"CBLC"), built.cblc));
+    }
     if let (Some(svg_plan), Some(font)) = (&plan.svg, font)
         && let Some(bytes) = svg::build(font, svg_plan, order, assets, warnings)?
     {
@@ -138,13 +283,226 @@ pub fn build(
 
 #[cfg(test)]
 mod tests {
-    use fontcraft_color::export::{ExportPlan, SvgDocument, SvgPlan, SvgSource};
+    use std::sync::Arc;
+
+    use fontcraft_color::export::{
+        COLOR_LAYERS_TO_COLR, COLOR_PALETTE_FOR_CPAL, EXPORT_COLR_TABLE, ExportPlan, MASTER_COLOR, SvgDocument, SvgPlan, SvgSource,
+    };
+    use fontcraft_color::layers::with_kind;
     use fontcraft_color::paint::Paint;
-    use fontcraft_model::{Font, ResolvedGlyph};
+    use fontcraft_color::palette::to_param;
+    use fontcraft_color::{ColorLayerKind, Palettes, Rgba};
+    use fontcraft_model::plist::{Number, Str, Value};
+    use fontcraft_model::{Component, Font, Instance, Layer, LayerAttrs, Master, PaletteEntry, Param, Path, ResolvedGlyph, Shape, Target};
+    use skrifa::instance::{LocationRef, Size};
+    use skrifa::raw::TableProvider;
+    use skrifa::raw::types::GlyphId;
+    use skrifa::{FontRef, MetadataProvider};
     use write_fonts::types::Tag;
 
-    use super::{GlyphOrder, build};
-    use crate::Options;
+    use super::{GlyphOrder, build, variable_plan};
+    use crate::{Compiled, Flavour, Options, compile};
+
+    fn colour_layer(id: &str, master: &str, entry: PaletteEntry, shapes: Vec<Shape>) -> Layer {
+        let mut l = Layer::new(master, 600.0);
+        l.id = id.to_string();
+        l.info.attrs = with_kind(&LayerAttrs::default(), Some(ColorLayerKind::Palette(entry)));
+        l.shapes = shapes;
+        l
+    }
+
+    /// Two palettes of two colours. `A` paints a square in colour 1 under a square in the text
+    /// colour that also holds a component; `B` (production name `bee`) one rectangle in colour 0.
+    fn palette_font() -> Font {
+        let mut f = Font::new("Palette Sans");
+        let palettes =
+            Palettes::new(vec![vec![Rgba::new(1, 2, 3, 4), Rgba::new(5, 6, 7, 8)], vec![Rgba::new(9, 10, 11, 12), Rgba::new(13, 14, 15, 16)]])
+                .unwrap();
+        Arc::make_mut(&mut f.info).params.0.push(to_param(&palettes));
+        let mut a = f.glyph_mut("A").unwrap();
+        a.layers[0].width = 600.0;
+        a.layers[0].shapes.push(Shape::Path(Path::rect(50.0, 0.0, 550.0, 700.0)));
+        a.layers.push(colour_layer("A-1", "m01", PaletteEntry::Index(1), vec![Shape::Path(Path::rect(50.0, 0.0, 550.0, 500.0))]));
+        a.layers.push(colour_layer(
+            "A-2",
+            "m01",
+            PaletteEntry::Foreground,
+            vec![Shape::Path(Path::rect(100.0, 100.0, 300.0, 300.0)), Shape::Component(Component::new("C", 0.0, 0.0))],
+        ));
+        drop(a);
+        f.glyph_mut("C").unwrap().layers[0].shapes.push(Shape::Path(Path::rect(400.0, 400.0, 500.0, 600.0)));
+        let mut b = f.glyph_mut("B").unwrap();
+        b.info.production = Some("bee".into());
+        b.layers[0].width = 500.0;
+        b.layers[0].shapes.push(Shape::Path(Path::rect(0.0, 0.0, 400.0, 700.0)));
+        b.layers.push(colour_layer("B-1", "m01", PaletteEntry::Index(0), vec![Shape::Path(Path::rect(20.0, 0.0, 380.0, 650.0))]));
+        drop(b);
+        f
+    }
+
+    fn gid(out: &Compiled, name: &str) -> u16 {
+        u16::try_from(out.glyph_order.iter().position(|n| n == name).unwrap()).unwrap()
+    }
+
+    /// The COLR version 0 records: (base glyph, [(layer glyph, palette index)]).
+    fn colr_records(out: &Compiled) -> Vec<(String, Vec<(String, u16)>)> {
+        let font = FontRef::new(&out.bytes).unwrap();
+        let colr = font.colr().unwrap();
+        assert_eq!(colr.version(), 0);
+        let layers = colr.layer_records().unwrap().unwrap();
+        let name = |g: skrifa::raw::types::GlyphId16| out.glyph_order[usize::from(g.to_u16())].clone();
+        colr.base_glyph_records()
+            .unwrap()
+            .unwrap()
+            .iter()
+            .map(|b| {
+                let first = usize::from(b.first_layer_index());
+                let own = layers.get(first..first + usize::from(b.num_layers())).unwrap();
+                (name(b.glyph_id()), own.iter().map(|l| (name(l.glyph_id()), l.palette_index())).collect())
+            })
+            .collect()
+    }
+
+    fn cpal_palettes(out: &Compiled) -> Vec<Vec<(u8, u8, u8, u8)>> {
+        let font = FontRef::new(&out.bytes).unwrap();
+        let cpal = font.cpal().unwrap();
+        let records = cpal.color_records_array().unwrap().unwrap();
+        let entries = usize::from(cpal.num_palette_entries());
+        cpal.color_record_indices()
+            .iter()
+            .map(|i| records[usize::from(i.get())..usize::from(i.get()) + entries].iter().map(|c| (c.red, c.green, c.blue, c.alpha)).collect())
+            .collect()
+    }
+
+    fn has_table(out: &Compiled, tag: &[u8; 4]) -> bool {
+        FontRef::new(&out.bytes).unwrap().table_data(Tag::new(tag)).is_some()
+    }
+
+    #[test]
+    fn palette_layers_compile_to_cpal_colr_and_layer_glyphs() {
+        let f = palette_font();
+        for flavour in [Flavour::TrueType, Flavour::Cff] {
+            let out = compile(&f, &f.default_target().unwrap(), flavour, &Options::default()).unwrap();
+            let n = out.glyph_order.len();
+            assert_eq!(&out.glyph_order[n - 3..], ["A.color0", "A.color1", "B.color0"], "{flavour:?}: layer glyphs after the source glyphs");
+            assert_eq!(
+                colr_records(&out),
+                [
+                    ("A".to_string(), vec![("A.color0".to_string(), 1), ("A.color1".to_string(), 0xFFFF)]),
+                    ("B".to_string(), vec![("B.color0".to_string(), 0)]),
+                ],
+                "{flavour:?}: the first layer in the file at the bottom, `*` as 0xFFFF"
+            );
+            assert_eq!(cpal_palettes(&out), [vec![(1, 2, 3, 4), (5, 6, 7, 8)], vec![(9, 10, 11, 12), (13, 14, 15, 16)]], "{flavour:?}");
+
+            let font = FontRef::new(&out.bytes).unwrap();
+            let metrics = font.glyph_metrics(Size::unscaled(), LocationRef::default());
+            let bounds = |name: &str| {
+                let b = metrics.bounds(GlyphId::new(u32::from(gid(&out, name)))).unwrap();
+                (b.x_min, b.y_min, b.x_max, b.y_max)
+            };
+            // Each layer glyph draws its own layer, the component included; the base glyph keeps
+            // the master layer as the fallback.
+            assert_eq!(bounds("A.color0"), (50.0, 0.0, 550.0, 500.0), "{flavour:?}");
+            assert_eq!(bounds("A.color1"), (100.0, 100.0, 500.0, 600.0), "{flavour:?}");
+            assert_eq!(bounds("A"), (50.0, 0.0, 550.0, 700.0), "{flavour:?}");
+            assert_eq!(metrics.advance_width(GlyphId::new(u32::from(gid(&out, "B.color0")))), Some(600.0), "{flavour:?}: the colour layer's advance");
+            assert_eq!(font.charmap().map('A').map(|g| g.to_u32()), Some(u32::from(gid(&out, "A"))), "{flavour:?}");
+            // A layer glyph is named from its base glyph's production name (CFF fonts keep their
+            // names in the charset, not in `post`).
+            if matches!(flavour, Flavour::TrueType) {
+                let post = font.post().unwrap();
+                assert_eq!(post.glyph_name(skrifa::raw::types::GlyphId16::new(gid(&out, "B.color0"))), Some("bee.color0"));
+            }
+        }
+    }
+
+    #[test]
+    fn instance_switches_remove_or_reorder_the_colour_tables() {
+        let mut f = palette_font();
+        let int = |i: i64| Value::Number(Number::int(i));
+        let instance = |name: &str, param: (&str, Value)| {
+            let mut inst = Instance { name: name.into(), ..Default::default() };
+            inst.params.0.push(Param::new(param.0, param.1));
+            inst
+        };
+        Arc::make_mut(&mut f.instances)
+            .extend([instance("Second", (COLOR_PALETTE_FOR_CPAL, int(1))), instance("Plain", (EXPORT_COLR_TABLE, Value::Bool(false)))]);
+        let ttf = |i: usize| compile(&f, &Target::Instance(i), Flavour::TrueType, &Options::default()).unwrap();
+
+        let second = ttf(0);
+        assert_eq!(cpal_palettes(&second), [vec![(9, 10, 11, 12), (13, 14, 15, 16)], vec![(1, 2, 3, 4), (5, 6, 7, 8)]]);
+        assert_eq!(colr_records(&second).len(), 2, "the layer records are unchanged");
+
+        let plain = ttf(1);
+        assert!(!has_table(&plain, b"COLR") && !has_table(&plain, b"CPAL"));
+        assert!(plain.glyph_order.iter().all(|n| !n.contains(".color")), "no layer glyphs: {:?}", plain.glyph_order);
+        let font = FontRef::new(&plain.bytes).unwrap();
+        let a = font.charmap().map('A').unwrap();
+        let b = font.glyph_metrics(Size::unscaled(), LocationRef::default()).bounds(a).unwrap();
+        assert_eq!((b.x_min, b.y_max), (50.0, 700.0), "the master layer stays as the outline");
+
+        // An interpolated instance would need interpolated colour layers: refused, unless no
+        // colour table is asked for.
+        Arc::make_mut(&mut f.instances).push(Instance { name: "Between".into(), location: vec![500.0], ..Default::default() });
+        let refused = compile(&f, &Target::Instance(2), Flavour::TrueType, &Options::default());
+        assert!(matches!(&refused, Err(crate::CompileError::ColorRefused(m)) if m.contains("Between")), "{:?}", refused.map(|c| c.glyph_order));
+
+        // A font without colour layers gets no colour tables, palettes or not.
+        let mut bare = Font::new("Bare");
+        Arc::make_mut(&mut bare.info).params.0.push(to_param(&Palettes::new(vec![vec![Rgba::BLACK]]).unwrap()));
+        let out = compile(&bare, &bare.default_target().unwrap(), Flavour::TrueType, &Options::default()).unwrap();
+        assert!(!has_table(&out, b"CPAL") && !has_table(&out, b"COLR"), "CPAL only with a table that uses it");
+    }
+
+    #[test]
+    fn a_layered_font_with_master_colors_compiles_to_colr() {
+        let mut f = Font::new("Layered");
+        Arc::make_mut(&mut f.info).params.0.push(Param::new(COLOR_LAYERS_TO_COLR, Value::Bool(true)));
+        let masters = Arc::make_mut(&mut f.masters);
+        masters[0].params.0.push(Param::new(MASTER_COLOR, Value::String(Str::new("255,0,0,255"))));
+        let mut shade = Master { id: "m02".into(), name: "Shade".into(), ..masters[0].clone() };
+        shade.params.0.retain(|p| p.name != MASTER_COLOR);
+        shade.params.0.push(Param::new(MASTER_COLOR, Value::String(Str::new("0,0,255,128"))));
+        masters.push(shade);
+        let names: Vec<String> = f.glyphs.as_arcs().iter().map(|g| g.name.clone()).collect();
+        for name in names {
+            let mut g = f.glyph_mut(&name).unwrap();
+            let mut copy = g.layers[0].clone();
+            copy.id = "m02".into();
+            copy.master = "m02".into();
+            g.layers.push(copy);
+        }
+        let mut a = f.glyph_mut("A").unwrap();
+        a.layers[0].shapes.push(Shape::Path(Path::rect(0.0, 0.0, 100.0, 100.0)));
+        a.layers[1].shapes.push(Shape::Path(Path::rect(10.0, -10.0, 110.0, 90.0)));
+        drop(a);
+
+        let out = compile(&f, &Target::Master("m01".into()), Flavour::TrueType, &Options::default()).unwrap();
+        let records = colr_records(&out);
+        let a = records.iter().find(|(base, _)| base == "A").unwrap();
+        // The first master on top: the second master's layer is painted first. The master
+        // colours become palette rows, the first used first.
+        let palettes = cpal_palettes(&out);
+        assert_eq!(palettes, [vec![(0, 0, 255, 128), (255, 0, 0, 255)]]);
+        assert_eq!(a.1, [("A.color0".to_string(), 0), ("A.color1".to_string(), 1)]);
+        let font = FontRef::new(&out.bytes).unwrap();
+        let b = font.glyph_metrics(Size::unscaled(), LocationRef::default()).bounds(GlyphId::new(u32::from(gid(&out, "A.color0")))).unwrap();
+        assert_eq!((b.x_min, b.y_min, b.x_max, b.y_max), (10.0, -10.0, 110.0, 90.0), "drawn from the second master's layer");
+
+        // Without the switch the layered font exports plainly.
+        Arc::make_mut(&mut f.info).params.0.retain(|p| p.name != COLOR_LAYERS_TO_COLR);
+        let plain = compile(&f, &Target::Master("m01".into()), Flavour::TrueType, &Options::default()).unwrap();
+        assert!(!has_table(&plain, b"COLR"));
+    }
+
+    #[test]
+    fn a_variable_build_plans_no_colour_tables() {
+        let plan = variable_plan(Some(&palette_font()));
+        assert!(plan.tables().is_empty());
+        assert_eq!(plan.problems.len(), 1);
+        assert!(variable_plan(Some(&Font::new("Plain"))).problems.is_empty());
+    }
 
     #[test]
     fn an_svg_plan_makes_the_svg_table() {

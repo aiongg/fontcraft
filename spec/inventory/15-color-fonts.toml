@@ -727,6 +727,7 @@ milestone = "M11"
 summary = "Colour data is added to ordinary OpenType fonts and can go into every export flavour: CFF-based .otf, TrueType .ttf, WOFF and WOFF2. Whether the colours show depends only on the rendering environment."
 ref = "Color Fonts › Working with Color Fonts › Exporting Color Fonts"
 status = "handbook"
+notes = "CPAL and COLR are written the same way for TrueType and CFF outlines; the layer glyphs are written like any glyph in `glyf` or `CFF `."
 
 # ───────────────────────────── Behaviours: layered colour fonts ─────────────────────────────
 
@@ -825,7 +826,10 @@ ref = "Appendix › Custom Parameters › Color Layers to COLR"
 status = "handbook"
 guesses = [
   "The masters with a Master Color become palette layers of one glyph in master order, the last master at the bottom and the first on top (as Edit View stacks them), each in a palette entry made from its Master Color; the fallback outline is the instance's own master. Settled by exporting the layered test font with Color Layers to COLR from the reference.",
+  "The Master Colors become palette rows after the font's own palettes, the same rows in every palette, numbered in the order the layers first use them; without palettes they are the one palette. Settled by reading CPAL of the layered test font exported from the reference.",
+  "A glyph that has palette or full-colour layers of its own keeps them; only glyphs without such layers are converted from the masters, and a master layer without outlines adds no layer. Settled by exporting a layered font in which one glyph also has palette layers.",
 ]
+notes = "Master Color is read as the text `R,G,B,A` or `R,G,B` with components from 0 to 255, as a list of such numbers, or as `#RRGGBB(AA)`; a value that is not a colour leaves its master out, with a warning. Components of other masters are drawn with that master's outlines, so their layer glyphs are written as outlines."
 
 # ───────────────────────────── Behaviours: palettes and palette layers (CPAL + COLR v0) ─────────────────────────────
 observe = ["Layered font: export an instance with Color Layers to COLR and read COLR and CPAL; note the paint order, the master whose outline becomes the fallback glyph, and the colours used."]
@@ -923,7 +927,7 @@ milestone = "M11"
 summary = "If glyphs have Color Palette layers, export writes CPAL and COLR: each palette layer becomes an unencoded layer glyph named after its base glyph with `.color` and its position among the palette layers (`A.color0`, `A.color1`, …), and the base glyph's COLR version 0 record lists those layer glyphs with their palette indices, the first layer in the file first (painted at the bottom). Identical layers of different glyphs are not shared."
 ref = "Color Fonts › COLR/CPAL Fonts; fontc fontbe/src/colr.rs"
 status = "handbook"
-notes = "Naming, order and the absence of sharing are what fontc 1.0.0 and fontmake 3.12.1 both write (M11 planning pass, the fontc colour test sources and a probe with two identical glyphs); the reference's own output is not observed. Layer glyphs follow the source glyphs in the glyph order, numbered numerically (`B.color2` before `B.color10`), as fontc orders them; fontmake sorts them as strings. A layer glyph is named from the base glyph's production name, as fontc does."
+notes = "Naming, order and the absence of sharing are what fontc 1.0.0 and fontmake 3.12.1 both write (M11 planning pass, the fontc colour test sources and a probe with two identical glyphs); the reference's own output is not observed. Layer glyphs follow the source glyphs in the glyph order, numbered numerically (`B.color2` before `B.color10`), as fontc orders them; fontmake sorts them as strings. A layer glyph is named from the base glyph's production name, as fontc does. As fontc writes them (its `glyphs2fontir/src/toir.rs`): a palette layer without paths or components makes no layer glyph; intermediate colour layers are not layers of their own; a layer glyph keeps the layer's components and takes the colour layer's advance, which for a mark is not the zero advance its base glyph gets. Unlike fontc, a layer glyph carries no anchors, as fontmake writes it."
 guesses = [
   "The first palette layer in the file paints at the bottom, as both oracles write it. Settled by exporting the palette test font from the reference and comparing its layer records with the Layers palette order.",
 ]
@@ -949,6 +953,7 @@ ref = "Color Fonts › COLR/CPAL Fonts › Exporting; Appendix › Custom Parame
 status = "handbook"
 guesses = [
   "Every palette is written, with the chosen palette moved to position 0, so the font keeps its alternatives and renders the chosen one by default. Settled by exporting the palette test font with Color Palette for CPAL = 1 from the reference.",
+  "A palette number the font does not have leaves the palettes in their stored order, with an export warning. Settled by exporting the palette test font with Color Palette for CPAL = 5 from the reference.",
 ]
 notes = "Neither oracle reads the parameter; fontmake ignores it on instances and fontc warns that it is unknown."
 observe = ["Palette font: export an instance with Color Palette for CPAL set to 1 and read CPAL; note whether one palette or both are written, and in which order."]
@@ -1382,6 +1387,10 @@ milestone = "M11"
 summary = "Every colour export switch (Color Layers to SVG, Color Layers to COLR, Color Palette for CPAL, Color Palette for SVG, Export COLR Table, Export sbix Table, Export SVG Table, SBIX to SVG) is set per instance in Font Info › Exports, so one source can export differently coloured or differently encoded fonts side by side."
 ref = "Color Fonts › COLR/CPAL Fonts › Exporting; sbix Fonts › Exporting"
 status = "handbook"
+notes = "Documented, not yet observed. An instance that has to be interpolated from the masters is refused while it would write a colour table from colour layers, because colour layers do not interpolate yet (M11.19); a variable font is written without colour tables, with a warning."
+guesses = [
+  "The switches are read from the font's parameters, then the master's, then the instance's, the later winning, as every other export parameter is read. Settled by setting Export COLR Table off on the font and on in an instance in the reference and exporting that instance.",
+]
 
 [[behavior]]
 id = "color.export.glyphFilterTokens"

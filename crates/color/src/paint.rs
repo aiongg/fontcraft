@@ -22,8 +22,10 @@
 //! - Depth at most [`crate::MAX_PAINT_DEPTH`]; stops at most [`crate::MAX_STOPS`].
 
 use fontcraft_geom::Point;
-use fontcraft_model::{Extend, Font, Glyph};
+use fontcraft_model::{Extend, Font, Glyph, PaletteEntry, Shape};
 
+use crate::layers::{ColorLayerKind, color_layers};
+use crate::palette::FOREGROUND_INDEX;
 use crate::{ColorError, Palettes};
 
 /// A node of the paint graph.
@@ -116,10 +118,39 @@ pub struct StrokeSpec {
 
 /// The paint graph of `glyph` for `master_id`, colours resolved against `palettes` where a
 /// writer needs them baked in. `None` when the glyph has no vector colour layers for the master.
+///
+/// A palette layer is one layer glyph of all its paths and components in its palette entry; a
+/// layer without them is left out, as fontc leaves it out. Intermediate colour layers are sources
+/// of their layer glyph's variation (M11.19), not layers of their own.
 pub fn glyph_paint(font: &Font, glyph: &Glyph, master_id: &str, palettes: &Palettes) -> Result<Option<Paint>, ColorError> {
-    // M11.6: palette layers; M11.7: full-colour layers.
-    let _ = (font, glyph, master_id, palettes);
-    Ok(None)
+    let _ = (font, palettes);
+    let mut layers = Vec::new();
+    for (layer, kind) in color_layers(glyph, master_id) {
+        if !layer.info.attrs.coordinates.is_empty() {
+            continue;
+        }
+        match kind {
+            ColorLayerKind::Palette(entry) => {
+                let shapes = drawn_shapes(&layer.shapes);
+                if shapes.is_empty() {
+                    continue;
+                }
+                let color = match entry {
+                    PaletteEntry::Index(index) if index != FOREGROUND_INDEX => ColorRef::Palette { index, alpha: 1.0 },
+                    PaletteEntry::Index(_) | PaletteEntry::Foreground => ColorRef::Foreground { alpha: 1.0 },
+                };
+                layers.push(Paint::Glyph { shape: ShapeRef { layer: layer.id.clone(), shapes, stroke: None }, paint: Box::new(Paint::Solid(color)) });
+            }
+            // M11.7: full-colour layers.
+            ColorLayerKind::FullColor | ColorLayerKind::IColor(_) | ColorLayerKind::Svg => {}
+        }
+    }
+    Ok((!layers.is_empty()).then_some(Paint::Layers(layers)))
+}
+
+/// The indices of the shapes in `shapes` that have an outline: paths and components.
+pub fn drawn_shapes(shapes: &[Shape]) -> Vec<usize> {
+    shapes.iter().enumerate().filter(|(_, s)| matches!(s, Shape::Path(_) | Shape::Component(_))).map(|(i, _)| i).collect()
 }
 
 /// Whether every paint in `paint` is solid, so the glyph fits COLR version 0
@@ -131,8 +162,22 @@ pub fn is_solid_stack(paint: &Paint) -> bool {
 }
 
 /// The layer glyphs `paint` needs, in order: the [`ShapeRef`] of every [`Paint::Glyph`].
+/// Nothing below [`crate::MAX_PAINT_DEPTH`] is visited.
 pub fn shape_refs(paint: &Paint) -> Vec<&ShapeRef> {
-    // M11.6
-    let _ = paint;
-    Vec::new()
+    fn collect<'a>(paint: &'a Paint, depth: usize, out: &mut Vec<&'a ShapeRef>) {
+        if depth > crate::MAX_PAINT_DEPTH {
+            return;
+        }
+        match paint {
+            Paint::Layers(list) => list.iter().for_each(|p| collect(p, depth + 1, out)),
+            Paint::Glyph { shape, paint } => {
+                out.push(shape);
+                collect(paint, depth + 1, out);
+            }
+            Paint::Solid(_) | Paint::Linear { .. } | Paint::Radial { .. } | Paint::Sweep { .. } => {}
+        }
+    }
+    let mut out = Vec::new();
+    collect(paint, 0, &mut out);
+    out
 }
