@@ -1054,6 +1054,9 @@ fn remove_pairs_by_rule(s: &mut Session, v: &Value) -> Result<Value> {
     Ok(json!({"removed": removed, "skipped": skipped}))
 }
 
+/// A vertical kerning pair to store: top glyph, bottom glyph, value.
+type VerticalPair = (String, String, f64);
+
 // ── Vertical from horizontal ───────────────────────────────────────────────────────────────────
 
 fn vertical_from_horizontal(s: &mut Session, v: &Value) -> Result<Value> {
@@ -1074,7 +1077,7 @@ fn vertical_from_horizontal(s: &mut Session, v: &Value) -> Result<Value> {
     let mut skipped = Vec::new();
     let mut counts = Map::new();
     // Per master, the vertical pairs to store: top, bottom, value.
-    let mut created: Vec<(String, Vec<(String, String, f64)>)> = Vec::new();
+    let mut created: Vec<(String, Vec<VerticalPair>)> = Vec::new();
     let mut out = Vec::new();
     let mut total = 0usize;
     for id in &masters {

@@ -154,7 +154,7 @@ fn left_bowl() -> Value {
 fn kerning_build_groups_finds_round_and_straight_sides() {
     let mut s = Session::with_document();
     let o = oval(250.0, 250.0, 200.0, 250.0);
-    draw(&mut s, "o", &[o.clone()], 500.0);
+    draw(&mut s, "o", std::slice::from_ref(&o), 500.0);
     // e: the o with a bar inside, which no profile sees.
     draw(&mut s, "e", &[o, rect(60.0, 240.0, 440.0, 260.0)], 500.0);
     // c: the o's left half with two terminals on the right.
