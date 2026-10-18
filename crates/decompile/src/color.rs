@@ -855,4 +855,72 @@ mod tests {
         let quad = Path::new(true, vec![n(0.0, 0.0, NodeKind::Line), n(50.0, 100.0, NodeKind::OffCurve), n(100.0, 0.0, NodeKind::QCurve)]);
         assert_eq!(group_bounds(&[Shape::Path(quad)]), [0.0, 0.0, 100.0, 50.0]);
     }
+
+    /// What FontCraft's COLR version 1 writer makes of a full-colour layer opens back to the same
+    /// paints: gradient positions are fractions of the curve bounds of each layer glyph's outline
+    /// on both sides.
+    #[test]
+    fn a_full_colour_layer_with_gradients_survives_compile_and_open() {
+        let mut f = Font::new("Gradient Back");
+        let master = f.masters[0].id.clone();
+        Arc::make_mut(&mut f.info).params.set(COLOR_PALETTES, palettes_value(&[vec![[255, 0, 0, 255], [0, 0, 255, 255]]]));
+        let linear = |start: (f64, f64), end: (f64, f64), first: u16| Gradient {
+            kind: GradientKind::Linear { start: fontcraft_geom::Point::new(start.0, start.1), end: fontcraft_geom::Point::new(end.0, end.1) },
+            stops: vec![ColorStop { offset: 0.0, color: color(first, 1.0) }, ColorStop { offset: 1.0, color: color(1 - first, 0.5) }],
+            extend: Extend::Reflect,
+        };
+        let shaded = linear((0.25, 0.5), (0.75, 1.0), 0);
+        // A curve whose top (75) lies below its control points (100).
+        let n = Node::new;
+        let curved = linear((0.0, 0.0), (1.0, 1.0), 1);
+        let shapes = {
+            let mut a = Path::rect(100.0, 100.0, 500.0, 400.0);
+            a.info.attrs.gradient = Some(shaded.clone());
+            let mut b = Path::rect(0.0, 0.0, 100.0, 100.0);
+            b.info.attrs.fill_color = Some(color(1, 1.0));
+            let mut c = Path::new(
+                true,
+                vec![
+                    n(0.0, 0.0, NodeKind::Line),
+                    n(0.0, 100.0, NodeKind::OffCurve),
+                    n(100.0, 100.0, NodeKind::OffCurve),
+                    n(100.0, 0.0, NodeKind::Curve),
+                ],
+            );
+            c.info.attrs.gradient = Some(curved.clone());
+            vec![Shape::Path(a), Shape::Path(b), Shape::Path(c)]
+        };
+        {
+            let mut a = f.glyph_mut("A").unwrap();
+            a.layers[0].width = 600.0;
+            a.layers[0].shapes.push(Shape::Path(Path::rect(0.0, 0.0, 500.0, 400.0)));
+            let mut l = Layer::new(master.as_str(), 600.0);
+            l.id = "a-colour".into();
+            l.info.attrs.full_color = true;
+            l.shapes = shapes;
+            a.layers.push(l);
+        }
+        let bytes = compile_ttf(&f, &Options::default()).unwrap().bytes;
+        let d = crate::decompile(&bytes, None).unwrap();
+        let back = d.font.glyph("A").unwrap();
+        let colour: Vec<&Layer> = back.layers.iter().filter(|l| !l.is_master_layer()).collect();
+        assert_eq!(colour.len(), 1, "one full-colour layer");
+        assert!(colour[0].info.attrs.full_color);
+        let paths: Vec<(&ShapeAttrs, [f64; 4])> = colour[0]
+            .shapes
+            .iter()
+            .map(|s| match s {
+                Shape::Path(p) => (&p.info.attrs, group_bounds(std::slice::from_ref(s))),
+                other => panic!("{other:?}"),
+            })
+            .collect();
+        assert_eq!(paths.len(), 3);
+        assert_eq!(paths[0].1, [100.0, 100.0, 500.0, 400.0]);
+        assert_eq!((paths[0].0.gradient.as_ref(), paths[0].0.fill_color), (Some(&shaded), None));
+        assert_eq!((paths[1].0.gradient.as_ref(), paths[1].0.fill_color), (None, Some(color(1, 1.0))));
+        let Some(Gradient { kind: GradientKind::Linear { start, end }, stops, extend }) = &paths[2].0.gradient else { panic!("{:?}", paths[2].0) };
+        let near = |a: f64, b: f64| (a - b).abs() < 0.02;
+        assert!(near(start.x, 0.0) && near(start.y, 0.0) && near(end.x, 1.0) && near(end.y, 1.0), "{start:?} {end:?}");
+        assert_eq!((stops, *extend), (&curved.stops, Extend::Reflect));
+    }
 }
