@@ -1,5 +1,5 @@
-//! `fontcraft-cli dump` (M12.4, M12.10): a shell over `font.dumpTables`. The TTX, JSON and hex
-//! forms are built; the text views, `@font`, `@glyphs` and `--normalize` come with M12.10.
+//! `fontcraft-cli dump` (M12.4, M12.10): a shell over `font.dumpTables`: TTX, JSON and hex, the
+//! text views (`-t TAG=VIEW`, `-t @font`, `-t @glyphs`) and the normalised dump (`--normalize`).
 
 use fontcraft_engine::{EngineError, Session};
 use serde_json::{Map, Value, json};
@@ -17,6 +17,10 @@ const USAGE: &str = "\
       Write the tables of a compiled font, collection face, WOFF or WOFF2 file to standard output, or
       to -o PATH or --output-dir DIR (one FONT.ttx, .json or .txt file per font). Tables that cannot
       be read are written as hex unless --strict.
+      Text views: -t GPOS=fea, -t GSUB=fea, -t GDEF=fea (feature code), -t GPOS=normalized,
+      -t GDEF=normalized (flat rules), -t @font (the font program's dictionaries), -t @glyphs (one
+      record per glyph; --glyph-detail medium or long adds the path with its hints).
+      --normalize writes the normalised dump for comparing two versions of a font.
 ";
 
 /// The options, as data (M12.4, M12.10).
@@ -32,6 +36,12 @@ const OPTIONS: &[OptSpec] = &[
     OptSpec::switch("strict", false, "stop at the first table that cannot be read"),
     OptSpec::switch("no-clobber", false, "refuse to replace an existing output file"),
     OptSpec::value("newline", "lf|cr|crlf", "lf", "line ending of the output"),
+    OptSpec::switch("normalize", false, "write the normalised dump: sorted tables, no values that always differ, outlines and layout as text"),
+    OptSpec::switch("version", true, "with --normalize, keep the version fields (--no-version blanks them)"),
+    OptSpec::switch("hints", true, "write stem hints in outline dumps (--no-hints leaves them out)"),
+    OptSpec::switch("show-extensions", false, "with --normalize, mark lookups stored as extension lookups"),
+    OptSpec::value("glyphs", "LIST", "", "the glyphs @glyphs lists, comma-separated; default every glyph"),
+    OptSpec::value("glyph-detail", "short|medium|long", "short", "what @glyphs writes per glyph"),
 ];
 
 /// Takes every `-t X`, `--table X` and `--table=X` (or the forms of `long`) out of `args`, so the
@@ -61,6 +71,7 @@ fn take_repeated(args: &[String], short: &str, long: &str) -> (Vec<String>, Vec<
     (values, rest)
 }
 
+/// The `tables` items: `TAG` as a tag, `TAG=VIEW` as `{tag, view}`.
 fn tags(given: &[String], parsed: &[String]) -> Vec<Value> {
     given
         .iter()
@@ -68,7 +79,10 @@ fn tags(given: &[String], parsed: &[String]) -> Vec<Value> {
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .chain(parsed.iter().map(String::as_str))
-        .map(|t| json!(t))
+        .map(|t| match t.split_once('=') {
+            Some((tag, view)) => json!({"tag": tag, "view": view}),
+            None => json!(t),
+        })
         .collect()
 }
 
@@ -96,6 +110,14 @@ fn run(args: &[String]) -> Outcome {
     base.insert("strict".into(), json!(parsed.switch("strict")));
     base.insert("noClobber".into(), json!(parsed.switch("no-clobber")));
     base.insert("newline".into(), json!(parsed.value("newline").unwrap_or("lf")));
+    base.insert("normalize".into(), json!(parsed.switch("normalize")));
+    base.insert("version".into(), json!(parsed.switch("version")));
+    base.insert("hints".into(), json!(parsed.switch("hints")));
+    base.insert("showExtensions".into(), json!(parsed.switch("show-extensions")));
+    base.insert("glyphDetail".into(), json!(parsed.value("glyph-detail").unwrap_or("short")));
+    if let Some(glyphs) = parsed.value("glyphs").filter(|g| !g.is_empty()) {
+        base.insert("glyphs".into(), json!(glyphs));
+    }
     if let Some(split) = parsed.value("split").filter(|s| !s.is_empty()) {
         base.insert("split".into(), json!(split));
     }
@@ -140,6 +162,7 @@ mod tests {
         let (excluded, rest) = take_repeated(&rest, "-x", "--exclude-table");
         assert_eq!(excluded, ["glyf"]);
         assert_eq!(rest, ["A.ttf"]);
+        assert_eq!(tags(&["GPOS=fea,@font".to_string()], &[]), vec![json!({"tag": "GPOS", "view": "fea"}), json!("@font")]);
         let e = run(&["missing.ttf".to_string()]).unwrap_err();
         assert_eq!(e.exit_code(), 3, "an unreadable input is exit status 3");
     }
