@@ -16,9 +16,11 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use fontcraft_fea::{CompileRequest, Compiled, Diagnostic, GlyphOrder, LayoutTable, MetricsValues, Severity, VirtualFiles};
+use fontcraft_tables::fontdame::{self, FontDameOptions};
 use fontcraft_tables::layout_install::{self, BlockValues, MetricFields, Os2Fields};
 use fontcraft_tables::limits::MAX_FEATURE_SOURCE;
 use fontcraft_tables::sfnt::{Tag, WriteOptions, tag_str};
+use fontcraft_tables::volt::{self, VoltOptions};
 use serde_json::{Value, json};
 
 use super::super::file_io::{self, InputKind, OutputRequest};
@@ -83,18 +85,19 @@ fn read_text(path: &Path) -> Result<String> {
     })
 }
 
-/// The text of a source file, and whether it came from a font's `TSIV` table (a VOLT project
-/// stored in a font).
-fn read_source(path: &Path) -> Result<(String, bool)> {
+/// The text of a source file and, for a VOLT project stored in a font's `TSIV` table, that
+/// font's glyph order.
+fn read_source(path: &Path) -> Result<(String, Option<Vec<String>>)> {
     let input = file_io::read_input(path)?;
     if input.kind.is_font() {
         let font = fontcraft_tables::read(&input.bytes, 0)?;
         let tsiv =
             font.get(*b"TSIV").ok_or_else(|| EngineError::Io(format!("{} is a font without a VOLT project (no TSIV table)", path.display())))?;
         let text = std::str::from_utf8(tsiv).map_err(|_| EngineError::Io(format!("the TSIV table of {} is not UTF-8 text", path.display())))?;
-        return Ok((text.trim_end_matches('\0').to_string(), true));
+        let order = fontcraft_tables::ttx::glyph_order(&font)?;
+        return Ok((text.trim_end_matches('\0').to_string(), Some(order)));
     }
-    Ok((read_text(path)?, false))
+    Ok((read_text(path)?, None))
 }
 
 /// The syntax of a source, from its first line that is neither empty nor a comment: FontDame
@@ -346,12 +349,13 @@ pub(super) fn compile_features(_: &mut Session, raw: &Value) -> Result<Value> {
     let mut font = fontcraft_tables::read(&input.bytes, face(&p, &input.bytes)?)?;
 
     let mut texts = Vec::with_capacity(sources.len());
-    let mut from_font = false;
+    let mut font_order: Option<Vec<String>> = None;
     for source in &sources {
-        let (text, in_font) = read_source(source)?;
-        from_font |= in_font;
+        let (text, order) = read_source(source)?;
+        font_order = font_order.or(order);
         texts.push(text);
     }
+    let from_font = font_order.is_some();
     let syntax = match syntax {
         Some(s) => s,
         None if from_font => Syntax::Volt,
@@ -372,19 +376,15 @@ pub(super) fn compile_features(_: &mut Session, raw: &Value) -> Result<Value> {
     let code = match syntax {
         Syntax::Fea => texts.into_iter().next().unwrap_or_default(),
         Syntax::Mti => {
-            let mut code = String::new();
-            for text in &texts {
-                let (fea, notes) = fontcraft_tables::fontdame::fontdame_to_fea(text, &names)?;
-                code.push_str(&fea);
-                if !code.ends_with('\n') {
-                    code.push('\n');
-                }
-                warnings.extend(notes);
-            }
-            code
+            let refs: Vec<&str> = texts.iter().map(String::as_str).collect();
+            let options = FontDameOptions { glyph_order: names.clone(), ..FontDameOptions::default() };
+            let (fea, notes) = fontdame::convert(&refs, &options)?;
+            warnings.extend(notes);
+            fea
         }
         Syntax::Volt => {
-            let (fea, notes) = fontcraft_tables::volt::volt_to_fea(texts.first().map(String::as_str).unwrap_or_default())?;
+            let options = VoltOptions { glyph_order: font_order, ..VoltOptions::default() };
+            let (fea, notes) = volt::convert(texts.first().map(String::as_str).unwrap_or_default(), &options)?;
             warnings.extend(notes);
             fea
         }
@@ -565,8 +565,8 @@ pub(super) fn lint_features(_: &mut Session, raw: &Value) -> Result<Value> {
     } else {
         None
     };
-    let (text, in_font) = read_source(&source)?;
-    if in_font {
+    let (text, font_order) = read_source(&source)?;
+    if font_order.is_some() {
         return Err(p.bad("`source` is a font: the lint reads feature code"));
     }
     let include_dir = include_dir(&p, &source)?;
