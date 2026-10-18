@@ -31,7 +31,8 @@ const USAGE: &str = "\
   fontcraft-cli tables checksum FONT... [--fix] [-o OUT | --in-place]
       Check every table checksum and head.checkSumAdjustment; exit status 1 when one is wrong.
       With --fix, write the font again with correct values.
-  fontcraft-cli tables import FONT DUMP.ttx... [-o OUT | --in-place]
+  fontcraft-cli tables import FONT DUMP.ttx... [--no-recalc-bounds] [-o OUT | --in-place]
+      Compile the tables of TTX dumps into the font, replacing tables with the same tag.
   fontcraft-cli tables reorder FONT [--order recommended|TAG,...] [-o OUT | --in-place]
       Write the tables in the recommended order, or the tags given first.
   fontcraft-cli tables show FONT [TAG...] [--path PATH] [--depth N] [--offsets] [--format json|text]
@@ -63,6 +64,7 @@ fn tables(args: &[String]) -> Outcome {
         "edit" => edit(rest),
         "copy" => copy(rest),
         "checksum" => checksum(rest),
+        "import" => import(rest),
         "reorder" => reorder(rest),
         "show" => show(rest),
         _ => super::not_built(&SUBCOMMAND, args),
@@ -125,6 +127,21 @@ fn add(rest: &[String]) -> Outcome {
     params.insert("font".into(), json!(font));
     params.insert("tables".into(), json!(tables));
     print(&run("tables.add", params)?)
+}
+
+fn import(rest: &[String]) -> Outcome {
+    let flags = with(&OUTPUT_FLAGS, &[("--recalc-bounds", "recalcBounds"), ("--no-recalc-bounds", "noRecalcBounds")]);
+    let (files, mut params) = options(rest, &OUTPUT, &flags)?;
+    drop_json(&mut params);
+    if params.remove("noRecalcBounds").is_some() {
+        params.insert("recalcBounds".into(), json!(false));
+    }
+    let Some((font, dumps)) = files.split_first().filter(|(_, d)| !d.is_empty()) else {
+        return Err(usage("tables import needs FONT and DUMP.ttx..."));
+    };
+    params.insert("font".into(), json!(font));
+    params.insert("dumps".into(), json!(dumps));
+    print(&run("tables.importTtx", params)?)
 }
 
 fn delete(rest: &[String]) -> Outcome {

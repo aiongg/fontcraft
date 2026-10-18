@@ -11,10 +11,10 @@
 //! out (comments carry no data), and `name` records in a legacy encoding other than Mac Roman,
 //! Latin-1 and ASCII are written as escaped bytes when they hold non-ASCII bytes.
 
-mod cmap;
+pub(crate) mod cmap;
 mod glyf;
-mod name;
-mod program;
+pub(crate) mod name;
+pub(crate) mod program;
 #[cfg(test)]
 mod tests;
 

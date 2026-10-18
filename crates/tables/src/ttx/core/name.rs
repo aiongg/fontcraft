@@ -8,11 +8,11 @@ use super::Rd;
 
 /// The legacy Macintosh Roman characters for bytes 0x80 to 0xFF, as Python's `mac_roman` codec
 /// maps them.
-const MAC_ROMAN_HIGH: &str =
+pub(crate) const MAC_ROMAN_HIGH: &str =
     "ÄÅÇÉÑÖÜáàâäãåçéèêëíìîïñóòôöõúùûü†°¢£§•¶ß®©™´¨≠ÆØ∞±≤≥¥µ∂∑∏π∫ªºΩæø¿¡¬√ƒ≈∆«»…\u{a0}ÀÃÕŒœ–—“”‘’÷◊ÿŸ⁄€‹›ﬁﬂ‡·‚„‰ÂÊÁËÈÍÎÏÌÓÔ\u{f8ff}ÒÚÛÙıˆ˜¯˘˙˚¸˝˛ˇ";
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Encoding {
+pub(crate) enum Encoding {
     Utf16,
     Ascii,
     Latin1,
@@ -22,7 +22,7 @@ enum Encoding {
 }
 
 /// fontTools' `getEncoding` for a record; `None` where it knows no encoding.
-fn encoding(platform: u16, encoding: u16, language: u16) -> Option<Encoding> {
+pub(crate) fn encoding(platform: u16, encoding: u16, language: u16) -> Option<Encoding> {
     use Encoding::*;
     match (platform, encoding) {
         (0, 0..=6) => Some(Utf16),

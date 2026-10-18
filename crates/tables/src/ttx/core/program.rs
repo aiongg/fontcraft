@@ -8,7 +8,7 @@
 use super::super::{XmlWriter, num2binary};
 
 /// Opcode, mnemonic, the number of bits the opcode carries, and the descriptive name.
-const OPCODES: &[(u8, &str, u32, &str)] = &[
+pub(crate) const OPCODES: &[(u8, &str, u32, &str)] = &[
     (0x00, "SVTCA", 1, "SetFPVectorToAxis"),
     (0x02, "SPVTCA", 1, "SetPVectorToAxis"),
     (0x04, "SFVTCA", 1, "SetFVectorToAxis"),
