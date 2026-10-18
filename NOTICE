@@ -177,6 +177,7 @@ bundled, the file says so in its header and the project is listed here with its 
   fallbacks of fontInfoData.py (normalizeStringForPostscript, postscriptFontNameFallback,
   postscriptBlueScaleFallback and the static defaults).
   The MATH table writer (crates/compile/src/math.rs) ports setupTable_MATH, with fontTools' (MIT) otlLib buildMathTable.
+  Contextual mark attachment (crates/features/src/marks_contextual.rs, M8.21) ports the contextual-anchor part of featureWriters/markFeatureWriter.py (3.9.1): the asterisk rule of parseAnchorName, _makeContextualAttachments, _makeAllContextualMarkLookups, _makeContextualMarkLookup and the lookup order of the mark, mkmk, abvm and blwm features.
 
   fontc (https://github.com/googlefonts/fontc), Apache License 2.0. The compiler's glyph rules
   are ported from its fontir and fontbe crates (1.0.0): pruning of missing components, inlining

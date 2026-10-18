@@ -4,6 +4,7 @@
 //! once. Run one module with `cargo test -p fontcraft-engine --test engine <module>::`.
 
 mod aligned_metrics;
+mod anchor_context;
 mod anchors;
 mod annotation;
 mod attributes;

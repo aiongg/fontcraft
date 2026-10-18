@@ -96,6 +96,8 @@ mod measurement_tests;
 #[cfg(test)]
 mod metrics_dialogs_tests;
 #[cfg(test)]
+mod palette_anchor_context_tests;
+#[cfg(test)]
 mod panels_tests;
 #[cfg(test)]
 mod preview_tests;

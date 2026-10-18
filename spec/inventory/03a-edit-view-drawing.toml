@@ -2322,7 +2322,12 @@ milestone = "M8"
 summary = "An anchor whose name starts with an asterisk (for example *bottom) is contextual: it replaces the plain anchor of the same base name for mark attachment whenever the glyph occurs in the context written in the anchor's Anchor Context field, and the plain anchor is used everywhere else. Several contextual anchors for one base name are told apart by a free suffix (*bottom.noon, *bottom.reh)."
 ref = "Edit View › Contextual Mark Attachment"
 status = "handbook"
-notes = "Documented, not yet observed. fontmake builds contextual anchors through ufo2ft's mark writer, from the `GPOS_Context` user data; fontc ignores them (M8 planning pass). No corpus source has an anchor context."
+notes = "Documented, not yet observed. Export follows ufo2ft's mark writer, which fontmake runs on the `GPOS_Context` user data; fontc ignores contexts (M8 planning pass). No corpus source has an anchor context. M8.21 (`crates/features/src/marks_contextual.rs`): a `*` anchor with a context attaches by its name without the `*` and without everything from the first `.`; a numbered one (`*top_2`) serves one ligature component. Each context and base name gets a lookup with the anchors, called from a chaining lookup after the plain attachment lookups, so it overrides them where the context matches. A master with such anchors gets the mark writer's `abvm`, `blwm`, `mark` and `mkmk` as feature code appended to the font's code; `curs`, the kerning and `GDEF` stay generated."
+guesses = [
+  "The contextual features are appended after the font's code, so their lookups come before the generated cursive and kerning lookups in the lookup list; a fontmake build with kerning, cursive and contextual anchors would settle the order.",
+  "A variable font keeps the plain anchors and warns that the contexts were left out; fontmake's variable build would settle what the reference does.",
+  "`abvm` and `blwm` take each contextual anchor by its own base name, where ufo2ft adds a context's whole anchor list to a feature when any one of them matches; a font with both kinds under one context would settle it.",
+]
 
 [[behavior]]
 id = "anchors.contextSyntax"
@@ -2331,7 +2336,12 @@ milestone = "M8"
 summary = "The anchor context is OpenType feature code for a glyph sequence in which * stands for the glyph holding the anchor; classes and tokens are allowed. An optional & marks where the mark glyph sits (needed when it does not come directly after the base), and a leading lookupflag …; statement sets lookup flags, typically UseMarkFilteringSet to restrict which marks the context applies to."
 ref = "Edit View › Contextual Mark Attachment"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. As ufo2ft reads the context (fontmake run on a font built for M8.21): each line is a separate context, trailing semicolons are dropped, the text before the semicolon is the lookup's flag statement, and without & the mark is put right after each *. Contexts that share a flag statement share one chaining lookup; longer contexts come first."
+guesses = [
+  "Tokens in a context are expanded with the compiled master's values before the context is read, as in feature code; a context whose token fails is left out with a warning.",
+  "A context line without `*`, or with `{`, `}`, `#` or a double quote, leaves the anchor's context out with a warning, where ufo2ft passes it to the feature compiler; the running app would show whether it refuses such a context.",
+  "With several semicolons the text up to the last one is the flag part, where ufo2ft fails on a second semicolon; the running app would settle it.",
+]
 
 [[panel]]
 id = "palette.anchorContext"
@@ -2343,7 +2353,10 @@ milestone = "M8"
 summary = "Field at the bottom of the Palette for the context of a selected asterisk-prefixed anchor. It is shown only while Show Info is on."
 ref = "Edit View › Contextual Mark Attachment"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. M8.21 (`crates/ui-egui/src/panels/palette_anchor_context.rs`): the last contextual section of the Palette, shown while Show Info is on and exactly one anchor whose name starts with `*` is selected; it runs `anchor.setContext`."
+guesses = [
+  "The field is multi-line, since a context may hold several lines, commits when it loses the focus, and Escape restores the stored text; the running app would show its size and when it commits.",
+]
 observe = [
   "In F6 (contextual anchors), select a `*top` anchor in Edit View: note the Anchor Context field in the Palette and how it accepts a context with a token.",
 ]
@@ -2354,13 +2367,17 @@ label = "Set Context"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?, layer?, anchor: string, context: string}"
+params = "{glyph, layer?, side?, anchor: name, context: string}"
 area = "components"
 milestone = "M8"
 summary = "Stores the context code of a contextual anchor, the action behind the Anchor Context field. The reference exposes it only as that field."
 ref = "Edit View › Contextual Mark Attachment"
 status = "inferred"
-notes = "Stored in the anchor's user data under the key `GPOS_Context`, where the reference's files keep it: glyphsLib passes anchor user data on and ufo2ft's mark writer reads that key (M8 planning pass). fontc does not support contextual anchors; fontmake is the oracle for them."
+notes = "Stored in the anchor's user data under the key `GPOS_Context`, where the reference's files keep it: glyphsLib passes anchor user data on and ufo2ft's mark writer reads that key (M8 planning pass). fontc does not support contextual anchors; fontmake is the oracle for them. M8.21: one undo step; the same context again changes nothing."
+guesses = [
+  "Only an anchor whose name starts with `*` takes a context, a plain anchor is refused, since the mark writer reads contexts of `*` anchors only; the running app would show whether the field appears for other anchors.",
+  "An empty or blank context removes the user-data key rather than storing an empty string; a file saved by the reference app after clearing the field would settle it.",
+]
 
 # ───────────────────────────── Guides ─────────────────────────────
 observe = [

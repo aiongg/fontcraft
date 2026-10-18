@@ -42,6 +42,7 @@ pub mod layers_color;
 pub mod measurements;
 pub mod pairs_and_phrases;
 pub mod palette;
+pub mod palette_anchor_context;
 pub mod palette_modules;
 pub mod palette_smart;
 pub mod reference_font;
