@@ -135,6 +135,7 @@ mod tables_file;
 mod thickness;
 mod transform;
 mod transform_metrics;
+mod tt_assembly;
 mod ufo_color_layers;
 mod undo_steps;
 mod url_scheme;

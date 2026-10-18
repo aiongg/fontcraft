@@ -58,6 +58,7 @@ pub use error::{
     HintingError, MAX_CONTROL_LINES, MAX_CONTROL_TEXT, MAX_CVT_ENTRIES, MAX_DELTA_COLUMNS, MAX_DELTA_PPM, MAX_INSTRUCTOR_PPM, MAX_LAYER_HINTS,
     MAX_PS_STEMS_WRITTEN, MAX_SOURCE_STEMS, MAX_SOURCE_ZONES, MAX_TT_STEMS, MAX_TT_ZONES, MIN_INSTRUCTOR_PPM,
 };
+pub use fontcraft_ttasm as ttasm;
 pub use noderef::{Edge, NodeOrder, NodeRef, TtPoint};
 pub use point_map::{PointMap, VecPointMap};
 pub use ps::{PsHint, PsHintKind, ps_hints, set_ps_hints};

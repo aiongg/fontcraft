@@ -154,7 +154,7 @@ pub mod status;
 mod stem_filters;
 pub mod tension;
 mod thickness;
-mod tt_assembly;
+pub mod tt_assembly;
 mod tt_debug;
 mod url;
 
