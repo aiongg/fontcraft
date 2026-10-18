@@ -33,6 +33,7 @@ const CONTEXTUAL: &[(&str, &str, Shown, Draw)] = &[
     ("stroke", "Stroke", stroke::shown, stroke::show),
     ("smartComponent", "Smart Component", super::palette_smart::shown, super::palette_smart::show),
     ("attributes", "Attributes", super::attributes::shown, super::attributes::show),
+    ("anchorContext", "Anchor Context", super::palette_anchor_context::shown, super::palette_anchor_context::show),
 ];
 
 pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {

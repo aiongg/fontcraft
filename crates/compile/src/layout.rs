@@ -21,6 +21,8 @@
 //!    systems. A generated feature the code declares without a marker is not generated
 //!    (`implicit.markerMissing`); a hand-written `kern` entry gets the marker at its end when
 //!    assembled.
+//!    A master with contextual anchors (`fontcraft_features::marks::contextual`) gets the mark
+//!    writer's features as feature code, appended to the file, instead of generated lookups.
 //! 5. The compile (`fontcraft_fea::compile`), which merges the generated lookups at the markers
 //!    or after the code's lookups.
 //!
@@ -33,6 +35,7 @@ use std::path::Path;
 
 use fontcraft_fea::{CompileRequest, Compiled as FeaCompiled, Diagnostic, GlyphOrder, Severity};
 use fontcraft_features::implicit::{ImplicitRequest, generated};
+use fontcraft_features::marks::contextual as contextual_marks;
 use fontcraft_features::marks::{MarkLimits, MarkRequest};
 use fontcraft_features::optical::BoundsTarget;
 use fontcraft_features::{EntryDiagnostic, EntryKind, FEATURE_WRITERS_KEY, KernRequest, MasterValues, SourceMap, Target, append_tags};
@@ -278,6 +281,7 @@ pub fn build(input: &LayoutInput, opts: &LayoutOptions, warnings: &mut Vec<Strin
 
     // Step 4: the implicit features.
     let mut generated_lookups = fontcraft_fea::GeneratedLookups::default();
+    let mut contextual = None;
     if opts.implicit {
         let index = input.font.map(KernIndex::new);
         let sources = input.edits.source_names();
@@ -308,8 +312,16 @@ pub fn build(input: &LayoutInput, opts: &LayoutOptions, warnings: &mut Vec<Strin
             Some(font) => crate::marks::tags(font, &resolved.master, any_anchor, &declared, warnings),
             None => fontcraft_features::marks::MarkTags::default(),
         };
-        let mark_request =
+        let mut mark_request =
             MarkRequest { input: &mark_input, master: &resolved.master, tags: mark_tags, limits: MarkLimits::default(), gsub: first.gsub.as_deref() };
+        // Contextual anchors (M8.21): the mark writer's features become code appended to the file.
+        if let Some(font) = input.font.filter(|_| opts.gpos) {
+            let pairs: Vec<(&str, &str)> = names.iter().map(|n| (n.as_str(), sources.get(n.as_str()).copied().unwrap_or(n.as_str()))).collect();
+            contextual = contextual_marks::for_master(font, input.data, &mark_request, &pairs, input.variable.is_some(), warnings);
+        }
+        if let Some(found) = &contextual {
+            mark_request.tags = found.tags_left(mark_request.tags);
+        }
         // A variable font's mark positions: the writer runs for each other master too.
         let other_marks: Vec<MarkRequest> = input
             .variable
@@ -339,11 +351,16 @@ pub fn build(input: &LayoutInput, opts: &LayoutOptions, warnings: &mut Vec<Strin
             generated_lookups.axes = variable.layout.axes().to_vec();
         }
     }
-    if assembly.is_none() && generated_lookups.is_empty() {
+    if assembly.is_none() && generated_lookups.is_empty() && contextual.is_none() {
         return Ok(LayoutTables::default());
     }
 
     // Step 5: the compile.
+    let contextual_files = match &contextual {
+        Some(found) => Some(contextual_marks::with_code(&files, &found.code).map_err(|d| mapped(vec![d]))?),
+        None => None,
+    };
+    let mut request = CompileRequest { files: contextual_files.as_ref().unwrap_or(&files), ..request };
     request.generated = (!generated_lookups.is_empty()).then_some(&generated_lookups);
     let compiled = fontcraft_fea::compile(&request).map_err(mapped)?;
     let diagnostics: Vec<EntryDiagnostic> = compiled.warnings.iter().map(|d| map.map(d.clone())).collect();

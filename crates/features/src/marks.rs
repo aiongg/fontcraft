@@ -71,6 +71,8 @@ use crate::properties::{
 };
 use read_fonts::tables::gsub::Gsub;
 
+#[path = "marks_contextual.rs"]
+pub mod contextual;
 #[path = "gdef.rs"]
 mod gdef;
 
