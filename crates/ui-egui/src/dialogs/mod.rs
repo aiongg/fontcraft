@@ -54,7 +54,7 @@ pub mod cross_axis;
 pub mod custom_parameter_picker;
 mod export;
 pub mod export_profiles;
-mod feature_picker;
+pub mod feature_picker;
 pub mod field_picker;
 mod find_and_replace;
 pub mod find_glyphs;
