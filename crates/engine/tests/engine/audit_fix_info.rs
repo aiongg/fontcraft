@@ -258,6 +258,8 @@ fn audit_fix_runs_a_font_info_fix_once_as_one_undo_step() {
         let info = Arc::make_mut(&mut font.info);
         info.params.set("year", int(2026));
         info.properties.set("versionString", "Version 1.0", false);
+        // One result for the font info, one for the master.
+        Arc::make_mut(&mut font.masters)[0].params.set("postscriptUniqueID", int(4_000_000));
         Ok(())
     })
     .unwrap();
@@ -275,7 +277,7 @@ fn audit_fix_runs_a_font_info_fix_once_as_one_undo_step() {
     // A dry run lists the edits and changes nothing.
     let dry = run(&mut s, "audit.fix", json!({"checks": [check], "safeOnly": false, "dryRun": true}));
     assert_eq!(dry["planned"][0]["command"], "font.info.clearGeneratedFields", "{dry}");
-    assert_eq!(dry["planned"][0]["changed"].as_array().unwrap().len(), 2);
+    assert_eq!(dry["planned"][0]["changed"].as_array().unwrap().len(), 3);
     assert_eq!(font_json(&s), before);
 
     // Both results of the kept run make one call, as one undo step.
@@ -294,5 +296,5 @@ fn audit_fix_runs_a_font_info_fix_once_as_one_undo_step() {
     assert_eq!(found(&mut s, check, json!({})), 0);
 
     run(&mut s, "edit.undo", json!({}));
-    assert_eq!(found(&mut s, check, json!({})), 2, "one undo restores both fields");
+    assert_eq!(found(&mut s, check, json!({})), 2, "one undo restores every field");
 }
