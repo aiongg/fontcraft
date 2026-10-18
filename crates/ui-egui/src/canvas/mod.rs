@@ -158,6 +158,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'stat
             status::draw(ui, &c, s, pending);
             reference_font::draw(ui, &c, s, pending);
             reporters::draw_back(ui, &c, s, pending);
+            tt_pixels::draw(ui, &c, s);
         }
         if text_mode && let Some(layout) = layout.as_deref() {
             text::draw_behind(&tc, layout, &tab, span.0);

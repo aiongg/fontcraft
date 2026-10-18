@@ -606,6 +606,14 @@ pub struct TtTokens {
     pub index_text: Color32,
     pub index_size: f32,
     pub index_gap: f32,
+    /// The previewed instance before hinting (`hinting.tt.tool.instanceOutline`).
+    pub instance_outline: Color32,
+    /// The grid-fitted outline (`hinting.tt.tool.gridFittedOutline`).
+    pub fitted_outline: Color32,
+    pub preview_outline_width: f32,
+    /// Full coverage in the pixel backdrop (`hinting.tt.tool.pixelBackdrop`); partly covered
+    /// pixels take a share of its alpha.
+    pub pixel: Color32,
 }
 
 impl TtTokens {
@@ -628,6 +636,10 @@ impl TtTokens {
             index_text: Color32::from_rgb(0xc0, 0x39, 0x2b),
             index_size: 10.0,
             index_gap: 4.0,
+            instance_outline: Color32::from_rgb(0x3a, 0x7b, 0xe8),
+            fitted_outline: Color32::from_rgb(0xe0, 0x3c, 0x31),
+            preview_outline_width: 1.25,
+            pixel: Color32::from_rgba_unmultiplied(0x9a, 0x9a, 0x9a, 0x70),
         }
     }
 }

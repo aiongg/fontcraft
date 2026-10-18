@@ -727,6 +727,8 @@ milestone = "M10"
 summary = "A blue outline shows the currently previewed instance before hinting. The instance is the one chosen in the instance menu beside the eye icon at the bottom left of Edit View (clicking the eye reveals the menu). When that instance coincides with the current master the blue outline is omitted because it would lie under the black one."
 ref = "TrueType Hinting › Hinting Outlines"
 status = "handbook"
+guesses = ["The previewed instance is held by the Instructor and chosen with the `instance` parameter of hint.tt.showPixelPreview, since the Preview Area's instance menu (preview.setInstance) does not exist yet; the blue outline is the instance compiled as TrueType and drawn unhinted, so it shows the exported quadratic outline; the reference app would show whether its blue outline is the cubic instance."]
+notes = "M10.26, crates/ui-egui/src/canvas/tt_pixels.rs: drawn while the Instructor is active and Show Pixel Preview is on; left out when the previewed instance sits at the edited master (Font::master_at), and when no instance is chosen. Documented, not yet observed."
 
 [[behavior]]
 id = "hinting.tt.tool.gridFittedOutline"
@@ -736,6 +738,7 @@ summary = "A red outline shows the previewed instance after its instructions hav
 ref = "TrueType Hinting › Hinting Outlines"
 status = "handbook"
 guesses = ["The grid-fitted outline comes from skrifa's TrueType interpreter (FreeType's v40 interpreter in Rust), not from the Windows rasterizer the handbook names (decided in M10 § 7, question 4); comparing red outlines with the reference app at a few sizes would show the difference."]
+notes = "M10.26, crates/ui-egui/src/canvas/tt_pixels.rs: the previewed instance is compiled in memory as TrueType with only the edited glyph and the glyphs it uses (no layout tables), so its fpgm, prep, cvt and glyph program are the export's; skrifa runs them at the pixel size in the rendering intent. Not drawn for a glyph without a glyph program. The preview font is rebuilt per document revision, glyph and instance; outlines and pixels are kept per size and intent. Documented, not yet observed."
 observe = [
   "T3: instruct n and take screenshots of the red grid-fitted outline at 12 and 16 PPM in each rendering intent; compare them with FontCraft's preview of the same font and note where the outlines differ.",
 ]
@@ -748,6 +751,7 @@ summary = "Behind the outlines a pixel rendering at the current size is shown. I
 ref = "TrueType Hinting › Hinting Outlines"
 status = "handbook"
 guesses = ["The backdrop shows grey coverage of the grid-fitted outline, sampled 6 times across each pixel in the two ClearType intents and once down it in GDI ClearType, not coloured subpixels; screenshots of the reference app's backdrop in each intent would settle it."]
+notes = "M10.26, crates/ui-egui/src/canvas/tt_pixels.rs: the coverage of the grid-fitted outline of the previewed instance, in a grey token colour, one texture pixel per device pixel scaled to the canvas without smoothing; drawn whenever the Instructor is active, also with Show Pixel Preview off. Documented, not yet observed."
 
 [[command]]
 id = "hint.tt.showPixelPreview"
@@ -755,12 +759,14 @@ label = "Show Pixel Preview"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{on?: bool}"
+params = "{on?: bool, instance?: name}"
 area = "hinting-tt"
 milestone = "M10"
 summary = "Edit View context-menu toggle that shows or hides the blue (unhinted instance) and red (grid-fitted) outlines of the TrueType Instructor."
 ref = "TrueType Hinting › Hinting Outlines"
 status = "handbook"
+guesses = ["The toggle hides only the blue and red outlines, as the handbook says; the pixel backdrop stays while the Instructor is active. Choosing an instance turns the preview on. The reference app would settle whether the backdrop goes with the outlines."]
+notes = "M10.26, crates/ui-egui/src/canvas/tt_pixels.rs: {on?: bool, instance?: name or #n or \"master\"}; the outlines are on when the Instructor starts. The context-menu item is not wired yet. Documented, not yet observed."
 
 [[command]]
 id = "hint.tt.setRenderingIntent"
@@ -775,6 +781,7 @@ summary = "Chooses which Windows rendering mode the grid-fitted outline and the 
 ref = "TrueType Hinting › Hinting Outlines"
 status = "inferred"
 guesses = ["The rendering intent is a pop-up in the TrueType Instructor's Info box beside the pixel size; Grayscale maps to skrifa's smooth normal target, ClearType to its LCD target without symmetric rendering (no vertical oversampling), DirectWrite to LCD with symmetric rendering; the reference app would settle the control and the comparison of outlines."]
+notes = "M10.26, crates/ui-egui/src/canvas/tt_pixels.rs: the intent is Instructor state (RenderingIntent, default grayscale) that the grid-fitted outline, the pixel backdrop, the Info box pop-up (M10.27) and the hinting waterfall (M10.29) read; fontcraft_render::hinted maps it to skrifa's targets."
 observe = ["T3: with the TrueType Instructor active, look for the Grayscale, ClearType and DirectWrite choice; note where it is (Info box, toolbar or menu) and what kind of control it is."]
 
 [[panel]]
@@ -808,6 +815,7 @@ summary = "Sets the pixels-per-em value used for the grid-fitted outline and pix
 ref = "TrueType Hinting › Pixel Size"
 status = "handbook"
 guesses = ["The pixel size field accepts whole numbers from 4 to 400 PPM; the reference app would settle the limits."]
+notes = "M10.26, crates/ui-egui/src/canvas/tt_pixels.rs: a whole number from 4 to 400 is taken; anything else is refused and changes nothing. Documented, not yet observed."
 observe = ["T3: type 2, then 500, into the TrueType Instructor's pixel size field; note the smallest and the largest value it accepts."]
 
 [[command]]

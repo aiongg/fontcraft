@@ -12,6 +12,7 @@
 //! | Item | For |
 //! |---|---|
 //! | [`InstructorState::ppm`], [`MIN_PPM`], [`MAX_PPM`], [`clamp_ppm`] | the preview pixel size (`hint.tt.setPixelSize`, the grid-fitted outline, the pixel backdrop) |
+//! | [`InstructorState::intent`], [`InstructorState::instance`], [`InstructorState::pixel_preview`] | the rendering intent, the previewed instance and the blue and red outlines ([`super::tt_pixels`]) |
 //! | [`InstructorState::direction`] | the Info box's direction button, which runs `hint.tt.toggleDirection` |
 //! | [`InstructorState::selected_in`] | the selected instructions, by list position, which the Info box edits |
 //! | [`badges`] | where each badge is drawn, for hit tests and frame tests |
@@ -64,11 +65,27 @@ pub struct InstructorState {
     pub point_indexes: bool,
     /// The selected instructions (`hint.tt.selectInstructions`).
     pub selected: SelectedInstructions,
+    /// The blue and red outlines (`hint.tt.showPixelPreview`).
+    pub pixel_preview: bool,
+    /// The previewed instance, as `hint.tt.showPixelPreview` names it; `None` previews the
+    /// edited master.
+    pub instance: Option<String>,
+    /// The rendering the grid-fitted outline, the pixel backdrop and the hinting preview imitate
+    /// (`hint.tt.setRenderingIntent`).
+    pub intent: super::tt_pixels::RenderingIntent,
 }
 
 impl Default for InstructorState {
     fn default() -> Self {
-        Self { direction: TtDirection::Vertical, ppm: DEFAULT_PPM, point_indexes: false, selected: SelectedInstructions::default() }
+        Self {
+            direction: TtDirection::Vertical,
+            ppm: DEFAULT_PPM,
+            point_indexes: false,
+            selected: SelectedInstructions::default(),
+            pixel_preview: true,
+            instance: None,
+            intent: super::tt_pixels::RenderingIntent::default(),
+        }
     }
 }
 
