@@ -89,7 +89,7 @@ label = "Set Left Sidebearing"
 menu = []
 shortcut = ""
 kind = "engine"
-params = '{glyphs: [names], layer?: id, value: number|string}'
+params = '{glyphs: [names], layer?: id, value: number|string, beam?: number}'
 area = "spacing-kerning"
 milestone = "M5"
 summary = "Sets the left sidebearing of a glyph layer to a number, or stores a metrics key (a string such as 'l', '=h+8' or '==u') for it. A number changes the space left of the outline and, we assume, the advance width with it (as the spacing shortcuts do); a key is stored and evaluated. This is what typing into the Info box field does."
@@ -103,6 +103,7 @@ guesses = [
   "A key that cannot be evaluated (a missing glyph, division by zero, an empty referenced glyph, a result out of range) is refused and nothing is stored.",
   "A key typed with one `=` into a field that shows a layer key removes that layer key, so the new glyph-level key applies on that layer.",
   "The sidebearing setters skip a layer without an outline and report it, since such a layer has no sidebearings.",
+  "With `beam` (the metrics beam, M13.20) a number is measured where the outline meets the horizontal line at that height, a layer the line misses is skipped, and a metrics key is refused because keys measure at the bounds; the secondary references' pages do not say how a key behaves at the beam.",
 ]
 
 [[command]]
@@ -111,7 +112,7 @@ label = "Set Right Sidebearing"
 menu = []
 shortcut = ""
 kind = "engine"
-params = '{glyphs: [names], layer?: id, value: number|string}'
+params = '{glyphs: [names], layer?: id, value: number|string, beam?: number}'
 area = "spacing-kerning"
 milestone = "M5"
 summary = "Sets the right sidebearing of a glyph layer to a number (changing the width) or stores a metrics key for it. This is what typing into the Info box field does."

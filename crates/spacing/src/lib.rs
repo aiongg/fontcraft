@@ -15,7 +15,14 @@
 //! # Sidebearings ([`measure`])
 //! [`metric`] measures LSB, RSB, TSB and BSB from the bounds of a layer's outline with its
 //! components resolved, and gives the width; [`sidebearings_at_height`] measures from the first
-//! and last crossing of a horizontal line. An empty layer has no sidebearings.
+//! and last crossing of a horizontal line (the metrics beam). [`measure::measured_outline`] is
+//! the outline they are measured on, slanted back in an italic master. An empty layer has no
+//! sidebearings.
+//!
+//! # Side profiles ([`profile`])
+//! The leftmost and rightmost ink of an outline sampled over a band, clipped to a depth, and the
+//! white area, mean white and optical gap taken from them: the measures of auto-spacing and
+//! auto-kerning. The module's own doc comment lists its API.
 //!
 //! # Evaluation ([`eval`])
 //! [`effective_key`] is the key that applies to one field of one layer (the layer's own key wins
@@ -60,6 +67,8 @@
 //! Key::display(&self) -> String;  Key::stored(&self) -> String;  Key::glyph(&self) -> Option<&str>
 //! metric(font: &Font, layer: &Layer, field: Field) -> Result<Option<f64>, EvalError>
 //! sidebearings_at_height(font: &Font, layer: &Layer, y: f64) -> Result<Option<(f64, f64)>, EvalError>
+//! measure::measured_outline(font: &Font, layer: &Layer) -> Result<BezPath, EvalError>
+//! profile::profiles(outline: &BezPath, band: Band, step: f64) -> Result<(SideProfile, SideProfile), ProfileError>
 //! effective_key<'a>(glyph: &'a Glyph, layer: &'a Layer, field: Field) -> Option<(Scope, &'a str)>
 //! evaluate(font: &Font, glyph: &str, layer: &str, field: Field) -> Result<Option<f64>, EvalError>
 //! evaluate_key(font: &Font, glyph: &str, layer: &str, field: Field, key: &Key) -> Result<f64, EvalError>

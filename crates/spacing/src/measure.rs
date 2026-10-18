@@ -50,13 +50,19 @@ fn slant(font: &Font, layer: &Layer) -> Option<(f64, f64)> {
     half_x.is_finite().then(|| (angle.to_radians().tan(), half_x))
 }
 
-/// The bounds of a layer's outline, slanted back in an italic master; `None` for an empty layer.
-pub fn bounds(font: &Font, layer: &Layer) -> Result<Option<Rect>, EvalError> {
+/// The outline sidebearings are measured on: [`outline`], slanted back around half the x-height
+/// in a master with an italic angle. Moving the layer sideways moves this outline by as much.
+pub fn measured_outline(font: &Font, layer: &Layer) -> Result<BezPath, EvalError> {
     let mut path = outline(font, layer)?;
     if let Some((tan, y0)) = slant(font, layer) {
         path.apply_affine(Affine::new([1.0, 0.0, -tan, 1.0, tan * y0, 0.0]));
     }
-    path_bounds(&path)
+    Ok(path)
+}
+
+/// The bounds of a layer's outline, slanted back in an italic master; `None` for an empty layer.
+pub fn bounds(font: &Font, layer: &Layer) -> Result<Option<Rect>, EvalError> {
+    path_bounds(&measured_outline(font, layer)?)
 }
 
 /// The bounds of a layer's outline as drawn, not slanted back in an italic master (the box an

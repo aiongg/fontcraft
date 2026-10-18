@@ -1519,16 +1519,23 @@ label = "Auto Space"
 menu = ["Glyph"]
 shortcut = ""
 kind = "engine"
-params = "{glyphs?, masters?: [id], method?: 'optical' | 'tight' | 'custom', percentOfUpm?: number, separation?: number, min?: number, max?: number}"
+params = "{glyphs?, masters?: [id], method?: 'optical' | 'tight' | 'custom', step?: number, depth?: number, area?: number, separation?: number, percentOfUpm?: number, min?: number, max?: number, beam?: number}"
 area = "spacing-kerning"
 milestone = "M13"
 summary = "Computes left and right sidebearings for the given glyphs from their shapes. Method optical judges the side profiles, tight sets both to zero, custom sets a percentage of the em; parts flagged as non-spacing are ignored (FontLab key: semicolon). FontForge's Auto Width does the same per script with a target separation plus minimum and maximum bearings, and warns against running it on glyphs built from references."
 ref = "FontLab 8 What's new › Metrics & kerning › Metrics (Auto-spacing; Autospace method); FontForge dialogs › Auto Width"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2). Built in M13.20 on the side profiles of `fontcraft_spacing::profile`. The non-spacing parts of FontLab (flagged parts ignored) are not built: FontCraft has no such flag. The corpus measure (docs/plans/M13.md § 5) compares the result with Inter's and Oswald's stored sidebearings."
 guesses = [
-  "Method optical is FontCraft's own (open decision D11, docs/plans/M13.md § 3): for each side, the white area between the glyph's side profile, clipped to a depth below its extreme, and the sidebearing line, measured over a band from the baseline to the reference height plus overshoot, is made equal to a target area; target, depth, band and sampling step are parameters, with defaults calibrated on the control glyphs n, o, H and O of the font itself. Neither FontLab nor FontForge documents its method.",
+  "Method optical is FontCraft's own (open decision D11, docs/plans/M13.md § 3): for each side, the side profile sampled every `step` units (default 5) over a band from the baseline less its overshoot to the reference height plus its overshoot, clipped to `depth` (default 15% of the x-height) inward from its extreme, and the advance edge enclose a mean white per inked row equal to `area`. Neither FontLab nor FontForge documents its method; comparing the results on a font spaced in either app would show how far they differ.",
+  "The mean white is taken over the rows with ink rather than over the whole band, so a glyph with ink in part of the band (a period, a hyphen) is not pushed away by the empty rows; FontLab's and FontForge's pages say nothing about such glyphs.",
+  "Without `area`, the area of a group is the mean of the four sides of the font's own n and o (capitals and figures: H and O) as they stand, so those glyphs keep about their spacing; a group without its control glyphs takes the other group's, and a master without any is refused. FontForge asks for a separation instead; it accepts `separation` as twice the area.",
+  "Capitals and figures (case upper or category Number) use the cap-height band, everything else the x-height band.",
+  "Without `glyphs`, every exported letter and figure is spaced; without `masters`, every master. Masters that take their widths from another are skipped.",
+  "Sidebearings are rounded to whole units, then held between `min` and `max`. Method custom defaults to 5% of the em.",
+  "A side whose field holds a metrics key keeps its value, and a layer with a width key or under automatic alignment is skipped, so keys stay in sync. FontLab's page does not say what auto-spacing does with its own metrics expressions.",
+  "`beam` applies to tight and custom: both sidebearings are measured where the outline meets the beam. Optical refuses it, as the profiles cover the whole band.",
 ]
 
 [[setting]]
@@ -1569,7 +1576,7 @@ label = "Center in Width"
 menu = ["Glyph"]
 shortcut = ""
 kind = "engine"
-params = "{glyphs?, layers?: [id], ratio?: number}"
+params = "{glyph | glyphs, layer? | layers?: [id], ratio?: number | 'a:b'}"
 area = "spacing-kerning"
 milestone = "M13"
 summary = "Shifts the outline inside its unchanged advance width so the sidebearings are equal, or in the given left-to-right ratio (FontForge offers 1:2 as Thirds in Width). Background guides of the glyph move with it (FontLab key: | in metrics mode)."
@@ -1577,6 +1584,10 @@ ref = "FontForge Metrics menu › Center in Width, Thirds in Width; FontLab 8 Wh
 status = "docs"
 origin = "fontforge"
 notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+guesses = [
+  "`ratio` is left ÷ right as a number, or text `a:b`; 1:2 matches FontForge's Thirds in Width. The new left sidebearing is rounded to the font's grid, and metrics keys stay (possibly out of sync), as with the spacing shortcuts. Running Center in Width in FontForge on an outline with an odd amount of space would show its rounding.",
+  "Layers under automatic alignment are skipped, as alignment sets their position; empty layers are skipped.",
+]
 
 [[command]]
 id = "kerning.autoKern"
@@ -2875,7 +2886,7 @@ label = "Copy Width / Sidebearings"
 menu = ["Edit"]
 shortcut = ""
 kind = "engine"
-params = "{from: glyph, what: ['width', 'lsb', 'rsb', 'verticalAdvance'], to?: [glyph]}"
+params = "{from: glyph, what: ['width', 'lsb', 'rsb', 'verticalAdvance'], to?: [glyph], layers?: [id]}"
 area = "spacing-kerning"
 milestone = "M13"
 summary = "Copies only the chosen metric values of a glyph so a paste applies them to other glyphs without touching outlines."
@@ -2883,6 +2894,10 @@ ref = "FontForge Edit menu › Copy Width, Copy VWidth, Copy LBearing, Copy RBea
 status = "docs"
 origin = "fontforge"
 notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+guesses = [
+  "FontCraft copies straight from `from` to the glyphs in `to` in one command, layer by layer with the same layer id (the first master by default); without `to` it only returns the values. FontForge copies to a clipboard and pastes later; commands take explicit targets, so the two steps are one.",
+  "The values apply in the order width, lsb, rsb, vertical advance, so copying lsb and rsb together decides the width. A copied value removes the metrics key its field showed, as typing a number does.",
+]
 
 [[command]]
 id = "edit.copyLayerToLayer"
