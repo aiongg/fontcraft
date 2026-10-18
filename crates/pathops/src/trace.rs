@@ -8,7 +8,7 @@
 //! | Boundaries | Every border between ink and paper is walked along pixel edges with ink on the left, so outer contours run counter-clockwise and counters clockwise (y up). Ink pixels that touch only at a corner belong to separate contours. Contours with less area than [`MIN_AREA`] (specks) are dropped. |
 //! | Staircases | Each straight run of pixel edges becomes the midpoints of its first and last unit edge, which turns a pixel staircase into a straight line. A short diagonal between two long runs that turn the same way is put back as the sharp corner it cut. |
 //! | Corners | The smoothed polygon is simplified (Douglas–Peucker); a vertex of the simplified polygon that turns by more than the corner angle is a corner. |
-//! | Curves | Between two corners, cubic curves are fitted to the smoothed polygon ([`fontcraft_geom::fit`]); a side with no simplified vertex between its corners is a straight line. |
+//! | Curves | Between two corners, the smoothed polygon is averaged with its neighbours a few times, which removes what is left of the staircase, and cubic curves are fitted to it ([`fontcraft_geom::fit`]); a side with no simplified vertex between its corners is a straight line. |
 //!
 //! Coordinates are pixels: y up, the origin at the bitmap's bottom-left corner. The caller maps
 //! them into the glyph.

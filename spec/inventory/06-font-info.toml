@@ -610,6 +610,9 @@ summary = "Returns the design axes in order, each with name, tag and hidden flag
 ref = "Font Info › Font › Axes"
 status = "inferred"
 notes = "A query of ours for the Axes list in Font Info › Font."
+guesses = [
+  "A query of ours: the reply lists each axis's index, name, tag and hidden flag in Font Info order; the reference app shows the same facts only in its Axes list.",
+]
 
 [[command]]
 id = "font.axes.add"

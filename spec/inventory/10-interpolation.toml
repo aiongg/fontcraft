@@ -216,6 +216,9 @@ milestone = "M9"
 summary = "Query: returns axes with internal and external ranges, masters and virtual masters with locations, the origin master, instances with an inside/extrapolated flag, mappings, and the glyphs carrying intermediate or alternate layers."
 ref = "Interpolation › Setting up Axes; Setting up Masters; Setting up Instances"
 status = "inferred"
+guesses = [
+  "A query of ours: one reply with axes (internal and external ranges, mapping), masters, virtual masters, the origin, instances with an extrapolated flag and the glyphs with special layers; the reference app spreads these facts over Font Info and the glyph windows.",
+]
 
 [[behavior]]
 id = "instances.multiAxisCoordinates"
@@ -398,6 +401,9 @@ milestone = "M9"
 summary = "Headless form of a drag in the Shape Order window: reorders the shapes of one layer to the given permutation of current indices. Rejects lists that are not a permutation."
 ref = "Interpolation › Outline Compatibility › Reordering Shapes"
 status = "inferred"
+guesses = [
+  "A headless form of our own for the drag in the Shape Order window: it takes the whole new order of one layer and refuses anything but a permutation; watching a drag in the reference app would show whether one drag moves a single shape or swaps two.",
+]
 
 [[command]]
 id = "glyph.swapShapes"
@@ -1448,6 +1454,9 @@ milestone = "M9"
 summary = "Query: converts a coordinate between the internal and external systems using Axis Location and Axis Mappings, so agents and the CLI can address locations in either."
 ref = "Interpolation › Variable Font Options › Axis Mappings"
 status = "inferred"
+guesses = [
+  "A query of ours: internal to external goes through Axis Location and then the inverse of Axis Mappings, external to internal the other way; comparing with the reference app's displayed external values on a test font would settle edge cases between mapping points.",
+]
 
 [[behavior]]
 id = "stat.purpose"
@@ -1716,6 +1725,9 @@ summary = "Shows or hides the Shape Order window on a glyph, by default the one 
 ref = "Interpolation › Outline Compatibility › Reordering Shapes"
 status = "inferred"
 notes = "Our shell command for the window.shapeOrder window. Its reply lists each layer's shapes, so agents can read the order before running glyph.setShapeOrder."
+guesses = [
+  "A shell command of ours that opens the window on a named glyph or the one being edited and replies with each layer's shapes; the reference app opens the window only from its menu.",
+]
 
 [[command]]
 id = "axisMappings.showDialog"
@@ -1730,6 +1742,9 @@ summary = "Opens the Axis Mappings dialog on the font's mappings or on a variabl
 ref = "Interpolation › Variable Font Options › Axis Mappings"
 status = "inferred"
 notes = "Our shell command for dialog.axisMappings; the reference opens the dialog from a click on the value of an Axis Mappings parameter."
+guesses = [
+  "A shell command of ours; the reference app opens the dialog from a click on an Axis Mappings parameter value, which this command stands in for, selecting the first axis unless one is named.",
+]
 
 [[command]]
 id = "axisMappings.dialogEdit"
@@ -1743,6 +1758,9 @@ milestone = "M9"
 summary = "Selects an axis and a point in the open Axis Mappings dialog and applies one mapping edit to its preview, as a click, a drag or an arrow key does."
 ref = "Interpolation › Variable Font Options › Axis Mappings"
 status = "inferred"
+guesses = [
+  "A headless form of our own for clicks, drags and arrow keys in the Axis Mappings dialog: one call selects an axis and point and runs one mapping edit on the preview.",
+]
 
 [[command]]
 id = "axisMappings.closeDialog"
@@ -1756,3 +1774,6 @@ milestone = "M9"
 summary = "Closes the Axis Mappings dialog: OK keeps its edits as one undo step, Cancel gives back the font it opened on."
 ref = "Interpolation › Variable Font Options › Axis Mappings"
 status = "inferred"
+guesses = [
+  "OK keeps all edits made while the dialog was open as one undo step and Cancel restores the font as it was; one undo step is our choice, and undoing after OK in the reference app would settle it.",
+]
