@@ -129,6 +129,11 @@ milestone = "M1"
 summary = "A directory of XML property lists and one GLIF file per glyph per layer: metainfo, fontinfo, groups, kerning, features.fea, lib, layercontents, glyph layers with layerinfo, plus `images/` and `data/`. One UFO is one master. Everything in the specification is read and written; the font, layer, glyph and object libs, the data directory and every identifier are preserved verbatim, while Glyphs-only concepts (smart components, hints tied to nodes, metrics keys, special layers) are carried in lib keys."
 ref = "UFO 3 specification (all pages under versions/ufo3); norad 0.19.0; Import & Export › Unified Font Object"
 status = "docs"
+notes = "Colour layers travel in ufo2ft's lib keys (M11.5): palette layers as the UFO layers of `colorLayerMapping`, or, read from it, in the font-wide `com.github.googlei18n.ufo2ft.colorLayers` list as pairs; a list entry that is a paint (a PaintColrLayers, a list of paints or one paint, each a PaintGlyph over a PaintSolid or a linear, radial or sweep gradient, inside transform paints) opens as full-colour layers of one component each, the gradient geometry as fractions of the component's box, and is written back the same. An entry the writer would not give back (a variable or composite paint, a turned gradient, a malformed value) stays lib data, written as read. Full-colour layers with paths stay UFO layers, their paint attributes reported as losses. Saving a UFO source converts its JPEG and TIFF images to PNG files (`image-jpeg`)."
+guesses = [
+  "A full-colour layer read from a colour layer list is named `Color`, the name the reference gives a new full-colour layer. Settled by opening a UFO whose lib has a colorLayers paint in the reference, if it reads one.",
+  "Colours of the list's full-colour layers that are not palette entries are added to the end of every palette, painted with alpha 1 and their own alpha in the palette, as the compiler adds them; glyphsLib adds them the same way but also puts the alpha in the paint. Settled by comparing the COLR of the reference's UFO export of a full-colour font with fontmake's build of it.",
+]
 
 [[format]]
 id = "ufoz"
@@ -726,7 +731,7 @@ milestone = "M11"
 summary = "Placed as a tracing template or as the bitmap of a colour glyph. A Glyphs source stores only a path relative to the document, with position, scale, slant, rotation, crop and alpha; a UFO requires the file itself inside `images/` and allows PNG only, so other image types are converted to PNG when saving to UFO. Images are left out of exports except for bitmap colour fonts."
 ref = "Edit View › Images; UFO 3 images directory, GLIF image element; Color Fonts › Standard Bitmap Graphics"
 status = "docs"
-notes = "Read by sniffing the header first (size and resolution), then decoded to RGBA within 64 MiB per file, 16,384 pixels per side and 2^26 pixels. A UFO written by FontCraft carries the image files of the UFO it was read from; saving reports every layer image that is not a PNG file in the UFO's `images/` folder as a loss (an image of another document, or a JPEG or TIFF)."
+notes = "Read by sniffing the header first (size and resolution), then decoded to RGBA within 64 MiB per file, 16,384 pixels per side and 2^26 pixels. A UFO written by FontCraft carries the image files of the UFO it was read from; saving converts its JPEG and TIFF images to PNG files first (`image-jpeg`) and reports every layer image that is still not a PNG file in the UFO's `images/` folder as a loss (an image of another document, or a file that does not decode)."
 
 [[format]]
 id = "image-jpeg"
@@ -737,10 +742,14 @@ write = false
 spec = "https://www.w3.org/Graphics/JPEG/itu-t81.pdf"
 area = "import-export"
 milestone = "M11"
-summary = "Placed by reference like PNG and used as a tracing template or as bitmap colour-glyph data. Not valid inside a UFO, so it is re-encoded as PNG there and the original relative path is remembered in the glyph lib."
+summary = "Placed by reference like PNG and used as a tracing template or as bitmap colour-glyph data. Not valid inside a UFO, so saving a UFO source re-encodes the JPEG files of its `images/` folder as PNG files, and the images name the PNG file."
 ref = "Edit View › Images; Color Fonts › Standard Bitmap Graphics"
 status = "handbook"
-notes = "Decoded to RGBA within the same limits as PNG; the resolution comes from the JFIF density or the Exif resolution."
+notes = "Decoded to RGBA within the same limits as PNG; the resolution comes from the JFIF density or the Exif resolution. On saving a UFO (one UFO, a designspace or one UFO per master) each JPEG or TIFF file a glyph image names in the UFO's `images/` folder is decoded under those limits and written as a PNG file of the same pixels, named like the file with a `png` extension (`_1`, `_2`… after the name when that file exists), and the old file is left out. A file that does not decode stays, and the save reports it as an image file that is not a PNG file. The images of a source in another format are not copied into the UFO. The handbook does not say what the reference does with such images in a UFO."
+guesses = [
+  "A converted image keeps its file name with a `png` extension, numbered when that name is taken, and the original name is not kept. Settled by exporting a font with a JPEG image to UFO from the reference and looking at its images folder and GLIF image element.",
+]
+observe = ["Font with a JPEG and a TIFF image on two glyphs: export it as UFO; note the files in `images/`, their format and the GLIF `image` elements' file names."]
 
 [[format]]
 id = "image-tiff"
@@ -754,7 +763,7 @@ milestone = "M11"
 summary = "Placed by reference like PNG; baseline TIFF (uncompressed, LZW, PackBits, 8-bit grey, RGB and RGBA) is decoded for display and for bitmap colour fonts. Other variants show the missing-image marker but keep their reference."
 ref = "Edit View › Images; Color Fonts › Standard Bitmap Graphics"
 status = "handbook"
-notes = "The first page of classic TIFF and BigTIFF is decoded, with at most 1,024 directory entries read; the size is checked before decoding."
+notes = "The first page of classic TIFF and BigTIFF is decoded, with at most 1,024 directory entries read; the size is checked before decoding. Saving a UFO source converts its TIFF images to PNG files as it converts JPEG files (`image-jpeg`)."
 
 [[format]]
 id = "image-pdf"

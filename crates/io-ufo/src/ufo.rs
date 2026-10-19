@@ -1305,8 +1305,8 @@ pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
     let layer_names: Vec<String> = layers.iter().map(|(n, _)| n.clone()).collect();
     let read_lib = lib.clone();
     let in_layer = |k: &str| glyphkeys::in_layer_lib(k, &layer_names, &read_lib);
-    // The font-wide colour layer list, unless the user data holds one as it was read.
-    let color_layers = crate::colorkeys::value(font, &master.id).filter(|_| master.user_data.get(crate::colorkeys::COLOR_LAYERS).is_none());
+    // The font-wide colour layer list, from the listed layers and the entries the user data keeps.
+    let writes_list = crate::colorkeys::writes_list(font, master);
     let stale: Vec<String> = lib
         .entries
         .iter()
@@ -1315,7 +1315,7 @@ pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
             !TYPED_LIB.contains(k)
                 && (master.user_data.get(k).is_none() || in_layer(k))
                 && !glyphs_keys.contains_key(*k)
-                && !(*k == crate::colorkeys::COLOR_LAYERS && color_layers.is_some())
+                && !(*k == crate::colorkeys::COLOR_LAYERS && writes_list)
         })
         .map(str::to_string)
         .collect();
@@ -1323,7 +1323,7 @@ pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
         patch(&mut lib, &k, None);
     }
     for (k, v) in &master.user_data.0.entries {
-        if !TYPED_LIB.contains(&k.as_str()) && !in_layer(k.as_str()) {
+        if !TYPED_LIB.contains(&k.as_str()) && !in_layer(k.as_str()) && !(k.as_str() == crate::colorkeys::COLOR_LAYERS && writes_list) {
             patch(&mut lib, k.as_str(), Some(v.without_spellings()));
         }
     }
@@ -1332,11 +1332,17 @@ pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
             patch(&mut lib, &k, Some(v));
         }
     }
-    // The list as read stays while it says the same, in its own key order.
-    if let Some(v) = color_layers
-        && lib.get(crate::colorkeys::COLOR_LAYERS).map(|k| libkeys::sorted_keys(k.clone())) != Some(libkeys::sorted_keys(v.clone()))
-    {
-        patch(&mut lib, crate::colorkeys::COLOR_LAYERS, Some(v));
+    // The list as read stays while it says the same, in its own key order. Colours of the list
+    // that are not palette entries go to the end of each palette.
+    let palette_base = crate::colorkeys::palette_len(lib.get(crate::colorkeys::COLOR_PALETTES));
+    if writes_list && let Some((v, added)) = crate::colorkeys::value(font, master, palette_base) {
+        if lib.get(crate::colorkeys::COLOR_LAYERS).is_none_or(|k| !crate::colorkeys::close(k, &v)) {
+            patch(&mut lib, crate::colorkeys::COLOR_LAYERS, Some(v));
+        }
+        if !added.is_empty() {
+            let palettes = crate::colorkeys::with_added(lib.get(crate::colorkeys::COLOR_PALETTES), &added);
+            patch(&mut lib, crate::colorkeys::COLOR_PALETTES, Some(palettes));
+        }
     }
     // The kept list stays while it names the same glyphs, in whatever order, and in a master that
     // read a list of its own (often none) while the default master's is unchanged. A glyph whose
@@ -1669,6 +1675,7 @@ pub(crate) fn font_losses(font: &Font, files: FilesFrom) -> Vec<String> {
     }
     out.extend(glyph_losses(font));
     out.extend(layer_losses(font, files));
+    out.extend(crate::colorkeys::losses(font));
     out.extend(shape_losses(font, designspace));
     out.extend(crate::features::losses(&font.features));
     out.extend(kerning::losses(font));
