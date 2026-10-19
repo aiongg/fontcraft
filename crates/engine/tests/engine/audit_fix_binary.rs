@@ -1,0 +1,214 @@
+//! Audit fixes on compiled fonts (M12.61): `audit.fix` with a file target and the `tables.*`
+//! repair commands. Each fault is put into a font exported in code; the check reports it before
+//! the fix and not after.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
+
+use std::path::{Path, PathBuf};
+
+use fontcraft_engine::Session;
+use fontcraft_tables::patch::{PatchOptions, PatchValue, patch_table, set_glyph_bounds};
+use fontcraft_tables::{SfntFont, TableOrder, WriteOptions};
+use fontcraft_testkit::rect;
+use serde_json::{Value, json};
+
+fn run(s: &mut Session, id: &str, p: Value) -> Value {
+    s.execute(id, &p).unwrap_or_else(|e| panic!("{id} {p}: {e}"))
+}
+
+fn scratch(tag: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("fontcraft-audit-fix-binary-{tag}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+/// A font with two glyphs exported to `dir/Font.ttf`.
+fn exported(dir: &Path) -> (Session, PathBuf) {
+    let mut s = Session::with_document();
+    run(&mut s, "path.addPath", json!({"glyph": "A", "nodes": rect(60.0, 0.0, 560.0, 700.0)}));
+    run(&mut s, "path.addPath", json!({"glyph": "B", "nodes": rect(80.0, 0.0, 500.0, 700.0)}));
+    let ttf = dir.join("Font.ttf");
+    run(&mut s, "file.exportStatic", json!({"destination": ttf, "timestamp": 0}));
+    (s, ttf)
+}
+
+fn read(path: &Path) -> SfntFont {
+    fontcraft_tables::read(&std::fs::read(path).unwrap(), 0).unwrap()
+}
+
+fn save(path: &Path, font: &SfntFont) {
+    std::fs::write(path, fontcraft_tables::write(font, &WriteOptions { order: TableOrder::Keep }).unwrap()).unwrap();
+}
+
+fn patch(font: &SfntFont, table: &[u8; 4], fields: &[(&str, f64)]) -> SfntFont {
+    let fields = fields.iter().map(|(n, v)| ((*n).to_string(), PatchValue::Number(*v))).collect();
+    patch_table(font, &PatchOptions { table: *table, fields }).unwrap()
+}
+
+/// A `name` table (format 0) of Windows Unicode records, and Macintosh Roman records for the
+/// ASCII ones on platform 1.
+fn name_table(records: &[(u16, u16, &str)]) -> Vec<u8> {
+    let mut sorted: Vec<&(u16, u16, &str)> = records.iter().collect();
+    sorted.sort_by_key(|(p, id, _)| (*p, *id));
+    let (mut head, mut storage) = (Vec::new(), Vec::new());
+    head.extend(0u16.to_be_bytes());
+    head.extend((sorted.len() as u16).to_be_bytes());
+    head.extend((6 + 12 * sorted.len() as u16).to_be_bytes());
+    for (platform, id, text) in sorted {
+        let bytes: Vec<u8> = if *platform == 1 { text.bytes().collect() } else { text.encode_utf16().flat_map(u16::to_be_bytes).collect() };
+        let (encoding, language) = if *platform == 1 { (0u16, 0u16) } else { (1, 0x409) };
+        for v in [*platform, encoding, language, *id, bytes.len() as u16, storage.len() as u16] {
+            head.extend(v.to_be_bytes());
+        }
+        storage.extend(bytes);
+    }
+    head.extend(storage);
+    head
+}
+
+/// The results of `checks` on `path` that carry a fix.
+fn fixable(s: &mut Session, path: &Path, checks: &[&str]) -> Vec<(String, String)> {
+    let r = run(s, "audit.run", json!({"target": path, "profile": "strict", "checks": checks, "maxResults": 10000}));
+    pairs(&r)
+}
+
+fn pairs(doc: &Value) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = doc["results"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|r| r["fix"]["id"].is_string())
+        .map(|r| (r["check"].as_str().unwrap().to_string(), r["code"].as_str().unwrap().to_string()))
+        .collect();
+    out.sort();
+    out.dedup();
+    out
+}
+
+const TABLE_CHECKS: [&str; 10] = [
+    "check.metrics.maxAdvanceWidth",
+    "check.metrics.caretSlope",
+    "check.metrics.fontBBox",
+    "check.metrics.xAvgCharWidth",
+    "check.metrics.strikeoutAndScripts",
+    "check.tables.os2Version",
+    "check.tables.dsig",
+    "check.outlines.pointsOutsideBBox",
+    "check.hinting.smartDropout",
+    "check.names.whitespace",
+];
+
+#[test]
+fn audit_fix_on_a_file_clears_each_table_fault() {
+    let dir = scratch("faults");
+    let (mut s, ttf) = exported(&dir);
+    let mut font = read(&ttf);
+    font = patch(&font, b"hhea", &[("advanceWidthMax", 1.0), ("caretSlopeRise", 0.0)]);
+    font = patch(&font, b"head", &[("yMax", 5000.0)]);
+    font = patch(&font, b"OS/2", &[("xAvgCharWidth", 1.0), ("yStrikeoutSize", 0.0)]);
+    let mut os2 = font.get(*b"OS/2").unwrap().to_vec();
+    os2[0..2].copy_from_slice(&3u16.to_be_bytes());
+    font.insert(*b"OS/2", os2);
+    font.insert(*b"DSIG", vec![0, 0, 0, 1, 0, 0, 0, 0]);
+    font.remove(*b"prep");
+    font = set_glyph_bounds(&font, &[(1, [100, 100, 200, 200])]).unwrap();
+    font.insert(*b"name", name_table(&[(3, 1, "Fix  Me "), (3, 2, "Regular"), (3, 4, "Fix Me Regular"), (3, 6, "FixMe-Regular"), (1, 1, "Fix")]));
+    save(&ttf, &font);
+    let original = std::fs::read(&ttf).unwrap();
+
+    let before = fixable(&mut s, &ttf, &TABLE_CHECKS);
+    for check in TABLE_CHECKS {
+        assert!(before.iter().any(|(c, _)| c == check), "{check} reports the fault before the fix: {before:?}");
+    }
+    let mut checks: Vec<&str> = TABLE_CHECKS.to_vec();
+    checks.push("check.names.noMacRecords");
+    let r = run(&mut s, "audit.fix", json!({"target": ttf, "profile": "strict", "checks": checks, "safeOnly": false}));
+    let output = PathBuf::from(r["output"].as_str().unwrap());
+    assert_eq!(output, dir.join("Font.fixed.ttf"));
+    assert_eq!(std::fs::read(&ttf).unwrap(), original, "the input is never changed");
+    let commands: Vec<&str> = r["applied"].as_array().unwrap().iter().map(|a| a["command"].as_str().unwrap()).collect();
+    assert_eq!(commands, ["tables.delete", "tables.cleanNameRecords", "tables.recalculate"], "the file-target order");
+    assert_eq!(pairs(&r["remaining"]), Vec::<(String, String)>::new(), "every fault is cleared");
+    assert_eq!(fixable(&mut s, &output, &checks), Vec::<(String, String)>::new());
+    let leftovers: Vec<_> =
+        std::fs::read_dir(&dir).unwrap().filter_map(|e| e.ok()).filter(|e| e.file_name().to_string_lossy().starts_with('.')).collect();
+    assert!(leftovers.is_empty(), "no temporary file is left behind");
+}
+
+#[test]
+fn audit_fix_on_a_file_plans_skips_and_writes_all_or_nothing() {
+    let dir = scratch("plan");
+    let (mut s, ttf) = exported(&dir);
+    let font = patch(&read(&ttf), b"hhea", &[("advanceWidthMax", 1.0)]);
+    let mut font = font;
+    font.insert(*b"DSIG", vec![0, 0, 0, 1, 0, 0, 0, 0]);
+    save(&ttf, &font);
+    let checks = ["check.metrics.maxAdvanceWidth", "check.tables.dsig", "check.metrics.useTypoMetrics"];
+
+    let dry = run(&mut s, "audit.fix", json!({"target": ttf, "profile": "strict", "checks": checks, "dryRun": true}));
+    let planned: Vec<&str> = dry["planned"].as_array().unwrap().iter().map(|c| c["command"].as_str().unwrap()).collect();
+    assert_eq!(planned, ["tables.delete", "tables.recalculate"]);
+    assert_eq!(dry["planned"][1]["params"]["fields"], json!(["hhea.advanceWidthMax"]));
+    assert!(!dir.join("Font.fixed.ttf").exists(), "a dry run writes nothing");
+
+    // useTypoMetrics changes the design: skipped unless safeOnly is false.
+    let r = run(&mut s, "audit.fix", json!({"target": ttf, "profile": "strict", "checks": checks, "inPlace": true}));
+    assert_eq!(r["output"], json!(ttf));
+    let skipped = r["skipped"].as_array().unwrap();
+    if let Some(typo) = skipped.iter().find(|k| k["check"] == "check.metrics.useTypoMetrics") {
+        assert!(typo["reason"].as_str().unwrap().contains("safeOnly"));
+    }
+    assert!(fixable(&mut s, &ttf, &checks[..2]).is_empty(), "the input itself is fixed with inPlace");
+
+    // A refused write leaves the existing output alone.
+    let font = patch(&read(&ttf), b"hhea", &[("advanceWidthMax", 1.0)]);
+    save(&ttf, &font);
+    let out = dir.join("Out.ttf");
+    std::fs::write(&out, b"keep").unwrap();
+    let refused = s.execute("audit.fix", &json!({"target": ttf, "profile": "strict", "checks": checks, "output": out, "noClobber": true}));
+    assert!(refused.is_err());
+    assert_eq!(std::fs::read(&out).unwrap(), b"keep");
+    let leftovers = std::fs::read_dir(&dir).unwrap().filter_map(|e| e.ok()).filter(|e| e.file_name().to_string_lossy().starts_with('.')).count();
+    assert_eq!(leftovers, 0, "the temporary copy is removed");
+    assert!(s.execute("audit.fix", &json!({"target": ttf, "results": ["r1"]})).is_err(), "result ids belong to the open document");
+}
+
+#[test]
+fn tables_recalculate_recomputes_the_named_fields_only() {
+    let dir = scratch("recalc");
+    let (mut s, ttf) = exported(&dir);
+    let font = patch(&read(&ttf), b"hhea", &[("advanceWidthMax", 1.0), ("caretSlopeRise", 0.0)]);
+    let font = patch(&font, b"OS/2", &[("fsType", 8.0)]);
+    save(&ttf, &font);
+    let r = run(&mut s, "tables.recalculate", json!({"font": ttf, "fields": ["hhea.caretSlopeRun"], "values": {"OS/2.fsType": 0}}));
+    let fields: Vec<&str> = r["changed"].as_array().unwrap().iter().map(|c| c["field"].as_str().unwrap()).collect();
+    assert_eq!(fields, ["hhea.caretSlopeRise", "OS/2.fsType"], "one field of a group stands for the group; values come last");
+    let out = read(Path::new(r["output"].as_str().unwrap()));
+    assert_eq!(fontcraft_tables::patch::read_field(&out, *b"hhea", "advanceWidthMax").unwrap(), PatchValue::Number(1.0), "fields not named stay");
+    assert_eq!(fontcraft_tables::patch::read_field(&out, *b"hhea", "caretSlopeRise").unwrap(), PatchValue::Number(1.0));
+
+    let r = run(&mut s, "tables.recalculate", json!({"font": ttf, "inPlace": true}));
+    assert!(r["changed"].as_array().unwrap().iter().any(|c| c["field"] == "hhea.advanceWidthMax"), "the defaults include advanceWidthMax");
+    assert!(s.execute("tables.recalculate", &json!({"font": ttf, "fields": ["OS/2.achVendID"]})).is_err(), "not a derived field");
+    assert!(s.execute("tables.recalculate", &json!({"font": ttf, "fields": ["OS/2.usWeightClass"]})).is_err(), "a static font has no wght axis");
+}
+
+#[test]
+fn tables_clean_name_records_and_rebuild_cmap_work_on_files() {
+    let dir = scratch("names");
+    let (mut s, ttf) = exported(&dir);
+    let mut font = read(&ttf);
+    font.insert(*b"name", name_table(&[(3, 1, "Fix\nMe"), (3, 3, "  "), (3, 6, "FixMe-Regular"), (1, 1, "Fix")]));
+    save(&ttf, &font);
+    let r = run(&mut s, "tables.cleanNameRecords", json!({"font": ttf}));
+    assert_eq!((r["removed"].as_u64(), r["changed"].as_u64()), (Some(2), Some(1)));
+    let out = PathBuf::from(r["output"].as_str().unwrap());
+    assert!(fixable(&mut s, &out, &["check.names.lineBreaks", "check.names.emptyRecords", "check.names.noMacRecords"]).is_empty());
+
+    let r = run(&mut s, "tables.rebuildCmap", json!({"font": ttf, "output": dir.join("Cmap.ttf")}));
+    assert!(r["mappings"].as_u64().unwrap() >= 2);
+    let before = run(&mut s, "audit.run", json!({"target": ttf, "profile": "strict", "checks": ["check.tables.cmapFormat12"]}));
+    let after = run(&mut s, "audit.run", json!({"target": dir.join("Cmap.ttf"), "profile": "strict", "checks": ["check.tables.cmapFormat12"]}));
+    assert_eq!(pairs(&after), pairs(&before), "a font without code points beyond the BMP keeps passing");
+    assert!(s.execute("tables.dropAxis", &json!({"font": ttf, "axis": "wght"})).is_err(), "a static font has no axis to drop");
+}
