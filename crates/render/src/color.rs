@@ -784,9 +784,9 @@ fn composite_px(mode: CompositeMode, s: [f32; 4], d: [f32; 4]) -> [f32; 4] {
 }
 
 fn composite_layer(top: &[u8], below: &mut [u8], mode: CompositeMode) {
-    let to_f = |p: &[u8]| -> [f32; 4] { [0, 1, 2, 3].map(|i| f32::from(p.get(i).copied().unwrap_or(0)) / 255.0) };
-    for (s, d) in top.chunks_exact(4).zip(below.chunks_exact_mut(4)) {
-        if mode == CompositeMode::SrcOver && s.get(3) == Some(&0) {
+    let to_f = |p: &[u8; 4]| -> [f32; 4] { p.map(|c| f32::from(c) / 255.0) };
+    for (s, d) in top.as_chunks::<4>().0.iter().zip(below.as_chunks_mut::<4>().0) {
+        if mode == CompositeMode::SrcOver && s[3] == 0 {
             continue;
         }
         let out = composite_px(mode, to_f(s), to_f(d));
@@ -943,7 +943,7 @@ impl<'a, 'f> Raster<'a, 'f> {
             self.clips.push(Clip::empty());
             return;
         };
-        let mut mask: Vec<u8> = image.pixels.chunks_exact(4).map(|p| p.get(3).copied().unwrap_or(0)).collect();
+        let mut mask: Vec<u8> = image.pixels.as_chunks::<4>().0.iter().map(|p| p[3]).collect();
         if let Some(outer) = self.clips.last() {
             for (i, m) in mask.iter_mut().enumerate() {
                 let (x, y) = (bbox.x0 + (i % bw as usize) as u32, bbox.y0 + (i / bw as usize) as u32);

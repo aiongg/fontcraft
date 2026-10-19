@@ -466,8 +466,8 @@ mod tests {
 
     /// Pixels whose channels differ by more than 24, and pixels with ink in `a`.
     fn differences(a: &Image, b: &Image) -> (usize, usize) {
-        let pa = a.pixels.chunks_exact(4);
-        let pb = b.pixels.chunks_exact(4);
+        let pa = a.pixels.as_chunks::<4>().0.iter();
+        let pb = b.pixels.as_chunks::<4>().0.iter();
         let differ = pa.clone().zip(pb).filter(|(x, y)| x.iter().zip(y.iter()).any(|(p, q)| p.abs_diff(*q) > 24)).count();
         (differ, pa.filter(|p| p[3] > 0).count())
     }
@@ -529,7 +529,7 @@ mod tests {
         assert_eq!(at(&image, 63, 31), [255, 0, 0, 255]);
         assert_eq!(at(&image, 64, 0)[3], 0);
         assert_eq!(at(&image, 0, 32)[3], 0);
-        assert_eq!(image.pixels.chunks_exact(4).filter(|p| p[3] > 0).count(), 64 * 32);
+        assert_eq!(image.pixels.as_chunks::<4>().0.iter().filter(|p| p[3] > 0).count(), 64 * 32);
 
         let (mine, kind) = rendered(&mut r, "F", 1.0);
         assert_eq!(kind, ColorKind::Svg);

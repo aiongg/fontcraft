@@ -511,7 +511,7 @@ impl Table {
         };
         let fd_select = write_fd_select(&fd_map, format, false)?;
         let charset = cid_charset(n);
-        let strings: [&[u8]; 2] = [b"Adobe", b"Identity"];
+        let strings: [&[u8]; 2] = [b"Adobe", b"Identity"]; // brand-ok: the CFF registry value
         let name: &[u8] = b"CFF2Font";
 
         let mut top_fixed: Vec<u8> = Vec::new();
@@ -878,7 +878,7 @@ fn generalize(op: u16, args: &[Val]) -> Result<Option<Vec<RelSeg>>> {
     let mut out = Vec::new();
     match op {
         5 => {
-            if a.len() % 2 != 0 {
+            if !a.len().is_multiple_of(2) {
                 return Err(wrong());
             }
             out.extend(a.chunks(2).map(|c| RelSeg::Line(c.first().copied().unwrap_or(0.0), c.get(1).copied().unwrap_or(0.0))));
@@ -891,13 +891,13 @@ fn generalize(op: u16, args: &[Val]) -> Result<Option<Vec<RelSeg>>> {
             }
         }
         8 => {
-            if a.len() % 6 != 0 {
+            if !a.len().is_multiple_of(6) {
                 return Err(wrong());
             }
             out.extend(a.chunks(6).map(|c| RelSeg::Curve(std::array::from_fn(|i| c.get(i).copied().unwrap_or(0.0)))));
         }
         24 => {
-            if a.len() < 8 || (a.len() - 2) % 6 != 0 {
+            if a.len() < 8 || !(a.len() - 2).is_multiple_of(6) {
                 return Err(wrong());
             }
             let curves = (a.len() - 2) / 6;
@@ -907,7 +907,7 @@ fn generalize(op: u16, args: &[Val]) -> Result<Option<Vec<RelSeg>>> {
             out.push(RelSeg::Line(g(a.len() - 2), g(a.len() - 1)));
         }
         25 => {
-            if a.len() < 8 || (a.len() - 6) % 2 != 0 {
+            if a.len() < 8 || !(a.len() - 6).is_multiple_of(2) {
                 return Err(wrong());
             }
             let lines = (a.len() - 6) / 2;
@@ -918,7 +918,7 @@ fn generalize(op: u16, args: &[Val]) -> Result<Option<Vec<RelSeg>>> {
         }
         26 | 27 => {
             let (first, rest) = if a.len() % 4 == 1 { (g(0), 1) } else { (0.0, 0) };
-            if (a.len() - rest) % 4 != 0 || a.len() < 4 {
+            if !(a.len() - rest).is_multiple_of(4) || a.len() < 4 {
                 return Err(wrong());
             }
             for (k, c) in a.get(rest..).unwrap_or_default().chunks(4).enumerate() {
@@ -928,7 +928,7 @@ fn generalize(op: u16, args: &[Val]) -> Result<Option<Vec<RelSeg>>> {
             }
         }
         30 | 31 => {
-            if a.len() < 4 || (a.len() % 4 != 0 && a.len() % 4 != 1) {
+            if a.len() < 4 || (!a.len().is_multiple_of(4) && a.len() % 4 != 1) {
                 return Err(wrong());
             }
             let m = a.len() / 4;
@@ -1501,9 +1501,12 @@ fn cid_charset(n: usize) -> Vec<u8> {
     }
 }
 
+/// One region of a variation store: start, peak and end per axis.
+type Region = Vec<(f64, f64, f64)>;
+
 /// The regions (per axis start, peak, end) and each subtable's region indexes of the CFF2
 /// variation store.
-fn read_store(data: &[u8], axis_count: usize) -> Result<(Vec<Vec<(f64, f64, f64)>>, Vec<Vec<u16>>)> {
+fn read_store(data: &[u8], axis_count: usize) -> Result<(Vec<Region>, Vec<Vec<u16>>)> {
     let store = ReadStore::read(FontData::new(data)).map_err(|e| invalid(format!("the CFF2 variation store cannot be read: {e}")))?;
     let list = store.variation_region_list().map_err(|e| invalid(format!("the CFF2 variation regions cannot be read: {e}")))?;
     if usize::from(list.axis_count()) != axis_count {

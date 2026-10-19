@@ -253,7 +253,7 @@ fn read_stat(data: &[u8]) -> Result<Stat> {
         let at = values_at + off;
         let format = u16_at(data, at).ok_or_else(cut)?;
         let v = match format {
-            1 | 2 | 3 => {
+            1..=3 => {
                 let axis = usize::from(u16_at(data, at + 2).ok_or_else(cut)?);
                 let flags = u16_at(data, at + 4).ok_or_else(cut)?;
                 let name_id = u16_at(data, at + 6).ok_or_else(cut)?;
