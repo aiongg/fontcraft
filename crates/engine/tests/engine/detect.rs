@@ -181,6 +181,112 @@ fn detect_composites_on_many_glyphs_that_almost_match_stops_at_the_work_limit() 
     assert!(out["stopped"].is_string(), "{out}");
 }
 
+/// A session whose font holds only `glyphs`, in this order.
+fn only(glyphs: Vec<(&str, Vec<Shape>)>) -> Session {
+    let mut s = Session::with_document();
+    s.edit("fixture", |f| {
+        f.glyphs.retain(|_| false);
+        for (name, shapes) in glyphs {
+            add_glyph(f, name, shapes);
+        }
+        Ok(())
+    })
+    .unwrap();
+    s
+}
+
+/// The components of `glyph`'s layer as (base, x, y), in shape order; panics on any other shape.
+fn parts(s: &Session, glyph: &str) -> Vec<(String, f64, f64)> {
+    layer(s.font().unwrap(), glyph)
+        .shapes
+        .iter()
+        .map(|sh| match sh {
+            Shape::Component(c) => {
+                let [.., x, y] = c.affine().as_coeffs();
+                (c.glyph.clone(), x, y)
+            }
+            other => panic!("{glyph}: {other:?} is not a component"),
+        })
+        .collect()
+}
+
+fn part(glyph: &str, x: f64, y: f64) -> (String, f64, f64) {
+    (glyph.to_string(), x, y)
+}
+
+const BREVE: [(f64, f64); 5] = [(-60.0, 520.0), (60.0, 520.0), (80.0, 600.0), (0.0, 560.0), (-80.0, 600.0)];
+const DOT: [(f64, f64); 4] = [(-30.0, -120.0), (30.0, -120.0), (30.0, -60.0), (-30.0, -60.0)];
+const TWO: [(f64, f64); 6] = [(0.0, 0.0), (200.0, 0.0), (200.0, 40.0), (70.0, 40.0), (200.0, 300.0), (0.0, 300.0)];
+const SLASH: [(f64, f64); 4] = [(250.0, 0.0), (290.0, 0.0), (450.0, 700.0), (410.0, 700.0)];
+
+/// Of two glyphs with the same outline, the combining mark is the base: `acute` comes first in
+/// the font and is drawn exactly where `Aacute` has its accent, yet `Aacute` and `acute` both
+/// get `acutecomb`.
+#[test]
+fn detect_composites_prefers_the_combining_mark_among_identical_outlines() {
+    let mut s = only(vec![
+        ("A", vec![poly(&A_OUTER, 0.0, 0.0), poly(&A_COUNTER, 0.0, 0.0)]),
+        ("acute", vec![poly(&ACUTE, 300.0, 200.0)]),
+        ("acutecomb", vec![poly(&ACUTE, 0.0, 0.0)]),
+        ("Aacute", vec![poly(&A_OUTER, 0.0, 0.0), poly(&A_COUNTER, 0.0, 0.0), poly(&ACUTE, 300.0, 200.0)]),
+    ]);
+    let r = run(&mut s, "font.detectComposites", json!({}));
+    assert_eq!(r["glyphs"], json!(["acute", "Aacute"]));
+    assert_eq!(parts(&s, "Aacute"), vec![part("A", 0.0, 0.0), part("acutecomb", 300.0, 200.0)]);
+    assert_eq!(parts(&s, "acute"), vec![part("acutecomb", 300.0, 200.0)]);
+    assert!(matches!(layer(s.font().unwrap(), "acutecomb").shapes.as_slice(), [Shape::Path(_)]), "the mark keeps its outline");
+}
+
+/// A glyph detected as a composite of two glyphs (`Abreve`) is not used for part of a larger
+/// glyph: `Abrevedotbelow` is built from `A`, `brevecomb` and `dotbelowcomb`. It still serves a
+/// glyph whose whole outline it is (`Abrevecyrillic`), and a stacked combining mark made of
+/// two marks (`brevedotcomb`) is still a base.
+#[test]
+fn detect_composites_builds_from_the_parts_not_from_a_detected_composite() {
+    let mut s = only(vec![
+        ("A", vec![poly(&A_OUTER, 0.0, 0.0), poly(&A_COUNTER, 0.0, 0.0)]),
+        ("brevecomb", vec![poly(&BREVE, 0.0, 0.0)]),
+        ("dotbelowcomb", vec![poly(&DOT, 0.0, 0.0)]),
+        ("acutecomb", vec![poly(&ACUTE, 0.0, 0.0)]),
+        ("breveacutecomb", vec![poly(&BREVE, 0.0, 0.0), poly(&ACUTE, 0.0, 120.0)]),
+        ("Abreve", vec![poly(&A_OUTER, 0.0, 0.0), poly(&A_COUNTER, 0.0, 0.0), poly(&BREVE, 300.0, 200.0)]),
+        ("Abrevecyrillic", vec![poly(&A_OUTER, 0.0, 0.0), poly(&A_COUNTER, 0.0, 0.0), poly(&BREVE, 300.0, 200.0)]),
+        ("Abrevedotbelow", vec![poly(&A_OUTER, 0.0, 0.0), poly(&A_COUNTER, 0.0, 0.0), poly(&BREVE, 300.0, 200.0), poly(&DOT, 300.0, 0.0)]),
+        ("Abreveacute", vec![poly(&A_OUTER, 0.0, 0.0), poly(&A_COUNTER, 0.0, 0.0), poly(&BREVE, 300.0, 200.0), poly(&ACUTE, 300.0, 320.0)]),
+    ]);
+    run(&mut s, "font.detectComposites", json!({}));
+    assert_eq!(parts(&s, "Abreve"), vec![part("A", 0.0, 0.0), part("brevecomb", 300.0, 200.0)]);
+    assert_eq!(parts(&s, "Abrevecyrillic"), vec![part("Abreve", 0.0, 0.0)], "a glyph with the same whole outline uses it");
+    assert_eq!(parts(&s, "Abrevedotbelow"), vec![part("A", 0.0, 0.0), part("brevecomb", 300.0, 200.0), part("dotbelowcomb", 300.0, 0.0)]);
+    assert_eq!(parts(&s, "breveacutecomb"), vec![part("brevecomb", 0.0, 0.0), part("acutecomb", 0.0, 120.0)]);
+    assert_eq!(parts(&s, "Abreveacute"), vec![part("A", 0.0, 0.0), part("breveacutecomb", 300.0, 200.0)], "a stacked mark stays a base");
+}
+
+/// Of bases with the same outline that match the same paths, the one drawn where the glyph
+/// has it wins: `twofifths` takes `two.numr` (no shift), not `two.dnom`, which comes first.
+#[test]
+fn detect_composites_takes_the_identical_base_drawn_where_the_glyph_has_it() {
+    let mut s = only(vec![
+        ("two.dnom", vec![poly(&TWO, 0.0, -100.0)]),
+        ("two.numr", vec![poly(&TWO, 0.0, 400.0)]),
+        ("fraction", vec![poly(&SLASH, 0.0, 0.0)]),
+        ("twofifths", vec![poly(&TWO, 0.0, 400.0), poly(&SLASH, 0.0, 0.0)]),
+    ]);
+    run(&mut s, "font.detectComposites", json!({"glyphs": ["twofifths"]}));
+    assert_eq!(parts(&s, "twofifths"), vec![part("two.numr", 0.0, 0.0), part("fraction", 0.0, 0.0)]);
+}
+
+/// Between glyphs with the same outline, the name without a suffix is the base: `colon` is made
+/// of two `period`s and `colon.tf` of `colon`, though `colon.tf` comes first in the font.
+#[test]
+fn detect_composites_makes_the_suffixed_copy_the_composite() {
+    let dot = |y: f64| Shape::Path(Path::rect(100.0, y, 160.0, y + 60.0));
+    let mut s = only(vec![("period", vec![dot(0.0)]), ("colon.tf", vec![dot(0.0), dot(400.0)]), ("colon", vec![dot(0.0), dot(400.0)])]);
+    run(&mut s, "font.detectComposites", json!({}));
+    assert_eq!(parts(&s, "colon"), vec![part("period", 0.0, 0.0), part("period", 0.0, 400.0)]);
+    assert_eq!(parts(&s, "colon.tf"), vec![part("colon", 0.0, 0.0)]);
+}
+
 fn read_tree(dir: &std::path::Path, root: &std::path::Path, out: &mut fontcraft_io_glyphs::Files) {
     for e in std::fs::read_dir(dir).unwrap().flatten() {
         let p = e.path();
@@ -241,6 +347,9 @@ fn composite_recovery_on_inter() {
         let took = t.elapsed();
         let font = flat.font().unwrap();
         let (mut found, mut other_bases, mut missed) = (0, 0, Vec::new());
+        // Rebuilt from other bases: fewer components (a composite base), more (finer parts), or
+        // as many (mostly glyphs with the same outline under another name).
+        let (mut coarser, mut finer, mut same_count) = (0, 0, 0);
         for (name, bases) in &wanted {
             let got = font.glyph(name).and_then(|g| g.layers.first()).map(|l| {
                 let mut b: Vec<String> = l
@@ -260,6 +369,11 @@ fn composite_recovery_on_inter() {
                     if other_bases < 25 {
                         println!("  {name}: source {bases:?}, rebuilt {b:?}");
                     }
+                    match b.len().cmp(&bases.len()) {
+                        std::cmp::Ordering::Less => coarser += 1,
+                        std::cmp::Ordering::Greater => finer += 1,
+                        std::cmp::Ordering::Equal => same_count += 1,
+                    }
                     other_bases += 1
                 }
                 _ => missed.push(name.as_str()),
@@ -272,6 +386,7 @@ fn composite_recovery_on_inter() {
             missed.len(),
             r["glyphs"].as_array().map_or(0, Vec::len)
         );
+        println!("  other bases: {coarser} with fewer components, {finer} with more, {same_count} with as many");
         println!("  missed (first 30): {:?}", missed.iter().take(30).collect::<Vec<_>>());
     }
     let _ = std::fs::remove_dir_all(&out);

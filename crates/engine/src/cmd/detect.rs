@@ -14,9 +14,17 @@
 //! Detect Composites works across the font without comparing every glyph with every other: base
 //! outlines are indexed by the signature of their largest contour, and a target only tries the
 //! bases whose contour signatures it holds. Bases are tried from the largest (most nodes) down,
-//! and a base must come strictly before its target in the order (nodes, then glyph order), so the
-//! components made in one run can never form a cycle. All the work of one run is capped by
-//! [`MAX_DETECT_WORK`].
+//! and a base must come strictly before its target in the order of [`Rank`] (nodes, combining
+//! marks first, fewer suffixes first, glyph order), so the components made in one run can never
+//! form a cycle.
+//!
+//! The base choice follows how composites are usually built: of glyphs with the same outline, a
+//! combining mark is the base of the others; a glyph detected as a composite of two or more
+//! glyphs serves as a base only for a glyph whose whole outline it is, or when it is a
+//! combining mark (a stacked mark); of bases with the same outline matching the same paths, the
+//! one named in the glyph's name, then a combining mark, then the one that needs the shortest
+//! shift is used. Whether a base is a composite is worked out once per run, when a glyph needs
+//! it. All the work of one run is capped by [`MAX_DETECT_WORK`].
 
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -50,7 +58,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Detect Composites",
             ["Font"],
             None,
-            "{glyphs?: [names] (default: every glyph), layer?: id or layers?: [ids] (default: every master layer), tolerance?: number (font units, 0 to 10, default 0.5), flips?: bool (default false: translation only)} in each layer, replace every group of closed, unlocked paths that repeats the whole outline of another glyph's layer with the same id (closed paths, no components) by a component of that glyph. Bases are tried from the largest down; a base must have fewer nodes than the glyph, or as many and come earlier in the font. With `flips`, mirrored and half-turned copies are found too. A component's offset is rounded to the font's grid when the match still holds. New components keep automatic alignment where aligning leaves them and the width in place (within the tolerance); it is turned off on the others. Locked glyphs are skipped and listed; master layers that end up with different components are named in `warnings`. Past the work limit the run stops, keeps what it found and says so in `stopped` → {glyphs: [names], components: number, skipped: [{glyph, layer?, reason}], warnings: [string], stopped: string | null}",
+            "{glyphs?: [names] (default: every glyph), layer?: id or layers?: [ids] (default: every master layer), tolerance?: number (font units, 0 to 10, default 0.5), flips?: bool (default false: translation only)} in each layer, replace every group of closed, unlocked paths that repeats the whole outline of another glyph's layer with the same id (closed paths, no components) by a component of that glyph. Bases are tried from the largest down; a base must have fewer nodes than the glyph, or as many and be a combining mark (`…comb`) where the glyph is not, or have fewer suffixes, or come earlier in the font. A glyph that holds two or more other glyphs' outlines itself is a base only for a glyph whose whole outline it is, unless it is a combining mark. Of bases with the same outline, the one named in the glyph's name goes first, then a combining mark, then the one drawn closest to where the glyph has it. With `flips`, mirrored and half-turned copies are found too. A component's offset is rounded to the font's grid when the match still holds. New components keep automatic alignment where aligning leaves them and the width in place (within the tolerance); it is turned off on the others. Locked glyphs are skipped and listed; master layers that end up with different components are named in `warnings`. Past the work limit the run stops, keeps what it found and says so in `stopped` → {glyphs: [names], components: number, skipped: [{glyph, layer?, reason}], warnings: [string], stopped: string | null}",
             has_doc,
             detect_composites
         )
@@ -87,15 +95,37 @@ fn contour(path: &Path) -> Contour {
     )
 }
 
+/// Where a glyph stands in the order that keeps one run free of cycles: a base must come
+/// strictly before the glyph it is found in. Fewer nodes first; among as many nodes, a
+/// combining mark (`…comb`) before other glyphs, a name with fewer suffixes before one with
+/// more (`colon` before `colon.tf`), then the font's order. So of two glyphs with the same
+/// outline, `acute` becomes a component of `acutecomb` and `colon.tf` of `colon`.
+type Rank = (usize, bool, usize, usize);
+
+fn rank(name: &str, nodes: usize, order: usize) -> Rank {
+    (nodes, !is_comb(name), name.matches('.').count(), order)
+}
+
+/// A combining mark by name: the part before the first suffix ends in `comb`.
+fn is_comb(name: &str) -> bool {
+    name.split('.').next().unwrap_or(name).ends_with("comb")
+}
+
+/// Components a base must hold itself before it stops serving as part of a larger glyph.
+const COMPOSITE_PARTS: usize = 2;
+
 /// A glyph whose outline can become a component.
-struct Base {
-    name: String,
+struct Base<'f> {
+    name: &'f str,
     /// Position in the font's glyph order.
     order: usize,
+    layer: &'f Layer,
     contours: Vec<Contour>,
     nodes: usize,
     /// The signature of every contour, sorted.
     sigs: Vec<Signature>,
+    comb: bool,
+    rank: Rank,
 }
 
 /// The layer of a glyph as a base outline: closed, non-empty paths and no components.
@@ -127,25 +157,72 @@ fn key_sig(contours: &[Contour]) -> Option<Signature> {
     Some(signature(c))
 }
 
-/// Every base outline for one layer id, indexed by the signature of its largest contour.
-struct Bases {
-    list: Vec<Base>,
+/// Every base outline for one layer id, indexed by the signature of its largest contour, with
+/// what detection made of each base's own layer once a run needed it.
+struct Bases<'f> {
+    list: Vec<Base<'f>>,
     by_key: HashMap<Signature, Vec<usize>>,
+    by_name: HashMap<&'f str, usize>,
+    /// How many components detection finds in each base's own layer, once worked out.
+    parts: Vec<Option<usize>>,
+    /// What detection made of each base's own layer, once worked out.
+    found: Vec<Option<Detected>>,
 }
 
-impl Bases {
-    fn new(font: &Font, id: &str) -> Self {
+impl<'f> Bases<'f> {
+    fn new(font: &'f Font, id: &str) -> Self {
         let mut list = Vec::new();
         let mut by_key: HashMap<Signature, Vec<usize>> = HashMap::new();
+        let mut by_name: HashMap<&'f str, usize> = HashMap::new();
         for (order, g) in font.glyphs.iter().enumerate() {
             let Some(layer) = g.layers.iter().find(|l| l.id == id) else { continue };
             let Some((contours, nodes)) = base_outline(layer) else { continue };
             let Some(key) = key_sig(&contours) else { continue };
             by_key.entry(key).or_default().push(list.len());
-            list.push(Base { name: g.name.clone(), order, sigs: sorted_sigs(&contours), contours, nodes });
+            by_name.entry(g.name.as_str()).or_insert(list.len());
+            let name = g.name.as_str();
+            list.push(Base {
+                name,
+                order,
+                layer,
+                sigs: sorted_sigs(&contours),
+                contours,
+                nodes,
+                comb: is_comb(name),
+                rank: rank(name, nodes, order),
+            });
         }
-        Self { list, by_key }
+        let (parts, found) = (vec![None; list.len()], (0..list.len()).map(|_| None).collect());
+        Self { list, by_key, by_name, parts, found }
     }
+
+    /// Whether base `b` holds at least [`COMPOSITE_PARTS`] components itself, so it does not
+    /// stand for part of a glyph with `nodes` nodes. A combining mark stays a base (a stacked
+    /// mark such as `circumflexacutecomb` is often made of other marks), and so does a glyph
+    /// whose whole outline the base is.
+    fn composite_for(&self, b: usize, nodes: usize) -> bool {
+        let Some(base) = self.list.get(b) else { return false };
+        base.nodes < nodes && !base.comb && self.parts.get(b).copied().flatten().unwrap_or(0) >= COMPOSITE_PARTS
+    }
+
+    /// How many components count for a base whose own layer detection made `found`: a base
+    /// that is one other glyph's whole outline counts as that glyph does (at least one), so a
+    /// copy of a composite is a composite too.
+    fn parts_of(&self, found: Option<&Detected>) -> usize {
+        let Some(d) = found else { return 0 };
+        let whole = !d.layer.shapes.iter().any(|s| matches!(s, Shape::Path(_)));
+        match d.components.as_slice() {
+            [only] if whole => self.by_name.get(only.as_str()).and_then(|&a| self.parts.get(a).copied().flatten()).unwrap_or(0).max(1),
+            list => list.len(),
+        }
+    }
+}
+
+/// Whether a run must know if `base` is a composite before it may use it in a glyph with
+/// `nodes` nodes: for [`Bases::composite_for`], and for [`Bases::parts_of`] when the glyph is
+/// a copy of the base.
+fn needs_parts(base: &Base, nodes: usize) -> bool {
+    base.nodes <= nodes && !base.comb
 }
 
 /// Whether every signature of `small` (sorted) is in `big` (sorted), counting repeats.
@@ -349,6 +426,7 @@ fn layer_ids(p: &Params, font: &Font) -> Result<Vec<String>> {
 // ── Detect Composites ───────────────────────────────────────────────────────────────────────────
 
 /// What detection made of one target layer.
+#[derive(Clone)]
 struct Detected {
     layer: Layer,
     components: Vec<String>,
@@ -370,8 +448,20 @@ fn spend(work: &mut usize, units: usize) -> bool {
     }
 }
 
-/// Finds base outlines in the closed, unlocked paths of `layer` of glyph `name` (at `order`).
-fn detect_layer(layer: &Layer, name: &str, order: usize, bases: &Bases, opts: &MatchOptions, grid: f64, work: &mut usize) -> Option<Detected> {
+/// The closed, unlocked paths of a target layer and the bases that may stand in them.
+struct Target {
+    /// Shape index of each contour.
+    slots: Vec<usize>,
+    contours: Vec<Contour>,
+    nodes: usize,
+    /// Indices into [`Bases::list`].
+    candidates: Vec<usize>,
+}
+
+/// The paths of `layer` of glyph `name` (at `order`) to look in, and the bases whose contour
+/// signatures they hold that come before the glyph ([`Rank`]); `None` when there is nothing
+/// to look in or the work ran out.
+fn target(layer: &Layer, name: &str, order: usize, bases: &Bases, work: &mut usize) -> Option<Target> {
     let mut slots = Vec::new();
     let mut contours = Vec::new();
     for (i, shape) in layer.shapes.iter().enumerate() {
@@ -388,9 +478,10 @@ fn detect_layer(layer: &Layer, name: &str, order: usize, bases: &Bases, opts: &M
         return None;
     }
     let nodes: usize = contours.iter().map(|c| c.nodes.len()).sum();
-    let mut sigs = sorted_sigs(&contours);
+    let own = rank(name, nodes, order);
+    let sigs = sorted_sigs(&contours);
     let mut seen = HashSet::new();
-    let mut candidates: Vec<&Base> = Vec::new();
+    let mut candidates = Vec::new();
     for sig in &sigs {
         if !seen.insert(*sig) {
             continue;
@@ -402,34 +493,143 @@ fn detect_layer(layer: &Layer, name: &str, order: usize, bases: &Bases, opts: &M
                 return None;
             }
             let Some(base) = bases.list.get(b) else { continue };
-            if base.name != name && (base.nodes, base.order) < (nodes, order) && sub_multiset(&base.sigs, &sigs) {
-                candidates.push(base);
+            if base.name != name && base.rank < own && sub_multiset(&base.sigs, &sigs) {
+                candidates.push(b);
             }
         }
     }
-    candidates.sort_by_key(|b| (Reverse(b.nodes), !named_in(&b.name, name), b.order));
+    Some(Target { slots, contours, nodes, candidates })
+}
+
+/// The candidates of `t` whose composite status is not known yet but needed.
+fn unknown_parts(t: &Target, bases: &Bases) -> Vec<usize> {
+    t.candidates
+        .iter()
+        .copied()
+        .filter(|&b| bases.list.get(b).is_some_and(|base| needs_parts(base, t.nodes)) && bases.parts.get(b).is_some_and(Option::is_none))
+        .collect()
+}
+
+/// Works out what detection makes of the layers of the bases in `roots`, and of the bases they
+/// need first, without recursion: a base is detected once every candidate whose composite
+/// status it needs is known, and candidates always rank lower, so this ends. Past the work
+/// limit the remaining bases count as having no components.
+fn work_out(bases: &mut Bases, roots: Vec<usize>, opts: &MatchOptions, grid: f64, work: &mut usize) {
+    let mut stack = roots;
+    let mut pending: HashMap<usize, Target> = HashMap::new();
+    while let Some(&b) = stack.last() {
+        if bases.parts.get(b).is_none_or(Option::is_some) {
+            stack.pop();
+            continue;
+        }
+        let Some((layer, name, order)) = bases.list.get(b).map(|base| (base.layer, base.name, base.order)) else {
+            stack.pop();
+            continue;
+        };
+        let t = match pending.remove(&b) {
+            Some(t) => Some(t),
+            None if *work > 0 => target(layer, name, order, bases, work),
+            None => None,
+        };
+        let Some(t) = t else {
+            if let Some(slot) = bases.parts.get_mut(b) {
+                *slot = Some(0);
+            }
+            stack.pop();
+            continue;
+        };
+        let unknown = unknown_parts(&t, bases);
+        if unknown.is_empty() || !spend(work, unknown.len()) {
+            let found = if *work > 0 { finish(layer, name, t, bases, opts, grid, work) } else { None };
+            let count = bases.parts_of(found.as_ref());
+            if let Some(slot) = bases.parts.get_mut(b) {
+                *slot = Some(count);
+            }
+            if let Some(slot) = bases.found.get_mut(b) {
+                *slot = found;
+            }
+            stack.pop();
+        } else {
+            pending.insert(b, t);
+            stack.extend(unknown);
+        }
+    }
+}
+
+/// See [`preference`].
+type Pref = (bool, bool, f64, Rank);
+
+/// How well a base that matched fits the glyph, among bases with the same outline; smaller is
+/// better. Named in the glyph's name, then a combining mark, then the shorter shift (the copy
+/// drawn where the glyph uses it, such as `two.numr` in a fraction), then [`Rank`].
+fn preference(base: &Base, target: &str, m: &Match) -> Pref {
+    let [.., e, f] = m.transform.as_coeffs();
+    (!named_in(base.name, target), !base.comb, e.hypot(f).round(), base.rank)
+}
+
+fn better(a: &Pref, b: &Pref) -> bool {
+    a.0.cmp(&b.0).then(a.1.cmp(&b.1)).then(a.2.total_cmp(&b.2)).then(a.3.cmp(&b.3)).is_lt()
+}
+
+/// The target contours a match covers.
+fn covered(m: &Match) -> Vec<usize> {
+    let mut out: Vec<usize> = m.runs.iter().map(|r| r.contour).collect();
+    out.sort_unstable();
+    out
+}
+
+/// Finds base outlines in the paths of `t` (from `layer` of glyph `name`): bases from the
+/// largest down; a base that is itself a composite of several glyphs is left out where it
+/// would cover only part of the glyph ([`Bases::composite_for`]); of the bases with the same
+/// outline that match the same paths, the one [`preference`] puts first is used.
+fn finish(layer: &Layer, name: &str, t: Target, bases: &Bases, opts: &MatchOptions, grid: f64, work: &mut usize) -> Option<Detected> {
+    let Target { slots, contours, nodes, candidates } = t;
+    let mut list: Vec<&Base> = candidates.iter().filter(|&&b| !bases.composite_for(b, nodes)).filter_map(|&b| bases.list.get(b)).collect();
+    list.sort_by_key(|b| (Reverse(b.nodes), !named_in(b.name, name), !b.comb, b.rank));
+    let mut tried = vec![false; list.len()];
 
     // The contours not claimed yet, and their positions in `contours`.
+    let mut sigs = sorted_sigs(&contours);
     let mut alive: Vec<Contour> = contours.clone();
     let mut alive_at: Vec<usize> = (0..contours.len()).collect();
     let mut entries: Vec<(Vec<usize>, Component)> = Vec::new();
-    for base in candidates {
+    for k in 0..list.len() {
         if *work == 0 || alive.is_empty() {
             break;
         }
+        let (Some(&base), Some(false)) = (list.get(k), tried.get(k).copied()) else { continue };
         if !spend(work, sigs.len()) || !sub_multiset(&base.sigs, &sigs) {
             continue;
         }
         let found = match_outline_within(&base.contours, &alive, opts, work);
-        if found.is_empty() {
-            continue;
+        let Some(first) = found.first() else { continue };
+        let paths = covered(first);
+        let mut best = (base, preference(base, name, first), found.clone());
+        for j in k.saturating_add(1)..list.len() {
+            let (Some(&twin), Some(false)) = (list.get(j), tried.get(j).copied()) else { continue };
+            if twin.sigs != base.sigs {
+                continue;
+            }
+            if !spend(work, 1) {
+                break;
+            }
+            let theirs = match_outline_within(&twin.contours, &alive, opts, work);
+            let Some(m) = theirs.first().filter(|m| covered(m) == paths) else { continue };
+            if let Some(slot) = tried.get_mut(j) {
+                *slot = true;
+            }
+            let pref = preference(twin, name, m);
+            if better(&pref, &best.1) {
+                best = (twin, pref, theirs);
+            }
         }
+        let (base, _, found) = best;
         let mut claimed: HashSet<usize> = HashSet::new();
         for m in &found {
             let affine = rounded(m, &base.contours, &alive, grid, opts.tolerance, work);
             let shapes: Vec<usize> = m.runs.iter().filter_map(|r| alive_at.get(r.contour).and_then(|&c| slots.get(c)).copied()).collect();
             claimed.extend(m.runs.iter().map(|r| r.contour));
-            entries.push((shapes, component(&base.name, affine)));
+            entries.push((shapes, component(base.name, affine)));
         }
         spend(work, alive.len());
         let (mut keep, mut keep_at) = (Vec::new(), Vec::new());
@@ -450,6 +650,24 @@ fn detect_layer(layer: &Layer, name: &str, order: usize, bases: &Bases, opts: &M
     Some(Detected { layer, components, created })
 }
 
+/// What detection makes of `layer` of glyph `name` (at `order`). A base glyph's layer is worked
+/// out once per run and kept, since other glyphs may need to know whether it is a composite.
+fn detect_layer(layer: &Layer, name: &str, order: usize, bases: &mut Bases, opts: &MatchOptions, grid: f64, work: &mut usize) -> Option<Detected> {
+    if let Some(&b) = bases.by_name.get(name)
+        && bases.list.get(b).is_some_and(|base| std::ptr::eq(base.layer, layer))
+    {
+        work_out(bases, vec![b], opts, grid, work);
+        return bases.found.get(b).cloned().flatten();
+    }
+    let t = target(layer, name, order, bases, work)?;
+    let unknown = unknown_parts(&t, bases);
+    work_out(bases, unknown, opts, grid, work);
+    if *work == 0 {
+        return None;
+    }
+    finish(layer, name, t, bases, opts, grid, work)
+}
+
 fn detect_composites(s: &mut Session, value: &Value) -> Result<Value> {
     let p = Params::new("font.detectComposites", value)?;
     let opts = match_options(&p)?;
@@ -466,7 +684,7 @@ fn detect_composites(s: &mut Session, value: &Value) -> Result<Value> {
     let mut count = 0usize;
     let mut stopped: Option<String> = None;
     let mut work = MAX_DETECT_WORK;
-    let mut bases: HashMap<String, Bases> = HashMap::new();
+    let mut bases: HashMap<String, Bases<'_>> = HashMap::new();
     let mut anchors = AnchorCache::new();
     for name in &glyphs {
         if work == 0 {
