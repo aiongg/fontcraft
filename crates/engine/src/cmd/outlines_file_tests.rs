@@ -107,3 +107,23 @@ fn outlines_direction_extremes_round_and_decompose() {
     assert!(session.execute("outlines.roundCoordinates", &json!({"input": dir.join("missing.ttf"), "output": dir.join("m.ttf")})).is_err());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// The `.ufo` chosen beside a font is the first by name in any listing order, and a listing over
+/// the limit is refused rather than cut.
+#[test]
+fn the_source_beside_a_font_is_chosen_by_name_in_any_order() {
+    use std::path::PathBuf;
+    let names = ["c.ufo", "a.ufo", "b.ufo"];
+    for order in [[0, 1, 2], [2, 1, 0], [1, 2, 0]] {
+        let paths = order.iter().map(|&i| PathBuf::from(names[i]));
+        assert_eq!(super::first_by_name(paths, 3), Ok(Some(PathBuf::from("a.ufo"))));
+    }
+    assert_eq!(super::first_by_name(names.iter().map(|n| PathBuf::from(*n)), 2), Err(()));
+    assert_eq!(super::first_by_name(std::iter::empty(), 2), Ok(None));
+
+    let dir = scratch("source-beside");
+    for name in ["b.ufo", "a.ufo"] {
+        std::fs::create_dir_all(dir.join(name)).unwrap();
+    }
+    assert_eq!(super::source_beside(&dir.join("font.ttf")).unwrap(), dir.join("a.ufo"));
+}

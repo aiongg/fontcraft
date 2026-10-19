@@ -116,6 +116,27 @@ fn export_with_profiles_refuses_and_writes_nothing() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
+/// Whether the sfnt `font` has a table `tag`, read from its table directory.
+fn has_table(font: &[u8], tag: &[u8; 4]) -> bool {
+    let count = usize::from(u16::from_be_bytes([font[4], font[5]]));
+    (0..count).any(|i| &font[12 + 16 * i..12 + 16 * i + 4] == tag)
+}
+
+/// A profile's autohint setting reaches the export: its TrueType fonts get the autohinter's
+/// `fpgm`, and the same profile with autohinting off gets none.
+#[test]
+fn export_with_profiles_autohints_when_the_profile_says_so() {
+    let dir = temp("autohint");
+    let (mut s, _) = two_fonts();
+    run(&mut s, "file.saveExportProfile", json!({"name": "Hinted", "basedOn": "OpenType TT", "settings": {"autohint": true}}));
+    run(&mut s, "file.exportWithProfiles", json!({"profiles": ["Hinted", "OpenType TT"], "destination": dir, "timestamp": 0}));
+    let hinted = std::fs::read(dir.join("Hinted/Second-Regular.ttf")).unwrap();
+    let plain = std::fs::read(dir.join("OpenType TT/Second-Regular.ttf")).unwrap();
+    assert!(has_table(&hinted, b"fpgm"), "the autohinted font has the autohinter's functions");
+    assert!(!has_table(&plain, b"fpgm"), "a profile without autohint writes no hinting");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
 /// Every profile's files move into place as one step: a file that cannot be written in the last
 /// profile leaves the files of the earlier profiles as they were.
 #[test]

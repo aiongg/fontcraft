@@ -104,3 +104,23 @@ fn autohint_ps_list_fd_dicts_assigns_glyphs_to_override_sets() {
     let err = s.execute("autohint.ps.listFdDicts", &json!({"fontinfo": "begin FDDict SC\n Colour 5\nend FDDict SC\n"})).unwrap_err();
     assert!(err.to_string().contains("line 2"), "{err}");
 }
+
+/// More standard stems than a CFF font keeps are cut to the first 12, and the reports say so.
+#[test]
+fn autohint_ps_list_fd_dicts_warns_when_the_stems_are_cut() {
+    use fontcraft_engine::model::StemDef;
+    let mut s = session();
+    let r = run(&mut s, "autohint.ps.listFdDicts", json!({}));
+    assert_eq!(r["warnings"], json!([]), "{r}");
+    s.edit("stems", |font| {
+        font.stems = Arc::new((0..13).map(|i| StemDef { name: format!("v{i}"), horizontal: false, ..StemDef::default() }).collect());
+        Arc::make_mut(&mut font.masters).first_mut().unwrap().stem_values = (0..13).map(|i| 50.0 + f64::from(i)).collect();
+        Ok(())
+    })
+    .unwrap();
+    let r = run(&mut s, "autohint.ps.listFdDicts", json!({}));
+    let warnings = r["warnings"].as_array().unwrap();
+    assert!(warnings.len() == 1 && warnings.first().and_then(Value::as_str).unwrap().contains("13 vertical stems"), "{r}");
+    let r = run(&mut s, "autohint.ps.reportStems", json!({"glyphs": ["l"]}));
+    assert_eq!(r["warnings"].as_array().map(Vec::len), Some(1), "{r}");
+}

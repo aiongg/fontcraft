@@ -69,7 +69,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Export Fonts As…",
             ["File"],
             None,
-            "{fonts?: [title or path] (default: the active document), profiles: [name], destination?: folder, bySource?: bool, installTemporarily?: bool, timestamp?: number|\"now\"} export every listed open font through every listed export profile in one run: each profile's fonts go into its output subfolder of the destination, or with bySource: true of the folder that holds each font's source file (give one or the other). Each profile builds the font's exportable instances as file.exportAll does, in the profile's outline format and containers, with its overlap removal and, when its cbdt setting is on, the CBDT and CBLC bitmap tables from the iColor layers; instances between masters are skipped and listed. Two profiles that would write the same file are refused. A failing export writes nothing. installTemporarily (installing the fonts until the app quits) is not supported yet → {profiles: [{profile, documents: [{title, destination, fonts, skipped}]}], written, warnings}",
+            "{fonts?: [title or path] (default: the active document), profiles: [name], destination?: folder, bySource?: bool, installTemporarily?: bool, timestamp?: number|\"now\"} export every listed open font through every listed export profile in one run: each profile's fonts go into its output subfolder of the destination, or with bySource: true of the folder that holds each font's source file (give one or the other). Each profile builds the font's exportable instances as file.exportAll does, in the profile's outline format and containers, with its overlap removal, when its cbdt setting is on the CBDT and CBLC bitmap tables from the iColor layers, and when its autohint is on autohinting as file.exportStatic's autohint does; instances between masters are skipped and listed. Two profiles that would write the same file are refused. A failing export writes nothing. installTemporarily (installing the fonts until the app quits) is not supported yet → {profiles: [{profile, documents: [{title, destination, fonts, skipped}]}], written, warnings}",
             has_doc,
             export_with_profiles
         ).files(const { &[FileParam::write("destination")] }).writes_files(),
@@ -371,6 +371,7 @@ struct Plan {
     containers: Vec<Container>,
     remove_overlap: bool,
     cbdt: bool,
+    autohint: bool,
 }
 
 fn plan(p: &Params, profile: &Profile) -> Result<Plan> {
@@ -381,13 +382,14 @@ fn plan(p: &Params, profile: &Profile) -> Result<Plan> {
         _ => Flavour::TrueType,
     };
     let containers = compile::containers(&pp, "containers", &Dest::Memory).map_err(|e| p.bad(format!("profile `{}`: {e}", profile.name)))?;
-    if pp.bool_or("autohint", false)? {
-        return Err(EngineError::Unsupported(format!(
-            "profile `{}` asks for autohinting, which export does not support yet (ROADMAP.md, M10)",
-            profile.name
-        )));
-    }
-    Ok(Plan { profile: profile.clone(), flavour, containers, remove_overlap: pp.bool_or("removeOverlap", true)?, cbdt: pp.bool_or("cbdt", false)? })
+    Ok(Plan {
+        profile: profile.clone(),
+        flavour,
+        containers,
+        remove_overlap: pp.bool_or("removeOverlap", true)?,
+        cbdt: pp.bool_or("cbdt", false)?,
+        autohint: pp.bool_or("autohint", false)?,
+    })
 }
 
 /// The documents `fonts` names (titles or paths), else the active one, as indices.
@@ -492,7 +494,8 @@ fn export_with_profiles(s: &mut Session, v: &Value) -> Result<Value> {
     let mut file_count = 0usize;
     for plan in &plans {
         let folder = plan.profile.params.get("folder").and_then(Value::as_str).unwrap_or_default();
-        let options = Options { timestamp, remove_overlap: plan.remove_overlap, cbdt: plan.cbdt, ..Default::default() };
+        let hinting = fontcraft_compile::HintingOptions { autohint: plan.autohint, strip: false };
+        let options = Options { timestamp, remove_overlap: plan.remove_overlap, cbdt: plan.cbdt, hinting, ..Default::default() };
         // One sink per destination folder: the profile's, or the profile's beside each source.
         let groups: Vec<(PathBuf, Vec<(usize, usize)>)> = match &base {
             Some(base) => vec![(below(base, folder), chosen.iter().copied().enumerate().collect())],

@@ -33,7 +33,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Report Stem Widths",
             [],
             None,
-            "{glyphs?: [names] (default: every exporting glyph), excludeGlyphs?: [names], master?: id (default: the first master), includeCurved?: bool (count stems formed by curves too; default false)} the stem widths the autohinter finds, without hinting: per width (whole units) the number of stems and the glyphs that have it, most frequent first → {master, horizontal: [{width, count, glyphs}], vertical: [{width, count, glyphs}], skipped: [{glyph, reason}], text: the report as text}",
+            "{glyphs?: [names] (default: every exporting glyph), excludeGlyphs?: [names], master?: id (default: the first master), includeCurved?: bool (count stems formed by curves too; default false)} the stem widths the autohinter finds, without hinting: per width (whole units) the number of stems and the glyphs that have it, most frequent first → {master, horizontal: [{width, count, glyphs}], vertical: [{width, count, glyphs}], skipped: [{glyph, reason}], warnings: [text] (a direction with more than 12 standard stems uses the first 12, as a CFF font keeps them), text: the report as text}",
             has_doc,
             report_stems
         ),
@@ -42,7 +42,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Report Alignment Zones",
             [],
             None,
-            "{glyphs?: [names] (default: every exporting glyph), excludeGlyphs?: [names], master?: id (default: the first master)} the top and bottom edges the autohinter finds (each glyph's extent and its horizontal stems), without hinting: per position (whole units) how often it occurs and the glyphs; top edges highest first, bottom edges lowest first → {master, top: [{height, count, glyphs}], bottom: [{height, count, glyphs}], skipped: [{glyph, reason}], text}",
+            "{glyphs?: [names] (default: every exporting glyph), excludeGlyphs?: [names], master?: id (default: the first master)} the top and bottom edges the autohinter finds (each glyph's extent and its horizontal stems), without hinting: per position (whole units) how often it occurs and the glyphs; top edges highest first, bottom edges lowest first → {master, top: [{height, count, glyphs}], bottom: [{height, count, glyphs}], skipped: [{glyph, reason}], warnings: [text] (as for the stem report), text}",
             has_doc,
             report_zones
         ),
@@ -51,7 +51,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "List Hint Dictionaries",
             [],
             None,
-            "{fontinfo?: text (override sets: FDDict and GlyphSet blocks), master?: id (default: the first master), allInstances?: bool (every master)} the zone-and-stem sets the autohinter uses and the glyphs each one hints; with override sets, glyphs no set takes get the font's set with its zones moved out of reach (`No Alignment Zones`) → {dicts: [{master, name, fontName?, blueValues: [[bottom, top]], otherBlues, familyBlues, familyOtherBlues, blueFuzz, dominantH, dominantV, flexOK, languageGroup, vCounterChars, hCounterChars, glyphs, glyphCount}], final?: {the FinalFont set, same fields without glyphs}}",
+            "{fontinfo?: text (override sets: FDDict and GlyphSet blocks), master?: id (default: the first master), allInstances?: bool (every master)} the zone-and-stem sets the autohinter uses and the glyphs each one hints; with override sets, glyphs no set takes get the font's set with its zones moved out of reach (`No Alignment Zones`) → {dicts: [{master, name, fontName?, blueValues: [[bottom, top]], otherBlues, familyBlues, familyOtherBlues, blueFuzz, dominantH, dominantV, flexOK, languageGroup, vCounterChars, hCounterChars, glyphs, glyphCount}], final?: {the FinalFont set, same fields without glyphs}, warnings: [text] (a master with more than 12 standard stems in a direction: only the first 12 are used, as a CFF font keeps them)}",
             has_doc,
             list_fd_dicts
         ),
@@ -89,19 +89,29 @@ fn zone_set(settings: &HintSettings) -> ZoneSet {
 
 /// The font's set for `master` as otfautohint reads it from a font: zones and stems not
 /// required (a direction without stems gets the em size), the em size and master name kept.
-fn base_dict(p: &Params, font: &Font, master: &str) -> Result<FdDict> {
+/// Also a warning for each direction with more stems than [`MAX_STEM_SNAP`], whose rest is not
+/// used.
+fn base_dict(p: &Params, font: &Font, master: &str) -> Result<(FdDict, Vec<String>)> {
     let settings = HintSettings::for_master(font, master).map_err(|e| p.bad(e.to_string()))?;
     let upm = f64::from(font.units_per_em);
-    let stems = |list: &[f64]| {
-        let list: Vec<f64> = list.iter().copied().filter(|v| v.is_finite()).take(MAX_STEM_SNAP).collect();
+    let mut warnings = Vec::new();
+    let mut stems = |list: &[f64], direction: &str| {
+        let finite: Vec<f64> = list.iter().copied().filter(|v| v.is_finite()).collect();
+        if finite.len() > MAX_STEM_SNAP {
+            warnings.push(format!(
+                "master `{master}` has {} {direction} stems; a CFF font keeps at most {MAX_STEM_SNAP}, so only the first {MAX_STEM_SNAP} are used",
+                finite.len()
+            ));
+        }
+        let list: Vec<f64> = finite.into_iter().take(MAX_STEM_SNAP).collect();
         if list.is_empty() { vec![upm] } else { list }
     };
-    let stems = StemSet { h: stems(&settings.stems_h), v: stems(&settings.stems_v) };
+    let stems = StemSet { h: stems(&settings.stems_h, "horizontal"), v: stems(&settings.stems_v, "vertical") };
     let name = font.master(master)?.name.clone();
     let mut dict = FdDict::new(&name, &zone_set(&settings), &stems, true).map_err(|e| p.bad(e.to_string()))?;
     dict.em_units = Some(upm);
     dict.font_name = Some(name);
-    Ok(dict)
+    Ok((dict, warnings))
 }
 
 /// The closed contours of `path`, quadratic segments raised to cubics (the autohinter reads
@@ -159,12 +169,13 @@ struct Prepared {
     options: Options,
     glyphs: Vec<(String, Vec<BezPath>)>,
     skipped: Vec<Value>,
+    warnings: Vec<String>,
 }
 
 fn prepare(p: &Params, font: &Font, include_curved: bool) -> Result<Prepared> {
     let master = master_id(p, font)?;
     let (names, explicit) = glyph_list(p, font)?;
-    let dict = base_dict(p, font, &master)?;
+    let (dict, warnings) = base_dict(p, font, &master)?;
     let options = Options { report_all_stems: include_curved, explicit_glyphs: explicit, ..Options::default() };
     let mut glyphs = Vec::with_capacity(names.len());
     let mut skipped = Vec::new();
@@ -174,7 +185,7 @@ fn prepare(p: &Params, font: &Font, include_curved: bool) -> Result<Prepared> {
             Err(e) => skipped.push(json!({"glyph": name, "reason": e.to_string()})),
         }
     }
-    Ok(Prepared { master, dict, options, glyphs, skipped })
+    Ok(Prepared { master, dict, options, glyphs, skipped, warnings })
 }
 
 impl Prepared {
@@ -204,6 +215,7 @@ fn report_stems(s: &mut Session, p: &Value) -> Result<Value> {
         "horizontal": stem_rows(&r.h),
         "vertical": stem_rows(&r.v),
         "skipped": prepared.skipped,
+        "warnings": prepared.warnings,
         "text": report::write_stem_report(&r),
     }))
 }
@@ -217,6 +229,7 @@ fn report_zones(s: &mut Session, p: &Value) -> Result<Value> {
         "top": zone_rows(&r.top),
         "bottom": zone_rows(&r.bottom),
         "skipped": prepared.skipped,
+        "warnings": prepared.warnings,
         "text": report::write_zone_report(&r),
     }))
 }
@@ -254,8 +267,10 @@ fn list_fd_dicts(s: &mut Session, p: &Value) -> Result<Value> {
     let upm = f64::from(font.units_per_em);
     let mut dicts = Vec::new();
     let mut final_dict = None;
+    let mut warnings = Vec::new();
     for master in &masters {
-        let base = base_dict(&p, font, master)?;
+        let (base, cut) = base_dict(&p, font, master)?;
+        warnings.extend(cut);
         // The extremes otfautohint takes for a source font: one em below the baseline, two above.
         let info: FontInfo = fontinfo::parse(text, &base, &names, 2.0 * upm, -upm).map_err(|e| p.bad(e.to_string()))?;
         for (i, d) in info.dicts.iter().enumerate() {
@@ -271,7 +286,7 @@ fn list_fd_dicts(s: &mut Session, p: &Value) -> Result<Value> {
             final_dict = info.final_dict.as_ref().map(|d| dict_json(master, d));
         }
     }
-    let mut out = json!({"dicts": dicts});
+    let mut out = json!({"dicts": dicts, "warnings": warnings});
     if let (Some(f), Some(obj)) = (final_dict, out.as_object_mut()) {
         obj.insert("final".into(), f);
     }

@@ -140,6 +140,26 @@ fn refused_math_data_changes_nothing() {
     refused(&mut s, "font.setMathData", json!({"glyphs": {"mathf": {"italicCorrection": 5}, "integral": {"topAccent": "x"}}}));
 }
 
+/// A UFO's list of extended shapes longer than a font can have glyphs is refused, not cut and
+/// written back shorter.
+#[test]
+fn an_overlong_extended_shape_list_is_refused() {
+    use fontcraft_compile::math::EXTENDED_SHAPE_KEY;
+    use fontcraft_engine::model::plist::{Array, Str, Value as PValue};
+    use fontcraft_engine::model::{MAX_GLYPHS, SourceFormat};
+    let mut s = session();
+    s.edit("setup", |font| {
+        font.source.format = SourceFormat::Ufo;
+        let items = vec![PValue::String(Str::new("other".to_string())); MAX_GLYPHS + 1];
+        let master = Arc::make_mut(&mut font.masters).first_mut().unwrap();
+        master.user_data.0.insert(EXTENDED_SHAPE_KEY, PValue::Array(Array { items, ..Array::default() }));
+        Ok(())
+    })
+    .unwrap();
+    let e = refused(&mut s, "font.setMathData", json!({"glyphs": {"integral": {"extendedShape": true}}}));
+    assert!(e.contains("extended shapes"), "{e}");
+}
+
 const BLOCK: &str = "table BASE {\n  HorizAxis.BaseTagList ideo romn;\n  HorizAxis.BaseScriptList latn romn -120 0;\n  HorizAxis.MinMax latn dflt -300, 900;\n} BASE;\n";
 
 #[test]

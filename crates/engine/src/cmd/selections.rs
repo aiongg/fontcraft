@@ -28,7 +28,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Store Selection",
             ["Edit", "Selection"],
             None,
-            "{glyph: name, layer?: id (default: the first master's layer), side?: \"foreground\" | \"background\", name: string, points?: [[shape, node]], shapes?: [index], anchors?: [name]} keep the given nodes, components and anchors under `name` in the glyph's data, replacing an entry of that name; every address must resolve in the layer and at least one must be given. A glyph keeps at most 256 entries → {glyph, name, replaced: bool, count: entries}",
+            "{glyph: name, layer?: id (default: the first master's layer), side?: \"foreground\" | \"background\", name: string, points?: [[shape, node]], shapes?: [index], anchors?: [name]} keep the given nodes, components and anchors under `name` in the glyph's data, replacing an entry of that name; every address must resolve in the layer and at least one must be given. A glyph keeps at most 256 entries. An entry the file holds with more than 100000 items in a list keeps only the first 100000, and a warning says so → {glyph, name, replaced: bool, count: entries, warnings: [text]}",
             has_doc,
             store
         )
@@ -38,7 +38,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Remove Stored Selection",
             [],
             None,
-            "{glyph: name, name: string} delete the stored selection called `name` from the glyph's data → {glyph, name, count: entries left}",
+            "{glyph: name, name: string} delete the stored selection called `name` from the glyph's data → {glyph, name, count: entries left, warnings: [text] (entries cut at 100000 items a list on write-back)}",
             has_doc,
             remove
         ),
@@ -47,7 +47,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Get Stored Selections",
             [],
             None,
-            "{glyph: name, layer?: id (default: the first master's layer), side?: \"foreground\" | \"background\", name?: string (only that entry)} the glyph's stored selections in stored order, each mapped onto the layer by index: what resolves there as target lists, and how many stored items do not → {glyph, layer, selections: [{name, points: [[shape, node]], shapes: [index], anchors: [name], missing: count}]}",
+            "{glyph: name, layer?: id (default: the first master's layer), side?: \"foreground\" | \"background\", name?: string (only that entry)} the glyph's stored selections in stored order, each mapped onto the layer by index: what resolves there as target lists, and how many stored items do not → {glyph, layer, selections: [{name, points: [[shape, node]], shapes: [index], anchors: [name], missing: count}], warnings: [text] (entries the file holds with more than 100000 items in a list, listed cut)}",
             has_doc,
             get
         ),
@@ -61,6 +61,9 @@ pub struct Stored {
     pub nodes: Vec<(usize, usize)>,
     pub anchors: Vec<String>,
     pub components: Vec<usize>,
+    /// The file held more than [`MAX_TARGETS`] items in one of the lists, and the rest were left
+    /// out. Not written back.
+    pub truncated: bool,
 }
 
 impl Stored {
@@ -82,15 +85,19 @@ impl Stored {
     }
 
     /// An entry as a file holds it; `None` when it has no usable name. Malformed items are left
-    /// out, and each list is cut at [`MAX_TARGETS`].
+    /// out, and each list is cut at [`MAX_TARGETS`] (marked in `truncated`).
     fn from_plist(v: &PValue) -> Option<Self> {
         let d = v.as_dict()?;
         let name = d.get("name")?.as_str()?;
         if !usable_name(name) {
             return None;
         }
-        let items =
-            |key: &str| d.get(key).and_then(PValue::as_array).map(|a| a.items.iter().take(MAX_TARGETS).collect::<Vec<_>>()).unwrap_or_default();
+        let mut truncated = false;
+        let mut items = |key: &str| {
+            let all = d.get(key).and_then(PValue::as_array).map(|a| a.items.as_slice()).unwrap_or_default();
+            truncated |= all.len() > MAX_TARGETS;
+            all.iter().take(MAX_TARGETS).collect::<Vec<_>>()
+        };
         let nodes = items("nodes")
             .into_iter()
             .filter_map(|p| {
@@ -103,7 +110,7 @@ impl Stored {
             .collect();
         let anchors = items("anchors").into_iter().filter_map(|a| a.as_str().filter(|a| usable_name(a)).map(str::to_string)).collect();
         let components = items("components").into_iter().filter_map(plist_index).collect();
-        Some(Self { name: name.to_string(), nodes, anchors, components })
+        Some(Self { name: name.to_string(), nodes, anchors, components, truncated })
     }
 }
 
@@ -181,6 +188,15 @@ pub fn map_onto(s: &Stored, parts: fontcraft_model::LayerParts) -> Mapped {
     m
 }
 
+/// One warning for each entry of `list` that the file held longer than [`MAX_TARGETS`] items;
+/// `kept` says what happened to the rest ("were kept", "are listed").
+fn truncation_warnings<'a>(list: impl IntoIterator<Item = &'a Stored>, kept: &str) -> Vec<String> {
+    list.into_iter()
+        .filter(|e| e.truncated)
+        .map(|e| format!("stored selection `{}` holds more than {MAX_TARGETS} items in a list; only the first {MAX_TARGETS} {kept}", e.name))
+        .collect()
+}
+
 fn selection_name<'a>(p: &Params<'a>) -> Result<&'a str> {
     let name = p.str("name")?;
     if !usable_name(name) {
@@ -217,7 +233,7 @@ fn store(s: &mut Session, v: &Value) -> Result<Value> {
     let font = s.font()?;
     t.resolve(font)?;
     let mut list = stored(font, &t.glyph);
-    let entry = Stored { name: name.clone(), nodes: dedup(&t.points), anchors: dedup(&t.anchors), components: dedup(&t.shapes) };
+    let entry = Stored { name: name.clone(), nodes: dedup(&t.points), anchors: dedup(&t.anchors), components: dedup(&t.shapes), truncated: false };
     let replaced = match list.iter_mut().find(|e| e.name == name) {
         Some(e) => {
             *e = entry;
@@ -232,8 +248,9 @@ fn store(s: &mut Session, v: &Value) -> Result<Value> {
         }
     };
     let count = list.len();
+    let warnings = truncation_warnings(&list, "were kept");
     s.edit("Store Selection", |font| write(font, &t.glyph, &list))?;
-    Ok(json!({"glyph": t.glyph, "name": name, "replaced": replaced, "count": count}))
+    Ok(json!({"glyph": t.glyph, "name": name, "replaced": replaced, "count": count, "warnings": warnings}))
 }
 
 /// `items` in their order, each kept once.
@@ -257,8 +274,9 @@ fn remove(s: &mut Session, v: &Value) -> Result<Value> {
         return Err(p.bad(format!("glyph `{glyph}` has no stored selection `{name}`")));
     }
     let count = list.len();
+    let warnings = truncation_warnings(&list, "were kept");
     s.edit("Remove Stored Selection", |font| write(font, glyph, &list))?;
-    Ok(json!({"glyph": glyph, "name": name, "count": count}))
+    Ok(json!({"glyph": glyph, "name": name, "count": count, "warnings": warnings}))
 }
 
 fn get(s: &mut Session, v: &Value) -> Result<Value> {
@@ -276,9 +294,9 @@ fn get(s: &mut Session, v: &Value) -> Result<Value> {
     {
         return Err(p.bad(format!("glyph `{}` has no stored selection `{name}`", t.glyph)));
     }
-    let selections: Vec<Value> = list
-        .iter()
-        .filter(|e| only.is_none_or(|n| n == e.name))
+    let shown = || list.iter().filter(|e| only.is_none_or(|n| n == e.name));
+    let warnings = truncation_warnings(shown(), "are listed");
+    let selections: Vec<Value> = shown()
         .map(|e| {
             let m = map_onto(e, r.parts);
             let mut o = Map::new();
@@ -290,7 +308,7 @@ fn get(s: &mut Session, v: &Value) -> Result<Value> {
             Value::Object(o)
         })
         .collect();
-    Ok(json!({"glyph": t.glyph, "layer": r.layer.id, "selections": selections}))
+    Ok(json!({"glyph": t.glyph, "layer": r.layer.id, "selections": selections, "warnings": warnings}))
 }
 
 #[cfg(test)]

@@ -94,6 +94,32 @@ fn a_glyph_keeps_at_most_256_stored_selections() {
     run(&mut s, "edit.storeSelection", json!({"glyph": "A", "name": "s0", "points": [[0, 1]]}));
 }
 
+/// A stored list longer than the target limit, as a hand-edited file could hold, is cut, and every
+/// command that reads or writes the entries back says so.
+#[test]
+fn an_overlong_stored_selection_is_cut_with_a_warning() {
+    use fontcraft_engine::model::plist::{Array, Dict, Number, Str, Value as PValue};
+    let mut s = two_masters();
+    let limit = fontcraft_engine::params::MAX_TARGETS;
+    s.edit("setup", |font| {
+        let mut entry = Dict::new();
+        entry.insert("name", PValue::String(Str::new("huge".to_string())));
+        let items = vec![PValue::Number(Number::int(0)); limit + 1];
+        entry.insert("components", PValue::Array(Array { items, ..Array::default() }));
+        let list = PValue::Array(Array { items: vec![PValue::Dict(entry)], ..Array::default() });
+        font.glyph_mut("A")?.info.user_data.0.insert(STORED_SELECTIONS, list);
+        Ok(())
+    })
+    .unwrap();
+    let r = run(&mut s, "edit.getStoredSelections", json!({"glyph": "A"}));
+    let warnings = r["warnings"].as_array().unwrap();
+    assert!(warnings.len() == 1 && warnings[0].as_str().unwrap().contains("huge"), "{r}");
+    let r = run(&mut s, "edit.storeSelection", json!({"glyph": "A", "name": "small", "points": [[0, 0]]}));
+    assert_eq!(r["warnings"].as_array().map(Vec::len), Some(1), "{r}");
+    let r = run(&mut s, "edit.storeSelection", json!({"glyph": "A", "name": "huge", "points": [[0, 0]]}));
+    assert_eq!(r["warnings"], json!([]), "a replaced entry is no longer cut: {r}");
+}
+
 #[test]
 fn stored_selections_survive_saving_to_glyphs() {
     let mut s = two_masters();

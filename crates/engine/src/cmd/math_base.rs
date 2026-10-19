@@ -302,12 +302,15 @@ fn apply_glyph(p: &Params, font: &mut Font, master: &str, name: &str, e: &GlyphE
     if ufo && let Some(on) = e.extended {
         let masters = Arc::make_mut(&mut font.masters);
         let m = masters.iter_mut().find(|m| m.id == master).ok_or_else(|| p.bad(format!("there is no master `{master}`")))?;
-        let mut list: Vec<String> = m
-            .user_data
-            .get(EXTENDED_SHAPE_KEY)
-            .and_then(PValue::as_array)
-            .map(|a| a.items.iter().take(MAX_GLYPHS).filter_map(PValue::as_str).map(str::to_string).collect())
-            .unwrap_or_default();
+        let stored = m.user_data.get(EXTENDED_SHAPE_KEY).and_then(PValue::as_array).map(|a| a.items.as_slice()).unwrap_or_default();
+        // The list is written back whole, so a cut would drop the entries past the limit.
+        if stored.len() > MAX_GLYPHS {
+            return Err(p.bad(format!(
+                "master `{master}` lists {} extended shapes, more than the {MAX_GLYPHS} a font can have glyphs; edit the list in the font's data first",
+                stored.len()
+            )));
+        }
+        let mut list: Vec<String> = stored.iter().filter_map(PValue::as_str).map(str::to_string).collect();
         list.retain(|n| n != name);
         if on {
             list.push(name.to_string());
