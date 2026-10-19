@@ -101,7 +101,7 @@ pub fn instantiate(font: &SfntFont, options: &InstanceOptions) -> Result<SfntFon
     if axes.iter().all(|a| pinned.iter().any(|(t, _)| *t == a.tag)) {
         full::full_instance_with(font, &pinned, options)
     } else {
-        partial::partial_instance(font, &options.limits)
+        partial::partial_instance_with(font, options)
     }
 }
 

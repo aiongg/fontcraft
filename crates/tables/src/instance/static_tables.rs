@@ -143,6 +143,18 @@ pub(super) fn apply_mvar(font: &mut SfntFont, coords: &[f64]) -> Result<()> {
         return Err(bad("the MVAR value records are shorter than 8 bytes"));
     }
     let deltas = StoreDeltas::read(data, store_offset, coords)?;
+    apply_mvar_deltas(font, &deltas)
+}
+
+/// Adds `deltas` (the `MVAR` store's, already evaluated) to the fields the `MVAR` records name,
+/// keeping `hhea` in step with `OS/2` as [`apply_mvar`] does.
+pub(super) fn apply_mvar_deltas(font: &mut SfntFont, deltas: &StoreDeltas) -> Result<()> {
+    let Some(data) = font.get(*b"MVAR") else { return Ok(()) };
+    let record_size = usize::from(u16_at(data, 6).ok_or_else(|| bad("the MVAR table is truncated"))?);
+    let count = usize::from(u16_at(data, 8).ok_or_else(|| bad("the MVAR table is truncated"))?);
+    if record_size < 8 && count > 0 {
+        return Err(bad("the MVAR value records are shorter than 8 bytes"));
+    }
     let mut changes: Vec<(Tag, usize, bool, f64)> = Vec::new();
     for i in 0..count {
         let at = 12 + i * record_size;
@@ -317,6 +329,14 @@ fn fixed_at(b: &[u8], at: usize) -> Option<f64> {
 /// those whose value (nominal value for format 2; every record for format 4) equals the pinned
 /// user value. The dropped subtables stay in the table's data, unreferenced.
 pub(super) fn reduce_stat(font: &mut SfntFont, user: &[(Tag, f64)]) -> Result<()> {
+    let ranges: Vec<(Tag, f64, f64)> = user.iter().map(|(t, v)| (*t, *v, *v)).collect();
+    reduce_stat_ranges(font, &ranges)
+}
+
+/// Keeps the `STAT` axis values that lie within the user ranges `(axis, min, max)`: those of
+/// axes not named, and those whose value (nominal value for format 2; every record for format 4)
+/// lies within its axis's range, as fontTools' `instantiateSTAT` keeps them.
+pub(super) fn reduce_stat_ranges(font: &mut SfntFont, ranges: &[(Tag, f64, f64)]) -> Result<()> {
     let Some(s) = font.get(*b"STAT") else { return Ok(()) };
     let mut s = s.to_vec();
     let axis_size = usize::from(u16_at(&s, 4).ok_or_else(|| bad("the STAT table is truncated"))?);
@@ -330,7 +350,7 @@ pub(super) fn reduce_stat(font: &mut SfntFont, user: &[(Tag, f64)]) -> Result<()
     let axis_tag =
         |i: usize| -> Option<Tag> { s.get(axes_at + i * axis_size..axes_at + i * axis_size + 4).and_then(|t| <[u8; 4]>::try_from(t).ok()) };
     let outside = |i: u16, v: f64| -> bool {
-        axis_tag(usize::from(i)).and_then(|t| user.iter().find(|(u, _)| *u == t)).is_some_and(|(_, pinned)| v != *pinned)
+        axis_tag(usize::from(i)).and_then(|t| ranges.iter().find(|(u, _, _)| *u == t)).is_some_and(|(_, min, max)| v < *min || v > *max)
     };
     let mut kept: Vec<u16> = Vec::with_capacity(value_count);
     for i in 0..value_count {
