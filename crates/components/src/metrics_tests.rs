@@ -279,3 +279,38 @@ fn an_edit_on_a_pinned_master_moves_only_the_layers_that_pin_it() {
     assert_eq!(layer(&out, "Apinned.ss01").width, 720.0, "a composite built on the pinned layer follows too");
     assert_eq!(layer(&out, "Aacute").width, 999.0, "a layer reading its own master keeps its stale width");
 }
+
+/// Re-alignment keeps an index of each glyph's users between edits and updates it from the
+/// glyphs that differ: a glyph that gains a component of `A` follows the next edit of `A`, and
+/// one that lost its components no longer does.
+#[test]
+fn the_kept_users_index_follows_components_added_and_removed() {
+    let mut glyphs = vec![
+        letter_a(),
+        top_mark("acutecomb"),
+        composite("Aacute", vec![part("A"), part("acutecomb")]),
+        drawn("B", 610.0, (60.0, 0.0, 560.0, 700.0), &[]),
+    ];
+    // Enough other glyphs that a few changes update the kept index instead of rebuilding it.
+    glyphs.extend((0..20).map(|i| drawn(&format!("x{i}"), 500.0, (0.0, 0.0, 500.0, 500.0), &[])));
+    let all: Vec<String> = glyphs.iter().map(|g| g.name.clone()).collect();
+    let start = realign_glyphs(font(glyphs), &all).unwrap();
+    let widen = |f: &Font, w: f64| {
+        let mut new = f.clone();
+        new.glyphs.get_mut("A").unwrap().layers[0].width = w;
+        realign(f, new).unwrap()
+    };
+    let first = widen(&start, 650.0);
+    assert_eq!(layer(&first, "Aacute").width, 650.0);
+
+    let mut swapped = first.clone();
+    swapped.glyphs.get_mut("B").unwrap().layers[0].shapes = vec![Shape::Component(part("A"))];
+    swapped.glyphs.get_mut("Aacute").unwrap().layers[0].shapes = vec![Shape::Path(Path::rect(0.0, 0.0, 100.0, 100.0))];
+    let second = realign(&first, swapped).unwrap();
+    assert_eq!(layer(&second, "B").width, 650.0, "the new composite is aligned");
+
+    let third = widen(&second, 700.0);
+    assert_eq!(layer(&third, "B").width, 700.0, "a glyph that gained a component of A follows A");
+    assert_eq!(layer(&third, "Aacute").width, 650.0, "a glyph that lost its components keeps its width");
+    assert!(Arc::ptr_eq(third.glyph("Aacute").unwrap(), second.glyph("Aacute").unwrap()));
+}

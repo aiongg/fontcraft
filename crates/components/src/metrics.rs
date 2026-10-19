@@ -23,15 +23,18 @@
 //!   other layers of those masters keep their stored positions. A change of masters, of the
 //!   alignment setting or of Propagate Anchors re-aligns every master.
 //! - Locked glyphs are skipped: a lock keeps the glyph's drawing as it is.
-//! - The dependency order is worked out for the affected glyphs only, from one pass over the
-//!   font's components, so one edit costs a pass over the components plus the work on the
-//!   glyphs that follow it.
+//! - The dependency order is worked out for the affected glyphs only, from an index of each base
+//!   glyph's users. The index of the last glyph tables seen is kept per thread and brought up to
+//!   date from the glyphs that differ, so one edit costs a pointer comparison over the glyphs
+//!   plus the work on the glyphs that follow it, not a pass over every layer. The anchor results
+//!   alignment reads are kept the same way ([`AnchorCache`] checks each one against the font).
 
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 
 use fontcraft_geom::{BezPath, Shape as _};
-use fontcraft_model::{Font, Glyph, Layer, Shape};
+use fontcraft_model::{Font, Glyph, GlyphTable, Layer, Shape};
 
 use crate::ComponentsError;
 use crate::align::{align_layer_cached, alignment_off, find_layer, plan_layer};
@@ -155,7 +158,7 @@ pub fn realign_glyphs(font: Font, changed: &[String]) -> Result<Font, Components
 }
 
 /// [`realign_glyphs`] on the layers of `masters` only (`None`: every layer).
-fn realign_on(mut font: Font, changed: &[String], masters: Option<&HashSet<String>>) -> Result<Font, ComponentsError> {
+fn realign_on(font: Font, changed: &[String], masters: Option<&HashSet<String>>) -> Result<Font, ComponentsError> {
     if changed.is_empty() || alignment_off(&font) {
         return Ok(font);
     }
@@ -164,7 +167,21 @@ fn realign_on(mut font: Font, changed: &[String], masters: Option<&HashSet<Strin
     // Glyph position → masters outside `masters` on which a layer of it is re-aligned because it
     // reads a re-aligned base layer. Bases come first in `order`, so one pass fills it.
     let mut followed: HashMap<usize, HashSet<String>> = HashMap::new();
-    let mut cache = AnchorCache::new();
+    let mut cache = take_anchor_cache();
+    let out = realign_in_order(font, order, &affected, masters, &mut followed, &mut cache);
+    keep_anchor_cache(cache);
+    out
+}
+
+/// The loop of [`realign_on`]: each glyph of `order` re-aligned on the wanted layers.
+fn realign_in_order(
+    mut font: Font,
+    order: Vec<usize>,
+    affected: &HashSet<usize>,
+    masters: Option<&HashSet<String>>,
+    followed: &mut HashMap<usize, HashSet<String>>,
+    cache: &mut AnchorCache,
+) -> Result<Font, ComponentsError> {
     for i in order {
         let Some(glyph) = font.glyphs.as_arcs().get(i).cloned() else { continue };
         if glyph.info.locked {
@@ -179,7 +196,7 @@ fn realign_on(mut font: Font, changed: &[String], masters: Option<&HashSet<Strin
                 None => true,
                 Some(m) if m.contains(&layer.master) => true,
                 Some(m) => {
-                    let follows = reads_realigned(&font, layer, &affected, m, &followed);
+                    let follows = reads_realigned(&font, layer, affected, m, followed);
                     if follows {
                         followed.entry(i).or_default().insert(layer.master.clone());
                     }
@@ -189,7 +206,7 @@ fn realign_on(mut font: Font, changed: &[String], masters: Option<&HashSet<Strin
             if !wanted {
                 continue;
             }
-            match align_layer_cached(&font, &glyph, layer, &mut cache) {
+            match align_layer_cached(&font, &glyph, layer, cache) {
                 Ok(Some(new_layer)) => updates.push((k, new_layer)),
                 // States of the font the editor shows as placeholders; they block no edit.
                 Ok(None)
@@ -235,20 +252,142 @@ fn reads_realigned(
     })
 }
 
-/// The positions of `changed` and of every glyph that uses one of them, directly or through
-/// other composites, each after all its bases. Glyphs on or above a cycle are left out.
-fn affected_order(font: &Font, changed: &[String]) -> Vec<usize> {
-    let glyphs = font.glyphs.as_arcs();
-    // Base name → positions of the glyphs with a component of it, each once.
-    let mut users: HashMap<&str, Vec<usize>> = HashMap::new();
-    for (i, g) in glyphs.iter().enumerate() {
-        for name in component_names(g) {
-            let list = users.entry(name).or_default();
-            if list.last() != Some(&i) {
-                list.push(i);
+/// Base name → the positions of the glyphs with a component of it, ascending, each once.
+type Users = HashMap<String, Vec<usize>>;
+
+/// The [`Users`] of one glyph table.
+struct UsersOf {
+    table: GlyphTable,
+    users: Users,
+}
+
+/// Glyph tables whose users are kept.
+const REMEMBERED_TABLES: usize = 2;
+/// A kept index is updated rather than built again while at most this fraction (one in N) of
+/// the glyphs differ.
+const UPDATE_SHARE: usize = 4;
+/// Anchor results kept between edits; past it the kept results are dropped.
+const MAX_KEPT_ANCHORS: usize = 50_000;
+
+thread_local! {
+    /// The users of the glyph tables re-aligned last, newest first. Holding a table keeps its
+    /// storage alive and unchanged (every change to a shared table copies it first), so a table
+    /// at the same address holds the same glyphs.
+    static USERS: RefCell<Vec<UsersOf>> = const { RefCell::new(Vec::new()) };
+    /// The anchor results of the last re-alignment, for the next one.
+    static ANCHORS: RefCell<AnchorCache> = RefCell::new(AnchorCache::new());
+}
+
+fn take_anchor_cache() -> AnchorCache {
+    ANCHORS.with(|c| c.try_borrow_mut().map(|mut c| std::mem::take(&mut *c)).unwrap_or_default())
+}
+
+fn keep_anchor_cache(cache: AnchorCache) {
+    if cache.len() > MAX_KEPT_ANCHORS {
+        return;
+    }
+    ANCHORS.with(|c| {
+        if let Ok(mut c) = c.try_borrow_mut() {
+            *c = cache;
+        }
+    });
+}
+
+/// Adds glyph `i` to the users of each glyph it has a component of.
+fn add_users(users: &mut Users, glyph: &Glyph, i: usize) {
+    for name in component_names(glyph) {
+        match users.get_mut(name) {
+            Some(list) => {
+                if let Err(at) = list.binary_search(&i) {
+                    list.insert(at, i);
+                }
+            }
+            None => {
+                users.insert(name.to_string(), vec![i]);
             }
         }
     }
+}
+
+/// Takes glyph `i`, as `glyph` was, out of the users of each glyph it had a component of.
+fn remove_users(users: &mut Users, glyph: &Glyph, i: usize) {
+    for name in component_names(glyph) {
+        let Some(list) = users.get_mut(name) else { continue };
+        if let Ok(at) = list.binary_search(&i) {
+            list.remove(at);
+        }
+        if list.is_empty() {
+            users.remove(name);
+        }
+    }
+}
+
+fn users_of(glyphs: &[Arc<Glyph>]) -> Users {
+    let mut users = Users::new();
+    for (i, g) in glyphs.iter().enumerate() {
+        add_users(&mut users, g, i);
+    }
+    users
+}
+
+/// Brings `kept` up to date for `table`, which has as many glyphs, from the glyphs that differ;
+/// false (and `kept` unusable) when too many differ.
+fn update_users(kept: &mut UsersOf, table: &GlyphTable) -> bool {
+    let (was, now) = (kept.table.as_arcs(), table.as_arcs());
+    let limit = now.len() / UPDATE_SHARE;
+    let differ: Vec<usize> = (0..now.len())
+        .filter(|&i| !matches!((was.get(i), now.get(i)), (Some(a), Some(b)) if Arc::ptr_eq(a, b)))
+        .take(limit.saturating_add(1))
+        .collect();
+    if differ.len() > limit {
+        return false;
+    }
+    for i in differ {
+        if let Some(g) = was.get(i) {
+            remove_users(&mut kept.users, g, i);
+        }
+        if let Some(g) = now.get(i) {
+            add_users(&mut kept.users, g, i);
+        }
+    }
+    kept.table = table.clone();
+    true
+}
+
+/// Runs `f` on the users of `font`'s glyphs: the kept index of the same table, a kept index of a
+/// table of the same length brought up to date, or one built from every glyph.
+fn with_users<R>(font: &Font, f: impl FnOnce(&Users) -> R) -> R {
+    USERS.with(|cell| {
+        let Ok(mut kept) = cell.try_borrow_mut() else { return f(&users_of(font.glyphs.as_arcs())) };
+        let now = font.glyphs.as_arcs();
+        let entry = if let Some(at) = kept.iter().position(|k| std::ptr::eq(k.table.as_arcs(), now)) {
+            kept.remove(at)
+        } else {
+            let mut updated = None;
+            if let Some(at) = kept.iter().position(|k| k.table.as_arcs().len() == now.len()) {
+                let mut entry = kept.remove(at);
+                if update_users(&mut entry, &font.glyphs) {
+                    updated = Some(entry);
+                }
+            }
+            updated.unwrap_or_else(|| UsersOf { table: font.glyphs.clone(), users: users_of(now) })
+        };
+        let out = f(&entry.users);
+        kept.insert(0, entry);
+        kept.truncate(REMEMBERED_TABLES);
+        out
+    })
+}
+
+/// The positions of `changed` and of every glyph that uses one of them, directly or through
+/// other composites, each after all its bases. Glyphs on or above a cycle are left out.
+fn affected_order(font: &Font, changed: &[String]) -> Vec<usize> {
+    with_users(font, |users| order_with(font, users, changed))
+}
+
+/// [`affected_order`] with the users of `font`'s glyphs.
+fn order_with(font: &Font, users: &Users, changed: &[String]) -> Vec<usize> {
+    let glyphs = font.glyphs.as_arcs();
     let mut affected: HashSet<usize> = HashSet::new();
     let mut queue: VecDeque<usize> = VecDeque::new();
     let mut seen_names: HashSet<&str> = HashSet::new();
