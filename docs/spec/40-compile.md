@@ -758,6 +758,9 @@ the binary only; compilation never changes the source.
 9. **Subroutiniser parity.** compreffor, cffsubr and makeotf's subroutiniser produce different
    byte streams for the same outlines. The oracle can only compare decoded outlines and total size,
    not bytes; define the size budget we accept (for example within a few percent of cffsubr).
+   Answer (M12.25): the subroutiniser (`crates/cff/src/subr`) follows compreffor's method; the
+   measure compares outlines after expansion and the bytes of the CharStrings and subroutine
+   INDEXes, with a budget of 2% above cffsubr (`crates/cff/crosscheck/subr_check.py`).
 10. **makeotf's "Development" wording.** The user guide says release mode removes the word from
     the version string; the exact non-release string was not located in the addfeatures source read
     (`name.cpp` builds `Version x.xxx;addfeatures <client>`). Observe makeotf output if we want the
