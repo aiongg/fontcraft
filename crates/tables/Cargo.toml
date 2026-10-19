@@ -21,3 +21,6 @@ fontcraft-decompile.workspace = true
 read-fonts.workspace = true
 write-fonts.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+fontcraft-plugins.workspace = true

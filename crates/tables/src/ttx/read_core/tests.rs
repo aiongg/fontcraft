@@ -1,8 +1,9 @@
 //! The core tables against `ttx`'s compiler. The input is the dump the writer tests compare
-//! with (`../core/testdata/core.ttx`, written by fontTools 4.66.1 for a font built in code); the
-//! expected bytes in `testdata/core.compiled` are what fontTools 4.66.1 writes from it
-//! (`TTFont(recalcTimestamp=False)`, `importXML`, `save`, bounds recalculated), one table a line.
-//! `head.checkSumAdjustment` is left out of the comparison: the font writer fills it.
+//! with (`../core/testdata/core.ttx`, written by fontTools 4.66.1 for a font built in code);
+//! `testdata/core.digest` holds the length and SHA-256 of each table fontTools 4.66.1 writes
+//! from it (`TTFont(recalcTimestamp=False)`, `importXML`, `save`, bounds recalculated), one table
+//! a line. `head.checkSumAdjustment` is zeroed before hashing: the font writer fills it. On a
+//! mismatch the test prints our bytes as hex, to compare with what `ttx` compiles.
 #![allow(clippy::string_slice)]
 
 use super::program::assemble;
@@ -10,7 +11,7 @@ use crate::sfnt::{Flavour, SfntFont};
 use crate::ttx::{DumpOptions, ImportOptions, dump, import};
 
 const CORE_TTX: &str = include_str!("../core/testdata/core.ttx");
-const CORE_COMPILED: &str = include_str!("testdata/core.compiled");
+const CORE_DIGEST: &str = include_str!("testdata/core.digest");
 
 /// The dump without the one record fontTools cannot read back (`&#0;` is not XML).
 fn core_ttx() -> String {
@@ -19,28 +20,29 @@ fn core_ttx() -> String {
     format!("{}{}", &CORE_TTX[..start], &CORE_TTX[end..])
 }
 
-fn expected(compiled: &str) -> Vec<([u8; 4], Vec<u8>)> {
-    compiled
+/// The tag, length and SHA-256 (lowercase hex) of each table of a digest file.
+fn expected(digest: &str) -> Vec<([u8; 4], usize, String)> {
+    digest
         .lines()
         .map(|line| {
-            let (tag, hex) = line.split_once(' ').unwrap();
-            let tag: [u8; 4] = tag.replace('_', " ").as_bytes().try_into().unwrap();
-            let bytes = (0..hex.len()).step_by(2).map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap()).collect();
-            (tag, bytes)
+            let mut parts = line.split(' ');
+            let tag: [u8; 4] = parts.next().unwrap().replace('_', " ").as_bytes().try_into().unwrap();
+            (tag, parts.next().unwrap().parse().unwrap(), parts.next().unwrap().to_string())
         })
         .collect()
 }
 
-fn assert_tables(font: &SfntFont, compiled: &str) {
-    let want = expected(compiled);
-    for (tag, bytes) in &want {
+fn assert_tables(font: &SfntFont, digest: &str) {
+    let want = expected(digest);
+    for (tag, len, sha) in &want {
         let mut got = font.get(*tag).unwrap_or_else(|| panic!("no '{}' table", String::from_utf8_lossy(tag))).to_vec();
-        let mut bytes = bytes.clone();
         if tag == b"head" {
             got[8..12].fill(0);
-            bytes[8..12].fill(0);
         }
-        assert_eq!(got, bytes, "table '{}'", String::from_utf8_lossy(tag));
+        if got.len() != *len || fontcraft_plugins::sha256::hex(&got) != *sha {
+            let hex: String = got.iter().map(|b| format!("{b:02x}")).collect();
+            panic!("table '{}' differs from what ttx compiles ({} bytes, {len} expected); ours: {hex}", String::from_utf8_lossy(tag), got.len());
+        }
     }
     assert_eq!(font.tables.len(), want.len(), "no other tables");
 }
@@ -49,7 +51,7 @@ fn assert_tables(font: &SfntFont, compiled: &str) {
 fn core_dump_compiles_as_ttx_compiles() {
     let font = import(SfntFont::new(Flavour::TrueType), &core_ttx(), &ImportOptions::default()).unwrap();
     assert_eq!(font.flavour, Flavour::TrueType);
-    assert_tables(&font, CORE_COMPILED);
+    assert_tables(&font, CORE_DIGEST);
 }
 
 #[test]
