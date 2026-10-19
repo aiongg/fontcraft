@@ -465,7 +465,7 @@ fn family_of<'a>(font: &'a Font, inst: &'a Instance) -> &'a str {
 
 /// The document made from instance `index` of `font`: its interpolation, with one master named
 /// after the instance and the instance as its only export.
-fn generated_font(p: &Params, font: &Font, index: usize) -> Result<(Font, Vec<String>)> {
+pub(super) fn generated_font(p: &Params, font: &Font, index: usize) -> Result<(Font, Vec<String>)> {
     let inst = font.instances.get(index).ok_or_else(|| p.bad(format!("there is no instance #{index}")))?;
     let options = options_for(font, index).map_err(|e| interp_error(p, e))?;
     let (mut out, notes) = instance_font_with_notes(font, index, &options).map_err(|e| interp_error(p, e))?;
