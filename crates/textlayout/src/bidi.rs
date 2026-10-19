@@ -1,26 +1,28 @@
-//! A simple bidirectional ordering for horizontal text, short of the Unicode bidirectional
-//! algorithm (UAX #9). Used when [`crate::Options::bidi`] is set (Text Preview); Edit View lays
-//! its text out in one direction.
+//! Bidirectional ordering for horizontal text by the Unicode Bidirectional Algorithm (UAX #9),
+//! through `fontcraft_shaping::bidi`. Used when [`crate::Options::bidi`] is set (Text Preview);
+//! Edit View lays its text out in one direction. Rows `textPreview.unicodeBidi`,
+//! `textPreview.setWritingDirection`.
 //!
-//! The rules:
-//! 1. Each item has a class from the character it was typed as: strong right to left (Hebrew,
-//!    Arabic, Syriac, Thaana, NKo and the other right-to-left blocks), digit (European and
-//!    Arabic-Indic digits), strong left to right (any other letter), mark (a combining mark,
-//!    which takes the class of the item before it) or neutral (spaces, punctuation, symbols, and
-//!    items without a character).
-//! 2. The paragraph has a base direction; an [`Embedding`] gives a range of items its own base
-//!    direction, one level above the paragraph's when the two differ.
-//! 3. Digits count as left to right. A neutral between two strong items of the same direction
-//!    takes that direction, else the base direction of its embedding. Line breaks and embedding
-//!    edges end the search for a strong neighbour.
-//! 4. Levels follow from the direction and the embedding (even: left to right, odd: right to
-//!    left). On each line, trailing spaces and the line break take the paragraph's level, then
-//!    every run at or above each level from the highest down to the lowest odd one is reversed.
+//! - Each line break ends a paragraph, and every paragraph takes the base direction of the text
+//!   (rules P1, P2 and P3 are not used to pick it): Text Preview has one alignment for all of
+//!   its lines.
+//! - An [`Embedding`] is the range between a left-to-right or right-to-left embedding character
+//!   and a pop character (LRE or RLE, then PDF): its levels start one or two above the
+//!   paragraph's, as rule X2 or X3 gives them. An embedding is closed at the end of each
+//!   paragraph and opened again in the next.
+//! - Items are analysed as the characters they were typed as; a glyph without one and a
+//!   placeholder count as an object replacement character (a neutral).
+//! - [`levels`] gives the levels after rules W1 to I2 and L1 for the paragraph's end; the
+//!   layout resets each line's trailing blanks ([`reset_trailing`], rule L1) and reverses its
+//!   runs ([`visual_order`], rule L2).
 //!
-//! Digits counting as left to right means "12 34" in right-to-left text reads "12 34", where the
-//! Unicode algorithm gives "34 12".
+//! "12 34" in right-to-left text reads "34 12": each number is a left-to-right run, and the runs
+//! follow the paragraph's direction.
 
 use std::ops::Range;
+
+use fontcraft_shaping::Direction as ShapeDirection;
+use fontcraft_shaping::bidi::paragraph_runs;
 
 use crate::text::Item;
 
@@ -36,15 +38,11 @@ pub struct Embedding {
 /// The ranges with their own direction that [`levels`] takes.
 pub const MAX_EMBEDDINGS: usize = 1_000;
 
-/// The bidirectional class of a character, as these rules use it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Class {
-    Ltr,
-    Rtl,
-    Digit,
-    Mark,
-    Neutral,
-}
+const LRE: char = '\u{202A}';
+const RLE: char = '\u{202B}';
+const PDF: char = '\u{202C}';
+/// What a glyph without a character and a placeholder are analysed as.
+const OBJECT: char = '\u{FFFC}';
 
 /// Whether a character belongs to a right-to-left script. Digits in those blocks are not.
 pub fn is_strong_rtl(c: char) -> bool {
@@ -60,130 +58,113 @@ fn is_arabic_digit(u: u32) -> bool {
     matches!(u, 0x0660..=0x0669 | 0x06F0..=0x06F9)
 }
 
-fn is_combining_mark(u: u32) -> bool {
-    matches!(u, 0x0300..=0x036F | 0x1AB0..=0x1AFF | 0x1DC0..=0x1DFF | 0x20D0..=0x20FF | 0xFE00..=0xFE0F | 0xFE20..=0xFE2F)
+/// The explicit directional formatting characters and the right-to-left mark.
+fn is_bidi_control(u: u32) -> bool {
+    matches!(u, 0x200F | 0x202A..=0x202E | 0x2066..=0x2069)
 }
 
-/// The class of a character.
-pub fn class(c: char) -> Class {
+/// Whether a character can take a level other than a left-to-right paragraph's: right-to-left
+/// letters, Arabic digits and the explicit controls. Left-to-right text without any is skipped.
+fn raises_ltr(c: char) -> bool {
     let u = u32::from(c);
-    if is_arabic_digit(u) {
-        Class::Digit
-    } else if is_rtl_block(u) {
-        Class::Rtl
-    } else if is_combining_mark(u) {
-        Class::Mark
-    } else if c.is_numeric() {
-        Class::Digit
-    } else if c.is_alphabetic() {
-        Class::Ltr
-    } else {
-        Class::Neutral
+    is_rtl_block(u) || is_bidi_control(u)
+}
+
+fn char_of(item: &Item) -> char {
+    match item {
+        Item::Glyph { typed: Some(c), .. } | Item::Missing(c) => *c,
+        Item::Glyph { typed: None, .. } | Item::Placeholder => OBJECT,
+        Item::LineBreak => '\n',
     }
 }
 
-fn item_class(item: &Item) -> Option<Class> {
-    match item {
-        Item::Glyph { typed: Some(c), .. } | Item::Missing(c) => Some(class(*c)),
-        Item::Glyph { typed: None, .. } | Item::Placeholder => Some(Class::Neutral),
-        Item::LineBreak => None,
+/// The embeddings that count: sorted by start, overlapping ones and those past
+/// [`MAX_EMBEDDINGS`] dropped, cut at `n` items, empty ones dropped.
+fn taken(embeddings: &[Embedding], n: usize) -> Vec<Embedding> {
+    let embeddings = embeddings.get(..MAX_EMBEDDINGS).unwrap_or(embeddings);
+    let mut sorted: Vec<&Embedding> = embeddings.iter().collect();
+    sorted.sort_by_key(|e| e.items.start);
+    let mut out: Vec<Embedding> = Vec::with_capacity(sorted.len());
+    let mut end = 0usize;
+    for e in sorted {
+        let (start, stop) = (e.items.start.min(n), e.items.end.min(n));
+        if start < end || start >= stop {
+            continue;
+        }
+        out.push(Embedding { items: start..stop, rtl: e.rtl });
+        end = stop;
     }
+    out
 }
 
 /// The level of every item: even runs left to right, odd right to left; `None` when every item
-/// runs in the paragraph's direction. Linear in the items, plus sorting at most
-/// `MAX_EMBEDDINGS` embeddings.
+/// runs in the paragraph's direction. Linear in the items: each paragraph (text between line
+/// breaks) is analysed on its own.
 pub(crate) fn levels(items: &[Item], base_rtl: bool, embeddings: &[Embedding]) -> Option<Vec<u8>> {
     let n = items.len();
-    let embeddings = embeddings.get(..MAX_EMBEDDINGS).unwrap_or(embeddings);
-    // Left-to-right text skips the full class lookup: this scan runs over every item.
-    let opposite = |item: &Item| match item {
-        Item::Glyph { typed: Some(c), .. } | Item::Missing(c) if base_rtl => matches!(class(*c), Class::Ltr | Class::Digit),
-        Item::Glyph { typed: Some(c), .. } | Item::Missing(c) => is_strong_rtl(*c),
-        _ => false,
-    };
-    let embedded = embeddings.iter().any(|e| e.rtl != base_rtl && e.items.start < e.items.end.min(n));
-    if !embedded && !items.iter().any(opposite) {
+    let embeddings = taken(embeddings, n);
+    // Left-to-right text with nothing right to left in it skips the analysis.
+    if !base_rtl && embeddings.is_empty() && !items.iter().any(|item| raises_ltr(char_of(item))) {
         return None;
     }
     let paragraph = u8::from(base_rtl);
-    let mut embedding = vec![paragraph; n];
-    let mut sorted: Vec<&Embedding> = embeddings.iter().collect();
-    sorted.sort_by_key(|e| e.items.start);
-    let mut taken = 0usize;
-    for e in sorted {
-        let (start, end) = (e.items.start.min(n), e.items.end.min(n));
-        if start < taken || start >= end {
-            continue;
+    let base = Some(if base_rtl { ShapeDirection::RightToLeft } else { ShapeDirection::LeftToRight });
+    let mut levels = vec![paragraph; n];
+    let mut text = String::new();
+    // Byte offset in `text` of each item of the paragraph.
+    let mut offsets: Vec<usize> = Vec::new();
+    let mut next_embedding = 0usize;
+    let mut start = 0usize;
+    while start < n {
+        let end = items.get(start..).and_then(|rest| rest.iter().position(|i| matches!(i, Item::LineBreak))).map_or(n, |p| start + p + 1);
+        text.clear();
+        offsets.clear();
+        // The embeddings that reach into this paragraph; the first may have begun in an earlier one.
+        while embeddings.get(next_embedding).is_some_and(|e| e.items.end <= start) {
+            next_embedding += 1;
         }
-        let level = if e.rtl == base_rtl { paragraph } else { paragraph + 1 };
-        for l in embedding.get_mut(start..end).unwrap_or_default() {
-            *l = level;
-        }
-        taken = end;
-    }
-
-    // Strong directions (true = right to left); marks follow the item before them; `None` for
-    // neutrals and line breaks.
-    let mut strong: Vec<Option<bool>> = Vec::with_capacity(n);
-    let mut breaks: Vec<bool> = Vec::with_capacity(n);
-    let mut prev: Option<Option<bool>> = None;
-    for (i, item) in items.iter().enumerate() {
-        let class = item_class(item);
-        let same_run = i > 0 && embedding.get(i.wrapping_sub(1)) == embedding.get(i);
-        let s = match class {
-            None => None,
-            Some(Class::Rtl) => Some(true),
-            Some(Class::Ltr | Class::Digit) => Some(false),
-            Some(Class::Mark) if same_run => prev.flatten(),
-            Some(Class::Mark | Class::Neutral) => None,
-        };
-        strong.push(s);
-        breaks.push(class.is_none());
-        prev = if class.is_some() { Some(s) } else { None };
-    }
-
-    // The nearest strong direction before and after each item, within its embedding and line.
-    let boundary = |a: usize, b: usize| breaks.get(a) != Some(&false) || breaks.get(b) != Some(&false) || embedding.get(a) != embedding.get(b);
-    let mut before: Vec<Option<bool>> = vec![None; n];
-    for i in 1..n {
-        if boundary(i - 1, i) {
-            continue;
-        }
-        let v = strong.get(i - 1).copied().flatten().or_else(|| before.get(i - 1).copied().flatten());
-        if let Some(b) = before.get_mut(i) {
-            *b = v;
-        }
-    }
-    let mut after: Vec<Option<bool>> = vec![None; n];
-    for i in (0..n.saturating_sub(1)).rev() {
-        if boundary(i, i + 1) {
-            continue;
-        }
-        let v = strong.get(i + 1).copied().flatten().or_else(|| after.get(i + 1).copied().flatten());
-        if let Some(a) = after.get_mut(i) {
-            *a = v;
-        }
-    }
-
-    let levels = (0..n)
-        .map(|i| {
-            let e = embedding.get(i).copied().unwrap_or(paragraph);
-            if breaks.get(i) == Some(&true) {
-                return paragraph;
+        let mut open: Option<usize> = None;
+        let mut e = next_embedding;
+        for i in start..end {
+            if open.is_none()
+                && let Some(emb) = embeddings.get(e)
+                && emb.items.start <= i
+                && i < emb.items.end
+            {
+                text.push(if emb.rtl { RLE } else { LRE });
+                open = Some(emb.items.end);
             }
-            let embedding_rtl = e % 2 == 1;
-            let rtl = match strong.get(i).copied().flatten() {
-                Some(rtl) => rtl,
-                None => match (before.get(i).copied().flatten(), after.get(i).copied().flatten()) {
-                    (Some(a), Some(b)) if a == b => a,
-                    _ => embedding_rtl,
-                },
-            };
-            if rtl == embedding_rtl { e } else { e + 1 }
-        })
-        .collect();
-    Some(levels)
+            let c = items.get(i).map_or(OBJECT, char_of);
+            // The paragraph separator stands outside the embedding, which it would close anyway.
+            if c == '\n' && open.take().is_some() {
+                text.push(PDF);
+                if embeddings.get(e).is_some_and(|emb| emb.items.end == i + 1) {
+                    e += 1;
+                }
+            }
+            offsets.push(text.len());
+            text.push(c);
+            if open == Some(i + 1) {
+                text.push(PDF);
+                open = None;
+                e += 1;
+            }
+        }
+        let mut runs = paragraph_runs(&text, base);
+        runs.sort_by_key(|r| r.range.start);
+        let mut r = 0usize;
+        for (k, &at) in offsets.iter().enumerate() {
+            while runs.get(r).is_some_and(|run| run.range.end <= at) {
+                r += 1;
+            }
+            let level = runs.get(r).filter(|run| run.range.start <= at).map_or(paragraph, |run| run.level);
+            if let Some(l) = levels.get_mut(start + k) {
+                *l = level;
+            }
+        }
+        start = end;
+    }
+    levels.iter().any(|l| *l != paragraph).then_some(levels)
 }
 
 /// Gives the trailing blanks (spaces and the closing line break) of the line `range` the

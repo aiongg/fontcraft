@@ -32,12 +32,16 @@
 //! kerning them.
 //!
 //! # Mixed directions ([`bidi`])
-//! With [`Options::bidi`] (Text Preview), horizontal text is split into runs of right-to-left
-//! and left-to-right script by a simple set of rules short of the Unicode bidirectional
-//! algorithm: a Latin word in right-to-left text keeps its letters in order, and only the runs
-//! are reversed. [`Embedding`]s give ranges their own base direction. Kerning applies between
-//! neighbours in the same run, from the table of that run's direction. Hit testing assumes one
-//! direction per line.
+//! With [`Options::bidi`] (Text Preview), horizontal text is ordered by the Unicode
+//! Bidirectional Algorithm (UAX #9): a Latin word in right-to-left text keeps its letters in
+//! order, and "12 34" there reads "34 12". [`Embedding`]s give ranges their own base direction.
+//! Kerning applies between neighbours in the same run, from the table of that run's direction.
+//! [`Layout::levels`] keeps the levels. Hit testing assumes one direction per line.
+//!
+//! # Text Preview shaping ([`line_shape`])
+//! [`shape_line`] shapes one line of such a layout through the full preview font: each run of
+//! one level in its own direction, with the script's default features and the compiled
+//! positioning, advances live from the model.
 //!
 //! The public API:
 //! ```text
@@ -64,11 +68,14 @@
 //! PreviewShaper::new(bytes: Arc<[u8]>, glyph_order: &[String], private_use: &[(u32, u16)], features: &[Tag]) -> Result<PreviewShaper, ShapeError>
 //! PreviewShaper::features(&self) -> &[Tag];  glyph_name(&self, gid: u16) -> Option<&Arc<str>>;  has_glyph(&self, name: &str) -> bool
 //! Shaping<'a> { shaper: &'a PreviewShaper, active: &'a [Tag], localized: Option<(Tag script, Tag language)> }
-//! Embedding { items: Range<usize>, rtl: bool };  bidi::MAX_EMBEDDINGS = 1_000;  bidi::Class::{Ltr, Rtl, Digit, Mark, Neutral}
-//! bidi::class(c: char) -> Class;  bidi::is_strong_rtl(c: char) -> bool
+//! Embedding { items: Range<usize>, rtl: bool };  bidi::MAX_EMBEDDINGS = 1_000
+//! bidi::is_strong_rtl(c: char) -> bool
+//! shape_line(font: &Font, master: &str, text: &Text, layout: &Layout, line: usize, shaper: &PreviewShaper) -> Option<ShapedLine>
+//! ShapedLine { placed: Vec<Placed>, length: f64, error: Option<String> }
 //! layout(font: &Font, master: &str, text: &Text, options: &Options) -> Result<Layout, LayoutError>
 //! line_height(font: &Font, master: &Master) -> f64
-//! Layout { placed: Vec<Placed>, lines: Vec<Line>, direction, line_height: f64, ascender: f64, shaping_error: Option<String> }
+//! Layout { placed: Vec<Placed>, lines: Vec<Line>, direction, line_height: f64, ascender: f64, shaping_error: Option<String>,
+//!          levels: Option<Vec<u8>> }
 //! Placed { glyph: Option<Arc<str>>, x: f64, y: f64, advance: f64, offset: f64, kern: f64, line: usize,
 //!          extra: Vec<(Arc<str>, f64, f64)>, cursive: bool }
 //! Line { items: Range<usize>, baseline: f64, length: f64 }
@@ -79,6 +86,7 @@
 pub mod bidi;
 pub mod cursive;
 pub mod layout;
+pub mod line_shape;
 pub mod shape;
 pub mod text;
 
@@ -92,6 +100,7 @@ pub use layout::{
     DEFAULT_LINE_WIDTH, KerningMode, LENGTH_RANGE, LINE_HEIGHT_PARAM, Layout, LayoutError, Line, MISSING_ADVANCE_RANGE, Options, Placed, layout,
     line_height,
 };
+pub use line_shape::{ShapedLine, shape_line};
 pub use shape::{PreviewShaper, Shaping};
 pub use text::{Charmap, Item, PLACEHOLDER, Text, TextError, parse, parse_prefix, parse_with};
 

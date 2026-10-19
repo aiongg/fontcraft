@@ -2,10 +2,18 @@
 //! for proofing passages that would slow Edit View down.
 //!
 //! The text is laid out with `textlayout`, as Edit View text is: characters map to glyphs by
-//! Unicode value, the document's kerning applies, the writing direction orders the glyphs (runs
-//! of the other direction keep their own order: `textlayout::bidi`), and
-//! lines wrap at the width of the window (the height, in vertical text). Characters the font
-//! lacks are drawn in the interface font. Only the lines in view are drawn.
+//! Unicode value, the document's kerning applies, the Unicode Bidirectional Algorithm orders
+//! mixed directions within the writing direction (`textlayout::bidi`), and lines wrap at the
+//! width of the window (the height, in vertical text). Characters the font lacks are drawn in
+//! the interface font. Only the lines in view are drawn.
+//!
+//! Horizontal text is then shaped (`textPreview.shaping`): the lines in view, and up to two
+//! screens around them, go through a full preview font of the shown master (`GSUB` and `GPOS`
+//! with the generated kerning and marks) with the script's default features, each run of one
+//! direction on its own (`textlayout::shape_line`). The font is built on a thread of its own:
+//! at once when the window first needs it, then each time the document changes and editing has
+//! paused for [`REBUILD_PAUSE`] seconds. Until a font is ready, and when it cannot be built, the
+//! text shows as laid out by code point, with the reason under the text.
 //!
 //! | Control | Does |
 //! |---|---|
@@ -18,17 +26,22 @@
 //!
 //! Text positions in commands are character indexes; a line break is one character.
 
+use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::ops::RangeInclusive;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 
 use egui::{Align2, Color32, ColorImage, FontId, Key, Modifiers, Order, Pos2, Rect, Sense, TextureHandle, TextureOptions, pos2, vec2};
+use fontcraft_engine::Session;
+use fontcraft_engine::compile::preview::{self, PreviewKind};
 use fontcraft_geom::{Affine, BezPath};
 use fontcraft_model::Font;
 use fontcraft_render::{Style, render_path};
 use fontcraft_spacing::kerning::KernIndex;
-use fontcraft_textlayout::{Charmap, Direction, Embedding, Item, KerningMode, LENGTH_RANGE, Layout, MAX_PREVIEW_ITEMS, Options, Text, bidi};
+use fontcraft_textlayout::{
+    Charmap, Direction, Embedding, Item, KerningMode, LENGTH_RANGE, Layout, MAX_PREVIEW_ITEMS, Options, Placed, PreviewShaper, ShapedLine, Text, bidi,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
@@ -59,6 +72,12 @@ const MAX_LISTED: usize = 1_000;
 const MAX_DRAWN: usize = 20_000;
 /// Characters of untrusted text quoted in a message.
 const MAX_QUOTED: usize = 64;
+/// How long editing must pause, in seconds, before the preview font is built again.
+pub const REBUILD_PAUSE: f64 = 0.5;
+/// Shaped lines kept; past it, the ones far from the view go.
+const MAX_SHAPED_LINES: usize = 4_096;
+/// How often a frame looks for a finished font build, in seconds.
+const BUILD_POLL: f64 = 0.03;
 
 pub const COMMANDS: &[UiCommand] = &[
     (
@@ -315,6 +334,10 @@ pub struct Cache {
     texture_key: Option<u64>,
     texture: Option<TextureHandle>,
     outlines: CompositeCache,
+    font: FontSlot,
+    /// The shaped lines of the current layout and preview font, by line index.
+    shaped_key: Option<u64>,
+    shaped: HashMap<usize, Arc<ShapedLine>>,
     field: String,
     field_revision: Option<u64>,
     /// The text field's last selection, in character indexes.
@@ -359,6 +382,144 @@ pub struct Drawn {
     /// The master drawn.
     pub master: Option<String>,
     pub message: Option<String>,
+    /// Lines drawn shaped through the preview font.
+    pub shaped: usize,
+    /// A preview font is being built.
+    pub building: bool,
+}
+
+/// What a preview font is built for: the document's id and revision, and the master.
+type FontKey = (u64, u64, String);
+/// A built preview font's shaper, or why it could not be built.
+type FontResult = Result<Arc<PreviewShaper>, String>;
+/// Where a build on another thread leaves its result.
+type Landing = Arc<Mutex<Option<FontResult>>>;
+
+/// The preview font Text Preview shapes with.
+#[derive(Default)]
+struct FontSlot {
+    /// The last build: its key and its result.
+    built: Option<(FontKey, FontResult)>,
+    /// The key asked for last, and the time (egui seconds) it was first asked for.
+    wanted: Option<(FontKey, f64)>,
+    /// The build under way.
+    running: Option<(FontKey, Landing)>,
+}
+
+impl FontSlot {
+    /// Takes the result of a finished build.
+    fn collect(&mut self) {
+        let Some((key, landing)) = &self.running else { return };
+        let done = landing.lock().ok().and_then(|mut l| l.take());
+        if let Some(result) = done {
+            self.built = Some((key.clone(), result));
+            self.running = None;
+        }
+    }
+
+    /// Starts a build when `key` has no font yet: at once for a document or master without one,
+    /// else once `key` has been asked for since [`REBUILD_PAUSE`] seconds (each edit makes a new
+    /// key). Returns
+    /// the shaper to draw with: the last font built for the same document and master, even when
+    /// edits have made it older than the document; `None` while there is none.
+    fn step(&mut self, key: &FontKey, now: f64, session: &Session, ctx: &egui::Context) -> Option<Arc<PreviewShaper>> {
+        self.collect();
+        let fresh = self.built.as_ref().is_some_and(|(k, _)| k == key);
+        let under_way = self.running.as_ref().is_some_and(|(k, _)| k == key);
+        if !fresh && !under_way {
+            if self.wanted.as_ref().is_none_or(|(k, _)| k != key) {
+                self.wanted = Some((key.clone(), now));
+            }
+            let since = self.wanted.as_ref().map_or(0.0, |(_, at)| now - at);
+            let editing = self.built.as_ref().is_some_and(|(k, _)| k.0 == key.0 && k.2 == key.2);
+            let wait = if editing { REBUILD_PAUSE - since } else { 0.0 };
+            if self.running.is_none() && wait <= 0.0 {
+                if let Some(doc) = session.active() {
+                    self.running = Some((key.clone(), start_build(doc.font.clone(), key.2.clone(), build_options(session))));
+                    self.collect();
+                }
+            } else if wait > 0.0 {
+                ctx.request_repaint_after(std::time::Duration::from_secs_f64(wait.clamp(BUILD_POLL, REBUILD_PAUSE)));
+            }
+        }
+        if self.running.is_some() {
+            ctx.request_repaint_after(std::time::Duration::from_secs_f64(BUILD_POLL));
+        }
+        let (built, result) = self.built.as_ref()?;
+        (built.0 == key.0 && built.2 == key.2).then(|| result.as_ref().ok().cloned()).flatten()
+    }
+
+    /// Why the font for `key`'s document and master could not be built.
+    fn error(&self, key: &FontKey) -> Option<&str> {
+        match &self.built {
+            Some((k, Err(e))) if k.0 == key.0 && k.2 == key.2 => Some(e),
+            _ => None,
+        }
+    }
+}
+
+/// The compile options a preview build reads: the session's glyph data and the folder the
+/// source's feature code includes files from, as `font.features.compile` reads them.
+fn build_options(session: &Session) -> fontcraft_engine::compile::Options {
+    let path = session.active().and_then(|d| d.path.clone());
+    fontcraft_engine::compile::Options {
+        glyph_data: fontcraft_engine::compile::DataRef(session.glyph_data().ok()),
+        feature_dir: feature_dir(path.as_deref()),
+        include_check: fontcraft_engine::file_access::include_check(),
+        ..fontcraft_engine::compile::Options::default()
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn feature_dir(path: Option<&std::path::Path>) -> Option<std::path::PathBuf> {
+    path.and_then(fontcraft_engine::io::feature_dir).filter(|d| fontcraft_engine::file_access::check_read(d).is_ok())
+}
+
+/// The web build has no file system to read includes from.
+#[cfg(target_arch = "wasm32")]
+fn feature_dir(_path: Option<&std::path::Path>) -> Option<std::path::PathBuf> {
+    None
+}
+
+/// The full preview font of `master` and its shaper.
+fn build_font(font: &Font, master: &str, options: &fontcraft_engine::compile::Options) -> FontResult {
+    let built = preview::layout_font_with(font, master, PreviewKind::Full, options).map_err(|e| format!("The text is not shaped: {e}"))?;
+    let tags: Vec<fontcraft_textlayout::shaping::Tag> = built.features.iter().map(|f| f.tag).collect();
+    PreviewShaper::new(Arc::<[u8]>::from(built.bytes), &built.glyph_order, &built.private_use, &tags)
+        .map(Arc::new)
+        .map_err(|e| format!("The text is not shaped: {e}"))
+}
+
+/// Builds the preview font on a thread of its own (here, on the web or when no thread can be
+/// started); the result lands in the returned slot.
+fn start_build(font: Arc<Font>, master: String, options: fontcraft_engine::compile::Options) -> Landing {
+    let landing: Landing = Arc::default();
+    let out = landing.clone();
+    let work = move || {
+        let result = fontcraft_engine::guard::catch_panic(|| build_font(&font, &master, &options))
+            .unwrap_or_else(|e| Err(format!("The text is not shaped: the preview font could not be built ({e})")));
+        if let Ok(mut slot) = out.lock() {
+            *slot = Some(result);
+        }
+    };
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let work = Arc::new(Mutex::new(Some(work)));
+        let in_thread = work.clone();
+        let spawned = std::thread::Builder::new().name("text preview font".into()).spawn(move || {
+            if let Some(w) = in_thread.lock().ok().and_then(|mut w| w.take()) {
+                w();
+            }
+        });
+        if spawned.is_err()
+            && let Some(w) = work.lock().ok().and_then(|mut w| w.take())
+        {
+            w();
+        }
+    }
+    #[cfg(target_arch = "wasm32")]
+    work();
+    landing
 }
 
 /// One entry of the style pop-up.
@@ -834,7 +995,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
             text_field(ui, tp, tokens, pending);
             ui.add_space(tokens.dialog_spacing);
             match (font, master.as_deref(), doc) {
-                (Some(font), Some(master), Some(doc)) => area(ui, tp, tokens, font, master, doc, index.as_deref(), pending),
+                (Some(font), Some(master), Some(doc)) => area(ui, tp, tokens, session, font, master, doc, index.as_deref(), pending),
                 _ => {
                     ui.label(egui::RichText::new("No font is open").color(tokens.text_dim));
                     tp.cache.drawn = Drawn { message: Some("No font is open".into()), ..Drawn::default() };
@@ -971,6 +1132,7 @@ fn area(
     ui: &mut egui::Ui,
     tp: &mut TextPreviewState,
     tokens: &Tokens,
+    session: &Session,
     font: &Font,
     master: &str,
     doc: (u64, u64),
@@ -1013,7 +1175,22 @@ fn area(
         tp.cache.matches_key = Some(mkey);
         tp.cache.matches = Arc::new(find_matches(&tp.text, &tp.find.query, tp.find.ignore_case, tp.find.matching));
     }
-    let mut drawn = Drawn { em: tp.size as f32, master: Some(master.to_string()), message: tp.cache.error.clone(), ..Drawn::default() };
+
+    // The preview font, and the shaped lines kept for this layout and font.
+    let now = ui.input(|i| i.time);
+    let font_key: FontKey = (doc.0, doc.1, master.to_string());
+    let shaper = if vertical { None } else { tp.cache.font.step(&font_key, now, session, ui.ctx()) };
+    let mut sh = std::collections::hash_map::DefaultHasher::new();
+    (key, shaper.as_ref().map(|s| Arc::as_ptr(s) as usize)).hash(&mut sh);
+    let shaped_key = sh.finish();
+    if tp.cache.shaped_key != Some(shaped_key) {
+        tp.cache.shaped_key = Some(shaped_key);
+        tp.cache.shaped.clear();
+    }
+
+    let message = tp.cache.error.clone().or_else(|| if vertical { None } else { tp.cache.font.error(&font_key).map(str::to_string) });
+    let mut drawn =
+        Drawn { em: tp.size as f32, master: Some(master.to_string()), message, building: tp.cache.font.running.is_some(), ..Drawn::default() };
     let (Some(layout), Some(text)) = (tp.cache.layout.clone(), tp.cache.text.clone()) else {
         if let Some(e) = &tp.cache.error {
             ui.label(egui::RichText::new(e).color(tokens.text_dim));
@@ -1055,23 +1232,68 @@ fn area(
         };
         let first = ((lo / lh).floor() - 1.0).max(0.0) as usize;
         let last = (((hi / lh).ceil() + 1.0).max(0.0) as usize).min(layout.lines.len());
-        let items = match (layout.lines.get(first), last.checked_sub(1).and_then(|l| layout.lines.get(l))) {
-            (Some(a), Some(b)) if first < last => a.items.start..b.items.end.min(a.items.start.saturating_add(MAX_DRAWN)),
-            _ => 0..0,
+
+        // Shaping: the lines in view first, then up to a screen's worth more per frame from the
+        // two screens around them.
+        let mut shaping_error = None;
+        if let Some(shaper) = shaper.as_deref() {
+            let page = last.saturating_sub(first).max(1);
+            let around = first.saturating_sub(2 * page)..last.saturating_add(2 * page).min(layout.lines.len());
+            if tp.cache.shaped.len() > MAX_SHAPED_LINES {
+                tp.cache.shaped.retain(|l, _| around.contains(l));
+            }
+            let mut budget = page;
+            let mut more = false;
+            let wanted = (first..last).chain(around.clone().filter(|l| !(first..last).contains(l)));
+            for (n, l) in wanted.enumerate() {
+                if tp.cache.shaped.contains_key(&l) {
+                    continue;
+                }
+                if n >= last.saturating_sub(first) {
+                    if budget == 0 {
+                        more = true;
+                        break;
+                    }
+                    budget -= 1;
+                }
+                if let Some(line) = fontcraft_textlayout::shape_line(font, master, &text, &layout, l, shaper) {
+                    tp.cache.shaped.insert(l, Arc::new(line));
+                }
+            }
+            if more {
+                ui.ctx().request_repaint();
+            }
+            shaping_error = (first..last).find_map(|l| tp.cache.shaped.get(&l).and_then(|s| s.error.clone()));
+        }
+        let shaped = &tp.cache.shaped;
+        // An item as drawn: from its shaped line when there is one.
+        let placed_of = |i: usize| -> Option<&Placed> {
+            let p = layout.placed.get(i)?;
+            match (shaped.get(&p.line), layout.lines.get(p.line)) {
+                (Some(s), Some(line)) => s.placed.get(i.checked_sub(line.items.start)?),
+                _ => Some(p),
+            }
         };
         let line_box = |i: usize| -> Option<Rect> {
-            let p = layout.placed.get(i)?;
+            let p = placed_of(i)?;
             let line = layout.lines.get(p.line)?;
             Some(match layout.direction {
                 Direction::Vertical => Rect::from_two_pos(
                     place.screen(line.baseline - layout.line_height / 2.0, -p.offset),
                     place.screen(line.baseline + layout.line_height / 2.0, -p.offset - p.advance),
                 ),
-                Direction::Ltr | Direction::Rtl => Rect::from_two_pos(
-                    place.screen(p.x, line.baseline + layout.ascender),
-                    place.screen(p.x + p.advance, line.baseline + layout.ascender - layout.line_height),
-                ),
+                Direction::Ltr | Direction::Rtl => {
+                    let left = if layout.direction == Direction::Rtl { -p.offset - p.advance } else { p.offset };
+                    Rect::from_two_pos(
+                        place.screen(left, line.baseline + layout.ascender),
+                        place.screen(left + p.advance, line.baseline + layout.ascender - layout.line_height),
+                    )
+                }
             })
+        };
+        let items = match (layout.lines.get(first), last.checked_sub(1).and_then(|l| layout.lines.get(l))) {
+            (Some(a), Some(b)) if first < last => a.items.start..b.items.end.min(a.items.start.saturating_add(MAX_DRAWN)),
+            _ => 0..0,
         };
         // Match highlights, behind the glyphs.
         let shown = matches.partition_point(|s| s + qlen <= items.start)..matches.partition_point(|s| *s < items.end);
@@ -1090,19 +1312,26 @@ fn area(
                 drawn.current = whole;
             }
         }
+        drawn.shaped = (first..last).filter(|l| shaped.contains_key(l)).count();
         // Glyph outlines, filled into one texture of the area in view.
         let mut outline = BezPath::new();
+        let mut add = |name: &str, x: f64, y: f64, drawn: &mut Drawn| {
+            let Some(layer) = font.glyph(name).and_then(|g| g.layer(master)) else { return };
+            if let Some(composite) = tp.cache.outlines.get(doc, font, name, layer) {
+                let mut glyph = composite.outline.clone();
+                glyph.apply_affine(Affine::translate((x, y)));
+                outline.extend(glyph.elements().iter().copied());
+            }
+            drawn.glyphs.push((Arc::from(name), place.screen(x, y)));
+        };
         for i in items.clone() {
-            let Some(p) = layout.placed.get(i) else { break };
+            let Some(p) = placed_of(i) else { break };
             match (p.glyph.as_deref(), text.items().get(i)) {
                 (Some(name), _) => {
-                    let Some(layer) = font.glyph(name).and_then(|g| g.layer(master)) else { continue };
-                    if let Some(composite) = tp.cache.outlines.get(doc, font, name, layer) {
-                        let mut glyph = composite.outline.clone();
-                        glyph.apply_affine(Affine::translate((p.x, p.y)));
-                        outline.extend(glyph.elements().iter().copied());
+                    add(name, p.x, p.y, &mut drawn);
+                    for (name, x, y) in &p.extra {
+                        add(name, *x, *y, &mut drawn);
                     }
-                    drawn.glyphs.push((Arc::from(name), place.screen(p.x, p.y)));
                 }
                 (None, Some(Item::Missing(c))) if !c.is_whitespace() && !c.is_control() => {
                     let centre = match layout.direction {
@@ -1115,7 +1344,17 @@ fn area(
                 _ => {}
             }
         }
-        fill(ui, &painter, &mut tp.cache, tokens, &outline, place, visible, ppp, key);
+        if drawn.message.is_none() {
+            drawn.message = shaping_error;
+        }
+        let mut th = std::collections::hash_map::DefaultHasher::new();
+        (shaped_key, drawn.shaped).hash(&mut th);
+        fill(ui, &painter, &mut tp.cache, tokens, &outline, place, visible, ppp, th.finish());
+        // Why the text is not shaped, over the bottom of the area.
+        if let Some(note) = &drawn.message {
+            let at = visible.left_bottom() + vec2(pad, -pad);
+            painter.text(at, Align2::LEFT_BOTTOM, note, egui::TextStyle::Small.resolve(ui.style()), tokens.text_dim);
+        }
         response.context_menu(|ui| context_menu(ui, tp, pending));
     });
     tp.cache.drawn = drawn;
