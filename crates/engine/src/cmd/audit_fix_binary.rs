@@ -426,13 +426,10 @@ pub(super) fn fix_file(s: &mut Session, v: &Value) -> Result<Value> {
 
     file_io::check_write(&output)?;
     // The calls work on a new temporary copy beside the file the output replaces (the file a
-    // link points to, so the link stays), with that file's permissions.
+    // link points to, so the link stays), with that file's permissions; stage checks both
+    // paths against the write roots before it creates the copy.
     let staged = super::instance::stage(&output, &source.bytes, 0)?;
     let discard = |staged: &super::instance::Staged| super::instance::discard(std::slice::from_ref(staged));
-    if let Err(e) = file_io::check_write(staged.target()).and_then(|()| file_io::check_write(staged.temp())) {
-        discard(&staged);
-        return Err(e);
-    }
     let tmp = staged.temp().to_path_buf();
     for call in &calls {
         match s.execute(call.command, &call_params(call, &tmp, true)) {

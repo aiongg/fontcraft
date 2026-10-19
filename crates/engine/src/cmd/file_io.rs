@@ -7,7 +7,7 @@
 //! the result is built in memory and written in one atomic step at the end. On the web there are
 //! no paths: every function here refuses with a message.
 
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use crate::params::Params;
 use crate::{EngineError, Result};
@@ -201,6 +201,29 @@ pub fn create_output_dir(req: &OutputRequest) -> Result<Vec<PathBuf>> {
         return Err(EngineError::Io(format!("cannot create {}: {e}", dir.display())));
     }
     Ok(missing)
+}
+
+/// `path` made absolute, with its longest existing part canonicalized (links followed) and the
+/// rest applied component by component, so that two spellings of one place compare equal.
+pub fn resolved(path: &Path) -> PathBuf {
+    let abs = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
+    let parts: Vec<Component<'_>> = abs.components().collect();
+    for k in (1..=parts.len()).rev() {
+        let head: PathBuf = parts.iter().take(k).collect();
+        if let Ok(mut out) = std::fs::canonicalize(&head) {
+            for c in parts.iter().skip(k) {
+                match c {
+                    Component::ParentDir => {
+                        out.pop();
+                    }
+                    Component::CurDir => {}
+                    other => out.push(other),
+                }
+            }
+            return out;
+        }
+    }
+    abs
 }
 
 /// Removes the folders [`create_output_dir`] created, deepest first, stopping at the first that

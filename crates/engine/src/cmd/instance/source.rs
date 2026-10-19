@@ -343,7 +343,7 @@ fn build_ufos(
             )));
         }
         let out = ufo_path(input, req, instance_dir, job, &names.filename)?;
-        let at = resolved(&out);
+        let at = file_io::resolved(&out);
         if let Some(source) = sources.iter().find(|s| at.starts_with(s) || s.starts_with(&at)) {
             return Err(p.bad(format!(
                 "instance `{label}` would be written to {}, which would replace {}, a file the source reads",
@@ -396,60 +396,53 @@ fn ufo_path(input: &Path, req: &OutputRequest, instance_dir: Option<&Path>, job:
         let req = OutputRequest { output_dir: dir, ..req.clone() };
         return file_io::output_path(input, &req, ".instance", Some("ufo"));
     }
-    let bad = || EngineError::Io(format!("the instance file name `{filename}` is not a path inside the source's folder"));
-    // The name comes from the file, so it may not climb out of the folder or name the folder itself.
-    let inside = Path::new(filename).components().all(|c| matches!(c, Component::Normal(_))) && filename.split('/').all(|s| s != "." && s != "..");
-    if filename.is_empty() || filename.contains('\\') || !inside {
+    let bad = || EngineError::Io(format!("the instance file name `{filename}` does not name a UFO folder"));
+    // As in fontmake, a recorded name is relative to the source's folder and may climb out of
+    // it (`../instance_ufo/X.ufo`); build_ufos refuses a target on or around a source file.
+    if filename.is_empty() || filename.contains('\\') || Path::new(filename).has_root() {
         return Err(bad());
     }
+    let last = filename.rsplit('/').find(|s| !s.is_empty()).filter(|s| *s != "." && *s != "..").ok_or_else(bad)?;
     match dir {
-        Some(dir) => {
-            let last = filename.rsplit('/').find(|s| !s.is_empty()).ok_or_else(bad)?;
-            Ok(dir.join(last))
-        }
+        Some(dir) => Ok(dir.join(last)),
         None => {
             let base = input.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(Path::new("."));
-            Ok(base.join(filename))
+            Ok(normalized(&base.join(filename)))
         }
     }
 }
 
+/// `path` with `.` dropped and each `..` folded into the part before it, by spelling only (as
+/// fontmake resolves instance file names); a leading `..` stays.
+fn normalized(path: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for c in path.components() {
+        match c {
+            Component::CurDir => {}
+            Component::ParentDir if matches!(out.components().next_back(), Some(Component::Normal(_))) => {
+                out.pop();
+            }
+            other => out.push(other),
+        }
+    }
+    if out.as_os_str().is_empty() {
+        out.push(".");
+    }
+    out
+}
+
 /// The source at `input` and every file opening it reads (a designspace's UFOs, the files of
-/// Import Font and Import Master parameters), each [`resolved`]. An instance is never written
+/// Import Font and Import Master parameters), each [`file_io::resolved`]. An instance is never written
 /// over one of them, inside one, or around one.
 #[cfg(not(target_arch = "wasm32"))]
 fn source_paths(input: &Path) -> Result<Vec<PathBuf>> {
-    let mut paths = vec![resolved(input)];
+    let mut paths = vec![file_io::resolved(input)];
     crate::io::check_references(input, &mut |p| {
-        paths.push(resolved(p));
+        paths.push(file_io::resolved(p));
         Ok(())
     })
     .map_err(EngineError::Io)?;
     Ok(paths)
-}
-
-/// `path` made absolute, with its longest existing part canonicalized (links followed) and the
-/// rest applied component by component, so that two spellings of one place compare equal.
-#[cfg(not(target_arch = "wasm32"))]
-fn resolved(path: &Path) -> PathBuf {
-    let abs = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
-    let parts: Vec<Component<'_>> = abs.components().collect();
-    for k in (1..=parts.len()).rev() {
-        let head: PathBuf = parts.iter().take(k).collect();
-        if let Ok(mut out) = std::fs::canonicalize(&head) {
-            for c in parts.iter().skip(k) {
-                match c {
-                    Component::ParentDir => {
-                        out.pop();
-                    }
-                    Component::CurDir => {}
-                    other => out.push(other),
-                }
-            }
-            return out;
-        }
-    }
-    abs
 }
 
 /// Creates the folders above `out` that are missing; answers them, deepest first.
@@ -905,39 +898,56 @@ mod tests {
     }
 
     #[test]
-    fn instantiate_source_keeps_recorded_names_inside_the_source_folder() {
-        let (root, _) = source("escape");
-        let dir = root.join("family");
+    fn instantiate_source_resolves_recorded_names_from_the_source_folder() {
+        let (root, _) = source("sibling");
+        let dir = root.join("master_ufo");
         std::fs::create_dir_all(&dir).unwrap();
         let ds = dir.join("Test.designspace");
         for ufo in ["Light.ufo", "Bold.ufo"] {
             std::fs::rename(root.join(ufo), dir.join(ufo)).unwrap();
         }
         std::fs::rename(root.join("Test.designspace"), &ds).unwrap();
-        // A victim UFO outside the source's folder, which a swap would remove.
-        let victim = root.join("victim.ufo");
-        ufo(&victim, "Victim", (0, 10, 20), &rect(0, 10));
+        let light = std::fs::read_to_string(dir.join("Light.ufo/glyphs/A_.glif")).unwrap();
         let original = std::fs::read_to_string(&ds).unwrap();
         let mut s = Session::new();
-        for (filename, out_dir) in
-            [("../victim.ufo", None), ("a/../../victim.ufo", None), ("..", Some(dir.join("out"))), (".", Some(dir.join("out")))]
-        {
+        // The layout fontmake writes: instances in a folder beside the masters' folder.
+        retarget(&ds, Some("../instance_ufo/Test-Regular.ufo"), "Regular");
+        let r = s.execute("font.instantiate", &json!({ "input": ds, "autohint": false })).unwrap();
+        let out = root.join("instance_ufo").join("Test-Regular.ufo");
+        assert_eq!(r["results"][0]["output"], json!(out.display().to_string()), "{r}");
+        assert_eq!(glyph_a(&out).0, 550.0);
+        // Run again: the earlier instance is replaced.
+        s.execute("font.instantiate", &json!({ "input": ds, "autohint": false })).unwrap();
+        assert_eq!(glyph_a(&out).0, 550.0);
+        std::fs::write(&ds, &original).unwrap();
+        retarget(&ds, Some("./instances/Test-Regular.ufo"), "Regular");
+        s.execute("font.instantiate", &json!({ "input": ds, "autohint": false })).unwrap();
+        assert!(dir.join("instances/Test-Regular.ufo/glyphs/A_.glif").is_file());
+        std::fs::write(&ds, &original).unwrap();
+        // A detour that lands on a master is refused.
+        retarget(&ds, Some("../master_ufo/Light.ufo"), "Regular");
+        let err = s.execute("font.instantiate", &json!({ "input": ds, "autohint": false })).unwrap_err();
+        assert!(err.to_string().contains("Light.ufo"), "{err}");
+        std::fs::write(&ds, &original).unwrap();
+        // Names that give no folder name, or an absolute path.
+        for (filename, out_dir) in [("..", Some(dir.join("out"))), (".", Some(dir.join("out"))), ("a/..", None), ("/abs/X.ufo", None)] {
             retarget(&ds, Some(filename), "Regular");
             let mut params = json!({ "input": ds, "autohint": false });
             if let Some(o) = &out_dir {
                 params["outputDir"] = json!(o);
             }
             let err = s.execute("font.instantiate", &params).unwrap_err();
-            assert!(err.to_string().contains("not a path inside"), "{filename}: {err}");
+            assert!(err.to_string().contains("does not name a UFO folder"), "{filename}: {err}");
             std::fs::write(&ds, &original).unwrap();
         }
         // No recorded file name, and a style name that would climb out through the default name.
         retarget(&ds, None, "/../../../victim");
         let err = s.execute("font.instantiate", &json!({ "input": ds, "autohint": false })).unwrap_err();
         assert!(err.to_string().contains("name with `/`"), "{err}");
-        assert_eq!(std::fs::read_to_string(victim.join("glyphs/A_.glif")).unwrap(), glif("A", "0041", 20, &rect(0, 10)));
-        assert_eq!(names_in(&root), ["family", "victim.ufo"], "nothing written outside");
-        assert_eq!(names_in(&dir), ["Bold.ufo", "Light.ufo", "Test.designspace"], "nothing written inside");
+        assert_eq!(std::fs::read_to_string(dir.join("Light.ufo/glyphs/A_.glif")).unwrap(), light, "the master is as it was");
+        assert!(dir.join("Bold.ufo/glyphs/A_.glif").is_file());
+        assert_eq!(names_in(&root), ["instance_ufo", "master_ufo"]);
+        assert_eq!(names_in(&dir), ["Bold.ufo", "Light.ufo", "Test.designspace", "instances"]);
         let _ = std::fs::remove_dir_all(&root);
     }
 

@@ -265,6 +265,9 @@ pub fn instance_font_with_notes(font: &Font, instance: usize, options: &InterpOp
     if fontcraft_model::is_ufo_family(font.source.format)
         && let Some(rules) = crate::doc_rules::document_rules(font)
     {
+        if rules.truncated {
+            notes.push(crate::doc_rules::cut_note());
+        }
         let names: HashSet<String> = glyphs.iter().map(|g| g.name.clone()).collect();
         let swaps = crate::doc_rules::swaps_at(&rules, &inst.location, |n| names.contains(n));
         for (old, new) in crate::doc_rules::apply_swaps(&mut glyphs, &swaps) {

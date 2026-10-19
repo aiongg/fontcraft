@@ -15,7 +15,7 @@ use write_fonts::tables::avar::{Avar, AxisValueMap, SegmentMaps};
 use write_fonts::types::F2Dot14;
 
 use super::fmt_g;
-use super::glyphset::{GlyphSet, MAX_DRAW_WORK, Work};
+use super::glyphset::{GlyphSet, MAX_DRAW_WORK_PER_AXIS, Work};
 use super::piecewise_linear_map;
 use crate::metrics::{moment_statistics, moments};
 use crate::sfnt::{SfntFont, Tag, tag_str};
@@ -374,7 +374,8 @@ pub fn plan_avar_with(font: &SfntFont, options: &PlanOptions) -> Result<PlanResu
     if segments.len() != axes.len() {
         segments = axes.iter().map(|a| (a.tag, Vec::new())).collect();
     }
-    let mut budget = Budget { work: Work(MAX_DRAW_WORK), entries: MAX_PLAN_ENTRIES };
+    let planned = kinds().iter().filter(|k| axes.iter().any(|a| a.tag == k.tag)).count().max(1);
+    let mut budget = Budget { work: Work::new(MAX_DRAW_WORK_PER_AXIS.saturating_mul(planned)), entries: MAX_PLAN_ENTRIES };
     let mut results = Vec::new();
     let mut any = false;
     for (kind, plan) in kinds().iter().zip([&options.weight, &options.width, &options.slant, &options.optical_size]) {

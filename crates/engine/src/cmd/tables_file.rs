@@ -122,32 +122,35 @@ pub(super) fn load(p: &Params<'_>, key: &str, face_key: &str) -> Result<Loaded> 
     let path = PathBuf::from(p.str(key)?);
     let input = file_io::read_input(&path)?;
     let face = p.get(face_key);
-    let plain_face = |p: &Params<'_>| -> Result<()> {
+    // A file holding one font accepts that font's index (0) or its PostScript name.
+    let plain_face = |p: &Params<'_>, font: &SfntFont| -> Result<()> {
         match face {
             None => Ok(()),
-            Some(v) if v.as_u64() == Some(0) => Ok(()),
-            Some(_) => Err(p.bad(format!("{} holds one font: `{face_key}` can only be 0", path.display()))),
+            Some(v) if v.as_u64() == Some(0) || v.as_str() == Some("0") => Ok(()),
+            Some(Value::String(name)) if postscript_name(font).as_deref() == Some(name.as_str()) => Ok(()),
+            Some(_) => Err(p.bad(format!("{} holds one font: `{face_key}` can only be 0 or its PostScript name", path.display()))),
         }
     };
     let (font, wrap) = match input.kind {
         InputKind::TrueType | InputKind::Cff => {
-            plain_face(p)?;
-            (fontcraft_tables::read(&input.bytes, 0)?, Wrap::Plain)
+            let font = fontcraft_tables::read(&input.bytes, 0)?;
+            plain_face(p, &font)?;
+            (font, Wrap::Plain)
         }
         InputKind::Woff => {
-            plain_face(p)?;
             let unwrapped = woff::decode(&input.bytes).map_err(tables_err)?;
             let font = fontcraft_tables::read(&unwrapped.sfnt, 0)?;
+            plain_face(p, &font)?;
             let extras = Extras { version: Some(unwrapped.version), metadata: unwrapped.metadata, private: unwrapped.private };
             (font, Wrap::Woff(extras))
         }
         InputKind::Woff2 => {
-            plain_face(p)?;
             let dir = woff2::directory(&input.bytes).map_err(tables_err)?;
             let transformed = |tag: &Tag| dir.tables.iter().any(|t| &t.tag == tag && t.transformed());
             let (transform_glyf, transform_hmtx) = (transformed(b"glyf"), transformed(b"hmtx"));
             let unwrapped = woff2::decode(&input.bytes).map_err(tables_err)?;
             let font = fontcraft_tables::read(&unwrapped.sfnt, 0)?;
+            plain_face(p, &font)?;
             let extras = Extras { version: Some(unwrapped.version), metadata: unwrapped.metadata, private: unwrapped.private };
             (font, Wrap::Woff2(woff2::Options { transform_glyf, transform_hmtx, extras }))
         }
@@ -195,7 +198,7 @@ fn member(p: &Params<'_>, key: &str, fonts: &[SfntFont]) -> Result<usize> {
 }
 
 /// Name ID 6 of a font, read from its `name` table.
-fn postscript_name(font: &SfntFont) -> Option<String> {
+pub(super) fn postscript_name(font: &SfntFont) -> Option<String> {
     use skrifa::raw::FontRead as _;
     let name = skrifa::raw::tables::name::Name::read(skrifa::raw::FontData::new(font.get(*b"name")?)).ok()?;
     let strings = name.string_data();

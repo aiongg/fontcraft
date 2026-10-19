@@ -33,7 +33,7 @@
 //! textures only. A glyph's texture is clipped to the canvas with a margin when it is larger.
 //! iColor images use the placed-image cache ([`super::images`]); svg files are read once per file
 //! revision ([`SvgCache`]). One glyph's drawing has a work budget ([`MAX_PAINT_WORK`]); a glyph
-//! past it is drawn up to there.
+//! that needs more is drawn as one plain fill of its outlines in the text colour.
 
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
@@ -67,11 +67,15 @@ pub const CLIP_MARGIN: f64 = 256.0;
 pub const MAX_DRAWABLES: usize = 8_192;
 /// Pixel operations (a fill's pixel box times its clips and its colour, summed over the fills)
 /// one glyph may take to draw: at least this, or [`PAINT_WORK_PER_PIXEL`] per pixel of the
-/// glyph's own box when that is more. A glyph that needs more is drawn up to there, so a file of
-/// many large layers cannot stall a frame.
+/// glyph's own box when that is more, up to [`MAX_GLYPH_PAINT_WORK`]. A glyph that needs more
+/// is drawn as one plain fill of its outlines, so a file of many large layers cannot stall a
+/// frame and no glyph is shown with layers missing.
 pub const MAX_PAINT_WORK: u64 = 64 << 20;
-/// Pixel operations one pixel of a glyph's box allows, for glyphs drawn large.
-pub const PAINT_WORK_PER_PIXEL: u64 = 16;
+/// Pixel operations one pixel of a glyph's box allows, for glyphs drawn large: room for a few
+/// hundred layers that each cover the whole glyph.
+pub const PAINT_WORK_PER_PIXEL: u64 = 256;
+/// Most pixel operations one glyph may take to draw, however large it is drawn.
+pub const MAX_GLYPH_PAINT_WORK: u64 = 1 << 30;
 /// Most svg files whose outlines are kept.
 pub const MAX_SVG_FILES: usize = 256;
 /// The Master Color parameter's dark-appearance counterpart.
@@ -618,39 +622,56 @@ fn pixel_box(rect: fontcraft_geom::Rect, t: Affine, width: u32, height: u32) -> 
     (x1 > x0 && y1 > y0).then_some((x0, y0, x1, y1))
 }
 
-/// Paints `drawables` into `px`; `to_pixels` maps the glyph's font units to pixels. Painting
-/// stops at the work budget ([`MAX_PAINT_WORK`]).
-fn paint_drawables(px: &mut Pixels, drawables: &[Drawable], to_pixels: Affine) {
-    paint_drawables_within(px, drawables, to_pixels, MAX_PAINT_WORK);
+/// Paints `drawables` into `px`; `to_pixels` maps the glyph's font units to pixels. A glyph past
+/// the work budget ([`MAX_PAINT_WORK`]) is painted as one fill of its outlines in `plain`.
+fn paint_drawables(px: &mut Pixels, drawables: &[Drawable], to_pixels: Affine, plain: [f32; 4]) {
+    paint_drawables_within(px, drawables, to_pixels, MAX_PAINT_WORK, plain);
 }
 
-/// [`paint_drawables`] with at least `least` pixel operations to spend. Answers whether every
-/// drawable was painted.
-fn paint_drawables_within(px: &mut Pixels, drawables: &[Drawable], to_pixels: Affine, least: u64) -> bool {
+/// What painting `drawables` into a `width × height` image takes.
+struct Work {
+    /// Each drawable's pixel box, `None` when it paints nothing.
+    boxes: Vec<Option<(u32, u32, u32, u32)>>,
+    /// The box of them all.
+    all: Option<(u32, u32, u32, u32)>,
+    /// Pixel operations needed.
+    cost: u64,
+    /// Pixel operations allowed, with at least `least`.
+    budget: u64,
+}
+
+fn work(drawables: &[Drawable], to_pixels: Affine, width: u32, height: u32, least: u64) -> Work {
+    let boxes: Vec<Option<(u32, u32, u32, u32)>> = drawables
+        .iter()
+        .map(|d| d.clips.first().filter(|f| !f.elements().is_empty()).and_then(|f| pixel_box(f.bounding_box(), to_pixels, width, height)))
+        .collect();
+    let all = boxes.iter().flatten().copied().reduce(|a, b| (a.0.min(b.0), a.1.min(b.1), a.2.max(b.2), a.3.max(b.3)));
+    let area = all.map_or(0, |(x0, y0, x1, y1)| u64::from(x1 - x0) * u64::from(y1 - y0));
+    let budget = least.max(PAINT_WORK_PER_PIXEL.saturating_mul(area).min(MAX_GLYPH_PAINT_WORK));
+    let cost = drawables.iter().zip(&boxes).fold(0u64, |sum, (d, b)| {
+        let Some((x0, y0, x1, y1)) = *b else { return sum };
+        let clips = u64::try_from(d.clips.len()).unwrap_or(u64::MAX);
+        sum.saturating_add((u64::from(x1 - x0) * u64::from(y1 - y0)).saturating_mul(clips.saturating_add(1)))
+    });
+    Work { boxes, all, cost, budget }
+}
+
+/// [`paint_drawables`] with at least `least` pixel operations to spend. Answers whether the
+/// drawables were painted in colour; when they would cost more than the budget, nothing of
+/// them is painted and their outlines are filled in `plain` instead.
+fn paint_drawables_within(px: &mut Pixels, drawables: &[Drawable], to_pixels: Affine, least: u64, plain: [f32; 4]) -> bool {
     let inverse = to_pixels.inverse();
     if !inverse.as_coeffs().iter().all(|v| v.is_finite()) {
         return true;
     }
-    let boxes: Vec<Option<(u32, u32, u32, u32)>> = drawables
-        .iter()
-        .map(|d| d.clips.first().filter(|f| !f.elements().is_empty()).and_then(|f| pixel_box(f.bounding_box(), to_pixels, px.width, px.height)))
-        .collect();
-    let area = boxes
-        .iter()
-        .flatten()
-        .copied()
-        .reduce(|a, b| (a.0.min(b.0), a.1.min(b.1), a.2.max(b.2), a.3.max(b.3)))
-        .map_or(0, |(x0, y0, x1, y1)| u64::from(x1 - x0) * u64::from(y1 - y0));
-    let budget = least.max(PAINT_WORK_PER_PIXEL.saturating_mul(area));
-    let mut spent = 0u64;
-    for (d, b) in drawables.iter().zip(&boxes) {
+    let work = work(drawables, to_pixels, px.width, px.height, least);
+    if work.cost > work.budget {
+        paint_plain(px, drawables, to_pixels, work.all, plain);
+        return false;
+    }
+    for (d, b) in drawables.iter().zip(&work.boxes) {
         let Some((x0, y0, x1, y1)) = *b else { continue };
         let (w, h) = (x1 - x0, y1 - y0);
-        let clips = u64::try_from(d.clips.len()).unwrap_or(u64::MAX);
-        spent = spent.saturating_add((u64::from(w) * u64::from(h)).saturating_mul(clips.saturating_add(1)));
-        if spent > budget {
-            return false;
-        }
         let shift = Affine::translate((-f64::from(x0), -f64::from(y0))) * to_pixels;
         let mut coverage = vec![1.0f32; w as usize * h as usize];
         let mut drawn = true;
@@ -678,6 +699,23 @@ fn paint_drawables_within(px: &mut Pixels, drawables: &[Drawable], to_pixels: Af
         }
     }
     true
+}
+
+/// Fills the outer outline of every drawable, as one path, in `color` within the box `all`: one
+/// pass over the glyph's pixels whatever the number of drawables.
+fn paint_plain(px: &mut Pixels, drawables: &[Drawable], to_pixels: Affine, all: Option<(u32, u32, u32, u32)>, color: [f32; 4]) {
+    let Some((x0, y0, x1, y1)) = all else { return };
+    let (w, h) = (x1 - x0, y1 - y0);
+    let outline = concat(drawables.iter().filter_map(|d| d.clips.first().cloned()).collect());
+    let shift = Affine::translate((-f64::from(x0), -f64::from(y0))) * to_pixels;
+    let Ok(mask) = render_path(&outline, shift, w, h, &MASK) else { return };
+    for (i, p) in mask.pixels.as_chunks::<4>().0.iter().enumerate() {
+        if p[3] == 0 {
+            continue;
+        }
+        let (x, y) = (x0 + i as u32 % w, y0 + i as u32 / w);
+        blend(px.data, (y as usize * px.width as usize + x as usize) * 4, color, f32::from(p[3]) / 255.0);
+    }
 }
 
 /// Paints the bitmap of `image` (straight RGBA, rows top to bottom) into `px`: `place` maps the
@@ -712,7 +750,7 @@ pub fn paint_preview_glyph(font: &Font, name: &str, layer: &Layer, src: &mut Sou
     let Some(kind) = kinds::kind(layer) else { return };
     let mode = Mode::Layers { master: layer.master.clone(), kind };
     match content(font, glyph, &mode, Some(layer), src) {
-        Some(Content::Vector(list)) => paint_drawables(px, &list, to_pixels),
+        Some(Content::Vector(list)) => paint_drawables(px, &list, to_pixels, color32_straight(src.text)),
         Some(Content::Bitmap(image)) => {
             let Some(path) = image.path.as_deref() else { return };
             let Ok(bytes) = src.assets.read(path) else { return };
@@ -740,7 +778,7 @@ pub fn glyph_image(
     let g = font.glyph(glyph)?;
     let Content::Vector(list) = content(font, g, mode, exact, src)? else { return None };
     let mut data = vec![0u8; width as usize * height as usize * 4];
-    paint_drawables(&mut Pixels { data: &mut data, width, height }, &list, to_pixels);
+    paint_drawables(&mut Pixels { data: &mut data, width, height }, &list, to_pixels, color32_straight(src.text));
     Some(ColorImage::from_rgba_premultiplied([width as usize, height as usize], &data))
 }
 
@@ -903,7 +941,7 @@ pub fn draw(c: &Painting, ctx: &egui::Context, ui: &mut ColorUi, images: &mut su
             if !valid {
                 let drawn = match content(s.font, glyph, &mode, exact, &mut src) {
                     Some(Content::Bitmap(image)) => Drawn::Bitmap(image),
-                    Some(Content::Vector(list)) => rasterise(ctx, &list, scale, view, name),
+                    Some(Content::Vector(list)) => rasterise(ctx, &list, scale, view, name, color32_straight(tokens.text_color)),
                     None => Drawn::Sprite { texture: None, bounds: [0; 4], region: [0; 4], bytes: 0 },
                 };
                 let components = glyph.layers.iter().any(|l| l.shapes.iter().any(|s| matches!(s, Shape::Component(_))));
@@ -941,8 +979,8 @@ fn clip(bounds: [i64; 4], view: [f64; 4]) -> [i64; 4] {
 }
 
 /// The drawables at `scale` pixels per font unit as a texture of their part within `view`
-/// (pixels from the glyph's origin).
-fn rasterise(ctx: &egui::Context, list: &[Drawable], scale: f64, view: [f64; 4], name: &str) -> Drawn {
+/// (pixels from the glyph's origin); past the work budget, a fill of their outlines in `plain`.
+fn rasterise(ctx: &egui::Context, list: &[Drawable], scale: f64, view: [f64; 4], name: &str, plain: [f32; 4]) -> Drawn {
     let to_px = Affine::scale_non_uniform(scale, -scale);
     let mut bounds: Option<fontcraft_geom::Rect> = None;
     for d in list {
@@ -962,7 +1000,7 @@ fn rasterise(ctx: &egui::Context, list: &[Drawable], scale: f64, view: [f64; 4],
     }
     let mut data = vec![0u8; width as usize * height as usize * 4];
     let to_pixels = Affine::translate((-(region[0] as f64), -(region[1] as f64))) * to_px;
-    paint_drawables(&mut Pixels { data: &mut data, width, height }, list, to_pixels);
+    paint_drawables(&mut Pixels { data: &mut data, width, height }, list, to_pixels, plain);
     let bytes = data.len();
     let image = ColorImage::from_rgba_premultiplied([width as usize, height as usize], &data);
     let texture = ctx.load_texture(format!("color-glyph:{name}"), image, TextureOptions::LINEAR);
@@ -1024,13 +1062,56 @@ mod tests {
         // Each fill costs 64 × 64 × 2 operations; 1,000 of them are far past a budget of 100 fills.
         let mut list: Vec<Drawable> = (0..1_000).map(|_| Drawable { clips: red.clips.clone(), leaf: Leaf::Solid([1.0, 0.0, 0.0, 1.0]) }).collect();
         list.push(blue);
+        let green = [0.0, 1.0, 0.0, 1.0];
         let mut data = vec![0u8; 64 * 64 * 4];
-        let all = paint_drawables_within(&mut Pixels { data: &mut data, width: 64, height: 64 }, &list, Affine::IDENTITY, 100 * 64 * 64 * 2);
+        let all = paint_drawables_within(&mut Pixels { data: &mut data, width: 64, height: 64 }, &list, Affine::IDENTITY, 100 * 64 * 64 * 2, green);
         assert!(!all, "the budget runs out");
-        assert_eq!(data[..4], [255, 0, 0, 255], "the fills within the budget are painted, the last one is not");
+        assert_eq!(data[..4], [0, 255, 0, 255], "past the budget the outlines are filled in the plain colour, no layer at all");
+        assert!(data.chunks(4).all(|p| p == &[0, 255, 0, 255][..]), "the whole outline is filled");
         let mut data = vec![0u8; 64 * 64 * 4];
-        assert!(paint_drawables_within(&mut Pixels { data: &mut data, width: 64, height: 64 }, &list[990..], Affine::IDENTITY, 100 * 64 * 64 * 2));
+        assert!(paint_drawables_within(
+            &mut Pixels { data: &mut data, width: 64, height: 64 },
+            &list[990..],
+            Affine::IDENTITY,
+            100 * 64 * 64 * 2,
+            green
+        ));
         assert_eq!(data[..4], [0, 0, 255, 255], "a glyph within the budget is painted whole");
+    }
+
+    #[test]
+    fn a_glyph_of_twenty_full_layers_fits_the_budget_on_a_large_canvas() {
+        let square = |size: f64| {
+            let mut p = BezPath::new();
+            p.move_to((0.0, 0.0));
+            p.line_to((size, 0.0));
+            p.line_to((size, size));
+            p.line_to((0.0, size));
+            p.close_path();
+            p
+        };
+        // Twenty layers that each cover the whole glyph, drawn at 4096 × 4096 pixels.
+        let list: Vec<Drawable> = (0..20).map(|_| Drawable { clips: vec![square(4096.0)], leaf: Leaf::Solid([1.0, 0.0, 0.0, 1.0]) }).collect();
+        let w = work(&list, Affine::IDENTITY, 4096, 4096, MAX_PAINT_WORK);
+        assert_eq!(w.cost, 20 * 4096 * 4096 * 2);
+        assert!(w.cost <= w.budget, "every layer is drawn: {} of {}", w.cost, w.budget);
+        // The same glyph painted small draws its top layer, not a plain fill.
+        let mut list = list;
+        for d in &mut list {
+            d.clips = vec![square(32.0)];
+        }
+        if let Some(top) = list.last_mut() {
+            top.leaf = Leaf::Solid([0.0, 0.0, 1.0, 1.0]);
+        }
+        let mut data = vec![0u8; 32 * 32 * 4];
+        assert!(paint_drawables_within(
+            &mut Pixels { data: &mut data, width: 32, height: 32 },
+            &list,
+            Affine::IDENTITY,
+            MAX_PAINT_WORK,
+            [0.0, 1.0, 0.0, 1.0]
+        ));
+        assert_eq!(data[..4], [0, 0, 255, 255]);
     }
 
     #[test]
