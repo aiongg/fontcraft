@@ -222,7 +222,7 @@ fn colr_v0(element: &Element, ctx: &ReadContext) -> Result<Option<Vec<u8>>> {
         }
     }
     let gid = |name: &str| -> Result<i64> { Ok(i64::from(ctx.glyph_id(name)?)) };
-    let mut keyed: Vec<(i64, &(String, Vec<(String, i64)>))> = Vec::with_capacity(glyphs.len());
+    let mut keyed = Vec::with_capacity(glyphs.len());
     for g in &glyphs {
         keyed.push((gid(&g.0)?, g));
     }

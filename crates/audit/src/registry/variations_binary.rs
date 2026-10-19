@@ -266,7 +266,7 @@ pub(super) const CHECKS: &[CheckSpec] = &[
         label: "No HVAR table",
         description: "The variable font has no HVAR table, so text engines must compute advance changes from the outlines.",
         profile: Strict,
-        fix: fix("recompile", "file.export", true, "Export the font again with the HVAR table generated."),
+        fix: fix("recompile", "variations.buildHvar", true, "Build the HVAR table from the gvar phantom point deltas."),
         codes: &["lacks-HVAR"],
         run: Runner::Binary(vb::hvar_missing),
         ..BASE

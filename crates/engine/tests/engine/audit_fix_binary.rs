@@ -111,7 +111,9 @@ fn audit_fix_on_a_file_clears_each_table_fault() {
     font.insert(*b"OS/2", os2);
     font.insert(*b"DSIG", vec![0, 0, 0, 1, 0, 0, 0, 0]);
     font.remove(*b"prep");
-    font = set_glyph_bounds(&font, &[(1, [100, 100, 200, 200])]).unwrap();
+    let bytes = std::fs::read(&ttf).unwrap();
+    let a = skrifa::MetadataProvider::charmap(&skrifa::FontRef::new(&bytes).unwrap()).map('A').unwrap().to_u32() as u16;
+    font = set_glyph_bounds(&font, &[(a, [100, 100, 200, 200])]).unwrap();
     font.insert(*b"name", name_table(&[(3, 1, "Fix  Me "), (3, 2, "Regular"), (3, 4, "Fix Me Regular"), (3, 6, "FixMe-Regular"), (1, 1, "Fix")]));
     save(&ttf, &font);
     let original = std::fs::read(&ttf).unwrap();
@@ -211,4 +213,33 @@ fn tables_clean_name_records_and_rebuild_cmap_work_on_files() {
     let after = run(&mut s, "audit.run", json!({"target": dir.join("Cmap.ttf"), "profile": "strict", "checks": ["check.tables.cmapFormat12"]}));
     assert_eq!(pairs(&after), pairs(&before), "a font without code points beyond the BMP keeps passing");
     assert!(s.execute("tables.dropAxis", &json!({"font": ttf, "axis": "wght"})).is_err(), "a static font has no axis to drop");
+}
+
+#[test]
+fn audit_fix_on_a_file_builds_a_missing_hvar_table() {
+    let dir = scratch("hvar");
+    let source = dir.join("TestSans.glyphs");
+    std::fs::write(&source, crate::export::TWO_MASTERS).unwrap();
+    let mut s = Session::new();
+    run(&mut s, "file.open", json!({"path": source}));
+    run(&mut s, "file.exportVariable", json!({"destination": dir, "timestamp": 0}));
+    let ttf = dir.join("TestSansVF.ttf");
+    let mut font = read(&ttf);
+    font.remove(*b"HVAR");
+    save(&ttf, &font);
+    let checks = ["check.variations.hvarMissing"];
+    let found = run(&mut s, "audit.run", json!({"target": ttf, "profile": "strict", "checks": checks}));
+    let fix = &found["results"][0]["fix"];
+    assert_eq!(fix["available"], true, "{fix}");
+    assert_eq!(fix["command"], "audit.fix");
+    assert_eq!(fix["params"], json!({"target": ttf, "checks": checks}));
+    assert_eq!(fix["via"], "variations.buildHvar");
+
+    let r = run(&mut s, "audit.fix", json!({"target": ttf, "profile": "strict", "checks": checks}));
+    assert_eq!(r["applied"][0]["command"], "variations.buildHvar", "{r}");
+    assert_eq!(r["applied"][0]["result"]["hvar"], "built", "{r}");
+    let fixed = dir.join("TestSansVF.fixed.ttf");
+    assert!(read(&fixed).get(*b"HVAR").is_some());
+    assert!(fixable(&mut s, &fixed, &checks).is_empty());
+    std::fs::remove_dir_all(&dir).unwrap();
 }

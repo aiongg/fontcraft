@@ -2484,7 +2484,7 @@ scope = "binary"
 fixable = true
 area = "qa"
 milestone = "M12"
-summary = "A variable font has no HVAR table, forcing engines to derive advance changes from glyph outlines. The fix builds one on export."
+summary = "A variable font has no HVAR table, forcing engines to derive advance changes from glyph outlines. The fix builds one from the gvar phantom point deltas (variations.buildHvar)."
 ref = "fontbakery googlefonts/varfont/has_HVAR"
 status = "docs"
 

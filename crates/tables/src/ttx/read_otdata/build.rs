@@ -136,7 +136,7 @@ pub(crate) fn val(name: &str, text: impl Into<String>) -> Element {
     el(name, vec![("value", text.into())], Vec::new())
 }
 
-fn value_of<'e>(e: &'e Element) -> Result<&'e str> {
+fn value_of(e: &Element) -> Result<&str> {
     e.attribute("value").ok_or_else(|| bad(format!("the element '{}' has no value", e.name)))
 }
 
@@ -844,7 +844,7 @@ impl<'a> Compiler<'a> {
                     }
                     sets.insert(glyph, ligs);
                 }
-                let mut keyed: Vec<(u32, String, Vec<(String, Vec<String>)>)> = Vec::with_capacity(sets.items.len());
+                let mut keyed = Vec::with_capacity(sets.items.len());
                 for (g, set) in sets.items {
                     keyed.push((u32::from(self.glyph(&g)?), g, set));
                 }
@@ -981,7 +981,9 @@ mod unit {
     fn entry_formats_follow_the_widest_index() {
         assert_eq!(entry_format(&[0]).unwrap(), 0x00);
         assert_eq!(entry_format(&[0x0000_0003]).unwrap(), 0x01);
-        assert_eq!(entry_format(&[0x0001_0000]).unwrap(), 0x10);
+        // fontTools' getEntryFormat: outer 1 with inner 0 needs one inner bit and fits a byte.
+        assert_eq!(entry_format(&[0x0001_0000]).unwrap(), 0x00);
+        assert_eq!(entry_format(&[0x00FF_0001]).unwrap(), 0x10);
         assert_eq!(int_list("[1, -2, 0x3]").unwrap(), vec![1, -2, 3]);
         assert_eq!(version_value("0x00010002").unwrap(), 0x0001_0002);
         assert_eq!(version_value("1.0").unwrap(), 0x0001_0000);

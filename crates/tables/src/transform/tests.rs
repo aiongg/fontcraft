@@ -350,12 +350,16 @@ fn units_per_em_recalculates_maxp_and_head_flags_and_stores_standard_post_names_
         post.extend_from_slice(s.as_bytes());
     }
     input.insert(*b"post", post);
+    // A stored size larger than any glyph program, as fonts whose size counts the font programs carry.
+    let mut maxp = input.get(*b"maxp").unwrap().to_vec();
+    maxp[26..28].copy_from_slice(&3596u16.to_be_bytes());
+    input.insert(*b"maxp", maxp);
     let out = transform(&input, &upem(2048)).unwrap();
 
     let maxp = out.get(*b"maxp").unwrap();
     let maxima: Vec<u16> = [6, 8, 10, 12, 28, 30].iter().map(|at| u16_at(maxp, *at)).collect();
     assert_eq!(maxima, [4, 1, 4, 1, 1, 1], "points, contours, composite points and contours, component elements and depth");
-    assert_eq!(u16_at(maxp, 26), 2, "the instruction size is kept");
+    assert_eq!(u16_at(maxp, 26), 3596, "the stored instruction size is kept");
     assert_eq!(u16_at(out.get(*b"head").unwrap(), 16) & 2, 2, "every left side bearing equals xMin");
 
     let post = out.get(*b"post").unwrap();

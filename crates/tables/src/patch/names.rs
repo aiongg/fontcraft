@@ -66,11 +66,11 @@ impl Record {
 
     fn decode(&self) -> Option<String> {
         if self.utf16() {
-            let chunks = self.raw.chunks_exact(2);
-            if !chunks.remainder().is_empty() {
+            let (chunks, rest) = self.raw.as_chunks::<2>();
+            if !rest.is_empty() {
                 return None;
             }
-            let units: Vec<u16> = chunks.filter_map(|c| be_u16(c, 0)).collect();
+            let units: Vec<u16> = chunks.iter().map(|c| u16::from_be_bytes(*c)).collect();
             String::from_utf16(&units).ok()
         } else if self.mac_roman() {
             Some(self.raw.iter().map(|b| MacRomanMapping.decode(*b)).collect())

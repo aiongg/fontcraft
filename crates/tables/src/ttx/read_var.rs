@@ -277,12 +277,15 @@ fn deltas(values: &[i64], out: &mut Vec<u8>) -> Result<()> {
     Ok(())
 }
 
+/// A point set of one glyph's tuples: its points, how many tuples use it, its packed bytes.
+type PointSet = (Vec<usize>, usize, Vec<u8>);
+
 /// `compileTupleVariationStore`: the tuple count (with the shared-points flag), the tuple
 /// headers and the serialised data.
 fn store(tuples: &[&Tuple], tags: &[String], shared: &HashMap<Vec<u8>, usize>, share_points: bool, two: bool) -> Result<(i64, Vec<u8>, Vec<u8>)> {
     let mut kept: Vec<(&Tuple, Vec<usize>)> = Vec::new();
     // Point sets in the order first met, with how often each occurs.
-    let mut sets: Vec<(Vec<usize>, usize, Vec<u8>)> = Vec::new();
+    let mut sets: Vec<PointSet> = Vec::new();
     let mut set_index: HashMap<Vec<usize>, usize> = HashMap::new();
     for t in tuples {
         let Some(points) = t.used() else { continue };
@@ -309,9 +312,9 @@ fn store(tuples: &[&Tuple], tags: &[String], shared: &HashMap<Vec<u8>, usize>, s
     let mut shared_points: Option<&Vec<usize>> = None;
     if share_points {
         // `max` keeps the first of equal keys.
-        let mut best: Option<(&(Vec<usize>, usize, Vec<u8>), usize)> = None;
+        let mut best: Option<(&PointSet, usize)> = None;
         for s in &sets {
-            let key = s.2.len() * (s.1 - 1);
+            let key = s.2.len() * s.1.saturating_sub(1);
             if best.is_none_or(|(_, k)| key > k) {
                 best = Some((s, key));
             }
@@ -399,9 +402,9 @@ pub(crate) fn gvar(element: &Element, ctx: &ReadContext, font: &SfntFont, glyf: 
             let loca = font.get(*b"loca").ok_or_else(|| bad("the 'gvar' table needs a 'loca' table"))?;
             let long = font.get(*b"head").and_then(|h| h.get(51)).is_some_and(|b| *b != 0);
             let locations: Vec<u32> = if long {
-                loca.chunks_exact(4).map(|c| c.iter().fold(0u32, |v, x| (v << 8) | u32::from(*x))).collect()
+                loca.as_chunks::<4>().0.iter().map(|c| u32::from_be_bytes(*c)).collect()
             } else {
-                loca.chunks_exact(2).map(|c| c.iter().fold(0u32, |v, x| (v << 8) | u32::from(*x)) * 2).collect()
+                loca.as_chunks::<2>().0.iter().map(|c| u32::from(u16::from_be_bytes(*c)) * 2).collect()
             };
             point_counts(data, &locations)?
         }

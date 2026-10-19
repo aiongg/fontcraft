@@ -115,6 +115,7 @@ const NOT_OUTLINE_STEPS: [&str; 9] = [
 const HAS_COMPONENTS: &str = "the layer has components: its outline fixes need safeOnly: false";
 /// Why a fix with no call `audit.fix` can make is left out.
 const NO_FIX_CALL: &str = "audit.fix cannot carry this fix out yet";
+const NO_FILE_FIX_CALL: &str = "audit.fix cannot carry this fix out on a compiled font: fix the source and export again";
 /// Added to the largest deviation the almost-straight check reported, so the reported curves fall
 /// strictly inside Tidy up Paths' `straighten` limit.
 const STRAIGHTEN_MARGIN: f64 = 1e-6;
@@ -128,7 +129,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Run Audit",
             [],
             None,
-            "{target?: \"document\" | path | [paths] (default the open document; several files or a folder of compiled fonts are also one family), profile?: id (default the document's default profile, else the application's, else universal), checks?: [id | prefix*], exclude?: [id | prefix*], groups?: [group], scope?: [\"source\" | \"binary\" | \"family\"], glyphs?: [names, indexes, first-last ranges, /CID] (entries that match nothing are warned about), glyphFile?: path (the same entries in a file), masters?: [ids], layers?: [ids], minSeverity?: \"info\" | \"warn\" | \"fail\", config?: {checkId: {threshold: number}}, maxResults?: count = 100, includePassed?: bool = false, includeIgnored?: bool = false, network?: bool = false} runs the checks of every scope and changes nothing: layer checks on every layer of the selected glyphs except backup layers (or the layers in `layers`), glyph and source checks on the source, binary checks on each compiled font (a source's exporting instances and variable font are compiled in memory and their findings name the source field behind a compiled value), family checks on two or more fonts. Turned-on check modules (none in safe mode) run on the same layers under any profile with layer checks; their results have the check id check.plugin.<module>.<name>, group plugin and no fix, and a module that fails is listed once in checks with status error and a message. On a compiled font the outline checks read the decoded file and checks that need source data are skipped. A check whose preconditions do not hold is skipped with the reason. A pattern that matches no check is an error. A capped check with more than maxResults results in one font gives one info result with the count instead. Results on the source's ignore list are counted in summary.ignored and listed only with includeIgnored. A run on the open document is kept for audit.results and audit.fix → {schema, tool, target: {kind, path, fonts: [{id, name, path, instance, format}]}, document?: {title, revision}, profile, config, summary: {fail, warn, info, passed, skipped, ignored, errors, truncated}, checks: [{id, status, results, reason?, message?}], results: [{id, check, code, severity, message, location: {font, glyph, master, layer, shapes?, points?, segments?, point?, bounds?, table?, field?, sourceField?, instance?, fonts?, masters?}, data, fix: {available, id?, safe?, description?, command?, params?, via?}, ignored, stale}], warnings?: [text]}",
+            "{target?: \"document\" | path | [paths] (default the open document; several files or a folder of compiled fonts are also one family), profile?: id (default the document's default profile, else the application's, else universal), checks?: [id | prefix*], exclude?: [id | prefix*], groups?: [group], scope?: [\"source\" | \"binary\" | \"family\"], glyphs?: [names, indexes, first-last ranges, /CID] (entries that match nothing are warned about), glyphFile?: path (the same entries in a file), masters?: [ids], layers?: [ids], minSeverity?: \"info\" | \"warn\" | \"fail\", config?: {checkId: {threshold: number}}, maxResults?: count = 100, includePassed?: bool = false, includeIgnored?: bool = false, network?: bool = false} runs the checks of every scope and changes nothing: layer checks on every layer of the selected glyphs except backup layers (or the layers in `layers`), glyph and source checks on the source, binary checks on each compiled font (a source's exporting instances and variable font are compiled in memory and their findings name the source field behind a compiled value), family checks on two or more fonts. Turned-on check modules (none in safe mode) run on the same layers under any profile with layer checks; their results have the check id check.plugin.<module>.<name>, group plugin and no fix, and a module that fails is listed once in checks with status error and a message. On a compiled font the outline checks read the decoded file and checks that need source data are skipped. A check whose preconditions do not hold is skipped with the reason. A pattern that matches no check is an error. A capped check with more than maxResults results in one font gives one info result with the count instead. Results on the source's ignore list are counted in summary.ignored and listed only with includeIgnored. A run on the open document is kept for audit.results and audit.fix. A result's fix gives the audit.fix call that carries it out: {results: [id]} on the open document, {checks, glyphs, layers} on a source file, {target, checks} on one compiled font file → {schema, tool, target: {kind, path, fonts: [{id, name, path, instance, format}]}, document?: {title, revision}, profile, config, summary: {fail, warn, info, passed, skipped, ignored, errors, truncated}, checks: [{id, status, results, reason?, message?}], results: [{id, check, code, severity, message, location: {font, glyph, master, layer, shapes?, points?, segments?, point?, bounds?, table?, field?, sourceField?, instance?, fonts?, masters?}, data, fix: {available, id?, safe?, description?, command?, params?, via?}, ignored, stale}], warnings?: [text]}",
             always,
             run
         )
@@ -945,17 +946,22 @@ fn examine_target(t: &mut Target, run: &Run) -> Examined {
 
 /// How a result names itself to `audit.fix`.
 #[derive(Clone, Copy, PartialEq)]
-enum FixParams {
+enum FixParams<'a> {
     /// `{results: [id]}`: the document is kept for `audit.fix`.
     ById,
     /// `{checks, glyphs, layers}`: the document is not kept.
     BySelection,
+    /// `{target, checks}`: one compiled font file, repaired by the table commands.
+    File(&'a str),
 }
 
 fn fix_json(f: &Finding, id: &str, how: FixParams) -> Value {
     let Some(fx) = f.fix else { return json!({"available": false}) };
     let mut m = Map::new();
-    let via = fix_via(&fx);
+    let via = match how {
+        FixParams::File(_) => super::audit_fix_binary::file_fix_command(fx.id),
+        _ => fix_via(&fx),
+    };
     m.insert("available".into(), json!(via.is_some()));
     m.insert("id".into(), json!(fx.id));
     m.insert("safe".into(), json!(fx.safe));
@@ -964,12 +970,16 @@ fn fix_json(f: &Finding, id: &str, how: FixParams) -> Value {
         Some(via) => {
             let params = match how {
                 FixParams::ById => json!({"results": [id]}),
+                FixParams::File(path) => json!({"target": path, "checks": [f.check]}),
                 FixParams::BySelection if f.location.glyph.is_empty() => json!({"checks": [f.check]}),
                 FixParams::BySelection => json!({"checks": [f.check], "glyphs": [f.location.glyph], "layers": [f.location.layer]}),
             };
             m.insert("command".into(), json!("audit.fix"));
             m.insert("params".into(), params);
             m.insert("via".into(), json!(via));
+        }
+        None if matches!(how, FixParams::File(_)) => {
+            m.insert("reason".into(), json!(NO_FILE_FIX_CALL));
         }
         None => {
             m.insert("reason".into(), json!(NO_FIX_CALL));
@@ -1139,7 +1149,11 @@ fn run(s: &mut Session, v: &Value) -> Result<Value> {
         let first = t.srcs.first().map(|s| s.model.clone()).unwrap_or_else(|| Arc::new(Font::new("")));
         let run = read_run(&p, s, &first, &t.settings)?;
         let ex = examine_target(&mut t, &run);
-        return document(&t, &run, &ex, FixParams::BySelection, false);
+        let how = match (t.kind, t.path.as_deref()) {
+            ("binary", Some(path)) => FixParams::File(path),
+            _ => FixParams::BySelection,
+        };
+        return document(&t, &run, &ex, how, false);
     }
     let doc = s.doc()?;
     let mut t = document_target_of(doc);
@@ -1881,8 +1895,9 @@ fn context(font: &Font, (grid_step, main_curve, variable): Facts) -> AuditContex
 
 // ── audit.list, audit.describe, audit.profile.list ─────────────────────────────────────────────
 
+/// audit.fix carries the check's fix out on the open document or on a compiled font file.
 fn fix_available(c: &CheckSpec) -> bool {
-    c.fix.as_ref().and_then(fix_via).is_some()
+    c.fix.as_ref().is_some_and(|f| fix_via(f).is_some() || super::audit_fix_binary::file_fix_command(f.id).is_some())
 }
 
 fn list(_: &mut Session, v: &Value) -> Result<Value> {

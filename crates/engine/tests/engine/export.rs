@@ -35,7 +35,7 @@ fn drawn() -> Session {
 
 /// Two masters (Regular 400, Bold 700) and four instances: Regular and Bold at the masters
 /// (Bold with a fileName parameter), Medium between them, Hidden at Bold but not exported.
-const TWO_MASTERS: &str = r#"{
+pub(crate) const TWO_MASTERS: &str = r#"{
 .appVersion = "3343";
 .formatVersion = 3;
 axes = (

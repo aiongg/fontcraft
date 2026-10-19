@@ -26,7 +26,10 @@ fn with(tables: Vec<(&[u8; 4], Vec<u8>)>) -> SfntFont {
     font
 }
 
-fn mappings(font: &SfntFont) -> Vec<(u16, u16, Vec<(u32, u32)>)> {
+/// Each subtable's platform, encoding and (code point, glyph) pairs.
+type Subtables = Vec<(u16, u16, Vec<(u32, u32)>)>;
+
+fn mappings(font: &SfntFont) -> Subtables {
     let cmap = read_fonts::tables::cmap::Cmap::read(FontData::new(font.get(*b"cmap").unwrap())).unwrap();
     cmap.encoding_records()
         .iter()
@@ -35,7 +38,8 @@ fn mappings(font: &SfntFont) -> Vec<(u16, u16, Vec<(u32, u32)>)> {
             let m = if matches!(sub, read_fonts::tables::cmap::CmapSubtable::Format14(_)) {
                 Vec::new()
             } else {
-                sub.iter().map(|(c, g)| (c, g.to_u32())).collect()
+                // Glyph 0 is format 4's closing 0xFFFF segment, not a mapping.
+                sub.iter().map(|(c, g)| (c, g.to_u32())).filter(|(_, g)| *g != 0).collect()
             };
             (r.platform_id() as u16, r.encoding_id(), m)
         })
@@ -89,7 +93,8 @@ fn clean_name_records_trims_drops_and_agrees() {
     assert_eq!(r.changed, 3);
     assert_eq!(
         names(&r.font),
-        [(3, 1, "My Family".into()), (3, 2, "Regular".into()), (3, 6, "MyFamily-Regular".into()), (3, 6, "MyFamily-Regular".into())]
+        [(3, 6, "MyFamily-Regular".into()), (3, 1, "My Family".into()), (3, 2, "Regular".into()), (3, 6, "MyFamily-Regular".into())],
+        "records stay sorted by platform, encoding and language (0x407 before 0x409), then name id"
     );
     let keep_mac = clean_name_records(&font, &NameOptions { drop_mac: false }).unwrap();
     assert_eq!(names(&keep_mac.font).first(), Some(&(1, 1, "Mac Family".into())));

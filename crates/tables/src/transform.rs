@@ -33,7 +33,8 @@
 //! instructions and gets its left side bearing set to its `xMin`; when no glyph keeps
 //! instructions the font programs and `cvt ` go too, and the device metrics caches (`hdmx`,
 //! `LTSH`, `VDMX`) go whenever a glyph changed. Whenever a glyph changed, `maxp` and the `head`
-//! bounds and flags are recalculated as fontTools' `maxp.recalc` recalculates them on saving.
+//! bounds and flags are recalculated as fontTools' `maxp.recalc` recalculates them on saving;
+//! `maxp.maxSizeOfInstructions` keeps its stored value unless glyphs lost their instructions.
 //!
 //! CFF and CFF2 outlines are refused for now, and so is a matrix on a variable font.
 
@@ -533,7 +534,10 @@ impl Work {
                 put_i16(&mut head, 50, i16::from(long));
                 font.insert(*b"head", head);
             }
-            if let Some(mut maxp) = font.get(*b"maxp").map(<[u8]>::to_vec)
+            // fontTools' `maxp.recalc` keeps `maxSizeOfInstructions` as stored; only a transform
+            // that removed glyph programs lowers it to the largest one left.
+            if !report.hints_kept
+                && let Some(mut maxp) = font.get(*b"maxp").map(<[u8]>::to_vec)
                 && maxp.len() >= 32
             {
                 let largest = self.glyphs.iter().map(|g| g.instructions().len()).max().unwrap_or(0);

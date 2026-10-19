@@ -194,6 +194,11 @@ const FILE_FIXES: [(&str, &str); 10] = [
     ("patchTable", "tables.recalculate"),
 ];
 
+/// The command that carries out the fix `id` on a compiled font file, when it is registered.
+pub(super) fn file_fix_command(id: &str) -> Option<&'static str> {
+    FILE_FIXES.iter().find(|(f, _)| *f == id).map(|(_, c)| *c).filter(|c| find_command(c).is_some())
+}
+
 /// The `audit.run` parameters `audit.fix` passes through on a file.
 const RUN_KEYS: [&str; 7] = ["profile", "checks", "exclude", "groups", "glyphs", "minSeverity", "config"];
 /// `audit.fix` parameters that only make sense on the open document.
@@ -256,7 +261,9 @@ impl FileReport {
 }
 
 /// The calls the results ask for, in the order they run.
-fn plan(results: &[Value], safe_only: bool, report: &mut FileReport) -> Vec<Call> {
+/// `truetype` says whether the file is an uncompressed TrueType font, the only kind
+/// `variations.buildHvar` reads.
+fn plan(results: &[Value], safe_only: bool, truetype: bool, report: &mut FileReport) -> Vec<Call> {
     // (fix order, face) → call
     let mut calls: BTreeMap<(usize, u64), Call> = BTreeMap::new();
     for r in results {
@@ -274,6 +281,10 @@ fn plan(results: &[Value], safe_only: bool, report: &mut FileReport) -> Vec<Call
         }
         if find_command(command).is_none() {
             report.skip(check, Some(fix_id), format!("{command}, which carries out this fix, is not built yet"));
+            continue;
+        }
+        if fix_id == "recompile" && !truetype {
+            report.skip(check, Some(fix_id), "HVAR is built from the gvar deltas of an uncompressed TrueType font; convert the file first");
             continue;
         }
         let location = r.get("location").cloned().unwrap_or(Value::Null);
@@ -414,7 +425,7 @@ pub(super) fn fix_file(s: &mut Session, v: &Value) -> Result<Value> {
     let results = before.get("results").and_then(Value::as_array).cloned().unwrap_or_default();
 
     let mut report = FileReport::default();
-    let calls = plan(&results, safe_only, &mut report);
+    let calls = plan(&results, safe_only, matches!(source.kind, file_io::InputKind::TrueType), &mut report);
     if dry {
         let planned: Vec<Value> =
             calls.iter().map(|c| json!({"fix": c.fix, "command": c.command, "params": call_params(c, &input, false), "checks": c.checks})).collect();

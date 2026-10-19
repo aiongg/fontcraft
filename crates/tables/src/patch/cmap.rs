@@ -71,7 +71,8 @@ pub fn rebuild_cmap(font: &SfntFont) -> Result<CmapRebuild> {
             if read > MAX_TTX_CMAP_ENTRIES {
                 return Err(TablesError::TooLarge { what: "the cmap mappings", limit: MAX_TTX_CMAP_ENTRIES });
             }
-            let Ok(gid) = u16::try_from(gid.to_u32()) else { continue };
+            // A mapping to glyph 0 is no mapping: format 4 ends with 0xFFFF → 0.
+            let Ok(gid @ 1..) = u16::try_from(gid.to_u32()) else { continue };
             if let Some(old) = map.insert(cp, gid)
                 && old != gid
             {
