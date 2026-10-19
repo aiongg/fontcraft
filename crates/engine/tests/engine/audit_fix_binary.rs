@@ -243,3 +243,20 @@ fn audit_fix_on_a_file_builds_a_missing_hvar_table() {
     assert!(fixable(&mut s, &fixed, &checks).is_empty());
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[cfg(unix)]
+#[test]
+fn audit_fix_in_place_through_a_symlink_writes_the_linked_file_and_keeps_the_link() {
+    let dir = scratch("symlink");
+    let (mut s, real) = exported(&dir);
+    save(&real, &patch(&read(&real), b"hhea", &[("advanceWidthMax", 1.0)]));
+    let link = dir.join("Link.ttf");
+    std::os::unix::fs::symlink(&real, &link).unwrap();
+    let checks = ["check.metrics.maxAdvanceWidth"];
+    assert!(!fixable(&mut s, &link, &checks).is_empty());
+
+    let r = run(&mut s, "audit.fix", json!({"target": link, "profile": "strict", "checks": checks, "inPlace": true}));
+    assert_eq!(r["applied"].as_array().unwrap().len(), 1, "{r}");
+    assert!(std::fs::symlink_metadata(&link).unwrap().file_type().is_symlink(), "the link stays a link");
+    assert!(fixable(&mut s, &real, &checks).is_empty(), "the linked file is fixed");
+}

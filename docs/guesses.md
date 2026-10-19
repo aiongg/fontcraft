@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**2384 guesses on 1409 rows (586 of them live commands).**
+**2385 guesses on 1409 rows (586 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -1898,6 +1898,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `audit.fix` | M3 | docs | yes | alignHandles turns both handles onto the line that bisects their two directions, keeping their lengths; a type designer's review of fixed kinks would settle whether one handle should stay put instead. |
 | `audit.fix` | M3 | docs | yes | setGdefClasses makes a glyph that must not be a mark a Symbol when the glyph database classes it as a mark; a review of the fixed glyphs' categories would settle it. |
 | `audit.fix` | M3 | docs | yes | cleanKerning leaves a tabular glyph that is kerned through a group shared with other glyphs in the report, because removing the group pair would change their kerning; an exception pair of zero is the other choice, which a review of fixed fonts would settle. |
+| `audit.fix` | M3 | docs | yes | A compiled font fixed with inPlace through a symbolic link replaces the file the link points to and keeps the link, with that file's permissions; fixing a linked font with the reference tools would settle whether the link should be replaced instead. |
 | `audit.profile.save` | M12 | inferred | yes | Without store the profile goes to the user's settings rather than the project; a user report would settle which store people expect by default. |
 | `audit.profile.delete` | M12 | inferred | yes | Deleting a profile that another profile of its store includes is refused rather than removing the include; a user report would settle it. |
 | `audit.profile.setDefault` | M12 | inferred | yes | target defaults to the document, so a source carries its own default; a user report would settle whether the application default is expected instead. |

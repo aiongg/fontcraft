@@ -421,6 +421,7 @@ fn prepare_source(_: &Params, _: &Path, _: &OutlineOptions, _: OutputRequest, _:
 /// The reference tools' default conversion error, as a fraction of the em.
 const DEFAULT_MAX_ERROR_EM: f64 = 0.001;
 /// Folders above a reference source searched for a GOADB (ttfcomponentizer's three).
+#[cfg(not(target_arch = "wasm32"))]
 const GOADB_LEVELS_UP: usize = 3;
 
 /// What `outlines.convertCurves` asks for, read once for every input.
@@ -429,6 +430,7 @@ struct CurveRequest {
     max_error_em: f64,
     mixed: bool,
     all_cubic: bool,
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     keep_direction: bool,
     glyphs: Vec<String>,
     exclude_glyphs: Vec<String>,

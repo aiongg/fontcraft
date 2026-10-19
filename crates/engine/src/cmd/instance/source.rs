@@ -952,8 +952,13 @@ mod tests {
         };
         let start = text.find("<instances>").unwrap();
         let end = text.find("</instances>").unwrap();
-        let text =
-            format!("{}<instances>{}{}{}", &text[..start], one("Test", "Test-Regular", 400), one("Test Wide", "TestWide-Regular", 600), &text[end..]);
+        let text = format!(
+            "{}<instances>{}{}{}",
+            text.get(..start).unwrap(),
+            one("Test", "Test-Regular", 400),
+            one("Test Wide", "TestWide-Regular", 600),
+            text.get(end..).unwrap()
+        );
         std::fs::write(&ds, text).unwrap();
         let mut s = Session::new();
         let r = s.execute("font.instantiate", &json!({ "input": ds, "to": "ttf", "outputDir": dir.join("both"), "timestamp": 0 })).unwrap();

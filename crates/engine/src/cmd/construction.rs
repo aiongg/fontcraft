@@ -15,7 +15,9 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use fontcraft_components::construction::{ApplyOptions, Built, MAX_RULES, MAX_RULES_BYTES, Rule, RuleFile, build_rule, construct_glyph, parse_rules};
+#[cfg(not(target_arch = "wasm32"))]
+use fontcraft_components::construction::MAX_RULES_BYTES;
+use fontcraft_components::construction::{ApplyOptions, Built, MAX_RULES, Rule, RuleFile, build_rule, construct_glyph, parse_rules};
 use fontcraft_model::glyphdata::GlyphData;
 use fontcraft_model::{Font, Glyph, MAX_GLYPHS, Shape};
 use fontcraft_spacing::kerning::{Direction, KernIndex};

@@ -322,9 +322,9 @@ mod tests {
         assert!(read <= MAX_RULE_TOTAL && read > MAX_RULE_TOTAL - 3_100, "{read}");
         let mut glyphs: Vec<Arc<Glyph>> = (0..glyphs_count)
             .map(|i| {
-                let mut g = Glyph::new(&format!("g{i}"));
+                let mut g = Glyph::new(format!("g{i}"));
                 let mut l = Layer::new("m01", i as f64);
-                l.shapes.push(Shape::Component(fontcraft_model::Component::new(&format!("g{}", (i + 7) % glyphs_count), 0.0, 0.0)));
+                l.shapes.push(Shape::Component(fontcraft_model::Component::new(format!("g{}", (i + 7) % glyphs_count), 0.0, 0.0)));
                 g.layers.push(l);
                 Arc::new(g)
             })

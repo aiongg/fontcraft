@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1349 rows to check: 2136 guesses and 491 observe steps.**
+**1349 rows to check: 2137 guesses and 491 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -1373,6 +1373,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: alignHandles turns both handles onto the line that bisects their two directions, keeping their lengths; a type designer's review of fixed kinks would settle whether one handle should stay put instead.
   - Guess: setGdefClasses makes a glyph that must not be a mark a Symbol when the glyph database classes it as a mark; a review of the fixed glyphs' categories would settle it.
   - Guess: cleanKerning leaves a tabular glyph that is kerned through a group shared with other glyphs in the report, because removing the group pair would change their kerning; an exception pair of zero is the other choice, which a review of fixed fonts would settle.
+  - Guess: A compiled font fixed with inPlace through a symbolic link replaces the file the link points to and keeps the link, with that file's permissions; fixing a linked font with the reference tools would settle whether the link should be replaced instead.
 - [ ] `audit.toggleLiveAudit` (M3, inferred, live): Live Audit
   - Guess: Live audit is off when the app starts; the default is ours.
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers

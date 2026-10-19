@@ -25,6 +25,7 @@ use crate::EngineError;
 use crate::params::Params;
 
 /// Most font files paired when A or B is a folder.
+#[cfg(not(target_arch = "wasm32"))]
 pub const MAX_FOLDER_FILES: usize = 10_000;
 /// Most characters of a PostScript name given as `faceA` or `faceB`.
 const MAX_FACE_NAME: usize = 256;
