@@ -495,7 +495,7 @@ fn subset_sbix_reads_a_repeated_strike_once_and_caps_the_strikes() {
     let ppems: Vec<u16> = (1..=257).collect();
     let list: Vec<usize> = (0..257).collect();
     font.insert(*b"sbix", sbix_strikes(&ppems, &list));
-    let err = subset(&font, &SubsetOptions { text: "A".into(), ..SubsetOptions::default() }).err().expect("refused");
+    let err = subset(&font, &SubsetOptions { text: "A".into(), ..SubsetOptions::default() }).expect_err("refused");
     assert!(err.to_string().contains("sbix strikes"), "{err}");
 }
 

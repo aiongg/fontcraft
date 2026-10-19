@@ -72,11 +72,14 @@ const TOLERANCE: f64 = 1e-9;
 /// Most outline segments the boxes measured while one [`Scope`] is open may hold together.
 pub(crate) const MAX_BOX_SEGMENTS: usize = 1 << 24;
 
+/// (font address, glyph, master): a layer glyph whose box is measured.
+type BoxKey = (usize, String, String);
+
 /// The boxes of layer glyphs measured while a [`Scope`] is open.
 struct Boxes {
-    /// (font address, glyph, master) → the untransformed box: `None` when the outline cannot be
-    /// made, `Some(None)` when it has no segment.
-    cache: HashMap<(usize, String, String), Option<Option<[f64; 4]>>>,
+    /// The untransformed box of each layer glyph: `None` when the outline cannot be made,
+    /// `Some(None)` when it has no segment.
+    cache: HashMap<BoxKey, Option<Option<[f64; 4]>>>,
     left: usize,
 }
 
