@@ -210,36 +210,39 @@ fn edit(app: &mut FontcraftApp, args: &Args) -> Result<Value, String> {
     }
     let font = app.session.font().map_err(|e| args.err(e))?;
     let setting = setting_index(font, st.setting.as_ref()).map_err(|e| args.err(e))?;
-    if let Some(tag) = args.string("axis")? {
-        if !font.axes.iter().any(|a| a.tag == tag) {
-            return Err(args.err(format!("the font has no axis `{tag}`")));
-        }
-        if tag != st.axis {
-            st.axis = tag.to_string();
-            st.point = None;
-        }
-    }
-    let count = points(font, setting, &st.axis).len();
-    match args.get("point") {
+    // Everything is checked before the dialog's state changes.
+    let (axis, mut point) = match args.string("axis")? {
+        Some(tag) if !font.axes.iter().any(|a| a.tag == tag) => return Err(args.err(format!("the font has no axis `{tag}`"))),
+        Some(tag) if tag != st.axis => (tag.to_string(), None),
+        _ => (st.axis.clone(), st.point),
+    };
+    let count = points(font, setting, &axis).len();
+    match args.given("point") {
         None => {}
-        Some(Value::Null) => st.point = None,
+        Some(Value::Null) => point = None,
         Some(_) => {
             let i = args.index("point")?.and_then(|i| usize::try_from(i).ok()).ok_or_else(|| args.err("`point` is a whole number from 0"))?;
             if i >= count {
-                return Err(args.err(format!("axis `{}` has {count} points; there is no point {i}", st.axis)));
+                return Err(args.err(format!("axis `{axis}` has {count} points; there is no point {i}")));
             }
-            st.point = Some(i);
+            point = Some(i);
         }
     }
-    if let Some(command) = args.string("command")? {
-        if !EDITS.contains(&command) {
-            return Err(args.err(format!("`command` is one of {}", EDITS.join(", "))));
-        }
-        let mut params = match args.get("params") {
-            None => Map::new(),
-            Some(Value::Object(m)) => m.clone(),
-            Some(_) => return Err(args.err("`params` must be a JSON object")),
-        };
+    let command = args.string("command")?;
+    if let Some(command) = command
+        && !EDITS.contains(&command)
+    {
+        return Err(args.err(format!("`command` is one of {}", EDITS.join(", "))));
+    }
+    let params = match args.get("params") {
+        None => Map::new(),
+        Some(Value::Object(m)) => m.clone(),
+        Some(_) => return Err(args.err("`params` must be a JSON object")),
+    };
+    st.axis = axis;
+    st.point = point;
+    if let Some(command) = command {
+        let mut params = params;
         params.insert("axis".into(), json!(st.axis));
         match &st.setting {
             Some(s) => params.insert("variableFontSetting".into(), s.clone()),

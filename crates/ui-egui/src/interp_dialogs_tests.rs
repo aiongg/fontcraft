@@ -297,6 +297,10 @@ fn the_axis_mappings_dialog_previews_its_edits_and_ok_keeps_one_undo_step() {
     );
     assert!(!error.is_empty());
     assert_eq!(execute(&mut app, "axisMappings.dialogEdit", json!({})), nudged, "the refused edit left the dialog as it was");
+    let bad = json!({"command": "axisMappings.dialogEdit", "params": {"axis": "wdth", "command": "axisMappings.nope"}});
+    assert!(!refused(&mut app, "engine.execute", bad).is_empty());
+    assert_eq!(execute(&mut app, "axisMappings.dialogEdit", json!({})), nudged, "a refused request keeps the axis it was on");
+    assert_eq!(execute(&mut app, "axisMappings.dialogEdit", json!({"point": null}))["point"], json!(null), "null clears the selection");
     frames(&mut app, 2);
 
     let done = execute(&mut app, "axisMappings.closeDialog", json!({"confirm": true}));
