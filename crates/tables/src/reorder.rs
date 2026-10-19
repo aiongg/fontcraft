@@ -12,7 +12,7 @@
 pub(crate) mod be;
 pub(crate) mod cff;
 pub(crate) mod cmap;
-mod layout;
+pub(crate) mod layout;
 pub(crate) mod names;
 pub(crate) mod tables;
 

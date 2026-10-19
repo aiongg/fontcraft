@@ -111,6 +111,11 @@ mod tests {
         ("hint.tt.renderPreview", &["output"], "'outline' or 'bitmap'"),
         ("tables.show", &["path"], "a record path inside a table"),
         ("tables.add", &["from"], "inside a `tables` item, checked with the `tables` parameter"),
+        (
+            "font.merge",
+            &["path", "map"],
+            "inside a `fonts` item: the `fonts` parameter is checked, and an item given as an object is refused under automation roots",
+        ),
         ("audit.export", &["target"], "only \"document\": files are not audited, so no file is read"),
         ("audit.clearCache", &["target"], "a file path clears nothing and reads no file"),
         ("fontView.*", &["entries", "entry", "folder", "parent", "filter"], "a sidebar entry's path, not a file"),

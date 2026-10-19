@@ -1006,8 +1006,8 @@ options = [
   "--map FILE: glyph map for the preceding FONT: a header line 'mergefonts [PostScriptName LanguageGroup]' followed by lines 'output-name source-name'; only listed glyphs are taken; numeric output names make the result CID-keyed",
   "--glyphs LIST, --exclude-glyphs LIST, --fd LIST, --exclude-fd LIST: glyph selection for the preceding FONT",
   "--input-list FILE: read the font paths from a text file, one per line, '#' comments",
-  "--layout merge|base|drop: union cmap, GSUB, GPOS and GDEF of all fonts (default for sfnt input), keep the base font's only, or drop layout",
-  "--duplicates first|last|error|rename: what to do when two fonts supply a glyph of the same name; default first, except that identical glyphs are always shared silently",
+  "--layout merge|base|drop: union cmap, GSUB, GPOS and GDEF of all fonts (default without maps), keep the base font's only, or drop GSUB, GPOS and GDEF while still uniting the cmaps (default with maps)",
+  "--duplicates first|last|error|rename: what to do when two fonts supply a glyph of the same name: keep the earlier, let the later replace it, refuse unless the two are identical, or keep both with .1, .2 ... appended; default rename without maps (as pyftmerge), first with maps (as mergefonts)",
   "--drop-tables TAG,...: tables to leave out of the result",
   "--import-ttx FILE: compile this XML dump into the result after merging, to set metadata",
   "--cid-info FILE: make the result CID-keyed and take the top-level dictionary values (FontName, FullName, FamilyName, Weight, version, Registry, Ordering, Supplement, optional Trademark and XUID) from this file",
@@ -1026,6 +1026,14 @@ milestone = "M12"
 summary = "Combines several fonts into one. Font-wide data comes from the first font; glyphs are added from the others, optionally only those listed in a per-font map file that can also rename them. Depending on --layout, the cmap and layout tables of all fonts are merged as well, or only the first font's are kept. The output has the format of the first font unless --to says otherwise."
 ref = "AFDKO mergefonts usage and help; fontTools merge (pyftmerge) usage"
 status = "docs"
+notes = "TrueType-flavoured static fonts only so far: CFF, CFF2 and variable inputs are refused, as are --import-ttx, --cid-info, --hint-dict-from, --ps-name, --language-group, --to, --fd and --exclude-fd, which need CFF or CID-keyed output. The font merge ports fontTools 4.66.1 merge: every glyph of every font, clashing names suffixed .1, .2 ...; glyphs of all but the first font lose their instructions; cmap format 4 and 12 subtables united with the first font keeping a shared code point, plus a locl single substitution in each later font's GSUB for it; format 14 united; GSUB and GPOS lookups concatenated, features of shared scripts merged per language system, unused features and lookups dropped; GDEF united; head, hhea, vhea, maxp, OS/2 and post merged field by field with fontTools' rules, glyph-derived fields recomputed as fontTools does on save. Tables fontTools has no rule for are dropped with a warning; BASE, JSTF and MATH, which fontTools merges, are dropped too. Per-font options follow their FONT on the command line; inside an @FILE they are read as global options and refused."
+guesses = [
+  "With a map, the result's glyph order is .notdef first, then each font's glyphs in its map's order (all glyphs of a font without a map, in font order); comparing with mergefonts' output order would settle it.",
+  "--layout drop still unites the cmaps (first font wins, no locl lookups), so a TrueType result stays usable; mergefonts writes no cmap at all.",
+  "A glyph merge takes head, hhea, vhea, OS/2, name, post and the font programs from the first font unchanged, apart from the glyph count, the bounding box, the hhea extents and the loca format.",
+  "When not every font has vmtx and vhea, the result has neither (with a warning); fontTools fails on such input.",
+  "Without a timestamp the library keeps the first font's creation time and the latest modification time; the command sets both to SOURCE_DATE_EPOCH or the current time, as fontTools does.",
+]
 
 [[cli]]
 id = "transform"
@@ -2468,6 +2476,7 @@ milestone = "M12"
 summary = "Combines fonts into one, taking font-wide data from the first and glyphs (optionally selected and renamed per font) from all, and either merging or dropping cmap and layout. Returns the resulting glyph order with the font each glyph came from and any conflicts that were resolved."
 ref = "docs/spec/20-cli.md › merge"
 status = "docs"
+notes = "Each fonts item is a path or {path, face?, map?, glyphs?, excludeGlyphs?}; a map file or a selection makes the run a glyph merge. Returns {output, bytes, glyphCount, glyphs: [{name, font, source}], conflicts, warnings}. Also takes noClobber (file plumbing). Under automation roots only plain path items pass the file check. Refused until CFF merging exists: importTtx, cidInfo, hintDictFrom, psName, languageGroup, to, fd, excludeFd."
 
 [[command]]
 id = "font.transform"

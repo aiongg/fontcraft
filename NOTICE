@@ -275,6 +275,8 @@ bundled, the file says so in its header and the project is listed here with its 
 
   Hint removal (crates/tables/src/dehint, M12.27) follows the --no-hinting rules of fontTools' subset module (MIT License): the hinting-table list, the maxp limits, the GPOS device-table and anchor pruning, and the Private DICT keys.
 
+  Font merging (crates/tables/src/merge.rs and merge/, M12.23) ports fontTools' merge package (fontTools 4.66.1, MIT License, Copyright 2013 Google, Inc.): the glyph-order renaming, the cmap union and locl duplicate handling, the layout merge of scripts, features and lookups, and the field rules of head, hhea, vhea, maxp, OS/2 and post.
+
   The subsetter (crates/tables/src/subset, M12.17) ports fontTools' subset module (MIT License, Copyright 2013 Google, Inc.): the option defaults, the glyph closure over cmap, glyf components and CFF seac, and the table rules for cmap, glyf, CFF, hmtx, vmtx, post, name, OS/2 and maxp. Its bidirectional mirroring pairs (crates/tables/src/subset/mirror.rs) are the Unicode Character Database's BidiMirroring.txt 18.0.0 (Unicode License v3, LICENSE-Unicode.txt) as fontTools' unicodedata.Mirrored lists them.
 
   Feature syntax conversion (M12.13): crates/tables/src/volt.rs and volt/parse.rs port fontTools' voltLib (lexer.py, parser.py, ast.py, voltToFea.py; MIT License, Copyright (c) 2017 Just van Rossum and others) and print feature code as fontTools' feaLib.ast does; crates/tables/src/fontdame/parse.rs ports the reader of fontTools' mtiLib (MIT License, Copyright (c) 2015 Google Inc. and others).
