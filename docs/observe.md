@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1349 rows to check: 2144 guesses and 492 observe steps.**
+**1352 rows to check: 2148 guesses and 492 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,7 +48,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 40 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 5 |
-| **Later milestones (after M6)** | all | **863** |
+| **Later milestones (after M6)** | all | **866** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 85 |
 | Later milestones (after M6) | Edit View: text mode and preview | 25 |
 | Later milestones (after M6) | Components and anchors | 39 |
@@ -60,7 +60,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Interpolation | 71 |
 | Later milestones (after M6) | Hinting | 106 |
 | Later milestones (after M6) | Colour fonts | 58 |
-| Later milestones (after M6) | Files: open, import, export | 55 |
+| Later milestones (after M6) | Files: open, import, export | 58 |
 | Later milestones (after M6) | Settings and the window | 13 |
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 62 |
 | Later milestones (after M6) | Elsewhere | 26 |
@@ -1379,7 +1379,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (863)
+## Later milestones (after M6) (866)
 
 ### Edit View: drawing, guides, layers and the Palette (85)
 
@@ -3711,7 +3711,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The colour is stored as the text `R,G,B,A` with components from 0 to 255 (the picker also reads `#RRGGBBAA` and a list of numbers). Settled by saving a font with a Master Color from the reference and reading the stored value.
   - Guess: Opacity is the alpha slider of the colour picker. Settled by opening the picker in the reference.
 
-### Files: open, import, export (55)
+### Files: open, import, export (58)
 
 - [ ] `export.instanceExportFolder` (behavior, M7, handbook): An instance carrying the Export Folder custom parameter is written to that…
   - Guess: The sub-path is used as written, `..` segments included, as the handbook says; an absolute path, an empty segment, a folder name with a character such as `:` or `\`, or a path of more than 32 segments makes export skip that instance with the reason, one trailing `/` is ignored, and the warnings name every file written outside the export destination; an Export Folder of `../x` and one of `/tmp/x` in the reference app settle it.
@@ -3818,6 +3818,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: Full-colour font with the gradient and stroke paths deleted (solid fills only): export and read COLR; note whether it is version 0 or version 1.
 - [ ] `compile.colrGradientGeometry` (behavior, M11, docs): Glyphs gradient coordinates are fractions of the layer's bounding box and are…
   - Guess: The ellipse angle of a version 4 radial gradient is not written: COLR circles cannot be squashed without a transform paint. Settled by exporting a radial gradient on a wide path from the reference and reading its paint.
+- [ ] `roundtrip.binaryPassThroughTables` (behavior, M12, inferred): Tables the importer does not turn into editable data are kept as…
+  - Guess: Stored tables are copied only when the whole glyph order is unchanged, since each of them indexes glyphs by id; settled by opening a TrueType font with an LTSH or hdmx table in the reference app, exporting it unchanged and checking whether the table is still there.
 - [ ] `type1` (format, M12, docs): Adobe Type 1 (PFB binary, PFA text)
   - Guess: Vertical metrics are measured on the glyphs d, H, x and p (falling back to the FontBBox), since a Type 1 font has no such fields; the reference app's import of a .pfb would settle it.
   - Guess: Ghost hints become TopGhost and BottomGhost hints with place (edge, 0), the edge being y for a top ghost and y + dy for a bottom ghost as tx reports them; the reference app's import of a hinted .pfb would settle it.
@@ -3833,6 +3835,11 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A repeated glyph name gets .1, .2…; when the name is too long for its suffix, it is cut to 247 bytes first so the result stays within 255. Importing a font with repeated long names into the reference app would settle it.
 - [ ] `proof-html` (format, M12, inferred): HTML specimen
   - Guess: The default sample is an English pangram with digits when the font maps all of its characters, else the first 64 characters of the character set. Settled by the owner.
+- [ ] `compile.dropImpliedOnCurves` (behavior, M12, docs): Optional, off by default in fontmake: on-curve points lying exactly midway between…
+  - Guess: Implied on-curve points are dropped by default, as fontc writes glyphs, where fontmake keeps them; settled by exporting a TrueType font from the reference app with a smooth node that lies halfway between the quadratic control points around it and counting the glyph's points.
+  - Guess: With implied points kept, an on-curve node of a quadratic source contour that lies exactly halfway between its off-curve neighbours is written as implied, because the model's quadratic segments do not tell such a node from an implied point; settled by the same export of a TrueType source with such a node.
+- [ ] `compile.os2WeightAdvice` (behavior, M12, docs): AFDKO's Windows guidance: weight classes 100 and 200 can trigger smeared or…
+  - Guess: The project compile checks only the lower limit (a weight class below 250), since it builds one font at a time; checking the bold partner's range needs the family, which a family-level check would settle.
 - [ ] `glyphsproject` (format, M13, handbook): Glyphs project
   - Observe: Make a Project from the instances test font (two masters, three instances, one with a custom parameter), set an export destination, save it, and send back the `.glyphsproject` file: its keys show where the instances, the link to the source and the destination are stored.
 - [ ] `ufo1` (format, M13, docs): Unified Font Object 1
