@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1335 rows to check: 2089 guesses and 483 observe steps.**
+**1335 rows to check: 2091 guesses and 483 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -1756,6 +1756,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Tokens in a context are expanded with the compiled master's values before the context is read, as in feature code; a context whose token fails is left out with a warning.
   - Guess: A context line without `*`, or with `{`, `}`, `#` or a double quote, leaves the anchor's context out with a warning, where ufo2ft passes it to the feature compiler; the running app would show whether it refuses such a context.
   - Guess: With several semicolons the text up to the last one is the flag part, where ufo2ft fails on a second semicolon; the running app would settle it.
+  - Guess: A context naming an unknown glyph or class leaves that anchor's context out with a warning, where ufo2ft's feature compile fails; an export from the running app with such a context would settle it.
 - [ ] `anchor.setContext` (M8, inferred, live): Set Context
   - Guess: Only an anchor whose name starts with `*` takes a context, a plain anchor is refused, since the mark writer reads contexts of `*` anchors only; the running app would show whether the field appears for other anchors.
   - Guess: An empty or blank context removes the user-data key rather than storing an empty string; a file saved by the reference app after clearing the field would settle it.
@@ -3473,6 +3474,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The command has no menu item, since the app has no Hints menu; it runs from the command search, the console and agents. Adding a Hints menu would settle where it goes.
 - [ ] `hint.tt.setAssembly` (M13, docs, live): Set TrueType Instructions
   - Guess: Without `master`, fpgm and prep text goes to every master and the font-level parameter is removed, as opening a hinted font stores them on every master; the secondary reference has a single font, so nothing settles it there.
+  - Guess: Without the cvt Table, prep Table Assembly and fpgm Table Assembly parameters, a glyph program that needs font programs is left out rather than written against FontCraft's own fpgm and cvt; an export from the secondary reference of a glyph program that calls a function, with no font programs set, would settle it.
   - Guess: Text that assembles to no bytes removes the program instead of storing an empty one; an empty program and none export the same.
   - Guess: Arguments written after an instruction are pushed in the order written, so the last ends on top of the stack; the secondary reference's documentation does not give the order, and its dialog would settle it.
   - Observe: In the secondary reference's instruction dialog, type `MDAP[rnd] 3 4` (two arguments) and Parse: check the order of the values in the push it makes.
