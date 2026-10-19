@@ -6,7 +6,7 @@ _Updated: 2026-10-19, after the batch of 17 packages of M8 to M13 (with the tuni
 
 ## State of the tree
 
-- `cargo xtask ci` passes all eleven steps (TESTCOUNT). The test step runs on cargo
+- `cargo xtask ci` passes all eleven steps (3,897 tests passed, 0 failed, 41 skipped). The test step runs on cargo
   nextest. Built and run on Linux x86-64 with Rust 1.97.
 - `master` holds 59 commits on top of `732f97b` (X.docs11, the last pushed commit), plus this documentation
   commit. They are the 17 packages of this batch, X.tune1, the integration commit X.integ6 and the review fixes
@@ -1162,5 +1162,5 @@ Append one terse entry per session: what landed, numbers, what is still open.
   auto-spacing and auto-kerning (X.tune1). Numbers: 885 of 993 commands live (was 852 of 985); 235 of 277
   packages (was 218); the oracle, `COLR`, subroutiniser and tool-against-fontTools baselines are under "State of
   the tree". Missed: TrueType autohinter x-height (61.7%) and cap-height (93.2%) rows, auto-spacing on Inter
-  (30% to 75% against 10%), FontDame 19 of 28; auto-kerning meets its target (85.7% to 99.2%). Gate: TESTCOUNT.
+  (30% to 75% against 10%), FontDame 19 of 28; auto-kerning meets its target (85.7% to 99.2%). Gate: 3,897 tests passed, 0 failed, 41 skipped.
   Open: everything under "Where to start"; the push waits for the owner.

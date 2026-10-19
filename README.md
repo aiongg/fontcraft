@@ -5,7 +5,7 @@ Rust, and drivable by AI agents as fully as by people. It follows the convention
 Crafting Apps (VectorCraft, PhotoCraft and their siblings) and aims at parity with the leading
 commercial font editor and with the standard open font-engineering tools.
 
-**Status: `.glyphs`, UFO and designspace sources open and save, compiled fonts open, and static and variable TrueType fonts compile with overlaps removed. Edit View, Font View, spacing, kerning and text mode (M3 to M5) are built, and the first waves of M6 to M13 add components, Font Info, feature code (compiled into exported fonts), variable-font tables, hinting, colour layers, command-line table tools, quality checks, font subsetting, a plug-in module runtime, a command console and macros, though much of that does not yet reach exported fonts. 680 of 960 commands run and feature parity is about 26% by our own grading; nothing is yet compared with the reference app.** See
+**Status: `.glyphs`, UFO and designspace sources open and save, compiled fonts open, and static and variable TrueType fonts compile with overlaps removed. Edit View, Font View, spacing, kerning and text mode (M3 to M5) are built, and the first waves of M6 to M13 add components, Font Info, feature code (compiled into exported fonts), variable-font tables, hinting, colour layers, command-line table tools, quality checks, font subsetting, a plug-in module runtime, a command console and macros, though much of that does not yet reach exported fonts. 885 of 993 commands run and feature parity is about 33% by our own grading; nothing is yet compared with the reference app.** See
 [ROADMAP.md](ROADMAP.md) for the honest assessment.
 
 ## What is here
