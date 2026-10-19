@@ -1764,7 +1764,7 @@ summary = "One of Adobe-CNS1-6, Adobe-GB1-5, Adobe-Japan1-3, Adobe-Japan1-6, Ado
 picker = "The registry, ordering and supplement of a CID-keyed font, one of the six standard character collections (CNS1, GB1, Japan1-3, Japan1-6, Korea1, Identity). Identity builds GSUB from the font's own features; the others use the collection's cmap and GSUB resources."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Moved from M7 to M12 by the M7 planning pass, with export.cidMapping: CID-keyed output is M12's (compile.cidKeyedFonts, compile.cidCmapResources), where the AFDKO tools are the oracle; neither fontc nor fontmake reads the parameter. FontCraft ships no CMap or GSUB resources for the standard collections: they come from files the user gives by path (docs/plans/M12.md § 7, question 6 (a)), which departs from the handbook until bundled data is decided with export.cidMapping."
+notes = "Moved from M7 to M12 by the M7 planning pass, with export.cidMapping: CID-keyed output is M12's (compile.cidKeyedFonts, compile.cidCmapResources), where the AFDKO tools are the oracle; neither fontc nor fontmake reads the parameter. FontCraft ships no CMap or GSUB resources for the standard collections: they come from files the user gives by path (docs/plans/M12.md § 7, question 6 (a)), which departs from the handbook until bundled data is decided with export.cidMapping. The CID-keyed CFF build (M12.41) reads the collection from the source's CID-keyed data (fontcraft_model::cid), not from this parameter; reading the parameter into that data is not built."
 
 [[parameter]]
 name = "sampleTexts"

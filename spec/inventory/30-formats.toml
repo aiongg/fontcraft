@@ -374,7 +374,7 @@ area = "import-export"
 milestone = "M12"
 summary = "Packs several compiled fonts into one collection file and shares byte-identical tables between members. A command-line job modelled on the AFDKO collection tools; the reference app's export dialog has no collection option."
 ref = "OpenType specification › Font Collections; AFDKO otf2otc, otc2otf; fontTools ttLib.ttCollection"
-notes = "Written by collection.pack (plain or WOFF2) with otf2otc's layout; compiling straight to a collection is M12.42."
+notes = "Written by collection.pack (plain or WOFF2) with otf2otc's layout. font.compile builds straight into a collection with `collection` or a .ttc or .otc destination."
 status = "docs"
 
 [[format]]
@@ -1192,3 +1192,5 @@ milestone = "M12"
 summary = "Tables the importer does not turn into editable data are kept as raw bytes in the font's `extra` (family `binary`) together with the checksum of the glyph set they belong to. The command-line tools can copy them into an export unchanged when asked; the editor's normal export ignores them, because stale tables next to edited glyphs are worse than missing ones."
 ref = "our design; fontTools ttx keeps unknown tables as hex"
 status = "inferred"
+notes = "The compile half is built (M12.42, crates/compile/src/extras.rs): the tables sit in the font's extra data, family binary, each as data under `table.<tag>`, with the glyph order's checksum (FNV-1a over the names) under `tableGlyphSet`; extras::store_tables writes them, and font.compile's passThroughTables copies them into a build whose glyph order has the same checksum, leaving them out with a warning otherwise and never replacing a table the compile wrote. The kept tables are LTSH, VDMX, hdmx, JSTF, EBDT, EBLC, EBSC, morx, mort, feat, ltag, kerx, ankr and trak. Opening a compiled font (TrueType, CFF, a collection's chosen face, WOFF or WOFF2) stores them with the checksum of the opened font's glyph order (crates/engine/src/io.rs, keep_stored_tables)."
+guesses = ["Stored tables are copied only when the whole glyph order is unchanged, since each of them indexes glyphs by id; settled by opening a TrueType font with an LTSH or hdmx table in the reference app, exporting it unchanged and checking whether the table is still there."]

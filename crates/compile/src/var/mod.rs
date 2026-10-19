@@ -767,6 +767,9 @@ impl Outlines<'_> {
                     ),
                 });
             }
+            if settings.curves == crate::outline::CurveMode::KeepQuad {
+                crate::outline::refuse_cubic(&g.name, contours.iter().flatten())?;
+            }
             let quadratic = glyf::quadratic_sources(&g.name, &contours, settings.tolerance)?;
             let paths: Vec<BezPath> = quadratic
                 .into_iter()

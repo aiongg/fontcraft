@@ -317,17 +317,30 @@ fn truetype(
 /// box is the table's `FontBBox`, as fontTools recomputes `hmtx`, `hhea` and `head` from a CFF
 /// table when it writes a font.
 fn postscript(input: &CffInput, builder: &mut FontBuilder, warnings: &mut Vec<String>) -> Result<(Boxes, Maxp), CompileError> {
-    let built = cff::build(
-        input.source,
-        input.font,
-        input.info,
-        input.order,
-        input.outlines,
-        input.names,
-        input.synthesised_notdef,
-        input.hinting,
-        warnings,
-    )?;
+    let built = match input.cid {
+        Some(plan) => crate::cid::build(
+            plan,
+            input.source,
+            input.font,
+            input.info,
+            input.order,
+            input.outlines,
+            input.synthesised_notdef,
+            input.hinting,
+            warnings,
+        )?,
+        None => cff::build(
+            input.source,
+            input.font,
+            input.info,
+            input.order,
+            input.outlines,
+            input.names,
+            input.synthesised_notdef,
+            input.hinting,
+            warnings,
+        )?,
+    };
     let clamp = |v: i64| i16::try_from(v.clamp(i64::from(i16::MIN), i64::from(i16::MAX))).unwrap_or(0);
     let bbox = |[x_min, y_min, x_max, y_max]: [i64; 4]| Bbox { x_min: clamp(x_min), y_min: clamp(y_min), x_max: clamp(x_max), y_max: clamp(y_max) };
     let boxes = Boxes {
@@ -426,6 +439,8 @@ struct CffInput<'a> {
     hinting: &'a crate::HintingOptions,
     /// Subroutinise the table ([`crate::Options::subroutinize`], resolved).
     subroutinize: bool,
+    /// Write a CID-keyed table ([`crate::cid`]).
+    cid: Option<&'a crate::cid::CidPlan>,
 }
 
 /// Builds every table and the font file. `synthesised_notdef`: glyph 0 is the compiler's own
@@ -510,6 +525,7 @@ pub fn assemble(
                     synthesised_notdef,
                     hinting: &options.hinting,
                     subroutinize,
+                    cid: extra.cid.as_ref(),
                 };
                 postscript(&input, &mut builder, warnings)?
             }
@@ -649,8 +665,16 @@ pub fn assemble(
         crate::layout_tables::apply_vhea(&blocks.vhea, &mut vhea);
         builder.add_table(&vhea).map_err(table("vhea"))?;
         builder.add_table(&vmtx).map_err(table("vmtx"))?;
+        if flavour == Flavour::Cff
+            && let Some(vorg) = crate::extras::vorg_table(&order.iter().map(|g| vertical_origin(g, &info)).collect::<Vec<_>>())
+        {
+            builder.add_raw(Tag::new(b"VORG"), vorg);
+        }
     } else if crate::layout_tables::sets_vhea(&blocks.vhea) {
         warnings.push("feature code: the vhea table block was left out: the font has no vertical metrics".into());
+    }
+    if let Some(meta) = crate::extras::meta_table(&font.params, warnings)? {
+        builder.add_raw(Tag::new(b"meta"), meta);
     }
     if let Some(plan) = &extra.math {
         builder.add_raw(Tag::new(b"MATH"), crate::math::build(plan, order, &boxes.glyphs, warnings)?);
@@ -755,7 +779,7 @@ fn vertical(order: &[ResolvedGlyph], boxes: &Boxes, info: &Info) -> (Vhea, Vmtx)
     let mut v = MetricsBuilder::default();
     for (i, g) in order.iter().enumerate() {
         let advance = u16_of(g.vert_width.unwrap_or(m.typo_ascender - m.typo_descender));
-        let origin = i16_of(g.vert_origin.map_or(m.typo_ascender, |o| m.typo_ascender - o));
+        let origin = vertical_origin(g, info);
         let bbox = boxes.glyphs.get(i).copied().flatten();
         let top = clamp16(i32::from(origin) - i32::from(bbox.map_or(0, |b| b.y_max)));
         v.update(advance, top, boxes.extents.get(i).copied().flatten().map(|e| e.1));
@@ -776,6 +800,13 @@ fn vertical(order: &[ResolvedGlyph], boxes: &Boxes, info: &Info) -> (Vhea, Vmtx)
         number_of_long_ver_metrics: u16::try_from(long.len()).unwrap_or(u16::MAX),
     };
     (vhea, Vmtx::new(long, short))
+}
+
+/// The y of `g`'s vertical origin: its own, measured down from the typographic ascender, or the
+/// ascender.
+fn vertical_origin(g: &ResolvedGlyph, info: &Info) -> i16 {
+    let m = &info.metrics;
+    i16_of(g.vert_origin.map_or(m.typo_ascender, |o| m.typo_ascender - o))
 }
 
 fn clamp16(v: i32) -> i16 {

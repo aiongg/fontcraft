@@ -12,7 +12,12 @@ const USAGE: &str = "\
   fontcraft-cli compile SOURCE... [--format ttf|otf]... [--container plain|woff|woff2]...
                         [-o FILE | --output-dir DIR] [--instances[=NAME,...]] [--masters-as-instances]
                         [--keep-overlaps] [--keep-direction] [--conversion-error EM] [--no-subroutinize]
+                        [--ttf-curves cu2qu|keep-quad] [--drop-implied-oncurves | --keep-implied-oncurves]
+                        [--subset | --no-subset] [--dsig] [--pass-through-tables] [--collection]
                         [--timestamp SECS|now] [--ttfautohint PATH] [--cbdt] [--plan]
+                        [--project-file FILE] [--project-defaults] [--menu-names FILE] [--goadb FILE]
+                        [--fontinfo FILE] [project options]
+                        [--cid-cmap FILE] [--mac-cmap FILE] [--mac-script N] [--mac-language N]
   fontcraft-cli compile SOURCE... --variable [--format ttf|otf] [--settings NAME,...] [--container plain|woff|woff2]...
                         [-o FILE | --output-dir DIR] [--timestamp SECS|now]
       Compile each SOURCE to static fonts: every exportable instance (or the named ones; a font
@@ -25,7 +30,33 @@ const USAGE: &str = "\
       sets Disable Subroutines. --ttfautohint PATH names the trusted ttfautohint program: a source whose TTFAutohint
       binary path parameter names that same file is autohinted by it (default: none runs).
       --cbdt also writes CBDT and CBLC bitmap tables from the iColor layers.
+      --ttf-curves: cu2qu (default) converts cubic curves to quadratic ones for TrueType;
+      keep-quad converts nothing, and a glyph with a cubic curve stops the build.
+      On-curve points halfway between two off-curve points are left out of TrueType glyphs;
+      --keep-implied-oncurves keeps every on-curve node and leaves out only the points the
+      conversion and quadratic splines imply (--drop-implied-oncurves: the default).
+      --no-subset ignores the Keep Glyphs and Remove Glyphs parameters (--subset: the default).
+      --dsig adds an empty DSIG table. --pass-through-tables copies the legacy, bitmap and Apple
+      tables a compiled SOURCE kept when it was opened, while its glyph order is unchanged.
+      --collection packs the fonts of each format into one collection that stores identical
+      tables once (SOURCE.ttc, or .otc for CFF); -o FILE.ttc or FILE.otc does the same.
       --plan prints what would be built, without building.
+      A project compile builds a font as the reference compiler's project workflow does (default
+      format otf). --project-file FILE reads a current.fpr project file first; the project
+      options then apply left to right, a later one overriding an earlier: --release /
+      --no-release (subroutinize, rename and order by the GlyphOrderAndAliasDB, stub DSIG),
+      --subroutinize / --no-subroutinize, --apply-goadb / --no-apply-goadb, --subset-to-goadb /
+      --no-subset-to-goadb, --stub-dsig / --no-stub-dsig, --bold / --no-bold, --italic /
+      --no-italic, --mac-names / --no-mac-names, --stub-cmap4, --legacy-double-mapping,
+      --kern-class0-optimization / --no-kern-class0-optimization; --fontinfo FILE fills what is
+      still unset. --menu-names FILE is a FontMenuNameDB, --goadb FILE a GlyphOrderAndAliasDB
+      (its code points always apply). --project-defaults finds fontinfo beside the source and
+      FontMenuNameDB and GlyphOrderAndAliasDB beside it or up to 4 folders above.
+      A CID-keyed SOURCE builds a CID-keyed CFF. --cid-cmap FILE (-ch) is a Unicode (UTF-32)
+      CMap of its character collection, which then gives every code point of the cmap table;
+      --mac-cmap FILE (-cm) a one-byte Macintosh CMap, written as a Macintosh cmap subtable with
+      the script --mac-script N (-cs; default: from the ordering) and the language
+      --mac-language N (-cl; default 0).
       --variable builds variable fonts instead: one per variable font setting (or the settings
       --settings names), or one for the whole designspace when the source has none, with
       TrueType outlines, or CFF2 outlines with --format otf; files are named by the setting's file
@@ -46,6 +77,8 @@ fn compile(args: &[String]) -> Outcome {
     let mut variable = false;
     let mut settings: Option<Vec<String>> = None;
     let mut autohinter: Option<&String> = None;
+    let mut project_words: Vec<String> = Vec::new();
+    let mut project = serde_json::Map::new();
     let mut it = args.iter();
     let list = |v: &str| -> Vec<String> { v.split(',').map(str::trim).filter(|s| !s.is_empty()).map(str::to_string).collect() };
     while let Some(arg) = it.next() {
@@ -68,9 +101,79 @@ fn compile(args: &[String]) -> Outcome {
             }
             "--subroutinize" | "--no-subroutinize" => {
                 params.insert("subroutinize".into(), json!(arg == "--subroutinize"));
+                project_words.push(arg.trim_start_matches('-').to_string());
+            }
+            "--release"
+            | "--no-release"
+            | "--apply-goadb"
+            | "--no-apply-goadb"
+            | "--subset-to-goadb"
+            | "--no-subset-to-goadb"
+            | "--stub-dsig"
+            | "--no-stub-dsig"
+            | "--bold"
+            | "--no-bold"
+            | "--italic"
+            | "--no-italic"
+            | "--mac-names"
+            | "--no-mac-names"
+            | "--stub-cmap4"
+            | "--legacy-double-mapping"
+            | "--kern-class0-optimization"
+            | "--no-kern-class0-optimization"
+            | "--synthetic-glyphs" => {
+                project_words.push(arg.trim_start_matches('-').to_string());
+                project.insert("projectOptions".into(), Value::Null);
+            }
+            "--project-file" | "--menu-names" | "--goadb" | "--fontinfo" => {
+                let key = match arg.as_str() {
+                    "--project-file" => "projectFile",
+                    "--menu-names" => "menuNames",
+                    "--goadb" => "goadb",
+                    _ => "fontinfo",
+                };
+                let file = it.next().ok_or_else(|| usage(format!("{arg} needs a file")))?;
+                project.insert(key.into(), json!(file));
+            }
+            "--cid-cmap" | "-ch" | "--mac-cmap" | "-cm" => {
+                let key = if matches!(arg.as_str(), "--cid-cmap" | "-ch") { "cidCmap" } else { "cidMacCmap" };
+                let file = it.next().ok_or_else(|| usage(format!("{arg} needs a CMap file")))?;
+                params.insert(key.into(), json!(file));
+            }
+            "--mac-script" | "-cs" | "--mac-language" | "-cl" => {
+                let key = if matches!(arg.as_str(), "--mac-script" | "-cs") { "cidMacScript" } else { "cidMacLanguage" };
+                let v = it.next().ok_or_else(|| usage(format!("{arg} needs a number")))?;
+                let n = v
+                    .parse::<u16>()
+                    .ok()
+                    .filter(|n| *n <= 32_767)
+                    .ok_or_else(|| usage(format!("{arg} must be a whole number from 0 to 32767, got `{v}`")))?;
+                params.insert(key.into(), json!(n));
+            }
+            "--project-defaults" => {
+                project.insert("projectDefaults".into(), json!(true));
             }
             "--keep-direction" => {
                 outlines.insert("keepDirection".into(), json!(true));
+            }
+            "--ttf-curves" => {
+                let v = it.next().ok_or_else(|| usage("--ttf-curves needs cu2qu or keep-quad"))?;
+                outlines.insert("curves".into(), json!(v));
+            }
+            "--drop-implied-oncurves" | "--keep-implied-oncurves" => {
+                outlines.insert("dropImpliedOnCurves".into(), json!(arg == "--drop-implied-oncurves"));
+            }
+            "--subset" | "--no-subset" => {
+                params.insert("subset".into(), json!(arg == "--subset"));
+            }
+            "--dsig" => {
+                params.insert("stubDsig".into(), json!(true));
+            }
+            "--pass-through-tables" => {
+                params.insert("passThroughTables".into(), json!(true));
+            }
+            "--collection" => {
+                params.insert("collection".into(), json!(true));
             }
             "--conversion-error" => {
                 let v = it.next().ok_or_else(|| usage("--conversion-error needs a number"))?;
@@ -108,6 +211,18 @@ fn compile(args: &[String]) -> Outcome {
     }
     if sources.is_empty() {
         return Err(usage("compile needs at least one SOURCE"));
+    }
+    // A project compile: the subroutinize switches count among its ordered options.
+    if !project.is_empty() {
+        if variable || formats.iter().any(|f| f.starts_with("variable")) {
+            return Err(usage("a project compile builds static fonts: leave out --variable"));
+        }
+        params.remove("subroutinize");
+        project.insert("projectOptions".into(), json!(project_words));
+        if formats.is_empty() {
+            formats.push("otf".into());
+        }
+        params.extend(project);
     }
     let destination = match (output, output_dir) {
         (Some(_), Some(_)) => return Err(usage("use either -o or --output-dir")),
@@ -159,6 +274,7 @@ fn compile(args: &[String]) -> Outcome {
             || params.contains_key("mastersAsInstances")
             || params.contains_key("subroutinize")
             || params.contains_key("cbdt")
+            || ["subset", "stubDsig", "passThroughTables", "collection"].iter().any(|k| params.contains_key(*k))
         {
             return Err(usage("--variable takes only --format, --settings, --container, -o, --output-dir and --timestamp"));
         }

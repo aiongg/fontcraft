@@ -37,10 +37,10 @@ pub fn specs() -> Vec<CommandSpec> {
             "Compile Fonts",
             [],
             None,
-            "{formats?: [\"ttf\"|\"otf\"], containers?: [\"plain\"|\"woff\"|\"woff2\"], instances?: bool|[string], mastersAsInstances?: bool, destination?: string, outlines?: {keepDirection?: bool, conversionError?: number, removeOverlaps?: bool, flattenComponents?: bool, decomposeComponents?: bool, decomposeTransformedComponents?: bool}, skipFeatures?: bool, subroutinize?: bool, cbdt?: bool, timestamp?: number|\"now\", versionStamp?: bool} build static fonts from the active document: every exportable instance (instances: true, the default; a font without instances builds its first master), the named instances, or none (false); mastersAsInstances adds one font per master. Instances between masters are skipped. Each font is built once per format (ttf: TrueType outlines, otf: CFF; default ttf) and written once per container (default plain). destination: a folder (files named by the instance's fileName parameter, else the PostScript name, with the document's file name standing in for a missing family name; with several formats each goes into a ttf or otf subfolder; an Export Folder parameter puts a font's files in that sub-folder, `..` climbing out of the destination; outside the desktop app a font whose files would land outside the destination is skipped), or a file path when exactly one file results; without it the fonts are built in memory and only described. conversionError: in em, default 0.001. removeOverlaps: merge overlapping contours in every glyph (default true; a glyph whose overlaps cannot be removed keeps them, with a warning). decomposeComponents: write every composite as contours (default false: only the composites the source's parameters and filter list name). decomposeTransformedComponents: write as contours every composite with a scaled, mirrored, slanted or rotated component (default: as the source's filter list says). flattenComponents: replace a component that points at a composite by the glyphs it reaches, so no composite is nested (default: as the source's filter list says). The feature code is compiled with the generated kerning and mark attachment, its automatic code regenerated for each font's glyphs unless Update Features is off; an error in it skips the font with the error. skipFeatures: leave out GSUB, GPOS and GDEF, for a fast build (default false). subroutinize: move repeated CFF charstring fragments into subroutines (default true unless the Disable Subroutines parameter is set; a table beyond the subroutiniser's limits is written without them, with a warning). cbdt: also write CBDT and CBLC bitmap tables from the iColor layers (default false). timestamp: seconds since the Unix epoch for the head table (default SOURCE_DATE_EPOCH, else now). versionStamp: append `;FontCraft <version>` to the version string (name ID 5) unless the font states its own (default true). Glyphs are written under their production names unless the Don't use Production Names parameter or Use Custom Naming is on; a name the font cannot hold is made valid, with a warning → {fonts: [{instance, source, format, glyphs, warnings, files: [{name, container, bytes, path?}]}], skipped: [{instance, source, reason}], warnings}",
+            "{formats?: [\"ttf\"|\"otf\"], containers?: [\"plain\"|\"woff\"|\"woff2\"], instances?: bool|[string], mastersAsInstances?: bool, destination?: string, outlines?: {keepDirection?: bool, conversionError?: number, removeOverlaps?: bool, flattenComponents?: bool, decomposeComponents?: bool, decomposeTransformedComponents?: bool, curves?: \"cu2qu\"|\"keep-quad\", dropImpliedOnCurves?: bool}, skipFeatures?: bool, subroutinize?: bool, cbdt?: bool, subset?: bool, stubDsig?: bool, passThroughTables?: bool, collection?: bool, timestamp?: number|\"now\", versionStamp?: bool, projectFile?: path, projectOptions?: [string], fontinfo?: path, menuNames?: path, goadb?: path, projectDefaults?: bool, cidCmap?: path, cidMacCmap?: path, cidMacScript?: number, cidMacLanguage?: number} build static fonts from the active document: every exportable instance (instances: true, the default; a font without instances builds its first master), the named instances, or none (false); mastersAsInstances adds one font per master. Instances between masters are skipped. Each font is built once per format (ttf: TrueType outlines, otf: CFF; default ttf) and written once per container (default plain). destination: a folder (files named by the instance's fileName parameter, else the PostScript name, with the document's file name standing in for a missing family name; with several formats each goes into a ttf or otf subfolder; an Export Folder parameter puts a font's files in that sub-folder, `..` climbing out of the destination; outside the desktop app a font whose files would land outside the destination is skipped), or a file path when exactly one file results; without it the fonts are built in memory and only described. conversionError: in em, default 0.001. curves: how TrueType curves are made: cu2qu (default) converts every cubic curve to quadratic ones; keep-quad converts nothing, and a glyph with a cubic curve stops the build. dropImpliedOnCurves: leave out of TrueType glyphs every on-curve point halfway between two off-curve points (default true); false leaves out only the points the conversion and quadratic splines imply and keeps every on-curve node. removeOverlaps: merge overlapping contours in every glyph (default true; a glyph whose overlaps cannot be removed keeps them, with a warning). decomposeComponents: write every composite as contours (default false: only the composites the source's parameters and filter list name). decomposeTransformedComponents: write as contours every composite with a scaled, mirrored, slanted or rotated component (default: as the source's filter list says). flattenComponents: replace a component that points at a composite by the glyphs it reaches, so no composite is nested (default: as the source's filter list says). The feature code is compiled with the generated kerning and mark attachment, its automatic code regenerated for each font's glyphs unless Update Features is off; an error in it skips the font with the error. skipFeatures: leave out GSUB, GPOS and GDEF, for a fast build (default false). subroutinize: move repeated CFF charstring fragments into subroutines (default true unless the Disable Subroutines parameter is set; a table beyond the subroutiniser's limits is written without them, with a warning). cbdt: also write CBDT and CBLC bitmap tables from the iColor layers (default false). subset: apply the Keep Glyphs and Remove Glyphs parameters (default true; false builds every glyph whose export flag is set). stubDsig: add an empty DSIG table (default false). passThroughTables: copy the legacy, bitmap and Apple tables a compiled font kept when it was opened (LTSH, VDMX, hdmx, JSTF, EBDT, EBLC, EBSC, morx, mort, feat, ltag, kerx, ankr, trak) when the glyph order is still theirs; otherwise they are left out with a warning (default false). collection: pack the fonts of each format into one collection file that stores identical tables once, plain container only: <document name>.ttc for TrueType and .otc for CFF in a destination folder, or the destination file when it ends in .ttc or .otc (which also asks for a collection); the fonts' own files are not written and their results list no files. timestamp: seconds since the Unix epoch for the head table (default SOURCE_DATE_EPOCH, else now). versionStamp: append `;FontCraft <version>` to the version string (name ID 5) unless the font states its own (default true). A project compile, as the reference compiler's project workflow builds a font, runs when any of these is given: projectFile (a `current.fpr` project file, read first; its FontMenuDBPath and GlyphAliasDBPath are relative to it), projectOptions (option words applied left to right after it, a later one overriding an earlier: release, no-release, subroutinize, no-subroutinize, apply-goadb, no-apply-goadb, subset-to-goadb, no-subset-to-goadb, stub-dsig, no-stub-dsig, bold, no-bold, italic, no-italic, mac-names, no-mac-names, stub-cmap4, legacy-double-mapping, kern-class0-optimization, no-kern-class0-optimization; release turns on subroutinizing, renaming and ordering by the GlyphOrderAndAliasDB and a stub DSIG), fontinfo (a keyword file read last, filling only what is still unset), menuNames (a FontMenuNameDB), goadb (a GlyphOrderAndAliasDB: its code points always apply; renaming, ordering and subsetting only when asked), projectDefaults (look for fontinfo beside the source and for FontMenuNameDB and GlyphOrderAndAliasDB beside it or up to 4 folders above). The source's own code points are replaced by those the GlyphOrderAndAliasDB and the glyph names give; without renaming, glyphs named by CFF standard strings come first in that list's order; menu names follow the FontMenuNameDB entry of the font's PostScript name, else the source's family and style names, with bold and italic setting the style link; CFF charstrings are subroutinized only when asked. A CID-keyed source (one with a Registry-Ordering-Supplement and a glyph-to-CID map) builds a CID-keyed CFF: glyphs in CID order, one font dictionary per sub-font with its own hinting values; cidCmap names a Unicode (UTF-32) CMap file of its character collection, which then gives every code point of the cmap table (without it the source's own code points are used); cidMacCmap names a one-byte Macintosh CMap file, written as a Macintosh cmap subtable with the script cidMacScript (default: from the ordering, Roman for an unknown one) and the language cidMacLanguage (default 0); a CMap file that cannot be read stops the build. Glyphs are written under their production names unless the Don't use Production Names parameter or Use Custom Naming is on; a name the font cannot hold is made valid, with a warning → {fonts: [{instance, source, format, glyphs, warnings, files: [{name, container, bytes, path?}]}], collections?: [{name, format, fonts, bytes, path?}], skipped: [{instance, source, reason}], warnings}",
             has_doc,
             compile
-        ).files(const { &[FileParam::write("destination")] }).writes_files(),
+        ).files(const { &[FileParam::write("destination"), FileParam::read("projectFile"), FileParam::read("menuNames"), FileParam::read("goadb"), FileParam::read("fontinfo"), FileParam::read("cidCmap"), FileParam::read("cidMacCmap")] }).writes_files(),
         cmd!(
             "file.exportVariable",
             "Export Variable Fonts",
@@ -55,10 +55,10 @@ pub fn specs() -> Vec<CommandSpec> {
             "Describe Compile Plan",
             [],
             None,
-            "{formats?, containers?, instances?, mastersAsInstances?, destination?, outlines?, skipFeatures?, cbdt?, sections?: [\"outputs\"|\"glyphOrder\"|\"productionNames\"|\"tables\"|\"instances\"]} what font.compile would build with the same parameters, without building or writing: per output the instance, format, PostScript name, glyph count, whether overlaps are removed, the files (paths with a destination, names without) and the tables; the final glyph order of the first output, by source name; the name each glyph of it is written under where that differs from its source name (its production name, made valid); each instance's master and location. sections: the parts to return (default all) → {outputs?: [{instance, source, format, postscriptName, style, glyphs, removeOverlap, files, tables?}], glyphOrder?, productionNames?: {source name: written name}, instances?: [{instance, source, master, location}], skipped, warnings}",
+            "{formats?, containers?, instances?, mastersAsInstances?, destination?, outlines?, skipFeatures?, cbdt?, subset?, stubDsig?, passThroughTables?, projectFile?, projectOptions?, fontinfo?, menuNames?, goadb?, projectDefaults?, cidCmap?, cidMacCmap?, cidMacScript?, cidMacLanguage?, sections?: [\"outputs\"|\"glyphOrder\"|\"productionNames\"|\"tables\"|\"instances\"]} what font.compile would build with the same parameters, without building or writing (a project compile's glyph names, order and code points and a CID-keyed font's CID order included): per output the instance, format, PostScript name, glyph count, whether overlaps are removed, the files (paths with a destination, names without) and the tables; the final glyph order of the first output, by source name; the name each glyph of it is written under where that differs from its source name (its production name, made valid); each instance's master and location. sections: the parts to return (default all) → {outputs?: [{instance, source, format, postscriptName, style, glyphs, removeOverlap, files, tables?}], glyphOrder?, productionNames?: {source name: written name}, instances?: [{instance, source, master, location}], skipped, warnings}",
             has_doc,
             compile_plan
-        ),
+        ).files(const { &[FileParam::read("projectFile"), FileParam::read("menuNames"), FileParam::read("goadb"), FileParam::read("fontinfo"), FileParam::read("cidCmap"), FileParam::read("cidMacCmap")] }),
     ]
 }
 
@@ -1064,11 +1064,31 @@ fn outline_options(p: &Params, options: &mut Options) -> Result<()> {
     if let Some(key) = group.keys().find(|k| {
         !matches!(
             k.as_str(),
-            "keepDirection" | "conversionError" | "removeOverlaps" | "flattenComponents" | "decomposeComponents" | "decomposeTransformedComponents"
+            "keepDirection"
+                | "conversionError"
+                | "removeOverlaps"
+                | "flattenComponents"
+                | "decomposeComponents"
+                | "decomposeTransformedComponents"
+                | "curves"
+                | "dropImpliedOnCurves"
         )
     }) {
         return Err(EngineError::Unsupported(format!("`outlines.{key}`")));
     }
+    if let Some(v) = group.get("curves").filter(|v| !v.is_null()) {
+        let name = v.as_str().ok_or_else(|| p.bad("`outlines.curves` is \"cu2qu\" or \"keep-quad\""))?;
+        options.curves = match fontcraft_compile::outline::CurveMode::parse(name) {
+            Some(mode) => mode,
+            None if matches!(name, "mixed" | "keep-cubic") => {
+                return Err(EngineError::Unsupported(format!(
+                    "the {name} curve mode: it writes cubic curves into glyf, which waits for that format to be final"
+                )));
+            }
+            None => return Err(p.bad(format!("`outlines.curves` is \"cu2qu\" or \"keep-quad\", got \"{name}\""))),
+        };
+    }
+    options.drop_implied_on_curves = flag("dropImpliedOnCurves")?.unwrap_or(true);
     options.remove_overlap = flag("removeOverlaps")?.unwrap_or(true);
     options.components.decompose_all = flag("decomposeComponents")?.unwrap_or(false);
     options.components.decompose_transformed = flag("decomposeTransformedComponents")?;
@@ -1107,6 +1127,9 @@ fn compile_request(s: &Session, p: &Params) -> Result<(Vec<Job>, Request)> {
     options.skip_features = p.bool_or("skipFeatures", false)?;
     options.cbdt = p.bool_or("cbdt", false)?;
     options.version_stamp = p.bool_or("versionStamp", true)?;
+    options.subset = p.bool_or("subset", true)?;
+    options.stub_dsig = p.bool_or("stubDsig", false)?;
+    options.pass_through_tables = p.bool_or("passThroughTables", false)?;
     source_includes(&mut options, s.doc()?.path.as_deref());
     let pick = Pick::read(p, "instances")?;
     let jobs = jobs(font, &pick, p.bool_or("mastersAsInstances", false)?, p)?;
@@ -1125,11 +1148,26 @@ fn compile(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("font.compile", p)?;
     let (jobs, mut req) = compile_request(s, &p)?;
     req.options.timestamp = timestamp(&p)?;
+    super::compile_cid::read(&p, &mut req.options)?;
     req.options.subroutinize = if p.get("subroutinize").is_some_and(|v| !v.is_null()) { Some(p.bool_or("subroutinize", true)?) } else { None };
     let doc = s.doc()?;
     let mut report = Report::default();
+    let prepared = match super::compile_project::read(&p, doc.path.as_deref())? {
+        Some((project, notes)) => {
+            report.warnings.extend(notes);
+            let mut prepared = super::compile_project::prepare(&p, &project, &doc.font, &mut req.options)?;
+            report.warnings.append(&mut prepared.warnings);
+            Some(prepared.font)
+        }
+        None => None,
+    };
+    let font = prepared.as_ref().unwrap_or(&doc.font);
+    let collection_file = p.opt_str("destination")?.map(std::path::PathBuf::from).filter(|d| collection_extension(d).is_some());
+    if collection_file.is_some() || p.bool_or("collection", false)? {
+        return compile_collection(s, &p, font, &jobs, req, collection_file, report);
+    }
     let mut sink = Sink::new(&req.dest, false, s.export_outside())?;
-    build(&doc.font, &doc.title, doc.path.as_deref(), s.glyph_data()?, &jobs, &req, &mut sink, &mut report)?;
+    build(font, &doc.title, doc.path.as_deref(), s.glyph_data()?, &jobs, &req, &mut sink, &mut report)?;
     if matches!(req.dest, Dest::File(_)) && report.file_count() > 1 {
         return Err(p.bad(format!("`destination` is one file, but {} fonts were built: give a folder", report.fonts.len())));
     }
@@ -1138,6 +1176,98 @@ fn compile(s: &mut Session, p: &Value) -> Result<Value> {
     }
     sink.commit()?;
     Ok(json!({ "fonts": report.fonts_json(false), "skipped": report.skipped, "warnings": report.warnings }))
+}
+
+// ---------- collections ----------
+
+/// The collection extension of `path` (`ttc`, `otc`), lower case.
+fn collection_extension(path: &std::path::Path) -> Option<&'static str> {
+    let ext = path.extension()?.to_str()?.to_ascii_lowercase();
+    ["ttc", "otc"].into_iter().find(|e| *e == ext)
+}
+
+/// The extension of a collection of `flavour` fonts.
+fn collection_ext(flavour: Flavour) -> &'static str {
+    match flavour {
+        Flavour::TrueType => "ttc",
+        Flavour::Cff => "otc",
+    }
+}
+
+/// `title` as a file name stem: characters a file name cannot hold dropped, `fonts` when nothing
+/// is left.
+fn collection_stem(title: &str) -> String {
+    let stem: String =
+        title.chars().filter(|c| !c.is_control() && !matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|')).take(MAX_STEM).collect();
+    let stem = stem.trim().trim_start_matches('.').to_string();
+    if stem.is_empty() { "fonts".into() } else { stem }
+}
+
+/// `font.compile` with `collection` (or a `.ttc`/`.otc` destination): every font is built in
+/// memory, then the fonts of each format are packed into one collection that stores identical
+/// tables once (`ttc.export`, `compile.collectionSharing`), written like any built file. The
+/// head tables share one timestamp, so they differ only where the fonts do.
+fn compile_collection(
+    s: &Session,
+    p: &Params,
+    font: &Font,
+    jobs: &[Job],
+    req: Request,
+    file: Option<std::path::PathBuf>,
+    mut report: Report,
+) -> Result<Value> {
+    if req.containers != [Container::Plain] {
+        return Err(p.bad("a collection is written as a plain font file: leave out `containers` or give [\"plain\"]"));
+    }
+    if let Some(path) = &file {
+        if req.flavours.len() > 1 {
+            return Err(p.bad("`destination` is one collection file, but this export builds two formats: give a folder"));
+        }
+        if collection_extension(path) == Some("otc") && req.flavours.contains(&Flavour::TrueType) {
+            return Err(p.bad("`destination` ends in .otc, which holds CFF fonts; TrueType fonts go into a .ttc file"));
+        }
+    }
+    let doc = s.doc()?;
+    let dest = match &file {
+        Some(path) => Dest::File(path.clone()),
+        None => req.dest.clone(),
+    };
+    let built = Request { dest: Dest::Memory, containers: vec![Container::Plain], first_only: false, ..req };
+    let mut memory = Sink::Memory { bytes: 0, keep: true };
+    build(font, &doc.title, doc.path.as_deref(), s.glyph_data()?, jobs, &built, &mut memory, &mut report)?;
+    if report.fonts.is_empty() {
+        return Err(nothing_built(&report));
+    }
+    let mut sink = Sink::new(&dest, false, s.export_outside())?;
+    let mut collections = Vec::new();
+    for &flavour in &built.flavours {
+        let members = report
+            .fonts
+            .iter()
+            .filter(|f| f.flavour == flavour)
+            .filter_map(|f| f.files.first().and_then(|file| file.data.as_deref()))
+            .map(|bytes| fontcraft_tables::read(bytes, 0))
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        if members.is_empty() {
+            continue;
+        }
+        let packed = fontcraft_tables::collection::pack(&members, &fontcraft_tables::collection::PackOptions::default())?;
+        let name = match &dest {
+            Dest::File(path) => path.file_name().map_or_else(|| "collection".into(), |n| n.to_string_lossy().into_owned()),
+            _ => format!("{}.{}", collection_stem(&doc.title), collection_ext(flavour)),
+        };
+        let out = sink.put(name, Container::Plain, packed, &mut report.warnings)?;
+        let mut entry = json!({ "name": out.name, "format": format_name(flavour), "fonts": members.len(), "bytes": out.bytes });
+        if let (Some(path), Value::Object(m)) = (&out.path, &mut entry) {
+            m.insert("path".into(), json!(path.to_string_lossy()));
+        }
+        collections.push(entry);
+    }
+    for f in &mut report.fonts {
+        f.files.clear();
+    }
+    sink.commit()?;
+    Ok(json!({ "fonts": report.fonts_json(false), "collections": collections, "skipped": report.skipped, "warnings": report.warnings }))
 }
 
 fn export_variable(s: &mut Session, p: &Value) -> Result<Value> {
@@ -1240,7 +1370,8 @@ pub(super) fn nothing_built(report: &Report) -> EngineError {
 
 fn compile_plan(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("font.compilePlan", p)?;
-    let (jobs, req) = compile_request(s, &p)?;
+    let (jobs, mut req) = compile_request(s, &p)?;
+    super::compile_cid::read(&p, &mut req.options)?;
     const SECTIONS: [&str; 5] = ["outputs", "glyphOrder", "productionNames", "tables", "instances"];
     let sections: Vec<&str> = match p.opt_strings("sections")? {
         None => SECTIONS.to_vec(),
@@ -1258,9 +1389,19 @@ fn compile_plan(s: &mut Session, p: &Value) -> Result<Value> {
     let want = |name: &str| sections.contains(&name);
     let data = s.glyph_data()?;
     let doc = s.doc()?;
-    let (font, source) = (&doc.font, doc.title.as_str());
-    font.check()?;
     let mut warnings: Vec<String> = Vec::new();
+    // A project compile builds the font its preparation makes, as `font.compile` does.
+    let project_font = match super::compile_project::read(&p, doc.path.as_deref())? {
+        Some((project, notes)) => {
+            warnings.extend(notes);
+            let mut prepared = super::compile_project::prepare(&p, &project, &doc.font, &mut req.options)?;
+            warnings.append(&mut prepared.warnings);
+            Some(prepared.font)
+        }
+        None => None,
+    };
+    let (font, source) = (project_font.as_ref().unwrap_or(&doc.font), doc.title.as_str());
+    font.check()?;
     let linked = crate::export_steps::linked(font, doc.path.as_deref(), &mut warnings)?;
     let font: &Font = &linked;
     let ctx = crate::export_steps::StepContext { data: &data };

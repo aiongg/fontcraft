@@ -36,6 +36,9 @@ pub enum Error {
     LayoutDidNotSettle,
     /// A glyph's hints cannot be written ([`crate::CharstringHints::validate`]).
     BadHints { glyph: String, message: String },
+    /// A CID-keyed font's CIDs, sub-fonts or character collection cannot be written
+    /// ([`crate::cid::build`]).
+    Cid(String),
 }
 
 impl fmt::Display for Error {
@@ -68,6 +71,7 @@ impl fmt::Display for Error {
             }
             Error::LayoutDidNotSettle => write!(f, "the CFF table layout did not settle"),
             Error::BadHints { glyph, message } => write!(f, "the hints of `{glyph}` cannot be written: {message}"),
+            Error::Cid(message) => write!(f, "{message}"),
         }
     }
 }

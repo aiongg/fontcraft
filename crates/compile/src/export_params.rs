@@ -87,6 +87,16 @@ impl ExportEdits {
     }
 }
 
+/// Removes Keep Glyphs and Remove Glyphs from `resolved`'s parameters unless `subset` is on
+/// (`compile.subsetOnExport`): the reference compiler's `--no-subset` builds every glyph whose
+/// export flag is set and ignores both lists. Export Glyphs and the export flags still apply.
+pub fn without_subset_lists(resolved: &mut Resolved, subset: bool) {
+    if !subset {
+        resolved.params.remove(KEEP_GLYPHS);
+        resolved.params.remove(REMOVE_GLYPHS);
+    }
+}
+
 /// Applies the glyph-set parameters of `resolved.params` to `resolved.glyphs`. `font` is the
 /// source the glyphs were resolved from (`None` for a resolved font compiled on its own), for the
 /// glyph facts a query reads that the resolved glyphs do not carry.

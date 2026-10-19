@@ -248,7 +248,8 @@ pub fn open(path: &Path, face: Option<u32>) -> Result<(Font, Vec<String>)> {
         return Ok((fontcraft_format::load(&bytes)?, Vec::new()));
     }
     if fontcraft_decompile::sniff(&bytes).is_some() {
-        let d = fontcraft_decompile::decompile(&bytes, face)?;
+        let mut d = fontcraft_decompile::decompile(&bytes, face)?;
+        keep_stored_tables(&mut d.font, &bytes, face);
         return Ok((d.font, d.warnings));
     }
     if fontcraft_io_sfd::is_sfd(&bytes) {
@@ -274,6 +275,26 @@ pub fn open(path: &Path, face: Option<u32>) -> Result<(Font, Vec<String>)> {
         return Ok((fontcraft_format::load(&bytes)?, Vec::new()));
     }
     Ok((fontcraft_io_glyphs::read(text)?, Vec::new()))
+}
+
+/// Keeps in `font` the tables of the compiled font `bytes` that a compile can copy back
+/// (`fontcraft_compile::extras::STORED_TABLES`, for `font.compile`'s `passThroughTables`), with
+/// the glyph order they index: the opened font's, one glyph per glyph id. A file whose table
+/// directory cannot be read keeps nothing; the decompiler has read it already.
+fn keep_stored_tables(font: &mut Font, bytes: &[u8], face: Option<u32>) {
+    let Ok(sfnt) = fontcraft_decompile::to_sfnt(bytes) else { return };
+    let Ok(file) = skrifa::raw::FileRef::new(&sfnt) else { return };
+    let face = match file {
+        skrifa::raw::FileRef::Font(f) => f,
+        skrifa::raw::FileRef::Collection(c) => match face.and_then(|i| c.get(i).ok()) {
+            Some(f) => f,
+            None => return,
+        },
+    };
+    let tables: Vec<_> =
+        face.table_directory().table_records().iter().filter_map(|r| face.table_data(r.tag()).map(|d| (r.tag(), d.as_bytes()))).collect();
+    let order: Vec<String> = font.glyphs.as_arcs().iter().map(|g| g.name.clone()).collect();
+    fontcraft_compile::extras::store_tables(font, &tables, &order);
 }
 
 /// An SFD file or folder as read, with what the reader skipped as warnings. There is no SFD
