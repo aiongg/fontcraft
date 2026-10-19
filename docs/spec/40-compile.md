@@ -715,6 +715,34 @@ charstrings (`crates/compile/src/cff_hints.rs`), so a hinted glyph's charstring 
 fontmake's in its stem operators and masks while its outline stays the same; the oracle's
 outline comparison does not see the difference.
 
+## 4b. FontDame conversion against mtiLib
+
+`features convert` writes FontDame layout text as feature code (`crates/tables/src/fontdame.rs`).
+fontTools' mtiLib is the oracle. The measure takes the 28 table tests of mtiLib's test data
+(14 GSUB, 9 GPOS, 5 GDEF), compiles our feature code with feaLib into a font with the tests'
+glyph order, and builds the same table from the file with mtiLib. It compares the two tables as
+rules: lookup types folded, extension lookups unwrapped, class rules expanded over the glyph
+order, called lookups replaced by their own rules, and features as script, language, tag and
+lookups. 24 of the 28 tables are equal. The other 4 hold what feature code cannot say:
+
+| Test file | mtiLib | FontCraft | Why |
+|---|---|---|---|
+| `chained-glyph` (read as GSUB and as GPOS) | the lookup flag holds mark attachment class 2; there is no GDEF table | the flag without the class, a warning, and a comment in the lookup naming the class | feature code names a mark attachment class by its glyphs, and the compiler numbers the classes itself, so a class number alone has no form. Converting the GDEF file in the same run keeps the class |
+| `gdefmarkattach` | a GDEF table with a mark attachment class definition | the classes as named glyph classes (`@GDEF_MarkAttachClass1`, …); no GDEF table | the `GDEF` table block of feature code has no mark attachment classes: a compiler builds them only from the lookup flags that use them |
+| `gdefmarkfilter` | a GDEF table with mark glyph sets | the sets as named glyph classes (`@GDEF_MarkFilterSet1`, …); no GDEF table | the same holds for mark filtering sets |
+
+A lookup flag's mark filtering set without its GDEF file is left out in the same way as a mark
+attachment class (no test file has one).
+
+Two choices differ from mtiLib on input the tests do not hold:
+
+- `# N` names glyph N of the glyph order when a glyph order is given (`--font`); mtiLib always
+  writes `glyphNNNNN`.
+- A reverse chaining subtable is written as one rule whose classes are sorted by name, or as one
+  rule per glyph when the replacements do not sort in the same order. feaLib pairs the two
+  classes after sorting each by name, and fea-rs pairs them in written order; both forms give
+  the file's pairs in both compilers.
+
 ---
 
 ## 5. Commands and data touched

@@ -343,11 +343,12 @@ pub(super) fn sniff(lines: &[Line]) -> Option<[u8; 4]> {
 
 const FLAG_WORDS: [&str; 6] = ["righttoleft", "ignorebaseglyphs", "ignoreligatures", "ignoremarks", "markattachmenttype", "markfiltertype"];
 
-/// The glyph a field names: `U 0041` by code point, `# 12` by glyph id, else the name itself.
+/// The glyph a field names: `U 0041` by code point (its AGLFN name, else `uniXXXX` or
+/// `uXXXXX`, as mtiLib names it), `# 12` by glyph id, else the name itself.
 pub(super) fn glyph(s: &str, no: usize, order: &[String]) -> Result<String> {
     if let Some(hex) = s.strip_prefix("U ").or_else(|| s.strip_prefix("u ")) {
         let cp = u32::from_str_radix(hex.trim(), 16).map_err(|_| err(no, format!("bad code point in \"{s}\"")))?;
-        return Ok(if cp <= 0xFFFF { format!("uni{cp:04X}") } else { format!("u{cp:X}") });
+        return Ok(crate::ttx::core::agl_name(cp));
     }
     if let Some(id) = s.strip_prefix("# ") {
         let id: usize = id.trim().parse().map_err(|_| err(no, format!("bad glyph id in \"{s}\"")))?;
