@@ -33,7 +33,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Export Audit Report",
             [],
             None,
-            "{path: path, format?: \"json\" | \"text\" | \"markdown\" | \"html\" (default from the extension of path: .json, .txt, .md, .html; else json), target?: \"document\" | path (default \"document\"), results?: a result document (written instead of the target's last results), minSeverity?: \"info\" | \"warn\" | \"fail\" = \"info\", noClobber?: bool} writes the last results of the target (those audit.results returns) to a file: the JSON result document, a plain-text log with one line per result (SEVERITY check-id [font] place: message) and a summary line, a Markdown report grouped by check with each check's description, or a self-contained HTML page with the same sections. Results below minSeverity are left out and the summary counts follow. The file is written in one step; nothing is written when the call fails → {path, format, results: count written, bytes}",
+            "{path: path, format?: \"json\" | \"text\" | \"markdown\" | \"html\" (default from the extension of path: .json, .txt, .md, .html; else json), target?: \"document\" | path (default \"document\"), results?: a result document (written instead of the target's last results), runId?: id (without results: refused unless the document still keeps that run), minSeverity?: \"info\" | \"warn\" | \"fail\" = \"info\", noClobber?: bool} writes the last results of the target (those audit.results returns) to a file: the JSON result document, a plain-text log with one line per result (SEVERITY check-id [font] place: message) and a summary line, a Markdown report grouped by check with each check's description, or a self-contained HTML page with the same sections. Results below minSeverity are left out and the summary counts follow. The file is written in one step; nothing is written when the call fails → {path, format, results: count written, bytes}",
             always,
             export_report
         ).files(const { &[FileParam::write("path")] }).writes_files(),
@@ -100,6 +100,9 @@ fn export_report(s: &mut Session, v: &Value) -> Result<Value> {
             let mut q = Map::new();
             if let Some(t) = target {
                 q.insert("target".into(), t.clone());
+            }
+            if let Some(id) = p.get("runId") {
+                q.insert("runId".into(), id.clone());
             }
             s.execute("audit.results", &Value::Object(q))?
         }

@@ -17,7 +17,7 @@
 //! | Active, Style Name, Weight Class, Width Class, Style Linking | `project.editInstance` with those keys, once per selected entry |
 //! | Custom Parameters: plus, checkbox, value, minus | the parameter picker; `project.editInstance` with `customParameters` |
 //! | Export Destination | the system folder chooser, then `project.setExportDestination`; without a chooser a text field |
-//! | Save | `project.save`; a project never saved asks for a folder and is saved there as `<title>.fontcraftproject` |
+//! | Save | `project.save`; a project never saved asks the save chooser for its file, offering `<title>.fontcraftproject` |
 //! | Export | `project.export`; disabled until the project is saved, linked to a font and has a destination |
 //! | close box | `project.close`, which keeps a project with unsaved changes open and says why in the status bar |
 //!
@@ -91,7 +91,7 @@ struct Dragged {
 enum Ask {
     Font,
     Destination,
-    SaveFolder,
+    SaveFile,
 }
 
 /// What the person did to a path control.
@@ -253,14 +253,11 @@ fn choose(app: &mut FontcraftApp, project: u64, title: &str, ask: Ask, pending: 
                 pending.push(("project.setExportDestination", json!({"project": project, "folder": folder.to_string_lossy()})));
             }
         }
-        Ask::SaveFolder => {
-            let Some(folder) = chooser.folder("Save Project") else { return };
-            let path = folder.join(format!("{title}.{PROJECT_EXTENSION}"));
-            if path.exists() {
-                app.state.status = format!("Save Project: {} exists already; save with project.save and another path", path.display());
-                return;
+        Ask::SaveFile => {
+            let suggested = format!("{title}.{PROJECT_EXTENSION}");
+            if let Some(path) = chooser.save("Save Project", "Project", &[PROJECT_EXTENSION], &suggested) {
+                pending.push(("project.save", json!({"project": project, "path": path.to_string_lossy()})));
             }
-            pending.push(("project.save", json!({"project": project, "path": path.to_string_lossy()})));
         }
     }
 }
@@ -336,13 +333,13 @@ fn export_row(ui: &mut egui::Ui, tokens: &Tokens, doc: &ProjectDoc, chooser: boo
             }
             let (enabled, hover) = match (&doc.path, chooser) {
                 (Some(_), _) => (true, "Save the project to its file"),
-                (None, true) => (true, "Choose a folder to save the project in"),
+                (None, true) => (true, "Choose the file to save the project to"),
                 (None, false) => (false, "This window has no file chooser: run project.save with a path"),
             };
             if widgets::button(ui, control_id(project, "save"), "Save", hover, enabled, false) {
                 match doc.path {
                     Some(_) => pending.push(("project.save", json!({"project": project}))),
-                    None => *ask = Some(Ask::SaveFolder),
+                    None => *ask = Some(Ask::SaveFile),
                 }
             }
             let shown = doc.data.destination.as_ref().map(|p| p.to_string_lossy().into_owned());

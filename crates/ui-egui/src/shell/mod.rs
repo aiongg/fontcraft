@@ -140,6 +140,7 @@ pub const UI_FILE_PARAMS: &[(&str, &[fontcraft_engine::cmd::FileParam])] = &[
     ("view.filterByEncodingFile", &[fontcraft_engine::cmd::FileParam::read("path")]),
     ("dialog.actions", &[fontcraft_engine::cmd::FileParam::read("openSet"), fontcraft_engine::cmd::FileParam::write("savePath")]),
     ("kerning.loadPairList", &[fontcraft_engine::cmd::FileParam::read("path")]),
+    ("audit.panel.exportReport", &[fontcraft_engine::cmd::FileParam::write("path")]),
     ("tableViewer.show", &[fontcraft_engine::cmd::FileParam::read("font"), fontcraft_engine::cmd::FileParam::read("compareWith")]),
 ];
 

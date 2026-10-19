@@ -14,11 +14,14 @@
 //! | Add to Set | `{add: true}` |
 //! | a step, Remove, Clear | selects it; `{remove: index}`; `{clear: true}` |
 //! | Title, Name or Path, Save, Open, Run Set | `{title}`; `{save}` or `{savePath}` (a name with a folder separator is a path); `{openSet}`; `{runSet: true}` |
+//! | Save As… (with a file chooser) | asks the save chooser for a macro file, then `{savePath, replace: true}` |
 
 use std::hash::{Hash, Hasher};
+use std::path::Path;
 use std::sync::Arc;
 
 use egui::{Color32, ColorImage, Pos2, Rect, Stroke, TextureHandle, TextureOptions, pos2, vec2};
+use fontcraft_engine::macros::MACRO_EXTENSION;
 use fontcraft_geom::{Affine, BezPath, Shape as _};
 use fontcraft_model::Font;
 use fontcraft_render::{Style, render_path};
@@ -41,6 +44,7 @@ pub fn window_id() -> egui::Id {
 
 pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     let ctx = ui.ctx().clone();
+    let chooser = app.picker.is_some();
     let FontcraftApp { session, state, tokens, .. } = app;
     let st = &mut state.panels.actions;
     let mut open = true;
@@ -50,6 +54,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
         _ => None,
     };
     let can_save = session.extensions().macros_dir.is_some();
+    let mut save_as = false;
     egui::Window::new("Actions")
         .id(window_id())
         .open(&mut open)
@@ -65,11 +70,29 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
                 let [list, middle, side] = cols else { return };
                 action_list(list, st, tokens, pending);
                 action_form(middle, st, spec, json_error.as_deref(), tokens, pending);
-                set_sidebar(side, st, can_save, tokens, pending);
+                save_as = set_sidebar(side, st, can_save, chooser, tokens, pending);
             });
         });
     if !open {
         pending.push((COMMAND, json!({"open": false})));
+    }
+    if save_as {
+        save_set_as(app, pending);
+    }
+}
+
+/// Save As… of the action set: asks the save chooser for the macro file, offering the name typed
+/// (else the set's title) with the macro extension, and saves the set there. The chooser asks
+/// before it answers with a file that exists, so the save replaces it. A cancelled chooser saves
+/// nothing.
+fn save_set_as(app: &mut FontcraftApp, pending: &mut Pending) {
+    let st = &app.state.panels.actions;
+    let typed = Path::new(st.set_name.trim()).file_stem().map(|n| n.to_string_lossy().into_owned()).filter(|n| !n.is_empty());
+    let title = Some(st.set_title.trim().to_string()).filter(|t| !t.is_empty());
+    let suggested = format!("{}.{MACRO_EXTENSION}", typed.or(title).unwrap_or_else(|| "Action Set".into()));
+    let Some(picker) = app.picker.as_mut() else { return };
+    if let Some(path) = picker.save("Save Action Set", "Macro", &[MACRO_EXTENSION], &suggested) {
+        pending.push((COMMAND, json!({"savePath": path.to_string_lossy(), "replace": true})));
     }
 }
 
@@ -248,7 +271,8 @@ fn field_widget(ui: &mut egui::Ui, field: &Field, value: &Value, tokens: &Tokens
 }
 
 /// The action set: its title, its steps, and the buttons that edit, save, open and run it.
-fn set_sidebar(ui: &mut egui::Ui, st: &mut actions::ActionsState, can_save: bool, tokens: &Tokens, pending: &mut Pending) {
+/// `chooser`: the window has a save chooser, so Save As… shows; true when it was clicked.
+fn set_sidebar(ui: &mut egui::Ui, st: &mut actions::ActionsState, can_save: bool, chooser: bool, tokens: &Tokens, pending: &mut Pending) -> bool {
     ui.label(egui::RichText::new("Action Set").strong());
     if let Some(title) = widgets::text(ui, widgets::id(("actions", "setTitle")), &st.set_title, tokens.dialog_field_width * 3.0) {
         pending.push((COMMAND, json!({"title": title})));
@@ -283,6 +307,7 @@ fn set_sidebar(ui: &mut egui::Ui, st: &mut actions::ActionsState, can_save: bool
     ui.add(egui::TextEdit::singleline(&mut st.set_name).desired_width(f32::INFINITY));
     let name = st.set_name.trim();
     let is_path = name.contains(['/', '\\']);
+    let mut save_as = false;
     ui.horizontal(|ui| {
         let save_ok = !name.is_empty() && !st.set.is_empty() && (is_path || can_save);
         if ui
@@ -293,6 +318,18 @@ fn set_sidebar(ui: &mut egui::Ui, st: &mut actions::ActionsState, can_save: bool
             let key = if is_path { "savePath" } else { "save" };
             pending.push((COMMAND, json!({key: name})));
         }
+        if chooser
+            && widgets::button(
+                ui,
+                widgets::id(("actions", "saveAs")),
+                "Save As…",
+                "Choose the macro file to save the set to",
+                !st.set.is_empty(),
+                false,
+            )
+        {
+            save_as = true;
+        }
         if ui.add_enabled(!name.is_empty(), egui::Button::new("Open")).on_hover_text("A macro of the Macros folder, or a macro file").clicked() {
             pending.push((COMMAND, json!({"openSet": name})));
         }
@@ -300,6 +337,7 @@ fn set_sidebar(ui: &mut egui::Ui, st: &mut actions::ActionsState, can_save: bool
             pending.push((COMMAND, json!({"runSet": true})));
         }
     });
+    save_as
 }
 
 /// The preview glyph before (left) and after (right) the action, at one scale.

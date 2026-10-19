@@ -1,14 +1,17 @@
 //! The Font Audit panel (`window.fontAudit`, M12.64): runs audits and lists their results
 //! (`docs/spec/21-qa.md` § 7).
 //!
-//! Rows: `window.fontAudit`, `audit.showPanel`, `audit.panel.run`, `audit.revealIssue`,
+//! Rows: `window.fontAudit`, `audit.showPanel`, `audit.panel.run`, `audit.panel.continue`,
+//! `audit.panel.cancel`, `audit.panel.previewFix`, `audit.panel.exportReport`, `audit.revealIssue`,
 //! `audit.nextIssue`, `audit.previousIssue`, `audit.filterResults`,
 //! `fontInfo.styleLinking.recommendedScheme` (listed as the results of the style-linking checks).
 //!
 //! | Control | Command |
 //! |---|---|
 //! | profile and target pop-ups | `audit.showPanel {profile}`, `{target}` |
-//! | Run | `audit.panel.run` |
+//! | Run | `audit.panel.run {inSteps}`, then `audit.panel.continue` once a frame while the progress bar shows |
+//! | Cancel (beside the progress bar) | `audit.panel.cancel` |
+//! | Preview Fix, and Apply under the preview | `audit.panel.previewFix` (a dry run of `audit.fix`), then the Fix action on the previewed results |
 //! | severity choices, group menu, search field, Fixable Only, Current Glyph Only, Show Ignored, group-by pop-up | `audit.filterResults` |
 //! | double-click on a result, or Return | `audit.revealIssue` |
 //! | Previous and Next | `audit.previousIssue`, `audit.nextIssue` |
@@ -16,13 +19,15 @@
 //! | Fix All Safe | `audit.fix {results, safeOnly: true}` on every listed result with a safe fix, then a re-run |
 //! | Ignore (with the reason field) | `audit.ignoreIssue` per selected result (several: one `command.batch`), then a re-run |
 //! | Stop Ignoring | `audit.unignoreIssue` per selected ignored result, then a re-run |
-//! | gear menu | `audit.editProfile`, `audit.clearCache`, `audit.toggleLiveAudit` |
+//! | gear menu | `audit.editProfile`, `audit.clearCache`, `audit.toggleLiveAudit`; Export Report… shows the export row |
+//! | export row: file, Choose…, format, Export | Choose… asks the save chooser for the file (view state; without a chooser the file is typed); Export runs `audit.panel.exportReport` |
 //!
 //! The panel keeps the result document of its last run ([`Run`]); the engine keeps the last run
 //! of each open document too, and its result ids are what `audit.fix` and `audit.ignoreIssue`
 //! take. Live audit and agents can replace the engine's run, so before a fix or an ignore the
-//! panel compares the two and, when they differ, runs its own parameters again first: on an
-//! unchanged font that gives the same ids. Selecting rows, collapsing groups and typing the
+//! panel compares the two by their run ids and, when they differ, runs its own parameters again
+//! first: on an unchanged font that gives the same ids. A fix of the kept run names its run id,
+//! so the engine refuses it when another run replaced that one in between. Selecting rows, collapsing groups and typing the
 //! reason are view state; everything else goes through the commands above.
 
 use std::collections::HashMap;
@@ -118,28 +123,56 @@ pub const COMMANDS: &[UiCommand] = &[
         "Run Font Audit",
         &[],
         "",
-        "{profile?: id | null, target?: \"font\" (the open document) | \"selectedGlyphs\" (the glyphs of the Edit View tab, else the Font View selection) | \"currentGlyph\" | \"export\" (the binary and family checks on the document's compiled instances) | \"family\" (the saved files of every open document, two or more), again?: bool (run the last run's parameters once more)} runs audit.run with the panel's profile and target, ignored results included, and lists its result document in the panel, which opens. A failed run keeps the list as it was → {open, profile, target, filter, run: {profile, target, summary, results, kept, warnings}, listed, groups, rows: [{id, check, severity, glyph, master, message, fixable, ignored, stale}] (the first 100 listed), more, selected, current}",
+        "{profile?: id | null, target?: \"font\" (the open document) | \"selectedGlyphs\" (the glyphs of the Edit View tab, else the Font View selection) | \"currentGlyph\" | \"export\" (the binary and family checks on the document's compiled instances) | \"family\" (the saved files of every open document, two or more), again?: bool (run the last run's parameters once more), inSteps?: bool (start the run with audit.start and let the panel continue it frame by frame, with a progress bar and Cancel; not for a family of files)} runs audit.run with the panel's profile and target, ignored results included, and lists its result document in the panel, which opens. A failed run keeps the list as it was → {open, profile, target, filter, run: {runId, profile, target, summary, results, kept, partial, warnings}, progress: {runId, stage, done, total} | null, preview, listed, groups, rows: [{id, check, severity, glyph, master, message, fixable, ignored, stale}] (the first 100 listed), more, selected, current}",
+    ),
+    (
+        "audit.panel.continue",
+        "Continue Font Audit",
+        &[],
+        "",
+        "{budget?: count (layers, 1 to 100,000; default 256)} does the next step (audit.step) of the run the panel started in steps; the panel runs it every frame while its progress bar shows. The last step lists the run's results. Refused when no run is in progress; a run whose document is no longer active is dropped → the panel as audit.panel.run returns it",
+    ),
+    (
+        "audit.panel.cancel",
+        "Cancel Font Audit",
+        &[],
+        "",
+        "{} stops the run the panel started in steps (audit.cancel) and lists what it had found, marked partial: the font and the engine's kept run do not change, and Fix and Ignore are off for partial results. Refused when no run is in progress → the panel as audit.panel.run returns it",
+    ),
+    (
+        "audit.panel.previewFix",
+        "Preview Audit Fix",
+        &[],
+        "",
+        "{results?: [result id] (default the selected results that have a fix), safeOnly?: bool = false} asks audit.fix for a dry run of the fixes of those results of the panel's run and shows the edits it would make in the detail area, where Apply runs them. Nothing changes. Refused for a run the engine no longer keeps → {preview: {results, safeOnly, planned: [text], skipped: [text]}}",
+    ),
+    (
+        "audit.panel.exportReport",
+        "Export Font Audit Report",
+        &[],
+        "",
+        "{path: path, format?: \"json\" | \"markdown\" | \"html\" | \"text\" (default from the extension of path), minSeverity?: \"info\" | \"warn\" | \"fail\"} writes the run the panel lists, partial runs and families of files included, with audit.export → audit.export's reply",
     ),
     (
         "audit.revealIssue",
         "Reveal Issue",
         &[],
         "",
-        "{result: id (from the panel's last run, else from the document's last audit.run)} a glyph result: opens the glyph in Edit View (the tab already editing it, else the tab holding exactly it, else a new tab) on the result's layer, selects the nodes, segments and components it reports and zooms to them; a result naming a Font Info field (sourceField): opens Font Info on its tab; a family result: makes the first open document among its fonts active. A result that names none of these reveals nothing and says why. The result becomes the panel's current and selected one → {result, revealed: \"glyph\" | \"fontInfo\" | \"fonts\" | null, glyph?, layer?, selection?, tab?, field?, documents?, reason?}",
+        "{result: id (from the panel's last run, else from the document's last audit.run), runId?: id (refused unless the panel lists that run)} a glyph result: opens the glyph in Edit View (the tab already editing it, else the tab holding exactly it, else a new tab) on the result's layer, selects the nodes, segments and components it reports and zooms to them; a result naming a Font Info field (sourceField): opens Font Info on its tab; a family result: makes the first open document among its fonts active. A result that names none of these reveals nothing and says why. The result becomes the panel's current and selected one → {result, runId, revealed: \"glyph\" | \"fontInfo\" | \"fonts\" | null, glyph?, layer?, selection?, tab?, field?, documents?, reason?}",
     ),
     (
         "audit.nextIssue",
         "Next Issue",
         &[],
         "",
-        "{scope?: \"font\" (default) | \"glyph\" (the results of the edited glyph)} reveals the listed result after the current one, as audit.revealIssue does, wrapping after the last; the panel's filters decide what is listed. Refused when nothing is listed → audit.revealIssue's reply",
+        "{scope?: \"font\" (default) | \"glyph\" (the results of the edited glyph), runId?: id (refused unless the panel lists that run)} reveals the listed result after the current one, as audit.revealIssue does, wrapping after the last; the panel's filters decide what is listed. Refused when nothing is listed → audit.revealIssue's reply",
     ),
     (
         "audit.previousIssue",
         "Previous Issue",
         &[],
         "",
-        "{scope?: \"font\" (default) | \"glyph\" (the results of the edited glyph)} reveals the listed result before the current one, as audit.revealIssue does, wrapping before the first; the panel's filters decide what is listed. Refused when nothing is listed → audit.revealIssue's reply",
+        "{scope?: \"font\" (default) | \"glyph\" (the results of the edited glyph), runId?: id (refused unless the panel lists that run)} reveals the listed result before the current one, as audit.revealIssue does, wrapping before the first; the panel's filters decide what is listed. Refused when nothing is listed → audit.revealIssue's reply",
     ),
     (
         "audit.filterResults",
@@ -315,6 +348,12 @@ pub struct Run {
     /// `(font id, path)` of each font the run examined.
     pub fonts: Vec<(String, Option<String>)>,
     pub warnings: Vec<String>,
+    /// The run's id (`runId` of the result document).
+    pub run_id: Option<String>,
+    /// The results of a cancelled run: what it had examined.
+    pub partial: bool,
+    /// The result document without its results, for Export Report.
+    pub head: Value,
 }
 
 impl Run {
@@ -341,7 +380,18 @@ impl Run {
             .and_then(Value::as_array)
             .map(|a| a.iter().take(MAX_WARNINGS).filter_map(|w| w.as_str().map(str::to_string)).collect())
             .unwrap_or_default();
-        Self { doc, revision, target, params, kept, profile, summary, items, checks, fonts, warnings }
+        let run_id = report.get("runId").and_then(Value::as_str).map(str::to_string);
+        let partial = report.get("partial").and_then(Value::as_bool).unwrap_or(false);
+        Self { doc, revision, target, params, kept, profile, summary, items, checks, fonts, warnings, run_id, partial, head: report }
+    }
+
+    /// The result document again, for Export Report.
+    fn document(&self) -> Value {
+        let mut doc = self.head.clone();
+        if let Some(o) = doc.as_object_mut() {
+            o.insert("results".into(), Value::Array(self.items.iter().map(|i| i.raw.clone()).collect()));
+        }
+        doc
     }
 
     fn item(&self, id: &str) -> Option<&Item> {
@@ -415,6 +465,44 @@ pub struct FontAuditState {
     /// The Audit Profile dialog while it is open.
     #[serde(skip)]
     pub dialog: Option<crate::dialogs::audit_profile::ProfileDraft>,
+    /// The run the panel started in steps, while it runs.
+    #[serde(skip)]
+    pub progress: Option<Progress>,
+    /// The dry run of the last Preview Fix.
+    #[serde(skip)]
+    pub preview: Option<Preview>,
+    /// The export row under the header (view state): shown, its path and its format.
+    #[serde(skip)]
+    pub export_open: bool,
+    #[serde(skip)]
+    pub export_path: String,
+    #[serde(skip)]
+    pub export_format: String,
+}
+
+/// A run in steps (`audit.start`) the panel continues every frame.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Progress {
+    pub run_id: String,
+    pub stage: String,
+    pub done: u64,
+    pub total: u64,
+    /// The document it runs on.
+    pub doc: u64,
+    pub target: String,
+    pub profile: Option<String>,
+    /// The `audit.start` parameters, kept with the run's results for a run again.
+    pub params: Value,
+}
+
+/// What `audit.fix` would do for some results (a dry run).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Preview {
+    pub ids: Vec<String>,
+    pub run_id: Option<String>,
+    pub safe_only: bool,
+    pub planned: Vec<String>,
+    pub skipped: Vec<String>,
 }
 
 impl Default for FontAuditState {
@@ -433,6 +521,11 @@ impl Default for FontAuditState {
             default_profile: "universal".into(),
             cache: None,
             dialog: None,
+            progress: None,
+            preview: None,
+            export_open: false,
+            export_path: String::new(),
+            export_format: "html".into(),
         }
     }
 }
@@ -564,6 +657,10 @@ pub fn run(app: &mut FontcraftApp, id: &str, args: &Args) -> Result<Value, Strin
         "audit.nextIssue" => step(app, args, true),
         "audit.previousIssue" => step(app, args, false),
         "audit.filterResults" => filter_results(app, args),
+        "audit.panel.continue" => panel_continue(app, args),
+        "audit.panel.cancel" => panel_cancel(app, args),
+        "audit.panel.previewFix" => preview_fix(app, args),
+        "audit.panel.exportReport" => export_report(app, args),
         other => Err(format!("unknown command `{other}`")),
     }
 }
@@ -724,6 +821,7 @@ fn check_catalogue(app: &mut FontcraftApp) -> HashMap<String, CheckInfo> {
 
 fn panel_run(app: &mut FontcraftApp, args: &Args) -> Result<Value, String> {
     let again = args.flag("again")?.unwrap_or(false);
+    let in_steps = args.flag("inSteps")?.unwrap_or(false);
     let st = &app.state.panels.font_audit;
     let (profile, target, params) = if again {
         let run = st.run.as_ref().ok_or_else(|| args.err("nothing has run in the Font Audit panel yet"))?;
@@ -735,21 +833,162 @@ fn panel_run(app: &mut FontcraftApp, args: &Args) -> Result<Value, String> {
         (profile, target, params)
     };
     let doc = app.session.active().map(|d| d.id).ok_or_else(|| args.err("no font is open"))?;
+    if in_steps && target != "family" {
+        let started = app.session.execute("audit.start", &params).map_err(|e| args.err(e))?;
+        let st = &mut app.state.panels.font_audit;
+        st.progress = Some(Progress {
+            run_id: started.get("runId").and_then(Value::as_str).unwrap_or_default().to_string(),
+            stage: started.get("stage").and_then(Value::as_str).unwrap_or_default().to_string(),
+            done: 0,
+            total: started.get("total").and_then(Value::as_u64).unwrap_or(0),
+            doc,
+            target: target.clone(),
+            profile: profile.clone(),
+            params,
+        });
+        st.profile = profile;
+        st.target = target;
+        st.open = true;
+        return Ok(panel_json(app));
+    }
     let report = app.session.execute("audit.run", &params).map_err(|e| args.err(e))?;
-    let revision = app.session.active().map_or(0, |d| d.revision);
+    list_report(app, report, doc, target, params, profile);
+    Ok(panel_json(app))
+}
+
+/// Whether the engine keeps the runs of `target` (every target but a family of files).
+fn target_kept(target: &str) -> bool {
+    target != "family"
+}
+
+/// Lists `report`, a result document of the panel's `target`, as the panel's run.
+fn list_report(app: &mut FontcraftApp, report: Value, doc: u64, target: String, params: Value, profile: Option<String>) {
+    let revision = app.session.documents().iter().find(|d| d.id == doc).map_or(0, |d| d.revision);
     let checks = check_catalogue(app);
-    let kept = target != "family";
+    let partial = report.get("partial").and_then(Value::as_bool).unwrap_or(false);
+    let kept = target_kept(&target) && !partial;
     let run = Run::read(report, doc, revision, target.clone(), params, kept, checks);
     let st = &mut app.state.panels.font_audit;
     st.profile = profile;
     st.target = target;
     st.run = Some(Shared::new(run));
+    st.progress = None;
+    st.preview = None;
     // Ids are numbered afresh by every run.
     st.selected.clear();
     st.current = None;
     st.open = true;
     refresh_profiles(app);
+}
+
+/// The run in steps the panel continues, or why there is none.
+fn progress_of(app: &FontcraftApp, args: &Args) -> Result<Progress, String> {
+    app.state.panels.font_audit.progress.clone().ok_or_else(|| args.err("no Font Audit run is in progress"))
+}
+
+fn panel_continue(app: &mut FontcraftApp, args: &Args) -> Result<Value, String> {
+    let budget = args.index("budget")?;
+    let pr = progress_of(app, args)?;
+    if app.session.active().map(|d| d.id) != Some(pr.doc) {
+        app.state.panels.font_audit.progress = None;
+        return Err(args.err("the font of the run in progress is no longer the active font: press Run again"));
+    }
+    let mut p = Map::new();
+    p.insert("runId".into(), json!(pr.run_id));
+    if let Some(b) = budget {
+        p.insert("budget".into(), json!(b));
+    }
+    let out = match app.session.execute("audit.step", &Value::Object(p)) {
+        Ok(out) => out,
+        Err(e) => {
+            app.state.panels.font_audit.progress = None;
+            return Err(args.err(e));
+        }
+    };
+    if out.get("finished").and_then(Value::as_bool) == Some(true) {
+        let report = out.get("report").cloned().unwrap_or(Value::Null);
+        list_report(app, report, pr.doc, pr.target, pr.params, pr.profile);
+    } else if let Some(p) = app.state.panels.font_audit.progress.as_mut() {
+        p.done = out.get("done").and_then(Value::as_u64).unwrap_or(p.done);
+        p.total = out.get("total").and_then(Value::as_u64).unwrap_or(p.total);
+        p.stage = out.get("stage").and_then(Value::as_str).unwrap_or_default().to_string();
+    }
     Ok(panel_json(app))
+}
+
+fn panel_cancel(app: &mut FontcraftApp, args: &Args) -> Result<Value, String> {
+    let pr = progress_of(app, args)?;
+    app.state.panels.font_audit.progress = None;
+    let out = app.session.execute("audit.cancel", &json!({"runId": pr.run_id})).map_err(|e| args.err(e))?;
+    let mut partial = out.get("partial").cloned().unwrap_or(Value::Null);
+    if let Some(o) = partial.as_object_mut() {
+        let (done, total) = (out.get("done").cloned().unwrap_or(Value::Null), out.get("total").cloned().unwrap_or(Value::Null));
+        o.insert("progress".into(), json!({"done": done, "total": total}));
+    }
+    list_report(app, partial, pr.doc, pr.target, pr.params, pr.profile);
+    Ok(panel_json(app))
+}
+
+/// One planned or skipped step of a dry run, as the detail area lists it.
+fn step_text(v: &Value) -> String {
+    let text = |key: &str| v.get(key).and_then(Value::as_str).unwrap_or_default();
+    let mut out = String::new();
+    for (key, sep) in [("fix", ""), ("command", ": "), ("glyph", " on "), ("master", ", master "), ("reason", ": ")] {
+        let t = text(key);
+        if !t.is_empty() {
+            out.push_str(if out.is_empty() { "" } else { sep });
+            out.push_str(t);
+        }
+    }
+    out.chars().take(MAX_TEXT).collect()
+}
+
+fn preview_fix(app: &mut FontcraftApp, args: &Args) -> Result<Value, String> {
+    let safe_only = args.flag("safeOnly")?.unwrap_or(false);
+    let run = app.state.panels.font_audit.run.clone().ok_or_else(|| args.err("nothing has run in the Font Audit panel yet"))?;
+    if !run.kept || run.partial {
+        return Err(args.err("only results the engine keeps can be fixed: run the audit on this font"));
+    }
+    let ids = match args.strings("results", MAX_ITEMS)? {
+        Some(ids) => ids,
+        None => app.state.panels.font_audit.selected.iter().filter(|id| run.item(id).is_some_and(|i| i.fixable)).cloned().collect(),
+    };
+    if ids.is_empty() {
+        return Err(args.err("no selected result has a fix"));
+    }
+    let mut p = Map::new();
+    p.insert("results".into(), json!(ids));
+    p.insert("safeOnly".into(), json!(safe_only));
+    p.insert("dryRun".into(), json!(true));
+    if let Some(id) = &run.run_id {
+        p.insert("runId".into(), json!(id));
+    }
+    let out = app.session.execute("audit.fix", &Value::Object(p)).map_err(|e| args.err(e))?;
+    let texts = |key: &str| -> Vec<String> {
+        out.get(key).and_then(Value::as_array).map(|a| a.iter().take(MAX_RETURNED).map(step_text).collect()).unwrap_or_default()
+    };
+    let preview = Preview { ids, run_id: run.run_id.clone(), safe_only, planned: texts("planned"), skipped: texts("skipped") };
+    let reply = json!({"preview": preview_json(&preview)});
+    app.state.panels.font_audit.preview = Some(preview);
+    Ok(reply)
+}
+
+fn preview_json(p: &Preview) -> Value {
+    json!({"results": p.ids, "safeOnly": p.safe_only, "planned": p.planned, "skipped": p.skipped})
+}
+
+fn export_report(app: &mut FontcraftApp, args: &Args) -> Result<Value, String> {
+    let path = args.string("path")?.filter(|p| !p.is_empty()).ok_or_else(|| args.err("`path` (the report file) is required"))?;
+    let run = app.state.panels.font_audit.run.clone().ok_or_else(|| args.err("nothing has run in the Font Audit panel yet"))?;
+    let mut p = Map::new();
+    p.insert("path".into(), json!(path));
+    for key in ["format", "minSeverity"] {
+        if let Some(v) = args.string(key)? {
+            p.insert(key.into(), json!(v));
+        }
+    }
+    p.insert("results".into(), run.document());
+    app.session.execute("audit.export", &Value::Object(p)).map_err(|e| args.err(e))
 }
 
 /// Makes sure the panel holds a run: the document's last `audit.run` when the panel has none.
@@ -826,6 +1065,12 @@ fn reveal_glyph(app: &mut FontcraftApp, args: &Args, index: usize, item: &Item, 
 
 fn reveal(app: &mut FontcraftApp, args: &Args, id: &str) -> Result<Value, String> {
     let run = ensure_run(app, args)?;
+    if let Some(asked) = args.string("runId")?
+        && run.run_id.as_deref() != Some(asked)
+    {
+        let listed = run.run_id.as_deref().unwrap_or("none");
+        return Err(args.err(format!("the Font Audit panel lists run `{}`, not `{}`", clip(listed), clip(asked))));
+    }
     let item = run.item(id).cloned().ok_or_else(|| args.err(format!("the Font Audit panel's last run has no result `{}`", clip(id))))?;
     let index = app.session.documents().iter().position(|d| d.id == run.doc);
     let mut out = match (&item.glyph, &item.source_field) {
@@ -865,6 +1110,7 @@ fn reveal(app: &mut FontcraftApp, args: &Args, id: &str) -> Result<Value, String
     };
     if let Value::Object(m) = &mut out {
         m.insert("result".into(), json!(id));
+        m.insert("runId".into(), json!(run.run_id));
     }
     let st = &mut app.state.panels.font_audit;
     st.current = Some(id.to_string());
@@ -962,6 +1208,8 @@ pub fn panel_json(app: &FontcraftApp) -> Value {
             let l = listing(run, &st.filter, glyph.as_deref(), &[]);
             let rows: Vec<Value> = l.order.iter().take(MAX_RETURNED).filter_map(|&i| run.items.get(i)).map(item_json).collect();
             let about = json!({
+                "runId": run.run_id,
+                "partial": run.partial,
                 "profile": run.profile,
                 "target": run.target,
                 "summary": run.summary,
@@ -979,6 +1227,8 @@ pub fn panel_json(app: &FontcraftApp) -> Value {
         "target": st.target,
         "filter": serde_json::to_value(&st.filter).unwrap_or(Value::Null),
         "run": run,
+        "progress": st.progress.as_ref().map(|p| json!({"runId": p.run_id, "stage": p.stage, "done": p.done, "total": p.total})),
+        "preview": st.preview.as_ref().map(preview_json),
         "listed": listed,
         "groups": groups,
         "more": listed > rows.len(),
@@ -1005,6 +1255,9 @@ fn kept_matches(app: &mut FontcraftApp, run: &Run, ids: &[String]) -> bool {
         return false;
     }
     let Ok(doc) = app.session.query("audit.results", &json!({"includeIgnored": true})) else { return false };
+    if let Some(id) = &run.run_id {
+        return doc.get("runId").and_then(Value::as_str) == Some(id.as_str()) && ids.iter().all(|i| run.item(i).is_some());
+    }
     let Some(list) = doc.get("results").and_then(Value::as_array) else { return false };
     if list.len() != run.items.len() {
         return false;
@@ -1037,10 +1290,19 @@ fn act(app: &mut FontcraftApp, run: &Run, action: Action, pending: &mut Pending)
     match action {
         Action::Reveal(id) => pending.push(("audit.revealIssue", json!({"result": id}))),
         Action::Fix { ids, safe_only } => {
-            if !kept_matches(app, run, &ids) {
-                pending.push(again.clone());
+            let mut p = Map::new();
+            p.insert("results".into(), json!(ids));
+            p.insert("safeOnly".into(), json!(safe_only));
+            match (&run.run_id, kept_matches(app, run, &ids)) {
+                // The run the engine keeps is this one: name it, so a run that replaces it
+                // between now and the fix makes the fix refuse instead of fixing other results.
+                (Some(id), true) => {
+                    p.insert("runId".into(), json!(id));
+                }
+                (_, true) => {}
+                (_, false) => pending.push(again.clone()),
             }
-            pending.push(("audit.fix", json!({"results": ids, "safeOnly": safe_only})));
+            pending.push(("audit.fix", Value::Object(p)));
             pending.push(again);
         }
         Action::Ignore { ids, reason } => {
@@ -1105,6 +1367,11 @@ struct Output {
     click: Option<(String, bool, bool)>,
     toggle_group: Option<String>,
     reason: Option<String>,
+    export_open: Option<bool>,
+    export_path: Option<String>,
+    export_format: Option<String>,
+    /// Choose… of the export row: ask the save chooser for the report file.
+    choose_export: bool,
     actions: Vec<Action>,
 }
 
@@ -1117,13 +1384,20 @@ struct Frame<'a> {
     revision: Option<u64>,
     live: bool,
     masters: HashMap<String, String>,
+    /// The window has a save chooser: the export row shows Choose….
+    chooser: bool,
 }
 
 fn label_of(list: &[(String, String)], id: &str) -> String {
     list.iter().find(|(i, _)| i == id).map_or_else(|| id.to_string(), |(_, l)| l.clone())
 }
 
-fn header(ui: &mut egui::Ui, f: &Frame, pending: &mut Pending) {
+/// The formats Export Report offers: the `format` of `audit.export`, the label, and the file
+/// extension `audit.export` reads as that format.
+const EXPORT_FORMATS: [(&str, &str, &str); 4] =
+    [("html", "HTML", "html"), ("markdown", "Markdown", "md"), ("json", "JSON", "json"), ("text", "Text", "txt")];
+
+fn header(ui: &mut egui::Ui, f: &Frame, out: &mut Output, pending: &mut Pending) {
     let st = f.st;
     ui.horizontal(|ui| {
         let caption = match &st.profile {
@@ -1148,12 +1422,32 @@ fn header(ui: &mut egui::Ui, f: &Frame, pending: &mut Pending) {
                 }
             }
         });
-        if widgets::button(ui, control_id("run"), "Run", "Run the audit with this profile on this target", true, false) {
-            pending.push(("audit.panel.run", json!({})));
+        match &st.progress {
+            Some(p) => {
+                let fraction = if p.total == 0 { 0.0 } else { (p.done as f32 / p.total as f32).clamp(0.0, 1.0) };
+                let bar = egui::ProgressBar::new(fraction)
+                    .desired_width(f.tokens.field_width * 2.0)
+                    .fill(f.tokens.accent)
+                    .text(format!("{} of {}", p.done, p.total));
+                ui.add(bar);
+                if widgets::button(ui, control_id("cancel"), "Cancel", "Stop the audit; what it found so far is listed, marked partial", true, false)
+                {
+                    pending.push(("audit.panel.cancel", json!({})));
+                }
+            }
+            None => {
+                if widgets::button(ui, control_id("run"), "Run", "Run the audit with this profile on this target", true, false) {
+                    pending.push(("audit.panel.run", json!({"inSteps": true})));
+                }
+            }
         }
         ui.menu_button("⚙", |ui| {
             if ui.button("Edit Profiles and Thresholds…").clicked() {
                 pending.push(("audit.editProfile", json!({"profile": st.profile})));
+                ui.close();
+            }
+            if ui.button("Export Report…").on_hover_text("Write the listed run to a JSON, Markdown, HTML or text file").clicked() {
+                out.export_open = Some(!st.export_open);
                 ui.close();
             }
             if ui.button("Clear Cache").on_hover_text("Forget the kept results, so the next run examines every glyph again").clicked() {
@@ -1167,6 +1461,48 @@ fn header(ui: &mut egui::Ui, f: &Frame, pending: &mut Pending) {
             }
         });
     });
+}
+
+/// The row Export Report shows: the file, its format and Export.
+fn export_row(ui: &mut egui::Ui, f: &Frame, out: &mut Output, pending: &mut Pending) {
+    let st = f.st;
+    ui.horizontal(|ui| {
+        let mut path = st.export_path.clone();
+        let edit =
+            egui::TextEdit::singleline(&mut path).id(control_id("exportPath")).hint_text("Report file").desired_width(f.tokens.field_width * 3.0);
+        if ui.add(edit).changed() {
+            out.export_path = Some(path);
+        }
+        if f.chooser && widgets::button(ui, control_id("exportChoose"), "Choose…", "Choose the report file", true, false) {
+            out.choose_export = true;
+        }
+        let caption = EXPORT_FORMATS.iter().find(|(id, ..)| *id == st.export_format).map_or("HTML", |(_, l, _)| *l);
+        egui::ComboBox::from_id_salt("window.fontAudit.exportFormat").selected_text(caption).show_ui(ui, |ui| {
+            for (id, label, _) in EXPORT_FORMATS {
+                if ui.selectable_label(st.export_format == id, label).clicked() {
+                    out.export_format = Some(id.to_string());
+                }
+            }
+        });
+        let ready = !st.export_path.trim().is_empty();
+        if widgets::button(ui, control_id("export"), "Export", "Write the listed run to this file", ready, false) {
+            pending.push(("audit.panel.exportReport", json!({"path": st.export_path.trim(), "format": st.export_format})));
+        }
+    });
+}
+
+/// Choose… of the export row: asks the save chooser for the report file, offering the name typed
+/// so far or one with the format's extension, and puts the answer in the path field. A cancelled
+/// chooser leaves the field as it was.
+fn choose_report_file(app: &mut FontcraftApp) {
+    let st = &app.state.panels.font_audit;
+    let (label, extension) = EXPORT_FORMATS.iter().find(|(id, ..)| *id == st.export_format).map_or(("HTML", "html"), |(_, l, e)| (*l, *e));
+    let typed = std::path::Path::new(st.export_path.trim()).file_name().map(|n| n.to_string_lossy().into_owned());
+    let suggested = typed.filter(|n| !n.is_empty()).unwrap_or_else(|| format!("Font Audit Report.{extension}"));
+    let Some(picker) = app.picker.as_mut() else { return };
+    if let Some(path) = picker.save("Export Report", &format!("{label} report"), &[extension], &suggested) {
+        app.state.panels.font_audit.export_path = path.to_string_lossy().into_owned();
+    }
 }
 
 fn summary(ui: &mut egui::Ui, f: &Frame, run: &Run) {
@@ -1189,6 +1525,14 @@ fn summary(ui: &mut egui::Ui, f: &Frame, run: &Run) {
             ui.colored_label(t.error_text, format!("Errors {}", n("errors")));
         }
     });
+    if run.partial {
+        let of = run.head.pointer("/progress/done").and_then(Value::as_u64).zip(run.head.pointer("/progress/total").and_then(Value::as_u64));
+        let text = match of {
+            Some((done, total)) => format!("Partial results: the run was cancelled after {done} of {total} steps."),
+            None => "Partial results: the run was cancelled.".to_string(),
+        };
+        ui.colored_label(t.audit_warn, text);
+    }
     for w in &run.warnings {
         ui.colored_label(t.text_dim, w);
     }
@@ -1414,13 +1758,27 @@ fn details(ui: &mut egui::Ui, f: &Frame, run: &Run) {
         "No automatic fix.".to_string()
     };
     ui.colored_label(t.text_dim, fix);
+    if let Some(p) = f.st.preview.as_ref().filter(|p| p.run_id == run.run_id && p.ids.iter().any(|i| *i == item.id)) {
+        ui.label(RichText::new(format!("Fix preview ({} results)", p.ids.len())).strong());
+        if p.planned.is_empty() {
+            ui.colored_label(t.text_dim, "Nothing would change.");
+        }
+        for line in &p.planned {
+            ui.label(line);
+        }
+        for line in &p.skipped {
+            ui.colored_label(t.text_dim, format!("Skipped: {line}"));
+        }
+    }
 }
 
 fn buttons(ui: &mut egui::Ui, f: &Frame, run: &Run, out: &mut Output, pending: &mut Pending) {
     let st = f.st;
     let current = f.revision == Some(run.revision);
-    let editable = run.kept && current;
-    let why = if !run.kept {
+    let editable = run.kept && current && !run.partial;
+    let why = if run.partial {
+        "Partial results of a cancelled run cannot be fixed or ignored: press Run again"
+    } else if !run.kept {
         "Results of font files are fixed and ignored in the files themselves"
     } else if f.revision.is_none() {
         "The font of this run is not the active font"
@@ -1442,6 +1800,22 @@ fn buttons(ui: &mut egui::Ui, f: &Frame, run: &Run, out: &mut Output, pending: &
     let ignored: Vec<Item> = selected.iter().filter(|i| i.ignored).map(|i| (*i).clone()).collect();
     let hover = |text: &'static str| if editable { text } else { why };
     ui.horizontal_wrapped(|ui| {
+        let preview = st.preview.as_ref().filter(|p| p.run_id == run.run_id && !p.ids.is_empty());
+        if widgets::button(
+            ui,
+            control_id("previewFix"),
+            "Preview Fix",
+            hover("Show what fixing the selected results would change"),
+            editable && !fixable.is_empty(),
+            false,
+        ) {
+            pending.push(("audit.panel.previewFix", json!({"results": fixable})));
+        }
+        if let Some(p) = preview
+            && widgets::button(ui, control_id("applyPreview"), "Apply", hover("Make the changes the preview lists"), editable, false)
+        {
+            out.actions.push(Action::Fix { ids: p.ids.clone(), safe_only: p.safe_only });
+        }
         if widgets::button(ui, control_id("fix"), "Fix", hover("Fix the selected results"), editable && !fixable.is_empty(), false) {
             out.actions.push(Action::Fix { ids: fixable.clone(), safe_only: false });
         }
@@ -1527,7 +1901,8 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     let doc = run.as_ref().and_then(|r| app.session.active().filter(|d| d.id == r.doc));
     let revision = doc.map(|d| d.revision);
     let masters: HashMap<String, String> = doc.map(|d| d.font.masters.iter().map(|m| (m.id.clone(), m.name.clone())).collect()).unwrap_or_default();
-    let frame = Frame { st, tokens: &app.tokens, listing: listing.clone(), revision, live: app.state.audit.live, masters };
+    let frame =
+        Frame { st, tokens: &app.tokens, listing: listing.clone(), revision, live: app.state.audit.live, masters, chooser: app.picker.is_some() };
     let mut out = Output::default();
     let mut open = true;
     let tokens = &app.tokens;
@@ -1539,7 +1914,10 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
         .default_width(tokens.list_column_unit * PANEL_UNITS)
         .default_pos(pos2(ui.ctx().content_rect().right() - tokens.list_column_unit * PANEL_UNITS - tokens.dialog_spacing, tokens.dialog_top))
         .show(ui.ctx(), |ui| {
-            header(ui, &frame, pending);
+            header(ui, &frame, &mut out, pending);
+            if frame.st.export_open && run.is_some() {
+                export_row(ui, &frame, &mut out, pending);
+            }
             match &run {
                 None => {
                     ui.add_space(tokens.dialog_spacing);
@@ -1579,8 +1957,25 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     if let Some(reason) = out.reason {
         st.reason = reason;
     }
+    if let Some(v) = out.export_open {
+        st.export_open = v;
+    }
+    if let Some(v) = out.export_path {
+        st.export_path = v;
+    }
+    if let Some(v) = out.export_format {
+        st.export_format = v;
+    }
+    // A run in steps goes on by one step a frame until it finishes or is cancelled.
+    if st.progress.is_some() && st.open {
+        pending.push(("audit.panel.continue", json!({})));
+        ui.ctx().request_repaint();
+    }
     if let Some((id, command, shift)) = out.click {
         select(st, listing.as_deref(), id, command, shift);
+    }
+    if out.choose_export {
+        choose_report_file(app);
     }
     if let Some(run) = run {
         for action in out.actions {
@@ -1774,5 +2169,168 @@ mod tests {
         w.click(&mut app, row_id(&ignored));
         w.click(&mut app, control_id("unignore"));
         assert!(has(&app, "check.outlines.openPath", "B"), "Stop Ignoring lists it again");
+    }
+
+    #[test]
+    fn audit_panel_run_in_steps_shows_progress_and_audit_panel_continue_lists_what_audit_run_returns() {
+        let mut app = audited_app();
+        let whole = app.session.execute("audit.run", &json!({"profile": "outlines", "includeIgnored": true})).unwrap();
+        let started = call(&mut app, "audit.panel.run", json!({"profile": "outlines", "inSteps": true}));
+        assert_eq!(started["run"], Value::Null, "nothing is listed until the run finishes");
+        assert_eq!(started["progress"]["done"], json!(0));
+        let total = started["progress"]["total"].as_u64().unwrap();
+        assert_eq!(total, 2 + 3, "two layers and the three later stages");
+
+        // Each frame continues the run by one step; the progress bar and Cancel show meanwhile.
+        let w = Window::new();
+        w.frame(&mut app, Vec::new());
+        assert!(w.ctx.read_response(control_id("cancel")).is_some(), "Cancel shows while the run goes on");
+        for _ in 0..8 {
+            if app.state.panels.font_audit.progress.is_none() {
+                break;
+            }
+            w.frame(&mut app, Vec::new());
+        }
+        assert!(app.state.panels.font_audit.progress.is_none(), "the run finished");
+        let run = app.state.panels.font_audit.run.clone().unwrap();
+        assert!(run.kept && !run.partial);
+        assert_eq!(run.items.len(), whole["results"].as_array().unwrap().len(), "the same results as one audit.run");
+        let kept = app.session.execute("audit.results", &json!({})).unwrap();
+        assert_eq!(kept["runId"].as_str(), run.run_id.as_deref(), "the engine keeps the panel's run");
+        assert!(refused(&mut app, "audit.panel.continue", json!({})).contains("no Font Audit run is in progress"));
+        w.frame(&mut app, Vec::new());
+        assert!(w.ctx.read_response(control_id("run")).is_some(), "Run is back");
+
+        // Reveal names the run it reveals from.
+        let extreme = id_of(&app, "check.outlines.missingExtremes", "A");
+        let revealed = call(&mut app, "audit.revealIssue", json!({"result": extreme, "runId": run.run_id}));
+        assert_eq!(revealed["runId"].as_str(), run.run_id.as_deref());
+        assert!(refused(&mut app, "audit.revealIssue", json!({"result": extreme, "runId": "run0"})).contains("lists run"));
+    }
+
+    #[test]
+    fn audit_panel_cancel_lists_partial_results_and_changes_nothing() {
+        let mut app = audited_app();
+        let kept = call(&mut app, "audit.panel.run", json!({"profile": "outlines"}))["run"]["runId"].clone();
+        let revision = app.session.doc().unwrap().revision;
+        call(&mut app, "audit.panel.run", json!({"profile": "outlines", "inSteps": true}));
+        let out = call(&mut app, "audit.panel.continue", json!({"budget": 1}));
+        assert_eq!(out["progress"]["done"], json!(1));
+        let out = call(&mut app, "audit.panel.cancel", json!({}));
+        assert_eq!(out["progress"], Value::Null);
+        assert_eq!(out["run"]["partial"], json!(true));
+        assert_eq!(out["run"]["kept"], json!(false), "partial results are not the engine's kept run");
+        let run = app.state.panels.font_audit.run.clone().unwrap();
+        assert!(run.items.iter().all(|i| i.glyph.as_deref() == Some("A")), "only the first layer was examined");
+        assert_eq!(app.session.execute("audit.results", &json!({})).unwrap()["runId"], kept, "the kept run is unchanged");
+        assert_eq!(app.session.doc().unwrap().revision, revision, "the font is unchanged");
+        assert!(refused(&mut app, "audit.panel.previewFix", json!({"results": [run.items[0].id]})).contains("engine keeps"));
+        assert!(refused(&mut app, "audit.panel.cancel", json!({})).contains("in progress"));
+        let w = Window::new();
+        w.frame(&mut app, Vec::new());
+        w.frame(&mut app, Vec::new());
+        assert!(w.ctx.read_response(control_id("run")).is_some());
+    }
+
+    #[test]
+    fn audit_panel_preview_fix_lists_the_planned_edits_and_apply_makes_them() {
+        let mut app = audited_app();
+        call(&mut app, "audit.panel.run", json!({"profile": "outlines"}));
+        let extreme = id_of(&app, "check.outlines.missingExtremes", "A");
+        let font = serde_json::to_value(&*app.session.doc().unwrap().font).unwrap();
+        let undo = app.session.doc().unwrap().history.undo.len();
+        let out = call(&mut app, "audit.panel.previewFix", json!({"results": [extreme]}));
+        let planned = out["preview"]["planned"].as_array().unwrap();
+        assert!(planned.iter().any(|p| p.as_str().unwrap().contains("path.addExtremes")), "{out}");
+        assert_eq!(serde_json::to_value(&*app.session.doc().unwrap().font).unwrap(), font, "a preview changes nothing");
+        assert_eq!(app.session.doc().unwrap().history.undo.len(), undo);
+        assert_eq!(app.state.panels.font_audit.preview.as_ref().unwrap().ids, vec![extreme.clone()]);
+
+        let w = Window::new();
+        w.click(&mut app, row_id(&extreme));
+        w.frame(&mut app, Vec::new());
+        assert!(w.ctx.read_response(control_id("applyPreview")).is_some(), "Apply shows with the preview");
+        w.click(&mut app, control_id("applyPreview"));
+        assert!(!has(&app, "check.outlines.missingExtremes", "A"), "Apply fixed the previewed result");
+        assert_eq!(app.session.doc().unwrap().history.undo.len(), undo + 1);
+        assert!(app.state.panels.font_audit.preview.is_none(), "the re-run drops the preview");
+    }
+
+    #[test]
+    fn audit_panel_export_report_writes_the_listed_run() {
+        let mut app = audited_app();
+        let listed = call(&mut app, "audit.panel.run", json!({"profile": "outlines"}));
+        let dir = std::env::temp_dir().join(format!("fontcraft-audit-panel-export-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let md = dir.join("report.md");
+        let out = call(&mut app, "audit.panel.exportReport", json!({"path": md.to_string_lossy()}));
+        assert_eq!(out["format"], json!("markdown"));
+        assert!(!std::fs::read_to_string(&md).unwrap().is_empty());
+        let js = dir.join("report.json");
+        call(&mut app, "audit.panel.exportReport", json!({"path": js.to_string_lossy(), "format": "json"}));
+        let written: Value = serde_json::from_slice(&std::fs::read(&js).unwrap()).unwrap();
+        assert_eq!(written["runId"], listed["run"]["runId"]);
+        assert_eq!(written["results"].as_array().unwrap().len(), listed["run"]["results"].as_u64().unwrap() as usize);
+        assert!(refused(&mut app, "audit.panel.exportReport", json!({})).contains("`path`"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// What a save chooser was asked: its title, its extensions and the name it offered.
+    type Asked = std::sync::Arc<std::sync::Mutex<Vec<(String, Vec<String>, String)>>>;
+
+    /// A save chooser that answers `path` and records what it was asked.
+    struct SavePicker {
+        path: Option<std::path::PathBuf>,
+        asked: Asked,
+    }
+
+    impl crate::shell::pickers::Picker for SavePicker {
+        fn folder(&mut self, _: &str) -> Option<std::path::PathBuf> {
+            None
+        }
+
+        fn files(&mut self, _: &str, _: &str, _: &[&str]) -> Vec<std::path::PathBuf> {
+            Vec::new()
+        }
+
+        fn save(&mut self, title: &str, _: &str, extensions: &[&str], suggested: &str) -> Option<std::path::PathBuf> {
+            self.asked.lock().unwrap().push((title.into(), extensions.iter().map(|e| e.to_string()).collect(), suggested.into()));
+            self.path.clone()
+        }
+    }
+
+    #[test]
+    fn audit_panel_export_report_choose_fills_the_file_from_the_save_chooser_and_export_writes_there() {
+        let mut app = audited_app();
+        call(&mut app, "audit.panel.run", json!({"profile": "outlines"}));
+        app.state.panels.font_audit.export_open = true;
+        app.state.panels.font_audit.export_format = "markdown".into();
+        let w = Window::new();
+
+        // Without a chooser the file is typed: no Choose….
+        w.frame(&mut app, Vec::new());
+        w.frame(&mut app, Vec::new());
+        assert!(w.ctx.read_response(control_id("exportChoose")).is_none());
+
+        let dir = std::env::temp_dir().join(format!("fontcraft-audit-panel-choose-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("chosen.md");
+        let asked = Asked::default();
+
+        // A cancelled chooser leaves the field as it was.
+        app.picker = Some(Box::new(SavePicker { path: None, asked: asked.clone() }));
+        w.click(&mut app, control_id("exportChoose"));
+        assert_eq!(app.state.panels.font_audit.export_path, "");
+
+        app.picker = Some(Box::new(SavePicker { path: Some(file.clone()), asked: asked.clone() }));
+        w.click(&mut app, control_id("exportChoose"));
+        assert_eq!(app.state.panels.font_audit.export_path, file.to_string_lossy());
+        let offered = ("Export Report".to_string(), vec!["md".to_string()], "Font Audit Report.md".to_string());
+        assert_eq!(*asked.lock().unwrap(), [offered.clone(), offered]);
+
+        w.click(&mut app, control_id("export"));
+        let written = std::fs::read_to_string(&file).unwrap();
+        assert!(written.starts_with('#'), "a Markdown report: {written}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
