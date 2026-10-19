@@ -4,6 +4,7 @@
 //! table a line. fontTools refuses `cff1.ttx` as it is (two charstrings end with operands, and a
 //! `VORG` record names a glyph past the glyph order), so that dump is first edited as
 //! [`cff1_ttx`] does.
+#![allow(clippy::string_slice)]
 
 use super::{encode_float, format_g8};
 use crate::sfnt::{Flavour, SfntFont};

@@ -270,9 +270,12 @@ fn translate(dx: f64, dy: f64, points: &mut [(f64, f64)]) {
     }
 }
 
+/// Points and the end point of each contour.
+type Coordinates = (Vec<(f64, f64)>, Vec<i64>);
+
 /// fontTools' `Glyph.getCoordinates(round=otRound)`: the points of a glyph with its components
 /// flattened, and the end point of each contour.
-fn coordinates(glyphs: &HashMap<&str, Glyph>, name: &str, depth: usize, budget: &mut usize) -> Result<(Vec<(f64, f64)>, Vec<i64>)> {
+fn coordinates(glyphs: &HashMap<&str, Glyph>, name: &str, depth: usize, budget: &mut usize) -> Result<Coordinates> {
     if depth > MAX_COMPONENT_DEPTH {
         return Err(recursion(name));
     }

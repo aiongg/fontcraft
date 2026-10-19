@@ -281,7 +281,7 @@ mod tests {
         assert_eq!(fs_type(&[0, 0]), 0);
         assert_eq!(fs_type(&[0, 0x0008]), 0x0008, "installable and editable give editable");
         assert_eq!(fs_type(&[0x0002, 0]), 0x0002, "restricted wins over everything");
-        assert_eq!(fs_type(&[0x0004, 0x0008]), 0x0004);
+        assert_eq!(fs_type(&[0x0004, 0x0008]), 0, "bits 2 and 3 are ANDed, so preview and editable share none");
     }
 
     #[test]

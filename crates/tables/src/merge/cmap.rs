@@ -69,10 +69,13 @@ fn default_ignorable(u: u32) -> bool {
     )
 }
 
+/// One font's variation sequences: (code point, selector, glyph or `None` for the default).
+type UvsList = Vec<(u32, u32, Option<u32>)>;
+
 /// The united mapping of the fonts `which` (indices into `fonts`, in order).
 pub(super) fn unite(fonts: &[SfntFont], plan: &Plan, which: &[usize], warnings: &mut Vec<String>) -> Result<United> {
     let mut united = United { duplicates: vec![BTreeMap::new(); fonts.len()], ..United::default() };
-    let mut uvs_lists: Vec<(usize, Vec<(u32, u32, Option<u32>)>)> = Vec::new();
+    let mut uvs_lists: Vec<(usize, UvsList)> = Vec::new();
     for &font_index in which {
         let Some(bytes) = fonts.get(font_index).and_then(|f| f.get(*b"cmap")) else { continue };
         let cmap = Cmap::read(FontData::new(bytes)).map_err(|e| TablesError::invalid(format!("the 'cmap' table cannot be read: {e}")))?;
@@ -108,9 +111,14 @@ pub(super) fn unite(fonts: &[SfntFont], plan: &Plan, which: &[usize], warnings: 
             warnings.push(format!("'cmap' subtables of font {} are left out: {}", font_index + 1, dropped.join(", ")));
         }
         let Some(sub) = full.or(bmp) else { continue };
+        // fontTools reads a format 4 subtable without its closing 0xFFFF segment.
+        let closing = matches!(sub, CmapSubtable::Format4(_));
         let mut kept = 0usize;
         let dups = united.duplicates.get_mut(font_index).ok_or_else(|| TablesError::invalid("font index out of range"))?;
         for (cp, gid) in sub.iter().take(MAX_CODE_POINTS) {
+            if closing && cp == 0xFFFF {
+                continue;
+            }
             let Some(new) = u16::try_from(gid.to_u32()).ok().and_then(|g| plan.new_id(font_index, g)) else { continue };
             match united.map.get(&cp).copied() {
                 None => {

@@ -615,7 +615,7 @@ fn for_each_lang_sys(records: &mut [ScriptRecord], mut f: impl FnMut(&mut LangSy
             f(ls);
         }
         for l in r.script.lang_sys_records.iter_mut() {
-            f(&mut *l.lang_sys);
+            f(&mut l.lang_sys);
         }
     }
 }

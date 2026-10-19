@@ -33,10 +33,10 @@ fn u32_at(b: &[u8], at: usize) -> Option<u32> {
 
 /// Writes a 16-bit value into `table` at `at` when the table is long enough.
 pub(super) fn put_u16(font: &mut SfntFont, tag: Tag, at: usize, v: u16) {
-    if let Some(t) = font.tables.get_mut(&tag) {
-        if let Some(s) = t.get_mut(at..at + 2) {
-            s.copy_from_slice(&v.to_be_bytes());
-        }
+    if let Some(t) = font.tables.get_mut(&tag)
+        && let Some(s) = t.get_mut(at..at + 2)
+    {
+        s.copy_from_slice(&v.to_be_bytes());
     }
 }
 
@@ -202,10 +202,10 @@ pub(super) fn set_weight_width_slant(font: &mut SfntFont, user: &[(Tag, f64)]) {
     }
     if let Some(s) = value(b"slnt") {
         let fixed = ot_round(s.clamp(-90.0, 90.0) * 65536.0) as i32;
-        if let Some(t) = font.tables.get_mut(b"post") {
-            if let Some(slot) = t.get_mut(4..8) {
-                slot.copy_from_slice(&fixed.to_be_bytes());
-            }
+        if let Some(t) = font.tables.get_mut(b"post")
+            && let Some(slot) = t.get_mut(4..8)
+        {
+            slot.copy_from_slice(&fixed.to_be_bytes());
         }
     }
 }
@@ -375,10 +375,10 @@ pub(super) fn reduce_stat(font: &mut SfntFont, user: &[(Tag, f64)]) -> Result<()
     if let Some(slot) = s.get_mut(12..14) {
         slot.copy_from_slice(&count.to_be_bytes());
     }
-    if count == 0 {
-        if let Some(slot) = s.get_mut(14..18) {
-            slot.copy_from_slice(&0u32.to_be_bytes());
-        }
+    if count == 0
+        && let Some(slot) = s.get_mut(14..18)
+    {
+        slot.copy_from_slice(&0u32.to_be_bytes());
     }
     font.insert(*b"STAT", s);
     Ok(())

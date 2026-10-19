@@ -3,6 +3,7 @@
 //! expected bytes in `testdata/core.compiled` are what fontTools 4.66.1 writes from it
 //! (`TTFont(recalcTimestamp=False)`, `importXML`, `save`, bounds recalculated), one table a line.
 //! `head.checkSumAdjustment` is left out of the comparison: the font writer fills it.
+#![allow(clippy::string_slice)]
 
 use super::program::assemble;
 use crate::sfnt::{Flavour, SfntFont};
@@ -92,8 +93,8 @@ fn kept_bounds_are_not_recalculated() {
 
 #[test]
 fn assembly_push_forms_follow_fonttools() {
-    assert_eq!(assemble("PUSH 1 2 300 4 5").unwrap(), [0xb1, 1, 2, 0xb8, 0x01, 0x2c, 0xb1, 4, 5]);
-    assert_eq!(assemble("PUSH 300 4 500").unwrap(), [0xba, 0x01, 0x2c, 0x00, 0x04, 0x01, 0xf4], "a lone byte between words is a word");
+    assert_eq!(assemble("PUSH[ ] 1 2 300 4 5").unwrap(), [0xb1, 1, 2, 0xb8, 0x01, 0x2c, 0xb1, 4, 5]);
+    assert_eq!(assemble("PUSH[ ] 300 4 500").unwrap(), [0xba, 0x01, 0x2c, 0x00, 0x04, 0x01, 0xf4], "a lone byte between words is a word");
     assert_eq!(assemble("NPUSHB[ ]  /* 2 values pushed */\n 7 8\nMDRP[01101]\nINSTR146[ ]").unwrap(), [0x40, 2, 7, 8, 0xcd, 146]);
     assert!(assemble("PUSHB[ ] 300").is_err());
     assert!(assemble("NOSUCH[ ]").is_err());

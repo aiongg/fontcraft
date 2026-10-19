@@ -54,7 +54,7 @@ fn tables_actions_print_results_and_exit_statuses() {
     assert_eq!(code, 2, "a missing TAG is a usage error");
     let (code, _, _) = cli(&["tables", "add", dir.join("missing.ttf").to_str().unwrap(), "zzzz=x"]);
     assert_eq!(code, 3, "an unreadable input is exit status 3");
-    let (code, _, _) = cli(&["tables", "import", ttf_s, "x.ttx"]);
-    assert_eq!(code, 4, "import belongs to another package");
+    let (code, _, _) = cli(&["tables", "import", ttf_s, dir.join("missing.ttx").to_str().unwrap()]);
+    assert_eq!(code, 3, "an unreadable dump is exit status 3");
     let _ = std::fs::remove_dir_all(&dir);
 }

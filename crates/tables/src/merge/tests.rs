@@ -15,10 +15,11 @@ use super::*;
 use crate::reorder::glyph_names;
 use crate::sfnt::{WriteOptions, read, write};
 
-/// A font of `glyphs` (name, code point, advance), each a rectangle; `kern` adds kerning between
+/// A font of `.notdef`, `space` and `glyphs` (name, code point, advance), each a rectangle; `kern` adds kerning between
 /// the first two.
 fn source(family: &str, glyphs: &[(&str, u32, f64)], kern: bool) -> Font {
     let mut f = Font::new(family);
+    f.glyphs.retain(|g| g.name == ".notdef" || g.name == "space");
     for (i, (name, cp, width)) in glyphs.iter().enumerate() {
         if f.glyph(name).is_none() {
             f.add_glyph(name, vec![*cp], *width).unwrap();

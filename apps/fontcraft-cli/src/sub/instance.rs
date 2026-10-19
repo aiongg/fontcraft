@@ -89,10 +89,10 @@ fn location_item(item: &str) -> Result<(String, Value), Failure> {
             if let Some(v) = number(lo)? {
                 range.insert("min".into(), json!(v));
             }
-            if let [_, d, _] = parts.as_slice() {
-                if let Some(v) = number(d)? {
-                    range.insert("default".into(), json!(v));
-                }
+            if let [_, d, _] = parts.as_slice()
+                && let Some(v) = number(d)?
+            {
+                range.insert("default".into(), json!(v));
             }
             if let Some(v) = number(hi)? {
                 range.insert("max".into(), json!(v));

@@ -5,11 +5,11 @@
 use write_fonts::NullableOffsetMarker;
 use write_fonts::from_obj::ToOwnedTable;
 use write_fonts::tables::avar::{Avar, AxisValueMap, SegmentMaps};
+use write_fonts::tables::fvar::InstanceRecord;
 use write_fonts::tables::fvar::{AxisInstanceArrays, Fvar, VariationAxisRecord};
 use write_fonts::tables::gdef as wgdef;
 use write_fonts::tables::gpos as wpos;
 use write_fonts::tables::gvar::{GlyphDelta, GlyphDeltas, GlyphVariations, Gvar};
-use write_fonts::tables::fvar::InstanceRecord;
 use write_fonts::tables::layout as wl;
 use write_fonts::tables::variations::ivs_builder::VariationStoreBuilder;
 use write_fonts::tables::variations::{RegionAxisCoordinates, Tent, VariationRegion};

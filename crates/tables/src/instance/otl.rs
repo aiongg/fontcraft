@@ -44,36 +44,36 @@ pub(super) fn instantiate_layout(font: &mut SfntFont, coords: &[f64]) -> Result<
         }
     }
     let deltas = gdef_deltas(font, coords)?;
-    if let Some(deltas) = &deltas {
-        if let Some(data) = font.get(*b"GDEF") {
-            crate::layout_budget::check_gdef(data)?;
-            let read = read_fonts::tables::gdef::Gdef::read(FontData::new(data)).map_err(|e| bad(format!("the GDEF table cannot be read: {e}")))?;
-            let mut gdef: Gdef = read.to_owned_table();
-            if let Some(list) = gdef.lig_caret_list.as_mut() {
-                for lig in list.lig_glyphs.iter_mut() {
-                    for caret in lig.caret_values.iter_mut() {
-                        if let CaretValue::Format3(t) = &**caret {
-                            if let DeviceOrVariationIndex::VariationIndex(v) = &*t.device {
-                                let d = ot_round(deltas.get(v.delta_set_outer_index, v.delta_set_inner_index));
-                                let value = clamp_i16(f64::from(t.coordinate) + d);
-                                **caret = CaretValue::format_1(value);
-                            }
-                        }
+    if let Some(deltas) = &deltas
+        && let Some(data) = font.get(*b"GDEF")
+    {
+        crate::layout_budget::check_gdef(data)?;
+        let read = read_fonts::tables::gdef::Gdef::read(FontData::new(data)).map_err(|e| bad(format!("the GDEF table cannot be read: {e}")))?;
+        let mut gdef: Gdef = read.to_owned_table();
+        if let Some(list) = gdef.lig_caret_list.as_mut() {
+            for lig in list.lig_glyphs.iter_mut() {
+                for caret in lig.caret_values.iter_mut() {
+                    if let CaretValue::Format3(t) = &**caret
+                        && let DeviceOrVariationIndex::VariationIndex(v) = &*t.device
+                    {
+                        let d = ot_round(deltas.get(v.delta_set_outer_index, v.delta_set_inner_index));
+                        let value = clamp_i16(f64::from(t.coordinate) + d);
+                        **caret = CaretValue::format_1(value);
                     }
                 }
             }
-            gdef.item_var_store = NullableOffsetMarker::new(None);
-            let empty = gdef.glyph_class_def.is_none()
-                && gdef.attach_list.is_none()
-                && gdef.lig_caret_list.is_none()
-                && gdef.mark_attach_class_def.is_none()
-                && gdef.mark_glyph_sets_def.is_none();
-            if empty {
-                font.remove(*b"GDEF");
-            } else {
-                let bytes = write_fonts::dump_table(&gdef).map_err(|e| bad(format!("the GDEF table could not be written again: {e}")))?;
-                font.insert(*b"GDEF", bytes);
-            }
+        }
+        gdef.item_var_store = NullableOffsetMarker::new(None);
+        let empty = gdef.glyph_class_def.is_none()
+            && gdef.attach_list.is_none()
+            && gdef.lig_caret_list.is_none()
+            && gdef.mark_attach_class_def.is_none()
+            && gdef.mark_glyph_sets_def.is_none();
+        if empty {
+            font.remove(*b"GDEF");
+        } else {
+            let bytes = write_fonts::dump_table(&gdef).map_err(|e| bad(format!("the GDEF table could not be written again: {e}")))?;
+            font.insert(*b"GDEF", bytes);
         }
     }
     if let Some(data) = font.get(*b"GPOS") {

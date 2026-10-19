@@ -81,7 +81,7 @@ fn cs(program: &str) -> Vec<u8> {
     let mut out = Vec::new();
     for word in program.split_whitespace() {
         if let Some(hex) = word.strip_prefix("mask:") {
-            out.extend((0..hex.len()).step_by(2).map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap()));
+            out.extend((0..hex.len()).step_by(2).map(|i| u8::from_str_radix(hex.get(i..i + 2).unwrap(), 16).unwrap()));
             continue;
         }
         if let Ok(v) = word.parse::<i64>() {

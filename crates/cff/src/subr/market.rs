@@ -621,7 +621,7 @@ impl Market<'_> {
         // Numbers: most used first, then arranged for the bias.
         let mut lists: Vec<Vec<usize>> = std::iter::once(gsubrs).chain(lsubrs).collect();
         for list in &mut lists {
-            list.sort_by(|&a, &b| self.usages(b).cmp(&self.usages(a)));
+            list.sort_by_key(|&a| std::cmp::Reverse(self.usages(a)));
             *list = arrange(list);
             let b = bias(list.len());
             for (pos, &c) in list.iter().enumerate() {
@@ -687,19 +687,19 @@ impl Market<'_> {
         let mut calls = enc.iter().peekable();
         let mut j = 0usize;
         while j < len {
-            if let Some(&&(at, c)) = calls.peek() {
-                if at as usize == j {
-                    calls.next();
-                    let cand = self.cand(c).ok_or_else(|| SubrError::Invalid("a call to a lost candidate".into()))?;
-                    if cand.flatten {
-                        out.extend_from_slice(&cand.program);
-                    } else {
-                        push_int(cand.position as i64 - cand.call_bias, &mut out)?;
-                        out.push(if cand.global { 29 } else { 10 });
-                    }
-                    j += (cand.len as usize).max(1);
-                    continue;
+            if let Some(&&(at, c)) = calls.peek()
+                && at as usize == j
+            {
+                calls.next();
+                let cand = self.cand(c).ok_or_else(|| SubrError::Invalid("a call to a lost candidate".into()))?;
+                if cand.flatten {
+                    out.extend_from_slice(&cand.program);
+                } else {
+                    push_int(cand.position as i64 - cand.call_bias, &mut out)?;
+                    out.push(if cand.global { 29 } else { 10 });
                 }
+                j += (cand.len as usize).max(1);
+                continue;
             }
             let id = self.text.get(from + j).copied().unwrap_or(NONE);
             out.extend_from_slice(self.token(id).unwrap_or_default());

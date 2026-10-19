@@ -88,7 +88,7 @@ pub const ALL: &[Subcommand] = &[
 ];
 
 /// The subcommands whose packages have not landed: each prints its usage and refuses to run.
-pub const PLANNED: &[&str] = &["instance", "optimize"];
+pub const PLANNED: &[&str] = &["optimize"];
 
 /// The subcommand named `name`.
 pub fn find(name: &str) -> Option<&'static Subcommand> {
@@ -170,7 +170,7 @@ mod tests {
 
     #[test]
     fn stubs_refuse_with_exit_status_4() {
-        let sub = find("instance").unwrap();
+        let sub = find("optimize").unwrap();
         let e = (sub.run)(&["in.ttf".to_string()]).unwrap_err();
         assert_eq!(e.exit_code(), 4);
         assert!(e.message().contains("not built"));

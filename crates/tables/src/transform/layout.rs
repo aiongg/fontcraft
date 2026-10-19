@@ -344,7 +344,7 @@ fn scaled_var_data(d: &ItemVariationData, s: Scaler) -> Result<ItemVariationData
             }
         }
     }
-    let long = need.iter().any(|&n| n == 4);
+    let long = need.contains(&4);
     let is_wide = |n: usize| if long { n == 4 } else { n == 2 };
     let mut order: Vec<usize> = (0..regions).filter(|&c| need.get(c).is_some_and(|&n| is_wide(n))).collect();
     let words = order.len();

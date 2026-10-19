@@ -656,11 +656,11 @@ pub(super) fn apply_gvar(
             *a = ot_round(right - left).clamp(0.0, 65535.0) as u16;
             *b = clamp_i16(ot_round(x_min - left));
         }
-        if let Some(v) = vmtx.as_deref_mut() {
-            if let (Some(a), Some(b)) = (v.advances.get_mut(g), v.bearings.get_mut(g)) {
-                *a = ot_round(top - bottom).clamp(0.0, 65535.0) as u16;
-                *b = clamp_i16(ot_round(top - y_max));
-            }
+        if let Some(v) = vmtx.as_deref_mut()
+            && let (Some(a), Some(b)) = (v.advances.get_mut(g), v.bearings.get_mut(g))
+        {
+            *a = ot_round(top - bottom).clamp(0.0, 65535.0) as u16;
+            *b = clamp_i16(ot_round(top - y_max));
         }
     }
     Ok(())

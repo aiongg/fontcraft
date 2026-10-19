@@ -71,9 +71,7 @@ pub(super) fn plan(
                 None => push(&mut plan, &mut by_name, &mut counters, font, gid, name)?,
                 Some(existing) => {
                     let earlier = plan.slots.get(existing).map(|s| (s.font, s.gid)).unwrap_or_default();
-                    if earlier == (font, gid) {
-                        existing
-                    } else if duplicates != Duplicates::Rename && same(earlier, (font, gid)) {
+                    if earlier == (font, gid) || (duplicates != Duplicates::Rename && same(earlier, (font, gid))) {
                         existing
                     } else {
                         match duplicates {
@@ -196,7 +194,7 @@ mod tests {
         assert_eq!(p.maps[0], [None, Some(1), None]);
         assert_eq!(p.maps[1], [Some(0), Some(2)]);
 
-        let no_notdef = vec![vec![("A".to_string(), "A".to_string())]];
+        let no_notdef = vec![vec![("A".to_string(), "A".to_string())], vec![("Alt".to_string(), "a".to_string())]];
         assert!(plan(&n, &no_notdef, Duplicates::First, &|_, _| false).is_err());
     }
 

@@ -1146,13 +1146,8 @@ impl Layout<'_> {
     /// fontTools' `setPos` stores them.
     fn length(&mut self, section: &Section, pos: usize, strings: &mut Option<&mut Strings>) -> Result<usize> {
         Ok(match section {
-            Section::Header => {
-                if self.cff2 {
-                    5
-                } else {
-                    4
-                }
-            }
+            // Major, minor and header size; HeaderTail holds the rest.
+            Section::Header => 3,
             Section::HeaderTail => {
                 if self.cff2 {
                     2

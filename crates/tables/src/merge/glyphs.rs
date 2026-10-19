@@ -92,6 +92,9 @@ fn metrics(font: &SfntFont, hea: [u8; 4], mtx: [u8; 4], n: usize) -> Result<Opti
     Ok(Some(out))
 }
 
+/// (advance, side bearing) of every glyph.
+pub(super) type Metrics = Vec<(u16, i16)>;
+
 /// The glyph tables of the result.
 pub(super) struct Built {
     pub count: usize,
@@ -100,9 +103,9 @@ pub(super) struct Built {
     /// `head.indexToLocFormat`: 1 for long offsets.
     pub long_loca: bool,
     pub hmtx: Vec<u8>,
-    pub h_metrics: Vec<(u16, i16)>,
+    pub h_metrics: Metrics,
     /// `vmtx` and its metrics, when every font has vertical metrics.
-    pub vertical: Option<(Vec<u8>, Vec<(u16, i16)>)>,
+    pub vertical: Option<(Vec<u8>, Metrics)>,
     /// (xMin, yMin, xMax, yMax) of every glyph with outlines.
     pub bounds: Vec<Option<[i16; 4]>>,
 }
@@ -127,7 +130,7 @@ pub(super) fn build(sources: &[Source<'_>], plan: &Plan, warnings: &mut Vec<Stri
         bounds.push(glyph_bounds(&data)?);
         offsets.push(glyf.len());
         glyf.extend_from_slice(&data);
-        while glyf.len() % 4 != 0 {
+        while !glyf.len().is_multiple_of(4) {
             glyf.push(0);
         }
         h_metrics.push(source.metric(slot.gid));

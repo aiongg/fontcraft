@@ -124,8 +124,10 @@ fn font_item(path: &str) -> Map<String, Value> {
     item
 }
 
+type Split = (Vec<Map<String, Value>>, Vec<String>);
+
 /// The FONT arguments with the per-font options attached, and every other argument.
-fn split(args: &[String]) -> Result<(Vec<Map<String, Value>>, Vec<String>), Failure> {
+fn split(args: &[String]) -> Result<Split, Failure> {
     let mut fonts: Vec<Map<String, Value>> = Vec::new();
     let mut rest: Vec<String> = Vec::new();
     let mut it = args.iter();
