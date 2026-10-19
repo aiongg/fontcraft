@@ -1,7 +1,8 @@
 //! The Space Center: each token of its text, matrix entry with an expression (and that it gives
 //! the font its command gives), the arrow and drag steps, the cut-off band and preferred suffix
 //! in a headless frame, refusals that change nothing, and a 200-glyph text within a frame's
-//! budget.
+//! budget. Then the sample strings, the waterfall, the display options (direction, centring,
+//! upside down, beam, stroke, overlays, guides, zones, line space, tracking) and their refusals.
 
 use std::sync::Arc;
 
@@ -287,7 +288,7 @@ fn space_center_refusals_change_nothing() {
     let before = app.state.panels.space_center.clone();
     refused(&mut app, "window.spaceCenter", json!({"text": "nonono", "select": 9}));
     refused(&mut app, "window.spaceCenter", json!({"size": 2}));
-    refused(&mut app, "window.spaceCenter", json!({"lineMode": "waterfall"}));
+    refused(&mut app, "window.spaceCenter", json!({"lineMode": "zigzag"}));
     refused(&mut app, "window.spaceCenter", json!({"text": "n".repeat(sc::MAX_TEXT_CHARS + 1)}));
     refused(&mut app, "view.setSpacingCutOff", json!({"bottom": 500, "top": 100}));
     refused(&mut app, "view.setPreferredSuffix", json!({"suffix": "a b"}));
@@ -314,6 +315,231 @@ fn space_center_frame_with_200_glyphs_is_within_budget() {
         best = best.min(start.elapsed());
     }
     println!("a Space Center frame with 200 glyphs: {best:?}");
+    if !cfg!(debug_assertions) {
+        assert!(best.as_millis() < 16, "a 200-glyph frame took {best:?}");
+    }
+}
+
+fn settings_samples(app: &mut FontcraftApp) {
+    use crate::dialogs::sample_strings::Group;
+    use fontcraft_engine::settings::Reserved;
+    let groups = vec![
+        Group { name: "Spacing".into(), strings: vec!["nn/Placeholder no".into()] },
+        Group { name: "Lines".into(), strings: vec!["/a.sc /H\\nnn".into(), "/Placeholder.alt n".into()] },
+    ];
+    app.session.settings_mut().set_reserved(Reserved::SampleStrings, &groups).unwrap();
+}
+
+#[test]
+fn space_center_sample_strings_menu_puts_a_stored_string_into_the_text() {
+    let mut app = sc_app();
+    settings_samples(&mut app);
+    app.state.selected_glyphs = vec!["a".into()];
+    // The placeholder is the glyph being edited; other names stay as they are.
+    let r = exec(&mut app, "window.spaceCenter", json!({"sample": 0}));
+    assert_eq!(r["text"], "nn/? no");
+    assert_eq!(r["glyphs"], json!(["n", "n", "a", "n", "o"]));
+    // Strings are counted over all groups in order; `\n` is a new line.
+    let r = exec(&mut app, "window.spaceCenter", json!({"sample": 1}));
+    assert_eq!(r["glyphs"], json!(["a.sc", "H", "n", "n"]));
+    let w = Window::new();
+    assert_eq!(w.drawn(&mut app).lines, 2);
+    assert_eq!(sc::sample_text("/Placeholder.alt n/Placeholder"), "/Placeholder.alt n/?", "only the whole name is the placeholder");
+
+    let before = app.state.panels.space_center.clone();
+    refused(&mut app, "window.spaceCenter", json!({"sample": 3}));
+    refused(&mut app, "window.spaceCenter", json!({"sample": 0, "text": "n"}));
+    refused(&mut app, "window.spaceCenter", json!({"sample": -1}));
+    assert_eq!(app.state.panels.space_center, before);
+}
+
+#[test]
+fn space_center_waterfall_draws_the_line_at_each_size() {
+    let mut app = sc_app();
+    let w = Window::new();
+    let r = exec(&mut app, "window.spaceCenter", json!({"text": "na\\no", "lineMode": "waterfall", "size": 24}));
+    assert_eq!(r["lineMode"], "waterfall");
+    assert_eq!(r["count"], 3);
+    let d = w.drawn(&mut app);
+    let sizes = sc::waterfall_sizes(24.0);
+    assert_eq!(sizes, [9.0, 10.0, 12.0, 14.0, 18.0, 24.0]);
+    assert_eq!(d.lines, 1, "a waterfall is one line");
+    assert_eq!(d.rows.len(), sizes.len());
+    let upm = f64::from(app.session.font().unwrap().units_per_em);
+    for ((scale, _), size) in d.rows.iter().zip(&sizes) {
+        assert!((f64::from(*scale) - size / upm).abs() < 1e-6, "{scale} for {size} pt");
+    }
+    assert!(d.rows.windows(2).all(|p| p[1].1 > p[0].1), "each size below the one before: {:?}", d.rows);
+    assert_eq!(names(&d), ["n", "a", "o"].repeat(sizes.len()));
+    assert_eq!(d.columns, ["n", "a", "o"], "the matrix keeps one column per glyph");
+    assert_eq!(sc::waterfall_sizes(9.0), [9.0]);
+}
+
+/// The x of each glyph drawn, in text order.
+fn xs(d: &Drawn) -> Vec<f32> {
+    d.glyphs.iter().map(|(_, p)| p.x).collect()
+}
+
+#[test]
+fn space_center_display_lays_out_right_to_left_centred_and_upside_down() {
+    let mut app = sc_app();
+    let w = Window::new();
+    exec(&mut app, "window.spaceCenter", json!({"text": "nao"}));
+    let ltr = w.drawn(&mut app);
+    let x = xs(&ltr);
+    assert!(x[0] < x[1] && x[1] < x[2], "{x:?}");
+
+    let r = exec(&mut app, "view.setSpaceCenterDisplay", json!({"rightToLeft": true}));
+    assert_eq!(r["rightToLeft"], true);
+    assert_eq!(r["fill"], true, "options left out keep their value");
+    let rtl = w.drawn(&mut app);
+    let x = xs(&rtl);
+    assert!(x[0] > x[1] && x[1] > x[2], "the first glyph is on the right: {x:?}");
+    assert!(x[2] > xs(&ltr)[2], "a right-to-left line starts from the right edge");
+
+    // Centred, the right-to-left text is the left-to-right text of its glyphs in reverse.
+    exec(&mut app, "view.setSpaceCenterDisplay", json!({"centered": true}));
+    let mut centred_rtl = xs(&w.drawn(&mut app));
+    exec(&mut app, "view.setSpaceCenterDisplay", json!({"rightToLeft": false}));
+    exec(&mut app, "window.spaceCenter", json!({"text": "oan"}));
+    let centred_ltr = xs(&w.drawn(&mut app));
+    centred_rtl.reverse();
+    for (a, b) in centred_rtl.iter().zip(&centred_ltr) {
+        assert!((a - b).abs() < 0.5, "{centred_rtl:?} {centred_ltr:?}");
+    }
+    assert!(centred_ltr[0] > xs(&ltr)[0], "centring moves a short line right");
+
+    // Upside down: the line is turned half a circle, so the first glyph is on the right and the
+    // baseline moves.
+    exec(&mut app, "view.setSpaceCenterDisplay", json!({"centered": false, "upsideDown": true}));
+    exec(&mut app, "window.spaceCenter", json!({"text": "nao"}));
+    let turned = w.drawn(&mut app);
+    let x = xs(&turned);
+    assert!(x[0] > x[1] && x[1] > x[2], "{x:?}");
+    assert_ne!(turned.baseline, ltr.baseline);
+    assert_eq!(names(&turned), ["n", "a", "o"]);
+}
+
+#[test]
+fn space_center_display_beam_shows_the_margins_on_it() {
+    let mut app = sc_app();
+    let w = Window::new();
+    exec(&mut app, "window.spaceCenter", json!({"text": "na"}));
+    let m = master(&app);
+    let font = app.session.font().unwrap();
+    let half = sc::x_height(font, &m) / 2.0;
+    let r = exec(&mut app, "view.setSpaceCenterDisplay", json!({"beam": true}));
+    assert_eq!(r["beamY"], json!(half), "half the x-height until a height is set");
+
+    let r = exec(&mut app, "view.setSpaceCenterDisplay", json!({"beamY": 250}));
+    assert_eq!((r["beam"].clone(), r["beamY"].clone()), (json!(true), json!(250.0)));
+    assert!(!app.state.panels.edit_aids.beam, "Edit View's beam stays off; only the height is shared");
+    let doc = app.session.active().unwrap().id;
+    assert_eq!(app.state.panels.edit_aids.beam_heights.get(&doc), Some(&250.0));
+    let d = w.drawn(&mut app);
+    let base = d.baseline.unwrap();
+    assert!((d.beam.unwrap() - (base - 250.0 * d.scale)).abs() < 0.5);
+    let labels: Vec<(&str, f64, f64)> = d.beam_labels.iter().map(|(n, l, r)| (&**n, *l, *r)).collect();
+    assert_eq!(
+        labels,
+        [("n", value(&app, "n", Row::Left), value(&app, "n", Row::Right)), ("a", value(&app, "a", Row::Left), value(&app, "a", Row::Right))]
+    );
+
+    // Above the outlines the beam meets nothing.
+    exec(&mut app, "view.setSpaceCenterDisplay", json!({"beamY": 900}));
+    assert!(w.drawn(&mut app).beam_labels.is_empty());
+    exec(&mut app, "view.setSpaceCenterDisplay", json!({"beam": false}));
+    assert_eq!(w.drawn(&mut app).beam, None);
+}
+
+#[test]
+fn space_center_display_draws_strokes_overlays_guides_and_zones() {
+    let mut app = sc_app();
+    app.session
+        .edit("guides and zones", |font| {
+            let master = Arc::make_mut(&mut font.masters).first_mut().unwrap();
+            master.guides.push(fontcraft_model::Guide { y: 300.0, ..Default::default() });
+            master.zones.push(fontcraft_model::AlignmentZone { pos: 500.0, size: 12.0 });
+            Ok(())
+        })
+        .unwrap();
+    let w = Window::new();
+    exec(&mut app, "window.spaceCenter", json!({"text": "nan"}));
+    let plain = w.drawn(&mut app);
+    assert!(plain.filled);
+    assert_eq!((plain.strokes, plain.overlays, plain.guides, plain.zones), (0, 0, 0, 0));
+    assert_eq!(plain.ground, Some(app.tokens.canvas));
+
+    let r = exec(
+        &mut app,
+        "view.setSpaceCenterDisplay",
+        json!({"fill": false, "stroke": true, "layers": ["Bold", "Bold"], "guides": true, "zones": true, "inverse": true}),
+    );
+    assert_eq!(r["layers"], json!(["Bold"]), "a layer named twice is drawn once");
+    let d = w.drawn(&mut app);
+    assert!(!d.filled);
+    assert_eq!(d.strokes, 3, "one contour per glyph");
+    assert_eq!(d.overlays, 3, "each glyph's Bold layer over it");
+    assert_eq!(d.guides, 3, "the master's guide across each glyph");
+    assert!(d.zones >= 1, "the master's zone");
+    assert_eq!(d.ground, Some(app.tokens.glyph_fill), "inverse: the glyph colour behind");
+}
+
+#[test]
+fn space_center_display_line_space_and_tracking_move_the_glyphs() {
+    let mut app = sc_app();
+    let w = Window::new();
+    exec(&mut app, "window.spaceCenter", json!({"text": "nn\\nn"}));
+    let d = w.drawn(&mut app);
+    let gap = d.rows[1].1 - d.rows[0].1;
+    let x = xs(&d);
+
+    exec(&mut app, "view.setSpaceCenterDisplay", json!({"lineSpace": 2, "tracking": 100}));
+    let spaced = w.drawn(&mut app);
+    assert!(((spaced.rows[1].1 - spaced.rows[0].1) - 2.0 * gap).abs() < 0.5, "{:?} {gap}", spaced.rows);
+    let tracked = xs(&spaced);
+    assert!(((tracked[1] - tracked[0]) - (x[1] - x[0] + 100.0 * d.scale)).abs() < 0.01, "{tracked:?} {x:?}");
+    assert!((tracked[2] - x[2]).abs() < 0.01, "a line's first glyph stays");
+}
+
+#[test]
+fn space_center_display_refusals_change_nothing() {
+    let mut app = sc_app();
+    exec(&mut app, "window.spaceCenter", json!({"text": "nan"}));
+    let before = app.state.panels.space_center.clone();
+    let heights = app.state.panels.edit_aids.beam_heights.clone();
+    refused(&mut app, "view.setSpaceCenterDisplay", json!({"lineSpace": 9, "beamY": 100}));
+    refused(&mut app, "view.setSpaceCenterDisplay", json!({"tracking": 5000}));
+    refused(&mut app, "view.setSpaceCenterDisplay", json!({"layers": [""]}));
+    refused(&mut app, "view.setSpaceCenterDisplay", json!({"layers": ["a", "b", "c", "d", "e", "f", "g", "h", "i"]}));
+    refused(&mut app, "view.setSpaceCenterDisplay", json!({"beam": "yes"}));
+    refused(&mut app, "view.setSpaceCenterDisplay", json!({"beamY": 1e9}));
+    assert_eq!(app.state.panels.space_center, before);
+    assert_eq!(app.state.panels.edit_aids.beam_heights, heights);
+}
+
+#[test]
+fn space_center_frame_with_every_display_option_is_within_budget() {
+    let mut app = sc_app();
+    let w = Window::new();
+    let text = "nonae".repeat(40);
+    exec(&mut app, "window.spaceCenter", json!({"text": text}));
+    exec(
+        &mut app,
+        "view.setSpaceCenterDisplay",
+        json!({"rightToLeft": true, "centered": true, "beam": true, "beamY": 250, "stroke": true, "layers": ["Bold"], "guides": true, "zones": true, "tracking": 10}),
+    );
+    exec(&mut app, "view.setSpacingCutOff", json!({"on": true}));
+    assert_eq!(w.drawn(&mut app).columns.len(), 200);
+    let mut best = std::time::Duration::MAX;
+    for k in 0..3 {
+        let shifted: String = text.chars().cycle().skip(k + 1).take(200).collect();
+        exec(&mut app, "window.spaceCenter", json!({"text": shifted}));
+        let start = std::time::Instant::now();
+        w.frame(&mut app);
+        best = best.min(start.elapsed());
+    }
+    println!("a Space Center frame with 200 glyphs and every display option: {best:?}");
     if !cfg!(debug_assertions) {
         assert!(best.as_millis() < 16, "a 200-glyph frame took {best:?}");
     }

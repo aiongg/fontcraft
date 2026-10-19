@@ -17,6 +17,11 @@
 //! suffix where the font has one. The matrix has one column per glyph of the text (control
 //! glyphs have none) and rows for the width and the left and right margins of the drawn layer.
 //!
+//! A stored sample string (`window.spaceCenter {sample}`) is read with the same tokens; its
+//! `/Placeholder` becomes `/?`. The display options (`view.setSpaceCenterDisplay`) set the
+//! direction, centring and turning of the preview and what is drawn over the glyphs; the metrics
+//! beam takes its height from `view.showMetricsBeam`, which Edit View shares.
+//!
 //! The font changes only through engine commands: the matrix and the keys run
 //! `spacing.setWidth`, `spacing.setLeftSidebearing`, `spacing.setRightSidebearing`,
 //! `spacing.increaseLeftSidebearing`, `spacing.increaseRightSidebearing` and
@@ -49,6 +54,14 @@ pub const DEFAULT_SIZE: f64 = 72.0;
 pub const DEFAULT_TEXT: &str = "hamburgefontsiv";
 /// Longest text typed into a matrix cell, in characters.
 pub const MAX_CELL_CHARS: usize = 64;
+/// Most overlay layers drawn over the text.
+pub const MAX_OVERLAY_LAYERS: usize = 8;
+/// Allowed line spacing, as a multiple of the master's line height.
+pub const LINE_SPACE_RANGE: RangeInclusive<f64> = 0.5..=4.0;
+/// Allowed tracking, in font units between neighbouring glyphs.
+pub const TRACKING_RANGE: RangeInclusive<f64> = -1_000.0..=1_000.0;
+/// The sizes of a waterfall below the window's size, in points; the window's size ends it.
+pub const WATERFALL_SIZES: [f64; 10] = [9.0, 10.0, 12.0, 14.0, 18.0, 24.0, 36.0, 48.0, 72.0, 96.0];
 /// Glyph names listed in a reply.
 const MAX_LISTED: usize = 1_000;
 /// Characters of untrusted text quoted in a message.
@@ -60,7 +73,7 @@ pub const COMMANDS: &[UiCommand] = &[
         "Space Center",
         &["Window"],
         "",
-        "{open?: bool (default true), text?: string, before?: string, after?: string, size?: points (4 to 1000), lineMode?: \"multi\"|\"single\", select?: column index|null} show or hide the Space Center and set its text, its control glyphs (placed before and after every glyph of the text), its size, multi-line or single-line display and the selected glyph. Texts take characters, /name, /name@layer, /? (the glyph being edited), /! (the Font View selection), /:group (the members of a kerning group) and \\n (a new line); at most 10000 characters each → {open, text, before, after, size, lineMode, master, glyphs: [names of the text's glyphs, one per matrix column], count, selected, cutOff: {on, bottom, top}, suffix, message}",
+        "{open?: bool (default true), text?: string, sample?: index, before?: string, after?: string, size?: points (4 to 1000), lineMode?: \"multi\"|\"single\"|\"waterfall\", select?: column index|null} show or hide the Space Center and set its text, its control glyphs (placed before and after every glyph of the text), its size, the display (several lines wrapped at the window's width, one line, or a waterfall: one line at a series of sizes up to the window's size) and the selected glyph. Texts take characters, /name, /name@layer, /? (the glyph being edited), /! (the Font View selection), /:group (the members of a kerning group) and \\n (a new line); at most 10000 characters each. `sample` puts in the stored sample string with that index, counted over all groups in order as edit.selectSampleText lists them, its /Placeholder read as /? → {open, text, before, after, size, lineMode, master, glyphs: [names of the text's glyphs, one per matrix column], count, selected, cutOff: {on, bottom, top}, suffix, display, message}",
     ),
     (
         "view.setSpacingCutOff",
@@ -76,27 +89,128 @@ pub const COMMANDS: &[UiCommand] = &[
         "",
         "{suffix?: string (absent or empty: none)} show, for every glyph of the Space Center's text, its variant named with this suffix (`sc` or `.sc` both mean `.sc`) when the font has one → {suffix, replaced: number of glyphs shown as their variant}",
     ),
+    (
+        "view.setSpaceCenterDisplay",
+        "Space Center Display Options",
+        &[],
+        "",
+        "{rightToLeft?: bool, centered?: bool, upsideDown?: bool, metrics?: bool, beam?: bool, beamY?: units, fill?: bool, stroke?: bool, inverse?: bool, guides?: bool, zones?: bool, layers?: [layer or master names] (at most 8), lineSpace?: 0.5 to 4, tracking?: units (-1000 to 1000)} set how the Space Center draws its text; options left out keep their value. rightToLeft lays the text out right to left from the right edge with the right-to-left kerning, centered centres every line, upsideDown turns the whole preview half a circle; metrics draws the glyphs' edges, beam a line at height beamY (shared with view.showMetricsBeam; by default half the x-height) with the margins measured where it meets each outline, fill and stroke the outlines filled and outlined, inverse light glyphs on a dark ground, guides the master's and the glyphs' guides, zones the master's alignment zones, layers the outlines of those layers (by layer name or id, else the master of that name) over each glyph; lineSpace multiplies the line height and tracking adds space between glyphs. Giving beamY without beam also shows the beam → {rightToLeft, centered, upsideDown, metrics, beam, beamY, fill, stroke, inverse, guides, zones, layers, lineSpace, tracking}",
+    ),
 ];
 
-/// Multi-line text that wraps at the window's width, or one line.
+/// Multi-line text that wraps at the window's width, one line, or one line at a series of sizes.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum LineMode {
     #[default]
     Multi,
     Single,
+    Waterfall,
 }
 
 impl LineMode {
+    pub const ALL: [LineMode; 3] = [LineMode::Multi, LineMode::Single, LineMode::Waterfall];
+
     pub fn name(self) -> &'static str {
         match self {
             LineMode::Multi => "multi",
             LineMode::Single => "single",
+            LineMode::Waterfall => "waterfall",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            LineMode::Multi => "Lines",
+            LineMode::Single => "One Line",
+            LineMode::Waterfall => "Waterfall",
         }
     }
 
     fn from_name(name: &str) -> Option<LineMode> {
-        [LineMode::Multi, LineMode::Single].into_iter().find(|m| m.name() == name)
+        LineMode::ALL.into_iter().find(|m| m.name() == name)
+    }
+}
+
+/// The sizes of a waterfall ending at `size`, in points, smallest first.
+pub fn waterfall_sizes(size: f64) -> Vec<f64> {
+    WATERFALL_SIZES.iter().copied().filter(|s| *s < size).chain(std::iter::once(size)).collect()
+}
+
+/// How the preview is drawn: `view.setSpaceCenterDisplay`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct Display {
+    pub right_to_left: bool,
+    pub centered: bool,
+    pub upside_down: bool,
+    pub metrics: bool,
+    pub beam: bool,
+    pub fill: bool,
+    pub stroke: bool,
+    pub inverse: bool,
+    pub guides: bool,
+    pub zones: bool,
+    /// Layers drawn as outlines over each glyph, as typed (a layer name or id, or a master name).
+    pub layers: Vec<String>,
+    pub line_space: f64,
+    pub tracking: f64,
+}
+
+impl Default for Display {
+    fn default() -> Self {
+        Display {
+            right_to_left: false,
+            centered: false,
+            upside_down: false,
+            metrics: true,
+            beam: false,
+            fill: true,
+            stroke: false,
+            inverse: false,
+            guides: false,
+            zones: false,
+            layers: Vec::new(),
+            line_space: 1.0,
+            tracking: 0.0,
+        }
+    }
+}
+
+/// The parameters of `view.setSpaceCenterDisplay` that switch something on or off.
+pub const DISPLAY_FLAGS: [&str; 10] = ["rightToLeft", "centered", "upsideDown", "metrics", "beam", "fill", "stroke", "inverse", "guides", "zones"];
+
+impl Display {
+    /// The switch named by one of [`DISPLAY_FLAGS`].
+    pub fn flag_mut(&mut self, key: &str) -> Option<&mut bool> {
+        Some(match key {
+            "rightToLeft" => &mut self.right_to_left,
+            "centered" => &mut self.centered,
+            "upsideDown" => &mut self.upside_down,
+            "metrics" => &mut self.metrics,
+            "beam" => &mut self.beam,
+            "fill" => &mut self.fill,
+            "stroke" => &mut self.stroke,
+            "inverse" => &mut self.inverse,
+            "guides" => &mut self.guides,
+            "zones" => &mut self.zones,
+            _ => return None,
+        })
+    }
+
+    /// The line spacing, within [`LINE_SPACE_RANGE`] (stored state is not trusted).
+    pub fn line_space(&self) -> f64 {
+        if LINE_SPACE_RANGE.contains(&self.line_space) { self.line_space } else { 1.0 }
+    }
+
+    /// The tracking, within [`TRACKING_RANGE`].
+    pub fn tracking(&self) -> f64 {
+        if TRACKING_RANGE.contains(&self.tracking) { self.tracking } else { 0.0 }
+    }
+
+    /// The overlay layers, at most [`MAX_OVERLAY_LAYERS`].
+    pub fn overlay_layers(&self) -> &[String] {
+        self.layers.get(..MAX_OVERLAY_LAYERS).unwrap_or(&self.layers)
     }
 }
 
@@ -180,6 +294,7 @@ pub struct SpaceCenterState {
     pub line_mode: LineMode,
     pub cut_off: CutOff,
     pub suffix: Option<String>,
+    pub display: Display,
     /// The selected glyph, as a matrix column.
     pub selected: Option<usize>,
     /// The window has the keyboard (a press inside it gives it, a press elsewhere takes it).
@@ -202,6 +317,7 @@ impl Default for SpaceCenterState {
             line_mode: LineMode::Multi,
             cut_off: CutOff::default(),
             suffix: None,
+            display: Display::default(),
             selected: None,
             keyboard: false,
             editing: None,
@@ -342,6 +458,22 @@ pub fn tokens(font: &Font, map: &Charmap, text: &str, cx: &Context<'_>, limit: u
     if full {
         problems.push(format!("the text is cut at {limit} glyphs"));
     }
+    out
+}
+
+/// A stored sample string as Space Center text: its `/Placeholder` tokens become `/?`; the rest
+/// (`/name`, `\n`) reads the same in both.
+pub fn sample_text(sample: &str) -> String {
+    let token = format!("/{}", fontcraft_textlayout::PLACEHOLDER);
+    let mut out = String::with_capacity(sample.len());
+    let mut rest = sample;
+    while let Some((head, tail)) = rest.split_once(token.as_str()) {
+        out.push_str(head);
+        // `/Placeholder.alt` names another glyph; only the whole name is the placeholder.
+        out.push_str(if tail.chars().next().is_none_or(ends_name) { "/?" } else { token.as_str() });
+        rest = tail;
+    }
+    out.push_str(rest);
     out
 }
 
@@ -608,14 +740,33 @@ pub fn drag_commands(drag: Drag, glyph: &str, layers: &[String], dx: f64) -> Vec
     layers.iter().map(|layer| (id, json!({"glyphs": [glyph], "layer": layer, "amount": amount}))).collect()
 }
 
+/// The x-height of `master`; half the em when it has none.
+pub fn x_height(font: &Font, master: &str) -> f64 {
+    let upm = f64::from(font.units_per_em);
+    let x = font.masters.iter().find(|m| m.id == master).map_or(upm * 0.5, |m| font.metric_pos(m, metric::X_HEIGHT, upm * 0.5));
+    if x.is_finite() { x } else { upm * 0.5 }
+}
+
 /// The cut-off band's bottom and top in `master`: the heights set, else the baseline and the
 /// master's x-height.
 pub fn band(font: &Font, master: &str, cut: &CutOff) -> (f64, f64) {
-    let upm = f64::from(font.units_per_em);
-    let x_height = font.masters.iter().find(|m| m.id == master).map_or(upm * 0.5, |m| font.metric_pos(m, metric::X_HEIGHT, upm * 0.5));
     let bottom = cut.bottom.unwrap_or(0.0);
-    let top = cut.top.unwrap_or(if x_height.is_finite() { x_height } else { upm * 0.5 });
+    let top = cut.top.unwrap_or_else(|| x_height(font, master));
     (bottom.min(top), bottom.max(top))
+}
+
+/// The metrics beam's height for document `doc` in `master`: the height `view.showMetricsBeam`
+/// keeps for the document, else half the master's x-height, as in Edit View.
+pub fn beam_height(app: &FontcraftApp, font: &Font, doc: u64, master: &str) -> f64 {
+    app.state.panels.edit_aids.beam_heights.get(&doc).copied().filter(|y| y.is_finite()).unwrap_or_else(|| x_height(font, master) / 2.0)
+}
+
+/// The beam height of the document and master shown.
+fn shown_beam(app: &FontcraftApp) -> Option<f64> {
+    let font = app.session.font().ok()?;
+    let doc = app.session.active()?.id;
+    let master = shown_master(app)?;
+    Some(beam_height(app, font, doc, &master))
 }
 
 // ── Commands ──────────────────────────────────────────────────────────────────────────────────
@@ -676,8 +827,22 @@ pub fn run(app: &mut FontcraftApp, id: &str, args: &Args) -> Result<Value, Strin
             }
             let mode = match args.string("lineMode")? {
                 None => None,
-                Some(name) => Some(LineMode::from_name(name).ok_or_else(|| args.err("`lineMode` must be multi or single"))?),
+                Some(name) => Some(LineMode::from_name(name).ok_or_else(|| args.err("`lineMode` must be multi, single or waterfall"))?),
             };
+            let sample = match args.index("sample")? {
+                None => None,
+                Some(_) if text.is_some() => return Err(args.err("give `text` or `sample`, not both")),
+                Some(i) => {
+                    let groups = crate::dialogs::sample_strings::groups(&app.session);
+                    let all: Vec<&String> = groups.iter().flat_map(|g| g.strings.iter()).collect();
+                    let s = usize::try_from(i)
+                        .ok()
+                        .and_then(|i| all.get(i))
+                        .ok_or_else(|| args.err(format!("there are {} sample strings, no string {i}", all.len())))?;
+                    Some(sample_text(s).chars().take(MAX_TEXT_CHARS).collect::<String>())
+                }
+            };
+            let text = text.or(sample);
             let mut next = app.state.panels.space_center.clone();
             next.open = open;
             next.keyboard = open;
@@ -755,8 +920,67 @@ pub fn run(app: &mut FontcraftApp, id: &str, args: &Args) -> Result<Value, Strin
             let replaced = resolved(app).map_or(0, |(_, r)| r.replaced);
             Ok(json!({"suffix": app.state.panels.space_center.suffix, "replaced": replaced}))
         }
+        "view.setSpaceCenterDisplay" => set_display(app, args),
         _ => Err(args.err("unknown command")),
     }
+}
+
+fn set_display(app: &mut FontcraftApp, args: &Args) -> Result<Value, String> {
+    // Every parameter is checked before anything changes.
+    let mut next = app.state.panels.space_center.display.clone();
+    for key in DISPLAY_FLAGS {
+        if let (Some(on), Some(slot)) = (args.flag(key)?, next.flag_mut(key)) {
+            *slot = on;
+        }
+    }
+    if let Some(names) = args.strings("layers", MAX_OVERLAY_LAYERS)? {
+        let mut layers: Vec<String> = Vec::new();
+        for name in names {
+            let name = name.trim().to_string();
+            if name.is_empty() || name.len() > MAX_NAME_LEN {
+                return Err(args.err(format!("a layer name in `layers` has 1 to {MAX_NAME_LEN} bytes")));
+            }
+            if !layers.contains(&name) {
+                layers.push(name);
+            }
+        }
+        next.layers = layers;
+    }
+    if let Some(v) = args.number("lineSpace")? {
+        if !LINE_SPACE_RANGE.contains(&v) {
+            return Err(args.err(format!("`lineSpace` lies between {} and {}", LINE_SPACE_RANGE.start(), LINE_SPACE_RANGE.end())));
+        }
+        next.line_space = v;
+    }
+    if let Some(v) = args.number("tracking")? {
+        if !TRACKING_RANGE.contains(&v) {
+            return Err(args.err(format!("`tracking` lies between {} and {} units", TRACKING_RANGE.start(), TRACKING_RANGE.end())));
+        }
+        next.tracking = v;
+    }
+    let beam_y = height_arg(args, "beamY")?;
+    if let Some(y) = beam_y {
+        if app.session.active().is_none() {
+            return Err(args.err("no font is open"));
+        }
+        if args.flag("beam")?.is_none() {
+            next.beam = true;
+        }
+        // The height is the one Edit View's beam keeps; its own beam stays on or off.
+        let keep = json!({"on": app.state.panels.edit_aids.beam, "y": y});
+        let beam_args = Args::new("view.showMetricsBeam", &keep)?;
+        super::edit_aids::run(app, "view.showMetricsBeam", &beam_args)?;
+    }
+    app.state.panels.space_center.display = next;
+    Ok(display_json(app))
+}
+
+fn display_json(app: &FontcraftApp) -> Value {
+    let mut out = serde_json::to_value(&app.state.panels.space_center.display).unwrap_or_else(|_| json!({}));
+    if let Some(map) = out.as_object_mut() {
+        map.insert("beamY".into(), shown_beam(app).map_or(Value::Null, |y| json!(y)));
+    }
+    out
 }
 
 fn cut_off_json(app: &FontcraftApp) -> Value {
@@ -788,6 +1012,7 @@ fn summary(app: &FontcraftApp) -> Value {
         "selected": sc.selected,
         "cutOff": cut_off_json(app),
         "suffix": sc.suffix,
+        "display": display_json(app),
         "message": r.message,
     })
 }
