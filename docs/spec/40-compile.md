@@ -735,6 +735,18 @@ charstrings (`crates/compile/src/cff_hints.rs`), so a hinted glyph's charstring 
 fontmake's in its stem operators and masks while its outline stays the same; the oracle's
 outline comparison does not see the difference.
 
+**CID-keyed CFF against makeotf.** A CID-keyed source builds a CID-keyed table in any CFF
+export, not only in a project compile (`compile.cidKeyedFonts`). Against makeotf 5.0.1 on the
+same synthetic CID-keyed UFO and CMaps the CID data, sub-fonts, Private values, glyph order and
+`cmap` subtables agree. The differences:
+
+| What | makeotf | FontCraft |
+|---|---|---|
+| charstring coordinates | fractions kept | rounded, as every FontCraft CFF (`compile.cffRoundTolerance`) |
+| `defaultWidthX`, `nominalWidthX` | its own choice per sub-font | fontTools' method per sub-font |
+| no Unicode CMap given | stops | encodes the source's own code points |
+| two-byte Macintosh CMap | a Macintosh subtable (not yet observed) | no Macintosh subtable, with a warning |
+
 ## 4b. FontDame conversion against mtiLib
 
 `features convert` writes FontDame layout text as feature code (`crates/tables/src/fontdame.rs`).

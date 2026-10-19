@@ -45,7 +45,7 @@ pub const ROUND_TOLERANCE: f64 = 0.5;
 /// written out, not `2.0 / 3.0`, so the arithmetic is the reference's to the last bit.
 const TWO_THIRDS: f64 = 0.666_666_666_666_666_7;
 
-fn table_error(e: cff::Error) -> CompileError {
+pub(crate) fn table_error(e: cff::Error) -> CompileError {
     CompileError::Table { table: "CFF ", message: e.to_string() }
 }
 
@@ -110,7 +110,7 @@ pub(crate) fn build(
 
 /// The hint settings of the master or instance `font` was resolved at, or `None` with a warning
 /// when its hinting parameters cannot be read.
-fn hint_settings(source: &Font, font: &Resolved, warnings: &mut Vec<String>) -> Option<HintSettings> {
+pub(crate) fn hint_settings(source: &Font, font: &Resolved, warnings: &mut Vec<String>) -> Option<HintSettings> {
     let read = match font.instance.filter(|i| source.instances.get(*i).is_some()) {
         Some(i) => HintSettings::for_instance(source, i, &font.master),
         None => HintSettings::for_master(source, &font.master),
@@ -130,7 +130,7 @@ fn hint_settings(source: &Font, font: &Resolved, warnings: &mut Vec<String>) -> 
 /// The font name: name ID 6, or, when the `name` table has none, the typographic family and
 /// subfamily joined by a hyphen and reduced to what a PostScript name may hold (ufo2ft's
 /// `postscriptFontNameFallback`).
-fn font_name(info: &Info, warnings: &mut Vec<String>) -> String {
+pub(crate) fn font_name(info: &Info, warnings: &mut Vec<String>) -> String {
     match info.name(6).filter(|n| !n.is_empty()) {
         Some(n) => latin1(&n, "the PostScript name", warnings),
         None => {
@@ -245,7 +245,7 @@ fn notice(s: Option<&str>) -> String {
     s.map(|s| postscript_string(&s.replace('\u{a9}', "Copyright"))).unwrap_or_default()
 }
 
-fn top_dict(font: &Resolved, info: &Info, warnings: &mut Vec<String>) -> TopDict {
+pub(crate) fn top_dict(font: &Resolved, info: &Info, warnings: &mut Vec<String>) -> TopDict {
     let (family, subfamily) = typographic_names(info);
     // A static instance also reads the plural key, as the handbook describes it.
     let full = text(font, "postscriptFullName", &["postscriptFullName"])
@@ -275,12 +275,12 @@ fn top_dict(font: &Resolved, info: &Info, warnings: &mut Vec<String>) -> TopDict
 const MAX_LIST: usize = 96;
 
 /// A list of finite numbers; a value that is not one is no list.
-fn numbers(v: &Value) -> Option<Vec<f64>> {
+pub(crate) fn numbers(v: &Value) -> Option<Vec<f64>> {
     v.as_array()?.items.iter().take(MAX_LIST).map(float).collect()
 }
 
 /// A number as the source spells it: an integer stays one.
-fn number(v: &Value) -> Option<Number> {
+pub(crate) fn number(v: &Value) -> Option<Number> {
     match v {
         Value::Number(n) => match n.value() {
             Num::Int(i) => Some(Number::Int(i)),

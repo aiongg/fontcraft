@@ -25,6 +25,7 @@ mod color_layer;
 mod common;
 mod compare;
 pub(crate) mod compile;
+mod compile_cid;
 mod compile_project;
 mod component;
 mod custom_params;

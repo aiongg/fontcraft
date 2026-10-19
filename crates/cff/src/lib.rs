@@ -22,8 +22,8 @@
 //!   charset, CharStrings INDEX, Private DICT. Offsets in the Top DICT are found by repeating the
 //!   layout until no position changes.
 //!
-//! Out of scope: CID-keyed fonts (ROS, FDArray, FDSelect), custom encodings (the standard
-//! encoding is implied), and the seldom-used Top
+//! CID-keyed fonts (ROS, FDArray, FDSelect, a charset of CIDs) are [`cid`]'s. Out of scope:
+//! custom encodings (the standard encoding is implied), and the seldom-used Top
 //! DICT entries (UniqueID, XUID, PostScript, BaseFontName, SyntheticBase). The `CFF2` table of a
 //! variable font, with blends, is [`cff2`]'s. The subroutiniser, which works on any `CFF ` or
 //! `CFF2` table, is [`subr`]'s.
@@ -36,6 +36,7 @@ mod bounds;
 pub mod cff2;
 mod charset;
 mod charstring;
+pub mod cid;
 mod dict;
 mod error;
 pub mod hints;

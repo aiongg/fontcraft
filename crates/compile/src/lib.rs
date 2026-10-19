@@ -43,6 +43,7 @@ pub mod arabic_forms;
 mod build;
 pub mod cff;
 pub mod cff_hints;
+pub mod cid;
 pub mod color;
 pub mod components_opt;
 pub mod drawing;
@@ -158,6 +159,9 @@ pub enum CompileError {
     /// A stage or table builder whose package has not been written yet.
     #[error("{0} is not available yet")]
     NotYetImplemented(&'static str),
+    /// The CID-keyed data or a CMap file cannot be used ([`cid`]); the text says why.
+    #[error("{0}")]
+    Cid(String),
 }
 
 /// Options of [`compile`].
@@ -232,6 +236,8 @@ pub struct Options {
     /// Copy the tables a compiled font kept when it was opened ([`extras::stored_tables`]) into
     /// the build when the glyph order is still theirs (`roundtrip.binaryPassThroughTables`).
     pub pass_through_tables: bool,
+    /// The CMap files and Macintosh `cmap` ids of a CID-keyed CFF build ([`cid`]).
+    pub cid: cid::CidOptions,
 }
 
 /// The asset store a compile reads ([`Options::assets`]). Two are equal when they are the same
@@ -314,6 +320,7 @@ impl Default for Options {
             subset: true,
             stub_dsig: false,
             pass_through_tables: false,
+            cid: cid::CidOptions::default(),
         }
     }
 }
@@ -474,6 +481,8 @@ pub(crate) struct Extra {
     pub cff2: Option<fontcraft_cff::cff2::Cff2Built>,
     /// The source's math data, written to `MATH` with the glyph boxes.
     pub math: Option<math::MathPlan>,
+    /// A CID-keyed CFF build ([`cid::plan`]).
+    pub cid: Option<cid::CidPlan>,
 }
 
 /// The outline stage of a variable compile: given the origin's final glyphs, the outlines to
@@ -524,6 +533,10 @@ pub(crate) fn compile_stages_with(
     let glyphs = preflight::run(std::mem::take(&mut resolved.glyphs), &mut warnings)?;
     let synthesised_notdef = !glyphs.iter().any(|g| g.name == ".notdef");
     let glyphs = order::final_order(glyphs, &resolved, &mut warnings)?;
+    let (glyphs, cid_plan) = match font {
+        Some(font) if flavour == Flavour::Cff && var.is_none() => cid::plan(font, glyphs, &options.cid, &mut warnings)?,
+        _ => (glyphs, None),
+    };
     preflight::check_cmap(&glyphs)?;
     let glyph_data = font.and_then(|_| compile_glyph_data(options));
     let color_plan = if var.is_some() {
@@ -565,6 +578,7 @@ pub(crate) fn compile_stages_with(
         }
     };
     extra.math = math::plan(font, &resolved, &edits);
+    extra.cid = cid_plan;
     let color_tables = color::build(font, &color_plan, &color::GlyphOrder::new(&glyphs, &made)?, options, &mut warnings)?;
     let bytes = build::assemble(
         font,
@@ -581,6 +595,9 @@ pub(crate) fn compile_stages_with(
         &mut warnings,
     )?;
     let mut compiled = Compiled { bytes, glyph_order: glyphs.into_iter().map(|g| g.name).collect(), warnings };
+    if let Some(plan) = &extra.cid {
+        cid::finish(&mut compiled, plan)?;
+    }
     extras::finish(font, &mut compiled, options)?;
     Ok(compiled)
 }

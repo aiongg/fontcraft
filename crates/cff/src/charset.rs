@@ -51,7 +51,7 @@ fn predefined(names: &[&[u8]]) -> Option<u8> {
     }
 }
 
-fn format0(sids: &[u16]) -> Vec<u8> {
+pub(crate) fn format0(sids: &[u16]) -> Vec<u8> {
     let mut out = Vec::with_capacity(1 + 2 * sids.len());
     out.push(0);
     for sid in sids {
@@ -61,7 +61,7 @@ fn format0(sids: &[u16]) -> Vec<u8> {
 }
 
 /// Format 1, or 2 when some range has more than 255 glyphs after its first.
-fn ranges(sids: &[u16]) -> Vec<u8> {
+pub(crate) fn ranges(sids: &[u16]) -> Vec<u8> {
     let mut runs: Vec<(u16, u32)> = Vec::new();
     let mut first: Option<u16> = None;
     let mut end: u16 = 0;

@@ -1749,18 +1749,29 @@ notes = "The two defaults follow the handbook, not fontmake (hinting.ps.blueScal
 id = "compile.cidKeyedFonts"
 area = "compile"
 milestone = "M12"
-summary = "A source becomes CID-keyed when it declares a Registry-Ordering-Supplement and a glyph name to CID map; optional font dictionaries (hint values per glyph group) are selected by groups named FDArraySelect.<index>[.<label>]. Glyphs are written in CID order whatever the editing order. makeotf -cn can also convert a name-keyed CFF to CID-keyed with the Adobe-Identity-0 ordering as an experimental post step."
-ref = "AFDKO docs/CIDKeyedUFOGuide.md; python/afdko/makeotf.py (-cn)"
-status = "docs"
+summary = "A source becomes CID-keyed when it declares a Registry-Ordering-Supplement and a glyph name to CID map; optional font dictionaries (hint values per glyph group) are selected by groups named FDArraySelect.<index>[.<label>]. Glyphs are written in CID order whatever the editing order. The CFF table is CID-keyed: ROS first in the Top DICT, CIDCount the highest CID plus one, the CID font name in the Name INDEX, a charset of CIDs, an FDSelect and one Font DICT per sub-font with its FontName and its own Private DICT (hint values as the sub-font gives them, defaultWidthX and nominalWidthX per sub-font); post is format 3. makeotf -cn can also convert a name-keyed CFF to CID-keyed with the Adobe-Identity-0 ordering as an experimental post step."
+ref = "AFDKO docs/CIDKeyedUFOGuide.md; python/afdko/makeotf.py (-cn); makeotf 5.0.1 and tx run on a synthetic CID-keyed UFO (M12.41)"
+status = "observed"
+notes = "Built by crates/cff/src/cid.rs and crates/compile/src/cid.rs (M12.41). Observed with makeotf 5.0.1: the Top DICT, FDArray, FDSelect (format 0 when smaller), Private values per sub-font, CIDCount, the glyph order and post 3.0. makeotf keeps fractional charstring coordinates where FontCraft rounds them, as every FontCraft CFF does (compile.cffRoundTolerance), and chooses its own widths per sub-font. The subroutiniser gives each sub-font its own local subroutines. -cn is not built."
+guesses = [
+  "A sub-font with a PrivateDict takes only the values it gives, CFF defaults for the rest, and one without a PrivateDict takes the font's hinting values; a makeotf build of a UFO with a sub-font that lacks a PrivateDict, or one that sets only BlueValues, would settle it.",
+  "A glyph in no FDArraySelect group is written with sub-font 0, with a warning; a makeotf build of a UFO with such a glyph would settle it.",
+  "A glyph the CID map leaves out, and a second glyph on a CID already taken, follow the highest CID in glyph order, with a warning, as export.cidMapping describes the reference app; a makeotf build of such a UFO would settle what makeotf does.",
+  "The Name INDEX holds the CID font name when the source gives one, else the PostScript name; a makeotf build of a UFO whose CIDFontName differs from its PostScript name would settle it.",
+]
 
 [[behavior]]
 id = "compile.cidCmapResources"
 area = "compile"
 milestone = "M12"
-summary = "For CID-keyed fonts makeotf takes encodings from Adobe CMap resources chosen by ROS: a Macintosh CMap, a UTF-32 horizontal CMap and a UTF-32 vertical CMap (for example UniJIS-UTF32-H/V for Adobe-Japan1); only glyphs named in them are encoded. Options -cm, -ch, -cv override the files. Our CID path reads codepoints from the source glyphs and can import a CMap resource to fill them."
-ref = "AFDKO docs/MakeOTFUserGuide.md (Adobe character code map)"
-status = "docs"
-notes = "CMap resources are files the user gives by path, as makeotf's -cm, -ch and -cv take them; FontCraft ships none (docs/plans/M12.md § 7, question 6 (a)). The ROS parameter's standard collections therefore need those files to encode their glyphs; without them a CID-keyed export encodes the code points of the source glyphs only. Whether to bundle the collections' data is left to export.cidMapping."
+summary = "For CID-keyed fonts makeotf takes encodings from Adobe CMap resources chosen by ROS: a UTF-32 horizontal CMap (-ch, required), a Macintosh CMap (-cm, optional; written as a platform 1 subtable whose script is -cs or the ordering's: Japan 1, CNS 2, GB 25, Korea 3, else Roman 0 with a warning; -cl the language) and a Unicode variation sequences file (-ci, format 14). Only glyphs whose CIDs the CMaps reach are encoded; the source glyphs' own code points are not used. makeotf 5.0.1 has no vertical CMap option."
+ref = "AFDKO docs/MakeOTFUserGuide.md (Adobe character code map); python/afdko/makeotf.py 5.0.1 (-cs, -cl, -cm, -ch, -ci, setCIDCMAPPaths); makeotf 5.0.1 run on a synthetic CID-keyed UFO with synthetic CMaps (M12.41)"
+status = "observed"
+notes = "CMap resources are files the user gives by path (font.compile cidCmap and cidMacCmap, the command line's --cid-cmap and --mac-cmap; cidMacScript and cidMacLanguage), as makeotf's -ch and -cm take them; FontCraft ships none (docs/plans/M12.md § 7, question 6 (a)). The ROS parameter's standard collections therefore need those files to encode their glyphs. Observed with makeotf 5.0.1: with -ch the cmap holds the CMap's code points only (format 4 subtables for platforms 0 and 3); with a one-byte -cm a format 6 subtable for platform 1 is added; without -cm there is none; without -ch makeotf stops. The CMap is parsed in crates/compile/src/cid/cmap.rs with every count capped; a malformed file, or one for another character collection, stops the compile. Not built: Macintosh CMaps with two-byte codes (left out with a warning), -ci variation sequences, the project file keys H_UniEncodingCMAPPath, MacEncodingCMAPPath, MacCmapScriptID and MacCmapLanguageID, and makeotf's search of its own resource folder."
+guesses = [
+  "Without a Unicode CMap the source glyphs' own code points are encoded instead of refusing the build as makeotf does; a CID-keyed export from the reference app without the collection's data would settle what it encodes.",
+  "The Macintosh subtable's language field holds the -cl value as given, 0 by default; a makeotf build with -cl would settle it.",
+]
 
 [[behavior]]
 id = "compile.makeotfReleaseMode"

@@ -317,17 +317,30 @@ fn truetype(
 /// box is the table's `FontBBox`, as fontTools recomputes `hmtx`, `hhea` and `head` from a CFF
 /// table when it writes a font.
 fn postscript(input: &CffInput, builder: &mut FontBuilder, warnings: &mut Vec<String>) -> Result<(Boxes, Maxp), CompileError> {
-    let built = cff::build(
-        input.source,
-        input.font,
-        input.info,
-        input.order,
-        input.outlines,
-        input.names,
-        input.synthesised_notdef,
-        input.hinting,
-        warnings,
-    )?;
+    let built = match input.cid {
+        Some(plan) => crate::cid::build(
+            plan,
+            input.source,
+            input.font,
+            input.info,
+            input.order,
+            input.outlines,
+            input.synthesised_notdef,
+            input.hinting,
+            warnings,
+        )?,
+        None => cff::build(
+            input.source,
+            input.font,
+            input.info,
+            input.order,
+            input.outlines,
+            input.names,
+            input.synthesised_notdef,
+            input.hinting,
+            warnings,
+        )?,
+    };
     let clamp = |v: i64| i16::try_from(v.clamp(i64::from(i16::MIN), i64::from(i16::MAX))).unwrap_or(0);
     let bbox = |[x_min, y_min, x_max, y_max]: [i64; 4]| Bbox { x_min: clamp(x_min), y_min: clamp(y_min), x_max: clamp(x_max), y_max: clamp(y_max) };
     let boxes = Boxes {
@@ -426,6 +439,8 @@ struct CffInput<'a> {
     hinting: &'a crate::HintingOptions,
     /// Subroutinise the table ([`crate::Options::subroutinize`], resolved).
     subroutinize: bool,
+    /// Write a CID-keyed table ([`crate::cid`]).
+    cid: Option<&'a crate::cid::CidPlan>,
 }
 
 /// Builds every table and the font file. `synthesised_notdef`: glyph 0 is the compiler's own
@@ -510,6 +525,7 @@ pub fn assemble(
                     synthesised_notdef,
                     hinting: &options.hinting,
                     subroutinize,
+                    cid: extra.cid.as_ref(),
                 };
                 postscript(&input, &mut builder, warnings)?
             }

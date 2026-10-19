@@ -17,6 +17,7 @@ const USAGE: &str = "\
                         [--timestamp SECS|now] [--ttfautohint PATH] [--cbdt] [--plan]
                         [--project-file FILE] [--project-defaults] [--menu-names FILE] [--goadb FILE]
                         [--fontinfo FILE] [project options]
+                        [--cid-cmap FILE] [--mac-cmap FILE] [--mac-script N] [--mac-language N]
   fontcraft-cli compile SOURCE... --variable [--format ttf|otf] [--settings NAME,...] [--container plain|woff|woff2]...
                         [-o FILE | --output-dir DIR] [--timestamp SECS|now]
       Compile each SOURCE to static fonts: every exportable instance (or the named ones; a font
@@ -51,6 +52,11 @@ const USAGE: &str = "\
       still unset. --menu-names FILE is a FontMenuNameDB, --goadb FILE a GlyphOrderAndAliasDB
       (its code points always apply). --project-defaults finds fontinfo beside the source and
       FontMenuNameDB and GlyphOrderAndAliasDB beside it or up to 4 folders above.
+      A CID-keyed SOURCE builds a CID-keyed CFF. --cid-cmap FILE (-ch) is a Unicode (UTF-32)
+      CMap of its character collection, which then gives every code point of the cmap table;
+      --mac-cmap FILE (-cm) a one-byte Macintosh CMap, written as a Macintosh cmap subtable with
+      the script --mac-script N (-cs; default: from the ordering) and the language
+      --mac-language N (-cl; default 0).
       --variable builds variable fonts instead: one per variable font setting (or the settings
       --settings names), or one for the whole designspace when the source has none, with
       TrueType outlines, or CFF2 outlines with --format otf; files are named by the setting's file
@@ -128,6 +134,21 @@ fn compile(args: &[String]) -> Outcome {
                 };
                 let file = it.next().ok_or_else(|| usage(format!("{arg} needs a file")))?;
                 project.insert(key.into(), json!(file));
+            }
+            "--cid-cmap" | "-ch" | "--mac-cmap" | "-cm" => {
+                let key = if matches!(arg.as_str(), "--cid-cmap" | "-ch") { "cidCmap" } else { "cidMacCmap" };
+                let file = it.next().ok_or_else(|| usage(format!("{arg} needs a CMap file")))?;
+                params.insert(key.into(), json!(file));
+            }
+            "--mac-script" | "-cs" | "--mac-language" | "-cl" => {
+                let key = if matches!(arg.as_str(), "--mac-script" | "-cs") { "cidMacScript" } else { "cidMacLanguage" };
+                let v = it.next().ok_or_else(|| usage(format!("{arg} needs a number")))?;
+                let n = v
+                    .parse::<u16>()
+                    .ok()
+                    .filter(|n| *n <= 32_767)
+                    .ok_or_else(|| usage(format!("{arg} must be a whole number from 0 to 32767, got `{v}`")))?;
+                params.insert(key.into(), json!(n));
             }
             "--project-defaults" => {
                 project.insert("projectDefaults".into(), json!(true));

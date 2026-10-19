@@ -36,6 +36,7 @@ mod color_palettes;
 mod command_sweep;
 mod compare;
 mod compatibility_indicators;
+mod compile_cid;
 mod compile_extras;
 mod compile_project;
 mod construction;
