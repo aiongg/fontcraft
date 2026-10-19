@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**2320 guesses on 1386 rows (572 of them live commands).**
+**2321 guesses on 1386 rows (572 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -112,6 +112,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `anchors.contextSyntax` (behavior) | M8 | handbook | – | Tokens in a context are expanded with the compiled master's values before the context is read, as in feature code; a context whose token fails is left out with a warning. |
 | `anchors.contextSyntax` (behavior) | M8 | handbook | – | A context line without `*`, or with `{`, `}`, `#` or a double quote, leaves the anchor's context out with a warning, where ufo2ft passes it to the feature compiler; the running app would show whether it refuses such a context. |
 | `anchors.contextSyntax` (behavior) | M8 | handbook | – | With several semicolons the text up to the last one is the flag part, where ufo2ft fails on a second semicolon; the running app would settle it. |
+| `anchors.contextSyntax` (behavior) | M8 | handbook | – | A context naming an unknown glyph or class leaves that anchor's context out with a warning, where ufo2ft's feature compile fails; an export from the running app with such a context would settle it. |
 | `snapping.toNodesAndHandles` (behavior) | M3 | handbook | – | The snap distance is 4 screen points, with the priority nodes, handles, guides, metric lines (03a question 28). |
 | `snapping.toNodesAndHandles` (behavior) | M3 | handbook | – | Ctrl suspends snapping as well as magnetic guides. |
 | `guides.knobAndSelection` (behavior) | M3 | handbook | – | A drag on the guide away from its knob turns it about the knob, the pressed side following the pointer (03a question 27). |

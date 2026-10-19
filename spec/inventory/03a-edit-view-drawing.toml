@@ -2336,11 +2336,12 @@ milestone = "M8"
 summary = "The anchor context is OpenType feature code for a glyph sequence in which * stands for the glyph holding the anchor; classes and tokens are allowed. An optional & marks where the mark glyph sits (needed when it does not come directly after the base), and a leading lookupflag …; statement sets lookup flags, typically UseMarkFilteringSet to restrict which marks the context applies to."
 ref = "Edit View › Contextual Mark Attachment"
 status = "handbook"
-notes = "Documented, not yet observed. As ufo2ft reads the context (fontmake run on a font built for M8.21): each line is a separate context, trailing semicolons are dropped, the text before the semicolon is the lookup's flag statement, and without & the mark is put right after each *. Contexts that share a flag statement share one chaining lookup; longer contexts come first."
+notes = "Documented, not yet observed. As ufo2ft reads the context (fontmake run on a font built for M8.21): each line is a separate context, trailing semicolons are dropped, the text before the semicolon is the lookup's flag statement, and without & the mark is put right after each *. Contexts that share a flag statement share one chaining lookup; longer contexts come first. A context that names a glyph the font does not have, or a class the feature code never names, is left out with a warning instead of failing the compile."
 guesses = [
   "Tokens in a context are expanded with the compiled master's values before the context is read, as in feature code; a context whose token fails is left out with a warning.",
   "A context line without `*`, or with `{`, `}`, `#` or a double quote, leaves the anchor's context out with a warning, where ufo2ft passes it to the feature compiler; the running app would show whether it refuses such a context.",
   "With several semicolons the text up to the last one is the flag part, where ufo2ft fails on a second semicolon; the running app would settle it.",
+  "A context naming an unknown glyph or class leaves that anchor's context out with a warning, where ufo2ft's feature compile fails; an export from the running app with such a context would settle it.",
 ]
 
 [[panel]]

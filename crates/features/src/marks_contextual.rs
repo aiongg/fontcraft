@@ -14,7 +14,9 @@
 //!   compiler collects them per compiled glyph ([`contexts_of`]) and runs [`for_master`].
 //! - A context is feature code: one context per line; an optional `lookupflag …;` before the
 //!   pattern; `*` stands for the glyph holding the anchor and `&` for the mark (after `*` when
-//!   left out). Tokens are expanded first, with the master's values.
+//!   left out). Tokens are expanded first, with the master's values. A context naming a glyph
+//!   the font does not have, or a class the feature code never names, is left out with a
+//!   warning, as other bad contexts are, so that it cannot fail the whole compile.
 //! - When at least one contextual rule is written, the mark writer's features (`abvm`, `blwm`,
 //!   `mark`, `mkmk`) are written as feature code ([`ContextualMarks::code`]): the plain lookups
 //!   of [`super::generate_marks`] first, then the lookups the contexts call, then one dispatch
@@ -117,6 +119,8 @@ pub struct ContextualRequest<'a> {
     pub contexts: &'a AnchorContexts,
     /// Evaluates the tokens of the contexts; `None` leaves a context with a token out.
     pub values: Option<&'a dyn TargetValues>,
+    /// The glyph classes the feature code names ([`classes_in`]); `None` does not check them.
+    pub classes: Option<&'a HashSet<String>>,
 }
 
 /// The mark writer's features as feature code, with the contextual lookups.
@@ -147,6 +151,7 @@ pub fn for_master(
     data: Option<&GlyphData>,
     marks: &MarkRequest,
     glyphs: &[(&str, &str)],
+    classes: Option<&HashSet<String>>,
     variable: bool,
     warnings: &mut Vec<String>,
 ) -> Option<ContextualMarks> {
@@ -162,7 +167,7 @@ pub fn for_master(
         return None;
     }
     let values = data.and_then(|data| MasterValues::new(font, data, marks.master).ok());
-    let req = ContextualRequest { marks, contexts: &contexts, values: values.as_ref().map(|v| v as &dyn TargetValues) };
+    let req = ContextualRequest { marks, contexts: &contexts, values: values.as_ref().map(|v| v as &dyn TargetValues), classes };
     match contextual_marks(&req) {
         Ok(found) => {
             if let Some(found) = &found {
@@ -175,6 +180,84 @@ pub fn for_master(
             None
         }
     }
+}
+
+/// Every glyph class name (`@name`) the text of `files` holds, defined or used; `None` when the
+/// code includes files from disk, whose classes are not known here.
+pub fn classes_in(files: &VirtualFiles) -> Option<HashSet<String>> {
+    if files.include_dir().is_some() && files.iter().any(|(_, text)| text.contains("include")) {
+        return None;
+    }
+    let mut out = HashSet::new();
+    for (_, text) in files.iter() {
+        for part in text.split('@').skip(1) {
+            let name: String = part.chars().take_while(|c| is_name_char(*c)).collect();
+            if !name.is_empty() {
+                out.insert(name);
+            }
+        }
+    }
+    Some(out)
+}
+
+fn is_name_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '-' | '*' | '+' | ':' | '^' | '|' | '~' | '\\')
+}
+
+/// Words of feature code a context may hold that are not glyph names.
+const CONTEXT_KEYWORDS: [&str; 10] = [
+    "lookupflag",
+    "RightToLeft",
+    "IgnoreBaseGlyphs",
+    "IgnoreLigatures",
+    "IgnoreMarks",
+    "MarkAttachmentType",
+    "UseMarkFilteringSet",
+    "lookup",
+    "NULL",
+    "anchor",
+];
+
+/// Checks the glyph and class names of a context's lines against the font's glyphs and the
+/// classes of the feature code. `Err`: the first name that is neither.
+fn check_names(lines: &[String], glyphs: &HashSet<&str>, classes: Option<&HashSet<String>>) -> Result<(), String> {
+    for line in lines {
+        let mut after_lookup = false;
+        for word in line.split(|c: char| c.is_whitespace() || matches!(c, '[' | ']' | '(' | ')' | '\'' | ',' | ';' | '<' | '>')) {
+            if word.is_empty() || word == "*" || word == "&" {
+                continue;
+            }
+            if std::mem::take(&mut after_lookup) {
+                continue;
+            }
+            if word == "lookup" {
+                after_lookup = true;
+                continue;
+            }
+            if CONTEXT_KEYWORDS.contains(&word) || word.trim_start_matches('-').chars().all(|c| c.is_ascii_digit()) {
+                continue;
+            }
+            if let Some(class) = word.strip_prefix('@') {
+                if classes.is_some_and(|known| !known.contains(class)) {
+                    return Err(format!("its context names the class `@{class}`, which the feature code does not define"));
+                }
+                continue;
+            }
+            let name = word.strip_prefix('\\').unwrap_or(word);
+            if name.chars().all(|c| c.is_ascii_digit()) || glyphs.contains(name) {
+                continue;
+            }
+            // A range `a-z` names two glyphs.
+            if let Some((first, last)) = name.split_once('-')
+                && glyphs.contains(first)
+                && glyphs.contains(last)
+            {
+                continue;
+            }
+            return Err(format!("its context names `{name}`, which is not a glyph of the font"));
+        }
+    }
+    Ok(())
 }
 
 /// `files` with [`CONTEXTUAL_FILE`] holding `code`, included at the end of the root file.
@@ -702,6 +785,7 @@ pub fn contextual_marks(req: &ContextualRequest) -> Result<Option<ContextualMark
     let (mut base, mut liga, mut mkmk, mut abvm) = (ByContext::default(), ByContext::default(), ByContext::default(), ByContext::default());
     let mut lines_left = MAX_CONTEXTS;
     let mut skipped: Vec<String> = Vec::new();
+    let glyph_names: HashSet<&str> = m.input.glyphs.iter().take(glyph_count).map(|g| g.name.as_str()).collect();
     for i in order {
         let Some((gid, parsed, point, text)) = found.get(i) else { continue };
         budget.spend(1)?;
@@ -723,7 +807,7 @@ pub fn contextual_marks(req: &ContextualRequest) -> Result<Option<ContextualMark
         } else {
             continue;
         };
-        let lines = match context_lines(text, req.values) {
+        let lines = match context_lines(text, req.values).and_then(|lines| check_names(&lines, &glyph_names, req.classes).map(|()| lines)) {
             Ok(lines) => lines,
             Err(why) => {
                 skipped.push(format!("a contextual anchor of `{glyph}`: {why}"));

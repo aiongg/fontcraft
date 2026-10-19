@@ -61,7 +61,7 @@ fn request(input: &MarkInput) -> MarkRequest<'_> {
 
 fn written(input: &MarkInput, contexts: &AnchorContexts) -> Option<ContextualMarks> {
     let marks = request(input);
-    contextual_marks(&ContextualRequest { marks: &marks, contexts, values: None }).unwrap()
+    contextual_marks(&ContextualRequest { marks: &marks, contexts, values: None, classes: None }).unwrap()
 }
 
 /// The line of `code` holding `needle`, and its index.
@@ -171,7 +171,7 @@ fn contexts_that_cannot_be_written_are_left_out_with_a_warning() {
     contexts.insert(("f_i".to_string(), "*top_2".to_string()), "o".to_string());
     let marks = request(&input);
     let contexts = AnchorContexts(contexts);
-    let found = contextual_marks(&ContextualRequest { marks: &marks, contexts: &contexts, values: None }).unwrap();
+    let found = contextual_marks(&ContextualRequest { marks: &marks, contexts: &contexts, values: None, classes: None }).unwrap();
     assert!(found.is_none(), "no contextual rule is left, so the generated lookups stay");
 
     // Through the compiler's entry the reasons reach the warnings; an empty context too.
@@ -179,7 +179,7 @@ fn contexts_that_cannot_be_written_are_left_out_with_a_warning() {
     only.insert(("n".to_string(), "*top".to_string()), "  ;\n".to_string());
     only.insert(("acutecomb".to_string(), "*top".to_string()), "n *".to_string());
     let contexts = AnchorContexts(only);
-    let found = contextual_marks(&ContextualRequest { marks: &marks, contexts: &contexts, values: None }).unwrap().unwrap();
+    let found = contextual_marks(&ContextualRequest { marks: &marks, contexts: &contexts, values: None, classes: None }).unwrap().unwrap();
     assert_eq!(found.rules, 1);
     assert_eq!(found.features, [ABVM, MARK, MKMK], "the plain mark lookups move to the code with the contextual ones");
     assert!(found.warnings.iter().any(|w| w.contains("empty")), "{:?}", found.warnings);
@@ -191,11 +191,27 @@ fn no_contexts_or_no_mark_features_write_nothing() {
     assert!(written(&input, &AnchorContexts::default()).is_none());
     let mut marks = request(&input);
     marks.tags = MarkTags { mark: false, mkmk: false, abvm: false, blwm: false, ..MarkTags::default() };
-    assert!(contextual_marks(&ContextualRequest { marks: &marks, contexts: &contexts, values: None }).unwrap().is_none());
+    assert!(contextual_marks(&ContextualRequest { marks: &marks, contexts: &contexts, values: None, classes: None }).unwrap().is_none());
     // An anchor without a context is a plain anchor of no group, as the reference reads it.
     let mut one = contexts.0.clone();
     one.retain(|(g, _), _| g == "acutecomb");
     let found = written(&input, &AnchorContexts(one)).unwrap();
     assert_eq!(found.rules, 1);
     assert!(!found.code.contains("gen_ContextualMark_"), "only the mark-to-mark context");
+}
+
+#[test]
+fn a_context_naming_an_unknown_glyph_or_class_is_left_out_with_a_warning() {
+    let (input, _) = probe();
+    let mut contexts = BTreeMap::new();
+    for (g, a, c) in [("n", "*top", "zzz *"), ("n", "*bottom.alt", "@Nope *"), ("f_i", "*top_2", "* & @Known"), ("acutecomb", "*top", "[n o] *")] {
+        contexts.insert((g.to_string(), a.to_string()), c.to_string());
+    }
+    let marks = request(&input);
+    let contexts = AnchorContexts(contexts);
+    let classes: HashSet<String> = ["Known".to_string()].into();
+    let found = contextual_marks(&ContextualRequest { marks: &marks, contexts: &contexts, values: None, classes: Some(&classes) }).unwrap().unwrap();
+    assert_eq!(found.rules, 2, "the two contexts with known names are written");
+    let warning = found.warnings.iter().find(|w| w.contains("left out")).unwrap();
+    assert!(warning.contains("`zzz`") && warning.contains("`@Nope`"), "{warning}");
 }

@@ -322,7 +322,8 @@ pub fn build(input: &LayoutInput, opts: &LayoutOptions, warnings: &mut Vec<Strin
         // Contextual anchors (M8.21): the mark writer's features become code appended to the file.
         if let Some(font) = input.font.filter(|_| opts.gpos) {
             let pairs: Vec<(&str, &str)> = names.iter().map(|n| (n.as_str(), sources.get(n.as_str()).copied().unwrap_or(n.as_str()))).collect();
-            contextual = contextual_marks::for_master(font, input.data, &mark_request, &pairs, input.variable.is_some(), warnings);
+            let classes = contextual_marks::classes_in(&files);
+            contextual = contextual_marks::for_master(font, input.data, &mark_request, &pairs, classes.as_ref(), input.variable.is_some(), warnings);
         }
         if let Some(found) = &contextual {
             mark_request.tags = found.tags_left(mark_request.tags);
