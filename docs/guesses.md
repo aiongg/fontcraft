@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**2458 guesses on 1434 rows (595 of them live commands).**
+**2465 guesses on 1436 rows (595 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -1852,6 +1852,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `metrics` (cli) | M12 | docs | – | Glyph names come from post, then the CFF charset, then uniXXXX from the cmap, then glyphNNNNN, with #n added to repeats as fontTools does; tx's own fallback names (g1, g2) were not followed. |
 | `metrics` (cli) | M12 | docs | – | With several fonts on the command line the text forms print a '## FONT' line before each report. |
 | `convert` (cli) | M12 | docs | – | With IN OUT.woff or OUT.woff2 the output keeps the input's outline flavour; the reference tools have no such two-argument form, so user feedback would settle it. |
+| `convert` (cli) | M12 | docs | – | A conversion whose glyphs would hold more than 16,777,216 points together (8,388,608 on wasm), components counted once for every use, or a CFF or CFF2 table whose expanded charstrings would take more than 1 GiB of memory (256 MiB on wasm), is refused with a message, where the reference tools convert it; a font that needs more would settle the limits. |
 | `subset` (cli) | M12 | docs | – | A variation index that names no delta set becomes no variation in the subset (pyftsubset stops with an error); a damaged corpus font would show what users expect. |
 | `subset` (cli) | M12 | docs | – | An sbix dupe or flip bitmap whose source glyph left the subset is dropped (pyftsubset stops with an error); a font that reuses bitmaps across glyphs would settle it. |
 | `subset` (cli) | M12 | docs | – | A CBLC index subtable of format 2 left with gaps is written as format 5 (pyftsubset stops with an error); a bitmap font with constant-size strikes would settle it. |
@@ -1871,6 +1872,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `instance` (cli) | M12 | docs | – | A downgrade refuses a hint operator with more than 48 operands, which a CFF stack cannot hold; fontTools writes it unchanged. A font with more than 24 stems in one operator would settle it. |
 | `instance` (cli) | M12 | docs | – | A format 3 BASE coordinate with a hinting device (not a variation index) is left as it is; fontTools stops on it with an assertion. |
 | `instance` (cli) | M12 | docs | – | For --update-name-table, a STAT table of version 1.0 (no elided fallback name) uses name ID 2 in its place, and a name missing on one platform is left out when names are joined; fontTools stops in both cases. |
+| `instance` (cli) | M12 | docs | – | A CFF2 table whose charstrings, subroutine calls followed, would take more than 1 GiB of memory as operators and blended values (256 MiB on wasm) is refused with a message; a font that needs more would settle the limit. |
+| `instance` (cli) | M12 | docs | – | A CFF2 path operator with an operand count the specification does not allow is refused; running fontTools' instancer on such a table would show whether it passes the operator through. |
 | `merge` (cli) | M12 | docs | – | With a map, the result's glyph order is .notdef first, then each font's glyphs in its map's order (all glyphs of a font without a map, in font order); comparing with mergefonts' output order would settle it. |
 | `merge` (cli) | M12 | docs | – | --layout drop still unites the cmaps (first font wins, no locl lookups), so a TrueType result stays usable; mergefonts writes no cmap at all. |
 | `merge` (cli) | M12 | docs | – | A glyph merge takes head, hhea, vhea, OS/2, name, post and the font programs from the first font unchanged, apart from the glyph count, the bounding box, the hhea extents and the loca format. |
@@ -2095,6 +2098,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `variable-ttf.open` (format) | M9 | inferred | – | A master takes the name of the named instance at its location, else its axis names and design coordinates; an intermediate layer is named by its coordinates in braces. |
 | `cff2.open` (format) | M9 | inferred | – | Every region of the CFF2 variation store becomes a master, since the charstrings do not say which glyphs use which region without evaluating them. Settled by opening CFF2 fonts built from sources with intermediate layers and comparing. |
 | `cff2.export` (format) | M9 | docs | – | Manual PostScript hints are left out of a CFF2 font, with a warning, where fontmake would write blended stems; comparing the hinted output of the two would settle whether blended hints are worth writing. |
+| `ttc.export` (format) | M12 | docs | – | With `collection: true`, a destination file ending in .ttf or .otf is refused instead of receiving collection bytes under a single-font name; a user's expectation, or a reference tool that writes collections, would settle it. |
 | `type1` (format) | M12 | docs | – | Vertical metrics are measured on the glyphs d, H, x and p (falling back to the FontBBox), since a Type 1 font has no such fields; the reference app's import of a .pfb would settle it. |
 | `type1` (format) | M12 | docs | – | Ghost hints become TopGhost and BottomGhost hints with place (edge, 0), the edge being y for a top ghost and y + dy for a bottom ghost as tx reports them; the reference app's import of a hinted .pfb would settle it. |
 | `type1` (format) | M12 | docs | – | Standard stems are named hStem0, hStem1… and vStem0…; the reference app's import of a .pfb would show its names. |
@@ -2179,6 +2183,9 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `compile.cidCmapResources` (behavior) | M12 | observed | – | Without a Unicode CMap the source glyphs' own code points are encoded instead of refusing the build as makeotf does; a CID-keyed export from the reference app without the collection's data would settle what it encodes. |
 | `compile.cidCmapResources` (behavior) | M12 | observed | – | The Macintosh subtable's language field holds the -cl value as given, 0 by default; a makeotf build with -cl would settle it. |
 | `compile.cidCmapResources` (behavior) | M12 | observed | – | Without -cm the stub Macintosh subtable takes the -cs script, else the ordering's; only a Latin ordering (Roman, 0) was observed, so a makeotf build of a Japan1 font without -cm would settle it. |
+| `compile.makeotfMetrics` (behavior) | M12 | observed | – | A negative advance in the source is written as 0 with a warning, where makeotf writes it wrapped to a large unsigned number; a font whose layout depends on that value would settle whether to follow it. |
+| `compile.makeotfMetrics` (behavior) | M12 | observed | – | A project compile with autohinting turned on writes the autohinted glyphs with integer coordinates, as every autohinted CFF glyph is written; makeotf does not autohint, so only a request for both would settle it. |
+| `compile.makeotfMetrics` (behavior) | M12 | observed | – | A CID-keyed project compile keeps the integer coordinates of every CID-keyed build; comparing makeotf's CID-keyed output point by point would settle it. |
 | `compile.colrGradientGeometry` (behavior) | M11 | docs | – | The ellipse angle of a version 4 radial gradient is not written: COLR circles cannot be squashed without a transform paint. Settled by exporting a radial gradient on a wide path from the reference and reading its paint. |
 | `CFF2` (table) | M9 | docs | – | Charstrings are not specialised or subroutinised; byte size against fontmake's output would show whether that is worth doing. |
 | `gasp` (table) | M10 | docs | – | A CFF export gets no gasp table even with the parameter, as ufo2ft writes gasp for TrueType output only and the handbook describes the parameter for TrueType fonts; a CFF export from the reference app with the parameter would settle it. |

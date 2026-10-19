@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1359 rows to check: 2165 guesses and 494 observe steps.**
+**1360 rows to check: 2166 guesses and 494 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,7 +48,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 43 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 5 |
-| **Later milestones (after M6)** | all | **870** |
+| **Later milestones (after M6)** | all | **871** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 86 |
 | Later milestones (after M6) | Edit View: text mode and preview | 25 |
 | Later milestones (after M6) | Components and anchors | 39 |
@@ -60,7 +60,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Interpolation | 71 |
 | Later milestones (after M6) | Hinting | 106 |
 | Later milestones (after M6) | Colour fonts | 59 |
-| Later milestones (after M6) | Files: open, import, export | 58 |
+| Later milestones (after M6) | Files: open, import, export | 59 |
 | Later milestones (after M6) | Settings and the window | 13 |
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 62 |
 | Later milestones (after M6) | Elsewhere | 26 |
@@ -1386,7 +1386,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (870)
+## Later milestones (after M6) (871)
 
 ### Edit View: drawing, guides, layers and the Palette (86)
 
@@ -3737,7 +3737,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The colour is stored as the text `R,G,B,A` with components from 0 to 255 (the picker also reads `#RRGGBBAA` and a list of numbers). Settled by saving a font with a Master Color from the reference and reading the stored value.
   - Guess: Opacity is the alpha slider of the colour picker. Settled by opening the picker in the reference.
 
-### Files: open, import, export (58)
+### Files: open, import, export (59)
 
 - [ ] `export.instanceExportFolder` (behavior, M7, handbook): An instance carrying the Export Folder custom parameter is written to that…
   - Guess: The sub-path is used as written, `..` segments included, as the handbook says; an absolute path, an empty segment, a folder name with a character such as `:` or `\`, or a path of more than 32 segments makes export skip that instance with the reason, one trailing `/` is ignored, and the warnings name every file written outside the export destination; an Export Folder of `../x` and one of `/tmp/x` in the reference app settle it.
@@ -3846,6 +3846,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The ellipse angle of a version 4 radial gradient is not written: COLR circles cannot be squashed without a transform paint. Settled by exporting a radial gradient on a wide path from the reference and reading its paint.
 - [ ] `roundtrip.binaryPassThroughTables` (behavior, M12, inferred): Tables the importer does not turn into editable data are kept as…
   - Guess: Stored tables are copied only when the whole glyph order is unchanged, since each of them indexes glyphs by id; settled by opening a TrueType font with an LTSH or hdmx table in the reference app, exporting it unchanged and checking whether the table is still there.
+- [ ] `ttc.export` (format, M12, docs): OpenType collection (export)
+  - Guess: With `collection: true`, a destination file ending in .ttf or .otf is refused instead of receiving collection bytes under a single-font name; a user's expectation, or a reference tool that writes collections, would settle it.
 - [ ] `type1` (format, M12, docs): Adobe Type 1 (PFB binary, PFA text)
   - Guess: Vertical metrics are measured on the glyphs d, H, x and p (falling back to the FontBBox), since a Type 1 font has no such fields; the reference app's import of a .pfb would settle it.
   - Guess: Ghost hints become TopGhost and BottomGhost hints with place (edge, 0), the edge being y for a top ghost and y + dy for a bottom ghost as tx reports them; the reference app's import of a hinted .pfb would settle it.
