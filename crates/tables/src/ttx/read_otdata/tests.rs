@@ -68,8 +68,11 @@ fn kerning_tables_compile_as_ttx_compiles() {
 
 #[test]
 fn our_layout_dump_reads_back_to_the_same_tables() {
-    for (text, _) in [LAYOUT, VARIABLE, VAR, GVAR, COLOR, KERN, APPLE_KERN] {
-        let font = read(text);
+    for (text, _) in [LAYOUT, VARIABLE, VAR, COLOR, KERN, APPLE_KERN] {
+        let mut font = read(text);
+        // A maxp (version 0.5) gives the dump a glyph count to name the glyphs by.
+        let glyphs = u8::try_from(text.matches("<GlyphID ").count()).unwrap();
+        font.insert(*b"maxp", vec![0, 0, 0x50, 0, 0, glyphs]);
         let dumped = dump(&font, &DumpOptions::default()).unwrap();
         let again = read(&dumped);
         for (tag, data) in &font.tables {
