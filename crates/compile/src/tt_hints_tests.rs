@@ -380,3 +380,143 @@ fn own_programs_that_need_the_original_font_programs_are_left_out() {
     assert!(!program(&font, gid(&out, "o")).is_empty(), "the Instructor hints are still compiled");
     runs_everywhere(&out.bytes);
 }
+
+/// `x` (0 to 500) and `H` (0 to 700) in a new font, whose `xHeight` zone at 500 has an overshoot
+/// of 16, with `options` and `control` as its TTFAutohint options and control instructions.
+fn x_and_h(options: &str, control: &str) -> Font {
+    let mut f = Font::new("Scale Sans");
+    for (name, right, top) in [("x", 450.0, 500.0), ("H", 550.0, 700.0)] {
+        f.glyph_mut(name).unwrap().layers[0].shapes.push(Shape::Path(Path::rect(50.0, 0.0, right, top)));
+    }
+    let params = &mut std::sync::Arc::make_mut(&mut f.info).params.0;
+    for (name, text) in
+        [(fontcraft_hinting::settings::TTF_AUTOHINT_OPTIONS, options), (fontcraft_hinting::settings::TTF_AUTOHINT_CONTROL_INSTRUCTIONS, control)]
+    {
+        if !text.is_empty() {
+            params.push(Param::new(name, Value::String(Str::new(text))));
+        }
+    }
+    f
+}
+
+fn autohinted() -> Options {
+    Options { hinting: crate::HintingOptions { autohint: true, ..Default::default() }, ..Options::default() }
+}
+
+/// The lowest and highest y of each named glyph, hinted at `ppem` by the interpreter.
+fn hinted_extents(out: &Compiled, names: &[&str], ppem: u16, target: Intent) -> Vec<(f32, f32)> {
+    let font = FontRef::new(&out.bytes).unwrap();
+    let outlines = font.outline_glyphs();
+    let instance =
+        HintingInstance::new(&outlines, Size::new(f32::from(ppem)), LocationRef::default(), HintingOptions { engine: Engine::Interpreter, target })
+            .unwrap();
+    names
+        .iter()
+        .map(|name| {
+            let mut e = Extent::default();
+            outlines.get(gid(out, name)).unwrap().draw(DrawSettings::hinted(&instance, true), &mut e).unwrap();
+            e.0.unwrap()
+        })
+        .collect()
+}
+
+const SMOOTH: Intent = Intent::Smooth { mode: SmoothMode::Normal, symmetric_rendering: true, preserve_linear_metrics: false };
+
+#[test]
+fn autohint_scales_the_zones_so_the_x_height_lands_on_the_grid_as_ttfautohint_does() {
+    // The tops of `x` and `H` at 6 to 30 PPM in ttfautohint 1.8.4's output for this font (an `o`
+    // and an `O` added to give it the same zones), with its default options, with `-X -` and
+    // with `-x 0`, rendered by FreeType's TrueType interpreter.
+    type Case = (&'static str, Option<u16>, bool, [i32; 25], [i32; 25]);
+    let cases: [Case; 3] = [
+        (
+            "",
+            Some(14),
+            true,
+            [3, 4, 4, 5, 5, 6, 7, 7, 8, 8, 8, 9, 9, 10, 10, 11, 11, 12, 13, 13, 14, 14, 15, 15, 15],
+            [4, 5, 5, 7, 7, 8, 9, 9, 11, 11, 11, 12, 12, 14, 14, 15, 15, 16, 18, 18, 19, 19, 20, 20, 22],
+        ),
+        (
+            "--x-height-snapping-exceptions=-",
+            Some(14),
+            false,
+            [3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13, 14, 14, 15, 15],
+            [4, 5, 6, 6, 7, 8, 8, 9, 10, 11, 11, 12, 13, 13, 14, 15, 15, 16, 17, 18, 18, 19, 20, 20, 21],
+        ),
+        (
+            "-x 0",
+            None,
+            true,
+            [3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 13, 13, 14, 14, 15, 15, 15],
+            [4, 5, 5, 7, 7, 8, 8, 9, 10, 11, 11, 12, 12, 14, 14, 15, 15, 16, 18, 18, 19, 19, 20, 20, 22],
+        ),
+    ];
+    for (options, limit, snapping, xs, hs) in cases {
+        let out = compile_ttf(&x_and_h(options, ""), &autohinted()).unwrap();
+        assert!(!out.warnings.iter().any(|w| w.contains("TTFAutohint")), "{:?}", out.warnings);
+        runs_everywhere(&out.bytes);
+        let mut checked = 0;
+        for (i, ppem) in (6..=30u16).enumerate() {
+            // Sizes where a value lies within 0.03 px of a rounding boundary are left out: the
+            // interpreters' fixed-point steps can tip them either way.
+            let s = 516.0 * f64::from(ppem) / 1000.0;
+            let up = if limit.is_some_and(|l| ppem <= l) { 13.0 / 16.0 } else { 5.0 / 8.0 };
+            if snapping && !(0.03..=0.97).contains(&(s + up).fract()) {
+                continue;
+            }
+            let factor = if snapping { (s + up).floor() / s } else { 1.0 };
+            let tops = hinted_extents(&out, &["x", "H"], ppem, SMOOTH);
+            for ((units, want), (bottom, top)) in [(500.0, xs[i]), (700.0, hs[i])].into_iter().zip(tops) {
+                assert_eq!(bottom, 0.0, "`{options}` at {ppem} PPM");
+                let v: f64 = units * f64::from(ppem) / 1000.0 * factor;
+                if (v.fract() - 0.5).abs() < 0.03 {
+                    continue;
+                }
+                assert_eq!(top, want as f32, "`{options}` at {ppem} PPM: the row of {units}");
+                checked += 1;
+            }
+        }
+        assert!(checked >= 35, "`{options}`: {checked} rows compared");
+    }
+}
+
+#[test]
+fn autohint_hints_a_glyph_with_components_as_its_outline_and_leaves_composites_alone() {
+    let mut f = x_and_h("", "");
+    f.add_glyph("xdot", Vec::new(), 600.0).unwrap();
+    f.add_glyph("xx", Vec::new(), 600.0).unwrap();
+    {
+        let mut g = f.glyph_mut("xdot").unwrap();
+        g.layers[0].shapes.push(Shape::Component(fontcraft_model::Component::new("x", 0.0, 0.0)));
+        g.layers[0].shapes.push(Shape::Path(Path::rect(200.0, 600.0, 300.0, 700.0)));
+    }
+    f.glyph_mut("xx").unwrap().layers[0].shapes.push(Shape::Component(fontcraft_model::Component::new("x", 0.0, 0.0)));
+    let out = compile_ttf(&f, &autohinted()).unwrap();
+    let font = FontRef::new(&out.bytes).unwrap();
+    assert!(!program(&font, gid(&out, "xdot")).is_empty(), "the mixed glyph is hinted as its outline");
+    assert!(program(&font, gid(&out, "xx")).is_empty(), "a composite gets no program of its own");
+    runs_everywhere(&out.bytes);
+    for ppem in 9..=30u16 {
+        let e = hinted_extents(&out, &["x", "H", "xdot", "xx"], ppem, SMOOTH);
+        let (x, h, xdot, xx) = (e[0], e[1], e[2], e[3]);
+        assert_eq!(xdot, (0.0, h.1), "{ppem} PPM: the dot's top on the cap-height row, the base on the baseline");
+        assert_eq!(xx, x, "{ppem} PPM: the composite draws its hinted component");
+    }
+}
+
+#[test]
+fn control_instruction_point_shifts_move_points_after_iup() {
+    let shifted = compile_ttf(&x_and_h("", "x point 0-3 yshift 1 @ 12"), &autohinted()).unwrap();
+    assert!(!shifted.warnings.iter().any(|w| w.contains("control")), "{:?}", shifted.warnings);
+    let plain = compile_ttf(&x_and_h("", ""), &autohinted()).unwrap();
+    runs_everywhere(&shifted.bytes);
+    let font = FontRef::new(&shifted.bytes).unwrap();
+    let text = fontcraft_hinting::ttasm::disassemble(program(&font, gid(&shifted, "x"))).unwrap();
+    let iup = text.rfind("IUP").unwrap();
+    assert!(text[iup..].contains("SVTCA[0]"), "the shifts follow IUP: {text}");
+    for ppem in [11u16, 12, 13] {
+        let (a, b) = (hinted_extents(&shifted, &["x"], ppem, Intent::Mono)[0], hinted_extents(&plain, &["x"], ppem, Intent::Mono)[0]);
+        let lift = if ppem == 12 { 1.0 } else { 0.0 };
+        assert_eq!(a, (b.0 + lift, b.1 + lift), "{ppem} PPM");
+    }
+}
