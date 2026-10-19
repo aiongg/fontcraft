@@ -165,6 +165,21 @@ fn font_wide_cff_budgets_refuse_before_the_table_is_built() {
 }
 
 #[test]
+fn nested_subroutine_expansion_counts_against_the_charstring_memory() {
+    // Glyph 2 calls a local subroutine that calls the global `0 100 rlineto` 3,000 times: a
+    // program of about 6 KB that writes about 9 KB once flat.
+    let subr = format!("0 50 hstemhm{} return", " -107 callgsubr".repeat(3_000));
+    let table = cff_table_with_subr(&subr);
+    let options = DehintOptions::default();
+    assert!(cff::dehint_within(&table, false, &options, 1 << 20, 1 << 20).unwrap().is_some(), "within a larger budget");
+
+    let started = std::time::Instant::now();
+    let e = cff::dehint_within(&table, false, &options, 1 << 20, 8_000).unwrap_err();
+    assert!(e.to_string().contains("charstrings without subroutines"), "{e}");
+    assert!(started.elapsed() < std::time::Duration::from_secs(1), "refused while the glyph is written");
+}
+
+#[test]
 fn shared_gpos_subtables_are_refused_before_they_are_copied() {
     use crate::layout_budget::tests::{MAX_SHARED, shared_gpos};
     let mut font = cff_font();

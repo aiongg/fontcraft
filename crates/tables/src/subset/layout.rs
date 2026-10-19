@@ -743,7 +743,8 @@ fn read_gpos(bytes: &[u8]) -> Result<Layout<PositionLookup>> {
     let tag = *b"GPOS";
     crate::layout_budget::check_gpos(bytes)?;
     let table = read_fonts::tables::gpos::Gpos::read(FontData::new(bytes)).map_err(|e| read_err(tag, e))?;
-    let owned: Gpos = table.to_owned_table();
+    let mut owned: Gpos = table.to_owned_table();
+    crate::layout_budget::restore_empty_pair_records(&mut owned)?;
     let Gpos { script_list, feature_list, lookup_list, feature_variations } = owned;
     Ok(Layout {
         scripts: script_list.into_inner(),

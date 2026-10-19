@@ -384,6 +384,7 @@ pub(crate) fn gpos(bytes: &[u8], order: &Order) -> Result<Vec<u8>> {
     crate::layout_budget::check_gpos(bytes)?;
     let table = read_fonts::tables::gpos::Gpos::read(FontData::new(bytes)).map_err(|e| read_err(tag, e))?;
     let mut owned: Gpos = table.to_owned_table();
+    crate::layout_budget::restore_empty_pair_records(&mut owned)?;
     for lookup in &mut owned.lookup_list.lookups {
         gpos_subtable(lookup, order)?;
     }

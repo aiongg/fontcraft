@@ -20,6 +20,7 @@ pub(super) fn prune(data: &[u8]) -> Result<Option<Vec<u8>>> {
     crate::layout_budget::check_gpos(data)?;
     let read = read_fonts::tables::gpos::Gpos::read(FontData::new(data)).map_err(|e| TablesError::Invalid(format!("the GPOS table: {e}")))?;
     let mut gpos: Gpos = read.to_owned_table();
+    crate::layout_budget::restore_empty_pair_records(&mut gpos)?;
     let mut changed = false;
     for lookup in gpos.lookup_list.lookups.iter_mut() {
         changed |= prune_lookup(lookup);

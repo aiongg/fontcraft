@@ -518,3 +518,75 @@ fn damaged_layout_tables_are_errors_or_empty_tables_never_crashes() {
         let _ = subset(&font, &SubsetOptions { text: "fia".into(), ..SubsetOptions::default() });
     }
 }
+
+#[test]
+fn subset_no_hinting_keeps_a_class_pair_table_whose_values_become_empty() {
+    // Every value is a 0 advance with a device table, so without hinting both value formats
+    // become 0 and the class records take no bytes. V leaves the subset, which empties class 3
+    // of the first definition and class 2 of the second.
+    let mut font = outlines();
+    let ids = Ids::new(&font);
+    let hinted = || {
+        wpos::Class2Record::new(
+            wpos::ValueRecord::new().with_x_advance(0).with_x_advance_device(wl::DeviceOrVariationIndex::device(12, 13, &[1, -1])),
+            wpos::ValueRecord::new(),
+        )
+    };
+    let class1: wl::ClassDef = [("T", 1), ("A", 2), ("V", 3)].iter().map(|(n, c)| (ids.g(n), *c)).collect();
+    let class2: wl::ClassDef = [("o", 1), ("V", 2)].iter().map(|(n, c)| (ids.g(n), *c)).collect();
+    let pair = wpos::PairPos::format_2(
+        ids.cov(&["T", "A", "V"]),
+        class1,
+        class2,
+        (0..4).map(|_| wpos::Class1Record::new((0..3).map(|_| hinted()).collect())).collect(),
+    );
+    let lookup = wpos::PositionLookup::Pair(wl::Lookup::new(wl::LookupFlag::empty(), vec![pair]));
+    let scripts = wl::ScriptList::new(vec![wl::ScriptRecord::new(WTag::new(b"DFLT"), wl::Script::new(system(&[0]), vec![]))]);
+    let table = wpos::Gpos::new(scripts, wl::FeatureList::new(vec![feature(b"kern", vec![0])]), wl::LookupList::new(vec![lookup]));
+    font.insert(*b"GPOS", dump_table(&table).unwrap());
+
+    // (value format 1, value format 2, class 1 count, class 2 count) of the subset.
+    let shape = |hinting: bool| {
+        let result = subset(&font, &SubsetOptions { text: "TAo".into(), hinting, ..SubsetOptions::default() }).unwrap();
+        let gpos = read_fonts::tables::gpos::Gpos::read(FontData::new(result.font.get(*b"GPOS").unwrap())).unwrap();
+        let lookup = gpos.lookup_list().unwrap().lookups().get(0).unwrap();
+        let read_fonts::tables::gpos::PositionLookup::Pair(l) = lookup else { panic!() };
+        let read_fonts::tables::gpos::PairPos::Format2(p) = l.subtables().get(0).unwrap() else { panic!() };
+        (p.value_format1().bits(), p.value_format2().bits(), p.class1_count(), p.class2_count())
+    };
+    assert_eq!(shape(true), (0x0004 | 0x0040, 0, 2, 2), "the device tables stay with hinting");
+    assert_eq!(shape(false), (0, 0, 2, 2), "pyftsubset --no-hinting keeps the subtable with empty records");
+}
+
+#[test]
+fn class_pair_records_without_values_count_against_the_layout_limit() {
+    // A pair table with both value formats 0 and two class definitions of 4,000 classes each:
+    // 16 million records once rebuilt, from a table of 16 KB.
+    const N: u16 = 4_000;
+    let mut t: Vec<u8> = Vec::new();
+    let mut be16 = |v: u16| t.extend_from_slice(&v.to_be_bytes());
+    // Header, empty script and feature lists, one lookup of type 2 with one subtable.
+    for v in [1, 0, 10, 12, 14, 0, 0, 1, 4, 2, 0, 1, 8] {
+        be16(v);
+    }
+    // PairPos format 2 at 26: coverage at +16, class definitions after it.
+    let cd1 = 16 + 6;
+    let cd2 = cd1 + 6 + 2 * N;
+    for v in [2, 16, 0, 0, cd1, cd2, N, N, 1, 1, 1] {
+        be16(v);
+    }
+    for _ in 0..2 {
+        for v in [1, 0, N] {
+            be16(v);
+        }
+        for class in 1..=N {
+            be16(class);
+        }
+    }
+    let mut font = outlines();
+    font.insert(*b"GPOS", t);
+    let started = std::time::Instant::now();
+    let e = subset(&font, &SubsetOptions { text: "T".into(), ..SubsetOptions::default() }).unwrap_err().to_string();
+    assert!(e.contains("too large"), "{e}");
+    assert!(started.elapsed() < std::time::Duration::from_secs(2), "refused before the records are built");
+}
