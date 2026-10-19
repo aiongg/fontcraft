@@ -45,7 +45,9 @@ fn fontdame_contextual_rules_call_lookups_defined_first() {
         fea,
         concat!(
             "# GSUB lookups\nlookup GSUB_u2aelow_sinh {\n    sub uvowelsignsinh by uuvowelsignsinh;\n} GSUB_u2aelow_sinh;\n\n",
-            "lookup GSUB_raucontext_sinh {\n    sub rakarsinh uvowelsignsinh' lookup GSUB_u2aelow_sinh;\n} GSUB_raucontext_sinh;\n\n",
+            "lookup GSUB_raucontext_sinh {\n",
+            "    # FontDame lookup flag left out: mark attachment class 2 (convert the GDEF file with this one)\n",
+            "    sub rakarsinh uvowelsignsinh' lookup GSUB_u2aelow_sinh;\n} GSUB_raucontext_sinh;\n\n",
         )
     );
     assert_eq!(warnings.len(), 2, "{warnings:?}");
@@ -144,6 +146,38 @@ fn fontdame_bad_files_fail_with_the_line_and_never_panic() {
     // `# N` names a glyph by id.
     let (fea, _) = fontdame_to_fea("FontDame GSUB table\nlookup\tl\tsingle\n# 1\t# 7\nlookup end\n", &[".notdef".into(), "a".into()]).unwrap();
     assert!(fea.contains("sub a by glyph00007;"), "{fea}");
+}
+
+/// A `U XXXX` glyph takes the name mtiLib gives it: AGLFN's, else `uniXXXX` or `uXXXXX`.
+#[test]
+fn fontdame_code_points_take_their_aglfn_names() {
+    let text = tabs("FontDame GSUB table\nlookup\tnum\talternate\nU 30\tU F730\tU 2039\tu 1D400\nlookup end\n");
+    let (fea, _) = fontdame_to_fea(&text, &[]).unwrap();
+    assert!(fea.contains("sub zero from [uniF730 guilsinglleft u1D400];"), "{fea}");
+}
+
+/// feaLib pairs the two classes of a reverse chaining rule after sorting each by name, fea-rs
+/// in written order: the classes are written sorted, and a mapping whose replacements sort in
+/// another order is written one glyph at a time. No `subtable;` goes between the subtables.
+#[test]
+fn fontdame_reverse_chaining_keeps_its_pairs_in_both_compilers() {
+    let text = tabs(concat!(
+        "FontDame GSUB table\nlookup\trev\treversechained\nRightToLeft\tyes\n",
+        "backtrackcoverage definition begin\nk\ncoverage definition end\n",
+        "zay\tzay.fina\nray\tray.fina\n% subtable\n",
+        "lookaheadcoverage definition begin\nk\ncoverage definition end\n",
+        "b\ta.alt\na\tb.alt\nlookup end\n",
+    ));
+    let (fea, warnings) = fontdame_to_fea(&text, &[]).unwrap();
+    assert_eq!(
+        fea,
+        concat!(
+            "# GSUB lookups\nlookup GSUB_rev {\n    lookupflag RightToLeft;\n",
+            "    rsub k [ray zay]' by [ray.fina zay.fina];\n",
+            "    rsub a' k by b.alt;\n    rsub b' k by a.alt;\n} GSUB_rev;\n\n",
+        )
+    );
+    assert!(warnings.is_empty(), "{warnings:?}");
 }
 
 /// fontTools' mtiLib test files, each read as the table its test reads it as.

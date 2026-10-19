@@ -10,19 +10,26 @@
 //!    GSUB and GPOS files given with it name.
 //! 2. `GSUB`, then `GPOS`: one lookup block per lookup (`GSUB_<name>`, `GPOS_<name>`), each
 //!    after the lookups its contextual rules call, with `subtable;` between the file's
-//!    subtables; then one feature block per feature tag, with a `script` and `language`
-//!    statement for every language system that lists the feature.
+//!    subtables (except in reverse chaining lookups, where every rule is a subtable); then one
+//!    feature block per feature tag, with a `script` and `language` statement for every
+//!    language system that lists the feature.
 //! 3. The `GDEF` table block: glyph classes, attachment points, ligature carets.
 //!
-//! What feature code cannot say is a warning: a feature no language system lists, a class 0
-//! that needs the glyph order when none is given, lookups moved so that a called lookup is
-//! defined first, mark attachment classes without their `GDEF` file.
+//! What feature code cannot say is left out with a warning: a feature no language system
+//! lists; class 0 when no glyph order is given; a lookup flag's mark attachment class or mark
+//! filtering set when the `GDEF` file is not converted with the lookups (feature code names
+//! these classes by their glyphs and the compiler numbers them); a `GDEF` file's mark
+//! attachment classes and filtering sets that no lookup uses (written as named glyph classes,
+//! which no table holds). A warning also names the lookups that move so that a called lookup
+//! is defined first. `docs/spec/40-compile.md` › FontDame conversion against mtiLib lists the
+//! differences from mtiLib's tables.
 //!
 //! Choices of ours, where the format leaves room: backtrack sequences are listed nearest glyph
 //! first, as the binary stores them, and are reversed for feature code; class 0 of a class
 //! definition is every glyph of the glyph order without another class (at the first input
-//! position, the glyphs listed with class 0); `U XXXX` names a glyph `uniXXXX` (`uXXXXX` above
-//! U+FFFF), where mtiLib would take the Adobe Glyph List name when there is one.
+//! position, the glyphs listed with class 0); a reverse chaining subtable is one rule with its
+//! classes sorted by name, or one rule per glyph when the replacements do not sort in the same
+//! order, since feaLib and fea-rs pair the two classes differently.
 
 mod parse;
 #[cfg(test)]
@@ -416,16 +423,20 @@ impl<'a> Writer<'a> {
             .filter(|(i, _)| l.flags & (1 << i) != 0)
             .map(|(_, w)| (*w).to_string())
             .collect();
+        let mut missing: Vec<String> = Vec::new();
         if l.mark_attach != 0 {
             match self.mark_attach.get(&l.mark_attach) {
                 Some(class) => {
                     words.push(format!("MarkAttachmentType @{class}"));
                     self.used_attach.insert(l.mark_attach);
                 }
-                None => self.warnings.push(format!(
-                    "lookup \"{}\": mark attachment class {} is defined in GDEF, which was not given with it; the lookup is written without it",
-                    l.name, l.mark_attach
-                )),
+                None => {
+                    self.warnings.push(format!(
+                        "lookup \"{}\": mark attachment class {} is defined in GDEF, which was not given with it; the lookup is written without it",
+                        l.name, l.mark_attach
+                    ));
+                    missing.push(format!("mark attachment class {}", l.mark_attach));
+                }
             }
         }
         if let Some(set) = l.filter_set {
@@ -434,17 +445,26 @@ impl<'a> Writer<'a> {
                     words.push(format!("UseMarkFilteringSet @{class}"));
                     self.used_filter.insert(set);
                 }
-                None => self.warnings.push(format!(
-                    "lookup \"{}\": mark filtering set {set} is defined in GDEF, which was not given with it; the lookup is written without it",
-                    l.name
-                )),
+                None => {
+                    self.warnings.push(format!(
+                        "lookup \"{}\": mark filtering set {set} is defined in GDEF, which was not given with it; the lookup is written without it",
+                        l.name
+                    ));
+                    missing.push(format!("mark filtering set {set}"));
+                }
             }
+        }
+        // The flag stays visible in the code, for whoever adds the GDEF classes by hand.
+        if !missing.is_empty() {
+            body.push(format!("# FontDame lookup flag left out: {} (convert the GDEF file with this one)", missing.join(", ")));
         }
         if !words.is_empty() {
             body.push(format!("lookupflag {};", words.join(" ")));
         }
         for (si, st) in l.subtables.iter().enumerate() {
-            if si > 0 {
+            // Every reverse chaining rule is a subtable of its own, and feaLib warns about the
+            // statement there as unsupported.
+            if si > 0 && l.kind != Kind::ReverseSub {
                 body.push("subtable;".to_string());
             }
             let base = format!("{name}_{}", si + 1);
@@ -550,25 +570,36 @@ impl<'a> Writer<'a> {
                     self.warnings.push(format!("FontDame line {line}: an empty coverage matches nothing; the rules are left out"));
                     return Ok(());
                 }
-                let src: Vec<String> = mapping.iter().map(|(a, _)| a.clone()).collect();
-                let dst: Vec<String> = mapping.iter().map(|(_, b)| b.clone()).collect();
-                let mut s = "rsub ".to_string();
-                if prefix.is_empty() && suffix.is_empty() {
-                    s.push_str(&glyph_set(&src));
+                // A class to class rule pairs its glyphs after sorting both classes by name in
+                // feaLib, and in written order in fea-rs; the classes are written sorted, and
+                // as one rule only when both readings give the file's pairs.
+                let mut pairs: Vec<&(String, String)> = mapping.iter().collect();
+                pairs.sort();
+                let consistent = pairs.windows(2).all(|w| matches!(w, [a, b] if a.1 <= b.1));
+                let groups: Vec<(Vec<String>, Vec<String>)> = if consistent {
+                    vec![pairs.iter().map(|(a, b)| (a.clone(), b.clone())).unzip()]
                 } else {
-                    for p in &prefix {
-                        s.push_str(p);
-                        s.push(' ');
+                    pairs.iter().map(|(a, b)| (vec![a.clone()], vec![b.clone()])).collect()
+                };
+                for (src, dst) in groups {
+                    let mut s = "rsub ".to_string();
+                    if prefix.is_empty() && suffix.is_empty() {
+                        s.push_str(&glyph_set(&src));
+                    } else {
+                        for p in &prefix {
+                            s.push_str(p);
+                            s.push(' ');
+                        }
+                        s.push_str(&glyph_set(&src));
+                        s.push('\'');
+                        for p in &suffix {
+                            s.push(' ');
+                            s.push_str(p);
+                        }
                     }
-                    s.push_str(&glyph_set(&src));
-                    s.push('\'');
-                    for p in &suffix {
-                        s.push(' ');
-                        s.push_str(p);
-                    }
+                    s.push_str(&format!(" by {};", glyph_set(&dst)));
+                    body.push(s);
                 }
-                s.push_str(&format!(" by {};", glyph_set(&dst)));
-                body.push(s);
             }
         }
         Ok(())
