@@ -160,9 +160,12 @@ pub fn build_hvar_with(font: &SfntFont, options: &HvarOptions) -> Result<HvarBui
     })
 }
 
+/// One delta per region.
+type RegionDeltas = Vec<(Region, i32)>;
+
 /// The horizontal and vertical advance deltas of glyph `gid` (with `points` outline points or
 /// components), one per distinct region of its tuples, zeros left out.
-fn phantom_deltas(gvar: &Gvar<'_>, gid: GlyphId, points: usize, axis_count: usize) -> Result<(Vec<(Region, i32)>, Vec<(Region, i32)>)> {
+fn phantom_deltas(gvar: &Gvar<'_>, gid: GlyphId, points: usize, axis_count: usize) -> Result<(RegionDeltas, RegionDeltas)> {
     let mut h: Vec<(Region, i32)> = Vec::new();
     let mut v: Vec<(Region, i32)> = Vec::new();
     let Some(data) =
@@ -196,7 +199,7 @@ fn phantom_deltas(gvar: &Gvar<'_>, gid: GlyphId, points: usize, axis_count: usiz
         for d in tuple.deltas() {
             let at = usize::from(d.position);
             if let Some(slot) = at.checked_sub(points).and_then(|k| phantom.get_mut(k)) {
-                *slot = (i32::from(d.x_delta), i32::from(d.y_delta));
+                *slot = (d.x_delta, d.y_delta);
             }
         }
         let [left, right, top, bottom] = phantom;

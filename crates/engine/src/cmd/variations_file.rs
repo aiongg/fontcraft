@@ -248,8 +248,11 @@ fn given_locations(p: &Params<'_>, list: &[Value]) -> Result<Vec<Vec<(Tag, f64)>
     Ok(out)
 }
 
+/// Master locations, each a list of axis tag and coordinate.
+type Locations = Vec<Vec<(Tag, f64)>>;
+
 /// The master locations and names of `designspace` or `locations`; `None` when neither is given.
-fn model_input(p: &Params<'_>) -> Result<Option<(Vec<Vec<(Tag, f64)>>, Vec<String>)>> {
+fn model_input(p: &Params<'_>) -> Result<Option<(Locations, Vec<String>)>> {
     match (p.opt_str("designspace")?, p.opt_array("locations")?) {
         (Some(_), Some(_)) => Err(p.bad("give `designspace` or `locations`, not both")),
         (Some(ds), None) => {

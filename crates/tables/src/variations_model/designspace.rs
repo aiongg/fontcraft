@@ -221,7 +221,8 @@ pub fn designspace_locations(text: &str) -> Result<DesignspaceLocations> {
     }
     let mut axes: Vec<Axis> = Vec::new();
     // Each source's name and its dimensions: axis name, design value, user value.
-    let mut sources: Vec<(String, Vec<(String, Option<f64>, Option<f64>)>)> = Vec::new();
+    type Dimension = (String, Option<f64>, Option<f64>);
+    let mut sources: Vec<(String, Vec<Dimension>)> = Vec::new();
     let mut stack: Vec<&str> = Vec::new();
     for event in events(text)? {
         match event {

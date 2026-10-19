@@ -256,7 +256,9 @@ fn build_fontmake(req: &Request, kind: SourceKind, source: &Path) -> Result<Buil
     }
     args.push(ext.into());
     if req.flavour == Flavour::Cff {
-        // Specialised charstrings without subroutines: what FontCraft's CFF writer is planned to do.
+        // Specialised charstrings without subroutines. FontCraft subroutinises its static CFF
+        // exports, but the CFF glyphs are compared as drawn, so subroutines do not change the
+        // result; leaving them out saves fontmake the subroutiniser's run.
         args.extend(["--optimize-cff".into(), "1".into()]);
     }
     // Overlaps are removed, by fontmake's default backend, as FontCraft removes them for static

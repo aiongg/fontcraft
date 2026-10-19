@@ -236,10 +236,14 @@ mod tests {
 
     #[test]
     fn widths_are_chosen_again_and_every_advance_stays() {
-        let advances = [500.0, 600.0, 600.0, 600.0, 600.0, 1200.0, 250.0];
+        // Enough glyphs that the width operands saved outweigh the fixed cost of the rewrite's
+        // five-byte DICT offsets.
+        let pattern = [500, 600, 600, 600, 600, 1200, 250];
+        let expected: Vec<i64> = pattern.iter().copied().cycle().take(pattern.len() * 10).collect();
+        let advances: Vec<f64> = expected.iter().map(|&a| a as f64).collect();
         let input = table(&advances);
         let before = read_advances(&input);
-        assert_eq!(before, vec![500, 600, 600, 600, 600, 1200, 250]);
+        assert_eq!(before, expected);
         let (out, report) = optimize_widths_table(&input).unwrap();
         assert_eq!(report.changed, 1, "{report:?}");
         assert!(out.len() < input.len(), "{} >= {}", out.len(), input.len());

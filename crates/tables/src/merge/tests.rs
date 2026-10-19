@@ -304,7 +304,7 @@ fn font_merge_recalculates_maxp_and_the_head_flags_from_the_merged_glyphs() {
     let merged = merge(&[one.clone(), two.clone()], &MergeOptions::default()).unwrap();
     let maxp = merged.get(*b"maxp").unwrap();
     let maxima: Vec<u16> = [6, 8, 10, 12, 28, 30].iter().map(|at| u16::from_be_bytes([maxp[*at], maxp[at + 1]])).collect();
-    assert_eq!(maxima, [4, 1, 0, 0, 0, 0], "rectangles only, no composites");
+    assert_eq!(maxima, [8, 2, 0, 0, 0, 0], "the hollow .notdef box is the largest glyph; no composites");
     let flags = |f: &SfntFont| u16::from_be_bytes([f.get(*b"head").unwrap()[16], f.get(*b"head").unwrap()[17]]);
     assert_eq!(flags(&merged) & 2, 2, "every left side bearing equals xMin");
 
