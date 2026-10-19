@@ -64,7 +64,7 @@ pub use rare::{Rare, RareDefault};
 pub use rename::{GlyphReference, RenameReport, Renamed, rename_glyphs};
 pub use resolve::{
     DONT_USE_PRODUCTION_NAMES, Metrics, ORIGIN_ANCHOR, Resolved, ResolvedAxis, ResolvedComponent, ResolvedGlyph, StyleLinking, Target, blue_values,
-    is_ufo_family,
+    is_ufo_family, location_class, strip_instance_info,
 };
 pub use shape_info::{
     Alignment, AnchorInfo, AnchorInfoBox, ComponentInfo, ComponentInfoBox, Dimension, NodeInfo, NodeInfoBox, Orientation, PathInfo, PathInfoBox,

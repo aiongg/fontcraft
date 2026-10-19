@@ -20,6 +20,14 @@
 //! master's location the master layer is the drawing; a variable font makes alternate layers
 //! separate glyphs with feature variations. The result's notes say when a font has any.
 //!
+//! A static instance of a UFO or designspace source takes its font information as fontmake's
+//! instancer gives it (ufo2ft's `Instantiator`, glyphsLib's `apply_instance_data_to_ufo`, both
+//! read for this port; ufo2ft MIT, glyphsLib Apache-2.0): the masters' names that belong to one
+//! style ([`strip_instance_info`]) are left out unless the source has one master and the
+//! instance sits at it, the style-map names come from the instance, and `usWeightClass` and
+//! `usWidthClass` come from the instance's location on a `wght` or `wdth` axis
+//! ([`location_class`]) unless the instance's own parameters set them.
+//!
 //! The master's alignment zones and stems come along for PostScript hinting values; the
 //! zones as blue values follow glyphsLib's `to_ufo_blue_values` (Apache-2.0, see `NOTICE`).
 //!
@@ -297,6 +305,14 @@ impl Font {
         let mut params = Params(self.info.params.0.iter().filter(|p| !p.disabled).cloned().collect());
         overlay(&mut properties, &mut params, &master.properties, &master.params);
         if let Some(inst) = instance {
+            if is_ufo_family(self.source.format) {
+                strip_instance_info(&mut properties, &mut params, self.masters.len() == 1);
+                for (tag, name) in [("wght", WEIGHT_CLASS), ("wdth", WIDTH_CLASS)] {
+                    if let Some(class) = location_class(self, &inst.location, tag) {
+                        params.set(name, fontcraft_plist::Value::Number(fontcraft_plist::Number::int(class)));
+                    }
+                }
+            }
             overlay(&mut properties, &mut params, &inst.properties, &inst.params);
         }
         let style_name = match instance {
@@ -486,6 +502,89 @@ fn apply_origin_anchor(g: &mut ResolvedGlyph) {
     for (_, p) in &mut g.anchors {
         *p = shift * *p;
     }
+}
+
+const WEIGHT_CLASS: &str = "weightClass";
+const WIDTH_CLASS: &str = "widthClass";
+
+/// Font information of a UFO's that names one style, as the model holds it (parameters, then
+/// properties): fontmake's instancer leaves it out of a static instance between masters
+/// (everything outside ufo2ft's `UFO_INFO_ATTRIBUTES_TO_COPY_TO_INSTANCES` that does not
+/// interpolate).
+const INSTANCE_OWN_PARAMS: &[&str] = &[
+    "postscriptFontName",
+    "postscriptFullName",
+    "postscriptWeightName",
+    "postscriptUniqueID",
+    "preferredFamilyName",
+    "openTypeNamePreferredFamilyName",
+    "preferredSubfamilyName",
+    "openTypeNamePreferredSubfamilyName",
+    "compatibleFullName",
+    "openTypeNameCompatibleFullName",
+    "WWSFamilyName",
+    "openTypeNameWWSFamilyName",
+    "WWSSubfamilyName",
+    "openTypeNameWWSSubfamilyName",
+    "uniqueID",
+    "openTypeNameUniqueID",
+    "macintoshFONDName",
+    "macintoshFONDFamilyID",
+    "year",
+];
+const INSTANCE_OWN_PROPERTIES: &[&str] = &[
+    "postscriptFontName",
+    "postscriptFullName",
+    "postscriptFullNames",
+    "preferredFamilyNames",
+    "preferredSubfamilyNames",
+    "compatibleFullNames",
+    "WWSFamilyName",
+    "WWSSubfamilyName",
+    "uniqueID",
+];
+/// The style-map names, which an instance of a designspace always states (its reader fills what
+/// the document leaves out).
+const STYLE_MAP_PARAMS: [&str; 2] = ["styleMapFamilyName", "styleMapStyleName"];
+const STYLE_MAP_PROPERTIES: [&str; 2] = ["styleMapFamilyNames", "styleMapStyleNames"];
+
+/// Removes from a UFO-family source's font or master information what a static instance does
+/// not take from it: the style-map names always, and the other names of one style
+/// ([`INSTANCE_OWN_PARAMS`]) unless `lone` (the source has one master and the instance sits at
+/// it, where fontmake copies all of the master's information).
+pub fn strip_instance_info(properties: &mut Properties, params: &mut Params, lone: bool) {
+    let (own_params, own_properties): (&[&str], &[&str]) = if lone { (&[], &[]) } else { (INSTANCE_OWN_PARAMS, INSTANCE_OWN_PROPERTIES) };
+    for name in STYLE_MAP_PARAMS.iter().chain(own_params) {
+        params.remove(name);
+    }
+    for key in STYLE_MAP_PROPERTIES.iter().chain(own_properties) {
+        properties.remove(key);
+    }
+}
+
+/// The OS/2 weight class (`wght`) or width class (`wdth`) that glyphsLib gives a static instance
+/// at `location` of a UFO-family source: the user value, truncated and kept within 1 to 1,000,
+/// for weight; the class whose width percentage is nearest (the lower on a tie) for width.
+/// `None` when the font has no such axis.
+pub fn location_class(font: &Font, location: &[f64], tag: &str) -> Option<i64> {
+    const WIDTHS: [f64; 9] = [50.0, 62.5, 75.0, 87.5, 100.0, 112.5, 125.0, 150.0, 200.0];
+    let i = font.axes.iter().position(|a| a.tag == tag)?;
+    let user = crate::axes::mapping(font, i).to_user(axis_value(location, i));
+    if !user.is_finite() {
+        return None;
+    }
+    if tag == "wght" {
+        #[allow(clippy::cast_possible_truncation)]
+        return Some(user.trunc().clamp(1.0, 1000.0) as i64);
+    }
+    let mut best = (5, f64::INFINITY);
+    for (class, w) in (1..).zip(WIDTHS) {
+        let d = (w - user).abs();
+        if d < best.1 {
+            best = (class, d);
+        }
+    }
+    Some(best.0)
 }
 
 /// A location's value on axis `i`: the reference's defaults where the location is short.

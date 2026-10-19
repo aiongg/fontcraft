@@ -515,7 +515,9 @@ pub(crate) fn derive_with_family(font: &Resolved, family: &str, style: &str, war
     let style = if style.is_empty() { font.style_name.as_str() } else { style };
     let params = &font.params;
     let italic_angle = -font.metrics.italic_angle;
-    let linked = if ufo { None } else { linked_names(font, family, style, warnings) };
+    // A static instance of a UFO-family source states its style-map names as a designspace
+    // instance does; a master's come from its font information.
+    let linked = linked_names(font, family, style, warnings);
 
     // Style flags.
     let mut selection = SelectionFlags::empty();
@@ -529,7 +531,10 @@ pub(crate) fn derive_with_family(font: &Resolved, family: &str, style: &str, war
         if let Some(rest) = param(params, &["openTypeOS2SelectionUnsupportedBits"], ints) {
             selection |= SelectionFlags::from_bits_truncate(u16::try_from(bits(&rest, 15)).unwrap_or(0));
         }
-        let implicit = param(params, &["styleMapStyleName"], |v| v.as_str().and_then(ribbi_flags))
+        let implicit = linked
+            .as_ref()
+            .map(|l| if l.flags.is_empty() { SelectionFlags::REGULAR } else { l.flags })
+            .or_else(|| param(params, &["styleMapStyleName"], |v| v.as_str().and_then(ribbi_flags)))
             .or_else(|| {
                 text(font, "preferredSubfamilyNames", &["preferredSubfamilyName", "openTypeNamePreferredSubfamilyName"]).and_then(ribbi_flags)
             })
@@ -889,7 +894,18 @@ fn names(
             None => {}
         }
     }
-    if ufo {
+    if let (true, Some(l)) = (ufo, linked) {
+        // A static instance: its style-map names, as fontmake's instancer gives them.
+        b.names.remove(&1);
+        b.add(1, &l.map_family);
+        b.add(2, ribbi_name(l.flags));
+        if b.get(16).is_none() && !l.family.is_empty() {
+            b.add(16, &l.family);
+        }
+        if b.get(17).is_none() && !l.style.is_empty() {
+            b.add(17, &l.style);
+        }
+    } else if ufo {
         // fontc's UFO rules: the style-map names are the legacy ones; the typographic ones fall
         // back to the family and style names.
         b.names.remove(&1);

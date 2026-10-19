@@ -33,6 +33,9 @@
 //! - A glyph whose sources cannot interpolate fails the instance when it exports; one that does
 //!   not export keeps the layer of its heaviest source, with a note ([`instance_font_with_notes`]).
 //! - A failure changes nothing and leaves the input untouched.
+//! - A UFO or designspace source's instance also gets the font information fontmake's instancer
+//!   gives it ([`ufo_instance_info`]): every number of the font information interpolated, as
+//!   fontMath's `MathInfo` does, and the names of one style left out.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -40,7 +43,7 @@ use std::sync::Arc;
 use fontcraft_geom::variation::VariationModel;
 use fontcraft_model::plist::{Array, Number, Value};
 use fontcraft_model::{
-    Family, Font, Glyph, GlyphTable, KernContext, KernFirst, KernTable, Kerning, Layer, Master, MasterKerning, Params, Shape, Transform,
+    Family, Font, Glyph, GlyphTable, KernContext, KernFirst, KernTable, Kerning, Layer, Master, MasterKerning, Param, Params, Shape, Transform,
 };
 
 use crate::InterpError;
@@ -258,7 +261,25 @@ pub fn instance_font_with_notes(font: &Font, instance: usize, options: &InterpOp
         glyphs.push(Arc::new(out));
     }
 
+    // A designspace's own rules swap glyphs in a static instance, as fontmake's instancer does.
+    if fontcraft_model::is_ufo_family(font.source.format)
+        && let Some(rules) = crate::doc_rules::document_rules(font)
+    {
+        let names: HashSet<String> = glyphs.iter().map(|g| g.name.clone()).collect();
+        for (old, new) in crate::doc_rules::swaps_at(&rules, &inst.location, |n| names.contains(n)) {
+            if !crate::doc_rules::swap_glyphs(&mut glyphs, &old, &new) {
+                notes.push(format!(
+                    "the designspace rule that substitutes `{new}` for `{old}` names a glyph the instance does not have and was left out"
+                ));
+            }
+        }
+    }
+
     let mut out = font.clone();
+    let mut master = master;
+    if fontcraft_model::is_ufo_family(font.source.format) {
+        ufo_instance_info(font, &inst.location, &weights.x, &mut out, &mut master);
+    }
     out.kerning = Arc::new(interpolate_kerning(font, &weights.x, &origin.id)?);
     out.masters = Arc::new(vec![master]);
     out.glyphs = GlyphTable::from_glyphs(glyphs);
@@ -721,6 +742,45 @@ fn interpolate_master(font: &Font, origin: &Master, weights: &MasterWeights, loc
         out.params = crate::params::set_axis_location(&out.params, &entries)?;
     }
     Ok(out)
+}
+
+/// Font-information numbers fontMath does not interpolate: ufo2ft copies them from the default
+/// source.
+const NOT_INTERPOLATED: [&str; 6] =
+    ["postscriptWindowsCharacterSet", "year", "postscriptUniqueID", "macintoshFONDFamilyID", "woffMajorVersion", "woffMinorVersion"];
+
+/// The font information of a UFO-family source's instance (`out`, whose one master is `master`):
+/// each number of the font's information that a master does not set itself is interpolated over
+/// the masters, each master taking the font's value where it has none (a designspace's masters
+/// hold only what differs from the default source), into the master's parameters. Unless the
+/// source has one master and the instance sits at it, the names of one style go
+/// ([`fontcraft_model::strip_instance_info`]).
+fn ufo_instance_info(font: &Font, location: &[f64], weights: &[(String, f64)], out: &mut Font, master: &mut Master) {
+    let masters: HashMap<&str, &Master> = font.masters.iter().map(|m| (m.id.as_str(), m)).collect();
+    for p in font.info.params.0.iter().filter(|p| !p.disabled && !NOT_INTERPOLATED.contains(&p.name.as_str())) {
+        let Value::Number(own) = &p.value else { continue };
+        if master.params.get(&p.name).is_some() {
+            continue;
+        }
+        let mut whole = true;
+        let sum = weighted(weights, |id| {
+            let n = masters.get(id).and_then(|m| m.params.get(&p.name)).and_then(Value::as_num).unwrap_or_else(|| own.value());
+            whole &= matches!(n, fontcraft_model::plist::Num::Int(_));
+            Some(n.as_f64())
+        });
+        let Some(sum) = sum else { continue };
+        #[allow(clippy::cast_possible_truncation)]
+        let number = if whole { Some(Number::int(ot_round(sum) as i64)) } else { Number::float(sum) };
+        if let Some(n) = number.filter(|n| n.value().as_f64() != own.value().as_f64()) {
+            master.params.0.push(Param::new(p.name.clone(), Value::Number(n)));
+        }
+    }
+    if font.masters.len() == 1 && font.master_at(location).is_some() {
+        return;
+    }
+    let info = Arc::make_mut(&mut out.info);
+    fontcraft_model::strip_instance_info(&mut info.properties, &mut info.params, false);
+    fontcraft_model::strip_instance_info(&mut master.properties, &mut master.params, false);
 }
 
 /// `params` with each parameter that is a number, or a list of numbers of one length, on every

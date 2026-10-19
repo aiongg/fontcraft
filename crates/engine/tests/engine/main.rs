@@ -50,6 +50,7 @@ mod cross_format;
 mod custom_params;
 mod decompose;
 mod derived_glyphs;
+mod designspace_instances;
 mod detect;
 mod determinism;
 mod drag_aids;
