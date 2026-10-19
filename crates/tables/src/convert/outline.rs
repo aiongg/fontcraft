@@ -5,19 +5,23 @@
 //! with `reverse_direction` into a `TTGlyphPen`: curves are converted first, then the contour
 //! is reversed with fontTools' `reversedContour` rule (the start point stays first, an implied
 //! closing line is never written), and a last point equal to the first is dropped.
+//!
+//! PostScript outlines are drawn as fontTools draws them (`T2OutlineExtractor`): in font units
+//! as the charstring states them, fractions kept, the FontMatrix not applied. An accented
+//! glyph drawn with `seac` reports its base and accent instead of drawing them.
 
 use std::collections::HashMap;
 
 use fontcraft_geom::cu2qu_multi::curves_to_quadratic;
 use fontcraft_geom::qu2cu::{Curve, quadratic_to_curves};
 use fontcraft_geom::{BezPath, CubicBez, Point, Shape as _};
-use read_fonts::model::glyph::outline::OutlinePen;
-use read_fonts::ps::cff::{CffFontRef, Subfont};
+use read_fonts::ps::cff::CffFontRef;
 use read_fonts::tables::glyf::{Anchor, CompositeGlyphFlags, Glyf, Glyph};
 use read_fonts::tables::loca::{Loca, LocaGlyph};
 use read_fonts::types::GlyphId;
 use read_fonts::{FontData, FontRead};
 
+use super::cff_table::{Drawing, Programs};
 use crate::{Result, TablesError};
 
 /// Deepest component nesting followed.
@@ -57,6 +61,20 @@ pub(super) struct Contour {
 
 impl Contour {
     /// The same contour drawn the other way round, still starting at `start`.
+    pub(super) fn translated(&self, dx: f64, dy: f64) -> Contour {
+        let t = |p: &P| (p.0 + dx, p.1 + dy);
+        let segs = self
+            .segs
+            .iter()
+            .map(|s| match s {
+                Seg::Line(p) => Seg::Line(t(p)),
+                Seg::Quad(offs, p) => Seg::Quad(offs.iter().map(t).collect(), t(p)),
+                Seg::Cubic(c1, c2, p) => Seg::Cubic(t(c1), t(c2), t(p)),
+            })
+            .collect();
+        Contour { start: t(&self.start), segs }
+    }
+
     pub(super) fn reversed(&self) -> Contour {
         let mut segs = Vec::with_capacity(self.segs.len());
         for i in (0..self.segs.len()).rev() {
@@ -73,7 +91,7 @@ impl Contour {
 
 /// Collects drawn contours, closing each one explicitly.
 #[derive(Default)]
-struct Collect {
+pub(super) struct Collect {
     contours: Vec<Contour>,
     open: Option<Contour>,
     points: usize,
@@ -105,7 +123,7 @@ impl Collect {
         }
     }
 
-    fn done(mut self) -> Result<Vec<Contour>> {
+    pub(super) fn done(mut self) -> Result<Vec<Contour>> {
         self.finish_open();
         if self.too_many || self.contours.len() > MAX_CONTOURS {
             return Err(TablesError::TooLarge { what: "the points of one glyph", limit: MAX_GLYPH_POINTS });
@@ -114,39 +132,42 @@ impl Collect {
     }
 }
 
-impl OutlinePen for Collect {
-    fn move_to(&mut self, x: f32, y: f32) {
+impl Collect {
+    pub(super) fn move_to(&mut self, p: P) {
         self.finish_open();
-        self.open = Some(Contour { start: (f64::from(x), f64::from(y)), segs: Vec::new() });
+        self.open = Some(Contour { start: p, segs: Vec::new() });
     }
-    fn line_to(&mut self, x: f32, y: f32) {
-        self.push(Seg::Line((f64::from(x), f64::from(y))));
+    pub(super) fn line_to(&mut self, p: P) {
+        self.push(Seg::Line(p));
     }
-    fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) {
-        self.push(Seg::Quad(vec![(f64::from(cx0), f64::from(cy0))], (f64::from(x), f64::from(y))));
+    pub(super) fn curve_to(&mut self, c1: P, c2: P, p: P) {
+        self.push(Seg::Cubic(c1, c2, p));
     }
-    fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
-        self.push(Seg::Cubic((f64::from(cx0), f64::from(cy0)), (f64::from(cx1), f64::from(cy1)), (f64::from(x), f64::from(y))));
-    }
-    fn close(&mut self) {
+    pub(super) fn close(&mut self) {
         self.finish_open();
     }
 }
 
-/// The glyphs of a `CFF ` or `CFF2` table as contours, at the default location.
+/// The glyphs of a `CFF ` or static `CFF2` table as contours.
 pub(super) struct PsOutlines<'a> {
     font: CffFontRef<'a>,
-    subfonts: HashMap<u16, Subfont>,
+    programs: Programs,
+    /// Charset names to glyphs, the first glyph of a repeated name; filled on first use.
+    by_name: std::cell::OnceCell<HashMap<String, usize>>,
 }
 
 impl<'a> PsOutlines<'a> {
     pub(super) fn new(data: &'a [u8], upem: u16) -> Result<Self> {
         let font = CffFontRef::new(data, 0, Some(i32::from(upem))).map_err(|e| TablesError::Invalid(format!("the CFF table cannot be read: {e}")))?;
-        Ok(PsOutlines { font, subfonts: HashMap::new() })
+        let programs = Programs::read(data, data.first() == Some(&2))?;
+        if programs.len() != font.num_glyphs() as usize {
+            return Err(TablesError::Invalid("the CFF table counts its glyphs two ways".into()));
+        }
+        Ok(PsOutlines { font, programs, by_name: std::cell::OnceCell::new() })
     }
 
     pub(super) fn glyph_count(&self) -> usize {
-        self.font.num_glyphs() as usize
+        self.programs.len()
     }
 
     #[cfg(test)]
@@ -164,18 +185,51 @@ impl<'a> PsOutlines<'a> {
         self.font.string(sid).map(|b| b.iter().map(|&c| char::from(c)).collect())
     }
 
+    /// The glyph's own contours and, for a `seac` glyph, its base and accent.
+    pub(super) fn draw(&self, gid: usize) -> Result<Drawing> {
+        self.programs.draw(gid)
+    }
+
+    /// The glyph's contours, a `seac` base and accent drawn in.
     pub(super) fn contours(&mut self, gid: usize) -> Result<Vec<Contour>> {
-        let id = GlyphId::new(u32::try_from(gid).map_err(|_| TablesError::Invalid("a glyph id beyond 32 bits".into()))?);
-        let bad = |e: read_fonts::ps::error::Error| TablesError::Invalid(format!("glyph {gid} cannot be drawn: {e}"));
-        let index = self.font.subfont_index(id).ok_or_else(|| TablesError::Invalid(format!("glyph {gid} has no Font DICT")))?;
-        if !self.subfonts.contains_key(&index) {
-            let sub = self.font.subfont(index, &[]).map_err(bad)?;
-            self.subfonts.insert(index, sub);
+        self.flattened(gid)
+    }
+
+    /// Contours with the `seac` base and accent drawn in (they may not be accented themselves).
+    pub(super) fn flattened(&self, gid: usize) -> Result<Vec<Contour>> {
+        let drawing = self.draw(gid)?;
+        let mut contours = drawing.contours;
+        if let Some(seac) = drawing.seac {
+            for (code, dx, dy) in [(seac.base, 0.0, 0.0), (seac.accent, seac.adx, seac.ady)] {
+                let Some(part) = self.standard_glyph(code) else { continue };
+                let inner = self.draw(part)?;
+                if inner.seac.is_some() {
+                    return Err(TablesError::Invalid(format!("glyph {gid}: a seac part is itself accented")));
+                }
+                contours.extend(inner.contours.iter().map(|c| c.translated(dx, dy)));
+            }
         }
-        let sub = self.subfonts.get(&index).ok_or_else(|| TablesError::Invalid(format!("glyph {gid} has no Font DICT")))?;
-        let mut pen = Collect::default();
-        self.font.draw(sub, id, &[], None, &mut pen).map_err(bad)?;
-        pen.done()
+        Ok(contours)
+    }
+
+    /// Whether the glyph is drawn with `seac`.
+    pub(super) fn is_accented(&self, gid: usize) -> bool {
+        self.programs.is_accented(gid)
+    }
+
+    /// The glyph a `seac` names by its standard-encoding code, found by charset name.
+    pub(super) fn standard_glyph(&self, code: u8) -> Option<usize> {
+        let name = read_fonts::ps::encoding::PredefinedEncoding::Standard.name(code);
+        let by_name = self.by_name.get_or_init(|| {
+            let mut map = HashMap::new();
+            for gid in 0..self.glyph_count() {
+                if let Some(n) = self.name(gid) {
+                    map.entry(n).or_insert(gid);
+                }
+            }
+            map
+        });
+        by_name.get(name).copied()
     }
 }
 
@@ -192,6 +246,14 @@ impl<'a> GlyfOutlines<'a> {
         let glyf = Glyf::read(FontData::new(glyf)).map_err(bad)?;
         let loca = Loca::read_with_args(FontData::new(loca), long_loca).map_err(bad)?;
         Ok(GlyfOutlines { glyf, loca, count })
+    }
+
+    /// The `xMin` a glyph's header states; `None` for a glyph without data.
+    pub(super) fn x_min(&self, gid: usize) -> Option<i16> {
+        match self.loca.get(GlyphId::new(u32::try_from(gid).ok()?), &self.glyf)? {
+            LocaGlyph::Glyph(g) => Some(g.x_min()),
+            LocaGlyph::Empty => None,
+        }
     }
 
     /// The glyph's contours; `instructions` is set when it (or a component) has a glyph program.
@@ -572,6 +634,35 @@ pub(super) fn encode_simple(contours: &[TtContour]) -> Result<(Vec<u8>, Option<[
     out.extend_from_slice(&xs);
     out.extend_from_slice(&ys);
     Ok((out, Some(bbox)))
+}
+
+/// A composite `glyf` glyph of components placed by offset, as fontTools' `TTGlyphPen` writes
+/// them: offsets rounded to the grid, no instructions.
+pub(super) fn encode_composite(components: &[(u16, i32, i32)], bbox: [i16; 4]) -> Result<Vec<u8>> {
+    let mut out = Vec::with_capacity(10 + components.len() * 8);
+    out.extend_from_slice(&(-1i16).to_be_bytes());
+    for v in bbox {
+        out.extend_from_slice(&v.to_be_bytes());
+    }
+    for (i, &(gid, x, y)) in components.iter().enumerate() {
+        // ARGS_ARE_XY_VALUES and ROUND_XY_TO_GRID; MORE_COMPONENTS but on the last.
+        let mut flags: u16 = 0x0002 | 0x0004;
+        if i + 1 < components.len() {
+            flags |= 0x0020;
+        }
+        let small = |v: i32| (-128..=127).contains(&v);
+        let args: Vec<u8> = if small(x) && small(y) {
+            vec![x as i8 as u8, y as i8 as u8]
+        } else {
+            flags |= 0x0001;
+            let fit = |v: i32| i16::try_from(v).map_err(|_| TablesError::Unsupported(format!("a component offset of {v} does not fit in glyf")));
+            [fit(x)?.to_be_bytes(), fit(y)?.to_be_bytes()].concat()
+        };
+        out.extend_from_slice(&flags.to_be_bytes());
+        out.extend_from_slice(&gid.to_be_bytes());
+        out.extend_from_slice(&args);
+    }
+    Ok(out)
 }
 
 #[cfg(test)]

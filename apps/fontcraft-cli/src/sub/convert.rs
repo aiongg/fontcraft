@@ -25,17 +25,17 @@ const USAGE: &str = "\
       with their values (default) or holds them drawn as outlines.
   fontcraft-cli convert FONT OUT | convert FONT... --to ttf|otf|otf-cff2|cff|cff2 [options]
       Rewrite compiled fonts with other outlines: CFF or CFF2 to TrueType (cubic curves become
-      quadratic within --max-error em, contours reversed), TrueType to CFF or CFF2 (components
-      decomposed, instructions dropped), CFF to CFF2 and back with hints kept, or only the CFF
-      or CFF2 table (cff, cff2). With IN OUT the extension of OUT says what to write; .woff and
-      .woff2 keep the input's outlines. Each output is INPUT.EXT unless -o, --output-dir or
+      quadratic within one font unit or --max-error em, contours reversed), TrueType to CFF or
+      CFF2 (components decomposed, instructions dropped), CFF to CFF2 and back with hints kept,
+      or only the CFF or CFF2 table (cff, cff2). With IN OUT the extension of OUT says what to
+      write; .woff and .woff2 keep the input's outlines. Each output is INPUT.EXT unless -o, --output-dir or
       --in-place says otherwise.
 ";
 
 const OPTIONS: &[OptSpec] = &[
     OptSpec::value("to", "FORMAT", "", "ttf, otf, otf-cff2, cff or cff2"),
     OptSpec::value("container", "plain|woff|woff2", "plain", "wrap the result"),
-    OptSpec::value("max-error", "EM", "0.001", "largest curve conversion error, as a fraction of the em"),
+    OptSpec::value("max-error", "EM", "", "largest curve conversion error, as a fraction of the em (default: one font unit)"),
     OptSpec::value(
         "curve-conversion",
         "optimized|exact",
@@ -159,9 +159,11 @@ fn convert_fonts(parsed: &args::Parsed, raw: &[String]) -> Outcome {
     params.insert("inputs".into(), json!(inputs));
     params.insert("to".into(), json!(to));
     params.insert("container".into(), json!(container));
-    let max_error = parsed.value("max-error").unwrap_or("0.001").parse::<f64>().map_err(|_| usage("--max-error needs a number"))?;
     let mut curves = Map::new();
-    curves.insert("maxError".into(), json!(max_error));
+    if let Some(v) = parsed.value("max-error").filter(|v| !v.is_empty()) {
+        let max_error = v.parse::<f64>().map_err(|_| usage("--max-error needs a number"))?;
+        curves.insert("maxError".into(), json!(max_error));
+    }
     curves.insert("conversion".into(), json!(parsed.value("curve-conversion").unwrap_or("optimized")));
     curves.insert("keepDirection".into(), json!(parsed.switch("keep-direction")));
     params.insert("curves".into(), Value::Object(curves));
