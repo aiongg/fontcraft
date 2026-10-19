@@ -3048,6 +3048,32 @@ summary = "Views and edits raw TrueType bytecode as assembly text, for glyph pro
 ref = "FontForge dialogs › Viewing and Editing truetype instructions; FontForge Hints menu › Edit Instructions, Edit fpgm, Edit prep"
 status = "docs"
 origin = "fontforge"
+notes = "Built in M13.51 (`hint.tt.editInstructions` opens it, `crates/ui-egui/src/dialogs/tt_instructions.rs`). The listing shows each instruction's byte offset and the disassembler's text, with a one-sentence explanation on hover; Edit and Parse work as described, Parse running hint.tt.setAssembly. Of the three shorthands in the summary only arguments on the instruction's line are supported: control values are not looked up or created by value, and deltas have no size-and-amount shorthand. Documented, not yet observed in the reference app."
+guesses = [
+  "Parse stores the text at once (one undo step) instead of waiting for the dialog to close; watching the secondary reference's dialog would show whether its changes apply only on OK.",
+  "The dialog has a Cancel button that drops the edited text and shows the listing again; the documentation names Edit and Parse only.",
+]
+observe = [
+  "Open the instruction dialog on a hinted glyph, press Edit, change a line, close the dialog without Parse, and check whether the change is kept.",
+]
+
+[[command]]
+id = "hint.tt.editInstructions"
+label = "Edit TrueType Instructions…"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{target?: {glyph: name} | 'fpgm' | 'prep', master?: id, open?: bool}"
+area = "hinting-tt"
+milestone = "M13"
+summary = "Opens the TrueType Instructions dialog on the raw program of a glyph (default the edited glyph) or on the font program or control value program, and returns its listing."
+ref = "FontForge Hints menu › Edit Instructions, Edit fpgm, Edit prep"
+status = "docs"
+origin = "fontforge"
+notes = "One command with a target stands for the secondary reference's three menu items. M13.51."
+guesses = [
+  "The command has no menu item, since the app has no Hints menu; it runs from the command search, the console and agents. Adding a Hints menu would settle where it goes.",
+]
 
 [[command]]
 id = "hint.tt.setAssembly"
@@ -3062,6 +3088,15 @@ summary = "Assembles the text and stores it as the raw instructions of a glyph o
 ref = "FontForge dialogs › Viewing and Editing truetype instructions"
 status = "docs"
 origin = "fontforge"
+notes = "Built in M13.51 (`crates/engine/src/cmd/tt_assembly.rs`). A glyph's program is stored as the layer's glyph program, the store an opened hinted font uses (`fontcraft_hinting::imported`), with the outline's fingerprint; fpgm and prep go to the fpgm Table Assembly and prep Table Assembly parameters. Numbers after an instruction other than a push are pushed before it, last on top; unbalanced IF, FDEF and IDEF blocks are refused. Export differs from the summary: it writes a glyph's own program only while the master has a cvt Table, prep Table Assembly or fpgm Table Assembly parameter, and a layer with both its own program and TrueType Instructor hints gets neither (`crates/compile/src/tt_hints.rs`); the result's `warnings` say so. Making the raw program win over Instructor hints is a change to the compiler."
+guesses = [
+  "Without `master`, fpgm and prep text goes to every master and the font-level parameter is removed, as opening a hinted font stores them on every master; the secondary reference has a single font, so nothing settles it there.",
+  "Text that assembles to no bytes removes the program instead of storing an empty one; an empty program and none export the same.",
+  "Arguments written after an instruction are pushed in the order written, so the last ends on top of the stack; the secondary reference's documentation does not give the order, and its dialog would settle it.",
+]
+observe = [
+  "In the secondary reference's instruction dialog, type `MDAP[rnd] 3 4` (two arguments) and Parse: check the order of the values in the push it makes.",
+]
 
 [[panel]]
 id = "window.ttDebugger"
@@ -3129,6 +3164,34 @@ summary = "Steps through the PostScript stem hints of a glyph one at a time for 
 ref = "FontForge Hints menu › Review Hints"
 status = "docs"
 origin = "fontforge"
+notes = "Built in M13.51 (`hint.ps.reviewHints` opens it, `crates/ui-egui/src/dialogs/review_hints.rs`), on the hint.ps commands: the fields run hint.ps.setHintValues, Create runs Add Horizontal or Vertical Hint without nodes, Remove runs hint.ps.deleteHints. The reviewed hint is the Edit View selection when the tab edits that layer, which the canvas marks while Show Hints is on. Documented, not yet observed in the reference app."
+guesses = [
+  "The position field is the hint's origin edge and the width its signed distance to the other edge, as the hint badges show them; ghost hints show an empty width. The secondary reference's dialog would show whether it uses base and width the same way.",
+  "Previous and Next stop at the first and last hint of the direction instead of wrapping round; the secondary reference's dialog would settle it.",
+  "Opening the dialog turns on View › Show Hints so the reviewed hint is visible.",
+]
+observe = [
+  "In the secondary reference, open Review Hints on a glyph with ghost hints and note what the width field shows for one.",
+  "Press Next on the last hint in the secondary reference's Review Hints and check whether it wraps to the first.",
+]
+
+[[command]]
+id = "hint.ps.reviewHints"
+label = "Review Hints…"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{glyph?: name, layer?: id, direction?: 'horizontal' | 'vertical', hint?: index, step?: 'next' | 'previous', open?: bool}"
+area = "hinting-ps"
+milestone = "M13"
+summary = "Opens the Review Hints dialog on a glyph's PostScript hints of one direction, or steps it to the next or previous hint, and returns the reviewed hint's values."
+ref = "FontForge Hints menu › Review Hints"
+status = "docs"
+origin = "fontforge"
+notes = "M13.51."
+guesses = [
+  "The command has no menu item, since the app has no Hints menu; it runs from the command search, the console and agents. Adding a Hints menu would settle where it goes.",
+]
 
 # =====================================================================================================
 # FontForge — bitmap strikes

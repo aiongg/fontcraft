@@ -83,6 +83,7 @@ pub mod pasted_outline_bounds;
 pub mod primitive_measurements;
 mod remove_glyph;
 mod rename_kerning_group;
+pub mod review_hints;
 mod round_corners;
 pub mod rule_tree;
 pub mod sample_strings;

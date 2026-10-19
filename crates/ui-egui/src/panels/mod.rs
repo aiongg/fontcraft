@@ -138,6 +138,8 @@ pub struct PanelState {
     pub compare_fonts: crate::shell::compare_fonts::CompareFontsState,
     pub compare_family: crate::shell::compare_family::CompareFamilyState,
     pub hinting_waterfall: hinting_waterfall::WaterfallState,
+    pub tt_instructions: crate::dialogs::tt_instructions::TtInstructionsState,
+    pub review_hints: crate::dialogs::review_hints::ReviewHintsState,
 }
 
 impl Default for PanelState {
@@ -179,6 +181,8 @@ impl Default for PanelState {
             compare_fonts: Default::default(),
             compare_family: Default::default(),
             hinting_waterfall: Default::default(),
+            tt_instructions: Default::default(),
+            review_hints: Default::default(),
         }
     }
 }
