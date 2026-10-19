@@ -148,9 +148,15 @@ pub struct Plan {
     pub num_glyphs: usize,
     /// Glyph ids kept, after the closure, in the input's numbering.
     pub glyphs: BTreeSet<u32>,
-    /// The glyphs after the GSUB closure, before components and accent parts join: GSUB, GPOS
-    /// and GDEF are subset to these.
+    /// The glyphs before the MATH closure: MATH keeps the variants and assemblies of these.
+    pub pre_math_glyphs: BTreeSet<u32>,
+    /// The glyphs after the MATH closure: the rest of MATH is subset to these.
+    pub math_glyphs: BTreeSet<u32>,
+    /// The glyphs after the GSUB closure, before components and accent parts join: GSUB, GPOS,
+    /// GDEF and kern are subset to these.
     pub layout_glyphs: BTreeSet<u32>,
+    /// The glyphs after the COLR closure, before components join: COLR is subset to these.
+    pub colr_glyphs: BTreeSet<u32>,
     /// Glyphs requested by name or id (they keep every code point that maps to them).
     pub requested: BTreeSet<u32>,
     /// Code points requested, with their mirrored partners under `bidi_closure`.
@@ -203,9 +209,9 @@ pub struct SubsetResult {
 
 /// The layout tables ([`layout`]).
 const LAYOUT_TABLES: [Tag; 3] = [*b"GDEF", *b"GSUB", *b"GPOS"];
-/// Variation tables (M12.19); they go together, so no font claims variations it lost.
+/// Variation tables ([`var`]; CFF2 fonts are refused and VARC is not subset yet).
 const VARIATION_TABLES: [Tag; 10] = [*b"fvar", *b"avar", *b"gvar", *b"cvar", *b"HVAR", *b"VVAR", *b"MVAR", *b"STAT", *b"CFF2", *b"VARC"];
-/// Other tables pyftsubset subsets (M12.19).
+/// Other tables pyftsubset subsets ([`other`]).
 const OTHER_TABLES: [Tag; 13] =
     [*b"COLR", *b"CPAL", *b"SVG ", *b"CBDT", *b"CBLC", *b"sbix", *b"MATH", *b"BASE", *b"kern", *b"EBLC", *b"EBDT", *b"VORG", *b"hdmx"];
 
@@ -234,6 +240,13 @@ pub fn subset(font: &SfntFont, options: &SubsetOptions) -> Result<SubsetResult> 
     layout::apply(&plan, &input, &mut output)?;
     var::apply(&plan, &input, &mut output)?;
     other::apply(&plan, &input, &mut output)?;
+    // The name table also keeps the names the other output tables refer to.
+    let referenced = var::name_ids_in_use(&output);
+    if let Some(name) = input.get(*b"name")
+        && !referenced.is_empty()
+    {
+        output.insert(*b"name", core::subset_name(&plan, name, &referenced)?);
+    }
 
     for tag in input.tags() {
         if output.tables.contains_key(&tag) {
@@ -246,11 +259,13 @@ pub fn subset(font: &SfntFont, options: &SubsetOptions) -> Result<SubsetResult> 
             }
             continue;
         }
-        let reason = if VARIATION_TABLES.contains(&tag) {
-            "subsetting variation tables is not built yet"
-        } else if OTHER_TABLES.contains(&tag) {
+        let reason = if tag == *b"VARC" {
             "subsetting this table is not built yet"
-        } else if core::is_core(tag) || LAYOUT_TABLES.contains(&tag) {
+        } else if [*b"CBDT", *b"CBLC", *b"EBDT", *b"EBLC"].contains(&tag) {
+            "its bitmap location or data table is missing"
+        } else if tag == *b"CPAL" {
+            "no color table uses its palettes"
+        } else if core::is_core(tag) || LAYOUT_TABLES.contains(&tag) || VARIATION_TABLES.contains(&tag) || OTHER_TABLES.contains(&tag) {
             "empty after subsetting"
         } else {
             "the subsetter does not know this table"

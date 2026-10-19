@@ -1,5 +1,7 @@
-//! The glyph closure of a subset: through `cmap`, the GSUB substitutions of the kept features
-//! ([`super::layout::close_glyphs`]), composite glyphs and CFF `seac`, in that order. Ported
+//! The glyph closure of a subset: through `cmap`, the MATH variants
+//! ([`super::other::math::close_glyphs`]), the GSUB substitutions of the kept features
+//! ([`super::layout::close_glyphs`]), the COLR layers and paints
+//! ([`super::other::colr::close_glyphs`]), composite glyphs and CFF `seac`, in that order. Ported
 //! from fontTools' `Subsetter._closure_glyphs` (MIT).
 //!
 //! Every closure is a work list over glyph ids: a glyph is visited at most once, so the work is
@@ -99,8 +101,13 @@ pub fn plan(font: &SfntFont, options: &SubsetOptions) -> Result<Plan> {
         glyphs.extend(0..n.min(4) as u32);
     }
 
+    plan.pre_math_glyphs = glyphs.clone();
+    super::other::math::close_glyphs(font, &mut glyphs, n)?;
+    plan.math_glyphs = glyphs.clone();
     plan.features = super::layout::close_glyphs(font, options, &mut glyphs, n)?;
     plan.layout_glyphs = glyphs.clone();
+    super::other::colr::close_glyphs(font, &mut glyphs, n)?;
+    plan.colr_glyphs = glyphs.clone();
 
     if let Some(glyf) = Glyf::read(font, n)? {
         close(&mut glyphs, n, |g| glyf.components(g as usize))?;

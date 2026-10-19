@@ -94,7 +94,7 @@ pub fn apply(plan: &Plan, input: &SfntFont, output: &mut SfntFont) -> Result<()>
         output.insert(*b"cmap", subset_cmap(plan, cmap)?);
     }
     if let Some(name) = input.get(*b"name") {
-        output.insert(*b"name", subset_name(plan, name)?);
+        output.insert(*b"name", subset_name(plan, name, &BTreeSet::new())?);
     }
     if let Some(os2) = input.get(*b"OS/2") {
         let code_points = output.get(*b"cmap").map(unicode_code_points).transpose()?.unwrap_or_default();
@@ -629,8 +629,9 @@ fn unicode_code_points(bytes: &[u8]) -> Result<BTreeSet<u32>> {
     Ok(out)
 }
 
-/// `name` with the records the options keep, sorted, strings stored once each.
-fn subset_name(plan: &Plan, bytes: &[u8]) -> Result<Vec<u8>> {
+/// `name` with the records the options keep (the requested IDs and the IDs in `referenced`,
+/// which other tables use), sorted, strings stored once each.
+pub(crate) fn subset_name(plan: &Plan, bytes: &[u8], referenced: &BTreeSet<u16>) -> Result<Vec<u8>> {
     let d = Data::new(*b"name", bytes);
     let format = d.u16(0)?;
     let count = usize::from(d.u16(2)?);
@@ -648,7 +649,7 @@ fn subset_name(plan: &Plan, bytes: &[u8]) -> Result<Vec<u8>> {
         let r = [d.u16(at)?, d.u16(at + 2)?, d.u16(at + 4)?, d.u16(at + 6)?];
         let [platform, encoding, language, id] = r;
         let text = d.slice(storage + usize::from(d.u16(at + 10)?), usize::from(d.u16(at + 8)?))?;
-        let id_kept = ids.contains(&id) || (o.all_name_ids && id < 256);
+        let id_kept = ids.contains(&id) || referenced.contains(&id) || (o.all_name_ids && id < 256);
         let unicode = platform == 0 || (platform == 3 && matches!(encoding, 0 | 1 | 10));
         let language_kept = languages.as_ref().is_none_or(|l| l.contains(&language));
         if id_kept && (unicode || o.name_legacy) && language_kept {

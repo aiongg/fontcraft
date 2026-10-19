@@ -14,8 +14,8 @@
 //!    language systems equal to their script's default, strips device tables under
 //!    `hinting: false`, and finally maps every glyph id to the output's numbering.
 //!
-//! GDEF keeps its variation store unchanged; variation indices stay valid because the store is
-//! not pruned.
+//! GDEF's variation store keeps only the delta sets GDEF and GPOS still use, renumbered
+//! ([`super::var::prune_layout_store`]).
 //!
 //! Every table passes the size check of `layout_budget` before it is read into owned types,
 //! nesting is bounded by [`MAX_LOOKUP_NESTING`] and the closure by [`MAX_CLOSURE_WORK`].
@@ -167,7 +167,7 @@ fn glyphs_of(c: &CoverageTable) -> Vec<u16> {
 }
 
 /// A coverage table of `glyphs` in their order, in the smaller format.
-fn coverage(glyphs: &[u16]) -> CoverageTable {
+pub(crate) fn coverage(glyphs: &[u16]) -> CoverageTable {
     let mut ranges: Vec<RangeRecord> = Vec::new();
     for (i, g) in glyphs.iter().enumerate() {
         match ranges.last_mut() {
@@ -806,18 +806,28 @@ pub fn apply(plan: &Plan, input: &SfntFont, output: &mut SfntFont) -> Result<()>
     let s = Bits::from_set(&plan.layout_glyphs);
     let order = output_order(plan);
     let mut used_mark_sets = Vec::new();
+    let mut gdef = None;
     if let Some(bytes) = input.get(*b"GDEF") {
-        let (gdef, used) = subset_gdef(bytes, &s)?;
+        let (g, used) = subset_gdef(bytes, &s)?;
         used_mark_sets = used;
-        if let Some(gdef) = gdef {
-            let bytes = write_fonts::dump_table(&gdef).map_err(|e| write_err(*b"GDEF", e))?;
-            output.insert(*b"GDEF", crate::reorder::layout::gdef(&bytes, &order)?);
-        }
+        gdef = Some(g);
     }
+    let mut gpos = None;
     if let Some(bytes) = input.get(*b"GPOS") {
-        let mut gpos = read_gpos(bytes)?;
-        gpos.prune_pre(&plan.options);
-        gpos.subset_glyphs(&s, &used_mark_sets);
+        let mut t = read_gpos(bytes)?;
+        t.prune_pre(&plan.options);
+        t.subset_glyphs(&s, &used_mark_sets);
+        gpos = Some(t);
+    }
+    // GDEF's store is pruned before GPOS's own pruning, as pyftsubset's table order has it.
+    if let (Some(g), Some(bytes)) = (gdef.as_mut(), input.get(*b"GDEF")) {
+        prune_variation_store(g, bytes, gpos.as_mut())?;
+    }
+    if let Some(gdef) = gdef.filter(gdef_keep) {
+        let bytes = write_fonts::dump_table(&gdef).map_err(|e| write_err(*b"GDEF", e))?;
+        output.insert(*b"GDEF", crate::reorder::layout::gdef(&bytes, &order)?);
+    }
+    if let Some(mut gpos) = gpos {
         gpos.prune_post(plan.options.hinting);
         output.insert(*b"GPOS", crate::reorder::layout::gpos(&write_gpos(gpos)?, &order)?);
     }
@@ -848,9 +858,9 @@ fn output_order(plan: &Plan) -> Order {
 
 // ── GDEF ──
 
-/// GDEF subset to `s`, or `None` when nothing is left; and the indices of the mark glyph sets
-/// still in use, which the lookups' mark filtering sets are renumbered by.
-fn subset_gdef(bytes: &[u8], s: &Bits) -> Result<(Option<Gdef>, Vec<u16>)> {
+/// GDEF subset to `s` (see [`gdef_keep`] for whether anything is left), and the indices of the
+/// mark glyph sets still in use, which the lookups' mark filtering sets are renumbered by.
+fn subset_gdef(bytes: &[u8], s: &Bits) -> Result<(Gdef, Vec<u16>)> {
     let tag = *b"GDEF";
     crate::layout_budget::check_gdef(bytes)?;
     let table = read_fonts::tables::gdef::Gdef::read(FontData::new(bytes)).map_err(|e| read_err(tag, e))?;
@@ -899,13 +909,207 @@ fn subset_gdef(bytes: &[u8], s: &Bits) -> Result<(Option<Gdef>, Vec<u16>)> {
     if empty {
         g.mark_glyph_sets_def.clear();
     }
-    let keep = g.lig_caret_list.as_ref().is_some()
+    Ok((g, used))
+}
+
+/// GDEF still holds something.
+fn gdef_keep(g: &Gdef) -> bool {
+    g.lig_caret_list.as_ref().is_some()
         || g.mark_attach_class_def.as_ref().is_some()
         || g.glyph_class_def.as_ref().is_some()
         || g.attach_list.as_ref().is_some()
         || g.mark_glyph_sets_def.as_ref().is_some()
-        || g.item_var_store.as_ref().is_some();
-    Ok((keep.then_some(g), used))
+        || g.item_var_store.as_ref().is_some()
+}
+
+/// Prunes GDEF's variation store to the delta sets GDEF's caret values and GPOS's value
+/// records and anchors still use, and renumbers their variation indices (`_pruneGDEF`).
+fn prune_variation_store(g: &mut Gdef, bytes: &[u8], mut gpos: Option<&mut Layout<PositionLookup>>) -> Result<()> {
+    if g.item_var_store.as_ref().is_none() {
+        return Ok(());
+    }
+    let mut used = BTreeSet::new();
+    layout_devices(g, gpos.as_deref_mut(), &mut |d| {
+        if let DeviceOrVariationIndex::VariationIndex(v) = d {
+            used.insert(u32::from(v.delta_set_outer_index) << 16 | u32::from(v.delta_set_inner_index));
+        }
+    });
+    let Some((store, map)) = super::var::prune_layout_store(bytes, &used)? else { return Ok(()) };
+    if store.is_empty() {
+        g.item_var_store.clear();
+    } else {
+        let read = read_fonts::tables::variations::ItemVariationStore::read(FontData::new(&store)).map_err(|e| read_err(*b"GDEF", e))?;
+        let owned: write_fonts::tables::variations::ItemVariationStore = read.to_owned_table();
+        g.item_var_store.set(owned);
+    }
+    layout_devices(g, gpos, &mut |d| {
+        if let DeviceOrVariationIndex::VariationIndex(v) = d {
+            let old = u32::from(v.delta_set_outer_index) << 16 | u32::from(v.delta_set_inner_index);
+            let new = map.get(&old).copied().unwrap_or(super::var::store::NO_VARIATION);
+            v.delta_set_outer_index = (new >> 16) as u16;
+            v.delta_set_inner_index = new as u16;
+        }
+    });
+    Ok(())
+}
+
+type DeviceFn<'f> = dyn FnMut(&mut DeviceOrVariationIndex) + 'f;
+
+/// Calls `f` on every device table and variation index of GDEF's caret values and of the live
+/// GPOS lookups.
+fn layout_devices(g: &mut Gdef, gpos: Option<&mut Layout<PositionLookup>>, f: &mut DeviceFn<'_>) {
+    if let Some(list) = g.lig_caret_list.as_mut() {
+        for lig in &mut list.lig_glyphs {
+            for caret in &mut lig.caret_values {
+                if let write_fonts::tables::gdef::CaretValue::Format3(c) = &mut **caret {
+                    f(&mut c.device);
+                }
+            }
+        }
+    }
+    for lookup in gpos.into_iter().flat_map(|t| t.lookups.iter_mut()).flatten() {
+        lookup.devices(f);
+    }
+}
+
+fn value_devices(v: &mut ValueRecord, f: &mut DeviceFn<'_>) {
+    for d in [&mut v.x_placement_device, &mut v.y_placement_device, &mut v.x_advance_device, &mut v.y_advance_device] {
+        if let Some(d) = d.as_mut() {
+            f(d);
+        }
+    }
+}
+
+fn anchor_devices(a: &mut AnchorTable, f: &mut DeviceFn<'_>) {
+    if let AnchorTable::Format3(a) = a {
+        for d in [&mut a.x_device, &mut a.y_device] {
+            if let Some(d) = d.as_mut() {
+                f(d);
+            }
+        }
+    }
+}
+
+fn anchors_devices<'a>(anchors: impl Iterator<Item = &'a mut NullableOffsetMarker<AnchorTable>>, f: &mut DeviceFn<'_>) {
+    for a in anchors {
+        if let Some(a) = a.as_mut() {
+            anchor_devices(a, f);
+        }
+    }
+}
+
+/// A GPOS lookup or subtable whose device tables can be visited.
+trait Devices {
+    fn devices(&mut self, f: &mut DeviceFn<'_>);
+}
+
+macro_rules! no_devices {
+    ($($ty:ty),+) => { $(impl Devices for $ty { fn devices(&mut self, _f: &mut DeviceFn<'_>) {} })+ };
+}
+
+no_devices!(PositionSequenceContext, PositionChainContext);
+
+impl Devices for SinglePos {
+    fn devices(&mut self, f: &mut DeviceFn<'_>) {
+        match self {
+            SinglePos::Format1(t) => value_devices(&mut t.value_record, f),
+            SinglePos::Format2(t) => t.value_records.iter_mut().for_each(|v| value_devices(v, f)),
+        }
+    }
+}
+
+impl Devices for PairPos {
+    fn devices(&mut self, f: &mut DeviceFn<'_>) {
+        match self {
+            PairPos::Format1(t) => {
+                for r in t.pair_sets.iter_mut().flat_map(|s| s.pair_value_records.iter_mut()) {
+                    value_devices(&mut r.value_record1, f);
+                    value_devices(&mut r.value_record2, f);
+                }
+            }
+            PairPos::Format2(t) => {
+                for r in t.class1_records.iter_mut().flat_map(|c| c.class2_records.iter_mut()) {
+                    value_devices(&mut r.value_record1, f);
+                    value_devices(&mut r.value_record2, f);
+                }
+            }
+        }
+    }
+}
+
+impl Devices for CursivePosFormat1 {
+    fn devices(&mut self, f: &mut DeviceFn<'_>) {
+        for r in &mut self.entry_exit_record {
+            anchors_devices([&mut r.entry_anchor, &mut r.exit_anchor].into_iter(), f);
+        }
+    }
+}
+
+fn mark_array_devices(m: &mut write_fonts::tables::gpos::MarkArray, f: &mut DeviceFn<'_>) {
+    for r in &mut m.mark_records {
+        anchor_devices(&mut r.mark_anchor, f);
+    }
+}
+
+impl Devices for MarkBasePosFormat1 {
+    fn devices(&mut self, f: &mut DeviceFn<'_>) {
+        mark_array_devices(&mut self.mark_array, f);
+        anchors_devices(self.base_array.base_records.iter_mut().flat_map(|r| r.base_anchors.iter_mut()), f);
+    }
+}
+
+impl Devices for MarkLigPosFormat1 {
+    fn devices(&mut self, f: &mut DeviceFn<'_>) {
+        mark_array_devices(&mut self.mark_array, f);
+        let anchors =
+            self.ligature_array.ligature_attaches.iter_mut().flat_map(|a| a.component_records.iter_mut()).flat_map(|c| c.ligature_anchors.iter_mut());
+        anchors_devices(anchors, f);
+    }
+}
+
+impl Devices for MarkMarkPosFormat1 {
+    fn devices(&mut self, f: &mut DeviceFn<'_>) {
+        mark_array_devices(&mut self.mark1_array, f);
+        anchors_devices(self.mark2_array.mark2_records.iter_mut().flat_map(|r| r.mark2_anchors.iter_mut()), f);
+    }
+}
+
+impl Devices for PosExtension {
+    fn devices(&mut self, f: &mut DeviceFn<'_>) {
+        match self {
+            PosExtension::Single(e) => e.extension.devices(f),
+            PosExtension::Pair(e) => e.extension.devices(f),
+            PosExtension::Cursive(e) => e.extension.devices(f),
+            PosExtension::MarkToBase(e) => e.extension.devices(f),
+            PosExtension::MarkToLig(e) => e.extension.devices(f),
+            PosExtension::MarkToMark(e) => e.extension.devices(f),
+            PosExtension::Contextual(e) => e.extension.devices(f),
+            PosExtension::ChainContextual(e) => e.extension.devices(f),
+        }
+    }
+}
+
+impl Devices for PositionLookup {
+    fn devices(&mut self, f: &mut DeviceFn<'_>) {
+        macro_rules! each {
+            ($l:expr) => {
+                for st in &mut $l.subtables {
+                    st.devices(f);
+                }
+            };
+        }
+        match self {
+            PositionLookup::Single(l) => each!(l),
+            PositionLookup::Pair(l) => each!(l),
+            PositionLookup::Cursive(l) => each!(l),
+            PositionLookup::MarkToBase(l) => each!(l),
+            PositionLookup::MarkToLig(l) => each!(l),
+            PositionLookup::MarkToMark(l) => each!(l),
+            PositionLookup::Contextual(l) => each!(l),
+            PositionLookup::ChainContextual(l) => each!(l),
+            PositionLookup::Extension(l) => each!(l),
+        }
+    }
 }
 
 // ── GSUB subtables ──
