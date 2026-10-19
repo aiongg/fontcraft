@@ -108,6 +108,10 @@ fn a_cff_font_with_vertical_metrics_gets_a_vorg_table() {
     let mut f = Font::new("Vert Sans");
     f.glyph_mut("A").unwrap().layers[0].shapes.push(Shape::Path(Path::rect(50.0, 0.0, 550.0, 700.0)));
     f.glyph_mut("A").unwrap().layers[0].info.vert_origin = Some(40.0);
+    // Vertical metrics come from the three vhea parameters, as ufo2ft decides them.
+    for (name, v) in [("vheaVertAscender", 500), ("vheaVertDescender", -500), ("vheaVertLineGap", 1000)] {
+        set_font_param(&mut f, name, Value::Number(fontcraft_model::plist::Number::int(v)));
+    }
     let target = f.default_target().unwrap();
     let out = compile(&f, &target, Flavour::Cff, &options()).unwrap();
     let font = FontRef::new(&out.bytes).unwrap();

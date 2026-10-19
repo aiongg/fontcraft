@@ -155,7 +155,8 @@ fn a_unicode_cmap_gives_the_code_points_and_a_mac_cmap_a_format_6_subtable() {
     assert_eq!(cmap.map_codepoint('A').map(|g| g.to_u32()), Some(gid(&out, "A")));
     assert_eq!(cmap.map_codepoint('b').map(|g| g.to_u32()), Some(gid(&out, "b")));
     assert_eq!(cmap.map_codepoint(' ').map(|g| g.to_u32()), Some(1));
-    assert_eq!(cmap.map_codepoint('C'), None, "only what the CMap maps is encoded");
+    // The Macintosh subtable covers 0x20 to 0x62, so `C` reads as glyph 0 there.
+    assert_eq!(cmap.map_codepoint('C').filter(|g| g.to_u32() != 0), None, "only what the CMap maps is encoded");
     assert!(out.warnings.iter().any(|w| w.contains("Roman (0)")), "{:?}", out.warnings);
     let mac = cmap.encoding_records().iter().find(|r| r.platform_id() as u16 == 1).expect("a Macintosh subtable");
     assert_eq!(mac.encoding_id(), 0);
@@ -191,7 +192,8 @@ fn cmap_files_that_cannot_be_used_stop_the_compile() {
     assert!(with("1 begincidrange <41> 2 endcidrange").contains("Unicode CMap cannot be read"));
     assert!(with(&UNI_CMAP.replace("(Test)", "(Adobe)")).contains("is for Adobe-Latin1"));
     assert!(with(&UNI_CMAP.replace("/UniTest-UTF32-H", "/TestMac-H")).contains("not a Unicode CMap"));
-    assert!(with("/CMapName /UniX-UTF32-H def 1 begincidrange <00000000> <FFFFFFFF> 0 endcidrange").contains("more than"));
+    // A range runs past the highest CID long before it reaches the cap on codes.
+    assert!(with("/CMapName /UniX-UTF32-H def 1 begincidrange <00000000> <FFFFFFFF> 0 endcidrange").contains("is not from 0 to"));
     assert!(with("/CMapName /UniX-UTF32-H def 1 begincidchar <41> 70000 endcidchar").contains("70000"));
     assert!(with("/CMapName /UniX-UTF32-H def 1 begincidrange <41> <43> 2").contains("not closed"));
     assert!(with("(unclosed").contains("not closed"));

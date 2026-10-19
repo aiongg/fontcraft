@@ -149,7 +149,7 @@ fn tables_kept_on_open_pass_through_unchanged_until_the_glyph_order_changes() {
     let plain = dir.join("plain.ttf");
     run(&mut s, "font.compile", json!({"destination": plain, "timestamp": 0}));
     assert!(FontRef::new(&std::fs::read(&plain).unwrap()).unwrap().table_data(Tag::new(b"LTSH")).is_none());
-    run(&mut s, "glyph.newGlyph", json!({"name": "B"}));
+    run(&mut s, "glyph.newGlyph", json!({"name": "A.alt"}));
     let changed = dir.join("changed.ttf");
     let out = run(&mut s, "font.compile", json!({"destination": changed, "timestamp": 0, "passThroughTables": true}));
     assert!(out.to_string().contains("no longer the one they were made for"), "{out}");
