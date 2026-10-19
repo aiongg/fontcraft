@@ -101,7 +101,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'stat
     let incompatible = compatibility::incompatible_in_tab(app);
     crate::shell::context_menu::show(app, ui, pending);
     crate::shell::preview::area(app, ui, pending);
-    let FontcraftApp { session, state, tokens, fill_cache, preview_tool, tools, layouts, .. } = app;
+    let FontcraftApp { session, state, tokens, fill_cache, preview_tool, tools, layouts, images, .. } = app;
     let Some(tab) = state.tab().cloned() else { return };
     layouts.prepare(session, &tab);
     let frame = egui::Frame::NONE.fill(tokens.canvas);
@@ -130,6 +130,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'stat
         if tab.edit_background {
             background::tint(&c);
         }
+        images::draw(&c, ui.ctx(), images, session, state, &tab, font, pending);
         let (lines, marks) = metric_scope::of(session, font, master, &tab);
         let span = view::vertical_span(font, master);
         // Vertical text has no horizontal metric lines to share: each column is its own.

@@ -80,6 +80,8 @@ mod guide_edit_tests;
 #[cfg(test)]
 mod hints_ps_tests;
 #[cfg(test)]
+mod images_tests;
+#[cfg(test)]
 mod info_box_kerning_tests;
 #[cfg(test)]
 mod info_box_metrics_tests;

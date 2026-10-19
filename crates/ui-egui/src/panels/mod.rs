@@ -33,6 +33,7 @@ pub mod info_box;
 pub mod info_box_attach;
 pub mod info_box_component;
 pub mod info_box_corner;
+pub mod info_box_image;
 pub mod info_box_kerning;
 pub mod info_box_metrics;
 pub mod info_box_ps_hint;

@@ -47,6 +47,8 @@ pub struct FontcraftApp {
     pub(crate) layouts: canvas::view::LayoutCache,
     /// Font View's caches and the edit or drag in progress.
     pub(crate) font_view: shell::font_view::FontViewUi,
+    /// Placed images in Edit View: decoded textures, the selected image, the drag in progress.
+    pub(crate) images: canvas::images::ImageUi,
     themed: bool,
 }
 
@@ -78,6 +80,7 @@ impl FontcraftApp {
             fill_cache: FillCache::default(),
             layouts: Default::default(),
             font_view: Default::default(),
+            images: Default::default(),
             themed: false,
         }
     }

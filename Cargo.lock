@@ -1513,6 +1513,7 @@ dependencies = [
  "fontcraft-engine",
  "fontcraft-geom",
  "fontcraft-glyphquery",
+ "fontcraft-io-pdf",
  "fontcraft-model",
  "fontcraft-render",
  "fontcraft-spacing",

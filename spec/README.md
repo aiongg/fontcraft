@@ -198,7 +198,7 @@ status = "docs"
 | `observe` | any row | a list of steps to carry out in the running reference app, one per string: what to do and what to look for. `cargo xtask observe` lists them in `docs/observe.md` with the row's guesses. Remove a step once it is done and its result is in `notes` |
 | `own` | any row | `true` when the row has no counterpart in the reference app (an agent query, a headless form, a FontCraft-only rule), so nothing about the reference is guessed. It may still carry `guesses` |
 | `when` | `[[command]]`, `[[tool]]` | where the shortcut works (decision 0004): `editView`, `textMode`, `fontView`, `dialog`, `tool:<tool id>` or `panel:<panel id>`. Without it the shortcut is global. A tool's letter always works in Edit View |
-| `context` | `[[command]]` | the context menus that show the command: `canvas` (empty canvas), `canvas.node`, `canvas.segment`, `canvas.path`, `canvas.guide`, `canvas.anchor`, `canvas.component`, `layers.row` (a row of the Palette's layer list), `toolbar` (a tool button) |
+| `context` | `[[command]]` | the context menus that show the command: `canvas` (empty canvas), `canvas.node`, `canvas.segment`, `canvas.path`, `canvas.guide`, `canvas.anchor`, `canvas.component`, `canvas.image` (a placed image), `layers.row` (a row of the Palette's layer list), `toolbar` (a tool button) |
 
 A `[[cli]]` id may hold a space for an action of a subcommand: `"tables list"` is `fontcraft-cli
 tables list`.

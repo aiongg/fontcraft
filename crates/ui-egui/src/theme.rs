@@ -240,6 +240,8 @@ pub struct Tokens {
     pub reference_font_outline: Color32,
     /// PostScript hints in Edit View (`hinting.ps.manual.display`).
     pub ps_hints: PsHintTokens,
+    /// Placed images in Edit View: the missing-image marker, the selected image's outline.
+    pub images: crate::canvas::images::ImageTokens,
     pub reference_font_outline_width: f32,
     /// Laid over the canvas while the background is the side being edited (`background.darkenedCanvas`).
     pub background_tint: Color32,
@@ -501,6 +503,7 @@ impl Tokens {
             visible_layer_outline_width: 0.75,
             reference_font_outline: Color32::from_rgba_unmultiplied(0x30, 0xa0, 0x60, 0xa0),
             ps_hints: PsHintTokens::dark(),
+            images: crate::canvas::images::ImageTokens::dark(),
             reference_font_outline_width: 1.0,
             background_tint: Color32::from_rgba_unmultiplied(0x00, 0x00, 0x00, 0x18),
             annotation: Color32::from_rgb(0xe0, 0x30, 0x30),

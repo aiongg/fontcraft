@@ -76,7 +76,8 @@ pub fn specs() -> Vec<CommandSpec> {
             has_doc,
             unlock
         )
-        .targets(&[TargetKind::Layer]),
+        .targets(&[TargetKind::Layer])
+        .context(&["canvas.image"]),
         cmd!(
             "image.setCrop",
             "Crop Image",
@@ -96,7 +97,8 @@ pub fn specs() -> Vec<CommandSpec> {
             has_doc,
             set_crop_to_layer_bounds
         )
-        .targets(&[TargetKind::Layer]),
+        .targets(&[TargetKind::Layer])
+        .context(&["canvas.image"]),
         cmd!(
             "image.resetCrop",
             "Reset Crop",
@@ -106,7 +108,8 @@ pub fn specs() -> Vec<CommandSpec> {
             has_doc,
             reset_crop
         )
-        .targets(&[TargetKind::Layer]),
+        .targets(&[TargetKind::Layer])
+        .context(&["canvas.image"]),
         cmd!(
             query "image.getInfo",
             "Get Image Info",

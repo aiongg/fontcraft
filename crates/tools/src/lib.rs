@@ -26,6 +26,7 @@
 //! | [`hint_drag`] | the Select tool's PostScript hint drags (M10.24) |
 //! | [`drag_aids`] | the Select tool's Tunni line drags, slides, the lever, and the points that follow a move |
 //! | [`tt_instructor`] | the TrueType Instructor tool (M10.25) |
+//! | [`image`] | a placed image under the pointer, its knobs, and the drags that move, scale, rotate and crop it (M11.13) |
 #![forbid(unsafe_code)]
 
 pub mod annotate;
@@ -39,6 +40,7 @@ pub mod guide_drag;
 pub mod hand;
 pub mod hint_drag;
 pub mod hit;
+pub mod image;
 pub mod keymap;
 pub mod knife;
 pub mod lasso;
