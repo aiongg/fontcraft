@@ -140,10 +140,17 @@ fn font_view_cell_image_display_draws_the_placed_image_behind_the_outline() {
     let w = Window::new();
     let shapes = w.settle(&mut app);
     assert_eq!(quads(&app, &shapes, cell(&app, "A")), ["image", "outline"], "the image under the outline");
+    let a = cell(&app, "A");
     let mesh = shapes
         .iter()
         .find_map(|s| match s {
-            Shape::Mesh(m) if m.vertices.first().is_some_and(|v| v.color != app.tokens.glyph_fill && v.color != Color32::WHITE) => Some(m),
+            Shape::Mesh(m)
+                if m.texture_id != TextureId::default()
+                    && a.expand(1.0).contains_rect(m.calc_bounds())
+                    && m.vertices.first().is_some_and(|v| v.color != app.tokens.glyph_fill && v.color != Color32::WHITE) =>
+            {
+                Some(m)
+            }
             _ => None,
         })
         .unwrap();

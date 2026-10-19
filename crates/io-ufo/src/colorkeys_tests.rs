@@ -348,6 +348,14 @@ fn colours_outside_the_palettes_are_added_to_them() {
         })
         .collect();
     assert_eq!(fills, [Some(Color::Palette { index: 2, alpha: 1.0 }), Some(Color::Palette { index: 3, alpha: 1.0 })]);
-    let palettes = back.info.params.get("Color Palettes").or_else(|| back.masters[0].params.get("Color Palettes")).and_then(Value::as_array).unwrap();
+    // The grey's 0.5 has no exact 8-bit value, so the reader keeps the palettes as user data.
+    let palettes = back
+        .info
+        .params
+        .get("Color Palettes")
+        .or_else(|| back.masters[0].params.get("Color Palettes"))
+        .or_else(|| back.masters[0].user_data.get(COLOR_PALETTES))
+        .and_then(Value::as_array)
+        .unwrap();
     assert_eq!(palettes.items.first().and_then(Value::as_array).map(|p| p.items.len()), Some(4));
 }
