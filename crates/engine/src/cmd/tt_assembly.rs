@@ -7,7 +7,7 @@
 //!
 //! | Target | Stored as | Read at export |
 //! |---|---|---|
-//! | `{glyph}` | the layer's glyph program (`fontcraft_hinting::imported`), with a fingerprint of the outline it was written for | while the outline keeps that fingerprint; a program that calls functions or uses control values or storage only when the master carries a cvt Table, prep Table Assembly or fpgm Table Assembly parameter (the command warns otherwise) |
+//! | `{glyph}` | the layer's glyph program (`fontcraft_hinting::imported`), with a fingerprint of the outline it was written for | while the outline keeps that fingerprint; a program that calls functions or uses control values or storage only when the master carries a cvt Table, prep Table Assembly or fpgm Table Assembly parameter (the command warns otherwise, and also when those parameters do not define the functions the program calls) |
 //! | `"fpgm"` | the master's fpgm Table Assembly parameter | instance, then master, then font |
 //! | `"prep"` | the master's prep Table Assembly parameter | instance, then master, then font |
 //!
@@ -39,7 +39,7 @@ pub fn specs() -> Vec<CommandSpec> {
         "Set TrueType Instructions",
         [],
         None,
-        "{target: {glyph: name} | \"fpgm\" | \"prep\", master?: id (a glyph: the layer of that master, default the main master; fpgm and prep: that master's parameter, default every master, and the font-level parameter is removed), assembly: string} assemble the text and store it as the glyph's own TrueType program or as the fpgm or prep Table Assembly parameter. One instruction per line as the disassembler writes it (`SVTCA[0]`, `PUSHB[ ] 1 2`, `PUSH 1 1000`); numbers after any other instruction are pushed before it, the last on top. Text that assembles to nothing removes the program. A parse error changes nothing and names the line → {target, master, bytes, instructions, assembly: the stored text, changed: bool, warnings: [text]}",
+        "{target: {glyph: name} | \"fpgm\" | \"prep\", master?: id (a glyph: the layer of that master, default the main master; fpgm and prep: that master's parameter, default every master, and the font-level parameter is removed), assembly: string} assemble the text and store it as the glyph's own TrueType program or as the fpgm or prep Table Assembly parameter. One instruction per line as the disassembler writes it (`SVTCA[0]`, `PUSHB[ ] 1 2`, `PUSH 1 1000`); numbers after any other instruction are pushed before it, the last on top. Text that assembles to nothing removes the program. A parse error changes nothing and names the line → {target, master, bytes, instructions, assembly: the stored text, changed: bool, warnings: [text] (a glyph program: the layer also has Instructor hints; the program needs font programs the master lacks, so export leaves it out; or it calls functions that the fpgm and prep Table Assembly parameters do not define)}",
         has_doc,
         run
     )]
@@ -450,6 +450,8 @@ fn run(s: &mut Session, v: &Value) -> Result<Value> {
                 warnings.push(format!(
                     "the program calls functions or uses control values or storage, and master `{id}` has no cvt Table, prep Table Assembly or fpgm Table Assembly parameter, so export leaves it out"
                 ));
+            } else if !remove && let Some(warning) = undefined_calls(font, &id, &assembled.bytes) {
+                warnings.push(warning);
             }
             if changed {
                 let targets = Targets::new(p.command(), name.clone(), Some(id.clone()));
@@ -523,6 +525,61 @@ fn has_font_programs(font: &Font, master: &str) -> bool {
     let names = [CVT_TABLE, PREP_TABLE_ASSEMBLY, FPGM_TABLE_ASSEMBLY];
     let master_has = font.master(master).is_ok_and(|m| names.iter().any(|n| m.params.get(n).is_some()));
     master_has || names.iter().any(|n| font.info.params.get(n).is_some())
+}
+
+/// Most function numbers a warning about undefined calls names.
+const MAX_NAMED_FUNCTIONS: usize = 16;
+
+/// A warning when a glyph program calls functions (CALL, LOOPCALL) that the export's fpgm and
+/// prep Table Assembly parameters (the master's, else the font's) do not define. A call whose
+/// number is pushed just before it is checked by number; any other call only needs some function
+/// to exist.
+fn undefined_calls(font: &Font, master: &str, program: &[u8]) -> Option<String> {
+    let list = ttasm::decode(program).ok()?;
+    let mut any_call = false;
+    let mut numbers: Vec<u32> = Vec::new();
+    let mut seen: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
+    let mut previous: Option<&ttasm::Instruction> = None;
+    for ins in &list {
+        if matches!(ins.opcode, 0x2A | 0x2B) {
+            any_call = true;
+            // The function number is on top of the stack for both calls.
+            if let Some(n) = previous.and_then(|p| p.data.last()).and_then(|n| u32::try_from(*n).ok())
+                && seen.insert(n)
+            {
+                numbers.push(n);
+            }
+        }
+        previous = Some(ins);
+    }
+    if !any_call {
+        return None;
+    }
+    let text = |name: &str| {
+        let own = font.master(master).ok().and_then(|m| m.params.get(name).and_then(PValue::as_str).map(str::to_string));
+        own.or_else(|| font.info.params.get(name).and_then(PValue::as_str).map(str::to_string))
+    };
+    let mut defined: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
+    for name in [FPGM_TABLE_ASSEMBLY, PREP_TABLE_ASSEMBLY] {
+        // Export leaves out a parameter that does not assemble, so its functions do not count.
+        let table = text(name).and_then(|t| ttasm::assemble(&t).ok()).and_then(|b| ttasm::FunctionTable::from_fpgm(&b).ok());
+        defined.extend(table.iter().flat_map(|t| t.functions.keys().copied()));
+    }
+    if defined.is_empty() {
+        return Some(format!(
+            "the program calls functions (CALL, LOOPCALL), and the fpgm and prep Table Assembly parameters of master `{master}` define none, so its hinting fails when the font is rendered"
+        ));
+    }
+    let missing: Vec<String> = numbers.iter().filter(|n| !defined.contains(n)).map(u32::to_string).collect();
+    if missing.is_empty() {
+        return None;
+    }
+    let more = missing.len().saturating_sub(MAX_NAMED_FUNCTIONS);
+    let shown = missing.iter().take(MAX_NAMED_FUNCTIONS).cloned().collect::<Vec<_>>().join(", ");
+    let named = if more > 0 { format!("{shown} and {more} more") } else { shown };
+    Some(format!(
+        "the program calls function {named}, which the fpgm and prep Table Assembly parameters of master `{master}` do not define, so its hinting fails when the font is rendered"
+    ))
 }
 
 #[cfg(test)]
