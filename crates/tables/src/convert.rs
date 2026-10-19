@@ -260,25 +260,40 @@ fn ps_to_truetype(font: &mut SfntFont, cff2: bool, max_error: f64, o: &ConvertOp
     }
     let names = glyph_names(font, n, Some(&ps));
     let mut metrics = Metrics::read(font, n)?;
-    // Every glyph's points are kept until glyf is written.
-    let mut budget = outline::Budget::new();
-    let mut quadratic = |contours: &[Contour], gid: usize| -> Result<Vec<outline::TtContour>> {
+    // A simple glyph is encoded as soon as it is converted: only its glyf bytes are kept.
+    let mut budget = outline::Budget::truetype();
+    let mut encoded: Vec<Option<EncodedGlyph>> = Vec::with_capacity(n);
+    let mut sizes = vec![(0usize, 0usize); n];
+    let (mut max_points, mut max_contours) = (0usize, 0usize);
+    let mut glyf_len = 0usize;
+    let mut simple = |contours: &[Contour], gid: usize| -> Result<EncodedGlyph> {
         let mut out = Vec::with_capacity(contours.len());
         for c in contours {
             let q = outline::to_quadratic(c, max_error).map_err(|e| in_glyph(e, gid))?;
             out.push(if o.reverse_direction { q.reversed() } else { q });
         }
         let points = outline::truetype_points(&out).map_err(|e| in_glyph(e, gid))?;
-        budget.points(points.iter().map(Vec::len).sum())?;
-        Ok(points)
+        let size = (points.iter().map(Vec::len).sum(), points.len());
+        budget.points(size.0)?;
+        max_points = max_points.max(size.0);
+        max_contours = max_contours.max(size.1);
+        if let Some(slot) = sizes.get_mut(gid) {
+            *slot = size;
+        }
+        let glyph = outline::encode_simple(&points).map_err(|e| in_glyph(e, gid))?;
+        glyf_len = glyf_len.saturating_add(glyph.0.len().next_multiple_of(2));
+        if glyf_len > crate::limits::MAX_SFNT {
+            return Err(TablesError::TooLarge { what: "the glyf table", limit: crate::limits::MAX_SFNT });
+        }
+        Ok(glyph)
     };
     // A seac glyph becomes a composite of its base and accent, as the reference draws seac as
     // two components; one with contours of its own, or whose parts are accented, is drawn out.
-    let mut planned = Vec::with_capacity(n);
+    let mut composites: Vec<(usize, Vec<(usize, i32, i32)>)> = Vec::new();
     for gid in 0..n {
         let drawing = ps.draw(gid)?;
         let glyph = match drawing.seac {
-            None => TtGlyph::Simple(quadratic(&drawing.contours, gid)?),
+            None => Some(simple(&drawing.contours, gid)?),
             Some(seac) => {
                 let parts: Vec<(usize, f64, f64)> = [(seac.base, 0.0, 0.0), (seac.accent, seac.adx, seac.ady)]
                     .into_iter()
@@ -292,36 +307,20 @@ fn ps_to_truetype(font: &mut SfntFont, cff2: bool, max_error: f64, o: &ConvertOp
                         }
                         Ok(r as i32)
                     };
-                    TtGlyph::Composite(
-                        parts.iter().map(|&(g, dx, dy)| -> Result<(usize, i32, i32)> { Ok((g, place(dx)?, place(dy)?)) }).collect::<Result<_>>()?,
-                    )
+                    let placed =
+                        parts.iter().map(|&(g, dx, dy)| -> Result<(usize, i32, i32)> { Ok((g, place(dx)?, place(dy)?)) }).collect::<Result<_>>()?;
+                    composites.push((gid, placed));
+                    None
                 } else {
-                    TtGlyph::Simple(quadratic(&ps.flattened(gid)?, gid)?)
+                    Some(simple(&ps.flattened(gid)?, gid)?)
                 }
             }
         };
-        planned.push(glyph);
-    }
-    let mut encoded: Vec<Option<EncodedGlyph>> = Vec::with_capacity(n);
-    let mut sizes = vec![(0usize, 0usize); n];
-    let (mut max_points, mut max_contours) = (0usize, 0usize);
-    for (gid, glyph) in planned.iter().enumerate() {
-        encoded.push(match glyph {
-            TtGlyph::Simple(points) => {
-                let size = (points.iter().map(Vec::len).sum(), points.len());
-                max_points = max_points.max(size.0);
-                max_contours = max_contours.max(size.1);
-                if let Some(slot) = sizes.get_mut(gid) {
-                    *slot = size;
-                }
-                Some(outline::encode_simple(points).map_err(|e| in_glyph(e, gid))?)
-            }
-            TtGlyph::Composite(_) => None,
-        });
+        encoded.push(glyph);
     }
     let (mut composite_points, mut composite_contours, mut components, mut depth) = (0usize, 0usize, 0usize, 0u16);
-    for (gid, glyph) in planned.iter().enumerate() {
-        let TtGlyph::Composite(parts) = glyph else { continue };
+    for (gid, parts) in &composites {
+        let (gid, parts) = (*gid, parts.as_slice());
         let mut bbox: Option<[i32; 4]> = None;
         let mut placed = Vec::with_capacity(parts.len());
         let (mut points, mut contours) = (0usize, 0usize);
@@ -422,13 +421,6 @@ fn ps_to_truetype(font: &mut SfntFont, cff2: bool, max_error: f64, o: &ConvertOp
     font.insert(*b"post", post);
     font.flavour = Flavour::TrueType;
     Ok(())
-}
-
-/// A glyph of the TrueType result before it is written.
-enum TtGlyph {
-    Simple(Vec<outline::TtContour>),
-    /// Simple glyphs placed by rounded offsets.
-    Composite(Vec<(usize, i32, i32)>),
 }
 
 // ── TrueType to CFF ─────────────────────────────────────────────────────────────────────────────

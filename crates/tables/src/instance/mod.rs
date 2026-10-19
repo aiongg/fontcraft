@@ -79,6 +79,13 @@ impl Default for InstanceOptions {
     }
 }
 
+/// Reads a `CFF2` table for instancing whose variation store has `axis_count` axes, and drops
+/// it; answers its glyph count. For tests that measure memory.
+#[cfg(test)]
+pub(crate) fn read_cff2_for_test(data: &[u8], axis_count: usize) -> Result<usize> {
+    cff2::Table::read(data, axis_count).map(|t| t.glyph_count())
+}
+
 /// The instance.
 pub fn instantiate(font: &SfntFont, options: &InstanceOptions) -> Result<SfntFont> {
     if options.limits.len() > MAX_AXES {

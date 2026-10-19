@@ -32,11 +32,15 @@ const MAX_COMPONENT_VISITS: usize = 100_000;
 const MAX_GLYPH_POINTS: usize = 65_535;
 /// Most contours one glyph may have.
 const MAX_CONTOURS: usize = 32_767;
-/// Most points one conversion may produce over all its glyphs, a component's points counted
-/// once for every use. All of them are kept until the new outline table is written (in a CFF
-/// path operator of up to 56 bytes each), and a glyph being converted is held in two more
+/// Most points a conversion to CFF may produce over all its glyphs, a component's points
+/// counted once for every use. All of them are kept until the new outline table is written (in
+/// a CFF path operator of up to 56 bytes each), and a glyph being converted is held in two more
 /// forms, so a 32-bit target (wasm) gets half.
 pub(super) const MAX_CONVERT_POINTS: usize = if usize::BITS >= 64 { 16 << 20 } else { 8 << 20 };
+/// Most points a conversion to TrueType may produce over all its glyphs. Each glyph is encoded
+/// as soon as it is converted, so this bounds the work, not what is held: a full CJK font
+/// (65,535 glyphs) makes about 10.6M.
+pub(super) const MAX_TRUETYPE_POINTS: usize = 64 << 20;
 /// Most component references one conversion follows over all its glyphs, nesting included.
 const MAX_CONVERT_VISITS: usize = 4 << 20;
 
@@ -44,19 +48,36 @@ const MAX_CONVERT_VISITS: usize = 4 << 20;
 pub(super) struct Budget {
     points: usize,
     visits: usize,
+    max_points: usize,
+    what: &'static str,
 }
 
 impl Budget {
+    /// For a conversion to CFF ([`MAX_CONVERT_POINTS`]).
     pub(super) fn new() -> Self {
-        Budget { points: MAX_CONVERT_POINTS, visits: MAX_CONVERT_VISITS }
+        Budget {
+            points: MAX_CONVERT_POINTS,
+            visits: MAX_CONVERT_VISITS,
+            max_points: MAX_CONVERT_POINTS,
+            what: "the points the converted glyphs hold together",
+        }
+    }
+
+    /// For a conversion to TrueType ([`MAX_TRUETYPE_POINTS`]).
+    pub(super) fn truetype() -> Self {
+        Budget {
+            points: MAX_TRUETYPE_POINTS,
+            visits: MAX_CONVERT_VISITS,
+            max_points: MAX_TRUETYPE_POINTS,
+            what: "the points the converted glyphs make together",
+        }
     }
 
     /// Charges `n` points produced.
     pub(super) fn points(&mut self, n: usize) -> Result<()> {
-        self.points = self
-            .points
-            .checked_sub(n)
-            .ok_or(TablesError::TooLarge { what: "the points the converted glyphs hold together", limit: MAX_CONVERT_POINTS })?;
+        self.points = self.points.checked_sub(n).ok_or(TablesError::TooLarge { what: self.what, limit: self.max_points })?;
+        #[cfg(test)]
+        POINTS_PEAK.with(|p| p.set(p.get().max(self.max_points.saturating_sub(self.points))));
         Ok(())
     }
 
@@ -68,6 +89,12 @@ impl Budget {
             .ok_or(TablesError::TooLarge { what: "the components the converted glyphs use together", limit: MAX_CONVERT_VISITS })?;
         Ok(())
     }
+}
+
+#[cfg(test)]
+thread_local! {
+    /// The most points any [`Budget`] on this thread has had charged, for tests that measure.
+    pub(super) static POINTS_PEAK: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 /// What decomposing one `glyf` glyph produces: its points and the glyph references followed

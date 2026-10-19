@@ -115,13 +115,104 @@ pub(super) struct Item {
     pub deltas: Vec<f64>,
 }
 
-/// One charstring operator with its operands. `op` is the operator byte, or 1200 plus the second
-/// byte of an escaped one; `mask` holds the bytes after `hintmask` and `cntrmask`.
+/// One charstring operator with its operands, as read from a [`Glyph`]. `op` is the operator
+/// byte, or 1200 plus the second byte of an escaped one; `mask` holds the bytes after
+/// `hintmask` and `cntrmask`.
 #[derive(Clone, Debug, PartialEq)]
-struct Cmd {
+struct Cmd<'a> {
     op: u16,
-    mask: Vec<u8>,
+    mask: &'a [u8],
     args: Vec<Val>,
+}
+
+/// One operator of a [`Glyph`]: its code and how many operands and mask bytes it takes, in
+/// order, from the glyph's buffers.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct CmdRecord {
+    op: u16,
+    args: u16,
+    mask: u16,
+}
+
+/// Marks an operand in [`Glyph::items`] that does not vary.
+const NO_ITEM: u32 = u32::MAX;
+
+/// The operators of one glyph. A whole table of glyphs is held at once, so the operands, their
+/// items and the mask bytes sit in one buffer each, in operator order.
+#[derive(Clone, Debug, Default, PartialEq)]
+struct Glyph {
+    cmds: Vec<CmdRecord>,
+    values: Vec<f64>,
+    /// The [`Item`] of each operand ([`NO_ITEM`] for a plain one); empty while no operand of the
+    /// glyph varies.
+    items: Vec<u32>,
+    masks: Vec<u8>,
+}
+
+impl Glyph {
+    /// The bytes the buffers hold.
+    fn held(&self) -> usize {
+        self.cmds.len() * std::mem::size_of::<CmdRecord>()
+            + self.values.len() * std::mem::size_of::<f64>()
+            + self.items.len() * std::mem::size_of::<u32>()
+            + self.masks.len()
+    }
+
+    /// Adds an operator with its operands; answers the bytes it adds.
+    fn push(&mut self, op: u16, args: &[Val], mask: &[u8]) -> Result<usize> {
+        let before = self.held();
+        let record = CmdRecord {
+            op,
+            args: u16::try_from(args.len()).map_err(|_| invalid(format!("operator {op} has more than 65535 operands")))?,
+            mask: u16::try_from(mask.len()).map_err(|_| invalid("a hint mask is longer than 65535 bytes"))?,
+        };
+        if self.items.is_empty() && args.iter().any(|a| a.item.is_some()) {
+            self.items.resize(self.values.len(), NO_ITEM);
+        }
+        for a in args {
+            self.values.push(a.v);
+            if !self.items.is_empty() {
+                let item = match a.item {
+                    Some(i) => u32::try_from(i).ok().filter(|i| *i != NO_ITEM).ok_or_else(|| invalid("too many blended values"))?,
+                    None => NO_ITEM,
+                };
+                self.items.push(item);
+            }
+        }
+        self.masks.extend_from_slice(mask);
+        self.cmds.push(record);
+        Ok(self.held().saturating_sub(before))
+    }
+
+    fn val(&self, i: usize) -> Val {
+        let item = self.items.get(i).copied().filter(|x| *x != NO_ITEM).and_then(|x| usize::try_from(x).ok());
+        Val { v: self.values.get(i).copied().unwrap_or(0.0), item }
+    }
+
+    /// Every operand, in order.
+    fn vals(&self) -> impl Iterator<Item = Val> + '_ {
+        (0..self.values.len()).map(|i| self.val(i))
+    }
+
+    fn cmds(&self) -> impl Iterator<Item = Cmd<'_>> + '_ {
+        let (mut at, mut mask_at) = (0usize, 0usize);
+        self.cmds.iter().map(move |r| {
+            let n = usize::from(r.args);
+            let args = (at..at + n).map(|i| self.val(i)).collect();
+            at += n;
+            let m = usize::from(r.mask);
+            let mask = self.masks.get(mask_at..mask_at + m).unwrap_or_default();
+            mask_at += m;
+            Cmd { op: r.op, mask, args }
+        })
+    }
+
+    fn shrink_to_fit(&mut self) {
+        self.cmds.shrink_to_fit();
+        self.values.shrink_to_fit();
+        self.items.shrink_to_fit();
+        self.masks.shrink_to_fit();
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -146,7 +237,7 @@ pub(super) struct Table {
     /// The Font DICT of each glyph and the format it was stored in; `None` without FDSelect.
     fd_select: Option<(Vec<u16>, u8)>,
     privates: Vec<Private>,
-    glyphs: Vec<Vec<Cmd>>,
+    glyphs: Vec<Glyph>,
     stack_limit: usize,
     /// The variation store's regions, each one (start, peak, end) per axis.
     pub regions: Vec<Vec<(f64, f64, f64)>>,
@@ -272,6 +363,7 @@ impl Table {
             let fd = fd_select.as_ref().and_then(|(m, _)| m.get(gid).copied()).map_or(0, usize::from);
             let private = privates.get(fd).ok_or_else(|| invalid(format!("glyph {gid} names Font DICT {fd}, which does not exist")))?;
             let local = local_subrs.get(fd).map(Vec::as_slice).unwrap_or_default();
+            budget.memory.charge(std::mem::size_of::<Glyph>())?;
             let mut run = Run {
                 global: &global,
                 local,
@@ -279,7 +371,7 @@ impl Table {
                 vsindex: private.vsindex,
                 stack: Vec::new(),
                 stems: 0,
-                cmds: Vec::new(),
+                glyph: Glyph::default(),
                 ops: 0,
                 stack_limit,
                 items: &mut items,
@@ -293,7 +385,9 @@ impl Table {
             if ops_total > MAX_OPS_PER_TABLE {
                 return Err(TablesError::TooLarge { what: "the operators of the CFF2 charstrings", limit: MAX_OPS_PER_TABLE });
             }
-            glyphs.push(run.cmds);
+            let mut glyph = run.glyph;
+            glyph.shrink_to_fit();
+            glyphs.push(glyph);
         }
         Ok(Table { top, font_dicts, fd_select, privates, glyphs, stack_limit, regions, datas, items })
     }
@@ -315,10 +409,15 @@ impl Table {
             }
         };
         for g in &mut self.glyphs {
-            for c in g.iter_mut() {
-                for v in &mut c.args {
-                    apply(v);
+            for (i, item) in g.items.iter_mut().enumerate() {
+                let Some(v) = g.values.get_mut(i) else { continue };
+                if *item == NO_ITEM {
+                    continue;
                 }
+                let mut val = Val { v: *v, item: usize::try_from(*item).ok() };
+                apply(&mut val);
+                *v = val.v;
+                *item = val.item.and_then(|x| u32::try_from(x).ok()).unwrap_or(NO_ITEM);
             }
         }
         for p in &mut self.privates {
@@ -474,7 +573,7 @@ impl Table {
     /// `hmtx` advances by glyph id; `font_bbox` goes into the Top DICT.
     pub fn write_cff(&self, advances: &[u16], font_bbox: [i64; 4]) -> Result<Vec<u8>> {
         let varies = |v: &Val| v.item.and_then(|i| self.items.get(i)).is_some_and(|it| !it.deltas.is_empty());
-        if self.glyphs.iter().flatten().any(|c| c.args.iter().any(varies))
+        if self.glyphs.iter().any(|g| g.vals().any(|v| varies(&v)))
             || self.privates.iter().any(|p| p.entries.iter().any(|e| e.vals.iter().any(varies)))
         {
             return Err(invalid("a CFF table cannot hold values that still vary"));
@@ -607,17 +706,15 @@ impl Table {
 
     /// A CFF2 charstring: `vsindex` first when the glyph's blends use another subtable than its
     /// Private DICT's, runs of blended operands written as `blend`s that fit the stack.
-    fn encode_cff2_glyph(&self, cmds: &[Cmd], private_vsindex: usize) -> Result<Vec<u8>> {
+    fn encode_cff2_glyph(&self, glyph: &Glyph, private_vsindex: usize) -> Result<Vec<u8>> {
         let mut out = Vec::new();
         let mut major: Option<usize> = None;
-        for c in cmds {
-            for a in c.args.iter().filter_map(|a| a.item) {
-                let m = self.items.get(a).map_or(0, |i| i.major);
-                match major {
-                    None => major = Some(m),
-                    Some(x) if x != m => return Err(TablesError::Unsupported("a charstring whose blends use two vsindex values".into())),
-                    Some(_) => {}
-                }
+        for a in glyph.vals().filter_map(|a| a.item) {
+            let m = self.items.get(a).map_or(0, |i| i.major);
+            match major {
+                None => major = Some(m),
+                Some(x) if x != m => return Err(TablesError::Unsupported("a charstring whose blends use two vsindex values".into())),
+                Some(_) => {}
             }
         }
         if let Some(m) = major
@@ -626,7 +723,7 @@ impl Table {
             put_cs_number(&mut out, m as f64)?;
             out.push(15);
         }
-        for c in cmds {
+        for c in glyph.cmds() {
             let mut depth = 0usize;
             let mut i = 0usize;
             while let Some(a) = c.args.get(i) {
@@ -662,7 +759,7 @@ impl Table {
                 i += run.len();
             }
             put_op(&mut out, c.op);
-            out.extend_from_slice(&c.mask);
+            out.extend_from_slice(c.mask);
             if out.len() > MAX_CHARSTRING {
                 return Err(TablesError::TooLarge { what: "a charstring without subroutines", limit: MAX_CHARSTRING });
             }
@@ -686,7 +783,7 @@ struct Run<'a, 'b> {
     vsindex: usize,
     stack: Vec<Val>,
     stems: usize,
-    cmds: Vec<Cmd>,
+    glyph: Glyph,
     ops: usize,
     stack_limit: usize,
     items: &'b mut Vec<Item>,
@@ -731,7 +828,7 @@ impl Run<'_, '_> {
                     i += 2;
                     match b1 {
                         // dotsection and the flex operators
-                        0 | 34..=37 => self.emit(1200 + u16::from(b1), Vec::new())?,
+                        0 | 34..=37 => self.emit(1200 + u16::from(b1), &[])?,
                         3..=5 | 9..=12 | 14 | 15 | 18 | 20..=24 | 26..=30 => {
                             return Err(TablesError::Unsupported(format!("the charstring arithmetic operator 12 {b1}")));
                         }
@@ -740,13 +837,13 @@ impl Run<'_, '_> {
                 }
                 1 | 3 | 18 | 23 => {
                     self.stems += self.stack.len() / 2;
-                    self.emit(u16::from(b0), Vec::new())?;
+                    self.emit(u16::from(b0), &[])?;
                     i += 1;
                 }
                 19 | 20 => {
                     self.stems += self.stack.len() / 2;
                     let n = self.stems.div_ceil(8);
-                    let mask = code.get(i + 1..i + 1 + n).ok_or_else(|| invalid("a hint mask is cut short"))?.to_vec();
+                    let mask = code.get(i + 1..i + 1 + n).ok_or_else(|| invalid("a hint mask is cut short"))?;
                     self.emit(u16::from(b0), mask)?;
                     i += 1 + n;
                 }
@@ -781,7 +878,7 @@ impl Run<'_, '_> {
                     blend(&mut self.stack, n, k, self.vsindex, self.items, self.budget)?;
                 }
                 4 | 5 | 6 | 7 | 8 | 21 | 22 | 24 | 25 | 26 | 27 | 30 | 31 => {
-                    self.emit(u16::from(b0), Vec::new())?;
+                    self.emit(u16::from(b0), &[])?;
                     i += 1;
                 }
                 other => return Err(invalid(format!("operator {other} is reserved in CFF2"))),
@@ -805,14 +902,13 @@ impl Run<'_, '_> {
         }
     }
 
-    fn emit(&mut self, op: u16, mask: Vec<u8>) -> Result<()> {
+    fn emit(&mut self, op: u16, mask: &[u8]) -> Result<()> {
         if !operands_fit(op, self.stack.len()) {
             return Err(invalid(format!("operator {op} cannot take {} operands", self.stack.len())));
         }
-        let size = std::mem::size_of::<Cmd>() + self.stack.capacity() * std::mem::size_of::<Val>() + mask.capacity();
-        self.budget.memory.charge(size)?;
-        let args = std::mem::take(&mut self.stack);
-        self.cmds.push(Cmd { op, mask, args });
+        let added = self.glyph.push(op, &self.stack, mask)?;
+        self.budget.memory.charge(added)?;
+        self.stack.clear();
         Ok(())
     }
 }
@@ -865,10 +961,10 @@ fn blend(stack: &mut Vec<Val>, n: usize, k: usize, major: usize, items: &mut Vec
 
 /// A CFF charstring: the width first when given, operators with more operands than the stack
 /// holds (the width included) split into generic segments, `endchar` last.
-fn encode_cff_glyph(cmds: &[Cmd], width: Option<f64>) -> Result<Vec<u8>> {
+fn encode_cff_glyph(glyph: &Glyph, width: Option<f64>) -> Result<Vec<u8>> {
     let mut out = Vec::new();
     let mut width = width;
-    for c in cmds {
+    for c in glyph.cmds() {
         let extra = usize::from(width.is_some());
         if c.args.len() + extra > MAX_CFF_STACK {
             let segs = generalize(c.op, &c.args)?.ok_or_else(|| {
@@ -886,7 +982,7 @@ fn encode_cff_glyph(cmds: &[Cmd], width: Option<f64>) -> Result<Vec<u8>> {
                 put_cs_number(&mut out, a.v)?;
             }
             put_op(&mut out, c.op);
-            out.extend_from_slice(&c.mask);
+            out.extend_from_slice(c.mask);
         }
         if out.len() > MAX_CHARSTRING {
             return Err(TablesError::TooLarge { what: "a charstring without subroutines", limit: MAX_CHARSTRING });

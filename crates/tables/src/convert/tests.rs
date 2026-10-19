@@ -445,13 +445,77 @@ fn nested_subroutines_past_the_memory_limit_are_refused_by_the_converter() {
     let limit = 1 << 20;
     let err = cff_table::Programs::read_within(&table, true, limit).err().unwrap();
     assert!(matches!(err, TablesError::TooLarge { limit: l, .. } if l == limit), "{err}");
-    // 16 MiB: they fit, the operators read from them do not.
-    let limit = 16 << 20;
+    // 8 MiB: they fit (3 MiB), the operators read from them (14 bytes each, 1M of them) do not.
+    let limit = 8 << 20;
     let err = cff_table::Programs::read_within(&table, true, limit).err().unwrap();
     assert!(matches!(err, TablesError::TooLarge { limit: l, .. } if l == limit), "{err}");
     assert!(started.elapsed() < std::time::Duration::from_secs(5));
+    // 24 MiB: the operators fit, their operands held in one buffer per glyph.
+    assert_eq!(cff_table::Programs::read_within(&table, true, 24 << 20).unwrap().len(), 64);
     // A curve with one operand is refused as it is read.
     let bare = crate::tests::nested_subr_cff2(1, 3, 4, &[139, 8]);
     let err = cff_table::Programs::read(&bare, true).err().unwrap();
     assert!(matches!(&err, TablesError::Invalid(m) if m.contains("operator 8")), "{err}");
+}
+
+/// Measures a full CJK font against the charstring memory and point limits, and prints the peaks:
+/// `FONTCRAFT_CJK_FONT=/path/to/font.otf cargo test -p fontcraft-tables --lib a_full_cjk_font -- --ignored --nocapture`.
+/// A variable CFF2 font is read by the instancer; a CFF or static CFF2 font is converted to
+/// TrueType and to the other CFF flavour.
+#[test]
+#[ignore = "reads the CJK font named by FONTCRAFT_CJK_FONT"]
+fn a_full_cjk_font_fits_the_charstring_and_point_limits() {
+    use crate::limits::{CHARSTRING_PEAK, MAX_CHARSTRING_MEMORY};
+    use std::cell::Cell;
+    let Some(path) = std::env::var_os("FONTCRAFT_CJK_FONT") else {
+        eprintln!("FONTCRAFT_CJK_FONT is not set: nothing measured");
+        return;
+    };
+    // MAX_CHARSTRING_MEMORY on a 32-bit target, which the font must fit twice over.
+    let wasm_memory = 512usize << 20;
+    let bytes = std::fs::read(&path).unwrap();
+    let font = crate::sfnt::read(&bytes, 0).unwrap();
+    let mib = |b: usize| b as f64 / f64::from(1u32 << 20);
+    let measure = |what: &str, run: &dyn Fn() -> Result<usize>| {
+        CHARSTRING_PEAK.with(|p| p.set(0));
+        outline::POINTS_PEAK.with(|p| p.set(0));
+        let started = std::time::Instant::now();
+        let result = run();
+        let (memory, points) = (CHARSTRING_PEAK.with(Cell::get), outline::POINTS_PEAK.with(Cell::get));
+        eprintln!(
+            "{what}: charstring memory {:.1} MiB (limit {:.0} MiB here, {:.0} MiB on wasm); points {points} (limit {}); {:.1} s; {}",
+            mib(memory),
+            mib(MAX_CHARSTRING_MEMORY),
+            mib(wasm_memory),
+            outline::MAX_TRUETYPE_POINTS,
+            started.elapsed().as_secs_f64(),
+            match &result {
+                Ok(n) => format!("{n} glyphs"),
+                Err(e) => e.to_string(),
+            }
+        );
+        assert!(result.is_ok(), "{what} is refused");
+        assert!(memory.saturating_mul(2) <= wasm_memory, "{what}: less than twice the room on wasm");
+        assert!(points.saturating_mul(3) <= outline::MAX_TRUETYPE_POINTS, "{what}: less than three times the room for points");
+    };
+    let converted = |target: ConvertTarget| -> Result<usize> {
+        let options = ConvertOptions { subroutinize: Some(false), ..ConvertOptions::new(target) };
+        convert_with(&font, &options).map(|c| c.glyphs)
+    };
+    match (font.get(*b"CFF "), font.get(*b"CFF2")) {
+        (_, Some(cff2)) if font.get(*b"fvar").is_some() => {
+            let fvar = font.get(*b"fvar").unwrap();
+            let axes = usize::from(u16::from_be_bytes([fvar[8], fvar[9]]));
+            measure("the CFF2 instancer read", &|| crate::instance::read_cff2_for_test(cff2, axes));
+        }
+        (Some(_), _) => {
+            measure("CFF to TrueType", &|| converted(ConvertTarget::TrueType { max_error: 1.0 }));
+            measure("CFF to CFF2", &|| converted(ConvertTarget::Cff2));
+        }
+        (None, Some(_)) => {
+            measure("CFF2 to TrueType", &|| converted(ConvertTarget::TrueType { max_error: 1.0 }));
+            measure("CFF2 to CFF", &|| converted(ConvertTarget::Cff));
+        }
+        (None, None) => eprintln!("the font has no CFF or CFF2 outlines: nothing measured"),
+    }
 }
