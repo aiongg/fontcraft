@@ -15,11 +15,28 @@ import sys
 from fontTools.ttLib.tables.otData import otData
 from fontTools.ttLib.tables.otTables import _equivalents
 
-# The otData range the writer covers: the common layout tables up to the first Apple table,
-# then the avar layouts. Variable composites and multi-variation stores are left out.
-FIRST, STOP = "LookupOrder", "ankr"
+# The otData ranges the writer covers: the common layout tables, the Apple tables, the COLR
+# layouts, then the avar layouts. Variable composites, multi-variation stores and the Apple
+# glyph metamorphosis tables (mort, morx) are left out.
+RANGES = [("LookupOrder", "TSIC"), ("COLR", "AxisValueMap")]
 EXTRA = {"AxisValueMap", "AxisSegmentMap", "avar"}
-SKIP = {
+MORPH = {
+    "mort",
+    "MortChain",
+    "MortSubtable",
+    "morx",
+    "MorxChain",
+    "MorphFeature",
+    "MorxSubtable",
+    "StateHeader",
+    "RearrangementMorph",
+    "ContextualMorph",
+    "LigatureMorph",
+    "NoncontextualMorph",
+    "InsertionMorph",
+    "MorphClass",
+}
+SKIP = MORPH | {
     "AATLookupSegment",
     "MultiVarData",
     "MultiVarStore",
@@ -50,6 +67,14 @@ SIMPLE = {
     "VarDataValue": "VarDataValue",
     "LookupFlag": "LookupFlag",
     "STATFlags": "StatFlags",
+    "VarIndex": "VarIndex",
+    "char64": "Char64",
+    "CIDGlyphMap": "CidGlyphMap",
+    "GlyphCIDMap": "GlyphCidMap",
+    "Angle": "Angle",
+    "BiasedAngle": "BiasedAngle",
+    "ExtendMode": "ExtendMode",
+    "CompositeMode": "CompositeMode",
 }
 COUNT = {"uint8": "Count8", "uint16": "Count16", "uint32": "Count32"}
 OFFSET = {"Offset": "Off16", "LOffset": "Off32", "Offset24": "Off24"}
@@ -65,9 +90,10 @@ format_re = re.compile(r"([A-Za-z0-9]+)Format(\d+)$")
 
 def selected():
     names = [n for n, _ in otData]
-    start, stop = names.index(FIRST), names.index(STOP)
+    spans = [(names.index(first), names.index(stop)) for first, stop in RANGES]
     for i, (name, fields) in enumerate(otData):
-        if (start <= i < stop or name in EXTRA) and name not in SKIP:
+        inside = any(start <= i < stop for start, stop in spans)
+        if (inside or name in EXTRA) and name not in SKIP:
             yield name, fields
 
 
@@ -99,7 +125,11 @@ def ty(t, name):
     m = re.match(r"(\w+)\((\w+)\)$", t)
     if m and m.group(1) in OFFSET_TO:
         return f'{OFFSET_TO[m.group(1)]}("{resolve(m.group(2))}")'
-    if "(" in t or t[:1].islower() or t in ("Flags32", "VarIndex", "GlyphID32", "Angle", "BiasedAngle"):
+    if m and m.group(1) == "AATLookup":
+        return f'AatLookup("{resolve(m.group(2))}")'
+    if m and m.group(1) == "AATLookupWithDataOffset":
+        return f'AatLookupData("{resolve(m.group(2))}")'
+    if "(" in t or t[:1].islower() or t == "GlyphID32":
         raise Unsupported(t)
     return f'Struct("{resolve(t)}")'
 
@@ -110,9 +140,9 @@ def cond(aux):
     m = re.fullmatch(r"(\w+) & (0x[0-9A-Fa-f]+)", aux)
     if m:
         return f'Cond::Mask("{m.group(1)}", {int(m.group(2), 16):#x})'
-    m = re.fullmatch(r"(\w+) >= (0x[0-9A-Fa-f]+)", aux)
+    m = re.fullmatch(r"(\w+) >= (0x[0-9A-Fa-f]+|\d+)", aux)
     if m:
-        return f'Cond::AtLeast("{m.group(1)}", {int(m.group(2), 16):#x})'
+        return f'Cond::AtLeast("{m.group(1)}", {int(m.group(2), 0):#x})'
     if aux == "DeltaFormat in (1,2,3)":
         return 'Cond::In123("DeltaFormat")'
     raise Unsupported(aux)
@@ -121,6 +151,8 @@ def cond(aux):
 def field(spec):
     t, name, repeat, aux, _ = spec
     kind = ty(t, name)
+    if isinstance(repeat, int) and repeat:
+        return f'Field {{ name: "{name}", ty: {kind}, rep: Rep::Fixed({repeat}), cond: Cond::Always }}'
     if repeat:
         assert isinstance(repeat, str), (name, repeat)
         return f'Field {{ name: "{name}", ty: {kind}, rep: Rep::Count("{repeat}", {int(aux or 0)}), cond: Cond::Always }}'

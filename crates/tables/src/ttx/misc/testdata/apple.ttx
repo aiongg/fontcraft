@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ttFont sfntVersion="\x00\x01\x00\x00" ttLibVersion="4.66">
+
+  <ankr>
+    <AnchorPoints Format="0">
+      <Flags value="0"/>
+      <Anchors>
+        <Lookup glyph="A">
+          <AnchorPoint index="0">
+            <XCoordinate value="10"/>
+            <YCoordinate value="20"/>
+          </AnchorPoint>
+        </Lookup>
+        <Lookup glyph="B">
+          <AnchorPoint index="0">
+            <XCoordinate value="1"/>
+            <YCoordinate value="2"/>
+          </AnchorPoint>
+          <AnchorPoint index="1">
+            <XCoordinate value="-3"/>
+            <YCoordinate value="-4"/>
+          </AnchorPoint>
+        </Lookup>
+      </Anchors>
+    </AnchorPoints>
+  </ankr>
+
+  <bsln>
+    <Version value="0x00010000"/>
+    <Baseline Format="3">
+      <DefaultBaseline value="1"/>
+      <StandardGlyph value="B"/>
+      <ControlPoint index="0" value="0"/>
+      <ControlPoint index="1" value="1"/>
+      <ControlPoint index="2" value="2"/>
+      <ControlPoint index="3" value="3"/>
+      <ControlPoint index="4" value="65535"/>
+      <ControlPoint index="5" value="65535"/>
+      <ControlPoint index="6" value="65535"/>
+      <ControlPoint index="7" value="65535"/>
+      <ControlPoint index="8" value="65535"/>
+      <ControlPoint index="9" value="65535"/>
+      <ControlPoint index="10" value="65535"/>
+      <ControlPoint index="11" value="65535"/>
+      <ControlPoint index="12" value="65535"/>
+      <ControlPoint index="13" value="65535"/>
+      <ControlPoint index="14" value="65535"/>
+      <ControlPoint index="15" value="65535"/>
+      <ControlPoint index="16" value="65535"/>
+      <ControlPoint index="17" value="65535"/>
+      <ControlPoint index="18" value="65535"/>
+      <ControlPoint index="19" value="65535"/>
+      <ControlPoint index="20" value="65535"/>
+      <ControlPoint index="21" value="65535"/>
+      <ControlPoint index="22" value="65535"/>
+      <ControlPoint index="23" value="65535"/>
+      <ControlPoint index="24" value="65535"/>
+      <ControlPoint index="25" value="65535"/>
+      <ControlPoint index="26" value="65535"/>
+      <ControlPoint index="27" value="65535"/>
+      <ControlPoint index="28" value="65535"/>
+      <ControlPoint index="29" value="65535"/>
+      <ControlPoint index="30" value="65535"/>
+      <ControlPoint index="31" value="65535"/>
+      <BaselineValues>
+        <Lookup glyph="A" value="3"/>
+        <Lookup glyph="B" value="3"/>
+        <Lookup glyph="C" value="5"/>
+      </BaselineValues>
+    </Baseline>
+  </bsln>
+
+  <cidg>
+    <CIDGlyphMapping Format="0">
+      <DataFormat value="0"/>
+      <Registry value="1"/>
+      <RegistryName value="Adobe"/>
+      <Order value="2"/>
+      <OrderName value="Japan1�"/>
+      <SupplementVersion value="6"/>
+      <Mapping>
+        <CID cid="0" glyph="A"/>
+        <CID cid="2" glyph="C"/>
+        <CID cid="3" glyph="B"/>
+      </Mapping>
+    </CIDGlyphMapping>
+  </cidg>
+
+  <feat>
+    <Version value="0x00010000"/>
+    <FeatureNames>
+      <Reserved1 value="0"/>
+      <Reserved2 value="0"/>
+      <FeatureName index="0">
+        <FeatureType value="1"/>
+        <Settings>
+          <Setting index="0">
+            <SettingValue value="0"/>
+            <SettingNameID value="257"/>  
+          </Setting>
+          <Setting index="1">
+            <SettingValue value="1"/>
+            <SettingNameID value="259"/>  
+          </Setting>
+        </Settings>
+        <FeatureFlags value="32768"/>
+        <FeatureNameID value="256"/>  
+      </FeatureName>
+      <FeatureName index="1">
+        <FeatureType value="3"/>
+        <Settings>
+          <Setting index="0">
+            <SettingValue value="4"/>
+            <SettingNameID value="260"/>  
+          </Setting>
+        </Settings>
+        <FeatureFlags value="49153"/>
+        <FeatureNameID value="258"/>  
+      </FeatureName>
+    </FeatureNames>
+  </feat>
+
+  <gcid>
+    <GlyphCIDMapping Format="0">
+      <DataFormat value="0"/>
+      <Registry value="1"/>
+      <RegistryName value="Adobe"/>
+      <Order value="2"/>
+      <OrderName value="Japan1�"/>
+      <SupplementVersion value="6"/>
+      <Mapping>
+        <CID glyph=".notdef" value="10"/>
+        <CID glyph="B" value="30"/>
+        <CID glyph="C" value="20"/>
+      </Mapping>
+    </GlyphCIDMapping>
+  </gcid>
+
+  <lcar>
+    <Version value="0x00010000"/>
+    <LigatureCarets Format="1">
+      <Carets>
+        <Lookup glyph="A">
+          <DivisionPoint index="0" value="5"/>
+        </Lookup>
+        <Lookup glyph="B">
+          <DivisionPoint index="0" value="7"/>
+          <DivisionPoint index="1" value="-8"/>
+        </Lookup>
+      </Carets>
+    </LigatureCarets>
+  </lcar>
+
+  <ltag>
+    <version value="1"/>
+    <flags value="0"/>
+    <LanguageTag tag="en"/>
+    <LanguageTag tag="zh-Hant"/>
+  </ltag>
+
+  <opbd>
+    <Version value="0x00010000"/>
+    <OpticalBounds Format="0">
+      <OpticalBoundsDeltas>
+        <Lookup glyph="A">
+          <Left value="-10"/>
+          <Top value="0"/>
+          <Right value="20"/>
+          <Bottom value="5"/>
+        </Lookup>
+        <Lookup glyph="C">
+          <Left value="1"/>
+          <Top value="2"/>
+          <Right value="3"/>
+          <Bottom value="4"/>
+        </Lookup>
+      </OpticalBoundsDeltas>
+    </OpticalBounds>
+  </opbd>
+
+  <trak>
+    <version value="1.0"/>
+    <format value="0"/>
+    <horizData>
+      <trackEntry value="-1.0" nameIndex="256">
+        <track size="12.0" value="-12"/>
+        <track size="24.5" value="-24"/>
+      </trackEntry>
+      <trackEntry value="0.0" nameIndex="257">
+        <track size="12.0" value="0"/>
+        <track size="24.5" value="0"/>
+      </trackEntry>
+      <trackEntry value="1.0" nameIndex="258">
+        <track size="12.0" value="30"/>
+        <track size="24.5" value="40"/>
+      </trackEntry>
+    </horizData>
+    <vertData>
+    </vertData>
+  </trak>
+
+</ttFont>

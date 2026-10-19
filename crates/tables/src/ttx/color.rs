@@ -1,15 +1,22 @@
-//! TTX writer: COLR, CPAL, SVG, sbix, CBDT, CBLC, EBDT and EBLC (M12.7).
+//! TTX writer: COLR, CPAL, SVG, sbix, and the bitmap tables EBLC, EBDT, CBLC, CBDT, bloc and
+//! bdat (M12.7).
 //!
 //! Each table is written element for element as fontTools' `ttx` writes it, and read with the
 //! same checks: a table fontTools would refuse to read is an error here, and [`super::dump`]
 //! then writes it as hex. Ported from fontTools' `ttLib.tables` (MIT): `C_O_L_R_` (version 0),
-//! `C_P_A_L_`, `S_V_G_`, `_s_b_i_x`, `sbixStrike` and `sbixGlyph`.
+//! `C_P_A_L_`, `S_V_G_`, `_s_b_i_x`, `sbixStrike` and `sbixGlyph`; the bitmap tables in
+//! [`bitmap`]. A `COLR` table of version 1 or later goes through the structured-table writer
+//! ([`super::otdata`]), whose layouts include the COLR paint graph, as in fontTools.
 //!
-//! Known differences: a `COLR` table of version 1 or later is left to the structured-table
-//! writer ([`super::otdata`]) or written as hex; an SVG document compressed with gzip is written
-//! as hex, as the crate has no gzip reader; the bitmap tables (`CBDT CBLC EBDT EBLC`) are written
-//! as hex.
+//! Known differences:
+//! - An SVG document compressed with gzip is written as hex, as the crate has no gzip reader.
+//! - A bitmap glyph whose data cannot be read makes its whole data table hex with
+//!   `ERROR="decompilation error"`; `ttx` reads bitmap glyphs only while writing them and stops
+//!   with an error.
+//! - Bitmap images are written as hex only (`rawimagedata`); the other forms `ttx` can be asked
+//!   for (rows, bits, external files) are not written.
 
+mod bitmap;
 #[cfg(test)]
 mod fonts;
 #[cfg(test)]
@@ -29,10 +36,19 @@ use super::{XmlWriter, num2binary};
 pub fn write_table(tag: Tag, data: &[u8], font: &SfntFont, w: &mut XmlWriter) -> Result<bool> {
     match &tag {
         b"COLR" => {
-            if u16_at(data, 0)? != 0 {
-                return Ok(false);
+            if u16_at(data, 0)? == 0 {
+                colr_v0(data, font, w)?;
+            } else {
+                super::otdata::write_layout_table(tag, data, font, w)?;
             }
-            colr_v0(data, font, w)?;
+        }
+        b"EBLC" | b"CBLC" | b"bloc" => bitmap::write_location(data, font, w)?,
+        b"EBDT" | b"CBDT" | b"bdat" => {
+            let locator = bitmap::locator(tag).and_then(|t| font.get(t).map(|d| (t, d)));
+            let Some((_, locator_data)) = locator else {
+                return Err(TablesError::invalid("a bitmap data table without its location table"));
+            };
+            bitmap::write_data(tag, data, locator_data, font, w)?;
         }
         b"CPAL" => cpal(data, w)?,
         b"SVG " => svg(data, w)?,

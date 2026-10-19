@@ -5,6 +5,17 @@ use super::engine::{Cond, Def, Field, Layout, Rep, Ty::*, Width};
 /// Every layout, sorted by name for [`def`].
 static DEFS: &[Def] = &[
     Def {
+        name: "Affine2x3",
+        layout: Layout::Plain(&[
+            Field { name: "xx", ty: Fixed, rep: Rep::One, cond: Cond::Always },
+            Field { name: "yx", ty: Fixed, rep: Rep::One, cond: Cond::Always },
+            Field { name: "xy", ty: Fixed, rep: Rep::One, cond: Cond::Always },
+            Field { name: "yy", ty: Fixed, rep: Rep::One, cond: Cond::Always },
+            Field { name: "dx", ty: Fixed, rep: Rep::One, cond: Cond::Always },
+            Field { name: "dy", ty: Fixed, rep: Rep::One, cond: Cond::Always },
+        ]),
+    },
+    Def {
         name: "AlternateSet",
         layout: Layout::Plain(&[
             Field { name: "GlyphCount", ty: Count16, rep: Rep::One, cond: Cond::Always },
@@ -55,6 +66,33 @@ static DEFS: &[Def] = &[
                     ],
                 ),
             ],
+        ),
+    },
+    Def {
+        name: "AnchorGlyphData",
+        layout: Layout::Plain(&[
+            Field { name: "AnchorPointCount", ty: Count32, rep: Rep::One, cond: Cond::Always },
+            Field { name: "AnchorPoint", ty: Struct("AnchorPoint"), rep: Rep::Count("AnchorPointCount", 0), cond: Cond::Always },
+        ]),
+    },
+    Def {
+        name: "AnchorPoint",
+        layout: Layout::Plain(&[
+            Field { name: "XCoordinate", ty: I16, rep: Rep::One, cond: Cond::Always },
+            Field { name: "YCoordinate", ty: I16, rep: Rep::One, cond: Cond::Always },
+        ]),
+    },
+    Def {
+        name: "AnchorPoints",
+        layout: Layout::Formats(
+            Width::U16,
+            &[(
+                0,
+                &[
+                    Field { name: "Flags", ty: U16, rep: Rep::One, cond: Cond::Always },
+                    Field { name: "Anchors", ty: AatLookupData("AnchorGlyphData"), rep: Rep::One, cond: Cond::Always },
+                ],
+            )],
         ),
     },
     Def {
@@ -205,6 +243,37 @@ static DEFS: &[Def] = &[
         ),
     },
     Def {
+        name: "BaseGlyphList",
+        layout: Layout::Plain(&[
+            Field { name: "BaseGlyphCount", ty: Count32, rep: Rep::One, cond: Cond::Always },
+            Field { name: "BaseGlyphPaintRecord", ty: Struct("BaseGlyphPaintRecord"), rep: Rep::Count("BaseGlyphCount", 0), cond: Cond::Always },
+        ]),
+    },
+    Def {
+        name: "BaseGlyphPaintRecord",
+        layout: Layout::Plain(&[
+            Field { name: "BaseGlyph", ty: Glyph, rep: Rep::One, cond: Cond::Always },
+            Field { name: "Paint", ty: Off32("Paint"), rep: Rep::One, cond: Cond::Always },
+        ]),
+    },
+    Def {
+        name: "BaseGlyphRecord",
+        layout: Layout::Plain(&[
+            Field { name: "BaseGlyph", ty: Glyph, rep: Rep::One, cond: Cond::Always },
+            Field { name: "FirstLayerIndex", ty: U16, rep: Rep::One, cond: Cond::Always },
+            Field { name: "NumLayers", ty: U16, rep: Rep::One, cond: Cond::Always },
+        ]),
+    },
+    Def {
+        name: "BaseGlyphRecordArray",
+        layout: Layout::Plain(&[Field {
+            name: "BaseGlyphRecord",
+            ty: Struct("BaseGlyphRecord"),
+            rep: Rep::Count("BaseGlyphRecordCount", 0),
+            cond: Cond::Always,
+        }]),
+    },
+    Def {
         name: "BaseLangSysRecord",
         layout: Layout::Plain(&[
             Field { name: "BaseLangSysTag", ty: Tag, rep: Rep::One, cond: Cond::Always },
@@ -251,6 +320,80 @@ static DEFS: &[Def] = &[
             Field { name: "DefaultIndex", ty: U16, rep: Rep::One, cond: Cond::Always },
             Field { name: "BaseCoordCount", ty: Count16, rep: Rep::One, cond: Cond::Always },
             Field { name: "BaseCoord", ty: Off16("BaseCoord"), rep: Rep::Count("BaseCoordCount", 0), cond: Cond::Always },
+        ]),
+    },
+    Def {
+        name: "Baseline",
+        layout: Layout::Formats(
+            Width::U16,
+            &[
+                (
+                    0,
+                    &[
+                        Field { name: "DefaultBaseline", ty: U16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "Delta", ty: U16, rep: Rep::Fixed(32), cond: Cond::Always },
+                    ],
+                ),
+                (
+                    1,
+                    &[
+                        Field { name: "DefaultBaseline", ty: U16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "Delta", ty: U16, rep: Rep::Fixed(32), cond: Cond::Always },
+                        Field { name: "BaselineValues", ty: AatLookup("uint16"), rep: Rep::One, cond: Cond::Always },
+                    ],
+                ),
+                (
+                    2,
+                    &[
+                        Field { name: "DefaultBaseline", ty: U16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "StandardGlyph", ty: Glyph, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "ControlPoint", ty: U16, rep: Rep::Fixed(32), cond: Cond::Always },
+                    ],
+                ),
+                (
+                    3,
+                    &[
+                        Field { name: "DefaultBaseline", ty: U16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "StandardGlyph", ty: Glyph, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "ControlPoint", ty: U16, rep: Rep::Fixed(32), cond: Cond::Always },
+                        Field { name: "BaselineValues", ty: AatLookup("uint16"), rep: Rep::One, cond: Cond::Always },
+                    ],
+                ),
+            ],
+        ),
+    },
+    Def {
+        name: "CIDGlyphMapping",
+        layout: Layout::Formats(
+            Width::U16,
+            &[(
+                0,
+                &[
+                    Field { name: "DataFormat", ty: U16, rep: Rep::One, cond: Cond::Always },
+                    Field { name: "StructLength", ty: Count32, rep: Rep::One, cond: Cond::Always },
+                    Field { name: "Registry", ty: U16, rep: Rep::One, cond: Cond::Always },
+                    Field { name: "RegistryName", ty: Char64, rep: Rep::One, cond: Cond::Always },
+                    Field { name: "Order", ty: U16, rep: Rep::One, cond: Cond::Always },
+                    Field { name: "OrderName", ty: Char64, rep: Rep::One, cond: Cond::Always },
+                    Field { name: "SupplementVersion", ty: U16, rep: Rep::One, cond: Cond::Always },
+                    Field { name: "Mapping", ty: CidGlyphMap, rep: Rep::One, cond: Cond::Always },
+                ],
+            )],
+        ),
+    },
+    Def {
+        name: "COLR",
+        layout: Layout::Plain(&[
+            Field { name: "Version", ty: U16, rep: Rep::One, cond: Cond::Always },
+            Field { name: "BaseGlyphRecordCount", ty: Count16, rep: Rep::One, cond: Cond::Always },
+            Field { name: "BaseGlyphRecordArray", ty: Off32("BaseGlyphRecordArray"), rep: Rep::One, cond: Cond::Always },
+            Field { name: "LayerRecordArray", ty: Off32("LayerRecordArray"), rep: Rep::One, cond: Cond::Always },
+            Field { name: "LayerRecordCount", ty: Count16, rep: Rep::One, cond: Cond::Always },
+            Field { name: "BaseGlyphList", ty: Off32("BaseGlyphList"), rep: Rep::One, cond: Cond::AtLeast("Version", 0x1) },
+            Field { name: "LayerList", ty: Off32("LayerList"), rep: Rep::One, cond: Cond::AtLeast("Version", 0x1) },
+            Field { name: "ClipList", ty: Off32("ClipList"), rep: Rep::One, cond: Cond::AtLeast("Version", 0x1) },
+            Field { name: "VarIndexMap", ty: Off32("DeltaSetIndexMap"), rep: Rep::One, cond: Cond::AtLeast("Version", 0x1) },
+            Field { name: "VarStore", ty: Off32("VarStore"), rep: Rep::One, cond: Cond::AtLeast("Version", 0x1) },
         ]),
     },
     Def {
@@ -490,6 +633,70 @@ static DEFS: &[Def] = &[
             Field { name: "Start", ty: Glyph, rep: Rep::One, cond: Cond::Always },
             Field { name: "End", ty: Glyph, rep: Rep::One, cond: Cond::Always },
             Field { name: "Class", ty: U16, rep: Rep::One, cond: Cond::Always },
+        ]),
+    },
+    Def {
+        name: "ClipBox",
+        layout: Layout::Formats(
+            Width::U8,
+            &[
+                (
+                    1,
+                    &[
+                        Field { name: "xMin", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "yMin", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "xMax", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "yMax", ty: I16, rep: Rep::One, cond: Cond::Always },
+                    ],
+                ),
+                (
+                    2,
+                    &[
+                        Field { name: "xMin", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "yMin", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "xMax", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "yMax", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "VarIndexBase", ty: VarIndex, rep: Rep::One, cond: Cond::Always },
+                    ],
+                ),
+            ],
+        ),
+    },
+    Def {
+        name: "ClipList",
+        layout: Layout::Formats(
+            Width::U8,
+            &[(
+                1,
+                &[
+                    Field { name: "ClipCount", ty: Count32, rep: Rep::One, cond: Cond::Always },
+                    Field { name: "ClipRecord", ty: Struct("ClipRecord"), rep: Rep::Count("ClipCount", 0), cond: Cond::Always },
+                ],
+            )],
+        ),
+    },
+    Def {
+        name: "ClipRecord",
+        layout: Layout::Plain(&[
+            Field { name: "StartGlyphID", ty: U16, rep: Rep::One, cond: Cond::Always },
+            Field { name: "EndGlyphID", ty: U16, rep: Rep::One, cond: Cond::Always },
+            Field { name: "ClipBox", ty: Off24("ClipBox"), rep: Rep::One, cond: Cond::Always },
+        ]),
+    },
+    Def {
+        name: "ColorLine",
+        layout: Layout::Plain(&[
+            Field { name: "Extend", ty: ExtendMode, rep: Rep::One, cond: Cond::Always },
+            Field { name: "StopCount", ty: Count16, rep: Rep::One, cond: Cond::Always },
+            Field { name: "ColorStop", ty: Struct("ColorStop"), rep: Rep::Count("StopCount", 0), cond: Cond::Always },
+        ]),
+    },
+    Def {
+        name: "ColorStop",
+        layout: Layout::Plain(&[
+            Field { name: "StopOffset", ty: F2Dot14, rep: Rep::One, cond: Cond::Always },
+            Field { name: "PaletteIndex", ty: U16, rep: Rep::One, cond: Cond::Always },
+            Field { name: "Alpha", ty: F2Dot14, rep: Rep::One, cond: Cond::Always },
         ]),
     },
     Def {
@@ -748,6 +955,25 @@ static DEFS: &[Def] = &[
             Field { name: "FeatureRecord", ty: Struct("FeatureRecord"), rep: Rep::Count("FeatureCount", 0), cond: Cond::Always },
         ]),
     },
+    Def {
+        name: "FeatureName",
+        layout: Layout::Plain(&[
+            Field { name: "FeatureType", ty: U16, rep: Rep::One, cond: Cond::Always },
+            Field { name: "SettingsCount", ty: Count16, rep: Rep::One, cond: Cond::Always },
+            Field { name: "Settings", ty: Off32("Settings"), rep: Rep::One, cond: Cond::Always },
+            Field { name: "FeatureFlags", ty: U16, rep: Rep::One, cond: Cond::Always },
+            Field { name: "FeatureNameID", ty: NameId, rep: Rep::One, cond: Cond::Always },
+        ]),
+    },
+    Def {
+        name: "FeatureNames",
+        layout: Layout::Plain(&[
+            Field { name: "FeatureNameCount", ty: Count16, rep: Rep::One, cond: Cond::Always },
+            Field { name: "Reserved1", ty: U16, rep: Rep::One, cond: Cond::Always },
+            Field { name: "Reserved2", ty: U32, rep: Rep::One, cond: Cond::Always },
+            Field { name: "FeatureName", ty: Struct("FeatureName"), rep: Rep::Count("FeatureNameCount", 0), cond: Cond::Always },
+        ]),
+    },
     Def { name: "FeatureParams", layout: Layout::Plain(&[]) },
     Def {
         name: "FeatureParamsCharacterVariants",
@@ -867,6 +1093,25 @@ static DEFS: &[Def] = &[
         ]),
     },
     Def {
+        name: "GlyphCIDMapping",
+        layout: Layout::Formats(
+            Width::U16,
+            &[(
+                0,
+                &[
+                    Field { name: "DataFormat", ty: U16, rep: Rep::One, cond: Cond::Always },
+                    Field { name: "StructLength", ty: Count32, rep: Rep::One, cond: Cond::Always },
+                    Field { name: "Registry", ty: U16, rep: Rep::One, cond: Cond::Always },
+                    Field { name: "RegistryName", ty: Char64, rep: Rep::One, cond: Cond::Always },
+                    Field { name: "Order", ty: U16, rep: Rep::One, cond: Cond::Always },
+                    Field { name: "OrderName", ty: Char64, rep: Rep::One, cond: Cond::Always },
+                    Field { name: "SupplementVersion", ty: U16, rep: Rep::One, cond: Cond::Always },
+                    Field { name: "Mapping", ty: GlyphCidMap, rep: Rep::One, cond: Cond::Always },
+                ],
+            )],
+        ),
+    },
+    Def {
         name: "GlyphPartRecord",
         layout: Layout::Plain(&[
             Field { name: "glyph", ty: Glyph, rep: Rep::One, cond: Cond::Always },
@@ -875,6 +1120,22 @@ static DEFS: &[Def] = &[
             Field { name: "FullAdvance", ty: U16, rep: Rep::One, cond: Cond::Always },
             Field { name: "PartFlags", ty: U16, rep: Rep::One, cond: Cond::Always },
         ]),
+    },
+    Def {
+        name: "GlyphProperties",
+        layout: Layout::Formats(
+            Width::U16,
+            &[
+                (0, &[Field { name: "DefaultProperties", ty: U16, rep: Rep::One, cond: Cond::Always }]),
+                (
+                    1,
+                    &[
+                        Field { name: "DefaultProperties", ty: U16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "Properties", ty: AatLookup("uint16"), rep: Rep::One, cond: Cond::Always },
+                    ],
+                ),
+            ],
+        ),
     },
     Def {
         name: "HVAR",
@@ -977,11 +1238,48 @@ static DEFS: &[Def] = &[
         ]),
     },
     Def {
+        name: "LayerList",
+        layout: Layout::Plain(&[
+            Field { name: "LayerCount", ty: Count32, rep: Rep::One, cond: Cond::Always },
+            Field { name: "Paint", ty: Off32("Paint"), rep: Rep::Count("LayerCount", 0), cond: Cond::Always },
+        ]),
+    },
+    Def {
+        name: "LayerRecord",
+        layout: Layout::Plain(&[
+            Field { name: "LayerGlyph", ty: Glyph, rep: Rep::One, cond: Cond::Always },
+            Field { name: "PaletteIndex", ty: U16, rep: Rep::One, cond: Cond::Always },
+        ]),
+    },
+    Def {
+        name: "LayerRecordArray",
+        layout: Layout::Plain(&[Field {
+            name: "LayerRecord",
+            ty: Struct("LayerRecord"),
+            rep: Rep::Count("LayerRecordCount", 0),
+            cond: Cond::Always,
+        }]),
+    },
+    Def {
+        name: "LigCaretDistances",
+        layout: Layout::Plain(&[
+            Field { name: "DivsionPointCount", ty: Count16, rep: Rep::One, cond: Cond::Always },
+            Field { name: "DivisionPoint", ty: I16, rep: Rep::Count("DivsionPointCount", 0), cond: Cond::Always },
+        ]),
+    },
+    Def {
         name: "LigCaretList",
         layout: Layout::Plain(&[
             Field { name: "Coverage", ty: Off16("Coverage"), rep: Rep::One, cond: Cond::Always },
             Field { name: "LigGlyphCount", ty: Count16, rep: Rep::One, cond: Cond::Always },
             Field { name: "LigGlyph", ty: Off16("LigGlyph"), rep: Rep::Count("LigGlyphCount", 0), cond: Cond::Always },
+        ]),
+    },
+    Def {
+        name: "LigCaretPoints",
+        layout: Layout::Plain(&[
+            Field { name: "DivsionPointCount", ty: Count16, rep: Rep::One, cond: Cond::Always },
+            Field { name: "DivisionPoint", ty: I16, rep: Rep::Count("DivsionPointCount", 0), cond: Cond::Always },
         ]),
     },
     Def {
@@ -1012,6 +1310,16 @@ static DEFS: &[Def] = &[
             Field { name: "ComponentCount", ty: Count16, rep: Rep::One, cond: Cond::Always },
             Field { name: "ComponentRecord", ty: Struct("ComponentRecord"), rep: Rep::Count("ComponentCount", 0), cond: Cond::Always },
         ]),
+    },
+    Def {
+        name: "LigatureCarets",
+        layout: Layout::Formats(
+            Width::U16,
+            &[
+                (0, &[Field { name: "Carets", ty: AatLookup("LigCaretDistances"), rep: Rep::One, cond: Cond::Always }]),
+                (1, &[Field { name: "Carets", ty: AatLookup("LigCaretPoints"), rep: Rep::One, cond: Cond::Always }]),
+            ],
+        ),
     },
     Def {
         name: "LigatureSet",
@@ -1330,6 +1638,326 @@ static DEFS: &[Def] = &[
         ),
     },
     Def {
+        name: "OpticalBounds",
+        layout: Layout::Formats(
+            Width::U16,
+            &[
+                (0, &[Field { name: "OpticalBoundsDeltas", ty: AatLookup("OpticalBoundsDeltas"), rep: Rep::One, cond: Cond::Always }]),
+                (1, &[Field { name: "OpticalBoundsPoints", ty: AatLookup("OpticalBoundsPoints"), rep: Rep::One, cond: Cond::Always }]),
+            ],
+        ),
+    },
+    Def {
+        name: "OpticalBoundsDeltas",
+        layout: Layout::Plain(&[
+            Field { name: "Left", ty: I16, rep: Rep::One, cond: Cond::Always },
+            Field { name: "Top", ty: I16, rep: Rep::One, cond: Cond::Always },
+            Field { name: "Right", ty: I16, rep: Rep::One, cond: Cond::Always },
+            Field { name: "Bottom", ty: I16, rep: Rep::One, cond: Cond::Always },
+        ]),
+    },
+    Def {
+        name: "OpticalBoundsPoints",
+        layout: Layout::Plain(&[
+            Field { name: "Left", ty: I16, rep: Rep::One, cond: Cond::Always },
+            Field { name: "Top", ty: I16, rep: Rep::One, cond: Cond::Always },
+            Field { name: "Right", ty: I16, rep: Rep::One, cond: Cond::Always },
+            Field { name: "Bottom", ty: I16, rep: Rep::One, cond: Cond::Always },
+        ]),
+    },
+    Def {
+        name: "Paint",
+        layout: Layout::Formats(
+            Width::U8,
+            &[
+                (
+                    1,
+                    &[
+                        Field { name: "NumLayers", ty: U8, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "FirstLayerIndex", ty: U32, rep: Rep::One, cond: Cond::Always },
+                    ],
+                ),
+                (
+                    2,
+                    &[
+                        Field { name: "PaletteIndex", ty: U16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "Alpha", ty: F2Dot14, rep: Rep::One, cond: Cond::Always },
+                    ],
+                ),
+                (
+                    3,
+                    &[
+                        Field { name: "PaletteIndex", ty: U16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "Alpha", ty: F2Dot14, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "VarIndexBase", ty: VarIndex, rep: Rep::One, cond: Cond::Always },
+                    ],
+                ),
+                (
+                    4,
+                    &[
+                        Field { name: "ColorLine", ty: Off24("ColorLine"), rep: Rep::One, cond: Cond::Always },
+                        Field { name: "x0", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "y0", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "x1", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "y1", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "x2", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "y2", ty: I16, rep: Rep::One, cond: Cond::Always },
+                    ],
+                ),
+                (
+                    5,
+                    &[
+                        Field { name: "ColorLine", ty: Off24("VarColorLine"), rep: Rep::One, cond: Cond::Always },
+                        Field { name: "x0", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "y0", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "x1", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "y1", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "x2", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "y2", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "VarIndexBase", ty: VarIndex, rep: Rep::One, cond: Cond::Always },
+                    ],
+                ),
+                (
+                    6,
+                    &[
+                        Field { name: "ColorLine", ty: Off24("ColorLine"), rep: Rep::One, cond: Cond::Always },
+                        Field { name: "x0", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "y0", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "r0", ty: U16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "x1", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "y1", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "r1", ty: U16, rep: Rep::One, cond: Cond::Always },
+                    ],
+                ),
+                (
+                    7,
+                    &[
+                        Field { name: "ColorLine", ty: Off24("VarColorLine"), rep: Rep::One, cond: Cond::Always },
+                        Field { name: "x0", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "y0", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "r0", ty: U16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "x1", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "y1", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "r1", ty: U16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "VarIndexBase", ty: VarIndex, rep: Rep::One, cond: Cond::Always },
+                    ],
+                ),
+                (
+                    8,
+                    &[
+                        Field { name: "ColorLine", ty: Off24("ColorLine"), rep: Rep::One, cond: Cond::Always },
+                        Field { name: "centerX", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "centerY", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "startAngle", ty: BiasedAngle, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "endAngle", ty: BiasedAngle, rep: Rep::One, cond: Cond::Always },
+                    ],
+                ),
+                (
+                    9,
+                    &[
+                        Field { name: "ColorLine", ty: Off24("VarColorLine"), rep: Rep::One, cond: Cond::Always },
+                        Field { name: "centerX", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "centerY", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "startAngle", ty: BiasedAngle, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "endAngle", ty: BiasedAngle, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "VarIndexBase", ty: VarIndex, rep: Rep::One, cond: Cond::Always },
+                    ],
+                ),
+                (
+                    10,
+                    &[
+                        Field { name: "Paint", ty: Off24("Paint"), rep: Rep::One, cond: Cond::Always },
+                        Field { name: "Glyph", ty: Glyph, rep: Rep::One, cond: Cond::Always },
+                    ],
+                ),
+                (11, &[Field { name: "Glyph", ty: Glyph, rep: Rep::One, cond: Cond::Always }]),
+                (
+                    12,
+                    &[
+                        Field { name: "Paint", ty: Off24("Paint"), rep: Rep::One, cond: Cond::Always },
+                        Field { name: "Transform", ty: Off24("Affine2x3"), rep: Rep::One, cond: Cond::Always },
+                    ],
+                ),
+                (
+                    13,
+                    &[
+                        Field { name: "Paint", ty: Off24("Paint"), rep: Rep::One, cond: Cond::Always },
+                        Field { name: "Transform", ty: Off24("VarAffine2x3"), rep: Rep::One, cond: Cond::Always },
+                    ],
+                ),
+                (
+                    14,
+                    &[
+                        Field { name: "Paint", ty: Off24("Paint"), rep: Rep::One, cond: Cond::Always },
+                        Field { name: "dx", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "dy", ty: I16, rep: Rep::One, cond: Cond::Always },
+                    ],
+                ),
+                (
+                    15,
+                    &[
+                        Field { name: "Paint", ty: Off24("Paint"), rep: Rep::One, cond: Cond::Always },
+                        Field { name: "dx", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "dy", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "VarIndexBase", ty: VarIndex, rep: Rep::One, cond: Cond::Always },
+                    ],
+                ),
+                (
+                    16,
+                    &[
+                        Field { name: "Paint", ty: Off24("Paint"), rep: Rep::One, cond: Cond::Always },
+                        Field { name: "scaleX", ty: F2Dot14, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "scaleY", ty: F2Dot14, rep: Rep::One, cond: Cond::Always },
+                    ],
+                ),
+                (
+                    17,
+                    &[
+                        Field { name: "Paint", ty: Off24("Paint"), rep: Rep::One, cond: Cond::Always },
+                        Field { name: "scaleX", ty: F2Dot14, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "scaleY", ty: F2Dot14, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "VarIndexBase", ty: VarIndex, rep: Rep::One, cond: Cond::Always },
+                    ],
+                ),
+                (
+                    18,
+                    &[
+                        Field { name: "Paint", ty: Off24("Paint"), rep: Rep::One, cond: Cond::Always },
+                        Field { name: "scaleX", ty: F2Dot14, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "scaleY", ty: F2Dot14, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "centerX", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "centerY", ty: I16, rep: Rep::One, cond: Cond::Always },
+                    ],
+                ),
+                (
+                    19,
+                    &[
+                        Field { name: "Paint", ty: Off24("Paint"), rep: Rep::One, cond: Cond::Always },
+                        Field { name: "scaleX", ty: F2Dot14, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "scaleY", ty: F2Dot14, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "centerX", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "centerY", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "VarIndexBase", ty: VarIndex, rep: Rep::One, cond: Cond::Always },
+                    ],
+                ),
+                (
+                    20,
+                    &[
+                        Field { name: "Paint", ty: Off24("Paint"), rep: Rep::One, cond: Cond::Always },
+                        Field { name: "scale", ty: F2Dot14, rep: Rep::One, cond: Cond::Always },
+                    ],
+                ),
+                (
+                    21,
+                    &[
+                        Field { name: "Paint", ty: Off24("Paint"), rep: Rep::One, cond: Cond::Always },
+                        Field { name: "scale", ty: F2Dot14, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "VarIndexBase", ty: VarIndex, rep: Rep::One, cond: Cond::Always },
+                    ],
+                ),
+                (
+                    22,
+                    &[
+                        Field { name: "Paint", ty: Off24("Paint"), rep: Rep::One, cond: Cond::Always },
+                        Field { name: "scale", ty: F2Dot14, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "centerX", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "centerY", ty: I16, rep: Rep::One, cond: Cond::Always },
+                    ],
+                ),
+                (
+                    23,
+                    &[
+                        Field { name: "Paint", ty: Off24("Paint"), rep: Rep::One, cond: Cond::Always },
+                        Field { name: "scale", ty: F2Dot14, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "centerX", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "centerY", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "VarIndexBase", ty: VarIndex, rep: Rep::One, cond: Cond::Always },
+                    ],
+                ),
+                (
+                    24,
+                    &[
+                        Field { name: "Paint", ty: Off24("Paint"), rep: Rep::One, cond: Cond::Always },
+                        Field { name: "angle", ty: Angle, rep: Rep::One, cond: Cond::Always },
+                    ],
+                ),
+                (
+                    25,
+                    &[
+                        Field { name: "Paint", ty: Off24("Paint"), rep: Rep::One, cond: Cond::Always },
+                        Field { name: "angle", ty: Angle, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "VarIndexBase", ty: VarIndex, rep: Rep::One, cond: Cond::Always },
+                    ],
+                ),
+                (
+                    26,
+                    &[
+                        Field { name: "Paint", ty: Off24("Paint"), rep: Rep::One, cond: Cond::Always },
+                        Field { name: "angle", ty: Angle, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "centerX", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "centerY", ty: I16, rep: Rep::One, cond: Cond::Always },
+                    ],
+                ),
+                (
+                    27,
+                    &[
+                        Field { name: "Paint", ty: Off24("Paint"), rep: Rep::One, cond: Cond::Always },
+                        Field { name: "angle", ty: Angle, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "centerX", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "centerY", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "VarIndexBase", ty: VarIndex, rep: Rep::One, cond: Cond::Always },
+                    ],
+                ),
+                (
+                    28,
+                    &[
+                        Field { name: "Paint", ty: Off24("Paint"), rep: Rep::One, cond: Cond::Always },
+                        Field { name: "xSkewAngle", ty: Angle, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "ySkewAngle", ty: Angle, rep: Rep::One, cond: Cond::Always },
+                    ],
+                ),
+                (
+                    29,
+                    &[
+                        Field { name: "Paint", ty: Off24("Paint"), rep: Rep::One, cond: Cond::Always },
+                        Field { name: "xSkewAngle", ty: Angle, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "ySkewAngle", ty: Angle, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "VarIndexBase", ty: VarIndex, rep: Rep::One, cond: Cond::Always },
+                    ],
+                ),
+                (
+                    30,
+                    &[
+                        Field { name: "Paint", ty: Off24("Paint"), rep: Rep::One, cond: Cond::Always },
+                        Field { name: "xSkewAngle", ty: Angle, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "ySkewAngle", ty: Angle, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "centerX", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "centerY", ty: I16, rep: Rep::One, cond: Cond::Always },
+                    ],
+                ),
+                (
+                    31,
+                    &[
+                        Field { name: "Paint", ty: Off24("Paint"), rep: Rep::One, cond: Cond::Always },
+                        Field { name: "xSkewAngle", ty: Angle, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "ySkewAngle", ty: Angle, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "centerX", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "centerY", ty: I16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "VarIndexBase", ty: VarIndex, rep: Rep::One, cond: Cond::Always },
+                    ],
+                ),
+                (
+                    32,
+                    &[
+                        Field { name: "SourcePaint", ty: Off24("Paint"), rep: Rep::One, cond: Cond::Always },
+                        Field { name: "CompositeMode", ty: CompositeMode, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "BackdropPaint", ty: Off24("Paint"), rep: Rep::One, cond: Cond::Always },
+                    ],
+                ),
+            ],
+        ),
+    },
+    Def {
         name: "PairPos",
         layout: Layout::Formats(
             Width::U16,
@@ -1482,6 +2110,17 @@ static DEFS: &[Def] = &[
         ]),
     },
     Def {
+        name: "Setting",
+        layout: Layout::Plain(&[
+            Field { name: "SettingValue", ty: U16, rep: Rep::One, cond: Cond::Always },
+            Field { name: "SettingNameID", ty: NameId, rep: Rep::One, cond: Cond::Always },
+        ]),
+    },
+    Def {
+        name: "Settings",
+        layout: Layout::Plain(&[Field { name: "Setting", ty: Struct("Setting"), rep: Rep::Count("SettingsCount", 0), cond: Cond::Always }]),
+    },
+    Def {
         name: "SinglePos",
         layout: Layout::Formats(
             Width::U16,
@@ -1580,6 +2219,35 @@ static DEFS: &[Def] = &[
         ]),
     },
     Def {
+        name: "VarAffine2x3",
+        layout: Layout::Plain(&[
+            Field { name: "xx", ty: Fixed, rep: Rep::One, cond: Cond::Always },
+            Field { name: "yx", ty: Fixed, rep: Rep::One, cond: Cond::Always },
+            Field { name: "xy", ty: Fixed, rep: Rep::One, cond: Cond::Always },
+            Field { name: "yy", ty: Fixed, rep: Rep::One, cond: Cond::Always },
+            Field { name: "dx", ty: Fixed, rep: Rep::One, cond: Cond::Always },
+            Field { name: "dy", ty: Fixed, rep: Rep::One, cond: Cond::Always },
+            Field { name: "VarIndexBase", ty: VarIndex, rep: Rep::One, cond: Cond::Always },
+        ]),
+    },
+    Def {
+        name: "VarColorLine",
+        layout: Layout::Plain(&[
+            Field { name: "Extend", ty: ExtendMode, rep: Rep::One, cond: Cond::Always },
+            Field { name: "StopCount", ty: Count16, rep: Rep::One, cond: Cond::Always },
+            Field { name: "ColorStop", ty: Struct("VarColorStop"), rep: Rep::Count("StopCount", 0), cond: Cond::Always },
+        ]),
+    },
+    Def {
+        name: "VarColorStop",
+        layout: Layout::Plain(&[
+            Field { name: "StopOffset", ty: F2Dot14, rep: Rep::One, cond: Cond::Always },
+            Field { name: "PaletteIndex", ty: U16, rep: Rep::One, cond: Cond::Always },
+            Field { name: "Alpha", ty: F2Dot14, rep: Rep::One, cond: Cond::Always },
+            Field { name: "VarIndexBase", ty: VarIndex, rep: Rep::One, cond: Cond::Always },
+        ]),
+    },
+    Def {
         name: "VarData",
         layout: Layout::Plain(&[
             Field { name: "ItemCount", ty: Count16, rep: Rep::One, cond: Cond::Always },
@@ -1631,6 +2299,7 @@ static DEFS: &[Def] = &[
             Field { name: "VarData", ty: Off32("VarData"), rep: Rep::Count("VarDataCount", 0), cond: Cond::Always },
         ]),
     },
+    Def { name: "ankr", layout: Layout::Plain(&[Field { name: "AnchorPoints", ty: Struct("AnchorPoints"), rep: Rep::One, cond: Cond::Always }]) },
     Def {
         name: "avar",
         layout: Layout::Plain(&[
@@ -1640,6 +2309,49 @@ static DEFS: &[Def] = &[
             Field { name: "AxisSegmentMap", ty: Struct("AxisSegmentMap"), rep: Rep::Count("AxisCount", 0), cond: Cond::Always },
             Field { name: "VarIdxMap", ty: Off32("DeltaSetIndexMap"), rep: Rep::One, cond: Cond::AtLeast("Version", 0x20000) },
             Field { name: "VarStore", ty: Off32("VarStore"), rep: Rep::One, cond: Cond::AtLeast("Version", 0x20000) },
+        ]),
+    },
+    Def {
+        name: "bsln",
+        layout: Layout::Plain(&[
+            Field { name: "Version", ty: Version, rep: Rep::One, cond: Cond::Always },
+            Field { name: "Baseline", ty: Struct("Baseline"), rep: Rep::One, cond: Cond::Always },
+        ]),
+    },
+    Def {
+        name: "cidg",
+        layout: Layout::Plain(&[Field { name: "CIDGlyphMapping", ty: Struct("CIDGlyphMapping"), rep: Rep::One, cond: Cond::Always }]),
+    },
+    Def {
+        name: "feat",
+        layout: Layout::Plain(&[
+            Field { name: "Version", ty: Version, rep: Rep::One, cond: Cond::Always },
+            Field { name: "FeatureNames", ty: Struct("FeatureNames"), rep: Rep::One, cond: Cond::Always },
+        ]),
+    },
+    Def {
+        name: "gcid",
+        layout: Layout::Plain(&[Field { name: "GlyphCIDMapping", ty: Struct("GlyphCIDMapping"), rep: Rep::One, cond: Cond::Always }]),
+    },
+    Def {
+        name: "lcar",
+        layout: Layout::Plain(&[
+            Field { name: "Version", ty: Version, rep: Rep::One, cond: Cond::Always },
+            Field { name: "LigatureCarets", ty: Struct("LigatureCarets"), rep: Rep::One, cond: Cond::Always },
+        ]),
+    },
+    Def {
+        name: "opbd",
+        layout: Layout::Plain(&[
+            Field { name: "Version", ty: Version, rep: Rep::One, cond: Cond::Always },
+            Field { name: "OpticalBounds", ty: Struct("OpticalBounds"), rep: Rep::One, cond: Cond::Always },
+        ]),
+    },
+    Def {
+        name: "prop",
+        layout: Layout::Plain(&[
+            Field { name: "Version", ty: Fixed, rep: Rep::One, cond: Cond::Always },
+            Field { name: "GlyphProperties", ty: Struct("GlyphProperties"), rep: Rep::One, cond: Cond::Always },
         ]),
     },
 ];

@@ -58,3 +58,31 @@ fn overlapping_lookup_segments_cost_no_more_than_their_glyphs() {
     // The last segment (index 65,534) holds 65,534 % 7 = 0.
     assert!(text.contains("<Lookup glyph=\"A\" value=\"0\"/>"), "{}", &text[..400.min(text.len())]);
 }
+
+const APPLE_TAGS: [Tag; 9] = [*b"ankr", *b"bsln", *b"cidg", *b"feat", *b"gcid", *b"lcar", *b"ltag", *b"opbd", *b"trak"];
+const APPLE_TAGS_2: [Tag; 3] = [*b"bsln", *b"lcar", *b"opbd"];
+
+#[test]
+fn apple_tables_match_ttx() {
+    assert_dump(&fonts::apple_font(), &APPLE_TAGS, include_str!("testdata/apple.ttx"));
+    assert_dump(&fonts::apple_font_2(), &APPLE_TAGS_2, include_str!("testdata/apple2.ttx"));
+}
+
+#[test]
+fn every_truncation_of_the_apple_tables_is_survived() {
+    assert_truncations_survive(&fonts::apple_font(), &APPLE_TAGS);
+    assert_truncations_survive(&fonts::apple_font_2(), &APPLE_TAGS_2);
+}
+
+#[test]
+fn a_trak_entry_names_its_track_from_the_name_table() {
+    let mut font = fonts::apple_font();
+    // A name table with one record: Macintosh, Roman, English, name ID 257 "Tight".
+    let mut name = fonts::Be::default();
+    name.u16s(&[0, 1, 18, 1, 0, 0, 257, 5, 0]);
+    name.bytes(b"Tight");
+    font.insert(*b"name", name.0);
+    let options = DumpOptions { tables: vec![*b"trak"], ..DumpOptions::default() };
+    let text = dump(&font, &options).unwrap();
+    assert!(text.contains("<trackEntry value=\"0.0\" nameIndex=\"257\">\n        <!-- Tight -->"), "{text}");
+}
