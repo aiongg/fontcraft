@@ -6,7 +6,7 @@
 //! glyph list name, without code points, with that compiler (version 5.0.1) and reading its `cmap`.
 
 /// `(glyph name, code point)`, sorted by name (byte order).
-pub(super) const NAME_CODES: [(&str, u32); 891] = [
+pub(super) static NAME_CODES: [(&str, u32); 891] = [
     ("A", 0x0041),
     ("AE", 0x00C6),
     ("AEacute", 0x01FC),

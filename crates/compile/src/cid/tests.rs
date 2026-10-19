@@ -137,7 +137,11 @@ fn a_cid_keyed_source_compiles_to_a_cid_keyed_cff_in_cid_order() {
     let font = FontRef::new(&out.bytes).unwrap();
     let cmap = font.cmap().unwrap();
     assert_eq!(cmap.map_codepoint('C').map(|g| g.to_u32()), Some(gid(&out, "C")));
-    assert!(cmap.encoding_records().iter().all(|r| r.platform_id() as u16 != 1));
+    // makeotf writes a stub Macintosh subtable without a Macintosh CMap: code 0 to glyph 0.
+    let mac = cmap.encoding_records().iter().find(|r| r.platform_id() as u16 == 1).expect("a Macintosh subtable");
+    assert_eq!(mac.encoding_id(), 0);
+    let CmapSubtable::Format6(sub) = mac.subtable(cmap.offset_data()).unwrap() else { panic!("format 6") };
+    assert_eq!((sub.first_code(), sub.entry_count(), sub.glyph_id_array()[0].get()), (0, 1, 0));
     // The CFF names the CID font; post holds no glyph names.
     assert_eq!(cff.metadata().unwrap().name(), Some("CidTest-Regular"));
     assert_eq!(font.post().unwrap().version(), read_fonts::types::Version16Dot16::VERSION_3_0);

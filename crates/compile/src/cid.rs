@@ -14,7 +14,7 @@
 //! | Private DICTs | a sub-font's own hinting values under their UFO font-info names, each as given (stem snaps sorted, no StdHW or StdVW), CFF defaults for the rest; a sub-font without a `PrivateDict` takes the font's values; `defaultWidthX` and `nominalWidthX` chosen per sub-font |
 //! | hints | each glyph's manual hints, else the autohinter's with its sub-font's zones and stems |
 //! | `cmap` | with a Unicode CMap file (makeotf's `-ch`), each glyph gets the code points the file maps to its CID and nothing else; without one, the source's own code points |
-//! | Macintosh `cmap` | with a Macintosh CMap file (`-cm`) of one-byte codes, a format 6 subtable (platform 1) with the script `-cs` names, else the ordering's (Japan 1, CNS 2, GB 25, Korea 3, else Roman 0), and the language `-cl` names, else 0 |
+//! | Macintosh `cmap` | with a Macintosh CMap file (`-cm`) of one-byte codes, a format 6 subtable (platform 1) with the script `-cs` names, else the ordering's (Japan 1, CNS 2, GB 25, Korea 3, else Roman 0), and the language `-cl` names, else 0; without one, a stub format 6 subtable that maps code 0 to glyph 0, as makeotf writes it |
 //!
 //! The CMap options and the script heuristic follow AFDKO's `python/afdko/makeotf.py` 5.0.1
 //! (Apache-2.0, see `NOTICE`).
@@ -83,7 +83,7 @@ pub(crate) struct CidPlan {
 struct MacPlan {
     script: u16,
     language: u16,
-    /// One-byte code → CID.
+    /// One-byte code → CID; empty without a Macintosh CMap, which gives the stub subtable.
     codes: BTreeMap<u32, u32>,
 }
 
@@ -186,13 +186,12 @@ pub(crate) fn plan(
         warnings.push(format!("the CID map leaves out {}, so they follow the highest CID", list(&left)));
     }
     mapped.sort_by_key(|(c, _)| *c);
-    let mut next = mapped.last().map_or(1, |(c, _)| c + 1);
-    for g in unmapped {
+    let first = mapped.last().map_or(1, |(c, _)| c + 1);
+    for (next, g) in (first..).zip(unmapped) {
         if next > MAX_CID {
             return Err(cid_error(format!("`{}` would be CID {next}, above the highest CID, {MAX_CID}", g.name)));
         }
         mapped.push((next, g));
-        next += 1;
     }
 
     let mut fds = HashMap::with_capacity(mapped.len());
@@ -236,7 +235,11 @@ pub(crate) fn plan(
                 Some(MacPlan { script, language: options.mac_language.unwrap_or(0), codes: cmap.cids })
             }
         }
-        None => None,
+        None => {
+            // The heuristic's warning is for a CMap the user gave; the stub needs no warning.
+            let script = options.mac_script.unwrap_or_else(|| mac_script(&state.ros.ordering, &mut Vec::new()));
+            Some(MacPlan { script, language: options.mac_language.unwrap_or(0), codes: BTreeMap::new() })
+        }
     };
     let plan = CidPlan { ros: state.ros.clone(), font_name: state.font_name.clone(), cids, fds, subfonts, mac };
     Ok((glyphs, Some(plan)))
@@ -413,8 +416,11 @@ pub(crate) fn finish(compiled: &mut Compiled, plan: &CidPlan) -> Result<(), Comp
 }
 
 /// A format 6 subtable from the first to the last code that reaches a glyph; `None` when no code
-/// does.
+/// does. Without codes, the stub: code 0 to glyph 0.
 fn format6(mac: &MacPlan, gid_of: &HashMap<u32, u16>) -> Option<Vec<u8>> {
+    if mac.codes.is_empty() {
+        return Some([6u16, 12, mac.language, 0, 1, 0].iter().flat_map(|v| v.to_be_bytes()).collect());
+    }
     let reached: BTreeMap<u32, u16> = mac.codes.iter().filter_map(|(code, cid)| gid_of.get(cid).filter(|g| **g != 0).map(|g| (*code, *g))).collect();
     let (&first, _) = reached.iter().next()?;
     let (&last, _) = reached.iter().next_back()?;
