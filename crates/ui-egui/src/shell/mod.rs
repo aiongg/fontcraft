@@ -40,6 +40,7 @@ pub mod selection;
 pub mod space_center;
 pub mod start_window;
 pub mod status_bar;
+pub mod table_viewer;
 pub mod tabs;
 pub mod text;
 pub mod text_preview;
@@ -123,6 +124,7 @@ pub const MODULES: &[(&[UiCommand], Handler)] = &[
     (crate::canvas::images::COMMANDS, crate::canvas::images::run),
     (crate::dialogs::tt_instructions::COMMANDS, crate::dialogs::tt_instructions::run),
     (crate::dialogs::review_hints::COMMANDS, crate::dialogs::review_hints::run),
+    (table_viewer::COMMANDS, table_viewer::run),
 ];
 
 /// The shell commands' parameters that name files, declared as engine commands declare theirs
@@ -134,6 +136,7 @@ pub const UI_FILE_PARAMS: &[(&str, &[fontcraft_engine::cmd::FileParam])] = &[
     ("view.filterByEncodingFile", &[fontcraft_engine::cmd::FileParam::read("path")]),
     ("dialog.actions", &[fontcraft_engine::cmd::FileParam::read("openSet"), fontcraft_engine::cmd::FileParam::write("savePath")]),
     ("kerning.loadPairList", &[fontcraft_engine::cmd::FileParam::read("path")]),
+    ("tableViewer.show", &[fontcraft_engine::cmd::FileParam::read("font"), fontcraft_engine::cmd::FileParam::read("compareWith")]),
 ];
 
 /// The file parameters [`UI_FILE_PARAMS`] declares for the shell command `id`.
@@ -174,6 +177,7 @@ pub fn windows(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'s
     crate::dialogs::tt_preview_address::show(app, ui, pending);
     crate::dialogs::tt_instructions::show(app, ui, pending);
     crate::dialogs::review_hints::show(app, ui, pending);
+    table_viewer::show(app, ui, pending);
 }
 
 pub fn is_ui_command(id: &str) -> bool {

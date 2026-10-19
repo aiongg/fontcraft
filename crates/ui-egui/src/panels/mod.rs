@@ -141,6 +141,7 @@ pub struct PanelState {
     pub hinting_waterfall: hinting_waterfall::WaterfallState,
     pub tt_instructions: crate::dialogs::tt_instructions::TtInstructionsState,
     pub review_hints: crate::dialogs::review_hints::ReviewHintsState,
+    pub table_viewer: crate::shell::table_viewer::TableViewerState,
 }
 
 impl Default for PanelState {
@@ -185,6 +186,7 @@ impl Default for PanelState {
             hinting_waterfall: Default::default(),
             tt_instructions: Default::default(),
             review_hints: Default::default(),
+            table_viewer: Default::default(),
         }
     }
 }
