@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**2321 guesses on 1386 rows (572 of them live commands).**
+**2326 guesses on 1390 rows (572 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -1813,6 +1813,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `transform` (cli) | M12 | docs | – | A negative advance width, which rotatefont writes into CFF, is set to 0 with a warning because hmtx cannot hold it; a font that relies on such widths would settle it. |
 | `transform` (cli) | M12 | docs | – | On a TrueType font a matrix strips the instructions of every changed glyph, drops fpgm, prep, cvt and cvar when no glyph keeps instructions, and drops hdmx, LTSH and VDMX whenever a glyph or width changed; rotatefont writes only CFF, so a TrueType user would settle it. |
 | `transform` (cli) | M12 | docs | – | A matrix leaves vmtx, post.italicAngle, the hhea caret slope, kerning and GPOS as they are, as rotatefont leaves everything but outlines and widths; a user of slanted output would settle whether the slant should reach italicAngle. |
+| `optimize` (cli) | M12 | docs | – | Naming any optimisation runs only the named ones, and naming none runs every built lossless one; each reference tool does one optimisation, so a user who combines them would settle it. |
+| `optimize` (cli) | M12 | docs | – | A step whose result is not smaller is dropped and the table kept as it was; fontmake keeps compreffor's output whatever its size, and comparing sizes on the corpus would show whether that ever matters. |
 | `collection pack` (cli) | M12 | docs | – | A --share-table that names a font past the inputs, or a font without that table, is refused; otf2otc ignores it silently. A user report of a script that relies on otf2otc's behaviour would settle it. |
 | `collection unpack` (cli) | M12 | docs | – | When two members have the same PostScript name, the later ones are named STEM-fontN; otc2otf writes them to the same path, so the last one wins. A user report would settle whether the reference behaviour is wanted. |
 | `diff` (cli) | M12 | docs | – | Without --all a table lists at most 1000 removed or added lines, or 4096 hex rows; none of the reference tools caps its output, so the cap is ours. |
@@ -1838,8 +1840,11 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `features lint` (cli) | M12 | inferred | – | Without --font or --glyph-order the compiler's messages about glyphs missing from the font are left out and hyphenated names are read as ranges; addfeatures always checks against a font. A request to check names against the code's own classes would change it. |
 | `features lint` (cli) | M12 | inferred | – | --warnings all adds one kind of note so far, a glyph that one mark-to-base or mark-to-ligature subtable lists both as a mark and as a base; running addfeatures -V on the same code would list the other notes worth adding. |
 | `features convert` (cli) | M12 | docs | – | FontDame backtrack sequences (glyph, class and coverage rules, reverse chaining) are read nearest glyph first, as the binary stores them, and reversed for feature code; a FontDame file with a multi-glyph backtrack and the table the reference tool compiles from it would settle it. |
-| `features convert` (cli) | M12 | docs | – | A FontDame `U XXXX` glyph reference becomes uniXXXX (uXXXXX above U+FFFF), where mtiLib takes the Adobe Glyph List name when there is one; a glyph-list lookup in the tables crate would match it. |
 | `variations build-avar` (cli) | M12 | docs | – | Without a designspace the font's own version 1 avar is read back as user-space maps and built again (fontTools' deprecated varLib.avar prints the maps instead); a version 2 avar is refused. Comparing with a user's expectations of the reference tool would settle it. |
+| `variations plan-avar` (cli) | M12 | docs | – | --plot writes an SVG chart of the normalised maps to FILE, where fontTools opens a window; comparing with how users of the reference tool use the chart would settle it. |
+| `variations build-hvar` (cli) | M12 | docs | – | Without --replace an existing HVAR or VVAR is kept and the run fails when nothing is left to build, where fontTools always replaces HVAR; a user's expectations of the reference tool would settle it. |
+| `variations plot` (cli) | M12 | docs | – | Each master gets a panel of its own, where fontTools 4.66 draws every support on one chart (it computes a grid it does not use); the reference tool's intent, seen in its history or its users' plots, would settle it. |
+| `variations plot` (cli) | M12 | docs | – | With more than two axes, --axes picks the plotted ones and masters that vary on other axes are left out, where fontTools refuses; comparing with users' needs would settle it. |
 | `mcp` (cli) | M13 | inferred | – | `--read-only` admits only commands that declare themselves queries; `--allow` and `--deny` take shell-style patterns over command ids, deny winning. No reference has such options; settled by the sibling apps' conventions. |
 | `mcp` (cli) | M13 | inferred | – | File access is unrestricted by default; `--automation-read-root` and `--automation-write-root` each take one folder, grant read and write access separately, and are an error with `--connect`. No reference has such options; settled by the sibling apps' conventions. |
 | `mcp` (cli) | M13 | inferred | – | Macro, recent-document and URL commands are refused while a root, `--read-only`, `--allow` or `--deny` is set, because their files and steps are not in their parameters; agents' needs would settle whether a checked macro runner is worth building. |
