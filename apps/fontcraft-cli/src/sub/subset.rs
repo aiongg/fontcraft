@@ -1,4 +1,4 @@
-//! `fontcraft-cli subset` (M12.17, M12.18): one `font.subset` run per input, with the option
+//! `fontcraft-cli subset` (M12.17–M12.19b): one `font.subset` run per input, with the option
 //! names of the reference subsetter.
 
 use fontcraft_engine::Session;
@@ -17,7 +17,8 @@ const USAGE: &str = "\
       Keep the chosen glyphs and every glyph they use (components, accent parts, .notdef), and
       remove the rest from every table. Glyphs the kept layout features can substitute in are
       kept too. The output is FONT.subset.EXT unless -o, --output-dir or --in-place says
-      otherwise. CFF2 fonts are refused; --json lists every dropped table and why.
+      otherwise. Unused CFF and CFF2 subroutines are removed; --json lists every dropped table
+      and why.
 ";
 
 /// The options, as data.
@@ -42,6 +43,7 @@ const OPTIONS: &[OptSpec] = &[
     OptSpec::switch("bidi-closure", true, "also keep the mirrored partner of each requested character"),
     OptSpec::switch("hinting", true, "keep hints and instructions"),
     OptSpec::list("hinting-tables", "TAG", "cvt,cvar,fpgm,prep,hdmx,VDMX", "tables --no-hinting removes"),
+    OptSpec::switch("desubroutinize", false, "expand every CFF and CFF2 subroutine instead of removing only the unused ones"),
     OptSpec::list("drop-tables", "TAG", "", "more tables to remove"),
     OptSpec::switch("passthrough-tables", false, "keep tables the subsetter does not know"),
     OptSpec::switch("legacy-kern", false, "keep the kern table when GPOS exists"),
@@ -139,6 +141,7 @@ fn run(args: &[String]) -> Outcome {
         ("bidiClosure", "bidi-closure"),
         ("layoutClosure", "layout-closure"),
         ("hinting", "hinting"),
+        ("desubroutinize", "desubroutinize"),
         ("passthroughTables", "passthrough-tables"),
         ("legacyKern", "legacy-kern"),
         ("nameLegacy", "name-legacy"),

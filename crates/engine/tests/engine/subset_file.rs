@@ -36,7 +36,8 @@ fn font_subset_keeps_the_selection_and_reports_the_map() {
     let missing = s.execute("font.subset", &json!({ "font": ttf, "keep": {"glyphs": ["nosuch"]}, "output": dir.join("x.ttf") }));
     assert!(missing.is_err(), "a missing glyph is refused by default");
     assert!(!dir.join("x.ttf").exists(), "a failed command writes nothing");
-    assert!(s.execute("font.subset", &json!({ "font": ttf, "keep": {"text": "A"}, "desubroutinize": true })).is_err());
+    let flat = s.execute("font.subset", &json!({ "font": ttf, "keep": {"text": "A"}, "desubroutinize": true, "output": dir.join("flat.ttf") }));
+    assert!(flat.is_ok(), "desubroutinize leaves a TrueType font as it is: {flat:?}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

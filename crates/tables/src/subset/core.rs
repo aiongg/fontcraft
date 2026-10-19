@@ -1,4 +1,4 @@
-//! Subsetting `cmap`, `glyf`, `loca`, `CFF `, `hmtx`, `vmtx`, `post`, `name`, `OS/2`, `maxp`,
+//! Subsetting `cmap`, `glyf`, `loca`, `CFF `, `CFF2` (through [`super::cff2`]), `hmtx`, `vmtx`, `post`, `name`, `OS/2`, `maxp`,
 //! `head`, `hhea`, `vhea` and the font-wide hinting tables (M12.17). Ported from the table
 //! methods of fontTools' subsetter (MIT).
 //!
@@ -14,7 +14,6 @@ use read_fonts::{FontData, FontRead};
 
 use super::closure::is_unicode;
 use super::{Plan, cs};
-use crate::dehint::{DehintOptions, GaspMode, dehint};
 use crate::limits::MAX_CODE_POINTS;
 use crate::reorder::be::{Data, put_u16, put_u32, set_u16, to_u16, to_u32};
 use crate::reorder::cmap::{write_format4, write_format12};
@@ -38,9 +37,6 @@ pub fn is_core(tag: Tag) -> bool {
 
 /// Writes the subset of the tables this module handles from `input` into `output`.
 pub fn apply(plan: &Plan, input: &SfntFont, output: &mut SfntFont) -> Result<()> {
-    if input.tables.contains_key(b"CFF2") {
-        return Err(TablesError::Unsupported("subsetting a CFF2 font".into()));
-    }
     let n_out = plan.new_to_old.len();
     for tag in COPIED {
         if let Some(bytes) = input.get(tag) {
@@ -61,6 +57,9 @@ pub fn apply(plan: &Plan, input: &SfntFont, output: &mut SfntFont) -> Result<()>
     }
     if let Some(bytes) = input.get(*b"CFF ") {
         output.insert(*b"CFF ", subset_cff(plan, bytes)?);
+    }
+    if let Some(bytes) = input.get(*b"CFF2") {
+        output.insert(*b"CFF2", super::cff2::subset_cff2(plan, bytes)?);
     }
     for (mtx, hea) in [(*b"hmtx", *b"hhea"), (*b"vmtx", *b"vhea")] {
         let (Some(table), Some(header)) = (input.get(mtx), input.get(hea)) else {
@@ -760,7 +759,8 @@ fn put_at(out: &mut [u8], at: usize, v: u32) -> Result<()> {
 
 /// `CFF ` of the subset: charstrings, charset and FDSelect follow the glyph set, `.notdef`
 /// keeps only its width unless its outline is kept, emptied glyphs become `endchar`, a
-/// custom Encoding gives way to the Standard Encoding, and hints go without hinting.
+/// custom Encoding gives way to the Standard Encoding; then [`super::cff2::finish_cff`] drops
+/// the unused Font DICTs and subroutines, or the hints without hinting.
 fn subset_cff(plan: &Plan, bytes: &[u8]) -> Result<Vec<u8>> {
     let table = cff::parse(bytes, plan.num_glyphs)?;
     let new_to_old: Vec<u16> = plan.new_to_old.iter().map(|o| to_u16(*o as usize, "a glyph id")).collect::<Result<_>>()?;
@@ -786,12 +786,5 @@ fn subset_cff(plan: &Plan, bytes: &[u8]) -> Result<Vec<u8>> {
         replace.insert(0, empty);
     }
     let rebuilt = table.rebuild_with(&new_to_old, None, &replace, true)?;
-    if plan.options.hinting {
-        return Ok(rebuilt);
-    }
-    let mut only = SfntFont::new(crate::sfnt::Flavour::Cff);
-    only.insert(*b"CFF ", rebuilt);
-    let options = DehintOptions { glyphs: None, keep_font_hints: false, hinting_tables: Vec::new(), keep_flex: true, gasp: GaspMode::Keep };
-    let mut stripped = dehint(&only, &options)?;
-    stripped.remove(*b"CFF ").ok_or_else(|| TablesError::invalid("removing the CFF hints lost the table"))
+    super::cff2::finish_cff(plan, rebuilt)
 }

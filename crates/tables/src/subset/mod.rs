@@ -4,11 +4,13 @@
 //!
 //! [`subset`] drops the tables the options remove, resolves the selection into a [`Plan`]
 //! ([`closure`]), then each table module writes its tables into the output: [`core`] (M12.17),
-//! [`layout`] (M12.18), [`var`] and [`other`] (M12.19). Each module has
+//! [`layout`] (M12.18), [`var`] and [`other`] (M12.19); [`core`] hands `CFF2` and the subroutine
+//! steps of both CFF flavours to `cff2` (M12.19b). Each module has
 //! `apply(plan, input, output) -> Result<()>` and leaves the tables it does not handle alone.
 //! A table of the input that no module wrote is dropped, and [`SubsetResult::dropped`] says why:
 //! no table that indexes glyphs is ever copied unchanged into a subset.
 
+mod cff2;
 pub mod closure;
 pub mod core;
 mod cs;
@@ -67,6 +69,8 @@ pub struct SubsetOptions {
     pub retain_gids: bool,
     /// Keep TrueType instructions and CFF hints.
     pub hinting: bool,
+    /// Expand every CFF and CFF2 subroutine; otherwise only the unused ones are removed.
+    pub desubroutinize: bool,
     /// Font-wide tables dropped when `hinting` is off.
     pub hinting_tables: Vec<Tag>,
     /// Keep glyph 0.
@@ -120,6 +124,7 @@ impl Default for SubsetOptions {
             layout_closure: true,
             retain_gids: false,
             hinting: true,
+            desubroutinize: false,
             hinting_tables: DEFAULT_HINTING_TABLES.to_vec(),
             notdef_glyph: true,
             notdef_outline: false,
@@ -209,7 +214,7 @@ pub struct SubsetResult {
 
 /// The layout tables ([`layout`]).
 const LAYOUT_TABLES: [Tag; 3] = [*b"GDEF", *b"GSUB", *b"GPOS"];
-/// Variation tables ([`var`]; CFF2 fonts are refused and VARC is not subset yet).
+/// Variation tables ([`var`], `CFF2` in [`core`]; VARC is not subset yet).
 const VARIATION_TABLES: [Tag; 10] = [*b"fvar", *b"avar", *b"gvar", *b"cvar", *b"HVAR", *b"VVAR", *b"MVAR", *b"STAT", *b"CFF2", *b"VARC"];
 /// Other tables pyftsubset subsets ([`other`]).
 const OTHER_TABLES: [Tag; 13] =
