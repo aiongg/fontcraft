@@ -501,8 +501,8 @@ type Raw = Vec<(usize, Finding)>;
 /// Runs the layer, glyph and source checks of `run` on `font`, the font at `fi` in the target.
 fn examine_font(font: &Font, fi: usize, run: &Run, facts: &audit::run::Facts, ex: &mut Examined, raw: &mut Raw, places: &mut HashMap<usize, Places>) {
     let layer_checks = start_font(font, fi, run, facts, ex, places);
-    let n = layers_of(font, run).len();
-    examine_layers(font, fi, run, &layer_checks, 0..n, ex, raw, places);
+    let chosen = layers_of(font, run);
+    examine_layers(&AuditContext::new(font), fi, run, &layer_checks, &chosen, ex, raw, places);
     examine_rest(font, fi, run, facts, ex, raw);
 }
 
@@ -528,25 +528,24 @@ fn start_font(
     layer_checks
 }
 
-/// Runs the layer checks and the check modules on the layers at `range` of [`layers_of`].
+/// Runs the layer checks and the check modules on `chosen`, a stretch of [`layers_of`] of the
+/// font of `ctx`.
 #[allow(clippy::too_many_arguments)]
 fn examine_layers(
-    font: &Font,
+    ctx: &AuditContext<'_>,
     fi: usize,
     run: &Run,
     layer_checks: &[&'static CheckSpec],
-    range: std::ops::Range<usize>,
+    chosen: &[(usize, &Arc<Glyph>, usize, &Layer)],
     ex: &mut Examined,
     raw: &mut Raw,
     places: &mut HashMap<usize, Places>,
 ) {
-    let all = layers_of(font, run);
-    let Some(chosen) = all.get(range.start.min(all.len())..range.end.min(all.len())) else { return };
-    let ctx = AuditContext::new(font);
+    let font = ctx.font;
     let place = places.entry(fi).or_default();
     if !layer_checks.is_empty() {
         for (_, g, li, layer) in chosen {
-            let report = audit::audit_layer(&ctx, g, layer, layer_checks, &run.config);
+            let report = audit::audit_layer(ctx, g, layer, layer_checks, &run.config);
             place.layers.insert((g.name.clone(), layer.id.clone()), (*li, layer.master.clone()));
             ex.tally.absorb(layer_checks, report);
         }

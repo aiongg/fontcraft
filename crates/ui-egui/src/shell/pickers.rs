@@ -26,6 +26,23 @@ pub trait Picker: Send {
     fn save(&mut self, title: &str, kind: &str, extensions: &[&str], suggested: &str) -> Option<PathBuf>;
 }
 
+/// The chosen `path`, with `.{default}` added when its extension is none of `extensions`: some
+/// choosers return the name as typed. `Err` says why nothing should run: the name with the
+/// extension added is a file that exists, and the chooser asked only about the name without it.
+pub fn with_extension(path: PathBuf, extensions: &[&str], default: &str) -> Result<PathBuf, String> {
+    if path.extension().and_then(|e| e.to_str()).is_some_and(|e| extensions.contains(&e)) {
+        return Ok(path);
+    }
+    let mut name = path.into_os_string();
+    name.push(".");
+    name.push(default);
+    let path = PathBuf::from(name);
+    if path.exists() {
+        return Err(format!("{} exists; choose it in the chooser to replace it", path.display()));
+    }
+    Ok(path)
+}
+
 /// The commands File › Save and File › Save As… run.
 const SAVE: &str = "file.save";
 const SAVE_AS: &str = "file.saveAs";
@@ -68,9 +85,8 @@ pub fn wants_save_path(app: &FontcraftApp, id: &str, params: &Value) -> bool {
 
 /// File › Save As…, and Save of a document without a file: asks the save chooser for the file,
 /// offering the document's title with the extension of its format, and runs `id` with the chosen
-/// path as the person's save. Save As is given the offered format when the chosen name has no
-/// format extension, so the file is written where the person said. A cancelled chooser saves
-/// nothing.
+/// path as the person's save. A chosen name without a format extension gets the offered one. A
+/// cancelled chooser saves nothing.
 pub fn save_with_chooser(app: &mut FontcraftApp, id: &str, params: Value) {
     let Some(doc) = app.session.active() else { return };
     let extension = save_extension(doc.font.source.format).unwrap_or(NATIVE_EXTENSION);
@@ -78,14 +94,17 @@ pub fn save_with_chooser(app: &mut FontcraftApp, id: &str, params: Value) {
     let title = if id == SAVE_AS { "Save As" } else { "Save" };
     let Some(picker) = app.picker.as_mut() else { return };
     let Some(path) = picker.save(title, "Font source", &SAVE_EXTENSIONS, &suggested) else { return };
+    let path = match with_extension(path, &SAVE_EXTENSIONS, extension) {
+        Ok(path) => path,
+        Err(why) => {
+            app.state.status = format!("{title}: {why}");
+            return;
+        }
+    };
     let mut params = match params {
         Value::Object(map) => map,
         _ => Map::new(),
     };
-    let named = path.extension().and_then(|e| e.to_str()).is_some_and(|e| SAVE_EXTENSIONS.contains(&e));
-    if id == SAVE_AS && !named && params.get("format").is_none_or(Value::is_null) {
-        params.insert("format".into(), json!(extension));
-    }
     params.insert("path".into(), json!(path.to_string_lossy()));
     // A failure is in the status bar already.
     let _ = app.run_from_shell(id, &Value::Object(params));
@@ -154,7 +173,7 @@ mod tests {
     use egui::{Event, Key, Modifiers, PointerButton, Pos2};
 
     use super::stub::{SaveAsked, SavePicker};
-    use super::{Picker, SAVE_EXTENSIONS, import_outlines, wants_files};
+    use super::{Picker, SAVE_EXTENSIONS, import_outlines, wants_files, with_extension};
     use crate::FontcraftApp;
 
     /// Each question a chooser was asked: its title and its file extensions.
@@ -325,6 +344,29 @@ mod tests {
         w.shortcut(&mut app, Key::S, Modifiers::COMMAND);
         assert_eq!(asked.lock().unwrap().len(), 1);
         assert!(!app.session.active().unwrap().modified(), "{}", app.state.status);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_chosen_name_without_an_extension_gets_the_offered_one() {
+        let dir = temp_dir("save-no-extension");
+        let w = Window::new();
+        let mut app = FontcraftApp::default();
+        // File › Save of an untitled document, answered with a bare name: a native file.
+        let asked = asked_by(&mut app, Some(dir.join("Mine")));
+        w.shortcut(&mut app, Key::S, Modifiers::COMMAND);
+        assert_eq!(asked.lock().unwrap().len(), 1);
+        let file = dir.join("Mine.fontcraft");
+        assert!(file.is_file(), "{}", app.state.status);
+        assert!(!dir.join("Mine").exists());
+        assert_eq!(app.session.active().unwrap().path.as_deref(), Some(file.as_path()));
+
+        // A name that ends in another extension keeps it and gets the offered one after it; a
+        // name with an accepted extension stays as it is.
+        assert_eq!(with_extension(dir.join("a.v2"), &SAVE_EXTENSIONS, "ufo").unwrap(), dir.join("a.v2.ufo"));
+        assert_eq!(with_extension(dir.join("a.glyphs"), &SAVE_EXTENSIONS, "ufo").unwrap(), dir.join("a.glyphs"));
+        // The name with the extension added is a file the chooser did not ask about: refused.
+        assert!(with_extension(dir.join("Mine"), &SAVE_EXTENSIONS, "fontcraft").unwrap_err().contains("exists"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

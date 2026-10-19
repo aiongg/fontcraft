@@ -96,6 +96,7 @@ fn run_subset(_: &mut Session, v: &Value) -> Result<Value> {
         "dropped": result.dropped.iter().map(|d| json!({"tag": tag_str(d.tag), "reason": d.reason})).collect::<Vec<_>>(),
         "missingGlyphs": result.missing_glyphs,
         "missingUnicodes": result.missing_unicodes.iter().map(|u| format!("U+{u:04X}")).collect::<Vec<_>>(),
+        "warnings": result.warnings,
     }))
 }
 

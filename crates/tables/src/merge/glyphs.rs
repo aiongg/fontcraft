@@ -338,7 +338,9 @@ fn bounds_of(outlines: &[Option<Outline>], g: usize, level: usize, done: &mut [D
                     failed = true;
                     break;
                 };
-                // Empty components leave the composite's bounds alone.
+                // Components whose bounds are a single point leave the composite's bounds
+                // alone: fontTools 4.66 tests the bounds, not the contour count, so a one-point
+                // glyph and a composite of empty glyphs are left out too.
                 if child[0] == child[2] && child[1] == child[3] {
                     continue;
                 }
@@ -648,5 +650,23 @@ mod tests {
             }
         }
         assert_eq!(warnings.len(), 1, "the glyph that refers to itself keeps its stored bounds: {warnings:?}");
+    }
+
+    /// fontTools 4.66.1's `recalcBounds` on the same glyphs: a one-point glyph and a composite
+    /// of an empty glyph are skipped as components, since their bounds are a single point.
+    #[test]
+    fn components_with_point_bounds_are_skipped_as_fonttools_skips_them() {
+        let bar = [(40, -125), (460, -125), (460, -55), (40, -55)];
+        let mut datas = vec![
+            simple(&[(50, 60)], [0; 4]),
+            Vec::new(),
+            simple(&bar, [0; 4]),
+            composite(&[(0, 10, 0, None), (2, 0, 0, None)], [0; 4]),
+            composite(&[(1, 0, 0, None)], [9; 4]),
+            composite(&[(4, 100, 200, None), (2, 0, 0, None)], [0; 4]),
+        ];
+        let bounds = recalc_bounds(&mut datas, &mut Vec::new()).unwrap();
+        let bar_bounds = Some([40, -125, 460, -55]);
+        assert_eq!(bounds, [Some([50, 60, 50, 60]), None, bar_bounds, bar_bounds, Some([0; 4]), bar_bounds]);
     }
 }

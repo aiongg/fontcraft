@@ -28,7 +28,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Store Selection",
             ["Edit", "Selection"],
             None,
-            "{glyph: name, layer?: id (default: the first master's layer), side?: \"foreground\" | \"background\", name: string, points?: [[shape, node]], shapes?: [index], anchors?: [name]} keep the given nodes, components and anchors under `name` in the glyph's data, replacing an entry of that name; every address must resolve in the layer and at least one must be given. A glyph keeps at most 256 entries. An entry the file holds with more than 100000 items in a list keeps only the first 100000, and a warning says so → {glyph, name, replaced: bool, count: entries, warnings: [text]}",
+            "{glyph: name, layer?: id (default: the first master's layer), side?: \"foreground\" | \"background\", name: string, points?: [[shape, node]], shapes?: [index], anchors?: [name]} keep the given nodes, components and anchors under `name` in the glyph's data, replacing an entry of that name; every address must resolve in the layer and at least one must be given. A glyph keeps at most 256 entries. Refused while another entry the file holds has more than 100000 items in a list: writing the entries back would cut it → {glyph, name, replaced: bool, count: entries, warnings: [text]}",
             has_doc,
             store
         )
@@ -38,7 +38,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Remove Stored Selection",
             [],
             None,
-            "{glyph: name, name: string} delete the stored selection called `name` from the glyph's data → {glyph, name, count: entries left, warnings: [text] (entries cut at 100000 items a list on write-back)}",
+            "{glyph: name, name: string} delete the stored selection called `name` from the glyph's data. Refused while another entry the file holds has more than 100000 items in a list: writing the entries back would cut it → {glyph, name, count: entries left, warnings: [text]}",
             has_doc,
             remove
         ),
@@ -189,12 +189,24 @@ pub fn map_onto(s: &Stored, parts: fontcraft_model::LayerParts) -> Mapped {
 }
 
 /// One warning for each entry of `list` that the file held longer than [`MAX_TARGETS`] items;
-/// `kept` says what happened to the rest ("were kept", "are listed").
+/// `kept` says what happened to the rest ("are listed").
 fn truncation_warnings<'a>(list: impl IntoIterator<Item = &'a Stored>, kept: &str) -> Vec<String> {
     list.into_iter()
         .filter(|e| e.truncated)
         .map(|e| format!("stored selection `{}` holds more than {MAX_TARGETS} items in a list; only the first {MAX_TARGETS} {kept}", e.name))
         .collect()
+}
+
+/// Refuses to write `list` back while an entry the file held is longer than [`MAX_TARGETS`]
+/// items in a list: only the first ones were read, so writing it would lose the rest.
+fn refuse_cut(p: &Params<'_>, list: &[Stored]) -> Result<()> {
+    match list.iter().find(|e| e.truncated) {
+        Some(e) => Err(p.bad(format!(
+            "stored selection `{}` holds more than {MAX_TARGETS} items in a list, which cannot be written back; store a smaller selection under its name or remove it first",
+            e.name
+        ))),
+        None => Ok(()),
+    }
 }
 
 fn selection_name<'a>(p: &Params<'a>) -> Result<&'a str> {
@@ -247,8 +259,9 @@ fn store(s: &mut Session, v: &Value) -> Result<Value> {
             false
         }
     };
+    refuse_cut(&p, &list)?;
     let count = list.len();
-    let warnings = truncation_warnings(&list, "were kept");
+    let warnings: Vec<String> = Vec::new();
     s.edit("Store Selection", |font| write(font, &t.glyph, &list))?;
     Ok(json!({"glyph": t.glyph, "name": name, "replaced": replaced, "count": count, "warnings": warnings}))
 }
@@ -273,8 +286,9 @@ fn remove(s: &mut Session, v: &Value) -> Result<Value> {
     if list.len() == before {
         return Err(p.bad(format!("glyph `{glyph}` has no stored selection `{name}`")));
     }
+    refuse_cut(&p, &list)?;
     let count = list.len();
-    let warnings = truncation_warnings(&list, "were kept");
+    let warnings: Vec<String> = Vec::new();
     s.edit("Remove Stored Selection", |font| write(font, glyph, &list))?;
     Ok(json!({"glyph": glyph, "name": name, "count": count, "warnings": warnings}))
 }

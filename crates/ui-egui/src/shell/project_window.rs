@@ -256,7 +256,10 @@ fn choose(app: &mut FontcraftApp, project: u64, title: &str, ask: Ask, pending: 
         Ask::SaveFile => {
             let suggested = format!("{title}.{PROJECT_EXTENSION}");
             if let Some(path) = chooser.save("Save Project", "Project", &[PROJECT_EXTENSION], &suggested) {
-                pending.push(("project.save", json!({"project": project, "path": path.to_string_lossy()})));
+                match super::pickers::with_extension(path, &[PROJECT_EXTENSION], PROJECT_EXTENSION) {
+                    Ok(path) => pending.push(("project.save", json!({"project": project, "path": path.to_string_lossy()}))),
+                    Err(why) => app.state.status = format!("Save Project: {why}"),
+                }
             }
         }
     }

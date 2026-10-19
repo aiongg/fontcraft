@@ -199,6 +199,10 @@ pub(super) struct PsOutlines<'a> {
     programs: Programs,
     /// Charset names to glyphs, the first glyph of a repeated name; filled on first use.
     by_name: std::cell::OnceCell<HashMap<String, usize>>,
+    /// The contours of each `seac` part, drawn once: many accented glyphs name the same part,
+    /// and a part's hints cost drawing time without adding contours. At most one entry per
+    /// standard-encoding code.
+    parts: std::cell::RefCell<HashMap<usize, std::rc::Rc<Vec<Contour>>>>,
 }
 
 impl<'a> PsOutlines<'a> {
@@ -208,7 +212,7 @@ impl<'a> PsOutlines<'a> {
         if programs.len() != font.num_glyphs() as usize {
             return Err(TablesError::Invalid("the CFF table counts its glyphs two ways".into()));
         }
-        Ok(PsOutlines { font, programs, by_name: std::cell::OnceCell::new() })
+        Ok(PsOutlines { font, programs, by_name: std::cell::OnceCell::new(), parts: std::cell::RefCell::default() })
     }
 
     pub(super) fn glyph_count(&self) -> usize {
@@ -247,14 +251,30 @@ impl<'a> PsOutlines<'a> {
         if let Some(seac) = drawing.seac {
             for (code, dx, dy) in [(seac.base, 0.0, 0.0), (seac.accent, seac.adx, seac.ady)] {
                 let Some(part) = self.standard_glyph(code) else { continue };
-                let inner = self.draw(part)?;
-                if inner.seac.is_some() {
+                let Some(inner) = self.part_contours(part)? else {
                     return Err(TablesError::Invalid(format!("glyph {gid}: a seac part is itself accented")));
-                }
-                contours.extend(inner.contours.iter().map(|c| c.translated(dx, dy)));
+                };
+                contours.extend(inner.iter().map(|c| c.translated(dx, dy)));
             }
         }
         Ok(contours)
+    }
+
+    /// The contours of a `seac` part, from the cache when drawn before; `None` when the part
+    /// is itself accented.
+    fn part_contours(&self, part: usize) -> Result<Option<std::rc::Rc<Vec<Contour>>>> {
+        if let Some(c) = self.parts.try_borrow().ok().and_then(|m| m.get(&part).cloned()) {
+            return Ok(Some(c));
+        }
+        let inner = self.draw(part)?;
+        if inner.seac.is_some() {
+            return Ok(None);
+        }
+        let contours = std::rc::Rc::new(inner.contours);
+        if let Ok(mut m) = self.parts.try_borrow_mut() {
+            m.insert(part, contours.clone());
+        }
+        Ok(Some(contours))
     }
 
     /// Whether the glyph is drawn with `seac`.

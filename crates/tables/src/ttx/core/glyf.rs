@@ -84,6 +84,7 @@ pub(crate) fn write_split(
     let mut names: Vec<&String> = order.iter().collect();
     names.sort();
     let mut existing: HashSet<String> = HashSet::new();
+    let mut counters = HashMap::new();
     let mut files = Vec::new();
     for name in names {
         let Some(bytes) = glyphs.get(name.as_str()) else { continue };
@@ -92,7 +93,7 @@ pub(crate) fn write_split(
             w.simple_comment("TTGlyph", &[("name", name)], "contains no outline data");
             continue;
         }
-        let file = user_name_to_file_name(name, &existing, prefix, ext)?;
+        let file = user_name_to_file_name(name, &existing, &mut counters, prefix, ext)?;
         existing.insert(file.to_lowercase());
         w.simple("TTGlyph", &[("src", &file)]);
         let mut g = w.child_at(0);
@@ -118,7 +119,18 @@ pub(crate) fn write_split(
 /// fontTools' `userNameToFileName` (from ufoLib, MIT): illegal characters become `_`, capitals
 /// get a `_` after them, reserved names a `_` before them, and a clash with an existing name
 /// (compared without case) takes a 15-digit counter.
-fn user_name_to_file_name(user: &str, existing: &HashSet<String>, prefix: &str, suffix: &str) -> Result<String> {
+///
+/// `counters` holds, for each name that clashed (lower case, counter left out), the counter it
+/// last took. Names are never removed from `existing`, so every lower counter is still taken and
+/// the search starts there: the first free counter is the same as fontTools finds, and a run of
+/// clashing names costs linear time, not quadratic.
+fn user_name_to_file_name(
+    user: &str,
+    existing: &HashSet<String>,
+    counters: &mut HashMap<String, usize>,
+    prefix: &str,
+    suffix: &str,
+) -> Result<String> {
     // fontTools' list also holds the two-character strings `\"` and `\0`, which never match.
     const ILLEGAL: &[char] = &['*', '+', '/', ':', '<', '>', '?', '[', '\\', ']', '|', '\u{7f}'];
     const RESERVED: [&str; 13] = ["con", "prn", "aux", "clock$", "nul", "a:-z:", "com1", "lpt1", "lpt2", "lpt3", "com2", "com3", "com4"];
@@ -152,9 +164,12 @@ fn user_name_to_file_name(user: &str, existing: &HashSet<String>, prefix: &str, 
         if prefix.chars().count() + name.chars().count() + suffix.chars().count() + 15 > MAX_LEN { name.chars().take(room).collect() } else { name };
     // Each try adds a name to `existing` only once the caller takes it, so the counter needs no
     // more tries than there are names already taken.
-    for counter in 1..=existing.len().saturating_add(1) {
+    let key = format!("{prefix}{short}\u{0}{suffix}").to_lowercase();
+    let start = counters.get(&key).copied().unwrap_or(1);
+    for counter in start..=existing.len().saturating_add(1) {
         let full = format!("{prefix}{short}{counter:015}{suffix}");
         if !existing.contains(&full.to_lowercase()) {
+            counters.insert(key, counter);
             return Ok(full);
         }
     }
@@ -348,7 +363,7 @@ mod file_names {
     #[test]
     fn glyph_file_names_follow_the_ufo_rules() {
         let none = HashSet::new();
-        let name = |n: &str| user_name_to_file_name(n, &none, "", "").unwrap();
+        let name = |n: &str| user_name_to_file_name(n, &none, &mut HashMap::new(), "", "").unwrap();
         assert_eq!(name("a"), "a");
         assert_eq!(name("A"), "A_");
         assert_eq!(name("A.alT"), "A_.alT_");
@@ -358,8 +373,26 @@ mod file_names {
         assert_eq!(name("CON"), "C_O_N_");
         assert_eq!(name("con.alt"), "_con.alt");
         assert_eq!(name("a/b|c"), "a_b_c");
-        assert_eq!(user_name_to_file_name(".notdef", &none, "x.", ".ttx").unwrap(), "x..notdef.ttx");
+        assert_eq!(user_name_to_file_name(".notdef", &none, &mut HashMap::new(), "x.", ".ttx").unwrap(), "x..notdef.ttx");
         let taken: HashSet<String> = ["x.a_.ttx".to_string()].into();
-        assert_eq!(user_name_to_file_name("A", &taken, "x.", ".ttx").unwrap(), "x.A_000000000000001.ttx");
+        assert_eq!(user_name_to_file_name("A", &taken, &mut HashMap::new(), "x.", ".ttx").unwrap(), "x.A_000000000000001.ttx");
+    }
+
+    #[test]
+    fn clashing_glyph_file_names_take_the_first_free_counter_in_linear_time() {
+        // 30,000 names that all filter to `_`: each takes the next counter, as fontTools' search
+        // from 1 does, without trying every lower counter again.
+        let mut existing = HashSet::new();
+        let mut counters = HashMap::new();
+        // A name another glyph took first, in the middle of the run.
+        existing.insert("_000000000000003".to_string());
+        let mut names = Vec::new();
+        for user in std::iter::once("*".to_string()).chain((0..30_000).map(|i| ["*", "+", "?", "|"][i % 4].to_string())) {
+            let file = user_name_to_file_name(&user, &existing, &mut counters, "", "").unwrap();
+            existing.insert(file.to_lowercase());
+            names.push(file);
+        }
+        assert_eq!(names[..5], ["_", "_000000000000001", "_000000000000002", "_000000000000004", "_000000000000005"]);
+        assert_eq!(names.last().map(String::as_str), Some("_000000000030001"));
     }
 }

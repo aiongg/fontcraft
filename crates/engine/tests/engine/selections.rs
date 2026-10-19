@@ -94,10 +94,10 @@ fn a_glyph_keeps_at_most_256_stored_selections() {
     run(&mut s, "edit.storeSelection", json!({"glyph": "A", "name": "s0", "points": [[0, 1]]}));
 }
 
-/// A stored list longer than the target limit, as a hand-edited file could hold, is cut, and every
-/// command that reads or writes the entries back says so.
+/// A stored list longer than the target limit, as a hand-edited file could hold, is listed cut
+/// with a warning, and a command that would write it back cut is refused.
 #[test]
-fn an_overlong_stored_selection_is_cut_with_a_warning() {
+fn an_overlong_stored_selection_is_listed_cut_and_never_written_back_cut() {
     use fontcraft_engine::model::plist::{Array, Dict, Number, Str, Value as PValue};
     let mut s = two_masters();
     let limit = fontcraft_engine::params::MAX_TARGETS;
@@ -114,10 +114,12 @@ fn an_overlong_stored_selection_is_cut_with_a_warning() {
     let r = run(&mut s, "edit.getStoredSelections", json!({"glyph": "A"}));
     let warnings = r["warnings"].as_array().unwrap();
     assert!(warnings.len() == 1 && warnings[0].as_str().unwrap().contains("huge"), "{r}");
-    let r = run(&mut s, "edit.storeSelection", json!({"glyph": "A", "name": "small", "points": [[0, 0]]}));
-    assert_eq!(r["warnings"].as_array().map(Vec::len), Some(1), "{r}");
+    // Writing the entries back would cut `huge`: storing or removing another entry is refused.
+    let e = refused(&mut s, "edit.storeSelection", json!({"glyph": "A", "name": "small", "points": [[0, 0]]}));
+    assert!(e.to_string().contains("huge"), "{e}");
     let r = run(&mut s, "edit.storeSelection", json!({"glyph": "A", "name": "huge", "points": [[0, 0]]}));
     assert_eq!(r["warnings"], json!([]), "a replaced entry is no longer cut: {r}");
+    run(&mut s, "edit.storeSelection", json!({"glyph": "A", "name": "small", "points": [[0, 0]]}));
 }
 
 #[test]

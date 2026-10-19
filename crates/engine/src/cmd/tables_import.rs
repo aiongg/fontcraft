@@ -53,6 +53,22 @@ fn read_text(path: &Path) -> Result<String> {
     String::from_utf8(input.bytes).map_err(|_| EngineError::Io(format!("{} is not UTF-8 text", path.display())))
 }
 
+/// The folder of the dump at `path`, its links resolved.
+fn dump_folder(path: &Path) -> Result<PathBuf> {
+    let dir = path.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(Path::new("."));
+    dir.canonicalize().map_err(|e| EngineError::Io(format!("{}: {e}", dir.display())))
+}
+
+/// `file`, which `by` names as `src`, with its links resolved; refused when that leaves
+/// `folder` (resolved), so a link inside the dump's folder cannot pull in a file from elsewhere.
+fn inside_folder(folder: &Path, file: &Path, by: &Path, src: &str) -> Result<PathBuf> {
+    let resolved = file.canonicalize().map_err(|e| EngineError::Io(format!("{}: {e}", file.display())))?;
+    if !resolved.starts_with(folder) {
+        return Err(EngineError::Io(format!("{} names the file `{src}`, which leads outside the dump's folder", by.display())));
+    }
+    Ok(resolved)
+}
+
 /// The dump at `path` parsed, with the parts of a split dump read in where `src` names them.
 fn read_dump(path: &Path) -> Result<Element> {
     let mut budget = ParseBudget::default();
@@ -61,7 +77,7 @@ fn read_dump(path: &Path) -> Result<Element> {
     let mut glyph_parts = 0usize;
     if parts == 0 {
         for table in &mut root.children {
-            read_glyph_parts(table, path, &mut budget, &mut glyph_parts)?;
+            read_glyph_parts(table, path, path, &mut budget, &mut glyph_parts)?;
         }
         return Ok(root);
     }
@@ -69,11 +85,12 @@ fn read_dump(path: &Path) -> Result<Element> {
         return Err(EngineError::Io(format!("{} names {parts} files; a split dump may name at most {MAX_TTX_PARTS}", path.display())));
     }
     let dir = path.parent().map(Path::to_path_buf).unwrap_or_default();
+    let folder = dump_folder(path)?;
     let mut children = Vec::with_capacity(root.children.len());
     for child in std::mem::take(&mut root.children) {
         let Some(src) = child.attribute("src") else {
             let mut child = child;
-            read_glyph_parts(&mut child, path, &mut budget, &mut glyph_parts)?;
+            read_glyph_parts(&mut child, path, path, &mut budget, &mut glyph_parts)?;
             children.push(child);
             continue;
         };
@@ -81,13 +98,14 @@ fn read_dump(path: &Path) -> Result<Element> {
             return Err(EngineError::Io(format!("{} names the file `{src}`: parts must be beside it or in a folder below it", path.display())));
         }
         let part_path: PathBuf = dir.join(src);
-        crate::file_access::check_read(&part_path).map_err(|e| EngineError::Io(format!("refusing to read {}: {e}", part_path.display())))?;
-        let mut part = parse_within(&read_text(&part_path)?, &mut budget).map_err(|e| EngineError::Io(format!("{}: {e}", part_path.display())))?;
+        let resolved = inside_folder(&folder, &part_path, path, src)?;
+        crate::file_access::check_read(&resolved).map_err(|e| EngineError::Io(format!("refusing to read {}: {e}", part_path.display())))?;
+        let mut part = parse_within(&read_text(&resolved)?, &mut budget).map_err(|e| EngineError::Io(format!("{}: {e}", part_path.display())))?;
         if part.children.iter().any(|c| c.attribute("src").is_some()) {
             return Err(EngineError::Io(format!("{} names further files at the level of tables; only the main file may", part_path.display())));
         }
         for table in &mut part.children {
-            read_glyph_parts(table, &part_path, &mut budget, &mut glyph_parts)?;
+            read_glyph_parts(table, &part_path, path, &mut budget, &mut glyph_parts)?;
         }
         children.extend(part.children);
     }
@@ -97,12 +115,14 @@ fn read_dump(path: &Path) -> Result<Element> {
 
 /// The elements of `table` that name a file (`ttx -g` writes one per glyph) replaced by what the
 /// file holds: the last element inside its table element, as fontTools' reader takes it. The
-/// file sits beside the part that names it, under the same rules as the parts.
-fn read_glyph_parts(table: &mut Element, part_path: &Path, budget: &mut ParseBudget, count: &mut usize) -> Result<()> {
+/// file sits beside the part that names it, under the same rules as the parts, and inside the
+/// folder of `main`, the dump's main file.
+fn read_glyph_parts(table: &mut Element, part_path: &Path, main: &Path, budget: &mut ParseBudget, count: &mut usize) -> Result<()> {
     if !table.children.iter().any(|c| c.attribute("src").is_some()) {
         return Ok(());
     }
     let dir = part_path.parent().map(Path::to_path_buf).unwrap_or_default();
+    let folder = dump_folder(main)?;
     for child in &mut table.children {
         let Some(src) = child.attribute("src").map(str::to_string) else { continue };
         *count += 1;
@@ -113,8 +133,9 @@ fn read_glyph_parts(table: &mut Element, part_path: &Path, budget: &mut ParseBud
             return Err(EngineError::Io(format!("{} names the file `{src}`: parts must be beside it or in a folder below it", part_path.display())));
         }
         let glyph_path = dir.join(&src);
-        crate::file_access::check_read(&glyph_path).map_err(|e| EngineError::Io(format!("refusing to read {}: {e}", glyph_path.display())))?;
-        let glyph = parse_within(&read_text(&glyph_path)?, budget).map_err(|e| EngineError::Io(format!("{}: {e}", glyph_path.display())))?;
+        let resolved = inside_folder(&folder, &glyph_path, part_path, &src)?;
+        crate::file_access::check_read(&resolved).map_err(|e| EngineError::Io(format!("refusing to read {}: {e}", glyph_path.display())))?;
+        let glyph = parse_within(&read_text(&resolved)?, budget).map_err(|e| EngineError::Io(format!("{}: {e}", glyph_path.display())))?;
         let inner = glyph.children.into_iter().flat_map(|t| t.children).last();
         let Some(inner) = inner else {
             return Err(EngineError::Io(format!("{} holds no element inside its table", glyph_path.display())));
