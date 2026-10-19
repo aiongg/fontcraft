@@ -150,6 +150,7 @@ bundled, the file says so in its header and the project is listed here with its 
   crates/tables/src/variations.rs ports varLib.avar.map, the avar table's renormalizeLocation, VarStoreInstancer, _add_avar and designspaceLib's get_validated_map.
   crates/tables/src/variations_model.rs and variations_model/ port varLib.hvar, varLib.models' main, piecewiseLinearMap and supportScalar, varLib.plot (drawn as SVG), varLib.avar.plan, ttLib.ttGlyphSet's variable glyph drawing and designspaceLib's normalize.
   crates/geom/src/qu2cu.rs ports qu2cu (Apache License 2.0, Copyright 2023 Google Inc. and Behdad Esfahbod) with misc/bezierTools.py's splitCubicAtTC, and crates/tables/src/outlines_curves.rs follows the qu2cu command line, pens/qu2cuPen.py, pens/cu2quPen.py, pens/ttGlyphPen.py and the glyf table's draw and dropImpliedOnCurvePoints.
+  crates/tables/src/convert.rs and convert/ (M12.30) follow cffLib.CFFToCFF2 and cffLib.CFF2ToCFF, pens/reverseContourPen.py and pens/cu2quPen.py.
   crates/features/src/fea_variable.rs ports misc/fixedTools.py's nearestMultipleShortestRepr,
   which writes a user coordinate with the fewest decimals a 16.16 fixed-point number keeps.
   crates/geom/src/variation.rs ports varLib's normalizeValue, supportScalar and VariationModel
@@ -301,6 +302,7 @@ bundled, the file says so in its header and the project is listed here with its 
   tag registry.
   The collection layout of crates/tables/src/collection.rs (M12.3) follows otf2otc.py in AFDKO 5.0.1, Apache License 2.0, Copyright 2014, 2017 Adobe.
   The normalised dump (crates/tables/src/text/ttxn.rs and ttxn_otl.rs, M12.10) is ported from ttxn.py in AFDKO 5.0.1, Apache License 2.0, Copyright 2014 Adobe; the abstract-font dump (text/txdump.rs) follows the output of AFDKO's tx -dump.
+  The conversion from CFF to TrueType outlines in crates/tables/src/convert.rs (M12.30) follows otf2ttf.py in AFDKO 5.0.1, Apache License 2.0, Copyright 2014 Adobe.
   The componentizing of crates/tables/src/outlines_curves.rs and crates/engine/src/cmd/outlines_file.rs (M12.29) follows ttfcomponentizer.py in AFDKO 5.0.1, Apache License 2.0, Copyright 2018 Adobe.
   The glyph selectors of fontcraft-cli autohint and stems (apps/fontcraft-cli/src/sub/autohint.rs, M12.39) follow otfautohint's __main__.py and autohint.py, and the stems report files (sub/stems.rs) follow its report.py, in AFDKO 5.0.1, Apache License 2.0, Copyright 2014, 2016, 2022 Adobe.
   crates/tables/src/features.rs follows fontTools' TTFont glyph naming (MIT License).
