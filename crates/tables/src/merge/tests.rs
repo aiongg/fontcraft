@@ -281,3 +281,65 @@ fn glyph_map_files() {
     assert!(parse_glyph_map("mergefonts X 7\n").is_err());
     assert!(parse_glyph_map(&"x".repeat(2000)).is_err());
 }
+
+/// Sets the left side bearing of glyph `gid` in `hmtx`.
+fn set_lsb(font: &mut SfntFont, gid: usize, lsb: i16) {
+    let long = usize::from(u16::from_be_bytes(font.get(*b"hhea").unwrap()[34..36].try_into().unwrap()));
+    let at = if gid < long { 4 * gid + 2 } else { 4 * long + 2 * (gid - long) };
+    let mut hmtx = font.get(*b"hmtx").unwrap().to_vec();
+    hmtx[at..at + 2].copy_from_slice(&lsb.to_be_bytes());
+    font.insert(*b"hmtx", hmtx);
+}
+
+#[test]
+fn font_merge_recalculates_maxp_and_the_head_flags_from_the_merged_glyphs() {
+    let (mut one, mut two) = (first(), second());
+    for font in [&mut one, &mut two] {
+        let mut maxp = font.get(*b"maxp").unwrap().to_vec();
+        for at in [6, 8, 10, 12, 28, 30] {
+            maxp[at..at + 2].copy_from_slice(&999u16.to_be_bytes());
+        }
+        font.insert(*b"maxp", maxp);
+    }
+    let merged = merge(&[one.clone(), two.clone()], &MergeOptions::default()).unwrap();
+    let maxp = merged.get(*b"maxp").unwrap();
+    let maxima: Vec<u16> = [6, 8, 10, 12, 28, 30].iter().map(|at| u16::from_be_bytes([maxp[*at], maxp[at + 1]])).collect();
+    assert_eq!(maxima, [4, 1, 0, 0, 0, 0], "rectangles only, no composites");
+    let flags = |f: &SfntFont| u16::from_be_bytes([f.get(*b"head").unwrap()[16], f.get(*b"head").unwrap()[17]]);
+    assert_eq!(flags(&merged) & 2, 2, "every left side bearing equals xMin");
+
+    let b = usize::from(gid(&two, "B"));
+    set_lsb(&mut two, b, 1);
+    let merged = merge(&[one, two], &MergeOptions::default()).unwrap();
+    assert_eq!(flags(&merged) & 2, 0, "B's side bearing no longer equals its xMin");
+}
+
+#[test]
+fn a_name_repeated_inside_one_font_gets_a_dot_suffix_and_keeps_its_stored_name() {
+    let mut one = first();
+    // Font 1 stores `V` under the name `A` too.
+    let stored: Vec<String> = glyph_names(&one).unwrap().into_iter().map(|n| if n == "V" { "A".to_string() } else { n }).collect();
+    let post = crate::reorder::names::write_post_v2(one.get(*b"post").unwrap(), &stored).unwrap();
+    one.insert(*b"post", post);
+    let two = second();
+    let names_two = glyph_names(&two).unwrap();
+    let result = merge_with_report(&[one, two], &MergeOptions::default()).unwrap();
+
+    let names: Vec<&str> = result.glyphs.iter().map(|g| g.name.as_str()).collect();
+    let v = stored.iter().rposition(|n| n == "A").unwrap();
+    let mut expected: Vec<String> = stored.iter().enumerate().map(|(i, n)| if i == v { "A.1".to_string() } else { n.clone() }).collect();
+    // Font 2 as pyftmerge names it: `A.1` is taken, so its A becomes `A.2`.
+    expected.extend(names_two.iter().map(|n| match n.as_str() {
+        "A" => "A.2".to_string(),
+        n if stored.iter().any(|s| s == n) => format!("{n}.1"),
+        n => n.to_string(),
+    }));
+    assert_eq!(names, expected);
+    assert_eq!(result.glyphs[v].source, "A.1", "the name font 1 reads as");
+
+    // `post` stores the glyph under the name font 1 stored, as fontTools' mapping does.
+    let n = names.len();
+    let stored_back = crate::reorder::names::post_names(result.font.get(*b"post").unwrap(), n).unwrap().unwrap();
+    assert_eq!(stored_back[v], "A");
+    assert_eq!(stored_back[stored.len()..], expected[stored.len()..]);
+}

@@ -6,13 +6,14 @@
 //!
 //! | Table | Rule |
 //! |---|---|
-//! | glyph order | every glyph of every font, in font order; a name already used gets `.1`, `.2`… |
+//! | glyph order | every glyph of every font, in font order; a name already used gets `.1`, `.2`…, and so does a name repeated inside one font, which `post` keeps storing under the repeated name |
 //! | `glyf`, `loca` | glyphs concatenated, components renumbered; glyphs of every font but the first lose their instructions |
 //! | `hmtx`, `vmtx` | concatenated; `hhea` and `vhea` extents recomputed from the glyphs |
 //! | `cmap` | Unicode mappings united, the earlier font keeping a code point; format 4, 12 when needed, 14 for variation sequences |
 //! | `GSUB`, `GPOS` | lookups concatenated; features of a script several fonts share merged by tag; unused features and lookups dropped |
 //! | `GDEF` | classes, attachment points, carets and mark sets united |
 //! | `head`, `hhea`, `vhea`, `maxp`, `OS/2`, `post` | field by field: extents take the largest value, bits are OR-ed, the rest comes from the first font |
+//! | `maxp`, `head` | then the point, contour and component maxima, the font bounds and `head.flags` bit 1 recalculated from the merged glyphs (`maxp.recalc`), in both forms of merge |
 //! | `name`, `cvt `, `fpgm`, `prep`, `gasp` | the first font's |
 //! | anything else | dropped, with a warning |
 //!
@@ -29,7 +30,7 @@ mod glyphs;
 mod layout;
 mod plan;
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use crate::limits::{MAX_GLYPHS, MAX_LIST_LINE, MAX_MERGE_FONTS};
 use crate::reorder::be::Data;
@@ -201,7 +202,7 @@ pub fn merge_with_report(fonts: &[SfntFont], options: &MergeOptions) -> Result<M
     }
     units_per_em(fonts)?;
 
-    let names: Vec<Vec<String>> = fonts.iter().map(crate::reorder::glyph_names).collect::<Result<_>>()?;
+    let (names, stored_names): (Vec<Vec<String>>, Vec<_>) = fonts.iter().map(plan::font_glyph_names).collect::<Result<Vec<_>>>()?.into_iter().unzip();
     let sources: Vec<glyphs::Source<'_>> = fonts.iter().enumerate().map(|(i, f)| glyphs::Source::read(f, i)).collect::<Result<_>>()?;
     let same = |a: (usize, u16), b: (usize, u16)| -> bool {
         match (sources.get(a.0), sources.get(b.0)) {
@@ -249,7 +250,17 @@ pub fn merge_with_report(fonts: &[SfntFont], options: &MergeOptions) -> Result<M
     }
     let post_headers = if map_form { first.get(*b"post").into_iter().collect() } else { tables_of(*b"post") };
     if !post_headers.is_empty() {
-        let names: Vec<String> = plan.slots.iter().map(|s| s.name.clone()).collect();
+        // fontTools stores each glyph under the name its own font's `post` had for it (the
+        // mappings of later fonts win), and under its name in the result otherwise.
+        let mut stored: HashMap<&str, &str> = HashMap::new();
+        if !map_form {
+            for (font, mapping) in fonts.iter().zip(&stored_names) {
+                if font.get(*b"post").is_some() {
+                    stored.extend(mapping.iter().map(|(k, v)| (k.as_str(), v.as_str())));
+                }
+            }
+        }
+        let names: Vec<String> = plan.slots.iter().map(|s| stored.get(s.name.as_str()).map_or_else(|| s.name.clone(), |n| n.to_string())).collect();
         out.insert(*b"post", fixed::post(&post_headers, &names)?);
     }
     for tag in [*b"name", *b"cvt ", *b"fpgm", *b"prep", *b"gasp"] {
@@ -286,6 +297,7 @@ pub fn merge_with_report(fonts: &[SfntFont], options: &MergeOptions) -> Result<M
         let list: Vec<String> = from.iter().map(ToString::to_string).collect();
         warnings.push(format!("'{}' (font {}) is left out: merge has no rule for it", tag_str(tag), list.join(", ")));
     }
+    crate::ttx::read_core::recalc_compiled_maxp(&mut out)?;
     for tag in &drop {
         out.remove(*tag);
     }

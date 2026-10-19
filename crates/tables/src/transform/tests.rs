@@ -335,3 +335,36 @@ fn cubic_point_flags_survive_a_rewritten_glyph() {
     let Shape::Simple(s) = &back[0].shape else { panic!("a simple glyph") };
     assert_eq!(s.points.iter().map(|p| p.cubic).collect::<Vec<_>>(), [false, true, true, false]);
 }
+
+#[test]
+fn units_per_em_recalculates_maxp_and_head_flags_and_stores_standard_post_names_by_index() {
+    let mut input = font();
+    // Version 2 names: glyph 1 is `.null` and glyph 2 `Bcomp`, both stored as strings.
+    let mut post = input.get(*b"post").unwrap()[..32].to_vec();
+    post[0..4].copy_from_slice(&0x0002_0000u32.to_be_bytes());
+    for v in [3u16, 0, 258, 259] {
+        post.extend_from_slice(&v.to_be_bytes());
+    }
+    for s in [".null", "Bcomp"] {
+        post.push(s.len() as u8);
+        post.extend_from_slice(s.as_bytes());
+    }
+    input.insert(*b"post", post);
+    let out = transform(&input, &upem(2048)).unwrap();
+
+    let maxp = out.get(*b"maxp").unwrap();
+    let maxima: Vec<u16> = [6, 8, 10, 12, 28, 30].iter().map(|at| u16_at(maxp, *at)).collect();
+    assert_eq!(maxima, [4, 1, 4, 1, 1, 1], "points, contours, composite points and contours, component elements and depth");
+    assert_eq!(u16_at(maxp, 26), 2, "the instruction size is kept");
+    assert_eq!(u16_at(out.get(*b"head").unwrap(), 16) & 2, 2, "every left side bearing equals xMin");
+
+    let post = out.get(*b"post").unwrap();
+    assert_eq!((i16_at(post, 8), i16_at(post, 10)), (-205, 102), "the underline still scales");
+    let mut expected = post[..32].to_vec();
+    for v in [3u16, 0, 1, 258] {
+        expected.extend_from_slice(&v.to_be_bytes());
+    }
+    expected.push(5);
+    expected.extend_from_slice(b"Bcomp");
+    assert_eq!(post, &expected[..], "`.null` takes its standard index and leaves the stored strings");
+}

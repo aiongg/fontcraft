@@ -327,3 +327,16 @@ fn a_doubling_chain_of_composites_over_an_empty_glyph_is_refused() {
     let err = glyf::apply_gvar(&mut glyphs, &gvar, 1, &[0.0], &mut hmtx, None).unwrap_err();
     assert!(matches!(err, TablesError::TooLarge { .. }), "{err}");
 }
+
+#[test]
+fn full_instance_recalculates_maxp_and_the_head_flags_as_the_instancer_saves() {
+    // The input's maxp maxima and head flags are all zero.
+    let font = variable_font();
+    let pin = |recalc_bounds| InstanceOptions { limits: vec![(WGHT, AxisLimit::Pin(650.0))], recalc_bounds, ..InstanceOptions::default() };
+    let out = instantiate(&font, &pin(true)).unwrap();
+    assert_eq!(i16s(&out, b"maxp", &[6, 8, 10, 12, 28, 30]), vec![4, 1, 4, 1, 1, 1]);
+    assert_eq!(i16s(&out, b"head", &[16])[0] & 2, 2, "every left side bearing equals xMin");
+    let kept = instantiate(&font, &pin(false)).unwrap();
+    assert_eq!(kept.get(*b"maxp"), font.get(*b"maxp"), "without bounds recalculation fontTools leaves maxp alone");
+    assert_eq!(i16s(&kept, b"head", &[16])[0] & 2, 0);
+}
