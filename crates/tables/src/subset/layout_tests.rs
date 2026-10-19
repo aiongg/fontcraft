@@ -45,6 +45,7 @@ const GLYPHS: [(&str, u32); 18] = [
 
 fn outlines() -> SfntFont {
     let mut f = Font::new("Layout Subset");
+    f.glyphs.retain(|g| g.name == ".notdef");
     for (i, (name, cp)) in GLYPHS.iter().enumerate() {
         let cps = if *cp == 0 { vec![] } else { vec![*cp] };
         f.add_glyph(name, cps, 500.0).unwrap();
@@ -234,7 +235,7 @@ fn otl(result: &SubsetResult, tag: [u8; 4]) -> String {
 fn gdef_classes(result: &SubsetResult) -> Vec<(String, u16)> {
     let names = glyph_names(&result.font).unwrap();
     let t = read_fonts::tables::gdef::Gdef::read(FontData::new(result.font.get(*b"GDEF").unwrap())).unwrap();
-    let mut out: Vec<(String, u16)> = t.glyph_class_def().unwrap().unwrap().iter().map(|(g, c)| (names[g.to_u16() as usize].clone(), c)).collect();
+    let mut out: Vec<(String, u16)> = t.glyph_class_def().unwrap().unwrap().iter().filter(|(_, c)| *c != 0).map(|(g, c)| (names[g.to_u16() as usize].clone(), c)).collect();
     out.sort();
     out
 }

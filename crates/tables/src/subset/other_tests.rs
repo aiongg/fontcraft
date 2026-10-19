@@ -30,6 +30,7 @@ fn be32(v: &mut Vec<u8>, x: u32) {
 /// `A` as a component, the others rectangles.
 fn outlines(glyphs: &[(&str, u32)]) -> SfntFont {
     let mut f = Font::new("Other Subset");
+    f.glyphs.retain(|g| g.name == ".notdef");
     for (i, (name, cp)) in glyphs.iter().enumerate() {
         let cps = if *cp == 0 { vec![] } else { vec![*cp] };
         f.add_glyph(name, cps, 500.0).unwrap();

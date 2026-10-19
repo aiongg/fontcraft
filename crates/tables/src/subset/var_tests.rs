@@ -26,6 +26,7 @@ fn be16(v: &mut Vec<u8>, x: u16) {
 /// `.notdef`, `A` (a rectangle), `B` (A as a component, moved 50) and `C` (a rectangle).
 fn outlines() -> SfntFont {
     let mut f = Font::new("Var Subset");
+    f.glyphs.retain(|g| g.name == ".notdef");
     for (i, (name, cp)) in [("A", 0x41), ("B", 0x42), ("C", 0x43)].into_iter().enumerate() {
         f.add_glyph(name, vec![cp], 500.0 + 10.0 * (i + 1) as f64).unwrap();
         if name != "B" {
@@ -108,7 +109,8 @@ fn hvar(store: &[u8], advances: Option<&[u32]>) -> Vec<u8> {
     out.extend_from_slice(&[0; 8]);
     out.extend_from_slice(store);
     if let Some(map) = advances {
-        out.extend_from_slice(&[0, 0x2F]);
+        // Entry format: 4-byte entries, 16 inner bits.
+        out.extend_from_slice(&[0, 0x3F]);
         be16(&mut out, map.len() as u16);
         for v in map {
             out.extend_from_slice(&v.to_be_bytes());

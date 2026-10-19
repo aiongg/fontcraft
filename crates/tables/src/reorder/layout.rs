@@ -130,7 +130,8 @@ fn remap_classes(cd: &mut ClassDef, order: &Order) -> Result<()> {
         }
         ClassDef::Format2(f) => {
             for r in &f.class_range_records {
-                let end = usize::from(r.end_glyph_id.to_u16()).min(n.saturating_sub(1));
+                // Ranges hold input glyph ids; a subset has fewer output glyphs than input ones.
+                let end = usize::from(r.end_glyph_id.to_u16()).min(order.old_to_new.len().saturating_sub(1));
                 for g in usize::from(r.start_glyph_id.to_u16())..=end {
                     set(g, r.class)?;
                 }

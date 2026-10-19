@@ -64,7 +64,7 @@ fn reconstructed_feature_code_compiles_back_to_the_same_layout() {
     let prefix = code(&fea.prefixes, PREFIX);
     // The lookup two features use, and the one a contextual rule calls, are in the prefix.
     assert!(prefix.contains("sub a by a.sc;") && prefix.contains("sub a by a.alt;"), "{prefix}");
-    assert!(prefix.contains("markClass acutecomb <anchor 0 500>") && prefix.contains("table GDEF {"), "{prefix}");
+    assert!(prefix.contains("markClass [acutecomb] <anchor 0 500>") && prefix.contains("table GDEF {"), "{prefix}");
     // A lookup only one feature uses is written in the feature, which needs no script statements.
     let liga = code(&fea.features, "liga");
     assert!(liga.starts_with("lookup ") && liga.contains("sub f i by f_i;") && !liga.contains("script"), "{liga}");
