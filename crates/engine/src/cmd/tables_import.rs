@@ -5,13 +5,13 @@
 //! and writes it (WOFF, WOFF2 and collection members keep their container). Each dump is
 //! compiled as the reference tool compiles it with `-m`, in the order given; a dump split into
 //! one file per table is read through its main file, whose `src` attributes name the parts
-//! beside it. A part path must be relative and stay in the main file's folder, and every part
-//! passes the same file-access check as the main file; the main file and its parts share the
-//! limits of one dump.
+//! beside it, and a part may name one file per glyph (`ttx -g`). A part path must be relative and
+//! stay in the folder of the file that names it, and every part passes the same file-access
+//! check as the main file; the main file and its parts share the limits of one dump.
 
 use std::path::{Component, Path, PathBuf};
 
-use fontcraft_tables::limits::MAX_TTX_PARTS;
+use fontcraft_tables::limits::{MAX_TTX_GLYPH_PARTS, MAX_TTX_PARTS};
 use fontcraft_tables::sfnt::tag_str;
 use fontcraft_tables::ttx::{Element, ImportOptions, ParseBudget, import_tree, parse_within};
 use fontcraft_tables::{TableOrder, TablesError};
@@ -58,7 +58,11 @@ fn read_dump(path: &Path) -> Result<Element> {
     let mut budget = ParseBudget::default();
     let mut root = parse_within(&read_text(path)?, &mut budget).map_err(|e| EngineError::Io(format!("{}: {e}", path.display())))?;
     let parts = root.children.iter().filter(|c| c.attribute("src").is_some()).count();
+    let mut glyph_parts = 0usize;
     if parts == 0 {
+        for table in &mut root.children {
+            read_glyph_parts(table, path, &mut budget, &mut glyph_parts)?;
+        }
         return Ok(root);
     }
     if parts > MAX_TTX_PARTS {
@@ -68,6 +72,8 @@ fn read_dump(path: &Path) -> Result<Element> {
     let mut children = Vec::with_capacity(root.children.len());
     for child in std::mem::take(&mut root.children) {
         let Some(src) = child.attribute("src") else {
+            let mut child = child;
+            read_glyph_parts(&mut child, path, &mut budget, &mut glyph_parts)?;
             children.push(child);
             continue;
         };
@@ -76,14 +82,49 @@ fn read_dump(path: &Path) -> Result<Element> {
         }
         let part_path: PathBuf = dir.join(src);
         crate::file_access::check_read(&part_path).map_err(|e| EngineError::Io(format!("refusing to read {}: {e}", part_path.display())))?;
-        let part = parse_within(&read_text(&part_path)?, &mut budget).map_err(|e| EngineError::Io(format!("{}: {e}", part_path.display())))?;
+        let mut part = parse_within(&read_text(&part_path)?, &mut budget).map_err(|e| EngineError::Io(format!("{}: {e}", part_path.display())))?;
         if part.children.iter().any(|c| c.attribute("src").is_some()) {
-            return Err(EngineError::Io(format!("{} names further files; dumps split by glyph are not read", part_path.display())));
+            return Err(EngineError::Io(format!("{} names further files at the level of tables; only the main file may", part_path.display())));
+        }
+        for table in &mut part.children {
+            read_glyph_parts(table, &part_path, &mut budget, &mut glyph_parts)?;
         }
         children.extend(part.children);
     }
     root.children = children;
     Ok(root)
+}
+
+/// The elements of `table` that name a file (`ttx -g` writes one per glyph) replaced by what the
+/// file holds: the last element inside its table element, as fontTools' reader takes it. The
+/// file sits beside the part that names it, under the same rules as the parts.
+fn read_glyph_parts(table: &mut Element, part_path: &Path, budget: &mut ParseBudget, count: &mut usize) -> Result<()> {
+    if !table.children.iter().any(|c| c.attribute("src").is_some()) {
+        return Ok(());
+    }
+    let dir = part_path.parent().map(Path::to_path_buf).unwrap_or_default();
+    for child in &mut table.children {
+        let Some(src) = child.attribute("src").map(str::to_string) else { continue };
+        *count += 1;
+        if *count > MAX_TTX_GLYPH_PARTS {
+            return Err(EngineError::Io(format!("{} names more than {MAX_TTX_GLYPH_PARTS} glyph files", part_path.display())));
+        }
+        if !Path::new(&src).components().all(|c| matches!(c, Component::Normal(_) | Component::CurDir)) {
+            return Err(EngineError::Io(format!("{} names the file `{src}`: parts must be beside it or in a folder below it", part_path.display())));
+        }
+        let glyph_path = dir.join(&src);
+        crate::file_access::check_read(&glyph_path).map_err(|e| EngineError::Io(format!("refusing to read {}: {e}", glyph_path.display())))?;
+        let glyph = parse_within(&read_text(&glyph_path)?, budget).map_err(|e| EngineError::Io(format!("{}: {e}", glyph_path.display())))?;
+        let inner = glyph.children.into_iter().flat_map(|t| t.children).last();
+        let Some(inner) = inner else {
+            return Err(EngineError::Io(format!("{} holds no element inside its table", glyph_path.display())));
+        };
+        if inner.attribute("src").is_some() {
+            return Err(EngineError::Io(format!("{} names a further file", glyph_path.display())));
+        }
+        *child = inner;
+    }
+    Ok(())
 }
 
 fn tables_import_ttx(_: &mut Session, p: &Value) -> Result<Value> {

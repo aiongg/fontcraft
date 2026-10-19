@@ -17,6 +17,7 @@
 //! | [`var`], [`color`], [`misc`] | variations; COLR, CPAL, SVG, sbix and bitmaps; kern, DSIG, the Apple tables | M12.7 |
 //! | [`read_core`], [`read_cff`] | reading the tables of `core` and `cff` | M12.8 |
 //! | [`read_otdata`], [`read_var`], [`read_color`] | reading the rest | M12.9 |
+//! | [`read_misc`], [`read_bitmap`] | reading `trak`, `ltag`, `sbix`, `EBSC` and the bitmap tables | M12.7c |
 //!
 //! Every writer module has `write_table(tag, data, font, w) -> Result<bool>` (false: not mine);
 //! every reader module has `read_table(element, font) -> Result<Option<(Tag, Vec<u8>)>>`
@@ -47,9 +48,11 @@ pub mod misc;
 mod oracle_digest;
 pub mod otdata;
 mod read;
+pub(crate) mod read_bitmap;
 pub mod read_cff;
 pub mod read_color;
 pub mod read_core;
+pub(crate) mod read_misc;
 pub mod read_otdata;
 pub mod read_var;
 pub mod var;
@@ -132,6 +135,17 @@ pub(crate) fn dump_within(font: &SfntFont, options: &DumpOptions, limit: usize) 
 /// one file per table. Each item is a file name and its text; the main file is `{stem}{ext}` and
 /// a table's file is `{stem}.{identifier}{ext}` ([`tag_to_identifier`]), as `ttx` names them.
 pub fn dump_split(font: &SfntFont, options: &DumpOptions, stem: &str, ext: &str) -> Result<Vec<(String, String)>> {
+    split_dump(font, options, stem, ext, false)
+}
+
+/// [`dump_split`] with `glyf` split further, as `ttx -g` splits it: the `glyf` file names one
+/// file per glyph that has an outline, `{stem}._g_l_y_f.{glyph}{ext}` with the glyph name made
+/// safe for file systems as fontTools' `userNameToFileName` makes it.
+pub fn dump_split_glyphs(font: &SfntFont, options: &DumpOptions, stem: &str, ext: &str) -> Result<Vec<(String, String)>> {
+    split_dump(font, options, stem, ext, true)
+}
+
+fn split_dump(font: &SfntFont, options: &DumpOptions, stem: &str, ext: &str, glyphs: bool) -> Result<Vec<(String, String)>> {
     check_options(options)?;
     if options.format != DumpFormat::Ttx {
         return Err(TablesError::BadOptions("only the TTX form can be split into one file per table".into()));
@@ -154,6 +168,7 @@ pub fn dump_split(font: &SfntFont, options: &DumpOptions, stem: &str, ext: &str)
         };
         main.simple(&element, &[("src", &name)]);
         let mut part = main.child_at(0);
+        part.set_depth(0);
         part.line(XML_DECLARATION);
         if options.no_version {
             part.open("ttFont", &[]);
@@ -161,10 +176,37 @@ pub fn dump_split(font: &SfntFont, options: &DumpOptions, stem: &str, ext: &str)
             part.open("ttFont", &[("ttLibVersion", TTX_VERSION)]);
         }
         part.blank();
-        write_entry(font, options, &mut part, entry)?;
+        let mut glyph_files = Vec::new();
+        let split_glyf = match entry {
+            Entry::Table(tag) if glyphs && &tag == b"glyf" && !options.hex.contains(&tag) => font.get(tag),
+            _ => None,
+        };
+        let mut written = false;
+        if let Some(data) = split_glyf {
+            let mut body = part.child_at(1);
+            let charged = part.used.get();
+            let prefix = format!("{stem}.{ident}.");
+            let result = core::write_glyf_split(data, font, &mut body, &prefix, ext, options.no_version);
+            body.check()?;
+            if let Ok(found) = result {
+                part.open(&element, &[]);
+                part.append(body);
+                part.close(&element);
+                part.blank();
+                glyph_files = found;
+                written = true;
+            } else {
+                // Written whole instead, as hex when it cannot be read.
+                part.used.set(charged);
+            }
+        }
+        if !written {
+            write_entry(font, options, &mut part, entry)?;
+        }
         part.close("ttFont");
         part.check()?;
         files.push((name, part.finish()));
+        files.extend(glyph_files);
     }
     main.close("ttFont");
     main.check()?;
@@ -188,7 +230,7 @@ fn writer_for(font: &SfntFont, options: &DumpOptions) -> XmlWriter {
     w
 }
 
-const XML_DECLARATION: &str = r#"<?xml version="1.0" encoding="UTF-8"?>"#;
+pub(crate) const XML_DECLARATION: &str = r#"<?xml version="1.0" encoding="UTF-8"?>"#;
 
 fn root_attributes(font: &SfntFont, options: &DumpOptions) -> Vec<(&'static str, String)> {
     // `repr()` of the four-byte string, without its quotes.
@@ -1066,6 +1108,11 @@ impl XmlWriter {
     /// The elements finished at the outermost level, in order.
     pub fn tree(&self) -> &[Element] {
         &self.done
+    }
+
+    /// Sets the indentation level of what is written next.
+    pub(crate) fn set_depth(&mut self, depth: usize) {
+        self.depth = depth;
     }
 
     /// An empty writer with the same settings, `levels` deeper than this one.

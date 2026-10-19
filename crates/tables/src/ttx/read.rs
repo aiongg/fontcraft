@@ -25,7 +25,7 @@ use crate::limits::{MAX_TTX_BYTES, MAX_TTX_DEPTH, MAX_TTX_ELEMENTS, MAX_TTX_TREE
 use crate::sfnt::{Flavour, SfntFont, Tag};
 use crate::{Result, TablesError};
 
-use super::{Element, ImportOptions, glyph_order, read_cff, read_color, read_core, read_otdata, read_var};
+use super::{Element, ImportOptions, glyph_order, read_bitmap, read_cff, read_color, read_core, read_misc, read_otdata, read_var};
 
 // ── Context ────────────────────────────────────────────────────────────────────────────────────
 
@@ -79,6 +79,12 @@ impl ReadContext {
             return Ok(id);
         }
         Err(TablesError::invalid(format!("the glyph '{name}' is not in the glyph order")))
+    }
+
+    /// The index of a name in the glyph order (fontTools' reverse glyph map, without the
+    /// `glyphN` names [`Self::glyph_id`] also takes).
+    pub(crate) fn known_glyph(&self, name: &str) -> Option<u32> {
+        self.ids.get(name).copied()
     }
 
     /// Whether the font will hold table `tag` (from the text or from the font itself).
@@ -670,6 +676,28 @@ pub(crate) fn import_tree(mut font: SfntFont, root: &Element, options: &ImportOp
     present.extend(elements.iter().map(|(t, _)| *t));
     let ctx = ReadContext::new(order, present, !options.keep_bounds);
 
+    // A bitmap location table and its data table compile together (fontTools compiles the data
+    // table first and gives the location table where each image went).
+    let mut bitmaps: HashMap<Tag, Vec<u8>> = HashMap::new();
+    for (tag, element) in &elements {
+        let raw = element.attribute("ERROR").is_some() || truthy(element, "raw");
+        if raw || read_bitmap::is_location(*tag) || bitmaps.contains_key(tag) {
+            continue;
+        }
+        let Some(location_tag) = read_bitmap::partner(*tag) else { continue };
+        let location = elements.iter().rev().find(|(t, e)| *t == location_tag && e.attribute("ERROR").is_none() && !truthy(e, "raw"));
+        let Some((_, location)) = location else {
+            return Err(TablesError::Unsupported(format!(
+                "reading the table '{}' from TTX without its '{}' table in the same text",
+                crate::sfnt::tag_str(*tag),
+                crate::sfnt::tag_str(location_tag)
+            )));
+        };
+        let (data, locations) = read_bitmap::bitmap_pair(*tag, element, location, &ctx)?;
+        bitmaps.insert(*tag, data);
+        bitmaps.insert(location_tag, locations);
+    }
+
     let mut loaded: BTreeSet<Tag> = BTreeSet::new();
     let mut glyf: Option<read_core::Glyf> = None;
     let mut metrics: [Option<Vec<(i64, i64)>>; 2] = [None, None];
@@ -678,6 +706,14 @@ pub(crate) fn import_tree(mut font: SfntFont, root: &Element, options: &ImportOp
         let raw = element.attribute("ERROR").is_some() || truthy(element, "raw");
         let bytes = if raw {
             hexdata(element)?
+        } else if let Some(data) = bitmaps.get(&tag) {
+            data.clone()
+        } else if read_bitmap::partner(tag).is_some() {
+            return Err(TablesError::Unsupported(format!(
+                "reading the table '{}' from TTX without its '{}' table in the same text",
+                crate::sfnt::tag_str(tag),
+                read_bitmap::partner(tag).map(crate::sfnt::tag_str).unwrap_or_default()
+            )));
         } else if &tag == b"glyf" {
             let compiled = read_core::compile_glyf(element, &ctx)?;
             let data = compiled.data.clone();
@@ -717,6 +753,14 @@ fn read_known(element: &Element, ctx: &ReadContext, font: &SfntFont) -> Result<O
     }
     if let Some(t) = read_cff::read_table_with(element, ctx)? {
         return Ok(Some(t));
+    }
+    if let Some(t) = read_misc::read_table_with(element, ctx)? {
+        return Ok(Some(t));
+    }
+    match element.name.as_str() {
+        "sbix" => return Ok(Some((*b"sbix", read_bitmap::sbix(element, ctx)?))),
+        "EBSC" => return Ok(Some((*b"EBSC", read_bitmap::ebsc(element)?))),
+        _ => {}
     }
     type Reader = fn(&Element, &ReadContext, &SfntFont) -> Result<Option<(Tag, Vec<u8>)>>;
     let others: [Reader; 3] = [read_otdata::read_table_with, read_var::read_table_with, read_color::read_table_with];

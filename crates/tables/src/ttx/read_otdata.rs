@@ -40,6 +40,8 @@ pub(crate) fn read_table_with(element: &Element, ctx: &ReadContext, font: &SfntF
         b"avar" => avar(element, ctx, font)?,
         b"meta" => meta(element)?,
         b"kern" => kern(element, ctx)?,
+        // The Apple tables whose layouts the writer's schema holds (M12.7c).
+        b"ankr" | b"bsln" | b"cidg" | b"feat" | b"gcid" | b"lcar" | b"opbd" | b"prop" => build::compile_layout(&element.name, element, ctx, font)?,
         _ => return Ok(None),
     };
     Ok(Some((tag, data)))

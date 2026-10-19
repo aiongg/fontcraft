@@ -503,3 +503,23 @@ mod fonts {
         font
     }
 }
+
+#[test]
+fn split_dumps_write_parts_at_the_left_margin_and_glyphs_on_their_own() {
+    let font = fonts::core_font();
+    let tables = dump_split(&font, &DumpOptions::default(), "core", ".ttx").unwrap();
+    let maxp = tables.iter().find(|(n, _)| n == "core._m_a_x_p.ttx").unwrap();
+    assert!(maxp.1.starts_with("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ttFont ttLibVersion=\"4.66\">\n\n  <maxp>\n"), "{}", maxp.1);
+
+    let parts = crate::ttx::dump_split_glyphs(&font, &DumpOptions::default(), "core", ".ttx").unwrap();
+    let glyf = parts.iter().find(|(n, _)| n == "core._g_l_y_f.ttx").unwrap();
+    assert!(glyf.1.contains("\n  <glyf>\n    <TTGlyph src=\"core._g_l_y_f.A_.ttx\"/>\n"), "{}", glyf.1);
+    assert!(!glyf.1.contains("<contour>"), "the outlines are in the glyph files");
+    let a = parts.iter().find(|(n, _)| n == "core._g_l_y_f.A_.ttx").unwrap();
+    assert!(a.1.starts_with("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ttFont ttLibVersion=\"4.66\">\n  <glyf>\n    <!-- The xMin, yMin, xMax and yMax values\n         will be recalculated by the compiler. -->\n    <TTGlyph name=\"A\""), "{}", a.1);
+    assert!(a.1.ends_with("    </TTGlyph>\n  </glyf>\n</ttFont>\n"), "{}", a.1);
+    // The whole dump and the split one hold the same glyph text.
+    let whole = dump(&font, &DumpOptions { tables: vec![*b"glyf"], ..DumpOptions::default() }).unwrap();
+    let body = &a.1[a.1.find("    <TTGlyph").unwrap()..a.1.find("  </glyf>").unwrap()];
+    assert!(whole.contains(body), "{whole}");
+}

@@ -13,6 +13,7 @@
 
 pub(crate) mod cmap;
 mod glyf;
+pub(crate) use glyf::write_split as write_glyf_split;
 pub(crate) mod name;
 pub(crate) mod program;
 #[cfg(test)]

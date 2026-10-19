@@ -198,6 +198,9 @@ pub(crate) struct Compiler<'a> {
     /// The number of `fvar` axes, when the font has an `fvar` table.
     fvar_axes: Option<i64>,
     graph: Graph,
+    /// The count slot of the `StructLength` field of the table being written, filled with the
+    /// table's length once it is written (fontTools' `StructWithLength`).
+    struct_length: Option<usize>,
 }
 
 /// Compiles table element `element` whose layout in the schema is named `class` (`GSUB`,
@@ -215,7 +218,30 @@ pub(crate) fn compile_layout(class: &str, element: &Element, ctx: &ReadContext, 
 impl<'a> Compiler<'a> {
     pub(crate) fn new(ctx: &'a ReadContext, font: &SfntFont) -> Self {
         let fvar_axes = font.get(*b"fvar").and_then(|d| Some(i64::from(u16::from_be_bytes([*d.get(8)?, *d.get(9)?]))));
-        Self { ctx, fvar_axes, graph: Graph::default() }
+        Self { ctx, fvar_axes, graph: Graph::default(), struct_length: None }
+    }
+
+    /// Table `class` compiled from `e` on its own, as bytes: the values of AAT lookups, which
+    /// fontTools compares before it writes them.
+    fn detached(&self, class: &str, e: &Element, state: &State, depth: usize) -> Result<Vec<u8>> {
+        let mut c = Compiler { ctx: self.ctx, fvar_axes: self.fvar_axes, graph: Graph::default(), struct_length: None };
+        let root = c.graph.node();
+        c.table(class, e, root, &mut state.clone(), false, depth + 1)?;
+        c.graph.assemble(root)
+    }
+
+    /// The bytes the items of `node` from `from` on take up.
+    fn written_since(&self, node: usize, from: usize) -> usize {
+        self.graph.nodes.get(node).map_or(0, |n| {
+            n.items
+                .iter()
+                .skip(from)
+                .map(|i| match i {
+                    Item::Data(d) => d.len(),
+                    Item::Offset { size, .. } | Item::Count { size, .. } => usize::from(*size),
+                })
+                .sum()
+        })
     }
 
     fn glyph(&self, name: &str) -> Result<u16> {
@@ -241,6 +267,11 @@ impl<'a> Compiler<'a> {
                 "ClassDef" => return self.class_def(e, node, state, depth),
                 "SingleSubst" | "MultipleSubst" | "AlternateSubst" | "LigatureSubst" => return self.simple_subst(class, e, node, state, depth),
                 "DeltaSetIndexMap" | "VarIdxMap" => return self.index_map(class, e, node, state, depth),
+                "ClipList" => return self.clip_list(e, node, state, depth),
+                "BaseGlyphRecordArray" | "BaseGlyphList" => {
+                    let sorted = self.sorted_base_glyphs(e)?;
+                    return self.table(class, &sorted, node, state, true, depth);
+                }
                 _ => {}
             }
         }
@@ -263,6 +294,8 @@ impl<'a> Compiler<'a> {
             }
         }
         let def = crate::ttx::otdata::layout_def(class).ok_or_else(|| bad(format!("no layout for the table '{class}'")))?;
+        let start = self.graph.nodes.get(node).map_or(0, |n| n.items.len());
+        let outer_length = self.struct_length.take();
         let fields: &[Field] = match def.layout {
             Layout::Plain(fields) => fields,
             Layout::Formats(width, formats) => {
@@ -274,7 +307,14 @@ impl<'a> Compiler<'a> {
                 formats.iter().find(|(n, _)| i64::from(*n) == format).map_or(&[][..], |(_, f)| *f)
             }
         };
-        self.fields(class, fields, e, node, state, depth)
+        let written = self.fields(class, fields, e, node, state, depth);
+        let length = std::mem::replace(&mut self.struct_length, outer_length);
+        written?;
+        if let Some(slot) = length {
+            let n = i64::try_from(self.written_since(node, start)).unwrap_or(i64::MAX);
+            self.graph.set_slot(slot, n, "StructLength")?;
+        }
+        Ok(())
     }
 
     /// The elements of `e` that field `f` reads.
@@ -312,7 +352,31 @@ impl<'a> Compiler<'a> {
         }
         // The counts of this table, by name.
         let mut counts: Vec<(&'static str, usize)> = Vec::new();
+        // `COLR.preWrite`: the layer count follows the offset of the array it counts.
+        let layer_count = if class == "COLR" {
+            let slot = self.graph.slot(None);
+            state.set("LayerRecordCount", St::Slot(slot));
+            Some(slot)
+        } else {
+            None
+        };
         for f in fields {
+            if let Rep::Fixed(n) = f.rep {
+                // An array of a fixed length (the `bsln` deltas and control points) must have it.
+                let items = Self::matching(f, e);
+                if items.len() != n {
+                    return Err(bad(format!("the table '{class}' has {} '{}' values, not {n}", items.len(), f.name)));
+                }
+                self.array(class, f, &items, e, node, state, &counts, depth)?;
+                continue;
+            }
+            if f.name == "StructLength" {
+                let slot = self.graph.slot(None);
+                let size = if matches!(f.ty, Ty::Count16 | Ty::U16) { 2 } else { 4 };
+                self.graph.push(node, Item::Count { slot, size })?;
+                self.struct_length = Some(slot);
+                continue;
+            }
             if let Rep::Count(repeat, adjust) = f.rep {
                 let items = Self::matching(f, e);
                 let n = i64::try_from(items.len()).unwrap_or(i64::MAX).saturating_sub(i64::from(adjust));
@@ -332,7 +396,10 @@ impl<'a> Compiler<'a> {
             }
             if is_count(f.name) {
                 let preset = if class == "VarRegionList" && f.name == "RegionAxisCount" { self.fvar_axes } else { None };
-                let slot = self.graph.slot(preset);
+                let slot = match layer_count {
+                    Some(slot) if f.name == "LayerRecordCount" => slot,
+                    _ => self.graph.slot(preset),
+                };
                 let size = match f.ty {
                     Ty::Count8 | Ty::U8 => 1,
                     Ty::Count32 | Ty::U32 => 4,
@@ -445,6 +512,17 @@ impl<'a> Compiler<'a> {
                 let c = child.ok_or_else(missing)?;
                 self.table(target, c, node, state, false, depth + 1)
             }
+            Ty::AatLookup(value) => {
+                let c = child.ok_or_else(missing)?;
+                self.aat_lookup(value, c, node, state, depth)
+            }
+            Ty::AatLookupData(table) => {
+                let c = child.ok_or_else(missing)?;
+                self.aat_lookup_data(table, c, node, state, depth)
+            }
+            Ty::CidGlyphMap => self.cid_glyph_map(child.ok_or_else(missing)?, node),
+            Ty::GlyphCidMap => self.glyph_cid_map(child.ok_or_else(missing)?, node),
+            Ty::VarIndex if child.is_some_and(|c| c.attribute("value").is_none()) => self.put(node, |o| o.u32(0xFFFF_FFFF, name)),
             Ty::ValueRecord => {
                 let which = if name.ends_with('2') { "ValueFormat2" } else { "ValueFormat1" };
                 let format = match state.get(which) {
@@ -573,6 +651,28 @@ impl<'a> Compiler<'a> {
                 let v = version_value(text)?;
                 self.put(node, |o| o.i32(v, name))
             }
+            Ty::Angle | Ty::BiasedAngle => {
+                // `Angle.fromString` snaps to a multiple of the step, `toInt` stores the fraction
+                // of 180 degrees less the bias.
+                let step = 1.0 / 16384.0 * 180.0;
+                let bias = if matches!(f.ty, Ty::BiasedAngle) { 1.0 } else { 0.0 };
+                let snapped = ot_round(float_lit(text)? / step)? as f64 * step;
+                let v = ot_round((snapped / 180.0 - bias) * 16384.0)?;
+                self.put(node, |o| o.i16(v, name))
+            }
+            Ty::ExtendMode | Ty::CompositeMode => {
+                let wanted = text.to_uppercase();
+                let v = (0..=255i64)
+                    .find(|v| crate::ttx::otdata::engine::enum_name(f.ty, *v).is_some_and(|n| n.to_uppercase() == wanted))
+                    .ok_or_else(|| bad(format!("'{text}' is not a value of {name}")))?;
+                self.put(node, |o| o.u8(v, name))
+            }
+            Ty::Char64 => {
+                // ASCII with `?` for anything else, cut or padded with zeros to 64 bytes.
+                let mut bytes: Vec<u8> = text.chars().map(|c| if c.is_ascii() { c as u8 } else { b'?' }).take(64).collect();
+                bytes.resize(64, 0);
+                self.graph.data(node, bytes)
+            }
             _ => {
                 let v = int_lit(text)?;
                 if matches!(f.ty, Ty::ValueFormat) {
@@ -582,7 +682,7 @@ impl<'a> Compiler<'a> {
                     Ty::U8 | Ty::Count8 => self.put(node, |o| o.u8(v, name)),
                     Ty::I16 => self.put(node, |o| o.i16(v, name)),
                     Ty::U24 => self.put(node, |o| o.u24(v, name)),
-                    Ty::U32 | Ty::Count32 => self.put(node, |o| o.u32(v, name)),
+                    Ty::U32 | Ty::Count32 | Ty::VarIndex => self.put(node, |o| o.u32(v, name)),
                     _ => self.put(node, |o| o.u16(v, name)),
                 }
             }
@@ -933,6 +1033,328 @@ impl<'a> Compiler<'a> {
         };
         self.table(class, &raw, node, state, true, depth)
     }
+
+    // ── COLR ───────────────────────────────────────────────────────────────────────────────────
+
+    /// `BaseGlyphRecordArray.preWrite` and `BaseGlyphList.preWrite`: the records sorted by the
+    /// index of their base glyph, records of one glyph keeping their order.
+    fn sorted_base_glyphs(&self, e: &Element) -> Result<Element> {
+        let mut keyed: Vec<(u16, Element)> = Vec::with_capacity(e.children.len());
+        let mut others = Vec::new();
+        for c in &e.children {
+            if c.name == "BaseGlyphRecord" || c.name == "BaseGlyphPaintRecord" {
+                let glyph =
+                    c.children.iter().rev().find(|g| g.name == "BaseGlyph").ok_or_else(|| bad(format!("a '{}' without a base glyph", c.name)))?;
+                keyed.push((self.glyph(value_of(glyph)?)?, c.clone()));
+            } else {
+                others.push(c.clone());
+            }
+        }
+        keyed.sort_by_key(|(id, _)| *id);
+        others.extend(keyed.into_iter().map(|(_, c)| c));
+        Ok(Element { name: e.name.clone(), attributes: e.attributes.clone(), children: others, text: String::new() })
+    }
+
+    /// `ClipList.fromXML` and `preWrite`: the glyphs that share a clip box, as ranges of
+    /// consecutive glyph indices, each range a record pointing at the box.
+    fn clip_list(&mut self, e: &Element, node: usize, state: &mut State, depth: usize) -> Result<()> {
+        // Glyph name to clip box, in the order the names first appear.
+        let mut clips: Ordered<Element> = Ordered::new();
+        for clip in e.children.iter().filter(|c| c.name == "Clip") {
+            let Some(clip_box) = clip.children.iter().rev().find(|c| c.name == "ClipBox") else { continue };
+            for g in clip.children.iter().filter(|c| c.name == "Glyph") {
+                if clips.items.len() >= MAX_LAYOUT_ITEMS {
+                    return Err(TablesError::TooLarge { what: "the glyphs of a clip list", limit: MAX_LAYOUT_ITEMS });
+                }
+                clips.insert(value_of(g)?, clip_box.clone());
+            }
+        }
+        // `groups`: glyphs by the content of their box, the first box of each kind kept.
+        let mut groups: Vec<(Vec<u8>, Element, Vec<String>)> = Vec::new();
+        let mut by_key: HashMap<Vec<u8>, usize> = HashMap::new();
+        for (glyph, clip_box) in &clips.items {
+            let key = self.detached("ClipBox", clip_box, state, depth)?;
+            match by_key.get(&key).and_then(|&i| groups.get_mut(i)) {
+                Some(group) => group.2.push(glyph.clone()),
+                None => {
+                    by_key.insert(key.clone(), groups.len());
+                    groups.push((key, clip_box.clone(), vec![glyph.clone()]));
+                }
+            }
+        }
+        let mut ranges: Vec<(u32, u32, Element)> = Vec::new();
+        for (_, clip_box, glyphs) in &groups {
+            // Names that are not in the glyph order are left out, as the reverse glyph map does.
+            let mut ids: Vec<u32> = glyphs.iter().filter_map(|g| self.ctx.known_glyph(g)).collect();
+            ids.sort_unstable();
+            ids.dedup();
+            let mut run: Option<(u32, u32)> = None;
+            for id in ids {
+                run = match run {
+                    Some((start, end)) if id == end.wrapping_add(1) => Some((start, id)),
+                    Some((start, end)) => {
+                        ranges.push((start, end, clip_box.clone()));
+                        Some((id, id))
+                    }
+                    None => Some((id, id)),
+                };
+            }
+            if let Some((start, end)) = run {
+                ranges.push((start, end, clip_box.clone()));
+            }
+        }
+        ranges.sort_by_key(|(start, end, _)| (*start, *end));
+        let records = ranges
+            .into_iter()
+            .map(|(start, end, clip_box)| {
+                el("ClipRecord", Vec::new(), vec![val("StartGlyphID", start.to_string()), val("EndGlyphID", end.to_string()), clip_box])
+            })
+            .collect();
+        let format = e.attribute("Format").unwrap_or("1").to_string();
+        let raw = el("ClipList", vec![("Format", format)], records);
+        self.table("ClipList", &raw, node, state, true, depth)
+    }
+
+    // ── AAT ────────────────────────────────────────────────────────────────────────────────────
+
+    /// The `Lookup` children of `e` as glyph index to element, the last element of a glyph
+    /// winning (fontTools reads them into a dict).
+    fn lookups<'e>(&self, e: &'e Element) -> Result<Vec<(u16, &'e Element)>> {
+        let mut by_glyph: HashMap<&str, &Element> = HashMap::new();
+        for c in e.children.iter().filter(|c| c.name == "Lookup") {
+            if by_glyph.len() >= MAX_LAYOUT_ITEMS {
+                return Err(TablesError::TooLarge { what: "the glyphs of an AAT lookup", limit: MAX_LAYOUT_ITEMS });
+            }
+            by_glyph.insert(c.attribute("glyph").ok_or_else(|| bad("a lookup entry without a glyph"))?, c);
+        }
+        let mut out: Vec<(u16, &Element)> = by_glyph.into_iter().map(|(g, c)| self.glyph(g).map(|id| (id, c))).collect::<Result<_>>()?;
+        out.sort_by_key(|(id, _)| *id);
+        Ok(out)
+    }
+
+    /// `AATLookup.write`: an AAT lookup from `e`, whose values are numbers (`value` is
+    /// `uint16`) or offsets to tables of layout `value`; the format that takes the fewest bytes.
+    fn aat_lookup(&mut self, value: &'static str, e: &Element, node: usize, state: &mut State, depth: usize) -> Result<()> {
+        let entries = self.lookups(e)?;
+        let mut values: Vec<(u16, AatValue)> = Vec::with_capacity(entries.len());
+        for (id, c) in entries {
+            let v = if value == "uint16" {
+                AatValue::Number(int_lit(value_of(c)?)?)
+            } else if c.attribute("empty").is_some_and(|v| int_lit(v).map(|n| n != 0).unwrap_or(false)) {
+                AatValue::Table(None)
+            } else {
+                AatValue::Table(Some(self.detached(value, c, state, depth)?))
+            };
+            values.push((id, v));
+        }
+        let glyphs = self.ctx.order()?.len();
+        let bytes = aat_lookup_bytes(&values, glyphs)?;
+        for piece in bytes {
+            match piece {
+                Piece::Data(d) => self.graph.data(node, d)?,
+                Piece::Table(None) => self.graph.data(node, vec![0, 0])?,
+                Piece::Table(Some(d)) => {
+                    let sub = self.graph.node();
+                    self.graph.data(sub, d)?;
+                    self.graph.push(node, Item::Offset { size: 2, node: sub })?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// `AATLookupWithDataOffset.write` (the anchors of `ankr`): each glyph's table compiled, equal
+    /// tables stored once, then a lookup of their offsets and the tables, each behind a 32-bit
+    /// offset.
+    fn aat_lookup_data(&mut self, table: &'static str, e: &Element, node: usize, state: &mut State, depth: usize) -> Result<()> {
+        let entries = self.lookups(e)?;
+        let mut data: Vec<u8> = Vec::new();
+        let mut at: HashMap<Vec<u8>, i64> = HashMap::new();
+        let mut values: Vec<(u16, AatValue)> = Vec::with_capacity(entries.len());
+        for (id, c) in entries {
+            let bytes = self.detached(table, c, state, depth)?;
+            let offset = match at.get(&bytes) {
+                Some(o) => *o,
+                None => {
+                    let o = i64::try_from(data.len()).unwrap_or(i64::MAX);
+                    data.extend_from_slice(&bytes);
+                    at.insert(bytes, o);
+                    o
+                }
+            };
+            values.push((id, AatValue::Number(offset)));
+        }
+        let glyphs = self.ctx.order()?.len();
+        let mut lookup = Vec::new();
+        for piece in aat_lookup_bytes(&values, glyphs)? {
+            if let Piece::Data(d) = piece {
+                lookup.extend(d);
+            }
+        }
+        let (lookup_node, data_node) = (self.graph.node(), self.graph.node());
+        self.graph.data(lookup_node, lookup)?;
+        self.graph.data(data_node, data)?;
+        self.graph.push(node, Item::Offset { size: 4, node: lookup_node })?;
+        self.graph.push(node, Item::Offset { size: 4, node: data_node })
+    }
+
+    /// `CIDGlyphMap.write`: a glyph index for every CID up to the highest, 0xFFFF for none.
+    fn cid_glyph_map(&mut self, e: &Element, node: usize) -> Result<()> {
+        let mut by_cid: HashMap<i64, u16> = HashMap::new();
+        for c in e.children.iter().filter(|c| c.name == "CID") {
+            let cid = int_lit(c.attribute("cid").ok_or_else(|| bad("a CID entry without a CID"))?)?;
+            if !(0..0xFFFF).contains(&cid) {
+                return Err(bad(format!("the CID {cid} does not fit the map")));
+            }
+            let glyph = c.attribute("glyph").ok_or_else(|| bad("a CID entry without a glyph"))?.trim();
+            by_cid.insert(cid, self.glyph(glyph)?);
+        }
+        let count = by_cid.keys().max().map_or(0, |m| m + 1);
+        self.put(node, |o| {
+            o.u16(count, "the number of CIDs")?;
+            (0..count).try_for_each(|cid| o.u16(by_cid.get(&cid).map_or(0xFFFF, |g| i64::from(*g)), "a glyph index"))
+        })
+    }
+
+    /// `GlyphCIDMap.write`: a CID for every glyph up to the highest that has one, 0xFFFF for
+    /// none.
+    fn glyph_cid_map(&mut self, e: &Element, node: usize) -> Result<()> {
+        let mut by_glyph: HashMap<String, i64> = HashMap::new();
+        for c in e.children.iter().filter(|c| c.name == "CID") {
+            if by_glyph.len() >= MAX_LAYOUT_ITEMS {
+                return Err(TablesError::TooLarge { what: "the glyphs of a CID map", limit: MAX_LAYOUT_ITEMS });
+            }
+            let glyph = c.attribute("glyph").ok_or_else(|| bad("a CID entry without a glyph"))?;
+            by_glyph.insert(glyph.to_string(), int_lit(c.attribute("value").ok_or_else(|| bad("a CID entry without a value"))?)?);
+        }
+        let mut by_id: HashMap<u16, i64> = HashMap::new();
+        for (glyph, cid) in by_glyph {
+            if cid != 0xFFFF {
+                by_id.insert(self.glyph(&glyph)?, cid);
+            }
+        }
+        let count = by_id.keys().max().map_or(0, |m| i64::from(*m) + 1);
+        self.put(node, |o| {
+            o.u16(count, "the number of glyphs")?;
+            (0..count).try_for_each(|g| o.u16(u16::try_from(g).ok().and_then(|g| by_id.get(&g)).copied().unwrap_or(0xFFFF), "a CID"))
+        })
+    }
+}
+
+/// The value of one AAT lookup entry: a number, or a table compiled on its own (`None` for an
+/// empty one, a null offset).
+#[derive(Clone, PartialEq)]
+enum AatValue {
+    Number(i64),
+    Table(Option<Vec<u8>>),
+}
+
+/// A piece of a compiled AAT lookup: bytes, or an offset to a table.
+enum Piece {
+    Data(Vec<u8>),
+    Table(Option<Vec<u8>>),
+}
+
+/// fontTools' `getSearchRange`.
+fn search_range(n: usize, item_size: usize) -> (usize, usize, usize) {
+    let mut exponent = 0usize;
+    let mut x = n;
+    while x > 0 {
+        x >>= 1;
+        exponent += 1;
+    }
+    let exponent = exponent.saturating_sub(1);
+    let range = (1usize << exponent.min(30)).saturating_mul(item_size);
+    (range, exponent, n.saturating_mul(item_size).saturating_sub(range))
+}
+
+/// `AATLookup.write`: formats 0, 2, 6 and 8 sized, the smallest written (the lower format on a
+/// tie). Every value takes two bytes, a number or an offset.
+fn aat_lookup_bytes(values: &[(u16, AatValue)], glyphs: usize) -> Result<Vec<Piece>> {
+    let (Some((first, first_value)), Some((last, _))) = (values.first(), values.last()) else {
+        return Err(bad("an AAT lookup with no entry"));
+    };
+    let mut segments: Vec<(u16, u16, &AatValue)> = Vec::new();
+    let (mut start, mut end, mut value) = (*first, *first, first_value);
+    for (id, v) in values.iter().skip(1) {
+        if u32::from(*id) != u32::from(end) + 1 || v != value {
+            segments.push((start, end, value));
+            (start, end, value) = (*id, *id, v);
+        } else {
+            end = *id;
+        }
+    }
+    segments.push((start, end, value));
+    let n = values.len();
+    let mut sizes: Vec<(usize, u16)> = Vec::new();
+    if n == glyphs {
+        sizes.push((2 + n * 2, 0));
+    }
+    sizes.push((2 + 10 + (segments.len() + 1) * 6, 2));
+    sizes.push((2 + 10 + (n + 1) * 4, 6));
+    if n == usize::from(*last) - usize::from(*first) + 1 {
+        sizes.push((6 + n * 2, 8));
+    }
+    sizes.sort_unstable();
+    let format = sizes.first().map_or(6, |s| s.1);
+    let mut out: Vec<Piece> = Vec::new();
+    let mut o = Out::default();
+    let flush = |o: &mut Out, out: &mut Vec<Piece>| {
+        if !o.0.is_empty() {
+            out.push(Piece::Data(std::mem::take(&mut o.0)));
+        }
+    };
+    let put_value = |o: &mut Out, out: &mut Vec<Piece>, v: &AatValue| -> Result<()> {
+        match v {
+            AatValue::Number(n) => o.u16(*n, "an AAT lookup value"),
+            AatValue::Table(t) => {
+                flush(o, out);
+                out.push(Piece::Table(t.clone()));
+                Ok(())
+            }
+        }
+    };
+    let header = |o: &mut Out, units: usize, unit: usize| -> Result<()> {
+        let (range, selector, shift) = search_range(units, unit);
+        for v in [unit, units, range, selector, shift] {
+            o.u16(i64::try_from(v).unwrap_or(i64::MAX), "an AAT lookup header")?;
+        }
+        Ok(())
+    };
+    o.u16(i64::from(format), "an AAT lookup format")?;
+    match format {
+        0 => {
+            for (_, v) in values {
+                put_value(&mut o, &mut out, v)?;
+            }
+        }
+        2 => {
+            header(&mut o, segments.len(), 6)?;
+            for (s, e, v) in &segments {
+                o.u16(i64::from(*e), "a segment end")?;
+                o.u16(i64::from(*s), "a segment start")?;
+                put_value(&mut o, &mut out, v)?;
+            }
+            o.bytes(&[0xFF, 0xFF, 0xFF, 0xFF, 0, 0]);
+        }
+        8 => {
+            o.u16(i64::from(*first), "the first glyph")?;
+            o.u16(i64::try_from(n).unwrap_or(i64::MAX), "the number of glyphs")?;
+            for (_, v) in values {
+                put_value(&mut o, &mut out, v)?;
+            }
+        }
+        _ => {
+            header(&mut o, n, 4)?;
+            for (id, v) in values {
+                o.u16(i64::from(*id), "a glyph index")?;
+                put_value(&mut o, &mut out, v)?;
+            }
+            o.bytes(&[0xFF, 0xFF, 0, 0]);
+        }
+    }
+    flush(&mut o, &mut out);
+    Ok(out)
 }
 
 /// `DeltaSetIndexMap.getEntryFormat`.

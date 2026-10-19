@@ -1,5 +1,5 @@
-//! TTX writer: COLR, CPAL, SVG, sbix, and the bitmap tables EBLC, EBDT, CBLC, CBDT, bloc and
-//! bdat (M12.7).
+//! TTX writer: COLR, CPAL, SVG, sbix, and the bitmap tables EBLC, EBDT, CBLC, CBDT, bloc,
+//! bdat and EBSC (M12.7).
 //!
 //! Each table is written element for element as fontTools' `ttx` writes it, and read with the
 //! same checks: a table fontTools would refuse to read is an error here, and [`super::dump`]
@@ -43,6 +43,7 @@ pub fn write_table(tag: Tag, data: &[u8], font: &SfntFont, w: &mut XmlWriter) ->
             }
         }
         b"EBLC" | b"CBLC" | b"bloc" => bitmap::write_location(data, font, w)?,
+        b"EBSC" => bitmap::write_scale(data, w)?,
         b"EBDT" | b"CBDT" | b"bdat" => {
             let locator = bitmap::locator(tag).and_then(|t| font.get(t).map(|d| (t, d)));
             let Some((_, locator_data)) = locator else {

@@ -85,3 +85,35 @@ fn tables_import_ttx_refuses_split_dump_parts_outside_its_folder() {
     let r = run(&mut s, "tables.importTtx", json!({ "font": ttf, "dumps": [main] }));
     assert_eq!(r["added"], json!([]), "a part beside the main file is read: {r}");
 }
+
+#[test]
+fn tables_import_ttx_reads_a_dump_split_by_glyph() {
+    let dir = temp("glyphs");
+    let (mut s, ttf) = font(&dir);
+    let out = dir.join("dump");
+    let r = run(&mut s, "font.dumpTables", json!({ "font": ttf, "split": "glyphs", "outputDir": out }));
+    let paths: Vec<&str> = r["paths"].as_array().unwrap().iter().map(|p| p.as_str().unwrap()).collect();
+    let glyph = out.join("Font._g_l_y_f.A_.ttx");
+    assert!(paths.contains(&glyph.to_str().unwrap()), "{r}");
+    let main = out.join("Font.ttx");
+    assert!(std::fs::read_to_string(out.join("Font._g_l_y_f.ttx")).unwrap().contains("<TTGlyph src=\"Font._g_l_y_f.A_.ttx\"/>"));
+
+    // Read back unchanged, the outlines are the font's own.
+    let back = run(&mut s, "tables.importTtx", json!({ "font": ttf, "dumps": [main], "output": dir.join("Same.ttf") }));
+    assert_eq!(table(Path::new(back["output"].as_str().unwrap()), b"glyf"), table(&ttf, b"glyf"), "{back}");
+
+    // A point moved in the glyph's own file reaches the font.
+    let text = std::fs::read_to_string(&glyph).unwrap();
+    let moved = text.replacen("x=\"560\"", "x=\"570\"", 1);
+    assert_ne!(moved, text);
+    std::fs::write(&glyph, moved).unwrap();
+    let edited = run(&mut s, "tables.importTtx", json!({ "font": ttf, "dumps": [main], "output": dir.join("Moved.ttf") }));
+    assert!(edited["replaced"].as_array().unwrap().contains(&json!("glyf")), "{edited}");
+
+    // A glyph file outside the dump's folder is refused.
+    let part = out.join("Font._g_l_y_f.ttx");
+    let glyf = std::fs::read_to_string(&part).unwrap().replace("src=\"Font._g_l_y_f.A_.ttx\"", "src=\"../A.ttx\"");
+    std::fs::write(&part, glyf).unwrap();
+    let err = s.execute("tables.importTtx", &json!({ "font": ttf, "dumps": [main], "output": dir.join("Bad.ttf") })).unwrap_err();
+    assert!(err.to_string().contains("parts must be beside it"), "{err}");
+}

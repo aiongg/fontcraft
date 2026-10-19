@@ -45,7 +45,7 @@ fn read_subtable(e: &Element, format: i64, ctx: &ReadContext) -> Result<Subtable
         Ok(m)
     };
     let (language, reserved, body) = match format {
-        0 | 4 | 6 => (Some(int_lit(attr(e, "language")?)?), 0, Body::Map(maps()?)),
+        0 | 2 | 4 | 6 => (Some(int_lit(attr(e, "language")?)?), 0, Body::Map(maps()?)),
         12 | 13 => (Some(int_lit(attr(e, "language")?)?), int_lit(attr(e, "reserved")?)?, Body::Map(maps()?)),
         14 => {
             let mut uvs: BTreeMap<i64, Vec<(i64, Option<String>)>> = BTreeMap::new();
@@ -56,7 +56,6 @@ fn read_subtable(e: &Element, format: i64, ctx: &ReadContext) -> Result<Subtable
             }
             (Some(0xFF), 0, Body::Uvs(uvs))
         }
-        2 => return Err(TablesError::Unsupported("reading cmap format 2 from TTX".into())),
         _ => (None, 0, Body::Raw(read_hex(&e.text)?)),
     };
     Ok(Subtable { platform, encoding, format, language, reserved, body })
@@ -153,6 +152,7 @@ fn compile_subtable(t: &Subtable, ctx: &ReadContext) -> Result<Vec<u8>> {
             }
             out.bytes(&gids);
         }
+        (Body::Map(map), 2) => format2(&mut out, map, language, ctx)?,
         (Body::Map(map), 4) => format4(&mut out, map, language, ctx)?,
         (Body::Map(map), 6) => {
             let (first, last) = match (map.keys().next(), map.keys().next_back()) {
@@ -207,6 +207,136 @@ fn compile_subtable(t: &Subtable, ctx: &ReadContext) -> Result<Vec<u8>> {
         (Body::Map(_), f) => return Err(TablesError::Unsupported(format!("cmap format {f}"))),
     }
     Ok(out.0)
+}
+
+/// A format 2 sub-header: first code, entry count, delta, range offset and its glyph indices.
+struct SubHeader {
+    first: i64,
+    count: i64,
+    delta: i64,
+    range_offset: i64,
+    glyphs: Vec<i64>,
+}
+
+impl SubHeader {
+    fn empty(range_offset: i64) -> Self {
+        Self { first: 0, count: 0, delta: 0, range_offset, glyphs: Vec::new() }
+    }
+
+    /// `cmap_format_2.setIDDelta`: glyph indices stored less a delta when all exceed one.
+    fn set_delta(&mut self) {
+        self.delta = 0;
+        let Some(&first) = self.glyphs.first() else { return };
+        let min = self.glyphs.iter().copied().filter(|g| *g != 0).fold(first, i64::min);
+        if min > 1 {
+            self.delta = if min > 0x8000 { -(0x10000 - min) - 1 } else { min - 1 };
+            let delta = self.delta;
+            for g in self.glyphs.iter_mut().take(usize::try_from(self.count).unwrap_or(0)) {
+                if *g > 0 {
+                    *g = (*g - delta) & 0xFFFF;
+                }
+            }
+        }
+    }
+}
+
+/// `cmap_format_2.compile`, kept as fontTools writes it: one sub-header per high byte, the
+/// single-byte codes in sub-header 0, equal glyph arrays shared.
+fn format2(out: &mut Out, map: &BTreeMap<i64, String>, language: i64, ctx: &ReadContext) -> Result<()> {
+    const EMPTY: i64 = -1;
+    let mut keys = [EMPTY; 256];
+    let mut headers: Vec<SubHeader> = Vec::new();
+    if map.keys().next().is_none_or(|c| *c > 255) {
+        headers.push(SubHeader::empty(0));
+    }
+    let mut last_high = -1i64;
+    let mut current: Option<usize> = headers.len().checked_sub(1);
+    for (code, name) in map {
+        let gid = gid_of(name, ctx)?;
+        if gid == 0 {
+            continue;
+        }
+        if !(0..=0xFFFF).contains(code) {
+            return Err(bad(format!("the code {code} does not fit a cmap format 2 subtable")));
+        }
+        let (high, low) = (code >> 8, code & 0xFF);
+        if high != last_high {
+            if last_high > -1
+                && let Some(h) = current.and_then(|i| headers.get_mut(i))
+            {
+                h.set_delta();
+                if last_high == 0 {
+                    for i in 0..h.count {
+                        if let Some(k) = usize::try_from(h.first + i).ok().and_then(|c| keys.get_mut(c)) {
+                            *k = 0;
+                        }
+                    }
+                }
+            }
+            headers.push(SubHeader { first: low, count: 1, delta: 0, range_offset: 0, glyphs: vec![gid] });
+            current = Some(headers.len() - 1);
+            if let Some(k) = usize::try_from(high).ok().and_then(|h| keys.get_mut(h)) {
+                *k = i64::try_from(headers.len() - 1).unwrap_or(EMPTY);
+            }
+            last_high = high;
+        } else if let Some(h) = current.and_then(|i| headers.get_mut(i)) {
+            let gap = low - (h.first + h.count);
+            for _ in 0..gap.max(0) {
+                h.glyphs.push(0);
+            }
+            h.glyphs.push(gid);
+            h.count += gap + 1;
+        }
+    }
+    match current.and_then(|i| headers.get_mut(i)) {
+        Some(h) => h.set_delta(),
+        // fontTools stops here too: every code maps to glyph 0 and no sub-header was made.
+        None => return Err(bad("a cmap format 2 subtable maps no code to a glyph")),
+    }
+    headers.push(SubHeader::empty(2));
+    let empty = i64::try_from(headers.len() - 1).unwrap_or(0);
+    for k in keys.iter_mut().filter(|k| **k == EMPTY) {
+        *k = empty;
+    }
+    let shared = headers.len() - 1;
+    let mut range_offset = i64::try_from(shared).unwrap_or(0) * 8 + 2;
+    for index in 0..shared {
+        let earlier = headers.get(..index).unwrap_or_default();
+        let Some(this) = headers.get(index) else { break };
+        let found = earlier.iter().enumerate().find(|(_, p)| p.glyphs == this.glyphs).map(|(j, p)| p.range_offset - (index - j) as i64 * 8);
+        let Some(h) = headers.get_mut(index) else { break };
+        h.range_offset = 0;
+        if let Some(offset) = found {
+            h.range_offset = offset;
+            h.glyphs.clear();
+        }
+        if h.range_offset == 0 {
+            h.range_offset = range_offset;
+            range_offset = range_offset - 8 + h.count * 2;
+        } else {
+            range_offset -= 8;
+        }
+    }
+    let arrays: usize = headers.iter().take(shared).map(|h| h.glyphs.len() * 2).sum();
+    let length = 6 + 512 + 8 * headers.len() + arrays;
+    out.u16(2, "format")?;
+    out.u16(i64::try_from(length).unwrap_or(i64::MAX), "the length of a cmap format 2 subtable")?;
+    out.u16(language, "language")?;
+    for k in keys {
+        out.u16(k * 8, "a sub-header key")?;
+    }
+    for h in &headers {
+        out.u16(h.first, "a first code")?;
+        out.u16(h.count, "an entry count")?;
+        out.i16(h.delta, "an id delta")?;
+        out.u16(h.range_offset, "an id range offset")?;
+    }
+    for h in headers.iter().take(shared) {
+        for g in &h.glyphs {
+            out.u16(*g, "a glyph index")?;
+        }
+    }
+    Ok(())
 }
 
 /// fontTools' `splitRange`: the extra segment starts and the ends for codes `start..=end`.

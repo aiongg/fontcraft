@@ -6,8 +6,9 @@
 //! Known differences:
 //! - an SVG document marked `compressed` is stored as it is in the text; fontTools gzips it
 //!   when that makes it smaller, and its gzip output cannot be reproduced byte for byte here;
-//! - COLR version 1 and the bitmap tables (sbix, CBDT, CBLC, EBDT, EBLC) are not read yet:
-//!   they fall back to their `hexdata` when the element has one.
+//!
+//! COLR version 1 goes through the generic compile of [`super::read_otdata`]; sbix, EBSC and the
+//! bitmap tables are read in [`super::read_bitmap`].
 
 use std::collections::HashMap;
 
@@ -24,12 +25,13 @@ pub fn read_table(element: &Element, font: &SfntFont) -> Result<Option<(Tag, Vec
 }
 
 /// [`read_table`] with the glyph order of the text being read.
-pub(crate) fn read_table_with(element: &Element, ctx: &ReadContext, _font: &SfntFont) -> Result<Option<(Tag, Vec<u8>)>> {
+pub(crate) fn read_table_with(element: &Element, ctx: &ReadContext, font: &SfntFont) -> Result<Option<(Tag, Vec<u8>)>> {
     Ok(Some(match element.name.as_str() {
         "CPAL" => (*b"CPAL", cpal(element)?),
         "COLR" => match colr_v0(element, ctx)? {
             Some(data) => (*b"COLR", data),
-            None => return Ok(None),
+            // Version 1 and later: the generic compile of the `COLR` layout (M12.7c).
+            None => (*b"COLR", super::read_otdata::build::compile_layout("COLR", element, ctx, font)?),
         },
         "SVG" => (*b"SVG ", svg(element)?),
         _ => return Ok(None),

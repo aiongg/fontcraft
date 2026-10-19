@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ttFont sfntVersion="\x00\x01\x00\x00" ttLibVersion="4.66">
+
+  <GlyphOrder>
+    <!-- The 'id' attribute is only for humans; it is ignored when parsed. -->
+    <GlyphID id="0" name=".notdef"/>
+    <GlyphID id="1" name="A"/>
+    <GlyphID id="2" name="B"/>
+    <GlyphID id="3" name="C"/>
+  </GlyphOrder>
+
+  <maxp>
+    <!-- Most of this table will be recalculated by the compiler -->
+    <tableVersion value="0x10000"/>
+    <numGlyphs value="4"/>
+    <maxPoints value="0"/>
+    <maxContours value="0"/>
+    <maxCompositePoints value="0"/>
+    <maxCompositeContours value="0"/>
+    <maxZones value="2"/>
+    <maxTwilightPoints value="0"/>
+    <maxStorage value="0"/>
+    <maxFunctionDefs value="0"/>
+    <maxInstructionDefs value="0"/>
+    <maxStackElements value="0"/>
+    <maxSizeOfInstructions value="0"/>
+    <maxComponentElements value="0"/>
+    <maxComponentDepth value="0"/>
+  </maxp>
+
+  <post>
+    <formatType value="2.0"/>
+    <italicAngle value="0.0"/>
+    <underlinePosition value="0"/>
+    <underlineThickness value="0"/>
+    <isFixedPitch value="0"/>
+    <minMemType42 value="0"/>
+    <maxMemType42 value="0"/>
+    <minMemType1 value="0"/>
+    <maxMemType1 value="0"/>
+    <psNames>
+      <!-- This file uses unique glyph names based on the information
+           found in the 'post' table. Since these names might not be unique,
+           we have to invent artificial names in case of clashes. In order to
+           be able to retain the original information, we need a name to
+           ps name mapping for those cases where they differ. That's what
+           you see below.
+            -->
+    </psNames>
+    <extraNames>
+      <!-- following are the name that are not taken from the standard Mac glyph order -->
+    </extraNames>
+  </post>
+
+  <bsln>
+    <Version value="0x00010000"/>
+    <Baseline Format="1">
+      <DefaultBaseline value="0"/>
+      <Delta index="0" value="0"/>
+      <Delta index="1" value="10"/>
+      <Delta index="2" value="20"/>
+      <Delta index="3" value="30"/>
+      <Delta index="4" value="40"/>
+      <Delta index="5" value="50"/>
+      <Delta index="6" value="60"/>
+      <Delta index="7" value="70"/>
+      <Delta index="8" value="80"/>
+      <Delta index="9" value="90"/>
+      <Delta index="10" value="100"/>
+      <Delta index="11" value="110"/>
+      <Delta index="12" value="120"/>
+      <Delta index="13" value="130"/>
+      <Delta index="14" value="140"/>
+      <Delta index="15" value="150"/>
+      <Delta index="16" value="160"/>
+      <Delta index="17" value="170"/>
+      <Delta index="18" value="180"/>
+      <Delta index="19" value="190"/>
+      <Delta index="20" value="200"/>
+      <Delta index="21" value="210"/>
+      <Delta index="22" value="220"/>
+      <Delta index="23" value="230"/>
+      <Delta index="24" value="240"/>
+      <Delta index="25" value="250"/>
+      <Delta index="26" value="260"/>
+      <Delta index="27" value="270"/>
+      <Delta index="28" value="280"/>
+      <Delta index="29" value="290"/>
+      <Delta index="30" value="300"/>
+      <Delta index="31" value="310"/>
+      <BaselineValues>
+        <Lookup glyph=".notdef" value="0"/>
+        <Lookup glyph="A" value="1"/>
+        <Lookup glyph="B" value="2"/>
+        <Lookup glyph="C" value="1"/>
+      </BaselineValues>
+    </Baseline>
+  </bsln>
+
+  <lcar>
+    <Version value="0x00010000"/>
+    <LigatureCarets Format="0">
+      <Carets>
+        <Lookup glyph="A">
+          <!-- DivsionPointCount=2 -->
+          <DivisionPoint index="0" value="100"/>
+          <DivisionPoint index="1" value="200"/>
+        </Lookup>
+        <Lookup glyph="B">
+          <!-- DivsionPointCount=2 -->
+          <DivisionPoint index="0" value="100"/>
+          <DivisionPoint index="1" value="200"/>
+        </Lookup>
+        <Lookup glyph="C">
+          <!-- DivsionPointCount=2 -->
+          <DivisionPoint index="0" value="100"/>
+          <DivisionPoint index="1" value="200"/>
+        </Lookup>
+      </Carets>
+    </LigatureCarets>
+  </lcar>
+
+  <opbd>
+    <Version value="0x00010000"/>
+    <OpticalBounds Format="1">
+      <OpticalBoundsPoints>
+        <Lookup glyph="B">
+          <Left value="1"/>
+          <Top value="2"/>
+          <Right value="3"/>
+          <Bottom value="4"/>
+        </Lookup>
+        <Lookup glyph="C" empty="1"/>
+      </OpticalBoundsPoints>
+    </OpticalBounds>
+  </opbd>
+
+</ttFont>

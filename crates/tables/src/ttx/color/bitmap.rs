@@ -256,6 +256,38 @@ pub(super) fn write_location(data: &[u8], font: &SfntFont, w: &mut XmlWriter) ->
     Ok(())
 }
 
+/// Writes `EBSC`: the header, then each bitmap scale table (two line metrics records and four
+/// sizes), as fontTools' `E_B_S_C_` writes it (M12.7c).
+pub(super) fn write_scale(data: &[u8], w: &mut XmlWriter) -> Result<()> {
+    let header = version(data)?;
+    let count = u32_at(data, 4)?;
+    let mut tables = Vec::new();
+    for i in 0..count {
+        if tables.len() >= MAX_BITMAP_SUBTABLES {
+            return Err(TablesError::TooLarge { what: "the scale tables of 'EBSC'", limit: MAX_BITMAP_SUBTABLES });
+        }
+        tables.push(bytes_at(data, 8usize.saturating_add(28usize.saturating_mul(i as usize)), 28)?);
+    }
+    w.simple("header", &[("version", &py_float(header)), ("numSizes", &tables.len().to_string())]);
+    for (index, table) in tables.iter().enumerate() {
+        w.open("bitmapScaleTable", &[("index", &index.to_string())]);
+        for (direction, at) in [("hori", 0usize), ("vert", 12)] {
+            w.open("sbitLineMetrics", &[("direction", direction)]);
+            for (i, name) in SBIT_LINE_METRICS.iter().enumerate() {
+                let b = u8_at(table, at + i)?;
+                w.simple(name, &[("value", &signed(b, *name != "widthMax"))]);
+            }
+            w.close("sbitLineMetrics");
+        }
+        for (i, name) in ["ppemX", "ppemY", "substitutePpemX", "substitutePpemY"].iter().enumerate() {
+            w.simple(name, &[("value", &u8_at(table, 24 + i)?.to_string())]);
+        }
+        w.close("bitmapScaleTable");
+        w.check()?;
+    }
+    Ok(())
+}
+
 /// Writes a data table (`EBDT`, `CBDT`, `bdat`), read with the location table `locator_data`.
 pub(super) fn write_data(tag: Tag, data: &[u8], locator_data: &[u8], font: &SfntFont, w: &mut XmlWriter) -> Result<()> {
     let header = version(data)?;
