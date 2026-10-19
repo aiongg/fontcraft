@@ -240,7 +240,8 @@ fn refusals() {
     let one = first();
     assert!(matches!(merge(std::slice::from_ref(&one), &MergeOptions::default()), Err(TablesError::BadOptions(_))), "one font needs a map");
     let cff = built(&source("Cff Sans", &[("A", 0x41, 600.0)], false), CompileFlavour::Cff);
-    assert!(matches!(merge(&[one.clone(), cff], &MergeOptions::default()), Err(TablesError::Unsupported(_))));
+    let e = merge(&[one.clone(), cff], &MergeOptions::default()).unwrap_err();
+    assert!(matches!(e, TablesError::BadOptions(_)) && e.to_string().contains("mix TrueType and CFF"), "{e}");
 
     let mut other_upem = second();
     let mut head = other_upem.get(*b"head").unwrap().to_vec();
@@ -342,4 +343,231 @@ fn a_name_repeated_inside_one_font_gets_a_dot_suffix_and_keeps_its_stored_name()
     let stored_back = crate::reorder::names::post_names(result.font.get(*b"post").unwrap(), n).unwrap().unwrap();
     assert_eq!(stored_back[v], "A");
     assert_eq!(stored_back[stored.len()..], expected[stored.len()..]);
+}
+
+/// Advance of every glyph as its charstring stores it, read against the table's Private DICT.
+fn charstring_advances(table: &[u8], n: usize) -> Vec<f64> {
+    let parsed = crate::reorder::cff::parse(table, n).unwrap();
+    let (default, nominal) = parsed.widths(0);
+    let (default, nominal) = (default.unwrap() as f64, nominal.unwrap() as f64);
+    let set = fontcraft_cff::subr::desubroutinize(&fontcraft_cff::subr::charstrings_of_table(table, false).unwrap()).unwrap();
+    set.charstrings.iter().map(|cs| cff::width_operand(cs).unwrap().map_or(default, |(v, _)| nominal + v)).collect()
+}
+
+fn advances(font: &SfntFont) -> Vec<f64> {
+    let bytes = write(font, &WriteOptions::default()).unwrap();
+    let f = FontRef::new(&bytes).unwrap();
+    let hmtx = f.hmtx().unwrap();
+    (0..f.maxp().unwrap().num_glyphs()).map(|g| f64::from(hmtx.advance(GlyphId::new(u32::from(g))).unwrap())).collect()
+}
+
+#[test]
+fn cff_fonts_merge_their_charstrings_under_the_first_fonts_private_dict() {
+    let one = built(&source("Cff One", &[("A", 0x41, 600.0), ("V", 0x56, 650.0)], false), CompileFlavour::Cff);
+    let two = built(&source("Cff Two", &[("A", 0x41, 731.0), ("B", 0x42, 655.0), ("C", 0x43, 655.0)], false), CompileFlavour::Cff);
+    let result = merge_with_report(&[one.clone(), two.clone()], &MergeOptions::default()).unwrap();
+    let font = &result.font;
+    assert_eq!(font.flavour, Flavour::Cff);
+    assert!(font.get(*b"glyf").is_none() && font.get(*b"loca").is_none());
+    let table = font.get(*b"CFF ").unwrap();
+
+    // Names come from the charsets, renamed as pyftmerge renames them.
+    let (names_one, names_two) = (glyph_names(&one).unwrap(), glyph_names(&two).unwrap());
+    let mut expected = names_one.clone();
+    expected.extend(names_two.iter().map(|n| if names_one.contains(n) { format!("{n}.1") } else { n.clone() }));
+    assert_eq!(glyph_names(font).unwrap(), expected);
+
+    // Every charstring stores the advance hmtx has, against the first font's widths.
+    let n = expected.len();
+    let first_widths = crate::reorder::cff::parse(one.get(*b"CFF ").unwrap(), names_one.len()).unwrap().widths(0);
+    assert_eq!(crate::reorder::cff::parse(table, n).unwrap().widths(0), first_widths, "the first font's Private DICT is kept");
+    assert_eq!(charstring_advances(table, n), advances(font));
+    assert_eq!(advances(font)[names_one.len() + gid(&two, "A") as usize], 731.0);
+
+    // Outlines are unchanged, and FontBBox and head follow the merged glyphs.
+    let bounds = crate::ttx::read_cff::glyph_bounds(table).unwrap();
+    let bounds_two = crate::ttx::read_cff::glyph_bounds(two.get(*b"CFF ").unwrap()).unwrap();
+    assert_eq!(bounds[names_one.len()..], bounds_two[..]);
+    let union = bounds
+        .iter()
+        .flatten()
+        .fold([f64::MAX, f64::MAX, f64::MIN, f64::MIN], |a, b| [a[0].min(b[0]), a[1].min(b[1]), a[2].max(b[2]), a[3].max(b[3])]);
+    let outwards = [union[0].floor(), union[1].floor(), union[2].ceil(), union[3].ceil()];
+    assert_eq!(crate::ttx::read_cff::font_bbox(table).unwrap(), Some(outwards));
+    let head = font.get(*b"head").unwrap();
+    let head_box: Vec<f64> = (0..4).map(|i| f64::from(i16::from_be_bytes([head[36 + 2 * i], head[37 + 2 * i]]))).collect();
+    assert_eq!(head_box, outwards);
+    assert_eq!(u16::from_be_bytes([font.get(*b"maxp").unwrap()[4], font.get(*b"maxp").unwrap()[5]]) as usize, n);
+}
+
+#[test]
+fn cff2_jstf_and_variable_inputs_follow_fonttools() {
+    let mut cff2 = first();
+    cff2.insert(*b"CFF2", vec![2, 0, 5, 0, 0]);
+    let e = merge(&[cff2, second()], &MergeOptions::default()).unwrap_err();
+    assert!(e.to_string().contains("CFF2"), "{e}");
+
+    let mut jstf = second();
+    jstf.insert(*b"JSTF", vec![0, 1, 0, 0, 0, 0]);
+    let e = merge(&[first(), jstf.clone()], &MergeOptions::default()).unwrap_err();
+    assert!(matches!(e, TablesError::Unsupported(_)) && e.to_string().contains("'JSTF'"), "{e}");
+    let dropped = MergeOptions { drop_tables: vec![*b"JSTF"], ..MergeOptions::default() };
+    assert!(merge(&[first(), jstf], &dropped).unwrap().get(*b"JSTF").is_none());
+
+    // A variable font merges as its default outlines, its variation tables left out.
+    let mut variable = first();
+    variable.insert(*b"fvar", vec![0; 16]);
+    variable.insert(*b"gvar", vec![0; 20]);
+    let result = merge_with_report(&[variable, second()], &MergeOptions::default()).unwrap();
+    assert!(result.font.get(*b"fvar").is_none() && result.font.get(*b"gvar").is_none());
+    assert!(result.warnings.iter().any(|w| w.contains("font 1 is variable")), "{:?}", result.warnings);
+}
+
+mod math_base {
+    use read_fonts::{FontData, FontRead};
+    use write_fonts::from_obj::ToOwnedTable;
+    use write_fonts::tables::base::{Axis, Base, BaseCoord, BaseCoordFormat1, BaseScript, BaseScriptList, BaseScriptRecord, BaseTagList, BaseValues};
+    use write_fonts::tables::math::{
+        Math, MathConstants, MathGlyphConstruction, MathGlyphInfo, MathGlyphVariantRecord, MathItalicsCorrectionInfo, MathKern, MathKernInfo,
+        MathKernInfoRecord, MathTopAccentAttachment, MathValueRecord, MathVariants,
+    };
+    use write_fonts::types::{FWord, UfWord};
+
+    use super::*;
+
+    fn cov(font: &SfntFont, names: &[&str]) -> CoverageTable {
+        CoverageTable::Format1(CoverageFormat1::new(names.iter().map(|n| GlyphId16::new(gid(font, n))).collect()))
+    }
+
+    fn value(v: i16) -> MathValueRecord {
+        MathValueRecord::new(FWord::new(v), None)
+    }
+
+    fn variants(font: &SfntFont, list: &[(&str, u16)]) -> MathGlyphConstruction {
+        MathGlyphConstruction::new(
+            None,
+            list.iter().map(|(n, a)| MathGlyphVariantRecord::new(GlyphId16::new(gid(font, n)), UfWord::new(*a))).collect(),
+        )
+    }
+
+    fn names_of(merged: &SfntFont, c: &CoverageTable) -> Vec<String> {
+        let names = glyph_names(merged).unwrap();
+        super::super::layout::coverage_glyphs(c).iter().map(|g| names[usize::from(g.to_u16())].clone()).collect()
+    }
+
+    /// fontTools' test_merge_MATH, on fonts built here.
+    #[test]
+    fn math_tables_unite_their_glyph_data_and_keep_the_first_constants() {
+        let mut one = built(
+            &source("Math One", &[("a", 0x61, 500.0), ("parenleft", 0x28, 500.0), ("parenleft.size1", 0xE000, 500.0)], false),
+            CompileFlavour::TrueType,
+        );
+        let mut two =
+            built(&source("Math Two", &[("b", 0x62, 500.0), ("integral", 0x222B, 500.0), ("minus", 0x2212, 500.0)], false), CompileFlavour::TrueType);
+        let three = built(&source("Math Three", &[("c", 0x63, 500.0)], false), CompileFlavour::TrueType);
+
+        let kern = MathKernInfoRecord::new(Some(MathKern::new(vec![value(100)], vec![value(10), value(20)])), None, None, None);
+        let info = MathGlyphInfo::new(
+            Some(MathItalicsCorrectionInfo::new(cov(&one, &["a"]), vec![value(10)])),
+            None,
+            None,
+            Some(MathKernInfo::new(cov(&one, &["a"]), vec![kern])),
+        );
+        let vert = variants(&one, &[("parenleft", 700), ("parenleft.size1", 1000)]);
+        let math = Math::new(
+            MathConstants { axis_height: value(250), ..MathConstants::default() },
+            info,
+            MathVariants::new(UfWord::new(20), Some(cov(&one, &["parenleft"])), None, vec![vert], vec![]),
+        );
+        one.insert(*b"MATH", write_fonts::dump_table(&math).unwrap());
+
+        let info = MathGlyphInfo::new(
+            Some(MathItalicsCorrectionInfo::new(cov(&two, &["b"]), vec![value(20)])),
+            Some(MathTopAccentAttachment::new(cov(&two, &["b"]), vec![value(250)])),
+            Some(cov(&two, &["integral"])),
+            None,
+        );
+        let horiz = variants(&two, &[("minus", 500)]);
+        let math = Math::new(
+            MathConstants { axis_height: value(300), ..MathConstants::default() },
+            info,
+            MathVariants::new(UfWord::new(30), None, Some(cov(&two, &["minus"])), vec![], vec![horiz]),
+        );
+        two.insert(*b"MATH", write_fonts::dump_table(&math).unwrap());
+
+        let merged = merge(&[one, two, three], &MergeOptions::default()).unwrap();
+        let table: Math = read_fonts::tables::math::Math::read(FontData::new(merged.get(*b"MATH").unwrap())).unwrap().to_owned_table();
+        assert_eq!(table.math_constants.axis_height.value, FWord::new(250));
+        let info = &*table.math_glyph_info;
+        let italics = info.math_italics_correction_info.as_ref().unwrap();
+        assert_eq!(names_of(&merged, &italics.coverage), ["a", "b"]);
+        assert_eq!(italics.italics_correction.iter().map(|v| v.value.to_i16()).collect::<Vec<_>>(), [10, 20]);
+        let accents = info.math_top_accent_attachment.as_ref().unwrap();
+        assert_eq!(names_of(&merged, &accents.top_accent_coverage), ["b"]);
+        assert_eq!(accents.top_accent_attachment[0].value.to_i16(), 250);
+        assert_eq!(names_of(&merged, info.extended_shape_coverage.as_ref().unwrap()), ["integral"]);
+        let kerns = info.math_kern_info.as_ref().unwrap();
+        assert_eq!(names_of(&merged, &kerns.math_kern_coverage), ["a"]);
+        assert_eq!(kerns.math_kern_info_records.len(), 1);
+
+        let v = &*table.math_variants;
+        assert_eq!(v.min_connector_overlap.to_u16(), 20);
+        assert_eq!(names_of(&merged, v.vert_glyph_coverage.as_ref().unwrap()), ["parenleft"]);
+        let names = glyph_names(&merged).unwrap();
+        let glyphs = |c: &MathGlyphConstruction| {
+            c.math_glyph_variant_records.iter().map(|r| names[usize::from(r.variant_glyph.to_u16())].clone()).collect::<Vec<_>>()
+        };
+        assert_eq!(glyphs(&v.vert_glyph_constructions[0]), ["parenleft", "parenleft.size1"]);
+        assert_eq!(names_of(&merged, v.horiz_glyph_coverage.as_ref().unwrap()), ["minus"]);
+        assert_eq!(glyphs(&v.horiz_glyph_constructions[0]), ["minus"]);
+    }
+
+    fn base_table(tags: &[&[u8; 4]], scripts: &[(&[u8; 4], i16)]) -> Vec<u8> {
+        let records = scripts
+            .iter()
+            .map(|(tag, low)| {
+                let values = BaseValues::new(0, vec![BaseCoord::Format1(BaseCoordFormat1::new(*low)), BaseCoord::Format1(BaseCoordFormat1::new(0))]);
+                BaseScriptRecord::new(OtTag::new(tag), BaseScript::new(Some(values), None, vec![]))
+            })
+            .collect();
+        let tags = BaseTagList::new(tags.iter().map(|t| OtTag::new(t)).collect());
+        write_fonts::dump_table(&Base::new(Some(Axis::new(Some(tags), BaseScriptList::new(records))), None)).unwrap()
+    }
+
+    #[test]
+    fn base_tables_share_their_baselines_and_unite_their_scripts() {
+        let mut one = first();
+        one.insert(*b"BASE", base_table(&[b"ideo", b"romn"], &[(b"latn", -120), (b"DFLT", -120)]));
+        let mut two = second();
+        two.insert(*b"BASE", base_table(&[b"ideo", b"romn"], &[(b"hani", -100), (b"latn", -50)]));
+        let merged = merge(&[one.clone(), two.clone()], &MergeOptions::default()).unwrap();
+        let base: Base = read_fonts::tables::base::Base::read(FontData::new(merged.get(*b"BASE").unwrap())).unwrap().to_owned_table();
+        let axis = base.horiz_axis.as_ref().unwrap();
+        assert_eq!(axis.base_tag_list.as_ref().unwrap().baseline_tags, [OtTag::new(b"ideo"), OtTag::new(b"romn")], "kept once");
+        let scripts: Vec<(OtTag, i16)> = axis
+            .base_script_list
+            .base_script_records
+            .iter()
+            .map(|r| match &*r.base_script.base_values.as_ref().unwrap().base_coords[0] {
+                BaseCoord::Format1(f) => (r.base_script_tag, f.coordinate),
+                other => panic!("{other:?}"),
+            })
+            .collect();
+        assert_eq!(
+            scripts,
+            [(OtTag::new(b"DFLT"), -120), (OtTag::new(b"hani"), -100), (OtTag::new(b"latn"), -120)],
+            "in tag order, the first font's latn"
+        );
+
+        // Layout base keeps the first font's table alone.
+        let base_only = MergeOptions { layout: Some(LayoutMode::Base), ..MergeOptions::default() };
+        assert_eq!(
+            merge(&[one.clone(), two.clone()], &base_only).unwrap().get(*b"BASE"),
+            Some(merge(&[one.clone(), second()], &base_only).unwrap().get(*b"BASE").unwrap())
+        );
+
+        two.insert(*b"BASE", base_table(&[b"romn"], &[(b"hani", -100)]));
+        let e = merge(&[one, two], &MergeOptions::default()).unwrap_err();
+        assert!(e.to_string().contains("different baselines"), "{e}");
+    }
 }

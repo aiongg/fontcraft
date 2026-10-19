@@ -1216,7 +1216,15 @@ with indices renumbered; GDEF classes are united; vertical extents such as `hhea
 largest value; `OS/2` range bits are OR-ed; names and other metadata come from the first font. All fonts must share units per em (rescale with `transform --upem`
 first) and outline flavour (use `convert`).
 
-Variable fonts can be merged only when their axes are identical.
+CFF fonts merge as fontTools merges them: subroutines are expanded, the first font's Top and Private
+DICTs are kept, and each later glyph's width operand is rewritten for the first font's `defaultWidthX`
+and `nominalWidthX`; `merge` then subroutinises the result again. `MATH` and `BASE` are merged too: the
+first font's constants and baselines, every font's glyph data and scripts.
+
+A variable font merges as its default outlines, its variation tables left out, as fontTools leaves
+them out. Refused, because fontTools cannot merge them either: `CFF2` fonts, CID-keyed CFF fonts,
+`JSTF` tables (leave them out with `--drop-tables JSTF`), and `GDEF` or `BASE` tables with variation
+data.
 
 Engine command: `font.merge`.
 

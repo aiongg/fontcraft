@@ -53,7 +53,7 @@ fn to_u16(v: usize, what: &'static str) -> Result<u16> {
 
 /// The order that moves font `font`'s glyph ids to the merged ones. The remapper reads only
 /// `old_to_new` and, through `len()`, the merged glyph count.
-fn order_for(plan: &Plan, font: usize) -> Result<Order> {
+pub(super) fn order_for(plan: &Plan, font: usize) -> Result<Order> {
     if !plan.takes_all_of(font) {
         return Err(TablesError::BadOptions(format!(
             "the layout of font {} can be merged only when the result takes each of its glyphs once: use layout base or drop",
@@ -375,7 +375,7 @@ fn single_subst(map: &BTreeMap<u16, u16>) -> SingleSubst {
 }
 
 /// A coverage table of sorted glyphs, in the smaller format.
-fn coverage(glyphs: &[G]) -> CoverageTable {
+pub(super) fn coverage(glyphs: &[G]) -> CoverageTable {
     let mut ranges: Vec<RangeRecord> = Vec::new();
     for (i, g) in glyphs.iter().enumerate() {
         match ranges.last_mut() {
@@ -390,7 +390,7 @@ fn coverage(glyphs: &[G]) -> CoverageTable {
     }
 }
 
-fn coverage_glyphs(c: &CoverageTable) -> Vec<G> {
+pub(super) fn coverage_glyphs(c: &CoverageTable) -> Vec<G> {
     match c {
         CoverageTable::Format1(f) => f.glyph_array.clone(),
         CoverageTable::Format2(f) => {

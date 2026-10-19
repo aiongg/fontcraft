@@ -41,6 +41,17 @@ impl<'a> Source<'a> {
         Ok(Source { glyphs, h_metrics, v_metrics })
     }
 
+    /// The glyphs of a CFF-flavoured font: its charstrings (subroutines expanded) and metrics.
+    pub fn read_cff(font: &'a SfntFont, charstrings: Vec<Vec<u8>>) -> Result<Self> {
+        let n = num_glyphs(font)?;
+        if charstrings.len() != n {
+            return Err(TablesError::invalid(format!("the 'CFF ' table has {} charstrings for {n} glyphs", charstrings.len())));
+        }
+        let h_metrics = metrics(font, *b"hhea", *b"hmtx", n)?.ok_or_else(|| TablesError::MissingTable("hmtx".into()))?;
+        let v_metrics = metrics(font, *b"vhea", *b"vmtx", n)?;
+        Ok(Source { glyphs: charstrings.into_iter().map(Cow::Owned).collect(), h_metrics, v_metrics })
+    }
+
     pub fn glyph(&self, gid: u16) -> &[u8] {
         self.glyphs.get(usize::from(gid)).map(|g| g.as_ref()).unwrap_or_default()
     }
@@ -110,13 +121,20 @@ pub(super) struct Built {
     pub bounds: Vec<Option<[i16; 4]>>,
 }
 
-pub(super) fn build(sources: &[Source<'_>], plan: &Plan, warnings: &mut Vec<String>) -> Result<Built> {
+/// The glyph tables of the result. With `cff` the sources hold charstrings: `glyf` and `loca`
+/// stay empty and the bounds are left for the `CFF ` table to give.
+pub(super) fn build(sources: &[Source<'_>], plan: &Plan, cff: bool, warnings: &mut Vec<String>) -> Result<Built> {
     let mut glyf: Vec<u8> = Vec::new();
     let mut offsets: Vec<usize> = Vec::with_capacity(plan.slots.len() + 1);
     let mut h_metrics = Vec::with_capacity(plan.slots.len());
     let mut bounds = Vec::with_capacity(plan.slots.len());
     for slot in &plan.slots {
         let source = sources.get(slot.font).ok_or_else(|| TablesError::invalid("a glyph comes from a font that was not given"))?;
+        if cff {
+            bounds.push(None);
+            h_metrics.push(source.metric(slot.gid));
+            continue;
+        }
         let mut data = source.glyph(slot.gid).to_vec();
         remap_components(&mut data, |old| {
             plan.new_id(slot.font, old).ok_or_else(|| {

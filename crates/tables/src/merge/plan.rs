@@ -40,12 +40,16 @@ impl Plan {
     }
 }
 
-/// A TrueType font's glyph names as fontTools' `post` reader gives them, and the stored name of
-/// each it had to change (`build_psNameMapping`): a name repeated in the font gets `.1`, `.2`…,
-/// skipping suffixed names the font already has. Without stored names, glyphs are `glyphNNNNN`
-/// (glyph 0 `.notdef`).
+/// A font's glyph names: a CFF font's from its charset; a TrueType font's as fontTools' `post`
+/// reader gives them, with the stored name of each it had to change (`build_psNameMapping`): a
+/// name repeated in the font gets `.1`, `.2`…, skipping suffixed names the font already has.
+/// Without stored names, glyphs are `glyphNNNNN` (glyph 0 `.notdef`).
 pub(super) fn font_glyph_names(font: &SfntFont) -> Result<(Vec<String>, HashMap<String, String>)> {
     let n = num_glyphs(font)?;
+    // fontTools takes a CFF font's glyph order from its charset, whatever `post` holds.
+    if let Some(cff) = font.get(*b"CFF ") {
+        return Ok((crate::reorder::cff::parse(cff, n)?.glyph_names(), HashMap::new()));
+    }
     let stored = match font.get(*b"post") {
         Some(post) => post_names(post, n)?,
         None => None,
