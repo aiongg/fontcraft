@@ -7,7 +7,7 @@
 //!
 //! | Target | Stored as | Read at export |
 //! |---|---|---|
-//! | `{glyph}` | the layer's glyph program (`fontcraft_hinting::imported`), with a fingerprint of the outline it was written for | while the outline keeps that fingerprint and the master carries a cvt Table, prep Table Assembly or fpgm Table Assembly parameter |
+//! | `{glyph}` | the layer's glyph program (`fontcraft_hinting::imported`), with a fingerprint of the outline it was written for | while the outline keeps that fingerprint; a program that calls functions or uses control values or storage only when the master carries a cvt Table, prep Table Assembly or fpgm Table Assembly parameter (the command warns otherwise) |
 //! | `"fpgm"` | the master's fpgm Table Assembly parameter | instance, then master, then font |
 //! | `"prep"` | the master's prep Table Assembly parameter | instance, then master, then font |
 //!
@@ -22,7 +22,7 @@
 use std::sync::Arc;
 
 use fontcraft_hinting::imported::{ImportedProgram, imported_program, remove_imported_program, set_imported_program};
-use fontcraft_hinting::settings::{FPGM_TABLE_ASSEMBLY, IMPORTED_GLYPH_PROGRAM_KEY, PREP_TABLE_ASSEMBLY, main_master};
+use fontcraft_hinting::settings::{CVT_TABLE, FPGM_TABLE_ASSEMBLY, IMPORTED_GLYPH_PROGRAM_KEY, PREP_TABLE_ASSEMBLY, main_master};
 use fontcraft_hinting::tt_instructions;
 use fontcraft_hinting::ttasm::{self, AsmError, MAX_GLYPH_PROGRAM_BYTES, MAX_PROGRAM_TEXT};
 use fontcraft_model::Font;
@@ -446,6 +446,11 @@ fn run(s: &mut Session, v: &Value) -> Result<Value> {
             if !remove && tt_instructions(layer).is_ok_and(|list| !list.is_empty()) {
                 warnings.push("the layer also has TrueType Instructor hints: export writes these instructions in their place".into());
             }
+            if !remove && ttasm::uses_font_programs(&assembled.bytes) && !has_font_programs(font, &id) {
+                warnings.push(format!(
+                    "the program calls functions or uses control values or storage, and master `{id}` has no cvt Table, prep Table Assembly or fpgm Table Assembly parameter, so export leaves it out"
+                ));
+            }
             if changed {
                 let targets = Targets::new(p.command(), name.clone(), Some(id.clone()));
                 let label = if remove { "Remove TrueType Instructions" } else { "Set TrueType Instructions" };
@@ -510,6 +515,14 @@ fn run(s: &mut Session, v: &Value) -> Result<Value> {
         "changed": changed,
         "warnings": warnings,
     }))
+}
+
+/// Does the export of `master` get font programs from a parameter (the master's or the font's),
+/// which a glyph program that calls functions or reads control values or storage needs?
+fn has_font_programs(font: &Font, master: &str) -> bool {
+    let names = [CVT_TABLE, PREP_TABLE_ASSEMBLY, FPGM_TABLE_ASSEMBLY];
+    let master_has = font.master(master).is_ok_and(|m| names.iter().any(|n| m.params.get(n).is_some()));
+    master_has || names.iter().any(|n| font.info.params.get(n).is_some())
 }
 
 #[cfg(test)]
