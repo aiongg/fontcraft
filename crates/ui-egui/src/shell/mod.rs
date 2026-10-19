@@ -45,6 +45,7 @@ pub mod table_viewer;
 pub mod tabs;
 pub mod text;
 pub mod text_preview;
+pub mod text_preview_color;
 pub mod toolbar;
 pub mod transform;
 pub mod url;

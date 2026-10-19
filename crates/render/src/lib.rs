@@ -10,10 +10,12 @@
 //! | [`render_line`] | a line of glyphs of one master, side by side by their advance widths |
 //! | [`render_layer`] | one glyph layer, by layer id |
 //! | [`hinted::HintedRenderer`] | grid-fitted outlines and pixels of a compiled font at a pixel size (M10) |
+//! | [`color::ColorRenderer`] | the colour glyphs of a compiled font: `COLR`, `SVG ` and `sbix` (M11.17) |
 //!
 //! [`Image`] also wraps pixels from elsewhere (a window screenshot) so they can be written as PNG.
 #![forbid(unsafe_code)]
 
+pub mod color;
 pub mod hinted;
 
 use fontcraft_geom::{Affine, BezPath, PathEl, Point};
