@@ -170,7 +170,8 @@ pub fn specs() -> Vec<CommandSpec> {
             always,
             fix
         )
-        .files(const { &[FileParam::read("target").keywords(&["document"]), FileParam::write("output"), FileParam::write("outputDir")] }),
+        .files(const { &[FileParam::read("target").keywords(&["document"]), FileParam::write("output"), FileParam::write("outputDir")] })
+        .writes_files(),
         cmd!(
             query "audit.profile.list",
             "List Audit Profiles",
