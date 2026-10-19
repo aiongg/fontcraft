@@ -1143,7 +1143,8 @@ fn compile_request(s: &Session, p: &Params) -> Result<(Vec<Job>, Request)> {
     if jobs.is_empty() {
         return Err(p.bad("nothing to build: `instances` is false and `mastersAsInstances` is not true"));
     }
-    if dest.extension().is_some() {
+    // A collection checks its file destination itself (`compile_collection`).
+    if dest.extension().is_some() && !p.bool_or("collection", false)? {
         check_file_destination(p, &dest, &flavours, &containers)?;
     }
     let req = Request { flavours, containers, options, dest, first_only: false, autohinter: crate::external_autohint::trusted(s) };

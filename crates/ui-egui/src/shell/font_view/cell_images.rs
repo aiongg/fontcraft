@@ -130,6 +130,9 @@ pub struct CellArt {
     revision: u64,
     /// Pixels decoded in this frame.
     decoded_pixels: u64,
+    /// The egui frame the decode budgets count for: a frame can run several layout passes, and
+    /// the budgets hold for the frame, not for each pass.
+    budget_frame: Option<u64>,
     focused: bool,
     /// The frame counter, for least-recently-drawn eviction.
     frame: u64,
@@ -194,8 +197,12 @@ impl CellArt {
         }
         self.focused = focused;
         self.frame = self.frame.wrapping_add(1);
-        self.decoded = 0;
-        self.decoded_pixels = 0;
+        let budget_frame = ctx.cumulative_frame_nr();
+        if self.budget_frame != Some(budget_frame) {
+            self.budget_frame = Some(budget_frame);
+            self.decoded = 0;
+            self.decoded_pixels = 0;
+        }
         self.coloured = 0;
         let text = tokens.color.text_color;
         let key: StyleKey = (doc, master.to_string(), tokens.dark, self.revision, text);

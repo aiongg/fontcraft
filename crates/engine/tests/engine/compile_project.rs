@@ -445,34 +445,35 @@ fn build_metrics(name: &str, features: &str) -> Vec<u8> {
     bytes
 }
 
-/// The points of glyph `name` as the outline draws them, contour by contour.
+/// The points of glyph `name` as its charstring states them, contour by contour, fractions kept
+/// (the outline drawing API drops the fractions of CFF coordinates).
 fn contours(bytes: &[u8], name: &str) -> Vec<Vec<(f32, f32)>> {
-    use skrifa::instance::{LocationRef, Size};
-    use skrifa::outline::{DrawSettings, OutlinePen};
+    use skrifa::raw::ps::cff::CffFontRef;
+    use skrifa::raw::ps::cs::CommandSink;
+    use skrifa::raw::types::{Fixed, Tag};
     #[derive(Default)]
     struct Pen(Vec<Vec<(f32, f32)>>);
-    impl OutlinePen for Pen {
-        fn move_to(&mut self, x: f32, y: f32) {
-            self.0.push(vec![(x, y)]);
+    impl CommandSink for Pen {
+        fn move_to(&mut self, x: Fixed, y: Fixed) {
+            self.0.push(vec![(x.to_f32(), y.to_f32())]);
         }
-        fn line_to(&mut self, x: f32, y: f32) {
+        fn line_to(&mut self, x: Fixed, y: Fixed) {
             if let Some(c) = self.0.last_mut() {
-                c.push((x, y));
+                c.push((x.to_f32(), y.to_f32()));
             }
         }
-        fn quad_to(&mut self, _: f32, _: f32, x: f32, y: f32) {
-            self.line_to(x, y);
-        }
-        fn curve_to(&mut self, _: f32, _: f32, _: f32, _: f32, x: f32, y: f32) {
+        fn curve_to(&mut self, _: Fixed, _: Fixed, _: Fixed, _: Fixed, x: Fixed, y: Fixed) {
             self.line_to(x, y);
         }
         fn close(&mut self) {}
     }
     let font = FontRef::new(bytes).unwrap();
     let gid = font.glyph_names().iter().find(|(_, n)| n.as_str() == name).unwrap().0;
-    let glyph = font.outline_glyphs().get(gid).unwrap();
+    let table = font.table_data(Tag::new(b"CFF ")).unwrap();
+    let cff = CffFontRef::new_cff(table.as_bytes(), 0, None).unwrap();
+    let subfont = cff.subfont(0, &[]).unwrap();
     let mut pen = Pen::default();
-    glyph.draw(DrawSettings::unhinted(Size::unscaled(), LocationRef::default()), &mut pen).unwrap();
+    cff.evaluate_charstring(&subfont, gid, &[], &mut pen).unwrap();
     pen.0
 }
 
