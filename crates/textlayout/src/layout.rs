@@ -73,9 +73,9 @@ pub struct Options<'a> {
     /// Glyphs shown in another layer than their layer of the master: glyph name → layer id. The
     /// width and vertical metrics come from that layer; a layer the glyph lacks is ignored.
     pub layers: Option<&'a BTreeMap<String, String>>,
-    /// Horizontal text only: order runs of the other direction by the rules of [`crate::bidi`],
-    /// so a left-to-right word in right-to-left text keeps its letters in order. Off, every item
-    /// follows `direction`.
+    /// Horizontal text only: order runs of the other direction by the Unicode Bidirectional
+    /// Algorithm ([`crate::bidi`]), so a left-to-right word in right-to-left text keeps its
+    /// letters in order. Off, every item follows `direction`.
     pub bidi: bool,
     /// With `bidi`: ranges of items with their own base direction.
     pub embeddings: &'a [Embedding],
@@ -165,6 +165,9 @@ pub struct Layout {
     pub ascender: f64,
     /// Why some of the text could not be shaped (it is laid out by code point there).
     pub shaping_error: Option<String>,
+    /// With [`Options::bidi`]: the UAX #9 level of every item, each line's trailing blanks reset
+    /// to the paragraph's; `None` when every item runs in the layout's direction.
+    pub levels: Option<Vec<u8>>,
     breaks: Vec<bool>,
 }
 
@@ -566,5 +569,6 @@ pub fn layout(font: &Font, master: &str, text: &Text, options: &Options<'_>) -> 
         .collect();
     let lines = lines.into_iter().enumerate().map(|(l, (items, length))| Line { items, baseline: base(l), length }).collect();
     let ascender = font.metric_pos(drawn, metric::ASCENDER, upm * 0.8);
-    Ok(Layout { placed, lines, direction, line_height: lh, ascender, shaping_error, breaks: items.iter().map(|m| m.is_break && wrap).collect() })
+    let breaks = items.iter().map(|m| m.is_break && wrap).collect();
+    Ok(Layout { placed, lines, direction, line_height: lh, ascender, shaping_error, levels, breaks })
 }

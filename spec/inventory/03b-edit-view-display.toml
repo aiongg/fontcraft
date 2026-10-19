@@ -2482,10 +2482,13 @@ milestone = "M8"
 summary = "Text Preview shapes its text as an application would: every feature that a shaper turns on by default for the script applies, positioning features included, with the generated kerning and mark attachment of the master or instance shown."
 ref = "Edit View › Entering Text › Text Preview"
 status = "handbook"
-notes = "Documented, not yet observed. The reference uses the operating system's shaper; FontCraft uses its own (M8 planning pass, `docs/plans/M8.md` § 3)."
+notes = "Documented, not yet observed. The reference uses the operating system's shaper; FontCraft uses its own (M8 planning pass, `docs/plans/M8.md` § 3): a full preview font of the shown master (`GSUB` and `GPOS`, generated kerning and marks included) built on a thread of its own, harfrust with the script's default features and no others, each run of one bidirectional level shaped in its own direction (`crates/textlayout/src/line_shape.rs`). Advances come live from the model. Lines are broken on the layout by code point, then the lines in view and up to two screens around them are shaped. Until the font is built, and when it cannot be built, the text is laid out by code point and the reason shows under it."
 guesses = [
   "The preview's font is rebuilt from the current feature code, kerning and anchors after edits, once editing pauses for half a second, without pressing Compile; editing a feature without compiling while the reference app's Text Preview is open would settle it.",
   "Text is split into script runs by Script_Extensions, and characters without a script (Common, Inherited, unassigned and private-use) stay in the run around them, so a glyph typed by name is shaped with its neighbours; typing a glyph name between two letters that form a contextual substitution in the reference app would settle it.",
+  "Lines are broken on the glyphs' own widths and the document's kerning before shaping, so a shaped line can end slightly short of or past the window's edge; a long Arabic paragraph in the reference app's Text Preview, compared at its line ends, would settle how the reference breaks shaped text.",
+  "Vertical text is not shaped: it is laid out by code point with the vertical widths and origins; vertical text with a `vert` feature in the reference app would settle it.",
+  "While a new font is built, the text stays shaped with the last font built for the same master; when the feature code does not compile, the text is laid out by code point with the compiler's message under it. Breaking a feature in the reference app while Text Preview is open would settle what it shows.",
 ]
 observe = [
   "In F1 (Latin features), edit a feature without pressing Compile while Text Preview shows text the feature affects: note whether the preview follows the edit, and when.",
@@ -2498,9 +2501,11 @@ milestone = "M8"
 summary = "Text Preview orders mixed right-to-left and left-to-right text by the Unicode Bidirectional Algorithm (UAX #9), as the operating system's text system does, replacing M5's simple run rules."
 ref = "Edit View › Entering Text › Text Preview"
 status = "handbook"
-notes = "Documented, not yet observed. Settles the M5 guesses on `textPreview.setWritingDirection` about digits and neutral characters."
+notes = "Documented, not yet observed. Settles the M5 guesses on `textPreview.setWritingDirection` about digits and neutral characters. UAX #9 through unicode-bidi (`crates/textlayout/src/bidi.rs`): each line break ends a paragraph; a range with its own direction is an embedding (LRE or RLE … PDF), closed at each line break and opened again after it; levels come from the whole paragraph, and each line resets its trailing blanks and reverses its runs (rules L1 and L2). \"12 34\" in right-to-left text reads \"34 12\"."
 guesses = [
   "A paragraph separator inside a line (U+2029) starts a new bidirectional paragraph whose runs follow the line's earlier runs, each paragraph ordered on its own; pasting text with U+2029 into the reference app's Text Preview would settle it.",
+  "Every paragraph takes the text's base direction (set, or from the text's first letter), not its own first strong character; a text whose second paragraph starts in the other script, in the reference app, would settle it.",
+  "A range set to the paragraph's own direction is an embedding too, one or two levels up as UAX #9 gives it, which changes only how neutral characters at its edges resolve; the reference app's Writing Direction on such a range would settle it.",
 ]
 observe = [
   "In F2 (Arabic), type \"12 34\" inside right-to-left text in Text Preview: note the order of the digits.",

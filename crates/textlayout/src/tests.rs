@@ -238,6 +238,37 @@ fn bidi_reverses_a_right_to_left_run_in_left_to_right_text_and_off_changes_nothi
 }
 
 #[test]
+fn bidi_orders_numbers_and_embeddings_as_the_unicode_algorithm_does() {
+    let mut f = bidi_font();
+    f.add_glyph("onearabic", vec![0x661], 500.0).unwrap();
+    f.add_glyph("twoarabic", vec![0x662], 500.0).unwrap();
+    let rtl = |t: &Text, embeddings: &[Embedding]| {
+        layout(&f, "m01", t, &Options { direction: Direction::Rtl, bidi: true, embeddings, ..Options::default() }).unwrap()
+    };
+    // alef ␣ 1 2 ␣ 2 1 in a right-to-left paragraph reads, from the left: 21 12 alef.
+    let t = text(&f, "\u{5d0} 12 21");
+    let l = rtl(&t, &[]);
+    let x = |i: usize| l.placed[i].x;
+    assert!(x(5) < x(6) && x(6) < x(2) && x(2) < x(3) && x(3) < x(0), "{:?}", l.placed.iter().map(|p| p.x).collect::<Vec<_>>());
+    assert_eq!(l.levels.as_deref(), Some(&[1, 1, 2, 2, 1, 2, 2][..]));
+
+    // Arabic-Indic digits after a Latin word in left-to-right text stay in order, one level up.
+    let t = text(&f, "ab \u{661}\u{662}");
+    let l = layout(&f, "m01", &t, &Options { bidi: true, ..Options::default() }).unwrap();
+    assert_eq!(l.levels.as_deref(), Some(&[0, 0, 0, 2, 2][..]));
+    assert!(l.placed[3].x < l.placed[4].x);
+
+    // An embedding reaching over a line break is closed before it and opened again after it: in
+    // both lines alef stands left of c, which it does not without the embedding.
+    let t = text(&f, "\u{5d0} c\n\u{5d0} c");
+    let l = rtl(&t, &[Embedding { items: 0..7, rtl: false }]);
+    assert!(l.placed[0].x < l.placed[2].x && l.placed[4].x < l.placed[6].x);
+    assert_eq!(l.levels.as_deref(), Some(&[3, 2, 2, 1, 3, 2, 2][..]));
+    let l = rtl(&t, &[]);
+    assert!(l.placed[2].x < l.placed[0].x && l.placed[6].x < l.placed[4].x);
+}
+
+#[test]
 fn vertical_text_uses_vertical_widths_and_origins() {
     let mut f = font();
     {

@@ -79,6 +79,11 @@ impl PreviewShaper {
         self.names.get(usize::from(gid))
     }
 
+    /// The shaping font.
+    pub(crate) fn shaping_font(&self) -> &ShapingFont {
+        &self.font
+    }
+
     /// Whether the preview font has the glyph.
     pub fn has_glyph(&self, name: &str) -> bool {
         self.ids.contains_key(name)
@@ -87,7 +92,7 @@ impl PreviewShaper {
     /// The character that reaches the glyph `name` through the preview font: its private-use code
     /// point when it has one, else the character it was typed as, else its first code point in
     /// the model. `None` when the preview font lacks the glyph.
-    fn char_of(&self, font: &Font, name: &str, typed: Option<char>) -> Option<char> {
+    pub(crate) fn char_of(&self, font: &Font, name: &str, typed: Option<char>) -> Option<char> {
         let gid = *self.ids.get(name)?;
         if let Some(cp) = self.private_use.get(&gid) {
             return char::from_u32(*cp);
