@@ -32,11 +32,11 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1357 rows to check: 2162 guesses and 494 observe steps.**
+**1359 rows to check: 2165 guesses and 494 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
-| **Built milestones (M0 to M6)** | all | **487** |
+| **Built milestones (M0 to M6)** | all | **489** |
 | Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 100 |
 | Built milestones (M0 to M6) | Edit View: text mode and preview | 32 |
 | Built milestones (M0 to M6) | Components and anchors | 83 |
@@ -45,7 +45,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Kerning and the Kerning window | 42 |
 | Built milestones (M0 to M6) | Font View | 108 |
 | Built milestones (M0 to M6) | Font Info and features | 9 |
-| Built milestones (M0 to M6) | Files: open, import, export | 41 |
+| Built milestones (M0 to M6) | Files: open, import, export | 43 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 5 |
 | **Later milestones (after M6)** | all | **870** |
@@ -65,7 +65,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 62 |
 | Later milestones (after M6) | Elsewhere | 26 |
 
-## Built milestones (M0 to M6) (487)
+## Built milestones (M0 to M6) (489)
 
 ### Edit View: drawing, guides, layers and the Palette (100)
 
@@ -1226,8 +1226,12 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `Decompose Glyphs` (parameter, M6, handbook): List of glyph names whose components are turned into outlines at export
   - Guess: A text value is read as glyph names separated by commas or spaces, besides the documented list; the reference app with a text value would settle it.
 
-### Files: open, import, export (41)
+### Files: open, import, export (43)
 
+- [ ] `file.save` (M1, handbook, live): Save
+  - Guess: The save chooser offers one filter with every source extension, and the chosen extension picks the format (no extension: the native format); the reference's format pop-up in its save sheet is documented but its layout is not observed.
+- [ ] `file.saveAs` (M1, handbook, live): Save As…
+  - Guess: Save As offers one filter with every source extension and no format or version pop-up, so the extension picks the format; the reference's save sheet picks the format from a pop-up, which observing it would let us match.
 - [ ] `file.open` (M1, handbook, live): Open…
   - Guess: The menu label and place are our assumption, and the shortcut is the platform convention; the chapter states neither.
 - [ ] `roundtrip.lossReport` (behavior, M1, inferred): Every save or export to a format that cannot hold part of…
@@ -3519,6 +3523,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `hint.tt.editInstructions` (M13, docs, live): Edit TrueType Instructions…
   - Guess: The command has no menu item, since the app has no Hints menu; it runs from the command search, the console and agents. Adding a Hints menu would settle where it goes.
 - [ ] `hint.tt.setAssembly` (M13, docs, live): Set TrueType Instructions
+  - Guess: A call's function number is known only when a push sits just before the call, as hand-written programs put it; other calls only need the font programs to define some function. A program that computes its numbers would need the interpreter to check, and nothing in the secondary reference says it checks at all.
   - Guess: Without `master`, fpgm and prep text goes to every master and the font-level parameter is removed, as opening a hinted font stores them on every master; the secondary reference has a single font, so nothing settles it there.
   - Guess: Without the cvt Table, prep Table Assembly and fpgm Table Assembly parameters, a glyph program that needs font programs is left out rather than written against FontCraft's own fpgm and cvt; an export from the secondary reference of a glyph program that calls a function, with no font programs set, would settle it.
   - Guess: Text that assembles to no bytes removes the program instead of storing an empty one; an empty program and none export the same.
@@ -3775,7 +3780,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `project.list` (M7, inferred, live): List Projects
   - Guess: A query of ours listing each open project's font link, destination, instances and saved state; the reference app shows the same facts only in each project window.
 - [ ] `window.project` (panel, M7, handbook): Project
-  - Guess: A Save button beside Export saves the project, and a project never saved asks for a folder and is named after its title; the handbook only names File › Save. Saving a project in the reference app settles where saving lives.
+  - Guess: A Save button beside Export saves the project, and a project never saved asks the save chooser for its file, offering a name after its title; the handbook only names File › Save. Saving a project in the reference app settles where saving lives.
   - Guess: Closing the window closes the project, and a project with unsaved changes stays open with the reason in the status bar; the reference app's close prompt is not documented. Closing an edited project in the reference app settles it.
   - Guess: The entry's context menu offers Duplicate in place of copy and paste; checking the reference app's context menu on a project instance settles it.
   - Guess: General fields an instance carries are shown read-only, since the project commands edit only the built-in fields and the custom parameters; editing a localized name in a project in the reference app settles whether they are editable there.
