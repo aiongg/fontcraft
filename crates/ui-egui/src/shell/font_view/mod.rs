@@ -9,6 +9,7 @@
 //! | [`list`] | List View: header, sort, column order and visibility, inline edits |
 //! | [`status`] | the mode buttons and the status area: counts and the cell size slider |
 //! | [`images`] | cell outlines rasterised once per glyph and cell size |
+//! | [`cell_images`] | placed images and colour glyphs in cells, image files dropped on cells |
 //! | [`inspector`] | the glyph inspector at the bottom left: the selected glyphs' properties |
 //! | [`metrics`] | the inspector's metric fields and their horizontal and vertical sets |
 //! | [`sidebar`] | the sidebar: entries with counts and badges, Cmd and Shift selection, filter actions |
@@ -188,6 +189,7 @@ pub struct FontViewUi {
     pub images: images::CellImages,
     /// List View's Char cells drawn from the glyph's outline, at row height.
     pub list_images: images::CellImages,
+    pub art: cell_images::CellArt,
     pub drag: Option<grid::Drag>,
     pub edit: Option<InlineEdit>,
     /// The grid cells or list rows laid out in the last frame, with their glyph and their

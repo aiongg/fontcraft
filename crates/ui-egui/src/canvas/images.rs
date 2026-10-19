@@ -210,31 +210,38 @@ impl ImageCache {
     }
 }
 
-/// Reads and decodes the file at `path` and uploads it; the entry and the bytes it holds.
-fn load(ctx: &egui::Context, assets: &dyn AssetStore, path: &str) -> (CachedImage, usize) {
-    let bytes = match assets.read(path) {
-        Ok(b) => b,
-        Err(e) => return (CachedImage::Failed(e.to_string()), 0),
-    };
-    let (image, size) = match imagery::sniff(&bytes) {
-        Err(e) => return (CachedImage::Failed(e.to_string()), 0),
+/// Reads and decodes the file at `path`: its straight RGBA pixels and the image's size in its own
+/// space, or the entry that stands in for a file that cannot be drawn. Font View's cells decode
+/// through it too.
+pub(crate) fn decode(assets: &dyn AssetStore, path: &str) -> Result<(Rgba8, [u32; 2]), CachedImage> {
+    let bytes = assets.read(path).map_err(|e| CachedImage::Failed(e.to_string()))?;
+    match imagery::sniff(&bytes) {
+        Err(e) => Err(CachedImage::Failed(e.to_string())),
         Ok(info) if info.format == ImageFormat::Pdf => match fontcraft_io_pdf::render_pdf(&bytes, PDF_PIXELS_PER_POINT, imagery::MAX_PIXELS) {
             Ok(r) => {
                 let ppp = if r.pixels_per_point.is_finite() && r.pixels_per_point > 0.0 { r.pixels_per_point } else { 1.0 };
                 let side = |px: u32| ((f64::from(px) / ppp).round().max(1.0)).min(f64::from(u32::MAX)) as u32;
                 let size = [side(r.image.width), side(r.image.height)];
-                (r.image, size)
+                Ok((r.image, size))
             }
-            Err(e) => return (CachedImage::Failed(e.to_string()), 0),
+            Err(e) => Err(CachedImage::Failed(e.to_string())),
         },
         Ok(info) if info.format.decodable() => match imagery::decode_rgba(&bytes, imagery::MAX_PIXELS) {
             Ok(image) => {
                 let size = [image.width, image.height];
-                (image, size)
+                Ok((image, size))
             }
-            Err(e) => return (CachedImage::Failed(e.to_string()), 0),
+            Err(e) => Err(CachedImage::Failed(e.to_string())),
         },
-        Ok(info) => return (CachedImage::Unsupported(info.format), 0),
+        Ok(info) => Err(CachedImage::Unsupported(info.format)),
+    }
+}
+
+/// Reads and decodes the file at `path` and uploads it; the entry and the bytes it holds.
+fn load(ctx: &egui::Context, assets: &dyn AssetStore, path: &str) -> (CachedImage, usize) {
+    let (image, size) = match decode(assets, path) {
+        Ok(decoded) => decoded,
+        Err(entry) => return (entry, 0),
     };
     let max_side = u32::try_from(ctx.input(|i| i.max_texture_side)).unwrap_or(u32::MAX);
     let image = shrink(image, max_side);
@@ -249,7 +256,7 @@ fn load(ctx: &egui::Context, assets: &dyn AssetStore, path: &str) -> (CachedImag
 
 /// `image` shrunk by a whole factor so that neither side exceeds `max_side`, averaging each
 /// block of pixels.
-fn shrink(image: Rgba8, max_side: u32) -> Rgba8 {
+pub(crate) fn shrink(image: Rgba8, max_side: u32) -> Rgba8 {
     let (w, h) = (image.width, image.height);
     let longest = w.max(h);
     if max_side == 0 || longest <= max_side {
