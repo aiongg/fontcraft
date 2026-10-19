@@ -52,6 +52,7 @@ mod kern;
 pub mod kern_table;
 pub mod layout;
 pub mod layout_tables;
+pub mod makeotf;
 mod marks;
 pub mod math;
 pub mod names;
@@ -210,6 +211,8 @@ pub struct Options {
     /// source's Disable Subroutines parameter is set. A table the subroutiniser refuses (one
     /// beyond its limits) is written without subroutines, with a warning.
     pub subroutinize: Option<bool>,
+    /// What a project compile adds to the built font (`makeotf::finish`); `None` otherwise.
+    pub project: Option<makeotf::Finish>,
 }
 
 /// The asset store a compile reads ([`Options::assets`]). Two are equal when they are the same
@@ -286,6 +289,7 @@ impl Default for Options {
             version_stamp: false,
             feature_axes: None,
             subroutinize: None,
+            project: None,
         }
     }
 }
@@ -454,7 +458,11 @@ pub(crate) type VarStage<'a> =
     &'a mut dyn FnMut(&Resolved, &[ResolvedGlyph], &outline::Settings, &mut Vec<String>) -> Result<(Vec<outline::Prepared>, Extra), CompileError>;
 
 fn compile_stages(font: Option<&Font>, resolved: Resolved, flavour: Flavour, options: &Options) -> Result<Compiled, CompileError> {
-    compile_stages_with(font, resolved, flavour, options, None, None)
+    let mut compiled = compile_stages_with(font, resolved, flavour, options, None, None)?;
+    if let Some(finish) = &options.project {
+        makeotf::finish(&mut compiled, finish)?;
+    }
+    Ok(compiled)
 }
 
 /// The glyphs of `resolved` as every compile stage before the outlines leaves them: glyph data,

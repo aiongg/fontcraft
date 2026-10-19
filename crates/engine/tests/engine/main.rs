@@ -36,6 +36,7 @@ mod color_palettes;
 mod command_sweep;
 mod compare;
 mod compatibility_indicators;
+mod compile_project;
 mod construction;
 mod corner;
 mod corner_helpers;

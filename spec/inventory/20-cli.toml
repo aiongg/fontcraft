@@ -288,7 +288,8 @@ id = "compile"
 usage = "fontcraft-cli compile SOURCE... [--format FMT]... [--container plain|woff|woff2]... [-o PATH | --output-dir DIR] [options]"
 options = [
   "SOURCE...: native project, .glyphs/.glyphspackage, .designspace, one or more .ufo, or a bare outline font; kind detected from content",
-  "--afdko-project [DIR]: gather inputs by AFDKO default names in DIR (font.ufo, font.pfa, font.ps, font.txt, cidfont.ps; features or features.fea; fontinfo or cidfontinfo; FontMenuNameDB and GlyphOrderAndAliasDB in DIR or up to two levels above); implies --format otf and --layer processed",
+  "--project-file FILE: an AFDKO current.fpr project file, read before the other project options; its font menu and glyph alias paths are relative to it",
+  "--project-defaults: find fontinfo beside the source and FontMenuNameDB and GlyphOrderAndAliasDB beside it or up to four folders above, as AFDKO looks for them; any project option makes the default format otf",
   "--format FMT: ttf | otf | otf-cff2 | variable | variable-cff2 | ttf-interpolatable | otf-interpolatable; repeatable",
   "--container plain|woff|woff2: also wrap each output in this container; repeatable, default plain",
   "--output-layout flat|by-format: with --output-dir, put everything in one folder (default) or in per-format subfolders named as fontmake names them (master_ttf, instance_otf, variable_ttf …)",
@@ -319,7 +320,7 @@ options = [
   "--subset-to-goadb: drop glyphs the GOADB does not name (needs --apply-goadb or --release)",
   "--lookup-final-names: resolve Unicode values through the GOADB's final names",
   "--show-final-names: use final rather than source glyph names in messages",
-  "--afdko-fontinfo FILE: AFDKO fontinfo keyword file (IsBoldStyle, IsItalicStyle, PreferOS/2TypoMetrics, IsOS/2WidthWeigthSlopeOnly, IsOS/2OBLIQUE); lowest priority after options file and command line",
+  "--fontinfo FILE: AFDKO fontinfo keyword file (IsBoldStyle, IsWindowsBold, IsItalicStyle, OmitMacNames, SuppressKernOptimization, AddStubDSIG); lowest priority after the project file and the command line",
   "--designspace FILE: with a bare variable font as source, the designspace used to translate axis locations written in design units in feature code",
   "--glyph-data FILE: extra glyph-info XML (production names, category, script); repeatable",
   "--uvs FILE: Unicode Variation Sequence list; adds a cmap format 14 subtable",

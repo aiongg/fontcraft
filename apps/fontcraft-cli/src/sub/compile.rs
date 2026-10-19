@@ -13,6 +13,8 @@ const USAGE: &str = "\
                         [-o FILE | --output-dir DIR] [--instances[=NAME,...]] [--masters-as-instances]
                         [--keep-overlaps] [--keep-direction] [--conversion-error EM] [--no-subroutinize]
                         [--timestamp SECS|now] [--ttfautohint PATH] [--cbdt] [--plan]
+                        [--project-file FILE] [--project-defaults] [--menu-names FILE] [--goadb FILE]
+                        [--fontinfo FILE] [project options]
   fontcraft-cli compile SOURCE... --variable [--format ttf|otf] [--settings NAME,...] [--container plain|woff|woff2]...
                         [-o FILE | --output-dir DIR] [--timestamp SECS|now]
       Compile each SOURCE to static fonts: every exportable instance (or the named ones; a font
@@ -26,6 +28,17 @@ const USAGE: &str = "\
       binary path parameter names that same file is autohinted by it (default: none runs).
       --cbdt also writes CBDT and CBLC bitmap tables from the iColor layers.
       --plan prints what would be built, without building.
+      A project compile builds a font as the reference compiler's project workflow does (default
+      format otf). --project-file FILE reads a current.fpr project file first; the project
+      options then apply left to right, a later one overriding an earlier: --release /
+      --no-release (subroutinize, rename and order by the GlyphOrderAndAliasDB, stub DSIG),
+      --subroutinize / --no-subroutinize, --apply-goadb / --no-apply-goadb, --subset-to-goadb /
+      --no-subset-to-goadb, --stub-dsig / --no-stub-dsig, --bold / --no-bold, --italic /
+      --no-italic, --mac-names / --no-mac-names, --stub-cmap4, --legacy-double-mapping,
+      --kern-class0-optimization / --no-kern-class0-optimization; --fontinfo FILE fills what is
+      still unset. --menu-names FILE is a FontMenuNameDB, --goadb FILE a GlyphOrderAndAliasDB
+      (its code points always apply). --project-defaults finds fontinfo beside the source and
+      FontMenuNameDB and GlyphOrderAndAliasDB beside it or up to 4 folders above.
       --variable builds variable fonts instead: one per variable font setting (or the settings
       --settings names), or one for the whole designspace when the source has none, with
       TrueType outlines, or CFF2 outlines with --format otf; files are named by the setting's file
@@ -46,6 +59,8 @@ fn compile(args: &[String]) -> Outcome {
     let mut variable = false;
     let mut settings: Option<Vec<String>> = None;
     let mut autohinter: Option<&String> = None;
+    let mut project_words: Vec<String> = Vec::new();
+    let mut project = serde_json::Map::new();
     let mut it = args.iter();
     let list = |v: &str| -> Vec<String> { v.split(',').map(str::trim).filter(|s| !s.is_empty()).map(str::to_string).collect() };
     while let Some(arg) = it.next() {
@@ -68,6 +83,42 @@ fn compile(args: &[String]) -> Outcome {
             }
             "--subroutinize" | "--no-subroutinize" => {
                 params.insert("subroutinize".into(), json!(arg == "--subroutinize"));
+                project_words.push(arg.trim_start_matches('-').to_string());
+            }
+            "--release"
+            | "--no-release"
+            | "--apply-goadb"
+            | "--no-apply-goadb"
+            | "--subset-to-goadb"
+            | "--no-subset-to-goadb"
+            | "--stub-dsig"
+            | "--no-stub-dsig"
+            | "--bold"
+            | "--no-bold"
+            | "--italic"
+            | "--no-italic"
+            | "--mac-names"
+            | "--no-mac-names"
+            | "--stub-cmap4"
+            | "--legacy-double-mapping"
+            | "--kern-class0-optimization"
+            | "--no-kern-class0-optimization"
+            | "--synthetic-glyphs" => {
+                project_words.push(arg.trim_start_matches('-').to_string());
+                project.insert("projectOptions".into(), Value::Null);
+            }
+            "--project-file" | "--menu-names" | "--goadb" | "--fontinfo" => {
+                let key = match arg.as_str() {
+                    "--project-file" => "projectFile",
+                    "--menu-names" => "menuNames",
+                    "--goadb" => "goadb",
+                    _ => "fontinfo",
+                };
+                let file = it.next().ok_or_else(|| usage(format!("{arg} needs a file")))?;
+                project.insert(key.into(), json!(file));
+            }
+            "--project-defaults" => {
+                project.insert("projectDefaults".into(), json!(true));
             }
             "--keep-direction" => {
                 outlines.insert("keepDirection".into(), json!(true));
@@ -108,6 +159,18 @@ fn compile(args: &[String]) -> Outcome {
     }
     if sources.is_empty() {
         return Err(usage("compile needs at least one SOURCE"));
+    }
+    // A project compile: the subroutinize switches count among its ordered options.
+    if !project.is_empty() {
+        if variable || formats.iter().any(|f| f.starts_with("variable")) {
+            return Err(usage("a project compile builds static fonts: leave out --variable"));
+        }
+        params.remove("subroutinize");
+        project.insert("projectOptions".into(), json!(project_words));
+        if formats.is_empty() {
+            formats.push("otf".into());
+        }
+        params.extend(project);
     }
     let destination = match (output, output_dir) {
         (Some(_), Some(_)) => return Err(usage("use either -o or --output-dir")),
