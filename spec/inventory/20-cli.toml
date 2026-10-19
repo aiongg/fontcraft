@@ -1968,14 +1968,13 @@ guesses = ["Without a designspace the font's own version 1 avar is read back as 
 id = "variations plan-avar"
 usage = "fontcraft-cli variations plan-avar FONT [--weights LIST] [--widths LIST] [--slants LIST] [--sizes LIST] [--samples N] [--glyphs LIST] [--pins AXIS=FROM:TO,...] [--design-limits AXIS=MIN:DEF:MAX] [--sanitize] [--plot FILE] [-o OUT]"
 options = [
-  "--weights LIST, --widths LIST, --slants LIST, --sizes LIST: target user values to place on wght, wdth, slnt and opsz; defaults are the usual steps of each axis",
+  "--weights LIST, --widths LIST, --slants LIST, --sizes LIST: target user values to place on wght, wdth, slnt and opsz, separated by commas or spaces; defaults are the usual steps of each axis",
   "--samples N: measurements taken between consecutive targets; default 8",
   "--glyphs LIST: glyphs to measure; default a representative set chosen by the planner",
   "--design-limits AXIS=MIN:DEFAULT:MAX: design-space extent of an axis when it cannot be read from the font; repeatable",
   "--pins AXIS=BEFORE:AFTER,...: values that must map exactly, splitting the axis into independently planned stretches; repeatable",
-  "--sanitize: first check that the measured quantity actually increases along the axis and stop if it does not",
+  "--sanitize: compare the measurements at the axis limits with the axis values and warn when they disagree; planning goes on",
   "--plot FILE: write a chart of the resulting mapping",
-  "--print-designspace: print the mapping as designspace <map> elements",
   "[global options]: -o/--output, --output-dir, --in-place, --no-clobber, --face, --json, -q/--quiet, -v/--verbose, --log, --log-file, --color, -j/--jobs, --timing, --trace, --backtrace, --options, --save-options, --dry-run, --timestamp, @FILE, -h/--help, --version (behavior rows cli.global.*)",
 ]
 command = "variations.planAvar"
@@ -1987,6 +1986,8 @@ milestone = "M12"
 summary = "Computes an avar mapping from measurements of the font itself so that equal steps of an axis give evenly progressing results: it samples the weight, width, slant or optical-size axis, measures the glyphs at each sample, and solves for the positions at which the requested values are reached. The mapping is written into the font and can be printed as a designspace fragment."
 ref = "fontTools varLib.avar.plan (avarPlanner)"
 status = "docs"
+notes = "Built in M12.34, a port of fontTools 4.66 varLib.avar.plan checked on a font built in code: the glyphs are measured at the user locations the planner samples (outlines and advances as fontTools' glyph set draws them: unrounded gvar deltas with inferred points, HVAR advances unrounded, phantom-point advances rounded), weight and optical size by the advance-weighted mean area, width by the mean advance, slant by the advance-weighted StatisticsPen slant; the planned axis is measured with its old avar map removed. Each planned axis present in fvar gets its normalised map in avar (identity maps for the other axes when the font gets a new avar), and every planned axis is printed as a designspace <axis> element, as fontTools prints it. CFF2 outlines are blended at the location quantised to F2Dot14 (fontTools blends unquantised). A font with avar version 2 is refused. --sanitize logs fontTools' warnings and goes on, as fontTools does. Lists take commas or spaces; --pins and --design-limits take AXIS=… items in one comma-separated list. Unconfirmed until the corpus measure: maps equal to fontTools' on every corpus variable font."
+guesses = ["--plot writes an SVG chart of the normalised maps to FILE, where fontTools opens a window; comparing with how users of the reference tool use the chart would settle it."]
 
 [[cli]]
 id = "variations map"
@@ -2026,6 +2027,8 @@ milestone = "M12"
 summary = "Adds an HVAR table to a variable TrueType font that lacks one, computing advance-width deltas from the phantom points in gvar, so that text engines need not process outlines to get advances. When the font has vertical metrics it adds VVAR as well."
 ref = "fontTools varLib.hvar"
 status = "docs"
+notes = "Built in M12.34 as fontTools 4.66 varLib.hvar computes it: per glyph and gvar tuple, the right phantom point's x delta minus the left one's, a phantom point left out of a tuple counting as 0; the deltas are stored by the compiler's HVAR builder (the store fontc's choice lays out, so bytes differ from fontTools' while the deltas agree). VVAR uses the top phantom point's y delta minus the bottom one's; fontTools 4.66 fails on fonts with vmtx, so VVAR has no oracle. The output defaults to <name>.hvar.<ext>, as fontTools names it. CFF2 fonts are refused: their advances have no phantom points. Unconfirmed until the corpus measure: deltas equal to fontTools' at every region peak on every corpus TrueType variable font."
+guesses = ["Without --replace an existing HVAR or VVAR is kept and the run fails when nothing is left to build, where fontTools always replaces HVAR; a user's expectations of the reference tool would settle it."]
 
 [[cli]]
 id = "variations model"
@@ -2044,6 +2047,7 @@ milestone = "M12"
 summary = "Shows how a set of master locations is turned into a variation model: the locations normalised to -1..1, the order in which masters are processed, and for each master the region of design space (its support) in which its deltas apply."
 ref = "fontTools varLib.models (main)"
 status = "docs"
+notes = "Built in M12.34 on the variation model ported from fontTools (crates/geom): the designspace's sources are normalised as designSpaceDocument.normalize does (design coordinates over the axis range mapped to design space, missing axes at 0), the axes ordered by name as fontTools' model sees them. The text output lists the normalised locations, then each master in the model's order with its support; --json gives the engine result. fontTools prints Python structures (pprint) instead. Unconfirmed until the corpus measure: order and supports equal to fontTools' on every corpus designspace."
 
 [[cli]]
 id = "variations plot"
@@ -2062,6 +2066,8 @@ milestone = "M12"
 summary = "Draws the supports of a variation model as charts, one per master: for one axis a curve of the master's influence along the axis, for two axes a surface, so that gaps and unexpected overlaps between masters can be seen."
 ref = "fontTools varLib.plot"
 status = "docs"
+notes = "Built in M12.34: SVG instead of a matplotlib window, no extra dependency. One panel per master in a grid of ceil(sqrt(n)) columns, each the curve (one axis) or wireframe (two axes, oblique projection) of the master's support scalar through the points varLib.plot samples, with the master locations as dots at height 1. A variable font is plotted by the distinct regions of its gvar tuples and HVAR store. Without -o the SVG goes to standard output. fontTools' location=value form (an interpolated surface of master values) is not carried over."
+guesses = ["Each master gets a panel of its own, where fontTools 4.66 draws every support on one chart (it computes a grid it does not use); the reference tool's intent, seen in its history or its users' plots, would settle it.", "With more than two axes, --axes picks the plotted ones and masters that vary on other axes are left out, where fontTools refuses; comparing with users' needs would settle it."]
 
 [[cli]]
 id = "run"
@@ -2832,12 +2838,13 @@ label = "Plan avar Table"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{font: path, targets?: {wght?: [number], wdth?: [number], slnt?: [number], opsz?: [number]}, samples?: int, glyphs?: selector, designLimits?: {axis: [min, default, max]}, pins?: {axis: [[before, after]]}, sanitize?: bool, plot?: path, output?: path, inPlace?: bool}"
+params = "{font: path, targets?: {wght?: [number], wdth?: [number], slnt?: [number], opsz?: [number]}, samples?: int, glyphs?: [name] | {name: frequency}, designLimits?: {axis: [min, default, max]}, pins?: {axis: [[before, after]]}, sanitize?: bool, plot?: path, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool}"
 area = "cli-tools"
 milestone = "M12"
 summary = "Measures a variable font along its weight, width, slant or optical-size axis and computes the avar segment map that places the requested axis values at perceptually even positions; writes the table and returns the mapping, also as a designspace fragment."
 ref = "docs/spec/20-cli.md › variations"
 status = "docs"
+notes = "Built in M12.34 (see the `variations plan-avar` row). glyphs takes names (each once) or {name: frequency}. Result: {output, avar, axes: {axis: {limits, mapping, normalized, measurements, warnings}}, designspace, plot?}."
 
 [[command]]
 id = "variations.mapCoordinates"
@@ -2859,12 +2866,13 @@ label = "Build HVAR Table"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{font: path, vvar?: bool, replace?: bool, output?: path, inPlace?: bool}"
+params = "{font: path, vvar?: bool, replace?: bool, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool}"
 area = "cli-tools"
 milestone = "M12"
 summary = "Computes advance-width (and, for fonts with vertical metrics, vertical-advance) variation tables for a variable TrueType font from its glyph variation data and adds them to the font."
 ref = "docs/spec/20-cli.md › variations"
 status = "docs"
+notes = "Built in M12.34 (see the `variations build-hvar` row). Result: {output, hvar, vvar, variedGlyphs, regions}; hvar and vvar are built, kept or skipped."
 
 [[command]]
 id = "variations.describeModel"
@@ -2878,6 +2886,7 @@ milestone = "M12"
 summary = "Read-only query returning, for a set of master locations, the normalised locations, the processing order and each master's support region as per-axis (lower, peak, upper) triples."
 ref = "docs/spec/20-cli.md › variations"
 status = "docs"
+notes = "Built in M12.34 (see the `variations model` row). A list of numbers names the axes A, B, C… as fontTools' --locations does; an {axis: number} object is read in tag order. Result: {axes, names, locations, order, sorted, supports}."
 
 [[command]]
 id = "variations.plot"
@@ -2885,12 +2894,13 @@ label = "Plot Variation Model"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{designspace?: path, font?: path, locations?: [[number]] | [{axis: number}], axes?: [tag], output?: path}"
+params = "{designspace?: path, font?: path, locations?: [[number]] | [{axis: number}], axes?: [tag], output?: path, noClobber?: bool}"
 area = "cli-tools"
 milestone = "M12"
 summary = "Renders one chart per master showing the scalar its deltas are multiplied by across one or two axes, and returns the image path."
 ref = "docs/spec/20-cli.md › variations"
 status = "docs"
+notes = "Built in M12.34 (see the `variations plot` row). Without output the SVG text is returned as svg. Writes a file only with output, so it is journaled, not a query."
 
 [[command]]
 id = "commands.list"
