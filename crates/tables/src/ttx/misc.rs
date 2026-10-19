@@ -390,8 +390,8 @@ fn prop(data: &[u8], font: &SfntFont, w: &mut XmlWriter) -> Result<()> {
     if format > 1 {
         return Err(TablesError::invalid(format!("unknown 'prop' format {format}")));
     }
-    let order = w.glyph_order(font)?;
-    let lookup = if format == 1 { Some(aat_lookup(data, 8, &order)?) } else { None };
+    // Format 0 names no glyph: it is written even when the glyph order cannot be read.
+    let lookup = if format == 1 { Some(aat_lookup(data, 8, &w.glyph_order(font)?)?) } else { None };
     val(w, "Version", fixed_to_str(f64::from(version) / 65536.0, 16));
     w.open("GlyphProperties", &[("Format", &format.to_string())]);
     val(w, "DefaultProperties", default);

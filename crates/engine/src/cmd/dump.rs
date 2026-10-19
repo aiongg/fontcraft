@@ -19,7 +19,7 @@ fn ttx_specs() -> Vec<CommandSpec> {
         "Dump Tables",
         [],
         None,
-        "{font: path, face?: number, tables?: [tag | {tag, view?}], excludeTables?: [tag], format?: \"ttx\"|\"json\"|\"hex\"|\"text\", split?: \"tables\", output?: path, outputDir?: path, noClobber?: bool, disassemble?: bool, strict?: bool, newline?: \"lf\"|\"cr\"|\"crlf\", normalize?: bool, version?: bool, hints?: bool, showExtensions?: bool, glyphs?: [name] | string, glyphDetail?: \"short\"|\"medium\"|\"long\"} the tables of a compiled font, collection face, WOFF or WOFF2 file as TTX (the XML of the reference dump tool), the same tree as JSON, or hex; tables that cannot be read are written as hex unless strict; tables leaves the glyph order out; split writes one file per table beside the main file. Text views: a table with a view ({tag: \"GPOS\", view: \"fea\"|\"normalized\"}), the pseudo-tables @font (the font program's DICTs) and @glyphs (index, name, encoding and, with glyphDetail medium or long, the path with hints unless hints is false), written as text. normalize writes the normalised dump: tables sorted, values that always differ zeroed, outlines as text paths, GSUB and GPOS as rules (version false also blanks the version fields, showExtensions marks extension lookups) → {format, text} or {format, json} without an output, {format, paths} with one",
+        "{font: path, face?: number, tables?: [tag | {tag, view?}], excludeTables?: [tag], format?: \"ttx\"|\"json\"|\"hex\"|\"text\", split?: \"tables\"|\"glyphs\", output?: path, outputDir?: path, noClobber?: bool, disassemble?: bool, strict?: bool, newline?: \"lf\"|\"cr\"|\"crlf\", normalize?: bool, version?: bool, hints?: bool, showExtensions?: bool, glyphs?: [name] | string, glyphDetail?: \"short\"|\"medium\"|\"long\"} the tables of a compiled font, collection face, WOFF or WOFF2 file as TTX (the XML of the reference dump tool), the same tree as JSON, or hex; tables that cannot be read are written as hex unless strict; tables leaves the glyph order out; split writes one file per table beside the main file (glyphs also one file per glyph outline). Text views: a table with a view ({tag: \"GPOS\", view: \"fea\"|\"normalized\"}), the pseudo-tables @font (the font program's DICTs) and @glyphs (index, name, encoding and, with glyphDetail medium or long, the path with hints unless hints is false), written as text. normalize writes the normalised dump: tables sorted, values that always differ zeroed, outlines as text paths, GSUB and GPOS as rules (version false also blanks the version fields, showExtensions marks extension lookups) → {format, text} or {format, json} without an output, {format, paths} with one",
         super::always,
         ttx::run
     ).files(const { &[FileParam::read("font"), FileParam::write("output"), FileParam::write("outputDir")] }).writes_files()]
@@ -29,7 +29,7 @@ mod ttx {
     use std::path::{Path, PathBuf};
 
     use fontcraft_tables::sfnt::parse_tag;
-    use fontcraft_tables::ttx::{DumpFormat, DumpOptions, dump, dump_split};
+    use fontcraft_tables::ttx::{DumpFormat, DumpOptions, dump, dump_split, dump_split_glyphs};
     use serde_json::{Value, json};
 
     use super::super::file_io::{OutputRequest, output_path, read_input, write_output};
@@ -70,10 +70,10 @@ mod ttx {
         for tag in p.opt_strings("excludeTables")?.unwrap_or_default() {
             skip.push(parse_tag(tag).map_err(|e| p.bad(format!("`excludeTables`: {e}")))?);
         }
-        let split = match p.opt_str("split")? {
-            None => false,
-            Some("tables") => true,
-            Some("glyphs") => return Err(EngineError::Unsupported("splitting the dump into one file per glyph is not built yet".into())),
+        let (split, split_glyphs) = match p.opt_str("split")? {
+            None => (false, false),
+            Some("tables") => (true, false),
+            Some("glyphs") => (true, true),
             Some(other) => return Err(p.bad(format!("`split` must be \"tables\" or \"glyphs\", got \"{other}\""))),
         };
         if split && format != DumpFormat::Ttx {
@@ -122,7 +122,11 @@ mod ttx {
             let main = output_path(path, &request, "", Some(ext))?;
             let stem = main.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| "dump".into());
             let dir = main.parent().map(Path::to_path_buf).unwrap_or_default();
-            let parts = dump_split(&font, &options, &stem, &format!(".{ext}"))?;
+            let parts = if split_glyphs {
+                dump_split_glyphs(&font, &options, &stem, &format!(".{ext}"))?
+            } else {
+                dump_split(&font, &options, &stem, &format!(".{ext}"))?
+            };
             let mut paths: Vec<PathBuf> = Vec::with_capacity(parts.len());
             for (name, text) in parts {
                 let target = dir.join(name);

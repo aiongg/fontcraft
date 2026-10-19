@@ -1,7 +1,7 @@
 //! `glyf`: glyphs sorted by name, simple glyphs as contours of points, composites as components
 //! with their transforms, and the instructions through [`super::program`].
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::sfnt::SfntFont;
 use crate::{Result, TablesError};
@@ -57,6 +57,108 @@ pub(super) fn write(data: &[u8], font: &SfntFont, w: &mut XmlWriter) -> Result<(
         w.check()?;
     }
     Ok(())
+}
+
+/// `glyf` as `ttx -g` writes it: in `w`, a `TTGlyph` naming a file for each glyph with an
+/// outline (empty glyphs stay inline); each file, named from `prefix`, the glyph name and `ext`,
+/// is returned with its text.
+pub(crate) fn write_split(
+    data: &[u8],
+    font: &SfntFont,
+    w: &mut XmlWriter,
+    prefix: &str,
+    ext: &str,
+    no_version: bool,
+) -> Result<Vec<(String, String)>> {
+    let loca = font.get(*b"loca").ok_or_else(|| TablesError::MissingTable("loca".into()))?;
+    let offsets = loca_offsets(loca, font)?;
+    let order = w.glyph_order(font)?;
+    let mut pos = *offsets.first().ok_or_else(|| TablesError::invalid("the 'loca' table is empty"))?;
+    let mut glyphs: HashMap<String, &[u8]> = HashMap::new();
+    for (i, next) in offsets.iter().skip(1).enumerate() {
+        let name = order.get(i).cloned().unwrap_or_else(|| format!("ttxautoglyph{i}"));
+        let bytes = data.get(pos..*next).ok_or_else(|| TablesError::invalid("not enough 'glyf' table data"))?;
+        glyphs.insert(name, bytes);
+        pos = *next;
+    }
+    let mut names: Vec<&String> = order.iter().collect();
+    names.sort();
+    let mut existing: HashSet<String> = HashSet::new();
+    let mut files = Vec::new();
+    for name in names {
+        let Some(bytes) = glyphs.get(name.as_str()) else { continue };
+        let contours = bytes.get(..2).map_or(0, |b| i16::from_be_bytes([b.first().copied().unwrap_or(0), b.get(1).copied().unwrap_or(0)]));
+        if contours == 0 {
+            w.simple_comment("TTGlyph", &[("name", name)], "contains no outline data");
+            continue;
+        }
+        let file = user_name_to_file_name(name, &existing, prefix, ext)?;
+        existing.insert(file.to_lowercase());
+        w.simple("TTGlyph", &[("src", &file)]);
+        let mut g = w.child_at(0);
+        g.set_depth(0);
+        g.line(super::super::XML_DECLARATION);
+        if no_version {
+            g.open("ttFont", &[]);
+        } else {
+            g.open("ttFont", &[("ttLibVersion", super::super::TTX_VERSION)]);
+        }
+        g.open("glyf", &[]);
+        g.comment("The xMin, yMin, xMax and yMax values\nwill be recalculated by the compiler.");
+        glyph(bytes, name, &order, &mut g)?;
+        g.close("glyf");
+        g.close("ttFont");
+        g.check()?;
+        files.push((file, g.finish()));
+        w.check()?;
+    }
+    Ok(files)
+}
+
+/// fontTools' `userNameToFileName` (from ufoLib, MIT): illegal characters become `_`, capitals
+/// get a `_` after them, reserved names a `_` before them, and a clash with an existing name
+/// (compared without case) takes a 15-digit counter.
+fn user_name_to_file_name(user: &str, existing: &HashSet<String>, prefix: &str, suffix: &str) -> Result<String> {
+    // fontTools' list also holds the two-character strings `\"` and `\0`, which never match.
+    const ILLEGAL: &[char] = &['*', '+', '/', ':', '<', '>', '?', '[', '\\', ']', '|', '\u{7f}'];
+    const RESERVED: [&str; 13] = ["con", "prn", "aux", "clock$", "nul", "a:-z:", "com1", "lpt1", "lpt2", "lpt3", "com2", "com3", "com4"];
+    const MAX_LEN: usize = 255;
+    let mut name: String =
+        if prefix.is_empty() && user.starts_with('.') { format!("_{}", user.get(1..).unwrap_or_default()) } else { user.to_string() };
+    let mut filtered = String::with_capacity(name.len());
+    for c in name.chars() {
+        if ILLEGAL.contains(&c) || (u32::from(c) >= 1 && u32::from(c) < 32) {
+            filtered.push('_');
+        } else if c.to_lowercase().ne(std::iter::once(c)) {
+            filtered.push(c);
+            filtered.push('_');
+        } else {
+            filtered.push(c);
+        }
+    }
+    let keep = MAX_LEN.saturating_sub(prefix.chars().count()).saturating_sub(suffix.chars().count());
+    name = filtered.chars().take(keep).collect();
+    name = name
+        .split('.')
+        .map(|p| if RESERVED.contains(&p.to_lowercase().as_str()) { format!("_{p}") } else { p.to_string() })
+        .collect::<Vec<_>>()
+        .join(".");
+    let full = format!("{prefix}{name}{suffix}");
+    if !existing.contains(&full.to_lowercase()) {
+        return Ok(full);
+    }
+    let room = MAX_LEN.saturating_sub(prefix.chars().count() + suffix.chars().count() + 15);
+    let short: String =
+        if prefix.chars().count() + name.chars().count() + suffix.chars().count() + 15 > MAX_LEN { name.chars().take(room).collect() } else { name };
+    // Each try adds a name to `existing` only once the caller takes it, so the counter needs no
+    // more tries than there are names already taken.
+    for counter in 1..=existing.len().saturating_add(1) {
+        let full = format!("{prefix}{short}{counter:015}{suffix}");
+        if !existing.contains(&full.to_lowercase()) {
+            return Ok(full);
+        }
+    }
+    Err(TablesError::invalid(format!("no file name could be made for the glyph '{user}'")))
 }
 
 fn glyph(data: &[u8], name: &str, order: &[String], w: &mut XmlWriter) -> Result<()> {
@@ -236,5 +338,28 @@ fn instructions_element(code: &[u8], w: &mut XmlWriter) {
         w.open("instructions", &[]);
         program::write(code, w);
         w.close("instructions");
+    }
+}
+
+#[cfg(test)]
+mod file_names {
+    use super::*;
+
+    #[test]
+    fn glyph_file_names_follow_the_ufo_rules() {
+        let none = HashSet::new();
+        let name = |n: &str| user_name_to_file_name(n, &none, "", "").unwrap();
+        assert_eq!(name("a"), "a");
+        assert_eq!(name("A"), "A_");
+        assert_eq!(name("A.alT"), "A_.alT_");
+        assert_eq!(name("T_H"), "T__H_");
+        assert_eq!(name(".notdef"), "_notdef");
+        assert_eq!(name("con"), "_con");
+        assert_eq!(name("CON"), "C_O_N_");
+        assert_eq!(name("con.alt"), "_con.alt");
+        assert_eq!(name("a/b|c"), "a_b_c");
+        assert_eq!(user_name_to_file_name(".notdef", &none, "x.", ".ttx").unwrap(), "x..notdef.ttx");
+        let taken: HashSet<String> = ["x.a_.ttx".to_string()].into();
+        assert_eq!(user_name_to_file_name("A", &taken, "x.", ".ttx").unwrap(), "x.A_000000000000001.ttx");
     }
 }

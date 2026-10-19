@@ -1,0 +1,245 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ttFont sfntVersion="\x00\x01\x00\x00" ttLibVersion="4.66">
+
+  <GlyphOrder>
+    <!-- The 'id' attribute is only for humans; it is ignored when parsed. -->
+    <GlyphID id="0" name=".notdef"/>
+    <GlyphID id="1" name="A"/>
+    <GlyphID id="2" name="B"/>
+    <GlyphID id="3" name="C"/>
+  </GlyphOrder>
+
+  <maxp>
+    <!-- Most of this table will be recalculated by the compiler -->
+    <tableVersion value="0x10000"/>
+    <numGlyphs value="4"/>
+    <maxPoints value="0"/>
+    <maxContours value="0"/>
+    <maxCompositePoints value="0"/>
+    <maxCompositeContours value="0"/>
+    <maxZones value="2"/>
+    <maxTwilightPoints value="0"/>
+    <maxStorage value="0"/>
+    <maxFunctionDefs value="0"/>
+    <maxInstructionDefs value="0"/>
+    <maxStackElements value="0"/>
+    <maxSizeOfInstructions value="0"/>
+    <maxComponentElements value="0"/>
+    <maxComponentDepth value="0"/>
+  </maxp>
+
+  <post>
+    <formatType value="2.0"/>
+    <italicAngle value="0.0"/>
+    <underlinePosition value="0"/>
+    <underlineThickness value="0"/>
+    <isFixedPitch value="0"/>
+    <minMemType42 value="0"/>
+    <maxMemType42 value="0"/>
+    <minMemType1 value="0"/>
+    <maxMemType1 value="0"/>
+    <psNames>
+      <!-- This file uses unique glyph names based on the information
+           found in the 'post' table. Since these names might not be unique,
+           we have to invent artificial names in case of clashes. In order to
+           be able to retain the original information, we need a name to
+           ps name mapping for those cases where they differ. That's what
+           you see below.
+            -->
+    </psNames>
+    <extraNames>
+      <!-- following are the name that are not taken from the standard Mac glyph order -->
+    </extraNames>
+  </post>
+
+  <COLR>
+    <Version value="1"/>
+    <!-- BaseGlyphRecordCount=1 -->
+    <BaseGlyphRecordArray>
+      <BaseGlyphRecord index="0">
+        <BaseGlyph value="C"/>
+        <FirstLayerIndex value="0"/>
+        <NumLayers value="2"/>
+      </BaseGlyphRecord>
+    </BaseGlyphRecordArray>
+    <LayerRecordArray>
+      <LayerRecord index="0">
+        <LayerGlyph value="A"/>
+        <PaletteIndex value="0"/>
+      </LayerRecord>
+      <LayerRecord index="1">
+        <LayerGlyph value="B"/>
+        <PaletteIndex value="1"/>
+      </LayerRecord>
+    </LayerRecordArray>
+    <!-- LayerRecordCount=2 -->
+    <BaseGlyphList>
+      <!-- BaseGlyphCount=3 -->
+      <BaseGlyphPaintRecord index="0">
+        <BaseGlyph value="A"/>
+        <Paint Format="1"><!-- PaintColrLayers -->
+          <NumLayers value="2"/>
+          <FirstLayerIndex value="0"/>
+        </Paint>
+      </BaseGlyphPaintRecord>
+      <BaseGlyphPaintRecord index="1">
+        <BaseGlyph value="B"/>
+        <Paint Format="12"><!-- PaintTransform -->
+          <Paint Format="10"><!-- PaintGlyph -->
+            <Paint Format="3"><!-- PaintVarSolid -->
+              <PaletteIndex value="1"/>
+              <Alpha value="1.0"/>
+              <VarIndexBase/>
+            </Paint>
+            <Glyph value="C"/>
+          </Paint>
+          <Transform>
+            <xx value="1.5"/>
+            <yx value="0.0"/>
+            <xy value="0.25"/>
+            <yy value="1.0"/>
+            <dx value="10.0"/>
+            <dy value="-20.0"/>
+          </Transform>
+        </Paint>
+      </BaseGlyphPaintRecord>
+      <BaseGlyphPaintRecord index="2">
+        <BaseGlyph value="C"/>
+        <Paint Format="32"><!-- PaintComposite -->
+          <SourcePaint Format="27"><!-- PaintVarRotateAroundCenter -->
+            <Paint Format="11"><!-- PaintColrGlyph -->
+              <Glyph value="B"/>
+            </Paint>
+            <angle value="45.5"/>
+            <centerX value="100"/>
+            <centerY value="-200"/>
+            <VarIndexBase value="5"/>
+          </SourcePaint>
+          <CompositeMode value="multiply"/>
+          <BackdropPaint Format="9"><!-- PaintVarSweepGradient -->
+            <ColorLine>
+              <Extend value="reflect"/>
+              <!-- StopCount=2 -->
+              <ColorStop index="0">
+                <StopOffset value="0.0"/>
+                <PaletteIndex value="0"/>
+                <Alpha value="1.0"/>
+                <VarIndexBase value="3"/>
+              </ColorStop>
+              <ColorStop index="1">
+                <StopOffset value="0.75"/>
+                <PaletteIndex value="1"/>
+                <Alpha value="0.25"/>
+                <VarIndexBase/>
+              </ColorStop>
+            </ColorLine>
+            <centerX value="3"/>
+            <centerY value="4"/>
+            <startAngle value="90.0"/>
+            <endAngle value="359.99"/>
+            <VarIndexBase value="7"/>
+          </BackdropPaint>
+        </Paint>
+      </BaseGlyphPaintRecord>
+    </BaseGlyphList>
+    <LayerList>
+      <!-- LayerCount=3 -->
+      <Paint index="0" Format="10"><!-- PaintGlyph -->
+        <Paint Format="2"><!-- PaintSolid -->
+          <PaletteIndex value="0"/>
+          <Alpha value="0.5"/>
+        </Paint>
+        <Glyph value="B"/>
+      </Paint>
+      <Paint index="1" Format="10"><!-- PaintGlyph -->
+        <Paint Format="4"><!-- PaintLinearGradient -->
+          <ColorLine>
+            <Extend value="repeat"/>
+            <!-- StopCount=2 -->
+            <ColorStop index="0">
+              <StopOffset value="0.0"/>
+              <PaletteIndex value="0"/>
+              <Alpha value="1.0"/>
+            </ColorStop>
+            <ColorStop index="1">
+              <StopOffset value="1.0"/>
+              <PaletteIndex value="1"/>
+              <Alpha value="0.25"/>
+            </ColorStop>
+          </ColorLine>
+          <x0 value="1"/>
+          <y0 value="2"/>
+          <x1 value="-3"/>
+          <y1 value="-4"/>
+          <x2 value="5"/>
+          <y2 value="6"/>
+        </Paint>
+        <Glyph value="C"/>
+      </Paint>
+      <Paint index="2" Format="21"><!-- PaintVarScaleUniform -->
+        <Paint Format="30"><!-- PaintSkewAroundCenter -->
+          <Paint Format="2"><!-- PaintSolid -->
+            <PaletteIndex value="1"/>
+            <Alpha value="1.0"/>
+          </Paint>
+          <xSkewAngle value="13.56"/>
+          <ySkewAngle value="-90.0"/>
+          <centerX value="7"/>
+          <centerY value="-9"/>
+        </Paint>
+        <scale value="1.5"/>
+        <VarIndexBase value="11"/>
+      </Paint>
+    </LayerList>
+    <ClipList Format="1">
+      <Clip>
+        <Glyph value="A"/>
+        <Glyph value="C"/>
+        <ClipBox Format="1">
+          <xMin value="0"/>
+          <yMin value="0"/>
+          <xMax value="500"/>
+          <yMax value="500"/>
+        </ClipBox>
+      </Clip>
+      <Clip>
+        <Glyph value="B"/>
+        <ClipBox Format="2">
+          <xMin value="1"/>
+          <yMin value="2"/>
+          <xMax value="3"/>
+          <yMax value="4"/>
+          <VarIndexBase value="9"/>
+        </ClipBox>
+      </Clip>
+    </ClipList>
+    <VarIndexMap Format="0">
+      <!-- Omitted values default to 0xFFFF/0xFFFF (no variations) -->
+      <Map index="0" outer="0" inner="0"/>
+      <Map index="1" outer="1" inner="1"/>
+    </VarIndexMap>
+    <VarStore Format="1">
+      <Format value="1"/>
+      <VarRegionList>
+        <!-- RegionAxisCount=1 -->
+        <!-- RegionCount=1 -->
+        <Region index="0">
+          <VarRegionAxis index="0">
+            <StartCoord value="0.0"/>
+            <PeakCoord value="1.0"/>
+            <EndCoord value="1.0"/>
+          </VarRegionAxis>
+        </Region>
+      </VarRegionList>
+      <!-- VarDataCount=1 -->
+      <VarData index="0">
+        <!-- ItemCount=1 -->
+        <NumShorts value="0"/>
+        <!-- VarRegionCount=1 -->
+        <VarRegionIndex index="0" value="0"/>
+        <Item index="0" value="[5]"/>
+      </VarData>
+    </VarStore>
+  </COLR>
+
+</ttFont>

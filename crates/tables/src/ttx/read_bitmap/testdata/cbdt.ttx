@@ -1,0 +1,223 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ttFont sfntVersion="\x00\x01\x00\x00" ttLibVersion="4.66">
+
+  <GlyphOrder>
+    <!-- The 'id' attribute is only for humans; it is ignored when parsed. -->
+    <GlyphID id="0" name=".notdef"/>
+    <GlyphID id="1" name="A"/>
+    <GlyphID id="2" name="B"/>
+    <GlyphID id="3" name="C"/>
+  </GlyphOrder>
+
+  <maxp>
+    <!-- Most of this table will be recalculated by the compiler -->
+    <tableVersion value="0x10000"/>
+    <numGlyphs value="4"/>
+    <maxPoints value="0"/>
+    <maxContours value="0"/>
+    <maxCompositePoints value="0"/>
+    <maxCompositeContours value="0"/>
+    <maxZones value="2"/>
+    <maxTwilightPoints value="0"/>
+    <maxStorage value="0"/>
+    <maxFunctionDefs value="0"/>
+    <maxInstructionDefs value="0"/>
+    <maxStackElements value="0"/>
+    <maxSizeOfInstructions value="0"/>
+    <maxComponentElements value="0"/>
+    <maxComponentDepth value="0"/>
+  </maxp>
+
+  <post>
+    <formatType value="2.0"/>
+    <italicAngle value="0.0"/>
+    <underlinePosition value="0"/>
+    <underlineThickness value="0"/>
+    <isFixedPitch value="0"/>
+    <minMemType42 value="0"/>
+    <maxMemType42 value="0"/>
+    <minMemType1 value="0"/>
+    <maxMemType1 value="0"/>
+    <psNames>
+      <!-- This file uses unique glyph names based on the information
+           found in the 'post' table. Since these names might not be unique,
+           we have to invent artificial names in case of clashes. In order to
+           be able to retain the original information, we need a name to
+           ps name mapping for those cases where they differ. That's what
+           you see below.
+            -->
+    </psNames>
+    <extraNames>
+      <!-- following are the name that are not taken from the standard Mac glyph order -->
+    </extraNames>
+  </post>
+
+  <CBDT>
+    <header version="3.0"/>
+    <strikedata index="0">
+      <cbdt_bitmap_format_17 name="A">
+        <SmallGlyphMetrics>
+          <height value="4"/>
+          <width value="4"/>
+          <BearingX value="0"/>
+          <BearingY value="4"/>
+          <Advance value="5"/>
+        </SmallGlyphMetrics>
+        <rawimagedata>
+          89504e47 0d0a1a0a 00010203 04050607
+          08090a0b 0c0d0e0f 10111213 
+        </rawimagedata>
+      </cbdt_bitmap_format_17>
+      <cbdt_bitmap_format_18 name="B">
+        <BigGlyphMetrics>
+          <height value="4"/>
+          <width value="4"/>
+          <horiBearingX value="0"/>
+          <horiBearingY value="4"/>
+          <horiAdvance value="5"/>
+          <vertBearingX value="-2"/>
+          <vertBearingY value="0"/>
+          <vertAdvance value="5"/>
+        </BigGlyphMetrics>
+        <rawimagedata>
+          010203   
+        </rawimagedata>
+      </cbdt_bitmap_format_18>
+    </strikedata>
+    <strikedata index="1">
+      <cbdt_bitmap_format_19 name="A">
+        <rawimagedata>
+          abcd   
+        </rawimagedata>
+      </cbdt_bitmap_format_19>
+      <cbdt_bitmap_format_19 name="C">
+        <rawimagedata>
+          ef01   
+        </rawimagedata>
+      </cbdt_bitmap_format_19>
+      <ebdt_bitmap_format_1 name="B">
+        <SmallGlyphMetrics>
+          <height value="1"/>
+          <width value="1"/>
+          <BearingX value="0"/>
+          <BearingY value="1"/>
+          <Advance value="2"/>
+        </SmallGlyphMetrics>
+        <rawimagedata>
+          80   
+        </rawimagedata>
+      </ebdt_bitmap_format_1>
+    </strikedata>
+  </CBDT>
+
+  <CBLC>
+    <header version="3.0"/>
+    <strike index="0">
+      <bitmapSizeTable>
+        <sbitLineMetrics direction="hori">
+          <ascender value="10"/>
+          <descender value="-2"/>
+          <widthMax value="8"/>
+          <caretSlopeNumerator value="1"/>
+          <caretSlopeDenominator value="0"/>
+          <caretOffset value="0"/>
+          <minOriginSB value="0"/>
+          <minAdvanceSB value="0"/>
+          <maxBeforeBL value="9"/>
+          <minAfterBL value="-1"/>
+          <pad1 value="0"/>
+          <pad2 value="0"/>
+        </sbitLineMetrics>
+        <sbitLineMetrics direction="vert">
+          <ascender value="0"/>
+          <descender value="0"/>
+          <widthMax value="0"/>
+          <caretSlopeNumerator value="0"/>
+          <caretSlopeDenominator value="0"/>
+          <caretOffset value="0"/>
+          <minOriginSB value="0"/>
+          <minAdvanceSB value="0"/>
+          <maxBeforeBL value="0"/>
+          <minAfterBL value="0"/>
+          <pad1 value="0"/>
+          <pad2 value="0"/>
+        </sbitLineMetrics>
+        <colorRef value="0"/>
+        <startGlyphIndex value="1"/>
+        <endGlyphIndex value="2"/>
+        <ppemX value="14"/>
+        <ppemY value="14"/>
+        <bitDepth value="1"/>
+        <flags value="1"/>
+      </bitmapSizeTable>
+      <!-- GlyphIds are written but not read. The firstGlyphIndex and
+           lastGlyphIndex values will be recalculated by the compiler. -->
+      <eblc_index_sub_table_1 imageFormat="17" firstGlyphIndex="1" lastGlyphIndex="1">
+        <glyphLoc id="1" name="A"/>
+      </eblc_index_sub_table_1>
+      <eblc_index_sub_table_1 imageFormat="18" firstGlyphIndex="2" lastGlyphIndex="2">
+        <glyphLoc id="2" name="B"/>
+      </eblc_index_sub_table_1>
+    </strike>
+    <strike index="1">
+      <bitmapSizeTable>
+        <sbitLineMetrics direction="hori">
+          <ascender value="10"/>
+          <descender value="-2"/>
+          <widthMax value="8"/>
+          <caretSlopeNumerator value="1"/>
+          <caretSlopeDenominator value="0"/>
+          <caretOffset value="0"/>
+          <minOriginSB value="0"/>
+          <minAdvanceSB value="0"/>
+          <maxBeforeBL value="9"/>
+          <minAfterBL value="-1"/>
+          <pad1 value="0"/>
+          <pad2 value="0"/>
+        </sbitLineMetrics>
+        <sbitLineMetrics direction="vert">
+          <ascender value="0"/>
+          <descender value="0"/>
+          <widthMax value="0"/>
+          <caretSlopeNumerator value="0"/>
+          <caretSlopeDenominator value="0"/>
+          <caretOffset value="0"/>
+          <minOriginSB value="0"/>
+          <minAdvanceSB value="0"/>
+          <maxBeforeBL value="0"/>
+          <minAfterBL value="0"/>
+          <pad1 value="0"/>
+          <pad2 value="0"/>
+        </sbitLineMetrics>
+        <colorRef value="0"/>
+        <startGlyphIndex value="1"/>
+        <endGlyphIndex value="3"/>
+        <ppemX value="14"/>
+        <ppemY value="14"/>
+        <bitDepth value="1"/>
+        <flags value="1"/>
+      </bitmapSizeTable>
+      <!-- GlyphIds are written but not read. The firstGlyphIndex and
+           lastGlyphIndex values will be recalculated by the compiler. -->
+      <eblc_index_sub_table_5 imageFormat="19" firstGlyphIndex="1" lastGlyphIndex="3">
+        <imageSize value="6"/>
+        <BigGlyphMetrics>
+          <height value="1"/>
+          <width value="1"/>
+          <horiBearingX value="0"/>
+          <horiBearingY value="1"/>
+          <horiAdvance value="2"/>
+          <vertBearingX value="0"/>
+          <vertBearingY value="0"/>
+          <vertAdvance value="2"/>
+        </BigGlyphMetrics>
+        <glyphLoc id="1" name="A"/>
+        <glyphLoc id="3" name="C"/>
+      </eblc_index_sub_table_5>
+      <eblc_index_sub_table_3 imageFormat="1" firstGlyphIndex="2" lastGlyphIndex="2">
+        <glyphLoc id="2" name="B"/>
+      </eblc_index_sub_table_3>
+    </strike>
+  </CBLC>
+
+</ttFont>

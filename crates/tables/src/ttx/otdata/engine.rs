@@ -1380,7 +1380,7 @@ const COMPOSITE_MODES: [&str; 28] = [
 ];
 
 /// The name of value `v` of a COLR enumeration; `None` for a number it does not define.
-fn enum_name(ty: Ty, v: i64) -> Option<&'static str> {
+pub(crate) fn enum_name(ty: Ty, v: i64) -> Option<&'static str> {
     let i = usize::try_from(v).ok()?;
     match ty {
         Ty::ExtendMode => ["pad", "repeat", "reflect"].get(i).copied(),
