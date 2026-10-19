@@ -75,6 +75,7 @@ mod filters_hatch_outline;
 mod filters_offset_curve;
 mod filters_roughen;
 mod filters_rounded_font;
+mod font_convert;
 mod font_diff;
 mod font_fields;
 mod font_view;

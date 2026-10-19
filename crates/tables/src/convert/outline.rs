@@ -1,0 +1,621 @@
+//! Outlines between flavours (M12.30): contours read from `CFF `, `CFF2` or `glyf`, curves
+//! converted between cubic and quadratic, contours reversed, and simple `glyf` glyphs written.
+//!
+//! The order follows AFDKO otf2ttf (Apache-2.0), which draws through fontTools' `Cu2QuPen`
+//! with `reverse_direction` into a `TTGlyphPen`: curves are converted first, then the contour
+//! is reversed with fontTools' `reversedContour` rule (the start point stays first, an implied
+//! closing line is never written), and a last point equal to the first is dropped.
+
+use std::collections::HashMap;
+
+use fontcraft_geom::cu2qu_multi::curves_to_quadratic;
+use fontcraft_geom::qu2cu::{Curve, quadratic_to_curves};
+use fontcraft_geom::{BezPath, CubicBez, Point, Shape as _};
+use read_fonts::model::glyph::outline::OutlinePen;
+use read_fonts::ps::cff::{CffFontRef, Subfont};
+use read_fonts::tables::glyf::{Anchor, CompositeGlyphFlags, Glyf, Glyph};
+use read_fonts::tables::loca::{Loca, LocaGlyph};
+use read_fonts::types::GlyphId;
+use read_fonts::{FontData, FontRead};
+
+use crate::{Result, TablesError};
+
+/// Deepest component nesting followed.
+const MAX_COMPONENT_DEPTH: usize = 32;
+/// Most component references followed for one glyph, nesting included.
+const MAX_COMPONENT_VISITS: usize = 100_000;
+/// Most points one converted glyph may have.
+const MAX_GLYPH_POINTS: usize = 65_535;
+/// Most contours one glyph may have.
+const MAX_CONTOURS: usize = 32_767;
+
+pub(super) type P = (f64, f64);
+
+/// One segment of a closed contour, by its end point.
+#[derive(Clone, Debug, PartialEq)]
+pub(super) enum Seg {
+    Line(P),
+    /// Off-curve points, with implied on-curve points between them, and the end point.
+    Quad(Vec<P>, P),
+    Cubic(P, P, P),
+}
+
+impl Seg {
+    fn end(&self) -> P {
+        match self {
+            Seg::Line(p) | Seg::Quad(_, p) | Seg::Cubic(_, _, p) => *p,
+        }
+    }
+}
+
+/// A closed contour: its last segment ends at `start` (an implied closing line is explicit).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(super) struct Contour {
+    pub start: P,
+    pub segs: Vec<Seg>,
+}
+
+impl Contour {
+    /// The same contour drawn the other way round, still starting at `start`.
+    pub(super) fn reversed(&self) -> Contour {
+        let mut segs = Vec::with_capacity(self.segs.len());
+        for i in (0..self.segs.len()).rev() {
+            let from = if i == 0 { self.start } else { self.segs.get(i - 1).map_or(self.start, Seg::end) };
+            segs.push(match self.segs.get(i) {
+                Some(Seg::Line(_)) | None => Seg::Line(from),
+                Some(Seg::Quad(offs, _)) => Seg::Quad(offs.iter().rev().copied().collect(), from),
+                Some(Seg::Cubic(c1, c2, _)) => Seg::Cubic(*c2, *c1, from),
+            });
+        }
+        Contour { start: self.start, segs }
+    }
+}
+
+/// Collects drawn contours, closing each one explicitly.
+#[derive(Default)]
+struct Collect {
+    contours: Vec<Contour>,
+    open: Option<Contour>,
+    points: usize,
+    too_many: bool,
+}
+
+impl Collect {
+    fn finish_open(&mut self) {
+        if let Some(mut c) = self.open.take() {
+            if c.segs.is_empty() {
+                return;
+            }
+            if c.segs.last().map(Seg::end) != Some(c.start) {
+                c.segs.push(Seg::Line(c.start));
+            }
+            self.contours.push(c);
+        }
+    }
+
+    fn push(&mut self, s: Seg) {
+        self.points += 3;
+        if self.points > MAX_GLYPH_POINTS * 4 {
+            self.too_many = true;
+            return;
+        }
+        match &mut self.open {
+            Some(c) => c.segs.push(s),
+            None => self.open = Some(Contour { start: (0.0, 0.0), segs: vec![s] }),
+        }
+    }
+
+    fn done(mut self) -> Result<Vec<Contour>> {
+        self.finish_open();
+        if self.too_many || self.contours.len() > MAX_CONTOURS {
+            return Err(TablesError::TooLarge { what: "the points of one glyph", limit: MAX_GLYPH_POINTS });
+        }
+        Ok(self.contours)
+    }
+}
+
+impl OutlinePen for Collect {
+    fn move_to(&mut self, x: f32, y: f32) {
+        self.finish_open();
+        self.open = Some(Contour { start: (f64::from(x), f64::from(y)), segs: Vec::new() });
+    }
+    fn line_to(&mut self, x: f32, y: f32) {
+        self.push(Seg::Line((f64::from(x), f64::from(y))));
+    }
+    fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) {
+        self.push(Seg::Quad(vec![(f64::from(cx0), f64::from(cy0))], (f64::from(x), f64::from(y))));
+    }
+    fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
+        self.push(Seg::Cubic((f64::from(cx0), f64::from(cy0)), (f64::from(cx1), f64::from(cy1)), (f64::from(x), f64::from(y))));
+    }
+    fn close(&mut self) {
+        self.finish_open();
+    }
+}
+
+/// The glyphs of a `CFF ` or `CFF2` table as contours, at the default location.
+pub(super) struct PsOutlines<'a> {
+    font: CffFontRef<'a>,
+    subfonts: HashMap<u16, Subfont>,
+}
+
+impl<'a> PsOutlines<'a> {
+    pub(super) fn new(data: &'a [u8], upem: u16) -> Result<Self> {
+        let font = CffFontRef::new(data, 0, Some(i32::from(upem))).map_err(|e| TablesError::Invalid(format!("the CFF table cannot be read: {e}")))?;
+        Ok(PsOutlines { font, subfonts: HashMap::new() })
+    }
+
+    pub(super) fn glyph_count(&self) -> usize {
+        self.font.num_glyphs() as usize
+    }
+
+    #[cfg(test)]
+    pub(super) fn is_cid(&self) -> bool {
+        self.font.is_cid()
+    }
+
+    /// The charset name of a glyph (`cidNNNNN` in a CID-keyed font); `None` without a charset.
+    pub(super) fn name(&self, gid: usize) -> Option<String> {
+        let charset = self.font.charset()?;
+        let sid = charset.string_id(GlyphId::new(u32::try_from(gid).ok()?))?;
+        if self.font.is_cid() {
+            return Some(format!("cid{:05}", sid.to_u16()));
+        }
+        self.font.string(sid).map(|b| b.iter().map(|&c| char::from(c)).collect())
+    }
+
+    pub(super) fn contours(&mut self, gid: usize) -> Result<Vec<Contour>> {
+        let id = GlyphId::new(u32::try_from(gid).map_err(|_| TablesError::Invalid("a glyph id beyond 32 bits".into()))?);
+        let bad = |e: read_fonts::ps::error::Error| TablesError::Invalid(format!("glyph {gid} cannot be drawn: {e}"));
+        let index = self.font.subfont_index(id).ok_or_else(|| TablesError::Invalid(format!("glyph {gid} has no Font DICT")))?;
+        if !self.subfonts.contains_key(&index) {
+            let sub = self.font.subfont(index, &[]).map_err(bad)?;
+            self.subfonts.insert(index, sub);
+        }
+        let sub = self.subfonts.get(&index).ok_or_else(|| TablesError::Invalid(format!("glyph {gid} has no Font DICT")))?;
+        let mut pen = Collect::default();
+        self.font.draw(sub, id, &[], None, &mut pen).map_err(bad)?;
+        pen.done()
+    }
+}
+
+/// The glyphs of a `glyf` table as contours, components decomposed.
+pub(super) struct GlyfOutlines<'a> {
+    glyf: Glyf<'a>,
+    loca: Loca<'a>,
+    count: usize,
+}
+
+impl<'a> GlyfOutlines<'a> {
+    pub(super) fn new(glyf: &'a [u8], loca: &'a [u8], long_loca: bool, count: usize) -> Result<Self> {
+        let bad = |e: read_fonts::ReadError| TablesError::Invalid(format!("the glyf or loca table cannot be read: {e}"));
+        let glyf = Glyf::read(FontData::new(glyf)).map_err(bad)?;
+        let loca = Loca::read_with_args(FontData::new(loca), long_loca).map_err(bad)?;
+        Ok(GlyfOutlines { glyf, loca, count })
+    }
+
+    /// The glyph's contours; `instructions` is set when it (or a component) has a glyph program.
+    pub(super) fn contours(&self, gid: usize, instructions: &mut bool) -> Result<Vec<Contour>> {
+        let mut out = Vec::new();
+        let mut visits = 0usize;
+        self.add(gid, [1.0, 0.0, 0.0, 1.0, 0.0, 0.0], 0, &mut visits, &mut out, instructions)?;
+        Ok(out)
+    }
+
+    fn add(&self, gid: usize, m: [f64; 6], depth: usize, visits: &mut usize, out: &mut Vec<Contour>, instructions: &mut bool) -> Result<()> {
+        if depth > MAX_COMPONENT_DEPTH {
+            return Err(TablesError::Invalid(format!("glyph {gid}: components nest deeper than {MAX_COMPONENT_DEPTH} (or form a cycle)")));
+        }
+        *visits += 1;
+        if *visits > MAX_COMPONENT_VISITS {
+            return Err(TablesError::TooLarge { what: "the components one glyph uses", limit: MAX_COMPONENT_VISITS });
+        }
+        if gid >= self.count {
+            return Err(TablesError::Invalid(format!("a component names glyph {gid}, beyond the glyph count")));
+        }
+        let id = GlyphId::new(gid as u32);
+        let glyph = match self.loca.get(id, &self.glyf) {
+            Some(LocaGlyph::Empty) => return Ok(()),
+            Some(LocaGlyph::Glyph(g)) => g,
+            None => return Err(TablesError::Invalid(format!("glyph {gid} cannot be read"))),
+        };
+        let at = |x: f64, y: f64| -> P { (m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]) };
+        match glyph {
+            Glyph::Simple(s) => {
+                if s.instruction_length() > 0 {
+                    *instructions = true;
+                }
+                let points: Vec<_> = s.points().collect();
+                if points.len() > MAX_GLYPH_POINTS {
+                    return Err(TablesError::TooLarge { what: "the points of one glyph", limit: MAX_GLYPH_POINTS });
+                }
+                let mut start = 0usize;
+                for end in s.end_pts_of_contours() {
+                    let end = usize::from(end.get());
+                    let pts = points.get(start..=end).ok_or_else(|| TablesError::Invalid(format!("glyph {gid}: a contour ends past its points")))?;
+                    let pts: Vec<(P, bool)> = pts.iter().map(|p| (at(f64::from(p.x), f64::from(p.y)), p.on_curve)).collect();
+                    if let Some(c) = truetype_contour(&pts) {
+                        out.push(c);
+                    }
+                    start = end + 1;
+                }
+                if out.len() > MAX_CONTOURS {
+                    return Err(TablesError::TooLarge { what: "the contours of one glyph", limit: MAX_CONTOURS });
+                }
+            }
+            Glyph::Composite(c) => {
+                if c.instructions().is_some_and(|i| !i.is_empty()) {
+                    *instructions = true;
+                }
+                for comp in c.components() {
+                    let Anchor::Offset { x, y } = comp.anchor else {
+                        return Err(TablesError::Unsupported(format!("glyph {gid}: a component placed by point numbers")));
+                    };
+                    let t = comp.transform;
+                    let (a, b, cc, d) = (t.xx.to_f64(), t.yx.to_f64(), t.xy.to_f64(), t.yy.to_f64());
+                    let (dx, dy) = if comp.flags.contains(CompositeGlyphFlags::SCALED_COMPONENT_OFFSET) {
+                        (a * f64::from(x) + cc * f64::from(y), b * f64::from(x) + d * f64::from(y))
+                    } else {
+                        (f64::from(x), f64::from(y))
+                    };
+                    // The component's matrix first, then this glyph's.
+                    let inner = [a, b, cc, d, dx, dy];
+                    let combined = [
+                        m[0] * inner[0] + m[2] * inner[1],
+                        m[1] * inner[0] + m[3] * inner[1],
+                        m[0] * inner[2] + m[2] * inner[3],
+                        m[1] * inner[2] + m[3] * inner[3],
+                        m[0] * inner[4] + m[2] * inner[5] + m[4],
+                        m[1] * inner[4] + m[3] * inner[5] + m[5],
+                    ];
+                    self.add(usize::from(comp.glyph.to_u16()), combined, depth + 1, visits, out, instructions)?;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+/// A TrueType contour from its points: implied on-curve points between off-curve ones, a
+/// contour of off-curve points only starting at the midpoint of its last and first points.
+fn truetype_contour(pts: &[(P, bool)]) -> Option<Contour> {
+    let mid = |a: P, b: P| ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0);
+    let first_on = pts.iter().position(|p| p.1);
+    let (start, order): (P, Vec<(P, bool)>) = match first_on {
+        Some(k) => {
+            let rotated: Vec<(P, bool)> = pts.iter().skip(k + 1).chain(pts.iter().take(k)).copied().collect();
+            (pts.get(k)?.0, rotated)
+        }
+        None => {
+            let (last, first) = (pts.last()?.0, pts.first()?.0);
+            (mid(last, first), pts.to_vec())
+        }
+    };
+    let mut segs = Vec::new();
+    let mut offs: Vec<P> = Vec::new();
+    for (p, on) in order {
+        if on {
+            segs.push(if offs.is_empty() { Seg::Line(p) } else { Seg::Quad(std::mem::take(&mut offs), p) });
+        } else {
+            offs.push(p);
+        }
+    }
+    if !offs.is_empty() {
+        segs.push(Seg::Quad(offs, start));
+    } else if segs.last().map(Seg::end) != Some(start) {
+        segs.push(Seg::Line(start));
+    }
+    // A one-point contour draws nothing.
+    if segs.iter().all(|s| matches!(s, Seg::Line(p) if *p == start)) {
+        return None;
+    }
+    Some(Contour { start, segs })
+}
+
+/// Cubic curves as quadratic splines within `max_error` font units (fontTools' cu2qu).
+pub(super) fn to_quadratic(c: &Contour, max_error: f64) -> Result<Contour> {
+    let mut segs = Vec::with_capacity(c.segs.len());
+    let mut from = c.start;
+    for s in &c.segs {
+        match s {
+            Seg::Cubic(c1, c2, p) => {
+                let cubic = CubicBez::new(pt(from), pt(*c1), pt(*c2), pt(*p));
+                let quads = curves_to_quadratic(&[cubic], max_error)
+                    .and_then(|mut v| v.pop())
+                    .ok_or_else(|| TablesError::Invalid("a curve cannot be approximated within the error bound".into()))?;
+                segs.push(Seg::Quad(quads.iter().map(|q| (q.p1.x, q.p1.y)).collect(), *p));
+            }
+            other => segs.push(other.clone()),
+        }
+        from = s.end();
+    }
+    Ok(Contour { start: c.start, segs })
+}
+
+/// How quadratic curves become cubic ones.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum QuadToCubic {
+    /// Runs of quadratic curves merged into fewer cubic curves within the error bound
+    /// (fontTools' qu2cu, every curve cubic).
+    #[default]
+    Optimized,
+    /// Each quadratic curve raised to the one cubic curve that draws it exactly.
+    Exact,
+}
+
+/// Quadratic splines as cubic curves.
+pub(super) fn to_cubic(c: &Contour, how: QuadToCubic, max_error: f64) -> Result<Contour> {
+    let mid = |a: P, b: P| ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0);
+    let mut segs: Vec<Seg> = Vec::with_capacity(c.segs.len());
+    let mut from = c.start;
+    let mut run: Vec<Vec<(f64, f64)>> = Vec::new();
+    let flush = |run: &mut Vec<Vec<(f64, f64)>>, segs: &mut Vec<Seg>| -> Result<()> {
+        if run.is_empty() {
+            return Ok(());
+        }
+        let curves = quadratic_to_curves(run, max_error, true).map_err(|e| TablesError::Invalid(format!("quadratic to cubic: {e}")))?;
+        for curve in curves {
+            segs.push(match curve {
+                Curve::Cubic([_, c1, c2, p]) => Seg::Cubic(c1, c2, p),
+                Curve::Quadratic([p0, q, p]) => raise(p0, q, p),
+            });
+        }
+        run.clear();
+        Ok(())
+    };
+    for s in &c.segs {
+        match (s, how) {
+            (Seg::Quad(offs, p), QuadToCubic::Exact) => {
+                let mut a = from;
+                for (i, q) in offs.iter().enumerate() {
+                    let b = match offs.get(i + 1) {
+                        Some(next) => mid(*q, *next),
+                        None => *p,
+                    };
+                    segs.push(raise(a, *q, b));
+                    a = b;
+                }
+            }
+            (Seg::Quad(offs, p), QuadToCubic::Optimized) => {
+                let mut spline = Vec::with_capacity(offs.len() + 2);
+                spline.push(from);
+                spline.extend_from_slice(offs);
+                spline.push(*p);
+                run.push(spline);
+            }
+            (other, _) => {
+                flush(&mut run, &mut segs)?;
+                segs.push(other.clone());
+            }
+        }
+        from = s.end();
+    }
+    flush(&mut run, &mut segs)?;
+    Ok(Contour { start: c.start, segs })
+}
+
+/// The cubic curve that draws the quadratic curve `p0 q p1`.
+fn raise(p0: P, q: P, p1: P) -> Seg {
+    let c1 = (p0.0 + 2.0 / 3.0 * (q.0 - p0.0), p0.1 + 2.0 / 3.0 * (q.1 - p0.1));
+    let c2 = (p1.0 + 2.0 / 3.0 * (q.0 - p1.0), p1.1 + 2.0 / 3.0 * (q.1 - p1.1));
+    Seg::Cubic(c1, c2, p1)
+}
+
+fn pt(p: P) -> Point {
+    Point::new(p.0, p.1)
+}
+
+/// The drawing steps of cubic contours for the CFF writer: the implied closing line left out.
+pub(super) fn path_ops(contours: &[Contour]) -> Result<Vec<fontcraft_cff::PathOp>> {
+    use fontcraft_cff::PathOp;
+    let mut ops = Vec::new();
+    for c in contours {
+        ops.push(PathOp::MoveTo(c.start));
+        let n = c.segs.len();
+        for (i, s) in c.segs.iter().enumerate() {
+            match s {
+                Seg::Line(p) if i + 1 == n && *p == c.start => {}
+                Seg::Line(p) => ops.push(PathOp::LineTo(*p)),
+                Seg::Cubic(c1, c2, p) => ops.push(PathOp::CurveTo(*c1, *c2, *p)),
+                Seg::Quad(..) => return Err(TablesError::Invalid("a quadratic curve reached the CFF writer".into())),
+            }
+        }
+    }
+    Ok(ops)
+}
+
+/// The bounds of the drawn contours (curve extremes, not control points).
+pub(super) fn drawn_bounds(contours: &[Contour]) -> Option<[f64; 4]> {
+    let mut path = BezPath::new();
+    for c in contours {
+        path.move_to(pt(c.start));
+        for s in &c.segs {
+            match s {
+                Seg::Line(p) => path.line_to(pt(*p)),
+                Seg::Cubic(c1, c2, p) => path.curve_to(pt(*c1), pt(*c2), pt(*p)),
+                Seg::Quad(offs, p) => {
+                    for q in quads(offs, *p) {
+                        path.quad_to(pt(q.0), pt(q.1));
+                    }
+                }
+            }
+        }
+        path.close_path();
+    }
+    if contours.is_empty() {
+        return None;
+    }
+    let r = path.bounding_box();
+    Some([r.x0, r.y0, r.x1, r.y1]).filter(|b| b.iter().all(|v| v.is_finite()))
+}
+
+/// The single quadratic curves of a spline: `(control, end)` pairs.
+fn quads(offs: &[P], end: P) -> Vec<(P, P)> {
+    let mid = |a: P, b: P| ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0);
+    offs.iter().enumerate().map(|(i, q)| (*q, offs.get(i + 1).map_or(end, |n| mid(*q, *n)))).collect()
+}
+
+/// A simple glyph's points, rounded: `(x, y, on-curve)` per contour.
+pub(super) type TtContour = Vec<(i32, i32, bool)>;
+
+/// The glyf points of quadratic contours, as `TTGlyphPen` writes them: the implied closing line
+/// left out, and a last point equal to the first dropped.
+pub(super) fn truetype_points(contours: &[Contour]) -> Result<Vec<TtContour>> {
+    let round = |v: f64| -> Result<i32> {
+        let r = (v + 0.5).floor();
+        if !(r.is_finite() && (-32_768.0..=32_767.0).contains(&r)) {
+            return Err(TablesError::Unsupported(format!("a coordinate of {v} does not fit in glyf")));
+        }
+        Ok(r as i32)
+    };
+    let mut out = Vec::with_capacity(contours.len());
+    for c in contours {
+        let mut pts: Vec<(P, bool)> = vec![(c.start, true)];
+        let n = c.segs.len();
+        for (i, s) in c.segs.iter().enumerate() {
+            match s {
+                Seg::Line(p) if i + 1 == n && *p == c.start => {}
+                Seg::Line(p) => pts.push((*p, true)),
+                Seg::Quad(offs, p) => {
+                    pts.extend(offs.iter().map(|q| (*q, false)));
+                    pts.push((*p, true));
+                }
+                Seg::Cubic(..) => return Err(TablesError::Invalid("a cubic curve reached the glyf writer".into())),
+            }
+        }
+        if pts.len() > 1 && pts.last().map(|p| p.0) == Some(c.start) {
+            pts.pop();
+        }
+        if pts.len() < 2 {
+            continue;
+        }
+        out.push(pts.iter().map(|(p, on)| Ok((round(p.0)?, round(p.1)?, *on))).collect::<Result<Vec<_>>>()?);
+    }
+    Ok(out)
+}
+
+/// A simple `glyf` glyph without instructions, and its bounds (`None` for an empty glyph,
+/// which has no data).
+pub(super) fn encode_simple(contours: &[TtContour]) -> Result<(Vec<u8>, Option<[i16; 4]>)> {
+    let points: usize = contours.iter().map(Vec::len).sum();
+    if points == 0 {
+        return Ok((Vec::new(), None));
+    }
+    if points > MAX_GLYPH_POINTS || contours.len() > MAX_CONTOURS {
+        return Err(TablesError::TooLarge { what: "the points of one glyph", limit: MAX_GLYPH_POINTS });
+    }
+    let all = || contours.iter().flatten();
+    let fit = |v: i32| i16::try_from(v).map_err(|_| TablesError::Unsupported(format!("a coordinate of {v} does not fit in glyf")));
+    let bbox = [
+        fit(all().map(|p| p.0).min().unwrap_or(0))?,
+        fit(all().map(|p| p.1).min().unwrap_or(0))?,
+        fit(all().map(|p| p.0).max().unwrap_or(0))?,
+        fit(all().map(|p| p.1).max().unwrap_or(0))?,
+    ];
+    let mut out = Vec::with_capacity(12 + points * 5);
+    out.extend_from_slice(&(contours.len() as i16).to_be_bytes());
+    for v in bbox {
+        out.extend_from_slice(&v.to_be_bytes());
+    }
+    let mut end = 0usize;
+    for c in contours {
+        end += c.len();
+        out.extend_from_slice(&((end - 1) as u16).to_be_bytes());
+    }
+    out.extend_from_slice(&0u16.to_be_bytes());
+    let mut flags = Vec::with_capacity(points);
+    let mut xs = Vec::new();
+    let mut ys = Vec::new();
+    let (mut px, mut py) = (0i32, 0i32);
+    for &(x, y, on) in all() {
+        let mut f = u8::from(on);
+        let (dx, dy) = (x - px, y - py);
+        (px, py) = (x, y);
+        if dx == 0 {
+            f |= 0x10;
+        } else if (-255..=255).contains(&dx) {
+            f |= 0x02;
+            if dx > 0 {
+                f |= 0x10;
+            }
+            xs.push(dx.unsigned_abs() as u8);
+        } else {
+            xs.extend_from_slice(&fit(dx)?.to_be_bytes());
+        }
+        if dy == 0 {
+            f |= 0x20;
+        } else if (-255..=255).contains(&dy) {
+            f |= 0x04;
+            if dy > 0 {
+                f |= 0x20;
+            }
+            ys.push(dy.unsigned_abs() as u8);
+        } else {
+            ys.extend_from_slice(&fit(dy)?.to_be_bytes());
+        }
+        flags.push(f);
+    }
+    let mut i = 0usize;
+    while let Some(&f) = flags.get(i) {
+        let mut repeat = 0usize;
+        while repeat < 255 && flags.get(i + 1 + repeat) == Some(&f) {
+            repeat += 1;
+        }
+        if repeat > 0 {
+            out.push(f | 0x08);
+            out.push(repeat as u8);
+        } else {
+            out.push(f);
+        }
+        i += repeat + 1;
+    }
+    out.extend_from_slice(&xs);
+    out.extend_from_slice(&ys);
+    Ok((out, Some(bbox)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn square() -> Contour {
+        // Counter-clockwise, as CFF draws an outer contour.
+        Contour { start: (0.0, 0.0), segs: vec![Seg::Line((100.0, 0.0)), Seg::Line((100.0, 100.0)), Seg::Line((0.0, 100.0)), Seg::Line((0.0, 0.0))] }
+    }
+
+    #[test]
+    fn reversing_keeps_the_start_point_and_drops_the_implied_closing_line() {
+        let r = square().reversed();
+        assert_eq!(r.start, (0.0, 0.0));
+        assert_eq!(truetype_points(&[r]).unwrap(), vec![vec![(0, 0, true), (0, 100, true), (100, 100, true), (100, 0, true)]]);
+        let curved = Contour { start: (0.0, 0.0), segs: vec![Seg::Line((100.0, 0.0)), Seg::Cubic((100.0, 50.0), (50.0, 100.0), (0.0, 0.0))] };
+        let r = curved.reversed();
+        assert_eq!(r.segs, vec![Seg::Cubic((50.0, 100.0), (100.0, 50.0), (100.0, 0.0)), Seg::Line((0.0, 0.0))]);
+    }
+
+    #[test]
+    fn exact_raising_draws_the_same_curve() {
+        let c = Contour { start: (0.0, 0.0), segs: vec![Seg::Quad(vec![(50.0, 100.0), (150.0, 100.0)], (200.0, 0.0)), Seg::Line((0.0, 0.0))] };
+        let cubic = to_cubic(&c, QuadToCubic::Exact, 1.0).unwrap();
+        assert_eq!(cubic.segs.len(), 3);
+        // The implied on-curve point (100, 100) is kept as an on-curve point.
+        assert_eq!(cubic.segs.first().map(Seg::end), Some((100.0, 100.0)));
+        let merged = to_cubic(&c, QuadToCubic::Optimized, 1.0).unwrap();
+        assert_eq!(merged.segs.len(), 2, "the two quadratic pieces of one spline become one cubic");
+        let b1 = drawn_bounds(&[c]).unwrap();
+        let b2 = drawn_bounds(&[merged]).unwrap();
+        for (a, b) in b1.iter().zip(&b2) {
+            assert!((a - b).abs() < 1.0, "{b1:?} vs {b2:?}");
+        }
+    }
+
+    #[test]
+    fn simple_glyphs_round_trip_through_the_glyf_reader() {
+        let contour = vec![(0, 0, true), (0, 700, true), (300, 900, false), (600, 700, true), (600, 0, true)];
+        let (bytes, bbox) = encode_simple(&[contour.clone()]).unwrap();
+        assert_eq!(bbox, Some([0, 0, 600, 900]));
+        let glyph = read_fonts::tables::glyf::SimpleGlyph::read(FontData::new(&bytes)).unwrap();
+        let read: Vec<(i32, i32, bool)> = glyph.points().map(|p| (i32::from(p.x), i32::from(p.y), p.on_curve)).collect();
+        assert_eq!(read, contour);
+    }
+}

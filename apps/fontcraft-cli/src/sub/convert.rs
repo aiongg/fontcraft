@@ -1,15 +1,17 @@
-//! `fontcraft-cli convert`.
+//! `fontcraft-cli convert`: sources through `file.saveAs` and `file.exportStatic`, compiled fonts
+//! through `font.convert` (M12.30).
 
 use super::Subcommand;
-use crate::io::{Outcome, execute, open, out, usage};
+use crate::args::{self, OptSpec};
+use crate::io::{Failure, Outcome, execute, open, out, out_json_line, usage};
 use fontcraft_engine::Session;
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 
 pub const SUBCOMMAND: Subcommand = Subcommand {
     name: "convert",
-    summary: "Convert a source to another format or compile it to one font",
+    summary: "Convert a font between formats or outline flavours, or a source to another format",
     usage: USAGE,
-    options: &[],
+    options: OPTIONS,
     actions: &[],
     run: convert,
 };
@@ -21,23 +23,57 @@ const USAGE: &str = "\
       one static font (.ttf, .otf with CFF outlines, .woff, .woff2) of its first exportable
       instance. --smart-components: a UFO or designspace keeps smart components as components
       with their values (default) or holds them drawn as outlines.
+  fontcraft-cli convert FONT OUT | convert FONT... --to ttf|otf|otf-cff2|cff|cff2 [options]
+      Rewrite compiled fonts with other outlines: CFF or CFF2 to TrueType (cubic curves become
+      quadratic within --max-error em, contours reversed), TrueType to CFF or CFF2 (components
+      decomposed, instructions dropped), CFF to CFF2 and back with hints kept, or only the CFF
+      or CFF2 table (cff, cff2). With IN OUT the extension of OUT says what to write; .woff and
+      .woff2 keep the input's outlines. Each output is INPUT.EXT unless -o, --output-dir or
+      --in-place says otherwise.
 ";
 
-fn convert(args: &[String]) -> Outcome {
-    let mut files: Vec<&String> = Vec::new();
-    let mut smart: Option<&str> = None;
-    let mut it = args.iter();
-    while let Some(arg) = it.next() {
-        match arg.as_str() {
-            "--smart-components" => match it.next().map(String::as_str) {
-                Some(v @ ("components" | "outlines")) => smart = Some(v),
-                _ => return Err(usage("--smart-components needs components or outlines")),
-            },
-            other if other.starts_with("--") => return Err(usage(format!("unknown convert option `{other}`"))),
-            _ => files.push(arg),
-        }
+const OPTIONS: &[OptSpec] = &[
+    OptSpec::value("to", "FORMAT", "", "ttf, otf, otf-cff2, cff or cff2"),
+    OptSpec::value("container", "plain|woff|woff2", "plain", "wrap the result"),
+    OptSpec::value("max-error", "EM", "0.001", "largest curve conversion error, as a fraction of the em"),
+    OptSpec::value(
+        "curve-conversion",
+        "optimized|exact",
+        "optimized",
+        "quadratic to cubic: merge curves within the error, or raise each one exactly",
+    ),
+    OptSpec::switch("keep-direction", false, "do not reverse contours when the curve degree changes"),
+    OptSpec::value("post-format", "2|3", "2", "keep glyph names in post (2) or drop them (3)"),
+    OptSpec::switch("subroutinize", false, "subroutinise CFF and CFF2 results (default: sfnt results yes, bare tables no)"),
+    OptSpec::value("max-subrs", "N", "", "most subroutines per INDEX"),
+    OptSpec::switch("no-hints", false, "drop stem hints when CFF outlines stay CFF"),
+    OptSpec::value("timestamp", "keep|now|SECONDS", "", "head.modified: keep it, the current time, or seconds since 1970"),
+    OptSpec::value("smart-components", "components|outlines", "", "sources: how a UFO or designspace holds smart components"),
+    OptSpec::value("output", "OUT", "", "the output file (one input only)").short('o'),
+    OptSpec::value("output-dir", "DIR", "", "the folder outputs go into"),
+    OptSpec::switch("in-place", false, "replace each input"),
+    OptSpec::switch("no-clobber", false, "refuse to replace an existing output"),
+    OptSpec::value("face", "N|NAME", "", "the face of a collection"),
+    OptSpec::switch("json", false, "print one JSON result per input"),
+];
+
+fn convert(raw: &[String]) -> Outcome {
+    let parsed = args::parse(OPTIONS, raw)?;
+    if parsed.help {
+        return out(&super::help(&SUBCOMMAND));
     }
-    let [input, output] = files.as_slice() else { return Err(usage("convert needs IN and OUT")) };
+    let Some(first) = parsed.positional.first() else { return Err(usage(super::help(&SUBCOMMAND))) };
+    let compiled = parsed.value("to").is_some() || is_compiled(first);
+    if compiled {
+        return convert_fonts(&parsed, raw);
+    }
+    let [input, output] = parsed.positional.as_slice() else { return Err(usage("convert needs IN and OUT")) };
+    let smart = parsed.value("smart-components").filter(|v| !v.is_empty());
+    if let Some(v) = smart
+        && !matches!(v, "components" | "outlines")
+    {
+        return Err(usage("--smart-components needs components or outlines"));
+    }
     let mut session = Session::new();
     open(&mut session, input)?;
     let extension = std::path::Path::new(output).extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
@@ -60,4 +96,121 @@ fn convert(args: &[String]) -> Outcome {
         }
     };
     out(&result.to_string())
+}
+
+/// A file whose first bytes say it is a compiled font (sfnt, collection, WOFF, WOFF2).
+fn is_compiled(path: &str) -> bool {
+    use std::io::Read as _;
+    let mut head = [0u8; 4];
+    let read = std::fs::File::open(path).and_then(|mut f| f.read_exact(&mut head));
+    read.is_ok() && matches!(&head, [0, 1, 0, 0] | b"OTTO" | b"true" | b"ttcf" | b"wOFF" | b"wOF2")
+}
+
+/// The flavour already in a compiled font, for `IN OUT.woff`: from the sfnt version and, for
+/// `OTTO`, whether the table directory lists `CFF2`.
+fn flavour_of(path: &str) -> Result<&'static str, Failure> {
+    let bytes = crate::io::read_input(path)?;
+    let at = |i: usize| bytes.get(i..i + 4);
+    let version = match at(0) {
+        Some(b"wOFF" | b"wOF2") => at(4),
+        other => other,
+    };
+    if version != Some(b"OTTO".as_slice()) {
+        return Ok("ttf");
+    }
+    // A plain sfnt: 12-byte header, then 16-byte table records; WOFF keeps its own directory,
+    // where CFF2 is rare enough to be read as CFF.
+    let tables = bytes.get(4..6).map_or(0, |n| usize::from(u16::from_be_bytes([n.first().copied().unwrap_or(0), n.get(1).copied().unwrap_or(0)])));
+    let cff2 = at(0) == Some(b"OTTO".as_slice()) && (0..tables.min(1024)).any(|i| at(12 + 16 * i) == Some(b"CFF2".as_slice()));
+    Ok(if cff2 { "otf-cff2" } else { "otf" })
+}
+
+fn convert_fonts(parsed: &args::Parsed, raw: &[String]) -> Outcome {
+    let mut params = Map::new();
+    let mut inputs: Vec<String> = parsed.positional.clone();
+    let mut container = parsed.value("container").unwrap_or("plain").to_string();
+    let to = match parsed.value("to") {
+        Some(to) => to.to_string(),
+        None => {
+            // IN OUT: the output's extension decides.
+            let [input, output] = parsed.positional.as_slice() else { return Err(usage("convert needs IN and OUT, or --to FORMAT")) };
+            if parsed.value("output").is_some() {
+                return Err(usage("give OUT or -o, not both"));
+            }
+            let extension = std::path::Path::new(output).extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+            let to = match extension.as_str() {
+                "ttf" => "ttf",
+                "otf" => "otf",
+                "cff" => "cff",
+                "cff2" => "cff2",
+                "woff" | "woff2" => {
+                    container = extension.clone();
+                    flavour_of(input)?
+                }
+                other => {
+                    return Err(usage(format!("cannot write `.{other}` from a compiled font (writable: .ttf, .otf, .cff, .cff2, .woff, .woff2)")));
+                }
+            };
+            params.insert("output".into(), json!(output));
+            inputs = vec![input.clone()];
+            to.to_string()
+        }
+    };
+    params.insert("inputs".into(), json!(inputs));
+    params.insert("to".into(), json!(to));
+    params.insert("container".into(), json!(container));
+    let max_error = parsed.value("max-error").unwrap_or("0.001").parse::<f64>().map_err(|_| usage("--max-error needs a number"))?;
+    let mut curves = Map::new();
+    curves.insert("maxError".into(), json!(max_error));
+    curves.insert("conversion".into(), json!(parsed.value("curve-conversion").unwrap_or("optimized")));
+    curves.insert("keepDirection".into(), json!(parsed.switch("keep-direction")));
+    params.insert("curves".into(), Value::Object(curves));
+    let post = parsed.value("post-format").unwrap_or("2").parse::<u64>().map_err(|_| usage("--post-format needs 2 or 3"))?;
+    params.insert("postFormat".into(), json!(post));
+    let mut cff = Map::new();
+    if raw.iter().any(|a| a == "--no-subroutinize") {
+        cff.insert("subroutinize".into(), json!(false));
+    } else if parsed.switch("subroutinize") {
+        cff.insert("subroutinize".into(), json!(true));
+    }
+    if let Some(n) = parsed.value("max-subrs").filter(|v| !v.is_empty()) {
+        cff.insert("maxSubrs".into(), json!(n.parse::<u64>().map_err(|_| usage("--max-subrs needs a number"))?));
+    }
+    if !cff.is_empty() {
+        params.insert("cff".into(), Value::Object(cff));
+    }
+    params.insert("hints".into(), json!(!parsed.switch("no-hints")));
+    if let Some(t) = parsed.value("timestamp").filter(|v| !v.is_empty()) {
+        params.insert("timestamp".into(), t.parse::<i64>().map(Value::from).unwrap_or_else(|_| json!(t)));
+    }
+    for (key, name) in [("output", "output"), ("outputDir", "output-dir")] {
+        if let Some(v) = parsed.value(name).filter(|v| !v.is_empty()) {
+            params.insert(key.into(), json!(v));
+        }
+    }
+    params.insert("inPlace".into(), json!(parsed.switch("in-place")));
+    params.insert("noClobber".into(), json!(parsed.switch("no-clobber")));
+    if let Some(face) = parsed.value("face").filter(|v| !v.is_empty()) {
+        params.insert("face".into(), face.parse::<u64>().map(Value::from).unwrap_or_else(|_| json!(face)));
+    }
+    let result = execute(&mut Session::new(), "font.convert", &Value::Object(params)).map_err(|f| match f {
+        Failure::Failed(m) if m.contains("cannot open") || m.contains("cannot read") => Failure::Input(m),
+        other => other,
+    })?;
+    let results = result.get("results").and_then(Value::as_array).cloned().unwrap_or_default();
+    for r in &results {
+        if parsed.switch("json") {
+            out_json_line(r)?;
+        } else {
+            let left: Vec<&str> =
+                r.get("leftBehind").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_str).collect()).unwrap_or_default();
+            out(&format!(
+                "{} -> {}{}",
+                r.get("input").and_then(Value::as_str).unwrap_or("?"),
+                r.get("output").and_then(Value::as_str).unwrap_or("?"),
+                if left.is_empty() { String::new() } else { format!(" (left behind: {})", left.join("; ")) }
+            ))?;
+        }
+    }
+    Ok(())
 }

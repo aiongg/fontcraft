@@ -884,6 +884,10 @@ milestone = "M12"
 summary = "Rewrites a font or source in another format while keeping its content: between outline flavours (CFF, CFF2, TrueType), between container and bare forms (OTF, bare CFF, Type 1 PFA/PFB, decrypted Type 1 text, TTX XML), from binary to UFO, and between source formats (native, .glyphs, UFO 2/3, designspace). Converting to the format the input already has re-reads and re-writes it, which normalises the file."
 ref = "AFDKO tx help (-cff, -cff2, -t1, -ufo, -svg modes), otf2ttf.py, type1/detype1, CIDKeyedUFOGuide.md; fontTools ttx (compile), cffLib.CFFToCFF2 / CFF2ToCFF, ttLib __main__, designspaceLib __main__; fontmake -o ufo"
 status = "docs"
+notes = "Built for compiled fonts (font.convert): --to ttf|otf|otf-cff2|cff|cff2, the IN OUT form with .ttf, .otf, .cff, .cff2, .woff and .woff2, --container, --max-error, --curve-conversion, --keep-direction, --post-format, --subroutinize/--no-subroutinize, --max-subrs, --no-hints, --timestamp, --face and the output options. Sources keep the IN OUT form through file.saveAs and file.exportStatic. Type 1 output is not written (read only, M12 decision); ttx, ufo, designspace, glyphs, native, svg-font targets from a compiled font, glyph selection, GOADB, CID keying, --location and the Type 1 and SVG options are refused with a message until built."
+guesses = [
+  "With IN OUT.woff or OUT.woff2 the output keeps the input's outline flavour; the reference tools have no such two-argument form, so user feedback would settle it.",
+]
 
 [[cli]]
 id = "subset"
@@ -2451,6 +2455,13 @@ milestone = "M12"
 summary = "Re-encodes a font or source in another format without changing its content and returns the files written plus a list of data the target format could not hold. Covers outline flavour changes, bare font programs, Type 1 in and out, TTX XML in and out, UFO and designspace export, and same-format normalisation."
 ref = "docs/spec/20-cli.md › convert"
 status = "docs"
+notes = "Built: compiled-font inputs (TrueType, CFF, static CFF2, collections by face, WOFF, WOFF2) to ttf, otf, otf-cff2 and the bare cff and cff2 tables, with container, curves, postFormat, cff.subroutinize, cff.maxSubrs, hints and timestamp. Returns {results: [{input, output, bytes, glyphs, leftBehind}]}. CFF to TrueType follows AFDKO otf2ttf (cu2qu at maxError times units per em, contours reversed, maxp 1.0, post 2, lsb = xMin, hhea recalculated); CFF to CFF2 and CFF2 to CFF follow fontTools cffLib (widths, endchar and dotsection; a nameless CFF2 becomes CID-keyed Adobe-Identity-0). Every output is staged and moved into place only when all inputs converted. Variable inputs are refused (instantiate first); other targets and the parameters not built yet are refused by name."
+guesses = [
+  "CFF to CFF2 writes the glyph names into post format 2 (fontTools leaves post as it was, usually format 3, so the names are lost); comparing with a reference app's CFF2 export would settle it.",
+  "CFF2 to CFF is name-keyed when post carries names and the table has one Font DICT, and CID-keyed Adobe-Identity-0 otherwise; fontTools always writes the CID-keyed form, so a reference user's expectation would settle it.",
+  "TrueType to CFF merges quadratic runs with fontTools' qu2cu at maxError (all curves cubic) by default; tx's own merging rule is not documented, so a corpus comparison of point counts with tx -cff would settle it.",
+  "The CFF Top DICT built from a TrueType font takes Notice from name ID 7, Copyright from name ID 0, FullName from ID 4, FamilyName from ID 16 or 1 and version from head.fontRevision; a comparison with tx and makeotf output would settle it.",
+]
 
 [[command]]
 id = "font.subset"
