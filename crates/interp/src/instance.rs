@@ -266,12 +266,10 @@ pub fn instance_font_with_notes(font: &Font, instance: usize, options: &InterpOp
         && let Some(rules) = crate::doc_rules::document_rules(font)
     {
         let names: HashSet<String> = glyphs.iter().map(|g| g.name.clone()).collect();
-        for (old, new) in crate::doc_rules::swaps_at(&rules, &inst.location, |n| names.contains(n)) {
-            if !crate::doc_rules::swap_glyphs(&mut glyphs, &old, &new) {
-                notes.push(format!(
-                    "the designspace rule that substitutes `{new}` for `{old}` names a glyph the instance does not have and was left out"
-                ));
-            }
+        let swaps = crate::doc_rules::swaps_at(&rules, &inst.location, |n| names.contains(n));
+        for (old, new) in crate::doc_rules::apply_swaps(&mut glyphs, &swaps) {
+            notes
+                .push(format!("the designspace rule that substitutes `{new}` for `{old}` names a glyph the instance does not have and was left out"));
         }
     }
 

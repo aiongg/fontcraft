@@ -7,6 +7,8 @@
 //! for a variable export. fontTools 4.66 fails on fonts with `vmtx` (its `add_VVAR` reads a name
 //! before setting it), so `VVAR` has no oracle.
 
+use std::collections::{HashMap, HashSet};
+
 use fontcraft_compile::var::hvar::{build_hvar, build_vvar};
 use fontcraft_compile::var::{Region, RegionAxis, VarValue};
 use read_fonts::tables::glyf::Glyph;
@@ -18,6 +20,27 @@ use crate::limits::MAX_TUPLE_VARIATIONS;
 use crate::sfnt::SfntFont;
 use crate::variations::fvar_axes;
 use crate::{Result, TablesError};
+
+/// The most distinct regions an item variation store can list (its region count is 16-bit).
+const MAX_STORE_REGIONS: usize = 65_535;
+/// The most `gvar` deltas read for one build, over every glyph and tuple. Tuples that share
+/// their points and peaks cost a few bytes each but make every point's delta be read again.
+const MAX_HVAR_DELTAS: usize = 1 << 30;
+/// The most region axes held in the advance deltas of all glyphs together, horizontal and
+/// vertical: 24 bytes each.
+const MAX_HVAR_REGION_AXES: usize = 1 << 24;
+
+/// A region's coordinates as bits, for hashing; they come from F2Dot14 values, so equal bits
+/// mean equal regions (`+ 0.0` folds −0 into 0).
+fn region_key(region: &Region) -> Vec<[u64; 3]> {
+    region.0.iter().map(|a| [a.start, a.peak, a.end].map(|x| (x + 0.0).to_bits())).collect()
+}
+
+/// The work [`build_hvar_with`] has left.
+struct Budget {
+    deltas: usize,
+    region_axes: usize,
+}
 
 /// What [`build_hvar_with`] builds.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -118,7 +141,8 @@ pub fn build_hvar_with(font: &SfntFont, options: &HvarOptions) -> Result<HvarBui
 
     let mut horizontal = Vec::with_capacity(count);
     let mut vertical = Vec::with_capacity(if vmtx.is_some() { count } else { 0 });
-    let mut regions: Vec<Region> = Vec::new();
+    let mut regions: HashSet<Vec<[u64; 3]>> = HashSet::new();
+    let mut budget = Budget { deltas: MAX_HVAR_DELTAS, region_axes: MAX_HVAR_REGION_AXES };
     for g in 0..count {
         let gid = GlyphId::new(u32::try_from(g).unwrap_or(u32::MAX));
         let points = match loca.get_glyf(gid, &glyf).map_err(|e| TablesError::invalid(format!("glyph {g} cannot be read: {e}")))? {
@@ -126,11 +150,17 @@ pub fn build_hvar_with(font: &SfntFont, options: &HvarOptions) -> Result<HvarBui
             Some(Glyph::Simple(s)) => s.num_points(),
             Some(Glyph::Composite(c)) => c.components().count(),
         };
-        let (h, v) = phantom_deltas(&gvar, gid, points, usize::from(axis_count))?;
+        let (h, v) = phantom_deltas(&gvar, gid, points, usize::from(axis_count), &mut budget)?;
+        let held = h.len().saturating_add(if vmtx.is_some() { v.len() } else { 0 }).saturating_mul(usize::from(axis_count));
+        budget.region_axes = budget
+            .region_axes
+            .checked_sub(held)
+            .ok_or(TablesError::TooLarge { what: "the region axes of the advance deltas", limit: MAX_HVAR_REGION_AXES })?;
         for (r, _) in &h {
-            if !regions.contains(r) {
-                regions.push(r.clone());
-            }
+            regions.insert(region_key(r));
+        }
+        if regions.len() > MAX_STORE_REGIONS {
+            return Err(TablesError::TooLarge { what: "the distinct regions of the advance deltas", limit: MAX_STORE_REGIONS });
         }
         horizontal.push(VarValue { default: i32::from(hmtx.advance(gid).unwrap_or(0)), deltas: h });
         if let Some(vmtx) = &vmtx {
@@ -165,9 +195,11 @@ type RegionDeltas = Vec<(Region, i32)>;
 
 /// The horizontal and vertical advance deltas of glyph `gid` (with `points` outline points or
 /// components), one per distinct region of its tuples, zeros left out.
-fn phantom_deltas(gvar: &Gvar<'_>, gid: GlyphId, points: usize, axis_count: usize) -> Result<(RegionDeltas, RegionDeltas)> {
+fn phantom_deltas(gvar: &Gvar<'_>, gid: GlyphId, points: usize, axis_count: usize, budget: &mut Budget) -> Result<(RegionDeltas, RegionDeltas)> {
     let mut h: Vec<(Region, i32)> = Vec::new();
     let mut v: Vec<(Region, i32)> = Vec::new();
+    // Each region's index in `h` and `v`, which list the regions in the same order.
+    let mut index: HashMap<Vec<[u64; 3]>, usize> = HashMap::new();
     let Some(data) =
         gvar.glyph_variation_data(gid).map_err(|e| TablesError::invalid(format!("the gvar data of glyph {} cannot be read: {e}", gid.to_u32())))?
     else {
@@ -197,24 +229,36 @@ fn phantom_deltas(gvar: &Gvar<'_>, gid: GlyphId, points: usize, axis_count: usiz
         // Left, right, top and bottom phantom points.
         let mut phantom = [(0i32, 0i32); 4];
         for d in tuple.deltas() {
+            budget.deltas = budget
+                .deltas
+                .checked_sub(1)
+                .ok_or(TablesError::TooLarge { what: "the gvar deltas read for the advances", limit: MAX_HVAR_DELTAS })?;
             let at = usize::from(d.position);
             if let Some(slot) = at.checked_sub(points).and_then(|k| phantom.get_mut(k)) {
                 *slot = (d.x_delta, d.y_delta);
             }
         }
         let [left, right, top, bottom] = phantom;
-        add(&mut h, &region, right.0 - left.0);
-        add(&mut v, &region, top.1 - bottom.1);
+        let (dh, dv) = (right.0 - left.0, top.1 - bottom.1);
+        let key = region_key(&region);
+        match index.get(&key).copied() {
+            // Two tuples of a glyph with one region add up.
+            Some(i) => {
+                if let Some(slot) = h.get_mut(i) {
+                    slot.1 = slot.1.saturating_add(dh);
+                }
+                if let Some(slot) = v.get_mut(i) {
+                    slot.1 = slot.1.saturating_add(dv);
+                }
+            }
+            None => {
+                index.insert(key, h.len());
+                h.push((region.clone(), dh));
+                v.push((region, dv));
+            }
+        }
     }
     h.retain(|(_, d)| *d != 0);
     v.retain(|(_, d)| *d != 0);
     Ok((h, v))
-}
-
-/// Adds `delta` to the entry of `region`; two tuples of a glyph with one region add up.
-fn add(deltas: &mut Vec<(Region, i32)>, region: &Region, delta: i32) {
-    match deltas.iter_mut().find(|(r, _)| r == region) {
-        Some(slot) => slot.1 = slot.1.saturating_add(delta),
-        None => deltas.push((region.clone(), delta)),
-    }
 }

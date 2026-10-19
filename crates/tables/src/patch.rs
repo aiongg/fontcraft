@@ -374,13 +374,47 @@ pub fn gasp_table(ranges: &[(u16, u16)]) -> Result<Vec<u8>> {
     Ok(out)
 }
 
+/// Whether `needle` occurs in `hay`, in time linear in both (Knuth, Morris and Pratt).
+fn contains_bytes(hay: &[u8], needle: &[u8]) -> bool {
+    if needle.is_empty() {
+        return true;
+    }
+    // fail[i]: the length of the longest proper prefix of needle[..=i] that also ends it.
+    let mut fail = vec![0usize; needle.len()];
+    let mut k = 0usize;
+    for (i, &c) in needle.iter().enumerate().skip(1) {
+        while k > 0 && needle.get(k) != Some(&c) {
+            k = fail.get(k - 1).copied().unwrap_or(0);
+        }
+        if needle.get(k) == Some(&c) {
+            k += 1;
+        }
+        if let Some(slot) = fail.get_mut(i) {
+            *slot = k;
+        }
+    }
+    let mut k = 0usize;
+    for &c in hay {
+        while k > 0 && needle.get(k) != Some(&c) {
+            k = fail.get(k - 1).copied().unwrap_or(0);
+        }
+        if needle.get(k) == Some(&c) {
+            k += 1;
+        }
+        if k == needle.len() {
+            return true;
+        }
+    }
+    false
+}
+
 /// The font with `code` appended to its `prep` program (a new `prep` when it has none) and
 /// `maxp.maxStackElements` raised to `stack` when it is lower. `false` and the font unchanged
 /// when the program already holds `code`.
 pub fn append_prep(font: &SfntFont, code: &[u8], stack: u16) -> Result<(SfntFont, bool)> {
     const PREP: Tag = *b"prep";
     let mut prep = font.get(PREP).map(<[u8]>::to_vec).unwrap_or_default();
-    if !code.is_empty() && prep.windows(code.len()).any(|w| w == code) {
+    if !code.is_empty() && contains_bytes(&prep, code) {
         return Ok((font.clone(), false));
     }
     if prep.len().saturating_add(code.len()) > usize::from(u16::MAX) * 4 {

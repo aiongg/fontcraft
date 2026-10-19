@@ -389,3 +389,77 @@ fn glyph_deltas_are_charged_once_however_many_components_use_the_glyph() {
     let composite = MAX_DRAW_WORK - work.0;
     assert!(composite < 2 * simple, "{composite} against {simple}");
 }
+
+#[test]
+fn many_distinct_advance_regions_are_counted_in_linear_time_and_refused() {
+    // 20 glyphs without outlines, each with 4,095 tuples whose private intermediate regions all
+    // differ: 81,900 regions, more than a store can list. Comparing each new region with every
+    // earlier one could not finish.
+    const GLYPHS: usize = 20;
+    const TUPLES: usize = 0x0FFF;
+    // The right phantom point moves by 1; every other delta is zero.
+    let tuple_data = [0x03u8, 0, 1, 0, 0, 0x83];
+    let mut gvar = Vec::new();
+    for v in [1u16, 0, 1, 0] {
+        be16(&mut gvar, v);
+    }
+    let header = 20 + 4 * (GLYPHS as u32 + 1);
+    gvar.extend_from_slice(&header.to_be_bytes());
+    for v in [GLYPHS as u16, 1] {
+        be16(&mut gvar, v);
+    }
+    gvar.extend_from_slice(&header.to_be_bytes());
+    let per_glyph = 4 + 10 * TUPLES + 1 + tuple_data.len() * TUPLES;
+    for g in 0..=GLYPHS {
+        gvar.extend_from_slice(&((g * per_glyph) as u32).to_be_bytes());
+    }
+    for g in 0..GLYPHS {
+        be16(&mut gvar, 0x8000 | TUPLES as u16);
+        be16(&mut gvar, (4 + 10 * TUPLES) as u16);
+        for k in 0..TUPLES {
+            let n = g * TUPLES + k;
+            let (start, peak) = (-((n % 16_384) as i16), 1 + (n / 16_384) as i16);
+            for v in [tuple_data.len() as u16, 0xC000, peak as u16, start as u16, 16_384] {
+                be16(&mut gvar, v);
+            }
+        }
+        gvar.push(0);
+        for _ in 0..TUPLES {
+            gvar.extend_from_slice(&tuple_data);
+        }
+    }
+    let mut font = variable_font();
+    let mut maxp = font.get(*b"maxp").unwrap().to_vec();
+    maxp[4..6].copy_from_slice(&(GLYPHS as u16).to_be_bytes());
+    font.insert(*b"maxp", maxp);
+    font.insert(*b"loca", vec![0u8; 4 * (GLYPHS + 1)]);
+    font.insert(*b"gvar", gvar);
+    let r = build_hvar_with(&font, &HvarOptions::default());
+    assert!(matches!(r, Err(TablesError::TooLarge { what: "the distinct regions of the advance deltas", .. })), "{r:?}");
+}
+
+#[test]
+fn plans_with_many_pins_and_values_are_refused_before_measuring() {
+    // 9,999 stretches between 10,000 pins, each holding a target value: copying the pins'
+    // measurements into every stretch, and measuring each pin, would take the whole budget of
+    // draws many times over.
+    let font = variable_font();
+    let pins: Vec<(f64, f64)> = (0..10_000).map(|i| 100.0 + 0.08 * f64::from(i)).map(|v| (v, v)).collect();
+    let values: Vec<f64> = pins.windows(2).map(|w| (w[0].0 + w[1].0) / 2.0).collect();
+    for samples in [0, MAX_SAMPLES_FOR_TESTS] {
+        let options = PlanOptions {
+            weight: AxisPlan { values: Some(values.clone()), pins: pins.clone(), ..AxisPlan::default() },
+            samples: Some(samples),
+            ..PlanOptions::default()
+        };
+        let r = plan_avar_with(&font, &options);
+        assert!(matches!(r, Err(TablesError::TooLarge { what: "the measurements of one plan", .. })), "{samples} samples: {r:?}");
+    }
+    // A few pins and values stay well inside the budget.
+    let options = PlanOptions {
+        weight: AxisPlan { values: Some(vec![250.0, 650.0]), pins: vec![(300.0, 300.0), (600.0, 600.0)], ..AxisPlan::default() },
+        samples: Some(MAX_SAMPLES_FOR_TESTS),
+        ..PlanOptions::default()
+    };
+    assert!(plan_avar_with(&font, &options).is_ok());
+}

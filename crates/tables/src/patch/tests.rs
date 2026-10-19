@@ -66,6 +66,46 @@ fn rebuild_cmap_writes_format_4_and_12_from_the_union() {
     assert_eq!(keys, [(0, 3), (3, 1)], "no format 12 without code points beyond the BMP");
 }
 
+#[test]
+fn rebuild_cmap_reports_many_conflicts_in_linear_time() {
+    // Two format 12 subtables over the same 262,136 code points, one glyph apart: every code
+    // point conflicts, which a rescan of the report per conflict could not finish.
+    let groups = 4u32;
+    let run = 65_534u32;
+    let format_12 = |first_glyph: u32| {
+        let mut t = Vec::new();
+        t.extend_from_slice(&12u16.to_be_bytes());
+        t.extend_from_slice(&0u16.to_be_bytes());
+        t.extend_from_slice(&(16 + 12 * groups).to_be_bytes());
+        t.extend_from_slice(&0u32.to_be_bytes());
+        t.extend_from_slice(&groups.to_be_bytes());
+        for k in 0..groups {
+            for v in [k << 16, (k << 16) + run - 1, first_glyph] {
+                t.extend_from_slice(&v.to_be_bytes());
+            }
+        }
+        t
+    };
+    let (a, b) = (format_12(1), format_12(2));
+    let mut cmap = Vec::new();
+    for v in [0u16, 2] {
+        cmap.extend_from_slice(&v.to_be_bytes());
+    }
+    let first = 4 + 2 * 8u32;
+    for (p, e, off) in [(0u16, 4u16, first), (3, 10, first + a.len() as u32)] {
+        cmap.extend_from_slice(&p.to_be_bytes());
+        cmap.extend_from_slice(&e.to_be_bytes());
+        cmap.extend_from_slice(&off.to_be_bytes());
+    }
+    cmap.extend(a);
+    cmap.extend(b);
+    let r = rebuild_cmap(&with(vec![(b"cmap", cmap)])).unwrap();
+    assert_eq!(r.mappings, (groups * run) as usize);
+    assert_eq!(r.conflicts.len(), (groups * run) as usize);
+    assert_eq!(r.conflicts[0], CmapConflict { codepoint: 0, kept: 2, dropped: 1 }, "platform 3 wins");
+    assert!(r.conflicts.windows(2).all(|w| w[0].codepoint < w[1].codepoint));
+}
+
 fn name_font(records: Vec<(u16, u16, u16, u16, &str)>) -> SfntFont {
     let mut recs: Vec<NameRecord> =
         records.into_iter().map(|(p, e, l, id, s)| NameRecord::new(p, e, l, NameId::new(id), s.to_string().into())).collect();
@@ -196,4 +236,24 @@ fn name_records_sharing_one_long_string_are_refused_quickly() {
     let font = with(vec![(b"name", name)]);
     let r = clean_name_records(&font, &NameOptions::default());
     assert!(matches!(r, Err(crate::TablesError::TooLarge { .. })), "{r:?}");
+}
+
+#[test]
+fn append_prep_searches_a_long_program_in_linear_time() {
+    // 16 MB of zeros and 64 KB of zeros ending in 1: comparing the code at every offset of the
+    // program would take about 10^12 steps.
+    let mut code = vec![0u8; 64 << 10];
+    *code.last_mut().unwrap() = 1;
+    let font = with(vec![(b"prep", vec![0u8; 16 << 20])]);
+    let r = append_prep(&font, &code, 0);
+    assert!(matches!(r, Err(crate::TablesError::TooLarge { .. })), "{r:?}");
+
+    let mut prep = vec![0xB0, 0x05];
+    prep.extend_from_slice(&[0, 0, 1, 0, 0, 1, 2]);
+    let font = with(vec![(b"prep", prep.clone())]);
+    let (same, appended) = append_prep(&font, &[0, 1, 0, 0, 1, 2], 0).unwrap();
+    assert!(!appended && same == font, "the program already holds the code");
+    let (more, appended) = append_prep(&font, &[0, 1, 0, 1], 0).unwrap();
+    assert!(appended);
+    assert_eq!(more.get(*b"prep").unwrap().len(), prep.len() + 4);
 }

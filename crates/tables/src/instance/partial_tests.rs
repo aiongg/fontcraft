@@ -342,3 +342,48 @@ fn bad_ranges_are_refused_and_change_nothing() {
     assert!(matches!(err, TablesError::Unsupported(_)), "{err}");
     assert_eq!(font, before);
 }
+
+#[test]
+fn many_distinct_feature_variation_conditions_are_kept_in_linear_time() {
+    // 200,000 records, each with its own wght filter range: comparing every kept condition set
+    // with every earlier one could not finish.
+    let font = variable_font(false);
+    let limits = resolve_limits(&font, &[(WGHT, AxisLimit::Range { min: 300.0, default: None, max: 900.0 })]).unwrap();
+    let count = 200_000u32;
+    let records: Vec<FeatureVariationRecord> = (0..count)
+        .map(|k| {
+            let min = F2Dot14::from_bits((k % 16_000) as i16);
+            let max = F2Dot14::from_bits(16_384 - (k / 16_000) as i16);
+            FeatureVariationRecord::new(Some(ConditionSet::new(vec![Condition::Format1AxisRange(ConditionFormat1::new(0, min, max))])), None)
+        })
+        .collect();
+    let mut features = OffsetMarker::new(FeatureList::new(Vec::new()));
+    let mut variations = NullableOffsetMarker::new(Some(FeatureVariations::new(records)));
+    partial_feature_variations(&mut features, &mut variations, &limits).unwrap();
+    let kept = variations.as_ref().map_or(0, |v| v.feature_variation_records.len());
+    assert_eq!(kept, count as usize, "every condition set differs");
+}
+
+#[test]
+fn a_cvar_too_large_to_hold_is_refused_before_its_deltas_are_made() {
+    // 4,095 tuples over a cvt of 524,288 values: 17 GB of deltas held together.
+    let mut font = variable_font(false);
+    font.insert(*b"cvt ", vec![0u8; 1 << 20]);
+    let tuples = 0x0FFFu16;
+    let mut cvar = Vec::new();
+    for v in [1u16, 0, tuples, 8 + 8 * tuples] {
+        be16(&mut cvar, v);
+    }
+    for _ in 0..tuples {
+        for v in [2u16, 0xA000, 0x4000, 0] {
+            be16(&mut cvar, v);
+        }
+    }
+    for _ in 0..tuples {
+        cvar.extend_from_slice(&[0x00, 0x80]);
+    }
+    font.insert(*b"cvar", cvar);
+    let limits = vec![(WGHT, AxisLimit::Range { min: 300.0, default: None, max: 900.0 })];
+    let r = instantiate(&font, &options(limits));
+    assert!(matches!(r, Err(TablesError::TooLarge { what: "the bytes of deltas one item holds while rebasing", .. })), "{r:?}");
+}

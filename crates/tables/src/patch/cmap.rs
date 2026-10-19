@@ -7,7 +7,7 @@
 //! variation sequences (0, 5) copied byte for byte. Other subtables (Macintosh, symbol) are
 //! left out.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use read_fonts::tables::cmap::Cmap;
 use read_fonts::{FontData, FontRead};
@@ -48,7 +48,10 @@ pub fn rebuild_cmap(font: &SfntFont) -> Result<CmapRebuild> {
     // Platform 0 first, so platform 3 overrides it.
     records.sort_by_key(|(p, e, _)| (u16::from(*p == 3), *e));
     let mut map: BTreeMap<u32, u16> = BTreeMap::new();
-    let mut conflicts = Vec::new();
+    // A code point that conflicts again moves to the end with its latest pair; `slot` finds the
+    // earlier entry so the report stays linear in the mappings read.
+    let mut conflicts: Vec<Option<CmapConflict>> = Vec::new();
+    let mut slot: HashMap<u32, usize> = HashMap::new();
     let mut variations: Option<Vec<u8>> = None;
     let mut read = 0usize;
     for (platform, encoding, offset) in records {
@@ -76,8 +79,12 @@ pub fn rebuild_cmap(font: &SfntFont) -> Result<CmapRebuild> {
             if let Some(old) = map.insert(cp, gid)
                 && old != gid
             {
-                conflicts.retain(|c: &CmapConflict| c.codepoint != cp);
-                conflicts.push(CmapConflict { codepoint: cp, kept: gid, dropped: old });
+                if let Some(earlier) = slot.insert(cp, conflicts.len())
+                    && let Some(c) = conflicts.get_mut(earlier)
+                {
+                    *c = None;
+                }
+                conflicts.push(Some(CmapConflict { codepoint: cp, kept: gid, dropped: old }));
             }
         }
     }
@@ -98,7 +105,7 @@ pub fn rebuild_cmap(font: &SfntFont) -> Result<CmapRebuild> {
     let table = assemble(&subtables)?;
     let mut out = font.clone();
     out.insert(CMAP, table);
-    Ok(CmapRebuild { font: out, mappings: map.len(), conflicts })
+    Ok(CmapRebuild { font: out, mappings: map.len(), conflicts: conflicts.into_iter().flatten().collect() })
 }
 
 /// The cmap table holding these subtables; identical subtables are stored once.
