@@ -48,6 +48,14 @@ pub fn desubroutinize_table(data: &[u8], cff2: bool) -> Result<Vec<u8>, SubrErro
     table.write(&set)
 }
 
+/// [`desubroutinize_table`], refused once the expanded charstrings hold more than `max_bytes`
+/// together ([`super::desubroutinize_within`]).
+pub fn desubroutinize_table_within(data: &[u8], cff2: bool, max_bytes: usize) -> Result<Vec<u8>, SubrError> {
+    let table = Table::read(data, cff2)?;
+    let set = super::desubroutinize_within(&table.set, max_bytes)?;
+    table.write(&set)
+}
+
 fn invalid(what: impl Into<String>) -> SubrError {
     SubrError::Invalid(what.into())
 }

@@ -143,7 +143,7 @@ fn glyf_points(font: &SfntFont, gid: usize) -> Vec<TtContour> {
     let n = num_glyphs(font).unwrap();
     let outlines = GlyfOutlines::new(font.get(*b"glyf").unwrap(), font.get(*b"loca").unwrap(), long, n).unwrap();
     let mut instructions = false;
-    let contours = outlines.contours(gid, &mut instructions).unwrap();
+    let contours = outlines.contours(gid, &mut instructions, &mut outline::Budget::new()).unwrap();
     outline::truetype_points(&contours).unwrap()
 }
 
@@ -358,4 +358,72 @@ fn truetype_to_cff_draws_each_glyph_at_its_left_side_bearing() {
     let (ba, bb) = (outline::drawn_bounds(&a).unwrap(), outline::drawn_bounds(&b).unwrap());
     assert!((bb[0] - ba[0] - 20.0).abs() < 1e-6 && (bb[2] - ba[2] - 20.0).abs() < 1e-6 && bb[1] == ba[1] && bb[3] == ba[3], "{ba:?} {bb:?}");
     assert_eq!(u16_at(moved.get(*b"hmtx").unwrap(), 6), Some(20));
+}
+
+/// A composite of glyph `gid` used twice.
+fn twice(gid: u16) -> Vec<u8> {
+    let mut g = Vec::new();
+    g.extend_from_slice(&(-1i16).to_be_bytes());
+    g.extend_from_slice(&[0; 8]);
+    for flags in [0x0023u16, 0x0003] {
+        // ARG_1_AND_2_ARE_WORDS | ARGS_ARE_XY_VALUES, MORE_COMPONENTS on the first
+        g.extend_from_slice(&be16(flags));
+        g.extend_from_slice(&be16(gid));
+        g.extend_from_slice(&[0; 4]);
+    }
+    g
+}
+
+#[test]
+fn a_doubling_component_chain_is_refused_before_it_is_decomposed() {
+    // Glyph k (1 to 15) uses glyph k + 1 twice and glyph 16 is one contour of 65,535 points:
+    // glyph 1 alone would decompose to 2^15 copies of it, about 2.1e9 points.
+    let mut font = SfntFont::new(Flavour::TrueType);
+    common(&mut font, &[500; 17], 0x0001_0000);
+    let mut glyphs = vec![Vec::new()];
+    glyphs.extend((2..=16u16).map(twice));
+    glyphs.push(encode_simple(&[vec![(0, 0, true); 65_535]]).unwrap().0);
+    let mut glyf = Vec::new();
+    let mut loca = Vec::new();
+    for g in &glyphs {
+        loca.extend_from_slice(&(glyf.len() as u32).to_be_bytes());
+        glyf.extend_from_slice(g);
+        if glyf.len() % 2 == 1 {
+            glyf.push(0);
+        }
+    }
+    loca.extend_from_slice(&(glyf.len() as u32).to_be_bytes());
+    let mut head = font.get(*b"head").unwrap().to_vec();
+    head[50..52].copy_from_slice(&be16(1));
+    font.insert(*b"head", head);
+    font.insert(*b"glyf", glyf);
+    font.insert(*b"loca", loca);
+    font.insert(*b"post", post_table(None, PostFormat::NoNames, &[]).unwrap().0);
+    let started = std::time::Instant::now();
+    let err = convert(&font, ConvertTarget::Cff).unwrap_err();
+    assert!(matches!(err, TablesError::TooLarge { limit, .. } if limit == outline::MAX_CONVERT_POINTS), "{err}");
+    assert!(started.elapsed() < std::time::Duration::from_secs(2));
+}
+
+#[test]
+fn nested_subroutines_past_the_memory_limit_are_refused_by_the_converter() {
+    // Every glyph runs `0 0 rlineto` 4^7 times through seven levels of calls.
+    let leaf = [139, 139, 5];
+    let small = crate::tests::nested_subr_cff2(2, 8, 4, &leaf);
+    assert_eq!(cff_table::Programs::read(&small, true).unwrap().len(), 2);
+    let table = crate::tests::nested_subr_cff2(64, 8, 4, &leaf);
+    let started = std::time::Instant::now();
+    // 1 MiB: the expanded charstrings (48 KiB a glyph) do not fit.
+    let limit = 1 << 20;
+    let err = cff_table::Programs::read_within(&table, true, limit).err().unwrap();
+    assert!(matches!(err, TablesError::TooLarge { limit: l, .. } if l == limit), "{err}");
+    // 16 MiB: they fit, the operators read from them do not.
+    let limit = 16 << 20;
+    let err = cff_table::Programs::read_within(&table, true, limit).err().unwrap();
+    assert!(matches!(err, TablesError::TooLarge { limit: l, .. } if l == limit), "{err}");
+    assert!(started.elapsed() < std::time::Duration::from_secs(5));
+    // A curve with one operand is refused as it is read.
+    let bare = crate::tests::nested_subr_cff2(1, 3, 4, &[139, 8]);
+    let err = cff_table::Programs::read(&bare, true).err().unwrap();
+    assert!(matches!(&err, TablesError::Invalid(m) if m.contains("operator 8")), "{err}");
 }

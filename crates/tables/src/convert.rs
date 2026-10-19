@@ -260,13 +260,17 @@ fn ps_to_truetype(font: &mut SfntFont, cff2: bool, max_error: f64, o: &ConvertOp
     }
     let names = glyph_names(font, n, Some(&ps));
     let mut metrics = Metrics::read(font, n)?;
-    let quadratic = |contours: &[Contour], gid: usize| -> Result<Vec<outline::TtContour>> {
+    // Every glyph's points are kept until glyf is written.
+    let mut budget = outline::Budget::new();
+    let mut quadratic = |contours: &[Contour], gid: usize| -> Result<Vec<outline::TtContour>> {
         let mut out = Vec::with_capacity(contours.len());
         for c in contours {
             let q = outline::to_quadratic(c, max_error).map_err(|e| in_glyph(e, gid))?;
             out.push(if o.reverse_direction { q.reversed() } else { q });
         }
-        outline::truetype_points(&out).map_err(|e| in_glyph(e, gid))
+        let points = outline::truetype_points(&out).map_err(|e| in_glyph(e, gid))?;
+        budget.points(points.iter().map(Vec::len).sum())?;
+        Ok(points)
     };
     // A seac glyph becomes a composite of its base and accent, as the reference draws seac as
     // two components; one with contours of its own, or whose parts are accented, is drawn out.
@@ -439,9 +443,10 @@ fn truetype_to_cff(font: &mut SfntFont, o: &ConvertOptions, left_behind: &mut Ve
     let outlines = GlyfOutlines::new(&glyf_bytes, &loca_bytes, long, n)?;
     let mut metrics = Metrics::read(font, n)?;
     let mut instructions = false;
+    let mut budget = outline::Budget::new();
     let mut glyphs = Vec::with_capacity(n);
     for (gid, name) in names.iter().enumerate() {
-        let contours = outlines.contours(gid, &mut instructions)?;
+        let contours = outlines.contours(gid, &mut instructions, &mut budget)?;
         // The references draw a TrueType glyph moved so that its stated xMin sits at the left
         // side bearing of hmtx; the two differ in fonts whose metrics were edited by hand.
         let shift = outlines.x_min(gid).map_or(0, |x| i32::from(metrics.lsb(gid)) - i32::from(x));
@@ -557,13 +562,20 @@ fn cff2_to_cff(font: &mut SfntFont, left_behind: &mut Vec<String>) -> Result<()>
     let upem = units_per_em(font)?;
     let data = table(font, CFF2)?.to_vec();
     let mut ps = PsOutlines::new(&data, upem)?;
-    let mut contours = Vec::new();
+    // The union of each glyph's bounds is the bounds of all contours together; a contour
+    // without segments adds nothing to either.
+    let mut bounds: Option<[f64; 4]> = None;
     for gid in 0..ps.glyph_count().min(n) {
-        contours.extend(ps.contours(gid)?);
+        let mut contours = ps.contours(gid)?;
+        contours.retain(|c| !c.segs.is_empty());
+        if let Some(b) = outline::drawn_bounds(&contours) {
+            bounds = Some(match bounds {
+                None => b,
+                Some(u) => [u[0].min(b[0]), u[1].min(b[1]), u[2].max(b[2]), u[3].max(b[3])],
+            });
+        }
     }
-    let font_bbox = outline::drawn_bounds(&contours)
-        .map(|b| [b[0].floor() as i64, b[1].floor() as i64, b[2].ceil() as i64, b[3].ceil() as i64])
-        .unwrap_or([0; 4]);
+    let font_bbox = bounds.map(|b| [b[0].floor() as i64, b[1].floor() as i64, b[2].ceil() as i64, b[3].ceil() as i64]).unwrap_or([0; 4]);
     let names = post_names(font, n);
     let metrics = Metrics::read(font, n)?;
     let (cff, by_name) = cff_table::cff2_to_cff(&data, &metrics.advances, names.as_deref(), &postscript_name(font), font_bbox)?;

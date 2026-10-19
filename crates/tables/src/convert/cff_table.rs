@@ -23,7 +23,7 @@
 //! one.
 
 use super::outline::{Collect, Contour};
-use crate::limits::{MAX_CFF_STACK, MAX_CFF2_STACK, MAX_CHARSTRING, MAX_SFNT};
+use crate::limits::{CharstringMemory, MAX_CFF_STACK, MAX_CFF2_STACK, MAX_CHARSTRING, MAX_CHARSTRING_MEMORY, MAX_SFNT};
 use crate::{Result, TablesError};
 
 /// Most entries one DICT may hold.
@@ -392,9 +392,11 @@ const CNTRMASK: u16 = 20;
 const ENDCHAR: u16 = 14;
 const DOTSECTION: u16 = 1200;
 
-/// Cuts an expanded charstring into operators. A variable CFF2 charstring (`blend`,
-/// `vsindex`) and the arithmetic operators are refused.
-fn parse_program(code: &[u8], cff2: bool) -> Result<Program> {
+/// Cuts an expanded charstring into operators, each charged to `memory`. A variable CFF2
+/// charstring (`blend`, `vsindex`), the arithmetic operators and a path operator that cannot
+/// be drawn with its operands are refused.
+fn parse_program(code: &[u8], cff2: bool, memory: &mut CharstringMemory) -> Result<Program> {
+    memory.charge(std::mem::size_of::<Program>())?;
     let cut = || invalid("a charstring is cut short");
     let mut program = Program::default();
     let mut args: Vec<i64> = Vec::new();
@@ -497,6 +499,10 @@ fn parse_program(code: &[u8], cff2: bool) -> Result<Program> {
             }
             other => return Err(invalid(format!("operator {other} is reserved"))),
         }
+        if !drawable(op, args.len()) {
+            return Err(invalid(format!("operator {op} cannot take {} operands", args.len())));
+        }
+        memory.charge(std::mem::size_of::<Op>() + args.capacity() * std::mem::size_of::<i64>() + mask.capacity())?;
         program.ops.push(Op { code: op, args: std::mem::take(&mut args), mask });
     }
     if !args.is_empty() {
@@ -511,6 +517,26 @@ fn parse_program(code: &[u8], cff2: bool) -> Result<Program> {
 // ── Drawing ─────────────────────────────────────────────────────────────────────────────────────
 
 const STEM_OPS: [u16; 6] = [1, 3, 18, 23, HINTMASK, CNTRMASK];
+
+/// Whether [`run`] draws path operator `code` with `n` operands, as the reference's drawing
+/// does; any other operator passes.
+fn drawable(code: u16, n: usize) -> bool {
+    match code {
+        21 => n == 2,
+        4 | 22 => n == 1,
+        5 => n.is_multiple_of(2),
+        8 => n.is_multiple_of(6),
+        24 => n >= 8 && (n - 2).is_multiple_of(6),
+        25 => n >= 6 && n.is_multiple_of(2),
+        26 | 27 => n % 4 <= 1,
+        30 | 31 => n.is_multiple_of(4) || (n % 4 == 1 && n >= 5),
+        1234 => n == 7,
+        1235 => n == 13,
+        1236 => n == 9,
+        1237 => n == 11,
+        _ => true,
+    }
+}
 
 fn is_path(code: u16) -> bool {
     matches!(code, 4..=8 | 21 | 22 | 24..=27 | 30 | 31 | 1234..=1237)
@@ -700,13 +726,23 @@ pub(super) struct Programs {
 
 impl Programs {
     pub(super) fn read(table: &[u8], cff2: bool) -> Result<Self> {
-        let expanded = fontcraft_cff::subr::desubroutinize_table(table, cff2).map_err(subr_error)?;
+        Self::read_within(table, cff2, MAX_CHARSTRING_MEMORY)
+    }
+
+    /// [`Programs::read`] with the expanded charstrings and their operators held to `limit`
+    /// bytes together.
+    pub(super) fn read_within(table: &[u8], cff2: bool, limit: usize) -> Result<Self> {
+        let (expanded, mut memory) = expand(table, cff2, limit)?;
         let flat = Flat::read(&expanded, cff2)?;
         if cff2 && flat.private_blends() {
             return Err(TablesError::Unsupported("a variable CFF2 font: instantiate it first".into()));
         }
-        let programs =
-            flat.charstrings.iter().enumerate().map(|(gid, code)| parse_program(code, cff2).map_err(|e| in_glyph(e, gid))).collect::<Result<_>>()?;
+        let programs = flat
+            .charstrings
+            .iter()
+            .enumerate()
+            .map(|(gid, code)| parse_program(code, cff2, &mut memory).map_err(|e| in_glyph(e, gid)))
+            .collect::<Result<_>>()?;
         Ok(Programs { programs })
     }
 
@@ -728,16 +764,31 @@ impl Programs {
     }
 }
 
+/// The table with every subroutine call expanded, and what is left of `limit` once its bytes
+/// are charged.
+fn expand(table: &[u8], cff2: bool, limit: usize) -> Result<(Vec<u8>, CharstringMemory)> {
+    let expanded = fontcraft_cff::subr::desubroutinize_table_within(table, cff2, limit).map_err(subr_error)?;
+    let mut memory = CharstringMemory::new(limit);
+    memory.charge(expanded.len())?;
+    Ok((expanded, memory))
+}
+
 /// The operators of a `seac` glyph with its base and accent written in. `standard_glyph` finds
 /// the glyph of a standard-encoding code; a part the font lacks is left out, as the reference
 /// leaves out a component it cannot find.
-fn flatten_seac(charstrings: &[&[u8]], own: &[Op], seac: [i64; 4], standard_glyph: &dyn Fn(u8) -> Option<usize>) -> Result<Vec<Op>> {
+fn flatten_seac(
+    charstrings: &[&[u8]],
+    own: &[Op],
+    seac: [i64; 4],
+    standard_glyph: &dyn Fn(u8) -> Option<usize>,
+    memory: &mut CharstringMemory,
+) -> Result<Vec<Op>> {
     let [adx, ady, base, accent] = seac;
-    let part = |code: i64| -> Result<Option<Program>> {
+    let mut part = |code: i64| -> Result<Option<Program>> {
         let code = u8::try_from(code / ONE).map_err(|_| invalid("seac names a character code outside 0 to 255"))?;
         let Some(gid) = standard_glyph(code) else { return Ok(None) };
         let bytes = charstrings.get(gid).ok_or_else(|| invalid("seac names a glyph beyond the CharStrings"))?;
-        let p = parse_program(bytes, false)?;
+        let p = parse_program(bytes, false, memory)?;
         if p.seac.is_some() {
             return Err(invalid("a seac part is itself accented"));
         }
@@ -1157,16 +1208,18 @@ fn cff2_font_matrix(flat: &Flat<'_>) -> Result<Option<Entry>> {
 /// The `CFF2` table for a `CFF ` table, and whether any `dotsection` was dropped.
 /// `standard_glyph` finds the glyph of a standard-encoding code, for `seac` glyphs.
 pub(super) fn cff_to_cff2(cff: &[u8], standard_glyph: &dyn Fn(u8) -> Option<usize>) -> Result<(Vec<u8>, bool)> {
-    let expanded = fontcraft_cff::subr::desubroutinize_table(cff, false).map_err(subr_error)?;
+    let (expanded, mut memory) = expand(cff, false, MAX_CHARSTRING_MEMORY)?;
     let flat = Flat::read(&expanded, false)?;
     let mut charstrings = Vec::with_capacity(flat.charstrings.len());
     let mut dropped_dotsection = false;
     let mut total = 0usize;
     for (gid, code) in flat.charstrings.iter().enumerate() {
-        let program = parse_program(code, false).map_err(|e| in_glyph(e, gid))?;
+        // A glyph's operators are dropped once it is written: they take from a copy of the budget.
+        let mut scratch = memory.clone();
+        let program = parse_program(code, false, &mut scratch).map_err(|e| in_glyph(e, gid))?;
         let ops = match program.seac {
             None => program.ops,
-            Some(seac) => flatten_seac(&flat.charstrings, &program.ops, seac, standard_glyph).map_err(|e| in_glyph(e, gid))?,
+            Some(seac) => flatten_seac(&flat.charstrings, &program.ops, seac, standard_glyph, &mut scratch).map_err(|e| in_glyph(e, gid))?,
         };
         let mut out = Vec::new();
         for op in &ops {
@@ -1180,6 +1233,7 @@ pub(super) fn cff_to_cff2(cff: &[u8], standard_glyph: &dyn Fn(u8) -> Option<usiz
         if total > MAX_SFNT {
             return Err(TablesError::TooLarge { what: "the CFF2 charstrings", limit: MAX_SFNT });
         }
+        memory.charge(out.capacity())?;
         charstrings.push(out);
     }
     let mut top = Vec::new();
@@ -1216,7 +1270,7 @@ pub(super) fn cff_to_cff2(cff: &[u8], standard_glyph: &dyn Fn(u8) -> Option<usiz
 /// With `names` (one per glyph, `.notdef` first) and one Font DICT the result is name-keyed;
 /// otherwise it is CID-keyed, Adobe-Identity-0 with CID n for glyph n, as the reference writes.
 pub(super) fn cff2_to_cff(cff2: &[u8], advances: &[u16], names: Option<&[String]>, font_name: &str, font_bbox: [i64; 4]) -> Result<(Vec<u8>, bool)> {
-    let expanded = fontcraft_cff::subr::desubroutinize_table(cff2, true).map_err(subr_error)?;
+    let (expanded, mut memory) = expand(cff2, true, MAX_CHARSTRING_MEMORY)?;
     let flat = Flat::read(&expanded, true)?;
     if flat.private_blends() {
         return Err(TablesError::Unsupported("a variable CFF2 font: instantiate it first".into()));
@@ -1228,7 +1282,7 @@ pub(super) fn cff2_to_cff(cff2: &[u8], advances: &[u16], names: Option<&[String]
     let mut charstrings = Vec::with_capacity(glyphs);
     let mut total = 0usize;
     for (gid, code) in flat.charstrings.iter().enumerate() {
-        let program = parse_program(code, true).map_err(|e| in_glyph(e, gid))?;
+        let program = parse_program(code, true, &mut memory.clone()).map_err(|e| in_glyph(e, gid))?;
         let width = i64::from(advances.get(gid).copied().unwrap_or(0));
         let mut out = Vec::new();
         let mut first = true;
@@ -1259,6 +1313,7 @@ pub(super) fn cff2_to_cff(cff2: &[u8], advances: &[u16], names: Option<&[String]
         if total > MAX_SFNT {
             return Err(TablesError::TooLarge { what: "the CFF charstrings", limit: MAX_SFNT });
         }
+        memory.charge(out.capacity())?;
         charstrings.push(out);
     }
 
@@ -1431,13 +1486,17 @@ mod tests {
         encode_num(30 * ONE, &mut code).unwrap();
         code.push(6);
         code.push(14);
-        let p = parse_program(&code, false).unwrap();
+        let p = parse_program(&code, false, &mut CharstringMemory::new(MAX_CHARSTRING_MEMORY)).unwrap();
         assert_eq!(p.width, Some(500 * ONE));
         assert_eq!(p.ops, vec![op(21, &[10, 20]), op(6, &[30])]);
         // seac keeps its operands for the converters; a code past 255 is refused.
-        let p = parse_program(&test_charstring(&[(&[600.0, 150.5, 20.0, 65.0, 194.0], 14)]), false).unwrap();
+        let p =
+            parse_program(&test_charstring(&[(&[600.0, 150.5, 20.0, 65.0, 194.0], 14)]), false, &mut CharstringMemory::new(MAX_CHARSTRING_MEMORY))
+                .unwrap();
         assert_eq!((p.width, p.seac), (Some(600 * ONE), Some([150 * ONE + ONE / 2, 20 * ONE, 65 * ONE, 194 * ONE])));
         assert!(p.ops.is_empty());
-        assert!(parse_program(&test_charstring(&[(&[0.0, 0.0, 65.0, 256.0], 14)]), false).is_err());
+        assert!(
+            parse_program(&test_charstring(&[(&[0.0, 0.0, 65.0, 256.0], 14)]), false, &mut CharstringMemory::new(MAX_CHARSTRING_MEMORY)).is_err()
+        );
     }
 }

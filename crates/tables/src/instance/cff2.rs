@@ -22,7 +22,9 @@
 //!   operator with more operands than CFF's 48-value stack holds split into generic segments.
 //!
 //! Counts read from the table are capped (glyphs, Font DICTs, DICT entries, operators per glyph
-//! and per table, items and their deltas, subroutine nesting).
+//! and per table, items and their deltas, subroutine nesting), and so is the memory the
+//! operators and items take ([`MAX_CHARSTRING_MEMORY`]). A path operator with an operand count
+//! the specification does not allow is refused.
 
 #[cfg(test)]
 #[path = "cff2_tests.rs"]
@@ -31,7 +33,7 @@ mod tests;
 use read_fonts::tables::variations::ItemVariationStore as ReadStore;
 use read_fonts::{FontData, FontRead};
 
-use crate::limits::{MAX_CFF_STACK, MAX_CFF2_STACK, MAX_CHARSTRING, MAX_SFNT, MAX_SUBR_NESTING};
+use crate::limits::{CharstringMemory, MAX_CFF_STACK, MAX_CFF2_STACK, MAX_CHARSTRING, MAX_CHARSTRING_MEMORY, MAX_SFNT, MAX_SUBR_NESTING};
 use crate::metrics::{Contour, Pt, Seg, exact_bounds};
 use crate::sfnt::SfntFont;
 use crate::{Result, TablesError};
@@ -165,6 +167,11 @@ pub(super) struct Resolved<'a> {
 impl Table {
     /// Reads a `CFF2` table whose variation store has `axis_count` axes.
     pub fn read(data: &[u8], axis_count: usize) -> Result<Self> {
+        Self::read_within(data, axis_count, MAX_CHARSTRING_MEMORY)
+    }
+
+    /// [`Table::read`] with the operators and blended values held to `limit` bytes together.
+    pub fn read_within(data: &[u8], axis_count: usize, limit: usize) -> Result<Self> {
         let major = *data.first().ok_or_else(|| invalid("the CFF2 table is empty"))?;
         if major != 2 {
             return Err(TablesError::Unsupported(format!("CFF2 major version {major}")));
@@ -176,7 +183,7 @@ impl Table {
         }
         let top_bytes = blob(data, hdr_size, top_len)?;
         let mut items: Vec<Item> = Vec::new();
-        let mut budget = ItemBudget::default();
+        let mut budget = ItemBudget { deltas: 0, memory: CharstringMemory::new(limit) };
         let top = parse_dict(top_bytes, None, &mut items, &mut budget)?;
         if top.iter().any(|e| e.blended) {
             return Err(invalid("the CFF2 Top DICT holds a blend"));
@@ -666,9 +673,10 @@ impl Table {
 
 // ---------- charstrings ----------
 
-#[derive(Default)]
+/// What the items and operators of one table may still take.
 struct ItemBudget {
     deltas: usize,
+    memory: CharstringMemory,
 }
 
 struct Run<'a, 'b> {
@@ -723,7 +731,7 @@ impl Run<'_, '_> {
                     i += 2;
                     match b1 {
                         // dotsection and the flex operators
-                        0 | 34..=37 => self.emit(1200 + u16::from(b1), Vec::new()),
+                        0 | 34..=37 => self.emit(1200 + u16::from(b1), Vec::new())?,
                         3..=5 | 9..=12 | 14 | 15 | 18 | 20..=24 | 26..=30 => {
                             return Err(TablesError::Unsupported(format!("the charstring arithmetic operator 12 {b1}")));
                         }
@@ -732,14 +740,14 @@ impl Run<'_, '_> {
                 }
                 1 | 3 | 18 | 23 => {
                     self.stems += self.stack.len() / 2;
-                    self.emit(u16::from(b0), Vec::new());
+                    self.emit(u16::from(b0), Vec::new())?;
                     i += 1;
                 }
                 19 | 20 => {
                     self.stems += self.stack.len() / 2;
                     let n = self.stems.div_ceil(8);
                     let mask = code.get(i + 1..i + 1 + n).ok_or_else(|| invalid("a hint mask is cut short"))?.to_vec();
-                    self.emit(u16::from(b0), mask);
+                    self.emit(u16::from(b0), mask)?;
                     i += 1 + n;
                 }
                 10 | 29 => {
@@ -773,7 +781,7 @@ impl Run<'_, '_> {
                     blend(&mut self.stack, n, k, self.vsindex, self.items, self.budget)?;
                 }
                 4 | 5 | 6 | 7 | 8 | 21 | 22 | 24 | 25 | 26 | 27 | 30 | 31 => {
-                    self.emit(u16::from(b0), Vec::new());
+                    self.emit(u16::from(b0), Vec::new())?;
                     i += 1;
                 }
                 other => return Err(invalid(format!("operator {other} is reserved in CFF2"))),
@@ -797,9 +805,35 @@ impl Run<'_, '_> {
         }
     }
 
-    fn emit(&mut self, op: u16, mask: Vec<u8>) {
+    fn emit(&mut self, op: u16, mask: Vec<u8>) -> Result<()> {
+        if !operands_fit(op, self.stack.len()) {
+            return Err(invalid(format!("operator {op} cannot take {} operands", self.stack.len())));
+        }
+        let size = std::mem::size_of::<Cmd>() + self.stack.capacity() * std::mem::size_of::<Val>() + mask.capacity();
+        self.budget.memory.charge(size)?;
         let args = std::mem::take(&mut self.stack);
         self.cmds.push(Cmd { op, mask, args });
+        Ok(())
+    }
+}
+
+/// Whether path operator `op` (the operator byte, or 1200 plus the byte after the escape) can
+/// take `n` operands by the charstring specification; any other operator passes.
+fn operands_fit(op: u16, n: usize) -> bool {
+    match op {
+        21 => n == 2,
+        4 | 22 => n == 1,
+        5 => n >= 2 && n.is_multiple_of(2),
+        6 | 7 => n >= 1,
+        8 => n >= 6 && n.is_multiple_of(6),
+        24 => n >= 8 && (n - 2).is_multiple_of(6),
+        25 => n >= 8 && n.is_multiple_of(2),
+        26 | 27 | 30 | 31 => n >= 4 && n % 4 <= 1,
+        1234 => n == 7,
+        1235 => n == 13,
+        1236 => n == 9,
+        1237 => n == 11,
+        _ => true,
     }
 }
 
@@ -822,6 +856,7 @@ fn blend(stack: &mut Vec<Val>, n: usize, k: usize, major: usize, items: &mut Vec
     for j in 0..n {
         let default = args.get(j).map_or(0.0, |a| a.v);
         let deltas: Vec<f64> = (0..k).map(|r| args.get(n + j * k + r).map_or(0.0, |a| a.v)).collect();
+        budget.memory.charge(std::mem::size_of::<Item>() + deltas.capacity() * std::mem::size_of::<f64>())?;
         stack.push(Val { v: default, item: Some(items.len()) });
         items.push(Item { major, deltas });
     }
