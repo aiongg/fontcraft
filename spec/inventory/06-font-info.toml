@@ -2130,6 +2130,7 @@ milestone = "M12"
 summary = "Recommended scheme, usable as a lint: Bold, Italic and Bold Italic link to Regular; every other italic links to its upright of the same weight. Linking a non-bold weight as the bold of another (Semibold as bold of Light) is allowed but hides it from family pickers that only expose four styles."
 ref = "Font Info › Exports › Style Linking"
 status = "handbook"
+notes = "Documented, not yet observed. The Font Audit panel (M12.64) lists departures from the scheme as results of check.names.subfamilyMatchesStyleBits and check.tables.fsSelection, whose fix syncStyleLinking runs font.instance.syncStyleLinking. No check reports a non-bold weight linked as the bold of another yet."
 
 # ───────────────────────────── Features tab ─────────────────────────────
 observe = [
