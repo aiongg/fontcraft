@@ -6,14 +6,15 @@
 //!   they meet, joined by a short segment between them) back to the crossing point: the two
 //!   nodes of the corner become one corner node there.
 //! - `component.flatten` replaces a nested component by components of the innermost glyphs.
-//! - `path.setShapeOrder` reorders a layer's shapes.
+//!
+//! The audit fix `fixCompatibility` reorders shapes with `glyph.setShapeOrder`.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use fontcraft_audit::Finding;
 use fontcraft_components::propagate::base_layer;
 use fontcraft_geom::{Affine, Piece, Point, Segment, Vec2, round_point};
-use fontcraft_model::{Alignment, Component, Font, Glyph, Layer, LayerSide, MAX_COMPONENT_DEPTH, Node, NodeKind, Path, Shape, Transform};
+use fontcraft_model::{Alignment, Component, Font, Glyph, Layer, MAX_COMPONENT_DEPTH, Node, NodeKind, Path, Shape, Transform};
 use serde_json::{Value, json};
 
 use super::common::grid;
@@ -49,17 +50,7 @@ pub fn specs() -> Vec<CommandSpec> {
             has_doc,
             flatten_components
         )
-        .targets(&[K::Layer, K::Shapes]),
-        cmd!(
-            "path.setShapeOrder",
-            "Set Shape Order",
-            [],
-            None,
-            "{glyph: name, layer?: id, side?: \"foreground\" | \"background\", order: [index]} reorders the shapes (paths and components) of the layer: `order` lists every current shape index exactly once, in the new order; anything else is refused. Hints follow the paths they point at → {selection}",
-            has_doc,
-            set_shape_order
-        )
-        .targets(&[K::Layer, K::Shapes]),
+.targets(&[K::Layer, K::Shapes]),
     ]
 }
 
@@ -466,57 +457,6 @@ fn flatten_components(s: &mut Session, v: &Value) -> Result<Value> {
     t.layer = Some(t.layer_id(s.font()?)?);
     t.shapes = added;
     Ok(json!({"replaced": replaced, "skipped": skipped, "selection": t.to_json()}))
-}
-
-// ── path.setShapeOrder ──────────────────────────────────────────────────────────────────────────
-
-fn set_shape_order(s: &mut Session, v: &Value) -> Result<Value> {
-    const ID: &str = "path.setShapeOrder";
-    let p = Params::new(ID, v)?;
-    let mut t = Targets::parse(&p)?;
-    let list = p.array("order")?;
-    if list.len() > MAX_TARGETS {
-        return Err(p.bad(format!("`order` holds {} entries; at most {MAX_TARGETS} are allowed", list.len())));
-    }
-    let mut order = Vec::with_capacity(list.len());
-    for v in list {
-        let i = v
-            .as_u64()
-            .and_then(|n| usize::try_from(n).ok())
-            .ok_or_else(|| p.bad(format!("`order` must hold shape indices (whole numbers from 0), found {} ({v})", kind(v))))?;
-        order.push(i);
-    }
-    s.edit("Set Shape Order", |font| {
-        t.edit_layer(font, |layer| {
-            let count = layer.parts(t.side).shapes.len();
-            let distinct: BTreeSet<usize> = order.iter().copied().collect();
-            if order.len() != count || distinct.len() != count || distinct.iter().any(|&i| i >= count) {
-                return Err(p.bad(format!("`order` must list each of the layer's {count} shape indices exactly once")));
-            }
-            let parts = layer.parts_mut(t.side);
-            let old = std::mem::take(parts.shapes);
-            let mut slots: Vec<Option<Shape>> = old.into_iter().map(Some).collect();
-            for &i in &order {
-                if let Some(shape) = slots.get_mut(i).and_then(Option::take) {
-                    parts.shapes.push(shape);
-                }
-            }
-            if t.side == LayerSide::Foreground && !layer.info.hints.is_empty() {
-                let mut new_of = vec![0usize; count];
-                for (new, &old) in order.iter().enumerate() {
-                    if let Some(slot) = new_of.get_mut(old) {
-                        *slot = new;
-                    }
-                }
-                let remap = |i: usize| Some(new_of.get(i).copied().unwrap_or(i));
-                layer.info.hints = layer.info.hints.iter().filter_map(|h| remap_hint(h, &remap)).collect();
-            }
-            Ok(())
-        })
-    })?;
-    t.points.clear();
-    t.shapes.clear();
-    Ok(json!({"selection": t.to_json()}))
 }
 
 // ── Calls of audit.fix ──────────────────────────────────────────────────────────────────────────

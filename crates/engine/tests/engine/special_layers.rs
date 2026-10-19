@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use fontcraft_engine::interp::instance::interpolate_layer;
 use fontcraft_engine::interp::{Designspace, GlyphSources, InterpOptions, Location};
+use fontcraft_engine::model::corner::{CornerHint, corner_hint};
 use fontcraft_engine::model::{Axis, Font, Glyph, GlyphTable, Layer, Master, Path, Shape};
 use fontcraft_engine::{EngineError, Session};
 use serde_json::{Value, json};
@@ -170,9 +171,17 @@ fn glyph_set_shape_order_and_swap_shapes() {
             })
             .collect()
     };
+    // A corner on the third path, which moves to the front.
+    s.edit("corner", |font| {
+        font.glyph_mut("e")?.layer_mut("m").unwrap().info.hints.push(CornerHint::new("_corner.a", 2, 1).to_hint());
+        Ok(())
+    })
+    .unwrap();
     let out = run(&mut s, "glyph.setShapeOrder", json!({"glyph": "e", "layer": "m", "order": [2, 0, 1]}));
     assert_eq!(out["order"], json!([2, 0, 1]));
     assert_eq!(edges(&s), [230.0, 10.0, 120.0]);
+    let hints: Vec<CornerHint> = e_layer(&s, "m").info.hints.iter().map(|h| corner_hint(h).unwrap().unwrap()).collect();
+    assert_eq!(hints, [CornerHint::new("_corner.a", 0, 1)], "the hint follows its path");
     for bad in [json!([0, 0, 1]), json!([0, 1]), json!([0, 1, 3])] {
         let m = refused(&mut s, "glyph.setShapeOrder", json!({"glyph": "e", "layer": "m", "order": bad}));
         assert!(m.contains("not a permutation"), "{m}");

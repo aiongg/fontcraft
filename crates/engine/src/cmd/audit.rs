@@ -1318,7 +1318,7 @@ fn fix_via(fx: &FixSpec) -> Option<&'static str> {
     let command = match super::audit_fix_info::source_command(fx.id) {
         Some(command) => command,
         // A contour-order result names the shapes that move, not the order they take.
-        None if fx.id == "fixCompatibility" && fx.command == Some("path.setShapeOrder") => return None,
+        None if fx.id == "fixCompatibility" && fx.command == Some("glyph.setShapeOrder") => return None,
         None if FIX_ORDER.contains(&fx.id) => fx.command?,
         None => return None,
     };

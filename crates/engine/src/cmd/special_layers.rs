@@ -12,7 +12,7 @@
 use fontcraft_interp::instance::interpolate_layer;
 use fontcraft_interp::labels::special_label;
 use fontcraft_interp::{Designspace, GlyphSources, InterpOptions, Location, ModelKind, Source};
-use fontcraft_model::{AxisRule, Font, Glyph, Layer, Shape};
+use fontcraft_model::{AxisRule, Font, Glyph, Layer, LayerSide, Shape};
 use serde_json::{Map, Value, json};
 
 use super::common::{Outcome, in_range, scope};
@@ -86,7 +86,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Set Shape Order",
             [],
             None,
-            "{glyph: name, layer?: id (default: the first master's layer), order: [index] (every shape index of the layer once, in the new order)} reorder the layer's shapes, so that shapes at the same index match across the glyph's layers for interpolation. A list that is not a permutation of the layer's shape indices is refused → {glyph, layer, order: [index]}",
+            "{glyph: name, layer?: id (default: the first master's layer), side?: \"foreground\" | \"background\", order: [index] (every shape index of the layer once, in the new order)} reorder the layer's shapes (paths and components), so that shapes at the same index match across the glyph's layers for interpolation. Hints follow the paths they point at. A list that is not a permutation of the layer's shape indices is refused → {glyph, layer, order: [index]}",
             has_doc,
             set_shape_order
         )
@@ -422,6 +422,17 @@ fn set_shape_order(s: &mut Session, value: &Value) -> Result<Value> {
             for &i in &order {
                 let shape = slots.get_mut(i).and_then(Option::take).ok_or_else(|| p.bad(format!("shape {i} does not resolve")))?;
                 shapes.push(shape);
+            }
+            // Hints point at paths by index, so they follow their paths to the new places.
+            if t.side == LayerSide::Foreground && !layer.info.hints.is_empty() {
+                let mut new_of: Vec<usize> = (0..count).collect();
+                for (new, &old) in order.iter().enumerate() {
+                    if let Some(slot) = new_of.get_mut(old) {
+                        *slot = new;
+                    }
+                }
+                let remap = |i: usize| Some(new_of.get(i).copied().unwrap_or(i));
+                layer.info.hints = layer.info.hints.iter().filter_map(|h| super::decompose::remap_hint(h, &remap)).collect();
             }
             Ok(())
         })

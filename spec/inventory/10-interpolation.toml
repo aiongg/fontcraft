@@ -403,12 +403,13 @@ label = "Set Shape Order"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph: name, layer: id, order: [int]}"
+params = "{glyph: name, layer?: id, side?: foreground|background, order: [int]} → {glyph, layer, order}"
 area = "interpolation"
 milestone = "M9"
-summary = "Headless form of a drag in the Shape Order window: reorders the shapes of one layer to the given permutation of current indices. Rejects lists that are not a permutation."
-ref = "Interpolation › Outline Compatibility › Reordering Shapes"
+summary = "Headless form of a drag in the Shape Order window: reorders the shapes (paths and components) of one layer to the given permutation of current indices. Hints follow the paths they point at. Rejects lists that are not a permutation."
+ref = "Interpolation › Outline Compatibility › Reordering Shapes; docs/spec/21-qa.md § 5 (fix fixCompatibility)"
 status = "inferred"
+notes = "The audit fix fixCompatibility names it, with path.makeNodeFirst and path.reverseContours, to give a master the contour order of the reference master. audit.fix does not call it yet: a check.variations.contourOrder result names the shapes that move but not the proposed order, so that fix is reported as not available."
 guesses = [
   "A headless form of our own for the drag in the Shape Order window: it takes the whole new order of one layer and refuses anything but a permutation; watching a drag in the reference app would show whether one drag moves a single shape or swaps two.",
 ]

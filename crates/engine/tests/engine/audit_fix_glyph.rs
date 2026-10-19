@@ -139,20 +139,6 @@ fn component_flatten_replaces_a_nested_component_by_innermost_components() {
 }
 
 #[test]
-fn path_set_shape_order_reorders_and_refuses_a_bad_order() {
-    let mut s = Session::with_document();
-    add(&mut s, "A", rect(0.0, 0.0, 100.0, 100.0));
-    add(&mut s, "A", rect(200.0, 0.0, 300.0, 100.0));
-    run(&mut s, "path.setShapeOrder", json!({"glyph": "A", "order": [1, 0]}));
-    assert_eq!(coords(&s, "A")[0].0, 200.0, "the second path comes first");
-    let before = serde_json::to_value(s.font().unwrap()).unwrap();
-    for bad in [json!([0]), json!([0, 0]), json!([0, 2]), json!([0, 1, 2])] {
-        assert!(s.execute("path.setShapeOrder", &json!({"glyph": "A", "order": bad})).is_err(), "{bad}");
-    }
-    assert_eq!(serde_json::to_value(s.font().unwrap()).unwrap(), before, "a refused order changes nothing");
-}
-
-#[test]
 fn audit_fix_layer_steps_snap_align_and_clean_up() {
     let mut s = Session::with_document();
     // The bottom edge one unit above the baseline.

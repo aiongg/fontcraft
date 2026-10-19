@@ -30,7 +30,7 @@ const BASE: CheckSpec = CheckSpec {
 
 const FIX_ORDER: Option<FixSpec> = Some(FixSpec {
     id: "fixCompatibility",
-    command: Some("path.setShapeOrder"),
+    command: Some("glyph.setShapeOrder"),
     safe: false,
     description: "Reorder the master's shapes to the proposed order.",
 });

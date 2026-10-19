@@ -4381,21 +4381,6 @@ notes = "The audit fix flattenComponents runs it; added by the M12 spec pass."
 guesses = ["The flattened components keep the inner components' settings but have automatic alignment off, so the drawn outline cannot move; comparing with the reference's flatten filter output on an automatically aligned composite would settle it."]
 
 [[command]]
-id = "path.setShapeOrder"
-label = "Set Shape Order"
-menu = []
-shortcut = ""
-kind = "engine"
-params = "{glyph: name, layer?: id, side?: foreground|background, order: [index]} → {selection}"
-area = "path-ops"
-milestone = "M12"
-summary = "Reorders the shapes (paths and components) of a layer. `order` lists every current shape index exactly once, in the new order; anything else is refused."
-ref = "Our design; docs/spec/21-qa.md § 5 (fix fixCompatibility)"
-status = "inferred"
-own = true
-notes = "The audit fix fixCompatibility uses it, with path.makeNodeFirst and path.reverseContours, to give a master the contour order of the reference master; added by the M12 spec pass. audit.fix does not call it yet: a check.variations.contourOrder result names the shapes that move but not the proposed order, so that fix is reported as not available."
-
-[[command]]
 id = "tables.recalculate"
 label = "Recalculate Table Fields"
 menu = []
