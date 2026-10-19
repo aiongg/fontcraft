@@ -7,10 +7,10 @@
 //! opens with its axes, masters, intermediate layers and named instances ([`variable`]). TrueType outlines stay quadratic and composite glyphs stay
 //! components (`open.truetypeKeepsQuadratic`, `open.truetypeKeepsComponents`); CFF outlines come
 //! back cubic. Pair kerning and kerning groups come back from the GPOS `kern` feature
-//! (`gpos_kern`). Hinting comes back too: CFF stems, zones and stems ([`cff_hints`]), and
+//! (`gpos_kern`), and the rest of the layout comes back as feature code ([`fea`]). Hinting comes back too: CFF stems, zones and stems ([`cff_hints`]), and
 //! TrueType `cvt `, `fpgm`, `prep`, `gasp` and glyph programs ([`tt_hints`]). Colour palettes and
-//! `COLR` glyphs come back as the `Color Palettes` parameter and colour layers ([`color`]). The rest of the
-//! layout and every other table are not read, and [`Decompiled::warnings`] lists them. The glyph order is recorded in a `glyphOrder` custom parameter, so a later export keeps
+//! `COLR` glyphs come back as the `Color Palettes` parameter and colour layers ([`color`]). Every other table is
+//! not read, and [`Decompiled::warnings`] lists them. The glyph order is recorded in a `glyphOrder` custom parameter, so a later export keeps
 //! the glyph ids (`open.recordsGlyphOrder`).
 //!
 //! Input is untrusted: every offset and size is checked, WOFF and WOFF2 data is decompressed only up
@@ -28,6 +28,7 @@ use std::sync::Arc;
 pub mod bare_cff;
 pub mod cff_hints;
 pub mod color;
+pub mod fea;
 mod gpos_kern;
 pub mod tt_hints;
 pub mod type1;
@@ -136,6 +137,7 @@ pub fn decompile(bytes: &[u8], face: Option<u32>) -> Result<Decompiled, Decompil
     };
     let mut d = variable::read_any(&font)?;
     color::import(&font, &mut d);
+    fea::import(&font, &mut d);
     Ok(d)
 }
 

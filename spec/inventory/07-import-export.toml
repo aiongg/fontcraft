@@ -690,9 +690,18 @@ milestone = "M8"
 summary = "OpenType layout from a compiled font is turned back into feature code shown in Font Info › Features, but not every feature can be rebuilt. A lookup referenced by more than one feature is emitted once, in a prefix entry named Prefix, and referenced from the features."
 ref = "Import & Export › Opening Font Files › Importing OpenType Features"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Built in M8.23 (`crates/decompile/src/fea.rs`): opening a compiled font turns GSUB, GPOS, GDEF and BASE into entries that compile back to equivalent tables. Glyph sets used more than once become classes; a prefix Languagesystems holds the languagesystem statements; the prefix Prefix holds the markClass statements, the GDEF and BASE blocks, every lookup more than one feature uses, every lookup a contextual rule calls or no feature uses, and the lookups that must come first to keep the lookup list in order; every other lookup is written inside its feature. aalt holds the rules of its own lookups; a stylistic set's name becomes its label. The kern feature's pair lookups are left out when the document's kerning gives them back, with an # Automatic Code line where they were when the feature keeps contextual kerning or later lookups follow; otherwise the kerning is cleared and kern stays code. What feature syntax cannot hold is a comment and a warning."
+guesses = [
+  "Lookups that must come before a shared lookup to keep the lookup order go into Prefix as well; opening a font with a shared lookup in the middle of its lookup list in the reference app would settle it.",
+  "The languagesystem statements go into a prefix named Languagesystems; the handbook names only the Prefix entry.",
+  "A lookup only one feature uses is written inside that feature, where the feature first uses it; the handbook says only where shared lookups go.",
+  "When the document's kerning cannot give back every kern pair lookup (other values, device tables, other lookup flags, kerning read in part), the kerning is cleared and the kern feature stays code, so export does not kern twice; opening such a font in the reference app would settle it.",
+  "A font whose glyph names feature syntax cannot hold opens with every reconstructed entry turned off and a warning; no source says what the reference does.",
+  "A stylistic set's name comes back as the default-language label, read from the name table's English record.",
+]
 observe = [
   "Open a compiled OTF exported from F1 (Latin features) with a lookup used by two features and contextual kerning: note whether a prefix named Prefix holds the shared lookup, and what happens to the contextual kerning.",
+  "Open the same OTF and note whether the languagesystem statements appear as their own prefix, and whether lookups used by one feature appear inside that feature or in Prefix.",
 ]
 
 [[behavior]]
@@ -702,7 +711,7 @@ milestone = "M5"
 summary = "Pair kerning and kerning groups (classes) from a compiled font are mostly recovered into the document's kerning data; contextual kerning is not recovered."
 ref = "Import & Export › Opening Font Files › Importing OpenType Features"
 status = "handbook"
-notes = "Documented, not yet observed. Built in M5.15: opening a compiled font reads the pair lookups (glyph pairs and class pairs, extension lookups included) of the GPOS `kern` feature and stores kerning that gives every covered pair the value a shaper takes from the font: lookups add up in lookup-list order, and in one lookup the first subtable that applies decides. Classes become groups, class pairs group pairs, and covered pairs the groups do not reproduce become glyph pairs. At most 2,000,000 covered pairs are read; a class table of more than 1,000,000 class pairs is skipped with a warning. Contextual kerning is not read."
+notes = "Documented, not yet observed. Built in M5.15: opening a compiled font reads the pair lookups (glyph pairs and class pairs, extension lookups included) of the GPOS `kern` feature and stores kerning that gives every covered pair the value a shaper takes from the font: lookups add up in lookup-list order, and in one lookup the first subtable that applies decides. Classes become groups, class pairs group pairs, and covered pairs the groups do not reproduce become glyph pairs. At most 2,000,000 covered pairs are read; a class table of more than 1,000,000 class pairs is skipped with a warning. Contextual kerning is not read into the kerning; it stays feature code in the kern entry (M8.23, `open.reconstructsFeatures`), and when the kerning cannot give back every pair lookup of the feature it is cleared and the feature stays code."
 guesses = [
   "A class read from a compiled font becomes a kerning group named after its first glyph in glyph order; no source says how the reference names recovered groups.",
   "A glyph keeps the first class it is in on each side, and pairs of a later class with other members are stored as glyph pairs; opening a font whose subtables use overlapping classes in the reference app would settle it.",
