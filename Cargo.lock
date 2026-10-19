@@ -1424,7 +1424,9 @@ dependencies = [
 name = "fontcraft-render"
 version = "0.0.1"
 dependencies = [
+ "fontcraft-color",
  "fontcraft-geom",
+ "fontcraft-imagery",
  "fontcraft-model",
  "skrifa 0.48.0",
  "thiserror 2.0.21",

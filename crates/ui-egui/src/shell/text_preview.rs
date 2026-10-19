@@ -343,6 +343,7 @@ pub struct Cache {
     /// The text field's last selection, in character indexes.
     pub selection: Option<(usize, usize)>,
     pub drawn: Drawn,
+    pub color: super::text_preview_color::ColorPreview,
 }
 
 // The cache is rebuilt from the state, so copies start empty and all caches compare equal.
@@ -1208,6 +1209,7 @@ fn area(
     let current = tp.find.current;
     let length = tp.length;
     let ppp = ui.ctx().pixels_per_point();
+    tp.cache.color.begin(session, font, tp.style.as_deref(), master, doc, now, ui.ctx(), f64::from(scale) * f64::from(ppp), tokens.glyph_fill);
 
     let scroll = egui::ScrollArea::both().id_salt(widgets::id(("textPreview", "scroll"))).auto_shrink([false, false]).max_height(size.y);
     scroll.stick_to_right(vertical).show_viewport(ui, |ui, viewport| {
@@ -1316,6 +1318,9 @@ fn area(
         // Glyph outlines, filled into one texture of the area in view.
         let mut outline = BezPath::new();
         let mut add = |name: &str, x: f64, y: f64, drawn: &mut Drawn| {
+            if tp.cache.color.take(name, place.screen(x, y)) {
+                return drawn.glyphs.push((Arc::from(name), place.screen(x, y)));
+            }
             let Some(layer) = font.glyph(name).and_then(|g| g.layer(master)) else { return };
             if let Some(composite) = tp.cache.outlines.get(doc, font, name, layer) {
                 let mut glyph = composite.outline.clone();
@@ -1348,8 +1353,9 @@ fn area(
             drawn.message = shaping_error;
         }
         let mut th = std::collections::hash_map::DefaultHasher::new();
-        (shaped_key, drawn.shaped).hash(&mut th);
+        (shaped_key, drawn.shaped, tp.cache.color.key()).hash(&mut th);
         fill(ui, &painter, &mut tp.cache, tokens, &outline, place, visible, ppp, th.finish());
+        tp.cache.color.paint(ui.ctx(), &painter, visible, ppp);
         // Why the text is not shaped, over the bottom of the area.
         if let Some(note) = &drawn.message {
             let at = visible.left_bottom() + vec2(pad, -pad);

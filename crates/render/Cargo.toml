@@ -11,7 +11,9 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+fontcraft-color.workspace = true
 fontcraft-geom.workspace = true
+fontcraft-imagery.workspace = true
 fontcraft-model.workspace = true
 skrifa.workspace = true
 thiserror.workspace = true
