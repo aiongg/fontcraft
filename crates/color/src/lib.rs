@@ -14,6 +14,7 @@
 //! | [`strike`] | M11.8 (M11.10 for [`strike::pick_size`]) | bitmap strikes from iColor layers |
 //! | [`svg`] | M11.9 (M11.10 for bitmaps) | SVG documents from paints and bitmaps, the `SVG ` table |
 //! | [`svg_import`] | M11.10 | a referenced SVG file rewritten as a glyph document |
+//! | [`svg_draw`] | M11.14 | an svg layer's file as filled outlines for the editor |
 //! | [`assets`] | M11.1 | [`AssetStore`]: stored image path → bytes; [`MemoryAssets`] |
 //!
 //! Who calls what: Edit View, Font View, Text Preview, the SVG writer and the COLR writer all read
@@ -33,6 +34,7 @@ pub mod paint;
 pub mod palette;
 pub mod strike;
 pub mod svg;
+pub mod svg_draw;
 pub mod svg_import;
 
 pub use assets::{AssetError, AssetStore, MemoryAssets};

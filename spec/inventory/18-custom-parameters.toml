@@ -1312,6 +1312,7 @@ effect = "ui"
 summary = "Colour used to display the filled outlines of the master, also handy for previewing layered fonts meant to be stacked in different colours. Display only: it is never written to the font, although the Color Layers parameters use its presence to pick colour masters."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented in the handbook; not yet observed in the reference app. Read as `R,G,B,A` or `R,G,B` from 0 to 255, a list of numbers, or `#RRGGBB(AA)`; Edit View fills the master's glyphs in it (`color.layered.masterColor`)."
 
 [[parameter]]
 name = "Master Color Dark"
@@ -1323,6 +1324,7 @@ effect = "ui"
 summary = "Dark-mode counterpart of Master Color."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented in the handbook; not yet observed in the reference app. Read like Master Color; used in place of it while the app's theme is dark, and Master Color is used when it is missing or cannot be read."
 
 [[parameter]]
 name = "Master Icon Glyph Name"

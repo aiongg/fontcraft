@@ -447,7 +447,10 @@ pub fn draw(
         sides.push(LayerSide::Background);
     }
     for s in sides {
-        if let Some(image) = side_image(layer, s).filter(|_| shown(state, layer, s)) {
+        // iColor and svg images are the layer's colour drawing (`super::color`).
+        if let Some(image) =
+            side_image(layer, s).filter(|_| shown(state, layer, s) && !(s == LayerSide::Foreground && super::color::draws_layer_image(layer)))
+        {
             draw_layer_image(c, &mut images.cache, ctx, assets.as_ref(), image, to_screen, images.revision);
         }
     }

@@ -59,6 +59,9 @@ pub fn draw(c: &Painting, cache: &mut FillCache, font: &Font, tab: &Tab, layout:
             .chain(placed.extra.iter().map(|(g, x, y)| (g.as_ref(), *x, *y, false)));
         for (name, x, y, edited) in glyphs {
             (name, x.to_bits(), y.to_bits()).hash(&mut shown);
+            if super::color::replaces_fill(font, tab, name) {
+                continue;
+            }
             let Some(layer) = super::view::shown_layer(font, tab, name) else { continue };
             let Some(composite) = cache.outlines.get(what.doc, font, name, layer) else { continue };
             let mut outline = composite.outline.clone();
@@ -79,7 +82,7 @@ pub fn draw(c: &Painting, cache: &mut FillCache, font: &Font, tab: &Tab, layout:
     let ppp = c.painter.ctx().pixels_per_point();
     let (w, h) = ((c.rect.width() * ppp).round(), (c.rect.height() * ppp).round());
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    (what, tab.text.revision(), tab.direction, tab.kerning, &tab.master, &tab.layers, &tab.features, shown.finish()).hash(&mut hasher);
+    (what, tab.text.revision(), tab.direction, tab.kerning, &tab.master, &tab.layers, &tab.features, shown.finish(), edited_index).hash(&mut hasher);
     for v in [
         c.view.scale(),
         c.view.origin.x,

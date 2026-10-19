@@ -1,0 +1,993 @@
+//! Colour glyphs in Edit View and in the previews: palette and full-colour layers through the
+//! paint graph (solid fills, gradients, strokes), iColor images at their size, svg layers as
+//! their file's outlines, and the masters of a layered font in their Master Color.
+//!
+//! Rows: `color.preview.editViewOtherGlyphs`, `color.preview.previewArea`,
+//! `color.fullColor.transparentSwatch` (drawing), `color.sbix.sizeScalesImage` (drawing),
+//! `color.layered.masterColor`, `color.layered.masterColorDark`, `color.layered.editLikeMasters`,
+//! `color.layered.stackingOrder`, and the `Master Color` and `Master Color Dark` parameters.
+//!
+//! When Edit View draws in colour ([`mode`]):
+//!
+//! | The edited glyph's active layer | The tab's glyphs are drawn |
+//! |---|---|
+//! | a colour layer | each glyph with colour layers in that layer's master in colour, the edited glyph included, behind the edited outline; the others as usual |
+//! | a master layer with a Master Color (a layered font) | every glyph filled in the Master Color of each shown master (the active one and those whose layer eye is on in the edited glyph), the first master on top; Master Color Dark on a dark canvas when the master has one |
+//! | any other layer | as usual |
+//!
+//! A glyph drawn in colour takes the place of its ordinary fill ([`replaces_fill`]). Which kind
+//! of colour layer a glyph shows: the edited glyph shows its active layer's kind (that very
+//! layer for iColor and svg layers); every other glyph the kind of the active layer when it has
+//! it, else vector layers, then svg, then iColor. Palette colours come from palette 0 of the
+//! master's palettes (the font's when the master has none); the text colour (`*`) is black on a
+//! light canvas and white on a dark one, and a preview's text colour in the previews. A colour with no opacity paints nothing, which is how a
+//! removed fill shows.
+//!
+//! The previews ([`preview_layer`]) draw a glyph in colour while one of its colour layers is the
+//! layer the tab shows for it; the colour is drawn over the strip before Flip and Blur, and Invert
+//! leaves it as it is.
+//!
+//! Drawing cost (`docs/plans/M11.md` § 5, an Edit View frame of 50 colour glyphs in 16 ms):
+//! vector content is rasterised on the CPU into one texture per glyph, kept while the glyph,
+//! the palettes, the mode and the zoom are unchanged, so scrolling and edits to other glyphs draw
+//! textures only. A glyph's texture is clipped to the canvas with a margin when it is larger.
+//! iColor images use the placed-image cache ([`super::images`]); svg files are read once per file
+//! revision ([`SvgCache`]).
+
+use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
+use std::sync::Arc;
+
+use egui::{Color32, ColorImage, Rect, TextureHandle, TextureOptions, pos2, vec2};
+use fontcraft_engine::Session;
+use fontcraft_engine::cmd::stroke::{layer_outline, shapes_outline};
+use fontcraft_engine::color::layers::{self as kinds, ColorLayerKind};
+use fontcraft_engine::color::paint::{self, ColorLine, ColorRef, Paint, ShapeRef};
+use fontcraft_engine::color::svg_draw::{self, SvgShape};
+use fontcraft_engine::color::{AssetStore, MAX_PAINT_DEPTH, Rgba, export, palette};
+use fontcraft_engine::imagery;
+use fontcraft_geom::{Affine, BezPath, Point, Shape as _};
+use fontcraft_model::{Extend, Font, Glyph, Image, Layer, Master, Shape};
+use fontcraft_render::{Style, render_path};
+use fontcraft_textlayout::Layout;
+
+use super::Painting;
+use super::images::draw_layer_image;
+use crate::state::Tab;
+
+/// Most glyph textures kept.
+pub const MAX_SPRITES: usize = 2_048;
+/// Most bytes of glyph textures kept.
+pub const MAX_SPRITE_BYTES: usize = 256 << 20;
+/// Pixels a clipped glyph texture reaches beyond the canvas on each side, so a short scroll
+/// draws it again without rasterising.
+pub const CLIP_MARGIN: f64 = 256.0;
+/// Most filled outlines one glyph is drawn with.
+pub const MAX_DRAWABLES: usize = 100_000;
+/// Most svg files whose outlines are kept.
+pub const MAX_SVG_FILES: usize = 256;
+/// The Master Color parameter's dark-appearance counterpart.
+pub const MASTER_COLOR_DARK: &str = "Master Color Dark";
+
+/// The look of colour drawing.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ColorTokens {
+    /// The text colour (`*`) of palette layers.
+    pub text_color: Color32,
+    /// Gradient knobs: the dot, its ring, its radius in screen points.
+    pub knob: Color32,
+    pub knob_outline: Color32,
+    pub knob_radius: f32,
+    pub knob_outline_width: f32,
+    /// The line from a linear gradient's start knob to its end knob.
+    pub knob_line: Color32,
+    pub knob_line_width: f32,
+}
+
+impl ColorTokens {
+    pub fn dark() -> Self {
+        Self {
+            text_color: Color32::WHITE,
+            knob: Color32::WHITE,
+            knob_outline: Color32::from_rgb(0x20, 0x20, 0x20),
+            knob_radius: 5.0,
+            knob_outline_width: 1.5,
+            knob_line: Color32::from_rgba_unmultiplied(0x80, 0x80, 0x80, 0xc0),
+            knob_line_width: 1.0,
+        }
+    }
+
+    pub fn light() -> Self {
+        Self { text_color: Color32::BLACK, ..Self::dark() }
+    }
+}
+
+// ── when and what ───────────────────────────────────────────────────────────────────────────────
+
+/// How Edit View draws in colour.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Mode {
+    /// A colour layer of `master` is the active layer; `kind` is its kind.
+    Layers { master: String, kind: ColorLayerKind },
+    /// A layered font: these masters' layers, bottom first, each filled in its colour (straight
+    /// RGBA from 0 to 1).
+    Layered { masters: Vec<(String, [f32; 4])> },
+}
+
+/// The colour a master is drawn in: its Master Color Dark on a dark canvas when it has a readable
+/// one, else its Master Color.
+pub fn master_color(master: &Master, dark: bool) -> Option<[f32; 4]> {
+    let dark_value = dark.then(|| master.params.get(MASTER_COLOR_DARK).and_then(export::master_color)).flatten();
+    let c = dark_value.or_else(|| master.params.get(export::MASTER_COLOR).and_then(export::master_color))?;
+    Some(straight(c))
+}
+
+fn straight(c: Rgba) -> [f32; 4] {
+    c.to_f64().map(|v| v as f32)
+}
+
+/// How the tab draws in colour, from its edited glyph's active layer; `None` for the ordinary
+/// drawing.
+pub fn mode(font: &Font, tab: &Tab, dark: bool) -> Option<Mode> {
+    let layer = super::view::active_layer(font, tab)?;
+    if let Some(kind) = kinds::kind(layer) {
+        return Some(Mode::Layers { master: layer.master.clone(), kind });
+    }
+    if !layer.is_master_layer() {
+        return None;
+    }
+    let glyph = font.glyph(tab.edited_glyph()?)?;
+    let shown = |id: &str| id == layer.master || glyph.layer(id).is_some_and(|l| l.info.visible);
+    // The first master is drawn on top, so it comes last.
+    let masters: Vec<(String, [f32; 4])> =
+        font.masters.iter().rev().filter(|m| shown(&m.id)).filter_map(|m| master_color(m, dark).map(|c| (m.id.clone(), c))).collect();
+    masters.iter().any(|(id, _)| *id == layer.master).then_some(Mode::Layered { masters })
+}
+
+/// Whether `glyph` has something to draw in `mode`.
+fn has_color(glyph: &Glyph, mode: &Mode) -> bool {
+    match mode {
+        Mode::Layers { master, .. } => glyph.layers.iter().any(|l| l.master == *master && kinds::export_kind(l).is_some()),
+        Mode::Layered { .. } => true,
+    }
+}
+
+/// Whether Edit View draws glyph `name` of `tab` in colour, in place of its ordinary fill or
+/// outline.
+pub fn replaces_fill(font: &Font, tab: &Tab, name: &str) -> bool {
+    mode(font, tab, false).is_some_and(|m| font.glyph(name).is_some_and(|g| has_color(g, &m)))
+}
+
+/// The layer a preview draws glyph `name` of `tab` in colour with: the layer the tab shows for
+/// it, while that is a colour layer (`color.preview.previewArea`).
+pub fn preview_layer<'f>(font: &'f Font, tab: &Tab, name: &str) -> Option<&'f Layer> {
+    super::view::shown_layer(font, tab, name).filter(|l| kinds::kind(l).is_some())
+}
+
+/// Whether Edit View draws the image of `layer` as its colour content rather than as a placed
+/// image: iColor and svg layers.
+pub fn draws_layer_image(layer: &Layer) -> bool {
+    matches!(kinds::kind(layer), Some(ColorLayerKind::IColor(_) | ColorLayerKind::Svg))
+}
+
+// ── content ─────────────────────────────────────────────────────────────────────────────────────
+
+/// A colour stop line with colours resolved: offsets in order, straight RGBA.
+#[derive(Clone, Debug, PartialEq)]
+struct Stops {
+    at: Vec<(f64, [f32; 4])>,
+    extend: Extend,
+}
+
+/// What fills an outline, in font units of the glyph.
+#[derive(Clone, Debug, PartialEq)]
+enum Leaf {
+    Solid([f32; 4]),
+    /// `t = (p − p0) · v`: `v` is the gradient vector divided by its squared length.
+    Linear {
+        p0: Point,
+        v: (f64, f64),
+        stops: Stops,
+    },
+    Radial {
+        c0: Point,
+        r0: f64,
+        c1: Point,
+        r1: f64,
+        stops: Stops,
+    },
+    Sweep {
+        center: Point,
+        start: f64,
+        end: f64,
+        stops: Stops,
+    },
+}
+
+/// One fill: `leaf` within every outline of `clips`.
+#[derive(Clone, Debug, PartialEq)]
+struct Drawable {
+    clips: Vec<BezPath>,
+    leaf: Leaf,
+}
+
+/// What a glyph draws in colour.
+#[derive(Clone, Debug)]
+enum Content {
+    Vector(Vec<Drawable>),
+    /// An iColor layer's image, drawn whole.
+    Bitmap(Image),
+}
+
+/// Where colours and files come from.
+pub struct Sources<'a> {
+    pub assets: &'a dyn AssetStore,
+    pub svgs: &'a mut SvgCache,
+    /// The app's file revision (`super::images::ImageUi::revision`).
+    pub revision: u64,
+    /// The text colour.
+    pub text: Color32,
+}
+
+/// The outlines of svg files, by stored path, file revision and placement.
+#[derive(Default)]
+pub struct SvgCache {
+    entries: HashMap<(String, u64, [u64; 6]), Arc<Vec<SvgShape>>>,
+}
+
+impl SvgCache {
+    /// The outlines of the svg file at `path` placed by `transform`; empty when it cannot be read.
+    fn get(&mut self, assets: &dyn AssetStore, path: &str, revision: u64, transform: Affine) -> Arc<Vec<SvgShape>> {
+        let key = (path.to_string(), revision, transform.as_coeffs().map(f64::to_bits));
+        if let Some(found) = self.entries.get(&key) {
+            return found.clone();
+        }
+        let shapes = assets.read(path).ok().and_then(|bytes| svg_draw::shapes(&bytes, transform).ok()).unwrap_or_default();
+        if self.entries.len() >= MAX_SVG_FILES {
+            self.entries.clear();
+        }
+        let shapes = Arc::new(shapes);
+        self.entries.insert(key, shapes.clone());
+        shapes
+    }
+
+    pub fn clear(&mut self) {
+        self.entries.clear();
+    }
+}
+
+fn clamp01(v: f64) -> f32 {
+    if v.is_finite() { v.clamp(0.0, 1.0) as f32 } else { 0.0 }
+}
+
+fn color32_straight(c: Color32) -> [f32; 4] {
+    let [r, g, b, a] = c.to_srgba_unmultiplied();
+    [r, g, b, a].map(|v| f32::from(v) / 255.0)
+}
+
+/// `c` resolved against palette `palette`; a row the palette lacks is drawn in the text colour.
+fn resolve(c: ColorRef, palette: &[Rgba], text: [f32; 4]) -> [f32; 4] {
+    let with = |[r, g, b, a]: [f32; 4], alpha: f64| [r, g, b, a * clamp01(alpha)];
+    match c {
+        ColorRef::Palette { index, alpha } => with(palette.get(usize::from(index)).map_or(text, |row| straight(*row)), alpha),
+        ColorRef::Foreground { alpha } => with(text, alpha),
+        ColorRef::Rgba(v) => v.map(clamp01),
+    }
+}
+
+fn stops(line: &ColorLine, palette: &[Rgba], text: [f32; 4]) -> Option<Stops> {
+    let mut at: Vec<(f64, [f32; 4])> =
+        line.stops.iter().filter(|s| s.offset.is_finite()).map(|s| (s.offset, resolve(s.color, palette, text))).collect();
+    at.sort_by(|a, b| a.0.total_cmp(&b.0));
+    (!at.is_empty()).then_some(Stops { at, extend: line.extend })
+}
+
+fn finite(p: Point) -> bool {
+    p.x.is_finite() && p.y.is_finite()
+}
+
+/// The fill a leaf paint gives; `None` for a node that is not a leaf or cannot be drawn.
+fn leaf(paint: &Paint, palette: &[Rgba], text: [f32; 4]) -> Option<Leaf> {
+    match paint {
+        Paint::Solid(c) => Some(Leaf::Solid(resolve(*c, palette, text))),
+        Paint::Linear { p0, p1, p2, line } => {
+            let stops = stops(line, palette, text)?;
+            if !(finite(*p0) && finite(*p1) && finite(*p2)) {
+                return None;
+            }
+            // Colour is constant along lines parallel to p0–p2: p1 projected onto the normal of
+            // p0–p2 through p0 gives the gradient vector, as COLR version 1 defines it.
+            let normal = (-(p2.y - p0.y), p2.x - p0.x);
+            let (dx, dy) = (p1.x - p0.x, p1.y - p0.y);
+            let nn = normal.0 * normal.0 + normal.1 * normal.1;
+            let (vx, vy) = if nn > 1e-12 {
+                let k = (dx * normal.0 + dy * normal.1) / nn;
+                (normal.0 * k, normal.1 * k)
+            } else {
+                (dx, dy)
+            };
+            let len2 = vx * vx + vy * vy;
+            if len2 <= 1e-12 {
+                return stops.at.last().map(|(_, c)| Leaf::Solid(*c));
+            }
+            Some(Leaf::Linear { p0: *p0, v: (vx / len2, vy / len2), stops })
+        }
+        Paint::Radial { c0, r0, c1, r1, line } => {
+            let ok = finite(*c0) && finite(*c1) && r0.is_finite() && r1.is_finite();
+            ok.then(|| stops(line, palette, text)).flatten().map(|stops| Leaf::Radial { c0: *c0, r0: r0.abs(), c1: *c1, r1: r1.abs(), stops })
+        }
+        Paint::Sweep { center, start, end, line } => {
+            let ok = finite(*center) && start.is_finite() && end.is_finite();
+            ok.then(|| stops(line, palette, text)).flatten().map(|stops| Leaf::Sweep { center: *center, start: *start, end: *end, stops })
+        }
+        Paint::Layers(_) | Paint::Glyph { .. } => None,
+    }
+}
+
+fn concat(parts: Vec<BezPath>) -> BezPath {
+    parts.into_iter().fold(BezPath::new(), |mut all, p| {
+        all.extend(p.elements().iter().copied());
+        all
+    })
+}
+
+/// The outline of the shapes `shape` names, as the COLR writer draws its layer glyph: on a
+/// full-colour layer the fill without strokes, or the stroke alone, expanded.
+fn shape_outline(font: &Font, glyph: &Glyph, shape: &ShapeRef) -> Option<BezPath> {
+    let layer = glyph.layers.iter().find(|l| l.id == shape.layer)?;
+    let mut shapes: Vec<Shape> = shape.shapes.iter().filter_map(|&i| layer.shapes.get(i).cloned()).collect();
+    if layer.info.attrs.full_color {
+        if shape.stroke.is_some() {
+            shapes.retain(|s| matches!(s, Shape::Path(_)));
+        }
+        for s in &mut shapes {
+            if let Shape::Path(p) = s {
+                if shape.stroke.is_some() {
+                    p.info.attrs.fill = false;
+                } else {
+                    p.info.attrs.stroke_width = None;
+                }
+            }
+        }
+    } else if shape.stroke.is_some() {
+        return None;
+    }
+    shapes_outline(font, &shapes, &layer.master).ok().map(concat)
+}
+
+/// The fills of `paint`, bottom first, each within the outlines of the glyph nodes above it.
+#[allow(clippy::too_many_arguments)]
+fn collect(
+    font: &Font,
+    glyph: &Glyph,
+    paint: &Paint,
+    clips: &mut Vec<BezPath>,
+    palette: &[Rgba],
+    text: [f32; 4],
+    out: &mut Vec<Drawable>,
+    depth: usize,
+) {
+    if depth > MAX_PAINT_DEPTH || out.len() >= MAX_DRAWABLES {
+        return;
+    }
+    match paint {
+        Paint::Layers(list) => {
+            for p in list {
+                collect(font, glyph, p, clips, palette, text, out, depth + 1);
+            }
+        }
+        Paint::Glyph { shape, paint } => {
+            let Some(outline) = shape_outline(font, glyph, shape) else { return };
+            clips.push(outline);
+            match leaf(paint, palette, text) {
+                Some(l) => out.push(Drawable { clips: clips.clone(), leaf: l }),
+                None => collect(font, glyph, paint, clips, palette, text, out, depth + 1),
+            }
+            clips.pop();
+        }
+        other => {
+            if !clips.is_empty()
+                && let Some(l) = leaf(other, palette, text)
+            {
+                out.push(Drawable { clips: clips.clone(), leaf: l });
+            }
+        }
+    }
+}
+
+/// Palette 0 of `master`'s palettes (the font's when the master has none).
+fn palette0(font: &Font, master: &str) -> Vec<Rgba> {
+    palette::read(font, Some(master)).ok().and_then(|p| p.palette(0).map(<[Rgba]>::to_vec)).unwrap_or_default()
+}
+
+fn vector(font: &Font, glyph: &Glyph, master: &str, text: [f32; 4]) -> Option<Content> {
+    let palettes = palette::read(font, Some(master)).unwrap_or_default();
+    let palette = palettes.palette(0).map(<[Rgba]>::to_vec).unwrap_or_default();
+    let graph = paint::glyph_paint(font, glyph, master, &palettes).ok()??;
+    let mut out = Vec::new();
+    collect(font, glyph, &graph, &mut Vec::new(), &palette, text, &mut out, 0);
+    Some(Content::Vector(out))
+}
+
+fn svg(layer: &Layer, src: &mut Sources) -> Option<Content> {
+    let image = layer.info.image.as_ref()?;
+    let path = image.path.as_deref()?;
+    let shapes = src.svgs.get(src.assets, path, src.revision, image.transform.affine());
+    let text = color32_straight(src.text);
+    let out = shapes
+        .iter()
+        .take(MAX_DRAWABLES)
+        .filter_map(|s| leaf(&s.paint, &[], text).map(|l| Drawable { clips: vec![s.outline.clone()], leaf: l }))
+        .collect();
+    Some(Content::Vector(out))
+}
+
+fn bitmap(layer: &Layer) -> Option<Content> {
+    let image = layer.info.image.as_ref().filter(|i| i.path.is_some())?;
+    // The image is the glyph: drawn whole, not at a tracing image's opacity.
+    Some(Content::Bitmap(Image { alpha: Some(100.0), ..image.clone() }))
+}
+
+/// The colour layers of `glyph` in `master` that are not intermediate layers, in file order.
+fn static_layers<'g>(glyph: &'g Glyph, master: &str) -> Vec<(&'g Layer, ColorLayerKind)> {
+    kinds::color_layers(glyph, master).into_iter().filter(|(l, _)| l.info.attrs.coordinates.is_empty()).collect()
+}
+
+/// What `glyph` draws in `mode`. `exact` is the edited glyph's active layer, drawn itself when it
+/// is an iColor or svg layer.
+fn content(font: &Font, glyph: &Glyph, mode: &Mode, exact: Option<&Layer>, src: &mut Sources) -> Option<Content> {
+    let text = color32_straight(src.text);
+    let (master, kind) = match mode {
+        Mode::Layered { masters } => {
+            let out = masters
+                .iter()
+                .filter_map(|(id, c)| {
+                    let layer = glyph.layer(id)?;
+                    let outline = layer_outline(font, layer).ok().map(concat)?;
+                    (!outline.elements().is_empty()).then(|| Drawable { clips: vec![outline], leaf: Leaf::Solid(*c) })
+                })
+                .collect();
+            return Some(Content::Vector(out));
+        }
+        Mode::Layers { master, kind } => (master.as_str(), *kind),
+    };
+    if let Some(layer) = exact {
+        return match kinds::kind(layer)? {
+            ColorLayerKind::IColor(_) => bitmap(layer),
+            ColorLayerKind::Svg => svg(layer, src),
+            ColorLayerKind::Palette(_) | ColorLayerKind::FullColor => vector(font, glyph, master, text),
+        };
+    }
+    let order = match kind {
+        ColorLayerKind::IColor(_) => [Pick::IColor, Pick::Vector, Pick::Svg],
+        ColorLayerKind::Svg => [Pick::Svg, Pick::Vector, Pick::IColor],
+        ColorLayerKind::Palette(_) | ColorLayerKind::FullColor => [Pick::Vector, Pick::Svg, Pick::IColor],
+    };
+    order.into_iter().find_map(|pick| by_kind(font, glyph, master, kind, pick, text, src))
+}
+
+/// Which kind of colour layer a glyph is drawn with.
+#[derive(Clone, Copy)]
+enum Pick {
+    Vector,
+    Svg,
+    IColor,
+}
+
+/// The content of `glyph`'s layers of one kind in `master`; `kind` is the active layer's. Of
+/// several iColor layers, the one of the active layer's size, else the largest.
+fn by_kind(font: &Font, glyph: &Glyph, master: &str, kind: ColorLayerKind, pick: Pick, text: [f32; 4], src: &mut Sources) -> Option<Content> {
+    match pick {
+        Pick::Vector => vector(font, glyph, master, text),
+        Pick::Svg => static_layers(glyph, master).into_iter().filter(|(_, k)| *k == ColorLayerKind::Svg).find_map(|(l, _)| svg(l, src)),
+        Pick::IColor => {
+            let sized: Vec<(&Layer, u16)> = static_layers(glyph, master)
+                .into_iter()
+                .filter(|(l, _)| l.info.image.as_ref().is_some_and(|i| i.path.is_some()))
+                .filter_map(|(l, k)| if let ColorLayerKind::IColor(size) = k { Some((l, size)) } else { None })
+                .collect();
+            let same = match kind {
+                ColorLayerKind::IColor(n) => sized.iter().find(|(_, size)| *size == n),
+                _ => None,
+            };
+            same.or_else(|| sized.iter().max_by_key(|(_, size)| *size)).and_then(|(l, _)| bitmap(l))
+        }
+    }
+}
+
+// ── rasterising ─────────────────────────────────────────────────────────────────────────────────
+
+/// Premultiplied RGBA pixels, rows top to bottom.
+pub struct Pixels<'a> {
+    pub data: &'a mut [u8],
+    pub width: u32,
+    pub height: u32,
+}
+
+const MASK: Style = Style { ink: [255, 255, 255, 255], background: [0, 0, 0, 0], anti_alias: true };
+
+/// `t` within 0 to 1 as the extend mode says.
+fn extend(t: f64, mode: Extend) -> f64 {
+    match mode {
+        Extend::Pad => t.clamp(0.0, 1.0),
+        Extend::Repeat => t - t.floor(),
+        Extend::Reflect => {
+            let m = t.rem_euclid(2.0);
+            if m > 1.0 { 2.0 - m } else { m }
+        }
+    }
+}
+
+fn sample(stops: &Stops, t: f64) -> [f32; 4] {
+    let t = if t.is_finite() { extend(t, stops.extend) } else { 0.0 };
+    let (Some(first), Some(last)) = (stops.at.first(), stops.at.last()) else { return [0.0; 4] };
+    if t <= first.0 {
+        return first.1;
+    }
+    if t >= last.0 {
+        return last.1;
+    }
+    let i = stops.at.partition_point(|(o, _)| *o <= t);
+    match (stops.at.get(i.wrapping_sub(1)), stops.at.get(i)) {
+        (Some((o0, c0)), Some((o1, c1))) if o1 > o0 => {
+            let k = ((t - o0) / (o1 - o0)) as f32;
+            let mut out = [0.0; 4];
+            for ((o, a), b) in out.iter_mut().zip(c0).zip(c1) {
+                *o = a + (b - a) * k;
+            }
+            out
+        }
+        (Some((_, c)), _) | (_, Some((_, c))) => *c,
+        _ => last.1,
+    }
+}
+
+/// The colour of `leaf` at font point `p`; `None` where a radial gradient paints nothing.
+fn eval(leaf: &Leaf, p: Point) -> Option<[f32; 4]> {
+    match leaf {
+        Leaf::Solid(c) => Some(*c),
+        Leaf::Linear { p0, v, stops } => Some(sample(stops, (p.x - p0.x) * v.0 + (p.y - p0.y) * v.1)),
+        Leaf::Radial { c0, r0, c1, r1, stops } => {
+            // The largest t with |p − c(t)| = r(t) and r(t) ≥ 0, c and r moving from the start
+            // circle to the end circle.
+            let (cdx, cdy, dr) = (c1.x - c0.x, c1.y - c0.y, r1 - r0);
+            let (pdx, pdy) = (p.x - c0.x, p.y - c0.y);
+            let a = cdx * cdx + cdy * cdy - dr * dr;
+            let b = pdx * cdx + pdy * cdy + r0 * dr;
+            let c = pdx * pdx + pdy * pdy - r0 * r0;
+            let r = |t: f64| r0 + t * dr;
+            let t = if a.abs() < 1e-9 {
+                (b.abs() > 1e-12).then(|| c / (2.0 * b)).filter(|t| r(*t) >= 0.0)
+            } else {
+                let disc = b * b - a * c;
+                if disc < 0.0 {
+                    None
+                } else {
+                    let s = disc.sqrt();
+                    let (t1, t2) = ((b + s) / a, (b - s) / a);
+                    let (hi, lo) = if t1 > t2 { (t1, t2) } else { (t2, t1) };
+                    [hi, lo].into_iter().find(|t| r(*t) >= 0.0)
+                }
+            }?;
+            Some(sample(stops, t))
+        }
+        Leaf::Sweep { center, start, end, stops } => {
+            let span = end - start;
+            if span.abs() < 1e-9 {
+                return stops.at.last().map(|(_, c)| *c);
+            }
+            let angle = (p.y - center.y).atan2(p.x - center.x).to_degrees().rem_euclid(360.0);
+            Some(sample(stops, (angle - start) / span))
+        }
+    }
+}
+
+/// Lays `color` (straight) at `coverage` over the premultiplied pixel at `at`.
+fn blend(data: &mut [u8], at: usize, color: [f32; 4], coverage: f32) {
+    let [r, g, b, a] = color;
+    let alpha = (a * coverage).clamp(0.0, 1.0);
+    if alpha <= 0.0 {
+        return;
+    }
+    let Some(px) = data.get_mut(at..at + 4) else { return };
+    let keep = 1.0 - alpha;
+    for (d, s) in px.iter_mut().zip([r * alpha, g * alpha, b * alpha, alpha]) {
+        let v = s * 255.0 + f32::from(*d) * keep;
+        *d = v.round().clamp(0.0, 255.0) as u8;
+    }
+}
+
+/// The pixel box of `rect` under `t` within `width × height`; `None` when it is empty.
+fn pixel_box(rect: fontcraft_geom::Rect, t: Affine, width: u32, height: u32) -> Option<(u32, u32, u32, u32)> {
+    let b = t.transform_rect_bbox(rect);
+    if !(b.x0.is_finite() && b.y0.is_finite() && b.x1.is_finite() && b.y1.is_finite()) {
+        return None;
+    }
+    let x0 = b.x0.floor().clamp(0.0, f64::from(width)) as u32;
+    let y0 = b.y0.floor().clamp(0.0, f64::from(height)) as u32;
+    let x1 = b.x1.ceil().clamp(0.0, f64::from(width)) as u32;
+    let y1 = b.y1.ceil().clamp(0.0, f64::from(height)) as u32;
+    (x1 > x0 && y1 > y0).then_some((x0, y0, x1, y1))
+}
+
+/// Paints `drawables` into `px`; `to_pixels` maps the glyph's font units to pixels.
+fn paint_drawables(px: &mut Pixels, drawables: &[Drawable], to_pixels: Affine) {
+    let inverse = to_pixels.inverse();
+    if !inverse.as_coeffs().iter().all(|v| v.is_finite()) {
+        return;
+    }
+    for d in drawables {
+        let Some(first) = d.clips.first() else { continue };
+        if first.elements().is_empty() {
+            continue;
+        }
+        let Some((x0, y0, x1, y1)) = pixel_box(first.bounding_box(), to_pixels, px.width, px.height) else { continue };
+        let (w, h) = (x1 - x0, y1 - y0);
+        let shift = Affine::translate((-f64::from(x0), -f64::from(y0))) * to_pixels;
+        let mut coverage = vec![1.0f32; w as usize * h as usize];
+        let mut drawn = true;
+        for clip in &d.clips {
+            let Ok(mask) = render_path(clip, shift, w, h, &MASK) else {
+                drawn = false;
+                break;
+            };
+            for (c, p) in coverage.iter_mut().zip(mask.pixels.chunks_exact(4)) {
+                *c *= f32::from(p.get(3).copied().unwrap_or(0)) / 255.0;
+            }
+        }
+        if !drawn {
+            continue;
+        }
+        for (i, cov) in coverage.iter().enumerate() {
+            if *cov <= 0.0 {
+                continue;
+            }
+            let (col, row) = (i as u32 % w, i as u32 / w);
+            let (x, y) = (x0 + col, y0 + row);
+            let Some(color) = eval(&d.leaf, inverse * Point::new(f64::from(x) + 0.5, f64::from(y) + 0.5)) else { continue };
+            let at = (y as usize * px.width as usize + x as usize) * 4;
+            blend(px.data, at, color, *cov);
+        }
+    }
+}
+
+/// Paints the bitmap of `image` (straight RGBA, rows top to bottom) into `px`: `place` maps the
+/// image's own space (pixels, y up from its bottom left) to pixels. Nearest-pixel sampling.
+fn paint_bitmap(px: &mut Pixels, decoded: &imagery::Rgba8, place: Affine) {
+    let inverse = place.inverse();
+    let (iw, ih) = (decoded.width, decoded.height);
+    if iw == 0 || ih == 0 || !inverse.as_coeffs().iter().all(|v| v.is_finite()) {
+        return;
+    }
+    let image_rect = fontcraft_geom::Rect::new(0.0, 0.0, f64::from(iw), f64::from(ih));
+    let Some((x0, y0, x1, y1)) = pixel_box(image_rect, place, px.width, px.height) else { return };
+    for y in y0..y1 {
+        for x in x0..x1 {
+            let q = inverse * Point::new(f64::from(x) + 0.5, f64::from(y) + 0.5);
+            if !(q.x >= 0.0 && q.y >= 0.0 && q.x < f64::from(iw) && q.y < f64::from(ih)) {
+                continue;
+            }
+            let (sx, sy) = (q.x as usize, ih as usize - 1 - (q.y as usize).min(ih as usize - 1));
+            let from = (sy * iw as usize + sx) * 4;
+            let Some(&[r, g, b, a]) = decoded.pixels.get(from..from + 4).and_then(|s| <&[u8; 4]>::try_from(s).ok()) else { continue };
+            let c = [r, g, b, a].map(|v| f32::from(v) / 255.0);
+            blend(px.data, (y as usize * px.width as usize + x as usize) * 4, c, 1.0);
+        }
+    }
+}
+
+/// Paints glyph `name` of a preview in colour with its colour layer `layer`, into `px`:
+/// `to_pixels` maps the glyph's font units, at its place on the line, to pixels.
+pub fn paint_preview_glyph(font: &Font, name: &str, layer: &Layer, src: &mut Sources, px: &mut Pixels, to_pixels: Affine) {
+    let Some(glyph) = font.glyph(name) else { return };
+    let Some(kind) = kinds::kind(layer) else { return };
+    let mode = Mode::Layers { master: layer.master.clone(), kind };
+    match content(font, glyph, &mode, Some(layer), src) {
+        Some(Content::Vector(list)) => paint_drawables(px, &list, to_pixels),
+        Some(Content::Bitmap(image)) => {
+            let Some(path) = image.path.as_deref() else { return };
+            let Ok(bytes) = src.assets.read(path) else { return };
+            let Ok(decoded) = imagery::decode_rgba(&bytes, imagery::MAX_PIXELS) else { return };
+            paint_bitmap(px, &decoded, to_pixels * image.transform.affine());
+        }
+        None => {}
+    }
+}
+
+/// The colour drawing of `glyph` in `mode` as an image of `width × height` pixels, `to_pixels`
+/// mapping its font units to pixels; for tests and exports of the canvas. iColor images are left
+/// out (they are textures of the image cache).
+#[allow(clippy::too_many_arguments)]
+pub fn glyph_image(
+    font: &Font,
+    glyph: &str,
+    mode: &Mode,
+    exact: Option<&Layer>,
+    src: &mut Sources,
+    width: u32,
+    height: u32,
+    to_pixels: Affine,
+) -> Option<ColorImage> {
+    let g = font.glyph(glyph)?;
+    let Content::Vector(list) = content(font, g, mode, exact, src)? else { return None };
+    let mut data = vec![0u8; width as usize * height as usize * 4];
+    paint_drawables(&mut Pixels { data: &mut data, width, height }, &list, to_pixels);
+    Some(ColorImage::from_rgba_premultiplied([width as usize, height as usize], &data))
+}
+
+// ── Edit View ───────────────────────────────────────────────────────────────────────────────────
+
+/// A glyph's colour drawing as Edit View keeps it.
+enum Drawn {
+    /// A texture of the glyph's pixels: `bounds` the whole drawing and `region` the part
+    /// rasterised, in pixels from the glyph's origin (x right, y down); `None` without pixels.
+    Sprite {
+        texture: Option<TextureHandle>,
+        bounds: [i64; 4],
+        region: [i64; 4],
+        bytes: usize,
+    },
+    Bitmap(Image),
+}
+
+struct Sprite {
+    glyph: Arc<Glyph>,
+    doc: (u64, u64),
+    /// Its layers hold components, whose outlines depend on other glyphs.
+    components: bool,
+    stamp: u64,
+    /// Pixels per font unit.
+    scale: u64,
+    drawn: Drawn,
+    used: u64,
+}
+
+impl Sprite {
+    fn bytes(&self) -> usize {
+        match &self.drawn {
+            Drawn::Sprite { bytes, .. } => *bytes,
+            Drawn::Bitmap(_) => 0,
+        }
+    }
+}
+
+/// Colour drawing state: the glyph textures, the svg files read, the gradient knob drag.
+#[derive(Default)]
+pub struct ColorUi {
+    sprites: HashMap<(String, Option<String>), Sprite>,
+    pub svgs: SvgCache,
+    /// The palette stamp of a document revision and master.
+    palette_stamp: Option<((u64, u64), String, u64)>,
+    doc: Option<u64>,
+    frame: u64,
+    pub knobs: super::gradient_knobs::KnobUi,
+}
+
+impl ColorUi {
+    /// Glyph textures held, for tests.
+    pub fn sprites(&self) -> usize {
+        self.sprites.len()
+    }
+
+    fn palette_stamp(&mut self, font: &Font, doc: (u64, u64), master: &str) -> u64 {
+        if let Some((d, m, s)) = &self.palette_stamp
+            && *d == doc
+            && m == master
+        {
+            return *s;
+        }
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        palette0(font, master).hash(&mut h);
+        let s = h.finish();
+        self.palette_stamp = Some((doc, master.to_string(), s));
+        s
+    }
+
+    fn evict(&mut self) {
+        let total: usize = self.sprites.values().map(Sprite::bytes).sum();
+        if self.sprites.len() <= MAX_SPRITES && total <= MAX_SPRITE_BYTES {
+            return;
+        }
+        let frame = self.frame;
+        self.sprites.retain(|_, s| s.used == frame);
+        let total: usize = self.sprites.values().map(Sprite::bytes).sum();
+        if self.sprites.len() > MAX_SPRITES || total > MAX_SPRITE_BYTES {
+            self.sprites.clear();
+        }
+    }
+}
+
+/// What [`draw`] reads besides the painting.
+pub struct Scene<'a> {
+    pub session: &'a Session,
+    pub tab: &'a Tab,
+    pub font: &'a Font,
+    pub layout: Option<&'a Layout>,
+    /// Where the edited glyph sits in the text.
+    pub origin: [f64; 2],
+    /// The document's id and revision.
+    pub doc: (u64, u64),
+}
+
+/// Draws the tab's glyphs in colour as [`mode`] says, behind the edited outline.
+pub fn draw(c: &Painting, ctx: &egui::Context, ui: &mut ColorUi, images: &mut super::images::ImageUi, s: &Scene) {
+    if ui.doc != Some(s.doc.0) {
+        ui.sprites.clear();
+        ui.svgs.clear();
+        ui.doc = Some(s.doc.0);
+    }
+    let tokens = &c.tokens.color;
+    let Some(mode) = mode(s.font, s.tab, c.tokens.dark) else { return };
+    let Some(layout) = s.layout else { return };
+    ui.frame = ui.frame.wrapping_add(1);
+    let ppp = f64::from(ctx.pixels_per_point());
+    let scale = c.view.scale() * ppp;
+    if !(scale.is_finite() && scale > 0.0) {
+        return;
+    }
+    let master_stamp = match &mode {
+        Mode::Layers { master, .. } => ui.palette_stamp(s.font, s.doc, master),
+        Mode::Layered { .. } => 0,
+    };
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    (format!("{mode:?}"), master_stamp, tokens.text_color.to_array(), images.revision).hash(&mut h);
+    let stamp = h.finish();
+    let to_screen = Affine::translate(c.view.origin.to_vec2()) * Affine::scale_non_uniform(c.view.scale(), -c.view.scale());
+    let edited_index = s.tab.edited_index();
+    let active = super::view::active_layer(s.font, s.tab);
+    let exact = active.filter(|l| draws_layer_image(l));
+    let assets = s.session.assets();
+    let mut src = Sources { assets: assets.as_ref(), svgs: &mut ui.svgs, revision: images.revision, text: tokens.text_color };
+    let canvas = [f64::from(c.rect.min.x) * ppp, f64::from(c.rect.min.y) * ppp, f64::from(c.rect.max.x) * ppp, f64::from(c.rect.max.y) * ppp];
+    let frame = ui.frame;
+    let mut fresh = Vec::new();
+    for (i, placed) in layout.placed.iter().enumerate() {
+        let glyphs = placed
+            .glyph
+            .as_deref()
+            .map(|g| (g, placed.x, placed.y, Some(i) == edited_index))
+            .into_iter()
+            .chain(placed.extra.iter().map(|(g, x, y)| (g.as_ref(), *x, *y, false)));
+        for (name, x, y, edited) in glyphs {
+            let Some(glyph) = s.font.glyph(name) else { continue };
+            if !has_color(glyph, &mode) {
+                continue;
+            }
+            let place = to_screen * Affine::translate((x - s.origin[0], y - s.origin[1]));
+            let exact = if edited { exact } else { None };
+            let key = (name.to_string(), exact.map(|l| l.id.clone()));
+            let o = place * Point::ZERO;
+            let (ox, oy) = ((o.x * ppp).round(), (o.y * ppp).round());
+            if !(ox.is_finite() && oy.is_finite()) {
+                continue;
+            }
+            let view = [canvas[0] - ox - CLIP_MARGIN, canvas[1] - oy - CLIP_MARGIN, canvas[2] - ox + CLIP_MARGIN, canvas[3] - oy + CLIP_MARGIN];
+            let valid = ui.sprites.get(&key).is_some_and(|e| {
+                e.stamp == stamp
+                    && e.scale == scale.to_bits()
+                    && (e.doc == s.doc || (e.doc.0 == s.doc.0 && Arc::ptr_eq(&e.glyph, glyph) && !e.components))
+                    && match &e.drawn {
+                        Drawn::Sprite { bounds, region, .. } => *region == clip(*bounds, view) || clip(*bounds, view) == [0; 4],
+                        Drawn::Bitmap(_) => true,
+                    }
+            });
+            if !valid {
+                let drawn = match content(s.font, glyph, &mode, exact, &mut src) {
+                    Some(Content::Bitmap(image)) => Drawn::Bitmap(image),
+                    Some(Content::Vector(list)) => rasterise(ctx, &list, scale, view, name),
+                    None => Drawn::Sprite { texture: None, bounds: [0; 4], region: [0; 4], bytes: 0 },
+                };
+                let components = glyph.layers.iter().any(|l| l.shapes.iter().any(|s| matches!(s, Shape::Component(_))));
+                ui.sprites
+                    .insert(key.clone(), Sprite { glyph: glyph.clone(), doc: s.doc, components, stamp, scale: scale.to_bits(), drawn, used: frame });
+                fresh.push(key.clone());
+            }
+            let Some(entry) = ui.sprites.get_mut(&key) else { continue };
+            entry.used = frame;
+            entry.doc = s.doc;
+            match &entry.drawn {
+                Drawn::Sprite { texture: Some(texture), region, .. } => {
+                    let [x0, y0, x1, y1] = region.map(|v| v as f64);
+                    let min = pos2(((ox + x0) / ppp) as f32, ((oy + y0) / ppp) as f32);
+                    let rect = Rect::from_min_size(min, vec2(((x1 - x0) / ppp) as f32, ((y1 - y0) / ppp) as f32));
+                    c.painter.image(texture.id(), rect, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
+                }
+                Drawn::Bitmap(image) => {
+                    draw_layer_image(c, &mut images.cache, ctx, src.assets, image, place, images.revision);
+                }
+                Drawn::Sprite { texture: None, .. } => {}
+            }
+        }
+    }
+    if !fresh.is_empty() {
+        ui.evict();
+    }
+}
+
+/// `bounds` within `view`, both `[x0, y0, x1, y1]`; all zero when they do not meet.
+fn clip(bounds: [i64; 4], view: [f64; 4]) -> [i64; 4] {
+    let v = [view[0].floor(), view[1].floor(), view[2].ceil(), view[3].ceil()].map(|f| f.clamp(-1.0e12, 1.0e12) as i64);
+    let out = [bounds[0].max(v[0]), bounds[1].max(v[1]), bounds[2].min(v[2]), bounds[3].min(v[3])];
+    if out[2] > out[0] && out[3] > out[1] { out } else { [0; 4] }
+}
+
+/// The drawables at `scale` pixels per font unit as a texture of their part within `view`
+/// (pixels from the glyph's origin).
+fn rasterise(ctx: &egui::Context, list: &[Drawable], scale: f64, view: [f64; 4], name: &str) -> Drawn {
+    let to_px = Affine::scale_non_uniform(scale, -scale);
+    let mut bounds: Option<fontcraft_geom::Rect> = None;
+    for d in list {
+        if let Some(first) = d.clips.first().filter(|p| !p.elements().is_empty()) {
+            let b = to_px.transform_rect_bbox(first.bounding_box());
+            bounds = Some(bounds.map_or(b, |o| o.union(b)));
+        }
+    }
+    let empty = Drawn::Sprite { texture: None, bounds: [0; 4], region: [0; 4], bytes: 0 };
+    let Some(b) = bounds.filter(|b| b.x0.is_finite() && b.y0.is_finite() && b.x1.is_finite() && b.y1.is_finite()) else { return empty };
+    let bounds = [b.x0.floor() - 1.0, b.y0.floor() - 1.0, b.x1.ceil() + 1.0, b.y1.ceil() + 1.0].map(|v| v.clamp(-1.0e12, 1.0e12) as i64);
+    let region = clip(bounds, view);
+    let (w, h) = (region[2] - region[0], region[3] - region[1]);
+    let (Ok(width), Ok(height)) = (u32::try_from(w), u32::try_from(h)) else { return Drawn::Sprite { texture: None, bounds, region, bytes: 0 } };
+    if width == 0 || height == 0 || u64::from(width) * u64::from(height) * 4 > MAX_SPRITE_BYTES as u64 {
+        return Drawn::Sprite { texture: None, bounds, region, bytes: 0 };
+    }
+    let mut data = vec![0u8; width as usize * height as usize * 4];
+    let to_pixels = Affine::translate((-(region[0] as f64), -(region[1] as f64))) * to_px;
+    paint_drawables(&mut Pixels { data: &mut data, width, height }, list, to_pixels);
+    let bytes = data.len();
+    let image = ColorImage::from_rgba_premultiplied([width as usize, height as usize], &data);
+    let texture = ctx.load_texture(format!("color-glyph:{name}"), image, TextureOptions::LINEAR);
+    Drawn::Sprite { texture: Some(texture), bounds, region, bytes }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fontcraft_engine::color::paint::{ColorLine, ColorStop};
+
+    fn line(a: [f64; 4], b: [f64; 4]) -> ColorLine {
+        ColorLine {
+            stops: vec![ColorStop { offset: 0.0, color: ColorRef::Rgba(a) }, ColorStop { offset: 1.0, color: ColorRef::Rgba(b) }],
+            extend: Extend::Pad,
+        }
+    }
+
+    #[test]
+    fn gradients_follow_their_geometry_and_extend_mode() {
+        let red = [1.0, 0.0, 0.0, 1.0];
+        let blue = [0.0, 0.0, 1.0, 1.0];
+        // Left to right over 0..100, isolines vertical.
+        let p = Paint::Linear { p0: Point::new(0.0, 0.0), p1: Point::new(100.0, 0.0), p2: Point::new(0.0, -100.0), line: line(red, blue) };
+        let l = leaf(&p, &[], [0.0; 4]).unwrap();
+        assert_eq!(eval(&l, Point::new(-50.0, 30.0)), Some([1.0, 0.0, 0.0, 1.0]), "padded before the start");
+        let mid = eval(&l, Point::new(50.0, 999.0)).unwrap();
+        assert!((mid[0] - 0.5).abs() < 1e-6 && (mid[2] - 0.5).abs() < 1e-6, "{mid:?}");
+        // A rotated p2 turns the isolines: p1 projects onto the normal of p0–p2.
+        let skew = Paint::Linear { p0: Point::new(0.0, 0.0), p1: Point::new(100.0, 100.0), p2: Point::new(0.0, -100.0), line: line(red, blue) };
+        let l = leaf(&skew, &[], [0.0; 4]).unwrap();
+        assert_eq!(eval(&l, Point::new(100.0, 0.0)), Some([0.0f32, 0.0, 1.0, 1.0]), "x alone decides the colour");
+        let mut repeat = line(red, blue);
+        repeat.extend = Extend::Repeat;
+        let r = Paint::Radial { c0: Point::new(0.0, 0.0), r0: 0.0, c1: Point::new(0.0, 0.0), r1: 10.0, line: repeat };
+        let l = leaf(&r, &[], [0.0; 4]).unwrap();
+        assert_eq!(eval(&l, Point::new(0.0, 0.0)), Some([1.0f32, 0.0, 0.0, 1.0]), "the centre is the first stop");
+        let again = eval(&l, Point::new(12.5, 0.0)).unwrap();
+        assert!((again[2] - 0.25).abs() < 1e-5, "repeats past the end circle: {again:?}");
+        let sweep = Paint::Sweep { center: Point::new(0.0, 0.0), start: 0.0, end: 360.0, line: line(red, blue) };
+        let l = leaf(&sweep, &[], [0.0; 4]).unwrap();
+        let quarter = eval(&l, Point::new(0.0, 10.0)).unwrap();
+        assert!((quarter[2] - 0.25).abs() < 1e-5, "counter-clockwise from the x axis: {quarter:?}");
+    }
+
+    #[test]
+    fn palette_rows_resolve_with_their_alpha_and_missing_rows_take_the_text_colour() {
+        let palette = [Rgba::new(255, 0, 0, 255)];
+        let text = [1.0, 1.0, 1.0, 1.0];
+        assert_eq!(resolve(ColorRef::Palette { index: 0, alpha: 0.5 }, &palette, text), [1.0, 0.0, 0.0, 0.5]);
+        assert_eq!(resolve(ColorRef::Palette { index: 7, alpha: 1.0 }, &palette, text), text);
+        assert_eq!(resolve(ColorRef::Foreground { alpha: 1.0 }, &palette, text), text);
+        let mut data = vec![0u8; 4];
+        blend(&mut data, 0, [1.0, 0.0, 0.0, 0.0], 1.0);
+        assert_eq!(data, [0, 0, 0, 0], "a colour with no opacity paints nothing");
+    }
+}

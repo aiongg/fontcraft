@@ -42,6 +42,8 @@ mod autometer_tests;
 #[cfg(test)]
 mod canvas_layers_tests;
 #[cfg(test)]
+mod color_tests;
+#[cfg(test)]
 mod command_console_tests;
 #[cfg(test)]
 mod compatibility_tests;

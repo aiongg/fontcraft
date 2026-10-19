@@ -719,8 +719,12 @@ ref = "Color Fonts › Working with Color Fonts › Previewing Color Fonts"
 status = "handbook"
 guesses = [
   "Other glyphs are drawn with the colour layers of the current master, in palette 0. Settled by selecting a colour layer in a tab of several colour glyphs in the reference.",
+  "The edited glyph is drawn in colour too, all its colour layers of the master in paint order behind the edited outline, its active iColor or svg layer itself when that is the active layer. Settled by editing a palette layer of a glyph with several palette layers in the reference.",
+  "Another glyph of the tab shows the colour kind of the active layer when it has it, else palette and full-colour layers, then its svg layer, then its iColor layer of the active layer's size or else its largest. Settled by a tab of glyphs with mixed colour kinds in the reference.",
+  "A palette index the palette does not have is drawn in the text colour. Settled by setting a palette layer's index past the last row in the reference.",
 ]
 observe = ["Palette font: select a palette layer of A and type AB in the Edit View tab; note whether B is drawn in colour and with which palette."]
+notes = "Documented in the handbook; not yet observed in the reference app. Drawn by `ui-egui/src/canvas/color.rs` from the paint graph the COLR writer reads. svg layers are drawn from their file's paths and strokes; clip paths, masks, filters, patterns, text and embedded images are not drawn, and even-odd fills are filled non-zero."
 
 [[behavior]]
 id = "color.preview.previewArea"
@@ -729,6 +733,11 @@ milestone = "M11"
 summary = "Two previews, the strip that the eye button opens below the Edit View canvas and the Preview Panel from Window › Preview Panel, draw a glyph in colour only while one of that glyph's colour layers is the selected layer."
 ref = "Color Fonts › Working with Color Fonts › Previewing Color Fonts"
 status = "handbook"
+guesses = [
+  "The colour glyphs are not inverted by Invert, and the text colour row draws in the preview's text colour. Settled by inverting the Preview Area of a palette font in the reference.",
+  "A preview showing an instance or all instances draws every glyph in its text colour, since the instance has no selected layer. Settled by choosing an instance in the Preview Area of a palette font in the reference.",
+]
+notes = "Documented in the handbook; not yet observed in the reference app. The colour glyphs are drawn over the strip before Flip and Blur."
 
 [[behavior]]
 id = "color.preview.textPreview"
@@ -790,6 +799,10 @@ summary = "The Master Color parameter on a master sets the colour its filled out
 ref = "Color Fonts › Layered Color Fonts › Initial Setup"
 status = "handbook"
 observe = ["Layered font: show all masters in Edit View; note whether each master is drawn in its Master Color with its opacity, and whether Master Color Dark is used in dark appearance."]
+guesses = [
+  "The other glyphs of the tab are filled in the same masters' colours as the edited glyph. Settled by typing several glyphs in a tab of a layered font with all masters shown in the reference.",
+]
+notes = "Documented in the handbook; not yet observed in the reference app. Edit View fills every glyph of the tab in the colours of the shown masters while the active layer is a master layer whose master has a Master Color."
 
 [[behavior]]
 id = "color.layered.masterColorDark"
@@ -798,6 +811,10 @@ milestone = "M11"
 summary = "Master Color Dark supplies an alternative preview colour used when the system is in dark appearance; without it the Master Color is used in both appearances."
 ref = "Color Fonts › Layered Color Fonts › Initial Setup"
 status = "handbook"
+guesses = [
+  "The app's dark theme stands for the system's dark appearance. Settled by switching the reference's appearance setting that keeps window content light, and looking at the masters.",
+]
+notes = "Documented in the handbook; not yet observed in the reference app. FontCraft uses Master Color Dark while its own theme is dark."
 
 [[behavior]]
 id = "color.layered.instancePerMaster"
@@ -814,6 +831,10 @@ milestone = "M11"
 summary = "Layers of a layered colour font are ordinary master layers and are edited as such. By default only the selected master is drawn; the eye buttons in the Layers palette show further masters, and showing all of them is the usual way to work."
 ref = "Color Fonts › Layered Color Fonts › Editing Color Layers"
 status = "handbook"
+guesses = [
+  "The masters shown are the active one and those whose layer eye is on in the edited glyph, for every glyph of the tab. Settled by showing a second master on one glyph of a tab in the reference and looking at the other glyphs.",
+]
+notes = "Documented in the handbook; not yet observed in the reference app."
 
 [[behavior]]
 id = "color.layered.stackingOrder"
@@ -823,6 +844,7 @@ summary = "When several masters are shown together, their order in Font Info ›
 ref = "Color Fonts › Layered Color Fonts › Editing Color Layers"
 status = "handbook"
 observe = ["Layered font: show all masters in Edit View; note which master is drawn on top."]
+notes = "Documented in the handbook; not yet observed in the reference app. Edit View paints the shown masters from the last to the first, so the first is on top."
 
 [[behavior]]
 id = "color.layered.exportSeparateFonts"
@@ -1053,6 +1075,7 @@ milestone = "M11"
 summary = "A colour swatch crossed by a red line means the colour is fully transparent, which is how a removed fill or stroke is shown."
 ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs"
 status = "handbook"
+notes = "Documented in the handbook; not yet observed in the reference app. On the canvas a fully transparent fill or stroke paints nothing; the swatch is drawn by the Attributes inspector."
 
 [[behavior]]
 id = "color.fullColor.strokeUnits"
@@ -1091,6 +1114,11 @@ milestone = "M11"
 summary = "While a path with a gradient is selected, Edit View shows draggable knobs for the gradient geometry: two for a linear gradient (start and end), one for a radial gradient (its origin)."
 ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs › Gradient"
 status = "handbook"
+guesses = [
+  "A linear gradient's knob moves its own end and keeps the other; the radial knob moves the start circle and the end circle with it; a conic gradient has no knob. Settled by dragging each knob in the reference and reading the saved positions.",
+  "A knob lies above the path's nodes, so a press on a knob drags the gradient even where a node lies under it. Settled by placing a knob on a node in the reference and dragging there.",
+]
+notes = "Documented in the handbook; not yet observed in the reference app. Knobs are placed in the path's own bounds, as `attributes.setGradientPosition` converts font units; a drag is that command, one undo step."
 
 [[behavior]]
 id = "color.fullColor.imageOnlyEffects"
@@ -1278,8 +1306,10 @@ ref = "Color Fonts › sbix Fonts › Adding Images to Glyphs"
 status = "handbook"
 guesses = [
   "An image scaled, rotated or flipped on its iColor layer is exported at its pixel size, with a warning, and its box's bottom-left corner gives the origin offsets. Settled by scaling an image on an iColor layer in the reference, exporting, and reading sbix.",
+  "Edit View draws an iColor layer's image opaque, as the glyph it is, not at a tracing image's 50 % opacity. Settled by selecting an iColor layer in the reference and comparing the image with the file.",
 ]
 observe = ["sbix font: double-click an iColor layer entry and type 256; note whether the image is drawn half as large as at 128."]
+notes = "Documented in the handbook; not yet observed in the reference app. Edit View draws the image at its transform, which `layer.setIColorSize` rescales, so the drawing follows the size."
 
 [[behavior]]
 id = "color.layers.widthFollowsMaster"
