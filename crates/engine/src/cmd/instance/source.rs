@@ -399,7 +399,7 @@ fn ufo_path(input: &Path, req: &OutputRequest, instance_dir: Option<&Path>, job:
     let bad = || EngineError::Io(format!("the instance file name `{filename}` does not name a UFO folder"));
     // As in fontmake, a recorded name is relative to the source's folder and may climb out of
     // it (`../instance_ufo/X.ufo`); build_ufos refuses a target on or around a source file.
-    if filename.is_empty() || filename.contains('\\') || Path::new(filename).has_root() {
+    if filename.is_empty() || filename.contains('\\') || !relative_parts(Path::new(filename)) {
         return Err(bad());
     }
     let last = filename.rsplit('/').find(|s| !s.is_empty()).filter(|s| *s != "." && *s != "..").ok_or_else(bad)?;
@@ -410,6 +410,12 @@ fn ufo_path(input: &Path, req: &OutputRequest, instance_dir: Option<&Path>, job:
             Ok(normalized(&base.join(filename)))
         }
     }
+}
+
+/// Whether `path` is made only of names, `.` and `..`: no root and no Windows drive prefix, whose
+/// join would replace the source's folder.
+fn relative_parts(path: &Path) -> bool {
+    path.components().all(|c| matches!(c, Component::Normal(_) | Component::CurDir | Component::ParentDir))
 }
 
 /// `path` with `.` dropped and each `..` folded into the part before it, by spelling only (as
@@ -687,6 +693,19 @@ fn compile_fonts(
 #[cfg(not(target_arch = "wasm32"))]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_recorded_name_with_a_root_or_drive_is_not_relative() {
+        assert!(relative_parts(Path::new("../instance_ufo/X.ufo")));
+        assert!(relative_parts(Path::new("./X.ufo")));
+        assert!(!relative_parts(Path::new("/tmp/X.ufo")));
+        // Only Windows parses a drive prefix; elsewhere `C:x` is a plain name.
+        #[cfg(windows)]
+        {
+            assert!(!relative_parts(Path::new("C:x/Y.ufo")));
+            assert!(!relative_parts(Path::new(r"\\server\share\Y.ufo")));
+        }
+    }
 
     const PLIST: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\">\n";
 

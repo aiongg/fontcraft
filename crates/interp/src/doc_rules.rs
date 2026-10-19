@@ -38,13 +38,19 @@ pub struct DocRules {
     pub rules: Vec<DocRule>,
     /// `processing="last"`: the substitutions go to `rclt` in a variable font.
     pub last: bool,
-    /// Reading stopped at [`MAX_RULE_TOTAL`] with more of the document left ([`cut_note`]).
+    /// Reading stopped at [`MAX_RULE_TOTAL`], or a list held more than [`MAX_RULE_ITEMS`], with
+    /// more of the document left ([`cut_note`]).
     pub truncated: bool,
 }
 
-/// The warning for rules read only up to [`MAX_RULE_TOTAL`].
+/// The warning for rules read only up to [`MAX_RULE_TOTAL`] or [`MAX_RULE_ITEMS`] per list.
 pub fn cut_note() -> String {
-    format!("the designspace rules were cut at {MAX_RULE_TOTAL} entries")
+    format!("the designspace rules were cut at {MAX_RULE_TOTAL} entries or {MAX_RULE_ITEMS} per list")
+}
+
+/// Whether `items` has an element past [`MAX_RULE_ITEMS`], which a capped read drops.
+fn past_cap<'a>(mut items: impl Iterator<Item = &'a xml::Element>) -> bool {
+    items.nth(MAX_RULE_ITEMS).is_some()
 }
 
 /// The kept designspace document's rules, unless the reader made them alternate layers; `None`
@@ -62,7 +68,9 @@ pub fn document_rules(font: &Font) -> Option<DocRules> {
     let mut left = MAX_RULE_TOTAL;
     let mut truncated = false;
     let set_cost = font.axes.len().max(1);
-    for r in el.elements().filter(|e| e.name() == "rule").take(MAX_RULE_ITEMS) {
+    let rule_els = || el.elements().filter(|e| e.name() == "rule");
+    truncated |= past_cap(rule_els());
+    for r in rule_els().take(MAX_RULE_ITEMS) {
         let Some(after) = left.checked_sub(1) else {
             truncated = true;
             break;
@@ -71,13 +79,15 @@ pub fn document_rules(font: &Font) -> Option<DocRules> {
         let mut spent = false;
         let mut sets = Vec::new();
         let direct = r.elements().any(|e| e.name() == "condition").then_some(r);
-        for s in r.elements().filter(|e| e.name() == "conditionset").take(MAX_RULE_ITEMS).chain(direct) {
+        let set_els = || r.elements().filter(|e| e.name() == "conditionset");
+        truncated |= past_cap(set_els());
+        for s in set_els().take(MAX_RULE_ITEMS).chain(direct) {
             let Some(after) = left.checked_sub(set_cost) else {
                 spent = true;
                 break;
             };
             left = after;
-            match condition_set(font, s, &mut left) {
+            match condition_set(font, s, &mut left, &mut truncated) {
                 Read::Set(set) => sets.push(set),
                 Read::Nowhere => {}
                 Read::Spent => {
@@ -87,7 +97,9 @@ pub fn document_rules(font: &Font) -> Option<DocRules> {
             }
         }
         let mut subs = Vec::new();
-        for s in r.elements().filter(|e| e.name() == "sub").take(if spent { 0 } else { MAX_RULE_ITEMS }) {
+        let sub_els = || r.elements().filter(|e| e.name() == "sub");
+        truncated |= !spent && past_cap(sub_els());
+        for s in sub_els().take(if spent { 0 } else { MAX_RULE_ITEMS }) {
             let Some(after) = left.checked_sub(1) else {
                 spent = true;
                 break;
@@ -115,10 +127,12 @@ enum Read {
     Spent,
 }
 
-/// The conditions directly in `parent` as one set, each charged to `left`.
-fn condition_set(font: &Font, parent: &xml::Element, left: &mut usize) -> Read {
+/// The conditions directly in `parent` as one set, each charged to `left`; sets `truncated` when
+/// the set is read with conditions past [`MAX_RULE_ITEMS`] left out.
+fn condition_set(font: &Font, parent: &xml::Element, left: &mut usize, truncated: &mut bool) -> Read {
     let mut set = vec![AxisRule::default(); font.axes.len()];
-    for c in parent.elements().filter(|e| e.name() == "condition").take(MAX_RULE_ITEMS) {
+    let conditions = || parent.elements().filter(|e| e.name() == "condition");
+    for c in conditions().take(MAX_RULE_ITEMS) {
         let Some(after) = left.checked_sub(1) else { return Read::Spent };
         *left = after;
         let Some(axis) = font.axes.iter().position(|a| Some(a.name.as_str()) == c.attr("name")) else { return Read::Nowhere };
@@ -132,6 +146,7 @@ fn condition_set(font: &Font, parent: &xml::Element, left: &mut usize) -> Read {
         slot.min = min;
         slot.max = max;
     }
+    *truncated |= past_cap(conditions());
     Read::Set(set)
 }
 
@@ -346,6 +361,29 @@ mod tests {
         let swaps = swaps_at(&rules, &[400.0], |_| true);
         assert!(swaps.len() > 95_000, "{}", swaps.len());
         assert!(apply_swaps(&mut glyphs, &swaps).is_empty());
+    }
+
+    #[test]
+    fn a_list_past_its_cap_is_reported_as_cut() {
+        // 10,001 small rules cost about 40,000 items: the per-list cap is reached long before
+        // the document's budget.
+        let rule = r#"<rule name="r"><conditionset><condition name="Weight" minimum="600"/></conditionset><sub name="A" with="A.alt"/></rule>"#;
+        let doc = |rules: usize| format!(r#"<designspace format="5.0"><rules>{}</rules></designspace>"#, rule.repeat(rules));
+        let rules = document_rules(&font(&doc(MAX_RULE_ITEMS + 1))).unwrap();
+        assert_eq!(rules.rules.len(), MAX_RULE_ITEMS);
+        assert!(rules.truncated, "the rule past the cap is reported");
+        assert!(!document_rules(&font(&doc(MAX_RULE_ITEMS))).unwrap().truncated, "a full list is not cut");
+
+        let subs = r#"<sub name="A" with="A.alt"/>"#.repeat(MAX_RULE_ITEMS + 1);
+        let one = format!(r#"<designspace format="5.0"><rules><rule name="r"><conditionset/>{subs}</rule></rules></designspace>"#);
+        let rules = document_rules(&font(&one)).unwrap();
+        assert_eq!(rules.rules[0].subs.len(), MAX_RULE_ITEMS);
+        assert!(rules.truncated, "the substitution past the cap is reported");
+
+        let conditions = r#"<condition name="Weight" minimum="600"/>"#.repeat(MAX_RULE_ITEMS + 1);
+        let one =
+            format!(r#"<designspace format="5.0"><rules><rule name="r"><conditionset>{conditions}</conditionset></rule></rules></designspace>"#);
+        assert!(document_rules(&font(&one)).unwrap().truncated, "the condition past the cap is reported");
     }
 
     #[test]
