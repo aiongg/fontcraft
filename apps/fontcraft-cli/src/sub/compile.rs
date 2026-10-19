@@ -12,7 +12,7 @@ const USAGE: &str = "\
   fontcraft-cli compile SOURCE... [--format ttf|otf]... [--container plain|woff|woff2]...
                         [-o FILE | --output-dir DIR] [--instances[=NAME,...]] [--masters-as-instances]
                         [--keep-overlaps] [--keep-direction] [--conversion-error EM] [--no-subroutinize]
-                        [--timestamp SECS|now] [--ttfautohint PATH] [--plan]
+                        [--timestamp SECS|now] [--ttfautohint PATH] [--cbdt] [--plan]
   fontcraft-cli compile SOURCE... --variable [--format ttf|otf] [--settings NAME,...] [--container plain|woff|woff2]...
                         [-o FILE | --output-dir DIR] [--timestamp SECS|now]
       Compile each SOURCE to static fonts: every exportable instance (or the named ones; a font
@@ -24,6 +24,7 @@ const USAGE: &str = "\
       given. CFF charstrings are subroutinised unless --no-subroutinize is given or the source
       sets Disable Subroutines. --ttfautohint PATH names the trusted ttfautohint program: a source whose TTFAutohint
       binary path parameter names that same file is autohinted by it (default: none runs).
+      --cbdt also writes CBDT and CBLC bitmap tables from the iColor layers.
       --plan prints what would be built, without building.
       --variable builds variable fonts instead: one per variable font setting (or the settings
       --settings names), or one for the whole designspace when the source has none, with
@@ -90,6 +91,9 @@ fn compile(args: &[String]) -> Outcome {
                 params.insert("timestamp".into(), t);
             }
             "--ttfautohint" => autohinter = Some(it.next().ok_or_else(|| usage("--ttfautohint needs the path of a ttfautohint program"))?),
+            "--cbdt" => {
+                params.insert("cbdt".into(), json!(true));
+            }
             "--plan" => plan = true,
             "--variable" => variable = true,
             "--settings" => settings = Some(list(it.next().ok_or_else(|| usage("--settings needs setting names"))?)),
@@ -154,6 +158,7 @@ fn compile(args: &[String]) -> Outcome {
             || params.contains_key("instances")
             || params.contains_key("mastersAsInstances")
             || params.contains_key("subroutinize")
+            || params.contains_key("cbdt")
         {
             return Err(usage("--variable takes only --format, --settings, --container, -o, --output-dir and --timestamp"));
         }

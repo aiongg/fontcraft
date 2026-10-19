@@ -197,6 +197,39 @@ fn badge_clicks_select_hints_tab_steps_through_them_and_delete_removes_them() {
 }
 
 #[test]
+fn arrow_keys_in_a_frame_move_the_selected_hint_and_keep_it_selected() {
+    let mut app = hinted_app();
+    app.run("view.showHints", &json!({"on": true})).unwrap();
+    let w = Window::new();
+    w.settle(&mut app);
+    let b0 = badge(&mut app, 0);
+    call(&mut app, "ui.pointer", json!({"events": [at("down", b0), at("up", b0)]}));
+    assert_eq!(selected_hints(&app), vec![0]);
+    let press = |key, modifiers| {
+        vec![
+            Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers },
+            Event::Key { key, physical_key: None, pressed: false, repeat: false, modifiers },
+        ]
+    };
+    // Shift+Up: the horizontal stem moves up by the big increment, keeping its size.
+    w.frame(&mut app, press(Key::ArrowUp, Modifiers::SHIFT));
+    let h = hints(&mut app);
+    assert_eq!((h[0]["origin"].as_f64(), h[0]["size"].as_f64()), (Some(10.0), Some(80.0)));
+    assert_eq!(selected_hints(&app), vec![0], "the hint stays selected");
+    assert_eq!(undo_labels(&app).last().map(String::as_str), Some("Set Hint Values"));
+    // Left and Right move vertical hints only: hint 0 stays where it is.
+    w.frame(&mut app, press(Key::ArrowRight, Modifiers::NONE));
+    assert_eq!(hints(&mut app)[0]["origin"].as_f64(), Some(10.0));
+    // The vertical stem linked to two nodes moves as a whole; its ends become numbers.
+    let b1 = badge(&mut app, 1);
+    call(&mut app, "ui.pointer", json!({"events": [at("down", b1), at("up", b1)]}));
+    w.frame(&mut app, press(Key::ArrowRight, Modifiers::NONE));
+    let h = hints(&mut app);
+    assert_eq!((h[1]["origin"].as_f64(), h[1]["size"].as_f64()), (Some(101.0), Some(200.0)));
+    assert_eq!(selected_hints(&app), vec![1]);
+}
+
+#[test]
 fn dragging_a_marker_equals_set_hint_values_and_a_drop_on_a_node_links_it() {
     let mut app = hinted_app();
     app.run("view.showHints", &json!({"on": true})).unwrap();

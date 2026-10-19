@@ -50,6 +50,12 @@ pub const KEYMAP: &[KeyBinding] = &[
     KeyBinding { keys: "Tab", when: "tool:select", command: "hint.ps.selectNextHint", note: "with PostScript hints selected" },
     KeyBinding { keys: "Shift+Tab", when: "tool:select", command: "hint.ps.selectPreviousHint", note: "with PostScript hints selected" },
     KeyBinding { keys: "Delete", when: "tool:select", command: "hint.ps.deleteHints", note: "with PostScript hints selected" },
+    KeyBinding {
+        keys: "Left, Right, Up, Down",
+        when: "tool:select",
+        command: "hint.ps.setHintValues",
+        note: "with PostScript hints selected: moves them by the font's increments (plain, Shift, Cmd)",
+    },
     KeyBinding { keys: "Cmd+A", when: "tool:annotation", command: "annotation.selectAll", note: "every annotation of the edited layer" },
     KeyBinding {
         keys: "Left, Right, Up, Down",

@@ -29,7 +29,7 @@ label = "Export All"
 menu = ["File"]
 shortcut = "Cmd+Alt+E"
 kind = "engine"
-params = '{documents?: [titles or paths], outlines?: ["truetype"|"cff"], containers?: ["plain"|"woff"|"woff2"], destination: path, removeOverlap?: bool, autohint?: bool, timestamp?: number|"now"}'
+params = '{documents?: [titles or paths], outlines?: ["truetype"|"cff"], containers?: ["plain"|"woff"|"woff2"], destination: path, removeOverlap?: bool, autohint?: bool, cbdt?: bool, timestamp?: number|"now"}'
 area = "compile"
 milestone = "M2"
 summary = "Exports every open document in one go without showing the export dialog; the menu item replaces Export… while Option is held. Each document is exported with its last-used export settings. FontCraft has no remembered settings yet, so the command takes them as parameters: every exportable instance of each chosen document, in each outline flavour and container asked for, into one destination folder, reporting what it wrote and what it skipped."
@@ -45,7 +45,7 @@ label = "Export Static Fonts"
 menu = []
 shortcut = ""
 kind = "engine"
-params = '{instances?: [names], outlines?: "cff"|"truetype", containers?: ["plain"|"woff"|"woff2"], removeOverlap?: bool, autohint?: bool, destination?: path, testInstall?: bool, timestamp?: number|"now"}'
+params = '{instances?: [names], outlines?: "cff"|"truetype", containers?: ["plain"|"woff"|"woff2"], removeOverlap?: bool, autohint?: bool, cbdt?: bool, destination?: path, testInstall?: bool, timestamp?: number|"now"}'
 area = "compile"
 milestone = "M2"
 summary = "Compiles one static font per export instance (or one default instance derived from the first master when the font defines none) in the chosen outline flavour, writing each requested container format. Existing files with the same name are replaced. This is the headless form of the dialog's OTF tab."
@@ -129,6 +129,7 @@ controls = [
   "File Format checkboxes: .otf/.ttf, WOFF, WOFF2 (any combination)",
   "Remove Overlap checkbox",
   "Autohint checkbox",
+  "CBDT checkbox (FontCraft's own, color.export.cbdtNotInReference)",
   "Export Destination: checkbox plus clickable folder path",
   "Test Install checkbox",
   "Next… button",
@@ -138,7 +139,7 @@ milestone = "M3"
 summary = "Options for static OpenType export: outline flavour, the container formats to write, overlap removal, autohinting and the two destinations (a folder, or direct installation into the system)."
 ref = "Import & Export › Exporting Font Files › OpenType Export"
 status = "handbook"
-notes = "Runs file.exportStatic. Fields: outlines (cff or truetype; opens on cff, as the video named in file.export shows it; whether that is the default or a remembered setting is not observed), containers (File Format checkboxes OTF/TTF, WOFF, WOFF2; plain ticked), removeOverlap (on) and autohint (off; the engine refuses it on until hinting on export exists), destination (Export Folder: a path with Choose…, see dialog.chooseExportFolder). Not built: the destination checkbox and Test Install (M14), so the folder is the only destination. The dialog does not preview, as exporting writes files: Next… runs the command once, journaled, and a failure keeps the dialog open with the message. Next… with no folder asks for one (export.promptWhenNoDestination). The flavour menu shows PostScript/CFF and TrueType for the words cff and truetype."
+notes = "Runs file.exportStatic. Fields: outlines (cff or truetype; opens on cff, as the video named in file.export shows it; whether that is the default or a remembered setting is not observed), containers (File Format checkboxes OTF/TTF, WOFF, WOFF2; plain ticked), removeOverlap (on), autohint (off), cbdt (off: also write CBDT and CBLC from the iColor layers, an option the reference does not have), destination (Export Folder: a path with Choose…, see dialog.chooseExportFolder). Not built: the destination checkbox and Test Install (M14), so the folder is the only destination. The dialog does not preview, as exporting writes files: Next… runs the command once, journaled, and a failure keeps the dialog open with the message. Next… with no folder asks for one (export.promptWhenNoDestination). The flavour menu shows PostScript/CFF and TrueType for the words cff and truetype."
 
 [[panel]]
 id = "dialog.exportVariable"

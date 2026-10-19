@@ -593,12 +593,16 @@ milestone = "M10"
 summary = "Clicking a hint's number badge selects the hint; Shift+click adds to or removes from the hint selection. The selected hint's values appear in the Info box."
 ref = "PostScript Hinting › Stem Hints"
 status = "handbook"
-notes = "The hint selection is part of the Edit View selection (`hints`, by list position; crates/tools/src/selection.rs). A click on a badge or marker selects that hint alone, Shift+click toggles it, a click elsewhere replaces it; hiding hints deselects them. Delete removes the selected hints (hint.ps.deleteHints). Documented in the handbook, not yet observed."
+notes = "The hint selection is part of the Edit View selection (`hints`, by list position; crates/tools/src/selection.rs). A click on a badge or marker selects that hint alone, Shift+click toggles it, a click elsewhere replaces it; hiding hints deselects them. Delete removes the selected hints (hint.ps.deleteHints). The arrow keys move the selected hints across the arrow (Up and Down horizontal hints, Left and Right vertical ones) by the font's keyboard increments (plain, Shift, Cmd), one hint.ps.setHintValues each, and the hints stay selected (crates/tools/src/hint_drag.rs). Documented in the handbook, not yet observed; the handbook does not mention arrow keys for hints."
 guesses = [
+  "The arrow keys move selected hints as they move selected nodes, the whole hint at once, so an end linked to a node becomes a number; an arrow along a hint's edges leaves it alone; with several hints selected each moves in its own undo step. The handbook says nothing about arrow keys and hints; pressing an arrow key with a linked hint selected in the reference app would settle it.",
   "Tab after the last hint wraps to the first and Shift+Tab before the first wraps to the last; with several hints selected Tab moves on from the one latest in list order; trying it in the reference app would settle it.",
   "A click on a hint's marker selects the hint as a click on its badge does; the reference app would settle it.",
 ]
-observe = ["T1: in n, select the last hint and press Tab; note whether the selection wraps to the first hint. Then select two hints and press Tab; note which hint is selected next."]
+observe = [
+  "T1: in n, select the last hint and press Tab; note whether the selection wraps to the first hint. Then select two hints and press Tab; note which hint is selected next.",
+  "T1: in n, select a stem hint linked to two nodes and press Up and then Shift+Up; note whether the hint moves, by how much, and whether its ends stay linked to the nodes.",
+]
 
 [[behavior]]
 id = "hinting.ps.manual.dragMarkers"

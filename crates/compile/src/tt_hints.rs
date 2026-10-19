@@ -36,7 +36,7 @@ use fontcraft_hinting::{
 };
 use fontcraft_model::plist::{Array, Dict, Number, Value};
 use fontcraft_model::{Font, Layer, Param, Resolved, ResolvedGlyph};
-use fontcraft_ttasm::{FunctionTable, ProgramLimits, analyse};
+use fontcraft_ttasm::{FunctionTable, ProgramLimits, analyse, uses_font_programs};
 use read_fonts::tables::glyf::CurvePoint;
 use write_fonts::tables::glyf::{Contour, SimpleGlyph};
 
@@ -555,7 +555,7 @@ impl Imported {
     }
 
     /// Removes the programs that need the font programs they were written for (see
-    /// [`uses_font_programs`]); answers the names of their glyphs.
+    /// [`fontcraft_ttasm::uses_font_programs`]); answers the names of their glyphs.
     fn drop_dependent(&mut self, order: &[ResolvedGlyph]) -> Vec<String> {
         let mut dropped = Vec::new();
         let mut keep = |gid: usize, program: &[u8]| {
@@ -585,15 +585,6 @@ fn merge_program_limits(limits: &mut ProgramLimits, imported: &Imported, functio
         }
         limits.max_size_of_instructions = limits.max_size_of_instructions.max(u16::try_from(p.len()).unwrap_or(u16::MAX));
     }
-}
-
-/// Does a glyph program reach state that `fpgm`, `prep` and `cvt ` set up: a function call
-/// (CALL, LOOPCALL), the control values (RCVT, WCVTP, WCVTF, MIAP, MIRP, DELTAC1–3) or storage
-/// (RS)? A program that cannot be decoded, or whose analysis cannot follow it, counts as one.
-fn uses_font_programs(program: &[u8]) -> bool {
-    let Ok(list) = fontcraft_ttasm::decode(program) else { return true };
-    list.iter().any(|i| matches!(i.opcode, 0x2A | 0x2B | 0x3E | 0x3F | 0x43 | 0x44 | 0x45 | 0x70 | 0x73..=0x75 | 0xE0..=0xFF))
-        || analyse(program, &FunctionTable::default()).map_or(true, |l| l.uncertain)
 }
 
 /// The hinting of a font whose only programs are its glyphs' own: no `cvt `, `fpgm` or `prep`.

@@ -166,3 +166,21 @@ fn an_edited_outline_makes_the_stored_program_stale() {
     }
     assert!(stored_program(s.font().unwrap(), &ProgramTarget::Glyph("H".into()), None).unwrap().unwrap().stale);
 }
+
+#[test]
+fn a_glyph_program_that_calls_functions_warns_when_the_master_has_no_font_programs() {
+    let mut s = session();
+    let r = run(&mut s, "hint.tt.setAssembly", json!({"target": {"glyph": "H"}, "assembly": GLYPH}));
+    assert_eq!(r["changed"], true, "the program is stored all the same");
+    let warnings = r["warnings"].as_array().unwrap();
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert!(warnings[0].as_str().unwrap().contains("export leaves it out"), "{warnings:?}");
+    assert!(h_program(&exported(&mut s)).is_empty(), "as the warning says, export leaves the program out");
+
+    // Reading a control value needs the font programs as much as a call does.
+    let r = run(&mut s, "hint.tt.setAssembly", json!({"target": {"glyph": "H"}, "assembly": "PUSHB[ ] 0\nRCVT[ ]\nPOP[ ]"}));
+    assert_eq!(r["warnings"].as_array().map(Vec::len), Some(1), "{r}");
+    // Removing the program warns about nothing.
+    let r = run(&mut s, "hint.tt.setAssembly", json!({"target": {"glyph": "H"}, "assembly": ""}));
+    assert_eq!(r["warnings"], json!([]));
+}

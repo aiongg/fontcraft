@@ -239,7 +239,7 @@ chosen by the kind of source and by `--format`:
 
 **Built (M2).** `--format ttf|otf`, `--container plain|woff|woff2`, `-o`/`--output-dir`,
 `--instances[=NAME,...]`, `--masters-as-instances`, `--keep-overlaps`, `--keep-direction`,
-`--conversion-error`, `--timestamp` and `--plan`. Each SOURCE is opened as a document and built by
+`--conversion-error`, `--timestamp`, `--cbdt` and `--plan`. Each SOURCE is opened as a document and built by
 `font.compile` (or described by `font.compilePlan`); the command prints one JSON line per SOURCE, and
 with several sources one that fails does not stop the others. The other options in the table below
 are later work.
@@ -253,7 +253,9 @@ skipped, and a source that builds nothing fails. Overlapping contours are merged
 `--keep-overlaps` is given; a glyph whose overlaps cannot be removed keeps them, with a warning
 naming it. Contours are reversed for TrueType unless
 `--keep-direction`; curves are converted to quadratics within `--conversion-error` em (default 0.001).
-`--timestamp` sets `head.created` and `head.modified` (default `SOURCE_DATE_EPOCH`, else now). Static CFF
+`--timestamp` sets `head.created` and `head.modified` (default `SOURCE_DATE_EPOCH`, else now).
+`--cbdt` also writes CBDT and CBLC bitmap tables from the iColor layers; variable fonts never get
+them. Static CFF
 output is subroutinised unless `--no-subroutinize` is given or the source sets Disable Subroutines; a table
 beyond the subroutiniser's limits is written without subroutines, with a warning. CFF2 output is not
 subroutinised. Glyphs are written under their production names, made valid as fontc makes

@@ -281,6 +281,16 @@ pub fn analyse(program: &[u8], functions: &FunctionTable) -> Result<ProgramLimit
     analysis::Analyser::new(&instructions, Some(functions)).limits(program.len())
 }
 
+/// Does a glyph program reach state that `fpgm`, `prep` and `cvt ` set up: a function call
+/// (CALL, LOOPCALL), the control values (RCVT, WCVTP, WCVTF, MIAP, MIRP, DELTAC1–3) or storage
+/// (RS)? A program that cannot be decoded, or whose analysis cannot follow it, counts as one.
+/// Such a program only works with the font programs it was written for.
+pub fn uses_font_programs(program: &[u8]) -> bool {
+    let Ok(list) = decode(program) else { return true };
+    list.iter().any(|i| matches!(i.opcode, 0x2A | 0x2B | 0x3E | 0x3F | 0x43 | 0x44 | 0x45 | 0x70 | 0x73..=0x75 | 0xE0..=0xFF))
+        || analyse(program, &FunctionTable::default()).map_or(true, |l| l.uncertain)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

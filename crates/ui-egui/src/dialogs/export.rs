@@ -8,6 +8,7 @@
 //! The OTF tab's options are the command's: Autohint is one checkbox whose effect follows the
 //! outline flavour (`export.autohintCff`, `export.autohintTrueType`), off by default since hinting
 //! is optional (`hinting.ps.hintingIsOptional`).
+//! CBDT is an option of FontCraft's own (`color.export.cbdtNotInReference`), off by default.
 //!
 //! Exporting writes files, so nothing runs until OK, which reads Next… as in the handbook. Each
 //! tab has an export folder: Choose… picks it, and Next… with no folder asks for one
@@ -81,6 +82,7 @@ fn otf_fields(_: &Session) -> Vec<Field> {
             false,
             "PostScript/CFF: hint every glyph without manual PostScript hints; TrueType: hint the whole font, in place of any manual TrueType hints. An instance's Autohint parameter overrides this",
         ),
+        Field::bool("cbdt", "CBDT", false, "Also write CBDT and CBLC bitmap tables from the iColor layers, for renderers that do not draw sbix"),
         destination(),
     ]
 }
@@ -261,6 +263,7 @@ mod tests {
             let mut app = drawn();
             let opened = open(&mut app, &by_dialog);
             assert_eq!(opened["params"]["autohint"], false, "hinting is optional: off until ticked");
+            assert_eq!(opened["params"]["cbdt"], false, "CBDT is off until ticked");
             call(&mut app, "ui.dialog.set", json!({"field": "outlines", "value": outlines}));
             call(&mut app, "ui.dialog.set", json!({"field": "autohint", "value": true}));
             let done = call(&mut app, "ui.dialog.confirm", json!({}));
