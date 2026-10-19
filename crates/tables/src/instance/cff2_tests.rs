@@ -316,6 +316,18 @@ fn a_blend_with_too_few_operands_is_refused() {
 }
 
 #[test]
+fn rlinecurve_with_one_curve_and_no_line_is_read() {
+    // `0 0 rmoveto 10 0 20 10 20 30 rlinecurve`: six operands make one curve.
+    let leaf = [139, 139, 21, 149, 139, 159, 149, 159, 169, 25];
+    let table = crate::tests::nested_subr_cff2(2, 1, 1, &leaf);
+    let t = Table::read(&table, 0).unwrap();
+    assert_eq!(program(&t, 1).last(), Some(&(25, vec![10.0, 0.0, 20.0, 10.0, 20.0, 30.0])));
+    let args: Vec<Val> = [10.0, 0.0, 20.0, 10.0, 20.0, 30.0].into_iter().map(Val::plain).collect();
+    assert_eq!(generalize(25, &args).unwrap(), Some(vec![RelSeg::Curve([10.0, 0.0, 20.0, 10.0, 20.0, 30.0])]));
+    assert!(!operands_fit(25, 4) && !operands_fit(25, 7));
+}
+
+#[test]
 fn nested_subroutines_past_the_memory_limit_are_refused() {
     // Every glyph runs `0 0 rlineto` 4^7 times through seven levels of calls.
     let small = crate::tests::nested_subr_cff2(2, 8, 4, &[139, 139, 5]);

@@ -943,6 +943,11 @@ pub(crate) fn place_design(
 
 /// Reads a single UFO as a document with one master.
 pub fn read(files: &Files) -> Result<Font> {
+    read_reporting(files).map(|(font, _)| font)
+}
+
+/// [`read`], with warnings about what was read in a plainer form than the files allow.
+pub fn read_reporting(files: &Files) -> Result<(Font, Vec<String>)> {
     // The master id glyphsLib keeps in the lib, else the reader's own.
     let lib = read_plist(files, LIB).ok().flatten().and_then(|d| match d.root {
         Value::Dict(d) => Some(d),
@@ -985,10 +990,10 @@ pub fn read(files: &Files) -> Result<Font> {
     };
     glyphkeys::read(&mut font, &master_id);
     libkeys::read(&mut font, false, &master_id);
-    crate::colorkeys::read(&mut font);
+    let warnings: Vec<String> = crate::colorkeys::read(&mut font).into_iter().collect();
     crate::gdef::strip_derived(&mut font, &master_id);
     font.check()?;
-    Ok(font)
+    Ok((font, warnings))
 }
 
 /// The model's units per em for a UFO's `unitsPerEm` (1000 when it has none; rounded).

@@ -11,7 +11,7 @@ use fontcraft_engine::imagery::{Rgba8, to_png};
 use fontcraft_model::Image;
 use serde_json::json;
 
-use super::{MAX_DECODE_PIXELS_PER_FRAME, MAX_DECODES_PER_FRAME, colour_image, layered_mode};
+use super::{MAX_COLOR_PER_FRAME, MAX_DECODE_PIXELS_PER_FRAME, MAX_DECODES_PER_FRAME, colour_image, layered_mode};
 use crate::FontcraftApp;
 use crate::canvas::color::{Mode, Sources, SvgCache};
 use crate::shell::font_view::images::Frame;
@@ -285,6 +285,40 @@ fn color_preview_palette_drives_font_view_draws_palette_glyphs_in_colour() {
     rectangle(&mut app, "C");
     w.frame(&mut app);
     assert_eq!(app.font_view.art.coloured, 0, "A's texture is kept");
+}
+
+#[test]
+fn font_view_colour_budget_holds_for_a_frame_of_two_passes() {
+    let mut app = FontcraftApp::default();
+    app.run("colorPalette.addColor", &json!({"color": "#FF0000"})).unwrap();
+    let names: Vec<String> = (0..MAX_COLOR_PER_FRAME + 8).map(|i| format!("c{i:02}")).collect();
+    app.session
+        .edit("many", |font| {
+            for n in &names {
+                font.add_glyph(n, vec![], 600.0)?;
+            }
+            Ok(())
+        })
+        .unwrap();
+    for n in &names {
+        rectangle(&mut app, n);
+    }
+    let m = master(&app);
+    app.run("layers.addBackupLayer", &json!({"glyphs": names, "master": m})).unwrap();
+    for n in &names {
+        let layer = app.session.font().unwrap().glyph(n).unwrap().layers.iter().find(|l| !l.is_master_layer()).unwrap().id.clone();
+        app.run("layer.convertToColorPalette", &json!({"glyph": n, "layer": layer})).unwrap();
+    }
+    app.run("fontView.setCellSize", &json!({"size": 40})).unwrap();
+    let w = Window::sized(1920.0, 1200.0);
+    let input = egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, w.size)), ..egui::RawInput::default() };
+    let _ = w.ctx.run_ui(input, |ui| {
+        if ui.ctx().current_pass_index() == 0 {
+            ui.ctx().request_discard("a second layout pass");
+        }
+        app.ui(ui);
+    });
+    assert_eq!(app.font_view.art.sprites(), MAX_COLOR_PER_FRAME, "the second pass makes no more colour textures");
 }
 
 #[test]
