@@ -272,7 +272,7 @@ fn default_language<'a>(font: &'a Resolved, property: &str, params: &[&str]) -> 
 
 /// Which front end of fontc writes a name.
 #[derive(Clone, Copy, PartialEq)]
-enum From {
+pub(crate) enum From {
     Both,
     /// `.glyphs` sources only.
     Glyphs,
@@ -284,7 +284,7 @@ enum From {
 /// Name properties and the name ids they fill (fontc's `try_name_id` for `.glyphs` sources, its
 /// UFO `names` for UFOs), with the parameters that hold the same name in format version 2 or in
 /// a UFO.
-const NAME_PROPERTIES: &[(&str, u16, &[&str], From)] = &[
+pub(crate) const NAME_PROPERTIES: &[(&str, u16, &[&str], From)] = &[
     ("copyrights", 0, &["copyright"], From::Both),
     ("familyNames", 1, &[], From::Both),
     ("uniqueID", 3, &["uniqueID", "openTypeNameUniqueID"], From::Both),

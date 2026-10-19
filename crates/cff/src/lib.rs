@@ -240,8 +240,22 @@ pub struct Built {
     pub glyph_bounds: Vec<Option<Bounds>>,
 }
 
+/// Choices of [`build_with`] beyond the font itself.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct BuildOptions {
+    /// Keep every segment the outline draws when specialising: a curve whose handles lie on its
+    /// ends, a line of no length and a line that continues the one before in the same
+    /// direction stay, as AFDKO's `tx` writes them (fontTools' `preserveTopology`).
+    pub keep_topology: bool,
+}
+
 /// Build the `CFF ` table for `font`.
 pub fn build(font: &Font) -> Result<Built, Error> {
+    build_with(font, BuildOptions::default())
+}
+
+/// [`build`] with `options`.
+pub fn build_with(font: &Font, options: BuildOptions) -> Result<Built, Error> {
     validate(font)?;
 
     let (default_width_x, nominal_width_x) = match font.widths {
@@ -257,7 +271,7 @@ pub fn build(font: &Font) -> Result<Built, Error> {
     let mut font_box: Option<Bounds> = None;
     for g in &font.glyphs {
         let width = if g.advance == default_width_x as f64 { None } else { Some(ot_round(g.advance - nominal_width_x as f64)) };
-        let built = charstring::build(&g.name, &g.path, g.hints.as_ref(), width, font.round_tolerance, font.specialise)?;
+        let built = charstring::build(&g.name, &g.path, g.hints.as_ref(), width, font.round_tolerance, font.specialise, options.keep_topology)?;
         if let Some(b) = built.bounds {
             font_box = Some(font_box.map_or(b, |f| f.union(b)));
         }

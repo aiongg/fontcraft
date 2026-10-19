@@ -54,6 +54,8 @@ pub(crate) fn table_error(e: cff::Error) -> CompileError {
 /// explicit closing lines as the reference draws it. `source` is the font `font` was resolved
 /// from, which holds the hints and the hint settings; without it the glyphs are unhinted.
 /// `hinting` holds the export's Autohint option and whether every hint is left out.
+/// `two_decimals`: keep coordinates to two decimals ([`two_decimals`]) instead of rounding them
+/// to integers, and every segment the outline draws.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn build(
     source: Option<&Font>,
@@ -64,6 +66,7 @@ pub(crate) fn build(
     names: &[String],
     synthesised_notdef: bool,
     hinting: &HintingOptions,
+    two_decimals: bool,
     warnings: &mut Vec<String>,
 ) -> Result<cff::Built, CompileError> {
     let settings = source.and_then(|s| hint_settings(s, font, warnings));
@@ -83,6 +86,8 @@ pub(crate) fn build(
     for (gid, ((g, prepared), name)) in order.iter().zip(outlines).zip(names).enumerate() {
         let mut path = match prepared {
             Prepared::Empty => Vec::new(),
+            // The reference's converter also keeps each contour's line back to its start.
+            Prepared::Simple(path) if two_decimals => path_ops(path, false).into_iter().map(two_decimal_op).collect(),
             Prepared::Simple(path) => path_ops(path, !(gid == 0 && synthesised_notdef)),
             Prepared::Composite(_) | Prepared::Points(_) => {
                 return Err(CompileError::Glyph { glyph: g.name.clone(), message: "a CFF outline cannot hold components or TrueType points".into() });
@@ -102,10 +107,27 @@ pub(crate) fn build(
         private,
         glyphs,
         widths: widths(font),
-        round_tolerance: ROUND_TOLERANCE,
+        round_tolerance: if two_decimals { 0.0 } else { ROUND_TOLERANCE },
         specialise: true,
     };
-    cff::build(&cff_font).map_err(table_error)
+    // The reference's converter keeps every segment it is given.
+    cff::build_with(&cff_font, cff::BuildOptions { keep_topology: two_decimals }).map_err(table_error)
+}
+
+/// `v` rounded to two decimals in single precision, as the reference's CFF converter stores a
+/// coordinate (`RND_ON_WRITE` in AFDKO's `cffwrite_t2cstr.cpp`, Apache-2.0).
+pub fn two_decimals(v: f64) -> f64 {
+    let single = v as f32;
+    f64::from((f64::from((single * 100.0).round()) / 100.0) as f32)
+}
+
+fn two_decimal_op(op: PathOp) -> PathOp {
+    let r = |(x, y): (f64, f64)| (two_decimals(x), two_decimals(y));
+    match op {
+        PathOp::MoveTo(p) => PathOp::MoveTo(r(p)),
+        PathOp::LineTo(p) => PathOp::LineTo(r(p)),
+        PathOp::CurveTo(a, b, p) => PathOp::CurveTo(r(a), r(b), r(p)),
+    }
 }
 
 /// The hint settings of the master or instance `font` was resolved at, or `None` with a warning

@@ -264,6 +264,8 @@ above. The rules are recorded so the mode can be implemented without re-reading 
   `compile.goadbRenaming`, `compile.unicodeFromGlyphNames`).
 - CID-keyed sources and their CMap resources (`compile.cidKeyedFonts`,
   `compile.cidCmapResources`).
+- What makeotf reads from a UFO and what it works out itself: metrics, style bits, version,
+  names, coordinates and segments (`compile.makeotfMetrics`).
 - Legacy switches we expose only here: `compile.cmapLegacyOptions`,
   `compile.kernClassOptimisation`. Synthetic glyphs are not reproduced
   (`compile.makeotfSyntheticGlyphs`).
@@ -526,7 +528,7 @@ all five.
 | Decision | fontmake (Python) | fontc | makeotf / AFDKO | FontCraft default |
 |---|---|---|---|---|
 | Output flavours | TTF, CFF, CFF2, variable TTF and CFF2 | TrueType-flavoured static or variable only | CFF from one source; CFF2 by merging masters | all four |
-| Overlap removal | on for static, off for variable; two backends | never | not part of makeotf | on for static, off for variable |
+| Overlap removal | on for static, off for variable; two backends | never | not part of makeotf | on for static, off for variable; off in a project compile |
 | Overlap flag bits | not stated in the docs read | never set | n/a | set on variable TTF glyphs |
 | cu2qu tolerance | 0.001 em, `-e` to change | upm/1000, fixed | n/a | 0.001 em, option |
 | Curve modes | cu2qu, mixed, keep-quad, keep-cubic | cu2qu only | n/a | cu2qu, keep-quad |
@@ -747,6 +749,36 @@ same synthetic CID-keyed UFO and CMaps the CID data, sub-fonts, Private values, 
 | `defaultWidthX`, `nominalWidthX` | its own choice per sub-font | fontTools' method per sub-font |
 | no Unicode CMap given | stops | encodes the source's own code points |
 | two-byte Macintosh CMap | a Macintosh subtable (not yet observed) | no Macintosh subtable, with a warning |
+
+**Project compile against makeotf.** A project compile (`font.compile` with project
+parameters) builds what makeotf 5.0.1 builds from a UFO (`compile.makeotfMetrics`). It follows
+makeotf in these points:
+
+- The source's OpenType values, kerning, groups and anchors are not used. The name table holds
+  IDs 1 to 6, the menu names and the feature code's names.
+- The version is 1.000 unless the feature code's `table head` sets a FontRevision.
+- Weight and width classes come from the full name; fsSelection from the bold and italic
+  options and the weight class; cap height, x-height, typographic, Windows and `hhea` metrics
+  from the glyphs d, O, o and the font box. The feature code's blocks override them.
+- Charstring coordinates keep two decimals and every segment; overlaps stay; composites keep
+  the advance and position the file gives (the command line opens the source without aligning
+  its composites).
+
+The measure builds the first 10 corpus UFOs that makeotf can build with both tools and compares
+a normalised dump: glyph order, `cmap`, names (ID 3 left out, ID 5 up to the first `;`),
+advances, outlines (points rounded to two decimals, a closing line back to the start point
+ignored), the OS/2 weight class, Regular, Bold and Italic bits, typographic and Windows metrics,
+flattened kerning and GSUB single and ligature substitutions, and `DSIG`. makeotf refuses most
+corpus UFOs (no postscriptFontName, keys it does not know, components with an empty base).
+
+These differences are ours on purpose or not yet followed:
+
+| What | makeotf | FontCraft | Why |
+|---|---|---|---|
+| a negative advance | wrapped to a large unsigned number (-78 becomes 65458) | 0, with a warning | a negative advance is not a valid `hmtx` value |
+| `sub fi by fi;` in a ligature feature | a single substitution in its own lookup | a ligature of one glyph in the feature's ligature lookup | the feature compiler follows feaLib, the oracle of every other compile |
+| vendor id, unique ID version, Panose weight, xAvgCharWidth, strikeout position, fsType, GDEF | worked out by makeotf | the ordinary compile's values | not yet followed; the measure does not compare them |
+| CID-keyed project compile | fractions kept | integers | the CID-keyed build rounds as every CID-keyed build does |
 
 ## 4b. FontDame conversion against mtiLib
 

@@ -1,7 +1,7 @@
 //! The project workflow of AFDKO's makeotf (M12.40; rows `compile.makeotfOptionPrecedence`,
 //! `.makeotfReleaseMode`, `.goadbRenaming`, `.glyphOrderMakeotf`, `.unicodeFromGlyphNames`,
 //! `.cmapLegacyOptions`, `.fontMenuNameDb`, `.nameLengthAdvice`, `.os2WeightAdvice`,
-//! `.kernClassOptimisation`, `.makeotfSyntheticGlyphs`).
+//! `.kernClassOptimisation`, `.makeotfSyntheticGlyphs`, `.makeotfMetrics`).
 //!
 //! A project compile reads the settings of a project file (`current.fpr`), the option words of
 //! the command line and a `fontinfo` keyword file, a FontMenuNameDB and a GlyphOrderAndAliasDB
@@ -25,7 +25,11 @@
 //! - Release mode subroutinises, renames and orders, and adds a stub `DSIG`; the version
 //!   string is the same as in a development build.
 //! - Menu names follow [`menu_records`].
+//! - The source's OpenType values, kerning, anchors and most names are not read
+//!   ([`Project::prepare`] leaves them out); the metrics, coordinates and segments follow
+//!   [`metrics`] and [`Finish`].
 
+pub mod metrics;
 mod names;
 
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -630,11 +634,19 @@ pub struct Project {
     pub aliases: Option<Vec<GlyphAlias>>,
 }
 
-/// What [`finish`] adds to a compiled font.
+/// What a project compile changes in the build: [`finish`] adds the stub tables, the compile
+/// writes the outlines and metrics as the reference does.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Finish {
     pub stub_dsig: bool,
     pub stub_cmap4: bool,
+    /// Charstring coordinates kept to two decimals and every segment kept, as the reference's
+    /// CFF converter writes them, and glyph boxes rounded by [`metrics::int_box`]; otherwise
+    /// every coordinate is rounded to an integer and the specialiser drops redundant segments.
+    pub two_decimals: bool,
+    /// The weight, width, style bits and vertical metrics worked out by [`metrics::apply`]
+    /// instead of read from the source.
+    pub metrics: Option<metrics::Source>,
 }
 
 /// The source as the project compile builds it, with what the compile needs to know.
@@ -707,6 +719,49 @@ fn push_master_param(font: &mut Font, name: &str, value: Value) {
 fn listed(names: &[String]) -> String {
     let shown: Vec<&str> = names.iter().take(MAX_LISTED).map(String::as_str).collect();
     format!("{}{}", shown.join(", "), if names.len() > MAX_LISTED { ", …" } else { "" })
+}
+
+/// The name IDs the reference writes from the source: the family, style, full and PostScript
+/// names, and the typographic family and style, which the menu names decide. It makes its own
+/// unique ID and version string, and writes no other name the feature code does not give.
+const NAMES_READ: [u16; 6] = [1, 2, 4, 6, 16, 17];
+
+/// Takes out of `font` what the reference compiler does not read from a source, so the ordinary
+/// compile does not write it: the name records other than [`NAMES_READ`] (properties, their
+/// parameters, the source's own name table entries and prevented IDs), the version (it writes
+/// 1.000 unless the feature code's `head` table sets a FontRevision), the kerning and the
+/// anchors (only the feature code makes `GPOS`).
+fn leave_out_unread(font: &mut Font) {
+    let unread: Vec<(&str, &[&str])> =
+        crate::info::NAME_PROPERTIES.iter().filter(|(_, id, _, _)| !NAMES_READ.contains(id)).map(|(key, _, params, _)| (*key, *params)).collect();
+    let strip = |properties: &mut fontcraft_model::Properties, params: &mut Params| {
+        for (key, names) in &unread {
+            properties.remove(key);
+            for name in *names {
+                params.remove(name);
+            }
+        }
+        params.remove("Name Table Entry");
+        params.remove("Prevent Name ID");
+    };
+    let info = Arc::make_mut(&mut font.info);
+    strip(&mut info.properties, &mut info.params);
+    for m in Arc::make_mut(&mut font.masters).iter_mut() {
+        strip(&mut m.properties, &mut m.params);
+    }
+    for i in Arc::make_mut(&mut font.instances).iter_mut() {
+        strip(&mut i.properties, &mut i.params);
+    }
+    font.version_major = 1;
+    font.version_minor = 0;
+    font.kerning = Arc::default();
+    for i in 0..font.glyphs.len() {
+        if font.glyphs.as_arcs().get(i).is_some_and(|g| g.layers.iter().any(|l| !l.anchors.is_empty()))
+            && let Some(mut g) = font.glyphs.get_mut_at(i)
+        {
+            g.layers.iter_mut().for_each(|l| l.anchors.clear());
+        }
+    }
 }
 
 /// The weight class the source states, from its parameters.
@@ -832,9 +887,12 @@ impl Project {
             set_master_param(&mut font, DONT_USE_PRODUCTION_NAMES, Value::Bool(true));
         }
 
+        leave_out_unread(&mut font);
+
         // Menu names.
         let target = font.default_target().map_err(|e| ProjectError(e.to_string()))?;
         let resolved = crate::drawing::resolve(&font, &target).map_err(|e| ProjectError(e.to_string()))?;
+        let full_name = property_text(&resolved, "postscriptFullNames", &["postscriptFullName"]);
         let postscript = crate::plan::postscript_name(&resolved, &Options::default()).unwrap_or_default();
         let made;
         let entry = match self.menu_db.as_ref().and_then(|db| db.entry(&postscript)) {
@@ -882,12 +940,25 @@ impl Project {
         }
         set_master_param(&mut font, "Export Mac Name Table Entries", Value::Bool(!s.omit_mac_names));
 
-        if let Some(w) = weight_class(&resolved.params).filter(|w| *w < LOWEST_SAFE_WEIGHT_CLASS) {
+        let stated = weight_class(&resolved.params);
+        if let Some(w) = stated.filter(|w| *w < LOWEST_SAFE_WEIGHT_CLASS) {
             warnings.push(format!(
                 "the weight class is {w}: older Windows applications may draw weights below {LOWEST_SAFE_WEIGHT_CLASS} smeared or emboldened; use {LOWEST_SAFE_WEIGHT_CLASS} or more"
             ));
         }
-        Ok(Prepared { font, subroutinize: s.subroutinize, finish: Finish { stub_dsig: s.stub_dsig, stub_cmap4: s.stub_cmap4 }, warnings })
+        let (computed, _) = metrics::classes(full_name.as_deref());
+        if let Some(w) = stated.filter(|w| *w != i64::from(computed)) {
+            warnings.push(format!(
+                "the source's weight class {w} is not used: a project compile takes it from the full name ({computed}); a `table OS/2 {{ WeightClass … }}` block in the feature code sets it"
+            ));
+        }
+        let finish = Finish {
+            stub_dsig: s.stub_dsig,
+            stub_cmap4: s.stub_cmap4,
+            two_decimals: true,
+            metrics: Some(metrics::Source { full_name, bold: s.bold, italic: s.italic }),
+        };
+        Ok(Prepared { font, subroutinize: s.subroutinize, finish, warnings })
     }
 }
 

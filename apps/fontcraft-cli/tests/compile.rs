@@ -155,3 +155,52 @@ fn compile_cbdt_adds_the_bitmap_tables_of_icolor_layers() {
     assert!(stderr.contains("--variable takes only"), "{stderr}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Writes `file` holding a property list with `body`.
+fn write_plist(file: &Path, body: &str) {
+    let text = format!(
+        "<?xml version='1.0' encoding='UTF-8'?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\">{body}</plist>\n"
+    );
+    std::fs::write(file, text).unwrap();
+}
+
+#[test]
+fn a_project_compile_keeps_composites_as_the_file_places_them() {
+    let dir = temp("project-composite");
+    let ufo = dir.join("Synth.ufo");
+    let glyphs = ufo.join("glyphs");
+    std::fs::create_dir_all(&glyphs).unwrap();
+    write_plist(
+        &ufo.join("metainfo.plist"),
+        "<dict><key>creator</key><string>org.example</string><key>formatVersion</key><integer>3</integer></dict>",
+    );
+    write_plist(
+        &ufo.join("fontinfo.plist"),
+        "<dict><key>familyName</key><string>Synth</string><key>styleName</key><string>Regular</string><key>postscriptFontName</key><string>Synth-Regular</string><key>unitsPerEm</key><integer>1000</integer></dict>",
+    );
+    write_plist(&ufo.join("layercontents.plist"), "<array><array><string>public.default</string><string>glyphs</string></array></array>");
+    let box_outline = r#"<contour><point x="50" y="0" type="line"/><point x="50" y="700" type="line"/><point x="650" y="700" type="line"/><point x="650" y="0" type="line"/></contour>"#;
+    let mark = r#"<contour><point x="-100" y="600" type="line"/><point x="-50" y="800" type="line"/><point x="0" y="800" type="line"/></contour>"#;
+    let composite = r#"<component base="O"/><component base="acutecomb" xOffset="400" yOffset="150"/>"#;
+    let mut contents = String::new();
+    for (name, file, width, outline) in [
+        (".notdef", "_notdef", 500, box_outline),
+        ("O", "O_", 700, box_outline),
+        ("acutecomb", "acutecomb", 0, mark),
+        ("Oacute", "O_acute", 720, composite),
+    ] {
+        contents.push_str(&format!("<key>{name}</key><string>{file}.glif</string>"));
+        let glif = format!(
+            "<?xml version='1.0' encoding='UTF-8'?>\n<glyph name=\"{name}\" format=\"2\"><advance width=\"{width}\"/><outline>{outline}</outline></glyph>\n"
+        );
+        std::fs::write(glyphs.join(format!("{file}.glif")), glif).unwrap();
+    }
+    write_plist(&glyphs.join("contents.plist"), &format!("<dict>{contents}</dict>"));
+    let out = dir.join("out.otf");
+    let (code, _, stderr) = cli(&["compile", ufo.to_str().unwrap(), "--project-defaults", "-o", out.to_str().unwrap(), "--timestamp", "0"]);
+    assert_eq!(code, 0, "{stderr}");
+    let (font, _) = fontcraft_engine::io::open(&out, None).unwrap();
+    // The reference keeps the advance the file gives, which is not its base's.
+    assert_eq!(font.glyph("Oacute").unwrap().layers[0].width, 720.0);
+    std::fs::remove_dir_all(&dir).unwrap();
+}

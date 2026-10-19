@@ -338,13 +338,20 @@ fn postscript(input: &CffInput, builder: &mut FontBuilder, warnings: &mut Vec<St
             input.names,
             input.synthesised_notdef,
             input.hinting,
+            input.two_decimals,
             warnings,
         )?,
     };
     let clamp = |v: i64| i16::try_from(v.clamp(i64::from(i16::MIN), i64::from(i16::MAX))).unwrap_or(0);
     let bbox = |[x_min, y_min, x_max, y_max]: [i64; 4]| Bbox { x_min: clamp(x_min), y_min: clamp(y_min), x_max: clamp(x_max), y_max: clamp(y_max) };
+    let glyphs: Vec<Option<Bbox>> = if input.two_decimals {
+        built.glyph_bounds.iter().map(|b| b.map(|b| bbox(crate::makeotf::metrics::int_box(&b)))).collect()
+    } else {
+        built.glyph_bounds.iter().map(|b| b.map(|b| bbox(b.round_with_tolerance(cff::ROUND_TOLERANCE)))).collect()
+    };
+    let font = if input.two_decimals { crate::makeotf::metrics::font_box(&glyphs) } else { bbox(built.font_bbox) };
     let boxes = Boxes {
-        glyphs: built.glyph_bounds.iter().map(|b| b.map(|b| bbox(b.round_with_tolerance(cff::ROUND_TOLERANCE)))).collect(),
+        glyphs,
         extents: built
             .glyph_bounds
             .iter()
@@ -356,7 +363,7 @@ fn postscript(input: &CffInput, builder: &mut FontBuilder, warnings: &mut Vec<St
                 })
             })
             .collect(),
-        font: bbox(built.font_bbox),
+        font,
         loc_format: 0,
     };
     let maxp =
@@ -441,6 +448,9 @@ struct CffInput<'a> {
     subroutinize: bool,
     /// Write a CID-keyed table ([`crate::cid`]).
     cid: Option<&'a crate::cid::CidPlan>,
+    /// Coordinates to two decimals and the reference's glyph boxes
+    /// ([`crate::makeotf::Finish::two_decimals`]).
+    two_decimals: bool,
 }
 
 /// Builds every table and the font file. `synthesised_notdef`: glyph 0 is the compiler's own
@@ -471,11 +481,20 @@ pub fn assemble(
         info.names.sort_by_key(|r| (r.platform, r.encoding, r.language, r.id));
     }
     let blocks = &layout.compiled;
+    let generated_version = info.name(5);
     if let Some(code_names) = &blocks.name {
         // A variable font's names are allocated after the layout stage, so the code's IDs may
         // meet them; those names keep their IDs.
         let protected: Vec<u16> = extra.names.iter().map(|(id, _)| *id).filter(|id| *id >= crate::var::names::FIRST_FONT_NAME_ID).collect();
         crate::layout_tables::merge_names(&mut info.names, code_names, &protected, warnings);
+    }
+    // A project compile's version string follows the feature code's FontRevision, unless the
+    // code names the version itself.
+    if let (true, Some(revision)) = (options.project.is_some(), blocks.head.font_revision)
+        && info.name(5) == generated_version
+    {
+        let text = crate::makeotf::metrics::version_string(revision);
+        info.names.iter_mut().filter(|r| r.id == 5).for_each(|r| r.text.clone_from(&text));
     }
     if options.version_stamp {
         info::stamp_version(&mut info, font);
@@ -526,11 +545,17 @@ pub fn assemble(
                     hinting: &options.hinting,
                     subroutinize,
                     cid: extra.cid.as_ref(),
+                    two_decimals: options.project.as_ref().is_some_and(|p| p.two_decimals),
                 };
                 postscript(&input, &mut builder, warnings)?
             }
         },
     };
+
+    if let Some(source) = options.project.as_ref().and_then(|p| p.metrics.as_ref()) {
+        crate::makeotf::metrics::apply(&mut info, source, order, &boxes.glyphs, boxes.font, font.units_per_em, extra.cid.is_some());
+    }
+    let m = info.metrics;
 
     // Horizontal metrics, from the glyphs as written.
     let mut horizontal = MetricsBuilder::default();
@@ -610,6 +635,9 @@ pub fn assemble(
     let max_context = crate::layout_tables::os2_max_context(blocks)?;
     let mut os2 = os2(&info, &horizontal.metrics, &code_points, max_context);
     crate::layout_tables::apply_os2(&blocks.os2, &mut os2);
+    if let Some(source) = options.project.as_ref().and_then(|p| p.metrics.as_ref()) {
+        crate::makeotf::metrics::after_overrides(&mut os2, &mut hhea, source, &blocks.os2, &blocks.hhea);
+    }
 
     // Glyph names: in `post` 2.0 for TrueType when there are few enough; CFF keeps them in its
     // charset and has `post` 3.0 (`compile.postFormat`).

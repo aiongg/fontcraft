@@ -443,7 +443,7 @@ mod hinted {
         // Without masks the plain operators: hstem (1) and vstem (3), no hintmask (19).
         let plain =
             CharstringHints { h_stems: vec![StemHint::bottom_ghost(0.0)], v_stems: vec![StemHint::between(10.0, 90.0)], ..Default::default() };
-        let b = charstring::build("g", &path, Some(&plain), None, 0.5, true).unwrap();
+        let b = charstring::build("g", &path, Some(&plain), None, 0.5, true, false).unwrap();
         // 21 -21 hstem 10 80 vstem 0 hmoveto
         assert_eq!(&b.bytes[..8], &[160, 118, 1, 149, 219, 3, 139, 22]);
         let events = read_back(Glyph { hints: Some(plain), ..glyph("g", 500.0, path) });
@@ -455,7 +455,7 @@ mod hinted {
         let path = rect(0.0, 0.0, 100.0, 4000.0);
         let h: Vec<StemHint> = (0..60).rev().map(|k| StemHint::between(f64::from(k) * 50.0, f64::from(k) * 50.0 + 20.0)).collect();
         let hints = CharstringHints { h_stems: h, ..Default::default() };
-        let b = charstring::build("g", &path, Some(&hints), Some(-20.0), 0.5, true).unwrap();
+        let b = charstring::build("g", &path, Some(&hints), Some(-20.0), 0.5, true, false).unwrap();
         assert_eq!(b.bytes.iter().filter(|&&x| x == 1).count(), 3, "23 + 23 + 14 stems");
         let events = read_back(Glyph { hints: Some(hints), ..glyph("g", 480.0, path) });
         let stems: Vec<Ev> = events.into_iter().filter(|e| matches!(e, Ev::H(..))).collect();
@@ -481,7 +481,7 @@ mod hinted {
                 PathOp::LineTo((0.0, 100.0)),
             ];
             let hints = CharstringHints { h_stems: vec![StemHint::between(-6.0, 0.0)], flex: vec![1], ..Default::default() };
-            let b = charstring::build("g", &path, Some(&hints), None, 0.5, true).unwrap();
+            let b = charstring::build("g", &path, Some(&hints), None, 0.5, true, false).unwrap();
             assert!(b.bytes.windows(2).any(|w| w == [12, op]), "flex operator 12 {op}");
             let events = read_back(Glyph { hints: Some(hints), ..glyph("g", 500.0, path.clone()) });
             let segs: Vec<Seg> = events.into_iter().filter_map(|e| if let Ev::Seg(s) = e { Some(s) } else { None }).collect();

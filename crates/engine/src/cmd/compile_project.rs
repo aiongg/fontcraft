@@ -95,12 +95,16 @@ pub(super) fn read(p: &Params, source: Option<&Path>) -> Result<Option<(Project,
 }
 
 /// Applies `project` to `font` and sets the compile options it decides: the finishing steps,
-/// and subroutinising unless `subroutinize` is given.
+/// subroutinising unless `subroutinize` is given, and overlaps kept, as the reference never
+/// removes them, unless `outlines.removeOverlaps` is given.
 pub(super) fn prepare(p: &Params, project: &Project, font: &Font, options: &mut fontcraft_compile::Options) -> Result<Prepared> {
     let prepared = project.prepare(font).map_err(|e| p.bad(e.to_string()))?;
     options.project = Some(prepared.finish.clone());
     if !p.get("subroutinize").is_some_and(|v| !v.is_null()) {
         options.subroutinize = Some(prepared.subroutinize);
+    }
+    if !p.get("outlines").and_then(|o| o.get("removeOverlaps")).is_some_and(|v| !v.is_null()) {
+        options.remove_overlap = false;
     }
     Ok(prepared)
 }

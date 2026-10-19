@@ -72,11 +72,12 @@ fn arg(args: &[f64], i: usize) -> f64 {
 }
 
 /// Specialise `commands` (generic `rmoveto`/`rlineto`/`rrcurveto` only) for an operand stack of
-/// `max_stack`.
-pub(crate) fn specialize(commands: Vec<Cmd>, max_stack: usize) -> Vec<Cmd> {
+/// `max_stack`. `keep_topology` skips pass 3, so every segment stays (the reference's
+/// `preserveTopology=True`).
+pub(crate) fn specialize(commands: Vec<Cmd>, max_stack: usize, keep_topology: bool) -> Vec<Cmd> {
     let commands = combine_moves(commands);
-    let commands = commands.into_iter().map(specialize_one).collect();
-    let mut commands = drop_redundant(commands);
+    let commands: Vec<Cmd> = commands.into_iter().map(specialize_one).collect();
+    let mut commands = if keep_topology { commands } else { drop_redundant(commands) };
     peephole(&mut commands);
     let mut commands = combine(commands, max_stack);
     for c in &mut commands {
@@ -329,7 +330,7 @@ mod tests {
     }
 
     fn spec(cmds: &[Cmd]) -> Vec<(Op, Vec<f64>)> {
-        specialize(cmds.to_vec(), 48).into_iter().map(|c| (c.op, c.args)).collect()
+        specialize(cmds.to_vec(), 48, false).into_iter().map(|c| (c.op, c.args)).collect()
     }
 
     const HMOVETO: Op = Op::Move(Cat::H);
@@ -367,6 +368,36 @@ mod tests {
             cmd(RLINETO, &[5.0, 5.0]),
         ]);
         assert_eq!(got, vec![(HMOVETO, vec![0.0]), (HLINETO, vec![30.0]), (RLINETO, vec![5.0, 5.0])]);
+    }
+
+    #[test]
+    fn keeping_the_topology_keeps_every_segment() {
+        // Expected values from fontTools' specializeCommands with preserveTopology=True.
+        let keep = |cmds: &[Cmd]| -> Vec<(Op, Vec<f64>)> { specialize(cmds.to_vec(), 48, true).into_iter().map(|c| (c.op, c.args)).collect() };
+        let lines =
+            [cmd(RMOVETO, &[0.0, 0.0]), cmd(RLINETO, &[10.0, 0.0]), cmd(RLINETO, &[20.0, 0.0]), cmd(RLINETO, &[0.0, 0.0]), cmd(RLINETO, &[5.0, 5.0])];
+        assert_eq!(
+            keep(&lines),
+            vec![(HMOVETO, vec![0.0]), (HLINETO, vec![10.0]), (HLINETO, vec![20.0]), (HLINETO, vec![0.0]), (RLINETO, vec![5.0, 5.0])]
+        );
+        let flat = [
+            cmd(RMOVETO, &[529.0, 1068.0]),
+            cmd(RRCURVETO, &[0.0, 0.0, -1.0, 0.0, 0.0, 0.0]),
+            cmd(RLINETO, &[0.0, -253.0]),
+            cmd(RRCURVETO, &[0.0, 0.0, 1.0, 0.0, 0.0, 0.0]),
+            cmd(RLINETO, &[100.0, 50.0]),
+        ];
+        assert_eq!(
+            keep(&flat),
+            vec![
+                (RMOVETO, vec![529.0, 1068.0]),
+                (HHCURVETO, vec![0.0, -1.0, 0.0, 0.0]),
+                (Op::Line(Cat::V), vec![-253.0]),
+                (HHCURVETO, vec![0.0, 1.0, 0.0, 0.0]),
+                (RLINETO, vec![100.0, 50.0]),
+            ]
+        );
+        assert_eq!(spec(&flat), vec![(RMOVETO, vec![529.0, 1068.0]), (HLINETO, vec![-1.0, -253.0, 1.0]), (RLINETO, vec![100.0, 50.0])]);
     }
 
     #[test]
@@ -427,7 +458,7 @@ mod tests {
         for i in 0..30 {
             cmds.push(cmd(RLINETO, &[1.0 + i as f64, 2.0]));
         }
-        let got = specialize(cmds, 48);
+        let got = specialize(cmds, 48, false);
         assert!(got.iter().all(|c| c.args.len() < 48));
         // The reference fills the last operator first: 23 pairs (46 arguments), then 7.
         let lens: Vec<usize> = got.iter().map(|c| c.args.len()).collect();
