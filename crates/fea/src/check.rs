@@ -6,7 +6,9 @@
 //! lets through and its compiler then panics on (a number outside 16 bits where it reads a
 //! signed 16-bit value, a CID over 65,535, an empty `table head`, a `size` feature whose
 //! subfamily and menu names disagree, a character variant character beyond Unicode, a Windows
-//! name string whose escapes are not valid UTF-16). Each has a test in `rows_tests.rs`.
+//! name string whose escapes are not valid UTF-16, a contextual rule that calls a named lookup
+//! with no rules, more lookups, features, mark filtering sets or character variant entries
+//! than a 16-bit index holds). Each has a test in `rows_tests.rs`.
 //!
 //! The tree is one tree for all files, so its offsets are not file offsets; a refusal is placed
 //! by finding the statement's text in the files.
@@ -27,6 +29,9 @@ const MAX_REFUSALS: usize = 20;
 const MAX_TREE_DEPTH: usize = 1_024;
 /// Longest piece of statement text used to place a refusal.
 const SNIPPET_BYTES: usize = 160;
+/// Most lookups in one table, features, mark filtering sets, and named parameters or characters
+/// in one `cvParameters` block: fea-rs stores each index or count in 16 bits and panics past it.
+const MAX_INDEX: usize = 65_535;
 
 pub(crate) fn tree(root: &Node, glyph_count: usize, limits: &Limits, files: &BTreeMap<String, Arc<str>>) -> Vec<Diagnostic> {
     let mut walk = Walk {
@@ -37,6 +42,10 @@ pub(crate) fn tree(root: &Node, glyph_count: usize, limits: &Limits, files: &BTr
         rules: 0,
         name_ids: HashSet::new(),
         elided_names: Vec::new(),
+        empty_lookups: HashSet::new(),
+        lookups: [0; 2],
+        features: 0,
+        filter_sets: 0,
         refusals: Vec::new(),
     };
     walk.node(root, 0);
@@ -61,6 +70,15 @@ struct Walk<'a> {
     name_ids: HashSet<u32>,
     /// `ElidedFallbackNameID` statements and the id each names.
     elided_names: Vec<(Node, u32)>,
+    /// Named lookup blocks with no rule: fea-rs gives them no lookup index, and a contextual
+    /// rule that calls one makes its compiler panic.
+    empty_lookups: HashSet<String>,
+    /// At least as many lookups as fea-rs builds, in GSUB and in GPOS.
+    lookups: [usize; 2],
+    /// At least as many feature records as fea-rs builds.
+    features: usize,
+    /// `lookupflag` statements with a mark filtering set.
+    filter_sets: usize,
     refusals: Vec<(String, String)>,
 }
 
@@ -90,7 +108,23 @@ impl Walk<'_> {
                     self.refuse(node, "a `table head` block needs a FontRevision statement".into());
                 }
             }
-            Kind::FeatureNode => self.size_feature(node),
+            Kind::FeatureNode => {
+                self.size_feature(node);
+                self.count_features(node);
+            }
+            Kind::AaltFeatureNode => {
+                self.count_features(node);
+                // aalt builds at most a single and an alternate substitution lookup.
+                self.add_lookups(node, false, 2);
+            }
+            Kind::ScriptNode | Kind::LanguageNode => self.count_features(node),
+            Kind::LookupFlagNode if node.iter_tokens().any(|t| t.kind == Kind::UseMarkFilteringSetKw) => {
+                self.filter_sets = self.filter_sets.saturating_add(1);
+                if self.filter_sets == MAX_INDEX + 1 {
+                    self.refuse(node, format!("the feature code uses more than {MAX_INDEX} mark filtering sets"));
+                }
+            }
+            Kind::CvParametersKw => self.cv_parameters(node),
             Kind::NameSpecNode => self.name_spec(node),
             Kind::CharacterKw => self.character(node),
             Kind::ParametersNode => self.size_parameters(node),
@@ -104,8 +138,21 @@ impl Walk<'_> {
                     self.elided_names.push((node.clone(), id));
                 }
             }
-            kind if is_rule(kind) => self.rule(node),
+            Kind::LookupBlockNode => {
+                let holds_rule = node.iter_children().filter_map(NodeOrToken::as_node).any(|n| has_rule(n, 0));
+                let label = node.iter_children().find(|c| c.kind() == Kind::Label).and_then(NodeOrToken::token_text);
+                if let (false, Some(label)) = (holds_rule, label) {
+                    self.empty_lookups.insert(label.to_string());
+                }
+            }
+            kind if is_rule(kind) => {
+                self.rule(node);
+                self.calls(node);
+            }
             _ => {}
+        }
+        if !is_rule(node.kind()) {
+            self.count_lookups(node);
         }
         for child in node.iter_children() {
             match child {
@@ -231,6 +278,75 @@ impl Walk<'_> {
         }
     }
 
+    /// Counts the lookups a block's own rules start (a feature, lookup or variation block): one at each change of
+    /// rule kind and after any other statement, and one more for each contextual rule with an
+    /// inline substitution or value record. fea-rs merges more than that, never less.
+    fn count_lookups(&mut self, block: &Node) {
+        let mut previous = None;
+        for child in block.iter_children().filter_map(NodeOrToken::as_node) {
+            let kind = child.kind();
+            if !is_rule(kind) {
+                previous = None;
+                continue;
+            }
+            let gpos = is_gpos(kind);
+            let mut added = usize::from(previous != Some(kind));
+            let inline = match kind {
+                Kind::GsubType6 => child.iter_children().any(|c| c.kind() == Kind::InlineSubNode),
+                Kind::GposType8 => has_kind(child, Kind::ValueRecordNode, 0),
+                _ => false,
+            };
+            added += usize::from(inline);
+            self.add_lookups(child, gpos, added);
+            previous = Some(kind);
+        }
+    }
+
+    fn add_lookups(&mut self, node: &Node, gpos: bool, added: usize) {
+        let Some(count) = self.lookups.get_mut(usize::from(gpos)) else {
+            return;
+        };
+        let before = *count;
+        *count = count.saturating_add(added);
+        if before <= MAX_INDEX && *count > MAX_INDEX {
+            let table = if gpos { "GPOS" } else { "GSUB" };
+            self.refuse(node, format!("the feature code makes more than {MAX_INDEX} {table} lookups"));
+        }
+    }
+
+    fn count_features(&mut self, node: &Node) {
+        self.features = self.features.saturating_add(1);
+        if self.features == MAX_INDEX + 1 {
+            self.refuse(node, format!("the feature code makes more than {MAX_INDEX} features"));
+        }
+    }
+
+    fn cv_parameters(&mut self, node: &Node) {
+        let blocks = || node.iter_children().filter_map(NodeOrToken::as_node);
+        let labels = blocks().filter(|n| n.kind() == Kind::CvParamsNameNode && n.iter_tokens().any(|t| t.kind == Kind::ParamUiLabelNameIdKw)).count();
+        let characters = blocks().filter(|n| n.kind() == Kind::CharacterKw).count();
+        if labels > MAX_INDEX || characters > MAX_INDEX {
+            self.refuse(node, format!("a `cvParameters` block may have at most {MAX_INDEX} named parameters and {MAX_INDEX} characters"));
+        }
+    }
+
+    /// Refuses a rule's `lookup NAME` calls to a lookup block with no rules.
+    fn calls(&mut self, node: &Node) {
+        let mut tokens = node.iter_tokens().filter(|t| !matches!(t.kind, Kind::Whitespace | Kind::Comment));
+        while let Some(token) = tokens.next() {
+            if token.kind != Kind::LookupKw {
+                continue;
+            }
+            let Some(name) = tokens.next().filter(|t| t.kind == Kind::Ident) else {
+                continue;
+            };
+            if self.empty_lookups.contains(name.text.as_str()) {
+                let message = format!("this rule calls the lookup `{}`, which has no rules; add a rule to it or remove the call", name.text);
+                self.refuse(node, message);
+            }
+        }
+    }
+
     /// A sequence whose members' classes multiply: a ligature or an enumerated pair.
     fn sequence(&mut self, node: &Node, items: &[&NodeOrToken]) -> usize {
         if items.len() > self.limits.ligature_components {
@@ -343,6 +459,21 @@ fn is_rule(kind: Kind) -> bool {
             | GposType8
             | GposIgnore
     )
+}
+
+/// Whether a node is or holds a rule; lookup blocks hold statements only a few levels deep.
+fn has_rule(node: &Node, depth: usize) -> bool {
+    is_rule(node.kind()) || (depth < MAX_TREE_DEPTH && node.iter_children().filter_map(NodeOrToken::as_node).any(|n| has_rule(n, depth + 1)))
+}
+
+/// Whether a node holds a node of the given kind.
+fn has_kind(node: &Node, kind: Kind, depth: usize) -> bool {
+    depth < MAX_TREE_DEPTH && node.iter_children().filter_map(NodeOrToken::as_node).any(|n| n.kind() == kind || has_kind(n, kind, depth + 1))
+}
+
+fn is_gpos(kind: Kind) -> bool {
+    use Kind::*;
+    matches!(kind, GposType1 | GposType2 | GposType3 | GposType4 | GposType5 | GposType6 | GposType7 | GposType8 | GposIgnore)
 }
 
 fn is_glyph_item(kind: Kind) -> bool {

@@ -359,3 +359,19 @@ fn colours_outside_the_palettes_are_added_to_them() {
         .unwrap();
     assert_eq!(palettes.items.first().and_then(Value::as_array).map(|p| p.items.len()), Some(4));
 }
+
+#[test]
+fn a_layer_glyph_box_is_measured_once_while_a_scope_is_open() {
+    let font = plain();
+    let m = master(&font);
+    // The box moves with an even scale and a translation exactly.
+    assert_eq!(bounds(&font, &m, "a.color0", &[2.0, 0.0, 0.0, 2.0, 10.0, 20.0]), Some([210.0, 20.0, 610.0, 1420.0]));
+    let _scope = Scope::enter();
+    for k in 0..1_000 {
+        let moved = [1.0, 0.0, 0.0, 1.0, f64::from(k), 0.0];
+        assert_eq!(bounds(&font, &m, "a.color0", &moved), Some([100.0 + f64::from(k), 0.0, 300.0 + f64::from(k), 700.0]));
+    }
+    let (entries, spent) = BOXES.with(|b| b.borrow().as_ref().map(|b| (b.cache.len(), MAX_BOX_SEGMENTS - b.left)).unwrap());
+    assert_eq!(entries, 1, "one glyph in one master");
+    assert!(spent < 10, "the outline was measured once: {spent} segments charged");
+}

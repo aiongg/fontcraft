@@ -33,7 +33,13 @@
 //! from it carry a mark in their UFO data, so the writer puts them back in the list rather than
 //! in UFO layers, as long as each still holds one component of a glyph of the font, unmoved for a
 //! palette layer.
+//!
+//! Gradients need the box of their layer glyph's outline. While a [`Scope`] is open each box is
+//! measured once per glyph and master, and the measuring shares [`MAX_BOX_SEGMENTS`]; the reader
+//! and the writer's entry points open one.
 
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use fontcraft_model::{
@@ -63,6 +69,51 @@ const DEFAULT_FILL: [f64; 4] = [0.5, 0.5, 0.5, 1.0];
 const IDENTITY: [f64; 6] = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
 /// Numbers the check by writing takes as equal: nine significant digits.
 const TOLERANCE: f64 = 1e-9;
+/// Most outline segments the boxes measured while one [`Scope`] is open may hold together.
+pub(crate) const MAX_BOX_SEGMENTS: usize = 1 << 24;
+
+/// The boxes of layer glyphs measured while a [`Scope`] is open.
+struct Boxes {
+    /// (font address, glyph, master) → the untransformed box: `None` when the outline cannot be
+    /// made, `Some(None)` when it has no segment.
+    cache: HashMap<(usize, String, String), Option<Option<[f64; 4]>>>,
+    left: usize,
+}
+
+thread_local! {
+    static BOXES: RefCell<Option<Boxes>> = const { RefCell::new(None) };
+}
+
+/// Keeps the measured boxes of layer glyphs until dropped. Open one around work on a whole font
+/// that does not change its outlines; scopes may nest, and the outermost one owns the boxes.
+pub(crate) struct Scope {
+    outer: bool,
+}
+
+impl Scope {
+    pub(crate) fn enter() -> Scope {
+        let outer = BOXES.with(|b| match b.try_borrow_mut() {
+            Ok(mut b) if b.is_none() => {
+                *b = Some(Boxes { cache: HashMap::new(), left: MAX_BOX_SEGMENTS });
+                true
+            }
+            _ => false,
+        });
+        Scope { outer }
+    }
+}
+
+impl Drop for Scope {
+    fn drop(&mut self) {
+        if self.outer {
+            BOXES.with(|b| {
+                if let Ok(mut b) = b.try_borrow_mut() {
+                    *b = None;
+                }
+            });
+        }
+    }
+}
 
 /// fontTools' `PaintFormat` numbers.
 mod format {
@@ -114,6 +165,7 @@ pub(crate) fn listed<'a>(font: &Font, l: &'a Layer) -> Option<Item<'a>> {
 /// Whether the writer writes master `master`'s list from its layers ([`value`]): some layer of it
 /// is listed, and its user data holds no list of another form than a dictionary.
 pub(crate) fn writes_list(font: &Font, master: &Master) -> bool {
+    let _boxes = Scope::enter();
     master.user_data.get(COLOR_LAYERS).is_none_or(|v| v.as_dict().is_some())
         && font.glyphs.iter().any(|g| g.layers.iter().any(|l| l.master == master.id && listed(font, l).is_some()))
 }
@@ -123,6 +175,7 @@ pub(crate) fn writes_list(font: &Font, master: &Master) -> bool {
 /// palettes, numbered from `base` (the length of the master's first palette). `None` when it has
 /// no listed layers.
 pub(crate) fn value(font: &Font, master: &Master, base: usize) -> Option<(Value, Vec<[f64; 4]>)> {
+    let _boxes = Scope::enter();
     let mut d = match master.user_data.get(COLOR_LAYERS) {
         None => Dict::new(),
         Some(Value::Dict(d)) => match Value::Dict(d.clone()).without_spellings() {
@@ -186,6 +239,7 @@ fn close_at(a: &Value, b: &Value, depth: usize) -> bool {
 /// What the list leaves out of the full-colour layers it holds, one line per kind with the
 /// number of layers.
 pub(crate) fn losses(font: &Font) -> Vec<String> {
+    let _boxes = Scope::enter();
     let (mut added, mut other) = (0usize, 0usize);
     for l in font.glyphs.iter().flat_map(|g| g.layers.iter()) {
         let Some(Item::Paint(c)) = listed(font, l) else { continue };
@@ -224,6 +278,8 @@ pub(crate) fn losses(font: &Font) -> Vec<String> {
 /// Turns the entries of each master's list into colour layers, where the writer gives the entry
 /// back; the other entries stay user data.
 pub(crate) fn read(font: &mut Font) {
+    // Adding colour layers leaves the master layers, and so the outlines, as they are.
+    let _boxes = Scope::enter();
     let lists: Vec<(String, Dict)> =
         font.masters.iter().filter_map(|m| m.user_data.get(COLOR_LAYERS).and_then(Value::as_dict).map(|d| (m.id.clone(), d.clone()))).collect();
     for (master, list) in lists {
@@ -746,25 +802,60 @@ fn near(a: f64, b: f64) -> bool {
     (a - b).abs() <= TOLERANCE * a.abs().max(b.abs()).max(1.0)
 }
 
-/// The box of `glyph`'s outline in `master` moved by `m`, curve extremes included (as the
-/// compiler measures a layer glyph): `[x0, y0, x1, y1]`, all 0 without an outline.
+/// The box of `glyph`'s outline in `master` moved by `m`, which only moves and scales evenly,
+/// curve extremes included (as the compiler measures a layer glyph): `[x0, y0, x1, y1]`, all 0
+/// without an outline.
 fn bounds(font: &Font, master: &str, glyph: &str, m: &[f64; 6]) -> Option<[f64; 4]> {
-    let path = font.outline(glyph, master).ok()?;
-    let [m0, m1, m2, m3, m4, m5] = *m;
-    let apply = |x: f64, y: f64| (m0 * x + m2 * y + m4, m1 * x + m3 * y + m5);
+    let (s, dx, dy) = even_scale(m)?;
+    let Some([x0, y0, x1, y1]) = glyph_box(font, master, glyph)? else { return Some([0.0; 4]) };
+    let out = [s * x0 + dx, s * y0 + dy, s * x1 + dx, s * y1 + dy];
+    out.iter().all(|v| v.is_finite()).then_some(out)
+}
+
+/// The untransformed box of `glyph`'s outline in `master`, from the open [`Scope`]'s boxes when
+/// there is one; `None` when the outline cannot be made or the scope's budget is spent.
+fn glyph_box(font: &Font, master: &str, glyph: &str) -> Option<Option<[f64; 4]>> {
+    let key = (std::ptr::from_ref(font) as usize, glyph.to_string(), master.to_string());
+    let open = BOXES.with(|b| b.try_borrow().ok().and_then(|b| b.as_ref().map(|b| (b.cache.get(&key).copied(), b.left))));
+    match open {
+        None => measure(font, master, glyph).0,
+        Some((Some(hit), _)) => hit,
+        Some((None, 0)) => None,
+        Some((None, _)) => {
+            let (value, cost) = measure(font, master, glyph);
+            BOXES.with(|b| {
+                if let Ok(mut b) = b.try_borrow_mut()
+                    && let Some(b) = b.as_mut()
+                {
+                    b.left = b.left.saturating_sub(cost);
+                    b.cache.insert(key, value);
+                }
+            });
+            value
+        }
+    }
+}
+
+/// The untransformed box of `glyph`'s outline in `master` and the segments it took.
+fn measure(font: &Font, master: &str, glyph: &str) -> (Option<Option<[f64; 4]>>, usize) {
+    let Ok(path) = font.outline(glyph, master) else { return (None, 1) };
     let mut out: Option<[f64; 4]> = None;
+    let mut segments = 1usize;
     for seg in path.segments() {
+        segments += 1;
         let cubic = seg.to_cubic();
-        let p = [cubic.p0, cubic.p1, cubic.p2, cubic.p3].map(|p| apply(p.x, p.y));
-        let (lx, hx) = extremes(p.map(|p| p.0));
-        let (ly, hy) = extremes(p.map(|p| p.1));
+        let p = [cubic.p0, cubic.p1, cubic.p2, cubic.p3];
+        let (lx, hx) = extremes(p.map(|p| p.x));
+        let (ly, hy) = extremes(p.map(|p| p.y));
         out = Some(match out {
             None => [lx, ly, hx, hy],
             Some([a, b, c, d]) => [a.min(lx), b.min(ly), c.max(hx), d.max(hy)],
         });
     }
-    let out = out.unwrap_or([0.0; 4]);
-    out.iter().all(|v| v.is_finite()).then_some(out)
+    if out.is_some_and(|b| !b.iter().all(|v| v.is_finite())) {
+        return (None, segments);
+    }
+    (Some(out), segments)
 }
 
 /// The lowest and highest value of one coordinate of a cubic Bézier over 0..1.

@@ -228,6 +228,7 @@ fn min_max(m: &mut MinMax, s: Scaler) -> Result<()> {
 }
 
 pub(super) fn scale_base(data: &[u8], s: Scaler) -> Result<Vec<u8>> {
+    crate::layout_budget::check_base(data)?;
     let read = read_fonts::tables::base::Base::read(FontData::new(data)).map_err(|e| damaged("BASE", e))?;
     let mut base: Base = read.to_owned_table();
     for axis in [base.horiz_axis.as_mut(), base.vert_axis.as_mut()].into_iter().flatten() {

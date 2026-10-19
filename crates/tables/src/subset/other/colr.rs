@@ -712,6 +712,10 @@ fn clip_boxes(colr: &Colr<'_>, plan: &Plan) -> Result<Option<BTreeMap<u16, Vec<u
     for i in 0..count {
         let r = at + 5 + 7 * i;
         let (start, end) = (d.u16(r)?, d.u16(r + 2)?);
+        // A clip whose first glyph comes after its last covers no glyph, as in fontTools.
+        if start > end {
+            continue;
+        }
         let boxed = at + u24(d, r + 4)?;
         let len = if d.u8(boxed)? == 2 { 13 } else { 9 };
         let bytes = d.slice(boxed, len)?;

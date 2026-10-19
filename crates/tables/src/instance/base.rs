@@ -43,6 +43,7 @@ pub(super) fn full(font: &mut SfntFont, coords: &[f64]) -> Result<()> {
 /// without, the devices and the store go.
 pub(super) fn apply(font: &mut SfntFont, deltas: &StoreDeltas, store: Option<ItemVariationStore>) -> Result<()> {
     let Some(data) = font.get(*b"BASE") else { return Ok(()) };
+    crate::layout_budget::check_base(data)?;
     let read = read_fonts::tables::base::Base::read(FontData::new(data)).map_err(|e| bad(format!("the BASE table cannot be read: {e}")))?;
     let mut base: Base = read.to_owned_table();
     let keep = store.is_some();

@@ -1229,7 +1229,8 @@ impl<'a> Writer<'a> {
                 }
                 calls.entry(*pos).or_default().push(*li);
             }
-            let ignore = rule.records.is_empty();
+            // A rule left with no call (its records named nothing that exists) does what `ignore` says.
+            let ignore = calls.is_empty();
             let mut line = Line::new(1, vec![Piece::Text(if ignore { format!("ignore {kw}") } else { kw.to_string() })]);
             for set in rule.back {
                 line.pieces.push(Piece::Text(" ".into()));

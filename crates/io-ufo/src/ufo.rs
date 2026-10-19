@@ -1121,6 +1121,8 @@ fn sorted(mut v: Vec<String>) -> Vec<String> {
 
 /// The files of one master's UFO.
 pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
+    // Colour layers in the list are measured once for the whole walk.
+    let _boxes = crate::colorkeys::Scope::enter();
     let (master, default) = (target.master, target.default);
     let mut out = Files::new();
     let version = font.source.ufo_version.unwrap_or(3);
@@ -1833,6 +1835,8 @@ pub(crate) fn glyph_losses(font: &Font) -> Vec<String> {
 /// are not counted here. A designspace (`designspace`) also holds alternate layers, as glyphs of
 /// their own, and intermediate layers' coordinates, as sparse sources.
 pub(crate) fn layer_losses(font: &Font, files: FilesFrom) -> Vec<String> {
+    // Colour layers in the list are measured once for the whole walk.
+    let _boxes = crate::colorkeys::Scope::enter();
     let designspace = files == FilesFrom::Designspace;
     use fontcraft_model::{Background, Image, LayerInfo};
     let unfiled = |i: &Option<Image>| i.as_ref().is_some_and(|i| i.path.is_none());
@@ -1946,6 +1950,8 @@ pub(crate) fn layer_losses(font: &Font, files: FilesFrom) -> Vec<String> {
 /// ([`crate::shapekeys`]), one line per kind with the number of objects that have it, in the
 /// layers a UFO holds (a designspace's: alternate layers too).
 pub(crate) fn shape_losses(font: &Font, designspace: bool) -> Vec<String> {
+    // Colour layers in the list are measured once for the whole walk.
+    let _boxes = crate::colorkeys::Scope::enter();
     use fontcraft_model::Shape;
     let mut counts = [0usize; SHAPE_LOSSES.len()];
     let ufo2 = font.source.ufo_version == Some(2);
@@ -2167,6 +2173,8 @@ pub(crate) fn braced_coordinates(name: &str) -> Option<Vec<f64>> {
 /// designspace (`designspace`) holds alternate layers, as glyphs of their own and rules, in a
 /// font with axes.
 pub fn layers_left_out(font: &Font, designspace: bool) -> usize {
+    // Colour layers in the list are measured once for the whole walk.
+    let _boxes = crate::colorkeys::Scope::enter();
     let layer_master = |id: &str| font.masters.iter().any(|m| m.id == id && m.extra.get(Family::Designspace, "layer").is_some());
     font.glyphs
         .iter()

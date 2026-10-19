@@ -118,7 +118,7 @@ pub(super) fn rewrite_width(cs: &[u8], from: (f64, f64), to: (f64, f64)) -> Resu
     };
     let mut out = Vec::with_capacity(cs.len() + 5);
     if width != to.0 {
-        encode_number(width - to.1, &mut out);
+        encode_number(width - to.1, &mut out)?;
     }
     out.extend_from_slice(rest);
     Ok(out)
@@ -159,8 +159,8 @@ pub(super) fn width_operand(cs: &[u8]) -> Result<Option<(f64, usize)>> {
 }
 
 /// A charstring number in fontTools' encoding: a 16-bit integer in its shortest form, anything
-/// else as 16.16 fixed point.
-fn encode_number(v: f64, out: &mut Vec<u8>) {
+/// else as 16.16 fixed point. A number 16.16 cannot hold is refused, as fontTools refuses it.
+fn encode_number(v: f64, out: &mut Vec<u8>) -> Result<()> {
     if v.fract() == 0.0 && (-32768.0..=32767.0).contains(&v) {
         let i = v as i32;
         match i {
@@ -173,10 +173,14 @@ fn encode_number(v: f64, out: &mut Vec<u8>) {
             }
         }
     } else {
-        let fixed = (v * 65536.0).round().clamp(f64::from(i32::MIN), f64::from(i32::MAX)) as i32;
+        let fixed = (v * 65536.0).round();
+        if !(f64::from(i32::MIN)..=f64::from(i32::MAX)).contains(&fixed) {
+            return Err(TablesError::invalid(format!("a glyph width operand of {v} is outside the range a charstring number holds")));
+        }
         out.push(255);
-        out.extend_from_slice(&fixed.to_be_bytes());
+        out.extend_from_slice(&(fixed as i32).to_be_bytes());
     }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -205,12 +209,24 @@ mod tests {
     fn numbers_take_fonttools_encodings() {
         let enc = |v: f64| {
             let mut out = Vec::new();
-            encode_number(v, &mut out);
+            encode_number(v, &mut out).unwrap();
             out
         };
         assert_eq!(enc(0.0), [139]);
         assert_eq!(enc(-1131.0), [254, 255]);
         assert_eq!(enc(1132.0), [28, 0x04, 0x6C]);
         assert_eq!(enc(0.5), [255, 0, 0, 0x80, 0]);
+        assert_eq!(enc(-32768.0), [28, 0x80, 0]);
+        assert_eq!(enc(32767.5), [255, 0x7F, 0xFF, 0x80, 0]);
+    }
+
+    #[test]
+    fn a_width_operand_past_16_16_is_refused() {
+        // A width of 20,000 against a new nominal of -20,000: an operand of 40,000.
+        let bare = [139 + 50, 22, 14];
+        let err = rewrite_width(&bare, (20_000.0, 0.0), (0.0, -20_000.0)).unwrap_err().to_string();
+        assert!(err.contains("40000"), "{err}");
+        let mut out = Vec::new();
+        assert!(encode_number(-32768.5, &mut out).is_err() && out.is_empty());
     }
 }

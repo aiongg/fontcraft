@@ -11,8 +11,10 @@
 //! One record is written per run of consecutive output glyphs.
 //!
 //! The XML reader is a small one of our own: elements, attributes, text, CDATA, comments,
-//! processing instructions and a doctype; nesting is capped by [`MAX_SVG_DEPTH`] and the
-//! reference closure by [`MAX_SVG_WORK`]. Documents compressed with gzip are refused.
+//! processing instructions and a doctype; nesting is capped by [`MAX_SVG_DEPTH`]. Each document
+//! is read once however many records point to it, and the work of all records together is
+//! capped by [`MAX_SVG_WORK`]. Documents compressed with gzip are refused. A record whose first
+//! glyph comes after its last covers no glyph, as in fontTools.
 
 use std::collections::{HashMap, HashSet};
 
@@ -22,8 +24,11 @@ use crate::{Result, TablesError};
 
 /// Deepest element nesting read.
 pub const MAX_SVG_DEPTH: usize = 256;
-/// Most element visits the reference closure of one document may make.
-pub const MAX_SVG_WORK: usize = 1 << 24;
+/// Most node visits the subsetting of the whole table may make: each record's pass over its
+/// document plus its reference closure.
+pub const MAX_SVG_WORK: usize = 1 << 26;
+/// Most bytes of subset documents the output may hold.
+pub const MAX_SVG_OUTPUT: usize = 1 << 27;
 
 fn bad(what: &str) -> TablesError {
     TablesError::invalid(format!("an SVG document cannot be read: {what}"))
@@ -311,10 +316,17 @@ pub(crate) fn subset(plan: &Plan, bytes: &[u8]) -> Result<Option<Vec<u8>>> {
     let mut records: Vec<(u16, u16, usize)> = Vec::new();
     let mut docs: Vec<Vec<u8>> = Vec::new();
     let mut doc_index: HashMap<Vec<u8>, usize> = HashMap::new();
+    let mut parsed: HashMap<(usize, usize), Parsed<'_>> = HashMap::new();
+    let mut work = MAX_SVG_WORK;
+    let mut written = 0usize;
     for i in 0..count {
         let r = list + 2 + 12 * i;
         let (start, end) = (d.u16(r)?, d.u16(r + 2)?);
-        let doc = d.slice(list + d.u32_usize(r + 4)?, d.u32_usize(r + 8)?)?;
+        if start > end {
+            continue;
+        }
+        let place = (list + d.u32_usize(r + 4)?, d.u32_usize(r + 8)?);
+        let doc = d.slice(place.0, place.1)?;
         let gids: Vec<u32> = plan.glyphs.range(u32::from(start)..=u32::from(end)).copied().collect();
         if gids.is_empty() {
             continue;
@@ -322,10 +334,18 @@ pub(crate) fn subset(plan: &Plan, bytes: &[u8]) -> Result<Option<Vec<u8>>> {
         if doc.starts_with(&[0x1F, 0x8B]) {
             return Err(TablesError::Unsupported("subsetting gzip-compressed SVG documents".into()));
         }
-        let Some(text) = subset_doc(plan, doc, &gids)? else { continue };
+        let parsed = match parsed.entry(place) {
+            std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),
+            std::collections::hash_map::Entry::Vacant(e) => e.insert(Parsed::new(doc)?),
+        };
+        let Some(text) = subset_doc(plan, parsed, &gids, &mut work)? else { continue };
         let index = match doc_index.get(&text) {
             Some(i) => *i,
             None => {
+                written = written.saturating_add(text.len());
+                if written > MAX_SVG_OUTPUT {
+                    return Err(TablesError::TooLarge { what: "the subset SVG documents", limit: MAX_SVG_OUTPUT });
+                }
                 doc_index.insert(text.clone(), docs.len());
                 docs.push(text);
                 docs.len() - 1
@@ -373,27 +393,47 @@ pub(crate) fn subset(plan: &Plan, bytes: &[u8]) -> Result<Option<Vec<u8>>> {
     Ok(Some(out))
 }
 
-/// The document `src` keeping glyphs `gids` (input ids); `None` when nothing is left.
-fn subset_doc(plan: &Plan, src: &[u8], gids: &[u32]) -> Result<Option<Vec<u8>>> {
-    let doc = Doc::parse(src)?;
-    let mut elements: HashMap<&[u8], usize> = HashMap::new();
-    let mut all = vec![doc.root];
-    doc.descendants(doc.root, &mut all);
-    for e in &all {
-        if let Some(id) = doc.id(*e) {
-            elements.insert(id, *e);
+/// A document read once, with its elements by id.
+struct Parsed<'a> {
+    doc: Doc<'a>,
+    elements: HashMap<&'a [u8], usize>,
+}
+
+impl<'a> Parsed<'a> {
+    fn new(src: &'a [u8]) -> Result<Self> {
+        let doc = Doc::parse(src)?;
+        let mut elements: HashMap<&'a [u8], usize> = HashMap::new();
+        let mut all = vec![doc.root];
+        doc.descendants(doc.root, &mut all);
+        for e in &all {
+            if let Some(id) = doc.id(*e) {
+                elements.insert(id, *e);
+            }
         }
+        Ok(Parsed { doc, elements })
     }
+}
+
+fn charge(work: &mut usize, visits: usize) -> Result<()> {
+    *work = work.checked_sub(visits).ok_or(TablesError::TooLarge { what: "the SVG subsetting work", limit: MAX_SVG_WORK })?;
+    Ok(())
+}
+
+/// The document of `parsed` keeping glyphs `gids` (input ids); `None` when nothing is left.
+fn subset_doc(plan: &Plan, parsed: &Parsed<'_>, gids: &[u32], work: &mut usize) -> Result<Option<Vec<u8>>> {
+    let Parsed { doc, elements } = parsed;
+    let src = doc.src;
+    // The pruning, renaming and writing passes each visit the nodes once.
+    charge(work, doc.nodes.len())?;
 
     // The ids to keep: the glyphs', then everything they reference.
     let mut keep: HashSet<Vec<u8>> = gids.iter().map(|g| format!("glyph{g}").into_bytes()).collect();
     let mut todo: Vec<Vec<u8>> = keep.iter().cloned().collect();
-    let mut work = MAX_SVG_WORK;
     while let Some(id) = todo.pop() {
         let Some(e) = elements.get(id.as_slice()) else { continue };
         let mut under = vec![*e];
         doc.descendants(*e, &mut under);
-        work = work.checked_sub(under.len()).ok_or(TablesError::TooLarge { what: "the SVG reference closure", limit: MAX_SVG_WORK })?;
+        charge(work, under.len())?;
         let mut refs = Vec::new();
         for (k, n) in under.into_iter().enumerate() {
             if let Some(el) = doc.elem(n)
@@ -411,7 +451,7 @@ fn subset_doc(plan: &Plan, src: &[u8], gids: &[u32]) -> Result<Option<Vec<u8>>> 
 
     // Mark what goes: every node not on the way to a kept id, outside a kept subtree.
     let mut removed = vec![false; doc.nodes.len()];
-    if !prune(&doc, doc.root, &keep, &mut removed, 0) {
+    if !prune(doc, doc.root, &keep, &mut removed, 0) {
         return Ok(None);
     }
 
@@ -419,7 +459,7 @@ fn subset_doc(plan: &Plan, src: &[u8], gids: &[u32]) -> Result<Option<Vec<u8>>> 
     let mut edits: HashMap<(usize, usize), Vec<u8>> = HashMap::new();
     if !plan.options.retain_gids {
         let mut kept = vec![doc.root];
-        descendants_kept(&doc, doc.root, &removed, &mut kept);
+        descendants_kept(doc, doc.root, &removed, &mut kept);
         let ids: HashSet<&[u8]> = kept.iter().filter_map(|e| doc.id(*e)).collect();
         let mut renamed: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
         for e in &kept {
@@ -457,7 +497,7 @@ fn subset_doc(plan: &Plan, src: &[u8], gids: &[u32]) -> Result<Option<Vec<u8>>> 
     }
 
     let mut out = Vec::with_capacity(src.len());
-    write(&doc, doc.root, &removed, &edits, &mut out);
+    write(doc, doc.root, &removed, &edits, &mut out);
     Ok(Some(out))
 }
 
