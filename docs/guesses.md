@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**2336 guesses on 1391 rows (572 of them live commands).**
+**2346 guesses on 1395 rows (576 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -1796,6 +1796,9 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `dump` (cli) | M12 | docs | – | The hex form lists each table with a header line, then offset, 16 bytes in two groups of eight and their ASCII, as hexdump -C does; no reference tool settles it. |
 | `dump` (cli) | M12 | docs | – | A dump past 1 GiB of text (the JSON form counting its element tree) stops with an error, and a simple glyph whose contour end points decrease is written as hex with the decompilation error, where ttx would write repeated points; a font that needs more would settle the limit. |
 | `dump` (cli) | M12 | docs | – | A coverage or class definition table whose ranges list more than 10,000,000 glyphs, or layout subtables nested so deep that their elements would pass 64 levels (extension lookups pointing at extension lookups), make the table be written as hex with the decompilation error, where ttx writes the glyphs in full and fails on the nesting; a font that needs more would settle the limits. |
+| `dump` (cli) | M12 | docs | – | A component bitmap (EBDT image formats 8 and 9) is written as ebdtComponent elements with the glyph name and the x and y offsets, which is what the ttx 4.66 code means to write but stops with an error on; a fixed ttx would settle it. |
+| `dump` (cli) | M12 | docs | – | A bitmap data table holding a glyph that cannot be read is written as hex with the decompilation error, and a trak table in a font without a name table is written without the name comments, where ttx stops with an error on both; a fixed ttx would settle them. |
+| `dump` (cli) | M12 | docs | – | A COLR clip list or an AAT lookup whose glyph ranges add up to more than 10,000,000 glyphs, a bitmap location table listing more than 10,000,000 glyphs, or a trak table with more than 10,000,000 per-size values make the table be written as hex with the decompilation error, where ttx writes it in full; a font that needs more would settle the limits. |
 | `tables copy` (cli) | M12 | inferred | – | Copying a table the target already has replaces it without a prompt, as tables add does; a test against the reference workflow (sfntedit extract then add) shows the same result. |
 | `tables import` (cli) | M12 | docs | – | Without -o or --in-place the result is written beside the input as FONT.edited.EXT, as the other tables actions do; the reference tool writes FONT#1.EXT beside the input, and a user of the reference command line would settle which to follow. |
 | `glyphs rename` (cli) | M12 | docs | – | Names a GOADB or map lists that the font lacks are reported as missing, not refused, since one GOADB serves a whole family. Settled by running tx -gf with a GOADB that names an absent glyph. |
@@ -1900,6 +1903,13 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `path.eraseOpenCorners` | M12 | inferred | yes | A corner counts only when the crossing lies in the later half of the first segment and the earlier half of the second, so the part dropped is the smaller one; watching the reference's Erase Open Corners on a corner with a long loop would settle it. |
 | `path.eraseOpenCorners` | M12 | inferred | yes | The new corner node and the handles of the split curves are rounded to the font's grid; checking the coordinates the reference writes after erasing a corner on a curve would settle it. |
 | `component.flatten` | M12 | inferred | yes | The flattened components keep the inner components' settings but have automatic alignment off, so the drawn outline cannot move; comparing with the reference's flatten filter output on an automatically aligned composite would settle it. |
+| `tables.recalculate` | M12 | inferred | yes | A monospaced font gets PANOSE proportion 9 (family kind 2) or spacing 3 (kinds 3 and 5), and a proportional font with proportion 9 gets 0; comparing with what a reference fixer writes on the same fonts would settle it. |
+| `tables.recalculate` | M12 | inferred | yes | Code page bits 30 and 31 keep their stored values while the others are recomputed from the cmap, since the check does not compare them either; a reference fixer's output would settle it. |
+| `tables.recalculate` | M12 | inferred | yes | Smart dropout control is appended to the end of an existing prep program; a hinting tool's fix of the same font would settle whether it goes first. |
+| `tables.cleanNameRecords` | M12 | inferred | yes | The PostScript name records take the CFF font name when the font has one, else the Windows English record; a reference fixer's choice on a font whose names disagree would settle it. |
+| `tables.rebuildCmap` | M12 | inferred | yes | Macintosh and other non-Unicode subtables are left out of the rebuilt table, as current compilers write it; a reference fixer's output on a font with a Mac Roman subtable would settle it. |
+| `tables.cleanInstances` | M12 | inferred | yes | Instances are sorted by the other axes in axis order, then by weight, so weights rise within each group; a reference fixer's order on a two-axis font would settle it. |
+| `tables.cleanInstances` | M12 | inferred | yes | When some records lack a PostScript name (0xFFFF), the PostScript name field is removed from every record rather than names invented; a reference fixer's output would settle it. |
 | `font.info.syncVerticalMetrics` | M12 | inferred | yes | The line gap moves into the ascenders so the hhea line height stays as it was; a reference tool that recommends vertical metrics would settle it. |
 | `font.info.syncVerticalMetrics` | M12 | inferred | yes | winAscent and winDescent take the extremes of all masters, so every instance between them is covered; a reference tool's recommendation would settle it. |
 | `font.instance.syncStyleLinking` | M12 | handbook | yes | An italic style whose Bold flag was set by hand keeps its flag and its link, since the handbook allows linking bolds to other styles; nothing in the reference settles it. |
