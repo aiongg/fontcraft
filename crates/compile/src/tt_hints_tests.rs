@@ -344,3 +344,39 @@ fn autohint_instructs_unhinted_glyphs_and_puts_zone_extremes_on_pixel_rows() {
     let manual = compile_ttf(&hinted_font(), &options).unwrap();
     assert!(manual.warnings.iter().any(|w| w.contains("replaced the manual instructions")), "{:?}", manual.warnings);
 }
+
+/// [`hinted_font`] with glyphs `I` and `J`, plain rectangles holding their own programs.
+fn with_own_programs(i: &str, j: &str) -> Font {
+    let mut f = hinted_font();
+    for (name, text) in [("I", i), ("J", j)] {
+        let mut g = f.glyph_mut(name).unwrap();
+        g.layers[0].width = 300.0;
+        g.layers[0].shapes.push(Shape::Path(Path::rect(100.0, 0.0, 200.0, 700.0)));
+        fontcraft_hinting::imported::set_imported_program(&mut g.layers[0], text.into());
+    }
+    f
+}
+
+#[test]
+fn own_programs_are_kept_when_the_instructor_tables_cannot_be_built() {
+    let mut f = with_own_programs("SVTCA[0]", "SVTCA[1]");
+    std::sync::Arc::make_mut(&mut f.info).params.0.push(Param::new(fontcraft_hinting::settings::TTF_ZONES, Value::String(Str::new("bad"))));
+    let out = compile_ttf(&f, &Options::default()).unwrap();
+    assert!(out.warnings.iter().any(|w| w.contains("family TT zones cannot be read")), "{:?}", out.warnings);
+    let font = FontRef::new(&out.bytes).unwrap();
+    assert_eq!(program(&font, gid(&out, "I")), [0x00]);
+    assert_eq!(program(&font, gid(&out, "J")), [0x01]);
+    assert!(program(&font, gid(&out, "o")).is_empty());
+}
+
+#[test]
+fn own_programs_that_need_the_original_font_programs_are_left_out() {
+    let f = with_own_programs("PUSHB[ ] 0\nCALL[ ]", "SVTCA[0]");
+    let out = compile_ttf(&f, &Options::default()).unwrap();
+    assert!(out.warnings.iter().any(|w| w.contains("`I`") && w.contains("left out")), "{:?}", out.warnings);
+    let font = FontRef::new(&out.bytes).unwrap();
+    assert!(program(&font, gid(&out, "I")).is_empty(), "CALL 0 would reach our function 0");
+    assert_eq!(program(&font, gid(&out, "J")), [0x00]);
+    assert!(!program(&font, gid(&out, "o")).is_empty(), "the Instructor hints are still compiled");
+    runs_everywhere(&out.bytes);
+}

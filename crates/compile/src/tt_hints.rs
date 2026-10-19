@@ -24,6 +24,7 @@
 //! A variable font gets the default master's programs without Delta instructions, and no
 //! `cvar` (a warning says so).
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use fontcraft_hinting::control::ControlInstructions;
@@ -231,15 +232,23 @@ pub fn tt_hinting(
         }
         // A glyph's own program wins over its Instructor hints.
         raw = imported_glyph_programs(source, &settings, order, outlines, variable, warnings);
+        let dependent = raw.drop_dependent(order);
+        if !dependent.is_empty() {
+            warnings.push(format!(
+                "the TrueType programs of {} call functions or use the control values or storage of the font programs they were written for, which are not exported without the cvt Table, prep Table Assembly and fpgm Table Assembly parameters, so they were left out",
+                names(&dependent)
+            ));
+        }
+        let raw_gids = raw.gids();
         let overruled: Vec<String> =
-            instructed.iter().filter(|(gid, _)| raw.has(*gid)).filter_map(|(gid, _)| order.get(*gid).map(|g| g.name.clone())).collect();
+            instructed.iter().filter(|(gid, _)| raw_gids.contains(gid)).filter_map(|(gid, _)| order.get(*gid).map(|g| g.name.clone())).collect();
         if !overruled.is_empty() {
             warnings.push(format!(
                 "{} have TrueType instructions of their own, which were written in place of their TrueType Instructor hints",
                 names(&overruled)
             ));
         }
-        instructed.retain(|(gid, _)| !raw.has(*gid));
+        instructed.retain(|(gid, _)| !raw_gids.contains(gid));
         None
     };
     if instructed.is_empty() {
@@ -249,8 +258,9 @@ pub fn tt_hinting(
     let family = match family_tt_zones(source) {
         Ok(z) => z,
         Err(e) => {
-            warnings.push(format!("the family TT zones cannot be read ({e}); the font was written without TrueType hints"));
-            return Ok(None);
+            warnings.push(format!("the family TT zones cannot be read ({e}); its TrueType hints were left out"));
+            // The glyphs' own programs need none of these.
+            return Ok(raw_only(raw, warnings));
         }
     };
     let instance = settings.instance.and_then(|i| source.instances.get(i));
@@ -258,16 +268,18 @@ pub fn tt_hinting(
     let programs: FontPrograms = match fontcraft_hinting::font_programs(&settings, &family, &column) {
         Ok(p) => p,
         Err(e) => {
-            warnings.push(format!("the TrueType font programs cannot be built ({e}); the font was written without TrueType hints"));
-            return Ok(None);
+            warnings.push(format!("the TrueType font programs cannot be built ({e}); its TrueType hints were left out"));
+            // The glyphs' own programs need none of these.
+            return Ok(raw_only(raw, warnings));
         }
     };
     warnings.extend(programs.warnings.iter().cloned());
     let functions = match FunctionTable::from_fpgm(&programs.fpgm) {
         Ok(f) => f,
         Err(e) => {
-            warnings.push(format!("the TrueType font program cannot be read back ({e}); the font was written without TrueType hints"));
-            return Ok(None);
+            warnings.push(format!("the TrueType font program cannot be read back ({e}); its TrueType hints were left out"));
+            // The glyphs' own programs need none of these.
+            return Ok(raw_only(raw, warnings));
         }
     };
     let mut programs = programs;
@@ -469,8 +481,9 @@ fn imported_tables(
     let prep = program(&settings.prep_assembly, "prep Table Assembly", warnings).unwrap_or_default();
     let cvt = settings.cvt.clone().unwrap_or_default();
     let mut imported = imported_glyph_programs(source, settings, order, outlines, variable, warnings);
+    let kept = imported.gids();
     let list: Vec<String> =
-        instructed.iter().filter(|(gid, _)| !imported.has(*gid)).filter_map(|(gid, _)| order.get(*gid).map(|g| g.name.clone())).collect();
+        instructed.iter().filter(|(gid, _)| !kept.contains(gid)).filter_map(|(gid, _)| order.get(*gid).map(|g| g.name.clone())).collect();
     if !list.is_empty() {
         warnings.push(format!(
             "the master carries imported TrueType tables (cvt Table, prep or fpgm Table Assembly), so the manual instructions of {} were not compiled; remove those parameters to export them",
@@ -516,8 +529,25 @@ impl Imported {
         self.glyphs.is_empty() && self.composites.is_empty()
     }
 
-    fn has(&self, gid: usize) -> bool {
-        self.glyphs.iter().any(|(g, _)| *g == gid) || self.composites.iter().any(|(g, _)| *g == gid)
+    fn gids(&self) -> HashSet<usize> {
+        self.glyphs.iter().map(|(g, _)| *g).chain(self.composites.iter().map(|(g, _)| *g)).collect()
+    }
+
+    /// Removes the programs that need the font programs they were written for (see
+    /// [`uses_font_programs`]); answers the names of their glyphs.
+    fn drop_dependent(&mut self, order: &[ResolvedGlyph]) -> Vec<String> {
+        let mut dropped = Vec::new();
+        let mut keep = |gid: usize, program: &[u8]| {
+            let independent = !uses_font_programs(program);
+            if !independent && let Some(g) = order.get(gid) {
+                dropped.push(g.name.clone());
+            }
+            independent
+        };
+        self.glyphs.retain(|(gid, g)| keep(*gid, &g.instructions));
+        self.composites.retain(|(gid, p)| keep(*gid, p));
+        dropped.sort();
+        dropped
     }
 
     fn programs(&self) -> impl Iterator<Item = &Vec<u8>> {
@@ -534,6 +564,15 @@ fn merge_program_limits(limits: &mut ProgramLimits, imported: &Imported, functio
         }
         limits.max_size_of_instructions = limits.max_size_of_instructions.max(u16::try_from(p.len()).unwrap_or(u16::MAX));
     }
+}
+
+/// Does a glyph program reach state that `fpgm`, `prep` and `cvt ` set up: a function call
+/// (CALL, LOOPCALL), the control values (RCVT, WCVTP, WCVTF, MIAP, MIRP, DELTAC1–3) or storage
+/// (RS)? A program that cannot be decoded, or whose analysis cannot follow it, counts as one.
+fn uses_font_programs(program: &[u8]) -> bool {
+    let Ok(list) = fontcraft_ttasm::decode(program) else { return true };
+    list.iter().any(|i| matches!(i.opcode, 0x2A | 0x2B | 0x3E | 0x3F | 0x43 | 0x44 | 0x45 | 0x70 | 0x73..=0x75 | 0xE0..=0xFF))
+        || analyse(program, &FunctionTable::default()).map_or(true, |l| l.uncertain)
 }
 
 /// The hinting of a font whose only programs are its glyphs' own: no `cvt `, `fpgm` or `prep`.

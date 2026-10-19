@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**2319 guesses on 1386 rows (572 of them live commands).**
+**2320 guesses on 1386 rows (572 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -2270,6 +2270,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `edit.pasteAfter` | M13 | docs | yes | Each copied glyph gives its layer of the target's master (by id, else by name, else the master shown when copying), as edit.paste matches masters. |
 | `hint.tt.editInstructions` | M13 | docs | yes | The command has no menu item, since the app has no Hints menu; it runs from the command search, the console and agents. Adding a Hints menu would settle where it goes. |
 | `hint.tt.setAssembly` | M13 | docs | yes | Without `master`, fpgm and prep text goes to every master and the font-level parameter is removed, as opening a hinted font stores them on every master; the secondary reference has a single font, so nothing settles it there. |
+| `hint.tt.setAssembly` | M13 | docs | yes | Without the cvt Table, prep Table Assembly and fpgm Table Assembly parameters, a glyph program that needs font programs is left out rather than written against FontCraft's own fpgm and cvt; an export from the secondary reference of a glyph program that calls a function, with no font programs set, would settle it. |
 | `hint.tt.setAssembly` | M13 | docs | yes | Text that assembles to no bytes removes the program instead of storing an empty one; an empty program and none export the same. |
 | `hint.tt.setAssembly` | M13 | docs | yes | Arguments written after an instruction are pushed in the order written, so the last ends on top of the stack; the secondary reference's documentation does not give the order, and its dialog would settle it. |
 | `hint.tt.debugStep` | M13 | docs | yes | A step is one instruction of the glyph program or of a function it calls, and the font and control value programs run without stops; the secondary reference's debugger would settle whether it steps through prep as well. |
