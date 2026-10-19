@@ -361,6 +361,15 @@ impl<'a> Compiler<'a> {
             None
         };
         for f in fields {
+            if let Rep::Fixed(n) = f.rep {
+                // An array of a fixed length (the `bsln` deltas and control points) must have it.
+                let items = Self::matching(f, e);
+                if items.len() != n {
+                    return Err(bad(format!("the table '{class}' has {} '{}' values, not {n}", items.len(), f.name)));
+                }
+                self.array(class, f, &items, e, node, state, &counts, depth)?;
+                continue;
+            }
             if f.name == "StructLength" {
                 let slot = self.graph.slot(None);
                 let size = if matches!(f.ty, Ty::Count16 | Ty::U16) { 2 } else { 4 };
