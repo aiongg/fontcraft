@@ -83,9 +83,7 @@ pub(super) fn instantiate_layout(font: &mut SfntFont, coords: &[f64]) -> Result<
         if deltas.is_some() || has_variations {
             let mut gpos: Gpos = read.to_owned_table();
             if let Some(deltas) = &deltas {
-                for lookup in gpos.lookup_list.lookups.iter_mut() {
-                    lookup_deltas(lookup, deltas);
-                }
+                apply_gpos(&mut gpos, Fold { deltas, keep_devices: false });
             }
             resolve_feature_variations(&mut gpos.feature_list, &mut gpos.feature_variations, coords);
             let bytes = write_fonts::dump_table(&gpos).map_err(|e| bad(format!("the GPOS table could not be written again: {e}")))?;
@@ -130,7 +128,7 @@ fn device_delta(device: &NullableOffsetMarker<DeviceOrVariationIndex>, deltas: &
     }
 }
 
-fn apply_record(r: &mut ValueRecord, deltas: &StoreDeltas) -> bool {
+fn apply_record(r: &mut ValueRecord, fold: Fold<'_>) -> bool {
     let mut changed = false;
     let pairs: [(&mut Option<i16>, &mut NullableOffsetMarker<DeviceOrVariationIndex>); 4] = [
         (&mut r.x_placement, &mut r.x_placement_device),
@@ -139,9 +137,11 @@ fn apply_record(r: &mut ValueRecord, deltas: &StoreDeltas) -> bool {
         (&mut r.y_advance, &mut r.y_advance_device),
     ];
     for (value, device) in pairs {
-        if let Some(d) = device_delta(device, deltas) {
+        if let Some(d) = device_delta(device, fold.deltas) {
             *value = Some(clamp_i16(f64::from(value.unwrap_or(0)) + d));
-            *device = NullableOffsetMarker::new(None);
+            if !fold.keep_devices {
+                *device = NullableOffsetMarker::new(None);
+            }
             changed = true;
         }
     }
@@ -169,7 +169,7 @@ fn fields(record: &ValueRecord) -> ValueFormat {
 }
 
 /// Applies the deltas to every record of one subtable and gives them the union of their fields.
-fn apply_records<'r>(records: impl Iterator<Item = &'r mut ValueRecord>, deltas: &StoreDeltas) {
+fn apply_records<'r>(records: impl Iterator<Item = &'r mut ValueRecord>, deltas: Fold<'_>) {
     let mut records: Vec<&mut ValueRecord> = records.collect();
     let mut changed = false;
     for r in records.iter_mut() {
@@ -183,7 +183,22 @@ fn apply_records<'r>(records: impl Iterator<Item = &'r mut ValueRecord>, deltas:
     }
 }
 
-fn lookup_deltas(lookup: &mut PositionLookup, d: &StoreDeltas) {
+/// The deltas one pass adds to `GPOS` values, and whether the variation-index devices stay (a
+/// partial instance, whose store still varies them) or go (a full instance).
+#[derive(Clone, Copy)]
+pub(super) struct Fold<'a> {
+    pub deltas: &'a StoreDeltas,
+    pub keep_devices: bool,
+}
+
+/// Adds the rounded delta of every variation-index device in `GPOS` to the value it varies.
+pub(super) fn apply_gpos(gpos: &mut Gpos, fold: Fold<'_>) {
+    for lookup in gpos.lookup_list.lookups.iter_mut() {
+        lookup_deltas(lookup, fold);
+    }
+}
+
+fn lookup_deltas(lookup: &mut PositionLookup, d: Fold<'_>) {
     match lookup {
         PositionLookup::Single(l) => l.subtables.iter_mut().for_each(|s| single(s, d)),
         PositionLookup::Pair(l) => l.subtables.iter_mut().for_each(|s| pair(s, d)),
@@ -208,14 +223,14 @@ fn lookup_deltas(lookup: &mut PositionLookup, d: &StoreDeltas) {
     }
 }
 
-fn single(s: &mut SinglePos, d: &StoreDeltas) {
+fn single(s: &mut SinglePos, d: Fold<'_>) {
     match s {
         SinglePos::Format1(t) => apply_records(std::iter::once(&mut t.value_record), d),
         SinglePos::Format2(t) => apply_records(t.value_records.iter_mut(), d),
     }
 }
 
-fn pair(p: &mut PairPos, d: &StoreDeltas) {
+fn pair(p: &mut PairPos, d: Fold<'_>) {
     match p {
         PairPos::Format1(t) => {
             apply_records(t.pair_sets.iter_mut().flat_map(|set| set.pair_value_records.iter_mut().map(|r| &mut r.value_record1)), d);
@@ -228,17 +243,21 @@ fn pair(p: &mut PairPos, d: &StoreDeltas) {
     }
 }
 
-fn anchor(a: &mut AnchorTable, d: &StoreDeltas) {
+fn anchor(a: &mut AnchorTable, d: Fold<'_>) {
     let AnchorTable::Format3(t) = a else { return };
     let mut changed = false;
-    if let Some(dx) = device_delta(&t.x_device, d) {
+    if let Some(dx) = device_delta(&t.x_device, d.deltas) {
         t.x_coordinate = clamp_i16(f64::from(t.x_coordinate) + dx);
-        t.x_device = NullableOffsetMarker::new(None);
+        if !d.keep_devices {
+            t.x_device = NullableOffsetMarker::new(None);
+        }
         changed = true;
     }
-    if let Some(dy) = device_delta(&t.y_device, d) {
+    if let Some(dy) = device_delta(&t.y_device, d.deltas) {
         t.y_coordinate = clamp_i16(f64::from(t.y_coordinate) + dy);
-        t.y_device = NullableOffsetMarker::new(None);
+        if !d.keep_devices {
+            t.y_device = NullableOffsetMarker::new(None);
+        }
         changed = true;
     }
     if changed && t.x_device.is_none() && t.y_device.is_none() {
@@ -247,26 +266,26 @@ fn anchor(a: &mut AnchorTable, d: &StoreDeltas) {
     }
 }
 
-fn nullable_anchor(a: &mut NullableOffsetMarker<AnchorTable>, d: &StoreDeltas) {
+fn nullable_anchor(a: &mut NullableOffsetMarker<AnchorTable>, d: Fold<'_>) {
     if let Some(a) = a.as_mut() {
         anchor(a, d);
     }
 }
 
-fn cursive(c: &mut CursivePosFormat1, d: &StoreDeltas) {
+fn cursive(c: &mut CursivePosFormat1, d: Fold<'_>) {
     for r in c.entry_exit_record.iter_mut() {
         nullable_anchor(&mut r.entry_anchor, d);
         nullable_anchor(&mut r.exit_anchor, d);
     }
 }
 
-fn marks(records: &mut [MarkRecord], d: &StoreDeltas) {
+fn marks(records: &mut [MarkRecord], d: Fold<'_>) {
     for m in records {
         anchor(&mut m.mark_anchor, d);
     }
 }
 
-fn mark_base(m: &mut MarkBasePosFormat1, d: &StoreDeltas) {
+fn mark_base(m: &mut MarkBasePosFormat1, d: Fold<'_>) {
     marks(&mut m.mark_array.mark_records, d);
     for b in m.base_array.base_records.iter_mut() {
         for a in b.base_anchors.iter_mut() {
@@ -275,7 +294,7 @@ fn mark_base(m: &mut MarkBasePosFormat1, d: &StoreDeltas) {
     }
 }
 
-fn mark_lig(m: &mut MarkLigPosFormat1, d: &StoreDeltas) {
+fn mark_lig(m: &mut MarkLigPosFormat1, d: Fold<'_>) {
     marks(&mut m.mark_array.mark_records, d);
     for lig in m.ligature_array.ligature_attaches.iter_mut() {
         for c in lig.component_records.iter_mut() {
@@ -286,7 +305,7 @@ fn mark_lig(m: &mut MarkLigPosFormat1, d: &StoreDeltas) {
     }
 }
 
-fn mark_mark(m: &mut MarkMarkPosFormat1, d: &StoreDeltas) {
+fn mark_mark(m: &mut MarkMarkPosFormat1, d: Fold<'_>) {
     marks(&mut m.mark1_array.mark_records, d);
     for r in m.mark2_array.mark2_records.iter_mut() {
         for a in r.mark2_anchors.iter_mut() {

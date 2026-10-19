@@ -19,7 +19,7 @@ use crate::{Result, TablesError};
 const MAX_COMPONENT_DEPTH: usize = 64;
 /// Most work done in all flattening composites to compute their bounds in one instance: one
 /// unit per component visited (empty glyphs included) and one per point copied.
-const MAX_FLATTEN_WORK: usize = 20_000_000;
+pub(super) const MAX_FLATTEN_WORK: usize = 20_000_000;
 /// Most points one simple glyph may have.
 const MAX_POINTS: usize = 65_536;
 
@@ -459,7 +459,7 @@ fn delta(d: i32, short: u8, same: u8, out: &mut Vec<u8>) -> u8 {
 
 /// Each glyph's component depth: 0 for simple and empty glyphs, one more than the deepest
 /// component for composites. A cycle or a component past the glyph count is refused.
-fn depths(glyphs: &[Glyph]) -> Result<Vec<usize>> {
+pub(super) fn depths(glyphs: &[Glyph]) -> Result<Vec<usize>> {
     fn depth(glyphs: &[Glyph], g: usize, memo: &mut [Option<usize>], level: usize) -> Result<usize> {
         if let Some(Some(d)) = memo.get(g) {
             return Ok(*d);
@@ -567,7 +567,7 @@ fn int_bounds(points: &[Pair]) -> Result<[i16; 4]> {
 
 /// The bounds of glyph `g` from its current points, as `Glyph.recalcBounds`. `budget` is shared
 /// by every glyph of the instance.
-fn recalc_bounds(glyphs: &[Glyph], g: usize, budget: &mut usize) -> Result<[i16; 4]> {
+pub(super) fn recalc_bounds(glyphs: &[Glyph], g: usize, budget: &mut usize) -> Result<[i16; 4]> {
     match glyphs.get(g) {
         Some(Glyph::Simple(s)) => int_bounds(&s.points),
         Some(Glyph::Composite(c)) => {

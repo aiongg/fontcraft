@@ -81,6 +81,11 @@ impl StoreDeltas {
         Ok(Self { rows })
     }
 
+    /// Deltas already summed, by outer then inner index.
+    pub(super) fn from_rows(rows: Vec<Vec<f64>>) -> Self {
+        Self { rows }
+    }
+
     /// The delta of one item; 0 for [`NO_VARIATION_INDEX`] and for indexes the store lacks.
     pub fn get(&self, outer: u16, inner: u16) -> f64 {
         self.rows.get(usize::from(outer)).and_then(|r| r.get(usize::from(inner))).copied().unwrap_or(0.0)
