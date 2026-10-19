@@ -3652,6 +3652,21 @@ guesses = [
 # RoboFont — Space Center, guidelines, UFO workflow
 # =====================================================================================================
 
+[[command]]
+id = "window.spaceCenter"
+label = "Space Center"
+menu = ["Window"]
+shortcut = ""
+kind = "ui"
+params = "{open?: bool, text?: string, before?: string, after?: string, size?: number, lineMode?: \"multi\"|\"single\", select?: index|null}"
+area = "spacing-kerning"
+milestone = "M13"
+summary = "Opens or closes the Space Center and sets its text, control glyphs, size, line mode and selected glyph."
+ref = "RoboFont reference › Space Center"
+status = "docs"
+origin = "robofont"
+notes = "Documented in the RoboFont reference, not yet observed. The parameters other than `open` are our addition for agents: they set what the window's fields and clicks set."
+
 [[panel]]
 id = "window.spaceCenter"
 label = "Space Center"
@@ -3663,7 +3678,12 @@ summary = "A separate window dedicated to spacing: several lines of text at read
 ref = "RoboFont reference › Space Center"
 status = "docs"
 origin = "robofont"
-notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5). Documented in the RoboFont reference, not yet observed. Built: the text, before and after fields, the size, multi-line and single-line display, the cut-off band, the preferred suffix and the matrix (width, left, right). Not built yet: the stored sample-string menu, the waterfall, centred, right-to-left and upside-down display, and the display menu's overlays (layers, guidelines, zones, images, stroke, line space, tracking)."
+guesses = [
+  "A new Space Center shows `hamburgefontsiv` at 72 points; the reference's default text and size would settle it.",
+  "The Space Center draws the showing Edit View tab's master, else the first master; how the reference picks the master of a multi-master font would settle it.",
+  "Matrix columns are the text's own glyphs; control glyphs get none. Opening a text with control glyphs in the reference would settle it.",
+]
 
 [[behavior]]
 id = "spaceCenter.inputSyntax"
@@ -3676,6 +3696,10 @@ origin = "robofont"
 notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5). The M13 planning pass confirmed the tokens on RoboFont's Space Center page; none clashes with the primary reference's text escapes, because `?`, `!` and `:` cannot start a glyph name."
 guesses = [
   "Space Center takes the reference spellings /name, /name@layer, /?, /!, /:group and \\n unchanged; Edit View's text mode keeps the primary reference's escapes only.",
+  "A glyph name after `/` ends at the next `/`, space, backslash or line break, and one space after any slash token is dropped, as in Edit View text; the reference app would settle whether `/? ` keeps its space.",
+  "`/?` in Font View stands for the first selected glyph; the reference app would settle it.",
+  "`/:group` takes every glyph whose left or right kerning group has that name, in glyph order; the reference's groups are not split by side, and a font with both kinds would settle it.",
+  "A glyph asked for in two layers in one text is drawn from the last layer named, because the layout takes one layer per glyph name; the reference app would settle it.",
 ]
 
 [[behavior]]
@@ -3686,7 +3710,11 @@ summary = "A matrix cell accepts a number, a reference that copies another glyph
 ref = "RoboFont reference › Space Center › Numerical fields"
 status = "docs"
 origin = "robofont"
-notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5). Documented in the RoboFont reference, not yet observed. A cell takes a number or `=` and an expression (`fontcraft_geom::expr`) whose names are glyphs standing for their value in the same row; the result runs `spacing.setWidth`, `spacing.setLeftSidebearing` or `spacing.setRightSidebearing` with a number, so no metrics key is stored."
+guesses = [
+  "A matrix entry's result rounds halves up, as metrics keys do; entering a fraction in the reference would settle it.",
+  "Up and Down in a matrix cell set the cell's value plus or minus the step as one command; the reference's undo history after several steps would settle it.",
+]
 
 [[behavior]]
 id = "spaceCenter.pointerAndKeys"
@@ -3696,7 +3724,12 @@ summary = "In the preview, dragging a margin changes it (with Alt, in all layers
 ref = "RoboFont reference › Space Center › Editing spacing with the mouse; Arrow key increments"
 status = "docs"
 origin = "robofont"
-notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5). Documented in the RoboFont reference, not yet observed. The keys and drags run the spacing nudges (`spacing.increaseRightSidebearing`, `spacing.increaseLeftSidebearing`, `spacing.shiftOutlineRight`) with a signed amount; a drag runs its command once, when the button is released."
+guesses = [
+  "Each side's arrow moves its edge that way: Right grows the right margin and Left shrinks it, Alt+Left grows the left margin and Alt+Right shrinks it, as the primary reference's text-mode spacing shortcuts do; the reference app would settle the direction of the Alt keys.",
+  "A press within the selection-ring radius of a glyph's left or right edge drags that margin, anywhere else inside its box drags the outline; the reference's grab distance would settle it.",
+  "Ctrl+Cmd with Shift shifts the outline by 10; the reference gives no 100 step for the outline, and pressing Ctrl+Cmd+Shift there would settle it.",
+]
 
 [[command]]
 id = "view.setSpacingCutOff"
@@ -3711,7 +3744,10 @@ summary = "Inverts foreground and background of the spacing preview between two 
 ref = "RoboFont reference › Space Center › Display options (Cut Off)"
 status = "docs"
 origin = "robofont"
-notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5). Documented in the RoboFont reference, not yet observed. It applies to the Space Center's preview; heights left out keep their value, and null heights mean the baseline and the x-height of the master shown."
+guesses = [
+  "The band is drawn on every line across the whole preview width; the reference app would settle whether it stops at the text's ends.",
+]
 
 [[command]]
 id = "view.setPreferredSuffix"
@@ -3726,7 +3762,10 @@ summary = "Shows, for every glyph of the preview text, the variant with the give
 ref = "RoboFont reference › Space Center › Display options (Suffixes)"
 status = "docs"
 origin = "robofont"
-notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5). Documented in the RoboFont reference, not yet observed. It applies to the Space Center's text and control glyphs; `sc` and `.sc` both mean the `.sc` variants."
+guesses = [
+  "The suffix replaces control glyphs as well as the text's glyphs; the reference app would settle it.",
+]
 
 [[behavior]]
 id = "kerning.previewGroupCombinations"

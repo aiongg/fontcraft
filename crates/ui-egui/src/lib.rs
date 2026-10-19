@@ -116,6 +116,8 @@ mod sidebar_tests;
 #[cfg(test)]
 mod smart_settings_tests;
 #[cfg(test)]
+mod space_center_tests;
+#[cfg(test)]
 mod spacing_dialogs_tests;
 #[cfg(test)]
 mod start_window_tests;
