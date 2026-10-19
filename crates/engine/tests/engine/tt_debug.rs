@@ -56,6 +56,7 @@ fn hint_tt_debug_step_runs_the_glyph_program_to_the_points_the_preview_draws() {
     assert_eq!(start["next"]["program"], "glyph");
     let listing = start["program"].as_array().unwrap().clone();
     assert!(!listing.is_empty(), "the snap compiles to a glyph program");
+    assert!(listing.iter().all(|i| !i["gloss"].as_str().unwrap().is_empty()), "every instruction has a gloss: {listing:?}");
     assert_eq!(start["next"]["pc"], listing[0]["pc"]);
     assert_eq!(sorted(points(&start)), vec![(1.0, 1.5), (1.0, 6.5), (2.0, 1.5), (2.0, 6.5)], "scaled, not yet moved");
     assert_eq!(start["phantom"].as_array().unwrap().len(), 4);

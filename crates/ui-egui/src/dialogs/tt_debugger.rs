@@ -264,7 +264,8 @@ fn status_line(r: &Value) -> String {
 }
 
 fn instruction_list(ui: &mut egui::Ui, tokens: &crate::theme::Tokens, r: &Value, breakpoints: &[u64], pending: &mut Pending) {
-    let current = (r["next"]["program"] == "glyph").then(|| r["next"]["pc"].as_u64()).flatten();
+    let next = r.get("next").filter(|n| n.get("program").and_then(Value::as_str) == Some("glyph"));
+    let current = next.and_then(|n| n.get("pc")).and_then(Value::as_u64);
     ui.vertical(|ui| {
         ui.set_width(LIST_WIDTH);
         ui.strong("Glyph program");
@@ -277,7 +278,11 @@ fn instruction_list(ui: &mut egui::Ui, tokens: &crate::theme::Tokens, r: &Value,
                 let Some(pc) = ins["pc"].as_u64() else { continue };
                 let mark = if breakpoints.contains(&pc) { "●" } else { " " };
                 let text = egui::RichText::new(format!("{mark} {pc:>5}  {}", ins["instruction"].as_str().unwrap_or(""))).monospace();
-                let row = ui.selectable_label(current == Some(pc), text).on_hover_text("Click to set or clear a breakpoint");
+                let hover = match ins["gloss"].as_str().filter(|g| !g.is_empty()) {
+                    Some(gloss) => format!("{gloss}\nClick to set or clear a breakpoint"),
+                    None => "Click to set or clear a breakpoint".to_string(),
+                };
+                let row = ui.selectable_label(current == Some(pc), text).on_hover_text(hover);
                 if current == Some(pc) {
                     row.scroll_to_me(None);
                 }

@@ -114,11 +114,26 @@ fn a_parse_error_changes_nothing() {
 }
 
 #[test]
-fn a_glyph_program_without_font_programs_warns_that_export_leaves_it_out() {
+fn a_glyph_program_is_exported_without_font_programs() {
     let mut s = session();
     let r = run(&mut s, "hint.tt.setAssembly", json!({"target": {"glyph": "H"}, "assembly": "SVTCA[0]"}));
-    assert_eq!(r["warnings"].as_array().map(Vec::len), Some(1));
-    assert!(h_program(&exported(&mut s)).is_empty());
+    assert_eq!(r["warnings"], json!([]));
+    let bytes = exported(&mut s);
+    assert_eq!(ttasm::disassemble(&h_program(&bytes)).unwrap(), "SVTCA[0]\n");
+    assert!(table(&bytes, b"fpgm").is_empty() && table(&bytes, b"prep").is_empty());
+}
+
+#[test]
+fn a_glyph_program_wins_over_instructor_hints() {
+    let mut s = session();
+    run(&mut s, "hint.tt.snapPoint", json!({"glyph": "H", "nodes": [[0, 0]], "zone": "none"}));
+    let compiled = h_program(&exported(&mut s));
+    assert!(!compiled.is_empty(), "the Instructor hint compiles to a program");
+    let r = run(&mut s, "hint.tt.setAssembly", json!({"target": {"glyph": "H"}, "assembly": "SVTCA[1]\nIUP[0]"}));
+    assert_eq!(r["warnings"].as_array().map(Vec::len), Some(1), "the result says the Instructor hints are overruled");
+    let bytes = exported(&mut s);
+    assert_eq!(ttasm::disassemble(&h_program(&bytes)).unwrap(), "SVTCA[1]\nIUP[0]\n");
+    assert!(table(&bytes, b"fpgm").is_empty(), "no glyph left with Instructor hints, so no font programs of ours");
 }
 
 #[test]

@@ -51,11 +51,11 @@ pub fn specs() -> Vec<CommandSpec> {
 }
 
 /// One font built in memory for a preview.
-struct Built {
-    bytes: Arc<[u8]>,
-    glyph_order: Vec<String>,
-    label: String,
-    warnings: Vec<String>,
+pub(super) struct Built {
+    pub(super) bytes: Arc<[u8]>,
+    pub(super) glyph_order: Vec<String>,
+    pub(super) label: String,
+    pub(super) warnings: Vec<String>,
 }
 
 /// The instance or master `instance` names, or the first master.
@@ -71,7 +71,7 @@ fn job(font: &Font, p: &Params) -> Result<Job> {
     jobs.into_iter().next().ok_or_else(|| p.bad(format!("the font has no instance or master `{name}`")))
 }
 
-fn build(s: &Session, p: &Params, flavour: Flavour) -> Result<Built> {
+pub(super) fn build(s: &Session, p: &Params, flavour: Flavour) -> Result<Built> {
     let font = s.font()?;
     let job = job(font, p)?;
     let options = Options { hinting: HintingOptions { autohint: p.bool_or("autohint", false)?, ..Default::default() }, ..Default::default() };

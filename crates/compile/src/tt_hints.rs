@@ -10,7 +10,11 @@
 //! | hints stripped, Export TrueType Hints off, or no glyph with instructions and no imported tables | no TrueType hinting |
 //! | Autohint on (the instance's Autohint parameter, else the export option) | our `cvt `, `fpgm` and `prep` with what the TTFAutohint options add, and the autohinter's program for every simple glyph ([`fontcraft_hinting::autohint_glyph`] on the layer being exported); manual instructions and imported tables are not written; with the Dehint option, no TrueType hinting |
 //! | cvt Table, prep Table Assembly or fpgm Table Assembly on the master or instance | those tables as they are; manual instructions are not compiled, with a warning, since they call functions of our own `fpgm` |
-//! | otherwise | our `cvt `, `fpgm` and `prep` for the zones and stems of the master or instance being built, and a glyph program for each glyph whose main-master layer has instructions |
+//! | otherwise | our `cvt `, `fpgm` and `prep` for the zones and stems of the master or instance being built, and a glyph program for each glyph whose main-master layer has instructions; with no such glyph, only the glyphs' own programs |
+//!
+//! A glyph's own program (raw assembly, set by `hint.tt.setAssembly` or kept from an opened
+//! font) is written as it is in place of its Instructor hints, in every case but Autohint, and
+//! needs none of the cvt Table, prep or fpgm Table Assembly parameters.
 //!
 //! Glyph programs: the instructions of the main master's layer, compiled against the point
 //! numbers of the outline being written ([`crate::points`]) with the zones, stems and Delta
@@ -20,7 +24,6 @@
 //! A variable font gets the default master's programs without Delta instructions, and no
 //! `cvar` (a warning says so).
 
-use std::collections::HashSet;
 use std::sync::Arc;
 
 use fontcraft_hinting::control::ControlInstructions;
@@ -204,6 +207,7 @@ pub fn tt_hinting(
             .push(format!("the TrueType instructions of these glyphs cannot be read, so they were exported without them: {}", unreadable.join(", ")));
     }
 
+    let mut raw = Imported::default();
     let auto = if autohinted(&settings, options) {
         let Some(auto) = AutoSetup::new(&settings, warnings) else { return Ok(None) };
         if !instructed.is_empty() {
@@ -225,10 +229,21 @@ pub fn tt_hinting(
         if imported(&settings) {
             return Ok(imported_tables(source, &settings, &instructed, order, outlines, variable, warnings));
         }
+        // A glyph's own program wins over its Instructor hints.
+        raw = imported_glyph_programs(source, &settings, order, outlines, variable, warnings);
+        let overruled: Vec<String> =
+            instructed.iter().filter(|(gid, _)| raw.has(*gid)).filter_map(|(gid, _)| order.get(*gid).map(|g| g.name.clone())).collect();
+        if !overruled.is_empty() {
+            warnings.push(format!(
+                "{} have TrueType instructions of their own, which were written in place of their TrueType Instructor hints",
+                names(&overruled)
+            ));
+        }
+        instructed.retain(|(gid, _)| !raw.has(*gid));
         None
     };
     if instructed.is_empty() {
-        return Ok(None);
+        return Ok(raw_only(raw, warnings));
     }
 
     let family = match family_tt_zones(source) {
@@ -366,6 +381,10 @@ pub fn tt_hinting(
     if deltas_dropped {
         warnings.push("Delta instructions are not written into a variable font".to_string());
     }
+    merge_program_limits(&mut limits, &raw, &functions);
+    glyphs.append(&mut raw.glyphs);
+    glyphs.sort_by_key(|(gid, _)| *gid);
+    let composites = std::mem::take(&mut raw.composites);
     finish(&mut limits, warnings);
     let (version_suffix, ttfa) = match &auto {
         Some(a) => (
@@ -374,7 +393,7 @@ pub fn tt_hinting(
         ),
         None => (None, None),
     };
-    Ok(Some(TtHinting { cvt: programs.cvt, fpgm: programs.fpgm, prep: programs.prep, glyphs, composites: Vec::new(), limits, version_suffix, ttfa }))
+    Ok(Some(TtHinting { cvt: programs.cvt, fpgm: programs.fpgm, prep: programs.prep, glyphs, composites, limits, version_suffix, ttfa }))
 }
 
 /// A copy of `layer` whose shapes are the closed contours of `outline` (the layer's outline with
@@ -449,15 +468,15 @@ fn imported_tables(
     let fpgm = program(&settings.fpgm_assembly, "fpgm Table Assembly", warnings).unwrap_or_default();
     let prep = program(&settings.prep_assembly, "prep Table Assembly", warnings).unwrap_or_default();
     let cvt = settings.cvt.clone().unwrap_or_default();
-    if !instructed.is_empty() {
-        let list: Vec<String> = instructed.iter().filter_map(|(gid, _)| order.get(*gid).map(|g| g.name.clone())).collect();
+    let mut imported = imported_glyph_programs(source, settings, order, outlines, variable, warnings);
+    let list: Vec<String> =
+        instructed.iter().filter(|(gid, _)| !imported.has(*gid)).filter_map(|(gid, _)| order.get(*gid).map(|g| g.name.clone())).collect();
+    if !list.is_empty() {
         warnings.push(format!(
             "the master carries imported TrueType tables (cvt Table, prep or fpgm Table Assembly), so the manual instructions of {} were not compiled; remove those parameters to export them",
             names(&list)
         ));
     }
-    let edited: HashSet<usize> = instructed.iter().map(|(gid, _)| *gid).collect();
-    let mut imported = imported_glyph_programs(source, settings, order, outlines, &edited, variable, warnings);
     if fpgm.is_empty() && prep.is_empty() && cvt.is_empty() && imported.is_empty() {
         return None;
     }
@@ -471,13 +490,7 @@ fn imported_tables(
     }
     // `maxSizeOfInstructions` counts glyph programs only.
     limits.max_size_of_instructions = 0;
-    for p in imported.glyphs.iter().map(|(_, g)| &g.instructions).chain(imported.composites.iter().map(|(_, b)| b)) {
-        match analyse(p, &functions) {
-            Ok(l) => limits.merge(&l),
-            Err(_) => limits.uncertain = true,
-        }
-        limits.max_size_of_instructions = limits.max_size_of_instructions.max(u16::try_from(p.len()).unwrap_or(u16::MAX));
-    }
+    merge_program_limits(&mut limits, &imported, &functions);
     finish(&mut limits, warnings);
     Some(TtHinting {
         cvt,
@@ -502,11 +515,41 @@ impl Imported {
     fn is_empty(&self) -> bool {
         self.glyphs.is_empty() && self.composites.is_empty()
     }
+
+    fn has(&self, gid: usize) -> bool {
+        self.glyphs.iter().any(|(g, _)| *g == gid) || self.composites.iter().any(|(g, _)| *g == gid)
+    }
+
+    fn programs(&self) -> impl Iterator<Item = &Vec<u8>> {
+        self.glyphs.iter().map(|(_, g)| &g.instructions).chain(self.composites.iter().map(|(_, b)| b))
+    }
 }
 
-/// The imported glyph programs (`fontcraft_hinting::imported`) of the layers being built, for
-/// the glyphs whose outline is unchanged since the font was opened and that have no instructions
-/// of the editor (`edited`), which win. A simple glyph is written from its layer's nodes as they
+/// Merges the needs of `imported`'s glyph programs, read against `functions`, into `limits`.
+fn merge_program_limits(limits: &mut ProgramLimits, imported: &Imported, functions: &FunctionTable) {
+    for p in imported.programs() {
+        match analyse(p, functions) {
+            Ok(l) => limits.merge(&l),
+            Err(_) => limits.uncertain = true,
+        }
+        limits.max_size_of_instructions = limits.max_size_of_instructions.max(u16::try_from(p.len()).unwrap_or(u16::MAX));
+    }
+}
+
+/// The hinting of a font whose only programs are its glyphs' own: no `cvt `, `fpgm` or `prep`.
+fn raw_only(raw: Imported, warnings: &mut Vec<String>) -> Option<TtHinting> {
+    if raw.is_empty() {
+        return None;
+    }
+    let mut limits = ProgramLimits::default();
+    merge_program_limits(&mut limits, &raw, &FunctionTable::default());
+    finish(&mut limits, warnings);
+    Some(TtHinting { glyphs: raw.glyphs, composites: raw.composites, limits, ..TtHinting::default() })
+}
+
+/// The glyphs' own programs (`fontcraft_hinting::imported`: imported with an opened font or set
+/// as assembly) of the layers being built, for the glyphs whose outline is unchanged since the
+/// program was stored; they win over the glyphs' Instructor hints. A simple glyph is written from its layer's nodes as they
 /// are, in their order and without overlap removal or a change of direction, since the program
 /// numbers those points; a composite keeps the components the outline stage made. A variable
 /// font gets none, since its points must match the other masters', and neither does an instance
@@ -516,7 +559,6 @@ fn imported_glyph_programs(
     settings: &HintSettings,
     order: &[ResolvedGlyph],
     outlines: &[Prepared],
-    edited: &HashSet<usize>,
     variable: bool,
     warnings: &mut Vec<String>,
 ) -> Imported {
@@ -525,7 +567,7 @@ fn imported_glyph_programs(
         None => true,
         Some(instance) => source.master(&settings.master).is_ok_and(|m| m.location == instance.location),
     };
-    let (mut stale, mut overruled, mut unwritable, mut dropped) = (Vec::new(), Vec::new(), Vec::new(), 0usize);
+    let (mut stale, mut unwritable, mut dropped) = (Vec::new(), Vec::new(), 0usize);
     for (gid, g) in order.iter().enumerate() {
         let Some(layer) = source.glyph(&g.name).and_then(|sg| sg.layer(&settings.master)) else { continue };
         let text = match imported_program(layer) {
@@ -538,10 +580,6 @@ fn imported_glyph_programs(
         };
         if variable || !at_master {
             dropped += 1;
-            continue;
-        }
-        if edited.contains(&gid) {
-            overruled.push(g.name.clone());
             continue;
         }
         let bytes = match fontcraft_ttasm::assemble(text) {
@@ -575,10 +613,6 @@ fn imported_glyph_programs(
     }
     if !stale.is_empty() {
         warnings.push(format!("the imported TrueType programs of {} were left out, since their outlines changed", names(&stale)));
-    }
-    if !overruled.is_empty() {
-        warnings
-            .push(format!("the imported TrueType programs of {} were left out, since the glyphs have instructions of their own", names(&overruled)));
     }
     if !unwritable.is_empty() {
         warnings.push(format!("the imported TrueType programs of these glyphs cannot be written, so they were left out: {}", unwritable.join(", ")));

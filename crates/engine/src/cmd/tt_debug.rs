@@ -1,8 +1,8 @@
 //! The TrueType debugger and delta suggestions. Rows: `hint.tt.debugStep`,
 //! `hint.tt.suggestDeltas` (and the engine side of `window.ttDebugger`).
 //!
-//! Both build the instance as TrueType in memory through the export path, as the hinted preview
-//! does (`hint_preview.rs`), and run its programs in FontCraft's own interpreter
+//! Both build the instance as TrueType in memory with the hinted preview's build
+//! (`hint_preview.rs`), and run its programs in FontCraft's own interpreter
 //! (`crate::ttvm`), ported from the one the preview draws with, so the points match.
 //!
 //! The debugger keeps no session state: a result names the step it stopped at, and the next
@@ -21,12 +21,11 @@
 
 use std::collections::BTreeMap;
 
-use fontcraft_compile::{Flavour, HintingOptions, Options};
-use fontcraft_model::{Font, Target as BuildTarget};
+use fontcraft_compile::Flavour;
 use serde_json::{Map, Value, json};
 use skrifa::raw::FontRef;
 
-use super::compile::{self, Container, Dest, Job, Pick, Report, Request, Sink};
+use super::hint_preview::{Built, build};
 use super::*;
 use crate::EngineError;
 use crate::params::Params;
@@ -64,7 +63,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Debugger Step",
             [],
             None,
-            "{glyph: name, instance?: name (a static instance by name, `#n` for an unnamed one, or a master id; default: the first master), ppem: number (whole pixel size 1 to 400), intent?: 'grayscale'|'cleartype'|'directwrite' (default 'grayscale'), action?: 'start'|'into'|'over'|'out'|'continue'|'stop' (default 'start'), step?: number (the `step` of the previous result; default 0), breakpoints?: [number] (byte offsets of instructions in the glyph program; 'over', 'out' and 'continue' stop at them)} runs the glyph's TrueType program to the next stop: 'start' before the first instruction, 'into' after one instruction, 'over' at the next instruction at the same call depth or shallower, 'out' at the first one after the current function returns, 'continue' at the next breakpoint, each of them at the end of the program if nothing comes first; 'stop' ends the session and runs nothing. A step is one instruction of the glyph program or of a function it calls. Coordinates and control values are in pixels → {glyph, gid, ppem, intent, step, finished, error?, hinting, depth, next?: {program: 'glyph'|'font'|'controlValue', pc, instruction}, breakpoint?: pc, program: [{pc, instruction}], stack, graphicsState: {projectionVector, dualProjectionVector, freedomVector, rp0, rp1, rp2, zp0, zp1, zp2, loop, round, minimumDistance, controlValueCutIn, singleWidthCutIn, singleWidth, deltaBase, deltaShift, autoFlip, instructControl, backwardCompatibility}, contours, points: [{x, y, originalX, originalY, onCurve, touchedX, touchedY}], phantom: [same, 4 items], twilight: [same], storage, cvt} or {stopped: true}",
+            "{glyph: name, instance?: name (a static instance by name, `#n` for an unnamed one, or a master id; default: the first master), ppem: number (whole pixel size 1 to 400), intent?: 'grayscale'|'cleartype'|'directwrite' (default 'grayscale'), action?: 'start'|'into'|'over'|'out'|'continue'|'stop' (default 'start'), step?: number (the `step` of the previous result; default 0), breakpoints?: [number] (byte offsets of instructions in the glyph program; 'over', 'out' and 'continue' stop at them)} runs the glyph's TrueType program to the next stop: 'start' before the first instruction, 'into' after one instruction, 'over' at the next instruction at the same call depth or shallower, 'out' at the first one after the current function returns, 'continue' at the next breakpoint, each of them at the end of the program if nothing comes first; 'stop' ends the session and runs nothing. A step is one instruction of the glyph program or of a function it calls. Coordinates and control values are in pixels → {glyph, gid, ppem, intent, step, finished, error?, hinting, depth, next?: {program: 'glyph'|'font'|'controlValue', pc, instruction}, breakpoint?: pc, program: [{pc, instruction, gloss (what the instruction does, in one sentence)}], stack, graphicsState: {projectionVector, dualProjectionVector, freedomVector, rp0, rp1, rp2, zp0, zp1, zp2, loop, round, minimumDistance, controlValueCutIn, singleWidthCutIn, singleWidth, deltaBase, deltaShift, autoFlip, instructControl, backwardCompatibility}, contours, points: [{x, y, originalX, originalY, onCurve, touchedX, touchedY}], phantom: [same, 4 items], twilight: [same], storage, cvt} or {stopped: true}",
             has_doc,
             debug_step
         ),
@@ -78,50 +77,6 @@ pub fn specs() -> Vec<CommandSpec> {
             suggest_deltas
         ),
     ]
-}
-
-/// One font built in memory.
-struct Built {
-    bytes: Vec<u8>,
-    glyph_order: Vec<String>,
-    label: String,
-}
-
-/// The instance or master `instance` names, or the first master (as the hinted preview reads it).
-fn job(font: &Font, p: &Params) -> Result<Job> {
-    let Some(name) = p.opt_str("instance")? else {
-        let m = font.default_master()?;
-        return Ok(Job { label: m.name.clone(), source: "default", target: BuildTarget::Master(m.id.clone()) });
-    };
-    if let Some(m) = font.masters.iter().find(|m| m.id == name) {
-        return Ok(Job { label: m.name.clone(), source: "master", target: BuildTarget::Master(m.id.clone()) });
-    }
-    let jobs = compile::jobs(font, &Pick::Named(vec![name.to_string()]), false, p)?;
-    jobs.into_iter().next().ok_or_else(|| p.bad(format!("the font has no instance or master `{name}`")))
-}
-
-fn build(s: &Session, p: &Params) -> Result<Built> {
-    let font = s.font()?;
-    let job = job(font, p)?;
-    let options = Options { hinting: HintingOptions { autohint: false, ..Default::default() }, ..Default::default() };
-    let req = Request {
-        flavours: vec![Flavour::TrueType],
-        containers: vec![Container::Plain],
-        options,
-        dest: Dest::Memory,
-        first_only: false,
-        autohinter: crate::external_autohint::trusted(s),
-    };
-    let mut sink = Sink::new(&req.dest, true, s.export_outside())?;
-    let mut report = Report::default();
-    let doc = s.doc()?;
-    compile::build(font, &doc.title, doc.path.as_deref(), s.glyph_data()?, std::slice::from_ref(&job), &req, &mut sink, &mut report)?;
-    if report.fonts.is_empty() {
-        return Err(compile::nothing_built(&report));
-    }
-    let Some(out) = report.fonts.into_iter().next() else { return Err(EngineError::Internal("the font was not built".into())) };
-    let bytes = out.files.into_iter().next().and_then(|f| f.data).ok_or_else(|| EngineError::Internal("the font was not kept in memory".into()))?;
-    Ok(Built { bytes, glyph_order: out.glyph_order, label: job.label })
 }
 
 fn font_ref<'a>(built: &'a Built) -> Result<FontRef<'a>> {
@@ -239,7 +194,7 @@ fn debug_step(s: &mut Session, p: &Value) -> Result<Value> {
             breakpoints.push(pc as usize);
         }
     }
-    let built = build(s, &p)?;
+    let built = build(s, &p, Flavour::TrueType)?;
     let gid = built.glyph_order.iter().position(|g| g == name).ok_or_else(|| p.bad(format!("glyph `{name}` is not exported")))?;
     let font = font_ref(&built)?;
     let ctx = SizeContext::new(&font, ppem, target).map_err(|e| p.bad(e))?;
@@ -274,7 +229,15 @@ fn state_json(run: &GlyphRun) -> Map<String, Value> {
     if let Some((program, pc, text)) = &snap.next {
         m.insert("next".into(), json!({"program": program_name(*program), "pc": pc, "instruction": text}));
     }
-    m.insert("program".into(), Value::Array(run.listing.iter().map(|(pc, text)| json!({"pc": pc, "instruction": text})).collect()));
+    m.insert(
+        "program".into(),
+        Value::Array(
+            run.listing
+                .iter()
+                .map(|(pc, text)| json!({"pc": pc, "instruction": text, "gloss": super::tt_assembly::gloss(text).unwrap_or("")}))
+                .collect(),
+        ),
+    );
     m.insert("stack".into(), json!(snap.stack));
     m.insert(
         "graphicsState".into(),
@@ -495,7 +458,7 @@ fn suggest_deltas(s: &mut Session, p: &Value) -> Result<Value> {
     }
     let (intent_name, target) = intent(&p)?;
     let names = p.opt_glyphs("glyphs", s.font()?)?;
-    let built = build(s, &p)?;
+    let built = build(s, &p, Flavour::TrueType)?;
     let glyphs: Vec<(String, usize)> = match names {
         Some(names) => names
             .into_iter()

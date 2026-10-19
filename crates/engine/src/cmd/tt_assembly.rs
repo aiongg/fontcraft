@@ -22,7 +22,7 @@
 use std::sync::Arc;
 
 use fontcraft_hinting::imported::{ImportedProgram, imported_program, remove_imported_program, set_imported_program};
-use fontcraft_hinting::settings::{CVT_TABLE, FPGM_TABLE_ASSEMBLY, IMPORTED_GLYPH_PROGRAM_KEY, PREP_TABLE_ASSEMBLY, main_master};
+use fontcraft_hinting::settings::{FPGM_TABLE_ASSEMBLY, IMPORTED_GLYPH_PROGRAM_KEY, PREP_TABLE_ASSEMBLY, main_master};
 use fontcraft_hinting::tt_instructions;
 use fontcraft_hinting::ttasm::{self, AsmError, MAX_GLYPH_PROGRAM_BYTES, MAX_PROGRAM_TEXT};
 use fontcraft_model::Font;
@@ -443,19 +443,8 @@ fn run(s: &mut Session, v: &Value) -> Result<Value> {
             };
             let absent = matches!(imported_program(layer), ImportedProgram::Absent);
             let changed = if remove { !absent } else { current != Some(assembled.text.as_str()) };
-            if !remove {
-                let m = font.master(&id)?;
-                let tables = [CVT_TABLE, PREP_TABLE_ASSEMBLY, FPGM_TABLE_ASSEMBLY];
-                if !tables.iter().any(|t| m.params.get(t).is_some() || font.info.params.get(t).is_some()) {
-                    warnings.push(
-                        "export writes a glyph's own instructions only while its master has a cvt Table, prep Table Assembly or fpgm Table Assembly parameter"
-                            .into(),
-                    );
-                }
-                if tt_instructions(layer).is_ok_and(|list| !list.is_empty()) {
-                    warnings
-                        .push("the layer also has TrueType Instructor hints: export writes its own instructions only once those are removed".into());
-                }
+            if !remove && tt_instructions(layer).is_ok_and(|list| !list.is_empty()) {
+                warnings.push("the layer also has TrueType Instructor hints: export writes these instructions in their place".into());
             }
             if changed {
                 let targets = Targets::new(p.command(), name.clone(), Some(id.clone()));
