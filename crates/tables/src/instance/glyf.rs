@@ -507,7 +507,7 @@ fn flatten(glyphs: &[Glyph], g: usize, level: usize, budget: &mut usize) -> Resu
     let charge = |budget: &mut usize, n: usize| {
         *budget = budget
             .checked_sub(n)
-            .ok_or_else(|| TablesError::TooLarge { what: "the component points flattened to compute composite bounds", limit: MAX_FLATTEN_WORK })?;
+            .ok_or(TablesError::TooLarge { what: "the component points flattened to compute composite bounds", limit: MAX_FLATTEN_WORK })?;
         Ok::<(), TablesError>(())
     };
     match glyphs.get(g) {
