@@ -8,8 +8,8 @@
 //! A `CFF2` subset keeps the variation store, every `vsindex` and blend, and each kept Font DICT
 //! with its Private DICT and local subroutines. `.notdef` (unless its outline is kept) and the
 //! glyphs emptied under `retain_gids` get an empty charstring, as the reference writes them.
-//! Without `hinting` the charstrings come back without subroutines; the reference keeps the used
-//! ones there.
+//! Without `hinting`, a font with hints comes back without subroutines; the reference keeps the
+//! used ones there. A font without hints keeps its used subroutines either way.
 
 use fontcraft_cff::subr::{SubrError, SubrMode, TableSubset, subset_table};
 
@@ -44,10 +44,9 @@ pub(super) fn finish_cff(plan: &Plan, rebuilt: Vec<u8>) -> Result<Vec<u8>> {
 }
 
 fn mode(plan: &Plan) -> SubrMode {
-    if !plan.options.hinting {
-        // Hint removal writes the charstrings without subroutines.
-        SubrMode::Keep
-    } else if plan.options.desubroutinize {
+    // Without `hinting` the unused subroutines go first, as in the reference: a font without
+    // hints keeps its used ones, and hint removal flattens the charstrings of one with hints.
+    if plan.options.desubroutinize {
         SubrMode::Expand
     } else {
         SubrMode::Prune

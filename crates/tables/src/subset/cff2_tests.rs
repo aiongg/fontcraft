@@ -122,15 +122,16 @@ fn a_cff2_subset_draws_the_same_and_keeps_only_the_subroutines_it_calls() {
     assert!(subr_count(&after) <= subr_count(&before));
     assert_eq!(prune_unused(&after).unwrap(), after, "every subroutine left is called, in order");
 
-    // Expanded, or without hints: no subroutine is left and the outlines stay.
-    for options in [
-        SubsetOptions { text: "bg".into(), desubroutinize: true, ..SubsetOptions::default() },
-        SubsetOptions { text: "bg".into(), hinting: false, ..SubsetOptions::default() },
-    ] {
-        let flat = subset(&input, &options).unwrap();
-        assert_eq!(subr_count(&set_of(&flat.font)), 0, "{options:?}");
-        assert_draws_the_same(&input, &flat.font, &[(1, old("b")), (2, old("g"))]);
-    }
+    // Expanded: no subroutine is left and the outlines stay.
+    let flat = subset(&input, &SubsetOptions { text: "bg".into(), desubroutinize: true, ..SubsetOptions::default() }).unwrap();
+    assert_eq!(subr_count(&set_of(&flat.font)), 0);
+    assert_draws_the_same(&input, &flat.font, &[(1, old("b")), (2, old("g"))]);
+
+    // Without hinting, a font that has no hints keeps the subroutines it calls, as pyftsubset does.
+    let unhinted = subset(&input, &SubsetOptions { text: "bg".into(), hinting: false, ..SubsetOptions::default() }).unwrap();
+    let unhinted_set = set_of(&unhinted.font);
+    assert_eq!(prune_unused(&unhinted_set).unwrap(), unhinted_set);
+    assert_draws_the_same(&input, &unhinted.font, &[(1, old("b")), (2, old("g"))]);
 
     // Glyph ids kept: the glyphs before `c` stay in place, empty.
     let retained = subset(&input, &SubsetOptions { glyphs: vec!["c".into()], retain_gids: true, ..SubsetOptions::default() }).unwrap();

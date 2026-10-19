@@ -513,7 +513,12 @@ fn split_dumps_write_parts_at_the_left_margin_and_glyphs_on_their_own() {
 
     let parts = crate::ttx::dump_split_glyphs(&font, &DumpOptions::default(), "core", ".ttx").unwrap();
     let glyf = parts.iter().find(|(n, _)| n == "core._g_l_y_f.ttx").unwrap();
-    assert!(glyf.1.contains("\n  <glyf>\n    <TTGlyph src=\"core._g_l_y_f.A_.ttx\"/>\n"), "{}", glyf.1);
+    // With a prefix, ufoLib's file-name rule keeps the leading period of `.notdef`.
+    assert!(
+        glyf.1.contains("\n  <glyf>\n    <TTGlyph src=\"core._g_l_y_f..notdef.ttx\"/>\n    <TTGlyph src=\"core._g_l_y_f.A_.ttx\"/>\n"),
+        "{}",
+        glyf.1
+    );
     assert!(!glyf.1.contains("<contour>"), "the outlines are in the glyph files");
     let a = parts.iter().find(|(n, _)| n == "core._g_l_y_f.A_.ttx").unwrap();
     assert!(a.1.starts_with("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ttFont ttLibVersion=\"4.66\">\n  <glyf>\n    <!-- The xMin, yMin, xMax and yMax values\n         will be recalculated by the compiler. -->\n    <TTGlyph name=\"A\""), "{}", a.1);

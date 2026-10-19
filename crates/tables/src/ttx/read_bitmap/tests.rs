@@ -12,7 +12,7 @@ use crate::ttx::{DumpOptions, ImportOptions, dump, import, import_tree, parse, t
 const BITMAP: (&str, &str) = (include_str!("testdata/bitmap.ttx"), include_str!("testdata/bitmap.digest"));
 const CBDT: (&str, &str) = (include_str!("testdata/cbdt.ttx"), include_str!("testdata/cbdt.digest"));
 const SBIX: (&str, &str) = (include_str!("testdata/sbix.ttx"), include_str!("testdata/sbix.digest"));
-
+/// `text` without its comments, the spaces before them and the lines only a comment was on.
 /// `text` without its comments, and without the lines only a comment was on.
 fn strip_comments(text: &str) -> String {
     let mut out = String::new();
@@ -22,7 +22,7 @@ fn strip_comments(text: &str) -> String {
         rest = rest[i..].find("-->").map_or("", |j| &rest[i + j + 3..]);
     }
     out.push_str(rest);
-    out.lines().filter(|l| !l.trim().is_empty()).collect::<Vec<_>>().join("\n")
+    out.lines().map(str::trim_end).filter(|l| !l.is_empty()).collect::<Vec<_>>().join("\n")
 }
 
 /// The element of table `tag` in a dump, as text.

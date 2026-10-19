@@ -104,7 +104,8 @@ fn tables_import_ttx_reads_a_dump_split_by_glyph() {
 
     // A point moved in the glyph's own file reaches the font.
     let text = std::fs::read_to_string(&glyph).unwrap();
-    let moved = text.replacen("x=\"560\"", "x=\"570\"", 1);
+    // The leading space keeps `xMax="560"` out of the match.
+    let moved = text.replacen(" x=\"560\"", " x=\"570\"", 1);
     assert_ne!(moved, text);
     std::fs::write(&glyph, moved).unwrap();
     let edited = run(&mut s, "tables.importTtx", json!({ "font": ttf, "dumps": [main], "output": dir.join("Moved.ttf") }));

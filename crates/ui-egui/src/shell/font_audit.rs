@@ -2179,7 +2179,8 @@ mod tests {
         assert_eq!(started["run"], Value::Null, "nothing is listed until the run finishes");
         assert_eq!(started["progress"]["done"], json!(0));
         let total = started["progress"]["total"].as_u64().unwrap();
-        assert_eq!(total, 2 + 3, "two layers and the three later stages");
+        let layers = app.session.doc().unwrap().font.glyphs.len() as u64;
+        assert_eq!(total, layers + 3, "one layer per glyph and the three later stages");
 
         // Each frame continues the run by one step; the progress bar and Cancel show meanwhile.
         let w = Window::new();
@@ -2214,14 +2215,15 @@ mod tests {
         let kept = call(&mut app, "audit.panel.run", json!({"profile": "outlines"}))["run"]["runId"].clone();
         let revision = app.session.doc().unwrap().revision;
         call(&mut app, "audit.panel.run", json!({"profile": "outlines", "inSteps": true}));
-        let out = call(&mut app, "audit.panel.continue", json!({"budget": 1}));
-        assert_eq!(out["progress"]["done"], json!(1));
+        // A new font's glyphs start .notdef, space, A: three layers reach A and stop before B.
+        let out = call(&mut app, "audit.panel.continue", json!({"budget": 3}));
+        assert_eq!(out["progress"]["done"], json!(3));
         let out = call(&mut app, "audit.panel.cancel", json!({}));
         assert_eq!(out["progress"], Value::Null);
         assert_eq!(out["run"]["partial"], json!(true));
         assert_eq!(out["run"]["kept"], json!(false), "partial results are not the engine's kept run");
         let run = app.state.panels.font_audit.run.clone().unwrap();
-        assert!(run.items.iter().all(|i| i.glyph.as_deref() == Some("A")), "only the first layer was examined");
+        assert!(!run.items.is_empty() && run.items.iter().all(|i| i.glyph.as_deref() != Some("B")), "only the first three layers were examined");
         assert_eq!(app.session.execute("audit.results", &json!({})).unwrap()["runId"], kept, "the kept run is unchanged");
         assert_eq!(app.session.doc().unwrap().revision, revision, "the font is unchanged");
         assert!(refused(&mut app, "audit.panel.previewFix", json!({"results": [run.items[0].id]})).contains("engine keeps"));
