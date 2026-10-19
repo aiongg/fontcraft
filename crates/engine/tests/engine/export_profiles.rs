@@ -156,7 +156,7 @@ fn save_export_profile_keeps_built_in_profiles_read_only() {
     assert_eq!(saved["created"], true);
     assert_eq!(
         saved["profile"]["params"],
-        json!({"folder": "Mine", "outlines": "cff", "containers": ["woff2", "plain"], "removeOverlap": true, "autohint": false})
+        json!({"folder": "Mine", "outlines": "cff", "containers": ["woff2", "plain"], "removeOverlap": true, "autohint": false, "cbdt": false})
     );
     let updated = run(&mut s, "file.saveExportProfile", json!({"name": "Mine", "settings": {"removeOverlap": false}}));
     assert_eq!(updated["created"], false);
@@ -186,6 +186,37 @@ fn save_export_profile_keeps_built_in_profiles_read_only() {
 
     run(&mut s, "file.removeExportProfile", json!({"name": "Mine"}));
     assert!(profile(&run(&mut s, "file.listExportProfiles", json!({})), "Mine").is_none());
+}
+
+/// A profile's `cbdt` setting reaches the compiler: the font it writes has `CBDT` and `CBLC`
+/// (empty strikes here, since the iColor image file does not exist, with a warning), and a
+/// profile without it writes neither.
+#[test]
+fn export_with_profiles_writes_cbdt_tables_when_the_profile_asks_for_them() {
+    use skrifa::{FontRef, Tag};
+    let dir = temp("cbdt");
+    let mut s = Session::with_document();
+    run(&mut s, "path.addPath", json!({"glyph": "A", "nodes": rect(60.0, 0.0, 560.0, 700.0)}));
+    s.edit("icolor layer", |font| {
+        let mut a = font.glyph_mut("A")?;
+        let mut l = fontcraft_model::Layer::new("m01", 600.0);
+        l.id = "x1".into();
+        a.layers.push(l);
+        Ok(())
+    })
+    .unwrap();
+    run(&mut s, "layer.convertToIColor", json!({"glyph": "A", "layer": "x1", "size": 64}));
+    run(&mut s, "layer.setIColorImage", json!({"glyph": "A", "layer": "x1", "path": "A 64.png"}));
+
+    let saved = run(&mut s, "file.saveExportProfile", json!({"name": "Bitmaps", "basedOn": "OpenType TT", "settings": {"cbdt": true}}));
+    assert_eq!(saved["profile"]["params"]["cbdt"], true);
+    assert!(fails(&mut s, "file.saveExportProfile", json!({"name": "Bitmaps", "settings": {"cbdt": "yes"}})).contains("cbdt"));
+    let out = run(&mut s, "file.exportWithProfiles", json!({"profiles": ["Bitmaps", "OpenType TT"], "destination": dir, "timestamp": 0}));
+    let has = |path: PathBuf, tag: &[u8; 4]| FontRef::new(&std::fs::read(path).unwrap()).unwrap().table_data(Tag::new(tag)).is_some();
+    assert!(has(dir.join("Bitmaps/Untitled-Regular.ttf"), b"CBDT") && has(dir.join("Bitmaps/Untitled-Regular.ttf"), b"CBLC"), "{out}");
+    assert!(!has(dir.join("OpenType TT/Untitled-Regular.ttf"), b"CBDT"), "{out}");
+    assert!(out.to_string().contains("no strikes"), "the missing image is reported: {out}");
+    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]

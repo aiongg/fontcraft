@@ -2,7 +2,7 @@
 //! `file.removeExportProfile`, `file.listExportProfiles`, `glyph.exportArtwork`.
 //!
 //! A profile is a named, saved set of the static export's settings: an output subfolder, the
-//! outline format, the containers, overlap removal and autohinting. Built-in profiles are fixed
+//! outline format, the containers, overlap removal, autohinting and the `CBDT` bitmap tables. Built-in profiles are fixed
 //! and read-only; the user's own live in the application settings under
 //! [`fontcraft_model::fc_keys::EXPORT_PROFILES`] as `[{name, params}]`. The settings file is
 //! untrusted: every stored profile is checked when it is read, and one that fails is reported and
@@ -55,7 +55,7 @@ const PDF_MAX_PAGE: f64 = 14_400.0;
 /// Most entries of a profile's `containers`.
 const MAX_CONTAINERS: usize = 3;
 /// The keys of a profile's `params`.
-const SETTING_KEYS: [&str; 5] = ["folder", "outlines", "containers", "removeOverlap", "autohint"];
+const SETTING_KEYS: [&str; 6] = ["folder", "outlines", "containers", "removeOverlap", "autohint", "cbdt"];
 
 /// The built-in profiles: name, outline format, containers. Each writes into a subfolder named
 /// after it.
@@ -69,7 +69,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Export Fonts As…",
             ["File"],
             None,
-            "{fonts?: [title or path] (default: the active document), profiles: [name], destination?: folder, bySource?: bool, installTemporarily?: bool, timestamp?: number|\"now\"} export every listed open font through every listed export profile in one run: each profile's fonts go into its output subfolder of the destination, or with bySource: true of the folder that holds each font's source file (give one or the other). Each profile builds the font's exportable instances as file.exportAll does, in the profile's outline format and containers, with its overlap removal; instances between masters are skipped and listed. Two profiles that would write the same file are refused. A failing export writes nothing. installTemporarily (installing the fonts until the app quits) is not supported yet → {profiles: [{profile, documents: [{title, destination, fonts, skipped}]}], written, warnings}",
+            "{fonts?: [title or path] (default: the active document), profiles: [name], destination?: folder, bySource?: bool, installTemporarily?: bool, timestamp?: number|\"now\"} export every listed open font through every listed export profile in one run: each profile's fonts go into its output subfolder of the destination, or with bySource: true of the folder that holds each font's source file (give one or the other). Each profile builds the font's exportable instances as file.exportAll does, in the profile's outline format and containers, with its overlap removal and, when its cbdt setting is on, the CBDT and CBLC bitmap tables from the iColor layers; instances between masters are skipped and listed. Two profiles that would write the same file are refused. A failing export writes nothing. installTemporarily (installing the fonts until the app quits) is not supported yet → {profiles: [{profile, documents: [{title, destination, fonts, skipped}]}], written, warnings}",
             has_doc,
             export_with_profiles
         ).files(const { &[FileParam::write("destination")] }).writes_files(),
@@ -78,7 +78,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Save Export Profile",
             [],
             None,
-            "{name: string, basedOn?: profile name, settings: {folder?: relative folder, outlines?: \"truetype\"|\"cff\", containers?: [\"plain\"|\"woff\"|\"woff2\"], removeOverlap?: bool, autohint?: bool}} create or update one of the user's export profiles, kept in the application settings. The settings start from basedOn's, else from the profile's own when it exists, else from the defaults (truetype, plain, removeOverlap true, autohint false), and `settings` replaces what it names. folder: the output subfolder, `/`-separated, relative and never climbing out with `..`; folder names ending in a space or a dot, and reserved device names (CON, PRN, AUX, NUL, COM1 to COM9, LPT1 to LPT9, with or without an extension), are refused on every system; empty writes into the destination itself; a new profile's folder defaults to its name. Built-in profiles are read-only: their names are refused; at most 256 profiles → {profile: {name, builtIn, params}, created: bool}",
+            "{name: string, basedOn?: profile name, settings: {folder?: relative folder, outlines?: \"truetype\"|\"cff\", containers?: [\"plain\"|\"woff\"|\"woff2\"], removeOverlap?: bool, autohint?: bool, cbdt?: bool}} create or update one of the user's export profiles, kept in the application settings. The settings start from basedOn's, else from the profile's own when it exists, else from the defaults (truetype, plain, removeOverlap true, autohint false, cbdt false), and `settings` replaces what it names. cbdt: also write CBDT and CBLC bitmap tables from the iColor layers. folder: the output subfolder, `/`-separated, relative and never climbing out with `..`; folder names ending in a space or a dot, and reserved device names (CON, PRN, AUX, NUL, COM1 to COM9, LPT1 to LPT9, with or without an extension), are refused on every system; empty writes into the destination itself; a new profile's folder defaults to its name. Built-in profiles are read-only: their names are refused; at most 256 profiles → {profile: {name, builtIn, params}, created: bool}",
             always,
             save_profile
         ),
@@ -96,7 +96,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "List Export Profiles",
             [],
             None,
-            "{} the export profiles: the built-in ones first, then the user's in the order they were made. problems lists stored profiles that cannot be read, which are left out → {profiles: [{name, builtIn, params: {folder, outlines, containers, removeOverlap, autohint}}], problems: [text]}",
+            "{} the export profiles: the built-in ones first, then the user's in the order they were made. problems lists stored profiles that cannot be read, which are left out → {profiles: [{name, builtIn, params: {folder, outlines, containers, removeOverlap, autohint, cbdt}}], problems: [text]}",
             always,
             list_profiles
         ),
@@ -134,7 +134,8 @@ fn built_in() -> Vec<Profile> {
     BUILT_IN
         .iter()
         .map(|(name, outlines, containers)| {
-            let params = json!({ "folder": name, "outlines": outlines, "containers": containers, "removeOverlap": true, "autohint": false });
+            let params =
+                json!({ "folder": name, "outlines": outlines, "containers": containers, "removeOverlap": true, "autohint": false, "cbdt": false });
             Profile { name: (*name).to_string(), built_in: true, params: params.as_object().cloned().unwrap_or_default() }
         })
         .collect()
@@ -244,6 +245,7 @@ fn merge_settings(base: &Map<String, Value>, settings: &Map<String, Value>, defa
     let params = json!({
         "folder": folder, "outlines": outlines, "containers": containers,
         "removeOverlap": flag("removeOverlap", true)?, "autohint": flag("autohint", false)?,
+        "cbdt": flag("cbdt", false)?,
     });
     Ok(params.as_object().cloned().unwrap_or_default())
 }
@@ -368,6 +370,7 @@ struct Plan {
     flavour: Flavour,
     containers: Vec<Container>,
     remove_overlap: bool,
+    cbdt: bool,
 }
 
 fn plan(p: &Params, profile: &Profile) -> Result<Plan> {
@@ -384,7 +387,7 @@ fn plan(p: &Params, profile: &Profile) -> Result<Plan> {
             profile.name
         )));
     }
-    Ok(Plan { profile: profile.clone(), flavour, containers, remove_overlap: pp.bool_or("removeOverlap", true)? })
+    Ok(Plan { profile: profile.clone(), flavour, containers, remove_overlap: pp.bool_or("removeOverlap", true)?, cbdt: pp.bool_or("cbdt", false)? })
 }
 
 /// The documents `fonts` names (titles or paths), else the active one, as indices.
@@ -489,7 +492,7 @@ fn export_with_profiles(s: &mut Session, v: &Value) -> Result<Value> {
     let mut file_count = 0usize;
     for plan in &plans {
         let folder = plan.profile.params.get("folder").and_then(Value::as_str).unwrap_or_default();
-        let options = Options { timestamp, remove_overlap: plan.remove_overlap, ..Default::default() };
+        let options = Options { timestamp, remove_overlap: plan.remove_overlap, cbdt: plan.cbdt, ..Default::default() };
         // One sink per destination folder: the profile's, or the profile's beside each source.
         let groups: Vec<(PathBuf, Vec<(usize, usize)>)> = match &base {
             Some(base) => vec![(below(base, folder), chosen.iter().copied().enumerate().collect())],

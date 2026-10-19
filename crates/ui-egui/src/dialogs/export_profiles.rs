@@ -39,7 +39,7 @@ pub const ARTWORK: Dialog = Dialog {
 };
 
 /// The settings fields, keyed as in a profile's params.
-const SETTINGS: [&str; 5] = ["folder", "outlines", "containers", "removeOverlap", "autohint"];
+const SETTINGS: [&str; 6] = ["folder", "outlines", "containers", "removeOverlap", "autohint", "cbdt"];
 
 fn names(session: &Session) -> Vec<String> {
     profiles(session).0.into_iter().take(MAX_CHOICES).map(|p| p.name).collect()
@@ -89,6 +89,8 @@ fn fields(session: &Session) -> Vec<Field> {
         .in_group("Output"),
         Field::bool("removeOverlap", "Remove Overlap", true, "Merge overlapping paths and components in every exported glyph").in_group("Outlines"),
         Field::bool("autohint", "Autohint", false, "Add automatic hints to the exported fonts").in_group("Hinting"),
+        Field::bool("cbdt", "CBDT", false, "Also write CBDT and CBLC bitmap tables from the iColor layers, for renderers that do not draw sbix")
+            .in_group("Colour"),
     ]
 }
 
