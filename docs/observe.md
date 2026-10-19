@@ -32,11 +32,11 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1352 rows to check: 2148 guesses and 492 observe steps.**
+**1357 rows to check: 2162 guesses and 494 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
-| **Built milestones (M0 to M6)** | all | **486** |
+| **Built milestones (M0 to M6)** | all | **487** |
 | Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 100 |
 | Built milestones (M0 to M6) | Edit View: text mode and preview | 32 |
 | Built milestones (M0 to M6) | Components and anchors | 83 |
@@ -45,27 +45,27 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Kerning and the Kerning window | 42 |
 | Built milestones (M0 to M6) | Font View | 108 |
 | Built milestones (M0 to M6) | Font Info and features | 9 |
-| Built milestones (M0 to M6) | Files: open, import, export | 40 |
+| Built milestones (M0 to M6) | Files: open, import, export | 41 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 5 |
-| **Later milestones (after M6)** | all | **866** |
-| Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 85 |
+| **Later milestones (after M6)** | all | **870** |
+| Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 86 |
 | Later milestones (after M6) | Edit View: text mode and preview | 25 |
 | Later milestones (after M6) | Components and anchors | 39 |
 | Later milestones (after M6) | Filters | 5 |
 | Later milestones (after M6) | Spacing and metrics keys | 12 |
 | Later milestones (after M6) | Kerning and the Kerning window | 12 |
-| Later milestones (after M6) | Font View | 16 |
+| Later milestones (after M6) | Font View | 18 |
 | Later milestones (after M6) | Font Info and features | 278 |
 | Later milestones (after M6) | Interpolation | 71 |
 | Later milestones (after M6) | Hinting | 106 |
-| Later milestones (after M6) | Colour fonts | 58 |
+| Later milestones (after M6) | Colour fonts | 59 |
 | Later milestones (after M6) | Files: open, import, export | 58 |
 | Later milestones (after M6) | Settings and the window | 13 |
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 62 |
 | Later milestones (after M6) | Elsewhere | 26 |
 
-## Built milestones (M0 to M6) (486)
+## Built milestones (M0 to M6) (487)
 
 ### Edit View: drawing, guides, layers and the Palette (100)
 
@@ -1226,7 +1226,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `Decompose Glyphs` (parameter, M6, handbook): List of glyph names whose components are turned into outlines at export
   - Guess: A text value is read as glyph names separated by commas or spaces, besides the documented list; the reference app with a text value would settle it.
 
-### Files: open, import, export (40)
+### Files: open, import, export (41)
 
 - [ ] `file.open` (M1, handbook, live): Open…
   - Guess: The menu label and place are our assumption, and the shortcut is the platform convention; the chapter states neither.
@@ -1235,6 +1235,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `glyphs3` (format, M1, docs): Glyphs file, format version 3
   - Guess: A gray colour `(gray, alpha)` is read as an RGBA colour with equal components, and the shape remembers which of its colours the file wrote as gray so that they are written as gray again. Settled by watching whether the reference app writes a colour picked from the gray swatches as gray.
   - Guess: A version 3 `strokePos` stored as text that is not a plain number stays a stored value, because it cannot be converted to the version 4 convention. Settled by finding a file whose stroke position is an expression.
+- [ ] `ufo3` (format, M1, docs): Unified Font Object 3
+  - Guess: A full-colour layer read from a colour layer list is named `Color`, the name the reference gives a new full-colour layer. Settled by opening a UFO whose lib has a colorLayers paint in the reference, if it reads one.
+  - Guess: Colours of the list's full-colour layers that are not palette entries are added to the end of every palette, painted with alpha 1 and their own alpha in the palette, as the compiler adds them; glyphsLib adds them the same way but also puts the alpha in the paint. Settled by comparing the COLR of the reference's UFO export of a full-colour font with fontmake's build of it.
 - [ ] `io.stableSourceSerialization` (behavior, M1, memory): Saving writes source files in a normalised form, with fixed key order,…
   - Open (recalled, not confirmed): Saving writes source files in a normalised form, with fixed key order, number formatting and indentation, and rewrites only the glyph files that changed, so version-control differences show real edits only. RoboFont bundles a UFO normaliser; the exact save behaviour is recalled rather than read.
 - [ ] `export.fileNaming` (behavior, M2, memory): Each exported file is named by the font's PostScript name (family and…
@@ -1379,9 +1382,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (866)
+## Later milestones (after M6) (870)
 
-### Edit View: drawing, guides, layers and the Palette (85)
+### Edit View: drawing, guides, layers and the Palette (86)
 
 - [ ] `anchors.ccmpAlongsideMark` (behavior, M8, handbook): When the mark feature is generated and glyphs such as idotless and…
   - Guess: ccmp follows from the glyph names alone, whether or not the marks carry anchors for the mark feature; Update in the reference app on a font with idotless and an anchorless acutecomb would settle it.
@@ -1438,6 +1441,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `editView.imageContextMenu` (panel, M11, handbook): Image context menu
   - Guess: A locked image's menu offers only Unlock Image, and an unlocked image's only the crop items. Settled by right-clicking a locked and an unlocked image in the reference.
   - Observe: Image font: lock H's image and right-click it; note the items. Unlock it and right-click again.
+- [ ] `image-jpeg` (format, M11, handbook): JPEG image placed in a glyph layer
+  - Guess: A converted image keeps its file name with a `png` extension, numbered when that name is taken, and the original name is not kept. Settled by exporting a font with a JPEG image to UFO from the reference and looking at its images folder and GLIF image element.
+  - Observe: Font with a JPEG and a TIFF image on two glyphs: export it as UFO; note the files in `images/`, their format and the GLIF `image` elements' file names.
 - [ ] `palette.pluginSections` (behavior, M13, handbook): Plug-ins can register their own Palette sections, which appear alongside the built-in…
   - Guess: Module sections follow the built-in sections in the order of the modules' names; the handbook does not say where plug-in sections go.
   - Guess: Values typed into a module's form are kept for the session only, and a module replaced by another version starts again from its defaults.
@@ -2039,7 +2045,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The stacked view aligns the members on their origin for a left group and on their advance width for a right group, where the kerning applies.
   - Guess: Propose (kerning.buildGroups without applying) and Apply are our additions, so built groups are reviewed before they are stored; a proposal made before the font changed is refused.
 
-### Font View (16)
+### Font View (18)
 
 - [ ] `smartFilter.rule.custom` (behavior, M8, handbook): Rule Custom holds a free-form glyph predicate written in the same expression…
   - Guess: The language adds matches (a regular expression over the whole value), which fea-rs refuses, because the Glyph Name rule offers matches and compiles to this language; && and || stand for AND and OR, and a yes-or-no attribute alone means == true. A comparison on tags holds when it holds for one tag. Settled by trying these forms in the reference's Custom rule.
@@ -2051,6 +2057,12 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `smartFilter.rule.hasTrueTypeHints` (behavior, M10, handbook): Rule Has TrueType Hints is true when the layer of the selected…
   - Guess: A TrueType hint left without its points (its nodes were deleted, so it is never compiled) does not count; a reference font with such a hint, filtered by this rule, would show whether it does.
   - Observe: T3: add a TrueType Stem to a glyph, delete one of its two nodes, then add a smart filter Has TrueType Hints is true; note whether the glyph is shown.
+- [ ] `fontView.cell.imageDisplay` (behavior, M11, handbook): A cell shows the image placed on the layer when View →…
+  - Guess: The image is drawn at its own opacity (50 % when the file states none), as Edit View draws it. Settled by a Font View cell of a glyph with an image in the reference.
+  - Guess: A missing or unreadable file draws the missing-image marker in the cell. Settled by moving an image file away and looking at Font View in the reference.
+- [ ] `fontView.image.dropOnCell` (behavior, M11, handbook): Dropping an image file from the file manager onto a glyph cell…
+  - Guess: The active layer of a glyph in Font View is its layer of Font View's master. Settled by dropping an image on a cell while Font View shows the second master in the reference.
+  - Guess: Several files dropped on Font View are matched to glyph names, whatever cell they land on, as Add Image does with several files. Settled by dropping two files on one cell in the reference.
 - [ ] `fontView.image.batchByFileName` (behavior, M11, handbook): When Add Image is given several files, each is matched to a…
   - Guess: Files with no glyph of their name are skipped and listed in the result; no glyph is created. Settled by Add Image with an unmatched file in the reference.
   - Observe: Image font: in Font View, Add Image with H.png, I.png, J.png and a.png; note which glyphs receive an image and any message about J, which has no glyph.
@@ -2901,6 +2913,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `TTFFamilyZonesThreshold` (parameter, M10, handbook): Integer PPM limit for applying family zones in TrueType hinting
   - Guess: Family zones apply up to and including the threshold PPM, are matched to the master's zones by index, are left out with a warning when the counts differ, and are not applied without the parameter; a reference export with family zones at the threshold size would settle it.
 - [ ] `color.preview.paletteDrivesFontView` (behavior, M11, handbook): Once the Color Palettes parameter exists, glyphs with palette layers are previewed…
+  - Guess: Cells use palette 0 of the master's palettes, as Edit View does. Settled by the palette font with two palettes in Font View in the reference.
+  - Guess: Of several iColor layers, a cell draws the largest size. Settled by a glyph with iColor 64 and iColor 128 layers in Font View in the reference.
+  - Guess: In a layered font, a cell stacks every master that has a Master Color, the first on top, whichever master Font View shows; a master without one shows plain outlines. Settled by the layered font in Font View in the reference.
   - Observe: Palette font: look at A in Font View; note whether its cell is drawn in colour and with which palette.
 - [ ] `color.layered.toColr` (behavior, M11, handbook): Color Layers to COLR on an instance converts a layered setup into…
   - Guess: The masters with a Master Color become palette layers of one glyph in master order, the last master at the bottom and the first on top (as Edit View stacks them), each in a palette entry made from its Master Color; the fallback outline is the instance's own master. Settled by exporting the layered test font with Color Layers to COLR from the reference.
@@ -3535,7 +3550,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: In the secondary reference, open Review Hints on a glyph with ghost hints and note what the width field shows for one.
   - Observe: Press Next on the last hint in the secondary reference's Review Hints and check whether it wraps to the first.
 
-### Colour fonts (58)
+### Colour fonts (59)
 
 - [ ] `color.fourKinds` (behavior, M11, handbook): Four colour workflows are supported: layered fonts (one font file per colour),…
   - Guess: A glyph may mix kinds: its palette and full-colour layers feed COLR, its iColor layers sbix and its svg layer the SVG table, each written by its own rule; an svg layer wins over a conversion by Color Layers to SVG for that glyph. Settled by exporting a glyph with a palette layer and an svg layer from the reference.
@@ -3549,6 +3564,12 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `color.preview.previewArea` (behavior, M11, handbook): Two previews, the strip that the eye button opens below the Edit…
   - Guess: The colour glyphs are not inverted by Invert, and the text colour row draws in the preview's text colour. Settled by inverting the Preview Area of a palette font in the reference.
   - Guess: A preview showing an instance or all instances draws every glyph in its text colour, since the instance has no selected layer. Settled by choosing an instance in the Preview Area of a palette font in the reference.
+- [ ] `color.preview.textPreview` (behavior, M11, handbook): Text Preview (Window › Text Preview) shows the font as the system…
+  - Guess: A glyph in more than one colour table is drawn from COLR, else SVG, else sbix, the order Edit View picks a glyph's colour layers in. Settled by exporting a glyph with palette, svg and iColor layers and looking at it in the reference's Text Preview.
+  - Guess: The sbix image is drawn from the smallest strike at least as large as the pixel size, else the largest, with its bottom left at the record's origin offsets from the glyph origin and no side bearing added. Settled by previewing an iColor font with two sizes at several text sizes in the reference.
+  - Guess: Colour glyphs are drawn with their origin on a whole pixel, so a glyph can sit up to half a pixel from its outline position. Settled by comparing small colour text with plain text in the reference's Text Preview.
+  - Guess: A colour glyph larger than 4,096 pixels on a side, or than 2,097,152 pixels, is drawn as its outline. Settled by previewing a colour font at the largest text size in the reference.
+  - Observe: Palette font with an instance whose Export COLR Table is off: open Text Preview, choose the instance in the style pop-up and note whether the glyphs show as plain outlines.
 - [ ] `color.layered.masterColor` (behavior, M11, handbook): The Master Color parameter on a master sets the colour its filled…
   - Guess: The other glyphs of the tab are filled in the same masters' colours as the edited glyph. Settled by typing several glyphs in a tab of a layered font with all masters shown in the reference.
   - Observe: Layered font: show all masters in Edit View; note whether each master is drawn in its Master Color with its opacity, and whether Master Color Dark is used in dark appearance.
