@@ -43,6 +43,8 @@ pub mod cff;
 pub mod color;
 pub mod core;
 pub mod misc;
+#[cfg(test)]
+mod oracle_digest;
 pub mod otdata;
 mod read;
 pub mod read_cff;

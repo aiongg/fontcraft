@@ -1,13 +1,14 @@
 //! `CFF `, `CFF2` and `VORG` against `ttx`'s compiler. The inputs are the dumps the writer tests
 //! compare with (`../cff/testdata/`, written by fontTools 4.66.1 for fonts built in code); the
-//! expected bytes in `testdata/*.compiled` are what fontTools 4.66.1 compiles from them, one
-//! table a line. fontTools refuses `cff1.ttx` as it is (two charstrings end with operands, and a
-//! `VORG` record names a glyph past the glyph order), so that dump is first edited as
-//! [`cff1_ttx`] does.
+//! `testdata/*.digest` hold the length and SHA-256 of each table fontTools 4.66.1 compiles from
+//! them, one table a line (see `oracle_digest`). fontTools refuses
+//! `cff1.ttx` as it is (two charstrings end with operands, and a `VORG` record names a glyph
+//! past the glyph order), so that dump is first edited as [`cff1_ttx`] does.
 #![allow(clippy::string_slice)]
 
 use super::{encode_float, format_g8};
 use crate::sfnt::{Flavour, SfntFont};
+use crate::ttx::oracle_digest::{assert_table, expected};
 use crate::ttx::{DumpOptions, ImportOptions, dump, import};
 
 const CFF1_TTX: &str = include_str!("../cff/testdata/cff1.ttx");
@@ -22,32 +23,20 @@ fn cff1_ttx() -> String {
     format!("{}{}", &s[..start], &s[end..])
 }
 
-fn expected(compiled: &str) -> Vec<([u8; 4], Vec<u8>)> {
-    compiled
-        .lines()
-        .map(|line| {
-            let (tag, hex) = line.split_once(' ').unwrap();
-            let tag: [u8; 4] = tag.replace('_', " ").as_bytes().try_into().unwrap();
-            let bytes = (0..hex.len()).step_by(2).map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap()).collect();
-            (tag, bytes)
-        })
-        .collect()
-}
-
-fn check(text: &str, compiled: &str) -> SfntFont {
+fn check(text: &str, digest: &str) -> SfntFont {
     let font = import(SfntFont::new(Flavour::Cff), text, &ImportOptions::default()).unwrap();
-    for (tag, bytes) in expected(compiled) {
+    for (tag, len, sha) in expected(digest) {
         let got = font.get(tag).unwrap_or_else(|| panic!("no '{}' table", String::from_utf8_lossy(&tag)));
-        assert_eq!(got, &bytes[..], "table '{}'", String::from_utf8_lossy(&tag));
+        assert_table(&tag, got, len, &sha);
     }
     font
 }
 
 #[test]
 fn cff_dumps_compile_as_ttx_compiles() {
-    check(&cff1_ttx(), include_str!("testdata/cff1.compiled"));
-    check(CID_TTX, include_str!("testdata/cid.compiled"));
-    check(CFF2_TTX, include_str!("testdata/cff2.compiled"));
+    check(&cff1_ttx(), include_str!("testdata/cff1.digest"));
+    check(CID_TTX, include_str!("testdata/cid.digest"));
+    check(CFF2_TTX, include_str!("testdata/cff2.digest"));
 }
 
 #[test]

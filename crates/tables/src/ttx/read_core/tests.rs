@@ -8,6 +8,7 @@
 
 use super::program::assemble;
 use crate::sfnt::{Flavour, SfntFont};
+use crate::ttx::oracle_digest::{assert_table, expected};
 use crate::ttx::{DumpOptions, ImportOptions, dump, import};
 
 const CORE_TTX: &str = include_str!("../core/testdata/core.ttx");
@@ -20,18 +21,6 @@ fn core_ttx() -> String {
     format!("{}{}", &CORE_TTX[..start], &CORE_TTX[end..])
 }
 
-/// The tag, length and SHA-256 (lowercase hex) of each table of a digest file.
-fn expected(digest: &str) -> Vec<([u8; 4], usize, String)> {
-    digest
-        .lines()
-        .map(|line| {
-            let mut parts = line.split(' ');
-            let tag: [u8; 4] = parts.next().unwrap().replace('_', " ").as_bytes().try_into().unwrap();
-            (tag, parts.next().unwrap().parse().unwrap(), parts.next().unwrap().to_string())
-        })
-        .collect()
-}
-
 fn assert_tables(font: &SfntFont, digest: &str) {
     let want = expected(digest);
     for (tag, len, sha) in &want {
@@ -39,10 +28,7 @@ fn assert_tables(font: &SfntFont, digest: &str) {
         if tag == b"head" {
             got[8..12].fill(0);
         }
-        if got.len() != *len || fontcraft_plugins::sha256::hex(&got) != *sha {
-            let hex: String = got.iter().map(|b| format!("{b:02x}")).collect();
-            panic!("table '{}' differs from what ttx compiles ({} bytes, {len} expected); ours: {hex}", String::from_utf8_lossy(tag), got.len());
-        }
+        assert_table(tag, &got, *len, sha);
     }
     assert_eq!(font.tables.len(), want.len(), "no other tables");
 }
