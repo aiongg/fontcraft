@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ttFont sfntVersion="\x00\x01\x00\x00" ttLibVersion="4.66">
+
+  <GlyphOrder>
+    <GlyphID id="0" name=".notdef"/>
+    <GlyphID id="1" name="A"/>
+    <GlyphID id="2" name="B"/>
+    <GlyphID id="3" name="C"/>
+  </GlyphOrder>
+
+  <fvar>
+    <Axis>
+      <AxisTag>wght</AxisTag>
+      <Flags>0x0</Flags>
+      <MinValue>100.0</MinValue>
+      <DefaultValue>400.0</DefaultValue>
+      <MaxValue>900.0</MaxValue>
+      <AxisNameID>256</AxisNameID>
+    </Axis>
+    <Axis>
+      <AxisTag>wdth</AxisTag>
+      <Flags>0x0</Flags>
+      <MinValue>75.0</MinValue>
+      <DefaultValue>100.0</DefaultValue>
+      <MaxValue>125.0</MaxValue>
+      <AxisNameID>257</AxisNameID>
+    </Axis>
+  </fvar>
+
+  <glyf>
+    <TTGlyph name=".notdef"/>
+    <TTGlyph name="A" xMin="0" yMin="0" xMax="100" yMax="100">
+      <contour>
+        <pt x="0" y="0" on="1"/>
+        <pt x="100" y="0" on="1"/>
+        <pt x="50" y="100" on="1"/>
+      </contour>
+      <instructions/>
+    </TTGlyph>
+    <TTGlyph name="B" xMin="0" yMin="0" xMax="10" yMax="10">
+      <contour>
+        <pt x="0" y="0" on="1"/>
+        <pt x="10" y="10" on="1"/>
+      </contour>
+      <instructions/>
+    </TTGlyph>
+    <TTGlyph name="C" xMin="0" yMin="0" xMax="100" yMax="100">
+      <component glyphName="A" x="0" y="0" flags="0x4"/>
+    </TTGlyph>
+  </glyf>
+
+  <cvt>
+    <cv index="0" value="10"/>
+    <cv index="1" value="20"/>
+    <cv index="2" value="-30"/>
+    <cv index="3" value="40"/>
+  </cvt>
+
+  <gvar>
+    <version value="1"/>
+    <reserved value="0"/>
+    <glyphVariations glyph="A">
+      <tuple>
+        <coord axis="wght" value="1.0"/>
+        <delta pt="0" x="1" y="-100"/>
+        <delta pt="1" x="2" y="200"/>
+        <delta pt="2" x="3" y="-300"/>
+        <delta pt="3" x="4" y="400"/>
+        <delta pt="4" x="5" y="-500"/>
+        <delta pt="5" x="6" y="600"/>
+        <delta pt="6" x="7" y="-700"/>
+      </tuple>
+      <tuple>
+        <coord axis="wght" min="0.25" value="0.5" max="1.0"/>
+        <delta pt="0" x="0" y="0"/>
+        <delta pt="1" x="0" y="0"/>
+        <delta pt="2" x="0" y="0"/>
+        <delta pt="3" x="0" y="0"/>
+        <delta pt="4" x="0" y="0"/>
+        <delta pt="5" x="0" y="0"/>
+        <delta pt="6" x="0" y="0"/>
+      </tuple>
+    </glyphVariations>
+    <glyphVariations glyph="B">
+      <tuple>
+        <coord axis="wdth" value="1.0"/>
+        <delta pt="0" x="10" y="-300"/>
+        <delta pt="2" x="-20" y="0"/>
+        <delta pt="5" x="30" y="400"/>
+      </tuple>
+    </glyphVariations>
+    <glyphVariations glyph="C">
+      <tuple>
+        <coord axis="wght" value="-1.0"/>
+        <coord axis="wdth" value="0.5"/>
+        <delta pt="1" x="5" y="-5"/>
+      </tuple>
+    </glyphVariations>
+  </gvar>
+
+  <cvar>
+    <version major="1" minor="0"/>
+    <tuple>
+      <coord axis="wght" value="1.0"/>
+      <delta cvt="0" value="1"/>
+      <delta cvt="1" value="-1"/>
+      <delta cvt="2" value="2"/>
+      <delta cvt="3" value="-2"/>
+    </tuple>
+    <tuple>
+      <coord axis="wdth" value="-1.0"/>
+      <delta cvt="0" value="300"/>
+      <delta cvt="3" value="-100"/>
+    </tuple>
+  </cvar>
+
+</ttFont>

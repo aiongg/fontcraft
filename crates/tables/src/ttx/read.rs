@@ -659,6 +659,13 @@ pub(crate) fn import_tree(mut font: SfntFont, root: &Element, options: &ImportOp
         Some(names) => Ok(names),
         None => glyph_order(&font),
     };
+    // fontTools compiles a table's dependencies first: `fvar` before the tables that take their
+    // axes from it, `glyf` and `cvt ` before the variations of their points and values.
+    elements.sort_by_key(|(tag, _)| match tag {
+        b"fvar" => 0,
+        b"glyf" | b"cvt " => 1,
+        _ => 2,
+    });
     let mut present: BTreeSet<Tag> = font.tables.keys().copied().collect();
     present.extend(elements.iter().map(|(t, _)| *t));
     let ctx = ReadContext::new(order, present, !options.keep_bounds);
@@ -679,6 +686,8 @@ pub(crate) fn import_tree(mut font: SfntFont, root: &Element, options: &ImportOp
         } else if &tag == b"loca" {
             // fontTools keeps the font's own `loca`; `glyf` replaces it when it is compiled.
             font.get(tag).map(<[u8]>::to_vec).unwrap_or_default()
+        } else if &tag == b"gvar" {
+            read_var::gvar(element, &ctx, &font, glyf.as_ref().map(|g| (g.data.as_slice(), g.locations.as_slice())))?
         } else if &tag == b"hmtx" || &tag == b"vmtx" {
             let vertical = &tag == b"vmtx";
             let m = read_core::compile_metrics(element, &ctx, vertical)?;
@@ -709,10 +718,10 @@ fn read_known(element: &Element, ctx: &ReadContext, font: &SfntFont) -> Result<O
     if let Some(t) = read_cff::read_table_with(element, ctx)? {
         return Ok(Some(t));
     }
-    type Reader = fn(&Element, &SfntFont) -> Result<Option<(Tag, Vec<u8>)>>;
-    let others: [Reader; 3] = [read_otdata::read_table, read_var::read_table, read_color::read_table];
+    type Reader = fn(&Element, &ReadContext, &SfntFont) -> Result<Option<(Tag, Vec<u8>)>>;
+    let others: [Reader; 3] = [read_otdata::read_table_with, read_var::read_table_with, read_color::read_table_with];
     for read in others {
-        if let Some(t) = read(element, font)? {
+        if let Some(t) = read(element, ctx, font)? {
             return Ok(Some(t));
         }
     }

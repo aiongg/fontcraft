@@ -709,7 +709,7 @@ area = "import-export"
 milestone = "M12"
 summary = "XML rendering of a compiled font, one element per table, used to inspect, diff and patch binaries. Written and read by the command-line tools for the tables we model; tables we do not model go through as hex dumps so a dump-and-compile cycle keeps them."
 ref = "fontTools ttx documentation; AFDKO docs (ttx listed as a companion tool)"
-notes = "M12.8: reading covers the core tables, CFF, CFF2, VORG and tables written as hex, compiled as fontTools 4.66 compiles them (tables import, tables.importTtx). The XML parser stops past 256 MiB of text, 64 levels of nesting and 50,000,000 elements, and reads literal line ends in attribute values as spaces, as XML parsers do."
+notes = "M12.8, M12.9: reading covers the core tables, CFF, CFF2, VORG, GSUB, GPOS, GDEF, BASE, JSTF, MATH, STAT, fvar, avar, meta, kern, gvar, cvar, HVAR, VVAR, MVAR, CPAL, COLR version 0, SVG and tables written as hex, compiled as fontTools 4.66 compiles them (tables import, tables.importTtx): the layout tables share equal subtables and lay them out in fontTools' order. Not read yet: COLR version 1, the bitmap tables and the Apple tables; an offset that overflows is refused where fontTools would restructure the lookups; a compressed SVG document is stored uncompressed. The XML parser stops past 256 MiB of text, 64 levels of nesting and 50,000,000 elements, and reads literal line ends in attribute values as spaces, as XML parsers do."
 status = "docs"
 
 # ───────────────────────────── Images placed in glyphs ─────────────────────────────
