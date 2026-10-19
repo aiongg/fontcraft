@@ -239,7 +239,7 @@ chosen by the kind of source and by `--format`:
 
 **Built (M2).** `--format ttf|otf`, `--container plain|woff|woff2`, `-o`/`--output-dir`,
 `--instances[=NAME,...]`, `--masters-as-instances`, `--keep-overlaps`, `--keep-direction`,
-`--conversion-error`, `--timestamp` and `--plan`. Each SOURCE is opened as a document and built by
+`--conversion-error`, `--timestamp`, `--cbdt` and `--plan`. Each SOURCE is opened as a document and built by
 `font.compile` (or described by `font.compilePlan`); the command prints one JSON line per SOURCE, and
 with several sources one that fails does not stop the others. The other options in the table below
 are later work.
@@ -253,7 +253,9 @@ skipped, and a source that builds nothing fails. Overlapping contours are merged
 `--keep-overlaps` is given; a glyph whose overlaps cannot be removed keeps them, with a warning
 naming it. Contours are reversed for TrueType unless
 `--keep-direction`; curves are converted to quadratics within `--conversion-error` em (default 0.001).
-`--timestamp` sets `head.created` and `head.modified` (default `SOURCE_DATE_EPOCH`, else now). CFF output
+`--timestamp` sets `head.created` and `head.modified` (default `SOURCE_DATE_EPOCH`, else now).
+`--cbdt` also writes CBDT and CBLC bitmap tables from the iColor layers; variable fonts never get
+them. CFF output
 is not subroutinised yet. Glyphs are written under their production names, made valid as fontc makes
 them, with a warning listing the names changed. Later: `--no-production-names`; glyphs flagged as not
 exported left out unless `--no-subset` (until then they are always left out); with `--output-layout

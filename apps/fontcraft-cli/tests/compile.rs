@@ -119,3 +119,39 @@ fn compile_merges_overlaps_unless_told_to_keep_them() {
     }
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn compile_cbdt_adds_the_bitmap_tables_of_icolor_layers() {
+    let dir = temp("cbdt");
+    let mut s = Session::with_document();
+    s.edit("icolor layer", |font| {
+        let mut l = fontcraft_engine::model::Layer::new("m01", 600.0);
+        l.id = "x1".into();
+        font.glyph_mut("A")?.layers.push(l);
+        Ok(())
+    })
+    .unwrap();
+    let layer = "x1";
+    s.execute("layer.convertToIColor", &json!({"glyph": "A", "layer": layer, "size": 64})).unwrap();
+    s.execute("layer.setIColorImage", &json!({"glyph": "A", "layer": layer, "path": "A 64.png"})).unwrap();
+    let src = dir.join("Color.fontcraft");
+    s.execute("file.saveAs", &json!({"path": src})).unwrap();
+    let src = src.to_str().unwrap();
+
+    let tables = |extra: &[&str]| -> Vec<String> {
+        let mut args = vec!["compile", src, "--plan"];
+        args.extend_from_slice(extra);
+        let (code, stdout, stderr) = cli(&args);
+        assert_eq!(code, 0, "{stderr}");
+        let plan: Value = serde_json::from_str(stdout.trim()).unwrap();
+        plan["result"]["outputs"][0]["tables"].as_array().unwrap().iter().map(|t| t.as_str().unwrap().to_string()).collect()
+    };
+    assert!(!tables(&[]).iter().any(|t| t == "CBDT"));
+    let with = tables(&["--cbdt"]);
+    assert!(with.iter().any(|t| t == "CBDT") && with.iter().any(|t| t == "CBLC"), "{with:?}");
+
+    let (code, _, stderr) = cli(&["compile", src, "--variable", "--cbdt"]);
+    assert_ne!(code, 0, "variable fonts have no CBDT option");
+    assert!(stderr.contains("--variable takes only"), "{stderr}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

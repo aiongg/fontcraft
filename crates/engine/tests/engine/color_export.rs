@@ -88,3 +88,35 @@ fn color_describe_export_reports_the_tables_layers_and_switches_of_each_instance
     assert!(s.execute("color.describeExport", &json!({"instance": "Bold"})).is_err());
     assert!(s.execute("color.describeExport", &json!({"instance": 0, "master": master_id})).is_err());
 }
+
+/// `A` with an iColor 64 layer whose image is `A 64.png`; nothing reads the image before a build.
+fn icolor_font() -> Session {
+    let mut s = Session::with_document();
+    s.edit("icolor layer", |font| {
+        let mut a = font.glyph_mut("A")?;
+        let mut l = Layer::new("m01", 600.0);
+        l.id = "x1".into();
+        a.layers.push(l);
+        Ok(())
+    })
+    .unwrap();
+    run(&mut s, "layer.convertToIColor", json!({"glyph": "A", "layer": "x1", "size": 64}));
+    run(&mut s, "layer.setIColorImage", json!({"glyph": "A", "layer": "x1", "path": "A 64.png"}));
+    s
+}
+
+/// `color.export.cbdtNotInReference`: the export option `cbdt` adds CBDT and CBLC to what
+/// `font.compile` builds, and only when it is given.
+#[test]
+fn font_compile_plan_writes_cbdt_and_cblc_only_with_the_cbdt_option() {
+    let mut s = icolor_font();
+    let tables = |s: &mut Session, p: Value| -> Vec<String> {
+        let out = run(s, "font.compilePlan", p);
+        out["outputs"][0]["tables"].as_array().unwrap().iter().map(|t| t.as_str().unwrap().to_string()).collect()
+    };
+    let plain = tables(&mut s, json!({"sections": ["outputs", "tables"]}));
+    assert!(!plain.iter().any(|t| t == "CBDT" || t == "CBLC"), "{plain:?}");
+    let with = tables(&mut s, json!({"sections": ["outputs", "tables"], "cbdt": true}));
+    assert!(with.iter().any(|t| t == "CBDT") && with.iter().any(|t| t == "CBLC"), "{with:?}");
+    assert!(s.execute("font.compilePlan", &json!({"cbdt": "yes"})).is_err(), "cbdt is true or false");
+}
