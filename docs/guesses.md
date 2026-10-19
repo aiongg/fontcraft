@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**2239 guesses on 1351 rows (556 of them live commands).**
+**2252 guesses on 1356 rows (557 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -1743,6 +1743,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 
 | Row | Milestone | Status | Live | Guess |
 |---|---|---|---|---|
+| `font.transform` | M12 | docs | yes | A composite whose component glyph is transformed keeps showing it as before when the composite itself is not selected: the component's transform becomes the inverse of the matrix; a user transforming part of a font would settle whether the composite should follow its component instead. |
+| `font.transform` | M12 | docs | yes | scaleEm multiplies units per em by the absolute value of the matrix's a and changes nothing else, as rotatefont's -fm changes only the FontMatrix; a TrueType user would settle whether metrics should follow. |
 | `collection.unpack` | M12 | docs | yes | A member whose file name another member already takes gets the collection name plus -fontN, N its own index or the next number no other member uses; otc2otf on such a collection would settle it. |
 | `collection.unpack` | M12 | docs | yes | When a later file cannot be written, the fonts this call created before it are removed and the error says so; no reference tool documents a partial failure. |
 | `woff.decompress` | M12 | docs | yes | extractMetadata and extractPrivateData that name the input, the font output or each other (compared as resolved paths) are refused before anything is written; no reference tool documents the case. |
@@ -1773,6 +1775,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `dump` (cli) | M12 | docs | – | A dump past 1 GiB of text (the JSON form counting its element tree) stops with an error, and a simple glyph whose contour end points decrease is written as hex with the decompilation error, where ttx would write repeated points; a font that needs more would settle the limit. |
 | `dump` (cli) | M12 | docs | – | A coverage or class definition table whose ranges list more than 10,000,000 glyphs, or layout subtables nested so deep that their elements would pass 64 levels (extension lookups pointing at extension lookups), make the table be written as hex with the decompilation error, where ttx writes the glyphs in full and fails on the nesting; a font that needs more would settle the limits. |
 | `tables copy` (cli) | M12 | inferred | – | Copying a table the target already has replaces it without a prompt, as tables add does; a test against the reference workflow (sfntedit extract then add) shows the same result. |
+| `tables import` (cli) | M12 | docs | – | Without -o or --in-place the result is written beside the input as FONT.edited.EXT, as the other tables actions do; the reference tool writes FONT#1.EXT beside the input, and a user of the reference command line would settle which to follow. |
 | `glyphs rename` (cli) | M12 | docs | – | Names a GOADB or map lists that the font lacks are reported as missing, not refused, since one GOADB serves a whole family. Settled by running tx -gf with a GOADB that names an absent glyph. |
 | `glyphs reorder` (cli) | M12 | docs | – | --sort unicode puts encoded glyphs first by their lowest code point and keeps the unencoded ones after them in their old order. Settled by tx's +b ordering on a font with unencoded glyphs. |
 | `glyphs reorder` (cli) | M12 | docs | – | --sort size sorts by the byte size of each glyph's outline data (glyf entry or charstring), smallest first. Settled by finding a reference tool that documents a size order. |
@@ -1782,6 +1785,16 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `metrics` (cli) | M12 | docs | – | With several fonts on the command line the text forms print a '## FONT' line before each report. |
 | `subset` (cli) | M12 | docs | – | While variation subsetting is not built, a variable font loses every variation table together (fvar, avar, gvar, cvar, HVAR, VVAR, MVAR, STAT), so no subset claims axes without the data behind them; M12.19 replaces this. |
 | `subset` (cli) | M12 | docs | – | Unused CFF subroutines stay in the subset (pyftsubset removes them); outlines are the same, the file is larger. Comparing sizes on the corpus would show whether pruning is worth porting. |
+| `instance` (cli) | M12 | docs | – | --named matches its pattern anywhere in the subfamily or PostScript name of an fvar named instance; checking makeinstancesufo and fontmake on a designspace with similar instance names would settle the matching rule. |
+| `instance` (cli) | M12 | docs | – | A named instance without a PostScript name is written as <input stem>-<subfamily without spaces>.<ext>; the reference tools name such files from the family and style names, which a run on such a font would show. |
+| `merge` (cli) | M12 | docs | – | With a map, the result's glyph order is .notdef first, then each font's glyphs in its map's order (all glyphs of a font without a map, in font order); comparing with mergefonts' output order would settle it. |
+| `merge` (cli) | M12 | docs | – | --layout drop still unites the cmaps (first font wins, no locl lookups), so a TrueType result stays usable; mergefonts writes no cmap at all. |
+| `merge` (cli) | M12 | docs | – | A glyph merge takes head, hhea, vhea, OS/2, name, post and the font programs from the first font unchanged, apart from the glyph count, the bounding box, the hhea extents and the loca format. |
+| `merge` (cli) | M12 | docs | – | When not every font has vmtx and vhea, the result has neither (with a warning); fontTools fails on such input. |
+| `merge` (cli) | M12 | docs | – | Without a timestamp the library keeps the first font's creation time and the latest modification time; the command sets both to SOURCE_DATE_EPOCH or the current time, as fontTools does. |
+| `transform` (cli) | M12 | docs | – | A negative advance width, which rotatefont writes into CFF, is set to 0 with a warning because hmtx cannot hold it; a font that relies on such widths would settle it. |
+| `transform` (cli) | M12 | docs | – | On a TrueType font a matrix strips the instructions of every changed glyph, drops fpgm, prep, cvt and cvar when no glyph keeps instructions, and drops hdmx, LTSH and VDMX whenever a glyph or width changed; rotatefont writes only CFF, so a TrueType user would settle it. |
+| `transform` (cli) | M12 | docs | – | A matrix leaves vmtx, post.italicAngle, the hhea caret slope, kerning and GPOS as they are, as rotatefont leaves everything but outlines and widths; a user of slanted output would settle whether the slant should reach italicAngle. |
 | `collection pack` (cli) | M12 | docs | – | A --share-table that names a font past the inputs, or a font without that table, is refused; otf2otc ignores it silently. A user report of a script that relies on otf2otc's behaviour would settle it. |
 | `collection unpack` (cli) | M12 | docs | – | When two members have the same PostScript name, the later ones are named STEM-fontN; otc2otf writes them to the same path, so the last one wins. A user report would settle whether the reference behaviour is wanted. |
 | `diff` (cli) | M12 | docs | – | Without --all a table lists at most 1000 removed or added lines, or 4096 hex rows; none of the reference tools caps its output, so the cap is ours. |
