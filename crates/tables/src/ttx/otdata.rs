@@ -20,7 +20,7 @@
 //!   pointing at extension lookups), are refused, so the table is written as hex. `ttx` writes
 //!   the first in full and fails on the second.
 
-mod engine;
+pub(crate) mod engine;
 mod schema;
 #[cfg(test)]
 mod tests;
@@ -53,6 +53,11 @@ pub(crate) fn write_layout_table(tag: Tag, data: &[u8], font: &SfntFont, w: &mut
     let order = glyph_order(font, w);
     let walker = Walker::new(data, tag, order, font.get(*b"name"));
     walker.write_top(crate::sfnt::tag_str(tag).trim_end(), w)
+}
+
+/// The layout named `name` in the generated schema, for the TTX reader.
+pub(crate) fn layout_def(name: &str) -> Option<&'static engine::Def> {
+    schema::def(name)
 }
 
 /// The glyph names. A font whose glyph order cannot be read still has its tables written, with
