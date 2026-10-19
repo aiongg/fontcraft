@@ -334,6 +334,8 @@ fn set_modified(font: &mut SfntFont, unix: i64) {
 }
 
 /// An output written to a temporary file beside its target.
+// The browser writes no files, so nothing builds one there.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 struct Staged {
     temp: PathBuf,
     /// The file the temporary replaces: the output, or the file it links to.
