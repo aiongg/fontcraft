@@ -54,6 +54,9 @@ pub const MAX_CHARSTRING: usize = 65_535;
 
 /// Most axes an instancing location or limit names.
 pub const MAX_AXES: usize = fontcraft_model::MAX_AXIS_VALUES;
+/// Most named instances read from one `fvar` table, and most instances one instancing run
+/// builds.
+pub const MAX_NAMED_INSTANCES: usize = 1_024;
 /// Most tuple variations for one glyph.
 pub const MAX_TUPLE_VARIATIONS: usize = 65_535;
 

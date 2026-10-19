@@ -4,8 +4,10 @@
 //! the same lines. The command runs [`instantiate`]: a compiled font goes to the binary path
 //! (M12.20, M12.21); any other input is a source, for [`instantiate_source`] (M12.22).
 //!
-//! Whole-file commands follow [`super::file_io`]: paths in, the input never changed, the outputs
-//! built in memory and written at the end, a refusal on the web.
+//! Whole-file commands follow [`super::file_io`]: paths in, the input never changed, a refusal on
+//! the web. Each output is written to a temporary file beside its target as it is built; once
+//! every instance is built they are moved into place, so a failure leaves existing files as
+//! they were.
 
 use std::path::{Path, PathBuf};
 
@@ -112,26 +114,70 @@ fn instantiate(_: &mut Session, params: &Value) -> Result<Value> {
         return Err(p.bad("`inPlace` replaces one file, and this run builds several instances"));
     }
 
-    let mut built: Vec<(PathBuf, Vec<u8>, Value)> = Vec::with_capacity(jobs.len());
+    let created = file_io::create_output_dir(&req)?;
+    let mut staged: Vec<Staged> = Vec::with_capacity(jobs.len());
+    let finish = Finish { remove_overlaps, ignore_overlap_errors, stamp, extension };
+    let results = build_all(&p, &font, &input.path, &req, &options, &finish, jobs, &mut staged).and_then(|results| commit(&staged).map(|()| results));
+    match results {
+        Ok(results) => Ok(json!({ "results": results })),
+        Err(e) => {
+            discard(&staged);
+            file_io::remove_created(&created);
+            Err(e)
+        }
+    }
+}
+
+/// What is done to each instance after it is built.
+struct Finish<'a> {
+    remove_overlaps: bool,
+    ignore_overlap_errors: bool,
+    /// `head.modified`, in Unix seconds; `None` keeps it.
+    stamp: Option<i64>,
+    extension: Option<&'a str>,
+}
+
+/// Builds every job and stages its output; answers the result entries.
+#[allow(clippy::too_many_arguments)]
+fn build_all(
+    p: &Params<'_>,
+    font: &SfntFont,
+    input: &Path,
+    req: &OutputRequest,
+    options: &InstanceOptions,
+    finish: &Finish<'_>,
+    jobs: Vec<Job>,
+    staged: &mut Vec<Staged>,
+) -> Result<Vec<Value>> {
+    let mut outs: Vec<PathBuf> = Vec::with_capacity(jobs.len());
+    let mut entries = Vec::with_capacity(jobs.len());
     for job in jobs {
-        let mut result = instance::instantiate(&font, &InstanceOptions { limits: job.limits.clone(), ..options.clone() })?;
+        let mut result = instance::instantiate(font, &InstanceOptions { limits: job.limits.clone(), ..options.clone() })?;
         let is_static = result.get(*b"fvar").is_none();
-        if remove_overlaps && is_static {
-            let outline =
-                OutlineOptions { keep_hinting: true, ignore_errors: ignore_overlap_errors, ..OutlineOptions::new(OutlineAction::RemoveOverlaps) };
+        if finish.remove_overlaps && is_static {
+            let outline = OutlineOptions {
+                keep_hinting: true,
+                ignore_errors: finish.ignore_overlap_errors,
+                ..OutlineOptions::new(OutlineAction::RemoveOverlaps)
+            };
             result = fontcraft_tables::outlines::repair(&result, &outline)?.font;
         }
-        if let Some(t) = stamp {
+        if let Some(t) = finish.stamp {
             set_modified(&mut result, t);
         }
         let bytes = fontcraft_tables::write(&result, &WriteOptions { order: TableOrder::Recommended })?;
         let out = match &job.named {
-            Some(named) if req.output.is_none() && !req.in_place => named_path(&input.path, &req, named, extension)?,
-            _ => file_io::output_path(&input.path, &req, ".instance", extension)?,
+            Some(named) if req.output.is_none() && !req.in_place => named_path(input, req, named, finish.extension)?,
+            _ => file_io::output_path(input, req, ".instance", finish.extension)?,
         };
-        if built.iter().any(|(o, _, _)| *o == out) {
+        if outs.contains(&out) {
             return Err(p.bad(format!("two instances would both be written to {}", out.display())));
         }
+        file_io::check_write(&out)?;
+        if req.no_clobber && !req.in_place && out.exists() {
+            return Err(EngineError::Io(format!("{} exists and noClobber is set", out.display())));
+        }
+        staged.push(stage(&out, &bytes, staged.len())?);
         let mut entry = json!({ "output": out.display().to_string(), "location": location_json(&job.limits), "static": is_static });
         if let (Some(named), Some(obj)) = (&job.named, entry.as_object_mut()) {
             obj.insert("location".into(), tagged(&named.coordinates));
@@ -142,17 +188,10 @@ fn instantiate(_: &mut Session, params: &Value) -> Result<Value> {
                 obj.insert("postscriptName".into(), json!(ps));
             }
         }
-        built.push((out, bytes, entry));
+        outs.push(out);
+        entries.push(entry);
     }
-    let mut written: Vec<&Path> = Vec::with_capacity(built.len());
-    for (out, bytes, _) in &built {
-        if let Err(e) = file_io::write_output(out, bytes, &req) {
-            remove_written(&written);
-            return Err(e);
-        }
-        written.push(out);
-    }
-    Ok(json!({ "results": built.into_iter().map(|(_, _, v)| v).collect::<Vec<_>>() }))
+    Ok(entries)
 }
 
 /// The instances the parameters ask for: the fvar named instances chosen by `named`, `all` or
@@ -199,6 +238,9 @@ fn jobs(p: &Params<'_>, font: &SfntFont) -> Result<Vec<Job>> {
     };
     if picked.is_empty() {
         return Err(p.bad("no named instance matches"));
+    }
+    if picked.len() > fontcraft_tables::limits::MAX_NAMED_INSTANCES {
+        return Err(p.bad(format!("one run builds at most {} instances", fontcraft_tables::limits::MAX_NAMED_INSTANCES)));
     }
     Ok(picked.into_iter().map(|n| Job { limits: n.coordinates.iter().map(|(t, v)| (*t, AxisLimit::Pin(*v))).collect(), named: Some(n) }).collect())
 }
@@ -291,15 +333,69 @@ fn set_modified(font: &mut SfntFont, unix: i64) {
     }
 }
 
+/// An output written to a temporary file beside its target.
+struct Staged {
+    temp: PathBuf,
+    /// The file the temporary replaces: the output, or the file it links to.
+    target: PathBuf,
+}
+
+/// Writes `bytes` to a new temporary file beside `out` (beside the file it links to, for a
+/// link), with the permissions of the file it will replace.
 #[cfg(not(target_arch = "wasm32"))]
-fn remove_written(paths: &[&Path]) {
-    for path in paths {
-        let _ = std::fs::remove_file(path);
+fn stage(out: &Path, bytes: &[u8], n: usize) -> Result<Staged> {
+    use std::io::Write as _;
+    let io = |path: &Path, e: std::io::Error| EngineError::Io(format!("cannot write {}: {e}", path.display()));
+    let target = if out.is_symlink() { std::fs::canonicalize(out).map_err(|e| io(out, e))? } else { out.to_path_buf() };
+    if target.is_dir() {
+        return Err(EngineError::Io(format!("cannot write {}: it is a folder", target.display())));
+    }
+    let name = target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "instance".into());
+    let temp = target.with_file_name(format!(".{name}.{}-{n}.tmp", std::process::id()));
+    let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&temp).map_err(|e| io(&temp, e))?;
+    if let Err(e) = file.write_all(bytes).and_then(|()| file.sync_all()) {
+        let _ = std::fs::remove_file(&temp);
+        return Err(io(&temp, e));
+    }
+    if let Ok(meta) = std::fs::metadata(&target) {
+        let _ = std::fs::set_permissions(&temp, meta.permissions());
+    }
+    Ok(Staged { temp, target })
+}
+
+/// Moves every staged output into place. If one cannot be moved, the ones after it are
+/// discarded and the error says which were written.
+#[cfg(not(target_arch = "wasm32"))]
+fn commit(staged: &[Staged]) -> Result<()> {
+    for (i, s) in staged.iter().enumerate() {
+        if let Err(e) = std::fs::rename(&s.temp, &s.target) {
+            discard(staged.get(i..).unwrap_or_default());
+            return Err(EngineError::Io(format!("cannot write {}: {e}; the {i} outputs before it were written", s.target.display())));
+        }
+    }
+    Ok(())
+}
+
+/// Removes the temporaries that are still there.
+#[cfg(not(target_arch = "wasm32"))]
+fn discard(staged: &[Staged]) {
+    for s in staged {
+        let _ = std::fs::remove_file(&s.temp);
     }
 }
 
 #[cfg(target_arch = "wasm32")]
-fn remove_written(_: &[&Path]) {}
+fn stage(out: &Path, _: &[u8], _: usize) -> Result<Staged> {
+    Err(EngineError::Unsupported(format!("writing {} in the browser", out.display())))
+}
+
+#[cfg(target_arch = "wasm32")]
+fn commit(_: &[Staged]) -> Result<()> {
+    Ok(())
+}
+
+#[cfg(target_arch = "wasm32")]
+fn discard(_: &[Staged]) {}
 
 #[cfg(test)]
 #[cfg(not(target_arch = "wasm32"))]
@@ -399,6 +495,25 @@ mod tests {
         assert!(s.execute("font.instantiate", &json!({ "input": input, "location": { "wght": 500 }, "clamp": false })).is_err());
         let refused = s.execute("font.instantiate", &json!({ "input": input, "location": { "wght": 650 }, "noClobber": true }));
         assert!(refused.is_err(), "the output exists and noClobber is set");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_failed_instance_leaves_existing_outputs_as_they_were() {
+        let dir = std::env::temp_dir().join(format!("fontcraft-instance-fail-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let input = dir.join("V.ttf");
+        std::fs::write(&input, variable_font()).unwrap();
+        let out = dir.join("out");
+        std::fs::create_dir_all(out.join("V-Bold.ttf")).unwrap();
+        std::fs::write(out.join("T-Light.ttf"), b"old").unwrap();
+        let mut s = Session::new();
+        let err = s.execute("font.instantiate", &json!({ "input": input, "all": true, "outputDir": out })).unwrap_err();
+        assert!(err.to_string().contains("folder"), "{err}");
+        assert_eq!(std::fs::read(out.join("T-Light.ttf")).unwrap(), b"old", "the first instance did not replace the file");
+        let mut left: Vec<String> = std::fs::read_dir(&out).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+        left.sort();
+        assert_eq!(left, ["T-Light.ttf", "V-Bold.ttf"], "no temporary file is left");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

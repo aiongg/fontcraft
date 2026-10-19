@@ -207,14 +207,18 @@ pub struct NamedInstance {
     pub postscript_name: Option<String>,
 }
 
-/// The named instances of the font's `fvar` table.
+/// The named instances of the font's `fvar` table; more than
+/// [`MAX_NAMED_INSTANCES`](crate::limits::MAX_NAMED_INSTANCES) are refused.
 pub fn named_instances(font: &SfntFont) -> Result<Vec<NamedInstance>> {
     let data = font.get(*b"fvar").ok_or_else(|| TablesError::MissingTable("fvar".into()))?;
     let fvar = Fvar::read(FontData::new(data)).map_err(|e| TablesError::invalid(format!("the fvar table cannot be read: {e}")))?;
     let axes = variations::fvar_axes(font)?;
     let instances = fvar.instances().map_err(|e| TablesError::invalid(format!("the fvar instances cannot be read: {e}")))?;
+    if instances.len() > crate::limits::MAX_NAMED_INSTANCES {
+        return Err(TablesError::TooLarge { what: "the named instances of the fvar table", limit: crate::limits::MAX_NAMED_INSTANCES });
+    }
     let name = font.get(*b"name").and_then(|d| Name::read(FontData::new(d)).ok());
-    let mut out = Vec::new();
+    let mut out = Vec::with_capacity(instances.len());
     for (index, inst) in instances.iter().enumerate() {
         let inst = inst.map_err(|e| TablesError::invalid(format!("fvar instance {index} cannot be read: {e}")))?;
         let coordinates = axes.iter().zip(inst.coordinates.iter()).map(|(a, c)| (a.tag, c.get().to_f64())).collect();
