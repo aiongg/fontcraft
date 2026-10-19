@@ -34,15 +34,10 @@ fn bad(what: impl Into<String>) -> TablesError {
     TablesError::invalid(what)
 }
 
-/// Applies `GDEF`'s variation store to `GDEF` and `GPOS`, then resolves the feature variations of
-/// `GSUB` and `GPOS`. `coords` is the normalised location, one value per `fvar` axis.
+/// Applies `BASE`'s variation store to `BASE` and `GDEF`'s to `GDEF` and `GPOS`, then resolves
+/// the feature variations of `GSUB` and `GPOS`. `coords` is the normalised location, one value per `fvar` axis.
 pub(super) fn instantiate_layout(font: &mut SfntFont, coords: &[f64]) -> Result<()> {
-    if let Some(data) = font.get(*b"BASE") {
-        let base = read_fonts::tables::base::Base::read(FontData::new(data)).map_err(|e| bad(format!("the BASE table cannot be read: {e}")))?;
-        if base.item_var_store_offset().is_some_and(|o| !o.is_null()) {
-            return Err(TablesError::Unsupported("instancing a BASE table that holds variation data".into()));
-        }
-    }
+    super::base::full(font, coords)?;
     let deltas = gdef_deltas(font, coords)?;
     if let Some(deltas) = &deltas
         && let Some(data) = font.get(*b"GDEF")

@@ -1133,6 +1133,14 @@ names. `--update-name-table` derives them from `STAT`; it fails if the font has 
 the location. `--named` and `--all` take the names from the named instance instead and name each output
 file after its PostScript name.
 
+**CFF2 outlines.** Every blend of the charstrings and Private DICTs is resolved at the location, the
+deltas rounded half to even as varLib.instancer rounds them; a partial instance rebases each variation-store
+subtable and keeps blends where something still varies. The result has no subroutines; hints are kept.
+`HVAR` and `VVAR` move the advances. `--downgrade-cff2` writes a CID-keyed CFF table once nothing in the
+outlines varies. Two differences from varLib.instancer change no outline: the charstring operators are kept
+as they were (the instancer respecialises them), and a downgraded font has its `head` and `hhea` bounds and
+the CFF FontBBox recomputed (the instancer keeps the input's `head` and `hhea` values when it downgrades).
+
 **Overlaps.** Variable TrueType fonts normally contain overlapping contours. A static instance keeps
 them and sets the overlap flags so that rasterisers use non-zero winding; `--remove-overlaps` merges them
 instead and drops hinting of changed glyphs.

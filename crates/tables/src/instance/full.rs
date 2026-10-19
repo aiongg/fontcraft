@@ -19,13 +19,18 @@
 //!    maxima and `head.flags` bit 1 (`maxp.recalc`). A `post` table fontTools loads on the way
 //!    (a `slnt` axis, `MVAR` deltas for it) has its version 2 names stored again as fontTools
 //!    stores them.
+//! 6. `CFF2` outlines (see `cff2.rs`): every blend resolved after `HVAR` and `VVAR` moved the
+//!    advances, the variation store dropped, and with `downgrade_cff2` a `CFF ` table written
+//!    instead; `BASE` coordinates take their deltas (see `base.rs`).
+//! 7. With `update_names`, the style names come from the `STAT` axis values at the location
+//!    before anything else changes, and the style bits follow them at the end (see `names.rs`).
 //!
-//! Not yet: `CFF2` outlines (refused), `VARC` (refused), a `BASE` table with variation data
-//! (refused), names from `STAT` (`update_names`, refused).
+//! Refused: `VARC`.
 
 use super::glyf::{self, Metrics};
+use super::ivs::StoreDeltas;
 use super::static_tables as st;
-use super::{InstanceOptions, otl, pin_location};
+use super::{InstanceOptions, cff2, names, otl, pin_location};
 use crate::sfnt::{SfntFont, Tag};
 use crate::{Result, TablesError};
 
@@ -45,20 +50,17 @@ pub fn full_instance_with(font: &SfntFont, location: &[(Tag, f64)], options: &In
     if font.get(*b"gvar").is_some() && font.get(*b"glyf").is_none() {
         return Err(TablesError::invalid("the font has a gvar table but no glyf table"));
     }
-    if font.get(*b"CFF2").is_some() {
-        return Err(TablesError::Unsupported("instancing CFF2 outlines".into()));
-    }
     if font.get(*b"VARC").is_some() {
         return Err(TablesError::Unsupported("instancing a VARC table".into()));
-    }
-    if options.update_names {
-        return Err(TablesError::Unsupported("naming an instance from its STAT axis values".into()));
     }
     let pinned = pin_location(font, location)?;
     let coords = pinned.normalized.as_slice();
     let axis_count = pinned.axes.len();
     let mut out = font.clone();
     out.remove(*b"DSIG");
+    if options.update_names {
+        names::update_name_table(&mut out, &pinned.user)?;
+    }
     let names_before = st::variation_name_ids(&out);
 
     let glyph_count = out.get(*b"maxp").and_then(|m| st::u16_at(m, 4)).map(usize::from);
@@ -111,11 +113,19 @@ pub fn full_instance_with(font: &SfntFont, location: &[(Tag, f64)], options: &In
     // fontTools loads `post` to read its italic angle when the font has a `slnt` axis, or to
     // apply `MVAR` deltas to it, and then writes it again.
     let post_loaded = pinned.user.iter().any(|(t, _)| t == b"slnt") || out.get(*b"post").map(<[u8]>::to_vec) != post_before;
-    if out.get(*b"glyf").is_none() && (out.get(*b"HVAR").is_some() || out.get(*b"VVAR").is_some()) {
-        // Only CFF2 fonts take their advances from HVAR, and they are refused above.
-        return Err(TablesError::Unsupported("applying HVAR or VVAR to a font without glyf outlines".into()));
+    if out.get(*b"glyf").is_none() {
+        // A font without glyf (CFF2) takes its advances from HVAR and VVAR.
+        for tag in [*b"HVAR", *b"VVAR"] {
+            if let Some(data) = out.get(tag) {
+                let offset = st::u16_at(data, 4).zip(st::u16_at(data, 6)).map(|(h, l)| (usize::from(h) << 16) | usize::from(l));
+                let offset = offset.ok_or_else(|| TablesError::invalid(format!("the {} table is truncated", crate::sfnt::tag_str(tag))))?;
+                let deltas = StoreDeltas::read(data, offset, coords)?;
+                cff2::shift_advances(&mut out, tag, &deltas)?;
+            }
+        }
     }
     otl::instantiate_layout(&mut out, coords)?;
+    cff2::instance_full(&mut out, coords, options.downgrade_cff2, options.recalc_bounds)?;
 
     st::reduce_stat(&mut out, &pinned.user)?;
     for tag in VARIATION_TABLES {
@@ -144,6 +154,9 @@ pub fn full_instance_with(font: &SfntFont, location: &[(Tag, f64)], options: &In
     }
     if glyf_loaded && options.recalc_bounds {
         crate::ttx::read_core::recalc_compiled_maxp(&mut out)?;
+    }
+    if options.update_names {
+        names::set_ribbi_bits(&mut out)?;
     }
     Ok(out)
 }

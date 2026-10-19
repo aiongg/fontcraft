@@ -21,11 +21,11 @@ use crate::sfnt::Flavour;
 
 const WGHT: Tag = *b"wght";
 
-fn be16(v: &mut Vec<u8>, x: u16) {
+pub(super) fn be16(v: &mut Vec<u8>, x: u16) {
     v.extend_from_slice(&x.to_be_bytes());
 }
 
-fn head() -> Vec<u8> {
+pub(super) fn head() -> Vec<u8> {
     let mut h = vec![0u8; 54];
     h[0..4].copy_from_slice(&0x0001_0000u32.to_be_bytes());
     h[12..16].copy_from_slice(&0x5F0F_3CF5u32.to_be_bytes());
@@ -43,7 +43,7 @@ fn maxp(glyphs: u16) -> Vec<u8> {
     m
 }
 
-fn hhea(long: u16) -> Vec<u8> {
+pub(super) fn hhea(long: u16) -> Vec<u8> {
     let mut h = vec![0u8; 36];
     h[0..4].copy_from_slice(&0x0001_0000u32.to_be_bytes());
     h[4..6].copy_from_slice(&800i16.to_be_bytes());
@@ -52,7 +52,7 @@ fn hhea(long: u16) -> Vec<u8> {
     h
 }
 
-fn os2() -> Vec<u8> {
+pub(super) fn os2() -> Vec<u8> {
     let mut o = vec![0u8; 96];
     o[0..2].copy_from_slice(&4u16.to_be_bytes());
     o[4..6].copy_from_slice(&400u16.to_be_bytes());
@@ -61,7 +61,7 @@ fn os2() -> Vec<u8> {
 }
 
 /// A format 0 `name` table of Windows English records.
-fn name(records: &[(u16, &str)]) -> Vec<u8> {
+pub(super) fn name(records: &[(u16, &str)]) -> Vec<u8> {
     let mut strings: Vec<u8> = Vec::new();
     let mut out = Vec::new();
     be16(&mut out, 0);
@@ -80,7 +80,7 @@ fn name(records: &[(u16, &str)]) -> Vec<u8> {
 
 /// `STAT` 1.1: one design axis (wght, name 256) and format 1 values 400 (name 2) and 650
 /// (name 257); elided fallback name 2.
-fn stat() -> Vec<u8> {
+pub(super) fn stat() -> Vec<u8> {
     let mut s = Vec::new();
     for v in [1u16, 1, 8, 1] {
         be16(&mut s, v);
@@ -113,7 +113,7 @@ fn tent(peak: f32) -> Tent {
 /// side moves −20, its top +50 and its advance +40 (two points left to inference); at −1 it
 /// narrows by 10 on each side and loses 30 in height and 20 in advance. B's component moves
 /// (30, 10) and its advance +60 at +1.
-fn variable_font() -> SfntFont {
+pub(super) fn variable_font() -> SfntFont {
     let square = Glyph::Simple(Simple {
         bbox: [100, 0, 500, 700],
         end_pts: vec![3],
@@ -183,11 +183,11 @@ fn glyphs_of(font: &SfntFont) -> Vec<Glyph> {
     glyf::read_glyf(font.get(*b"glyf").unwrap(), font.get(*b"loca").unwrap(), long, 3).unwrap()
 }
 
-fn i16s(font: &SfntFont, tag: &[u8; 4], at: &[usize]) -> Vec<i16> {
+pub(super) fn i16s(font: &SfntFont, tag: &[u8; 4], at: &[usize]) -> Vec<i16> {
     at.iter().map(|a| static_tables::u16_at(font.get(*tag).unwrap(), *a).unwrap() as i16).collect()
 }
 
-fn name_ids(font: &SfntFont) -> Vec<u16> {
+pub(super) fn name_ids(font: &SfntFont) -> Vec<u16> {
     let n = font.get(*b"name").unwrap();
     let count = usize::from(static_tables::u16_at(n, 2).unwrap());
     (0..count).map(|i| static_tables::u16_at(n, 6 + 12 * i + 6).unwrap()).collect()
@@ -339,4 +339,104 @@ fn full_instance_recalculates_maxp_and_the_head_flags_as_the_instancer_saves() {
     let kept = instantiate(&font, &pin(false)).unwrap();
     assert_eq!(kept.get(*b"maxp"), font.get(*b"maxp"), "without bounds recalculation fontTools leaves maxp alone");
     assert_eq!(i16s(&kept, b"head", &[16])[0] & 2, 0);
+}
+
+/// Every Windows English name of the font, by ID.
+fn names_of(font: &SfntFont) -> Vec<(u16, String)> {
+    let n = read_fonts::tables::name::Name::read(FontData::new(font.get(*b"name").unwrap())).unwrap();
+    let mut out: Vec<(u16, String)> =
+        n.name_record().iter().map(|r| (r.name_id().to_u16(), r.string(n.string_data()).unwrap().chars().collect::<String>())).collect();
+    out.sort();
+    out
+}
+
+fn with_names(limit: AxisLimit) -> InstanceOptions {
+    InstanceOptions { limits: vec![(WGHT, limit)], update_names: true, ..InstanceOptions::default() }
+}
+
+#[test]
+fn update_names_follows_the_stat_values_as_the_instancer_does() {
+    // fontTools 4.66.1, instantiateVariableFont(updateFontNames=True) on the same font.
+    let font = variable_font();
+    let s = |v: &[(u16, &str)]| v.iter().map(|(i, t)| (*i, t.to_string())).collect::<Vec<_>>();
+    let medium = instantiate(&font, &with_names(AxisLimit::Pin(650.0))).unwrap();
+    assert_eq!(
+        names_of(&medium),
+        s(&[
+            (1, "Test Medium"),
+            (2, "Regular"),
+            (4, "Test Medium"),
+            (6, "Test-Medium"),
+            (16, "Test"),
+            (17, "Medium"),
+            (256, "Weight"),
+            (257, "Medium")
+        ])
+    );
+    assert_eq!(i16s(&medium, b"OS/2", &[62])[0], 0x40, "fsSelection says Regular");
+    let regular = instantiate(&font, &with_names(AxisLimit::Pin(400.0))).unwrap();
+    assert_eq!(names_of(&regular), s(&[(1, "Test"), (2, "Regular"), (4, "Test Regular"), (6, "Test-Regular"), (256, "Weight")]));
+    // A partial instance is named after its new default.
+    let ranged = instantiate(&font, &with_names(AxisLimit::Range { min: 650.0, default: None, max: 900.0 })).unwrap();
+    assert_eq!(names_of(&ranged).iter().find(|(i, _)| *i == 17).map(|(_, t)| t.as_str()), Some("Medium"));
+    let kept = instantiate(&font, &with_names(AxisLimit::Range { min: 400.0, default: None, max: 900.0 })).unwrap();
+    assert_eq!(names_of(&kept).iter().filter(|(i, _)| *i <= 6).count(), 4, "names 1, 2, 4 and 6");
+}
+
+#[test]
+fn update_names_is_refused_without_a_stat_value_at_the_location() {
+    let font = variable_font();
+    let err = instantiate(&font, &with_names(AxisLimit::Pin(500.0))).unwrap_err();
+    assert!(matches!(&err, TablesError::BadOptions(m) if m.contains("wght 500")), "{err}");
+    let mut no_stat = font.clone();
+    no_stat.remove(*b"STAT");
+    let err = instantiate(&no_stat, &with_names(AxisLimit::Pin(650.0))).unwrap_err();
+    assert!(matches!(&err, TablesError::BadOptions(m) if m.contains("no STAT")), "{err}");
+}
+
+/// A `BASE` table whose one coordinate (10) varies by +100 at wght +1.
+fn with_variable_base() -> SfntFont {
+    use write_fonts::tables::base as wbase;
+    let mut font = variable_font();
+    let mut builder = VariationStoreBuilder::new(1);
+    let region = VariationRegion::new(vec![RegionAxisCoordinates::new(F2Dot14::from_f32(0.0), F2Dot14::from_f32(1.0), F2Dot14::from_f32(1.0))]);
+    let temp = builder.add_deltas(vec![(region, 100)]);
+    let (store, remap) = builder.build();
+    let index = remap.get(temp).unwrap();
+    let device = wl::DeviceOrVariationIndex::VariationIndex(wl::VariationIndex::new(index.delta_set_outer_index, index.delta_set_inner_index));
+    let values = wbase::BaseValues::new(0, vec![wbase::BaseCoord::format_3(10, Some(device))]);
+    let script = wbase::BaseScript::new(Some(values), None, vec![]);
+    let list = wbase::BaseScriptList::new(vec![wbase::BaseScriptRecord::new(WTag::new(b"latn"), script)]);
+    let axis = wbase::Axis::new(Some(wbase::BaseTagList::new(vec![WTag::new(b"romn")])), list);
+    let mut base = wbase::Base::new(Some(axis), None);
+    base.item_var_store = NullableOffsetMarker::new(Some(store));
+    font.insert(*b"BASE", write_fonts::dump_table(&base).unwrap());
+    font
+}
+
+fn base_coord(font: &SfntFont) -> (i16, bool, bool) {
+    use read_fonts::tables::base::{Base, BaseCoord};
+    let base = Base::read(FontData::new(font.get(*b"BASE").unwrap())).unwrap();
+    let axis = base.horiz_axis().unwrap().unwrap();
+    let script = axis.base_script_list().unwrap().base_script_records()[0].base_script(axis.base_script_list().unwrap().offset_data()).unwrap();
+    let coord = script.base_values().unwrap().unwrap().base_coords().get(0).unwrap();
+    let has_store = base.item_var_store_offset().is_some_and(|o| !o.is_null());
+    match coord {
+        BaseCoord::Format3(t) => (t.coordinate(), true, has_store),
+        other => (other.coordinate(), false, has_store),
+    }
+}
+
+#[test]
+fn base_coordinates_take_their_deltas() {
+    let font = with_variable_base();
+    // A quarter of +100 at 650 (avar maps 0.5 to 0.25): the device and the store go.
+    let full = instantiate(&font, &InstanceOptions { limits: vec![(WGHT, AxisLimit::Pin(650.0))], ..InstanceOptions::default() }).unwrap();
+    assert_eq!(base_coord(&full), (35, false, false));
+    // Limited above the default: nothing moves into the default, and the variation stays.
+    let kept = partial::partial_instance(&font, &[(WGHT, AxisLimit::Range { min: 400.0, default: None, max: 900.0 })]).unwrap();
+    assert_eq!(base_coord(&kept), (10, true, true));
+    // Limited below the default: the region goes, and so do the device and the store.
+    let below = partial::partial_instance(&font, &[(WGHT, AxisLimit::Range { min: 100.0, default: None, max: 400.0 })]).unwrap();
+    assert_eq!(base_coord(&below), (10, false, false));
 }
