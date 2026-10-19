@@ -135,3 +135,31 @@ fn component_bitmaps_are_written_with_their_offsets() {
         assert!(text.lines().any(|l| l == line), "{line}\n{text}");
     }
 }
+
+#[test]
+fn strikes_sharing_one_large_subtable_array_are_refused_quickly() {
+    // 20,000 strikes, each listing the same 131,072 subtables of no glyph: 2.6e9 subtables.
+    const STRIKES: u32 = 20_000;
+    const SUBTABLES: u32 = 131_072;
+    let array = 8 + 48 * STRIKES;
+    let mut eblc = fonts::Be::default();
+    eblc.u32s(&[0x20000, STRIKES]);
+    for _ in 0..STRIKES {
+        eblc.u32s(&[array, 0, SUBTABLES]);
+        eblc.u8s(&[0; 36]);
+    }
+    for _ in 0..SUBTABLES {
+        eblc.u16s(&[1, 0]);
+        eblc.u32s(&[8 * SUBTABLES]);
+    }
+    eblc.u16s(&[2, 1]);
+    eblc.u32s(&[0, 0]);
+    eblc.u8s(&[0; 8]);
+    let mut font = fonts::bitmap_font();
+    font.insert(*b"EBLC", eblc.0);
+    let options = DumpOptions { tables: vec![*b"EBLC"], ..DumpOptions::default() };
+    match dump(&font, &options) {
+        Ok(text) => assert!(text.contains("<EBLC ERROR=\"decompilation error\" raw=\"True\">"), "{}", text.chars().take(400).collect::<String>()),
+        Err(e) => assert!(matches!(e, crate::TablesError::TooLarge { .. }), "{e}"),
+    }
+}

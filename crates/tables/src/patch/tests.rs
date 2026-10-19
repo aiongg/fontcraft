@@ -178,3 +178,22 @@ fn patch_table_and_os2_upgrade_write_fields_in_place() {
     assert_eq!(&data[2..4], &os2[2..4], "older fields keep their bytes");
     assert_eq!(raise_os2_version(&up, 2, &fill).unwrap(), up, "never lowered");
 }
+
+#[test]
+fn name_records_sharing_one_long_string_are_refused_quickly() {
+    // 65,535 records, each pointing at the same 65,535 bytes: 4.3 GB of strings. The storage
+    // starts inside the records, as a 16-bit offset must.
+    let count = 65_535u16;
+    let mut name = Vec::new();
+    for v in [0u16, count, 6] {
+        name.extend_from_slice(&v.to_be_bytes());
+    }
+    for i in 0..count {
+        for v in [3u16, 1, 0x409, i, 0xFFFF, 0] {
+            name.extend_from_slice(&v.to_be_bytes());
+        }
+    }
+    let font = with(vec![(b"name", name)]);
+    let r = clean_name_records(&font, &NameOptions::default());
+    assert!(matches!(r, Err(crate::TablesError::TooLarge { .. })), "{r:?}");
+}

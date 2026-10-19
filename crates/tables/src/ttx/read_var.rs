@@ -6,7 +6,7 @@
 //! within a glyph, and deltas packed in runs with its size optimisation. Ported from
 //! fontTools' `ttLib.tables` (MIT): `otData`, `_g_v_a_r`, `_c_v_a_r` and `TupleVariation`.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use crate::sfnt::{SfntFont, Tag};
 use crate::{Result, TablesError};
@@ -43,17 +43,25 @@ fn count(n: usize) -> i64 {
     i64::try_from(n).unwrap_or(i64::MAX)
 }
 
-/// One delta set: a region and a delta per point (`None` for points left to inference).
+/// The delta sets one tuple variation store can hold: its count field has 12 bits.
+const MAX_STORE_TUPLES: usize = 0x0FFF;
+
+/// One delta set: a region and the deltas of the points that have one; the other points are
+/// left to inference.
 struct Tuple {
     /// Axis tag to (start, peak, end), in 2.14 units.
     axes: Vec<(String, (i64, i64, i64))>,
-    deltas: Vec<Option<(i64, i64)>>,
+    /// The points (or control values) the set covers.
+    points: usize,
+    /// Point index to its delta. Sparse, so that the memory follows the text rather than the
+    /// point count the font claims.
+    deltas: BTreeMap<usize, (i64, i64)>,
 }
 
 impl Tuple {
     /// `TupleVariation.fromXML` over the children of a `tuple` element.
     fn read(e: &Element, points: usize, numeric_axes: bool) -> Result<Tuple> {
-        let mut t = Tuple { axes: Vec::new(), deltas: vec![None; points] };
+        let mut t = Tuple { axes: Vec::new(), points, deltas: BTreeMap::new() };
         for c in &e.children {
             match c.name.as_str() {
                 "coord" => {
@@ -89,9 +97,9 @@ impl Tuple {
                     };
                     let slot = usize::try_from(index)
                         .ok()
-                        .and_then(|i| t.deltas.get_mut(i))
+                        .filter(|i| *i < points)
                         .ok_or_else(|| bad(format!("a delta for point {index}, past the glyph's points")))?;
-                    *slot = Some(value);
+                    t.deltas.insert(slot, value);
                 }
                 _ => {}
             }
@@ -101,11 +109,16 @@ impl Tuple {
 
     /// The points with deltas: `Some(empty)` for all of them, `None` for none.
     fn used(&self) -> Option<Vec<usize>> {
-        if self.deltas.iter().all(Option::is_some) {
+        if self.deltas.len() == self.points {
             return Some(Vec::new());
         }
-        let used: Vec<usize> = self.deltas.iter().enumerate().filter(|(_, d)| d.is_some()).map(|(i, _)| i).collect();
+        let used: Vec<usize> = self.deltas.keys().copied().collect();
         (!used.is_empty()).then_some(used)
+    }
+
+    /// Whether [`store`] keeps the set ([`Tuple::used`] is not `None`).
+    fn kept(&self) -> bool {
+        !self.deltas.is_empty() || self.points == 0
     }
 
     fn coord(&self, tags: &[String]) -> Result<Vec<u8>> {
@@ -155,10 +168,10 @@ impl Tuple {
             flags |= 0x2000;
             aux.extend_from_slice(points);
         }
-        let xs: Vec<i64> = self.deltas.iter().flatten().map(|d| d.0).collect();
+        let xs: Vec<i64> = self.deltas.values().map(|d| d.0).collect();
         deltas(&xs, &mut aux)?;
         if two {
-            let ys: Vec<i64> = self.deltas.iter().flatten().map(|d| d.1).collect();
+            let ys: Vec<i64> = self.deltas.values().map(|d| d.1).collect();
             deltas(&ys, &mut aux)?;
         }
         let mut head = Out::default();
@@ -300,12 +313,12 @@ fn store(tuples: &[&Tuple], tags: &[String], shared: &HashMap<Vec<u8>, usize>, s
         kept.push((t, points));
     }
     let Some(first) = kept.first() else { return Ok((0, Vec::new(), Vec::new())) };
-    let n = first.0.deltas.len();
-    if kept.iter().any(|(t, _)| t.deltas.len() != n) {
+    let n = first.0.points;
+    if kept.iter().any(|(t, _)| t.points != n) {
         return Err(bad("delta sets of different sizes"));
     }
-    if kept.len() > 0x0FFF {
-        return Err(TablesError::TooLarge { what: "the delta sets of one glyph", limit: 0x0FFF });
+    if kept.len() > MAX_STORE_TUPLES {
+        return Err(TablesError::TooLarge { what: "the delta sets of one glyph", limit: MAX_STORE_TUPLES });
     }
     let mut total = count(kept.len());
     let mut data = Vec::new();
@@ -355,6 +368,9 @@ fn point_counts(glyf: &[u8], locations: &[u32]) -> Result<Vec<usize>> {
         if contours >= 0 {
             let n = usize::try_from(contours).unwrap_or(0);
             let points = if n == 0 { 0 } else { u16_at(g, 10 + 2 * (n - 1)).ok_or_else(cut)? + 1 };
+            if !has_flags(g, n, points) {
+                return Err(cut());
+            }
             out.push(points + 4);
             continue;
         }
@@ -379,6 +395,28 @@ fn point_counts(glyf: &[u8], locations: &[u32]) -> Result<Vec<usize>> {
         out.push(components + 4);
     }
     Ok(out)
+}
+
+/// Whether a simple glyph of `contours` contours holds a flag for each of the `points` its
+/// last end point claims, so a short glyph cannot claim more points than its data.
+fn has_flags(g: &[u8], contours: usize, points: usize) -> bool {
+    let at = 10 + 2 * contours;
+    let Some(instructions) =
+        g.get(at..at + 2).map(|b| usize::from(u16::from_be_bytes([b.first().copied().unwrap_or(0), b.get(1).copied().unwrap_or(0)])))
+    else {
+        return false;
+    };
+    let mut flags = g.get(at + 2 + instructions..).unwrap_or_default().iter();
+    let mut seen = 0usize;
+    while seen < points {
+        let Some(flag) = flags.next() else { return false };
+        seen += 1;
+        if flag & 0x08 != 0 {
+            let Some(repeat) = flags.next() else { return false };
+            seen += usize::from(*repeat);
+        }
+    }
+    true
 }
 
 /// The axis tags variation data refers to: the `fvar` axes, else `count` numbered axes.
@@ -427,7 +465,16 @@ pub(crate) fn gvar(element: &Element, ctx: &ReadContext, font: &SfntFont, glyf: 
         let glyph = c.attribute("glyph").ok_or_else(|| bad("glyph variations without a glyph"))?;
         let gid = usize::try_from(ctx.glyph_id(glyph)?).unwrap_or(usize::MAX);
         let n = *points.get(gid).ok_or_else(|| bad(format!("the glyph '{glyph}' is not in the 'glyf' table")))?;
-        let tuples = c.children.iter().filter(|t| t.name == "tuple").map(|t| Tuple::read(t, n, numeric)).collect::<Result<Vec<_>>>()?;
+        let mut tuples = Vec::new();
+        let mut kept = 0usize;
+        for t in c.children.iter().filter(|t| t.name == "tuple") {
+            let tuple = Tuple::read(t, n, numeric)?;
+            kept += usize::from(tuple.kept());
+            if kept > MAX_STORE_TUPLES {
+                return Err(TablesError::TooLarge { what: "the delta sets of one glyph", limit: MAX_STORE_TUPLES });
+            }
+            tuples.push(tuple);
+        }
         match glyph_index.get(glyph).and_then(|&i| by_glyph.get_mut(i)) {
             Some(slot) => slot.1 = tuples,
             None => {
@@ -510,11 +557,19 @@ fn cvar(element: &Element, font: &SfntFont) -> Result<Vec<u8>> {
                 major = int_lit(c.attribute("major").unwrap_or("1"))?;
                 minor = int_lit(c.attribute("minor").unwrap_or("0"))?;
             }
-            "tuple" => tuples.push(Tuple::read(c, values, false)?),
+            "tuple" => {
+                let tuple = Tuple::read(c, values, false)?;
+                if !tuple.deltas.is_empty() {
+                    if tuples.len() >= MAX_STORE_TUPLES {
+                        return Err(TablesError::TooLarge { what: "the delta sets of one glyph", limit: MAX_STORE_TUPLES });
+                    }
+                    tuples.push(tuple);
+                }
+            }
             _ => {}
         }
     }
-    let with_impact: Vec<&Tuple> = tuples.iter().filter(|t| t.deltas.iter().any(Option::is_some)).collect();
+    let with_impact: Vec<&Tuple> = tuples.iter().collect();
     let (n, headers, data) = store(&with_impact, &tags, &HashMap::new(), false, false)?;
     let mut o = Out::default();
     o.u16(major, "cvar.majorVersion")?;
@@ -524,4 +579,70 @@ fn cvar(element: &Element, font: &SfntFont) -> Result<Vec<u8>> {
     o.bytes(&headers);
     o.bytes(&data);
     Ok(o.0)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::TablesError;
+    use crate::sfnt::{Flavour, SfntFont};
+    use crate::ttx::{ImportOptions, import};
+
+    /// A font with binary `head`, `loca` and `glyf`: `.notdef` empty and `A` as given.
+    fn font_with(glyph: &[u8]) -> SfntFont {
+        let mut font = SfntFont::new(Flavour::TrueType);
+        let mut head = vec![0u8; 54];
+        head[51] = 1;
+        font.insert(*b"head", head);
+        let mut loca = Vec::new();
+        for offset in [0u32, 0, glyph.len() as u32] {
+            loca.extend_from_slice(&offset.to_be_bytes());
+        }
+        font.insert(*b"loca", loca);
+        font.insert(*b"glyf", glyph.to_vec());
+        font
+    }
+
+    /// One contour of `points` points, all at the origin: repeated flags, no coordinate bytes.
+    fn simple_glyph(points: usize) -> Vec<u8> {
+        let mut g = vec![0, 1, 0, 0, 0, 0, 0, 0, 0, 0];
+        g.extend_from_slice(&u16::try_from(points - 1).unwrap().to_be_bytes());
+        g.extend_from_slice(&[0, 0]);
+        let mut left = points;
+        while left > 0 {
+            let run = left.min(256);
+            g.extend_from_slice(&[0x39, u8::try_from(run - 1).unwrap()]);
+            left -= run;
+        }
+        g
+    }
+
+    fn gvar_text(tuples: &str) -> String {
+        format!(
+            "<ttFont><GlyphOrder><GlyphID name=\".notdef\"/><GlyphID name=\"A\"/></GlyphOrder>\
+             <gvar><version value=\"1\"/><reserved value=\"0\"/><axisCount value=\"1\"/>\
+             <glyphVariations glyph=\"A\">{tuples}</glyphVariations></gvar></ttFont>"
+        )
+    }
+
+    #[test]
+    fn many_delta_sets_on_a_large_glyph_are_read_sparsely_and_capped() {
+        // 60,000 points x 200,000 delta sets once took 24 bytes per point per set (about 300 GB).
+        let font = font_with(&simple_glyph(60_000));
+        let one = "<tuple><coord axis=\"0\" value=\"1.0\"/><delta pt=\"5\" x=\"10\" y=\"0\"/></tuple>";
+        let text = gvar_text(&format!("{}{one}", "<tuple/>".repeat(200_000)));
+        let out = import(font.clone(), &text, &ImportOptions::default()).unwrap();
+        assert!(out.get(*b"gvar").is_some_and(|g| g.len() > 20));
+
+        let many = gvar_text(&one.repeat(super::MAX_STORE_TUPLES + 1));
+        assert!(matches!(import(font, &many, &ImportOptions::default()), Err(TablesError::TooLarge { .. })));
+    }
+
+    #[test]
+    fn a_glyph_cannot_claim_more_points_than_its_flags() {
+        // A 14-byte glyph whose last end point says 65,535 points.
+        let short = [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0xFE, 0, 0];
+        let text = gvar_text("<tuple><coord axis=\"0\" value=\"1.0\"/><delta pt=\"0\" x=\"1\" y=\"0\"/></tuple>");
+        assert!(import(font_with(&short), &text, &ImportOptions::default()).is_err());
+        assert!(import(font_with(&simple_glyph(3)), &text, &ImportOptions::default()).is_ok());
+    }
 }

@@ -4,7 +4,7 @@
 //! The table is parsed and written byte by byte, so records whose encoding is not known (and
 //! cannot be cleaned) and the language-tag records of format 1 keep their bytes.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use read_fonts::tables::name::MacRomanMapping;
 use read_fonts::{FontData, FontRead};
@@ -16,6 +16,9 @@ use crate::{Result, TablesError};
 const NAME: Tag = *b"name";
 /// Most name records read; the count field is 16 bits.
 const MAX_RECORDS: usize = 65_535;
+/// Most string bytes read over all records and language tags, counting a string once per
+/// record that points at it: records may all share one 64 KB string.
+const MAX_NAME_TEXT: usize = 16 << 20;
 
 /// What [`clean_name_records`] does besides the white space.
 #[derive(Clone, Debug, PartialEq)]
@@ -110,7 +113,12 @@ fn parse(data: &[u8]) -> Result<(u16, Vec<Record>, Vec<Vec<u8>>)> {
     let format = be_u16(data, 0).ok_or_else(bad)?;
     let count = usize::from(be_u16(data, 2).ok_or_else(bad)?).min(MAX_RECORDS);
     let storage = usize::from(be_u16(data, 4).ok_or_else(bad)?);
-    let string = |len: u16, off: u16| -> Result<Vec<u8>> {
+    let mut read = 0usize;
+    let mut string = |len: u16, off: u16| -> Result<Vec<u8>> {
+        read = read.saturating_add(usize::from(len));
+        if read > MAX_NAME_TEXT {
+            return Err(TablesError::TooLarge { what: "the strings of the name table's records", limit: MAX_NAME_TEXT });
+        }
         let start = storage.checked_add(usize::from(off)).ok_or_else(bad)?;
         let end = start.checked_add(usize::from(len)).ok_or_else(bad)?;
         Ok(data.get(start..end).ok_or_else(bad)?.to_vec())
@@ -182,6 +190,7 @@ pub fn clean_name_records(font: &SfntFont, options: &NameOptions) -> Result<Name
     let before = records.len();
     let mut changed = 0usize;
     let mut kept: Vec<Record> = Vec::with_capacity(records.len());
+    let mut keys: HashSet<(u16, u16, u16, u16)> = HashSet::with_capacity(records.len());
     for mut r in records {
         if options.drop_mac && r.platform == 1 {
             continue;
@@ -199,7 +208,7 @@ pub fn clean_name_records(font: &SfntFont, options: &NameOptions) -> Result<Name
                 changed = changed.saturating_add(1);
             }
         }
-        if kept.iter().any(|k| k.key() == r.key()) {
+        if !keys.insert(r.key()) {
             continue;
         }
         kept.push(r);

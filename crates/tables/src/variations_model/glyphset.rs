@@ -6,6 +6,10 @@
 //! points. CFF2 charstrings are blended at the location quantised to F2Dot14, as read-fonts
 //! takes it.
 
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::rc::Rc;
+
 use read_fonts::ps::cff::CffFontRef;
 use read_fonts::ps::cs::CommandSink;
 use read_fonts::tables::glyf::{Anchor, CompositeGlyphFlags, Glyf, Glyph};
@@ -115,7 +119,7 @@ impl<'a> GlyphSet<'a> {
             _ => None,
         };
         let f2 = coords.iter().map(|v| F2Dot14::from_f32(*v as f32)).collect();
-        Ok(At { set: self, coords: coords.to_vec(), varied, hvar, f2 })
+        Ok(At { set: self, coords: coords.to_vec(), varied, hvar, f2, deltas: RefCell::default() })
     }
 }
 
@@ -126,6 +130,8 @@ pub(super) struct At<'s, 'a> {
     varied: bool,
     hvar: Option<StoreDeltas>,
     f2: Vec<F2Dot14>,
+    /// Each glyph's summed `gvar` deltas, decoded once however many composites use the glyph.
+    deltas: RefCell<HashMap<u32, Rc<Vec<Pair>>>>,
 }
 
 impl At<'_, '_> {
@@ -187,7 +193,7 @@ impl At<'_, '_> {
         let glyph = loca.get_glyf(GlyphId::new(gid), glyf).map_err(|e| TablesError::invalid(format!("glyph {gid} cannot be read: {e}")))?;
         match glyph {
             None => {
-                let deltas = self.deltas(gvar, gid, &[], &[])?;
+                let deltas = self.deltas(gvar, gid, &[], &[], work)?;
                 Ok((Vec::new(), phantom_x(&deltas)))
             }
             Some(Glyph::Simple(simple)) => {
@@ -200,7 +206,7 @@ impl At<'_, '_> {
                     on.push(p.on_curve);
                 }
                 let ends: Vec<usize> = simple.end_pts_of_contours().iter().map(|e| usize::from(e.get())).collect();
-                let deltas = self.deltas(gvar, gid, &base, &ends)?;
+                let deltas = self.deltas(gvar, gid, &base, &ends, work)?;
                 let moved: Vec<TtPoint> = base
                     .iter()
                     .zip(&on)
@@ -232,7 +238,7 @@ impl At<'_, '_> {
                     })
                     .collect();
                 let ends: Vec<usize> = (0..components.len()).collect();
-                let deltas = self.deltas(gvar, gid, &base, &ends)?;
+                let deltas = self.deltas(gvar, gid, &base, &ends, work)?;
                 let mut out: Vec<Vec<TtPoint>> = Vec::new();
                 for (i, c) in components.iter().enumerate() {
                     work.spend(1)?;
@@ -284,11 +290,26 @@ impl At<'_, '_> {
     }
 
     /// The summed, scaled `gvar` deltas of glyph `gid` for its points `base` and the four phantom
-    /// points after them.
-    fn deltas(&self, gvar: Option<&Gvar<'_>>, gid: u32, base: &[Pair], ends: &[usize]) -> Result<Vec<Pair>> {
+    /// points after them. A glyph's deltas depend only on the glyph and the location, so they
+    /// are computed once per glyph and charged to `work` then.
+    fn deltas(&self, gvar: Option<&Gvar<'_>>, gid: u32, base: &[Pair], ends: &[usize], work: &mut Work) -> Result<Rc<Vec<Pair>>> {
+        let n = base.len() + 4;
+        let Some(gvar) = gvar else { return Ok(Rc::new(vec![(0.0, 0.0); n])) };
+        if let Some(known) = self.deltas.try_borrow().ok().and_then(|cache| cache.get(&gid).cloned()) {
+            return Ok(known);
+        }
+        let total = Rc::new(self.decode(gvar, gid, base, ends, work)?);
+        if let Ok(mut cache) = self.deltas.try_borrow_mut() {
+            cache.insert(gid, Rc::clone(&total));
+        }
+        Ok(total)
+    }
+
+    /// [`At::deltas`] without the cache: one decode of the glyph's tuples, each one that applies
+    /// at this location charged per point (its deltas, the inferred ones and the sum).
+    fn decode(&self, gvar: &Gvar<'_>, gid: u32, base: &[Pair], ends: &[usize], work: &mut Work) -> Result<Vec<Pair>> {
         let n = base.len() + 4;
         let mut total = vec![(0.0, 0.0); n];
-        let Some(gvar) = gvar else { return Ok(total) };
         let Some(data) = gvar
             .glyph_variation_data(GlyphId::new(gid))
             .map_err(|e| TablesError::invalid(format!("the gvar data of glyph {gid} cannot be read: {e}")))?
@@ -304,6 +325,7 @@ impl At<'_, '_> {
             if count >= MAX_TUPLE_VARIATIONS {
                 return Err(TablesError::TooLarge { what: "the tuple variations of one glyph", limit: MAX_TUPLE_VARIATIONS });
             }
+            work.spend(1)?;
             let peak = tuple.peak();
             let start = tuple.intermediate_start();
             let end = tuple.intermediate_end();
@@ -317,6 +339,7 @@ impl At<'_, '_> {
             if scalar == 0.0 {
                 continue;
             }
+            work.spend(n)?;
             let mut explicit: Vec<Option<Pair>> = vec![None; n];
             for d in tuple.deltas() {
                 if let Some(slot) = explicit.get_mut(usize::from(d.position)) {

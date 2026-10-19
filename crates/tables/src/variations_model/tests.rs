@@ -302,3 +302,90 @@ fn plan_avar_places_weights_as_fonttools_does() {
 }
 
 const MAX_SAMPLES_FOR_TESTS: usize = super::plan::MAX_SAMPLES;
+
+#[test]
+fn glyph_deltas_are_charged_once_however_many_components_use_the_glyph() {
+    use super::glyphset::{GlyphSet, MAX_DRAW_WORK, Work};
+    const POINTS: usize = 1_000;
+    const TUPLES: usize = 0x0FFF;
+    const COMPONENTS: usize = 300;
+    // Glyph 1: one contour of 1,000 points at the origin. Glyph 2: 300 copies of glyph 1.
+    let mut s = Vec::new();
+    for v in [1u16, 0, 0, 0, 0, (POINTS - 1) as u16, 0] {
+        be16(&mut s, v);
+    }
+    let mut left = POINTS;
+    while left > 0 {
+        let run = left.min(256);
+        s.extend_from_slice(&[0x39, (run - 1) as u8]);
+        left -= run;
+    }
+    let mut c = Vec::new();
+    for v in [0xFFFFu16, 0, 0, 0, 0] {
+        be16(&mut c, v);
+    }
+    for i in 0..COMPONENTS {
+        be16(&mut c, if i + 1 < COMPONENTS { 0x22 } else { 0x02 });
+        be16(&mut c, 1);
+        c.extend_from_slice(&[0, 0]);
+    }
+    let mut glyf = s.clone();
+    glyf.extend_from_slice(&c);
+    let mut loca = Vec::new();
+    for v in [0u32, 0, s.len() as u32, (s.len() + c.len()) as u32] {
+        loca.extend_from_slice(&v.to_be_bytes());
+    }
+    // gvar: 4,095 tuples peaking at wght +1 on glyph 1, each with a zero delta for every point.
+    let all_zero = |out: &mut Vec<u8>| {
+        let mut left = POINTS + 4;
+        while left > 0 {
+            let run = left.min(64);
+            out.push(0x80 | (run - 1) as u8);
+            left -= run;
+        }
+    };
+    let mut tuple_data = Vec::new();
+    all_zero(&mut tuple_data);
+    all_zero(&mut tuple_data);
+    let mut data = Vec::new();
+    be16(&mut data, 0x8000 | TUPLES as u16);
+    be16(&mut data, (4 + 6 * TUPLES) as u16);
+    for _ in 0..TUPLES {
+        for v in [tuple_data.len() as u16, 0x8000, 0x4000] {
+            be16(&mut data, v);
+        }
+    }
+    data.push(0);
+    for _ in 0..TUPLES {
+        data.extend_from_slice(&tuple_data);
+    }
+    let mut gvar = Vec::new();
+    for v in [1u16, 0, 1, 0] {
+        be16(&mut gvar, v);
+    }
+    let offsets = 4 * 4;
+    gvar.extend_from_slice(&(20u32 + offsets).to_be_bytes());
+    for v in [3u16, 1] {
+        be16(&mut gvar, v);
+    }
+    gvar.extend_from_slice(&(20u32 + offsets).to_be_bytes());
+    for v in [0u32, 0, data.len() as u32, data.len() as u32] {
+        gvar.extend_from_slice(&v.to_be_bytes());
+    }
+    gvar.extend_from_slice(&data);
+    let mut font = variable_font();
+    font.insert(*b"glyf", glyf);
+    font.insert(*b"loca", loca);
+    font.insert(*b"gvar", gvar);
+
+    let set = GlyphSet::new(&font, 1).unwrap();
+    let mut work = Work(MAX_DRAW_WORK);
+    set.at(&[1.0]).unwrap().glyph(1, &mut work).unwrap();
+    let simple = MAX_DRAW_WORK - work.0;
+    assert!(simple >= TUPLES * (POINTS + 4), "every tuple that applies is charged per point: {simple}");
+    // Decoding the deltas again for each component would cost 300 times as much.
+    let mut work = Work(MAX_DRAW_WORK);
+    set.at(&[1.0]).unwrap().glyph(2, &mut work).unwrap();
+    let composite = MAX_DRAW_WORK - work.0;
+    assert!(composite < 2 * simple, "{composite} against {simple}");
+}
