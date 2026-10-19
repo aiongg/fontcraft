@@ -1101,6 +1101,8 @@ milestone = "M12"
 summary = "Re-encodes parts of an existing binary font more compactly, or more simply for speed, without changing how it renders or shapes: CFF subroutines and operator forms, CFF default and nominal widths, class-kerning subtable layout, shared variation-store data, gvar delta optimisation, implied on-curve points and table order. Without options it applies every lossless size optimisation."
 ref = "fontTools otlLib.optimize, cffLib.width, cffLib.specializer, varLib.varStore, config (GPOS compression level), ttx --optimize-font-speed; AFDKO tx +S/-S, +W/-W; fontmake --optimize-cff, --subroutinizer"
 status = "docs"
+notes = "M12.26: built for CFF and CFF2 fonts: --subroutinize and --max-subrs (crates/cff/src/subr, compreffor's method, every glyph expanded again and compared), --desubroutinize, --cff-widths (cffLib.width's search, crates/cff/src/width.rs; every advance is read back from the rewritten table; --cff-widths=exhaustive gives the same pair, since the search is exact), --canonical-order, --report, -o, --output-dir, --in-place, --no-clobber, --face, --json and -j. Without an optimisation named, widths and subroutines both run. A step that would not make its table smaller is not applied, and a table that would come out larger is kept, unless --desubroutinize or --max-subrs asked for it. Widths are chosen on expanded charstrings, so a subroutinised table is subroutinised again after them. A table the subroutiniser refuses keeps its charstrings, with a note. Not built, refused when named: --for speed, --charstrings, --gpos-compaction above 0, --varstore, --gvar-iup and --no-gvar-iup, --drop-implied-oncurves, --colr-layer-reuse. A default run on a font with GPOS or fvar notes that GPOS compaction and variation store merging were skipped."
+guesses = ["Naming any optimisation runs only the named ones, and naming none runs every built lossless one; each reference tool does one optimisation, so a user who combines them would settle it.", "A step whose result is not smaller is dropped and the table kept as it was; fontmake keeps compreffor's output whatever its size, and comparing sizes on the corpus would show whether that ever matters."]
 
 [[cli]]
 id = "collection"
@@ -2500,12 +2502,13 @@ label = "Optimize Font"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{font: path, face?: int|name, preset?: \"size\"|\"speed\", subroutinize?: bool, maxSubrs?: int, desubroutinize?: bool, charstrings?: \"specialize\"|\"generalize\", cffWidths?: bool|\"exhaustive\", gposCompaction?: 0..9, varstore?: bool|{quantum: int}, gvarIup?: bool, dropImpliedOncurves?: bool, colrLayerReuse?: bool, canonicalOrder?: bool, report?: bool, output?: path, inPlace?: bool}"
+params = "{font: path, face?: int|name, preset?: \"size\"|\"speed\", subroutinize?: bool, maxSubrs?: int, desubroutinize?: bool, charstrings?: \"specialize\"|\"generalize\", cffWidths?: bool|\"exhaustive\", gposCompaction?: 0..9, varstore?: bool|{quantum: int}, gvarIup?: bool, dropImpliedOncurves?: bool, colrLayerReuse?: bool, canonicalOrder?: bool, report?: bool, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool}"
 area = "cli-tools"
 milestone = "M12"
 summary = "Applies size or speed re-encodings to a binary font that do not change rendering or shaping, and returns per-table byte counts before and after each step. With report set nothing is written."
 ref = "docs/spec/20-cli.md › optimize"
 status = "docs"
+notes = "M12.26: returns {output (null with report), written, bytes, bytesBefore, bytesAfter, steps: [{step, table, before, after, applied}], tables: [{table, before, after}], notes}. Built: subroutinize, maxSubrs (1 to 65,535; implies subroutinize), desubroutinize, cffWidths (true or \"exhaustive\", the same search), canonicalOrder, report, face, output, outputDir, inPlace and noClobber. Refused as not built: preset \"speed\", charstrings, gposCompaction above 0, varstore, gvarIup, dropImpliedOncurves, colrLayerReuse. Sources are refused: the command works on compiled fonts."
 
 [[command]]
 id = "collection.list"

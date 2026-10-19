@@ -253,8 +253,10 @@ skipped, and a source that builds nothing fails. Overlapping contours are merged
 `--keep-overlaps` is given; a glyph whose overlaps cannot be removed keeps them, with a warning
 naming it. Contours are reversed for TrueType unless
 `--keep-direction`; curves are converted to quadratics within `--conversion-error` em (default 0.001).
-`--timestamp` sets `head.created` and `head.modified` (default `SOURCE_DATE_EPOCH`, else now). CFF output
-is not subroutinised yet. Glyphs are written under their production names, made valid as fontc makes
+`--timestamp` sets `head.created` and `head.modified` (default `SOURCE_DATE_EPOCH`, else now). Static CFF
+output is subroutinised unless `--no-subroutinize` is given or the source sets Disable Subroutines; a table
+beyond the subroutiniser's limits is written without subroutines, with a warning. CFF2 output is not
+subroutinised. Glyphs are written under their production names, made valid as fontc makes
 them, with a warning listing the names changed. Later: `--no-production-names`; glyphs flagged as not
 exported left out unless `--no-subset` (until then they are always left out); with `--output-layout
 by-format`, outputs and intermediate sources in per-format folders as fontmake arranges them

@@ -39,7 +39,7 @@ mod table;
 
 use std::fmt;
 
-pub use table::{charstrings_of_table, desubroutinize_table, subroutinize_table};
+pub use table::{WidthsReport, charstrings_of_table, desubroutinize_table, optimize_widths_table, subroutinize_table};
 
 /// Deepest subroutine nesting the charstring formats allow: a glyph's own charstring is depth 0
 /// and every call adds one.

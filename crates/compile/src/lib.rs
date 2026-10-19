@@ -205,6 +205,11 @@ pub struct Options {
     /// feature syntax (`(wght:700) 14`, `condition`) reads. The interpolated font has one
     /// master, so it no longer holds them. `None` reads them from the compiled font.
     pub feature_axes: Option<(fontcraft_features::fea_variable::FeatureAxes, Vec<f64>)>,
+    /// Move repeated charstring fragments of a `CFF ` table into subroutines
+    /// (`compile.cffSubroutinisation`), as fontmake does by default. `None`: on, unless the
+    /// source's Disable Subroutines parameter is set. A table the subroutiniser refuses (one
+    /// beyond its limits) is written without subroutines, with a warning.
+    pub subroutinize: Option<bool>,
 }
 
 /// The asset store a compile reads ([`Options::assets`]). Two are equal when they are the same
@@ -280,6 +285,7 @@ impl Default for Options {
             include_check: None,
             version_stamp: false,
             feature_axes: None,
+            subroutinize: None,
         }
     }
 }
@@ -616,6 +622,8 @@ pub(crate) fn u16_of(v: f64) -> u16 {
 
 #[cfg(test)]
 mod instance_names_tests;
+#[cfg(test)]
+mod subr_export_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

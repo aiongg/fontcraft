@@ -511,6 +511,7 @@ effect = "other"
 summary = "When set, CFF charstrings are exported without subroutines. Used when very complex outlines fail to export, or to shorten test exports of fonts with many glyphs."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "M12.26: read by the static CFF export (font, master or instance level, as resolved): set, the CFF table is written without subroutines; otherwise it is subroutinised, as the handbook implies by offering the switch and as fontmake does by default. font.compile's subroutinize parameter and the command line's --no-subroutinize override it. Documented in the handbook, not yet observed in the reference app."
 
 [[parameter]]
 name = "DisableAllAutomaticBehaviour"

@@ -553,7 +553,7 @@ all five.
 | xAvgCharWidth | mean of non-zero advances, rounded | same | same mean, truncated | rounded |
 | post version | 2.0 for TTF and for CFF2 (varLib) | 2.0 always | 3.0 for CFF; CFF2 3.0 unless `-k` | 2.0 TTF and CFF2, 3.0 CFF |
 | Timestamps | now, or SOURCE_DATE_EPOCH (fontTools) | source created date, now for modified, SOURCE_DATE_EPOCH | now | fontc rule |
-| CFF subroutinisation | on by default (level 2) | n/a | off unless `-S` or `-r` | on for release, off for draft |
+| CFF subroutinisation | on by default (level 2) | n/a | off unless `-S` or `-r` | static CFF: on unless Disable Subroutines or `subroutinize: false`; a table past the subroutiniser's limits is written without, with a warning. CFF2: off. The draft preset (M12.40) is to turn it off |
 | Feature compiler | feaLib; MTI optional | fea-rs | addfeatures (own parser) | fea-rs |
 | Generated kern/mark | ufo2ft writers, modes skip/append, quantisation option | same modes, no quantisation | none; kerning is written in the feature file | fontc rule, quantisation optional |
 | Contextual anchors (`*top` with a context in `GPOS_Context`) | ufo2ft's mark writer adds chained lookups that call the contextual anchors' attachments | ignored | n/a | as fontmake (M8.21) |

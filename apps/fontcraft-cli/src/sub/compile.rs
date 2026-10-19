@@ -11,7 +11,7 @@ pub const SUBCOMMAND: Subcommand =
 const USAGE: &str = "\
   fontcraft-cli compile SOURCE... [--format ttf|otf]... [--container plain|woff|woff2]...
                         [-o FILE | --output-dir DIR] [--instances[=NAME,...]] [--masters-as-instances]
-                        [--keep-overlaps] [--keep-direction] [--conversion-error EM]
+                        [--keep-overlaps] [--keep-direction] [--conversion-error EM] [--no-subroutinize]
                         [--timestamp SECS|now] [--ttfautohint PATH] [--plan]
   fontcraft-cli compile SOURCE... --variable [--format ttf|otf] [--settings NAME,...] [--container plain|woff|woff2]...
                         [-o FILE | --output-dir DIR] [--timestamp SECS|now]
@@ -21,7 +21,8 @@ const USAGE: &str = "\
       name in DIR (default: the current folder); with both formats each goes into a ttf or otf
       subfolder. -o names the one file a single SOURCE builds. Instances between masters are
       skipped until interpolation exists. Overlapping contours are merged unless --keep-overlaps is
-      given. --ttfautohint PATH names the trusted ttfautohint program: a source whose TTFAutohint
+      given. CFF charstrings are subroutinised unless --no-subroutinize is given or the source
+      sets Disable Subroutines. --ttfautohint PATH names the trusted ttfautohint program: a source whose TTFAutohint
       binary path parameter names that same file is autohinted by it (default: none runs).
       --plan prints what would be built, without building.
       --variable builds variable fonts instead: one per variable font setting (or the settings
@@ -63,6 +64,9 @@ fn compile(args: &[String]) -> Outcome {
             }
             "--remove-overlaps" => {
                 outlines.insert("removeOverlaps".into(), json!(true));
+            }
+            "--subroutinize" | "--no-subroutinize" => {
+                params.insert("subroutinize".into(), json!(arg == "--subroutinize"));
             }
             "--keep-direction" => {
                 outlines.insert("keepDirection".into(), json!(true));
@@ -149,6 +153,7 @@ fn compile(args: &[String]) -> Outcome {
             || params.contains_key("outlines")
             || params.contains_key("instances")
             || params.contains_key("mastersAsInstances")
+            || params.contains_key("subroutinize")
         {
             return Err(usage("--variable takes only --format, --settings, --container, -o, --output-dir and --timestamp"));
         }
