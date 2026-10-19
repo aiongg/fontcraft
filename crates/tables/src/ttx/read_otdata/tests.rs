@@ -12,6 +12,7 @@ const LAYOUT: (&str, &str) = (include_str!("testdata/layout.ttx"), include_str!(
 const VARIABLE: (&str, &str) = (include_str!("testdata/variable.ttx"), include_str!("testdata/variable.digest"));
 const VAR: (&str, &str) = (include_str!("testdata/var.ttx"), include_str!("testdata/var.digest"));
 const COLOR: (&str, &str) = (include_str!("testdata/color.ttx"), include_str!("testdata/color.digest"));
+const GVAR: (&str, &str) = (include_str!("testdata/gvar.ttx"), include_str!("testdata/gvar.digest"));
 const KERN: (&str, &str) = (include_str!("testdata/kern.ttx"), include_str!("testdata/kern.digest"));
 const APPLE_KERN: (&str, &str) = (include_str!("testdata/apple_kern.ttx"), include_str!("testdata/apple_kern.digest"));
 
@@ -50,6 +51,16 @@ fn colour_tables_compile_as_ttx_compiles() {
 }
 
 #[test]
+fn glyph_and_control_value_variations_compile_as_ttx_compiles() {
+    // The outlines and control values are there for their counts; only the variations count.
+    let (text, digest) = GVAR;
+    let font = read(text);
+    for (tag, len, sha) in &expected(digest) {
+        assert_table(tag, font.get(*tag).unwrap(), *len, sha);
+    }
+}
+
+#[test]
 fn kerning_tables_compile_as_ttx_compiles() {
     assert_compiles_as_ttx(KERN);
     assert_compiles_as_ttx(APPLE_KERN);
@@ -57,7 +68,7 @@ fn kerning_tables_compile_as_ttx_compiles() {
 
 #[test]
 fn our_layout_dump_reads_back_to_the_same_tables() {
-    for (text, _) in [LAYOUT, VARIABLE, VAR, COLOR, KERN, APPLE_KERN] {
+    for (text, _) in [LAYOUT, VARIABLE, VAR, GVAR, COLOR, KERN, APPLE_KERN] {
         let font = read(text);
         let dumped = dump(&font, &DumpOptions::default()).unwrap();
         let again = read(&dumped);

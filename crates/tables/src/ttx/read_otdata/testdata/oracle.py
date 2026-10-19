@@ -7,7 +7,7 @@ Run with a Python that has fontTools (the version named in `ttx/mod.rs`, `TTX_VE
 Each `<name>.ttx` here is made of table elements the writer tests store (`../../otdata`,
 `../../var`, `../../color`, `../../misc`) under a glyph order: the order of the font the writer tests build
 from `fonts.otasm`, or a short one that holds every glyph the tables name. fontTools reads each
-file (`TTFont().importXML`) and compiles every table in it; `<name>.digest` holds the tag (`_`
+file (`TTFont().importXML`) and compiles every table in it (for `gvar.ttx`, its variation tables); `<name>.digest` holds the tag (`_`
 for a space), byte length and SHA-256 of each, one table a line.
 """
 
@@ -41,6 +41,39 @@ FVAR = """  <fvar>
       <AxisNameID>257</AxisNameID>
     </Axis>
   </fvar>
+
+"""
+
+# Outlines and control values for the deltas of `var.ttx`: A has 3 points, B 2, C one
+# component (each with the 4 phantom points), and 4 control values.
+GLYF = """  <glyf>
+    <TTGlyph name=".notdef"/>
+    <TTGlyph name="A" xMin="0" yMin="0" xMax="100" yMax="100">
+      <contour>
+        <pt x="0" y="0" on="1"/>
+        <pt x="100" y="0" on="1"/>
+        <pt x="50" y="100" on="1"/>
+      </contour>
+      <instructions/>
+    </TTGlyph>
+    <TTGlyph name="B" xMin="0" yMin="0" xMax="10" yMax="10">
+      <contour>
+        <pt x="0" y="0" on="1"/>
+        <pt x="10" y="10" on="1"/>
+      </contour>
+      <instructions/>
+    </TTGlyph>
+    <TTGlyph name="C" xMin="0" yMin="0" xMax="100" yMax="100">
+      <component glyphName="A" x="0" y="0" flags="0x4"/>
+    </TTGlyph>
+  </glyf>
+
+  <cvt>
+    <cv index="0" value="10"/>
+    <cv index="1" value="20"/>
+    <cv index="2" value="-30"/>
+    <cv index="3" value="40"/>
+  </cvt>
 
 """
 
@@ -79,18 +112,20 @@ def main():
         "layout": (orders["layout"], "", TTX / "otdata/testdata/layout.ttx", ["GDEF", "GSUB", "GPOS", "BASE", "JSTF", "MATH", "meta"]),
         "variable": (orders["variable"], "", TTX / "otdata/testdata/variable.ttx", ["GDEF", "GSUB", "STAT", "fvar", "avar"]),
         "var": ([".notdef", "A", "B", "C"], FVAR, TTX / "var/testdata/var.ttx", ["HVAR", "VVAR", "MVAR"]),
+        # Only the variation tables are compared: the outlines are there for their point counts.
+        "gvar": ([".notdef", "A", "B", "C"], FVAR + GLYF, TTX / "var/testdata/var.ttx", ["gvar", "cvar"], ["gvar", "cvar"]),
         "color": ([".notdef", "A", "B", "C"], "", TTX / "color/testdata/color.ttx", ["COLR", "CPAL", "SVG"]),
         "kern": ([".notdef", "A", "B", "C"], "", TTX / "misc/testdata/misc.ttx", ["kern"]),
         "apple_kern": ([".notdef", "A", "B", "C"], "", TTX / "misc/testdata/apple_kern.ttx", ["kern"]),
     }
-    for name, (order, extra, path, tags) in inputs.items():
+    for name, (order, extra, path, tags, *only) in inputs.items():
         text = HEAD + glyph_order(order) + extra + blocks(path, tags) + "</ttFont>\n"
         (HERE / f"{name}.ttx").write_text(text, encoding="utf-8")
         font = TTFont()
         font.importXML(str(HERE / f"{name}.ttx"))
         lines = []
         for tag in font.keys():
-            if tag == "GlyphOrder":
+            if tag == "GlyphOrder" or (only and tag not in only[0]):
                 continue
             data = font.getTableData(tag)
             lines.append(f"{tag.replace(' ', '_')} {len(data)} {hashlib.sha256(data).hexdigest()}\n")
