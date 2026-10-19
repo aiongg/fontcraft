@@ -49,6 +49,9 @@ pub const MAX_LOOKUP_NESTING: usize = 64;
 /// Most records, offsets and glyphs a `GSUB`, `GPOS` or `GDEF` table may expand to when a tool
 /// rewrites it, counting a shared subtable once per offset to it.
 pub const MAX_LAYOUT_ITEMS: usize = 10_000_000;
+/// Most index subtables a bitmap location table (`EBLC`, `CBLC`, `bloc`) may list over all its
+/// strikes, counting a subtable array once per strike that points at it.
+pub const MAX_BITMAP_SUBTABLES: usize = 1 << 20;
 
 /// Deepest subroutine nesting in a charstring (the CFF specification's limit).
 pub const MAX_SUBR_NESTING: usize = 10;

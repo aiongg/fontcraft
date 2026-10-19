@@ -9,7 +9,7 @@
 
 use std::collections::HashMap;
 
-use crate::limits::MAX_LAYOUT_ITEMS;
+use crate::limits::{MAX_BITMAP_SUBTABLES, MAX_LAYOUT_ITEMS};
 use crate::sfnt::{SfntFont, Tag};
 use crate::{Result, TablesError};
 
@@ -97,11 +97,17 @@ fn read_location(data: &[u8]) -> Result<Location> {
         pos = pos.saturating_add(48);
         strikes.push(Strike { size, subtables: Vec::new() });
     }
-    let mut items = 0usize;
+    // Shared by every strike: they may all point at one subtable array, and a subtable that
+    // lists no glyph still costs its header.
+    let (mut items, mut listed) = (0usize, 0usize);
     for strike in &mut strikes {
         let array = u32_at(&strike.size, 0)? as usize;
         let subtables = u32_at(&strike.size, 8)?;
         for i in 0..subtables {
+            listed += 1;
+            if listed > MAX_BITMAP_SUBTABLES {
+                return Err(TablesError::TooLarge { what: "the index subtables of a bitmap location table", limit: MAX_BITMAP_SUBTABLES });
+            }
             let at = array.saturating_add(8usize.saturating_mul(i as usize));
             let first = u16_at(data, at)?;
             let last = u16_at(data, at.saturating_add(2))?;
