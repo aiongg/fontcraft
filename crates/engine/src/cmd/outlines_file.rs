@@ -674,16 +674,26 @@ fn componentize(_: &mut Session, v: &Value) -> Result<Value> {
 fn source_beside(font: &Path) -> Result<PathBuf> {
     let folder = font.parent().filter(|f| !f.as_os_str().is_empty()).unwrap_or(Path::new("."));
     let entries = std::fs::read_dir(folder).map_err(|e| EngineError::Io(format!("cannot list {}: {e}", folder.display())))?;
-    let mut found: Vec<PathBuf> = entries
-        .filter_map(|e| e.ok().map(|e| e.path()))
-        .filter(|p| p.extension().is_some_and(|x| x.eq_ignore_ascii_case("ufo")))
-        .take(MAX_INPUTS)
-        .collect();
-    found.sort();
-    found
-        .into_iter()
-        .next()
+    let sources = entries.filter_map(|e| e.ok().map(|e| e.path())).filter(|p| p.extension().is_some_and(|x| x.eq_ignore_ascii_case("ufo")));
+    first_by_name(sources, MAX_INPUTS)
+        .map_err(|()| EngineError::Io(format!("more than {MAX_INPUTS} .ufo sources beside {}: give `reference`", font.display())))?
         .ok_or_else(|| EngineError::Io(format!("no .ufo source beside {}: give `reference`, or `detect` to work without one", font.display())))
+}
+
+/// The least of `paths` by name, whatever order they come in; `Err` when there are more than
+/// `limit`, so the choice never depends on which entries a cut would have kept.
+#[cfg(not(target_arch = "wasm32"))]
+fn first_by_name(paths: impl Iterator<Item = PathBuf>, limit: usize) -> std::result::Result<Option<PathBuf>, ()> {
+    let mut least: Option<PathBuf> = None;
+    for (seen, path) in paths.enumerate() {
+        if seen >= limit {
+            return Err(());
+        }
+        if least.as_ref().is_none_or(|l| path < *l) {
+            least = Some(path);
+        }
+    }
+    Ok(least)
 }
 
 #[cfg(target_arch = "wasm32")]

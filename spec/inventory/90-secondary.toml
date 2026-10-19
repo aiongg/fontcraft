@@ -553,6 +553,7 @@ summary = "Lists a glyph's stored selections, each mapped onto a layer by node i
 ref = "FontLab 8 What's new › Edit & refine › Selections panel"
 status = "inferred"
 origin = "fontlab"
+notes = "An entry the file holds with more than 100000 items in a list is listed cut, with a warning; edit.storeSelection and edit.removeStoredSelection warn when they write such an entry back cut."
 guesses = [
   "A query that maps stored selections onto any layer is our addition for agents and scripts; FontLab has no such command."
 ]
@@ -2127,7 +2128,7 @@ summary = "Exports every listed open font through every listed export profile in
 ref = "FontLab 8 What's new › Formats › File › Export Font As"
 status = "docs"
 origin = "fontlab"
-notes = "Documented, not yet observed. Each profile builds the exportable instances as file.exportAll does. installTemporarily is refused as not supported yet: installing fonts for the session needs the desktop app's platform code (M14). All files are staged and moved into place only when every font was built."
+notes = "Documented, not yet observed. Each profile builds the exportable instances as file.exportAll does, with the profile's overlap removal and autohint setting passed to the compiler as file.exportStatic passes its own. installTemporarily is refused as not supported yet: installing fonts for the session needs the desktop app's platform code (M14). All files are staged and moved into place only when every font was built."
 guesses = [
   "Without `fonts` the active document is exported, not every open one; the reference's Export Fonts As dialog would settle the default.",
   "A profile's subfolder may not climb out of the destination with `..`, for any caller; the reference's profile settings would settle whether it can.",
@@ -3600,7 +3601,7 @@ summary = "Sets math constants and per-glyph math data from a structured object;
 ref = "FontForge dialogs › Math typesetting information; glyphsLib builder/user_data.py and ufo2ft outlineCompiler.py (setupTable_MATH) for where the data is stored"
 status = "docs"
 origin = "fontforge"
-notes = "Documented, not yet observed. Built (M13.47): the data is stored where glyphsLib and ufo2ft read it, so fontmake compiles the same table: the constants in the master's user data (a UFO's font lib) under com.nagwa.MATHPlugin.constants; extended shapes and variants in the glyph's user data (a UFO keeps the variants in the glyph lib and the extended shapes as a list in the font lib); italic correction, top accent and math kerning as the anchors math.ic, math.ta and math.tr1…, math.tl1…, math.br1…, math.bl1… on the master layer. Keys left out keep their values; null removes. The compiler (crates/compile/src/math.rs) writes MATH from it, with variant and part advances from the glyph boxes and an assembly's italic correction taken from its last part, as ufo2ft does."
+notes = "Documented, not yet observed. A UFO master whose extended-shape list holds more than 65535 entries is refused: the list is written back whole, so cutting it would drop entries. Built (M13.47): the data is stored where glyphsLib and ufo2ft read it, so fontmake compiles the same table: the constants in the master's user data (a UFO's font lib) under com.nagwa.MATHPlugin.constants; extended shapes and variants in the glyph's user data (a UFO keeps the variants in the glyph lib and the extended shapes as a list in the font lib); italic correction, top accent and math kerning as the anchors math.ic, math.ta and math.tr1…, math.tl1…, math.br1…, math.bl1… on the master layer. Keys left out keep their values; null removes. The compiler (crates/compile/src/math.rs) writes MATH from it, with variant and part advances from the glyph boxes and an assembly's italic correction taken from its last part, as ufo2ft does."
 guesses = [
   "A new math.ic or math.ta anchor is placed at height 0, and an existing one keeps its height; the plugin that defined these anchors would settle where it puts them.",
   "Math kerning anchors are named with the corner's prefix and a number from 1 (math.tr1, math.tr2); ufo2ft reads any name with the prefix.",
@@ -4044,7 +4045,7 @@ summary = "Lists what another program changed in an open document's files since 
 ref = "RoboFont reference › External Changes window"
 status = "docs"
 origin = "robofont"
-notes = "Documented in the reference's public manual, not yet observed. The comparison is three-way by model equality (the document, the font as last read or written, the file), so the document's own unsaved edits are never offered as changes; items both sides changed are marked conflict. M12's source diff can replace the model comparison when it lands. A review that leaves nothing out refreshes the document's stamp, so file.save writes without asking; after a refusal file.save refuses until force: true. The menu item is dialog.externalChanges."
+notes = "Documented in the reference's public manual, not yet observed. The glyph text difference returns at most 20000 lines; a longer one is listed cut, with textTruncated and a warning. The comparison is three-way by model equality (the document, the font as last read or written, the file), so the document's own unsaved edits are never offered as changes; items both sides changed are marked conflict. M12's source diff can replace the model comparison when it lands. A review that leaves nothing out refreshes the document's stamp, so file.save writes without asking; after a refusal file.save refuses until force: true. The menu item is dialog.externalChanges."
 guesses = [
   "The document's own unsaved edits are kept and never listed, so Update All merges rather than reloads; the manual speaks of taking the incoming change, and a document with unsaved edits in the reference settles whether it keeps them.",
   "Font-level data is grouped into nine parts (info, axes, masters, instances, kerning, features, groups, glyph order, other), each accepted whole; the manual mentions font-level data without saying how finely it is split.",

@@ -46,7 +46,7 @@ pub fn specs() -> Vec<CommandSpec> {
         "Review External Changes",
         [],
         None,
-        "{font?: number | string, accept?: [{glyph: name, layer?: id, attributes?: bool} | {part: name}] | \"all\" | \"none\", glyph?: name} read the file of an open document again (font: its position among the open documents or the path it was opened from; default the active one) and list what the file changed since the document last read or wrote it, where the document does not already match: glyphs added, removed or changed (by layer, and attributes for the glyph's own data apart from its layers) and the font-level parts info, axes, masters, instances, kerning, features, groups, glyphOrder and other. What only the document changed is not listed; conflict marks what both changed. Without accept it only reports. accept takes the named items from the file as one undo step and keeps the document's version of the rest: {glyph} every listed item of the glyph, {glyph, layer} one layer, {glyph, attributes: true} the glyph's own data, {part} a font-level part; \"all\" takes everything, \"none\" nothing. A locked glyph refuses an accepted change. When nothing listed is left out, a later save writes without asking; after a refusal, file.save refuses until force: true. glyph: also return that glyph's stored text as a line difference, the file's lines as additions and the document's as removals → {index, title, path, modified, changed, glyphs: [{glyph, change: \"added\"|\"removed\"|\"changed\", locked, conflict, attributes, layers: [{layer, name, change}]}], parts: [{part, conflict}], accepted?, rejected?, saveNeedsForce, text?: [{op: \" \"|\"-\"|\"+\", text}]}",
+        "{font?: number | string, accept?: [{glyph: name, layer?: id, attributes?: bool} | {part: name}] | \"all\" | \"none\", glyph?: name} read the file of an open document again (font: its position among the open documents or the path it was opened from; default the active one) and list what the file changed since the document last read or wrote it, where the document does not already match: glyphs added, removed or changed (by layer, and attributes for the glyph's own data apart from its layers) and the font-level parts info, axes, masters, instances, kerning, features, groups, glyphOrder and other. What only the document changed is not listed; conflict marks what both changed. Without accept it only reports. accept takes the named items from the file as one undo step and keeps the document's version of the rest: {glyph} every listed item of the glyph, {glyph, layer} one layer, {glyph, attributes: true} the glyph's own data, {part} a font-level part; \"all\" takes everything, \"none\" nothing. A locked glyph refuses an accepted change. When nothing listed is left out, a later save writes without asking; after a refusal, file.save refuses until force: true. glyph: also return that glyph's stored text as a line difference, the file's lines as additions and the document's as removals → {index, title, path, modified, changed, glyphs: [{glyph, change: \"added\"|\"removed\"|\"changed\", locked, conflict, attributes, layers: [{layer, name, change}]}], parts: [{part, conflict}], accepted?, rejected?, saveNeedsForce, text?: [{op: \" \"|\"-\"|\"+\", text}] (at most 20000 lines), textTruncated?: bool (lines past 20000 left out), warnings: [text]}",
         has_file,
         review
     )]
@@ -143,9 +143,15 @@ fn review(s: &mut Session, v: &Value) -> Result<Value> {
             o.insert("accepted".into(), json!(accepted));
             o.insert("rejected".into(), json!(rejected));
         }
-        if let Some(text) = text {
+        let mut warnings = Vec::new();
+        if let Some((text, cut)) = text {
             o.insert("text".into(), Value::Array(text.into_iter().map(|(op, line)| json!({ "op": op.to_string(), "text": line })).collect()));
+            o.insert("textTruncated".into(), json!(cut));
+            if cut {
+                warnings.push(format!("the text difference is longer than {MAX_TEXT_LINES} lines; only the first {MAX_TEXT_LINES} are listed"));
+            }
         }
+        o.insert("warnings".into(), json!(warnings));
     }
     Ok(out)
 }
@@ -675,8 +681,8 @@ fn replace_font(s: &mut Session, i: usize, label: &str, next: Font) -> Result<()
 }
 
 /// The glyph's stored form (the native file's text) in the document and in the file, as a line
-/// difference.
-fn glyph_text(p: &Params, cur: &Font, disk: &Font, name: &str) -> Result<Vec<(char, String)>> {
+/// difference of at most [`MAX_TEXT_LINES`] lines, and whether lines past that were left out.
+fn glyph_text(p: &Params, cur: &Font, disk: &Font, name: &str) -> Result<(Vec<(char, String)>, bool)> {
     let text = |f: &Font| -> Result<String> {
         match f.glyphs.get(name) {
             Some(g) => serde_json::to_string_pretty(&**g).map_err(|e| EngineError::Internal(e.to_string())),
@@ -689,7 +695,9 @@ fn glyph_text(p: &Params, cur: &Font, disk: &Font, name: &str) -> Result<Vec<(ch
     let (old, new) = (text(cur)?, text(disk)?);
     let old: Vec<&str> = old.lines().collect();
     let new: Vec<&str> = new.lines().collect();
-    Ok(line_diff(&old, &new).into_iter().take(MAX_TEXT_LINES).map(|(op, l)| (op, l.to_string())).collect())
+    let lines = line_diff(&old, &new);
+    let cut = lines.len() > MAX_TEXT_LINES;
+    Ok((lines.into_iter().take(MAX_TEXT_LINES).map(|(op, l)| (op, l.to_string())).collect(), cut))
 }
 
 /// `old` turned into `new`, line by line: `' '` kept, `'-'` removed, `'+'` added. The common
@@ -756,5 +764,25 @@ mod tests {
         let new = ["a", "x", "c", "d", "e"];
         let ops: String = line_diff(&old, &new).iter().map(|(op, l)| format!("{op}{l}")).collect::<Vec<_>>().join(",");
         assert_eq!(ops, " a,-b,+x, c, d,+e");
+    }
+
+    /// A glyph whose text difference passes the line limit is listed cut, and says so.
+    #[test]
+    fn a_long_glyph_text_difference_is_marked_cut() {
+        use fontcraft_model::{Node, NodeKind, Path, Shape};
+        let cur = Session::with_document().font().unwrap().clone();
+        let mut disk = cur.clone();
+        {
+            let mut g = disk.glyph_mut("A").unwrap();
+            let nodes = (0..MAX_TEXT_LINES).map(|i| Node::new(i as f64, 0.0, NodeKind::Line)).collect();
+            g.layers.first_mut().unwrap().shapes.push(Shape::Path(Path::new(false, nodes)));
+        }
+        let v = json!({});
+        let p = Params::new("file.reviewExternalChanges", &v).unwrap();
+        let (lines, cut) = glyph_text(&p, &cur, &disk, "A").unwrap();
+        assert!(cut);
+        assert_eq!(lines.len(), MAX_TEXT_LINES);
+        let (_, cut) = glyph_text(&p, &cur, &cur, "A").unwrap();
+        assert!(!cut);
     }
 }
