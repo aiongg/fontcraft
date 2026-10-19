@@ -111,3 +111,49 @@ fn compile_takes_the_curve_mode_implied_points_subset_and_dsig_switches() {
     let e = s.execute("font.compile", &json!({"outlines": {"dropImpliedOnCurves": "yes"}})).unwrap_err().to_string();
     assert!(e.contains("dropImpliedOnCurves"), "{e}");
 }
+
+#[test]
+fn tables_kept_on_open_pass_through_unchanged_until_the_glyph_order_changes() {
+    let dir = temp("pass-through");
+    let mut s = Session::with_document();
+    let square = json!([{"x": 0, "y": 0}, {"x": 500, "y": 0}, {"x": 500, "y": 500}, {"x": 0, "y": 500}]);
+    run(&mut s, "path.addPath", json!({"glyph": "A", "nodes": square}));
+    let built = dir.join("built.ttf");
+    run(&mut s, "font.compile", json!({"destination": built, "timestamp": 0}));
+    let glyphs = FontRef::new(&std::fs::read(&built).unwrap()).unwrap().maxp().unwrap().num_glyphs();
+
+    // The legacy tables are added as raw bytes; nothing in the build reads their contents.
+    let mut sfnt = fontcraft_tables::sfnt::read(&std::fs::read(&built).unwrap(), 0).unwrap();
+    let mut ltsh = vec![0, 0];
+    ltsh.extend(glyphs.to_be_bytes());
+    ltsh.extend(std::iter::repeat_n(1u8, usize::from(glyphs)));
+    let kept: [(&[u8; 4], Vec<u8>); 3] =
+        [(b"LTSH", ltsh), (b"hdmx", vec![0, 0, 0, 0, 0, 0, 0, 4]), (b"trak", vec![0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])];
+    for (tag, data) in &kept {
+        sfnt.insert(**tag, data.clone());
+    }
+    let legacy = dir.join("legacy.ttf");
+    std::fs::write(&legacy, fontcraft_tables::sfnt::write(&sfnt, &Default::default()).unwrap()).unwrap();
+
+    let mut s = Session::new();
+    run(&mut s, "file.open", json!({ "path": legacy }));
+    let copied = dir.join("copied.ttf");
+    run(&mut s, "font.compile", json!({"destination": copied, "timestamp": 0, "passThroughTables": true}));
+    let bytes = std::fs::read(&copied).unwrap();
+    let font = FontRef::new(&bytes).unwrap();
+    for (tag, data) in &kept {
+        assert_eq!(font.table_data(Tag::new(tag)).map(|d| d.as_bytes().to_vec()).as_ref(), Some(data), "{}", String::from_utf8_lossy(*tag));
+    }
+
+    // Without the switch, and once the glyph order is no longer the binary's, nothing is copied.
+    let plain = dir.join("plain.ttf");
+    run(&mut s, "font.compile", json!({"destination": plain, "timestamp": 0}));
+    assert!(FontRef::new(&std::fs::read(&plain).unwrap()).unwrap().table_data(Tag::new(b"LTSH")).is_none());
+    run(&mut s, "glyph.newGlyph", json!({"name": "B"}));
+    let changed = dir.join("changed.ttf");
+    let out = run(&mut s, "font.compile", json!({"destination": changed, "timestamp": 0, "passThroughTables": true}));
+    assert!(out.to_string().contains("no longer the one they were made for"), "{out}");
+    let bytes = std::fs::read(&changed).unwrap();
+    let font = FontRef::new(&bytes).unwrap();
+    assert!(kept.iter().all(|(tag, _)| font.table_data(Tag::new(tag)).is_none()));
+}

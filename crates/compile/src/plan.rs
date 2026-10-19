@@ -1,7 +1,7 @@
 //! What a compile would produce, without building it (`font.compilePlan`).
 //!
 //! [`plan`] runs the stages that decide the font's shape (resolve, glyph data, preflight, glyph
-//! order, the names) and stops before outline preparation and the table builders. It fails where the build
+//! order with a CID-keyed font's CID order, the names) and stops before outline preparation and the table builders. It fails where the build
 //! would fail in those stages, so a plan that succeeds names the glyphs and tables the build
 //! writes.
 
@@ -58,6 +58,10 @@ fn plan_stages(font: Option<&Font>, mut resolved: Resolved, flavour: Flavour, op
     let edits = crate::export_params::apply(font, &mut resolved, &mut warnings)?;
     let glyphs = preflight::run(std::mem::take(&mut resolved.glyphs), &mut warnings)?;
     let glyphs = order::final_order(glyphs, &resolved, &mut warnings)?;
+    let glyphs = match font {
+        Some(font) if flavour == Flavour::Cff => crate::cid::plan(font, glyphs, &options.cid, &mut warnings)?.0,
+        _ => glyphs,
+    };
     preflight::check_cmap(&glyphs)?;
     let glyph_data = font.and_then(|_| crate::compile_glyph_data(options));
     let color_plan = crate::color::plan(font, &resolved, options);

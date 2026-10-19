@@ -55,10 +55,10 @@ pub fn specs() -> Vec<CommandSpec> {
             "Describe Compile Plan",
             [],
             None,
-            "{formats?, containers?, instances?, mastersAsInstances?, destination?, outlines?, skipFeatures?, cbdt?, sections?: [\"outputs\"|\"glyphOrder\"|\"productionNames\"|\"tables\"|\"instances\"]} what font.compile would build with the same parameters, without building or writing: per output the instance, format, PostScript name, glyph count, whether overlaps are removed, the files (paths with a destination, names without) and the tables; the final glyph order of the first output, by source name; the name each glyph of it is written under where that differs from its source name (its production name, made valid); each instance's master and location. sections: the parts to return (default all) → {outputs?: [{instance, source, format, postscriptName, style, glyphs, removeOverlap, files, tables?}], glyphOrder?, productionNames?: {source name: written name}, instances?: [{instance, source, master, location}], skipped, warnings}",
+            "{formats?, containers?, instances?, mastersAsInstances?, destination?, outlines?, skipFeatures?, cbdt?, subset?, stubDsig?, passThroughTables?, projectFile?, projectOptions?, fontinfo?, menuNames?, goadb?, projectDefaults?, cidCmap?, cidMacCmap?, cidMacScript?, cidMacLanguage?, sections?: [\"outputs\"|\"glyphOrder\"|\"productionNames\"|\"tables\"|\"instances\"]} what font.compile would build with the same parameters, without building or writing (a project compile's glyph names, order and code points and a CID-keyed font's CID order included): per output the instance, format, PostScript name, glyph count, whether overlaps are removed, the files (paths with a destination, names without) and the tables; the final glyph order of the first output, by source name; the name each glyph of it is written under where that differs from its source name (its production name, made valid); each instance's master and location. sections: the parts to return (default all) → {outputs?: [{instance, source, format, postscriptName, style, glyphs, removeOverlap, files, tables?}], glyphOrder?, productionNames?: {source name: written name}, instances?: [{instance, source, master, location}], skipped, warnings}",
             has_doc,
             compile_plan
-        ),
+        ).files(const { &[FileParam::read("projectFile"), FileParam::read("menuNames"), FileParam::read("goadb"), FileParam::read("fontinfo"), FileParam::read("cidCmap"), FileParam::read("cidMacCmap")] }),
     ]
 }
 
@@ -1370,7 +1370,8 @@ pub(super) fn nothing_built(report: &Report) -> EngineError {
 
 fn compile_plan(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("font.compilePlan", p)?;
-    let (jobs, req) = compile_request(s, &p)?;
+    let (jobs, mut req) = compile_request(s, &p)?;
+    super::compile_cid::read(&p, &mut req.options)?;
     const SECTIONS: [&str; 5] = ["outputs", "glyphOrder", "productionNames", "tables", "instances"];
     let sections: Vec<&str> = match p.opt_strings("sections")? {
         None => SECTIONS.to_vec(),
@@ -1388,9 +1389,19 @@ fn compile_plan(s: &mut Session, p: &Value) -> Result<Value> {
     let want = |name: &str| sections.contains(&name);
     let data = s.glyph_data()?;
     let doc = s.doc()?;
-    let (font, source) = (&doc.font, doc.title.as_str());
-    font.check()?;
     let mut warnings: Vec<String> = Vec::new();
+    // A project compile builds the font its preparation makes, as `font.compile` does.
+    let project_font = match super::compile_project::read(&p, doc.path.as_deref())? {
+        Some((project, notes)) => {
+            warnings.extend(notes);
+            let mut prepared = super::compile_project::prepare(&p, &project, &doc.font, &mut req.options)?;
+            warnings.append(&mut prepared.warnings);
+            Some(prepared.font)
+        }
+        None => None,
+    };
+    let (font, source) = (project_font.as_ref().unwrap_or(&doc.font), doc.title.as_str());
+    font.check()?;
     let linked = crate::export_steps::linked(font, doc.path.as_deref(), &mut warnings)?;
     let font: &Font = &linked;
     let ctx = crate::export_steps::StepContext { data: &data };

@@ -11,17 +11,16 @@
 //!
 //! # CMap files
 //!
-//! [`parse_cmap`] reads the CMap resource format (PostScript text): `CIDSystemInfo`'s
-//! `/Registry`, `/Ordering` and `/Supplement`, `/CMapName`, and the `begincidrange` and
-//! `begincidchar` blocks; `usecmap` is reported, not followed. Only Unicode CMaps (named `Uni…`,
-//! or unnamed) can be used, because glyphs are encoded by code point: codes are read as UTF-8
-//! when the name says `UTF8`, as UTF-16 when it says `UTF16`, and as the code point itself
-//! otherwise (`UTF32`, `UCS2`). The file is untrusted: at most
-//! [`super::encodings::MAX_FILE_BYTES`] bytes and [`MAX_CMAP_CODES`] codes.
+//! CMap files are read by the compile crate's reader ([`fontcraft_compile::cid::parse_cmap`]),
+//! the one the CID-keyed build uses. Only Unicode CMaps (named `Uni…`, or unnamed) can be used,
+//! because glyphs are encoded by code point. The file is untrusted: at most
+//! [`super::encodings::MAX_FILE_BYTES`] bytes are read, and the reader caps the codes at
+//! [`fontcraft_compile::cid::MAX_CMAP_CODES`].
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+use fontcraft_compile::cid::{CMap, CodeKind, parse_cmap};
 use fontcraft_model::cid::{self, CidFont, MAX_CID, MAX_SUBFONTS, MAX_SUPPLEMENT, Ros, SubFont};
 use fontcraft_model::plist::{Array, Num, Number, Str, Value as PValue};
 use fontcraft_model::{Font, GLYPH_ORDER_PARAM, Glyph, GlyphTable, MAX_GLYPHS, Shape, rename_glyphs};
@@ -30,8 +29,6 @@ use serde_json::{Map, Value, json};
 use super::*;
 use crate::params::{Params, kind};
 
-/// Most codes a CMap file may map (ranges count every code they cover).
-pub const MAX_CMAP_CODES: usize = 1 << 20;
 /// Most numbers in one hinting array of a sub-font (the CFF limit for BlueValues).
 const MAX_PRIVATE_ARRAY: usize = 14;
 /// Most names one message lists.
@@ -114,255 +111,15 @@ fn some_names<S: AsRef<str>>(names: &[S]) -> String {
 
 // ── CMap files ──────────────────────────────────────────────────────────────────────────────────
 
-/// What a CMap file says.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct CMap {
-    pub name: Option<String>,
-    pub registry: Option<String>,
-    pub ordering: Option<String>,
-    pub supplement: Option<u32>,
-    /// Code point → CID; the first entry for a code point counts.
-    pub cids: BTreeMap<u32, u32>,
-    /// The CMap this one names with `usecmap`, which is not read.
-    pub uses: Option<String>,
-}
-
-impl CMap {
-    /// CID → its code points, ascending.
-    pub fn code_points(&self) -> BTreeMap<u32, Vec<u32>> {
-        let mut out: BTreeMap<u32, Vec<u32>> = BTreeMap::new();
-        for (cp, c) in &self.cids {
-            out.entry(*c).or_default().push(*cp);
-        }
-        out
-    }
-
-    fn warnings(&self) -> Vec<String> {
-        self.uses.iter().map(|u| format!("the CMap uses the CMap `{u}`, which is not read; codes only it maps are left out")).collect()
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-enum Token {
-    Name(String),
-    Hex(Vec<u8>),
-    Text(String),
-    Int(i64),
-    Word(String),
-}
-
-/// Splits PostScript text into the tokens a CMap needs; `%` comments are skipped.
-fn tokens(text: &str) -> std::result::Result<Vec<Token>, String> {
-    let mut out = Vec::new();
-    let mut chars = text.char_indices().peekable();
-    let delimiter = |c: char| c.is_whitespace() || "()<>[]{}/%".contains(c);
-    while let Some((at, c)) = chars.next() {
-        match c {
-            c if c.is_whitespace() => {}
-            '%' => while chars.next_if(|(_, c)| *c != '\n' && *c != '\r').is_some() {},
-            '(' => {
-                let mut s = String::new();
-                let mut depth = 1usize;
-                loop {
-                    let Some((_, c)) = chars.next() else { return Err(format!("a string at byte {at} is not closed")) };
-                    match c {
-                        '(' => depth = depth.saturating_add(1),
-                        ')' => {
-                            depth = depth.saturating_sub(1);
-                            if depth == 0 {
-                                break;
-                            }
-                        }
-                        '\\' => {
-                            chars.next();
-                            continue;
-                        }
-                        _ => {}
-                    }
-                    s.push(c);
-                }
-                out.push(Token::Text(s));
-            }
-            '<' if chars.next_if(|(_, c)| *c == '<').is_some() => out.push(Token::Word("<<".into())),
-            '>' if chars.next_if(|(_, c)| *c == '>').is_some() => out.push(Token::Word(">>".into())),
-            '<' => {
-                let mut digits = String::new();
-                loop {
-                    let Some((_, c)) = chars.next() else { return Err(format!("a hexadecimal code at byte {at} is not closed")) };
-                    match c {
-                        '>' => break,
-                        c if c.is_ascii_hexdigit() => digits.push(c),
-                        c if c.is_whitespace() => {}
-                        _ => return Err(format!("a hexadecimal code at byte {at} holds `{c}`")),
-                    }
-                    if digits.len() > 8 {
-                        return Err(format!("the code at byte {at} is longer than 4 bytes"));
-                    }
-                }
-                if digits.is_empty() || !digits.len().is_multiple_of(2) {
-                    return Err(format!("the code at byte {at} is not a whole number of bytes"));
-                }
-                let bytes = (0..digits.len() / 2)
-                    .map(|i| digits.get(i * 2..i * 2 + 2).and_then(|d| u8::from_str_radix(d, 16).ok()))
-                    .collect::<Option<Vec<u8>>>()
-                    .ok_or_else(|| format!("the code at byte {at} cannot be read"))?;
-                out.push(Token::Hex(bytes));
-            }
-            '/' => {
-                let mut s = String::new();
-                while let Some((_, c)) = chars.next_if(|(_, c)| !delimiter(*c)) {
-                    s.push(c);
-                }
-                out.push(Token::Name(s));
-            }
-            '[' | ']' | '{' | '}' | ')' | '>' => out.push(Token::Word(c.to_string())),
-            c => {
-                let mut s = c.to_string();
-                while let Some((_, c)) = chars.next_if(|(_, c)| !delimiter(*c)) {
-                    s.push(c);
-                }
-                out.push(match s.parse::<i64>() {
-                    Ok(n) => Token::Int(n),
-                    Err(_) => Token::Word(s),
-                });
-            }
-        }
-    }
-    Ok(out)
-}
-
-#[derive(Clone, Copy, PartialEq)]
-enum Codes {
-    Utf8,
-    Utf16,
-    Plain,
-}
-
-/// The code point a code stands for, if it is one.
-fn decode(codes: Codes, bytes: &[u8]) -> Option<u32> {
-    let value = |b: &[u8]| b.iter().fold(0u32, |v, x| (v << 8) | u32::from(*x));
-    let cp = match codes {
-        Codes::Utf8 => std::str::from_utf8(bytes).ok().and_then(|s| {
-            let mut it = s.chars();
-            let c = it.next()?;
-            it.next().is_none().then_some(u32::from(c))
-        })?,
-        Codes::Utf16 => match bytes {
-            [_, _] => value(bytes),
-            [a, b, c, d] => {
-                let (hi, lo) = ((u32::from(*a) << 8) | u32::from(*b), (u32::from(*c) << 8) | u32::from(*d));
-                if !(0xD800..0xDC00).contains(&hi) || !(0xDC00..0xE000).contains(&lo) {
-                    return None;
-                }
-                0x10000 + ((hi - 0xD800) << 10) + (lo - 0xDC00)
-            }
-            _ => return None,
-        },
-        Codes::Plain => value(bytes),
-    };
-    char::from_u32(cp).map(u32::from)
-}
-
-/// Reads a CMap file (see the module notes).
-pub fn parse_cmap(bytes: &[u8]) -> std::result::Result<CMap, String> {
-    if bytes.len() > super::encodings::MAX_FILE_BYTES {
-        return Err(format!("the file is {} bytes long; at most {} are read", bytes.len(), super::encodings::MAX_FILE_BYTES));
-    }
-    let text = String::from_utf8_lossy(bytes);
-    let toks = tokens(&text)?;
-    let mut out = CMap::default();
-    for (i, t) in toks.iter().enumerate() {
-        let next = toks.get(i + 1);
-        match (t, next) {
-            (Token::Name(n), Some(Token::Text(s))) if n == "Registry" => out.registry = Some(s.clone()),
-            (Token::Name(n), Some(Token::Text(s))) if n == "Ordering" => out.ordering = Some(s.clone()),
-            (Token::Name(n), Some(Token::Int(v))) if n == "Supplement" => out.supplement = u32::try_from(*v).ok(),
-            (Token::Name(n), Some(Token::Name(v))) if n == "CMapName" && out.name.is_none() => out.name = Some(v.clone()),
-            (Token::Word(w), _) if w == "usecmap" => {
-                if let Some(Token::Name(u)) = i.checked_sub(1).and_then(|j| toks.get(j)) {
-                    out.uses = Some(u.clone());
-                }
-            }
-            _ => {}
-        }
-    }
-    let codes = match &out.name {
-        Some(n) if !n.starts_with("Uni") => {
-            return Err(format!("`{n}` is not a Unicode CMap; only CMaps that map Unicode code points (named Uni…) can be used"));
-        }
-        Some(n) if n.contains("UTF8") => Codes::Utf8,
-        Some(n) if n.contains("UTF16") => Codes::Utf16,
-        _ => Codes::Plain,
-    };
-    let mut count = 0usize;
-    let mut add = |out: &mut CMap, code: &[u8], c: i64| -> std::result::Result<(), String> {
-        count += 1;
-        if count > MAX_CMAP_CODES {
-            return Err(format!("the CMap maps more than {MAX_CMAP_CODES} codes"));
-        }
-        let c = u32::try_from(c).ok().filter(|c| *c <= MAX_CID).ok_or_else(|| format!("the CID {c} is not from 0 to {MAX_CID}"))?;
-        if let Some(cp) = decode(codes, code) {
-            out.cids.entry(cp).or_insert(c);
-        }
-        Ok(())
-    };
-    let mut i = 0usize;
-    while let Some(t) = toks.get(i) {
-        i += 1;
-        let Token::Word(w) = t else { continue };
-        match w.as_str() {
-            "begincidrange" => loop {
-                match (toks.get(i), toks.get(i + 1), toks.get(i + 2)) {
-                    (Some(Token::Word(e)), _, _) if e == "endcidrange" => {
-                        i += 1;
-                        break;
-                    }
-                    (Some(Token::Hex(lo)), Some(Token::Hex(hi)), Some(Token::Int(start))) => {
-                        if lo.len() != hi.len() {
-                            return Err("a cidrange's two codes differ in length".into());
-                        }
-                        let n = lo.len();
-                        let value = |b: &[u8]| b.iter().fold(0u32, |v, x| (v << 8) | u32::from(*x));
-                        let (a, b) = (value(lo), value(hi));
-                        if a > b {
-                            return Err(format!("the cidrange <{a:X}> <{b:X}> runs backwards"));
-                        }
-                        for code in a..=b {
-                            let bytes = code.to_be_bytes();
-                            let Some(code_bytes) = bytes.get(4usize.saturating_sub(n)..) else { break };
-                            add(&mut out, code_bytes, start.saturating_add(i64::from(code - a)))?;
-                        }
-                        i += 3;
-                    }
-                    _ => return Err("a cidrange block holds something other than <code> <code> CID".into()),
-                }
-            },
-            "begincidchar" => loop {
-                match (toks.get(i), toks.get(i + 1)) {
-                    (Some(Token::Word(e)), _) if e == "endcidchar" => {
-                        i += 1;
-                        break;
-                    }
-                    (Some(Token::Hex(code)), Some(Token::Int(c))) => {
-                        add(&mut out, code, *c)?;
-                        i += 2;
-                    }
-                    _ => return Err("a cidchar block holds something other than <code> CID".into()),
-                }
-            },
-            _ => {}
-        }
-    }
-    if out.cids.is_empty() && out.uses.is_none() {
-        return Err("the CMap maps no code points to CIDs".into());
-    }
-    Ok(out)
+/// The notes a CMap gives the user: the CMap it names with `usecmap`, which is not read.
+fn cmap_warnings(cmap: &CMap) -> Vec<String> {
+    cmap.uses.iter().map(|u| format!("the CMap uses the CMap `{u}`, which is not read; codes only it maps are left out")).collect()
 }
 
 /// Reads the CMap file at `path`; refuses one that names another character collection.
 fn read_cmap(p: &Params, path: &str, ros: Option<&Ros>) -> Result<CMap> {
     let bytes = super::encodings::read_text_file(path)?;
-    let cmap = parse_cmap(&bytes).map_err(|e| p.bad(format!("{path}: {e}")))?;
+    let cmap = parse_cmap(&bytes, CodeKind::Unicode).map_err(|e| p.bad(format!("{path}: {e}")))?;
     if let Some(ros) = ros {
         let same = |given: &Option<String>, ours: &str| given.as_deref().is_none_or(|g| g == ours);
         if !same(&cmap.registry, &ros.registry) || !same(&cmap.ordering, &ros.ordering) {
@@ -462,7 +219,7 @@ fn convert_to_cid(s: &mut Session, v: &Value) -> Result<Value> {
         state.store(f);
         Ok(())
     })?;
-    let warnings = cmap.map(|m| m.warnings()).unwrap_or_default();
+    let warnings = cmap.as_ref().map(cmap_warnings).unwrap_or_default();
     Ok(json!({
         "ros": ros.text(),
         "cids": count,
@@ -499,7 +256,7 @@ fn flatten(s: &mut Session, v: &Value) -> Result<Value> {
     // Glyph name → the code points the CMap gives it.
     let mut encode: HashMap<String, Vec<u32>> = HashMap::new();
     if let Some(cmap) = &cmap {
-        let by_cid = cmap.code_points();
+        let by_cid = cmap.codes_by_cid();
         for (c, i) in &with_cid {
             if let (Some(cps), Some(g)) = (by_cid.get(c), font.glyphs.as_arcs().get(*i)) {
                 encode.entry(g.name.clone()).or_insert_with(|| cps.clone());
@@ -529,7 +286,7 @@ fn flatten(s: &mut Session, v: &Value) -> Result<Value> {
         CidFont::remove(f);
         Ok(())
     })?;
-    let warnings = cmap.map(|m| m.warnings()).unwrap_or_default();
+    let warnings = cmap.as_ref().map(cmap_warnings).unwrap_or_default();
     Ok(json!({"glyphs": in_cid_order, "subfonts": subfonts, "encoded": encoded, "warnings": warnings}))
 }
 
@@ -815,38 +572,4 @@ fn insert_subfont(s: &mut Session, p: &Params, mut state: CidFont) -> Result<Val
 /// How many CIDs from `first` to [`MAX_CID`] are free to hand out.
 fn cids_left(first: u32) -> usize {
     usize::try_from(u64::from(MAX_CID).saturating_add(1).saturating_sub(u64::from(first))).unwrap_or(usize::MAX)
-}
-
-#[cfg(test)]
-mod tests {
-    #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
-
-    use super::*;
-
-    #[test]
-    fn cmap_files_read_ranges_chars_and_the_collection() {
-        let text = b"%!PS-Adobe-3.0 Resource-CMap\n/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n\
-/CIDSystemInfo 3 dict dup begin\n  /Registry (Test) def\n  /Ordering (Han1) def\n  /Supplement 2 def\nend def\n\
-/CMapName /UniHan-UTF16-H def\n1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n\
-2 begincidrange\n<4E00> <4E02> 100\n<d840dc00> <d840dc01> 200\nendcidrange\n\
-1 begincidchar\n<0020> 1 % a space\nendcidchar\nendcmap\n";
-        let cmap = parse_cmap(text).unwrap();
-        assert_eq!(cmap.name.as_deref(), Some("UniHan-UTF16-H"));
-        assert_eq!((cmap.registry.as_deref(), cmap.ordering.as_deref(), cmap.supplement), (Some("Test"), Some("Han1"), Some(2)));
-        let got: Vec<(u32, u32)> = cmap.cids.iter().map(|(a, b)| (*a, *b)).collect();
-        assert_eq!(got, [(0x20, 1), (0x4E00, 100), (0x4E01, 101), (0x4E02, 102), (0x20000, 200), (0x20001, 201)]);
-        assert_eq!(cmap.code_points().get(&100), Some(&vec![0x4E00]));
-
-        let utf8 = b"/CMapName /UniHan-UTF8-H def\n1 begincidchar\n<E4B880> 7\nendcidchar\n";
-        assert_eq!(parse_cmap(utf8).unwrap().cids.get(&0x4E00), Some(&7));
-        assert!(parse_cmap(b"/CMapName /90ms-RKSJ-H def\n1 begincidchar\n<20> 1\nendcidchar\n").unwrap_err().contains("not a Unicode CMap"));
-        assert!(parse_cmap(b"1 begincidrange\n<0000> <00> 1\nendcidrange\n").is_err());
-        assert!(parse_cmap(b"1 begincidchar\n<0041> 70000\nendcidchar\n").is_err());
-        assert!(parse_cmap(b"1 begincidchar\n<0041\n").is_err());
-        assert!(parse_cmap(b"1 begincidrange\n<00000000> <0000FFFF> 0\nendcidrange\n").unwrap_err().contains("65534"));
-        // 17 ranges of 65,535 codes each: every CID is in range, the count is not.
-        let ranges: String = (0..17).map(|i| format!("<{i:02X}0000> <{i:02X}FFFE> 0\n")).collect();
-        let huge = format!("17 begincidrange\n{ranges}endcidrange\n");
-        assert!(parse_cmap(huge.as_bytes()).unwrap_err().contains("more than"));
-    }
 }

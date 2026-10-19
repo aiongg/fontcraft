@@ -91,3 +91,33 @@ fn a_cid_keyed_font_compiles_with_its_cmap_file_and_a_bad_cmap_file_writes_nothi
         .to_string();
     assert!(e.contains("cidMacScript"), "{e}");
 }
+
+/// A UTF-32 CMap of the made-up `Test-Order` collection that puts B before A.
+const ORDER_CMAP: &str = "/CIDSystemInfo 3 dict dup begin /Registry (Test) def /Ordering (Order) def /Supplement 0 def end def\n\
+/CMapName /UniTest-UTF32-H def\n2 begincidchar\n<00000042> 1\n<00000041> 2\nendcidchar\n";
+
+#[test]
+fn the_compile_plan_gives_the_cid_order_the_compile_writes() {
+    let dir = temp("plan");
+    let cmap = dir.join("UniTest-UTF32-H");
+    std::fs::write(&cmap, ORDER_CMAP).unwrap();
+    let mut s = Session::new();
+    run(&mut s, "file.new", json!({"familyName": "Cid Sans"}));
+    run(&mut s, "cid.convertToCid", json!({"registry": "Test", "ordering": "Order", "supplement": 0, "cmap": cmap.to_str().unwrap()}));
+    let plan = run(&mut s, "font.compilePlan", json!({"formats": ["otf"], "sections": ["glyphOrder"]}));
+    let order: Vec<&str> = plan["glyphOrder"].as_array().unwrap().iter().map(|n| n.as_str().unwrap()).collect();
+    assert_eq!(order.get(..4), Some(&[".notdef", "B", "A", "space"][..]), "CID order, the unmapped glyphs after the highest CID");
+
+    let out = dir.join("CidSans.otf");
+    run(&mut s, "font.compile", json!({"formats": ["otf"], "destination": out.to_str().unwrap()}));
+    let bytes = std::fs::read(&out).unwrap();
+    let font = FontRef::new(&bytes).unwrap();
+    assert_eq!(usize::from(font.maxp().unwrap().num_glyphs()), order.len());
+    // The CID-keyed font has no glyph names; its cmap shows which glyph each glyph id holds.
+    for (c, gid) in font.charmap().mappings() {
+        let Some(ch) = char::from_u32(c).filter(|ch| ch.is_ascii_alphabetic() || *ch == ' ') else { continue };
+        let name = if ch == ' ' { "space".to_string() } else { ch.to_string() };
+        assert_eq!(order.get(gid.to_u32() as usize).copied(), Some(name.as_str()), "U+{c:04X}");
+    }
+    std::fs::remove_dir_all(&dir).unwrap();
+}

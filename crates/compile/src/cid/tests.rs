@@ -246,3 +246,34 @@ fn sub_font_private_values_are_read_as_given() {
     assert_eq!(widths, Widths::Optimise);
     assert!(w.iter().any(|m| m.contains("LanguageGroup 7")));
 }
+
+#[test]
+fn cmap_files_read_ranges_chars_and_the_collection() {
+    let text = b"%!PS-Adobe-3.0 Resource-CMap\n/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n\
+/CIDSystemInfo 3 dict dup begin\n  /Registry (Test) def\n  /Ordering (Han1) def\n  /Supplement 2 def\nend def\n\
+/CMapName /UniHan-UTF16-H def\n1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n\
+2 begincidrange\n<4E00> <4E02> 100\n<d840dc00> <d840dc01> 200\nendcidrange\n\
+1 begincidchar\n<0020> 1 % a space\nendcidchar\nendcmap\n";
+    let cmap = parse_cmap(text, CodeKind::Unicode).unwrap();
+    assert_eq!(cmap.name.as_deref(), Some("UniHan-UTF16-H"));
+    assert_eq!((cmap.registry.as_deref(), cmap.ordering.as_deref(), cmap.supplement), (Some("Test"), Some("Han1"), Some(2)));
+    let got: Vec<(u32, u32)> = cmap.cids.iter().map(|(a, b)| (*a, *b)).collect();
+    assert_eq!(got, [(0x20, 1), (0x4E00, 100), (0x4E01, 101), (0x4E02, 102), (0x20000, 200), (0x20001, 201)]);
+    assert_eq!(cmap.codes_by_cid().get(&100), Some(&vec![0x4E00]));
+
+    let utf8 = b"/CMapName /UniHan-UTF8-H def\n1 begincidchar\n<E4B880> 7\nendcidchar\n";
+    assert_eq!(parse_cmap(utf8, CodeKind::Unicode).unwrap().cids.get(&0x4E00), Some(&7));
+    assert!(
+        parse_cmap(b"/CMapName /90ms-RKSJ-H def\n1 begincidchar\n<20> 1\nendcidchar\n", CodeKind::Unicode)
+            .unwrap_err()
+            .contains("not a Unicode CMap")
+    );
+    assert!(parse_cmap(b"1 begincidrange\n<0000> <00> 1\nendcidrange\n", CodeKind::Unicode).is_err());
+    assert!(parse_cmap(b"1 begincidchar\n<0041> 70000\nendcidchar\n", CodeKind::Unicode).is_err());
+    assert!(parse_cmap(b"1 begincidchar\n<0041\n", CodeKind::Unicode).is_err());
+    assert!(parse_cmap(b"1 begincidrange\n<00000000> <0000FFFF> 0\nendcidrange\n", CodeKind::Unicode).unwrap_err().contains("65534"));
+    // 17 ranges of 65,535 codes each: every CID is in range, the count is not.
+    let ranges: String = (0..17).map(|i| format!("<{i:02X}0000> <{i:02X}FFFE> 0\n")).collect();
+    let huge = format!("17 begincidrange\n{ranges}endcidrange\n");
+    assert!(parse_cmap(huge.as_bytes(), CodeKind::Unicode).unwrap_err().contains("more than"));
+}

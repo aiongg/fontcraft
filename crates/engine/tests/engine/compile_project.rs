@@ -243,3 +243,30 @@ fn a_refused_project_compile_writes_nothing() {
     }
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// The glyph order `font.compilePlan` gives for the UFO in `dir` with `extra`, by written name.
+fn planned_order(dir: &Path, extra: Value) -> Vec<String> {
+    let ufo = write_ufo(dir);
+    let mut s = Session::new();
+    s.execute("file.open", &json!({ "path": ufo })).unwrap();
+    let mut params = json!({"formats": ["otf"], "sections": ["glyphOrder", "productionNames"]});
+    for (k, v) in extra.as_object().unwrap() {
+        params[k] = v.clone();
+    }
+    let plan = s.execute("font.compilePlan", &params).unwrap_or_else(|e| panic!("{params}: {e}"));
+    let written = |n: &str| plan["productionNames"].get(n).and_then(Value::as_str).unwrap_or(n).to_string();
+    plan["glyphOrder"].as_array().unwrap().iter().map(|n| written(n.as_str().unwrap())).collect()
+}
+
+#[test]
+fn the_compile_plan_gives_the_glyph_order_of_the_project_compile() {
+    for (name, extra) in
+        [("plan-dev", json!({"projectOptions": []})), ("plan-release", json!({"projectOptions": ["release"], "projectDefaults": true}))]
+    {
+        let dir = temp(name);
+        std::fs::write(dir.join("GlyphOrderAndAliasDB"), GOADB).unwrap();
+        let (bytes, _) = build(&dir, extra.clone());
+        assert_eq!(planned_order(&dir, extra), order(&bytes), "{name}");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+}

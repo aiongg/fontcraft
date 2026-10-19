@@ -519,7 +519,7 @@ milestone = "M12"
 summary = "Pre-computed hinted advance widths per ppem. read-fonts reads it; write-fonts ships generated/generated_hdmx.rs without a module that includes it. Only meaningful for hinted fonts, and producing it needs a TrueType interpreter run per size."
 ref = "read-fonts src/tables/hdmx.rs; write-fonts generated/generated_hdmx.rs, src/tables.rs"
 status = "docs"
-notes = "Copied unchanged into a build by font.compile's passThroughTables (CLI --pass-through-tables) from the bytes a compiled font kept when it was opened, only while the glyph order has the checksum they were stored with (crates/compile/src/extras.rs; roundtrip.binaryPassThroughTables). The reader side, storing them when a compiled font is opened, is not built yet. The binary tools copy the table byte for byte when they do not touch it."
+notes = "Copied unchanged into a build by font.compile's passThroughTables (CLI --pass-through-tables) from the bytes a compiled font kept when it was opened, only while the glyph order has the checksum they were stored with (crates/compile/src/extras.rs; roundtrip.binaryPassThroughTables). Opening a compiled font stores them (crates/engine/src/io.rs), indexed by the opened font's glyph order. The binary tools copy the table byte for byte when they do not touch it."
 
 [[table]]
 tag = "LTSH"
@@ -531,7 +531,7 @@ milestone = "M12"
 summary = "Per-glyph ppem above which advances scale linearly. Neither fontations crate knows the table; it only appears as a name in write-fonts's recommended table order. Preserve on round trip, generate only if a hinted legacy target asks for it."
 ref = "write-fonts src/font_builder.rs; read-fonts src/table_provider.rs"
 status = "docs"
-notes = "Copied unchanged into a build by font.compile's passThroughTables (CLI --pass-through-tables) from the bytes a compiled font kept when it was opened, only while the glyph order has the checksum they were stored with (crates/compile/src/extras.rs; roundtrip.binaryPassThroughTables). The reader side, storing them when a compiled font is opened, is not built yet. The binary tools copy the table byte for byte when they do not touch it."
+notes = "Copied unchanged into a build by font.compile's passThroughTables (CLI --pass-through-tables) from the bytes a compiled font kept when it was opened, only while the glyph order has the checksum they were stored with (crates/compile/src/extras.rs; roundtrip.binaryPassThroughTables). Opening a compiled font stores them (crates/engine/src/io.rs), indexed by the opened font's glyph order. The binary tools copy the table byte for byte when they do not touch it."
 
 [[table]]
 tag = "VDMX"
@@ -543,7 +543,7 @@ milestone = "M12"
 summary = "Vertical device metrics (yMax/yMin per ppem). Unknown to both fontations crates apart from its slot in the recommended table order. Same policy as LTSH."
 ref = "write-fonts src/font_builder.rs; read-fonts src/table_provider.rs"
 status = "docs"
-notes = "Copied unchanged into a build by font.compile's passThroughTables (CLI --pass-through-tables) from the bytes a compiled font kept when it was opened, only while the glyph order has the checksum they were stored with (crates/compile/src/extras.rs; roundtrip.binaryPassThroughTables). The reader side, storing them when a compiled font is opened, is not built yet. The binary tools copy the table byte for byte when they do not touch it."
+notes = "Copied unchanged into a build by font.compile's passThroughTables (CLI --pass-through-tables) from the bytes a compiled font kept when it was opened, only while the glyph order has the checksum they were stored with (crates/compile/src/extras.rs; roundtrip.binaryPassThroughTables). Opening a compiled font stores them (crates/engine/src/io.rs), indexed by the opened font's glyph order. The binary tools copy the table byte for byte when they do not touch it."
 
 [[table]]
 tag = "MATH"
@@ -567,7 +567,7 @@ milestone = "M12"
 summary = "Justification table. Not present in read-fonts or write-fonts and not produced by fontc, fontmake or makeotf as documented. Kept as opaque bytes on round trip; no generation planned until a user needs it."
 ref = "read-fonts src/tables/; write-fonts src/tables.rs"
 status = "docs"
-notes = "Copied unchanged into a build by font.compile's passThroughTables (CLI --pass-through-tables) from the bytes a compiled font kept when it was opened, only while the glyph order has the checksum they were stored with (crates/compile/src/extras.rs; roundtrip.binaryPassThroughTables). The reader side, storing them when a compiled font is opened, is not built yet. The binary tools copy the table byte for byte when they do not touch it."
+notes = "Copied unchanged into a build by font.compile's passThroughTables (CLI --pass-through-tables) from the bytes a compiled font kept when it was opened, only while the glyph order has the checksum they were stored with (crates/compile/src/extras.rs; roundtrip.binaryPassThroughTables). Opening a compiled font stores them (crates/engine/src/io.rs), indexed by the opened font's glyph order. The binary tools copy the table byte for byte when they do not touch it."
 
 [[table]]
 tag = "EBDT"
@@ -579,7 +579,7 @@ milestone = "M12"
 summary = "Embedded monochrome or grey bitmaps with their location table EBLC (and EBSC scaling). read-fonts reads EBDT and EBLC through the shared bitmap code; there is no writer."
 ref = "read-fonts src/tables/ebdt.rs, eblc.rs, bitmap.rs; write-fonts src/tables.rs"
 status = "docs"
-notes = "Copied unchanged into a build by font.compile's passThroughTables (CLI --pass-through-tables) from the bytes a compiled font kept when it was opened, only while the glyph order has the checksum they were stored with (crates/compile/src/extras.rs; roundtrip.binaryPassThroughTables). The reader side, storing them when a compiled font is opened, is not built yet. The binary tools copy the table byte for byte when they do not touch it."
+notes = "Copied unchanged into a build by font.compile's passThroughTables (CLI --pass-through-tables) from the bytes a compiled font kept when it was opened, only while the glyph order has the checksum they were stored with (crates/compile/src/extras.rs; roundtrip.binaryPassThroughTables). Opening a compiled font stores them (crates/engine/src/io.rs), indexed by the opened font's glyph order. The binary tools copy the table byte for byte when they do not touch it."
 
 [[table]]
 tag = "morx"
@@ -591,7 +591,7 @@ milestone = "M12"
 summary = "Apple extended glyph metamorphosis, with the related feat (feature names) and ltag tables. read-fonts reads morx, mort, feat and ltag; nothing writes them and no reference compiler here generates them. Round-trip only."
 ref = "read-fonts src/tables/morx.rs, mort.rs, feat.rs, ltag.rs, aat.rs; write-fonts src/tables.rs"
 status = "docs"
-notes = "Copied unchanged into a build by font.compile's passThroughTables (CLI --pass-through-tables) from the bytes a compiled font kept when it was opened, only while the glyph order has the checksum they were stored with (crates/compile/src/extras.rs; roundtrip.binaryPassThroughTables). The reader side, storing them when a compiled font is opened, is not built yet. The binary tools copy the table byte for byte when they do not touch it."
+notes = "Copied unchanged into a build by font.compile's passThroughTables (CLI --pass-through-tables) from the bytes a compiled font kept when it was opened, only while the glyph order has the checksum they were stored with (crates/compile/src/extras.rs; roundtrip.binaryPassThroughTables). Opening a compiled font stores them (crates/engine/src/io.rs), indexed by the opened font's glyph order. The binary tools copy the table byte for byte when they do not touch it."
 
 [[table]]
 tag = "kerx"
@@ -603,7 +603,7 @@ milestone = "M12"
 summary = "Apple extended kerning, with the related ankr anchor table. Readable through read-fonts, no writer. Round-trip only."
 ref = "read-fonts src/tables/kerx.rs, ankr.rs; write-fonts src/tables.rs"
 status = "docs"
-notes = "Copied unchanged into a build by font.compile's passThroughTables (CLI --pass-through-tables) from the bytes a compiled font kept when it was opened, only while the glyph order has the checksum they were stored with (crates/compile/src/extras.rs; roundtrip.binaryPassThroughTables). The reader side, storing them when a compiled font is opened, is not built yet. The binary tools copy the table byte for byte when they do not touch it."
+notes = "Copied unchanged into a build by font.compile's passThroughTables (CLI --pass-through-tables) from the bytes a compiled font kept when it was opened, only while the glyph order has the checksum they were stored with (crates/compile/src/extras.rs; roundtrip.binaryPassThroughTables). Opening a compiled font stores them (crates/engine/src/io.rs), indexed by the opened font's glyph order. The binary tools copy the table byte for byte when they do not touch it."
 
 [[table]]
 tag = "trak"
@@ -615,7 +615,7 @@ milestone = "M12"
 summary = "Apple tracking table. Readable through read-fonts, no writer. Round-trip only."
 ref = "read-fonts src/tables/trak.rs; write-fonts src/tables.rs"
 status = "docs"
-notes = "Copied unchanged into a build by font.compile's passThroughTables (CLI --pass-through-tables) from the bytes a compiled font kept when it was opened, only while the glyph order has the checksum they were stored with (crates/compile/src/extras.rs; roundtrip.binaryPassThroughTables). The reader side, storing them when a compiled font is opened, is not built yet. The binary tools copy the table byte for byte when they do not touch it."
+notes = "Copied unchanged into a build by font.compile's passThroughTables (CLI --pass-through-tables) from the bytes a compiled font kept when it was opened, only while the glyph order has the checksum they were stored with (crates/compile/src/extras.rs; roundtrip.binaryPassThroughTables). Opening a compiled font stores them (crates/engine/src/io.rs), indexed by the opened font's glyph order. The binary tools copy the table byte for byte when they do not touch it."
 
 [[table]]
 tag = "VARC"
