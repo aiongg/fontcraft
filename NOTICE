@@ -290,7 +290,7 @@ bundled, the file says so in its header and the project is listed here with its 
 
   Units-per-em scaling (crates/tables/src/transform.rs, M12.24) ports fontTools' ttLib.scaleUpem (MIT License): the scaled fields of each table, the rounding, and the item variation store layout after scaling.
 
-  crates/tables/src/transform/post.rs ports the post table's version 2 decode_format_2_0, unpackPStrings and encode_format_2_0, crates/tables/src/merge/plan.rs its build_psNameMapping, and crates/tables/src/ttx/read_core/glyf.rs maxp.recalc for compiled fonts (fontTools 4.66.1, MIT License).
+  crates/tables/src/transform/post.rs ports the post table's version 2 decode_format_2_0, unpackPStrings and encode_format_2_0, crates/tables/src/merge/plan.rs its build_psNameMapping, crates/tables/src/merge/glyphs.rs glyf's Glyph.recalcBounds and tryRecalcBoundsComposite, and crates/tables/src/ttx/read_core/glyf.rs maxp.recalc for compiled fonts (fontTools 4.66.1, MIT License).
 
   Feature syntax conversion (M12.13): crates/tables/src/volt.rs and volt/parse.rs port fontTools' voltLib (lexer.py, parser.py, ast.py, voltToFea.py; MIT License, Copyright (c) 2017 Just van Rossum and others) and print feature code as fontTools' feaLib.ast does; crates/tables/src/fontdame/parse.rs ports the reader of fontTools' mtiLib (MIT License, Copyright (c) 2015 Google Inc. and others).
 
