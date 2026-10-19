@@ -248,8 +248,13 @@ pub fn open(path: &Path, face: Option<u32>) -> Result<(Font, Vec<String>)> {
         return Ok((fontcraft_format::load(&bytes)?, Vec::new()));
     }
     if fontcraft_decompile::sniff(&bytes).is_some() {
-        let mut d = fontcraft_decompile::decompile(&bytes, face)?;
-        keep_stored_tables(&mut d.font, &bytes, face);
+        // A WOFF or WOFF2 is unwrapped once, for the decompiler and for the stored tables. One
+        // that cannot be unwrapped goes to the decompiler as it is, which says why.
+        let sfnt = fontcraft_decompile::to_sfnt(&bytes).ok();
+        let mut d = fontcraft_decompile::decompile(sfnt.as_deref().unwrap_or(&bytes), face)?;
+        if let Some(sfnt) = &sfnt {
+            keep_stored_tables(&mut d.font, sfnt, face);
+        }
         return Ok((d.font, d.warnings));
     }
     if fontcraft_io_sfd::is_sfd(&bytes) {
@@ -277,13 +282,12 @@ pub fn open(path: &Path, face: Option<u32>) -> Result<(Font, Vec<String>)> {
     Ok((fontcraft_io_glyphs::read(text)?, Vec::new()))
 }
 
-/// Keeps in `font` the tables of the compiled font `bytes` that a compile can copy back
-/// (`fontcraft_compile::extras::STORED_TABLES`, for `font.compile`'s `passThroughTables`), with
-/// the glyph order they index: the opened font's, one glyph per glyph id. A file whose table
-/// directory cannot be read keeps nothing; the decompiler has read it already.
-fn keep_stored_tables(font: &mut Font, bytes: &[u8], face: Option<u32>) {
-    let Ok(sfnt) = fontcraft_decompile::to_sfnt(bytes) else { return };
-    let Ok(file) = skrifa::raw::FileRef::new(&sfnt) else { return };
+/// Keeps in `font` the tables of the sfnt `sfnt` (a font or a collection) that a compile can copy
+/// back (`fontcraft_compile::extras::STORED_TABLES`, for `font.compile`'s `passThroughTables`),
+/// with the glyph order they index: the opened font's, one glyph per glyph id. A file whose
+/// table directory cannot be read keeps nothing; the decompiler has read it already.
+fn keep_stored_tables(font: &mut Font, sfnt: &[u8], face: Option<u32>) {
+    let Ok(file) = skrifa::raw::FileRef::new(sfnt) else { return };
     let face = match file {
         skrifa::raw::FileRef::Font(f) => f,
         skrifa::raw::FileRef::Collection(c) => match face.and_then(|i| c.get(i).ok()) {

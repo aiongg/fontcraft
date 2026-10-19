@@ -80,28 +80,35 @@ pub struct Input {
 }
 
 /// Reads a regular file of at most [`MAX_INPUT`] bytes and recognises its kind.
-#[cfg(not(target_arch = "wasm32"))]
 pub fn read_input(path: &Path) -> Result<Input> {
+    let input = read_input_up_to(path, MAX_INPUT)?;
+    if input.bytes.len() > MAX_INPUT {
+        return Err(EngineError::Io(format!("{} is larger than {MAX_INPUT} bytes", path.display())));
+    }
+    Ok(input)
+}
+
+/// Reads at most `limit` + 1 bytes of a regular file (`limit` capped at [`MAX_INPUT`]), so the
+/// caller can refuse a file over its own, smaller limit without reading all of it.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn read_input_up_to(path: &Path, limit: usize) -> Result<Input> {
     use std::io::Read as _;
     let meta = std::fs::metadata(path).map_err(|e| EngineError::Io(format!("cannot open {}: {e}", path.display())))?;
     if !meta.is_file() {
         return Err(EngineError::Io(format!("cannot open {}: it is not a regular file", path.display())));
     }
     let mut bytes = Vec::new();
-    let limit = MAX_INPUT as u64;
+    let limit = limit.min(MAX_INPUT) as u64;
     // At most one byte past the limit, whatever the file's size claims to be.
     std::fs::File::open(path)
         .and_then(|f| f.take(limit + 1).read_to_end(&mut bytes))
         .map_err(|e| EngineError::Io(format!("cannot read {}: {e}", path.display())))?;
-    if bytes.len() as u64 > limit {
-        return Err(EngineError::Io(format!("{} is larger than {MAX_INPUT} bytes", path.display())));
-    }
     let kind = detect(&bytes);
     Ok(Input { path: path.to_path_buf(), bytes, kind })
 }
 
 #[cfg(target_arch = "wasm32")]
-pub fn read_input(_: &Path) -> Result<Input> {
+pub fn read_input_up_to(_: &Path, _: usize) -> Result<Input> {
     Err(refused())
 }
 

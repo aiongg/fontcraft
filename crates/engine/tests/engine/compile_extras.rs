@@ -73,6 +73,17 @@ fn a_collection_holds_every_font_built_and_stores_identical_tables_once() {
     written.sort();
     assert_eq!(written, ["TestSans.otc", "TestSans.ttc"], "{out}");
     assert_eq!(&std::fs::read(folder.join("TestSans.otc")).unwrap()[..4], b"ttcf");
+    // Each format is built and packed on its own; the fonts of both are listed once each.
+    let fonts = out["fonts"].as_array().unwrap();
+    let collections = out["collections"].as_array().unwrap();
+    assert_eq!(collections.len(), 2, "{out}");
+    for c in collections {
+        let format = c["format"].as_str().unwrap();
+        assert_eq!(c["fonts"], fonts.iter().filter(|f| f["format"] == format).count(), "{out}");
+    }
+    let one = run(&mut s, "font.compile", json!({"destination": dir.join("one"), "collection": true, "formats": ["ttf"], "timestamp": 0}));
+    assert_eq!(out["warnings"], one["warnings"], "what the instances report is listed once");
+    assert_eq!(out["skipped"], one["skipped"]);
 }
 
 #[test]
@@ -85,6 +96,13 @@ fn a_collection_request_that_cannot_be_written_writes_nothing() {
     let e = s.execute("font.compile", &json!({"collection": true, "containers": ["woff2"], "destination": dir.join("out")})).unwrap_err().to_string();
     assert!(e.contains("plain"), "{e}");
     assert!(!otc.exists() && !dir.join("out").exists());
+    // A collection to a file is checked by the file's extension, also when `collection` asks for it.
+    let ttf = dir.join("x.ttf");
+    for formats in [json!(["ttf"]), json!(["ttf", "otf"])] {
+        let e = s.execute("font.compile", &json!({"collection": true, "destination": ttf, "formats": formats})).unwrap_err().to_string();
+        assert!(e.contains(".ttc"), "{e}");
+        assert!(!ttf.exists());
+    }
 }
 
 #[test]

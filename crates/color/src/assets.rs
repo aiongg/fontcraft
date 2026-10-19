@@ -47,6 +47,14 @@ pub trait AssetStore: Send + Sync {
         let _ = max;
         self.read(path)
     }
+
+    /// A value that changes whenever the file at `path` changes (from its modification time and
+    /// size, say), found without reading the file; `None` when the store cannot tell or cannot
+    /// read the file. A cache of decoded images checks it to keep what is still current.
+    fn version(&self, path: &str) -> Option<u64> {
+        let _ = path;
+        None
+    }
 }
 
 /// Files held in memory, keyed by stored path.
@@ -87,5 +95,10 @@ impl AssetStore for MemoryAssets {
 
     fn exists(&self, path: &str) -> bool {
         self.files.contains_key(path)
+    }
+
+    /// Replacing a file stores a new buffer: its address and length tell the versions apart.
+    fn version(&self, path: &str) -> Option<u64> {
+        self.files.get(path).map(|b| (b.as_ptr() as usize as u64) ^ (b.len() as u64).rotate_left(32))
     }
 }

@@ -27,6 +27,12 @@ use crate::params::Params;
 pub const MAX_FONTS: usize = 1_000;
 /// Most bytes of font files one command returns in its result when it writes no files.
 pub const MAX_RETURNED_BYTES: usize = 256 << 20;
+/// Most bytes of fonts of one format held in memory to be packed into a collection: room for a
+/// large CJK family.
+#[cfg(target_pointer_width = "64")]
+pub const MAX_COLLECTION_BYTES: usize = 2 << 30;
+#[cfg(not(target_pointer_width = "64"))]
+pub const MAX_COLLECTION_BYTES: usize = 512 << 20;
 /// Longest file name stem, in characters.
 const MAX_STEM: usize = 200;
 
@@ -408,8 +414,8 @@ fn font_json(f: &FontOut, with_data: bool) -> Value {
 
 /// Where built files go while a command runs.
 pub(super) enum Sink {
-    /// Kept in memory; `bytes` counts what is kept.
-    Memory { bytes: usize, keep: bool },
+    /// Kept in memory; `bytes` counts what is kept, at most `limit`.
+    Memory { bytes: usize, keep: bool, limit: usize },
     #[cfg(not(target_arch = "wasm32"))]
     Disk(Stage),
 }
@@ -422,7 +428,7 @@ impl Sink {
     #[cfg_attr(target_arch = "wasm32", allow(unused_variables))]
     pub(super) fn new(dest: &Dest, keep: bool, outside: bool) -> Result<Self> {
         match dest {
-            Dest::Memory => Ok(Sink::Memory { bytes: 0, keep }),
+            Dest::Memory => Ok(Sink::Memory { bytes: 0, keep, limit: MAX_RETURNED_BYTES }),
             #[cfg(not(target_arch = "wasm32"))]
             Dest::Folder(path) => Ok(Sink::Disk(Stage::new(path.clone(), false, outside))),
             #[cfg(not(target_arch = "wasm32"))]
@@ -436,16 +442,17 @@ impl Sink {
     fn put(&mut self, name: String, container: Container, data: Vec<u8>, warnings: &mut Vec<String>) -> Result<FileOut> {
         let bytes = data.len();
         match self {
-            Sink::Memory { bytes: total, keep } => {
+            Sink::Memory { bytes: total, keep, limit } => {
                 if !*keep {
                     return Ok(FileOut { name, container, bytes, path: None, data: None });
                 }
                 *total = total.saturating_add(bytes);
-                if *total > MAX_RETURNED_BYTES {
-                    return Err(EngineError::Unsupported(format!(
-                        "returning more than {} MB of fonts in one result; give a `destination` to write them to files",
-                        MAX_RETURNED_BYTES >> 20
-                    )));
+                if *total > *limit {
+                    return Err(EngineError::Unsupported(if *limit == MAX_RETURNED_BYTES {
+                        format!("returning more than {} MB of fonts in one result; give a `destination` to write them to files", *limit >> 20)
+                    } else {
+                        format!("packing more than {} MB of fonts of one format into a collection; build fewer instances into it", *limit >> 20)
+                    }));
                 }
                 Ok(FileOut { name, container, bytes, path: None, data: Some(data) })
             }
@@ -1203,10 +1210,10 @@ fn collection_stem(title: &str) -> String {
     if stem.is_empty() { "fonts".into() } else { stem }
 }
 
-/// `font.compile` with `collection` (or a `.ttc`/`.otc` destination): every font is built in
-/// memory, then the fonts of each format are packed into one collection that stores identical
-/// tables once (`ttc.export`, `compile.collectionSharing`), written like any built file. The
-/// head tables share one timestamp, so they differ only where the fonts do.
+/// `font.compile` with `collection` (or a `.ttc`/`.otc` destination): one format at a time, its
+/// fonts are built in memory (at most [`MAX_COLLECTION_BYTES`]) and packed into one collection
+/// that stores identical tables once (`ttc.export`, `compile.collectionSharing`), written like
+/// any built file. The head tables share one timestamp, so they differ only where the fonts do.
 fn compile_collection(
     s: &Session,
     p: &Params,
@@ -1219,7 +1226,16 @@ fn compile_collection(
     if req.containers != [Container::Plain] {
         return Err(p.bad("a collection is written as a plain font file: leave out `containers` or give [\"plain\"]"));
     }
+    // A collection to a file destination with a font extension (`collection: true`) is checked
+    // as a .ttc or .otc destination is.
+    let file = file.or_else(|| match &req.dest {
+        Dest::File(path) => Some(path.clone()),
+        _ => None,
+    });
     if let Some(path) = &file {
+        if collection_extension(path).is_none() {
+            return Err(p.bad("a collection is written to a .ttc (TrueType) or .otc (CFF) file: give such a file or a folder as `destination`"));
+        }
         if req.flavours.len() > 1 {
             return Err(p.bad("`destination` is one collection file, but this export builds two formats: give a folder"));
         }
@@ -1232,39 +1248,60 @@ fn compile_collection(
         Some(path) => Dest::File(path.clone()),
         None => req.dest.clone(),
     };
-    let built = Request { dest: Dest::Memory, containers: vec![Container::Plain], first_only: false, ..req };
-    let mut memory = Sink::Memory { bytes: 0, keep: true };
-    build(font, &doc.title, doc.path.as_deref(), s.glyph_data()?, jobs, &built, &mut memory, &mut report)?;
-    if report.fonts.is_empty() {
-        return Err(nothing_built(&report));
-    }
     let mut sink = Sink::new(&dest, false, s.export_outside())?;
     let mut collections = Vec::new();
-    for &flavour in &built.flavours {
-        let members = report
-            .fonts
-            .iter()
-            .filter(|f| f.flavour == flavour)
-            .filter_map(|f| f.files.first().and_then(|file| file.data.as_deref()))
-            .map(|bytes| fontcraft_tables::read(bytes, 0))
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-        if members.is_empty() {
-            continue;
+    for (pass, &flavour) in req.flavours.iter().enumerate() {
+        let built = Request {
+            flavours: vec![flavour],
+            containers: vec![Container::Plain],
+            options: req.options.clone(),
+            dest: Dest::Memory,
+            first_only: false,
+            autohinter: req.autohinter.clone(),
+        };
+        let mut memory = Sink::Memory { bytes: 0, keep: true, limit: MAX_COLLECTION_BYTES };
+        let mut part = Report::default();
+        build(font, &doc.title, doc.path.as_deref(), s.glyph_data()?, jobs, &built, &mut memory, &mut part)?;
+        // Each pass prepares the same instances: what they report is kept once.
+        for skipped in part.skipped {
+            if !report.skipped.contains(&skipped) {
+                report.skipped.push(skipped);
+            }
         }
-        let packed = fontcraft_tables::collection::pack(&members, &fontcraft_tables::collection::PackOptions::default())?;
+        for warning in part.warnings {
+            if pass == 0 || !report.warnings.contains(&warning) {
+                report.warnings.push(warning);
+            }
+        }
+        let (packed, count) = {
+            let members = part
+                .fonts
+                .iter()
+                .filter_map(|f| f.files.first().and_then(|file| file.data.as_deref()))
+                .map(|bytes| fontcraft_tables::read(bytes, 0))
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            if members.is_empty() {
+                continue;
+            }
+            (fontcraft_tables::collection::pack(&members, &fontcraft_tables::collection::PackOptions::default())?, members.len())
+        };
+        for f in &mut part.fonts {
+            f.files.clear();
+        }
+        report.fonts.append(&mut part.fonts);
         let name = match &dest {
             Dest::File(path) => path.file_name().map_or_else(|| "collection".into(), |n| n.to_string_lossy().into_owned()),
             _ => format!("{}.{}", collection_stem(&doc.title), collection_ext(flavour)),
         };
         let out = sink.put(name, Container::Plain, packed, &mut report.warnings)?;
-        let mut entry = json!({ "name": out.name, "format": format_name(flavour), "fonts": members.len(), "bytes": out.bytes });
+        let mut entry = json!({ "name": out.name, "format": format_name(flavour), "fonts": count, "bytes": out.bytes });
         if let (Some(path), Value::Object(m)) = (&out.path, &mut entry) {
             m.insert("path".into(), json!(path.to_string_lossy()));
         }
         collections.push(entry);
     }
-    for f in &mut report.fonts {
-        f.files.clear();
+    if report.fonts.is_empty() {
+        return Err(nothing_built(&report));
     }
     sink.commit()?;
     Ok(json!({ "fonts": report.fonts_json(false), "collections": collections, "skipped": report.skipped, "warnings": report.warnings }))

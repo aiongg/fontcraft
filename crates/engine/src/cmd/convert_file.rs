@@ -5,9 +5,9 @@
 //!
 //! Compiled fonts (TrueType, OpenType CFF or CFF2, one face of a collection, WOFF, WOFF2) are
 //! converted between outline flavours and to bare CFF or CFF2 tables, and a result can be
-//! wrapped in WOFF or WOFF2. Every input is converted in memory first and every output is
-//! written to a temporary file beside its target; only when all of them are there are they
-//! moved into place, so a failing run writes nothing.
+//! wrapped in WOFF or WOFF2. Each output is written to a temporary file beside its target as
+//! soon as its input is converted, so memory holds one font at a time; only when all of them
+//! are there are they moved into place, so a failing conversion writes nothing.
 
 use std::path::{Path, PathBuf};
 
@@ -73,10 +73,8 @@ enum Container {
     Woff2,
 }
 
-/// One converted input waiting to be written.
-struct Done {
-    input: PathBuf,
-    output: PathBuf,
+/// One converted input.
+struct Converted {
     bytes: Vec<u8>,
     glyphs: usize,
     left_behind: Vec<String>,
@@ -119,38 +117,45 @@ fn convert_fonts(_: &mut Session, v: &Value) -> Result<Value> {
         return Err(p.bad("a bare CFF or CFF2 table cannot be wrapped in WOFF"));
     }
 
-    let mut done = Vec::with_capacity(inputs.len());
+    let mut outputs = Vec::with_capacity(inputs.len());
     for input in &inputs {
-        done.push(convert_one(&p, Path::new(input), &settings, container, &request).map_err(|e| in_input(e, input))?);
+        outputs.push(file_io::output_path(Path::new(input), &request, "", Some(settings.extension(container))).map_err(|e| in_input(e, input))?);
     }
     // Two inputs written to one file, or an output that replaces another input, would lose a
     // result: refused before anything is written.
     let resolved = |path: &Path| std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
     let sources: Vec<PathBuf> = inputs.iter().map(|i| resolved(Path::new(i))).collect();
-    let mut targets: Vec<PathBuf> = Vec::with_capacity(done.len());
-    for d in &done {
-        let target = resolved(&d.output);
+    let mut targets: Vec<PathBuf> = Vec::with_capacity(outputs.len());
+    for (input, output) in inputs.iter().zip(&outputs) {
+        let target = resolved(output);
         if targets.contains(&target) {
-            return Err(p.bad(format!("two inputs would both be written to {}", d.output.display())));
+            return Err(p.bad(format!("two inputs would both be written to {}", output.display())));
         }
-        if sources.contains(&target) && resolved(&d.input) != target {
-            return Err(p.bad(format!("the output {} would replace another input", d.output.display())));
+        if sources.contains(&target) && resolved(Path::new(input)) != target {
+            return Err(p.bad(format!("the output {} would replace another input", output.display())));
         }
         targets.push(target);
     }
-    write_all(&done, &request)?;
-    let results: Vec<Value> = done
-        .iter()
-        .map(|d| {
-            json!({
-                "input": d.input.display().to_string(),
-                "output": d.output.display().to_string(),
-                "bytes": d.bytes.len(),
-                "glyphs": d.glyphs,
-                "leftBehind": d.left_behind,
-            })
-        })
-        .collect();
+    for output in &outputs {
+        file_io::check_write(output)?;
+        if request.no_clobber && !request.in_place && output.exists() {
+            return Err(EngineError::Io(format!("{} exists and noClobber is set", output.display())));
+        }
+    }
+    let mut staging = Staging::open(&request)?;
+    let mut results = Vec::with_capacity(inputs.len());
+    for (n, (input, output)) in inputs.iter().zip(&outputs).enumerate() {
+        let c = convert_one(&p, Path::new(input), &settings, container).map_err(|e| in_input(e, input))?;
+        staging.stage(output, &c.bytes, n)?;
+        results.push(json!({
+            "input": input,
+            "output": output.display().to_string(),
+            "bytes": c.bytes.len(),
+            "glyphs": c.glyphs,
+            "leftBehind": c.left_behind,
+        }));
+    }
+    staging.commit()?;
     Ok(json!({ "results": results }))
 }
 
@@ -306,7 +311,7 @@ fn now() -> Result<i64> {
     Err(EngineError::Unsupported("the current time in the browser".into()))
 }
 
-fn convert_one(p: &Params<'_>, input: &Path, settings: &Settings, container: Container, request: &OutputRequest) -> Result<Done> {
+fn convert_one(p: &Params<'_>, input: &Path, settings: &Settings, container: Container) -> Result<Converted> {
     let file = file_io::read_input(input)?;
     match file.kind {
         k if k.is_font() => {}
@@ -329,48 +334,85 @@ fn convert_one(p: &Params<'_>, input: &Path, settings: &Settings, container: Con
         Container::Woff2 => fontcraft_container::woff2::encode(&converted.bytes, &fontcraft_container::woff2::Options::default())
             .map_err(|e| EngineError::Io(format!("WOFF2: {e}")))?,
     };
-    let output = file_io::output_path(input, request, "", Some(settings.extension(container)))?;
-    Ok(Done { input: input.to_path_buf(), output, bytes, glyphs: converted.glyphs, left_behind: converted.left_behind })
+    Ok(Converted { bytes, glyphs: converted.glyphs, left_behind: converted.left_behind })
 }
 
-/// Writes every output to a temporary file beside its target, then moves them all into place.
+/// The temporary files of one run. [`Staging::commit`] moves them into place; dropped before
+/// that, the run removes them and the output folder it created.
+struct Staging {
+    /// Each output's temporary file, its target, and whether the target existed before.
+    #[cfg(not(target_arch = "wasm32"))]
+    staged: Vec<(PathBuf, PathBuf, bool)>,
+    #[cfg(not(target_arch = "wasm32"))]
+    created: Vec<PathBuf>,
+}
+
 #[cfg(not(target_arch = "wasm32"))]
-fn write_all(done: &[Done], request: &OutputRequest) -> Result<()> {
-    for d in done {
-        file_io::check_write(&d.output)?;
-        if request.no_clobber && !request.in_place && d.output.exists() {
-            return Err(EngineError::Io(format!("{} exists and noClobber is set", d.output.display())));
-        }
+impl Staging {
+    /// Creates the request's `outputDir` when it is missing.
+    fn open(request: &OutputRequest) -> Result<Self> {
+        Ok(Staging { staged: Vec::new(), created: file_io::create_output_dir(request)? })
     }
-    let created = file_io::create_output_dir(request)?;
-    let mut staged: Vec<(PathBuf, PathBuf)> = Vec::with_capacity(done.len());
-    let discard = |staged: &[(PathBuf, PathBuf)]| {
-        for (temp, _) in staged {
-            let _ = std::fs::remove_file(temp);
-        }
-    };
-    for (n, d) in done.iter().enumerate() {
-        match stage(&d.output, &d.bytes, n) {
-            Ok(s) => staged.push(s),
-            Err(e) => {
-                discard(&staged);
-                file_io::remove_created(&created);
-                return Err(e);
+
+    /// Writes output `n` to its temporary file.
+    fn stage(&mut self, out: &Path, bytes: &[u8], n: usize) -> Result<()> {
+        let (temp, target) = stage(out, bytes, n)?;
+        let existed = target.exists();
+        self.staged.push((temp, target, existed));
+        Ok(())
+    }
+
+    /// Moves every temporary file into place. When a move fails, the outputs already moved that
+    /// replaced no file are removed again; a file already replaced keeps its new content, and
+    /// the message says how many there are.
+    fn commit(mut self) -> Result<()> {
+        for (i, (temp, target, _)) in self.staged.iter().enumerate() {
+            if let Err(e) = std::fs::rename(temp, target) {
+                let mut replaced = 0;
+                for (_, moved, existed) in self.staged.iter().take(i) {
+                    if *existed {
+                        replaced += 1;
+                    } else {
+                        let _ = std::fs::remove_file(moved);
+                    }
+                }
+                let kept = if replaced == 0 {
+                    "nothing was written".to_string()
+                } else {
+                    format!("{replaced} existing files before it were already replaced; the new files were removed")
+                };
+                return Err(EngineError::Io(format!("cannot write {}: {e}; {kept}", target.display())));
             }
         }
+        self.staged.clear();
+        self.created.clear();
+        Ok(())
     }
-    for (i, (temp, target)) in staged.iter().enumerate() {
-        if let Err(e) = std::fs::rename(temp, target) {
-            discard(staged.get(i..).unwrap_or_default());
-            return Err(EngineError::Io(format!("cannot write {}: {e}; the {i} outputs before it were written", target.display())));
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl Drop for Staging {
+    fn drop(&mut self) {
+        for (temp, _, _) in &self.staged {
+            let _ = std::fs::remove_file(temp);
         }
+        file_io::remove_created(&self.created);
     }
-    Ok(())
 }
 
 #[cfg(target_arch = "wasm32")]
-fn write_all(_: &[Done], _: &OutputRequest) -> Result<()> {
-    Err(EngineError::Unsupported("writing files in the browser".into()))
+impl Staging {
+    fn open(_: &OutputRequest) -> Result<Self> {
+        Ok(Staging {})
+    }
+
+    fn stage(&mut self, _: &Path, _: &[u8], _: usize) -> Result<()> {
+        Err(EngineError::Unsupported("writing files in the browser".into()))
+    }
+
+    fn commit(self) -> Result<()> {
+        Ok(())
+    }
 }
 
 /// Writes `bytes` to a new temporary file beside `out` (beside the file it links to, for a
