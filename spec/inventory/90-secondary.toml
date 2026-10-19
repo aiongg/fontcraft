@@ -3751,14 +3751,23 @@ label = "Space Center"
 menu = ["Window"]
 shortcut = ""
 kind = "ui"
-params = "{open?: bool, text?: string, before?: string, after?: string, size?: number, lineMode?: \"multi\"|\"single\", select?: index|null}"
+params = "{open?: bool, text?: string, sample?: index, before?: string, after?: string, size?: number, lineMode?: \"multi\"|\"single\"|\"waterfall\", select?: index|null}"
 area = "spacing-kerning"
 milestone = "M13"
 summary = "Opens or closes the Space Center and sets its text, control glyphs, size, line mode and selected glyph."
 ref = "RoboFont reference › Space Center"
 status = "docs"
 origin = "robofont"
-notes = "Documented in the RoboFont reference, not yet observed. The parameters other than `open` are our addition for agents: they set what the window's fields and clicks set."
+notes = "Documented in the RoboFont reference, not yet observed. The parameters other than `open` are our addition for agents: they set what the window's fields and clicks set. `sample` puts in a stored sample string (the same store as Edit View's Select Sample Text) chosen from the window's Samples menu. The waterfall draws the text's one line at 9, 10, 12, 14, 18, 24, 36, 48, 72 and 96 points, the sizes below the window's size, then at the window's size."
+guesses = [
+  "A sample string's `/Placeholder` becomes `/?`, the glyph being edited, in the Space Center; the reference's Space Center reads its own sample strings, and choosing one with a placeholder there would settle it.",
+  "The waterfall's sizes are 9, 10, 12, 14, 18, 24, 36, 48, 72 and 96 points up to the window's size, then the window's size; the reference app's waterfall would settle the series.",
+  "In a waterfall the matrix keeps one column per glyph of the text and a click selects the glyph in every size; the reference app would settle it.",
+]
+observe = [
+  "In the reference's Space Center, switch to Waterfall with the size at 72: note each line's size.",
+  "Choose a sample string from the text field's menu: note whether it replaces the text or is added to it.",
+]
 
 [[panel]]
 id = "window.spaceCenter"
@@ -3771,7 +3780,7 @@ summary = "A separate window dedicated to spacing: several lines of text at read
 ref = "RoboFont reference › Space Center"
 status = "docs"
 origin = "robofont"
-notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5). Documented in the RoboFont reference, not yet observed. Built: the text, before and after fields, the size, multi-line and single-line display, the cut-off band, the preferred suffix and the matrix (width, left, right). Not built yet: the stored sample-string menu, the waterfall, centred, right-to-left and upside-down display, and the display menu's overlays (layers, guidelines, zones, images, stroke, line space, tracking)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5). Documented in the RoboFont reference, not yet observed. Built: the text with its Samples menu of stored sample strings, the before and after fields, the size, multi-line, single-line and waterfall display, the cut-off band, the preferred suffix, the matrix (width, left, right), and the Display menu (`view.setSpaceCenterDisplay`): right to left, centred, upside down, metrics, beam, fill, stroke, inverse, guides, zones, overlay layers, line space and tracking. Not built yet: images in the display menu."
 guesses = [
   "A new Space Center shows `hamburgefontsiv` at 72 points; the reference's default text and size would settle it.",
   "The Space Center draws the showing Edit View tab's master, else the first master; how the reference picks the master of a multi-master font would settle it.",
@@ -3840,6 +3849,38 @@ origin = "robofont"
 notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5). Documented in the RoboFont reference, not yet observed. It applies to the Space Center's preview; heights left out keep their value, and null heights mean the baseline and the x-height of the master shown."
 guesses = [
   "The band is drawn on every line across the whole preview width; the reference app would settle whether it stops at the text's ends.",
+]
+
+[[command]]
+id = "view.setSpaceCenterDisplay"
+label = "Space Center Display Options"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{rightToLeft?: bool, centered?: bool, upsideDown?: bool, metrics?: bool, beam?: bool, beamY?: number, fill?: bool, stroke?: bool, inverse?: bool, guides?: bool, zones?: bool, layers?: [string], lineSpace?: number, tracking?: number}"
+area = "spacing-kerning"
+milestone = "M13"
+summary = "Sets how the Space Center draws its text: right to left, centred or upside down, and what is drawn with the glyphs (metrics, the metrics beam with the margins measured on it, fill, stroke, inverse colours, guides, alignment zones, other layers as outlines), with the line spacing and tracking."
+ref = "RoboFont reference › Space Center › Display options"
+status = "docs"
+origin = "robofont"
+notes = "Documented in the RoboFont reference, not yet observed. The window's Display menu runs it with the option changed. Right to left lays the text out with the right-to-left kerning from the window's right edge. Upside down turns the whole preview half a circle; the arrow keys and drags still act on the glyphs' own left and right margins. The beam's height is the one `view.showMetricsBeam` keeps for the document (half the x-height until set), so Edit View and the Space Center measure at the same height; the Space Center's beam is switched on and off on its own. Tracking is added after the lines are broken."
+guesses = [
+  "Right to left uses the font's right-to-left kerning, as an Edit View tab set right to left does; the reference's kerning is not split by direction, and a font with right-to-left pairs would settle it.",
+  "Upside down turns the preview half a circle, as Text Preview's Flip does, rather than mirroring it top to bottom; the reference app would settle it.",
+  "With the preview upside down the keys and drags keep their meaning for the glyph (Right still grows the right margin); the reference app would settle whether they follow the screen instead.",
+  "The beam shares its height with Edit View's metrics beam and is switched on separately; the reference app would settle whether its Space Center beam has its own height.",
+  "The margins on the beam are labelled on rows whose em is at least four label sizes, so small waterfall lines show only the beam; the reference app would settle it.",
+  "Tracking adds its units between neighbouring glyphs after the lines are broken, so lines wrap as without tracking; the reference app's tracking near the window's edge would settle it.",
+  "Guides are drawn within each glyph's advance box, the master's and the glyph's own; the reference app would settle whether a horizontal guide runs across the whole line.",
+  "Overlay layers are offered by master name in the menu, and the command also takes layer names or ids; the reference's layer list would settle it.",
+  "Line space multiplies the master's line height, from 0.5 to 4; the reference app's control would settle the range.",
+]
+observe = [
+  "In the reference's Space Center, turn on Right to Left with a Latin text: note the order and where the line starts.",
+  "Turn on Upside Down: note whether the text is turned or mirrored, and press Right with a glyph selected: note which margin grows.",
+  "Turn on Beam: note its default height, whether it can be dragged, and whether Edit View's beam moves with it.",
+  "Turn on Guides with a horizontal font guide: note whether it runs across the line or within each glyph.",
 ]
 
 [[command]]
