@@ -721,7 +721,7 @@ fn read_known(element: &Element, ctx: &ReadContext, font: &SfntFont) -> Result<O
 
 // ── What the compiler recalculates ─────────────────────────────────────────────────────────────
 
-fn put_u16(font: &mut SfntFont, tag: Tag, at: usize, v: i64, what: &str) -> Result<()> {
+pub(crate) fn put_u16(font: &mut SfntFont, tag: Tag, at: usize, v: i64, what: &str) -> Result<()> {
     put(font, tag, at, &{
         let mut o = Out::default();
         o.u16(v, what)?;
@@ -729,7 +729,7 @@ fn put_u16(font: &mut SfntFont, tag: Tag, at: usize, v: i64, what: &str) -> Resu
     })
 }
 
-fn put_i16(font: &mut SfntFont, tag: Tag, at: usize, v: i64, what: &str) -> Result<()> {
+pub(crate) fn put_i16(font: &mut SfntFont, tag: Tag, at: usize, v: i64, what: &str) -> Result<()> {
     put(font, tag, at, &{
         let mut o = Out::default();
         o.i16(v, what)?;
@@ -747,13 +747,13 @@ fn put(font: &mut SfntFont, tag: Tag, at: usize, bytes: &[u8]) -> Result<()> {
     Ok(())
 }
 
-fn get_u16(font: &SfntFont, tag: Tag, at: usize) -> Option<u16> {
+pub(crate) fn get_u16(font: &SfntFont, tag: Tag, at: usize) -> Option<u16> {
     let d = font.get(tag)?;
     Some(u16::from_be_bytes([*d.get(at)?, *d.get(at.saturating_add(1))?]))
 }
 
 /// The metrics of every glyph from the font's own `hmtx` or `vmtx`.
-fn font_metrics(font: &SfntFont, vertical: bool, count: usize) -> Option<Vec<(i64, i64)>> {
+pub(crate) fn font_metrics(font: &SfntFont, vertical: bool, count: usize) -> Option<Vec<(i64, i64)>> {
     let (table, header) = if vertical { (*b"vmtx", *b"vhea") } else { (*b"hmtx", *b"hhea") };
     let data = font.get(table)?;
     let long = get_u16(font, header, 34).map_or(count, usize::from).min(count);
@@ -819,26 +819,8 @@ fn recalculate(
     if loaded.contains(b"maxp") && font.get(*b"maxp").is_some() {
         if let Some(g) = glyf.filter(|_| ctx.recalc) {
             let hmtx = metrics_of(font, false);
-            let r = read_core::maxp_recalc(g, hmtx.as_deref())?;
-            for (at, v) in [
-                (6, r.max_points),
-                (8, r.max_contours),
-                (10, r.max_composite_points),
-                (12, r.max_composite_contours),
-                (28, r.max_component_elements),
-                (30, r.max_component_depth),
-            ] {
-                if font.get(*b"maxp").is_some_and(|d| d.len() >= 32) {
-                    put_u16(font, *b"maxp", at, v, "a maxp maximum")?;
-                }
-            }
-            if font.get(*b"head").is_some() {
-                for (at, v) in [(36, r.bounds[0]), (38, r.bounds[1]), (40, r.bounds[2]), (42, r.bounds[3])] {
-                    put_i16(font, *b"head", at, v, "the font bounding box")?;
-                }
-                let flags = i64::from(get_u16(font, *b"head", 16).unwrap_or(0));
-                let flags = if r.all_xmin_is_lsb { flags | 2 } else { flags & !2 };
-                put_u16(font, *b"head", 16, flags, "head.flags")?;
+            let r = read_core::maxp_recalc(&g.glyphs, hmtx.as_deref())?;
+            if read_core::apply_maxp_recalc(font, &r)? {
                 loaded.insert(*b"head");
             }
         }

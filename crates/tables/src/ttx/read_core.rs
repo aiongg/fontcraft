@@ -32,7 +32,7 @@ use super::read::{
     xml_to_tag,
 };
 
-pub(crate) use glyf::{Glyf, compile_glyf, compile_loca, maxp_recalc};
+pub(crate) use glyf::{Glyf, apply_maxp_recalc, compile_glyf, compile_loca, maxp_recalc, recalc_compiled_maxp};
 
 /// The table a TTX table element stands for, as bytes; `None` for an element this module does
 /// not handle. `font` gives the context some tables need (glyph order, `maxp`, `head`).

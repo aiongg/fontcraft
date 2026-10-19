@@ -8,10 +8,11 @@
 //! |---|---|
 //! | `glyf` | point coordinates and component offsets, each rounded on its own; bounds worked out again |
 //! | `hmtx`, `vmtx` | advances and side bearings |
-//! | `head` | units per em; the bounds are worked out again from `glyf` |
+//! | `head` | units per em; the bounds and `flags` bit 1 (every left side bearing at `xMin`) are worked out again from `glyf` |
+//! | `maxp` | the point, contour and component maxima worked out again (`maxp.recalc`) |
 //! | `hhea`, `vhea` | line metrics and caret offset; the largest advance and the extremes worked out again |
 //! | `OS/2` | the average width, sub- and superscript sizes and offsets, strikeout, typographic and Windows metrics, x-height, cap height |
-//! | `post` | underline position and thickness |
+//! | `post` | underline position and thickness; names of version 2 stored again as fontTools stores them, standard names by their standard index |
 //! | `VORG` | the vertical origins |
 //! | `kern` | format 0 pair values |
 //! | `gvar` | every delta |
@@ -31,13 +32,15 @@
 //! transformed once. Advance widths follow [`Widths`]. Every changed glyph loses its
 //! instructions and gets its left side bearing set to its `xMin`; when no glyph keeps
 //! instructions the font programs and `cvt ` go too, and the device metrics caches (`hdmx`,
-//! `LTSH`, `VDMX`) go whenever a glyph changed.
+//! `LTSH`, `VDMX`) go whenever a glyph changed. Whenever a glyph changed, `maxp` and the `head`
+//! bounds and flags are recalculated as fontTools' `maxp.recalc` recalculates them on saving.
 //!
 //! CFF and CFF2 outlines are refused for now, and so is a matrix on a variable font.
 
 mod fixed;
 mod glyf;
 mod layout;
+pub(crate) mod post;
 mod tuples;
 
 #[cfg(test)]
@@ -442,9 +445,12 @@ impl Work {
             fixed::OS2_SIGNED.iter().try_for_each(|&(at, what)| fixed::scale_i16(t, at, s, what))?;
             fixed::OS2_UNSIGNED.iter().try_for_each(|&(at, what)| fixed::scale_u16(t, at, s, what))
         })?;
+        let glyph_count = self.glyphs.len();
         patch(font, *b"post", &mut |t| {
             fixed::scale_i16(t, 8, s, "the underline position")?;
-            fixed::scale_i16(t, 10, s, "the underline thickness")
+            fixed::scale_i16(t, 10, s, "the underline thickness")?;
+            *t = post::recompile(t, glyph_count)?;
+            Ok(())
         })?;
         patch(font, *b"VORG", &mut |t| fixed::scale_vorg(t, s))?;
         let mut kern_skipped = 0;
@@ -576,6 +582,9 @@ impl Work {
                     font.insert(*b"vhea", vhea);
                 }
             }
+        }
+        if any_changed || report.units_per_em.is_some() {
+            crate::ttx::read_core::recalc_compiled_maxp(font)?;
         }
         Ok(self.font)
     }

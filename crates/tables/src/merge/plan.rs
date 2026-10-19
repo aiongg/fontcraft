@@ -1,10 +1,13 @@
 //! The glyph order of the result: which glyph of which font fills each place, and where each
-//! input glyph went. The renaming follows fontTools' `computeMegaGlyphOrder` (MIT License).
+//! input glyph went. The renaming follows fontTools' `computeMegaGlyphOrder`, and the names of
+//! each font its `post` table's `build_psNameMapping` (fontTools 4.66.1, MIT License).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use super::Duplicates;
 use crate::limits::MAX_GLYPHS;
+use crate::reorder::names::{num_glyphs, post_names};
+use crate::sfnt::SfntFont;
 use crate::{Result, TablesError};
 
 /// One glyph of the result.
@@ -35,6 +38,43 @@ impl Plan {
         let mut seen = std::collections::HashSet::with_capacity(map.len());
         map.iter().all(|m| m.is_some_and(|g| seen.insert(g)))
     }
+}
+
+/// A TrueType font's glyph names as fontTools' `post` reader gives them, and the stored name of
+/// each it had to change (`build_psNameMapping`): a name repeated in the font gets `.1`, `.2`…,
+/// skipping suffixed names the font already has. Without stored names, glyphs are `glyphNNNNN`
+/// (glyph 0 `.notdef`).
+pub(super) fn font_glyph_names(font: &SfntFont) -> Result<(Vec<String>, HashMap<String, String>)> {
+    let n = num_glyphs(font)?;
+    let stored = match font.get(*b"post") {
+        Some(post) => post_names(post, n)?,
+        None => None,
+    };
+    let Some(stored) = stored else {
+        return Ok(((0..n).map(|g| if g == 0 { ".notdef".to_string() } else { format!("glyph{g:05}") }).collect(), HashMap::new()));
+    };
+    let in_font: HashSet<&str> = stored.iter().map(String::as_str).collect();
+    let mut next: HashMap<String, usize> = HashMap::with_capacity(stored.len());
+    let mut mapping = HashMap::new();
+    let mut names = Vec::with_capacity(stored.len());
+    for ps in &stored {
+        let mut name = ps.clone();
+        if let Some(&first) = next.get(&name) {
+            // The search ends: each step skips a distinct name of the font.
+            let mut k = first;
+            while in_font.contains(format!("{name}.{k}").as_str()) {
+                k += 1;
+            }
+            next.insert(name.clone(), k + 1);
+            name = format!("{name}.{k}");
+        }
+        next.insert(name.clone(), 1);
+        if name != *ps {
+            mapping.insert(name.clone(), ps.clone());
+        }
+        names.push(name);
+    }
+    Ok((names, mapping))
 }
 
 /// The plan for fonts whose glyph names are `names`. `same(a, b)` says whether two input glyphs

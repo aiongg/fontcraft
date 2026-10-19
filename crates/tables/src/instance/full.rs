@@ -15,7 +15,10 @@
 //! 4. `OS/2.xAvgCharWidth` from the new advances; `usWeightClass`, `usWidthClass` and
 //!    `post.italicAngle` from the `wght`, `wdth` and `slnt` values.
 //! 5. The overlap flags on every glyph, when asked; `head`, `hhea` and `vhea` bounds and
-//!    extents recomputed, when asked.
+//!    extents recomputed, when asked, and with them, when `glyf` was rewritten, the `maxp`
+//!    maxima and `head.flags` bit 1 (`maxp.recalc`). A `post` table fontTools loads on the way
+//!    (a `slnt` axis, `MVAR` deltas for it) has its version 2 names stored again as fontTools
+//!    stores them.
 //!
 //! Not yet: `CFF2` outlines (refused), `VARC` (refused), a `BASE` table with variation data
 //! (refused), names from `STAT` (`update_names`, refused).
@@ -61,7 +64,10 @@ pub fn full_instance_with(font: &SfntFont, location: &[(Tag, f64)], options: &In
     let glyph_count = out.get(*b"maxp").and_then(|m| st::u16_at(m, 4)).map(usize::from);
     let mut hmtx: Option<Metrics> = None;
     let has_gvar = out.get(*b"gvar").is_some();
-    if out.get(*b"glyf").is_some() && (has_gvar || options.overlap_flags) {
+    // fontTools loads `glyf` only to apply `gvar` or set the overlap flags; only then does saving
+    // recalculate `maxp`.
+    let glyf_loaded = out.get(*b"glyf").is_some() && (has_gvar || options.overlap_flags);
+    if glyf_loaded {
         let glyphs_n = glyph_count.ok_or_else(|| TablesError::MissingTable("maxp".into()))?;
         let head = out.get(*b"head").ok_or_else(|| TablesError::MissingTable("head".into()))?;
         let long_loca = st::u16_at(head, 50).ok_or_else(|| TablesError::invalid("the head table is truncated"))? != 0;
@@ -100,7 +106,11 @@ pub fn full_instance_with(font: &SfntFont, location: &[(Tag, f64)], options: &In
     }
 
     st::apply_cvar(&mut out, axis_count, coords)?;
+    let post_before = out.get(*b"post").map(<[u8]>::to_vec);
     st::apply_mvar(&mut out, coords)?;
+    // fontTools loads `post` to read its italic angle when the font has a `slnt` axis, or to
+    // apply `MVAR` deltas to it, and then writes it again.
+    let post_loaded = pinned.user.iter().any(|(t, _)| t == b"slnt") || out.get(*b"post").map(<[u8]>::to_vec) != post_before;
     if out.get(*b"glyf").is_none() && (out.get(*b"HVAR").is_some() || out.get(*b"VVAR").is_some()) {
         // Only CFF2 fonts take their advances from HVAR, and they are refused above.
         return Err(TablesError::Unsupported("applying HVAR or VVAR to a font without glyf outlines".into()));
@@ -128,6 +138,13 @@ pub fn full_instance_with(font: &SfntFont, location: &[(Tag, f64)], options: &In
         }
     }
     st::set_weight_width_slant(&mut out, &pinned.user);
+    if post_loaded && let (Some(post), Some(n)) = (out.get(*b"post"), glyph_count) {
+        let post = crate::transform::post::recompile(post, n)?;
+        out.insert(*b"post", post);
+    }
+    if glyf_loaded && options.recalc_bounds {
+        crate::ttx::read_core::recalc_compiled_maxp(&mut out)?;
+    }
     Ok(out)
 }
 

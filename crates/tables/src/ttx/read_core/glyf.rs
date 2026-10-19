@@ -4,10 +4,11 @@
 
 use std::collections::{HashMap, HashSet};
 
+use crate::sfnt::SfntFont;
 use crate::{Result, TablesError};
 
 use super::super::Element;
-use super::super::read::{Num, Out, ReadContext, attr, float_to_fixed, int_lit, num_lit, ot_round};
+use super::super::read::{Num, Out, ReadContext, attr, float_to_fixed, font_metrics, get_u16, int_lit, num_lit, ot_round, put_i16, put_u16};
 use super::program_of;
 
 const X_SHORT: u8 = 0x02;
@@ -518,7 +519,7 @@ fn composite_values(glyphs: &[GlyphStat], index: usize, depth: i64, memo: &mut C
 }
 
 /// fontTools' `maxp.recalc` over the compiled glyphs and the horizontal metrics.
-pub(crate) fn maxp_recalc(glyf: &Glyf, hmtx: Option<&[(i64, i64)]>) -> Result<MaxpRecalc> {
+pub(crate) fn maxp_recalc(glyphs: &[GlyphStat], hmtx: Option<&[(i64, i64)]>) -> Result<MaxpRecalc> {
     let mut r = MaxpRecalc {
         bounds: [i64::MAX, i64::MAX, i64::MIN, i64::MIN],
         max_points: 0,
@@ -531,7 +532,7 @@ pub(crate) fn maxp_recalc(glyf: &Glyf, hmtx: Option<&[(i64, i64)]>) -> Result<Ma
     };
     let mut memo = CompositeMemo::new();
     let mut visits = MAX_COMPONENT_VISITS;
-    for (i, g) in glyf.glyphs.iter().enumerate() {
+    for (i, g) in glyphs.iter().enumerate() {
         if g.contours == 0 {
             continue;
         }
@@ -544,7 +545,7 @@ pub(crate) fn maxp_recalc(glyf: &Glyf, hmtx: Option<&[(i64, i64)]>) -> Result<Ma
             r.max_points = r.max_points.max(g.points as i64);
             r.max_contours = r.max_contours.max(i64::from(g.contours));
         } else {
-            let (p, n, d) = composite_values(&glyf.glyphs, i, 1, &mut memo, &mut visits)?;
+            let (p, n, d) = composite_values(glyphs, i, 1, &mut memo, &mut visits)?;
             r.max_composite_points = r.max_composite_points.max(p);
             r.max_composite_contours = r.max_composite_contours.max(n);
             r.max_component_elements = r.max_component_elements.max(g.components.len() as i64);
@@ -555,4 +556,115 @@ pub(crate) fn maxp_recalc(glyf: &Glyf, hmtx: Option<&[(i64, i64)]>) -> Result<Ma
         r.bounds = [0; 4];
     }
     Ok(r)
+}
+
+/// Writes `r` into the font as fontTools' `maxp.recalc` does: the six maxima of a version 1.0
+/// `maxp`, and the `head` bounds and `flags` bit 1 (set when every glyph with outlines has its
+/// left side bearing at its `xMin`, cleared otherwise). Says whether the font has a `head`.
+pub(crate) fn apply_maxp_recalc(font: &mut SfntFont, r: &MaxpRecalc) -> Result<bool> {
+    if font.get(*b"maxp").is_some_and(|d| d.len() >= 32) {
+        for (at, v) in [
+            (6, r.max_points),
+            (8, r.max_contours),
+            (10, r.max_composite_points),
+            (12, r.max_composite_contours),
+            (28, r.max_component_elements),
+            (30, r.max_component_depth),
+        ] {
+            put_u16(font, *b"maxp", at, v, "a maxp maximum")?;
+        }
+    }
+    if font.get(*b"head").is_none() {
+        return Ok(false);
+    }
+    for (at, v) in [(36, r.bounds[0]), (38, r.bounds[1]), (40, r.bounds[2]), (42, r.bounds[3])] {
+        put_i16(font, *b"head", at, v, "the font bounding box")?;
+    }
+    let flags = i64::from(get_u16(font, *b"head", 16).unwrap_or(0));
+    let flags = if r.all_xmin_is_lsb { flags | 2 } else { flags & !2 };
+    put_u16(font, *b"head", 16, flags, "head.flags")?;
+    Ok(true)
+}
+
+/// fontTools' `maxp.recalc` on a compiled TrueType font, as its `maxp` compiler runs it when a
+/// font whose `glyf` table was loaded is saved with `recalcBBoxes`: see [`apply_maxp_recalc`].
+/// The glyph statistics come from the `glyf` and `loca` bytes, the side bearings from `hmtx`.
+/// `maxp.numGlyphs` is the glyph count read; a font without `glyf` is left as it is.
+pub(crate) fn recalc_compiled_maxp(font: &mut SfntFont) -> Result<()> {
+    let Some(glyf) = font.get(*b"glyf") else { return Ok(()) };
+    let count = usize::from(get_u16(font, *b"maxp", 4).ok_or_else(|| bad("the 'maxp' table is missing or cut short"))?);
+    let long = get_u16(font, *b"head", 50).ok_or_else(|| bad("the 'head' table is missing or cut short"))? != 0;
+    let loca = font.get(*b"loca").ok_or_else(|| TablesError::MissingTable("loca".into()))?;
+    let glyphs = compiled_glyph_stats(glyf, loca, long, count)?;
+    let hmtx = font_metrics(font, false, count);
+    let r = maxp_recalc(&glyphs, hmtx.as_deref())?;
+    apply_maxp_recalc(font, &r)?;
+    Ok(())
+}
+
+/// What [`maxp_recalc`] needs of each glyph of a compiled `glyf` table. A glyph that `loca`
+/// places past the end of `glyf` is cut at the end, and one it gives a negative length is
+/// empty, as fontTools' slicing of the table makes them.
+fn compiled_glyph_stats(glyf: &[u8], loca: &[u8], long: bool, count: usize) -> Result<Vec<GlyphStat>> {
+    let offset = |i: usize| -> Option<usize> {
+        if long {
+            let at = i.checked_mul(4)?;
+            let b = loca.get(at..at.checked_add(4)?)?;
+            usize::try_from(u32::from_be_bytes([*b.first()?, *b.get(1)?, *b.get(2)?, *b.get(3)?])).ok()
+        } else {
+            let at = i.checked_mul(2)?;
+            let b = loca.get(at..at.checked_add(2)?)?;
+            Some(usize::from(u16::from_be_bytes([*b.first()?, *b.get(1)?])) * 2)
+        }
+    };
+    let mut out = Vec::with_capacity(count);
+    for gid in 0..count {
+        let (Some(start), Some(end)) = (offset(gid), offset(gid + 1)) else {
+            return Err(bad("the 'loca' table is cut short"));
+        };
+        let start = start.min(glyf.len());
+        let end = end.min(glyf.len()).max(start);
+        let data = glyf.get(start..end).unwrap_or_default();
+        out.push(compiled_glyph_stat(data).map_err(|e| bad(format!("glyph {gid}: {e}")))?);
+    }
+    Ok(out)
+}
+
+fn compiled_glyph_stat(data: &[u8]) -> std::result::Result<GlyphStat, &'static str> {
+    let u16_at = |at: usize| data.get(at..at.saturating_add(2)).and_then(|b| <[u8; 2]>::try_from(b).ok()).map(u16::from_be_bytes);
+    let i16_at = |at: usize| u16_at(at).map(|v| v as i16);
+    let mut stat = GlyphStat { contours: 0, bounds: [0; 4], points: 0, components: Vec::new() };
+    if data.is_empty() {
+        return Ok(stat);
+    }
+    let cut = "the glyph is cut short";
+    stat.contours = i32::from(i16_at(0).ok_or(cut)?);
+    for (slot, at) in stat.bounds.iter_mut().zip([2, 4, 6, 8]) {
+        *slot = i64::from(i16_at(at).ok_or(cut)?);
+    }
+    if stat.contours > 0 {
+        let last = 10 + 2 * (stat.contours as usize - 1);
+        stat.points = usize::from(u16_at(last).ok_or(cut)?) + 1;
+    } else if stat.contours < 0 {
+        // Each component record takes at least 6 bytes, so the count stays below the glyph's size.
+        let mut at = 10usize;
+        loop {
+            let flags = i64::from(u16_at(at).ok_or(cut)?);
+            stat.components.push(usize::from(u16_at(at + 2).ok_or(cut)?));
+            at += 4 + if flags & ARG_1_AND_2_ARE_WORDS != 0 { 4 } else { 2 };
+            at += if flags & WE_HAVE_A_SCALE != 0 {
+                2
+            } else if flags & WE_HAVE_AN_X_AND_Y_SCALE != 0 {
+                4
+            } else if flags & WE_HAVE_A_TWO_BY_TWO != 0 {
+                8
+            } else {
+                0
+            };
+            if flags & MORE_COMPONENTS == 0 {
+                break;
+            }
+        }
+    }
+    Ok(stat)
 }
