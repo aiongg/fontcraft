@@ -206,6 +206,26 @@ fn int29(v: usize) -> Result<Vec<u8>> {
     Ok(out)
 }
 
+/// A DICT integer in its shortest encoding.
+fn dict_int(v: i64) -> Result<Vec<u8>> {
+    Ok(match v {
+        -107..=107 => vec![(v + 139) as u8],
+        108..=1131 => vec![(((v - 108) >> 8) + 247) as u8, ((v - 108) & 0xFF) as u8],
+        -1131..=-108 => vec![(((-v - 108) >> 8) + 251) as u8, ((-v - 108) & 0xFF) as u8],
+        -32768..=32767 => {
+            let mut out = vec![28];
+            out.extend_from_slice(&(v as i16).to_be_bytes());
+            out
+        }
+        _ => {
+            let v = i32::try_from(v).map_err(|_| TablesError::invalid("a CFF DICT number is out of range"))?;
+            let mut out = vec![29];
+            out.extend_from_slice(&v.to_be_bytes());
+            out
+        }
+    })
+}
+
 /// Encodes `entries`, giving the operators in `replace` the operands listed there (as
 /// five-byte integers); replaced operators the entries lack are appended.
 fn encode(entries: &[Entry], replace: &[(u16, Vec<usize>)]) -> Result<Vec<u8>> {
@@ -449,6 +469,18 @@ impl<'a> Cff<'a> {
 
     pub(crate) fn is_cid(&self) -> bool {
         self.cid
+    }
+
+    /// Gives the Top DICT operator `op` the integer operands `values`, replacing its entry or
+    /// adding one at the end.
+    pub(crate) fn set_top_ints(&mut self, op: u16, values: &[i64]) -> Result<()> {
+        let operands = values.iter().map(|v| dict_int(*v)).collect::<Result<Vec<_>>>()?;
+        let entry = Entry { op, operands, ints: values.iter().map(|v| Some(*v)).collect() };
+        match self.top.iter_mut().find(|e| e.op == op) {
+            Some(e) => *e = entry,
+            None => self.top.push(entry),
+        }
+        Ok(())
     }
 
     /// The SID (or CID) of every glyph.

@@ -6,7 +6,7 @@
 //! Each `fonts` item is a path, or `{path, face?, map?, glyphs?, excludeGlyphs?}`. A map file or
 //! a glyph selection turns the run into a glyph merge (only the listed glyphs, font-wide values
 //! from the first font); without either, whole fonts are merged with their layout. The options
-//! that only make sense for CFF and CID-keyed output are refused until CFF merging exists.
+//! for CID-keyed output, hint dictionaries, renaming and conversion are refused as not built.
 
 use std::path::PathBuf;
 
@@ -47,7 +47,7 @@ pub fn specs() -> Vec<CommandSpec> {
     .writes_files()]
 }
 
-/// Options of the reference tools that need CFF or CID-keyed output.
+/// Options of the reference tools that are not built.
 const CFF_ONLY: [(&str, &str); 6] = [
     ("importTtx", "compiling an XML dump into the merged font"),
     ("cidInfo", "CID-keyed output"),

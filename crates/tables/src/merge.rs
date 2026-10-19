@@ -8,14 +8,20 @@
 //! |---|---|
 //! | glyph order | every glyph of every font, in font order; a name already used gets `.1`, `.2`…, and so does a name repeated inside one font, which `post` keeps storing under the repeated name |
 //! | `glyf`, `loca` | glyphs concatenated, components renumbered; glyphs of every font but the first lose their instructions |
+//! | `CFF ` | charstrings concatenated with their subroutines expanded and their widths moved to the first font's Private DICT, which is kept with its Top DICT; `FontBBox` recalculated; then subroutinised again ([`cff`]) |
 //! | `hmtx`, `vmtx` | concatenated; `hhea` and `vhea` extents recomputed from the glyphs |
 //! | `cmap` | Unicode mappings united, the earlier font keeping a code point; format 4, 12 when needed, 14 for variation sequences |
 //! | `GSUB`, `GPOS` | lookups concatenated; features of a script several fonts share merged by tag; unused features and lookups dropped |
 //! | `GDEF` | classes, attachment points, carets and mark sets united |
+//! | `MATH`, `BASE` | glyph-keyed data united, constants and baselines shared ([`base_math`]) |
 //! | `head`, `hhea`, `vhea`, `maxp`, `OS/2`, `post` | field by field: extents take the largest value, bits are OR-ed, the rest comes from the first font |
 //! | `maxp`, `head` | then the point, contour and component maxima, the font bounds and `head.flags` bit 1 recalculated from the merged glyphs (`maxp.recalc`), in both forms of merge |
 //! | `name`, `cvt `, `fpgm`, `prep`, `gasp` | the first font's |
-//! | anything else | dropped, with a warning |
+//! | anything else | dropped, with a warning; for a variable font this leaves its default outlines |
+//!
+//! Refused, as fontTools cannot merge them: CID-keyed CFF and `CFF2` fonts, `JSTF` tables
+//! (unless dropped), and `GDEF` or `BASE` with variation data. The fonts must all have TrueType
+//! outlines or all CFF outlines.
 //!
 //! A code point several fonts map stays with the first; each later font gets a `locl` lookup
 //! under its scripts that substitutes its own glyph (it needs a `GSUB` table).
@@ -24,6 +30,8 @@
 //! lists, under their new names, and every font-wide value from the first font. Layout is
 //! dropped unless asked for.
 
+mod base_math;
+mod cff;
 mod cmap;
 mod fixed;
 mod glyphs;
@@ -197,13 +205,32 @@ pub fn merge_with_report(fonts: &[SfntFont], options: &MergeOptions) -> Result<M
     }
     let layout = options.layout.unwrap_or(if map_form { LayoutMode::Drop } else { LayoutMode::Merge });
     let duplicates = options.duplicates.unwrap_or(if map_form { Duplicates::First } else { Duplicates::Rename });
+    let drop: BTreeSet<Tag> = options.drop_tables.iter().copied().collect();
+    let mut kinds: Vec<bool> = Vec::with_capacity(fonts.len());
     for (i, font) in fonts.iter().enumerate() {
-        check_input(font, i)?;
+        kinds.push(check_input(font, i)?);
+    }
+    let is_cff = kinds.first().copied().unwrap_or(false);
+    if kinds.iter().any(|k| *k != is_cff) {
+        return Err(TablesError::BadOptions("the fonts mix TrueType and CFF outlines: convert them to one kind first".into()));
+    }
+    if layout == LayoutMode::Merge
+        && !drop.contains(b"JSTF")
+        && let Some(i) = fonts.iter().position(|f| f.get(*b"JSTF").is_some())
+    {
+        return Err(TablesError::Unsupported(format!("merging 'JSTF' tables (font {}); leave 'JSTF' out with dropTables", i + 1)));
     }
     units_per_em(fonts)?;
 
     let (names, stored_names): (Vec<Vec<String>>, Vec<_>) = fonts.iter().map(plan::font_glyph_names).collect::<Result<Vec<_>>>()?.into_iter().unzip();
-    let sources: Vec<glyphs::Source<'_>> = fonts.iter().enumerate().map(|(i, f)| glyphs::Source::read(f, i)).collect::<Result<_>>()?;
+    let expanded: Vec<Vec<u8>> = if is_cff { fonts.iter().enumerate().map(|(i, f)| cff::expand(f, i)).collect::<Result<_>>()? } else { Vec::new() };
+    let cff_fonts: Vec<cff::Expanded<'_>> =
+        fonts.iter().zip(&expanded).enumerate().map(|(i, (f, e))| cff::Expanded::read(f, e, i)).collect::<Result<_>>()?;
+    let sources: Vec<glyphs::Source<'_>> = if is_cff {
+        fonts.iter().zip(&cff_fonts).map(|(f, e)| glyphs::Source::read_cff(f, e.charstrings())).collect::<Result<_>>()?
+    } else {
+        fonts.iter().enumerate().map(|(i, f)| glyphs::Source::read(f, i)).collect::<Result<_>>()?
+    };
     let same = |a: (usize, u16), b: (usize, u16)| -> bool {
         match (sources.get(a.0), sources.get(b.0)) {
             (Some(x), Some(y)) => x.glyph(a.1) == y.glyph(b.1) && x.metric(a.1) == y.metric(b.1),
@@ -213,13 +240,28 @@ pub fn merge_with_report(fonts: &[SfntFont], options: &MergeOptions) -> Result<M
     let plan = plan::plan(&names, &options.glyph_maps, duplicates, &same)?;
     let mut warnings: Vec<String> = Vec::new();
     let mut conflicts = plan.conflicts.clone();
+    for (i, font) in fonts.iter().enumerate() {
+        if font.get(*b"fvar").is_some() {
+            warnings.push(format!("font {} is variable: the result is static, with its default outlines", i + 1));
+        }
+    }
 
-    let mut out = SfntFont::new(Flavour::TrueType);
-    let drop: BTreeSet<Tag> = options.drop_tables.iter().copied().collect();
-    let built = glyphs::build(&sources, &plan, &mut warnings)?;
+    let first = fonts.first().ok_or_else(|| TablesError::BadOptions("give fonts to merge".into()))?;
+    let mut out = SfntFont::new(if is_cff { Flavour::Cff } else { Flavour::TrueType });
+    let mut built = glyphs::build(&sources, &plan, is_cff, &mut warnings)?;
+    if is_cff {
+        let names: Vec<String> = plan.slots.iter().map(|s| s.name.clone()).collect();
+        let table = cff::build(&cff_fonts, &plan, &names, &mut warnings)?;
+        built.bounds = table.bounds;
+        // fontTools keeps the first font's indexToLocFormat when there is no `loca`.
+        built.long_loca = Data::new(*b"head", first.get(*b"head").unwrap_or_default()).i16(50)? != 0;
+        out.insert(*b"CFF ", table.table);
+    } else {
+        out.insert(*b"glyf", built.glyf.clone());
+        out.insert(*b"loca", built.loca.clone());
+    }
 
     // Font-wide tables.
-    let first = fonts.first().ok_or_else(|| TablesError::BadOptions("give fonts to merge".into()))?;
     let tables_of = |tag: Tag| -> Vec<&[u8]> { fonts.iter().filter_map(|f| f.get(tag)).collect() };
     let (head, hhea, maxp) = if map_form {
         let one = |tag: Tag| first.get(tag).map(<[u8]>::to_vec).ok_or_else(|| TablesError::MissingTable(tag_str(tag)));
@@ -232,8 +274,6 @@ pub fn merge_with_report(fonts: &[SfntFont], options: &MergeOptions) -> Result<M
     out.insert(*b"hhea", fixed::finish_hea(hhea, &built.h_metrics, &built.bounds, false)?);
     out.insert(*b"maxp", fixed::finish_maxp(maxp, built.count)?);
     out.insert(*b"hmtx", built.hmtx.clone());
-    out.insert(*b"glyf", built.glyf.clone());
-    out.insert(*b"loca", built.loca.clone());
     if let Some((vmtx, v_metrics)) = &built.vertical {
         let vhea = if map_form { first.get(*b"vhea").map(<[u8]>::to_vec) } else { Some(fixed::hhea(&tables_of(*b"vhea"))?) };
         if let Some(vhea) = vhea {
@@ -280,8 +320,15 @@ pub fn merge_with_report(fonts: &[SfntFont], options: &MergeOptions) -> Result<M
     }
     match layout {
         LayoutMode::Drop => {}
-        LayoutMode::Base => layout::base(fonts, &plan, &mut out)?,
-        LayoutMode::Merge => layout::merge(fonts, &plan, &united.duplicates, &drop, &mut out, &mut warnings)?,
+        LayoutMode::Base => {
+            layout::base(fonts, &plan, &mut out)?;
+            base_math::merge(fonts, &[0], &plan, &drop, &mut out)?;
+        }
+        LayoutMode::Merge => {
+            layout::merge(fonts, &plan, &united.duplicates, &drop, &mut out, &mut warnings)?;
+            let all: Vec<usize> = (0..fonts.len()).collect();
+            base_math::merge(fonts, &all, &plan, &drop, &mut out)?;
+        }
     }
     // Everything else is dropped, as fontTools drops tables it has no rule for.
     let handled: BTreeSet<Tag> = out.tables.keys().copied().chain(HANDLED.iter().copied()).collect();
@@ -316,28 +363,26 @@ pub fn merge_with_report(fonts: &[SfntFont], options: &MergeOptions) -> Result<M
 }
 
 /// Tables merge reads or rebuilds, so they are never reported as dropped.
-const HANDLED: [Tag; 19] = [
-    *b"head", *b"hhea", *b"maxp", *b"hmtx", *b"glyf", *b"loca", *b"vhea", *b"vmtx", *b"OS/2", *b"post", *b"name", *b"cvt ", *b"fpgm", *b"prep",
-    *b"gasp", *b"cmap", *b"GSUB", *b"GPOS", *b"GDEF",
+const HANDLED: [Tag; 22] = [
+    *b"head", *b"hhea", *b"maxp", *b"hmtx", *b"glyf", *b"loca", *b"CFF ", *b"vhea", *b"vmtx", *b"OS/2", *b"post", *b"name", *b"cvt ", *b"fpgm",
+    *b"prep", *b"gasp", *b"cmap", *b"GSUB", *b"GPOS", *b"GDEF", *b"BASE", *b"MATH",
 ];
 
-/// Tables that make a font variable or that hold outlines merge does not handle.
-const REFUSED: [(&[u8; 4], &str); 4] = [
-    (b"CFF ", "merging CFF-flavoured fonts"),
-    (b"CFF2", "merging CFF-flavoured fonts"),
-    (b"fvar", "merging variable fonts"),
-    (b"gvar", "merging variable fonts"),
-];
-
-fn check_input(font: &SfntFont, index: usize) -> Result<()> {
-    for (tag, what) in REFUSED {
-        if font.get(*tag).is_some() {
-            return Err(TablesError::Unsupported(format!("{what} (font {})", index + 1)));
-        }
+/// Whether the font has CFF outlines (else TrueType ones). `CFF2` fonts are refused: fontTools
+/// has no rule for `CFF2`, so its merge of them has no outlines.
+fn check_input(font: &SfntFont, index: usize) -> Result<bool> {
+    if font.get(*b"CFF2").is_some() {
+        return Err(TablesError::Unsupported(format!("merging CFF2 fonts (font {})", index + 1)));
     }
-    for tag in [*b"head", *b"maxp", *b"hhea", *b"hmtx", *b"glyf", *b"loca"] {
-        if font.get(tag).is_none() {
-            return Err(TablesError::BadOptions(format!("font {} has no '{}' table; merge needs TrueType outlines", index + 1, tag_str(tag))));
+    let cff = font.get(*b"CFF ").is_some();
+    let needed: &[Tag] = if cff { &[*b"head", *b"maxp", *b"hhea", *b"hmtx"] } else { &[*b"head", *b"maxp", *b"hhea", *b"hmtx", *b"glyf", *b"loca"] };
+    for tag in needed {
+        if font.get(*tag).is_none() {
+            return Err(TablesError::BadOptions(format!(
+                "font {} has no '{}' table; merge needs TrueType or CFF outlines",
+                index + 1,
+                tag_str(*tag)
+            )));
         }
     }
     for tag in [*b"GSUB", *b"GPOS"] {
@@ -348,7 +393,7 @@ fn check_input(font: &SfntFont, index: usize) -> Result<()> {
             return Err(TablesError::Unsupported(format!("merging '{}' feature variations (font {})", tag_str(tag), index + 1)));
         }
     }
-    Ok(())
+    Ok(cff)
 }
 
 fn units_per_em(fonts: &[SfntFont]) -> Result<()> {
