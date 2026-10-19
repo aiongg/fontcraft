@@ -111,6 +111,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
         ui.ctx().request_repaint();
     }
     font_view.edit = edit.filter(|e| !e.glyph.is_empty() && (edit_shown || e.fresh));
+    super::cell_images::dropped(ui.ctx(), ui.max_rect(), &laid_out, &cache.master, pending);
     font_view.laid_out = laid_out;
 }
 

@@ -2197,7 +2197,7 @@ milestone = "M11"
 summary = "Dropping an image file on a glyph cell in Font View or on a glyph in Edit View places it on that glyph's layer, the same as Glyph > Add Image…."
 ref = "Edit View › Images › Adding Images"
 status = "handbook"
-notes = "Documented, not yet observed. On the canvas (Font View cells are M11.16's): one dropped file runs `glyph.addImage` on the edited glyph's active layer, on the side being edited; several files run it once with the files matched to glyph names. Files dropped in the web build carry no path and are not placed yet."
+notes = "Documented, not yet observed. On the canvas, one dropped file runs `glyph.addImage` on the edited glyph's active layer, on the side being edited. On a Font View cell, one file runs it on that glyph's layer of Font View's master. In both, several files run it once with the files matched to glyph names. Files dropped in the web build carry no path and are not placed yet."
 guesses = [
   "A file dropped anywhere on the canvas goes on the edited glyph, not on the glyph under the pointer. Settled by dropping an image on a glyph of the line that is not being edited in the reference.",
   "Several files dropped on the canvas are matched to glyph names, as several files given to Add Image are. Settled by dropping two files on Edit View in the reference.",

@@ -1547,6 +1547,11 @@ milestone = "M11"
 summary = "A cell shows the image placed on the layer when View → Show Image is on. A glyph with no paths and no components shows its image even when that option is off."
 ref = "Font View › Images"
 status = "handbook"
+notes = "Documented, not yet observed. The cell draws the image of the glyph's layer of Font View's master under the outline, with its transform, crop and opacity as in Edit View, clipped to the cell. Thumbnails are decoded a few files per frame and kept within a byte limit."
+guesses = [
+  "The image is drawn at its own opacity (50 % when the file states none), as Edit View draws it. Settled by a Font View cell of a glyph with an image in the reference.",
+  "A missing or unreadable file draws the missing-image marker in the cell. Settled by moving an image file away and looking at Font View in the reference.",
+]
 
 # ── List View columns ──
 
@@ -3266,6 +3271,11 @@ milestone = "M11"
 summary = "Dropping an image file from the file manager onto a glyph cell places the image on that glyph's currently active layer."
 ref = "Font View › Images"
 status = "handbook"
+notes = "Documented, not yet observed. The drop runs `glyph.addImage` with the file, the glyph under the pointer and Font View's master layer; List View rows take drops the same way."
+guesses = [
+  "The active layer of a glyph in Font View is its layer of Font View's master. Settled by dropping an image on a cell while Font View shows the second master in the reference.",
+  "Several files dropped on Font View are matched to glyph names, whatever cell they land on, as Add Image does with several files. Settled by dropping two files on one cell in the reference.",
+]
 
 [[behavior]]
 id = "fontView.image.batchByFileName"
@@ -3300,6 +3310,7 @@ milestone = "M11"
 summary = "View → Show Image controls whether placed images are drawn in Font View cells; empty glyphs show their image regardless of the option."
 ref = "Font View › Images"
 status = "handbook"
+notes = "Documented, not yet observed. The option is the one `view.showImage` sets for Edit View."
 
 # ── Rows added after the audit of 2026-10-07: commands the Font View chapter states that had only
 #    been recorded as batch behaviours. ──

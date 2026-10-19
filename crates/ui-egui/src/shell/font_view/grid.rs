@@ -1,10 +1,10 @@
 //! The cell grid (`fontView.grid`).
 //!
 //! Each cell draws the glyph's layer of Font View's master (`fontView.cell.followsMaster`), its
-//! colour labels, its badges and, from [`LABEL_MIN_CELL`] up, the name and the Unicode marker
-//! (`fontView.cell.*`). Only the lines in view are laid out and painted. One response covers
-//! the whole grid and the pointer is hit-tested against the layout, so a font of any size costs
-//! the same per frame.
+//! placed image and colour drawing ([`super::cell_images`]), its colour labels, its badges and,
+//! from [`LABEL_MIN_CELL`] up, the name and the Unicode marker (`fontView.cell.*`). Only the
+//! lines in view are laid out and painted. One response covers the whole grid and the pointer is
+//! hit-tested against the layout, so a font of any size costs the same per frame.
 //!
 //! | Pointer | Does |
 //! |---|---|
@@ -26,6 +26,7 @@ use fontcraft_spacing::{Problem, SyncCache};
 use serde_json::{Value, json};
 
 use super::cache::{FontViewCache, Row};
+use super::cell_images::{self, ArtFrame, CellArt};
 use super::columns::Column;
 use super::images::{Cell, CellImages, Frame};
 use super::{InlineEdit, LABEL_MIN_CELL};
@@ -150,6 +151,8 @@ struct CellPaint<'a> {
     sync: Option<&'a SyncCache>,
     /// The glyphs whose layers cannot interpolate, while the font shows the indicators.
     incompatible: &'a HashSet<String>,
+    /// Placed images and colour glyphs (`cell_images`).
+    art: &'a ArtFrame,
 }
 
 /// Whether a metrics key of `glyph`, on any layer the scan covers, is out of sync
@@ -163,6 +166,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     let Some(doc) = session.active() else { return };
     let font = doc.font.clone();
     let doc_key = (doc.id, doc.revision);
+    let assets = session.assets();
     let incompatible = if session.compat_indicators() { session.incompatible_glyphs() } else { HashSet::new() };
     // Scans again only the glyphs an edit touched and the glyphs whose keys read them.
     let sync = session.metrics_sync().ok();
@@ -175,6 +179,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     let layout = Layout::new(cache.visible.len(), cache.shown_sections(fv), width, cell_side, label_height, tokens);
     let selected: HashSet<&str> = state.selected_glyphs.iter().map(String::as_str).collect();
     let mods = ui.input(|i| i.modifiers);
+    let art_frame = font_view.art.begin(ui.ctx(), assets, doc_key, &font, &cache.master, state.display.show_image, tokens);
     let paint = CellPaint {
         font: &font,
         doc: doc_key,
@@ -186,6 +191,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
         pixels_per_point: ui.ctx().pixels_per_point(),
         sync,
         incompatible: &incompatible,
+        art: &art_frame,
     };
     font_view.images.start_frame();
     let mut laid_out = Vec::new();
@@ -193,6 +199,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     let mut edit = font_view.edit.take();
     let mut edit_shown = false;
     let images = &mut font_view.images;
+    let art = &mut font_view.art;
     let drag = &mut font_view.drag;
     egui::ScrollArea::vertical().id_salt("fontView.grid").auto_shrink(false).show_viewport(ui, |ui, viewport| {
         let (rect, response) = ui.allocate_exact_size(vec2(width, layout.height.max(viewport.height())), Sense::click_and_drag());
@@ -211,7 +218,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
                         let r = layout.cell_rect(origin, y, start, at);
                         let is_selected = selected.contains(row.glyph.name.as_str());
                         laid_out.push((row.glyph.name.clone(), r));
-                        deferred |= paint_cell(&painter, ui.ctx(), images, &paint, row, r, is_selected);
+                        deferred |= paint_cell(&painter, ui.ctx(), images, art, &paint, row, r, is_selected);
                         if let Some(e) = edit.as_mut().filter(|e| e.glyph == row.glyph.name && e.column == Column::Name) {
                             edit_shown = true;
                             if let Some(command) = name_field(ui, e, label_rect(r), row) {
@@ -233,6 +240,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     // A field scrolled out of view or finished (its glyph cleared) is dropped; a new one starts
     // next frame.
     font_view.edit = edit.filter(|e| !e.glyph.is_empty() && (edit_shown || e.fresh));
+    cell_images::dropped(ui.ctx(), ui.max_rect(), &laid_out, &cache.master, pending);
     font_view.laid_out = laid_out;
     if deferred {
         ui.ctx().request_repaint();
@@ -356,8 +364,19 @@ fn name_field(ui: &mut egui::Ui, edit: &mut InlineEdit, rect: Rect, row: &Row) -
     Column::Name.edit_command(row, &text)
 }
 
-/// Draws one cell. Returns true when its outline waits for the next frame.
-fn paint_cell(painter: &egui::Painter, ctx: &egui::Context, images: &mut CellImages, c: &CellPaint, row: &Row, rect: Rect, selected: bool) -> bool {
+/// Draws one cell. Returns true when its outline, image or colour drawing waits for the next
+/// frame.
+#[allow(clippy::too_many_arguments)]
+fn paint_cell(
+    painter: &egui::Painter,
+    ctx: &egui::Context,
+    images: &mut CellImages,
+    cell_art: &mut CellArt,
+    c: &CellPaint,
+    row: &Row,
+    rect: Rect,
+    selected: bool,
+) -> bool {
     let t = c.tokens;
     let glyph = &row.glyph;
     let art = Rect::from_min_size(rect.min, Vec2::splat(rect.width()));
@@ -370,12 +389,16 @@ fn paint_cell(painter: &egui::Painter, ctx: &egui::Context, images: &mut CellIma
     let mut deferred = false;
     let inner = art.shrink(t.cell_inset);
     let side = (inner.width() * c.pixels_per_point).round().max(1.0) as u32;
-    match images.get(ctx, c.doc, c.font, glyph, c.master, c.frame, side) {
-        Cell::Ready(Some(texture)) => {
-            painter.image(texture, inner, Rect::from_min_max(Pos2::ZERO, pos2(1.0, 1.0)), t.glyph_fill);
+    let drawn = cell_art.paint(c.art, painter, c.font, glyph, inner);
+    deferred |= drawn.deferred;
+    if !drawn.colour {
+        match images.get(ctx, c.doc, c.font, glyph, c.master, c.frame, side) {
+            Cell::Ready(Some(texture)) => {
+                painter.image(texture, inner, Rect::from_min_max(Pos2::ZERO, pos2(1.0, 1.0)), t.glyph_fill);
+            }
+            Cell::Ready(None) => {}
+            Cell::Later => deferred = true,
         }
-        Cell::Ready(None) => {}
-        Cell::Later => deferred = true,
     }
     let out_of_sync = c.sync.is_some_and(|s| metrics_out_of_sync(s, &glyph.name));
     paint_badges(painter, t, art, glyph, c.master, row.props.has_custom_info, out_of_sync);

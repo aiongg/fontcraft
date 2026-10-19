@@ -754,6 +754,12 @@ milestone = "M11"
 summary = "Once the Color Palettes parameter exists, glyphs with palette layers are previewed in colour in Font View cells as well as in Edit View."
 ref = "Appendix › Custom Parameters › Color Palettes"
 status = "handbook"
+notes = "Documented, not yet observed. A cell draws a glyph with colour layers in Font View's master in colour, in place of its outline, through the same paint graph as Edit View: palette and full-colour layers, else an svg layer, else an iColor image. When the master has a Master Color, every glyph is drawn with the layers of each master that has one, in its colour."
+guesses = [
+  "Cells use palette 0 of the master's palettes, as Edit View does. Settled by the palette font with two palettes in Font View in the reference.",
+  "Of several iColor layers, a cell draws the largest size. Settled by a glyph with iColor 64 and iColor 128 layers in Font View in the reference.",
+  "In a layered font, a cell stacks every master that has a Master Color, the first on top, whichever master Font View shows; a master without one shows plain outlines. Settled by the layered font in Font View in the reference.",
+]
 observe = ["Palette font: look at A in Font View; note whether its cell is drawn in colour and with which palette."]
 
 [[behavior]]
