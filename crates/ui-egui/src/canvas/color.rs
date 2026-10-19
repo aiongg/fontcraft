@@ -702,11 +702,14 @@ fn paint_drawables_within(px: &mut Pixels, drawables: &[Drawable], to_pixels: Af
 }
 
 /// Fills the outer outline of every drawable, as one path, in `color` within the box `all`: one
-/// pass over the glyph's pixels whatever the number of drawables.
+/// pass over the glyph's pixels whatever the number of drawables. Each outline is turned to one
+/// winding first, so layers wound in opposite directions add up under the nonzero rule instead
+/// of cancelling where they overlap.
 fn paint_plain(px: &mut Pixels, drawables: &[Drawable], to_pixels: Affine, all: Option<(u32, u32, u32, u32)>, color: [f32; 4]) {
     let Some((x0, y0, x1, y1)) = all else { return };
     let (w, h) = (x1 - x0, y1 - y0);
-    let outline = concat(drawables.iter().filter_map(|d| d.clips.first().cloned()).collect());
+    let outline =
+        concat(drawables.iter().filter_map(|d| d.clips.first()).map(|c| if c.area() < 0.0 { c.reverse_subpaths() } else { c.clone() }).collect());
     let shift = Affine::translate((-f64::from(x0), -f64::from(y0))) * to_pixels;
     let Ok(mask) = render_path(&outline, shift, w, h, &MASK) else { return };
     for (i, p) in mask.pixels.as_chunks::<4>().0.iter().enumerate() {
@@ -1077,6 +1080,26 @@ mod tests {
             green
         ));
         assert_eq!(data[..4], [0, 0, 255, 255], "a glyph within the budget is painted whole");
+    }
+
+    #[test]
+    fn the_plain_fill_has_no_hole_where_layers_wind_oppositely() {
+        let mut square = BezPath::new();
+        square.move_to((0.0, 0.0));
+        square.line_to((64.0, 0.0));
+        square.line_to((64.0, 64.0));
+        square.line_to((0.0, 64.0));
+        square.close_path();
+        let reversed = square.reverse_subpaths();
+        // Half the layers wound each way: joined as they are, their windings sum to zero.
+        let list: Vec<Drawable> = (0..1_000)
+            .map(|i| Drawable { clips: vec![if i % 2 == 0 { square.clone() } else { reversed.clone() }], leaf: Leaf::Solid([1.0, 0.0, 0.0, 1.0]) })
+            .collect();
+        let green = [0.0, 1.0, 0.0, 1.0];
+        let mut data = vec![0u8; 64 * 64 * 4];
+        let all = paint_drawables_within(&mut Pixels { data: &mut data, width: 64, height: 64 }, &list, Affine::IDENTITY, 100 * 64 * 64 * 2, green);
+        assert!(!all, "the budget runs out");
+        assert!(data.chunks(4).all(|p| p == &[0, 255, 0, 255][..]), "the overlap is filled solid");
     }
 
     #[test]

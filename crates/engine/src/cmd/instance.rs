@@ -635,4 +635,24 @@ mod tests {
         assert_eq!(left, ["T-Light.ttf", "V-Bold.ttf"], "no temporary file is left");
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    /// An output that is a link out of the automation write root is refused before anything is
+    /// created beside the file it leads to.
+    #[cfg(unix)]
+    #[test]
+    fn a_staged_link_out_of_the_write_root_is_refused() {
+        let base = std::env::temp_dir().join(format!("fontcraft-instance-link-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(base.join("out")).unwrap();
+        std::fs::create_dir_all(base.join("outside")).unwrap();
+        std::fs::write(base.join("outside/T.ttf"), b"old").unwrap();
+        std::os::unix::fs::symlink(base.join("outside/T.ttf"), base.join("out/T.ttf")).unwrap();
+        let roots = crate::file_access::AutomationRoots::new(None, Some(&base.join("out"))).unwrap().unwrap();
+        let staged = crate::file_access::confine(Some(&roots), || stage(&base.join("out/T.ttf"), b"new", 0));
+        assert!(staged.is_err_and(|e| e.to_string().contains("outside the write root")));
+        let outside: Vec<_> = std::fs::read_dir(base.join("outside")).unwrap().map(|e| e.unwrap().file_name()).collect();
+        assert_eq!(outside, ["T.ttf"], "no temporary file beside the link's target");
+        assert_eq!(std::fs::read(base.join("outside/T.ttf")).unwrap(), b"old");
+        std::fs::remove_dir_all(&base).unwrap();
+    }
 }
