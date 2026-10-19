@@ -19,13 +19,22 @@
 //!    on-curve nodes on its two edges that lie closest together across, from the edge already
 //!    touched to the other. Stems with a touched edge go first; when none is left, the lowest
 //!    stem starts from its bottom edge, which the compiler rounds.
-//! 3. Vertical Delta for the `touch` and `point` control instructions.
+//! 3. The `left` and `right` points of the control instructions, each a one-point segment from
+//!    its x plus the left offset to its x plus the right offset: a vertical Snap when it lies in
+//!    a zone; else a vertical Stem from the nearest flat run above or below that overlaps the
+//!    segment, within one and a half times the glyph's widest horizontal stem; else a rounded
+//!    vertical Snap, an edge on the grid.
+//! 4. Vertical Delta for the y shifts of the `touch` control instructions (before IUP, whole
+//!    pixels: a shift of half a pixel or more moves one pixel).
 //!
-//! Nothing is hinted horizontally except the `left` and `right` points of the control
-//! instructions.
+//! Nothing is hinted horizontally. The `point` shifts and the x shifts of `touch` run after
+//! IUP, in eighths of a pixel ([`AutoHints::shifts`], [`shift_program`]); `nodir` points are
+//! never instructed.
 //!
-//! Control instructions: `nodir` points are never instructed; `left` and `right` points get a
-//! rounded horizontal Snap, which makes them an edge the hinting keeps on the grid.
+//! `prep` ([`autohint_prep`]) scales the zones so the x-height lands on the pixel grid, and
+//! switches the glyph programs off above the hinting limit. At export the `xHeight` and
+//! `capHeight` zones apply only when the font draws one of the letters ttfautohint measures them
+//! on ([`drop_unmeasured_zones`]).
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -382,51 +391,203 @@ pub fn snapping_exceptions(text: &str) -> Result<Vec<(u16, u16)>, String> {
     Ok(out)
 }
 
-/// What the TTFAutohint options add to `prep` after our own program ([`crate::font_programs`]):
-/// the hinting limit (glyph programs off above it), the x-height increase (the `xHeight` zone
-/// rounded up from an eighth of a pixel at 6 PPM up to the limit) and the x-height snapping
-/// exceptions (the `xHeight` zone unrounded at those sizes). Empty when none applies.
-pub fn autohint_prep(options: &TtAutohintOptions, settings: &HintSettings, layout: &crate::CvtLayout) -> Result<Vec<u8>, HintingError> {
+/// What the autohinter adds to `prep` after our own program ([`crate::font_programs`]): the
+/// zones rounded as ttfautohint rounds them, with the x-height scaling when the master has an
+/// `xHeight` zone, and the hinting limit (glyph programs off above it).
+///
+/// X-height scaling, as the ttfautohint manual describes it and its output on our test fonts
+/// shows: the top of the `xHeight` zone, overshoot included, is rounded to the pixel grid with a
+/// preference for rounding up (up from 3/8 of a pixel above a row; from 3/16 at 6 PPM up to the
+/// x-height increase limit), and every zone is then placed at its position scaled by the same
+/// factor, rounded to the nearest row. Horizontal stems scale by that factor too. At the sizes of
+/// the x-height snapping exceptions, and at every size without an `xHeight` zone, the factor is
+/// 1, so the zones are only rounded. Zone and stem
+/// deltas of our own `prep` are kept: each fitted entry moves by the difference between the
+/// scaled row and the row our program gave it. Zones aligned to another zone keep their rounded
+/// distance to it; zones in an alignment cycle, and those aligned to one, stay as our program
+/// placed them.
+///
+/// Returns the `cvt ` entries to append after `layout`'s (the top of the `xHeight` zone, so the
+/// rasterizer scales it as it scales the zones) and the program to append to `prep`. Storage:
+/// [`S_X_SCALED`] and [`S_X_FITTED`], after the font programs' own.
+pub fn autohint_prep(options: &TtAutohintOptions, settings: &HintSettings, layout: &crate::CvtLayout) -> Result<(Vec<i16>, Vec<u8>), HintingError> {
     use std::fmt::Write;
     let mut t = String::new();
-    let x_height: Vec<(u16, u16)> = settings
-        .tt_zones
-        .iter()
-        .zip(&layout.zones)
-        .filter(|(z, _)| z.name == "xHeight" && z.size > 0.0 && z.align.is_none())
-        .map(|(_, cells)| *cells)
-        .collect();
-    let in_range = |lo: u16, hi: u16| format!("MPPEM[ ]\nPUSH {lo}\nGTEQ[ ]\nMPPEM[ ]\nPUSH {hi}\nLTEQ[ ]\nAND[ ]\nIF[ ]");
-    if options.increase_x_height >= 6 {
-        for (pos, fit) in &x_height {
-            let _ = writeln!(
-                t,
-                "{}\nPUSH {fit} {pos} {X_HEIGHT_INCREASE_THRESHOLD} {}\nCALL[ ]\nEIF[ ]",
-                in_range(6, options.increase_x_height.min(MAX_OPTION_PPM)),
-                crate::tt_font::FN_ZONE_ROUND
-            );
-        }
-    }
+    let mut cvt = Vec::new();
     let exceptions = snapping_exceptions(&options.x_height_snapping_exceptions)
         .map_err(|message| HintingError::BadParameter { name: "TTFAutohint options".into(), message })?;
-    for (lo, hi) in exceptions {
-        for (pos, fit) in &x_height {
-            let _ = writeln!(t, "{}\nPUSH {fit} {pos}\nRCVT[ ]\nWCVTP[ ]\nEIF[ ]", in_range(lo, hi));
-        }
-    }
+    let (top, scaling) = x_height_scaling(options, settings, layout, &exceptions);
+    cvt.extend(top);
+    t.push_str(&scaling);
     if options.hinting_limit > 0 {
         let _ = writeln!(t, "MPPEM[ ]\nPUSH {}\nGT[ ]\nIF[ ]\nPUSH 1 1\nINSTCTRL[ ]\nEIF[ ]", options.hinting_limit.min(MAX_OPTION_PPM));
     }
     if t.is_empty() {
-        return Ok(Vec::new());
+        return Ok((cvt, Vec::new()));
     }
-    Ok(fontcraft_ttasm::assemble(&t)?)
+    Ok((cvt, fontcraft_ttasm::assemble(&t)?))
 }
 
-/// The rounding threshold of the `xHeight` zone at the sizes the x-height increase covers, 26.6
-/// pixels: the x-height takes the row above once it lies an eighth of a pixel above the one
-/// below.
-const X_HEIGHT_INCREASE_THRESHOLD: i32 = 24;
+/// Storage written by [`autohint_prep`]: the top of the x-height zone at this size, unrounded,
+/// and its rounded row (26.6 pixels).
+pub const S_X_SCALED: u8 = 11;
+pub const S_X_FITTED: u8 = 12;
+/// What the x-height zone's scaled top gets added before it is floored to a row: 5/8 of a pixel,
+/// and 13/16 from 6 PPM up to the x-height increase limit (26.6).
+const X_HEIGHT_ROUND_UP: i32 = 40;
+const X_HEIGHT_INCREASE_ROUND_UP: i32 = 52;
+
+/// The `cvt ` entry and the `prep` text of the x-height scaling ([`autohint_prep`]). Without a
+/// usable `xHeight` zone, or room in `cvt ` for the entry, the factor is 1: the zones are only
+/// rounded to the nearest row.
+fn x_height_scaling(
+    options: &TtAutohintOptions,
+    settings: &HintSettings,
+    layout: &crate::CvtLayout,
+    exceptions: &[(u16, u16)],
+) -> (Option<i16>, String) {
+    use crate::tt_font::{FN_ROUND, MAX_ZONE_THRESHOLD_PX};
+    use std::fmt::Write;
+    let zones = &settings.tt_zones;
+    let word = |v: f64| -> Option<i32> { (v.is_finite() && (1.0..=32_767.0).contains(&v.round())).then(|| v.round() as i32) };
+    let entry = layout.len;
+    // A zone at or below the baseline cannot scale the others.
+    let top = zones
+        .iter()
+        .find(|z| z.name == "xHeight" && z.align.is_none() && z.size >= 0.0)
+        .filter(|x| word(x.position).is_some())
+        .and_then(|x| word(x.position + x.size))
+        .and_then(|v| i16::try_from(v).ok())
+        .filter(|_| usize::from(entry) < crate::MAX_CVT_ENTRIES);
+    let in_range = |lo: u16, hi: u16| format!("MPPEM[ ]\nPUSH {lo}\nGTEQ[ ]\nMPPEM[ ]\nPUSH {hi}\nLTEQ[ ]\nAND[ ]\nIF[ ]");
+    // The cvt entry our program rounded zone `k` from: the family zone up to the family
+    // threshold, else the zone's own position.
+    let source = |k: usize| -> Option<String> {
+        let (pos, _) = layout.zones.get(k).copied()?;
+        Some(match (settings.tt_family_zones_threshold.map(|p| p.min(MAX_OPTION_PPM)), layout.family.get(k)) {
+            (Some(until), Some(family)) => format!("MPPEM[ ]\nPUSH {until}\nLTEQ[ ]\nIF[ ]\nPUSH {family}\nELSE[ ]\nPUSH {pos}\nEIF[ ]"),
+            _ => format!("PUSH {pos}"),
+        })
+    };
+    // The value on the stack scaled by the factor and rounded; only rounded at a factor of 1,
+    // which MUL and DIV would leave up to 1/64 pixel short.
+    let scaled = format!(
+        "PUSH {S_X_FITTED}\nRS[ ]\nPUSH {S_X_SCALED}\nRS[ ]\nNEQ[ ]\nIF[ ]\nPUSH {S_X_FITTED}\nRS[ ]\nMUL[ ]\nPUSH {S_X_SCALED}\nRS[ ]\nDIV[ ]\nEIF[ ]\nPUSH {FN_ROUND}\nCALL[ ]"
+    );
+
+    let mut t = String::new();
+    if top.is_some() {
+        let _ = writeln!(t, "; x-height scaling\nPUSH {S_X_SCALED} {entry}\nRCVT[ ]\nWS[ ]");
+        let _ = writeln!(t, "PUSH {S_X_FITTED} {S_X_SCALED}\nRS[ ]\nPUSH {X_HEIGHT_ROUND_UP}\nADD[ ]");
+    } else {
+        let _ = writeln!(t, "; no x-height scaling\nPUSH {S_X_SCALED} 64\nWS[ ]\nPUSH {S_X_FITTED} 64");
+    }
+    if top.is_some() && options.increase_x_height >= 6 {
+        let _ = writeln!(
+            t,
+            "{}\nPUSH {}\nADD[ ]\nEIF[ ]",
+            in_range(6, options.increase_x_height.min(MAX_OPTION_PPM)),
+            X_HEIGHT_INCREASE_ROUND_UP - X_HEIGHT_ROUND_UP
+        );
+    }
+    if top.is_some() {
+        t.push_str("FLOOR[ ]\n");
+        for &(lo, hi) in exceptions {
+            let _ = writeln!(t, "{}\nPOP[ ]\nPUSH {S_X_SCALED}\nRS[ ]\nEIF[ ]", in_range(lo, hi));
+        }
+    }
+    let _ = writeln!(t, "WS[ ]\nPUSH {S_X_SCALED}\nRS[ ]\nPUSH 0\nGT[ ]\nPUSH {S_X_FITTED}\nRS[ ]\nPUSH 0\nGT[ ]\nAND[ ]\nIF[ ]");
+
+    // Alignment depth of each zone: 0 for a zone rounded on its own, `None` in or below a cycle.
+    let target = |k: usize| -> Option<usize> {
+        let name = zones.get(k)?.align.as_deref()?;
+        zones.iter().position(|z| z.name == name).filter(|&j| j != k)
+    };
+    let depth: Vec<Option<usize>> = (0..zones.len())
+        .map(|start| {
+            let mut k = start;
+            for d in 0..=zones.len() {
+                match target(k) {
+                    Some(j) => k = j,
+                    None => return Some(d),
+                }
+            }
+            None
+        })
+        .collect();
+    let mut aligned: Vec<(usize, usize, usize)> =
+        (0..zones.len()).filter_map(|k| Some((depth.get(k).copied().flatten().filter(|d| *d > 0)?, k, target(k)?))).collect();
+    aligned.sort();
+    // FN_ZONE_ALIGN's placement of zone `k` on zone `j`: the target's row plus the rounded distance.
+    let placement = |k: usize, j: usize| -> Option<String> {
+        let ((pos, _), (tpos, tfit)) = (layout.zones.get(k).copied()?, layout.zones.get(j).copied()?);
+        Some(format!("PUSH {tfit}\nRCVT[ ]\nPUSH {pos}\nRCVT[ ]\nPUSH {tpos}\nRCVT[ ]\nSUB[ ]\nPUSH {FN_ROUND}\nCALL[ ]\nADD[ ]"))
+    };
+    // Aligned zones lose their placement first, dependents before their targets, which keeps
+    // only their deltas; they get it back from the scaled targets at the end.
+    for &(_, k, j) in aligned.iter().rev() {
+        let (Some((_, fit)), Some(p)) = (layout.zones.get(k).copied(), placement(k, j)) else { continue };
+        let _ = writeln!(t, "PUSH {fit} {fit}\nRCVT[ ]\n{p}\nSUB[ ]\nWCVTP[ ]");
+    }
+    let threshold = if settings.tt_zone_rounding_threshold.is_finite() {
+        settings.tt_zone_rounding_threshold.clamp(-MAX_ZONE_THRESHOLD_PX, MAX_ZONE_THRESHOLD_PX)
+    } else {
+        0.0
+    };
+    for (k, z) in zones.iter().enumerate() {
+        if depth.get(k).copied().flatten() != Some(0) {
+            continue;
+        }
+        let (Some((_, fit)), Some(src)) = (layout.zones.get(k).copied(), source(k)) else { continue };
+        // The rounding of our own `prep` (`FN_ZONE_ROUND`), replaced by the scaled row.
+        let times = if z.name == "xHeight" { 2.0 } else { 1.0 };
+        let thr = if z.size > 0.0 { (threshold * times * 64.0).round() as i32 } else { 0 };
+        let _ = writeln!(
+            t,
+            "; zone {k}\nPUSH {fit} {fit}\nRCVT[ ]\n{src}\nRCVT[ ]\n{scaled}\n{src}\nRCVT[ ]\nPUSH {}\nADD[ ]\nFLOOR[ ]\nSUB[ ]\nADD[ ]\nWCVTP[ ]",
+            thr + 32
+        );
+    }
+    for &(_, k, j) in &aligned {
+        let (Some((_, fit)), Some(p)) = (layout.zones.get(k).copied(), placement(k, j)) else { continue };
+        let _ = writeln!(t, "PUSH {fit} {fit}\nRCVT[ ]\n{p}\nADD[ ]\nWCVTP[ ]");
+    }
+    for (k, (s, &(width, fit))) in settings.tt_stems.iter().zip(&layout.stems).enumerate() {
+        if s.horizontal {
+            let _ = writeln!(
+                t,
+                "; stem {k}\nPUSH {fit} {fit}\nRCVT[ ]\nPUSH {width}\nRCVT[ ]\n{scaled}\nPUSH {width}\nRCVT[ ]\nPUSH 32\nADD[ ]\nFLOOR[ ]\nSUB[ ]\nADD[ ]\nWCVTP[ ]"
+            );
+        }
+    }
+    t.push_str("EIF[ ]\n");
+    (top, t)
+}
+
+/// The letters the ttfautohint manual lists for its Latin x-height zone and cap-height zone.
+const X_HEIGHT_LETTERS: [char; 8] = ['u', 'v', 'x', 'z', 'o', 'e', 's', 'c'];
+const CAP_HEIGHT_LETTERS: [char; 8] = ['T', 'H', 'E', 'Z', 'O', 'C', 'Q', 'S'];
+
+/// Leaves out of `settings` the zones the autohinter has no letters for, as ttfautohint, which
+/// measures its zones on those letters, finds none: the `xHeight` zone (and so the x-height
+/// scaling) when no glyph for u, v, x, z, o, e, s or c has an outline on the master, the
+/// `capHeight` zone when none for T, H, E, Z, O, C, Q or S has. Returns the names left out.
+pub fn drop_unmeasured_zones(font: &Font, settings: &mut HintSettings) -> Vec<String> {
+    let drawn = |letters: &[char]| {
+        font.glyphs.iter().any(|g| {
+            g.unicodes.iter().any(|u| char::from_u32(*u).is_some_and(|c| letters.contains(&c)))
+                && g.layer(&settings.master).is_some_and(|l| !l.shapes.is_empty())
+        })
+    };
+    let mut gone = Vec::new();
+    for (name, letters) in [("xHeight", &X_HEIGHT_LETTERS), ("capHeight", &CAP_HEIGHT_LETTERS)] {
+        if settings.tt_zones.iter().any(|z| z.name == name) && !drawn(letters) {
+            gone.push(name.to_string());
+        }
+    }
+    settings.tt_zones.retain(|z| !gone.contains(&z.name));
+    gone
+}
 
 /// One glyph layer to autohint.
 pub struct AutoGlyph<'a> {
@@ -451,8 +612,22 @@ pub struct AutoGlyph<'a> {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct AutoHints {
     pub instructions: Vec<TtInstruction>,
+    /// The control instructions' corrections that run after IUP (`point` shifts, and the x
+    /// shifts of `touch`), which no Instructor instruction holds: the export writes them with
+    /// [`shift_program`], the commands that store instructions with [`shifts_as_deltas`].
+    pub shifts: Vec<PointShift>,
     /// What the analysis skipped or could not use, for the report.
     pub warnings: Vec<String>,
+}
+
+/// A move of one node along one axis by `amount` (26.6 pixels, a multiple of an eighth of a
+/// pixel, at most one pixel either way) at each of `ppems`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PointShift {
+    pub node: NodeRef,
+    pub direction: Direction,
+    pub ppems: Vec<u16>,
+    pub amount: i32,
 }
 
 /// TrueType instructions for one glyph's main-master layer, replacing its manual ones.
@@ -480,7 +655,10 @@ pub fn autohint_tt(
         points: None,
         delta_column: column.as_deref(),
     };
-    Ok(autohint_glyph(&input)?.instructions)
+    let h = autohint_glyph(&input)?;
+    let mut list = h.instructions;
+    list.extend(shifts_as_deltas(&h.shifts, column.as_deref(), &mut Vec::new()));
+    Ok(list)
 }
 
 /// A node of the layer as the analysis sees it.
@@ -517,7 +695,6 @@ pub fn autohint_glyph(input: &AutoGlyph) -> Result<AutoHints, HintingError> {
         .collect();
 
     let mut touched_y: BTreeSet<NodeRef> = BTreeSet::new();
-    let mut touched_x: BTreeSet<NodeRef> = BTreeSet::new();
     let mut list = Vec::new();
 
     // 1. Extremes in zones.
@@ -567,13 +744,40 @@ pub fn autohint_glyph(input: &AutoGlyph) -> Result<AutoHints, HintingError> {
         }
     }
 
-    // Control instructions: left and right edges, then the corrections.
-    for r in &control.edges {
-        if touched_x.insert(*r) {
-            list.push(TtInstruction::new(TtKind::Snap { zone: ZoneRef::NoZone }, Direction::Horizontal, TtPoint::Node(*r)));
+    // 3. The control instructions' left and right points: one-point segments, hinted as edges.
+    let widest = settings
+        .tt_stems
+        .iter()
+        .filter(|s| s.horizontal && s.size.is_finite())
+        .map(|s| s.size)
+        .chain(stems.0.iter().map(|(lo, hi)| hi - lo))
+        .fold(0.0f64, f64::max);
+    let runs = flat_runs(&paths);
+    for &(r, a, b) in &control.segments {
+        if control.nodir.contains(&r) || touched_y.contains(&r) {
+            continue;
         }
+        let Some(p) = all.iter().find(|q| q.r == r).copied() else { continue };
+        if zones.iter().any(|&(lo, hi, _)| p.y >= lo - fuzz && p.y <= hi + fuzz) {
+            touched_y.insert(r);
+            list.push(TtInstruction::new(TtKind::Snap { zone: ZoneRef::Auto }, Direction::Vertical, TtPoint::Node(r)));
+            continue;
+        }
+        match segment_partner(&runs, &p, a, b, widest * SEGMENT_STEM_REACH, &touched_y, &control.nodir) {
+            Some(q) => {
+                let mut t = TtInstruction::new(TtKind::Stem { stem: StemRef::Auto, triple: None }, Direction::Vertical, TtPoint::Node(r));
+                t.origin = Some(TtPoint::Node(q.r));
+                touched_y.insert(q.r);
+                list.push(t);
+            }
+            None => list.push(TtInstruction::new(TtKind::Snap { zone: ZoneRef::NoZone }, Direction::Vertical, TtPoint::Node(r))),
+        }
+        touched_y.insert(r);
     }
+
+    // 4. The `touch` corrections.
     list.extend(control.deltas(input.delta_column, &mut out.warnings));
+    out.shifts = control.after_iup;
     if list.len() > crate::MAX_LAYER_HINTS {
         return Err(HintingError::LimitExceeded { what: "instructions on a layer", limit: crate::MAX_LAYER_HINTS });
     }
@@ -651,6 +855,61 @@ fn closest_pair(lo: &[Pt], hi: &[Pt], direction: Direction) -> Option<(Pt, Pt)> 
         }
     }
     best.map(|(_, a, b)| (a, b))
+}
+
+/// How far from a `left` or `right` point, as a multiple of the glyph's widest horizontal stem,
+/// another segment may lie and still form a stem with it.
+const SEGMENT_STEM_REACH: f64 = 1.5;
+
+/// The flat stretches of the closed paths: (left x, right x, y, its on-curve nodes) of each run
+/// of on-curve nodes at one height, a single on-curve node counting as a run of its own.
+fn flat_runs(paths: &[Vec<Pt>]) -> Vec<(f64, f64, f64, Vec<Pt>)> {
+    let mut out = Vec::new();
+    for path in paths {
+        let n = path.len();
+        for (i, p) in path.iter().enumerate() {
+            if !p.on {
+                continue;
+            }
+            out.push((p.x, p.x, p.y, vec![*p]));
+            if let Some(q) = path.get((i + 1) % n).filter(|q| q.on && q.r != p.r && (q.y - p.y).abs() <= EDGE_TOLERANCE) {
+                out.push((p.x.min(q.x), p.x.max(q.x), p.y, vec![*p, *q]));
+            }
+        }
+    }
+    out
+}
+
+/// The node a `left` or `right` point at `p`, whose segment spans `a` to `b`, forms a stem with:
+/// a node of the nearest flat run above or below that overlaps the segment, within `reach` font
+/// units, a node already touched first. `None` when no run qualifies.
+fn segment_partner(
+    runs: &[(f64, f64, f64, Vec<Pt>)],
+    p: &Pt,
+    a: f64,
+    b: f64,
+    reach: f64,
+    touched: &BTreeSet<NodeRef>,
+    nodir: &BTreeSet<NodeRef>,
+) -> Option<Pt> {
+    let mut best: Option<(f64, bool, Pt)> = None;
+    for (lo, hi, y, nodes) in runs {
+        let d = (y - p.y).abs();
+        if d <= EDGE_TOLERANCE || d > reach || *hi < a || *lo > b || nodes.iter().any(|q| q.r == p.r) {
+            continue;
+        }
+        let pick = nodes.iter().filter(|q| !nodir.contains(&q.r)).min_by(|q, r| {
+            (!touched.contains(&q.r), (q.x - p.x).abs())
+                .partial_cmp(&(!touched.contains(&r.r), (r.x - p.x).abs()))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        let Some(q) = pick.copied() else { continue };
+        let key = (d, !touched.contains(&q.r));
+        if best.as_ref().is_none_or(|(bd, bt, _)| key.0 < *bd - EDGE_TOLERANCE || ((key.0 - bd).abs() <= EDGE_TOLERANCE && !key.1 && *bt)) {
+            best = Some((key.0, key.1, q));
+        }
+    }
+    best.map(|(_, _, q)| q)
 }
 
 /// The PostScript autohinter's stems of the layer: horizontal stems as (bottom, top) and
@@ -752,9 +1011,13 @@ fn fd_dict(name: &str, zones: &[(f64, f64, bool)], stems: &StemSet) -> Option<Fd
 #[derive(Default)]
 struct GlyphControl {
     nodir: BTreeSet<NodeRef>,
-    edges: Vec<NodeRef>,
-    /// (node, PPMs, y shift in pixels) of each `touch` and `point` correction, in text order.
-    shifts: Vec<(NodeRef, Vec<u16>, f64)>,
+    /// (node, segment start, segment end) of each `left` and `right` point: its x plus the
+    /// offsets, font units, start not after end.
+    segments: Vec<(NodeRef, f64, f64)>,
+    /// (node, PPMs, y shift in pixels) of each `touch` correction, in text order.
+    touch: Vec<(NodeRef, Vec<u16>, f64)>,
+    /// The corrections written after IUP: `point` shifts and the x shifts of `touch`.
+    after_iup: Vec<PointShift>,
 }
 
 impl GlyphControl {
@@ -765,7 +1028,7 @@ impl GlyphControl {
             return out;
         }
         // Exported point number → node.
-        let mut by_point: HashMap<u32, NodeRef> = HashMap::new();
+        let mut by_point: HashMap<u32, Pt> = HashMap::new();
         let mut k = 0u32;
         for p in paths.iter().flatten() {
             let n = match input.points {
@@ -774,37 +1037,50 @@ impl GlyphControl {
             };
             k = k.saturating_add(1);
             if let Some(n) = n {
-                by_point.entry(n).or_insert(p.r);
+                by_point.entry(n).or_insert(*p);
             }
         }
         for line in lines {
             let mut nodes = Vec::with_capacity(line.points.len());
             for i in &line.points {
                 match by_point.get(i) {
-                    Some(r) => nodes.push(*r),
+                    Some(p) => nodes.push(*p),
                     None => warnings.push(format!("control instructions, line {}: glyph `{}` has no point {i}", line.line, input.glyph)),
                 }
             }
             match &line.kind {
-                ControlKind::NoDir => out.nodir.extend(nodes),
-                ControlKind::Left | ControlKind::Right => out.edges.extend(nodes),
-                ControlKind::Touch { x_shift, y_shift } | ControlKind::Point { x_shift, y_shift } => {
-                    if *x_shift != 0.0 {
-                        warnings
-                            .push(format!("control instructions, line {}: horizontal shifts are not applied by the built-in autohinter", line.line));
+                ControlKind::NoDir => out.nodir.extend(nodes.iter().map(|p| p.r)),
+                ControlKind::Left { left_offset, right_offset } | ControlKind::Right { left_offset, right_offset } => {
+                    let (a, b) = (f64::from(*left_offset.min(right_offset)), f64::from(*left_offset.max(right_offset)));
+                    for p in nodes {
+                        if out.segments.len() >= MAX_CONTROL_SEGMENTS {
+                            warnings.push(format!(
+                                "control instructions, line {}: glyph `{}` has more than {MAX_CONTROL_SEGMENTS} left and right points; the rest were left out",
+                                line.line, input.glyph
+                            ));
+                            break;
+                        }
+                        out.segments.push((p.r, p.x + a, p.x + b));
                     }
-                    for r in nodes {
-                        out.shifts.push((r, line.ppems.clone(), *y_shift));
+                }
+                ControlKind::Touch { x_shift, y_shift } => {
+                    for p in &nodes {
+                        out.touch.push((p.r, line.ppems.clone(), *y_shift));
                     }
+                    out.after_iup.extend(shifts(&nodes, Direction::Horizontal, *x_shift, &line.ppems));
+                }
+                ControlKind::Point { x_shift, y_shift } => {
+                    out.after_iup.extend(shifts(&nodes, Direction::Horizontal, *x_shift, &line.ppems));
+                    out.after_iup.extend(shifts(&nodes, Direction::Vertical, *y_shift, &line.ppems));
                 }
             }
         }
         out
     }
 
-    /// One vertical Delta per corrected node, cells by the sign of its shift.
+    /// One vertical Delta per node with `touch` corrections, cells by the sign of its shift.
     fn deltas(&self, column: Option<&str>, warnings: &mut Vec<String>) -> Vec<TtInstruction> {
-        if self.shifts.is_empty() {
+        if self.touch.is_empty() {
             return Vec::new();
         }
         let Some(column) = column else {
@@ -812,7 +1088,7 @@ impl GlyphControl {
             return Vec::new();
         };
         let mut per_node: BTreeMap<NodeRef, BTreeMap<u16, DeltaDir>> = BTreeMap::new();
-        for (r, ppems, shift) in &self.shifts {
+        for (r, ppems, shift) in &self.touch {
             if shift.abs() < MIN_DELTA_SHIFT {
                 continue;
             }
@@ -822,17 +1098,98 @@ impl GlyphControl {
                 cells.insert(*p, dir);
             }
         }
-        per_node
-            .into_iter()
-            .filter(|(_, cells)| !cells.is_empty())
-            .map(|(r, cells)| {
-                let mut t =
-                    TtInstruction::new(TtKind::Delta { cells: BTreeMap::from([(column.to_string(), cells)]) }, Direction::Vertical, TtPoint::Node(r));
-                t.rounding = Rounding::NoRounding;
-                t
-            })
-            .collect()
+        delta_instructions(per_node, column)
     }
+}
+
+/// Vertical Delta instructions, one per node, in the Delta column `column`.
+fn delta_instructions(per_node: BTreeMap<NodeRef, BTreeMap<u16, DeltaDir>>, column: &str) -> Vec<TtInstruction> {
+    per_node
+        .into_iter()
+        .filter(|(_, cells)| !cells.is_empty())
+        .map(|(r, cells)| {
+            let mut t =
+                TtInstruction::new(TtKind::Delta { cells: BTreeMap::from([(column.to_string(), cells)]) }, Direction::Vertical, TtPoint::Node(r));
+            t.rounding = Rounding::NoRounding;
+            t
+        })
+        .collect()
+}
+
+/// The shifts of `nodes` along one axis, in eighths of a pixel; none for a shift that rounds to 0.
+fn shifts(nodes: &[Pt], direction: Direction, pixels: f64, ppems: &[u16]) -> Vec<PointShift> {
+    let eighths = if pixels.is_finite() { (pixels.clamp(-1.0, 1.0) * 8.0).round() as i32 } else { 0 };
+    if eighths == 0 {
+        return Vec::new();
+    }
+    let ppems: Vec<u16> = ppems.iter().copied().filter(|p| (1..=crate::MAX_DELTA_PPM).contains(p)).collect();
+    nodes.iter().map(|p| PointShift { node: p.r, direction, ppems: ppems.clone(), amount: eighths * 8 }).collect()
+}
+
+/// Most `left` and `right` points of one glyph the autohinter looks at; each costs a pass over
+/// the glyph's nodes.
+const MAX_CONTROL_SEGMENTS: usize = 256;
+/// Most shift cells (node and size) written after IUP in one glyph program.
+pub const MAX_SHIFT_CELLS: usize = 8_192;
+
+/// The program the export appends to a glyph's autohinted program, after its IUP: each shift as a
+/// move of its point at each of its sizes. Empty when there are none; shifts whose node has no
+/// exported point are left out.
+pub fn shift_program(shifts: &[PointShift], points: &dyn PointMap) -> Result<Vec<u8>, HintingError> {
+    use std::fmt::Write;
+    let mut t = String::new();
+    let mut cells = 0usize;
+    for direction in [Direction::Vertical, Direction::Horizontal] {
+        let mut axis_set = false;
+        for s in shifts.iter().filter(|s| s.direction == direction) {
+            let Some(point) = points.point(s.node) else { continue };
+            for ppm in &s.ppems {
+                cells += 1;
+                if cells > MAX_SHIFT_CELLS {
+                    return Err(HintingError::LimitExceeded { what: "control-instruction shift cells in a glyph", limit: MAX_SHIFT_CELLS });
+                }
+                if !axis_set {
+                    t.push_str(if direction == Direction::Vertical { "SVTCA[0]\n" } else { "SVTCA[1]\n" });
+                    axis_set = true;
+                }
+                let _ = writeln!(t, "PUSH {point} {ppm} {} {}\nCALL[ ]", s.amount.clamp(-64, 64), crate::tt_font::FN_POINT_DELTA);
+            }
+        }
+    }
+    if t.is_empty() {
+        return Ok(Vec::new());
+    }
+    Ok(fontcraft_ttasm::assemble(&t)?)
+}
+
+/// The shifts of `shifts` as the Instructor stores them: a vertical Delta at each size, one cell
+/// up or down by the sign of a shift of at least half a pixel. Horizontal shifts and smaller ones
+/// give none and are reported.
+pub fn shifts_as_deltas(shifts: &[PointShift], column: Option<&str>, warnings: &mut Vec<String>) -> Vec<TtInstruction> {
+    if shifts.is_empty() {
+        return Vec::new();
+    }
+    let Some(column) = column else {
+        warnings.push("control instructions: the corrections have no Delta column here and were left out".into());
+        return Vec::new();
+    };
+    let mut per_node: BTreeMap<NodeRef, BTreeMap<u16, DeltaDir>> = BTreeMap::new();
+    let mut dropped = false;
+    for s in shifts {
+        if s.direction != Direction::Vertical || s.amount.abs() < 32 {
+            dropped = true;
+            continue;
+        }
+        let dir = if s.amount > 0 { DeltaDir::Up } else { DeltaDir::Down };
+        let cells = per_node.entry(s.node).or_default();
+        for p in &s.ppems {
+            cells.insert(*p, dir);
+        }
+    }
+    if dropped {
+        warnings.push("control instructions: horizontal shifts and shifts under half a pixel are written only by an autohinted export, not stored as Delta instructions".into());
+    }
+    delta_instructions(per_node, column)
 }
 
 #[cfg(test)]
@@ -866,5 +1223,125 @@ mod tests {
             assert!(TtAutohintOptions::parse(bad).is_err(), "{bad}");
         }
         assert!(TtAutohintOptions::parse(&"-W ".repeat(5_000)).is_err());
+    }
+
+    /// A slab 0 to 100 high and a wedge whose lowest point (point 5) hangs at 160, outside every
+    /// zone of a new font's master, with a horizontal TT stem of 100.
+    fn slab_and_wedge() -> (Font, HintSettings) {
+        use fontcraft_model::{Node, NodeKind, Path};
+        let mut font = Font::new("Edges");
+        let n = |x, y| Node::new(x, y, NodeKind::Line);
+        font.glyph_mut("x").unwrap().layer_mut("m01").unwrap().shapes = vec![
+            Shape::Path(Path::rect(0.0, 0.0, 260.0, 100.0)),
+            Shape::Path(Path::new(true, vec![n(250.0, 400.0), n(300.0, 160.0), n(350.0, 400.0)])),
+        ];
+        let mut settings = HintSettings::for_master(&font, "m01").unwrap();
+        settings.tt_stems.push(crate::TtStem { name: "bar".into(), horizontal: true, size: 100.0, ..Default::default() });
+        (font, settings)
+    }
+
+    fn hints_for(font: &Font, settings: &HintSettings, control: &str) -> AutoHints {
+        let control = crate::control::parse(control).unwrap();
+        let options = TtAutohintOptions::default();
+        let layer = font.glyph("x").unwrap().layer("m01").unwrap();
+        let input = AutoGlyph {
+            glyph: "x",
+            layer,
+            settings,
+            zones: None,
+            stems: None,
+            options: &options,
+            control: &control,
+            points: None,
+            delta_column: Some("m01"),
+        };
+        autohint_glyph(&input).unwrap()
+    }
+
+    fn on(list: &[TtInstruction], node: NodeRef) -> Vec<&TtInstruction> {
+        list.iter().filter(|t| t.target == TtPoint::Node(node)).collect()
+    }
+
+    #[test]
+    fn left_and_right_points_become_edges_whose_offsets_reach_a_neighbouring_segment() {
+        let (font, settings) = slab_and_wedge();
+        let tip = NodeRef::new(1, 1);
+        assert!(on(&hints_for(&font, &settings, "").instructions, tip).is_empty(), "the tip is no extreme in a zone");
+
+        // A one-point segment over nothing: an edge rounded to the grid.
+        let h = hints_for(&font, &settings, "x left 5");
+        let t = on(&h.instructions, tip);
+        assert_eq!(t.len(), 1, "{:?}", h.instructions);
+        assert_eq!((&t[0].kind, t[0].direction), (&TtKind::Snap { zone: ZoneRef::NoZone }, Direction::Vertical));
+
+        // Offsets that reach over the slab's top make a stem with it.
+        let h = hints_for(&font, &settings, "x right 5 (-60, 0)");
+        let t = on(&h.instructions, tip);
+        assert_eq!(t.len(), 1, "{:?}", h.instructions);
+        assert!(matches!(t[0].kind, TtKind::Stem { .. }) && t[0].direction == Direction::Vertical, "{:?}", t[0]);
+        match t[0].origin {
+            Some(TtPoint::Node(r)) => assert!(r.path == 0 && matches!(r.node, 2 | 3), "the origin is on the slab's top: {r:?}"),
+            ref other => panic!("{other:?}"),
+        }
+
+        // `nodir` wins over a direction.
+        let h = hints_for(&font, &settings, "x left 5\nx nodir 5");
+        assert!(on(&h.instructions, tip).is_empty());
+    }
+
+    #[test]
+    fn point_shifts_and_x_shifts_run_after_iup_in_eighths_of_a_pixel() {
+        let (font, settings) = slab_and_wedge();
+        let tip = NodeRef::new(1, 1);
+        let h = hints_for(&font, &settings, "x point 5 xshift 0.3 yshift -0.5 @ 12; x touch 5 xshift -1 yshift 1 @ 9-10");
+        let shifts: Vec<(Direction, i32, &[u16])> = h.shifts.iter().map(|s| (s.direction, s.amount, s.ppems.as_slice())).collect();
+        assert_eq!(
+            shifts,
+            [(Direction::Horizontal, 16, &[12][..]), (Direction::Vertical, -32, &[12][..]), (Direction::Horizontal, -64, &[9, 10][..])]
+        );
+        assert!(h.shifts.iter().all(|s| s.node == tip));
+        // The touch y shift is a Delta before IUP.
+        assert!(on(&h.instructions, tip).iter().any(|t| matches!(t.kind, TtKind::Delta { .. })), "{:?}", h.instructions);
+
+        let points = crate::VecPointMap { paths: vec![(0..4).map(Some).collect(), (4..7).map(Some).collect()], count: 7 };
+        let program = shift_program(&h.shifts, &points).unwrap();
+        let text = fontcraft_ttasm::disassemble(&program).unwrap();
+        assert!(text.contains("SVTCA[0]") && text.contains("SVTCA[1]"), "{text}");
+
+        // Stored as Instructor instructions, only the vertical shift of half a pixel or more stays.
+        let mut warnings = Vec::new();
+        let deltas = shifts_as_deltas(&h.shifts, Some("m01"), &mut warnings);
+        assert_eq!(deltas.len(), 1);
+        assert!(matches!(&deltas[0].kind, TtKind::Delta { cells } if cells["m01"] == BTreeMap::from([(12u16, DeltaDir::Down)])));
+        assert_eq!(warnings.len(), 1);
+    }
+
+    #[test]
+    fn x_height_scaling_needs_an_x_height_zone_and_a_cvt_entry_for_its_top() {
+        let (font, settings) = slab_and_wedge();
+        let layout = crate::CvtLayout::new(&settings, &[]).unwrap();
+        let (cvt, prep) = autohint_prep(&TtAutohintOptions::default(), &settings, &layout).unwrap();
+        assert_eq!(cvt, [516], "the new font's x-height 500 with its overshoot of 16");
+        assert!(!prep.is_empty());
+        let mut flat = settings.clone();
+        flat.tt_zones.retain(|z| z.name != "xHeight");
+        let layout = crate::CvtLayout::new(&flat, &[]).unwrap();
+        let (cvt, _) = autohint_prep(&TtAutohintOptions::default(), &flat, &layout).unwrap();
+        assert!(cvt.is_empty());
+        let _ = font;
+    }
+
+    #[test]
+    fn zones_without_their_letters_are_left_out() {
+        let mut font = Font::new("Letters");
+        let mut settings = HintSettings::for_master(&font, "m01").unwrap();
+        let before = settings.tt_zones.len();
+        // A new font's letters have no outlines yet.
+        assert_eq!(drop_unmeasured_zones(&font, &mut settings), ["xHeight", "capHeight"]);
+        assert_eq!(settings.tt_zones.len(), before - 2);
+        font.glyph_mut("e").unwrap().layer_mut("m01").unwrap().shapes.push(Shape::Path(fontcraft_model::Path::rect(0.0, 0.0, 400.0, 500.0)));
+        let mut settings = HintSettings::for_master(&font, "m01").unwrap();
+        assert_eq!(drop_unmeasured_zones(&font, &mut settings), ["capHeight"]);
+        assert!(settings.tt_zones.iter().any(|z| z.name == "xHeight"));
     }
 }

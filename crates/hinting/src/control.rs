@@ -27,6 +27,8 @@ use crate::{HintingError, MAX_CONTROL_LINES, MAX_CONTROL_TEXT, MAX_DELTA_PPM};
 pub const MAX_CONTROL_POINTS: usize = 65_536;
 /// Highest point index an entry may name (the TrueType point limit).
 const MAX_POINT_INDEX: u32 = 65_535;
+/// Largest left or right offset, in font units (the range of a TrueType coordinate).
+const MAX_OFFSET: u32 = 32_767;
 /// Points and sizes all parsed lines hold together: an entry's numbers are copied once per glyph
 /// it names, so the text's size alone does not bound them.
 pub const MAX_CONTROL_NUMBERS: usize = 1 << 22;
@@ -34,17 +36,24 @@ pub const MAX_CONTROL_NUMBERS: usize = 1 << 22;
 /// What one line asks for.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ControlKind {
-    /// Points belong to a segment's left (or right) edge.
-    Left,
-    Right,
+    /// Each point is a one-point segment whose outline runs left (or right) from it, from the
+    /// point's x plus the left offset to its x plus the right offset (font units).
+    Left {
+        left_offset: i32,
+        right_offset: i32,
+    },
+    Right {
+        left_offset: i32,
+        right_offset: i32,
+    },
     /// Points are weak (no direction).
     NoDir,
-    /// Shift the points at the given sizes, after hinting.
+    /// Shift the points at the given sizes before IUP, which then leaves them where they are.
     Touch {
         x_shift: f64,
         y_shift: f64,
     },
-    /// Shift the points at the given sizes, before IUP.
+    /// Shift the points at the given sizes after IUP.
     Point {
         x_shift: f64,
         y_shift: f64,
@@ -226,20 +235,31 @@ fn parse_entry(text: &str, line: usize, out: &mut ControlInstructions, budget: &
     }
     let kind = match kind_word {
         "left" | "right" => {
-            // Optional (left offset, right offset): font units, read and checked only.
-            if let Some(open) = rest.first().filter(|w| *w == "(") {
-                let _ = open;
-                let inner: Vec<&String> = rest.iter().skip(1).take_while(|w| *w != ")").filter(|w| *w != ",").collect();
-                if inner.len() != 2 || inner.iter().any(|w| w.parse::<i32>().is_err()) || rest.iter().filter(|w| *w == ")").count() != 1 {
-                    return Err(err("the offsets must be `(left, right)` in whole font units".into()));
+            // Optional (left offset, right offset), whole font units.
+            let (mut left_offset, mut right_offset) = (0, 0);
+            if rest.first().is_some_and(|w| w == "(") {
+                let inner: Vec<i32> = rest
+                    .iter()
+                    .skip(1)
+                    .take_while(|w| *w != ")")
+                    .filter(|w| *w != ",")
+                    .map(|w| w.parse::<i32>().ok().filter(|v| v.unsigned_abs() <= MAX_OFFSET))
+                    .collect::<Option<_>>()
+                    .unwrap_or_default();
+                let [l, r] = inner.as_slice() else {
+                    return Err(err(format!("the offsets must be `(left, right)` in whole font units up to {MAX_OFFSET}")));
+                };
+                if rest.iter().filter(|w| *w == ")").count() != 1 {
+                    return Err(err(format!("the offsets must be `(left, right)` in whole font units up to {MAX_OFFSET}")));
                 }
                 if rest.last().is_some_and(|w| w != ")") {
                     return Err(err("text after the offsets".into()));
                 }
+                (left_offset, right_offset) = (*l, *r);
             } else if !rest.is_empty() {
                 return Err(err(format!("unexpected `{}`", rest.join(" "))));
             }
-            if kind_word == "left" { ControlKind::Left } else { ControlKind::Right }
+            if kind_word == "left" { ControlKind::Left { left_offset, right_offset } } else { ControlKind::Right { left_offset, right_offset } }
         }
         "nodir" => {
             if !rest.is_empty() {
@@ -331,7 +351,7 @@ mod tests {
         assert_eq!(kinds[0], ("a", &ControlKind::Touch { x_shift: 0.0, y_shift: 0.5 }, &[3, 4, 5][..], &[12, 14, 15][..]));
         assert_eq!(kinds[1].0, "b");
         assert_eq!((kinds[2].0, kinds[2].1), ("l", &ControlKind::NoDir));
-        assert_eq!((kinds[3].0, kinds[3].1, kinds[3].2), ("d", &ControlKind::Left, &[2, 4][..]));
+        assert_eq!((kinds[3].0, kinds[3].1, kinds[3].2), ("d", &ControlKind::Left { left_offset: -10, right_offset: 20 }, &[2, 4][..]));
         assert_eq!((kinds[4].1, kinds[4].3), (&ControlKind::Point { x_shift: -0.25, y_shift: 0.0 }, &[9][..]));
         assert_eq!(c.lines[4].line, 5);
         assert_eq!(c.ignored, vec![4]);
@@ -346,6 +366,7 @@ mod tests {
             ("a touch 1 @ 0", 1),
             ("a left", 1),
             ("a left 1 (5)", 1),
+            ("a right 1 (5, 40000)", 1),
             ("a nodir 1-4000000000", 1),
             ("a nodir 9-3", 1),
             ("touch 1 @ 12", 1),

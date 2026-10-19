@@ -216,6 +216,7 @@ pub fn tt_hinting(
             warnings.push(format!("Autohint is on, so the TrueType autohinter replaced the manual instructions of {}", names(&list)));
         }
         instructed = (0..order.len()).map(|gid| (gid, Vec::new())).collect();
+        fontcraft_hinting::drop_unmeasured_zones(source, &mut settings);
         if auto.options.windows_compatibility {
             // Zones at the heights Windows clips to, so extremes there land on a pixel row.
             let (ascent, descent) = win_metrics;
@@ -285,11 +286,12 @@ pub fn tt_hinting(
     let mut programs = programs;
     if let Some(auto) = &auto {
         match fontcraft_hinting::autohint_prep(&auto.options, &settings, &programs.layout) {
-            Ok(extra) => {
+            Ok((cvt, extra)) => {
                 match analyse(&extra, &functions) {
                     Ok(l) => programs.limits.merge(&l),
                     Err(_) => programs.limits.uncertain = true,
                 }
+                programs.cvt.extend(cvt);
                 programs.prep.extend(extra);
             }
             Err(e) => warnings.push(format!("the TTFAutohint options cannot be applied to `prep` ({e}); they were left out")),
@@ -320,6 +322,7 @@ pub fn tt_hinting(
         let zones = settings.tt_zones_for(source, &g.name);
         let stems = settings.tt_stems_for(source, &g.name);
         let autohinted;
+        let mut after_iup = Vec::new();
         let instructions: &[fontcraft_hinting::TtInstruction] = match &auto {
             Some(auto) => {
                 let Some(e) = exported(built, &[], prepared, options.remove_overlap && !variable) else { continue };
@@ -339,13 +342,14 @@ pub fn tt_hinting(
                     Ok(h) => {
                         warnings.extend(h.warnings);
                         autohinted = h.instructions;
+                        after_iup = h.shifts;
                     }
                     Err(err) => {
                         warnings.push(format!("glyph `{}`: the TrueType autohinter failed ({err}); it was exported without instructions", g.name));
                         continue;
                     }
                 }
-                if autohinted.is_empty() {
+                if autohinted.is_empty() && after_iup.is_empty() {
                     continue;
                 }
                 &autohinted
@@ -372,12 +376,29 @@ pub fn tt_hinting(
         match glyph_program(&cx) {
             Ok(p) => {
                 warnings.extend(p.warnings.iter().map(|w| format!("glyph {w}")));
-                if p.bytes.is_empty() {
+                let mut bytes = p.bytes;
+                // The control instructions' corrections after IUP.
+                match fontcraft_hinting::shift_program(&after_iup, &e.map) {
+                    Ok(extra) if extra.is_empty() => {}
+                    Ok(extra) if bytes.len().saturating_add(extra.len()) <= fontcraft_ttasm::MAX_GLYPH_PROGRAM_BYTES => {
+                        match analyse(&extra, &functions) {
+                            Ok(l) => limits.merge(&l),
+                            Err(_) => limits.uncertain = true,
+                        }
+                        bytes.extend(extra);
+                    }
+                    Ok(_) => {
+                        warnings.push(format!("glyph `{}`: its control-instruction shifts make its program too long; they were left out", g.name))
+                    }
+                    Err(err) => warnings.push(format!("glyph `{}`: its control-instruction shifts were left out ({err})", g.name)),
+                }
+                if bytes.is_empty() {
                     continue;
                 }
                 limits.merge(&p.limits);
+                limits.max_size_of_instructions = limits.max_size_of_instructions.max(u16::try_from(bytes.len()).unwrap_or(u16::MAX));
                 let mut glyph = e.glyph;
-                glyph.instructions = p.bytes;
+                glyph.instructions = bytes;
                 glyphs.push((*gid, glyph));
             }
             Err(err) => warnings

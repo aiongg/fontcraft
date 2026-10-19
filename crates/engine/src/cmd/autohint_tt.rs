@@ -165,8 +165,9 @@ fn hint_layers(p: &Params, font: &Font, glyphs: &[String], master: &str, setting
             delta_column: column.as_deref(),
         };
         match autohint_glyph(&input) {
-            Ok(h) => {
+            Ok(mut h) => {
                 out.warnings.extend(h.warnings);
+                h.instructions.extend(fontcraft_hinting::shifts_as_deltas(&h.shifts, column.as_deref(), &mut out.warnings));
                 // Checked on a copy, so a layer that cannot take them is skipped, not the run refused.
                 if let Err(e) = set_tt_instructions(&mut layer.clone(), &h.instructions) {
                     out.skipped.push(json!({"glyph": name, "reason": e.to_string()}));
