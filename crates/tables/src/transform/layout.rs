@@ -59,6 +59,7 @@ pub(super) fn scale_gpos(data: &[u8], s: Scaler) -> Result<Vec<u8>> {
     crate::layout_budget::check_gpos(data)?;
     let read = read_fonts::tables::gpos::Gpos::read(FontData::new(data)).map_err(|e| damaged("GPOS", e))?;
     let mut gpos: Gpos = read.to_owned_table();
+    crate::layout_budget::restore_empty_pair_records(&mut gpos)?;
     for lookup in gpos.lookup_list.lookups.iter_mut() {
         lookup_values(lookup, s)?;
     }

@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 
 use read_fonts::types::GlyphId16;
 use read_fonts::{FontData, FontRead};
-use write_fonts::tables::gpos::{Gpos, PositionLookup, SinglePos, ValueRecord};
+use write_fonts::tables::gpos::{Class1Record, Class2Record, Gpos, PairPos, PositionLookup, SinglePos, ValueRecord};
 use write_fonts::tables::layout::{CoverageTable, FeatureList, Lookup, LookupFlag, LookupList, ScriptList};
 
 use super::glyf::{self, Args, Component, Composite, Form, Glyph, Point, Shape, Simple};
@@ -186,6 +186,27 @@ fn units_per_em_scales_gpos_values() {
     let read_fonts::tables::gpos::PositionLookup::Single(single) = lookup else { panic!("a single adjustment lookup") };
     let read_fonts::tables::gpos::SinglePos::Format1(t) = single.subtables().get(0).unwrap() else { panic!("format 1") };
     assert_eq!(t.value_record().x_advance(), Some(-102));
+}
+
+#[test]
+fn units_per_em_keeps_a_class_pair_table_whose_value_formats_are_both_zero() {
+    // Records of value format 0 take no bytes, so the table read back has no class records.
+    let class1: write_fonts::tables::layout::ClassDef = [(GlyphId16::new(1), 1)].into_iter().collect();
+    let class2: write_fonts::tables::layout::ClassDef = [(GlyphId16::new(2), 1)].into_iter().collect();
+    let empty = || Class2Record::new(ValueRecord::new(), ValueRecord::new());
+    let records = (0..2).map(|_| Class1Record::new(vec![empty(), empty()])).collect();
+    let coverage: CoverageTable = [GlyphId16::new(1)].into_iter().collect();
+    let pair = PairPos::format_2(coverage, class1, class2, records);
+    let lookup = PositionLookup::Pair(Lookup::new(LookupFlag::empty(), vec![pair]));
+    let gpos = Gpos::new(ScriptList::default(), FeatureList::default(), LookupList::new(vec![lookup]));
+    let mut input = font();
+    input.insert(*b"GPOS", write_fonts::dump_table(&gpos).unwrap());
+    let out = transform(&input, &upem(2048)).unwrap();
+    let read = read_fonts::tables::gpos::Gpos::read(FontData::new(out.get(*b"GPOS").unwrap())).unwrap();
+    let lookup = read.lookup_list().unwrap().lookups().get(0).unwrap();
+    let read_fonts::tables::gpos::PositionLookup::Pair(l) = lookup else { panic!("a pair adjustment lookup") };
+    let read_fonts::tables::gpos::PairPos::Format2(t) = l.subtables().get(0).unwrap() else { panic!("format 2") };
+    assert_eq!((t.value_format1().bits(), t.value_format2().bits(), t.class1_count(), t.class2_count()), (0, 0, 2, 2));
 }
 
 /// A `gvar` with one axis where only glyph 1 (`A`) varies: one tuple over all of its eight

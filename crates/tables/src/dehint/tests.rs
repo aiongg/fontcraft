@@ -161,7 +161,7 @@ fn font_wide_cff_budgets_refuse_before_the_table_is_built() {
     let e = cff::dehint_within(&table, false, &options, 5_000, 1 << 20).unwrap_err();
     assert!(e.to_string().contains("operators all glyphs run"), "{e}");
     let e = cff::dehint_within(&table, false, &options, 1 << 20, 4_000).unwrap_err();
-    assert!(e.to_string().contains("charstrings without subroutines"), "{e}");
+    assert!(e.to_string().contains("memory the charstrings of one table take"), "{e}");
 }
 
 #[test]
@@ -175,7 +175,7 @@ fn nested_subroutine_expansion_counts_against_the_charstring_memory() {
 
     let started = std::time::Instant::now();
     let e = cff::dehint_within(&table, false, &options, 1 << 20, 8_000).unwrap_err();
-    assert!(e.to_string().contains("charstrings without subroutines"), "{e}");
+    assert!(e.to_string().contains("memory the charstrings of one table take"), "{e}");
     assert!(started.elapsed() < std::time::Duration::from_secs(1), "refused while the glyph is written");
 }
 

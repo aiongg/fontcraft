@@ -10,7 +10,7 @@
 //! pyftsubset deletes.
 
 use super::DehintOptions;
-use crate::limits::{MAX_CFF_STACK, MAX_CFF2_STACK, MAX_CHARSTRING, MAX_SFNT, MAX_SUBR_NESTING};
+use crate::limits::{CharstringMemory, MAX_CFF_STACK, MAX_CFF2_STACK, MAX_CHARSTRING, MAX_CHARSTRING_MEMORY, MAX_SFNT, MAX_SUBR_NESTING};
 use crate::{Result, TablesError};
 
 /// Most operators one glyph may run, subroutine calls followed.
@@ -23,10 +23,6 @@ const MAX_DICT_ENTRIES: usize = 4_096;
 const MAX_FONT_DICTS: usize = 256;
 /// Most glyphs (CharStrings INDEX entries).
 const MAX_GLYPHS: usize = 65_535;
-/// Most bytes the charstrings written without subroutines may hold together, each glyph's
-/// buffer included. Subroutine calls make a short program expand, so every operator written
-/// counts as it is written. The 32-bit value leaves room in a wasm32 address space.
-const MAX_CHARSTRING_MEMORY: usize = if usize::BITS >= 64 { 1 << 30 } else { 256 << 20 };
 
 // DICT operators: one byte, or 1200 + the byte after the escape 12.
 const OP_CHARSET: u16 = 15;
@@ -59,13 +55,13 @@ pub(super) fn dehint_within(data: &[u8], cff2: bool, options: &DehintOptions, ma
     let mut charstrings = Vec::with_capacity(table.charstrings.len());
     let mut glyphs_changed = 0usize;
     let mut ops = 0usize;
-    let mut memory_left = max_bytes;
+    let mut memory = CharstringMemory::new(max_bytes);
     for (gid, code) in table.charstrings.iter().enumerate() {
         let fd = table.fd_select.as_ref().and_then(|s| s.get(gid).copied()).unwrap_or(0);
         let private =
             table.privates.get(usize::from(fd)).ok_or_else(|| invalid(format!("glyph {gid} names Font DICT {fd}, which does not exist")))?;
-        memory_left = memory_left.checked_sub(std::mem::size_of::<Vec<u8>>()).ok_or_else(|| too_much_output(max_bytes))?;
-        let mut flat = Flat::new(&table, private, options.selected(gid), options.keep_flex, memory_left, max_bytes);
+        memory.charge(std::mem::size_of::<Vec<u8>>())?;
+        let mut flat = Flat::new(&table, private, options.selected(gid), options.keep_flex, memory);
         flat.run(code, 0).map_err(|e| in_glyph(e, gid))?;
         flat.finish().map_err(|e| in_glyph(e, gid))?;
         if flat.removed {
@@ -75,7 +71,7 @@ pub(super) fn dehint_within(data: &[u8], cff2: bool, options: &DehintOptions, ma
         if ops > max_ops {
             return Err(TablesError::TooLarge { what: "the operators all glyphs run", limit: max_ops });
         }
-        memory_left = flat.memory_left;
+        memory = flat.memory;
         charstrings.push(flat.out);
     }
     let private_changed = strip_private && table.privates.iter().any(|p| p.entries.iter().any(|e| PRIVATE_HINT_OPS.contains(&e.op)));
@@ -93,10 +89,6 @@ pub(super) fn dehint_within(data: &[u8], cff2: bool, options: &DehintOptions, ma
         .collect::<Result<_>>()?;
     let bytes = table.write(&charstrings, &privates)?;
     Ok(Some((bytes, glyphs_changed)))
-}
-
-fn too_much_output(limit: usize) -> TablesError {
-    TablesError::TooLarge { what: "the charstrings without subroutines", limit }
 }
 
 fn invalid(what: impl Into<String>) -> TablesError {
@@ -752,10 +744,9 @@ struct Flat<'t> {
     /// CFF: the width of a removed first stem or mask, written before the next operator.
     width: Option<Tok>,
     out: Vec<u8>,
-    /// Bytes the table's written charstrings may still take, this one's included.
-    memory_left: usize,
-    /// The table-wide byte budget, for the refusal.
-    memory_limit: usize,
+    /// Bytes the table's written charstrings may still take, this one's included. Subroutine
+    /// calls make a short program expand, so every operator counts as it is written.
+    memory: CharstringMemory,
     ops: usize,
     /// Something was removed: a stem, a mask, `dotsection` or flex.
     removed: bool,
@@ -768,7 +759,7 @@ enum Flow {
 }
 
 impl<'t> Flat<'t> {
-    fn new(table: &'t Table<'t>, private: &'t Private<'t>, strip: bool, keep_flex: bool, memory_left: usize, memory_limit: usize) -> Self {
+    fn new(table: &'t Table<'t>, private: &'t Private<'t>, strip: bool, keep_flex: bool, memory: CharstringMemory) -> Self {
         Flat {
             cff2: table.cff2,
             strip,
@@ -783,8 +774,7 @@ impl<'t> Flat<'t> {
             width_settled: false,
             width: None,
             out: Vec::new(),
-            memory_left,
-            memory_limit,
+            memory,
             ops: 0,
             removed: false,
             ended: false,
@@ -896,7 +886,7 @@ impl<'t> Flat<'t> {
         self.depth = 0;
         self.out.extend_from_slice(op);
         let written = self.out.len().saturating_sub(before);
-        self.memory_left = self.memory_left.checked_sub(written).ok_or_else(|| too_much_output(self.memory_limit))?;
+        self.memory.charge(written)?;
         if self.out.len() > MAX_CHARSTRING {
             return Err(TablesError::TooLarge { what: "a charstring without subroutines", limit: MAX_CHARSTRING });
         }

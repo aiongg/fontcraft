@@ -83,6 +83,7 @@ pub fn recompile_layout(font: &SfntFont) -> Result<(SfntFont, Vec<usize>)> {
     crate::layout_budget::check_gpos(data)?;
     let read = read_fonts::tables::gpos::Gpos::read(FontData::new(data)).map_err(|e| TablesError::invalid(format!("the GPOS table: {e}")))?;
     let mut gpos: Gpos = read.to_owned_table();
+    crate::layout_budget::restore_empty_pair_records(&mut gpos)?;
     let mut converted = Vec::new();
     for (i, lookup) in gpos.lookup_list.lookups.iter_mut().enumerate() {
         let new = match &**lookup {

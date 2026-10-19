@@ -77,6 +77,7 @@ pub(super) fn instantiate_layout(font: &mut SfntFont, coords: &[f64]) -> Result<
         let has_variations = read.feature_variations_offset().is_some_and(|o| !o.is_null());
         if deltas.is_some() || has_variations {
             let mut gpos: Gpos = read.to_owned_table();
+            crate::layout_budget::restore_empty_pair_records(&mut gpos)?;
             if let Some(deltas) = &deltas {
                 apply_gpos(&mut gpos, Fold { deltas, keep_devices: false });
             }

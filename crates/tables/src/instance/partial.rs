@@ -1188,6 +1188,7 @@ fn partial_layout(out: &mut SfntFont, limits: &Limits, budget: &mut usize) -> Re
         if fold.is_some() || has_variations {
             crate::layout_budget::check_gpos(data)?;
             let mut gpos: Gpos = read.to_owned_table();
+            crate::layout_budget::restore_empty_pair_records(&mut gpos)?;
             if let Some((deltas, keep)) = &fold {
                 otl::apply_gpos(&mut gpos, Fold { deltas, keep_devices: *keep });
             }

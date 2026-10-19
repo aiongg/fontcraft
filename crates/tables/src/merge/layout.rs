@@ -151,7 +151,8 @@ pub(super) fn merge(
         }
         if let (Some(bytes), Some(order)) = (table(font, GPOS, skip), order) {
             let moved = remap::gpos(bytes, order)?;
-            let table: Gpos = read_fonts::tables::gpos::Gpos::read(FontData::new(&moved)).map_err(|e| read_err(GPOS, e))?.to_owned_table();
+            let mut table: Gpos = read_fonts::tables::gpos::Gpos::read(FontData::new(&moved)).map_err(|e| read_err(GPOS, e))?.to_owned_table();
+            crate::layout_budget::restore_empty_pair_records(&mut table)?;
             gpos_parts.push((
                 i,
                 Part {
