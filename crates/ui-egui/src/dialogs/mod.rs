@@ -46,6 +46,7 @@ mod add_glyphs_existing;
 mod add_other_font;
 mod add_pixel_glyph;
 pub mod attach_picker;
+pub mod audit_profile;
 mod axis_location;
 pub mod axis_mappings;
 pub mod baselines;

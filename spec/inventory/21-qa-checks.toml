@@ -3991,13 +3991,34 @@ label = "Font Audit"
 menu = ["Window"]
 shortcut = ""
 kind = "ui"
-params = "{visible?: bool}"
+params = "{visible?: bool, profile?: id | null, target?: 'font'|'selectedGlyphs'|'currentGlyph'|'export'|'family'}"
 area = "qa"
 milestone = "M12"
-summary = "Shows or hides the Font Audit panel."
+summary = "Shows or hides the Font Audit panel, and sets the profile and target its Run button uses."
 ref = "Our design"
 status = "inferred"
-guesses = ["The Font Audit panel opens from the Window menu with no shortcut, because the reference app has no audit panel; a later decision on shortcuts would settle it (21-qa.md question 1)."]
+notes = "Built in M12.64 (crates/ui-egui/src/shell/font_audit.rs). Without `visible` the call toggles the panel. The profile and target pop-ups of the panel run this command."
+guesses = [
+  "The Font Audit panel opens from the Window menu with no shortcut, because the reference app has no audit panel; a later decision on shortcuts would settle it (21-qa.md question 1).",
+  "The panel opens on the target This Font with the document's default profile; nothing in the reference app settles it.",
+]
+
+[[command]]
+id = "audit.panel.run"
+label = "Run Font Audit"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{profile?: id | null, target?: 'font'|'selectedGlyphs'|'currentGlyph'|'export'|'family', again?: bool}"
+area = "qa"
+milestone = "M12"
+summary = "Runs audit.run with the Font Audit panel's profile and target, ignored results included, and lists its result document in the panel."
+ref = "Our design"
+status = "inferred"
+notes = "Built in M12.64. Selected Glyphs audits the glyphs of the Edit View tab, else the Font View selection; Export of This Font runs the binary and family checks on the compiled instances; Family of Open Fonts audits the saved files of every open document (two or more), whose results the engine does not keep, so Fix and Ignore are off for them. `again` repeats the last run's parameters: the panel runs it after Fix, Ignore and Stop Ignoring, and before them when live audit or an agent replaced the run the engine keeps (an unchanged font gives the same result ids). Progress and cancelling a run are not built: audit.run runs to the end in one call."
+guesses = [
+  "Family of Open Fonts reads the saved files, not unsaved edits; an engine target for several open documents would settle it.",
+]
 
 [[command]]
 id = "audit.revealIssue"
@@ -4011,6 +4032,14 @@ milestone = "M12"
 summary = "Opens the glyph of a result in Edit View on the right master, selects the nodes, contours, components or anchors the result points at and zooms to them; for font-level results opens the matching Font Info field."
 ref = "Our design"
 status = "inferred"
+notes = "Built in M12.64. The result id comes from the Font Audit panel's last run, else from the document's last audit.run. A glyph result uses the tab already editing the glyph, else the tab holding exactly it, else a new tab, then selects the result's layer; the zoom shows the reported area at least 200 units wide. A result with a sourceField opens Font Info on the tab of the field (font, masters or exports), not on the field itself. A family result makes the first open document among its fonts active. A compiled-table result without a sourceField reveals nothing and says why. The closest thing in the reference app is the Show button of the export results dialog, which opens the glyph in a new tab (handbook, Glyph Naming Rules); documented but not yet observed."
+guesses = [
+  "Reveal reuses a tab that already edits the glyph instead of always opening a new one as the export results dialog's Show button does, so stepping through results does not pile up tabs; watching Show in the reference app with a tab already open settles how it treats an open tab.",
+  "Font Info opens on the tab that holds the field without focusing the field; a Font Info command that focuses a field would settle it.",
+]
+observe = [
+  "Export a font that has a glyph named with a space; in the export results dialog press Show while a tab already shows that glyph, and note whether a second tab opens.",
+]
 
 [[command]]
 id = "audit.nextIssue"
@@ -4024,6 +4053,7 @@ milestone = "M12"
 summary = "Reveals the next result after the current one, within the current glyph or across the font, wrapping at the end."
 ref = "Our design"
 status = "inferred"
+notes = "Built in M12.64. Steps through the results the Font Audit panel lists, in list order, so its filters and grouping apply; the scope defaults to the whole font. Refused when nothing is listed."
 guesses = ["No menu item and no shortcut: the panel's arrow buttons and the Edit View marker badges run it, because the reference app has no audit panel (21-qa.md question 1)."]
 
 [[command]]
@@ -4038,6 +4068,7 @@ milestone = "M12"
 summary = "Reveals the result before the current one, within the current glyph or across the font, wrapping at the start."
 ref = "Our design"
 status = "inferred"
+notes = "Built in M12.64. Steps through the results the Font Audit panel lists, in list order, so its filters and grouping apply; the scope defaults to the whole font. Refused when nothing is listed."
 guesses = ["No menu item and no shortcut: the panel's arrow buttons and the Edit View marker badges run it, because the reference app has no audit panel (21-qa.md question 1)."]
 
 [[command]]
@@ -4080,12 +4111,44 @@ label = "Filter Audit Results"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{minSeverity?: 'info'|'warn'|'fail', groups?: [group], text?: string, fixableOnly?: bool, currentGlyphOnly?: bool, groupBy?: 'check'|'glyph'|'severity'}"
+params = "{minSeverity?: 'info'|'warn'|'fail', groups?: [group], text?: string, fixableOnly?: bool, currentGlyphOnly?: bool, showIgnored?: bool, groupBy?: 'check'|'glyph'|'severity'}"
 area = "qa"
 milestone = "M12"
 summary = "Sets which results the Font Audit panel lists and how it groups them. Does not change the stored results."
 ref = "Our design"
 status = "inferred"
+notes = "Built in M12.64. Keys left out keep their value; an unknown severity, group or grouping is refused and nothing changes. The search text is matched, ignoring case, against the check id, the glyph, the table and the message. Groups are listed in the order their first result comes; grouped by severity, failures come first."
+guesses = [
+  "The severity filter is three choices (all, warnings and failures, failures) rather than a toggle per severity, because the command takes a minimum severity; a later design review would settle it.",
+]
+
+[[command]]
+id = "audit.editProfile"
+label = "Edit Audit Profile"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{profile?: id, duplicate?: bool}"
+area = "qa"
+milestone = "M12"
+summary = "Opens the Audit Profile dialog on a built-in, user or project profile, or on an editable copy of it."
+ref = "Our design"
+status = "inferred"
+notes = "Built in M12.64. Without `profile` the dialog opens on the Font Audit panel's profile, else on the effective default profile. Run from the gear menu of the panel."
+
+[[command]]
+id = "audit.closeProfileDialog"
+label = "Close Audit Profile"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{action?: 'cancel'|'save'|'delete'}"
+area = "qa"
+milestone = "M12"
+summary = "Closes the Audit Profile dialog, saving the draft with audit.profile.save or deleting the profile with audit.profile.delete first when asked."
+ref = "Our design"
+status = "inferred"
+notes = "Built in M12.64. A save with changed project values runs audit.config.set and audit.profile.save as one command.batch. A refused save or delete keeps the dialog open and changes nothing; a built-in profile cannot be saved."
 
 # ---------------------------------------------------------------------------
 # Panels
@@ -4113,6 +4176,12 @@ milestone = "M12"
 summary = "Runs audits and lists their results. Selecting a row reveals the issue; fixes and ignores apply to the selected rows. Every control dispatches an audit.* command, so the panel holds no logic of its own."
 ref = "Our design; cf. fontbakery HTML report, fontTools varLib.interpolatable report"
 status = "inferred"
+notes = "Built in M12.64 (crates/ui-egui/src/shell/font_audit.rs). Click selects a row, Cmd-click adds or removes one, Shift-click selects a range; double-click or Return reveals the current row. The detail area shows the check's description, the location, the result's data and the fix's description with whether it is safe; a computed fix preview (audit.fix dryRun) is not built. Fix, Fix All Safe, Ignore and Stop Ignoring run their engine command and then run the audit again. The profile pop-up lists the built-in and the user's profiles; the document's project profiles are listed once audit.profile.list returns them. The gear menu has Edit Profiles and Thresholds, Clear Cache and Live Audit; Export Report is not built (it needs a save-file chooser), audit.export does it from the command line and the control channel. Progress and cancel are not built."
+guesses = [
+  "Fix runs the selected rows' fixes with safeOnly false, since the person chose them, while Fix All Safe keeps safeOnly true; watching how people use the panel would settle it.",
+  "Ignoring several rows at once is one undo step (a command.batch); nothing settles it.",
+  "The panel sits at the top right of the window and lists sixteen rows before it scrolls; a layout review would settle it.",
+]
 
 [[panel]]
 id = "dialog.auditProfile"
@@ -4131,6 +4200,11 @@ milestone = "M12"
 summary = "Edits a user or project audit profile: which checks run, with which severity and thresholds. Built-in profiles open read-only and can be duplicated."
 ref = "Our design; cf. fontbakery profile and configuration file"
 status = "inferred"
+notes = "Built in M12.64 (crates/ui-egui/src/dialogs/audit_profile.rs), opened by audit.editProfile and closed by audit.closeProfileDialog. It is modal and changes nothing until Save. A check's box adds it to checks or exclude, or takes it out of the list that turned it on or off; the severity pop-up sets an override for every message of the check (overrides of single message codes are kept as read). Threshold fields show the selected check's thresholds with their defaults. Project values are the open document's (audit.config.set), saved with the profile as one command.batch. The id of a saved profile and its storage cannot change in the dialog; Duplicate makes a copy under a new id."
+guesses = [
+  "A built-in profile opens as a read-only draft that includes it, and Duplicate turns that into a user profile `<id>-copy` that includes the built-in one instead of listing its checks; nothing settles it.",
+  "Project values are edited in the profile dialog although they belong to the document, not to the profile, because the inventory row lists them there; a design review would settle it.",
+]
 
 # ---------------------------------------------------------------------------
 # Behaviours
