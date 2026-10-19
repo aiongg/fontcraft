@@ -121,9 +121,11 @@ fn print_usage() -> io::Outcome {
     for sub in rest().filter(|s| !sub::PLANNED.contains(&s.name)) {
         out(&format!("  {:<12} {}", sub.name, sub.summary))?;
     }
-    out("\nPLANNED (each prints its usage with --help; not built yet):")?;
-    for sub in rest().filter(|s| sub::PLANNED.contains(&s.name)) {
-        out(&format!("  {:<12} {}", sub.name, sub.summary))?;
+    if rest().any(|s| sub::PLANNED.contains(&s.name)) {
+        out("\nPLANNED (each prints its usage with --help; not built yet):")?;
+        for sub in rest().filter(|s| sub::PLANNED.contains(&s.name)) {
+            out(&format!("  {:<12} {}", sub.name, sub.summary))?;
+        }
     }
     Ok(())
 }

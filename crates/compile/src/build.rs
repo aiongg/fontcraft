@@ -348,8 +348,33 @@ fn postscript(input: &CffInput, builder: &mut FontBuilder, warnings: &mut Vec<St
     };
     let maxp =
         Maxp { num_glyphs: u16::try_from(input.order.len()).map_err(|_| CompileError::TooManyGlyphs(input.order.len()))?, ..Default::default() };
-    builder.add_raw(Tag::new(b"CFF "), built.table);
+    let table = if input.subroutinize { subroutinized(built.table, warnings) } else { built.table };
+    builder.add_raw(Tag::new(b"CFF "), table);
     Ok((boxes, maxp))
+}
+
+/// The source's Disable Subroutines parameter is on.
+fn subroutines_disabled(font: &Resolved) -> bool {
+    font.params.get(DISABLE_SUBROUTINES).and_then(fontcraft_model::param_flag).unwrap_or(false)
+}
+
+/// The custom parameter that writes `CFF ` charstrings without subroutines.
+const DISABLE_SUBROUTINES: &str = "Disable Subroutines";
+
+/// `table` with its charstrings subroutinised ([`fontcraft_cff::subr::subroutinize_table`]),
+/// or `table` itself when that is not smaller. A table the subroutiniser refuses (too many
+/// tokens, a self-check that failed) is kept as it is, with a warning: the export never fails
+/// for want of subroutines.
+fn subroutinized(table: Vec<u8>, warnings: &mut Vec<String>) -> Vec<u8> {
+    use fontcraft_cff::subr::{SubrOptions, subroutinize_table};
+    match subroutinize_table(&table, false, &SubrOptions::default()) {
+        Ok(out) if out.len() < table.len() => out,
+        Ok(_) => table,
+        Err(e) => {
+            warnings.push(format!("the CFF table was written without subroutines: {e}"));
+            table
+        }
+    }
 }
 
 /// The `CFF2` table of a variable font, with the boxes and `maxp` (version 0.5) of its outlines
@@ -399,6 +424,8 @@ struct CffInput<'a> {
     names: &'a [String],
     synthesised_notdef: bool,
     hinting: &'a crate::HintingOptions,
+    /// Subroutinise the table ([`crate::Options::subroutinize`], resolved).
+    subroutinize: bool,
 }
 
 /// Builds every table and the font file. `synthesised_notdef`: glyph 0 is the compiler's own
@@ -472,7 +499,18 @@ pub fn assemble(
         Flavour::Cff => match &extra.cff2 {
             Some(built) => cff2_table(built, order.len(), &mut builder)?,
             None => {
-                let input = CffInput { source, font, info: &info, order, outlines, names: &names, synthesised_notdef, hinting: &options.hinting };
+                let subroutinize = options.subroutinize.unwrap_or_else(|| !subroutines_disabled(font));
+                let input = CffInput {
+                    source,
+                    font,
+                    info: &info,
+                    order,
+                    outlines,
+                    names: &names,
+                    synthesised_notdef,
+                    hinting: &options.hinting,
+                    subroutinize,
+                };
                 postscript(&input, &mut builder, warnings)?
             }
         },

@@ -74,7 +74,11 @@ fn job(font: &Font, p: &Params) -> Result<Job> {
 pub(super) fn build(s: &Session, p: &Params, flavour: Flavour) -> Result<Built> {
     let font = s.font()?;
     let job = job(font, p)?;
-    let options = Options { hinting: HintingOptions { autohint: p.bool_or("autohint", false)?, ..Default::default() }, ..Default::default() };
+    let options = Options {
+        hinting: HintingOptions { autohint: p.bool_or("autohint", false)?, ..Default::default() },
+        subroutinize: Some(false),
+        ..Default::default()
+    };
     let req = Request {
         flavours: vec![flavour],
         containers: vec![Container::Plain],

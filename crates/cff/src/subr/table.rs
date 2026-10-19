@@ -7,6 +7,9 @@
 
 use super::{CFF_STACK, CFF2_DEFAULT_STACK, CharstringSet, MAX_FONT_DICTS, MAX_GLYPHS, MAX_STACK_LIMIT, SubrError, SubrOptions};
 
+mod widths;
+pub use widths::{WidthsReport, optimize_widths_table};
+
 /// Most entries one DICT may hold.
 const MAX_DICT_ENTRIES: usize = 4_096;
 /// Largest table read or written.
