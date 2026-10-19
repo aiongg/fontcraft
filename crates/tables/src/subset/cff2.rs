@@ -46,11 +46,7 @@ pub(super) fn finish_cff(plan: &Plan, rebuilt: Vec<u8>) -> Result<Vec<u8>> {
 fn mode(plan: &Plan) -> SubrMode {
     // Without `hinting` the unused subroutines go first, as in the reference: a font without
     // hints keeps its used ones, and hint removal flattens the charstrings of one with hints.
-    if plan.options.desubroutinize {
-        SubrMode::Expand
-    } else {
-        SubrMode::Prune
-    }
+    if plan.options.desubroutinize { SubrMode::Expand } else { SubrMode::Prune }
 }
 
 /// `table` with its hints removed unless `hinting` is on.

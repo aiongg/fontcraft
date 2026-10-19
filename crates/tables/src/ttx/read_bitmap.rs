@@ -292,8 +292,11 @@ fn compile_glyph(e: &Element, format: i64, ctx: &ReadContext) -> Result<Vec<u8>>
     Ok(o.0)
 }
 
-/// The strikes of a data table: per strike, glyph name to its element and image format.
-fn read_data(e: &Element, color: bool) -> Result<(i64, Vec<HashMap<String, (i64, &Element)>>)> {
+/// One strike of a data table: glyph name to its image format and element.
+type StrikeData<'a> = HashMap<String, (i64, &'a Element)>;
+
+/// The version of a data table and its strikes.
+fn read_data(e: &Element, color: bool) -> Result<(i64, Vec<StrikeData<'_>>)> {
     let mut version = None;
     let mut strikes = Vec::new();
     for child in &e.children {
@@ -468,7 +471,7 @@ fn index_subtable(sub: &IndexSubTable, ids: &[u32], first: u32, last: u32, locs:
                 if sub.index_format == 1 { o.u32(v, "an image offset")? } else { o.u16(v, "an image offset")? }
             }
             let size = if sub.index_format == 1 { 4 } else { 2 };
-            if (size * offsets.len()) % 4 != 0 {
+            if !(size * offsets.len()).is_multiple_of(4) {
                 o.bytes(&vec![0; size]);
             }
         }

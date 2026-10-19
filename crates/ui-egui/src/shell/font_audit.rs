@@ -1758,7 +1758,7 @@ fn details(ui: &mut egui::Ui, f: &Frame, run: &Run) {
         "No automatic fix.".to_string()
     };
     ui.colored_label(t.text_dim, fix);
-    if let Some(p) = f.st.preview.as_ref().filter(|p| p.run_id == run.run_id && p.ids.iter().any(|i| *i == item.id)) {
+    if let Some(p) = f.st.preview.as_ref().filter(|p| p.run_id == run.run_id && p.ids.contains(&item.id)) {
         ui.label(RichText::new(format!("Fix preview ({} results)", p.ids.len())).strong());
         if p.planned.is_empty() {
             ui.colored_label(t.text_dim, "Nothing would change.");

@@ -246,6 +246,9 @@ fn subroutinize_table(table: &[u8], cff2: bool, o: &ConvertOptions) -> Result<Ve
 
 // ── CFF or CFF2 to TrueType ─────────────────────────────────────────────────────────────────────
 
+/// A glyph's encoded `glyf` data and its bounds.
+type EncodedGlyph = (Vec<u8>, Option<[i16; 4]>);
+
 fn ps_to_truetype(font: &mut SfntFont, cff2: bool, max_error: f64, o: &ConvertOptions, left_behind: &mut Vec<String>) -> Result<()> {
     let upem = units_per_em(font)?;
     let n = num_glyphs(font)?;
@@ -295,7 +298,7 @@ fn ps_to_truetype(font: &mut SfntFont, cff2: bool, max_error: f64, o: &ConvertOp
         };
         planned.push(glyph);
     }
-    let mut encoded: Vec<Option<(Vec<u8>, Option<[i16; 4]>)>> = Vec::with_capacity(n);
+    let mut encoded: Vec<Option<EncodedGlyph>> = Vec::with_capacity(n);
     let mut sizes = vec![(0usize, 0usize); n];
     let (mut max_points, mut max_contours) = (0usize, 0usize);
     for (gid, glyph) in planned.iter().enumerate() {

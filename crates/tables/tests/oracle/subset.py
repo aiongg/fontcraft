@@ -6,11 +6,11 @@ Usage (fontTools' Python, isolated mode):
 For each font and each of four selections it runs both subsetters with the same options,
 then compares the old-to-new glyph index map and the TTX dump of every core table
 (`cmap`, `glyf`, `CFF `, `hmtx`, `vmtx`, `post`, `name`, `OS/2`, `maxp`, `head`, `hhea`,
-`vhea`, `gasp`, `cvt `, `fpgm`, `prep`, `VDMX`). The tables FontCraft does not subset yet
-(layout, variation, colour and the other glyph-indexed tables) are dropped on both sides, so
-the comparison covers the core subsetter only. Before dumping, CFF subroutines are inlined on
-both sides (FontCraft keeps the subroutine INDEXes, pyftsubset prunes them), and
-`head.checkSumAdjustment` and `head.indexToLocFormat` are ignored.
+`vhea`, `gasp`, `cvt `, `fpgm`, `prep`, `VDMX`). The other tables (layout, variation, colour
+and the other glyph-indexed tables) are dropped on both sides, so the comparison covers the
+core subsetter only. Before dumping, CFF subroutines are inlined on both sides, so the order
+and numbering of the subroutines left do not count, and `head.checkSumAdjustment` and
+`head.indexToLocFormat` are ignored.
 
 Prints one summary line per selection and writes every difference to OUT_DIR/report.json.
 """

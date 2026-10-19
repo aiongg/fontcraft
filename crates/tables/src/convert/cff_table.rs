@@ -579,10 +579,8 @@ fn run(ops: &[Op], pen: &mut Collect) -> Result<(i64, i64)> {
             (22, [x]) => t.move_by(*x, 0),
             (4, [y]) => t.move_by(0, *y),
             (5, _) if a.len() % 2 == 0 => {
-                for c in a.chunks_exact(2) {
-                    if let [x, y] = c {
-                        t.line_by(*x, *y);
-                    }
+                for [x, y] in a.as_chunks::<2>().0 {
+                    t.line_by(*x, *y);
                 }
             }
             (6 | 7, _) => {
@@ -606,10 +604,8 @@ fn run(ops: &[Op], pen: &mut Collect) -> Result<(i64, i64)> {
             }
             (25, _) if a.len() >= 6 && a.len() % 2 == 0 => {
                 let (l, c) = a.split_at(a.len() - 6);
-                for p in l.chunks_exact(2) {
-                    if let [x, y] = p {
-                        t.line_by(*x, *y);
-                    }
+                for [x, y] in l.as_chunks::<2>().0 {
+                    t.line_by(*x, *y);
                 }
                 curves(&mut t, c);
             }
@@ -619,13 +615,11 @@ fn run(ops: &[Op], pen: &mut Collect) -> Result<(i64, i64)> {
                     1 => (a.first().copied().unwrap_or(0), a.get(1..).unwrap_or(&[])),
                     _ => return Err(bad()),
                 };
-                for c in rest.chunks_exact(4) {
-                    if let [p, q, r, s] = c {
-                        if op.code == 26 {
-                            t.curve_by((first, *p), (*q, *r), (0, *s));
-                        } else {
-                            t.curve_by((*p, first), (*q, *r), (*s, 0));
-                        }
+                for [p, q, r, s] in rest.as_chunks::<4>().0 {
+                    if op.code == 26 {
+                        t.curve_by((first, *p), (*q, *r), (0, *s));
+                    } else {
+                        t.curve_by((*p, first), (*q, *r), (*s, 0));
                     }
                     first = 0;
                 }
@@ -677,10 +671,8 @@ fn run(ops: &[Op], pen: &mut Collect) -> Result<(i64, i64)> {
 
 /// `rrcurveto` operands: six per curve.
 fn curves(t: &mut Turtle<'_>, a: &[i64]) {
-    for c in a.chunks_exact(6) {
-        if let [a1, b1, a2, b2, a3, b3] = c {
-            t.curve_by((*a1, *b1), (*a2, *b2), (*a3, *b3));
-        }
+    for [a1, b1, a2, b2, a3, b3] in a.as_chunks::<6>().0 {
+        t.curve_by((*a1, *b1), (*a2, *b2), (*a3, *b3));
     }
 }
 
