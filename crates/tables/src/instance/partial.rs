@@ -21,13 +21,17 @@
 //!    they used go.
 //! 6. `OS/2.xAvgCharWidth`, `usWeightClass`, `usWidthClass` and `post.italicAngle` follow the
 //!    new defaults; bounds and `maxp` are recomputed when `glyf` was rewritten.
+//! 7. `CFF2` (see `cff2.rs`): the blends of each variation-store subtable are rebased as the
+//!    items of one item variation store subtable; `HVAR` and `VVAR` move the advances of a font
+//!    without `glyf` by their default parts. `BASE` coordinates take theirs, keeping their
+//!    devices while its store has regions. With `update_names`, the style names come from the
+//!    `STAT` axis values at the new default location (see `names.rs`).
 //!
 //! The item variation stores keep their subtables and item counts, so every variation index
 //! stays valid; fontTools reorders and packs them afterwards, which changes no value.
 //!
-//! Refused: `CFF2` outlines, `VARC`, `avar` version 2, a `BASE` or `COLR` table with variation
-//! data, feature-variation conditions other than axis ranges, an `avar` map that is not valid,
-//! names from `STAT` (`update_names`).
+//! Refused: `VARC`, `avar` version 2, a `COLR` table with variation data, feature-variation
+//! conditions other than axis ranges, an `avar` map that is not valid.
 
 use std::collections::{HashMap, HashSet};
 
@@ -61,7 +65,7 @@ use super::ivs::StoreDeltas;
 use super::otl::{self, Fold};
 use super::solver::{AxisRange, Tent, rebase_tent};
 use super::static_tables as st;
-use super::{AxisLimit, InstanceOptions, full, ot_round, quantize};
+use super::{AxisLimit, InstanceOptions, base, cff2, full, names, ot_round, quantize};
 use crate::limits::{MAX_SFNT, MAX_TUPLE_VARIATIONS};
 use crate::sfnt::{SfntFont, Tag, tag_str};
 use crate::variations::{self, FvarAxis};
@@ -98,14 +102,8 @@ pub fn partial_instance_with(font: &SfntFont, options: &InstanceOptions) -> Resu
     if font.get(*b"gvar").is_some() && font.get(*b"glyf").is_none() {
         return Err(bad("the font has a gvar table but no glyf table"));
     }
-    if font.get(*b"CFF2").is_some() {
-        return Err(TablesError::Unsupported("instancing CFF2 outlines".into()));
-    }
     if font.get(*b"VARC").is_some() {
         return Err(TablesError::Unsupported("instancing a VARC table".into()));
-    }
-    if options.update_names {
-        return Err(TablesError::Unsupported("naming an instance from its STAT axis values".into()));
     }
     let limits = resolve_limits(font, &options.limits)?;
     if limits.new_count() == 0 {
@@ -113,12 +111,13 @@ pub fn partial_instance_with(font: &SfntFont, options: &InstanceOptions) -> Resu
         return full::full_instance_with(font, &pinned, options);
     }
     refuse_unhandled(font)?;
-    if font.get(*b"glyf").is_none() && (font.get(*b"HVAR").is_some() || font.get(*b"VVAR").is_some()) {
-        return Err(TablesError::Unsupported("applying HVAR or VVAR to a font without glyf outlines".into()));
-    }
 
     let mut out = font.clone();
     out.remove(*b"DSIG");
+    if options.update_names {
+        let defaults: Vec<(Tag, f64)> = limits.axes.iter().zip(&limits.user).map(|(a, u)| (a.tag, u.map_or(a.default, |u| u.default))).collect();
+        names::update_name_table(&mut out, &defaults)?;
+    }
     let mut budget = MAX_REBASE_WORK;
     let names_before = st::variation_name_ids(&out);
     let glyph_count = out.get(*b"maxp").and_then(|m| st::u16_at(m, 4)).map(usize::from);
@@ -130,6 +129,8 @@ pub fn partial_instance_with(font: &SfntFont, options: &InstanceOptions) -> Resu
     let post_loaded = limits.limited_tag(*b"slnt") || out.get(*b"post").map(<[u8]>::to_vec) != post_before;
     partial_metrics_store(&mut out, *b"HVAR", &limits, &mut budget)?;
     partial_metrics_store(&mut out, *b"VVAR", &limits, &mut budget)?;
+    partial_cff2(&mut out, &limits, options, &mut budget)?;
+    partial_base(&mut out, &limits, &mut budget)?;
     partial_layout(&mut out, &limits, &mut budget)?;
 
     partial_avar(&mut out, &limits)?;
@@ -161,17 +162,14 @@ pub fn partial_instance_with(font: &SfntFont, options: &InstanceOptions) -> Resu
     if gvar_result.is_some() && options.recalc_bounds {
         crate::ttx::read_core::recalc_compiled_maxp(&mut out)?;
     }
+    if options.update_names {
+        names::set_ribbi_bits(&mut out)?;
+    }
     Ok(out)
 }
 
 /// Refuses tables whose variation data a partial instance would leave stale.
 fn refuse_unhandled(font: &SfntFont) -> Result<()> {
-    if let Some(data) = font.get(*b"BASE") {
-        let base = read_fonts::tables::base::Base::read(FontData::new(data)).map_err(|e| bad(format!("the BASE table cannot be read: {e}")))?;
-        if base.item_var_store_offset().is_some_and(|o| !o.is_null()) {
-            return Err(TablesError::Unsupported("instancing a BASE table that holds variation data".into()));
-        }
-    }
     if let Some(data) = font.get(*b"COLR")
         && st::u16_at(data, 0).is_some_and(|v| v >= 1)
         && data.get(30..34).is_some_and(|o| o.iter().any(|b| *b != 0))
@@ -1018,14 +1016,17 @@ fn partial_mvar(out: &mut SfntFont, limits: &Limits, budget: &mut usize) -> Resu
     Ok(())
 }
 
-/// `HVAR` or `VVAR` of a font with `glyf` outlines: the metrics already moved with the phantom
-/// points, so only the store is rebased.
+/// `HVAR` or `VVAR`: the store is rebased. In a font with `glyf` outlines the metrics already
+/// moved with the phantom points; in one without (CFF2), the default parts move the advances.
 fn partial_metrics_store(out: &mut SfntFont, tag: Tag, limits: &Limits, budget: &mut usize) -> Result<()> {
     let Some(data) = out.get(tag) else { return Ok(()) };
     let data = data.to_vec();
     let offset = st::u16_at(&data, 4).zip(st::u16_at(&data, 6)).map(|(h, l)| (usize::from(h) << 16) | usize::from(l));
     let offset = offset.ok_or_else(|| bad(format!("the {} table is truncated", tag_str(tag))))?;
     let rebased = rebase_store(&data, offset, limits, budget)?;
+    if out.get(*b"glyf").is_none() {
+        cff2::shift_advances(out, tag, &StoreDeltas::from_rows(rebased.defaults.clone()))?;
+    }
     let bytes = if tag == *b"HVAR" {
         let read = read_fonts::tables::hvar::Hvar::read(FontData::new(&data)).map_err(|e| bad(format!("the HVAR table cannot be read: {e}")))?;
         let mut t: Hvar = read.to_owned_table();
@@ -1040,6 +1041,85 @@ fn partial_metrics_store(out: &mut SfntFont, tag: Tag, limits: &Limits, budget: 
     let bytes = bytes.map_err(|e| bad(format!("the {} table could not be written again: {e}", tag_str(tag))))?;
     out.insert(tag, bytes);
     Ok(())
+}
+
+// ---------------------------------------------------------------------------------------------
+// CFF2 and BASE
+
+/// `CFF2`: the items of each variation-store subtable (the values its blends make) rebased as
+/// the items of one item variation store subtable. A subtable left without regions goes and its
+/// values stop varying; the store goes when none is left, and with `downgrade_cff2` the table
+/// becomes `CFF `, as fontTools does when nothing in the outlines varies any more.
+fn partial_cff2(out: &mut SfntFont, limits: &Limits, options: &InstanceOptions, budget: &mut usize) -> Result<()> {
+    let Some(data) = out.get(*b"CFF2") else { return Ok(()) };
+    let mut table = cff2::Table::read(data, limits.axes.len())?;
+    if table.datas.is_empty() {
+        return cff2::instance_full(out, &vec![0.0; limits.axes.len()], options.downgrade_cff2, options.recalc_bounds);
+    }
+    let n_items = table.items.len();
+    let mut by_major: Vec<Vec<usize>> = vec![Vec::new(); table.datas.len()];
+    for (i, it) in table.items.iter().enumerate() {
+        if let Some(v) = by_major.get_mut(it.major) {
+            v.push(i);
+        }
+    }
+    let mut add = vec![0.0; n_items];
+    let mut new_deltas: Vec<Vec<f64>> = vec![Vec::new(); n_items];
+    let mut majors: Vec<Option<usize>> = Vec::with_capacity(table.datas.len());
+    let mut kept_subtables: Vec<(usize, Vec<TupleVar>)> = Vec::new();
+    for (major, region_idx) in table.datas.iter().enumerate() {
+        let members = by_major.get(major).map(Vec::as_slice).unwrap_or_default();
+        let count = members.len();
+        charge(budget, count.saturating_mul(region_idx.len()).saturating_add(count).saturating_add(1))?;
+        let mut vars = Vec::with_capacity(region_idx.len());
+        for (j, r) in region_idx.iter().enumerate() {
+            let region = table
+                .regions
+                .get(usize::from(*r))
+                .ok_or_else(|| bad(format!("CFF2 variation subtable {major} names region {r}, which the store lacks")))?;
+            let axes: Vec<(usize, Tent)> = region
+                .iter()
+                .enumerate()
+                .filter(|(_, (_, p, _))| *p != 0.0)
+                .map(|(i, (s, p, e))| (i, Tent { start: *s, peak: *p, end: *e }))
+                .collect();
+            let deltas: Vec<f64> = members.iter().map(|i| table.items.get(*i).and_then(|it| it.deltas.get(j)).copied().unwrap_or(0.0)).collect();
+            vars.push(TupleVar { axes, deltas });
+        }
+        let rebased = rebase_vars(vars, limits, budget)?;
+        if let Some(d) = &rebased.default {
+            for (pos, i) in members.iter().enumerate() {
+                if let Some(slot) = add.get_mut(*i) {
+                    *slot = d.get(pos).copied().unwrap_or(0.0);
+                }
+            }
+        }
+        if rebased.kept.is_empty() {
+            majors.push(None);
+            continue;
+        }
+        for (pos, i) in members.iter().enumerate() {
+            if let Some(slot) = new_deltas.get_mut(*i) {
+                *slot = rebased.kept.iter().map(|v| v.deltas.get(pos).copied().unwrap_or(0.0)).collect();
+            }
+        }
+        majors.push(Some(kept_subtables.len()));
+        kept_subtables.push((0, rebased.kept));
+    }
+    table.resolve(&cff2::Resolved { add: &add, deltas: Some(&new_deltas), majors: &majors })?;
+    let store = if kept_subtables.is_empty() { None } else { Some(write_store(&kept_subtables, limits)?.0) };
+    cff2::finish(out, &table, store.as_deref(), options.downgrade_cff2, options.recalc_bounds)
+}
+
+/// `BASE`: the store rebased, its default parts added to the coordinates; the devices stay
+/// while regions are left.
+fn partial_base(out: &mut SfntFont, limits: &Limits, budget: &mut usize) -> Result<()> {
+    let Some(offset) = base::store_offset(out)? else { return Ok(()) };
+    let data = out.get(*b"BASE").unwrap_or_default().to_vec();
+    let rebased = rebase_store(&data, offset, limits, budget)?;
+    let deltas = StoreDeltas::from_rows(rebased.defaults.clone());
+    let store = if rebased.regions > 0 { Some(rebased.owned()?) } else { None };
+    base::apply(out, &deltas, store)
 }
 
 // ---------------------------------------------------------------------------------------------

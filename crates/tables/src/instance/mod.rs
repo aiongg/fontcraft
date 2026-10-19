@@ -1,7 +1,9 @@
 //! The instancer (M12.20, M12.21; rows `instance`, `font.instantiate`). A port of fontTools'
 //! `varLib.instancer` (MIT, Copyright (c) 2019 Google LLC and the fontTools authors): full
 //! instances ([`full`]), partial pinning and axis ranges ([`partial`]) with its region solver
-//! ([`solver`]). Instances from sources (M12.22) are the engine's job.
+//! ([`solver`]). `CFF2` outlines, variable `BASE` tables and names from `STAT` (M12.20b) are
+//! the private modules `cff2`, `base` and `names`. Instances from sources (M12.22) are the
+//! engine's job.
 //!
 //! # API for the packages that build on this one
 //!
@@ -18,10 +20,13 @@
 //!   `GDEF`/`GPOS` and `HVAR`).
 //! - [`named_instances`] lists the `fvar` named instances with their names.
 
+mod base;
+mod cff2;
 pub mod full;
 mod glyf;
 pub mod iup;
 pub mod ivs;
+mod names;
 mod otl;
 pub mod partial;
 pub mod solver;
@@ -54,11 +59,14 @@ pub enum AxisLimit {
 pub struct InstanceOptions {
     /// At most [`crate::limits::MAX_AXES`] entries; values finite.
     pub limits: Vec<(Tag, AxisLimit)>,
-    /// Update `name` and `OS/2` for a static instance from the matching named instance or STAT.
+    /// Rewrite the style names (IDs 1, 2, 3, 4, 6, 16, 17) from the `STAT` axis values at the
+    /// new default location, and the style bits of `head` and `OS/2` from them; refused when
+    /// `STAT` lacks a value there.
     pub update_names: bool,
     /// Set the overlap flags on simple glyphs of a static instance.
     pub overlap_flags: bool,
-    /// Turn `CFF2` into `CFF ` when every axis is pinned.
+    /// Write `CFF ` instead of `CFF2` when nothing in the outlines varies any more (every axis
+    /// pinned, or none the outlines use left).
     pub downgrade_cff2: bool,
     /// Recompute the font-wide bounds and extents (`head`, `hhea`, `vhea`) of the result, as
     /// fontTools does when it saves with `recalcBBoxes`. Glyph bounds are always recomputed.
@@ -67,7 +75,7 @@ pub struct InstanceOptions {
 
 impl Default for InstanceOptions {
     fn default() -> Self {
-        Self { limits: Vec::new(), update_names: false, overlap_flags: true, downgrade_cff2: true, recalc_bounds: true }
+        Self { limits: Vec::new(), update_names: false, overlap_flags: true, downgrade_cff2: false, recalc_bounds: true }
     }
 }
 

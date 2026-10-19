@@ -239,6 +239,12 @@ pub struct Built {
     pub glyph_bounds: Vec<Option<Bounds>>,
 }
 
+/// The `defaultWidthX` and `nominalWidthX` that make charstrings holding these advance widths
+/// smallest, by the reference's method; `None` for no widths.
+pub fn optimize_widths(widths: &[i64]) -> Option<(i64, i64)> {
+    width::optimize(widths)
+}
+
 /// Build the `CFF ` table for `font`.
 pub fn build(font: &Font) -> Result<Built, Error> {
     validate(font)?;
