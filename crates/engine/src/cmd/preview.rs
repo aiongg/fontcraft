@@ -338,7 +338,7 @@ fn render(s: &mut Session, v: &Value) -> Result<Value> {
             blur_pixels(&mut pixels, width as usize, height_px as usize, blur_radius(blur));
             let image = Image::from_rgba_premultiplied(width, height_px, pixels).map_err(|e| p.bad(e.to_string()))?;
             let png = image.png().map_err(|e| p.bad(e.to_string()))?;
-            out["png"] = json!(base64::engine::general_purpose::STANDARD.encode(png));
+            set(&mut out, "png", json!(base64::engine::general_purpose::STANDARD.encode(png)));
         }
         Format::Svg => {
             let mut path = filled;
@@ -352,16 +352,26 @@ fn render(s: &mut Session, v: &Value) -> Result<Value> {
             } else {
                 (String::new(), "")
             };
-            out["svg"] = json!(format!(
-                "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{width}\" height=\"{height_px}\" viewBox=\"0 0 {width} {height_px}\">{filter}<rect width=\"{width}\" height=\"{height_px}\" fill=\"{}\"/><path d=\"{}\" fill=\"{}\"{use_filter}/></svg>",
-                hex(paper),
-                path.to_svg(),
-                hex(ink)
-            ));
+            set(
+                &mut out,
+                "svg",
+                json!(format!(
+                    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{width}\" height=\"{height_px}\" viewBox=\"0 0 {width} {height_px}\">{filter}<rect width=\"{width}\" height=\"{height_px}\" fill=\"{}\"/><path d=\"{}\" fill=\"{}\"{use_filter}/></svg>",
+                    hex(paper),
+                    path.to_svg(),
+                    hex(ink)
+                )),
+            );
         }
     }
-    out["warnings"] = json!(warnings);
+    set(&mut out, "warnings", json!(warnings));
     Ok(out)
+}
+
+fn set(out: &mut Value, key: &str, value: Value) {
+    if let Some(m) = out.as_object_mut() {
+        m.insert(key.into(), value);
+    }
 }
 
 fn toggle_visibility(s: &mut Session, v: &Value) -> Result<Value> {

@@ -149,6 +149,9 @@ pub fn item_at(layout: &Layout, x: f64, y: f64) -> Option<usize> {
     line.items.clone().find(|&i| layout.placed.get(i).is_some_and(|p| p.glyph.is_some() && x >= p.x && x < p.x + p.advance))
 }
 
+/// The matrix values of one glyph of the line.
+pub type MatrixRow = [Option<f64>; 3];
+
 /// Lays the window's text out for `master` at `line_width` font units, with the matrix values.
 pub fn lay_out(
     font: &Font,
@@ -157,7 +160,7 @@ pub fn lay_out(
     cx: &Context<'_>,
     line_width: f64,
     index: Option<&KernIndex>,
-) -> Result<(Resolved, Layout, Vec<[Option<f64>; 3]>), String> {
+) -> Result<(Resolved, Layout, Vec<MatrixRow>), String> {
     let resolved = sc::resolve(font, master, state, cx);
     let mut text = Text::with_limit(MAX_GLYPHS_SHOWN).map_err(|e| e.to_string())?;
     text.insert(0, resolved.items.clone()).map_err(|e| e.to_string())?;

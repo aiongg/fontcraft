@@ -50,8 +50,6 @@ impl Definition {
         }
     }
 
-    /// Returns the function number or opcode.
-
     /// Returns the byte range of the code for this definition in the source
     /// program.
     pub fn code_range(&self) -> Range<usize> {
@@ -127,10 +125,11 @@ impl DefinitionMap<'_> {
             Self::Ref(defs) => *defs,
         };
         // Fast path, try to use key as index.
-        if let Some(def) = defs.get(key as usize) {
-            if def.is_active() && def.key == key {
-                return Ok(def);
-            }
+        if let Some(def) = defs.get(key as usize)
+            && def.is_active()
+            && def.key == key
+        {
+            return Ok(def);
         }
         // Otherwise, walk backward doing a linear search.
         for def in defs.iter().rev() {
@@ -140,8 +139,6 @@ impl DefinitionMap<'_> {
         }
         Err(HintErrorKind::InvalidDefinition(key as _))
     }
-
-    /// Returns a reference to the underlying definition slice.
 
     /// If the map is mutable, resets all definitions to the default
     /// value.

@@ -34,7 +34,7 @@ pub const COMMANDS: &[UiCommand] = &[(
     "Review Hints…",
     &[],
     "",
-    "{glyph?: name (default the edited glyph, else the first glyph selected in Font View), layer?: id (default the main master's layer), direction?: \"horizontal\" | \"vertical\" (default the direction of `hint`, else the one reviewed before, else horizontal), hint?: index (in the layer's PostScript hint list), step?: \"next\" | \"previous\" (from the reviewed hint, within the direction), open?: bool (false closes the dialog)} opens the Review Hints dialog on the layer's PostScript hints of one direction, in list order, and turns on Show Hints. Without `hint` or `step` the first hint of the direction is reviewed; stepping past the first or the last is refused → {open, glyph, layer, direction, hint: index | null, hints: [index] (the direction's hints), origin: number | null, size: number | null (null for a ghost)}",
+    "{glyph?: name (default: the open dialog's glyph when `step`, `direction` or `hint` is given, else the edited glyph, else the first glyph selected in Font View), layer?: id (default the main master's layer), direction?: \"horizontal\" | \"vertical\" (default the direction of `hint`, else the one reviewed before, else horizontal), hint?: index (in the layer's PostScript hint list), step?: \"next\" | \"previous\" (from the reviewed hint, within the direction), open?: bool (false closes the dialog)} opens the Review Hints dialog on the layer's PostScript hints of one direction, in list order, and turns on Show Hints. Without `hint` or `step` the first hint of the direction is reviewed; stepping past the first or the last is refused → {open, glyph, layer, direction, hint: index | null, hints: [index] (the direction's hints), origin: number | null, size: number | null (null for a ghost)}",
 )];
 
 /// The dialog's state.
@@ -113,7 +113,7 @@ pub fn run(app: &mut FontcraftApp, id: &str, args: &Args) -> Result<Value, Strin
     let font = app.session.font().map_err(|e| args.err(e))?;
     let glyph = match args.string("glyph")? {
         Some(g) => g.to_string(),
-        None if previous.open && args.get("step").is_some() => previous.glyph.clone(),
+        None if previous.open && ["step", "direction", "hint"].iter().any(|k| args.get(k).is_some()) => previous.glyph.clone(),
         None => current_glyph(app).ok_or_else(|| args.err("no glyph is edited or selected: give `glyph`"))?,
     };
     let layer_id = match args.string("layer")? {

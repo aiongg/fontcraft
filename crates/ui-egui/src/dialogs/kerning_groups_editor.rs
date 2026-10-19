@@ -192,7 +192,7 @@ pub fn window(app: &mut FontcraftApp, args: &Args) -> Result<Value, String> {
         Some(v) => Some(GroupsView::from_name(v).ok_or_else(|| args.err(format!("`view` must be cells, list or stacked, got `{}`", quoted(v))))?),
         None => None,
     };
-    let group = match args.get("group") {
+    let group = match args.given("group") {
         Some(Value::Null) => Some(None),
         Some(_) => {
             let name = args.string("group")?.unwrap_or_default();
@@ -203,7 +203,7 @@ pub fn window(app: &mut FontcraftApp, args: &Args) -> Result<Value, String> {
         None => None,
     };
     let apply = args.flag("apply")?.unwrap_or(false);
-    let propose = match args.get("propose") {
+    let propose = match args.given("propose") {
         Some(Value::Null) => Some(None),
         Some(Value::Object(m)) => {
             let mut m = m.clone();

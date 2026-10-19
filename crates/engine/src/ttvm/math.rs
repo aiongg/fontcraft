@@ -61,7 +61,7 @@ pub fn mul_div_no_round(a: i32, b: i32, c: i32) -> i32 {
         cu = 0u64.wrapping_sub(cu);
         sign = -sign;
     }
-    let result = if cu > 0 { au.wrapping_mul(bu) / cu } else { 0x7FFFFFFF };
+    let result = au.wrapping_mul(bu).checked_div(cu).unwrap_or(0x7FFFFFFF);
     if sign < 0 { (result as i32).wrapping_neg() } else { result as i32 }
 }
 

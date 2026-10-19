@@ -62,6 +62,7 @@ fn sc_app() -> FontcraftApp {
         app.run("path.addRectangle", &json!({"glyph": name, "x": x, "y": 0, "width": width, "height": 500})).unwrap();
         app.run("glyph.setUnicodes", &json!({"glyphs": [name], "unicodes": [code]})).unwrap();
     }
+    app.run("glyph.newGlyph", &json!({"name": "a.sc"})).unwrap();
     app.run("path.addRectangle", &json!({"glyph": "a.sc", "x": 30, "y": 0, "width": 300, "height": 400})).unwrap();
     app.session
         .edit("setup", |font| {

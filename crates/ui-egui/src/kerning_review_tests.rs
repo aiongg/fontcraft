@@ -199,7 +199,7 @@ fn window_kerning_pairs_preview_sorts_by_first_glyph_second_glyph_and_value() {
     assert_eq!(sides(&of_t), vec![pair("L", "T"), pair("@T", "@o"), pair("T", "o")]);
     // Typing a character scrolls to the first pair whose first glyph it encodes.
     let jumped = app.run("window.kerningPairsPreview", &json!({"glyph": null, "jump": "L"})).unwrap();
-    assert_eq!(jumped["scrollTo"], json!(1));
+    assert_eq!(jumped["scrollTo"], json!(1), "{jumped}");
     // Refusals change nothing.
     assert!(app.run("window.kerningPairsPreview", &json!({"sort": "name"})).is_err());
     assert!(app.run("window.kerningPairsPreview", &json!({"size": 50})).is_err());

@@ -212,6 +212,11 @@ impl<'a> Args<'a> {
         self.obj.and_then(|m| m.get(key)).filter(|v| !v.is_null())
     }
 
+    /// The value of `key` as given, `null` included: for parameters where `null` clears.
+    pub fn given(&self, key: &str) -> Option<&'a Value> {
+        self.obj.and_then(|m| m.get(key))
+    }
+
     /// `on` for a display toggle: the value given, or the opposite of `current` when absent.
     pub fn toggle(&self, current: bool) -> Result<bool, String> {
         match self.get("on") {

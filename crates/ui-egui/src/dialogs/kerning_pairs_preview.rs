@@ -303,7 +303,7 @@ fn jump_target(font: &Font, rows: &[PreviewRow], sort: PreviewSort, c: char) -> 
 }
 
 fn side_pair(args: &Args, key: &str) -> Result<Option<Option<(String, String)>>, String> {
-    let Some(v) = args.get(key) else { return Ok(None) };
+    let Some(v) = args.given(key) else { return Ok(None) };
     if v.is_null() {
         return Ok(Some(None));
     }
@@ -317,7 +317,7 @@ fn side_pair(args: &Args, key: &str) -> Result<Option<Option<(String, String)>>,
 /// `window.kerningPairsPreview`.
 pub fn window(app: &mut FontcraftApp, args: &Args) -> Result<Value, String> {
     let open = args.flag("open")?.unwrap_or(true);
-    let master = match args.get("master") {
+    let master = match args.given("master") {
         Some(Value::Null) => Some(None),
         Some(_) => {
             let id = args.string("master")?.unwrap_or_default();
@@ -329,7 +329,7 @@ pub fn window(app: &mut FontcraftApp, args: &Args) -> Result<Value, String> {
         }
         None => None,
     };
-    let glyph = match args.get("glyph") {
+    let glyph = match args.given("glyph") {
         Some(Value::Null) => Some(None),
         Some(_) => {
             let name = args.string("glyph")?.unwrap_or_default();
