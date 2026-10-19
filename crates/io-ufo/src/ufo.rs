@@ -1138,6 +1138,8 @@ pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
 
     // metainfo.plist
     let (mut meta, _) = kept_dict(master, METAINFO);
+    // A format 2 source written as format 3 needs the layer list format 2 does not have.
+    let upgraded = meta.entries.iter().find(|(k, _)| k.as_str() == "formatVersion").and_then(|(_, v)| v.as_num()).is_some_and(|n| n.as_f64() < 3.0);
     // The creator stays as the file says; a new UFO names us.
     if !from_ufo {
         patch(&mut meta, "creator", Some(str_value(CREATOR)));
@@ -1278,7 +1280,8 @@ pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
         ..Default::default()
     });
     let kept_lc = ufo_get(&master.extra, LAYERCONTENTS).filter(|v| **v == layer_value).cloned();
-    if version >= 3 && (from_ufo && kept_lc.is_some() || !from_ufo || layers.len() > 1 || ufo_get(&master.extra, LAYERCONTENTS).is_some()) {
+    if version >= 3 && (from_ufo && kept_lc.is_some() || !from_ufo || upgraded || layers.len() > 1 || ufo_get(&master.extra, LAYERCONTENTS).is_some())
+    {
         out.insert(LAYERCONTENTS.into(), plist(LAYERCONTENTS, &kept_lc.unwrap_or(layer_value)));
     }
     // lib.plist: the master's user data, glyphsLib's keys for what `fontinfo.plist` cannot hold
@@ -2334,6 +2337,16 @@ mod tests {
     fn list(names: &[&str]) -> String {
         let items: String = names.iter().map(|n| format!("      <string>{n}</string>\n")).collect();
         format!("    <array>\n{items}    </array>\n")
+    }
+
+    #[test]
+    fn a_format_2_ufo_written_as_format_3_lists_its_layers() {
+        let mut font = read(&ufo_with("", "", 2)).unwrap();
+        assert!(!write(&font).unwrap().contains_key(LAYERCONTENTS), "format 2 stays without a layer list");
+        font.source.ufo_version = Some(3);
+        let files = write(&font).unwrap();
+        assert!(s(&files[METAINFO]).contains("<integer>3</integer>"));
+        assert!(s(&files[LAYERCONTENTS]).contains("<string>glyphs</string>"), "format 3 requires layercontents.plist");
     }
 
     #[test]

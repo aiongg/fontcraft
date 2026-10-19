@@ -442,6 +442,9 @@ fn finish(
     let masters = std::sync::Arc::make_mut(&mut made.masters);
     let master = masters.first_mut().ok_or_else(|| p.bad(format!("instance `{label}` has no master")))?;
     fontcraft_model::strip_instance_info(&mut master.properties, &mut master.params, lone);
+    // The instance lists only the layers its glyphs use, not the ones the default source lists
+    // without having them on disk.
+    master.extra.remove(fontcraft_model::Family::Ufo, "missingLayers");
     let text = |s: &str| PValue::String(s.into());
     if let Some(ps) = &names.postscript {
         master.params.set("postscriptFontName", text(ps));
@@ -745,6 +748,22 @@ mod tests {
         assert!(s.execute("font.instantiate", &json!({ "input": ds, "named": "Nothing" })).is_err());
         assert!(s.execute("font.instantiate", &json!({ "input": ds, "updateNameTable": true })).is_err(), "an option of compiled fonts");
         assert!(s.execute("font.instantiate", &json!({ "input": ds, "inPlace": true })).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn instantiate_source_lists_only_the_layers_the_instance_has() {
+        let (dir, ds) = source("layers");
+        std::fs::write(
+            dir.join("Light.ufo/layercontents.plist"),
+            format!("{PLIST}<array><array><string>public.default</string><string>glyphs</string></array><array><string>{{600}}</string><string>glyphs.{{600}}</string></array></array></plist>\n"),
+        )
+        .unwrap();
+        let mut s = Session::new();
+        s.execute("font.instantiate", &json!({ "input": ds, "autohint": false })).unwrap();
+        let out = dir.join("instances").join("Test-Regular.ufo");
+        let lc = std::fs::read_to_string(out.join("layercontents.plist")).unwrap();
+        assert!(lc.contains("<string>glyphs</string>") && !lc.contains("{600}"), "a layer the default source lists but does not have: {lc}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

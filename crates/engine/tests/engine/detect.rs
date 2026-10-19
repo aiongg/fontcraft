@@ -336,7 +336,7 @@ fn composite_recovery_on_inter() {
     std::fs::create_dir_all(&out).unwrap();
     let otf = out.join("Inter-Regular.otf");
     let mut s = Session::new();
-    s.add_document(source, None).unwrap();
+    s.add_document(source, Some(dir.clone())).unwrap();
     run(&mut s, "font.customParameters.add", json!({"scope": "font", "name": "Don't use Production Names", "value": true}));
     run(&mut s, "file.exportStatic", json!({"instances": ["Regular"], "outlines": "cff", "destination": otf, "timestamp": 0}));
     for tolerance in [0.5, 1.0] {

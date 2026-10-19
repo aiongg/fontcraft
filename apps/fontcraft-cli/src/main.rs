@@ -47,7 +47,7 @@ USAGE:
 
   fontcraft-cli compile SOURCE... [--format ttf|otf]... [--container plain|woff|woff2]...
                         [-o FILE | --output-dir DIR] [--instances[=NAME,...]] [--masters-as-instances]
-                        [--keep-overlaps] [--keep-direction] [--conversion-error EM]
+                        [--keep-overlaps] [--keep-direction] [--conversion-error EM] [--no-subroutinize]
                         [--timestamp SECS|now] [--ttfautohint PATH] [--cbdt] [--plan]
       Compile each SOURCE to static fonts: every exportable instance (or the named ones; a font
       without instances builds its first master), plus each master with --masters-as-instances,
@@ -55,9 +55,10 @@ USAGE:
       name in DIR (default: the current folder); with both formats each goes into a ttf or otf
       subfolder. -o names the one file a single SOURCE builds. Instances between masters are
       skipped until interpolation exists. Overlapping contours are merged unless --keep-overlaps is
-      given. --ttfautohint PATH names the trusted ttfautohint program: a source whose TTFAutohint
-      binary path parameter names that same file is autohinted by it (default: none runs).
-      --cbdt also writes CBDT and CBLC bitmap tables from the iColor layers.
+      given. CFF charstrings are subroutinised unless --no-subroutinize is given or the source
+      sets Disable Subroutines. --ttfautohint PATH names the trusted ttfautohint program: a source
+      whose TTFAutohint binary path parameter names that same file is autohinted by it (default:
+      none runs). --cbdt also writes CBDT and CBLC bitmap tables from the iColor layers.
       --plan prints what would be built, without building.
       One JSON line per SOURCE.
 
