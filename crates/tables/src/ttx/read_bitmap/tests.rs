@@ -117,3 +117,15 @@ fn bitmap_images_in_other_forms_are_refused() {
     );
     assert!(import(SfntFont::new(Flavour::TrueType), &row, &ImportOptions::default()).is_err());
 }
+
+#[test]
+fn a_huge_fixed_image_size_is_refused_before_it_is_allocated() {
+    let (text, _) = BITMAP;
+    // 2^40 bytes of padding: allocating it first would abort the process.
+    for size in ["1099511627776", "4294967295"] {
+        let huge = text.replacen("<imageSize value=\"2\"/>", &format!("<imageSize value=\"{size}\"/>"), 1);
+        assert_ne!(huge, text);
+        let err = import(SfntFont::new(Flavour::TrueType), &huge, &ImportOptions::default()).unwrap_err();
+        assert!(err.to_string().contains("image size") || err.to_string().contains("bitmap data table"), "{err}");
+    }
+}

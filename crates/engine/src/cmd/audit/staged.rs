@@ -87,6 +87,10 @@ pub struct Staged {
     run: Run,
     values: BTreeSet<String>,
     layer_checks: Vec<&'static CheckSpec>,
+    /// The layers to examine, as glyph and layer indices into `font`, found once at the start.
+    layer_ids: Vec<(usize, usize)>,
+    /// The font-wide facts the audit context holds, surveyed once at the start.
+    context_facts: Facts,
     layers: usize,
     /// Layers examined so far.
     examined: usize,
@@ -94,6 +98,16 @@ pub struct Staged {
     ex: Examined,
     raw: Raw,
     places: HashMap<usize, Places>,
+    /// What [`Staged::finish`] changes, as it was before the first call: a step or cancel
+    /// whose report then fails leaves the run as it was, and the next try finishes it again.
+    before_finish: Option<BeforeFinish>,
+}
+
+/// The parts of a run that finishing it changes.
+struct BeforeFinish {
+    truncated: usize,
+    tally_notes: Vec<String>,
+    target_notes: usize,
 }
 
 impl std::fmt::Debug for Staged {
@@ -129,7 +143,19 @@ impl Staged {
         match self.stage {
             Stage::Layers => {
                 let end = self.examined.saturating_add(budget).min(self.layers);
-                examine_layers(&self.font, 0, &self.run, &self.layer_checks, self.examined..end, &mut self.ex, &mut self.raw, &mut self.places);
+                let glyphs = self.font.glyphs.as_arcs();
+                let chosen: Vec<(usize, &Arc<Glyph>, usize, &Layer)> = self
+                    .layer_ids
+                    .get(self.examined..end)
+                    .unwrap_or_default()
+                    .iter()
+                    .filter_map(|&(gi, li)| {
+                        let g = glyphs.get(gi)?;
+                        Some((gi, g, li, g.layers.get(li)?))
+                    })
+                    .collect();
+                let ctx = context(&self.font, self.context_facts);
+                examine_layers(&ctx, 0, &self.run, &self.layer_checks, &chosen, &mut self.ex, &mut self.raw, &mut self.places);
                 self.examined = end;
                 if end >= self.layers {
                     self.stage = Stage::Source;
@@ -154,10 +180,25 @@ impl Staged {
         }
     }
 
-    /// Sorts and caps what the run found, as the end of `audit.run` does.
+    /// Sorts and caps what the run found, as the end of `audit.run` does. The findings stay in
+    /// the run, so finishing again gives the same result.
     fn finish(&mut self) {
+        match &self.before_finish {
+            Some(b) => {
+                self.ex.tally.truncated = b.truncated;
+                self.ex.tally.notes = b.tally_notes.clone();
+                self.target.notes.truncate(b.target_notes);
+            }
+            None => {
+                self.before_finish = Some(BeforeFinish {
+                    truncated: self.ex.tally.truncated,
+                    tally_notes: self.ex.tally.notes.clone(),
+                    target_notes: self.target.notes.len(),
+                });
+            }
+        }
         let ignore = self.target.settings.ignore_index();
-        finish(std::mem::take(&mut self.raw), &self.run, &self.places, &ignore, true, &mut self.ex);
+        finish(self.raw.clone(), &self.run, &self.places, &ignore, true, &mut self.ex);
         self.target.notes.append(&mut self.ex.tally.notes);
     }
 
@@ -181,16 +222,22 @@ fn start(s: &mut Session, v: &Value) -> Result<Value> {
         run,
         values,
         layer_checks: Vec::new(),
+        layer_ids: Vec::new(),
+        context_facts: (None, None, false),
         layers: 0,
         examined: 0,
         stage: Stage::Layers,
         ex: Examined::default(),
         raw: Raw::new(),
         places: HashMap::new(),
+        before_finish: None,
     };
     let facts = staged.facts(true);
     staged.layer_checks = start_font(&font, 0, &staged.run, &facts, &mut staged.ex, &mut staged.places);
-    staged.layers = layers_of(&font, &staged.run).len();
+    staged.layer_ids = layers_of(&font, &staged.run).into_iter().map(|(gi, _, li, _)| (gi, li)).collect();
+    staged.layers = staged.layer_ids.len();
+    let ctx = AuditContext::new(&font);
+    staged.context_facts = (ctx.grid_step, ctx.main_curve, ctx.variable);
     if staged.layers == 0 {
         staged.stage = Stage::Source;
     }

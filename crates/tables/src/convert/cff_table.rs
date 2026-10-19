@@ -773,25 +773,49 @@ fn expand(table: &[u8], cff2: bool, limit: usize) -> Result<(Vec<u8>, Charstring
     Ok((expanded, memory))
 }
 
+/// A `seac` part, parsed once for the whole table: many accented glyphs name the same part.
+struct SeacPart {
+    /// Every operator.
+    ops: Vec<Op>,
+    /// The operators without the hints, for a part whose hints are dropped: an accented
+    /// glyph then costs only what it writes.
+    paths: Vec<Op>,
+    /// Where the part's drawing ends.
+    end: (i64, i64),
+}
+
+/// The parts parsed so far, by glyph id; at most one per standard-encoding code.
+type SeacParts = std::collections::HashMap<usize, std::rc::Rc<SeacPart>>;
+
 /// The operators of a `seac` glyph with its base and accent written in. `standard_glyph` finds
 /// the glyph of a standard-encoding code; a part the font lacks is left out, as the reference
-/// leaves out a component it cannot find.
+/// leaves out a component it cannot find. A part is parsed on first use, charged to `memory`,
+/// and kept in `parts`.
 fn flatten_seac(
     charstrings: &[&[u8]],
     own: &[Op],
     seac: [i64; 4],
     standard_glyph: &dyn Fn(u8) -> Option<usize>,
+    parts: &mut SeacParts,
     memory: &mut CharstringMemory,
 ) -> Result<Vec<Op>> {
     let [adx, ady, base, accent] = seac;
-    let mut part = |code: i64| -> Result<Option<Program>> {
+    let mut part = |code: i64| -> Result<Option<std::rc::Rc<SeacPart>>> {
         let code = u8::try_from(code / ONE).map_err(|_| invalid("seac names a character code outside 0 to 255"))?;
         let Some(gid) = standard_glyph(code) else { return Ok(None) };
+        if let Some(p) = parts.get(&gid) {
+            return Ok(Some(p.clone()));
+        }
         let bytes = charstrings.get(gid).ok_or_else(|| invalid("seac names a glyph beyond the CharStrings"))?;
         let p = parse_program(bytes, false, memory)?;
         if p.seac.is_some() {
             return Err(invalid("a seac part is itself accented"));
         }
+        let end = run(&p.ops, &mut Collect::default())?;
+        let paths: Vec<Op> = p.ops.iter().filter(|op| !STEM_OPS.contains(&op.code)).cloned().collect();
+        memory.charge(paths.iter().fold(0usize, |n, op| n.saturating_add(std::mem::size_of::<Op>() + op.args.len() * 8 + op.mask.len())))?;
+        let p = std::rc::Rc::new(SeacPart { ops: p.ops, paths, end });
+        parts.insert(gid, p.clone());
         Ok(Some(p))
     };
     let keep_base_hints = !own.iter().any(|op| STEM_OPS.contains(&op.code) || is_path(op.code));
@@ -799,13 +823,12 @@ fn flatten_seac(
     let mut at = run(own, &mut Collect::default())?;
     for (program, shift, hints) in [(part(base)?, (0, 0), keep_base_hints), (part(accent)?, (adx, ady), false)] {
         let Some(program) = program else { continue };
-        let end = run(&program.ops, &mut Collect::default())?;
+        let end = program.end;
         let mut first = true;
-        for op in program.ops {
+        for op in if hints { &program.ops } else { &program.paths } {
+            let op = op.clone();
             if STEM_OPS.contains(&op.code) {
-                if hints {
-                    out.push(op);
-                }
+                out.push(op);
                 continue;
             }
             if first && is_path(op.code) {
@@ -1213,13 +1236,17 @@ pub(super) fn cff_to_cff2(cff: &[u8], standard_glyph: &dyn Fn(u8) -> Option<usiz
     let mut charstrings = Vec::with_capacity(flat.charstrings.len());
     let mut dropped_dotsection = false;
     let mut total = 0usize;
+    let mut seac_parts = SeacParts::new();
     for (gid, code) in flat.charstrings.iter().enumerate() {
-        // A glyph's operators are dropped once it is written: they take from a copy of the budget.
+        // A glyph's operators are dropped once it is written: they take from a copy of the
+        // budget. The seac parts are kept for the whole table and charged to the budget itself.
         let mut scratch = memory.clone();
         let program = parse_program(code, false, &mut scratch).map_err(|e| in_glyph(e, gid))?;
         let ops = match program.seac {
             None => program.ops,
-            Some(seac) => flatten_seac(&flat.charstrings, &program.ops, seac, standard_glyph, &mut scratch).map_err(|e| in_glyph(e, gid))?,
+            Some(seac) => {
+                flatten_seac(&flat.charstrings, &program.ops, seac, standard_glyph, &mut seac_parts, &mut memory).map_err(|e| in_glyph(e, gid))?
+            }
         };
         let mut out = Vec::new();
         for op in &ops {

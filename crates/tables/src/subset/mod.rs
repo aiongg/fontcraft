@@ -182,6 +182,9 @@ pub struct Plan {
     /// closure; the `.notdef` width scan takes from it.
     pub charstring_ops_left: usize,
     pub options: SubsetOptions,
+    /// What the table modules tell the person, one sentence each (see
+    /// [`SubsetResult::warnings`]).
+    pub warnings: std::cell::RefCell<Vec<String>>,
 }
 
 impl Plan {
@@ -210,6 +213,8 @@ pub struct SubsetResult {
     pub dropped: Vec<DroppedTable>,
     pub missing_glyphs: Vec<String>,
     pub missing_unicodes: Vec<u32>,
+    /// What the person should know about the output, one sentence each.
+    pub warnings: Vec<String>,
 }
 
 /// The layout tables ([`layout`]).
@@ -290,6 +295,7 @@ pub fn subset(font: &SfntFont, options: &SubsetOptions) -> Result<SubsetResult> 
         dropped,
         missing_glyphs: plan.missing_glyphs.clone(),
         missing_unicodes: plan.missing_unicodes.clone(),
+        warnings: plan.warnings.take(),
     })
 }
 

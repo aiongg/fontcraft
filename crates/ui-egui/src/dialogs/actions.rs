@@ -92,7 +92,10 @@ fn save_set_as(app: &mut FontcraftApp, pending: &mut Pending) {
     let suggested = format!("{}.{MACRO_EXTENSION}", typed.or(title).unwrap_or_else(|| "Action Set".into()));
     let Some(picker) = app.picker.as_mut() else { return };
     if let Some(path) = picker.save("Save Action Set", "Macro", &[MACRO_EXTENSION], &suggested) {
-        pending.push((COMMAND, json!({"savePath": path.to_string_lossy(), "replace": true})));
+        match crate::shell::pickers::with_extension(path, &[MACRO_EXTENSION], MACRO_EXTENSION) {
+            Ok(path) => pending.push((COMMAND, json!({"savePath": path.to_string_lossy(), "replace": true}))),
+            Err(why) => app.state.status = format!("Save Action Set: {why}"),
+        }
     }
 }
 

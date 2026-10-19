@@ -1501,7 +1501,10 @@ fn choose_report_file(app: &mut FontcraftApp) {
     let suggested = typed.filter(|n| !n.is_empty()).unwrap_or_else(|| format!("Font Audit Report.{extension}"));
     let Some(picker) = app.picker.as_mut() else { return };
     if let Some(path) = picker.save("Export Report", &format!("{label} report"), &[extension], &suggested) {
-        app.state.panels.font_audit.export_path = path.to_string_lossy().into_owned();
+        match crate::shell::pickers::with_extension(path, &[extension], extension) {
+            Ok(path) => app.state.panels.font_audit.export_path = path.to_string_lossy().into_owned(),
+            Err(why) => app.state.status = format!("Export Report: {why}"),
+        }
     }
 }
 

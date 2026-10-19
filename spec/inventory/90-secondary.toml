@@ -519,7 +519,7 @@ summary = "Saves the current node selection of the glyph under a name in the gly
 ref = "FontLab 8 What's new › Edit & refine › Selections panel"
 status = "docs"
 origin = "fontlab"
-notes = "Documented, not yet observed. Kept in the glyph's user data under com.fontcraft.storedSelections as {name, nodes: [[shape, node]], anchors, components}, so .glyphs and UFO files keep it. Commands take explicit targets, so the glyph is required; the shell fills it and the lists from the Edit View selection. At most 256 entries per glyph."
+notes = "Documented, not yet observed. Kept in the glyph's user data under com.fontcraft.storedSelections as {name, nodes: [[shape, node]], anchors, components}, so .glyphs and UFO files keep it. Commands take explicit targets, so the glyph is required; the shell fills it and the lists from the Edit View selection. At most 256 entries per glyph. Refused, as edit.removeStoredSelection is, while another entry the file holds has more than 100000 items in a list, since writing the entries back would cut it."
 guesses = [
   "Selected anchors and components are stored with the nodes, by anchor name and shape index; FontLab documents node selections only, and its panel on a selection with a component would settle it.",
   "Storing an empty selection is refused; FontLab's Add button with nothing selected would settle it.",

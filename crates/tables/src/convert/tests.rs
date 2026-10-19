@@ -343,6 +343,34 @@ fn cff_to_cff2_writes_the_seac_base_and_accent_into_the_charstring() {
     assert_eq!(ps_contours(&seac_font(), CFF, 3), expected, "the CFF glyph drawn out gives the same");
 }
 
+/// Many accented glyphs, each with a contour of its own, naming one accent of 20,000 stem
+/// hints: the accent is parsed and drawn once, not once for each glyph that names it.
+#[test]
+fn many_seac_glyphs_naming_one_heavily_hinted_accent_convert_quickly() {
+    const ACCENTED: usize = 3000;
+    let mut font = SfntFont::new(Flavour::Cff);
+    common(&mut font, &vec![600; ACCENTED + 3], 0x5000);
+    let cs = cff_table::test_charstring;
+    let mut accent: Vec<(&[f64], u16)> = vec![(&[0.0, 1.0][..], 1u16); 20_000];
+    accent.extend([(&[100.0, 750.0][..], 21), (&[50.0, 0.0, 0.0, 50.0][..], 5), (&[][..], 14)]);
+    let mut charstrings = vec![cs(&[(&[], 14)]), cs(&[(&[10.0, 0.0], 21), (&[300.0, 0.0, 0.0, 700.0, -300.0, 0.0], 5), (&[], 14)]), cs(&accent)];
+    let accented = cs(&[(&[400.0, 0.0], 21), (&[10.0, 0.0, 0.0, 10.0], 5), (&[0.0, 20.0, 65.0, 194.0], 14)]);
+    charstrings.extend(std::iter::repeat_n(accented, ACCENTED));
+    let names: Vec<String> = (0..ACCENTED).map(|i| format!("g{i}")).collect();
+    let mut all = vec![".notdef", "A", "acute"];
+    all.extend(names.iter().map(String::as_str));
+    font.insert(CFF, cff_table::test_table(&all, charstrings, &[]));
+    font.insert(*b"post", post_table(None, PostFormat::NoNames, &[]).unwrap().0);
+
+    let mut to2 = ConvertOptions::new(ConvertTarget::Cff2);
+    to2.subroutinize = Some(false);
+    let cff2 = convert_with(&font, &to2).unwrap().font.unwrap();
+    let drawn = PsOutlines::new(cff2.get(CFF2).unwrap(), 1000).unwrap().draw(ACCENTED + 2).unwrap();
+    assert_eq!(drawn.contours.len(), 3, "its own square, A and acute");
+    let ttf = convert_with(&font, &ConvertOptions::new(ConvertTarget::TrueType { max_error: 1.0 })).unwrap().font.unwrap();
+    assert_eq!(glyf_points(&ttf, ACCENTED + 2).len(), 3);
+}
+
 #[test]
 fn truetype_to_cff_draws_each_glyph_at_its_left_side_bearing() {
     // hmtx gives A a left side bearing of 20 while its glyf header says xMin 0; tx and

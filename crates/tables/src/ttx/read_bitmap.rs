@@ -346,7 +346,13 @@ pub(crate) fn bitmap_pair(data_tag: Tag, data: &Element, location: &Element, ctx
                         let (format, e) = strike_glyphs.get(name).ok_or_else(|| bad(format!("the glyph '{name}' has no bitmap in its strike")))?;
                         let mut bytes = compile_glyph(e, *format, ctx)?;
                         if let Some(size) = sub.image_size {
-                            let size = usize::try_from(size).map_err(|_| bad("a negative image size"))?;
+                            let size = u32::try_from(size).map_err(|_| bad("an image size outside 0..=4294967295"))?;
+                            let size = usize::try_from(size).unwrap_or(usize::MAX);
+                            // Checked before the resize: the size comes from the file and the
+                            // padding would otherwise be allocated first.
+                            if size > crate::limits::MAX_SFNT.saturating_sub(out.0.len()) {
+                                return Err(TablesError::TooLarge { what: "a bitmap data table", limit: crate::limits::MAX_SFNT });
+                            }
                             if bytes.len() > size {
                                 return Err(bad(format!(
                                     "a bitmap is larger than the fixed image size of its format {} index subtable",

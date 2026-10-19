@@ -10,7 +10,7 @@
 
 use std::collections::BTreeSet;
 
-use super::super::{CharstringSet, SubrError, desubroutinize, prune::prune_unused};
+use super::super::{CharstringSet, SubrError, desubroutinize_within, prune::prune_unused};
 use super::{Entry, Table, invalid};
 
 /// What happens to the subroutines of a subset table.
@@ -19,7 +19,8 @@ pub enum SubrMode {
     /// Kept as they are.
     Keep,
     /// The ones no kept glyph reaches are removed and the calls renumbered. Where that is not
-    /// possible ([`prune_unused`] refuses), they are kept as they are.
+    /// possible ([`prune_unused`] refuses, or its work passes a limit), they are kept as they
+    /// are: keeping them is always correct.
     Prune,
     /// Every call is expanded; no subroutine is left.
     Expand,
@@ -34,11 +35,19 @@ pub struct TableSubset<'a> {
     /// Output glyphs whose charstring becomes empty: no program in `CFF2`, `endchar` in `CFF `.
     pub emptied: &'a [usize],
     pub subroutines: SubrMode,
+    /// With [`SubrMode::Expand`], the most bytes the expanded charstrings may take together.
+    pub max_expanded: usize,
 }
 
 /// The table with the glyphs of `subset`, without the Font DICTs no glyph selects, its
 /// subroutines treated as `subset.subroutines` says.
 pub fn subset_table(data: &[u8], cff2: bool, subset: &TableSubset<'_>) -> Result<Vec<u8>, SubrError> {
+    subset_table_noted(data, cff2, subset, &mut Vec::new())
+}
+
+/// [`subset_table`], adding to `notes` a sentence for each thing the person should know: the
+/// subroutines kept because pruning them passed a limit.
+pub fn subset_table_noted(data: &[u8], cff2: bool, subset: &TableSubset<'_>, notes: &mut Vec<String>) -> Result<Vec<u8>, SubrError> {
     let table = Table::read(data, cff2)?;
     let n_in = table.set.charstrings.len();
     let new_to_old: Vec<usize> = match subset.glyphs {
@@ -91,10 +100,14 @@ pub fn subset_table(data: &[u8], cff2: bool, subset: &TableSubset<'_>) -> Result
     };
     let set = match subset.subroutines {
         SubrMode::Keep => set,
-        SubrMode::Expand => desubroutinize(&set)?,
+        SubrMode::Expand => desubroutinize_within(&set, subset.max_expanded)?,
         SubrMode::Prune => match prune_unused(&set) {
             Ok(pruned) => pruned,
             Err(SubrError::Unsupported(_)) => set,
+            Err(e @ SubrError::TooLarge { .. }) => {
+                notes.push(format!("the unused subroutines were kept: {e}"));
+                set
+            }
             Err(e) => return Err(e),
         },
     };
@@ -281,7 +294,7 @@ mod tests {
         // pyftsubset --gids=0,2: Font DICT 0 goes, glyph 2 keeps local subroutines 0 and 2 of
         // Font DICT 1 and global subroutine 1, renumbered; .notdef becomes empty.
         let input = fixture();
-        let subset = TableSubset { glyphs: Some(&[0, 2]), emptied: &[0], subroutines: SubrMode::Prune };
+        let subset = TableSubset { glyphs: Some(&[0, 2]), emptied: &[0], subroutines: SubrMode::Prune, max_expanded: usize::MAX };
         let out = subset_table(&input, true, &subset).unwrap();
         let set = parts(&out);
         assert_eq!(set.charstrings, vec![Vec::new(), cs(&format!("{GLYPH2} -107 callsubr -106 callsubr -107 callgsubr"))]);
@@ -298,10 +311,13 @@ mod tests {
         let set = parts(&subset_table(&input, true, &expand).unwrap());
         assert_eq!(set.charstrings[1], cs(&format!("{GLYPH2} 200 0 rmoveto 0 -40 rlineto 0 20 5 1 blend rlineto")));
         assert!(set.global_subrs.is_empty() && set.local_subrs.iter().all(Vec::is_empty));
+        // The expanded charstrings are held to the limit the caller gives.
+        let small = TableSubset { max_expanded: 8, ..expand };
+        assert!(matches!(subset_table(&input, true, &small), Err(SubrError::TooLarge { .. })));
 
         // --retain-gids --notdef-outline: emptied glyph 1 keeps Font DICT 0, which loses its
         // subroutines; .notdef keeps its outline.
-        let retain = TableSubset { glyphs: Some(&[0, 1, 2]), emptied: &[1], subroutines: SubrMode::Prune };
+        let retain = TableSubset { glyphs: Some(&[0, 1, 2]), emptied: &[1], subroutines: SubrMode::Prune, max_expanded: usize::MAX };
         let set = parts(&subset_table(&input, true, &retain).unwrap());
         assert_eq!(set.fd_select, vec![1, 0, 1]);
         assert_eq!(set.charstrings[..2], [cs(GLYPHS[0]), Vec::new()]);
@@ -312,10 +328,13 @@ mod tests {
     fn hostile_subsets_fail_with_a_message() {
         let input = fixture();
         for glyphs in [&[][..], &[0, 9][..]] {
-            let subset = TableSubset { glyphs: Some(glyphs), emptied: &[], subroutines: SubrMode::Prune };
+            let subset = TableSubset { glyphs: Some(glyphs), emptied: &[], subroutines: SubrMode::Prune, max_expanded: usize::MAX };
             assert!(matches!(subset_table(&input, true, &subset), Err(SubrError::Invalid(_))), "{glyphs:?}");
         }
-        assert!(subset_table(&input[..40], true, &TableSubset { glyphs: None, emptied: &[], subroutines: SubrMode::Keep }).is_err());
+        assert!(
+            subset_table(&input[..40], true, &TableSubset { glyphs: None, emptied: &[], subroutines: SubrMode::Keep, max_expanded: usize::MAX })
+                .is_err()
+        );
     }
 
     #[test]

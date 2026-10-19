@@ -84,6 +84,19 @@ fn tables_import_ttx_refuses_split_dump_parts_outside_its_folder() {
     std::fs::write(&main, "<?xml version=\"1.0\"?>\n<ttFont><OS_2 src=\"os2.ttx\"/></ttFont>\n").unwrap();
     let r = run(&mut s, "tables.importTtx", json!({ "font": ttf, "dumps": [main] }));
     assert_eq!(r["added"], json!([]), "a part beside the main file is read: {r}");
+
+    // A link beside the main file that leads out of its folder is refused, with or without
+    // automation roots; one that stays inside is read.
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(dir.join("os2.ttx"), dir.join("dump").join("out.ttx")).unwrap();
+        std::os::unix::fs::symlink(dir.join("dump").join("os2.ttx"), dir.join("dump").join("in.ttx")).unwrap();
+        std::fs::write(&main, "<?xml version=\"1.0\"?>\n<ttFont><OS_2 src=\"out.ttx\"/></ttFont>\n").unwrap();
+        let err = s.execute("tables.importTtx", &json!({ "font": ttf, "dumps": [main] })).unwrap_err();
+        assert!(err.to_string().contains("outside the dump's folder"), "{err}");
+        std::fs::write(&main, "<?xml version=\"1.0\"?>\n<ttFont><OS_2 src=\"in.ttx\"/></ttFont>\n").unwrap();
+        run(&mut s, "tables.importTtx", json!({ "font": ttf, "dumps": [main] }));
+    }
 }
 
 #[test]
@@ -117,4 +130,15 @@ fn tables_import_ttx_reads_a_dump_split_by_glyph() {
     std::fs::write(&part, glyf).unwrap();
     let err = s.execute("tables.importTtx", &json!({ "font": ttf, "dumps": [main], "output": dir.join("Bad.ttf") })).unwrap_err();
     assert!(err.to_string().contains("parts must be beside it"), "{err}");
+
+    // So is a glyph file that is a link to a file outside it.
+    #[cfg(unix)]
+    {
+        std::fs::copy(&glyph, dir.join("A.ttx")).unwrap();
+        std::os::unix::fs::symlink(dir.join("A.ttx"), out.join("link.ttx")).unwrap();
+        let glyf = std::fs::read_to_string(&part).unwrap().replace("src=\"../A.ttx\"", "src=\"link.ttx\"");
+        std::fs::write(&part, glyf).unwrap();
+        let err = s.execute("tables.importTtx", &json!({ "font": ttf, "dumps": [main], "output": dir.join("Bad.ttf") })).unwrap_err();
+        assert!(err.to_string().contains("outside the dump's folder"), "{err}");
+    }
 }
