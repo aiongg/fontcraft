@@ -32,6 +32,51 @@ const MAX_COMPONENT_VISITS: usize = 100_000;
 const MAX_GLYPH_POINTS: usize = 65_535;
 /// Most contours one glyph may have.
 const MAX_CONTOURS: usize = 32_767;
+/// Most points one conversion may produce over all its glyphs, a component's points counted
+/// once for every use. All of them are kept until the new outline table is written (in a CFF
+/// path operator of up to 56 bytes each), and a glyph being converted is held in two more
+/// forms, so a 32-bit target (wasm) gets half.
+pub(super) const MAX_CONVERT_POINTS: usize = if usize::BITS >= 64 { 16 << 20 } else { 8 << 20 };
+/// Most component references one conversion follows over all its glyphs, nesting included.
+const MAX_CONVERT_VISITS: usize = 4 << 20;
+
+/// What one conversion may still produce, shared by all its glyphs.
+pub(super) struct Budget {
+    points: usize,
+    visits: usize,
+}
+
+impl Budget {
+    pub(super) fn new() -> Self {
+        Budget { points: MAX_CONVERT_POINTS, visits: MAX_CONVERT_VISITS }
+    }
+
+    /// Charges `n` points produced.
+    pub(super) fn points(&mut self, n: usize) -> Result<()> {
+        self.points = self
+            .points
+            .checked_sub(n)
+            .ok_or(TablesError::TooLarge { what: "the points the converted glyphs hold together", limit: MAX_CONVERT_POINTS })?;
+        Ok(())
+    }
+
+    /// Charges `n` component references followed.
+    fn visits(&mut self, n: usize) -> Result<()> {
+        self.visits = self
+            .visits
+            .checked_sub(n)
+            .ok_or(TablesError::TooLarge { what: "the components the converted glyphs use together", limit: MAX_CONVERT_VISITS })?;
+        Ok(())
+    }
+}
+
+/// What decomposing one `glyf` glyph produces: its points and the glyph references followed
+/// (itself included), each component counted once for every use.
+#[derive(Clone, Copy, Debug)]
+struct Cost {
+    points: usize,
+    visits: usize,
+}
 
 pub(super) type P = (f64, f64);
 
@@ -238,6 +283,8 @@ pub(super) struct GlyfOutlines<'a> {
     glyf: Glyf<'a>,
     loca: Loca<'a>,
     count: usize,
+    /// The cost of each glyph, once known.
+    costs: std::cell::RefCell<Vec<Option<Cost>>>,
 }
 
 impl<'a> GlyfOutlines<'a> {
@@ -245,7 +292,7 @@ impl<'a> GlyfOutlines<'a> {
         let bad = |e: read_fonts::ReadError| TablesError::Invalid(format!("the glyf or loca table cannot be read: {e}"));
         let glyf = Glyf::read(FontData::new(glyf)).map_err(bad)?;
         let loca = Loca::read_with_args(FontData::new(loca), long_loca).map_err(bad)?;
-        Ok(GlyfOutlines { glyf, loca, count })
+        Ok(GlyfOutlines { glyf, loca, count, costs: std::cell::RefCell::new(vec![None; count]) })
     }
 
     /// The `xMin` a glyph's header states; `None` for a glyph without data.
@@ -256,12 +303,48 @@ impl<'a> GlyfOutlines<'a> {
         }
     }
 
-    /// The glyph's contours; `instructions` is set when it (or a component) has a glyph program.
-    pub(super) fn contours(&self, gid: usize, instructions: &mut bool) -> Result<Vec<Contour>> {
+    /// The glyph's contours, their points charged to `budget`; `instructions` is set when it
+    /// (or a component) has a glyph program.
+    pub(super) fn contours(&self, gid: usize, instructions: &mut bool, budget: &mut Budget) -> Result<Vec<Contour>> {
+        // The glyph is charged before it is decomposed, so a chain of components that multiplies
+        // its points is refused before any of them are made.
+        let cost = self.cost(gid, 0)?;
+        budget.points(cost.points)?;
+        budget.visits(cost.visits)?;
         let mut out = Vec::new();
         let mut visits = 0usize;
         self.add(gid, [1.0, 0.0, 0.0, 1.0, 0.0, 0.0], 0, &mut visits, &mut out, instructions)?;
         Ok(out)
+    }
+
+    /// What decomposing glyph `gid` produces, by the point counts the glyphs state.
+    fn cost(&self, gid: usize, depth: usize) -> Result<Cost> {
+        if depth > MAX_COMPONENT_DEPTH {
+            return Err(TablesError::Invalid(format!("glyph {gid}: components nest deeper than {MAX_COMPONENT_DEPTH} (or form a cycle)")));
+        }
+        if let Some(known) = self.costs.borrow().get(gid).copied().flatten() {
+            return Ok(known);
+        }
+        if gid >= self.count {
+            return Err(TablesError::Invalid(format!("a component names glyph {gid}, beyond the glyph count")));
+        }
+        let cost = match self.loca.get(GlyphId::new(gid as u32), &self.glyf) {
+            Some(LocaGlyph::Empty) => Cost { points: 0, visits: 1 },
+            Some(LocaGlyph::Glyph(Glyph::Simple(s))) => Cost { points: s.num_points(), visits: 1 },
+            Some(LocaGlyph::Glyph(Glyph::Composite(c))) => {
+                let mut total = Cost { points: 0, visits: 1 };
+                for comp in c.components() {
+                    let part = self.cost(usize::from(comp.glyph.to_u16()), depth + 1)?;
+                    total = Cost { points: total.points.saturating_add(part.points), visits: total.visits.saturating_add(part.visits) };
+                }
+                total
+            }
+            None => return Err(TablesError::Invalid(format!("glyph {gid} cannot be read"))),
+        };
+        if let Some(slot) = self.costs.borrow_mut().get_mut(gid) {
+            *slot = Some(cost);
+        }
+        Ok(cost)
     }
 
     fn add(&self, gid: usize, m: [f64; 6], depth: usize, visits: &mut usize, out: &mut Vec<Contour>, instructions: &mut bool) -> Result<()> {

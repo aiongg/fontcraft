@@ -70,3 +70,59 @@ fn overlapping_tables_past_the_size_limit_are_refused_before_copying() {
     small.resize(12 + 16 * 3 + 64, 7);
     assert_eq!(read(&small, 0).unwrap().tables.len(), 3);
 }
+
+/// A `CFF2` INDEX with four-byte offsets.
+fn cff2_index(items: &[Vec<u8>]) -> Vec<u8> {
+    let mut out = (items.len() as u32).to_be_bytes().to_vec();
+    out.push(4);
+    let mut at = 1u32;
+    out.extend_from_slice(&at.to_be_bytes());
+    for item in items {
+        at += item.len() as u32;
+        out.extend_from_slice(&at.to_be_bytes());
+    }
+    for item in items {
+        out.extend_from_slice(item);
+    }
+    out
+}
+
+/// A static `CFF2` table of `glyphs` glyphs, each calling global subroutine `depth − 1`.
+/// Subroutine k > 0 calls subroutine k − 1 `fanout` times and subroutine 0 is `leaf`, so every
+/// glyph runs `leaf` fanout^(depth − 1) times. `depth` is at most 10.
+pub(crate) fn nested_subr_cff2(glyphs: usize, depth: usize, fanout: usize, leaf: &[u8]) -> Vec<u8> {
+    // Subroutine numbers are biased by 107 below 1240 subroutines; k − 107 is the byte k + 32.
+    let call = |k: usize| [k as u8 + 32, 29];
+    let mut subrs = vec![leaf.to_vec()];
+    for k in 1..depth {
+        subrs.push((0..fanout).flat_map(|_| call(k - 1)).collect());
+    }
+    let gsubrs = cff2_index(&subrs);
+    let charstrings = cff2_index(&vec![call(depth - 1).to_vec(); glyphs]);
+    let int = |v: usize| {
+        let mut b = vec![29];
+        b.extend_from_slice(&(v as i32).to_be_bytes());
+        b
+    };
+    // StdHW 50.
+    let private = vec![189, 10];
+    let top_len = 13;
+    let at_cs = 5 + top_len + gsubrs.len();
+    let fd_len = 11;
+    let at_fd = at_cs + charstrings.len();
+    let at_private = at_fd + cff2_index(&[vec![0; fd_len]]).len();
+    let mut fd = int(private.len());
+    fd.extend(int(at_private));
+    fd.push(18);
+    let mut top = int(at_cs);
+    top.push(17);
+    top.extend(int(at_fd));
+    top.extend([12, 36]);
+    assert_eq!((top.len(), fd.len()), (top_len, fd_len));
+    let mut out = vec![2, 0, 5];
+    out.extend_from_slice(&(top_len as u16).to_be_bytes());
+    for part in [top, gsubrs, charstrings, cff2_index(&[fd]), private] {
+        out.extend(part);
+    }
+    out
+}

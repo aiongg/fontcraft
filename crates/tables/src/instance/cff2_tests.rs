@@ -314,3 +314,20 @@ fn a_blend_with_too_few_operands_is_refused() {
     let err = instantiate(&font, &pin(650.0)).unwrap_err();
     assert!(matches!(&err, TablesError::Invalid(m) if m.contains("glyph 2") && m.contains("too few")), "{err}");
 }
+
+#[test]
+fn nested_subroutines_past_the_memory_limit_are_refused() {
+    // Every glyph runs `0 0 rlineto` 4^7 times through seven levels of calls.
+    let small = crate::tests::nested_subr_cff2(2, 8, 4, &[139, 139, 5]);
+    let t = Table::read(&small, 0).unwrap();
+    assert_eq!(program(&t, 1).len(), 1 << 14);
+    let table = crate::tests::nested_subr_cff2(64, 8, 4, &[139, 139, 5]);
+    let limit = 16 << 20;
+    let started = std::time::Instant::now();
+    let err = Table::read_within(&table, 0, limit).unwrap_err();
+    assert!(matches!(err, TablesError::TooLarge { limit: l, .. } if l == limit), "{err}");
+    assert!(started.elapsed() < std::time::Duration::from_secs(5));
+    // A path operator without its operands is refused as it is read.
+    let bare = crate::tests::nested_subr_cff2(1, 3, 4, &[5]);
+    assert!(matches!(Table::read(&bare, 0), Err(TablesError::Invalid(m)) if m.contains("operator 5")));
+}

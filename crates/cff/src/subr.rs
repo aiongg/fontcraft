@@ -39,7 +39,7 @@ mod table;
 
 use std::fmt;
 
-pub use table::{WidthsReport, charstrings_of_table, desubroutinize_table, optimize_widths_table, subroutinize_table};
+pub use table::{WidthsReport, charstrings_of_table, desubroutinize_table, desubroutinize_table_within, optimize_widths_table, subroutinize_table};
 
 /// Deepest subroutine nesting the charstring formats allow: a glyph's own charstring is depth 0
 /// and every call adds one.
@@ -220,14 +220,23 @@ impl std::error::Error for SubrError {}
 
 /// The set with every subroutine call expanded and no subroutines left.
 pub fn desubroutinize(set: &CharstringSet) -> Result<CharstringSet, SubrError> {
+    desubroutinize_within(set, usize::MAX)
+}
+
+/// [`desubroutinize`], refused once the expanded charstrings hold more than `max_bytes`
+/// together. Each glyph is expanded and charged before the next one is, so memory stays near
+/// the limit.
+pub fn desubroutinize_within(set: &CharstringSet, max_bytes: usize) -> Result<CharstringSet, SubrError> {
     set.validate()?;
-    let flats = flatten_all(set)?;
-    Ok(CharstringSet {
-        charstrings: flats.into_iter().map(|f| f.bytes).collect(),
-        global_subrs: Vec::new(),
-        local_subrs: vec![Vec::new(); set.fd_count()],
-        ..set.clone()
-    })
+    let mut budget = MAX_OPS_PER_SET;
+    let mut left = max_bytes;
+    let mut charstrings = Vec::with_capacity(set.charstrings.len());
+    for gid in 0..set.charstrings.len() {
+        let bytes = flat::flatten(set, gid, &mut budget).map_err(|e| in_glyph(e, gid))?.bytes;
+        left = left.checked_sub(bytes.len()).ok_or(SubrError::TooLarge { what: "bytes in the expanded charstrings", limit: max_bytes })?;
+        charstrings.push(bytes);
+    }
+    Ok(CharstringSet { charstrings, global_subrs: Vec::new(), local_subrs: vec![Vec::new(); set.fd_count()], ..set.clone() })
 }
 
 /// The set with repeated charstring fragments moved into subroutines. Existing subroutines are

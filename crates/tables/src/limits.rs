@@ -61,6 +61,33 @@ pub const MAX_CFF_STACK: usize = 48;
 pub const MAX_CFF2_STACK: usize = 513;
 /// Longest charstring, in bytes.
 pub const MAX_CHARSTRING: usize = 65_535;
+/// Most memory the charstrings of one `CFF ` or `CFF2` table may take once their subroutine
+/// calls are expanded and they are read into operators, by an estimate counting each operator
+/// and operand with its allocation. The expanded charstrings, their operators and the table
+/// written from them are held at the same time, so a 32-bit target (wasm) gets a quarter.
+pub const MAX_CHARSTRING_MEMORY: usize = if usize::BITS >= 64 { 1 << 30 } else { 256 << 20 };
+
+/// What the charstrings of one table may still take under a memory limit
+/// ([`MAX_CHARSTRING_MEMORY`] outside tests).
+#[derive(Clone, Debug)]
+pub(crate) struct CharstringMemory {
+    left: usize,
+    limit: usize,
+}
+
+impl CharstringMemory {
+    pub(crate) fn new(limit: usize) -> Self {
+        CharstringMemory { left: limit, limit }
+    }
+
+    pub(crate) fn charge(&mut self, bytes: usize) -> crate::Result<()> {
+        self.left = self.left.checked_sub(bytes).ok_or(crate::TablesError::TooLarge {
+            what: "the memory the charstrings of one table take, subroutine calls expanded",
+            limit: self.limit,
+        })?;
+        Ok(())
+    }
+}
 
 /// Most axes an instancing location or limit names.
 pub const MAX_AXES: usize = fontcraft_model::MAX_AXIS_VALUES;
