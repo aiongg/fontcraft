@@ -39,7 +39,7 @@ fn binary_specs() -> Vec<CommandSpec> {
         "Instantiate",
         [],
         None,
-        "{input: path, face?: int, location?: {axis: number | {min?: number, default?: number, max?: number} | \"drop\"}, static?: bool, named?: regex, all?: bool, indices?: [int], to?: \"same\"|\"ttf\"|\"otf\", output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool, clamp?: bool, optimizeGvar?: bool, overlapFlag?: bool, removeOverlaps?: bool, ignoreOverlapErrors?: bool, updateNameTable?: bool, downgradeCff2?: bool, recalcBounds?: bool, round?: bool, timestamp?: \"keep\"|\"now\"|int} instances a variable font: every axis pinned (a number, \"drop\" for the default, or static to pin the axes not named at their default) gives a static font; named, all and indices build fvar named instances instead, each named after its PostScript name; locations are clamped to the axis ranges; the output defaults to <name>.instance.<ext> beside the input; a designspace or other source is instanced by the source path → {results: [{output, location: {axis: number}, static: bool, name?, postscriptName?}]}",
+        "{input: path, face?: int, location?: {axis: number | {min?: number, default?: number, max?: number} | \"drop\"}, static?: bool, named?: regex, all?: bool, indices?: [int], to?: \"same\"|\"ttf\"|\"otf\"|\"ufo\", output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool, clamp?: bool, optimizeGvar?: bool, overlapFlag?: bool, removeOverlaps?: bool, ignoreOverlapErrors?: bool, updateNameTable?: bool, downgradeCff2?: bool, recalcBounds?: bool, round?: bool, timestamp?: \"keep\"|\"now\"|int, autohint?: bool, normalize?: bool, strict?: bool, ufoVersion?: 2|3, instanceDir?: path, layoutOnly?: bool, masterFinder?: string} instances a variable font: every axis pinned (a number, \"drop\" for the default, or static to pin the axes not named at their default) gives a static font; named, all and indices build fvar named instances instead, each named after its PostScript name; locations are clamped to the axis ranges; the output defaults to <name>.instance.<ext> beside the input; a designspace or other multi-master source gives static instances: at `location` (user values; axes not named at their default; clamped unless clamp is false) or the source's instances chosen by named, all or indices (default: every exporting one), written as UFOs (the default; to the file names the source records, or into instanceDir or outputDir; rounded unless round is false, PostScript-autohinted unless autohint is false, overlaps removed with removeOverlaps; ufoVersion default 3) or compiled with to ttf or otf as font.compile does; a glyph whose masters are not compatible is left out with a warning, or stops the run with strict → {results: [{output, location: {axis: number}, static: bool, name?, postscriptName?}], warnings?: [string]}",
         always,
         instantiate
     )
@@ -47,16 +47,15 @@ fn binary_specs() -> Vec<CommandSpec> {
     .writes_files()]
 }
 
-/// `font.instantiate` on designspace and multi-master sources (M12.22).
+/// `font.instantiate` on designspace and multi-master sources (M12.22): the source part of the
+/// one command above, so no command of its own.
 fn source_specs() -> Vec<CommandSpec> {
-    // M12.22
     Vec::new()
 }
 
-/// `font.instantiate` with a source as input (M12.22).
-fn instantiate_source(p: &Params<'_>, input: &file_io::Input) -> Result<Value> {
-    // M12.22
-    Err(p.bad(format!("{} is not a compiled font; instancing sources is not built yet", input.path.display())))
+/// `font.instantiate` with a source as input (M12.22): see [`source`].
+fn instantiate_source(p: &Params<'_>, input: &Path, req: &OutputRequest) -> Result<Value> {
+    source::instantiate(p, input, req)
 }
 
 /// One font to build: its limits and how its result is described and named.
@@ -70,11 +69,15 @@ fn instantiate(_: &mut Session, params: &Value) -> Result<Value> {
     let path = p.str("input")?;
     let req = OutputRequest::from_params(&p)?;
     let face = p.opt_int("face", 0, i64::from(u32::MAX))?.and_then(|f| u32::try_from(f).ok()).unwrap_or(0);
+    // A UFO or a package is a folder, which no compiled font is.
+    if Path::new(path).is_dir() {
+        return instantiate_source(&p, Path::new(path), &req);
+    }
     let input = file_io::read_input(Path::new(path))?;
     if !input.kind.is_font() {
-        return instantiate_source(&p, &input);
+        return instantiate_source(&p, &input.path, &req);
     }
-    for key in ["autohint", "normalize", "strict", "ufoVersion", "layoutOnly", "masterFinder"] {
+    for key in ["autohint", "normalize", "strict", "ufoVersion", "instanceDir", "layoutOnly", "masterFinder"] {
         if p.get(key).is_some() {
             return Err(p.bad(format!("`{key}` applies to sources only, and {path} is a compiled font")));
         }
@@ -340,6 +343,8 @@ struct Staged {
     temp: PathBuf,
     /// The file the temporary replaces: the output, or the file it links to.
     target: PathBuf,
+    /// A folder (a UFO), which replaces an existing one by being swapped in for it.
+    folder: bool,
 }
 
 /// Writes `bytes` to a new temporary file beside `out` (beside the file it links to, for a
@@ -362,15 +367,65 @@ fn stage(out: &Path, bytes: &[u8], n: usize) -> Result<Staged> {
     if let Ok(meta) = std::fs::metadata(&target) {
         let _ = std::fs::set_permissions(&temp, meta.permissions());
     }
-    Ok(Staged { temp, target })
+    Ok(Staged { temp, target, folder: false })
 }
 
-/// Moves every staged output into place. If one cannot be moved, the ones after it are
-/// discarded and the error says which were written.
+/// Most files one staged folder holds.
+#[cfg(not(target_arch = "wasm32"))]
+const MAX_FOLDER_FILES: usize = crate::io::MAX_PACKAGE_FILES;
+
+/// Writes `files` (paths relative to the folder, `/`-separated) into a new temporary folder
+/// beside `out`. An existing `out` must be a folder that `is_replaceable` accepts.
+#[cfg(not(target_arch = "wasm32"))]
+fn stage_folder(out: &Path, files: &std::collections::BTreeMap<String, Vec<u8>>, n: usize, is_replaceable: impl Fn(&Path) -> bool) -> Result<Staged> {
+    let io = |path: &Path, e: std::io::Error| EngineError::Io(format!("cannot write {}: {e}", path.display()));
+    let target = if out.is_symlink() { std::fs::canonicalize(out).map_err(|e| io(out, e))? } else { out.to_path_buf() };
+    if target.exists() && !(target.is_dir() && is_replaceable(&target)) {
+        return Err(EngineError::Io(format!("cannot write {}: something that is not a UFO has that name", target.display())));
+    }
+    if files.len() > MAX_FOLDER_FILES {
+        return Err(EngineError::Io(format!("cannot write {}: more than {MAX_FOLDER_FILES} files", target.display())));
+    }
+    let name = target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "instance".into());
+    let temp = target.with_file_name(format!(".{name}.{}-{n}.tmp", std::process::id()));
+    std::fs::create_dir(&temp).map_err(|e| io(&temp, e))?;
+    let staged = Staged { temp, target, folder: true };
+    let written = write_tree(&staged.temp, &staged.target, files);
+    match written {
+        Ok(()) => Ok(staged),
+        Err(e) => {
+            discard(std::slice::from_ref(&staged));
+            Err(e)
+        }
+    }
+}
+
+/// Writes `files` under `root`, a new folder that stands in for `target` in messages.
+#[cfg(not(target_arch = "wasm32"))]
+fn write_tree(root: &Path, target: &Path, files: &std::collections::BTreeMap<String, Vec<u8>>) -> Result<()> {
+    let io = |path: &Path, e: std::io::Error| EngineError::Io(format!("cannot write {}: {e}", path.display()));
+    for (rel, bytes) in files {
+        let safe = !rel.is_empty() && !rel.starts_with('/') && !rel.contains('\\') && rel.split('/').all(|s| !s.is_empty() && s != "." && s != "..");
+        if !safe {
+            return Err(EngineError::Io(format!("cannot write {}: `{rel}` is not a path inside it", target.display())));
+        }
+        let path = root.join(rel);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| io(parent, e))?;
+        }
+        std::fs::write(&path, bytes).map_err(|e| io(&path, e))?;
+    }
+    Ok(())
+}
+
+/// Moves every staged output into place. A staged folder is swapped in: the folder it replaces
+/// is moved aside first, then removed. If one cannot be moved, the ones after it are discarded
+/// and the error says which were written.
 #[cfg(not(target_arch = "wasm32"))]
 fn commit(staged: &[Staged]) -> Result<()> {
     for (i, s) in staged.iter().enumerate() {
-        if let Err(e) = std::fs::rename(&s.temp, &s.target) {
+        let moved = if s.folder { swap_folder(s) } else { std::fs::rename(&s.temp, &s.target) };
+        if let Err(e) = moved {
             discard(staged.get(i..).unwrap_or_default());
             return Err(EngineError::Io(format!("cannot write {}: {e}; the {i} outputs before it were written", s.target.display())));
         }
@@ -378,11 +433,33 @@ fn commit(staged: &[Staged]) -> Result<()> {
     Ok(())
 }
 
+/// Puts a staged folder in place of its target, which is set aside and removed once the new
+/// folder is there; when the move fails, the old folder is put back.
+#[cfg(not(target_arch = "wasm32"))]
+fn swap_folder(s: &Staged) -> std::io::Result<()> {
+    if std::fs::symlink_metadata(&s.target).is_err() {
+        return std::fs::rename(&s.temp, &s.target);
+    }
+    let name = s.target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "instance".into());
+    let aside = s.target.with_file_name(format!(".{name}.{}.old", std::process::id()));
+    std::fs::rename(&s.target, &aside)?;
+    if let Err(e) = std::fs::rename(&s.temp, &s.target) {
+        let _ = std::fs::rename(&aside, &s.target);
+        return Err(e);
+    }
+    let _ = std::fs::remove_dir_all(&aside);
+    Ok(())
+}
+
 /// Removes the temporaries that are still there.
 #[cfg(not(target_arch = "wasm32"))]
 fn discard(staged: &[Staged]) {
     for s in staged {
-        let _ = std::fs::remove_file(&s.temp);
+        if s.folder {
+            let _ = std::fs::remove_dir_all(&s.temp);
+        } else {
+            let _ = std::fs::remove_file(&s.temp);
+        }
     }
 }
 
@@ -398,6 +475,8 @@ fn commit(_: &[Staged]) -> Result<()> {
 
 #[cfg(target_arch = "wasm32")]
 fn discard(_: &[Staged]) {}
+
+mod source;
 
 #[cfg(test)]
 #[cfg(not(target_arch = "wasm32"))]

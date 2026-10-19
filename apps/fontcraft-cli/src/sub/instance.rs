@@ -1,6 +1,6 @@
 //! `fontcraft-cli instance` (M12.20–M12.22): runs `font.instantiate`. Static and named
-//! instances of compiled variable fonts (M12.20); partial instances (M12.21) and sources (M12.22)
-//! report the engine's "not built yet" until their packages land.
+//! instances of compiled variable fonts (M12.20); partial instances (M12.21); UFO and compiled
+//! instances of designspaces and other multi-master sources (M12.22).
 
 use serde_json::{Map, Value, json};
 
@@ -47,6 +47,14 @@ const OPTIONS: &[OptSpec] = &[
     OptSpec::switch("in-place", false, "replace the input font"),
     OptSpec::switch("no-clobber", false, "refuse to replace an existing output"),
     OptSpec::switch("json", false, "print the engine command's result as JSON"),
+    // M12.22
+    OptSpec::switch("autohint", true, "PostScript-autohint UFO instances of a source"),
+    OptSpec::switch("normalize", true, "write UFO instances in canonical form"),
+    OptSpec::switch("strict", false, "stop at a glyph of a source that cannot be interpolated instead of leaving it out"),
+    OptSpec::value("ufo-version", "2|3", "", "format version of UFO instances (default 3)"),
+    OptSpec::value("instance-dir", "DIR", "", "the folder for UFO instances (default: the paths the source records)"),
+    OptSpec::switch("layout-only", false, "interpolate only the layout tables of compiled masters"),
+    OptSpec::value("master-finder", "TEMPLATE", "", "how to find the compiled master of each source, with --layout-only"),
 ];
 
 fn run(args: &[String]) -> Outcome {
@@ -148,6 +156,24 @@ fn params(parsed: &Parsed) -> Result<Value, Failure> {
         }
         p.insert("indices".into(), Value::Array(indices));
     }
+    // Options of sources go to the engine only when they differ from their default, as the
+    // engine refuses them for a compiled font.
+    for (option, key, default) in
+        [("autohint", "autohint", true), ("normalize", "normalize", true), ("strict", "strict", false), ("layout-only", "layoutOnly", false)]
+    {
+        if parsed.switch(option) != default {
+            p.insert(key.into(), json!(!default));
+        }
+    }
+    if let Some(v) = parsed.value("ufo-version").filter(|v| !v.is_empty()) {
+        let v: u32 = v.parse().ok().filter(|v| matches!(v, 2 | 3)).ok_or_else(|| usage(format!("--ufo-version takes 2 or 3, got `{v}`")))?;
+        p.insert("ufoVersion".into(), json!(v));
+    }
+    for (option, key) in [("instance-dir", "instanceDir"), ("master-finder", "masterFinder")] {
+        if let Some(v) = parsed.value(option).filter(|v| !v.is_empty()) {
+            p.insert(key.into(), json!(v));
+        }
+    }
     if let Some(face) = parsed.value("face").filter(|v| !v.is_empty()) {
         let face: u32 = face.parse().map_err(|_| usage(format!("--face takes a whole number, got `{face}`")))?;
         p.insert("face".into(), json!(face));
@@ -187,5 +213,19 @@ mod tests {
         assert!(params(&parsed(&["V.ttf", "wght=bold"])).is_err());
         assert!(params(&parsed(&["V.ttf", "wght=1", "wght=2"])).is_err());
         assert!(params(&parsed(&[])).is_err());
+    }
+
+    #[test]
+    fn instance_source_options_reach_the_engine_only_when_given() {
+        let p = params(&parsed(&["F.designspace", "--all"])).unwrap();
+        for key in ["autohint", "normalize", "strict", "layoutOnly", "ufoVersion", "instanceDir"] {
+            assert!(p.get(key).is_none(), "{key} is left to the engine's default");
+        }
+        let p = params(&parsed(&["F.designspace", "--no-autohint", "--strict", "--ufo-version", "2", "--instance-dir", "out"])).unwrap();
+        assert_eq!(p["autohint"], json!(false));
+        assert_eq!(p["strict"], json!(true));
+        assert_eq!(p["ufoVersion"], json!(2));
+        assert_eq!(p["instanceDir"], json!("out"));
+        assert!(params(&parsed(&["F.designspace", "--ufo-version", "4"])).is_err());
     }
 }
