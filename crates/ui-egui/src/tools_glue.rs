@@ -247,6 +247,9 @@ pub fn pointer(app: &mut FontcraftApp, ev: RawPointer) -> Vec<String> {
     if let Some(errors) = crate::canvas::text::pointer(app, ev) {
         return errors;
     }
+    if let Some(errors) = crate::canvas::gradient_knobs::pointer(app, ev) {
+        return errors;
+    }
     if let Some(errors) = crate::canvas::images::pointer(app, ev) {
         return errors;
     }

@@ -530,16 +530,29 @@ pub struct Picture<'a> {
 /// The strip as an image the size of its rect in pixels: the glyphs filled, inverted, turned
 /// and blurred as the options say. `None` for an empty or oversized strip.
 pub fn picture(p: &Picture, outlines: &mut CompositeCache) -> Option<ColorImage> {
+    picture_with(p, outlines, None)
+}
+
+/// [`picture`], with each glyph whose shown layer is a colour layer drawn in colour from
+/// `colour`'s files (`color.preview.previewArea`); without `colour` every glyph is filled.
+pub fn picture_with(p: &Picture, outlines: &mut CompositeCache, mut colour: Option<&mut crate::canvas::color::Sources>) -> Option<ColorImage> {
     let rect = p.placement.rect;
     let s = p.placement.scale;
     // Glyphs whose advance lies more than an em beyond the strip cannot reach into it.
     let reach = f64::from(p.font.units_per_em) * s;
     let (min_x, max_x) = (f64::from(rect.min.x) - reach, f64::from(rect.max.x) + reach);
     let mut filled = BezPath::new();
+    let mut coloured = Vec::new();
     for placed in &p.layout.placed {
         let Some(name) = placed.glyph.as_deref() else { continue };
         let (a, b) = (p.placement.x0 + placed.x * s, p.placement.x0 + (placed.x + placed.advance) * s);
         if b < min_x || a > max_x {
+            continue;
+        }
+        if colour.is_some()
+            && let Some(layer) = crate::canvas::color::preview_layer(p.font, p.tab, name)
+        {
+            coloured.push((name, layer, placed.x, placed.y));
             continue;
         }
         let Some(layer) = view::shown_layer(p.font, p.tab, name) else { continue };
@@ -548,7 +561,13 @@ pub fn picture(p: &Picture, outlines: &mut CompositeCache) -> Option<ColorImage>
         outline.apply_affine(Affine::translate((placed.x, placed.y)));
         filled.extend(outline.elements().iter().copied());
     }
-    finish(&filled, p.placement, p.ppp, p.options, p.ink, p.paper)
+    finish(&filled, p.placement, p.ppp, p.options, p.ink, p.paper, &mut |px, to_pixels| {
+        if let Some(src) = colour.as_deref_mut() {
+            for (name, layer, x, y) in &coloured {
+                crate::canvas::color::paint_preview_glyph(p.font, name, layer, src, px, to_pixels * Affine::translate((*x, *y)));
+            }
+        }
+    })
 }
 
 /// One glyph of the line of all instances: the instance's view, its master id and the glyph's
@@ -602,11 +621,21 @@ pub fn picture_all(
         filled.extend(outline.elements().iter().copied());
     }
     let (options, ink, paper) = style;
-    finish(&filled, placement, ppp, options, ink, paper)
+    finish(&filled, placement, ppp, options, ink, paper, &mut |_, _| {})
 }
 
-/// `filled` (font units on the line) rasterised into the strip, inverted, turned and blurred.
-fn finish(filled: &BezPath, placement: &Placement, ppp: f32, options: &PreviewOptions, ink: Color32, paper: Color32) -> Option<ColorImage> {
+/// `filled` (font units on the line) rasterised into the strip, inverted, `over` painted on it
+/// (given the pixels and the map from font units on the line to them), turned and blurred.
+#[allow(clippy::too_many_arguments)]
+fn finish(
+    filled: &BezPath,
+    placement: &Placement,
+    ppp: f32,
+    options: &PreviewOptions,
+    ink: Color32,
+    paper: Color32,
+    over: &mut dyn FnMut(&mut crate::canvas::color::Pixels, Affine),
+) -> Option<ColorImage> {
     let rect = placement.rect;
     let ppp = if ppp.is_finite() && ppp > 0.0 { ppp } else { 1.0 };
     let (w, h) = ((rect.width() * ppp).round(), (rect.height() * ppp).round());
@@ -622,6 +651,7 @@ fn finish(filled: &BezPath, placement: &Placement, ppp: f32, options: &PreviewOp
     let style = Style { ink: ink.to_srgba_unmultiplied(), background: paper.to_srgba_unmultiplied(), anti_alias: true };
     let image = render_path(filled, to_pixels, width, height, &style).ok()?;
     let mut pixels = image.pixels;
+    over(&mut crate::canvas::color::Pixels { data: &mut pixels, width, height }, to_pixels);
     if options.flip {
         pixels = turn_pixels(&pixels);
     }
@@ -823,7 +853,14 @@ pub(crate) fn strip(app: &mut FontcraftApp, ui: &mut egui::Ui, rect: Rect, targe
             Line::Text { view: None, layout } => {
                 let Ok(font) = app.session.font() else { return };
                 let p = Picture { font, tab, layout, placement: &placement, ppp, doc, options: &options, ink, paper };
-                picture(&p, &mut app.fill_cache.outlines)
+                let assets = app.session.assets();
+                let mut colour = crate::canvas::color::Sources {
+                    assets: assets.as_ref(),
+                    svgs: &mut app.color_ui.svgs,
+                    revision: app.images.revision,
+                    text: if options.invert { paper } else { ink },
+                };
+                picture_with(&p, &mut app.fill_cache.outlines, Some(&mut colour))
             }
             Line::Text { view: Some((i, view)), layout } => {
                 // The instance view's one master stands in for the tab's.

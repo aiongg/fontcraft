@@ -8,6 +8,8 @@
 //! | [`guides`] | guides, the grid, parameter metric lines, CJK grids, measurement labels |
 //! | [`background`] | the other side of the layer and the other visible layers, behind the outline; the darker canvas while the background is edited |
 //! | [`images`] | placed images, through a cache of decoded textures |
+//! | [`color`] | colour glyphs: palette, full-colour, iColor and svg layers, layered masters in their Master Color |
+//! | [`gradient_knobs`] | the knobs of the selected paths' gradients, and their drags |
 //! | [`fill`] | filled glyphs, rasterised by the `render` crate into a texture |
 //! | [`composite`] | (no drawing) each glyph's outline with strokes expanded and masks applied, cached |
 //! | [`components`] | components by alignment state, placeholders, corner components, the nodes inside components while dragging |
@@ -36,11 +38,13 @@ pub mod audit_markers;
 pub mod autometer;
 pub mod background;
 pub mod bbox;
+pub mod color;
 pub mod compatibility;
 pub mod components;
 pub mod composite;
 pub mod edit_aids;
 pub mod fill;
+pub mod gradient_knobs;
 pub mod group_members;
 pub mod guides;
 pub mod hints_ps;
@@ -101,7 +105,8 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'stat
     let incompatible = compatibility::incompatible_in_tab(app);
     crate::shell::context_menu::show(app, ui, pending);
     crate::shell::preview::area(app, ui, pending);
-    let FontcraftApp { session, state, tokens, fill_cache, preview_tool, tools, layouts, images, .. } = app;
+    let knobs = gradient_knobs::current(app);
+    let FontcraftApp { session, state, tokens, fill_cache, preview_tool, tools, layouts, images, color_ui, .. } = app;
     let Some(tab) = state.tab().cloned() else { return };
     layouts.prepare(session, &tab);
     let frame = egui::Frame::NONE.fill(tokens.canvas);
@@ -171,6 +176,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'stat
         if state.display.group_members {
             group_members::draw(&c, fill_cache, font, &tab, layout.as_deref(), origin, doc);
         }
+        color::draw(&c, ui.ctx(), color_ui, images, &color::Scene { session: &*session, tab: &tab, font, layout: layout.as_deref(), origin, doc });
         let what = fill::Fill { doc, others: state.display.fill_preview, edited: state.display.fill_preview && (*preview_tool || text_mode) };
         fill::draw(&c, fill_cache, font, &tab, layout.as_deref(), origin, what);
         compatibility::draw_bars(&c, font, layout.as_deref(), origin, &incompatible);
@@ -246,6 +252,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'stat
         if state.display.anchors {
             anchors::draw(&c, layer, &tab.selection, &marks);
         }
+        gradient_knobs::draw(&c, &knobs);
         hints_ps::draw_marks(&c, &hints, &tab.selection);
         if let Some(s) = &scene {
             autometer::draw(ui, &c, s, pending);

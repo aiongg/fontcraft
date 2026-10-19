@@ -49,6 +49,8 @@ pub struct FontcraftApp {
     pub(crate) font_view: shell::font_view::FontViewUi,
     /// Placed images in Edit View: decoded textures, the selected image, the drag in progress.
     pub(crate) images: canvas::images::ImageUi,
+    /// Colour glyphs in Edit View: their textures, the svg files read, the gradient knob drag.
+    pub(crate) color_ui: canvas::color::ColorUi,
     themed: bool,
 }
 
@@ -81,6 +83,7 @@ impl FontcraftApp {
             layouts: Default::default(),
             font_view: Default::default(),
             images: Default::default(),
+            color_ui: Default::default(),
             themed: false,
         }
     }
