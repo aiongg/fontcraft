@@ -10,7 +10,8 @@
 //! UFO instances follow fontTools' instantiator (ufo2ft `instantiator.py`, MIT License) in what
 //! they carry from the default source: the font info that is not specific to one style, the
 //! instance's PostScript and style-map names from the designspace, and the OS/2 weight and width
-//! classes from the `wght` and `wdth` locations when the masters state none.
+//! classes from the `wght` and `wdth` locations by the rule static export of a UFO-family source
+//! uses ([`fontcraft_model::strip_instance_info`], [`fontcraft_model::location_class`]).
 //!
 //! UFOs are staged in temporary folders beside their targets and swapped in once every instance
 //! is built ([`super::stage_folder`], [`super::commit`]), so a failure leaves existing files as
@@ -37,44 +38,6 @@ use crate::{EngineError, Result, Session};
 /// Options of compiled variable fonts, with the value that leaves each without effect.
 const BINARY_ONLY: [(&str, bool); 5] =
     [("optimizeGvar", true), ("overlapFlag", true), ("updateNameTable", false), ("downgradeCff2", false), ("recalcBounds", true)];
-
-/// Font-info keys that name one style, so an instance does not take them from the default
-/// source (the instantiator's list): parameters under their UFO and reference names, and the
-/// properties that hold the same values.
-const STYLE_PARAMS: [&str; 18] = [
-    "postscriptFontName",
-    "postscriptFullName",
-    "postscriptUniqueID",
-    "styleMapFamilyName",
-    "styleMapStyleName",
-    "openTypeNameCompatibleFullName",
-    "compatibleFullName",
-    "openTypeNamePreferredFamilyName",
-    "preferredFamilyName",
-    "openTypeNamePreferredSubfamilyName",
-    "preferredSubfamilyName",
-    "openTypeNameUniqueID",
-    "openTypeNameWWSFamilyName",
-    "WWSFamilyName",
-    "openTypeNameWWSSubfamilyName",
-    "WWSSubfamilyName",
-    "woffMetadataUniqueID",
-    "postscriptWeightName",
-];
-const STYLE_PROPERTIES: [&str; 8] = [
-    "postscriptFontName",
-    "postscriptFullName",
-    "postscriptFullNames",
-    "preferredFamilyNames",
-    "preferredSubfamilyNames",
-    "WWSFamilyName",
-    "WWSSubfamilyName",
-    "uniqueID",
-];
-
-/// usWidthClass 1 to 9 at these `wdth` user values (the OpenType specification's table).
-const WIDTH_CLASSES: [(f64, f64); 9] =
-    [(50.0, 1.0), (62.5, 2.0), (75.0, 3.0), (87.5, 4.0), (100.0, 5.0), (112.5, 6.0), (125.0, 7.0), (150.0, 8.0), (200.0, 9.0)];
 
 /// What the instances are written as.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -378,7 +341,7 @@ fn build_ufos(
             other => other,
         })?;
         warnings.extend(notes.into_iter().map(|n| format!("instance `{label}`: {n}")));
-        let made = finish(p, made, inst, &names, &job.location, steps, skipped, &label, warnings)?;
+        let made = finish(p, font, made, inst, &names, steps, skipped, &label, warnings)?;
         let out = ufo_path(input, req, instance_dir, job, &names.filename)?;
         if out == input || outs.contains(&out) {
             return Err(p.bad(format!("two instances, or an instance and the source, would both be written to {}", out.display())));
@@ -455,10 +418,10 @@ fn make_parent(out: &Path) -> Result<Vec<PathBuf>> {
 #[allow(clippy::too_many_arguments)]
 fn finish(
     p: &Params<'_>,
+    font: &Font,
     made: Font,
     inst: &Instance,
     names: &fontcraft_io_ufo::designspace::InstanceNames,
-    location: &Value,
     steps: &Steps,
     skipped: &[String],
     label: &str,
@@ -470,40 +433,35 @@ fn finish(
     }
     let mut made = run_steps(made, steps, label, warnings)?;
     made.source.ufo_version = Some(steps.ufo_version);
+    let lone = font.masters.len() == 1 && font.master_at(&inst.location).is_some();
     let info = std::sync::Arc::make_mut(&mut made.info);
     let has = |params: &fontcraft_model::Params, keys: &[&str]| keys.iter().any(|k| params.get(k).is_some());
     let font_weight = has(&info.params, &["weightClass", "openTypeOS2WeightClass"]);
     let font_width = has(&info.params, &["widthClass", "openTypeOS2WidthClass"]);
-    for key in STYLE_PARAMS {
-        info.params.remove(key);
-    }
-    info.properties.0.retain(|prop| !STYLE_PROPERTIES.contains(&prop.key.as_str()));
+    fontcraft_model::strip_instance_info(&mut info.properties, &mut info.params, lone);
     let masters = std::sync::Arc::make_mut(&mut made.masters);
     let master = masters.first_mut().ok_or_else(|| p.bad(format!("instance `{label}` has no master")))?;
-    for key in STYLE_PARAMS {
-        master.params.remove(key);
-    }
-    master.properties.0.retain(|prop| !STYLE_PROPERTIES.contains(&prop.key.as_str()));
+    fontcraft_model::strip_instance_info(&mut master.properties, &mut master.params, lone);
     let text = |s: &str| PValue::String(s.into());
     if let Some(ps) = &names.postscript {
         master.params.set("postscriptFontName", text(ps));
     }
     master.params.set("styleMapFamilyName", text(&names.style_map_family));
     master.params.set("styleMapStyleName", text(names.style_map_style));
-    let axis = |tag: &str| location.get(tag).and_then(Value::as_f64);
-    let weight = inst.params.get("weightClass").cloned().or_else(|| {
-        let known = font_weight || has(&master.params, &["weightClass", "openTypeOS2WeightClass"]);
-        let value = axis("wght").map(|w| fontcraft_compile::ot_round(w.clamp(1.0, 1000.0)));
-        let value = value.or_else(|| inst.weight_class.is_some().then(|| fontcraft_model::axes::instance_class_value(inst, "wght")));
-        (!known).then_some(value).flatten().map(class_value)
-    });
-    let width = inst.params.get("widthClass").cloned().or_else(|| {
-        let known = font_width || has(&master.params, &["widthClass", "openTypeOS2WidthClass"]);
-        let value = axis("wdth")
-            .map(width_class)
-            .or_else(|| inst.width_class.is_some().then(|| width_class(fontcraft_model::axes::instance_class_value(inst, "wdth"))));
-        (!known).then_some(value).flatten().map(class_value)
-    });
+    // fontmake sets the classes from the location on a wght or wdth axis whatever the masters
+    // state (glyphsLib's apply_instance_data after the instantiator); without the axis, from the
+    // instance's own class when the masters state none.
+    let class = |tag: &str, param: &str, known: bool| {
+        inst.params.get(param).cloned().or_else(|| {
+            let value = fontcraft_model::location_class(font, &inst.location, tag).or_else(|| {
+                let own = if tag == "wght" { inst.weight_class.is_some() } else { inst.width_class.is_some() };
+                (own && !known).then(|| fontcraft_model::user_class(tag, fontcraft_model::axes::instance_class_value(inst, tag))).flatten()
+            });
+            value.map(|v| PValue::Number(Number::int(v)))
+        })
+    };
+    let weight = class("wght", "weightClass", font_weight || has(&master.params, &["weightClass", "openTypeOS2WeightClass"]));
+    let width = class("wdth", "widthClass", font_width || has(&master.params, &["widthClass", "openTypeOS2WidthClass"]));
     if let Some(w) = weight {
         master.params.set("weightClass", w);
     }
@@ -511,29 +469,6 @@ fn finish(
         master.params.set("widthClass", w);
     }
     Ok(made)
-}
-
-/// A class as an integer parameter value.
-fn class_value(v: f64) -> PValue {
-    // Classes are 1 to 1000 here.
-    #[allow(clippy::cast_possible_truncation)]
-    PValue::Number(Number::int(v as i64))
-}
-
-/// usWidthClass at a `wdth` user value: linear between the specification's values, rounded,
-/// within 1 to 9.
-fn width_class(wdth: f64) -> f64 {
-    let v = wdth.clamp(50.0, 200.0);
-    let mut class = 9.0;
-    for pair in WIDTH_CLASSES.windows(2) {
-        if let [(x0, c0), (x1, c1)] = pair
-            && v <= *x1
-        {
-            class = c0 + (v - x0) / (x1 - x0) * (c1 - c0);
-            break;
-        }
-    }
-    fontcraft_compile::ot_round(class).clamp(1.0, 9.0)
 }
 
 /// Remove Overlap, Round Coordinates (and the widths and kerning, as the instantiator rounds

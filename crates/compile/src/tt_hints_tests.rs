@@ -513,7 +513,7 @@ fn control_instruction_point_shifts_move_points_after_iup() {
     let font = FontRef::new(&shifted.bytes).unwrap();
     let text = fontcraft_hinting::ttasm::disassemble(program(&font, gid(&shifted, "x"))).unwrap();
     let iup = text.rfind("IUP").unwrap();
-    assert!(text[iup..].contains("SVTCA[0]"), "the shifts follow IUP: {text}");
+    assert!(text.get(iup..).unwrap().contains("SVTCA[0]"), "the shifts follow IUP: {text}");
     for ppem in [11u16, 12, 13] {
         let (a, b) = (hinted_extents(&shifted, &["x"], ppem, Intent::Mono)[0], hinted_extents(&plain, &["x"], ppem, Intent::Mono)[0]);
         let lift = if ppem == 12 { 1.0 } else { 0.0 };

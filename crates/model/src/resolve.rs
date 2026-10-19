@@ -530,6 +530,7 @@ const INSTANCE_OWN_PARAMS: &[&str] = &[
     "openTypeNameUniqueID",
     "macintoshFONDName",
     "macintoshFONDFamilyID",
+    "woffMetadataUniqueID",
     "year",
 ];
 const INSTANCE_OWN_PROPERTIES: &[&str] = &[
@@ -563,13 +564,18 @@ pub fn strip_instance_info(properties: &mut Properties, params: &mut Params, lon
 }
 
 /// The OS/2 weight class (`wght`) or width class (`wdth`) that glyphsLib gives a static instance
-/// at `location` of a UFO-family source: the user value, truncated and kept within 1 to 1,000,
-/// for weight; the class whose width percentage is nearest (the lower on a tie) for width.
-/// `None` when the font has no such axis.
+/// at `location` of a UFO-family source ([`user_class`] of the user value). `None` when the font
+/// has no such axis.
 pub fn location_class(font: &Font, location: &[f64], tag: &str) -> Option<i64> {
-    const WIDTHS: [f64; 9] = [50.0, 62.5, 75.0, 87.5, 100.0, 112.5, 125.0, 150.0, 200.0];
     let i = font.axes.iter().position(|a| a.tag == tag)?;
-    let user = crate::axes::mapping(font, i).to_user(axis_value(location, i));
+    user_class(tag, crate::axes::mapping(font, i).to_user(axis_value(location, i)))
+}
+
+/// The OS/2 class glyphsLib gives a `wght` or `wdth` user value: the value, truncated and kept
+/// within 1 to 1,000, for weight; the class whose width percentage is nearest (the lower on a
+/// tie) for width. `None` when the value is not finite.
+pub fn user_class(tag: &str, user: f64) -> Option<i64> {
+    const WIDTHS: [f64; 9] = [50.0, 62.5, 75.0, 87.5, 100.0, 112.5, 125.0, 150.0, 200.0];
     if !user.is_finite() {
         return None;
     }
