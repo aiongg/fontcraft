@@ -34,12 +34,16 @@
 
 mod flat;
 mod market;
+mod prune;
 mod suffix;
 mod table;
 
 use std::fmt;
 
-pub use table::{WidthsReport, charstrings_of_table, desubroutinize_table, optimize_widths_table, subroutinize_table};
+pub use prune::prune_unused;
+pub use table::{
+    SubrMode, TableSubset, WidthsReport, charstrings_of_table, desubroutinize_table, optimize_widths_table, subroutinize_table, subset_table,
+};
 
 /// Deepest subroutine nesting the charstring formats allow: a glyph's own charstring is depth 0
 /// and every call adds one.

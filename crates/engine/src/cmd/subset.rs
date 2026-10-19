@@ -2,8 +2,8 @@
 //!
 //! Whole-file commands follow [`super::file_io`]: paths in, the input never changed, the output
 //! written atomically, a refusal on the web. Compiled fonts with TrueType or CFF outlines are
-//! subset with their layout, variation, colour, bitmap and math tables; CFF2 fonts are refused
-//! and the tables the subsetter does not know are dropped (the result lists them).
+//! subset with their layout, variation, colour, bitmap and math tables, CFF2 outlines included;
+//! the tables the subsetter does not know are dropped (the result lists them).
 
 use std::path::PathBuf;
 
@@ -21,14 +21,13 @@ use crate::{EngineError, Result, Session};
 const MAX_LIST_ITEMS: usize = 1_114_112;
 
 /// Parameters of the row that are not built yet: giving one is refused rather than ignored.
-const NOT_BUILT: [&str; 15] = [
+const NOT_BUILT: [&str; 14] = [
     "excludeGlyphs",
     "fd",
     "excludeFd",
     "random",
     "goadb",
     "exportFlags",
-    "desubroutinize",
     "noSubsetTables",
     "obfuscateNames",
     "recalcBounds",
@@ -46,7 +45,7 @@ pub fn specs() -> Vec<CommandSpec> {
         "Subset Font",
         [],
         None,
-        "{font: path, face?: int|name, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool, keep?: {glyphs?: [name]|\"*\", gids?: [int|\"a-b\"], unicodes?: [int|\"U+XXXX\"|\"XXXX-YYYY\"]|\"*\", text?: string}, ignoreMissingGlyphs?: bool, ignoreMissingUnicodes?: bool, retainGids?: bool, notdefGlyph?: bool, notdefOutline?: bool, recommendedGlyphs?: bool, bidiClosure?: bool, layoutClosure?: bool, layoutFeatures?: [tag]|\"*\"|{add?: [tag], remove?: [tag]}, layoutScripts?: [string]|\"*\", hinting?: bool, hintingTables?: [tag], dropTables?: [tag], passthroughTables?: bool, legacyKern?: bool, nameIds?: [int]|\"*\", nameLanguages?: [int]|\"*\", nameLegacy?: bool, glyphNames?: bool, legacyCmap?: bool, symbolCmap?: bool, pruneUnicodeRanges?: bool, pruneCodepageRanges?: bool}",
+        "{font: path, face?: int|name, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool, keep?: {glyphs?: [name]|\"*\", gids?: [int|\"a-b\"], unicodes?: [int|\"U+XXXX\"|\"XXXX-YYYY\"]|\"*\", text?: string}, ignoreMissingGlyphs?: bool, ignoreMissingUnicodes?: bool, retainGids?: bool, notdefGlyph?: bool, notdefOutline?: bool, recommendedGlyphs?: bool, bidiClosure?: bool, layoutClosure?: bool, layoutFeatures?: [tag]|\"*\"|{add?: [tag], remove?: [tag]}, layoutScripts?: [string]|\"*\", hinting?: bool, hintingTables?: [tag], desubroutinize?: bool, dropTables?: [tag], passthroughTables?: bool, legacyKern?: bool, nameIds?: [int]|\"*\", nameLanguages?: [int]|\"*\", nameLegacy?: bool, glyphNames?: bool, legacyCmap?: bool, symbolCmap?: bool, pruneUnicodeRanges?: bool, pruneCodepageRanges?: bool}",
         always,
         run_subset
     )
@@ -121,6 +120,7 @@ fn options(p: &Params<'_>) -> Result<SubsetOptions> {
         Some(_) => o.layout_scripts = p.opt_strings("layoutScripts")?.map(|v| v.into_iter().map(str::to_string).collect()),
     }
     o.hinting = p.bool_or("hinting", o.hinting)?;
+    o.desubroutinize = p.bool_or("desubroutinize", o.desubroutinize)?;
     o.passthrough_tables = p.bool_or("passthroughTables", o.passthrough_tables)?;
     o.legacy_kern = p.bool_or("legacyKern", o.legacy_kern)?;
     o.name_legacy = p.bool_or("nameLegacy", o.name_legacy)?;

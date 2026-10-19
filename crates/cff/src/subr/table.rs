@@ -7,7 +7,9 @@
 
 use super::{CFF_STACK, CFF2_DEFAULT_STACK, CharstringSet, MAX_FONT_DICTS, MAX_GLYPHS, MAX_STACK_LIMIT, SubrError, SubrOptions};
 
+mod subset;
 mod widths;
+pub use subset::{SubrMode, TableSubset, subset_table};
 pub use widths::{WidthsReport, optimize_widths_table};
 
 /// Most entries one DICT may hold.
