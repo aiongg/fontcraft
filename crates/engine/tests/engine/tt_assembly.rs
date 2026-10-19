@@ -184,3 +184,27 @@ fn a_glyph_program_that_calls_functions_warns_when_the_master_has_no_font_progra
     let r = run(&mut s, "hint.tt.setAssembly", json!({"target": {"glyph": "H"}, "assembly": ""}));
     assert_eq!(r["warnings"], json!([]));
 }
+
+#[test]
+fn a_glyph_program_that_calls_functions_warns_when_the_font_programs_do_not_define_them() {
+    let mut s = session();
+    // A prep without functions: export writes the glyph program, whose call reaches nothing.
+    run(&mut s, "hint.tt.setAssembly", json!({"target": "prep", "assembly": "SVTCA[0]"}));
+    let r = run(&mut s, "hint.tt.setAssembly", json!({"target": {"glyph": "H"}, "assembly": GLYPH}));
+    let warnings = r["warnings"].as_array().unwrap();
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert!(warnings[0].as_str().unwrap().contains("define none"), "{warnings:?}");
+    assert!(!h_program(&exported(&mut s)).is_empty(), "with a prep, export writes the program");
+
+    // An fpgm that defines function 0 but not 5: the call to 5 is named, LOOPCALL included.
+    run(&mut s, "hint.tt.setAssembly", json!({"target": "fpgm", "assembly": FPGM}));
+    let r = run(&mut s, "hint.tt.setAssembly", json!({"target": {"glyph": "H"}, "assembly": "PUSHB[ ] 2 5\nLOOPCALL[ ]\nIUP[0]"}));
+    let warnings = r["warnings"].as_array().unwrap();
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    let text = warnings[0].as_str().unwrap();
+    assert!(text.contains("function 5,") && !text.contains("function 0"), "{text}");
+
+    // A call to a defined function warns about nothing.
+    let r = run(&mut s, "hint.tt.setAssembly", json!({"target": {"glyph": "H"}, "assembly": GLYPH}));
+    assert_eq!(r["warnings"], json!([]), "{r}");
+}
