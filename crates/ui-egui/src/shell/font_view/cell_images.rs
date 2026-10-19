@@ -22,14 +22,17 @@
 //! - Images are decoded by the same code as Edit View's (`canvas::images::decode`) and
 //!   kept as thumbnails no larger than the cell (a power of two from [`MIN_THUMB_SIDE`] to
 //!   [`MAX_THUMB_SIDE`] pixels), so a screenful of cells holds little texture memory. A frame
-//!   decodes at most [`MAX_DECODES_PER_FRAME`] files and draws the rest in later frames.
+//!   decodes at most [`MAX_DECODES_PER_FRAME`] files, and none after it has decoded
+//!   [`MAX_DECODE_PIXELS_PER_FRAME`] pixels (a large scan costs far more than a small file); the
+//!   rest are drawn in later frames.
 //! - Colour glyphs are rasterised by Edit View's colour drawing
 //!   ([`crate::canvas::color::glyph_image`]) into one texture per glyph and cell size, kept
 //!   while the glyph, its master, the palettes and the cell are unchanged. A frame makes at most
 //!   [`MAX_COLOR_PER_FRAME`] of them.
 //! - Both caches are bounded in entries and bytes and drop the least recently drawn entries.
-//!   Switching documents empties them; a file revision raised when the window gets the focus
-//!   back reads changed files again.
+//!   Switching documents empties them. When the window gets the focus back, each thumbnail is
+//!   checked against its file's version ([`AssetStore::version`]: its modification time and
+//!   size) as it is next drawn, and only a changed file is decoded again.
 
 use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
@@ -60,6 +63,8 @@ pub const MIN_THUMB_SIDE: u32 = 32;
 pub const MAX_THUMB_SIDE: u32 = 1_024;
 /// Most image files read and decoded in one frame.
 pub const MAX_DECODES_PER_FRAME: usize = 4;
+/// Decoded pixels after which a frame decodes no more files: about 16 Mpx, a few large scans.
+pub const MAX_DECODE_PIXELS_PER_FRAME: u64 = 16 << 20;
 /// Most colour glyph textures kept, and their bytes.
 pub const MAX_SPRITES: usize = 4_096;
 pub const MAX_SPRITE_BYTES: usize = 128 << 20;
@@ -68,11 +73,10 @@ pub const MAX_SPRITE_SIDE: u32 = 1_024;
 /// Most colour glyph textures made in one frame.
 pub const MAX_COLOR_PER_FRAME: usize = 32;
 
-/// Which thumbnail: the stored path, the file revision, the thumbnail's largest side.
+/// Which thumbnail: the stored path and the thumbnail's largest side.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct ThumbKey {
     path: String,
-    revision: u64,
     side: u32,
 }
 
@@ -80,6 +84,10 @@ struct Thumb {
     image: CachedImage,
     bytes: usize,
     used: u64,
+    /// The file's version when it was decoded; `None` when the store cannot tell.
+    version: Option<u64>,
+    /// The focus revision at which `version` was last found current.
+    checked: u64,
 }
 
 /// A glyph's colour drawing as a cell keeps it.
@@ -120,6 +128,8 @@ pub struct CellArt {
     doc: Option<u64>,
     /// Raised when the window gets the focus back, so changed files are read again.
     revision: u64,
+    /// Pixels decoded in this frame.
+    decoded_pixels: u64,
     focused: bool,
     /// The frame counter, for least-recently-drawn eviction.
     frame: u64,
@@ -185,6 +195,7 @@ impl CellArt {
         self.focused = focused;
         self.frame = self.frame.wrapping_add(1);
         self.decoded = 0;
+        self.decoded_pixels = 0;
         self.coloured = 0;
         let text = tokens.color.text_color;
         let key: StyleKey = (doc, master.to_string(), tokens.dark, self.revision, text);
@@ -262,23 +273,38 @@ impl CellArt {
             marker(painter, f, cell, place, None);
             return false;
         };
-        let key = ThumbKey { path: path.to_string(), revision: f.revision, side: px.clamp(MIN_THUMB_SIDE, MAX_THUMB_SIDE).next_power_of_two() };
+        let key = ThumbKey { path: path.to_string(), side: px.clamp(MIN_THUMB_SIDE, MAX_THUMB_SIDE).next_power_of_two() };
+        // After the focus comes back, a thumbnail whose file is unchanged is kept.
+        if let Some(thumb) = self.thumbs.get_mut(&key)
+            && thumb.checked != f.revision
+        {
+            let version = f.assets.version(path);
+            if version.is_some() && version == thumb.version {
+                thumb.checked = f.revision;
+            } else if let Some(stale) = self.thumbs.remove(&key) {
+                self.thumb_bytes = self.thumb_bytes.saturating_sub(stale.bytes);
+            }
+        }
         if !self.thumbs.contains_key(&key) {
-            if self.decoded >= MAX_DECODES_PER_FRAME {
+            if self.decoded >= MAX_DECODES_PER_FRAME || self.decoded_pixels >= MAX_DECODE_PIXELS_PER_FRAME {
                 return true;
             }
             self.decoded += 1;
-            let (image, bytes) = thumbnail(painter.ctx(), f.assets.as_ref(), path, key.side);
+            // Taken before the read, so a change made during it is seen at the next check.
+            let version = f.assets.version(path);
+            let (image, bytes, pixels) = thumbnail(painter.ctx(), f.assets.as_ref(), path, key.side);
+            self.decoded_pixels = self.decoded_pixels.saturating_add(pixels);
+            // The other sizes made from another version of the file are stale.
             let mut freed = 0;
             self.thumbs.retain(|k, t| {
-                let keep = k.path != key.path || k.revision == key.revision;
+                let keep = k.path != key.path || (version.is_some() && t.version == version);
                 if !keep {
                     freed += t.bytes;
                 }
                 keep
             });
             self.thumb_bytes = self.thumb_bytes.saturating_sub(freed).saturating_add(bytes);
-            self.thumbs.insert(key.clone(), Thumb { image, bytes, used: self.frame });
+            self.thumbs.insert(key.clone(), Thumb { image, bytes, used: self.frame, version, checked: f.revision });
             evict(&mut self.thumbs, &mut self.thumb_bytes, MAX_THUMBS, MAX_THUMB_BYTES, &key, |t| t.used, |t| t.bytes);
         }
         let frame = self.frame;
@@ -410,21 +436,23 @@ fn icolor_image(glyph: &Glyph, master: &str) -> Option<Image> {
         .map(|(_, image)| Image { alpha: Some(100.0), ..image.clone() })
 }
 
-/// Decodes the file at `path` into a texture whose longest side is at most `side` pixels.
-fn thumbnail(ctx: &egui::Context, assets: &dyn AssetStore, path: &str, side: u32) -> (CachedImage, usize) {
+/// Decodes the file at `path` into a texture whose longest side is at most `side` pixels: the
+/// entry, the bytes it holds and the pixels decoded.
+fn thumbnail(ctx: &egui::Context, assets: &dyn AssetStore, path: &str, side: u32) -> (CachedImage, usize, u64) {
     let (image, size) = match decode(assets, path) {
         Ok(decoded) => decoded,
-        Err(entry) => return (entry, 0),
+        Err(entry) => return (entry, 0, 0),
     };
+    let pixels = u64::from(image.width).saturating_mul(u64::from(image.height));
     let max_side = u32::try_from(ctx.input(|i| i.max_texture_side)).unwrap_or(u32::MAX);
     let image = shrink(image, side.min(max_side));
     let (w, h) = (image.width as usize, image.height as usize);
     if w == 0 || h == 0 || w.checked_mul(h).and_then(|n| n.checked_mul(4)) != Some(image.pixels.len()) {
-        return (CachedImage::Failed("the decoded image has the wrong number of pixels".into()), 0);
+        return (CachedImage::Failed("the decoded image has the wrong number of pixels".into()), 0, pixels);
     }
     let color = ColorImage::from_rgba_unmultiplied([w, h], &image.pixels);
     let texture = ctx.load_texture(format!("fontView.image:{path}"), color, TextureOptions::LINEAR);
-    (CachedImage::Ready { texture, size }, image.pixels.len())
+    (CachedImage::Ready { texture, size }, image.pixels.len(), pixels)
 }
 
 /// Drops the least recently drawn entries of `map`, never `keep`, until it is within `max_len`

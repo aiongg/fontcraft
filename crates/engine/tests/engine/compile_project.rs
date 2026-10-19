@@ -270,3 +270,44 @@ fn the_compile_plan_gives_the_glyph_order_of_the_project_compile() {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }
+
+#[test]
+fn a_confined_project_compile_reads_no_derived_path_outside_the_read_root() {
+    use fontcraft_engine::file_access::{AutomationRoots, confine};
+    let base = temp("confined");
+    let inside = base.join("in");
+    let outside = base.join("outside");
+    std::fs::create_dir_all(&inside).unwrap();
+    std::fs::create_dir_all(&outside).unwrap();
+    let ufo = write_ufo(&inside);
+    // Not a FontMenuNameDB: had it been read, the compile would fail quoting this line.
+    let hidden = outside.join("FontMenuNameDB");
+    std::fs::write(&hidden, "hidden words\n").unwrap();
+    let mut s = Session::new();
+    s.execute("file.open", &json!({ "path": ufo })).unwrap();
+    let roots = AutomationRoots::new(Some(&inside), Some(&inside)).unwrap().unwrap();
+    let out = inside.join("out.otf");
+    let fpr = inside.join("current.fpr");
+    let absolute = hidden.display().to_string();
+    for (key, value) in
+        [("FontMenuDBPath", "../outside/FontMenuNameDB"), ("FontMenuDBPath", absolute.as_str()), ("GlyphAliasDBPath", "../outside/FontMenuNameDB")]
+    {
+        std::fs::write(&fpr, format!("{key} {value}\n")).unwrap();
+        let params = json!({"formats": ["otf"], "destination": out, "projectFile": fpr});
+        let e = confine(Some(&roots), || s.execute("font.compile", &params)).unwrap_err().to_string();
+        assert!(e.contains(key) && e.contains("outside the read root"), "{key} {value}: {e}");
+        assert!(!e.contains("hidden words"), "{e}");
+        assert!(!out.exists());
+    }
+
+    // The defaults search skips a FontMenuNameDB above the read root, as if it were missing.
+    std::fs::write(base.join("FontMenuNameDB"), "[Synth-Regular]\n\tf=Synth Pro\n\ts=Light Italic\n\tl=Synth Pro Light\n").unwrap();
+    let params = json!({"formats": ["otf"], "destination": out, "projectDefaults": true, "timestamp": 0});
+    confine(Some(&roots), || s.execute("font.compile", &params)).unwrap();
+    let n = names(&std::fs::read(&out).unwrap());
+    assert_eq!((win(&n, 1), win(&n, 16)), (Some("Synth"), None));
+    std::fs::remove_file(&out).unwrap();
+    s.execute("font.compile", &params).unwrap();
+    assert_eq!(win(&names(&std::fs::read(&out).unwrap()), 16), Some("Synth Pro"), "found without roots");
+    std::fs::remove_dir_all(&base).unwrap();
+}

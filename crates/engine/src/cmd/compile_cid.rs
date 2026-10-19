@@ -12,7 +12,7 @@ use crate::params::Params;
 pub(super) fn read(p: &Params, options: &mut Options) -> Result<()> {
     let file = |key: &str| -> Result<Option<Vec<u8>>> {
         let Some(path) = p.opt_str(key)? else { return Ok(None) };
-        let input = super::file_io::read_input(std::path::Path::new(path))?;
+        let input = super::file_io::read_input_up_to(std::path::Path::new(path), MAX_CMAP_BYTES)?;
         if input.bytes.len() > MAX_CMAP_BYTES {
             return Err(p.bad(format!("`{key}`: {path} is larger than {MAX_CMAP_BYTES} bytes")));
         }

@@ -864,11 +864,16 @@ fn hex_line(offset: u64) -> usize {
 }
 
 impl Text {
-    /// Splits `text` into lines, cut at [`MAX_HELD_TEXT`] on a line end.
+    /// Splits `text` into lines, cut at [`MAX_HELD_TEXT`] on a line end, or on a character
+    /// boundary when that much text holds no line end.
     pub fn new(mut text: String, cut: bool) -> Self {
         let mut cut = cut;
         if text.len() > MAX_HELD_TEXT {
-            let end = text.as_bytes().get(..MAX_HELD_TEXT).and_then(|b| b.iter().rposition(|c| *c == b'\n')).unwrap_or(0);
+            let end = text
+                .as_bytes()
+                .get(..MAX_HELD_TEXT)
+                .and_then(|b| b.iter().rposition(|c| *c == b'\n'))
+                .unwrap_or_else(|| (MAX_HELD_TEXT.saturating_sub(3)..=MAX_HELD_TEXT).rev().find(|&i| text.is_char_boundary(i)).unwrap_or(0));
             text.truncate(end);
             cut = true;
         }
@@ -1640,6 +1645,9 @@ mod tests {
         assert!(Text::new(String::new(), false).is_empty());
         let big = Text::new("x\n".repeat(MAX_HELD_TEXT / 2 + 10), false);
         assert!(big.cut && big.text.len() <= MAX_HELD_TEXT);
+        // One long line of two-byte characters is cut on a character boundary, not dropped.
+        let line = Text::new("é".repeat(MAX_HELD_TEXT / 2 + 10), false);
+        assert!(line.cut && line.len() == 1 && line.text.len() >= MAX_HELD_TEXT - 1 && line.text.len() <= MAX_HELD_TEXT);
 
         assert_eq!(path_part("lookups"), Some(".lookups".into()));
         assert_eq!(path_part("3"), Some("[3]".into()));

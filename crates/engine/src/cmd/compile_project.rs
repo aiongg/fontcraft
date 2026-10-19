@@ -31,7 +31,7 @@ pub(super) fn read(p: &Params, source: Option<&Path>) -> Result<Option<(Project,
     let mut project_dir: Option<PathBuf> = None;
     if let Some(path) = p.opt_str("projectFile")? {
         let path = PathBuf::from(path);
-        let text = text(p, "projectFile", &path)?;
+        let text = text(p, "`projectFile`", &path)?;
         notes.extend(settings.apply_project(&text).map_err(|e| p.bad(format!("`projectFile`: {e}")))?);
         project_dir = path.parent().map(Path::to_path_buf);
     }
@@ -45,32 +45,33 @@ pub(super) fn read(p: &Params, source: Option<&Path>) -> Result<Option<(Project,
     }
     let fontinfo = match p.opt_str("fontinfo")? {
         Some(path) => Some(PathBuf::from(path)),
-        None if defaults => folder.map(|f| f.join("fontinfo")).filter(|f| f.is_file()),
+        None if defaults => folder.map(|f| f.join("fontinfo")).filter(|f| readable(f) && f.is_file()),
         None => None,
     };
     if let Some(path) = fontinfo {
-        settings.apply_fontinfo(&text(p, "fontinfo", &path)?).map_err(|e| p.bad(format!("`fontinfo`: {e}")))?;
+        settings.apply_fontinfo(&text(p, "`fontinfo`", &path)?).map_err(|e| p.bad(format!("`fontinfo`: {e}")))?;
     }
-    let from_project = |relative: &Option<String>| -> Option<PathBuf> {
-        relative.as_ref().map(|r| project_dir.as_deref().map_or_else(|| PathBuf::from(r), |d| d.join(r)))
+    // Each path comes with the name its messages use: the parameter, or the project file's key.
+    let from_project = |relative: &Option<String>, key: &'static str| -> Option<(PathBuf, &'static str)> {
+        relative.as_ref().map(|r| (project_dir.as_deref().map_or_else(|| PathBuf::from(r), |d| d.join(r)), key))
     };
     let menu = match p.opt_str("menuNames")? {
-        Some(path) => Some(PathBuf::from(path)),
-        None => from_project(&settings.paths.menu_names).or_else(|| if defaults { near(folder, "FontMenuNameDB") } else { None }),
+        Some(path) => Some((PathBuf::from(path), "`menuNames`")),
+        None => from_project(&settings.paths.menu_names, "`projectFile` FontMenuDBPath")
+            .or_else(|| if defaults { near(folder, "FontMenuNameDB").map(|f| (f, "`menuNames`")) } else { None }),
     };
     let goadb = match p.opt_str("goadb")? {
-        Some(path) => Some(PathBuf::from(path)),
-        None => {
-            from_project(&settings.paths.goadb).or_else(|| if defaults && settings.apply_goadb { near(folder, "GlyphOrderAndAliasDB") } else { None })
-        }
+        Some(path) => Some((PathBuf::from(path), "`goadb`")),
+        None => from_project(&settings.paths.goadb, "`projectFile` GlyphAliasDBPath")
+            .or_else(|| if defaults && settings.apply_goadb { near(folder, "GlyphOrderAndAliasDB").map(|f| (f, "`goadb`")) } else { None }),
     };
     let menu_db = match menu {
-        Some(path) => Some(makeotf::parse_menu_db(&text(p, "menuNames", &path)?).map_err(|e| p.bad(format!("`menuNames`: {e}")))?),
+        Some((path, key)) => Some(makeotf::parse_menu_db(&text(p, key, &path)?).map_err(|e| p.bad(format!("{key}: {e}")))?),
         None => None,
     };
     let aliases = match goadb {
-        Some(path) => {
-            let table = fontcraft_tables::goadb::parse(&text(p, "goadb", &path)?).map_err(|e| p.bad(format!("`goadb`: {e}")))?;
+        Some((path, key)) => {
+            let table = fontcraft_tables::goadb::parse(&text(p, key, &path)?).map_err(|e| p.bad(format!("{key}: {e}")))?;
             Some(
                 table
                     .entries
@@ -105,22 +106,31 @@ pub(super) fn prepare(p: &Params, project: &Project, font: &Font, options: &mut 
     Ok(prepared)
 }
 
-/// The text of the file `key` names.
+/// The text of the file at `path`, which must lie inside the automation read root when one is in
+/// force, since a project file can name any path. `key` names the parameter or project file key
+/// in messages.
 fn text(p: &Params, key: &str, path: &Path) -> Result<String> {
-    let input = super::file_io::read_input(path)?;
+    crate::file_access::check_read(path).map_err(|e| p.bad(format!("{key}: {e}")))?;
+    let input = super::file_io::read_input_up_to(path, makeotf::MAX_PROJECT_BYTES)?;
     if input.bytes.len() > makeotf::MAX_PROJECT_BYTES {
-        return Err(p.bad(format!("`{key}`: {} is larger than {} bytes", path.display(), makeotf::MAX_PROJECT_BYTES)));
+        return Err(p.bad(format!("{key}: {} is larger than {} bytes", path.display(), makeotf::MAX_PROJECT_BYTES)));
     }
-    String::from_utf8(input.bytes).map_err(|_| p.bad(format!("`{key}`: {} is not UTF-8 text", path.display())))
+    String::from_utf8(input.bytes).map_err(|_| p.bad(format!("{key}: {} is not UTF-8 text", path.display())))
 }
 
-/// A file called `name` in `folder` or up to [`LEVELS_UP`] folders above it.
+/// May automation read `path`? A search candidate it may not read counts as missing.
+fn readable(path: &Path) -> bool {
+    crate::file_access::check_read(path).is_ok()
+}
+
+/// A file called `name` in `folder` or up to [`LEVELS_UP`] folders above it, skipping folders
+/// automation may not read.
 fn near(folder: Option<&Path>, name: &str) -> Option<PathBuf> {
     let mut dir = folder;
     for _ in 0..=LEVELS_UP {
         let d = dir?;
         let candidate = d.join(name);
-        if candidate.is_file() {
+        if readable(&candidate) && candidate.is_file() {
             return Some(candidate);
         }
         dir = d.parent();

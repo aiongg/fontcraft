@@ -215,6 +215,15 @@ impl AssetStore for FsAssets {
     fn exists(&self, path: &str) -> bool {
         self.resolve(path).filter(|f| crate::file_access::check_read(f).is_ok()).and_then(|f| std::fs::metadata(f).ok()).is_some_and(|m| m.is_file())
     }
+
+    fn version(&self, path: &str) -> Option<u64> {
+        use std::hash::{Hash, Hasher};
+        let (_, meta) = self.checked(path).ok()?;
+        let modified = meta.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?;
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        (modified.as_secs(), modified.subsec_nanos(), meta.len()).hash(&mut h);
+        Some(h.finish())
+    }
 }
 
 /// The session's asset state: the file cache, and the files uploaded in the web build.

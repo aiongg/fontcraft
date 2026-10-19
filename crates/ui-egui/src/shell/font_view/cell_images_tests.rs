@@ -11,7 +11,7 @@ use fontcraft_engine::imagery::{Rgba8, to_png};
 use fontcraft_model::Image;
 use serde_json::json;
 
-use super::{MAX_DECODES_PER_FRAME, colour_image, layered_mode};
+use super::{MAX_DECODE_PIXELS_PER_FRAME, MAX_DECODES_PER_FRAME, colour_image, layered_mode};
 use crate::FontcraftApp;
 use crate::canvas::color::{Mode, Sources, SvgCache};
 use crate::shell::font_view::images::Frame;
@@ -215,6 +215,45 @@ fn font_view_cell_image_display_decodes_a_few_files_per_frame() {
     for n in &names {
         assert_eq!(quads(&app, &shapes, cell(&app, n)), ["image"], "{n}");
     }
+}
+
+#[test]
+fn font_view_cell_image_display_budgets_decoded_pixels_per_frame() {
+    let dir = folder("pixels");
+    // Two images, each as large as a frame's budget: fewer files than the file cap.
+    let side = (MAX_DECODE_PIXELS_PER_FRAME as f64).sqrt().ceil() as u32;
+    let files = [png(&dir, "A.png", side, [0, 0, 255, 255]), png(&dir, "B.png", side, [0, 0, 255, 255])];
+    let mut app = FontcraftApp::default();
+    app.run("glyph.addImage", &json!({ "files": files })).unwrap();
+    let w = Window::new();
+    w.frame(&mut app);
+    assert_eq!(app.font_view.art.decoded(), 1, "one large scan uses up the frame");
+    assert_eq!(app.font_view.art.thumbs(), 1);
+    w.frame(&mut app);
+    assert_eq!(app.font_view.art.thumbs(), 2, "the next frame decodes the other");
+}
+
+#[test]
+fn font_view_cell_image_display_keeps_thumbnails_of_unchanged_files_when_the_focus_returns() {
+    let dir = folder("focus");
+    let file = png(&dir, "A.png", 64, [255, 0, 0, 255]);
+    let mut app = FontcraftApp::default();
+    app.run("glyph.addImage", &json!({"files": [file.clone()], "glyphs": ["A"]})).unwrap();
+    let w = Window::new();
+    w.settle(&mut app);
+    assert_eq!(app.font_view.art.thumbs(), 1);
+    let refocus = |app: &mut FontcraftApp| {
+        w.frame_with(app, egui::RawInput { focused: false, ..Default::default() });
+        w.frame_with(app, egui::RawInput { focused: true, ..Default::default() });
+    };
+    refocus(&mut app);
+    assert_eq!(app.font_view.art.decoded(), 0, "an unchanged file is not decoded again");
+    png(&dir, "A.png", 32, [0, 255, 0, 255]);
+    let later = std::time::SystemTime::now() + std::time::Duration::from_secs(5);
+    std::fs::File::options().write(true).open(&file).unwrap().set_modified(later).unwrap();
+    refocus(&mut app);
+    assert_eq!(app.font_view.art.decoded(), 1, "a changed file is decoded again");
+    assert_eq!(app.font_view.art.thumbs(), 1);
 }
 
 #[test]

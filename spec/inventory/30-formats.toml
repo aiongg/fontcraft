@@ -379,8 +379,11 @@ area = "import-export"
 milestone = "M12"
 summary = "Packs several compiled fonts into one collection file and shares byte-identical tables between members. A command-line job modelled on the AFDKO collection tools; the reference app's export dialog has no collection option."
 ref = "OpenType specification › Font Collections; AFDKO otf2otc, otc2otf; fontTools ttLib.ttCollection"
-notes = "Written by collection.pack (plain or WOFF2) with otf2otc's layout. font.compile builds straight into a collection with `collection` or a .ttc or .otc destination."
+notes = "Written by collection.pack (plain or WOFF2) with otf2otc's layout. font.compile builds straight into a collection with `collection` or a .ttc or .otc destination; a file destination must end in .ttc or .otc and holds one format. font.compile builds and packs one format at a time, holding at most 2 GiB of that format's fonts (512 MiB on 32-bit targets)."
 status = "docs"
+guesses = [
+  "With `collection: true`, a destination file ending in .ttf or .otf is refused instead of receiving collection bytes under a single-font name; a user's expectation, or a reference tool that writes collections, would settle it.",
+]
 
 [[format]]
 id = "woff.export"

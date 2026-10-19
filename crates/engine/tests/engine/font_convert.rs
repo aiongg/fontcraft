@@ -55,6 +55,11 @@ fn font_convert_changes_the_outline_flavour_and_writes_nothing_on_failure() {
     let failed = s.execute("font.convert", &json!({ "inputs": [ttf, junk], "to": "cff", "outputDir": dir.join("none") }));
     assert!(failed.is_err());
     assert!(!dir.join("none").exists(), "a failed conversion writes nothing");
+    // Beside the inputs: the first output, already staged when the second input fails, is removed.
+    let listing = || std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name()).collect::<std::collections::BTreeSet<_>>();
+    let before = listing();
+    assert!(s.execute("font.convert", &json!({ "inputs": [ttf, junk], "to": "cff" })).is_err());
+    assert_eq!(listing(), before, "no output and no temporary file is left");
     assert!(s.execute("font.convert", &json!({ "input": ttf, "to": "ufo" })).is_err(), "sources are written by file.saveAs");
     assert!(s.execute("font.convert", &json!({ "input": ttf, "to": "otf", "glyphs": ["A"] })).is_err(), "options not built yet are refused");
     let _ = std::fs::remove_dir_all(&dir);
