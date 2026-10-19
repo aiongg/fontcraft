@@ -56,7 +56,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Convert Font Format",
             [],
             None,
-            "{inputs: [path] | input: path, to: \"ttf\"|\"otf\"|\"otf-cff2\"|\"cff\"|\"cff2\", output?: path (one input), outputDir?: path, inPlace?: bool, noClobber?: bool, face?: int|name, container?: \"plain\"|\"woff\"|\"woff2\", nameBy?: \"filename\", curves?: {maxError?: em fraction (default 0.001), conversion?: \"optimized\"|\"exact\", keepDirection?: bool}, postFormat?: 2|3, cff?: {subroutinize?: bool, maxSubrs?: int}, hints?: bool, timestamp?: \"keep\"|\"now\"|int (seconds since 1970)}. Compiled fonts only: CFF or static CFF2 to TrueType (cubic to quadratic within maxError, contours reversed), TrueType to CFF or CFF2 (components decomposed, instructions dropped), CFF to CFF2 and back with hints kept, or the bare outline table (cff, cff2). Without output the result goes beside the input with the new extension → {results: [{input, output, bytes, glyphs, leftBehind: [text]}]}",
+            "{inputs: [path] | input: path, to: \"ttf\"|\"otf\"|\"otf-cff2\"|\"cff\"|\"cff2\", output?: path (one input), outputDir?: path, inPlace?: bool, noClobber?: bool, face?: int|name, container?: \"plain\"|\"woff\"|\"woff2\", nameBy?: \"filename\", curves?: {maxError?: em fraction (default one font unit), conversion?: \"optimized\"|\"exact\", keepDirection?: bool}, postFormat?: 2|3, cff?: {subroutinize?: bool, maxSubrs?: int}, hints?: bool, timestamp?: \"keep\"|\"now\"|int (seconds since 1970)}. Compiled fonts only: CFF or static CFF2 to TrueType (cubic to quadratic within maxError, contours reversed), TrueType to CFF or CFF2 (components decomposed, instructions dropped), CFF to CFF2 and back with hints kept, or the bare outline table (cff, cff2). Without output the result goes beside the input with the new extension → {results: [{input, output, bytes, glyphs, leftBehind: [text]}]}",
             always,
             convert_fonts
         )
@@ -165,7 +165,8 @@ fn in_input(e: EngineError, input: &str) -> EngineError {
 /// The conversion parameters, read once for every input.
 struct Settings {
     to: &'static str,
-    max_error_em: f64,
+    /// `None`: one font unit, the reference converters' bound.
+    max_error_em: Option<f64>,
     quad_to_cubic: QuadToCubic,
     reverse_direction: bool,
     post_format: PostFormat,
@@ -205,11 +206,12 @@ impl Settings {
             }
         }
         let max_error_em = match curve("maxError") {
-            None => 0.001,
-            Some(v) => v
-                .as_f64()
-                .filter(|e| e.is_finite() && *e > 0.0 && *e <= 1.0)
-                .ok_or_else(|| p.bad("`curves.maxError` must be above 0 and at most 1 (em)"))?,
+            None => None,
+            Some(v) => Some(
+                v.as_f64()
+                    .filter(|e| e.is_finite() && *e > 0.0 && *e <= 1.0)
+                    .ok_or_else(|| p.bad("`curves.maxError` must be above 0 and at most 1 (em)"))?,
+            ),
         };
         let quad_to_cubic = match curve("conversion").map(|v| v.as_str()) {
             None | Some(Some("optimized")) => QuadToCubic::Optimized,
@@ -260,8 +262,9 @@ impl Settings {
     }
 
     fn options(&self, units_per_em: f64) -> Result<ConvertOptions> {
+        let max_error = self.max_error_em.map_or(1.0, |e| e * units_per_em);
         let target = match self.to {
-            "ttf" => ConvertTarget::TrueType { max_error: self.max_error_em * units_per_em },
+            "ttf" => ConvertTarget::TrueType { max_error },
             "otf" => ConvertTarget::Cff,
             "otf-cff2" => ConvertTarget::Cff2,
             "cff" => ConvertTarget::BareCff,
@@ -270,7 +273,7 @@ impl Settings {
         let mut o = ConvertOptions::new(target);
         o.reverse_direction = self.reverse_direction;
         o.quad_to_cubic = self.quad_to_cubic;
-        o.cubic_error = self.max_error_em * units_per_em;
+        o.cubic_error = max_error;
         o.post_format = self.post_format;
         o.subroutinize = self.subroutinize;
         o.max_subrs = self.max_subrs;

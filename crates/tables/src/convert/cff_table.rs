@@ -1,5 +1,6 @@
 //! `CFF ` ↔ `CFF2` table conversion (M12.30), after fontTools `cffLib.CFFToCFF2` and
-//! `cffLib.CFF2ToCFF` (MIT, Copyright (c) 2017 Just van Rossum and contributors), written anew.
+//! `cffLib.CFF2ToCFF`, and the drawing after `misc.psCharStrings.T2OutlineExtractor` (MIT,
+//! Copyright (c) 2017 Just van Rossum and contributors), written anew.
 //!
 //! Both directions work on charstrings with every subroutine call expanded
 //! (`fontcraft_cff::subr::desubroutinize_table`); the caller subroutinises the result again.
@@ -12,7 +13,16 @@
 //!
 //! A variable `CFF2` table (one whose charstrings or Private DICTs blend) is refused: it must be
 //! instantiated first.
+//!
+//! An accented glyph drawn with `seac` (`endchar` with four operands) has no CFF2 form: its base
+//! and accent charstrings are written into it, the accent moved by its offset. The base keeps
+//! its hints when the glyph has no path or hints of its own; the accent's hints go.
+//!
+//! [`Programs::draw`] draws the expanded charstrings as fontTools' `T2OutlineExtractor` does:
+//! 16.16 operands added up exactly, no FontMatrix, an implied `moveto` before a path that lacks
+//! one.
 
+use super::outline::{Collect, Contour};
 use crate::limits::{MAX_CFF_STACK, MAX_CFF2_STACK, MAX_CHARSTRING, MAX_SFNT};
 use crate::{Result, TablesError};
 
@@ -373,6 +383,8 @@ struct Program {
     width: Option<i64>,
     /// Every operator but `endchar`.
     ops: Vec<Op>,
+    /// CFF: the operands of an accented `endchar` (seac): adx, ady, base code, accent code.
+    seac: Option<[i64; 4]>,
 }
 
 const HINTMASK: u16 = 19;
@@ -381,7 +393,7 @@ const ENDCHAR: u16 = 14;
 const DOTSECTION: u16 = 1200;
 
 /// Cuts an expanded charstring into operators. A variable CFF2 charstring (`blend`,
-/// `vsindex`), an accented `endchar` (seac) and the arithmetic operators are refused.
+/// `vsindex`) and the arithmetic operators are refused.
 fn parse_program(code: &[u8], cff2: bool) -> Result<Program> {
     let cut = || invalid("a charstring is cut short");
     let mut program = Program::default();
@@ -460,8 +472,15 @@ fn parse_program(code: &[u8], cff2: bool) -> Result<Program> {
                 i += n;
             }
             ENDCHAR if !cff2 => {
-                if args.len() == 4 {
-                    return Err(TablesError::Unsupported("an accented glyph drawn with seac".into()));
+                if let [adx, ady, base, accent] = args.as_slice() {
+                    let code = |v: i64| (0..=255 * ONE).contains(&v) && v % ONE == 0;
+                    if !(code(*base) && code(*accent)) {
+                        return Err(invalid("seac names a character code outside 0 to 255"));
+                    }
+                    program.seac = Some([*adx, *ady, *base, *accent]);
+                    args.clear();
+                    ended = true;
+                    continue;
                 }
                 if !args.is_empty() {
                     return Err(invalid("endchar has operands left"));
@@ -487,6 +506,288 @@ fn parse_program(code: &[u8], cff2: bool) -> Result<Program> {
         return Err(invalid("the charstring has no endchar"));
     }
     Ok(program)
+}
+
+// ── Drawing ─────────────────────────────────────────────────────────────────────────────────────
+
+const STEM_OPS: [u16; 6] = [1, 3, 18, 23, HINTMASK, CNTRMASK];
+
+fn is_path(code: u16) -> bool {
+    matches!(code, 4..=8 | 21 | 22 | 24..=27 | 30 | 31 | 1234..=1237)
+}
+
+/// A 16.16 value in font units.
+fn fixed(v: i64) -> f64 {
+    v as f64 / ONE as f64
+}
+
+/// The pen position in 16.16 units, moved as a Type 2 charstring moves it.
+struct Turtle<'a> {
+    pen: &'a mut Collect,
+    at: (i64, i64),
+    moved: bool,
+}
+
+impl Turtle<'_> {
+    fn step(&mut self, d: (i64, i64)) -> (f64, f64) {
+        self.at = (self.at.0.saturating_add(d.0), self.at.1.saturating_add(d.1));
+        (fixed(self.at.0), fixed(self.at.1))
+    }
+
+    fn move_by(&mut self, dx: i64, dy: i64) {
+        self.close();
+        let p = self.step((dx, dy));
+        self.pen.move_to(p);
+        self.moved = true;
+    }
+
+    fn line_by(&mut self, dx: i64, dy: i64) {
+        if !self.moved {
+            self.move_by(0, 0);
+        }
+        let p = self.step((dx, dy));
+        self.pen.line_to(p);
+    }
+
+    fn curve_by(&mut self, a: (i64, i64), b: (i64, i64), c: (i64, i64)) {
+        if !self.moved {
+            self.move_by(0, 0);
+        }
+        let p1 = self.step(a);
+        let p2 = self.step(b);
+        let p3 = self.step(c);
+        self.pen.curve_to(p1, p2, p3);
+    }
+
+    fn close(&mut self) {
+        if self.moved {
+            self.pen.close();
+        }
+        self.moved = false;
+    }
+}
+
+/// Draws expanded charstring operators into `pen` from the origin; answers the pen position
+/// at the end.
+fn run(ops: &[Op], pen: &mut Collect) -> Result<(i64, i64)> {
+    let mut t = Turtle { pen, at: (0, 0), moved: false };
+    for op in ops {
+        let a = op.args.as_slice();
+        let bad = || invalid(format!("operator {} cannot take {} operands", op.code, a.len()));
+        match (op.code, a) {
+            (21, [x, y]) => t.move_by(*x, *y),
+            (22, [x]) => t.move_by(*x, 0),
+            (4, [y]) => t.move_by(0, *y),
+            (5, _) if a.len() % 2 == 0 => {
+                for c in a.chunks_exact(2) {
+                    if let [x, y] = c {
+                        t.line_by(*x, *y);
+                    }
+                }
+            }
+            (6 | 7, _) => {
+                let mut horizontal = op.code == 6;
+                for v in a {
+                    if horizontal {
+                        t.line_by(*v, 0)
+                    } else {
+                        t.line_by(0, *v)
+                    }
+                    horizontal = !horizontal;
+                }
+            }
+            (8, _) if a.len() % 6 == 0 => curves(&mut t, a),
+            (24, _) if a.len() >= 8 && (a.len() - 2) % 6 == 0 => {
+                let (c, l) = a.split_at(a.len() - 2);
+                curves(&mut t, c);
+                if let [x, y] = l {
+                    t.line_by(*x, *y);
+                }
+            }
+            (25, _) if a.len() >= 6 && a.len() % 2 == 0 => {
+                let (l, c) = a.split_at(a.len() - 6);
+                for p in l.chunks_exact(2) {
+                    if let [x, y] = p {
+                        t.line_by(*x, *y);
+                    }
+                }
+                curves(&mut t, c);
+            }
+            (26 | 27, _) => {
+                let (mut first, rest) = match a.len() % 4 {
+                    0 => (0, a),
+                    1 => (a.first().copied().unwrap_or(0), a.get(1..).unwrap_or(&[])),
+                    _ => return Err(bad()),
+                };
+                for c in rest.chunks_exact(4) {
+                    if let [p, q, r, s] = c {
+                        if op.code == 26 {
+                            t.curve_by((first, *p), (*q, *r), (0, *s));
+                        } else {
+                            t.curve_by((*p, first), (*q, *r), (*s, 0));
+                        }
+                    }
+                    first = 0;
+                }
+            }
+            (30 | 31, _) => {
+                let mut rest = a;
+                let mut vertical = op.code == 30;
+                while !rest.is_empty() {
+                    let (p, q, r, s, last, tail) = match rest {
+                        [p, q, r, s, last] => (*p, *q, *r, *s, *last, &[][..]),
+                        [p, q, r, s, tail @ ..] => (*p, *q, *r, *s, 0, tail),
+                        _ => return Err(bad()),
+                    };
+                    if vertical {
+                        t.curve_by((0, p), (q, r), (s, last));
+                    } else {
+                        t.curve_by((p, 0), (q, r), (last, s));
+                    }
+                    vertical = !vertical;
+                    rest = tail;
+                }
+            }
+            (1234, [dx1, dx2, dy2, dx3, dx4, dx5, dx6]) => {
+                t.curve_by((*dx1, 0), (*dx2, *dy2), (*dx3, 0));
+                t.curve_by((*dx4, 0), (*dx5, -dy2), (*dx6, 0));
+            }
+            (1235, [dx1, dy1, dx2, dy2, dx3, dy3, dx4, dy4, dx5, dy5, dx6, dy6, _fd]) => {
+                t.curve_by((*dx1, *dy1), (*dx2, *dy2), (*dx3, *dy3));
+                t.curve_by((*dx4, *dy4), (*dx5, *dy5), (*dx6, *dy6));
+            }
+            (1236, [dx1, dy1, dx2, dy2, dx3, dx4, dx5, dy5, dx6]) => {
+                t.curve_by((*dx1, *dy1), (*dx2, *dy2), (*dx3, 0));
+                t.curve_by((*dx4, 0), (*dx5, *dy5), (*dx6, -(dy1 + dy2 + dy5)));
+            }
+            (1237, [dx1, dy1, dx2, dy2, dx3, dy3, dx4, dy4, dx5, dy5, d6]) => {
+                let dx = dx1 + dx2 + dx3 + dx4 + dx5;
+                let dy = dy1 + dy2 + dy3 + dy4 + dy5;
+                let last = if dx.abs() > dy.abs() { (*d6, -dy) } else { (-dx, *d6) };
+                t.curve_by((*dx1, *dy1), (*dx2, *dy2), (*dx3, *dy3));
+                t.curve_by((*dx4, *dy4), (*dx5, *dy5), last);
+            }
+            (code, _) if is_path(code) => return Err(bad()),
+            _ => {}
+        }
+    }
+    t.close();
+    Ok(t.at)
+}
+
+/// `rrcurveto` operands: six per curve.
+fn curves(t: &mut Turtle<'_>, a: &[i64]) {
+    for c in a.chunks_exact(6) {
+        if let [a1, b1, a2, b2, a3, b3] = c {
+            t.curve_by((*a1, *b1), (*a2, *b2), (*a3, *b3));
+        }
+    }
+}
+
+/// An accented glyph's parts: character codes in the standard encoding, the accent's offset
+/// in font units.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct Seac {
+    pub adx: f64,
+    pub ady: f64,
+    pub base: u8,
+    pub accent: u8,
+}
+
+/// A glyph as drawn: its own contours, and its `seac` parts.
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct Drawing {
+    pub contours: Vec<Contour>,
+    pub seac: Option<Seac>,
+}
+
+/// The expanded charstrings of a `CFF ` or static `CFF2` table, cut into operators.
+pub(super) struct Programs {
+    programs: Vec<Program>,
+}
+
+impl Programs {
+    pub(super) fn read(table: &[u8], cff2: bool) -> Result<Self> {
+        let expanded = fontcraft_cff::subr::desubroutinize_table(table, cff2).map_err(subr_error)?;
+        let flat = Flat::read(&expanded, cff2)?;
+        if cff2 && flat.private_blends() {
+            return Err(TablesError::Unsupported("a variable CFF2 font: instantiate it first".into()));
+        }
+        let programs =
+            flat.charstrings.iter().enumerate().map(|(gid, code)| parse_program(code, cff2).map_err(|e| in_glyph(e, gid))).collect::<Result<_>>()?;
+        Ok(Programs { programs })
+    }
+
+    pub(super) fn len(&self) -> usize {
+        self.programs.len()
+    }
+
+    pub(super) fn is_accented(&self, gid: usize) -> bool {
+        self.programs.get(gid).is_some_and(|p| p.seac.is_some())
+    }
+
+    pub(super) fn draw(&self, gid: usize) -> Result<Drawing> {
+        let p = self.programs.get(gid).ok_or_else(|| invalid(format!("glyph {gid} is beyond the CharStrings")))?;
+        let mut pen = Collect::default();
+        run(&p.ops, &mut pen).map_err(|e| in_glyph(e, gid))?;
+        let code = |v: i64| u8::try_from(v / ONE).unwrap_or(0);
+        let seac = p.seac.map(|[adx, ady, base, accent]| Seac { adx: fixed(adx), ady: fixed(ady), base: code(base), accent: code(accent) });
+        Ok(Drawing { contours: pen.done()?, seac })
+    }
+}
+
+/// The operators of a `seac` glyph with its base and accent written in. `standard_glyph` finds
+/// the glyph of a standard-encoding code; a part the font lacks is left out, as the reference
+/// leaves out a component it cannot find.
+fn flatten_seac(charstrings: &[&[u8]], own: &[Op], seac: [i64; 4], standard_glyph: &dyn Fn(u8) -> Option<usize>) -> Result<Vec<Op>> {
+    let [adx, ady, base, accent] = seac;
+    let part = |code: i64| -> Result<Option<Program>> {
+        let code = u8::try_from(code / ONE).map_err(|_| invalid("seac names a character code outside 0 to 255"))?;
+        let Some(gid) = standard_glyph(code) else { return Ok(None) };
+        let bytes = charstrings.get(gid).ok_or_else(|| invalid("seac names a glyph beyond the CharStrings"))?;
+        let p = parse_program(bytes, false)?;
+        if p.seac.is_some() {
+            return Err(invalid("a seac part is itself accented"));
+        }
+        Ok(Some(p))
+    };
+    let keep_base_hints = !own.iter().any(|op| STEM_OPS.contains(&op.code) || is_path(op.code));
+    let mut out: Vec<Op> = own.to_vec();
+    let mut at = run(own, &mut Collect::default())?;
+    for (program, shift, hints) in [(part(base)?, (0, 0), keep_base_hints), (part(accent)?, (adx, ady), false)] {
+        let Some(program) = program else { continue };
+        let end = run(&program.ops, &mut Collect::default())?;
+        let mut first = true;
+        for op in program.ops {
+            if STEM_OPS.contains(&op.code) {
+                if hints {
+                    out.push(op);
+                }
+                continue;
+            }
+            if first && is_path(op.code) {
+                first = false;
+                // The part draws from its own origin: move there from where the last part ended.
+                let (dx, dy) = (shift.0 - at.0, shift.1 - at.1);
+                let moved = match (op.code, op.args.as_slice()) {
+                    (21, [x, y]) => Some((x + dx, y + dy)),
+                    (22, [x]) => Some((x + dx, dy)),
+                    (4, [y]) => Some((dx, y + dy)),
+                    _ => None,
+                };
+                let (x, y) = moved.unwrap_or((dx, dy));
+                out.push(Op { code: 21, args: vec![x, y], mask: Vec::new() });
+                if moved.is_some() {
+                    continue;
+                }
+            }
+            out.push(op);
+        }
+        if !first {
+            at = (shift.0 + end.0, shift.1 + end.1);
+        }
+    }
+    Ok(out)
 }
 
 /// Writes one operand: an integer in the shortest form, anything else as 16.16 fixed.
@@ -862,7 +1163,8 @@ fn cff2_font_matrix(flat: &Flat<'_>) -> Result<Option<Entry>> {
 }
 
 /// The `CFF2` table for a `CFF ` table, and whether any `dotsection` was dropped.
-pub(super) fn cff_to_cff2(cff: &[u8]) -> Result<(Vec<u8>, bool)> {
+/// `standard_glyph` finds the glyph of a standard-encoding code, for `seac` glyphs.
+pub(super) fn cff_to_cff2(cff: &[u8], standard_glyph: &dyn Fn(u8) -> Option<usize>) -> Result<(Vec<u8>, bool)> {
     let expanded = fontcraft_cff::subr::desubroutinize_table(cff, false).map_err(subr_error)?;
     let flat = Flat::read(&expanded, false)?;
     let mut charstrings = Vec::with_capacity(flat.charstrings.len());
@@ -870,8 +1172,12 @@ pub(super) fn cff_to_cff2(cff: &[u8]) -> Result<(Vec<u8>, bool)> {
     let mut total = 0usize;
     for (gid, code) in flat.charstrings.iter().enumerate() {
         let program = parse_program(code, false).map_err(|e| in_glyph(e, gid))?;
+        let ops = match program.seac {
+            None => program.ops,
+            Some(seac) => flatten_seac(&flat.charstrings, &program.ops, seac, standard_glyph).map_err(|e| in_glyph(e, gid))?,
+        };
         let mut out = Vec::new();
-        for op in &program.ops {
+        for op in &ops {
             if op.code == DOTSECTION {
                 dropped_dotsection = true;
                 continue;
@@ -1059,6 +1365,40 @@ fn read_u32(b: &[u8], at: usize) -> Option<u32> {
     Some(u32::from_be_bytes(b.get(at..at.checked_add(4)?)?.try_into().ok()?))
 }
 
+/// A charstring of `(operands, operator)` steps, operands in font units.
+#[cfg(test)]
+pub(super) fn test_charstring(steps: &[(&[f64], u16)]) -> Vec<u8> {
+    let mut out = Vec::new();
+    for (args, code) in steps {
+        let op = Op { code: *code, args: args.iter().map(|v| (v * ONE as f64).round() as i64).collect(), mask: Vec::new() };
+        encode_op(&op, &mut out).unwrap();
+    }
+    out
+}
+
+/// A name-keyed `CFF ` table of these glyphs (`.notdef` first) and charstrings, without
+/// subroutines; `top` is DICT data the Top DICT holds besides the offsets.
+#[cfg(test)]
+pub(super) fn test_table(names: &[&str], charstrings: Vec<Vec<u8>>, top: &[u8]) -> Vec<u8> {
+    let mut charset = vec![0u8];
+    for i in 1..names.len() {
+        charset.extend_from_slice(&(390 + i as u16).to_be_bytes());
+    }
+    let parts = Parts {
+        cff2: false,
+        name: b"Test".to_vec(),
+        strings: names.iter().skip(1).map(|n| n.as_bytes().to_vec()).collect(),
+        top: parse_dict(top, false).unwrap(),
+        charset: Some(charset),
+        fd_select: None,
+        charstrings,
+        font_dicts: None,
+        // defaultWidthX 0
+        privates: vec![vec![139, 20]],
+    };
+    parts.write().unwrap()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1102,12 +1442,10 @@ mod tests {
         let p = parse_program(&code, false).unwrap();
         assert_eq!(p.width, Some(500 * ONE));
         assert_eq!(p.ops, vec![op(21, &[10, 20]), op(6, &[30])]);
-        // seac is refused.
-        let mut seac = Vec::new();
-        for v in [0, 0, 65, 194] {
-            encode_num(v * ONE, &mut seac).unwrap();
-        }
-        seac.push(14);
-        assert!(matches!(parse_program(&seac, false), Err(TablesError::Unsupported(_))));
+        // seac keeps its operands for the converters; a code past 255 is refused.
+        let p = parse_program(&test_charstring(&[(&[600.0, 150.5, 20.0, 65.0, 194.0], 14)]), false).unwrap();
+        assert_eq!((p.width, p.seac), (Some(600 * ONE), Some([150 * ONE + ONE / 2, 20 * ONE, 65 * ONE, 194 * ONE])));
+        assert!(p.ops.is_empty());
+        assert!(parse_program(&test_charstring(&[(&[0.0, 0.0, 65.0, 256.0], 14)]), false).is_err());
     }
 }
