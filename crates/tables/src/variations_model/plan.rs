@@ -8,6 +8,7 @@
 //! `avar` map removed; other axes stay at their defaults. A planned map whose normalised points
 //! all lie within 0.01 of the identity is dropped.
 
+use std::collections::HashMap;
 use std::f64::consts::PI;
 
 use write_fonts::tables::avar::{Avar, AxisValueMap, SegmentMaps};
@@ -27,6 +28,9 @@ pub const MAX_PLAN_VALUES: usize = 10_000;
 pub const MAX_SAMPLES: usize = 1_000;
 /// The planner's default sample count.
 pub const DEFAULT_SAMPLES: usize = 8;
+/// Most entries of the measurement tables of one call, over every axis: each pin, and for each
+/// stretch with a target value, its copy of the pins' measurements and its samples.
+pub const MAX_PLAN_ENTRIES: usize = 1_000_000;
 
 const WEIGHTS: [f64; 19] =
     [50.0, 100.0, 150.0, 200.0, 250.0, 300.0, 350.0, 400.0, 450.0, 500.0, 550.0, 600.0, 650.0, 700.0, 750.0, 800.0, 850.0, 900.0, 950.0];
@@ -155,16 +159,65 @@ fn finite(v: f64, what: &str) -> Result<f64> {
     if v.is_finite() { Ok(v) } else { Err(TablesError::BadOptions(format!("{what} is not a finite number"))) }
 }
 
-/// `map[key] = value` on an insertion-ordered map.
-fn put(map: &mut Vec<(f64, f64)>, key: f64, value: f64) {
-    match map.iter_mut().find(|(k, _)| *k == key) {
-        Some(slot) => slot.1 = value,
-        None => map.push((key, value)),
+/// An insertion-ordered map from numbers, compared with `==`, to numbers.
+#[derive(Clone, Default)]
+struct Table {
+    pairs: Vec<(f64, f64)>,
+    /// Each key's index in `pairs`, by its bits with −0 folded into 0. NaN keys equal nothing,
+    /// so they are not indexed.
+    index: HashMap<u64, usize>,
+}
+
+impl Table {
+    /// `map[key] = value`.
+    fn put(&mut self, key: f64, value: f64) {
+        if key.is_nan() {
+            self.pairs.push((key, value));
+            return;
+        }
+        let bits = (key + 0.0).to_bits();
+        match self.index.get(&bits).and_then(|&i| self.pairs.get_mut(i)) {
+            Some(slot) => slot.1 = value,
+            None => {
+                self.index.insert(bits, self.pairs.len());
+                self.pairs.push((key, value));
+            }
+        }
+    }
+
+    fn get(&self, key: f64) -> Result<f64> {
+        (!key.is_nan())
+            .then(|| self.index.get(&(key + 0.0).to_bits()))
+            .flatten()
+            .and_then(|&i| self.pairs.get(i))
+            .map(|(_, v)| *v)
+            .ok_or_else(|| TablesError::invalid("a pin has no measurement"))
     }
 }
 
 fn get(map: &[(f64, f64)], key: f64) -> Result<f64> {
     map.iter().find(|(k, _)| *k == key).map(|(_, v)| *v).ok_or_else(|| TablesError::invalid("a pin has no measurement"))
+}
+
+/// [`piecewise_linear_map`] over a mapping whose keys ascend, each once, found by bisection.
+fn piecewise_sorted(v: f64, mapping: &[(f64, f64)]) -> f64 {
+    let i = mapping.partition_point(|(k, _)| *k < v);
+    if let Some(&(k, to)) = mapping.get(i)
+        && k == v
+    {
+        return to;
+    }
+    let (Some(&(lowest, at_lowest)), Some(&(highest, at_highest))) = (mapping.first(), mapping.last()) else { return v };
+    if v < lowest {
+        return v + at_lowest - lowest;
+    }
+    if v > highest {
+        return v + at_highest - highest;
+    }
+    match (i.checked_sub(1).and_then(|j| mapping.get(j)), mapping.get(i)) {
+        (Some(&(a, va)), Some(&(b, vb))) if b != a => va + (vb - va) * (v - a) / (b - a),
+        _ => v,
+    }
 }
 
 /// fontTools' `normalizeValue` with clamping.
@@ -183,19 +236,18 @@ struct Measurer<'s, 'a> {
 
 impl Measurer<'_, '_> {
     /// The averaged measurement of the glyphs at user value `value` of the axis.
-    fn at(&self, value: f64) -> Result<f64> {
+    fn at(&self, value: f64, work: &mut Work) -> Result<f64> {
         let mut coords = vec![0.0; self.set.axis_count];
         if let Some(slot) = coords.get_mut(self.axis) {
             *slot = normalize(value, self.limits)?;
         }
         let at = self.set.at(&coords)?;
-        let mut work = Work(MAX_DRAW_WORK);
         let (mut sum, mut total) = (0.0, 0.0);
         for &(gid, frequency) in self.glyphs {
             if frequency == 0.0 {
                 continue;
             }
-            let glyph = at.glyph(gid, &mut work)?;
+            let glyph = at.glyph(gid, work)?;
             match self.quantity {
                 Quantity::Weight => {
                     let mult = glyph.width * frequency;
@@ -301,9 +353,13 @@ pub fn plan_avar_with(font: &SfntFont, options: &PlanOptions) -> Result<PlanResu
                 return Err(TablesError::TooLarge { what: "the glyphs to measure", limit: crate::limits::MAX_GLYPHS });
             }
             let order = crate::ttx::glyph_order(font)?;
+            let mut by_name: HashMap<&str, usize> = HashMap::with_capacity(order.len());
+            for (i, n) in order.iter().enumerate() {
+                by_name.entry(n.as_str()).or_insert(i);
+            }
             let mut out = Vec::with_capacity(list.len());
             for (name, frequency) in list {
-                let gid = order.iter().position(|n| n == name).ok_or_else(|| TablesError::BadOptions(format!("the font has no glyph `{name}`")))?;
+                let gid = *by_name.get(name.as_str()).ok_or_else(|| TablesError::BadOptions(format!("the font has no glyph `{name}`")))?;
                 if !frequency.is_finite() {
                     return Err(TablesError::BadOptions(format!("the frequency of `{name}` is not a finite number")));
                 }
@@ -318,12 +374,13 @@ pub fn plan_avar_with(font: &SfntFont, options: &PlanOptions) -> Result<PlanResu
     if segments.len() != axes.len() {
         segments = axes.iter().map(|a| (a.tag, Vec::new())).collect();
     }
+    let mut budget = Budget { work: Work(MAX_DRAW_WORK), entries: MAX_PLAN_ENTRIES };
     let mut results = Vec::new();
     let mut any = false;
     for (kind, plan) in kinds().iter().zip([&options.weight, &options.width, &options.slant, &options.optical_size]) {
         let Some(index) = axes.iter().position(|a| a.tag == kind.tag) else { continue };
         let Some(axis) = axes.get(index) else { continue };
-        let result = plan_axis(&set, index, axis, kind, plan, samples, &glyphs, options.sanitize)?;
+        let result = plan_axis(&set, index, axis, kind, plan, samples, &glyphs, options.sanitize, &mut budget)?;
         if let Some(slot) = segments.iter_mut().find(|(t, _)| *t == kind.tag) {
             slot.1 = result.normalized.clone();
         }
@@ -353,6 +410,19 @@ fn f2dot14(v: f64) -> F2Dot14 {
     F2Dot14::from_bits((v * 16384.0 + 0.5).floor().clamp(-32768.0, 32767.0) as i16)
 }
 
+/// The values of `sorted` (ascending, each once) strictly between `lo` and `hi`.
+fn targets_of(sorted: &[f64], lo: f64, hi: f64) -> &[f64] {
+    let from = sorted.partition_point(|w| *w <= lo);
+    let to = sorted.partition_point(|w| *w < hi).max(from);
+    sorted.get(from..to).unwrap_or_default()
+}
+
+/// What one call of [`plan_avar_with`] may still spend, over all its axes.
+struct Budget {
+    work: Work,
+    entries: usize,
+}
+
 #[allow(clippy::too_many_arguments)]
 fn plan_axis(
     set: &GlyphSet<'_>,
@@ -363,6 +433,7 @@ fn plan_axis(
     samples: usize,
     glyphs: &[(u32, f64)],
     sanitize: bool,
+    budget: &mut Budget,
 ) -> Result<AxisPlanResult> {
     let name = tag_str(kind.tag);
     let triple = (axis.minimum, axis.default, axis.maximum);
@@ -383,33 +454,39 @@ fn plan_axis(
         }
         None => triple,
     };
-    let mut pins: Vec<(f64, f64)> = Vec::new();
+    let mut pin_table = Table::default();
     for &(before, after) in &plan.pins {
-        put(&mut pins, before, after);
+        pin_table.put(before, after);
     }
-    put(&mut pins, triple.0, design.0);
-    put(&mut pins, triple.1, design.1);
-    put(&mut pins, triple.2, design.2);
+    pin_table.put(triple.0, design.0);
+    pin_table.put(triple.1, design.1);
+    pin_table.put(triple.2, design.2);
+    let mut pins = pin_table.pairs;
     pins.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let mut sorted_values = values;
+    sorted_values.sort_by(f64::total_cmp);
+    sorted_values.dedup();
+    let stretches = pins.windows(2).filter(|w| matches!(w, [(lo, _), (hi, _)] if !targets_of(&sorted_values, *lo, *hi).is_empty())).count();
+    let entries = stretches.saturating_mul(pins.len().saturating_add(samples)).saturating_add(pins.len());
+    budget.entries =
+        budget.entries.checked_sub(entries).ok_or(TablesError::TooLarge { what: "the measurements of one plan", limit: MAX_PLAN_ENTRIES })?;
 
     let measurer = Measurer { set, axis: index, limits: triple, glyphs, quantity: kind.quantity };
-    let mut measurements: Vec<(f64, f64)> = Vec::new();
+    let mut measurements = Table::default();
     for &(value, design_value) in &pins {
-        put(&mut measurements, design_value, measurer.at(value)?);
+        measurements.put(design_value, measurer.at(value, &mut budget.work)?);
     }
-    let warnings = if sanitize && kind.sanitized { sanitize_axis(kind.quantity, triple, design, &measurements)? } else { Vec::new() };
+    let warnings = if sanitize && kind.sanitized { sanitize_axis(kind.quantity, triple, design, &measurements.pairs)? } else { Vec::new() };
 
-    let mut out: Vec<(f64, f64)> = Vec::new();
-    let mut out_normalized: Vec<(f64, f64)> = Vec::new();
+    let mut out = Table::default();
+    let mut out_normalized = Table::default();
     for pair in pins.windows(2) {
         let [(range_min, target_min), (range_max, target_max)] = pair else { continue };
         let (range_min, target_min, range_max, target_max) = (*range_min, *target_min, *range_max, *target_max);
-        let mut targets: Vec<f64> = values.iter().copied().filter(|w| range_min < *w && *w < range_max).collect();
+        let targets = targets_of(&sorted_values, range_min, range_max);
         if targets.is_empty() {
             continue;
         }
-        targets.sort_by(f64::total_cmp);
-        targets.dedup();
         if target_max == target_min {
             return Err(TablesError::BadOptions(format!("two pins of the `{}` axis map to the same design value", name.trim_end())));
         }
@@ -421,33 +498,34 @@ fn plan_axis(
         let mut value_measurements = measurements.clone();
         for sample in 1..=samples {
             let value = range_min + (range_max - range_min) * sample as f64 / (samples + 1) as f64;
-            let design_value = piecewise_linear_map(value, &pins);
-            put(&mut value_measurements, design_value, measurer.at(value)?);
+            let design_value = piecewise_sorted(value, &pins);
+            value_measurements.put(design_value, measurer.at(value, &mut budget.work)?);
         }
-        let mut sorted = value_measurements.clone();
+        let mut sorted = value_measurements.pairs.clone();
         sorted.sort_by(|a, b| a.0.total_cmp(&b.0));
-        let mut measurement_value: Vec<(f64, f64)> = Vec::new();
+        let mut measurement_value = Table::default();
         for (design_value, measurement) in sorted {
-            put(&mut measurement_value, measurement, design_value);
+            measurement_value.put(measurement, design_value);
         }
 
-        put(&mut out, range_min, target_min);
-        put(&mut out_normalized, normalized_min, normalized_target_min);
-        let at_min = get(&value_measurements, target_min)?;
-        let at_max = get(&value_measurements, target_max)?;
-        for value in targets {
+        out.put(range_min, target_min);
+        out_normalized.put(normalized_min, normalized_target_min);
+        let at_min = value_measurements.get(target_min)?;
+        let at_max = value_measurements.get(target_max)?;
+        for &value in targets {
             let t = kind.normalize.normalize(value, range_min, range_max)?;
             let target_measurement = kind.interpolate.interpolate(t, at_min, at_max)?;
-            let target_value = piecewise_linear_map(target_measurement, &measurement_value);
-            put(&mut out, value, target_value);
+            let target_value = piecewise_linear_map(target_measurement, &measurement_value.pairs);
+            out.put(value, target_value);
             let value_normalized = normalized_min + (value - range_min) / (range_max - range_min) * (normalized_max - normalized_min);
             let mapped =
                 normalized_target_min + (target_value - target_min) / (target_max - target_min) * (normalized_target_max - normalized_target_min);
-            put(&mut out_normalized, value_normalized, finite(mapped, "a planned value")?);
+            out_normalized.put(value_normalized, finite(mapped, "a planned value")?);
         }
-        put(&mut out, range_max, target_max);
-        put(&mut out_normalized, normalized_max, normalized_target_max);
+        out.put(range_max, target_max);
+        out_normalized.put(normalized_max, normalized_target_max);
     }
+    let (mut out, mut out_normalized) = (out.pairs, out_normalized.pairs);
     if out_normalized.iter().all(|(k, v)| (k - v).abs() < 0.01) {
         out.clear();
         out_normalized.clear();
@@ -471,6 +549,7 @@ fn plan_axis(
         }
         snippet.push_str("    </axis>");
     }
+    let mut measurements = measurements.pairs;
     measurements.sort_by(|a, b| a.0.total_cmp(&b.0));
     Ok(AxisPlanResult {
         tag: kind.tag,

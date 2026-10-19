@@ -29,7 +29,7 @@
 //! data, feature-variation conditions other than axis ranges, an `avar` map that is not valid,
 //! names from `STAT` (`update_names`).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use fontcraft_geom::{Point, Vec2};
 use read_fonts::tables::cvar::Cvar as ReadCvar;
@@ -69,6 +69,10 @@ use crate::{Result, TablesError};
 
 /// Most delta values copied, scaled or added while rebasing one font, over all its tables.
 const MAX_REBASE_WORK: usize = 256 << 20;
+/// Most bytes of deltas one item (a glyph's or `cvar`'s tuple variations) holds at once, read
+/// and then rebased: each delta is an `f64`. Lower where the address space is 32-bit.
+const MAX_ITEM_DELTA_BYTES: usize = if usize::BITS >= 64 { 512 << 20 } else { 128 << 20 };
+const DELTA_BYTES: usize = std::mem::size_of::<f64>();
 /// Most regions in one item variation store, and region indexes in one of its subtables.
 const MAX_REGIONS: usize = 65_535;
 /// Most bytes one `gvar` tuple variation's data may take (its size field has 16 bits).
@@ -401,6 +405,14 @@ struct Rebased {
     kept: Vec<TupleVar>,
 }
 
+/// Refuses an item whose deltas would take more than [`MAX_ITEM_DELTA_BYTES`].
+fn check_held(deltas: usize) -> Result<()> {
+    if deltas.saturating_mul(DELTA_BYTES) > MAX_ITEM_DELTA_BYTES {
+        return Err(TablesError::TooLarge { what: "the bytes of deltas one item holds while rebasing", limit: MAX_ITEM_DELTA_BYTES });
+    }
+    Ok(())
+}
+
 fn charge(budget: &mut usize, work: usize) -> Result<()> {
     if work > *budget {
         return Err(TablesError::TooLarge { what: "the work of rebasing the variation data", limit: MAX_REBASE_WORK });
@@ -450,14 +462,19 @@ fn change_axis(mut var: TupleVar, axis: usize, range: AxisRange, out: &mut Vec<T
 fn rebase_vars(mut vars: Vec<TupleVar>, limits: &Limits, budget: &mut usize) -> Result<Rebased> {
     for &axis in &limits.order {
         let Some(range) = limits.norm.get(axis).copied().flatten() else { continue };
-        let mut next = Vec::with_capacity(vars.len());
+        let mut next: Vec<TupleVar> = Vec::with_capacity(vars.len());
+        // Deltas in `next`; those of `vars` were checked when they were made.
+        let mut held = 0usize;
         for v in vars {
             // The solver gives at most five regions for one.
             charge(budget, v.deltas.len().saturating_add(1).saturating_mul(5))?;
+            let before = next.len();
             change_axis(v, axis, range, &mut next);
             if next.len() > MAX_TUPLE_VARIATIONS {
                 return Err(TablesError::TooLarge { what: "the tuple variations of one item once rebased", limit: MAX_TUPLE_VARIATIONS });
             }
+            held = next.get(before..).unwrap_or_default().iter().fold(held, |n, v| n.saturating_add(v.deltas.len()));
+            check_held(held)?;
         }
         vars = next;
     }
@@ -676,6 +693,7 @@ fn glyph_vars(table: &ReadGvar<'_>, g: usize, axis_count: usize, coords0: &[Pair
             return Err(TablesError::TooLarge { what: "the tuple variations of one glyph", limit: MAX_TUPLE_VARIATIONS });
         }
         charge(budget, n.saturating_mul(2))?;
+        check_held(count.saturating_add(1).saturating_mul(n).saturating_mul(2))?;
         let start = tuple.intermediate_start();
         let end = tuple.intermediate_end();
         let axes = tuple_axes(&tuple.peak(), start.as_ref(), end.as_ref(), axis_count);
@@ -746,6 +764,8 @@ fn partial_cvar(out: &mut SfntFont, limits: &Limits, budget: &mut usize) -> Resu
     let cvar = ReadCvar::read(FontData::new(data)).map_err(|e| bad(format!("the cvar table cannot be read: {e}")))?;
     let axes = u16::try_from(axis_count).map_err(|_| bad("too many axes"))?;
     let Some(variation_data) = cvar.variation_data(axes) else { return Err(bad("the cvar variation data cannot be read")) };
+    // Every tuple's deltas are held together, so the whole set is checked before any is made.
+    check_held(usize::from(cvar.tuple_variation_count().count()).saturating_mul(count))?;
     let mut vars = Vec::new();
     for (n, tuple) in variation_data.tuples().enumerate() {
         if n >= MAX_TUPLE_VARIATIONS {
@@ -1122,7 +1142,7 @@ fn partial_feature_variations(
     let full_range = AxisRange::new(-1.0, 0.0, 1.0);
     let mut applied = false;
     let mut universal = false;
-    let mut seen: Vec<Vec<(u16, i16, i16)>> = Vec::new();
+    let mut seen: HashSet<Vec<(u16, i16, i16)>> = HashSet::new();
     let mut records: Vec<FeatureVariationRecord> = Vec::new();
     let mut defaults: Option<FeatureTableSubstitution> = None;
     for rec in &fv.feature_variation_records {
@@ -1169,8 +1189,7 @@ fn partial_feature_variations(
                 list.iter().map(|c| (c.axis_index, c.filter_range_min_value.to_bits(), c.filter_range_max_value.to_bits())).collect();
             key.sort_unstable();
             key.dedup();
-            if !seen.contains(&key) {
-                seen.push(key);
+            if seen.insert(key) {
                 let set = (!list.is_empty()).then(|| ConditionSet::new(list.iter().cloned().map(Condition::Format1AxisRange).collect()));
                 records.push(FeatureVariationRecord::new(set, rec.feature_table_substitution.as_ref().cloned()));
             }

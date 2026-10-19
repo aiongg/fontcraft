@@ -9,7 +9,7 @@
 //! Every glyph's advance is read back from the result and compared with the input's.
 
 use super::super::flat::{self, Flat};
-use super::super::{CharstringSet, MAX_OPS_PER_SET, SubrError};
+use super::super::{CFF_STACK, CharstringSet, MAX_OPS_PER_SET, SubrError};
 use super::{Entry, Table, invalid};
 
 const OP_DEFAULT_WIDTH: u16 = 20;
@@ -38,7 +38,13 @@ pub fn optimize_widths_table(data: &[u8]) -> Result<(Vec<u8>, WidthsReport), Sub
     let mut report = WidthsReport::default();
     let mut charstrings = set.charstrings.clone();
     let mut advances = Vec::with_capacity(flats.len());
-    for fd in 0..fd_count {
+    let mut by_fd: Vec<Vec<usize>> = vec![Vec::new(); fd_count];
+    for g in 0..flats.len() {
+        if let Some(list) = by_fd.get_mut(set.fd_of(g)) {
+            list.push(g);
+        }
+    }
+    for (fd, glyphs) in by_fd.iter().enumerate() {
         let (default, nominal) = match pair(table.privates.get(fd)) {
             Some(p) => p,
             None => {
@@ -46,10 +52,10 @@ pub fn optimize_widths_table(data: &[u8]) -> Result<(Vec<u8>, WidthsReport), Sub
                 continue;
             }
         };
-        let glyphs: Vec<usize> = (0..flats.len()).filter(|&g| set.fd_of(g) == fd).collect();
+        let mut noted = false;
         let mut widths = Vec::with_capacity(glyphs.len());
         let mut found = Vec::with_capacity(glyphs.len());
-        for &g in &glyphs {
+        for &g in glyphs {
             let Some(flat) = flats.get(g) else { continue };
             match width_of(flat) {
                 Ok(w) => {
@@ -59,16 +65,17 @@ pub fn optimize_widths_table(data: &[u8]) -> Result<(Vec<u8>, WidthsReport), Sub
                     };
                     let Some(advance) = advance else { break };
                     widths.push(advance);
-                    found.push((g, w.skip, advance));
+                    found.push((g, w.skip, advance, w.args.saturating_sub(usize::from(w.operand.is_some()))));
                 }
                 Err(why) => {
                     report.kept.push(format!("Font DICT {fd}: glyph {g}: {why}"));
+                    noted = true;
                     break;
                 }
             }
         }
         if found.len() != glyphs.len() {
-            if !report.kept.iter().any(|k| k.starts_with(&format!("Font DICT {fd}:"))) {
+            if !noted {
                 report.kept.push(format!("Font DICT {fd}: a width does not fit"));
             }
             continue;
@@ -80,26 +87,31 @@ pub fn optimize_widths_table(data: &[u8]) -> Result<(Vec<u8>, WidthsReport), Sub
         }
         let Some((new_default, new_nominal)) = crate::width::optimize(&widths) else { continue };
         if (new_default, new_nominal) == (default, nominal) {
-            advances.extend(found.iter().map(|&(g, _, a)| (g, a)));
+            advances.extend(found.iter().map(|&(g, _, a, _)| (g, a)));
             continue;
         }
         let mut rewritten = Vec::with_capacity(found.len());
-        let mut ok = true;
-        for &(g, skip, advance) in &found {
+        let mut why = None;
+        for &(g, skip, advance, args) in &found {
             let Some(flat) = flats.get(g) else { continue };
             let mut bytes = Vec::with_capacity(flat.bytes.len() + 3);
             if advance != new_default {
+                // The width joins the first operator's arguments on the 48-entry stack.
+                if args >= CFF_STACK {
+                    why = Some(format!("Font DICT {fd}: glyph {g}: a width operand would overflow the argument stack"));
+                    break;
+                }
                 let v = advance.saturating_sub(new_nominal);
                 if crate::number::encode_t2_number(v as f64, "a glyph width", &mut bytes).is_err() {
-                    ok = false;
+                    why = Some(format!("Font DICT {fd}: a width difference does not fit a charstring number"));
                     break;
                 }
             }
             bytes.extend_from_slice(flat.bytes.get(skip..).unwrap_or_default());
             rewritten.push((g, bytes));
         }
-        if !ok {
-            report.kept.push(format!("Font DICT {fd}: a width difference does not fit a charstring number"));
+        if let Some(why) = why {
+            report.kept.push(why);
             continue;
         }
         let Some(private) = table.privates.get_mut(fd) else { continue };
@@ -116,7 +128,7 @@ pub fn optimize_widths_table(data: &[u8]) -> Result<(Vec<u8>, WidthsReport), Sub
                 *slot = bytes;
             }
         }
-        advances.extend(found.iter().map(|&(g, _, a)| (g, a)));
+        advances.extend(found.iter().map(|&(g, _, a, _)| (g, a)));
         report.changed += 1;
     }
     let out = CharstringSet { charstrings, ..set };
@@ -140,6 +152,8 @@ fn pair(private: Option<&Vec<Entry>>) -> Option<(i64, i64)> {
 struct Width {
     operand: Option<i64>,
     skip: usize,
+    /// The first operator's arguments, the width included.
+    args: usize,
 }
 
 fn width_of(flat: &Flat) -> Result<Width, &'static str> {
@@ -155,12 +169,12 @@ fn width_of(flat: &Flat) -> Result<Width, &'static str> {
         _ => return Err("the charstring does not start with a hint, a move or endchar"),
     };
     if !has_width {
-        return Ok(Width { operand: None, skip: 0 });
+        return Ok(Width { operand: None, skip: 0, args: depth });
     }
     let token = flat.tokens.first().ok_or("the charstring is empty")?;
     let bytes = flat.token_bytes(token);
     let value = int_value(bytes).ok_or("its width is not a whole number")?;
-    Ok(Width { operand: Some(value), skip: bytes.len() })
+    Ok(Width { operand: Some(value), skip: bytes.len(), args: depth })
 }
 
 /// The integer a Type 2 number token holds; `None` for a fraction or an operator.
@@ -258,5 +272,27 @@ mod tests {
     fn a_table_that_is_not_cff_is_refused() {
         assert!(optimize_widths_table(&[2, 0, 5, 0, 0]).is_err());
         assert!(optimize_widths_table(&[]).is_err());
+    }
+
+    #[test]
+    fn a_width_that_would_overflow_the_stack_keeps_the_widths() {
+        // Glyph 2 starts with an hstem of 48 arguments and takes the default width 0; the other
+        // advances make 600 the better default, which would give glyph 2 a 49th argument.
+        let pattern = [600, 600, 0, 600, 600, 1200, 250];
+        let expected: Vec<i64> = pattern.iter().copied().cycle().take(pattern.len() * 10).collect();
+        let advances: Vec<f64> = expected.iter().map(|&a| a as f64).collect();
+        let built = table(&advances);
+        let t = Table::read(&built, false).unwrap();
+        let mut set = t.set.clone();
+        let mut stems = vec![139u8; CFF_STACK];
+        stems.extend_from_slice(&[1, 14]);
+        set.charstrings[2] = stems;
+        let input = t.write(&set).unwrap();
+        let before = read_advances(&input);
+        assert_eq!(before, expected);
+        let (out, report) = optimize_widths_table(&input).unwrap();
+        assert_eq!(report.changed, 0, "{report:?}");
+        assert!(report.kept.iter().any(|k| k.contains("overflow the argument stack")), "{report:?}");
+        assert_eq!(read_advances(&out), before);
     }
 }

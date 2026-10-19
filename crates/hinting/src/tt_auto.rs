@@ -1040,6 +1040,8 @@ impl GlyphControl {
                 by_point.entry(n).or_insert(*p);
             }
         }
+        let mut cells_left = MAX_CONTROL_CELLS;
+        let mut over = false;
         for line in lines {
             let mut nodes = Vec::with_capacity(line.points.len());
             for i in &line.points {
@@ -1061,6 +1063,19 @@ impl GlyphControl {
                             break;
                         }
                         out.segments.push((p.r, p.x + a, p.x + b));
+                    }
+                }
+                // Each node holds its own copy of the sizes, once for a `touch` and once for each
+                // axis of a `point`.
+                ControlKind::Touch { .. } | ControlKind::Point { .. }
+                    if !take_cells(&mut cells_left, nodes.len().saturating_mul(line.ppems.len().max(1)).saturating_mul(2)) =>
+                {
+                    if !over {
+                        warnings.push(format!(
+                            "control instructions, line {}: glyph `{}` has more than {MAX_CONTROL_CELLS} correction cells (points times sizes); the rest were left out",
+                            line.line, input.glyph
+                        ));
+                        over = true;
                     }
                 }
                 ControlKind::Touch { x_shift, y_shift } => {
@@ -1126,6 +1141,23 @@ fn shifts(nodes: &[Pt], direction: Direction, pixels: f64, ppems: &[u16]) -> Vec
     nodes.iter().map(|p| PointShift { node: p.r, direction, ppems: ppems.clone(), amount: eighths * 8 }).collect()
 }
 
+/// Takes `n` from `left`; `false` (and nothing left) when there is not enough.
+fn take_cells(left: &mut usize, n: usize) -> bool {
+    match left.checked_sub(n) {
+        Some(rest) => {
+            *left = rest;
+            true
+        }
+        None => {
+            *left = 0;
+            false
+        }
+    }
+}
+
+/// Most cells (a point at a size, per axis) of one glyph's `touch` and `point` corrections the
+/// autohinter holds; the program after IUP takes [`MAX_SHIFT_CELLS`] of them.
+const MAX_CONTROL_CELLS: usize = 1 << 16;
 /// Most `left` and `right` points of one glyph the autohinter looks at; each costs a pass over
 /// the glyph's nodes.
 const MAX_CONTROL_SEGMENTS: usize = 256;
@@ -1287,6 +1319,17 @@ mod tests {
         // `nodir` wins over a direction.
         let h = hints_for(&font, &settings, "x left 5\nx nodir 5");
         assert!(on(&h.instructions, tip).is_empty());
+    }
+
+    #[test]
+    fn corrections_past_the_cell_budget_are_left_out_with_a_warning() {
+        // 300 lines moving all seven points at 255 sizes: about a million point and size cells.
+        let (font, settings) = slab_and_wedge();
+        let control = "x point 0-6 xshift 1 yshift 1 @ 1-255\n".repeat(300);
+        let h = hints_for(&font, &settings, &control);
+        let cells: usize = h.shifts.iter().map(|s| s.ppems.len()).sum();
+        assert!(cells > 0 && cells <= MAX_CONTROL_CELLS, "{cells}");
+        assert_eq!(h.warnings.iter().filter(|w| w.contains("correction cells")).count(), 1, "{:?}", h.warnings);
     }
 
     #[test]
