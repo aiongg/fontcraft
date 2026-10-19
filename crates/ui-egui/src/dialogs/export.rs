@@ -299,6 +299,10 @@ mod tests {
         fn files(&mut self, _: &str, _: &str, _: &[&str]) -> Vec<PathBuf> {
             Vec::new()
         }
+
+        fn save(&mut self, _: &str, _: &str, _: &[&str], _: &str) -> Option<PathBuf> {
+            None
+        }
     }
 
     fn picker(app: &mut FontcraftApp, folder: Option<&Path>) -> Arc<Mutex<Vec<String>>> {

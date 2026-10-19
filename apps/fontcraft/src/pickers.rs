@@ -1,5 +1,5 @@
-//! The platform's file and folder choosers, for the dialogs and File › Import, and Show in
-//! Finder.
+//! The platform's file and folder choosers, for the dialogs, File › Import and the save paths of
+//! panels, and Show in Finder.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -18,6 +18,17 @@ impl Picker for SystemPicker {
 
     fn files(&mut self, title: &str, kind: &str, extensions: &[&str]) -> Vec<PathBuf> {
         rfd::FileDialog::new().set_title(title).add_filter(kind, extensions).pick_files().unwrap_or_default()
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn save(&mut self, title: &str, kind: &str, extensions: &[&str], suggested: &str) -> Option<PathBuf> {
+        rfd::FileDialog::new().set_title(title).add_filter(kind, extensions).set_file_name(suggested).save_file()
+    }
+
+    /// The browser has no blocking save chooser: the path stays typed.
+    #[cfg(target_arch = "wasm32")]
+    fn save(&mut self, _: &str, _: &str, _: &[&str], _: &str) -> Option<PathBuf> {
+        None
     }
 }
 

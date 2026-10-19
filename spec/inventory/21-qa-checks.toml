@@ -4144,7 +4144,7 @@ summary = "Writes the run the Font Audit panel lists to a report file with audit
 ref = "Our design; cf. fontbakery --html, --ghmarkdown, --json"
 status = "inferred"
 own = true
-notes = "Built in M12.64b. Export Report… in the gear menu shows a row with the file, the format (HTML first) and Export. The window has no save-file chooser yet, so the file is typed."
+notes = "Built in M12.64b. Export Report… in the gear menu shows a row with the file, Choose…, the format (HTML first) and Export. Choose… asks the system save chooser for the file, offering the typed name or Font Audit Report with the format's extension; where the window has no chooser (the browser, the control channel) Choose… is hidden and the file is typed."
 guesses = ["The export row offers HTML first, as the most readable report; people using the panel would settle the default."]
 
 [[command]]

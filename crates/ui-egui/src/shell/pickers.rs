@@ -1,6 +1,6 @@
 //! The system's file choosers. The desktop app gives [`FontcraftApp::picker`] one; without it (the
-//! browser, MCP, tests) folder fields hide Choose…, OK with no folder is an error, and File ›
-//! Import › Outlines… says that `file.importOutlines` needs `files`.
+//! browser, MCP, tests) folder fields and save paths hide Choose… and stay typed, OK with no
+//! folder is an error, and File › Import › Outlines… says that `file.importOutlines` needs `files`.
 
 use std::path::PathBuf;
 
@@ -18,6 +18,10 @@ pub trait Picker: Send {
     /// The files the person chose (several allowed) among those whose extension is one of
     /// `extensions`, described as `kind`; empty when they cancelled.
     fn files(&mut self, title: &str, kind: &str, extensions: &[&str]) -> Vec<PathBuf>;
+    /// The file the person chose to write, offered with the name `suggested` among files whose
+    /// extension is one of `extensions`, described as `kind`; `None` when they cancelled. The
+    /// chooser asks before it answers with a file that exists.
+    fn save(&mut self, title: &str, kind: &str, extensions: &[&str], suggested: &str) -> Option<PathBuf>;
 }
 
 /// A run of `id` with `params` that asks for files first: File › Import › Outlines… names none.
@@ -68,6 +72,10 @@ mod tests {
         fn files(&mut self, title: &str, _: &str, extensions: &[&str]) -> Vec<PathBuf> {
             self.asked.lock().unwrap().push((title.to_string(), extensions.iter().map(|e| e.to_string()).collect()));
             self.files.clone()
+        }
+
+        fn save(&mut self, _: &str, _: &str, _: &[&str], _: &str) -> Option<PathBuf> {
+            None
         }
     }
 

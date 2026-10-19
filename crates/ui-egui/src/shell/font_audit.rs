@@ -20,7 +20,7 @@
 //! | Ignore (with the reason field) | `audit.ignoreIssue` per selected result (several: one `command.batch`), then a re-run |
 //! | Stop Ignoring | `audit.unignoreIssue` per selected ignored result, then a re-run |
 //! | gear menu | `audit.editProfile`, `audit.clearCache`, `audit.toggleLiveAudit`; Export Report… shows the export row |
-//! | export row: file, format, Export | `audit.panel.exportReport` |
+//! | export row: file, Choose…, format, Export | Choose… asks the save chooser for the file (view state; without a chooser the file is typed); Export runs `audit.panel.exportReport` |
 //!
 //! The panel keeps the result document of its last run ([`Run`]); the engine keeps the last run
 //! of each open document too, and its result ids are what `audit.fix` and `audit.ignoreIssue`
@@ -1370,6 +1370,8 @@ struct Output {
     export_open: Option<bool>,
     export_path: Option<String>,
     export_format: Option<String>,
+    /// Choose… of the export row: ask the save chooser for the report file.
+    choose_export: bool,
     actions: Vec<Action>,
 }
 
@@ -1382,14 +1384,18 @@ struct Frame<'a> {
     revision: Option<u64>,
     live: bool,
     masters: HashMap<String, String>,
+    /// The window has a save chooser: the export row shows Choose….
+    chooser: bool,
 }
 
 fn label_of(list: &[(String, String)], id: &str) -> String {
     list.iter().find(|(i, _)| i == id).map_or_else(|| id.to_string(), |(_, l)| l.clone())
 }
 
-/// The formats Export Report offers: the `format` of `audit.export`, and the label.
-const EXPORT_FORMATS: [(&str, &str); 4] = [("html", "HTML"), ("markdown", "Markdown"), ("json", "JSON"), ("text", "Text")];
+/// The formats Export Report offers: the `format` of `audit.export`, the label, and the file
+/// extension `audit.export` reads as that format.
+const EXPORT_FORMATS: [(&str, &str, &str); 4] =
+    [("html", "HTML", "html"), ("markdown", "Markdown", "md"), ("json", "JSON", "json"), ("text", "Text", "txt")];
 
 fn header(ui: &mut egui::Ui, f: &Frame, out: &mut Output, pending: &mut Pending) {
     let st = f.st;
@@ -1467,9 +1473,12 @@ fn export_row(ui: &mut egui::Ui, f: &Frame, out: &mut Output, pending: &mut Pend
         if ui.add(edit).changed() {
             out.export_path = Some(path);
         }
-        let caption = EXPORT_FORMATS.iter().find(|(id, _)| *id == st.export_format).map_or("HTML", |(_, l)| *l);
+        if f.chooser && widgets::button(ui, control_id("exportChoose"), "Choose…", "Choose the report file", true, false) {
+            out.choose_export = true;
+        }
+        let caption = EXPORT_FORMATS.iter().find(|(id, ..)| *id == st.export_format).map_or("HTML", |(_, l, _)| *l);
         egui::ComboBox::from_id_salt("window.fontAudit.exportFormat").selected_text(caption).show_ui(ui, |ui| {
-            for (id, label) in EXPORT_FORMATS {
+            for (id, label, _) in EXPORT_FORMATS {
                 if ui.selectable_label(st.export_format == id, label).clicked() {
                     out.export_format = Some(id.to_string());
                 }
@@ -1480,6 +1489,20 @@ fn export_row(ui: &mut egui::Ui, f: &Frame, out: &mut Output, pending: &mut Pend
             pending.push(("audit.panel.exportReport", json!({"path": st.export_path.trim(), "format": st.export_format})));
         }
     });
+}
+
+/// Choose… of the export row: asks the save chooser for the report file, offering the name typed
+/// so far or one with the format's extension, and puts the answer in the path field. A cancelled
+/// chooser leaves the field as it was.
+fn choose_report_file(app: &mut FontcraftApp) {
+    let st = &app.state.panels.font_audit;
+    let (label, extension) = EXPORT_FORMATS.iter().find(|(id, ..)| *id == st.export_format).map_or(("HTML", "html"), |(_, l, e)| (*l, *e));
+    let typed = std::path::Path::new(st.export_path.trim()).file_name().map(|n| n.to_string_lossy().into_owned());
+    let suggested = typed.filter(|n| !n.is_empty()).unwrap_or_else(|| format!("Font Audit Report.{extension}"));
+    let Some(picker) = app.picker.as_mut() else { return };
+    if let Some(path) = picker.save("Export Report", &format!("{label} report"), &[extension], &suggested) {
+        app.state.panels.font_audit.export_path = path.to_string_lossy().into_owned();
+    }
 }
 
 fn summary(ui: &mut egui::Ui, f: &Frame, run: &Run) {
@@ -1878,7 +1901,8 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     let doc = run.as_ref().and_then(|r| app.session.active().filter(|d| d.id == r.doc));
     let revision = doc.map(|d| d.revision);
     let masters: HashMap<String, String> = doc.map(|d| d.font.masters.iter().map(|m| (m.id.clone(), m.name.clone())).collect()).unwrap_or_default();
-    let frame = Frame { st, tokens: &app.tokens, listing: listing.clone(), revision, live: app.state.audit.live, masters };
+    let frame =
+        Frame { st, tokens: &app.tokens, listing: listing.clone(), revision, live: app.state.audit.live, masters, chooser: app.picker.is_some() };
     let mut out = Output::default();
     let mut open = true;
     let tokens = &app.tokens;
@@ -1949,6 +1973,9 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     }
     if let Some((id, command, shift)) = out.click {
         select(st, listing.as_deref(), id, command, shift);
+    }
+    if out.choose_export {
+        choose_report_file(app);
     }
     if let Some(run) = run {
         for action in out.actions {
@@ -2245,6 +2272,65 @@ mod tests {
         assert_eq!(written["runId"], listed["run"]["runId"]);
         assert_eq!(written["results"].as_array().unwrap().len(), listed["run"]["results"].as_u64().unwrap() as usize);
         assert!(refused(&mut app, "audit.panel.exportReport", json!({})).contains("`path`"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// What a save chooser was asked: its title, its extensions and the name it offered.
+    type Asked = std::sync::Arc<std::sync::Mutex<Vec<(String, Vec<String>, String)>>>;
+
+    /// A save chooser that answers `path` and records what it was asked.
+    struct SavePicker {
+        path: Option<std::path::PathBuf>,
+        asked: Asked,
+    }
+
+    impl crate::shell::pickers::Picker for SavePicker {
+        fn folder(&mut self, _: &str) -> Option<std::path::PathBuf> {
+            None
+        }
+
+        fn files(&mut self, _: &str, _: &str, _: &[&str]) -> Vec<std::path::PathBuf> {
+            Vec::new()
+        }
+
+        fn save(&mut self, title: &str, _: &str, extensions: &[&str], suggested: &str) -> Option<std::path::PathBuf> {
+            self.asked.lock().unwrap().push((title.into(), extensions.iter().map(|e| e.to_string()).collect(), suggested.into()));
+            self.path.clone()
+        }
+    }
+
+    #[test]
+    fn audit_panel_export_report_choose_fills_the_file_from_the_save_chooser_and_export_writes_there() {
+        let mut app = audited_app();
+        call(&mut app, "audit.panel.run", json!({"profile": "outlines"}));
+        app.state.panels.font_audit.export_open = true;
+        app.state.panels.font_audit.export_format = "markdown".into();
+        let w = Window::new();
+
+        // Without a chooser the file is typed: no Choose….
+        w.frame(&mut app, Vec::new());
+        w.frame(&mut app, Vec::new());
+        assert!(w.ctx.read_response(control_id("exportChoose")).is_none());
+
+        let dir = std::env::temp_dir().join(format!("fontcraft-audit-panel-choose-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("chosen.md");
+        let asked = Asked::default();
+
+        // A cancelled chooser leaves the field as it was.
+        app.picker = Some(Box::new(SavePicker { path: None, asked: asked.clone() }));
+        w.click(&mut app, control_id("exportChoose"));
+        assert_eq!(app.state.panels.font_audit.export_path, "");
+
+        app.picker = Some(Box::new(SavePicker { path: Some(file.clone()), asked: asked.clone() }));
+        w.click(&mut app, control_id("exportChoose"));
+        assert_eq!(app.state.panels.font_audit.export_path, file.to_string_lossy());
+        let offered = ("Export Report".to_string(), vec!["md".to_string()], "Font Audit Report.md".to_string());
+        assert_eq!(*asked.lock().unwrap(), [offered.clone(), offered]);
+
+        w.click(&mut app, control_id("export"));
+        let written = std::fs::read_to_string(&file).unwrap();
+        assert!(written.starts_with('#'), "a Markdown report: {written}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
