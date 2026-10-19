@@ -764,7 +764,8 @@ pub fn contextual_marks(req: &ContextualRequest) -> Result<Option<ContextualMark
 
     // The plain lookups and the contextual ones, feature by feature, in ufo2ft's order: the
     // plain lookups, the lookups the contexts call, the dispatch lookups, then the mark-to-mark
-    // lookups `abvm` and `blwm` hold.
+    // lookups `abvm` and `blwm` hold. ufo2ft defines those last ones inside their feature
+    // blocks, so they come after every other lookup in the font.
     let generated = generate_marks(m, &mut quiet)?;
     let names: Vec<&str> = m.input.glyphs.iter().take(glyph_count).map(|g| g.name.as_str()).collect();
     let mut w = Writer::new(names);
@@ -809,14 +810,16 @@ pub fn contextual_marks(req: &ContextualRequest) -> Result<Option<ContextualMark
             w.lookup(&d.name, &d.statements)?;
         }
         used.extend(ctx.dispatch.iter().map(|d| d.name.clone()));
-        for l in generated.lookups.iter().filter(|l| l.feature == tag).filter(nested) {
+        blocks.push((tag, used));
+    }
+    for (tag, used) in blocks.iter_mut().filter(|(tag, _)| *tag == ABVM || *tag == BLWM) {
+        let label = tag.to_string();
+        for l in generated.lookups.iter().filter(|l| l.feature == *tag && matches!(l.rules, MarkRules::MarkToMark { .. })) {
             budget.spend(1)?;
             used.extend(w.plain(&label, l)?);
         }
-        if !used.is_empty() {
-            blocks.push((tag, used));
-        }
     }
+    blocks.retain(|(_, used)| !used.is_empty());
     if rules == 0 {
         return Ok(None);
     }

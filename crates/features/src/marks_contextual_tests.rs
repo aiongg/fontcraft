@@ -90,7 +90,9 @@ fn contextual_lookups_dispatch_as_fontmake_builds_them() {
     let found = written(&input, &contexts).expect("contextual rules");
     let code = &found.code;
     assert_eq!(found.rules, 4, "{code}");
-    assert_eq!(found.features, [MARK, MKMK], "no Indic glyph, so no abvm or blwm");
+    // The combining marks' script extensions include Tai Le, a script that uses abvm, so abvm
+    // gets their mark-to-mark lookup, as fontmake writes it.
+    assert_eq!(found.features, [ABVM, MARK, MKMK]);
     assert!(found.warnings.is_empty(), "{:?}", found.warnings);
 
     // The lookups the contexts call, in fontmake's order: base contexts longest first, then the
@@ -156,7 +158,8 @@ fn contextual_code_compiles_to_chained_lookups_after_the_plain_ones() {
             _ => "other",
         })
         .collect();
-    assert_eq!(kinds, ["base", "base", "lig", "base", "base", "lig", "chain", "chain", "mkmk", "mkmk", "chain"]);
+    // fontmake's order: abvm's mark-to-mark lookup comes last.
+    assert_eq!(kinds, ["base", "base", "lig", "base", "base", "lig", "chain", "chain", "mkmk", "mkmk", "chain", "mkmk"]);
 }
 
 #[test]
@@ -178,7 +181,7 @@ fn contexts_that_cannot_be_written_are_left_out_with_a_warning() {
     let contexts = AnchorContexts(only);
     let found = contextual_marks(&ContextualRequest { marks: &marks, contexts: &contexts, values: None }).unwrap().unwrap();
     assert_eq!(found.rules, 1);
-    assert_eq!(found.features, [MARK, MKMK], "the plain mark lookups move to the code with the contextual ones");
+    assert_eq!(found.features, [ABVM, MARK, MKMK], "the plain mark lookups move to the code with the contextual ones");
     assert!(found.warnings.iter().any(|w| w.contains("empty")), "{:?}", found.warnings);
 }
 
