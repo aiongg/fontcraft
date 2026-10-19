@@ -692,6 +692,54 @@ fn reverse(w: &mut Walk, s: &ReverseChainSingleSubstFormat1) -> Result<()> {
     Ok(())
 }
 
+/// Gives back the class records that the owned conversion loses. read-fonts reads an array of
+/// zero-size records as empty, so a `PairPosFormat2` whose two value formats are 0 (as
+/// pyftsubset writes a pair table whose values are all 0) comes back without records, and
+/// write-fonts refuses to write it. Each such subtable gets one empty record per class pair of
+/// its class definitions; the records it gets count against [`MAX_LAYOUT_ITEMS`] for the whole
+/// table.
+pub(crate) fn restore_empty_pair_records(gpos: &mut write_fonts::tables::gpos::Gpos) -> Result<()> {
+    use write_fonts::tables::gpos::{ExtensionSubtable as Ext, PositionLookup as Lookup};
+    let mut w = Walk::new("GPOS", MAX_LAYOUT_ITEMS);
+    for lookup in gpos.lookup_list.lookups.iter_mut() {
+        match &mut **lookup {
+            Lookup::Pair(l) => {
+                for s in l.subtables.iter_mut() {
+                    restore_pair(&mut w, s)?;
+                }
+            }
+            Lookup::Extension(l) => {
+                for s in l.subtables.iter_mut() {
+                    if let Ext::Pair(e) = &mut **s {
+                        restore_pair(&mut w, &mut e.extension)?;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+/// The classes of `cd`, with class 0, counted as write-fonts counts them for the header.
+fn owned_class_count(cd: &write_fonts::tables::layout::ClassDef) -> usize {
+    cd.iter().map(|(_, c)| c).chain(std::iter::once(0)).collect::<std::collections::BTreeSet<u16>>().len()
+}
+
+fn restore_pair(w: &mut Walk, p: &mut write_fonts::tables::gpos::PairPos) -> Result<()> {
+    use write_fonts::tables::gpos::{Class1Record, Class2Record, PairPos as Owned, ValueRecord as Value};
+    let Owned::Format2(f) = p else { return Ok(()) };
+    if !f.class1_records.is_empty() {
+        return Ok(());
+    }
+    let n1 = owned_class_count(&f.class_def1);
+    let n2 = owned_class_count(&f.class_def2);
+    w.charge(n1.saturating_mul(1 + n2))?;
+    let row = Class1Record::new(vec![Class2Record::new(Value::default(), Value::default()); n2]);
+    f.class1_records = vec![row; n1];
+    Ok(())
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
