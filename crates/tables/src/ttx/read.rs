@@ -21,7 +21,7 @@
 use std::collections::{BTreeSet, HashMap};
 use std::rc::Rc;
 
-use crate::limits::{MAX_TTX_BYTES, MAX_TTX_DEPTH, MAX_TTX_ELEMENTS};
+use crate::limits::{MAX_TTX_BYTES, MAX_TTX_DEPTH, MAX_TTX_ELEMENTS, MAX_TTX_TREE_BYTES};
 use crate::sfnt::{Flavour, SfntFont, Tag};
 use crate::{Result, TablesError};
 
@@ -312,17 +312,56 @@ fn xml_error(what: &str, pos: usize) -> TablesError {
     TablesError::invalid(format!("the XML could not be read: {what} (at byte {pos})"))
 }
 
+/// What the TTX texts parsed against one budget may still use: text bytes, elements and an
+/// estimate of the element tree's memory.
+#[derive(Clone, Debug)]
+pub struct ParseBudget {
+    text: usize,
+    elements: usize,
+    tree: usize,
+}
+
+impl Default for ParseBudget {
+    fn default() -> Self {
+        Self { text: MAX_TTX_BYTES, elements: MAX_TTX_ELEMENTS, tree: MAX_TTX_TREE_BYTES }
+    }
+}
+
+impl ParseBudget {
+    fn tree(&mut self, bytes: usize) -> Result<()> {
+        self.tree =
+            self.tree.checked_sub(bytes).ok_or(TablesError::TooLarge { what: "the memory of the TTX element tree", limit: MAX_TTX_TREE_BYTES })?;
+        Ok(())
+    }
+}
+
+/// The memory a string's heap allocation takes, with a share for the allocator.
+fn heap(s: &str) -> usize {
+    if s.is_empty() { 0 } else { s.len().saturating_add(16) }
+}
+
+/// The memory an element just read takes, without its text and children.
+fn element_cost(e: &Element) -> usize {
+    let attributes = e
+        .attributes
+        .iter()
+        .fold(0usize, |n, (k, v)| n.saturating_add(std::mem::size_of::<(String, String)>()).saturating_add(heap(k)).saturating_add(heap(v)));
+    std::mem::size_of::<Element>().saturating_add(heap(&e.name)).saturating_add(attributes)
+}
+
 /// Parses TTX text into its root element within the limits.
 pub(crate) fn parse(text: &str) -> Result<Element> {
-    if text.len() > MAX_TTX_BYTES {
-        return Err(TablesError::TooLarge { what: "the TTX text", limit: MAX_TTX_BYTES });
-    }
+    parse_within(text, &mut ParseBudget::default())
+}
+
+/// Parses TTX text into its root element, charging `budget`; several texts can share one.
+pub(crate) fn parse_within(text: &str, budget: &mut ParseBudget) -> Result<Element> {
+    budget.text = budget.text.checked_sub(text.len()).ok_or(TablesError::TooLarge { what: "the TTX text", limit: MAX_TTX_BYTES })?;
     let text = text.strip_prefix('\u{feff}').unwrap_or(text);
     let b = text.as_bytes();
     let mut pos = 0usize;
     let mut stack: Vec<Element> = Vec::new();
     let mut root: Option<Element> = None;
-    let mut count = 0usize;
     while pos < b.len() {
         let rest = text.get(pos..).unwrap_or_default();
         if !rest.starts_with('<') {
@@ -330,7 +369,10 @@ pub(crate) fn parse(text: &str) -> Result<Element> {
             let raw = text.get(pos..end).unwrap_or_default();
             let decoded = decode_text(raw, false, pos)?;
             match stack.last_mut() {
-                Some(top) => top.text.push_str(&decoded),
+                Some(top) => {
+                    budget.tree(decoded.len())?;
+                    top.text.push_str(&decoded);
+                }
                 None if decoded.trim().is_empty() => {}
                 None => return Err(xml_error("text outside the root element", pos)),
             }
@@ -350,7 +392,10 @@ pub(crate) fn parse(text: &str) -> Result<Element> {
                 .ok_or_else(|| xml_error("an unclosed CDATA section", pos))?;
             let body = normalize_newlines(text.get(start..end).unwrap_or_default());
             match stack.last_mut() {
-                Some(top) => top.text.push_str(&body),
+                Some(top) => {
+                    budget.tree(body.len())?;
+                    top.text.push_str(&body);
+                }
                 None => return Err(xml_error("a CDATA section outside the root element", pos)),
             }
             pos = end.saturating_add(3);
@@ -371,10 +416,9 @@ pub(crate) fn parse(text: &str) -> Result<Element> {
             pos = pos.saturating_add(close).saturating_add(1);
         } else {
             let (element, empty, next) = start_tag(text, pos)?;
-            count = count.saturating_add(1);
-            if count > MAX_TTX_ELEMENTS {
-                return Err(TablesError::TooLarge { what: "the number of TTX elements", limit: MAX_TTX_ELEMENTS });
-            }
+            budget.elements =
+                budget.elements.checked_sub(1).ok_or(TablesError::TooLarge { what: "the number of TTX elements", limit: MAX_TTX_ELEMENTS })?;
+            budget.tree(element_cost(&element))?;
             if stack.len() >= MAX_TTX_DEPTH {
                 return Err(TablesError::TooLarge { what: "the TTX element nesting", limit: MAX_TTX_DEPTH });
             }

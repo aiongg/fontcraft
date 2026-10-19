@@ -5,12 +5,15 @@
 //! and writes it (WOFF, WOFF2 and collection members keep their container). Each dump is
 //! compiled as the reference tool compiles it with `-m`, in the order given; a dump split into
 //! one file per table is read through its main file, whose `src` attributes name the parts
-//! beside it.
+//! beside it. A part path must be relative and stay in the main file's folder, and every part
+//! passes the same file-access check as the main file; the main file and its parts share the
+//! limits of one dump.
 
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
+use fontcraft_tables::limits::MAX_TTX_PARTS;
 use fontcraft_tables::sfnt::tag_str;
-use fontcraft_tables::ttx::{Element, ImportOptions, import_tree, parse};
+use fontcraft_tables::ttx::{Element, ImportOptions, ParseBudget, import_tree, parse_within};
 use fontcraft_tables::{TableOrder, TablesError};
 use serde_json::{Value, json};
 
@@ -52,9 +55,14 @@ fn read_text(path: &Path) -> Result<String> {
 
 /// The dump at `path` parsed, with the parts of a split dump read in where `src` names them.
 fn read_dump(path: &Path) -> Result<Element> {
-    let mut root = parse(&read_text(path)?).map_err(|e| EngineError::Io(format!("{}: {e}", path.display())))?;
-    if root.children.iter().all(|c| c.attribute("src").is_none()) {
+    let mut budget = ParseBudget::default();
+    let mut root = parse_within(&read_text(path)?, &mut budget).map_err(|e| EngineError::Io(format!("{}: {e}", path.display())))?;
+    let parts = root.children.iter().filter(|c| c.attribute("src").is_some()).count();
+    if parts == 0 {
         return Ok(root);
+    }
+    if parts > MAX_TTX_PARTS {
+        return Err(EngineError::Io(format!("{} names {parts} files; a split dump may name at most {MAX_TTX_PARTS}", path.display())));
     }
     let dir = path.parent().map(Path::to_path_buf).unwrap_or_default();
     let mut children = Vec::with_capacity(root.children.len());
@@ -63,8 +71,12 @@ fn read_dump(path: &Path) -> Result<Element> {
             children.push(child);
             continue;
         };
+        if !Path::new(src).components().all(|c| matches!(c, Component::Normal(_) | Component::CurDir)) {
+            return Err(EngineError::Io(format!("{} names the file `{src}`: parts must be beside it or in a folder below it", path.display())));
+        }
         let part_path: PathBuf = dir.join(src);
-        let part = parse(&read_text(&part_path)?).map_err(|e| EngineError::Io(format!("{}: {e}", part_path.display())))?;
+        crate::file_access::check_read(&part_path).map_err(|e| EngineError::Io(format!("refusing to read {}: {e}", part_path.display())))?;
+        let part = parse_within(&read_text(&part_path)?, &mut budget).map_err(|e| EngineError::Io(format!("{}: {e}", part_path.display())))?;
         if part.children.iter().any(|c| c.attribute("src").is_some()) {
             return Err(EngineError::Io(format!("{} names further files; dumps split by glyph are not read", part_path.display())));
         }

@@ -826,9 +826,18 @@ impl Element {
 }
 
 /// Parses TTX text into its root element within [`crate::limits::MAX_TTX_BYTES`],
-/// [`crate::limits::MAX_TTX_DEPTH`] and [`crate::limits::MAX_TTX_ELEMENTS`].
+/// [`crate::limits::MAX_TTX_DEPTH`], [`crate::limits::MAX_TTX_ELEMENTS`] and
+/// [`crate::limits::MAX_TTX_TREE_BYTES`].
 pub fn parse(text: &str) -> Result<Element> {
     read::parse(text)
+}
+
+pub use read::ParseBudget;
+
+/// [`parse`] charging `budget`, so that the files of a dump split into parts share the limits
+/// of one text.
+pub fn parse_within(text: &str, budget: &mut ParseBudget) -> Result<Element> {
+    read::parse_within(text, budget)
 }
 
 /// Builds TTX text: indentation of two spaces per level, attributes in the order given, text and

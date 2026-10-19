@@ -21,6 +21,13 @@ pub const MAX_TTX_BYTES: usize = 256 << 20;
 pub const MAX_TTX_DEPTH: usize = 64;
 /// Most elements in one TTX input.
 pub const MAX_TTX_ELEMENTS: usize = 50_000_000;
+/// Most memory the element tree of one TTX input may take, by an estimate counting each
+/// element, attribute and string with its allocation. A 256 MB dump as `ttx` writes it comes to
+/// about 1.6 GB on a 64-bit target and 1 GB on a 32-bit one (wasm), whose 4 GB address space
+/// needs room for the rest.
+pub const MAX_TTX_TREE_BYTES: usize = if usize::BITS >= 64 { 3 << 30 } else { 3 << 29 };
+/// Most files one TTX dump split into one file per table may name.
+pub const MAX_TTX_PARTS: usize = MAX_TABLES;
 /// Largest text dump (TTX or JSON) written for one call, in bytes: the text, plus an estimate
 /// of the element tree the JSON form is built from.
 pub const MAX_TTX_OUTPUT: usize = 1 << 30;
