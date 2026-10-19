@@ -565,6 +565,7 @@ all five.
 | GDEF classes | generated block unless `--no-generate-GDEF` | FEA block wins, else source categories | from feature file | fontc rule |
 | Feature variations tag | rvrn/rclt from designspace | same; Glyphs bracket layers default rvrn | designspace grammar noted in CFF2 doc | fontc rule |
 | DSIG | none | none | stub in release mode | none |
+| `meta` header's reserved third field | the offset of the data | 0 | n/a | 0, as fontc and the OpenType spec |
 | TrueType hinting | external ttfautohint after build | none | n/a | own, after build |
 | Variable CFF2 route | interpolatable masters merged | n/a | buildmasterotfs + buildcff2vf, or bare CFF2 + addfeatures | direct from source model |
 | Option precedence | CLI over UFO lib keys | CLI over source defaults (tri-state flags) | fontinfo < project file < CLI, left to right | export preset < per-export options |

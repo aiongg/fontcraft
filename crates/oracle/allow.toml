@@ -530,6 +530,13 @@ oracle = "fontmake"
 ours = "0"
 reason = "The source sets the vertical line gap to 0; fontmake writes 1000, fontc the source's 0 (FontCraft follows fontc)."
 
+[[allow]]
+table = "meta"
+key = "bytes"
+oracle = "fontmake"
+sources = ["/MetaTable.ufo", "/MetaTable.glyphs"]
+reason = "The third field of the meta header is reserved and should be 0: fontc writes 0, fontTools the offset of the data (FontCraft follows fontc). The data maps and their text are the same."
+
 # --- Overlap removal (M3.7) ----------------------------------------------------------------------
 # fontmake removes overlaps with booleanOperations, FontCraft with its own engine. Both give the
 # same shape; where they place a point differs (docs/spec/40-compile.md § 3.8).
