@@ -32,8 +32,11 @@ const KEPT_FLAGS: i64 = 0x0004 | 0x0010 | 0x0200 | 0x0400 | SCALED_COMPONENT_OFF
 
 /// Deepest component nesting followed; fontTools stops only at Python's recursion limit.
 const MAX_COMPONENT_DEPTH: usize = 64;
-/// Most points a composite glyph may flatten to while its bounds are computed.
-const MAX_FLAT_POINTS: usize = 10_000_000;
+/// Most work done in all flattening composite glyphs to compute their bounds in one table: one
+/// unit per component visited (empty glyphs included) and one per point copied.
+const MAX_FLATTEN_WORK: usize = 20_000_000;
+/// Most component references followed in all by `maxp_recalc`.
+const MAX_COMPONENT_VISITS: usize = 20_000_000;
 
 struct Component {
     glyph: String,
@@ -149,8 +152,9 @@ pub(crate) fn compile_glyf(element: &Element, ctx: &ReadContext) -> Result<Glyf>
     let order = ctx.order()?;
     if ctx.recalc {
         let mut done: HashSet<String> = HashSet::new();
+        let mut budget = MAX_FLATTEN_WORK;
         for name in order {
-            recalc_bounds(&mut glyphs, name, &mut done, 0)?;
+            recalc_bounds(&mut glyphs, name, &mut done, 0, &mut budget)?;
         }
     }
     let mut chunks: Vec<Vec<u8>> = Vec::with_capacity(order.len());
@@ -215,8 +219,9 @@ fn recursion(name: &str) -> TablesError {
     bad(format!("glyph '{name}' contains a recursive component reference"))
 }
 
-/// fontTools' `Glyph.recalcBounds`, with the `boundsDone` set of the table compile.
-fn recalc_bounds(glyphs: &mut HashMap<&str, Glyph>, name: &str, done: &mut HashSet<String>, depth: usize) -> Result<()> {
+/// fontTools' `Glyph.recalcBounds`, with the `boundsDone` set of the table compile. `budget` is
+/// shared by every glyph of the table.
+fn recalc_bounds(glyphs: &mut HashMap<&str, Glyph>, name: &str, done: &mut HashSet<String>, depth: usize, budget: &mut usize) -> Result<()> {
     if depth > MAX_COMPONENT_DEPTH {
         return Err(recursion(name));
     }
@@ -226,7 +231,7 @@ fn recalc_bounds(glyphs: &mut HashMap<&str, Glyph>, name: &str, done: &mut HashS
         let mut bounds: Option<[f64; 4]> = None;
         for (child, x, y) in parts {
             if !done.contains(&child) {
-                recalc_bounds(glyphs, &child, done, depth + 1)?;
+                recalc_bounds(glyphs, &child, done, depth + 1, budget)?;
                 done.insert(child.clone());
             }
             let b = glyphs.get(child.as_str()).map(|c| c.bounds).ok_or_else(|| bad(format!("the 'glyf' table has no glyph '{child}'")))?;
@@ -249,8 +254,7 @@ fn recalc_bounds(glyphs: &mut HashMap<&str, Glyph>, name: &str, done: &mut HashS
     if g.contours == 0 {
         return Ok(());
     }
-    let mut budget = MAX_FLAT_POINTS;
-    let (points, _) = coordinates(glyphs, name, 0, &mut budget)?;
+    let (points, _) = coordinates(glyphs, name, 0, budget)?;
     let b = int_bounds(&points)?;
     if let Some(g) = glyphs.get_mut(name) {
         g.bounds = b;
@@ -279,16 +283,21 @@ fn coordinates(glyphs: &HashMap<&str, Glyph>, name: &str, depth: usize, budget: 
     if depth > MAX_COMPONENT_DEPTH {
         return Err(recursion(name));
     }
+    let charge = |budget: &mut usize, n: usize| {
+        *budget = budget
+            .checked_sub(n)
+            .ok_or(TablesError::TooLarge { what: "the component points flattened to compute composite bounds", limit: MAX_FLATTEN_WORK })?;
+        Ok::<(), TablesError>(())
+    };
     let g = glyphs.get(name).ok_or_else(|| bad(format!("the 'glyf' table has no glyph '{name}'")))?;
     if g.contours > 0 {
-        *budget = budget
-            .checked_sub(g.coords.len())
-            .ok_or(TablesError::TooLarge { what: "the flattened points of a composite glyph", limit: MAX_FLAT_POINTS })?;
+        charge(budget, g.coords.len())?;
         return Ok((g.coords.clone(), g.end_points.clone()));
     }
     let mut all: Vec<(f64, f64)> = Vec::new();
     let mut ends: Vec<i64> = Vec::new();
     for c in &g.components {
+        charge(budget, 1)?;
         let child = glyphs.get(c.glyph.as_str()).ok_or_else(|| bad(format!("the 'glyf' table has no glyph '{}'", c.glyph)))?;
         let (mut pts, child_ends) = coordinates(glyphs, &c.glyph, depth + 1, budget)?;
         if child.contours > 0 {
@@ -468,27 +477,43 @@ pub(crate) struct MaxpRecalc {
     pub all_xmin_is_lsb: bool,
 }
 
+/// Points, contours and component depth below a composite glyph (0 when it uses no other
+/// composite), memoised per glyph index.
+type CompositeMemo = HashMap<usize, (i64, i64, i64)>;
+
 /// Points, contours and depth of a composite glyph, as `getCompositeMaxpValues` counts them.
-fn composite_values(glyphs: &[GlyphStat], index: usize, depth: i64) -> Result<(i64, i64, i64)> {
+/// `memo` and `visits` are shared by every glyph of the table.
+fn composite_values(glyphs: &[GlyphStat], index: usize, depth: i64, memo: &mut CompositeMemo, visits: &mut usize) -> Result<(i64, i64, i64)> {
+    let too_deep = || bad("a composite glyph nests its components too deeply");
+    if let Some(&(points, contours, below)) = memo.get(&index) {
+        if depth.saturating_add(below) > MAX_COMPONENT_DEPTH as i64 {
+            return Err(too_deep());
+        }
+        return Ok((points, contours, depth + below));
+    }
     if depth > MAX_COMPONENT_DEPTH as i64 {
-        return Err(bad("a composite glyph nests its components too deeply"));
+        return Err(too_deep());
     }
     let g = glyphs.get(index).ok_or_else(|| bad("a component names a glyph past the glyph order"))?;
     let (mut points, mut contours, mut max_depth) = (0i64, 0i64, depth);
     for c in &g.components {
+        *visits = visits
+            .checked_sub(1)
+            .ok_or(TablesError::TooLarge { what: "the component references followed to recalculate 'maxp'", limit: MAX_COMPONENT_VISITS })?;
         let base = glyphs.get(*c).ok_or_else(|| bad("a component names a glyph past the glyph order"))?;
         let (p, n) = if base.contours == 0 {
             continue;
         } else if base.contours > 0 {
             (base.points as i64, i64::from(base.contours))
         } else {
-            let (p, n, d) = composite_values(glyphs, *c, depth + 1)?;
+            let (p, n, d) = composite_values(glyphs, *c, depth + 1, memo, visits)?;
             max_depth = max_depth.max(d);
             (p, n)
         };
         points = points.saturating_add(p);
         contours = contours.saturating_add(n);
     }
+    memo.insert(index, (points, contours, max_depth - depth));
     Ok((points, contours, max_depth))
 }
 
@@ -504,6 +529,8 @@ pub(crate) fn maxp_recalc(glyf: &Glyf, hmtx: Option<&[(i64, i64)]>) -> Result<Ma
         max_component_depth: 0,
         all_xmin_is_lsb: true,
     };
+    let mut memo = CompositeMemo::new();
+    let mut visits = MAX_COMPONENT_VISITS;
     for (i, g) in glyf.glyphs.iter().enumerate() {
         if g.contours == 0 {
             continue;
@@ -517,7 +544,7 @@ pub(crate) fn maxp_recalc(glyf: &Glyf, hmtx: Option<&[(i64, i64)]>) -> Result<Ma
             r.max_points = r.max_points.max(g.points as i64);
             r.max_contours = r.max_contours.max(i64::from(g.contours));
         } else {
-            let (p, n, d) = composite_values(&glyf.glyphs, i, 1)?;
+            let (p, n, d) = composite_values(&glyf.glyphs, i, 1, &mut memo, &mut visits)?;
             r.max_composite_points = r.max_composite_points.max(p);
             r.max_composite_contours = r.max_composite_contours.max(n);
             r.max_component_elements = r.max_component_elements.max(g.components.len() as i64);

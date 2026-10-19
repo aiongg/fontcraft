@@ -301,3 +301,29 @@ fn gpos_variation_deltas_are_applied_and_gdef_goes_when_left_empty() {
     assert_eq!(t.value_record.x_advance, Some(35), "10 plus a quarter of 100");
     assert!(t.value_record.x_advance_device.is_none());
 }
+
+#[test]
+fn a_doubling_chain_of_composites_over_an_empty_glyph_is_refused() {
+    // Each composite uses the previous one twice, scaled so that its bounds come from the
+    // flattened points: 2^64 component visits without a shared budget.
+    let mut glyphs = vec![Glyph::Empty, Glyph::Empty];
+    for g in 1..=64u16 {
+        let comp = Component {
+            flags: 0x000A,
+            gid: g,
+            dx: 0.0,
+            dy: 0.0,
+            points: (0, 0),
+            transform_raw: vec![0x40, 0],
+            transform: Some([1.0, 0.0, 0.0, 1.0]),
+        };
+        glyphs.push(Glyph::Composite(Composite { bbox: [0; 4], components: vec![comp.clone(), comp], instructions: None }));
+    }
+    let (glyf_bytes, loca, long) = glyf::write_glyf(&glyphs).unwrap();
+    let mut glyphs = glyf::read_glyf(&glyf_bytes, &loca, long, glyphs.len()).unwrap();
+    let gvar = Gvar::new((0..glyphs.len() as u32).map(|g| GlyphVariations::new(GlyphId::new(g), vec![])).collect(), 1).unwrap();
+    let gvar = write_fonts::dump_table(&gvar).unwrap();
+    let mut hmtx = glyf::Metrics { advances: vec![0; glyphs.len()], bearings: vec![0; glyphs.len()] };
+    let err = glyf::apply_gvar(&mut glyphs, &gvar, 1, &[0.0], &mut hmtx, None).unwrap_err();
+    assert!(matches!(err, TablesError::TooLarge { .. }), "{err}");
+}

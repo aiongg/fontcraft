@@ -17,8 +17,9 @@ use crate::{Result, TablesError};
 
 /// Deepest component nesting followed.
 const MAX_COMPONENT_DEPTH: usize = 64;
-/// Most points one composite glyph may flatten to while its bounds are computed.
-const MAX_FLAT_POINTS: usize = 1 << 20;
+/// Most work done in all flattening composites to compute their bounds in one instance: one
+/// unit per component visited (empty glyphs included) and one per point copied.
+const MAX_FLATTEN_WORK: usize = 20_000_000;
 /// Most points one simple glyph may have.
 const MAX_POINTS: usize = 65_536;
 
@@ -503,16 +504,21 @@ fn flatten(glyphs: &[Glyph], g: usize, level: usize, budget: &mut usize) -> Resu
     if level > MAX_COMPONENT_DEPTH {
         return Err(bad(format!("glyph {g}: components nest deeper than {MAX_COMPONENT_DEPTH} levels")));
     }
+    let charge = |budget: &mut usize, n: usize| {
+        *budget = budget
+            .checked_sub(n)
+            .ok_or_else(|| TablesError::TooLarge { what: "the component points flattened to compute composite bounds", limit: MAX_FLATTEN_WORK })?;
+        Ok::<(), TablesError>(())
+    };
     match glyphs.get(g) {
         Some(Glyph::Simple(s)) => {
-            *budget = budget
-                .checked_sub(s.points.len())
-                .ok_or_else(|| bad(format!("glyph {g}: its components hold more than {MAX_FLAT_POINTS} points")))?;
+            charge(budget, s.points.len())?;
             Ok(s.points.clone())
         }
         Some(Glyph::Composite(c)) => {
             let mut all: Vec<Pair> = Vec::new();
             for comp in &c.components {
+                charge(budget, 1)?;
                 let mut pts = flatten(glyphs, usize::from(comp.gid), level + 1, budget)?;
                 if comp.is_xy() {
                     let scaled_offset = comp.flags & SCALED_COMPONENT_OFFSET != 0;
@@ -559,8 +565,9 @@ fn int_bounds(points: &[Pair]) -> Result<[i16; 4]> {
     Ok([c(x0)?, c(y0)?, c(x1)?, c(y1)?])
 }
 
-/// The bounds of glyph `g` from its current points, as `Glyph.recalcBounds`.
-fn recalc_bounds(glyphs: &[Glyph], g: usize) -> Result<[i16; 4]> {
+/// The bounds of glyph `g` from its current points, as `Glyph.recalcBounds`. `budget` is shared
+/// by every glyph of the instance.
+fn recalc_bounds(glyphs: &[Glyph], g: usize, budget: &mut usize) -> Result<[i16; 4]> {
     match glyphs.get(g) {
         Some(Glyph::Simple(s)) => int_bounds(&s.points),
         Some(Glyph::Composite(c)) => {
@@ -582,8 +589,7 @@ fn recalc_bounds(glyphs: &[Glyph], g: usize) -> Result<[i16; 4]> {
                 let Some(b) = b else { return Ok([0; 4]) };
                 int_bounds(&[(b[0], b[1]), (b[2], b[3])])
             } else {
-                let mut budget = MAX_FLAT_POINTS;
-                int_bounds(&flatten(glyphs, g, 0, &mut budget)?)
+                int_bounds(&flatten(glyphs, g, 0, budget)?)
             }
         }
         _ => Ok([0; 4]),
@@ -606,6 +612,7 @@ pub(super) fn apply_gvar(
     }
     let mut order: Vec<(usize, usize)> = depths(glyphs)?.into_iter().enumerate().map(|(g, d)| (d, g)).collect();
     order.sort_unstable();
+    let mut budget = MAX_FLATTEN_WORK;
     for (_, g) in order {
         let Some(glyph) = glyphs.get(g) else { continue };
         let [x_min, _, _, y_max] = glyph.bbox().map(f64::from);
@@ -645,7 +652,7 @@ pub(super) fn apply_gvar(
             }
             _ => {}
         }
-        let bbox = recalc_bounds(glyphs, g)?;
+        let bbox = recalc_bounds(glyphs, g, &mut budget)?;
         match glyphs.get_mut(g) {
             Some(Glyph::Simple(s)) => s.bbox = bbox,
             Some(Glyph::Composite(c)) => c.bbox = bbox,

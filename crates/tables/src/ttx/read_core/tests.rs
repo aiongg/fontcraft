@@ -100,3 +100,34 @@ fn assembly_push_forms_follow_fonttools() {
     assert!(assemble("NOSUCH[ ]").is_err());
     assert!(assemble("MDRP[01]").is_err(), "the argument bits must match the instruction");
 }
+
+/// A font whose glyphs `c1`…`c64` each use the previous glyph twice at offset `x`, down to
+/// `leaf`: 2^64 component visits for code that follows every reference.
+fn doubling_chain(leaf: &str, x: &str) -> String {
+    let core = core_ttx();
+    let tables = &core[core.find("  <head>").unwrap()..core.find("  <hmtx>").unwrap()];
+    let names: Vec<String> = [".notdef".to_string(), "leaf".to_string()].into_iter().chain((1..=64).map(|i| format!("c{i}"))).collect();
+    let order: String = names.iter().enumerate().map(|(i, n)| format!("<GlyphID id=\"{i}\" name=\"{n}\"/>")).collect();
+    let hmtx: String = names.iter().map(|n| format!("<mtx name=\"{n}\" width=\"500\" lsb=\"0\"/>")).collect();
+    let mut glyf = format!("<TTGlyph name=\".notdef\"/>{leaf}");
+    for i in 1..=64 {
+        let prev = if i == 1 { "leaf".to_string() } else { format!("c{}", i - 1) };
+        let comp = format!("<component glyphName=\"{prev}\" x=\"{x}\" y=\"0\" flags=\"0x0\"/>");
+        glyf.push_str(&format!("<TTGlyph name=\"c{i}\">{comp}{comp}</TTGlyph>"));
+    }
+    format!(
+        "<ttFont sfntVersion=\"\\x00\\x01\\x00\\x00\"><GlyphOrder>{order}</GlyphOrder>{tables}<hmtx>{hmtx}</hmtx><loca/><glyf>{glyf}</glyf></ttFont>"
+    )
+}
+
+#[test]
+fn a_doubling_chain_of_composites_compiles_without_following_every_reference() {
+    let empty = "<TTGlyph name=\"leaf\"/>";
+    let font = import(SfntFont::new(Flavour::TrueType), &doubling_chain(empty, "0"), &ImportOptions::default()).unwrap();
+    let maxp = font.get(*b"maxp").unwrap();
+    assert_eq!(&maxp[28..32], [0, 2, 0, 64], "maxComponentElements and maxComponentDepth");
+    // Fractional offsets make the bounds come from the flattened points; an empty leaf still
+    // costs a visit.
+    let err = import(SfntFont::new(Flavour::TrueType), &doubling_chain(empty, "0.5"), &ImportOptions::default()).unwrap_err();
+    assert!(err.to_string().contains("flattened"), "{err}");
+}
