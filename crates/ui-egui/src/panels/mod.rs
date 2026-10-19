@@ -142,6 +142,7 @@ pub struct PanelState {
     pub tt_instructions: crate::dialogs::tt_instructions::TtInstructionsState,
     pub review_hints: crate::dialogs::review_hints::ReviewHintsState,
     pub font_audit: crate::shell::font_audit::FontAuditState,
+    pub table_viewer: crate::shell::table_viewer::TableViewerState,
 }
 
 impl Default for PanelState {
@@ -187,6 +188,7 @@ impl Default for PanelState {
             tt_instructions: Default::default(),
             review_hints: Default::default(),
             font_audit: Default::default(),
+            table_viewer: Default::default(),
         }
     }
 }

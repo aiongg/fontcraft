@@ -3059,19 +3059,30 @@ id = "window.tableViewer"
 label = "Table Viewer"
 location = "window"
 controls = [
-  "font field with Open button, or the fonts of the last export",
-  "table list: tag, size, checksum and whether the reader decodes it",
-  "tree of the selected table's records and fields (tables.show), with glyph names for glyph indices",
-  "hex pane for the selected record, with its offset and size",
-  "Compare With… button: a second font; tables and fields that differ are marked (font.diff)",
-  "search field over field names and values",
+  "font field with Open… (where the app has a file chooser) and Reload; the fonts of the last export are not offered yet",
+  "table list: tag, size, checksum and whether the reader decodes it (tables.show)",
+  "Fields view: tree of the selected table's records and fields (tables.show), with glyph names for glyph indices, read two levels at a time",
+  "hex pane under the tree for the selected record (font.dumpTables hex), with its byte range",
+  "TTX view: the TTX text of the selected table (font.dumpTables)",
+  "Compare With field and Compare With… button: a second font; the tables that differ are marked (font.diff), and the Differences view shows the decoded comparison of the selected table",
+  "search field over field names and values, or over the lines of the TTX and Differences views",
 ]
 area = "cli-tools"
 milestone = "M12"
-summary = "Shows a compiled font's tables as a tree of decoded fields with a hex pane, and compares two fonts table by table. Every control calls tables.list, tables.show or font.diff, so the window holds no logic of its own."
+summary = "Shows a compiled font's tables as a tree of decoded fields with a hex pane or as TTX text, and compares two fonts table by table. Every control calls tableViewer.show, which reads tables.show, font.dumpTables or font.diff, so the window holds no logic of its own."
+notes = "The window holds at most 200,000 records and 32 MiB of text per table, and dumps tables up to 4 MiB as TTX or hex; larger ones are dumped to a file with font.dumpTables. Only the rows in view are laid out."
 ref = "Our design, after the reference vendor's free table-viewer companion tool"
 status = "inferred"
 own = true
+guesses = [
+  "The table list is at the left and the selected table's view at the right, with the hex pane under the tree; a look at the companion tool's window would settle the layout.",
+  "Differing tables are marked in the list by a byte comparison, and the field-level differences of one table are shown as a line comparison of its decoded text in a Differences view rather than as marks on tree records; the companion tool's comparison display would settle it.",
+  "The search keeps the matching records with the records above them, and matches only records already read; the companion tool's search would settle whether it reads the whole table.",
+]
+observe = [
+  "Open a font in the reference vendor's table-viewer companion tool; note where the table list, the field tree and the hex bytes are placed.",
+  "Compare two fonts in that tool; note how tables and fields that differ are marked.",
+]
 
 [[command]]
 id = "tableViewer.show"
@@ -3079,10 +3090,10 @@ label = "Table Viewer"
 menu = ["Window"]
 shortcut = ""
 kind = "ui"
-params = "{font?: path, compareWith?: path}"
+params = "{font?: path, face?: number, compareWith?: path|null, table?: tag, view?: \"fields\"|\"ttx\"|\"differences\", path?: string, record?: [index], expand?: bool, search?: string} → {open, font, face, compareWith, table, view, search, tables: [{tag, length, checksum, decoded, error?, status?, firstOffset?}], identical?, differing: [name], content, record?}"
 area = "cli-tools"
 milestone = "M12"
-summary = "Opens the Table Viewer window, optionally on a font file and with a second font to compare."
+summary = "Opens the Table Viewer window, optionally on a font file and with a second font to compare, and drives it: selects a table, a view (fields, TTX, differences), a record by path or by child positions, and the search. A refused change leaves the window as it was."
 ref = "Our design"
 status = "inferred"
 own = true
