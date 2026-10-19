@@ -1,8 +1,8 @@
 //! The glyph closure of a subset: through `cmap`, the MATH variants
 //! ([`super::other::math::close_glyphs`]), the GSUB substitutions of the kept features
 //! ([`super::layout::close_glyphs`]), the COLR layers and paints
-//! ([`super::other::colr::close_glyphs`]), composite glyphs and CFF `seac`, in that order. Ported
-//! from fontTools' `Subsetter._closure_glyphs` (MIT).
+//! ([`super::other::colr::close_glyphs`]), the variable components of `VARC` with composite
+//! glyphs, and CFF `seac`, in that order. Ported from fontTools' `Subsetter._closure_glyphs` (MIT).
 //!
 //! Every closure is a work list over glyph ids: a glyph is visited at most once, so the work is
 //! bounded by the glyph count and the size of the outline tables, whatever the nesting depth.
@@ -15,6 +15,7 @@ use read_fonts::{FontData, FontRead};
 
 use super::core::Glyf;
 use super::mirror::mirrored;
+use super::varc::Varc;
 use super::{Plan, SubsetOptions, cs};
 use crate::limits::{MAX_CODE_POINTS, MAX_SUBSET_TEXT};
 use crate::reorder::cff;
@@ -109,8 +110,21 @@ pub fn plan(font: &SfntFont, options: &SubsetOptions) -> Result<Plan> {
     super::other::colr::close_glyphs(font, &mut glyphs, n)?;
     plan.colr_glyphs = glyphs.clone();
 
-    if let Some(glyf) = Glyf::read(font, n)? {
-        close(&mut glyphs, n, |g| glyf.components(g as usize))?;
+    // pyftsubset closes over VARC before glyf; one work list over both reaches the same glyphs,
+    // and also the variable components of a VARC glyph that only a glyf composite names.
+    let glyf = Glyf::read(font, n)?;
+    let mut varc = Varc::read(font)?;
+    if glyf.is_some() || varc.is_some() {
+        close(&mut glyphs, n, |g| {
+            let mut parts = match varc.as_mut() {
+                Some(varc) => varc.component_glyphs(g)?,
+                None => Vec::new(),
+            };
+            if let Some(glyf) = &glyf {
+                parts.extend(glyf.components(g as usize)?);
+            }
+            Ok(parts)
+        })?;
     }
     if let Some(bytes) = font.get(*b"CFF ") {
         let table = cff::parse(bytes, n)?;
