@@ -1,8 +1,9 @@
 //! Conversions between outline flavours on fonts built in code. The expected TrueType points of
 //! `cff_to_truetype_matches_otf2ttf` come from AFDKO 5.0.1's otf2ttf on the same outline built
-//! with fontTools' FontBuilder and `T2CharStringPen`.
+//! with fontTools' FontBuilder and `T2CharStringPen`; those of the seac tests from otf2ttf on
+//! the same charstrings built with FontBuilder.
 
-use super::outline::{TtContour, encode_simple};
+use super::outline::{Seg, TtContour, encode_simple};
 use super::*;
 use fontcraft_cff::PathOp;
 
@@ -60,6 +61,9 @@ const A: [(i32, i32, bool); 5] = [(0, 0, true), (0, 700, true), (300, 900, false
 fn truetype_font() -> SfntFont {
     let mut font = SfntFont::new(Flavour::TrueType);
     common(&mut font, &[500, 600, 650], 0x0001_0000);
+    let mut hmtx = font.get(*b"hmtx").unwrap().to_vec();
+    hmtx[10..12].copy_from_slice(&be16(50));
+    font.insert(*b"hmtx", hmtx);
     let (a, _) = encode_simple(&[A.to_vec()]).unwrap();
     let glyphs = [Vec::new(), a, composite(1, 50, 0, [50, 0, 650, 900])];
     let mut glyf = Vec::new();
@@ -106,6 +110,32 @@ fn cff_font() -> SfntFont {
     let (post, _) = post_table(None, PostFormat::NoNames, &[]).unwrap();
     font.insert(*b"post", post);
     font
+}
+
+/// `.notdef`, `A` (a box from x 10.5), `acute` (a triangle) and `Aacute`, drawn with seac from
+/// A and acute, the accent moved by (150.5, 20); the FontMatrix is that of a 2000-unit em.
+fn seac_font() -> SfntFont {
+    let mut font = SfntFont::new(Flavour::Cff);
+    common(&mut font, &[500, 600, 300, 600], 0x5000);
+    let cs = cff_table::test_charstring;
+    let charstrings = vec![
+        cs(&[(&[], 14)]),
+        cs(&[(&[10.5, 0.0], 21), (&[300.0, 0.0, 0.0, 700.0, -300.0, 0.0], 5), (&[], 14)]),
+        cs(&[(&[100.0, 750.0], 21), (&[50.0, 0.0, 0.0, 50.0], 5), (&[], 14)]),
+        // A is 65 and acute 194 in the standard encoding.
+        cs(&[(&[150.5, 20.0, 65.0, 194.0], 14)]),
+    ];
+    // FontMatrix [0.0005 0 0 0.0005 0 0]
+    let matrix = [0x1e, 0x5c, 0x4f, 0x8b, 0x8b, 0x1e, 0x5c, 0x4f, 0x8b, 0x8b, 12, 7];
+    font.insert(CFF, cff_table::test_table(&[".notdef", "A", "acute", "Aacute"], charstrings, &matrix));
+    font.insert(*b"post", post_table(None, PostFormat::NoNames, &[]).unwrap().0);
+    font
+}
+
+/// A closed contour of straight lines through `points`.
+fn polygon(points: &[(f64, f64)]) -> Contour {
+    let segs = points.iter().skip(1).chain(points.first()).map(|p| Seg::Line(*p)).collect();
+    Contour { start: points[0], segs }
 }
 
 fn glyf_points(font: &SfntFont, gid: usize) -> Vec<TtContour> {
@@ -264,4 +294,68 @@ fn bare_tables_and_refusals() {
     cyclic.insert(*b"glyf", glyf);
     assert!(matches!(convert(&cyclic, ConvertTarget::Cff), Err(TablesError::Invalid(_))));
     assert!(matches!(convert(&SfntFont::new(Flavour::TrueType), ConvertTarget::Cff), Err(TablesError::MissingTable(_))));
+}
+
+#[test]
+fn cff_to_truetype_keeps_fractions_and_writes_seac_as_components_as_otf2ttf_does() {
+    let ttf = convert_with(&seac_font(), &ConvertOptions::new(ConvertTarget::TrueType { max_error: 1.0 })).unwrap().font.unwrap();
+    let on = |pts: &[(i32, i32)]| pts.iter().map(|&(x, y)| (x, y, true)).collect::<Vec<_>>();
+    // 10.5 and 310.5 round up, so the fractions were kept; the FontMatrix is not applied.
+    assert_eq!(glyf_points(&ttf, 1), vec![on(&[(11, 0), (11, 700), (311, 700), (311, 0)])]);
+    assert_eq!(glyf_points(&ttf, 2), vec![on(&[(100, 750), (150, 800), (150, 750)])]);
+    // Aacute: A at the origin and acute at (151, 20), the offset rounded to the grid.
+    let glyf = ttf.get(*b"glyf").unwrap();
+    let loca = ttf.get(*b"loca").unwrap();
+    let at = |gid: usize| {
+        if u16_at(ttf.get(*b"head").unwrap(), 50) == Some(0) {
+            usize::from(u16_at(loca, 2 * gid).unwrap()) * 2
+        } else {
+            u32_at(loca, 4 * gid).unwrap() as usize
+        }
+    };
+    let mut expected = Vec::new();
+    for v in [-1i16, 11, 0, 311, 820] {
+        expected.extend_from_slice(&v.to_be_bytes());
+    }
+    // MORE_COMPONENTS | ROUND_XY_TO_GRID | ARGS_ARE_XY_VALUES, then ARG_1_AND_2_ARE_WORDS for 151.
+    expected.extend_from_slice(&[0x00, 0x26, 0, 1, 0, 0]);
+    expected.extend_from_slice(&[0x00, 0x07, 0, 2, 0, 151, 0, 20]);
+    assert_eq!(&glyf[at(3)..at(4)], expected.as_slice());
+    assert_eq!(glyf_points(&ttf, 3), vec![on(&[(11, 0), (11, 700), (311, 700), (311, 0)]), on(&[(251, 770), (301, 820), (301, 770)])]);
+    assert_eq!(u16_at(ttf.get(*b"hmtx").unwrap(), 14), Some(11), "the composite's lsb is its xMin");
+    let maxp = ttf.get(*b"maxp").unwrap();
+    let fields: Vec<_> = [6, 8, 10, 12, 28, 30].iter().map(|&at| u16_at(maxp, at).unwrap()).collect();
+    assert_eq!(fields, vec![4, 1, 7, 2, 2, 1], "points, contours, composite points and contours, components, depth");
+}
+
+#[test]
+fn cff_to_cff2_writes_the_seac_base_and_accent_into_the_charstring() {
+    let mut to2 = ConvertOptions::new(ConvertTarget::Cff2);
+    to2.subroutinize = Some(false);
+    let cff2 = convert_with(&seac_font(), &to2).unwrap().font.unwrap();
+    let ps = PsOutlines::new(cff2.get(CFF2).unwrap(), 1000).unwrap();
+    let drawn = ps.draw(3).unwrap();
+    assert!(drawn.seac.is_none());
+    // fontTools' drawing of the source glyph with its two components decomposed.
+    let expected =
+        vec![polygon(&[(10.5, 0.0), (310.5, 0.0), (310.5, 700.0), (10.5, 700.0)]), polygon(&[(250.5, 770.0), (300.5, 770.0), (300.5, 820.0)])];
+    assert_eq!(drawn.contours, expected);
+    assert_eq!(ps_contours(&seac_font(), CFF, 3), expected, "the CFF glyph drawn out gives the same");
+}
+
+#[test]
+fn truetype_to_cff_draws_each_glyph_at_its_left_side_bearing() {
+    // hmtx gives A a left side bearing of 20 while its glyf header says xMin 0; tx and
+    // fontTools' glyph set both draw it moved right by the difference.
+    let plain = convert_with(&truetype_font(), &ConvertOptions::new(ConvertTarget::Cff)).unwrap().font.unwrap();
+    let mut ttf = truetype_font();
+    let mut hmtx = ttf.get(*b"hmtx").unwrap().to_vec();
+    hmtx[6..8].copy_from_slice(&be16(20));
+    ttf.insert(*b"hmtx", hmtx);
+    let moved = convert_with(&ttf, &ConvertOptions::new(ConvertTarget::Cff)).unwrap().font.unwrap();
+    let (a, b) = (ps_contours(&plain, CFF, 1), ps_contours(&moved, CFF, 1));
+    assert_eq!((b.len(), b[0].start), (a.len(), (a[0].start.0 + 20.0, a[0].start.1)));
+    let (ba, bb) = (outline::drawn_bounds(&a).unwrap(), outline::drawn_bounds(&b).unwrap());
+    assert!((bb[0] - ba[0] - 20.0).abs() < 1e-6 && (bb[2] - ba[2] - 20.0).abs() < 1e-6 && bb[1] == ba[1] && bb[3] == ba[3], "{ba:?} {bb:?}");
+    assert_eq!(u16_at(moved.get(*b"hmtx").unwrap(), 6), Some(20));
 }

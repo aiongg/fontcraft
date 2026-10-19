@@ -759,6 +759,43 @@ Two choices differ from mtiLib on input the tests do not hold:
   classes after sorting each by name, and fea-rs pairs them in written order; both forms give
   the file's pairs in both compilers.
 
+## 4c. Format conversion against the reference converters
+
+`font.convert` (`crates/tables/src/convert.rs`) is measured over the corpus, glyph by glyph in
+glyph order, with the outlines as fontTools draws them:
+
+| Direction | Oracle | Compared |
+|---|---|---|
+| CFF → TrueType | AFDKO otf2ttf | `glyf` points, on-curve flags and contour ends |
+| TrueType → CFF | `tx -cff` | drawn area within 0.5 % and drawn bounds within 1 unit |
+| CFF → CFF2 | fontTools `CFFToCFF2` | the drawn path |
+| CFF2 → CFF | fontTools `CFF2ToCFF` | the drawn path |
+
+The rules FontCraft takes from the oracles:
+
+- **Drawing.** Charstrings are drawn as fontTools' `T2OutlineExtractor` draws them: operands
+  added up in 16.16 units, so fractions stay; the FontMatrix is not applied; a path without a
+  `moveto` starts at the current point.
+- **Error bound.** Without `maxError` the curve conversion stays within one font unit, the
+  default of otf2ttf (`-e`, in font units) and of fontTools' qu2cu. `maxError` is a fraction of
+  the em when given.
+- **seac to TrueType.** A `seac` glyph becomes a composite: the base at the origin and the
+  accent at `(adx, ady)` rounded, both with `ROUND_XY_TO_GRID`, as otf2ttf's `TTGlyphPen`
+  writes the two components fontTools draws. `maxp` holds the composite fields.
+- **Left side bearing.** TrueType to CFF moves each glyph so that the `xMin` of its `glyf`
+  header sits at its `hmtx` left side bearing. tx and fontTools' glyph set both draw a
+  TrueType glyph there; the two values differ only in fonts edited by hand.
+
+Differences kept:
+
+| What | Reference | FontCraft | Why |
+|---|---|---|---|
+| A `seac` glyph, CFF → CFF2 | `CFFToCFF2` leaves the four seac operands at the end of the charstring, so the glyph draws nothing | the base and the moved accent written into the charstring; the base keeps its hints when the glyph has none of its own, the accent's are dropped | CFF2 has no seac, and the reference's result loses the glyph |
+| A `seac` glyph with contours of its own, or whose base or accent is accented, CFF → TrueType | otf2ttf's pen decomposes the components without converting them, so cubic points reach `glyf` | the parts drawn out and converted with the rest of the glyph | a `glyf` table of format 0 holds quadratic curves only |
+| Merging quadratic runs, TrueType → CFF | tx merges by its own rule, which is not documented; on some glyphs of the old Oswald fonts its curves stray up to 3 % in area from the source | fontTools' qu2cu within the error bound, every curve cubic | both are valid cubic outlines; FontCraft's stay within the stated bound |
+| Glyph names of a TrueType font without `post` names, TrueType → CFF | tx names glyphs from the cmap with Adobe Glyph List names (`Gcommaaccent`, `ff`) and `g<gid>` otherwise | `glyphNNNNN` | tx's name table is not documented, and fontTools names the same glyphs differently again (`uni0122`, `glyph00001`); the measure compares outlines by glyph index |
+| CFF2 → CFF oracle | fontTools 4.66 `CFF2ToCFF` fails on a table with local subroutines, and on recalculating `hhea` after it renames the glyphs | — | the measure expands the subroutines first and keeps the stated bounds |
+
 ---
 
 ## 5. Commands and data touched

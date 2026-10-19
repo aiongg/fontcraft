@@ -4,9 +4,9 @@
 //!
 //! | From → to | Outlines | Other tables |
 //! |---|---|---|
-//! | CFF or static CFF2 → TrueType | cubic to quadratic within `max_error` units (fontTools' cu2qu), contours reversed; hints dropped | `CFF `/`CFF2` and `VORG` removed; `glyf`, `loca`, `maxp` 1.0 and `post` (format 2 with names, or 3) built; `hmtx` left side bearings set to `xMin`; `head` and `hhea` bounds recalculated, as AFDKO otf2ttf does |
-//! | TrueType → CFF or CFF2 | quadratic to cubic ([`QuadToCubic`]), contours reversed, components decomposed; instructions dropped | `glyf`, `loca`, `cvt `, `fpgm`, `prep`, `gasp`, `hdmx`, `LTSH`, `VDMX` removed; `maxp` 0.5; `post` format 3 (CFF) or 2 (CFF2) |
-//! | CFF → CFF2 | charstrings unchanged but for the width, `endchar` and `dotsection`; hints kept | `post` gets the glyph names (format 2) unless format 3 is asked for |
+//! | CFF or static CFF2 → TrueType | charstrings drawn in font units as stated (fractions kept, no FontMatrix), cubic to quadratic within `max_error` units (fontTools' cu2qu), contours reversed; a `seac` glyph becomes a composite of its base and accent; hints dropped | `CFF `/`CFF2` and `VORG` removed; `glyf`, `loca`, `maxp` 1.0 and `post` (format 2 with names, or 3) built; `hmtx` left side bearings set to `xMin`; `head` and `hhea` bounds recalculated, as AFDKO otf2ttf does |
+//! | TrueType → CFF or CFF2 | each glyph moved so that its `xMin` sits at its `hmtx` left side bearing, quadratic to cubic ([`QuadToCubic`]), contours reversed, components decomposed; instructions dropped | `glyf`, `loca`, `cvt `, `fpgm`, `prep`, `gasp`, `hdmx`, `LTSH`, `VDMX` removed; `maxp` 0.5; `post` format 3 (CFF) or 2 (CFF2) |
+//! | CFF → CFF2 | charstrings unchanged but for the width, `endchar` and `dotsection`, and `seac` glyphs drawn out; hints kept | `post` gets the glyph names (format 2) unless format 3 is asked for |
 //! | static CFF2 → CFF | the `hmtx` advance as the width; hints kept | `post` format 3, the names in the charset |
 //! | → bare CFF or CFF2 | as above | only the outline table is written |
 //!
@@ -251,27 +251,103 @@ fn ps_to_truetype(font: &mut SfntFont, cff2: bool, max_error: f64, o: &ConvertOp
     let n = num_glyphs(font)?;
     let tag = if cff2 { CFF2 } else { CFF };
     let data = table(font, tag)?.to_vec();
-    let mut ps = PsOutlines::new(&data, upem)?;
+    let ps = PsOutlines::new(&data, upem)?;
     if ps.glyph_count() != n {
         return Err(TablesError::invalid(format!("maxp counts {n} glyphs but the outline table holds {}", ps.glyph_count())));
     }
     let names = glyph_names(font, n, Some(&ps));
     let mut metrics = Metrics::read(font, n)?;
+    let quadratic = |contours: &[Contour], gid: usize| -> Result<Vec<outline::TtContour>> {
+        let mut out = Vec::with_capacity(contours.len());
+        for c in contours {
+            let q = outline::to_quadratic(c, max_error).map_err(|e| in_glyph(e, gid))?;
+            out.push(if o.reverse_direction { q.reversed() } else { q });
+        }
+        outline::truetype_points(&out).map_err(|e| in_glyph(e, gid))
+    };
+    // A seac glyph becomes a composite of its base and accent, as the reference draws seac as
+    // two components; one with contours of its own, or whose parts are accented, is drawn out.
+    let mut planned = Vec::with_capacity(n);
+    for gid in 0..n {
+        let drawing = ps.draw(gid)?;
+        let glyph = match drawing.seac {
+            None => TtGlyph::Simple(quadratic(&drawing.contours, gid)?),
+            Some(seac) => {
+                let parts: Vec<(usize, f64, f64)> = [(seac.base, 0.0, 0.0), (seac.accent, seac.adx, seac.ady)]
+                    .into_iter()
+                    .filter_map(|(code, dx, dy)| ps.standard_glyph(code).map(|g| (g, dx, dy)))
+                    .collect();
+                if drawing.contours.is_empty() && parts.iter().all(|p| !ps.is_accented(p.0)) {
+                    let place = |v: f64| -> Result<i32> {
+                        let r = (v + 0.5).floor();
+                        if !(r.is_finite() && (-32_768.0..=32_767.0).contains(&r)) {
+                            return Err(TablesError::Unsupported(format!("glyph {gid}: a seac offset of {v} does not fit in glyf")));
+                        }
+                        Ok(r as i32)
+                    };
+                    TtGlyph::Composite(
+                        parts.iter().map(|&(g, dx, dy)| -> Result<(usize, i32, i32)> { Ok((g, place(dx)?, place(dy)?)) }).collect::<Result<_>>()?,
+                    )
+                } else {
+                    TtGlyph::Simple(quadratic(&ps.flattened(gid)?, gid)?)
+                }
+            }
+        };
+        planned.push(glyph);
+    }
+    let mut encoded: Vec<Option<(Vec<u8>, Option<[i16; 4]>)>> = Vec::with_capacity(n);
+    let mut sizes = vec![(0usize, 0usize); n];
+    let (mut max_points, mut max_contours) = (0usize, 0usize);
+    for (gid, glyph) in planned.iter().enumerate() {
+        encoded.push(match glyph {
+            TtGlyph::Simple(points) => {
+                let size = (points.iter().map(Vec::len).sum(), points.len());
+                max_points = max_points.max(size.0);
+                max_contours = max_contours.max(size.1);
+                if let Some(slot) = sizes.get_mut(gid) {
+                    *slot = size;
+                }
+                Some(outline::encode_simple(points).map_err(|e| in_glyph(e, gid))?)
+            }
+            TtGlyph::Composite(_) => None,
+        });
+    }
+    let (mut composite_points, mut composite_contours, mut components, mut depth) = (0usize, 0usize, 0usize, 0u16);
+    for (gid, glyph) in planned.iter().enumerate() {
+        let TtGlyph::Composite(parts) = glyph else { continue };
+        let mut bbox: Option<[i32; 4]> = None;
+        let mut placed = Vec::with_capacity(parts.len());
+        let (mut points, mut contours) = (0usize, 0usize);
+        for &(part, dx, dy) in parts {
+            let id = u16::try_from(part).map_err(|_| TablesError::invalid("more than 65535 glyphs"))?;
+            placed.push((id, dx, dy));
+            let (p, c) = sizes.get(part).copied().unwrap_or((0, 0));
+            points += p;
+            contours += c;
+            let Some(Some((_, Some(b)))) = encoded.get(part) else { continue };
+            let moved = [i32::from(b[0]) + dx, i32::from(b[1]) + dy, i32::from(b[2]) + dx, i32::from(b[3]) + dy];
+            bbox = Some(match bbox {
+                None => moved,
+                Some(u) => [u[0].min(moved[0]), u[1].min(moved[1]), u[2].max(moved[2]), u[3].max(moved[3])],
+            });
+        }
+        let fit = |v: i32| i16::try_from(v).map_err(|_| TablesError::Unsupported(format!("glyph {gid}: its bounds do not fit in glyf")));
+        let b = bbox.unwrap_or([0; 4]);
+        let bbox = [fit(b[0])?, fit(b[1])?, fit(b[2])?, fit(b[3])?];
+        let bytes = outline::encode_composite(&placed, bbox).map_err(|e| in_glyph(e, gid))?;
+        composite_points = composite_points.max(points);
+        composite_contours = composite_contours.max(contours);
+        components = components.max(parts.len());
+        depth = 1;
+        if let Some(slot) = encoded.get_mut(gid) {
+            *slot = Some((bytes, Some(bbox)));
+        }
+    }
     let mut glyf = Vec::new();
     let mut offsets = Vec::with_capacity(n + 1);
     let mut bounds: Vec<Option<[i16; 4]>> = Vec::with_capacity(n);
-    let (mut max_points, mut max_contours) = (0usize, 0usize);
-    for gid in 0..n {
-        let contours = ps.contours(gid)?;
-        let mut quadratic = Vec::with_capacity(contours.len());
-        for c in &contours {
-            let q = outline::to_quadratic(c, max_error).map_err(|e| in_glyph(e, gid))?;
-            quadratic.push(if o.reverse_direction { q.reversed() } else { q });
-        }
-        let points = outline::truetype_points(&quadratic).map_err(|e| in_glyph(e, gid))?;
-        max_points = max_points.max(points.iter().map(Vec::len).sum());
-        max_contours = max_contours.max(points.len());
-        let (bytes, bbox) = outline::encode_simple(&points).map_err(|e| in_glyph(e, gid))?;
+    for (gid, e) in encoded.into_iter().enumerate() {
+        let (bytes, bbox) = e.ok_or_else(|| TablesError::invalid("a glyph was left unwritten"))?;
         offsets.push(glyf.len());
         glyf.extend_from_slice(&bytes);
         if glyf.len() % 2 == 1 {
@@ -310,7 +386,11 @@ fn ps_to_truetype(font: &mut SfntFont, cff2: bool, max_error: f64, o: &ConvertOp
     put_u16(&mut maxp, 4, count)?;
     put_u16(&mut maxp, 6, u16::try_from(max_points).unwrap_or(u16::MAX))?;
     put_u16(&mut maxp, 8, u16::try_from(max_contours).unwrap_or(u16::MAX))?;
+    put_u16(&mut maxp, 10, u16::try_from(composite_points).unwrap_or(u16::MAX))?;
+    put_u16(&mut maxp, 12, u16::try_from(composite_contours).unwrap_or(u16::MAX))?;
     put_u16(&mut maxp, 14, 1)?;
+    put_u16(&mut maxp, 28, u16::try_from(components).unwrap_or(u16::MAX))?;
+    put_u16(&mut maxp, 30, depth)?;
 
     let (post, dropped) = post_table(font.get(*b"post"), o.post_format, &names)?;
     if dropped {
@@ -337,6 +417,13 @@ fn ps_to_truetype(font: &mut SfntFont, cff2: bool, max_error: f64, o: &ConvertOp
     Ok(())
 }
 
+/// A glyph of the TrueType result before it is written.
+enum TtGlyph {
+    Simple(Vec<outline::TtContour>),
+    /// Simple glyphs placed by rounded offsets.
+    Composite(Vec<(usize, i32, i32)>),
+}
+
 // ── TrueType to CFF ─────────────────────────────────────────────────────────────────────────────
 
 fn truetype_to_cff(font: &mut SfntFont, o: &ConvertOptions, left_behind: &mut Vec<String>) -> Result<()> {
@@ -352,9 +439,13 @@ fn truetype_to_cff(font: &mut SfntFont, o: &ConvertOptions, left_behind: &mut Ve
     let mut glyphs = Vec::with_capacity(n);
     for (gid, name) in names.iter().enumerate() {
         let contours = outlines.contours(gid, &mut instructions)?;
+        // The references draw a TrueType glyph moved so that its stated xMin sits at the left
+        // side bearing of hmtx; the two differ in fonts whose metrics were edited by hand.
+        let shift = outlines.x_min(gid).map_or(0, |x| i32::from(metrics.lsb(gid)) - i32::from(x));
         let mut cubic: Vec<Contour> = Vec::with_capacity(contours.len());
         for c in &contours {
-            let k = outline::to_cubic(c, o.quad_to_cubic, o.cubic_error).map_err(|e| in_glyph(e, gid))?;
+            let c = if shift == 0 { c.clone() } else { c.translated(f64::from(shift), 0.0) };
+            let k = outline::to_cubic(&c, o.quad_to_cubic, o.cubic_error).map_err(|e| in_glyph(e, gid))?;
             cubic.push(if o.reverse_direction { k.reversed() } else { k });
         }
         let path = outline::path_ops(&cubic).map_err(|e| in_glyph(e, gid))?;
@@ -441,7 +532,7 @@ fn cff_to_cff2(font: &mut SfntFont, o: &ConvertOptions, left_behind: &mut Vec<St
     let data = table(font, CFF)?.to_vec();
     let ps = PsOutlines::new(&data, upem)?;
     let names = glyph_names(font, n, Some(&ps));
-    let (cff2, dropped_dotsection) = cff_table::cff_to_cff2(&data)?;
+    let (cff2, dropped_dotsection) = cff_table::cff_to_cff2(&data, &|code| ps.standard_glyph(code))?;
     if dropped_dotsection {
         left_behind.push("dotsection hints (CFF2 has none)".into());
     }
@@ -568,6 +659,10 @@ impl Metrics {
 
     fn advance(&self, gid: usize) -> u16 {
         self.advances.get(gid).copied().unwrap_or(0)
+    }
+
+    fn lsb(&self, gid: usize) -> i16 {
+        self.lsbs.get(gid).copied().unwrap_or(0)
     }
 
     fn set_lsb(&mut self, gid: usize, v: i16) {
