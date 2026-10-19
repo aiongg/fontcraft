@@ -417,7 +417,7 @@ impl AlternateRules {
     /// overlay the later rule wins a glyph several substitute; within one of the second, the
     /// list that sorts first wins, as its lookup comes first in the lookup list.
     pub fn of(font: &Font, designspace: &Designspace, warnings: &mut Vec<String>) -> Result<Option<AlternateRules>, CompileError> {
-        let rules = alternate_rules(font, designspace)?;
+        let rules = alternate_rules(font, designspace, warnings)?;
         if rules.is_empty() {
             return Ok(None);
         }
@@ -463,7 +463,8 @@ impl AlternateRules {
 
 /// The overlay's input: one rule per alternate set of every exported glyph, in glyph order then
 /// set order, each substituting the set's alternate glyph for its glyph inside the set's box.
-pub fn alternate_rules(font: &Font, designspace: &Designspace) -> Result<Vec<OverlayRule<Substitutions>>, CompileError> {
+/// A note on rules read only in part goes to `warnings`.
+pub fn alternate_rules(font: &Font, designspace: &Designspace, warnings: &mut Vec<String>) -> Result<Vec<OverlayRule<Substitutions>>, CompileError> {
     let mut rules = Vec::new();
     for sources in alternate_sources(font, designspace)? {
         for (alternate, name) in sources.alternates.iter().zip(bracket_names(font, &sources)) {
@@ -471,7 +472,7 @@ pub fn alternate_rules(font: &Font, designspace: &Designspace) -> Result<Vec<Ove
             rules.push(OverlayRule { boxes: vec![region], payload: vec![(sources.glyph.clone(), name)] });
         }
     }
-    rules.extend(document_rules(font, designspace)?);
+    rules.extend(document_rules(font, designspace, warnings)?);
     Ok(rules)
 }
 
@@ -479,11 +480,15 @@ pub fn alternate_rules(font: &Font, designspace: &Designspace) -> Result<Vec<Ove
 /// ([`fontcraft_interp::doc_rules`]), after the alternate layers' own: one rule per `<rule>`, its
 /// condition sets as boxes, its substitutions of exported glyphs as the payload, as varLib reads
 /// them. None for a variable font setting that leaves axes out.
-fn document_rules(font: &Font, designspace: &Designspace) -> Result<Vec<OverlayRule<Substitutions>>, CompileError> {
+fn document_rules(font: &Font, designspace: &Designspace, warnings: &mut Vec<String>) -> Result<Vec<OverlayRule<Substitutions>>, CompileError> {
     if !fontcraft_model::is_ufo_family(font.source.format) || designspace.axes().len() != font.axes.len() {
         return Ok(Vec::new());
     }
     let Some(doc) = fontcraft_interp::doc_rules::document_rules(font) else { return Ok(Vec::new()) };
+    let note = fontcraft_interp::doc_rules::cut_note();
+    if doc.truncated && !warnings.contains(&note) {
+        warnings.push(note);
+    }
     let exported = |n: &str| font.glyph(n).is_some_and(|g| g.export);
     let mut out = Vec::new();
     for r in &doc.rules {
@@ -539,7 +544,7 @@ pub fn from_font(
     glyph_order: &[String],
     warnings: &mut Vec<String>,
 ) -> Result<Vec<FeatureVariation>, CompileError> {
-    let rules = alternate_rules(font, designspace)?;
+    let rules = alternate_rules(font, designspace, warnings)?;
     if rules.is_empty() {
         return Ok(Vec::new());
     }
@@ -879,7 +884,7 @@ mod tests {
         let made = bracket_glyphs(&font, &designspace).unwrap();
         assert_eq!(made, vec![MadeGlyph { name: "a.BRACKET.varAlt01".into(), source: MadeFrom::Alternate { glyph: "a".into(), set: 0 } }]);
 
-        let rules = alternate_rules(&font, &designspace).unwrap();
+        let rules = alternate_rules(&font, &designspace, &mut Vec::new()).unwrap();
         assert_eq!(rules.len(), 1);
         // 600 on 400…1000 normalizes to 1/3.
         let span = rules[0].boxes[0].0[0];
@@ -916,7 +921,7 @@ mod tests {
         let designspace = Designspace::new(&font).unwrap();
         let made = bracket_glyphs(&font, &designspace).unwrap();
         assert_eq!(made, vec![MadeGlyph { name: "a.BRACKET.varAlt02".into(), source: MadeFrom::Alternate { glyph: "a".into(), set: 0 } }]);
-        let rules = alternate_rules(&font, &designspace).unwrap();
+        let rules = alternate_rules(&font, &designspace, &mut Vec::new()).unwrap();
         assert_eq!(rules[0].payload, vec![("a".to_string(), "a.BRACKET.varAlt02".to_string())]);
     }
 

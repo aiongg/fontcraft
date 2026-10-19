@@ -305,7 +305,7 @@ const MAX_SAMPLES_FOR_TESTS: usize = super::plan::MAX_SAMPLES;
 
 #[test]
 fn glyph_deltas_are_charged_once_however_many_components_use_the_glyph() {
-    use super::glyphset::{GlyphSet, MAX_DRAW_WORK, Work};
+    use super::glyphset::{GlyphSet, MAX_DRAW_WORK_PER_AXIS, Work};
     const POINTS: usize = 1_000;
     const TUPLES: usize = 0x0FFF;
     const COMPONENTS: usize = 300;
@@ -379,14 +379,14 @@ fn glyph_deltas_are_charged_once_however_many_components_use_the_glyph() {
     font.insert(*b"gvar", gvar);
 
     let set = GlyphSet::new(&font, 1).unwrap();
-    let mut work = Work(MAX_DRAW_WORK);
+    let mut work = Work::new(MAX_DRAW_WORK_PER_AXIS);
     set.at(&[1.0]).unwrap().glyph(1, &mut work).unwrap();
-    let simple = MAX_DRAW_WORK - work.0;
+    let simple = MAX_DRAW_WORK_PER_AXIS - work.left;
     assert!(simple >= TUPLES * (POINTS + 4), "every tuple that applies is charged per point: {simple}");
     // Decoding the deltas again for each component would cost 300 times as much.
-    let mut work = Work(MAX_DRAW_WORK);
+    let mut work = Work::new(MAX_DRAW_WORK_PER_AXIS);
     set.at(&[1.0]).unwrap().glyph(2, &mut work).unwrap();
-    let composite = MAX_DRAW_WORK - work.0;
+    let composite = MAX_DRAW_WORK_PER_AXIS - work.left;
     assert!(composite < 2 * simple, "{composite} against {simple}");
 }
 

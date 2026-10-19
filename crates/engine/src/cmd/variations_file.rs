@@ -472,12 +472,9 @@ fn plan_avar(_: &mut Session, params: &Value) -> Result<Value> {
     Ok(result)
 }
 
-/// Whether `a` and `b` name one file: the same file when both exist, else the same absolute path.
+/// Whether `a` and `b` name one file, however each is spelled and whether or not it exists.
 fn same_place(a: &Path, b: &Path) -> bool {
-    match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
-        (Ok(a), Ok(b)) => a == b,
-        _ => std::path::absolute(a).ok().zip(std::path::absolute(b).ok()).is_some_and(|(a, b)| a == b),
-    }
+    file_io::resolved(a) == file_io::resolved(b)
 }
 
 /// Writes the font and its plot together: both are staged beside their targets and moved into
@@ -714,6 +711,10 @@ versionMinor = 0;
         assert!(!avar.exists(), "the font is not written when the plot fails");
         assert!(s.execute("variations.planAvar", &json!({ "font": out, "plot": dir })).is_err(), "a folder");
         assert!(s.execute("variations.planAvar", &json!({ "font": out, "plot": avar })).is_err(), "the output itself");
+        // The output, spelled with a detour through a folder that does not exist.
+        let detour = dir.join("missing").join("..").join("Bare.hvar.avar.ttf");
+        let err = s.execute("variations.planAvar", &json!({ "font": out, "plot": detour })).unwrap_err();
+        assert!(err.to_string().contains("names the font file"), "{err}");
         assert!(s.execute("variations.planAvar", &json!({ "font": out, "plot": out })).is_err(), "the input");
         assert!(!avar.exists());
         let temps = std::fs::read_dir(&dir).unwrap().filter(|e| e.as_ref().unwrap().file_name().to_string_lossy().ends_with(".tmp")).count();

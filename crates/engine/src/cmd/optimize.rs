@@ -243,6 +243,16 @@ mod tests {
         assert_eq!(file_io::detect(&std::fs::read(&out).unwrap()), file_io::InputKind::Woff);
         session.execute("font.optimize", &json!({"font": woff.display().to_string(), "inPlace": true})).unwrap();
         assert_eq!(file_io::detect(&std::fs::read(&woff).unwrap()), file_io::InputKind::Woff);
+
+        // A file holding one font takes that font's PostScript name as `face`, and no other.
+        let plain = dir.join("Plain.otf");
+        std::fs::write(&plain, &otf).unwrap();
+        let ps = super::super::tables_file::postscript_name(&member).unwrap();
+        let font = plain.display().to_string();
+        session.execute("font.optimize", &json!({"font": font, "face": ps, "report": true})).unwrap();
+        session.execute("font.optimize", &json!({"font": font, "face": 0, "report": true})).unwrap();
+        assert!(session.execute("font.optimize", &json!({"font": font, "face": "Other-Name", "report": true})).is_err());
+        assert!(session.execute("font.optimize", &json!({"font": font, "face": 1, "report": true})).is_err());
         std::fs::remove_dir_all(&dir).ok();
     }
 }

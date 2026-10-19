@@ -353,15 +353,11 @@ impl Staged {
     pub(super) fn temp(&self) -> &Path {
         &self.temp
     }
-
-    /// What the temporary replaces once committed.
-    pub(super) fn target(&self) -> &Path {
-        &self.target
-    }
 }
 
 /// Writes `bytes` to a new temporary file beside `out` (beside the file it links to, for a
-/// link), with the permissions of the file it will replace.
+/// link), with the permissions of the file it will replace. Both the file replaced and the
+/// temporary must pass the write check before anything is created.
 #[cfg(not(target_arch = "wasm32"))]
 pub(super) fn stage(out: &Path, bytes: &[u8], n: usize) -> Result<Staged> {
     use std::io::Write as _;
@@ -372,6 +368,9 @@ pub(super) fn stage(out: &Path, bytes: &[u8], n: usize) -> Result<Staged> {
     }
     let name = target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "instance".into());
     let temp = target.with_file_name(format!(".{name}.{}-{n}.tmp", std::process::id()));
+    // `out` was checked by the caller; a link may lead elsewhere, so check where the write lands.
+    file_io::check_write(&target)?;
+    file_io::check_write(&temp)?;
     let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&temp).map_err(|e| io(&temp, e))?;
     if let Err(e) = file.write_all(bytes).and_then(|()| file.sync_all()) {
         let _ = std::fs::remove_file(&temp);

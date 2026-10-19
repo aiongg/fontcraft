@@ -30,9 +30,10 @@ use crate::{Result, TablesError};
 
 /// Deepest component nesting followed.
 const MAX_COMPONENT_DEPTH: usize = 64;
-/// Most points, component placements and applied deltas drawn for one call, over every
-/// measurement it makes of the glyph set.
-pub(super) const MAX_DRAW_WORK: usize = 2_000_000_000;
+/// Most points, component placements and applied deltas drawn for each axis one call plans,
+/// over every measurement it makes of the glyph set. The axes of a call share one counter of
+/// this times their number.
+pub(super) const MAX_DRAW_WORK_PER_AXIS: usize = 2_000_000_000;
 
 struct Provider<'a>(&'a SfntFont);
 
@@ -67,15 +68,23 @@ pub(super) struct Drawn {
 }
 
 /// The work budget of one call, shared by its passes over the glyphs.
-pub(super) struct Work(pub usize);
+pub(super) struct Work {
+    /// What is left to spend.
+    pub left: usize,
+    limit: usize,
+}
 
 impl Work {
+    pub(super) fn new(limit: usize) -> Self {
+        Self { left: limit, limit }
+    }
+
     fn spend(&mut self, n: usize) -> Result<()> {
-        if n > self.0 {
-            self.0 = 0;
-            return Err(TablesError::TooLarge { what: "the outline data drawn", limit: MAX_DRAW_WORK });
+        if n > self.left {
+            self.left = 0;
+            return Err(TablesError::TooLarge { what: "the outline data drawn", limit: self.limit });
         }
-        self.0 -= n;
+        self.left -= n;
         Ok(())
     }
 }

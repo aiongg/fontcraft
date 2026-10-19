@@ -38,6 +38,13 @@ pub struct DocRules {
     pub rules: Vec<DocRule>,
     /// `processing="last"`: the substitutions go to `rclt` in a variable font.
     pub last: bool,
+    /// Reading stopped at [`MAX_RULE_TOTAL`] with more of the document left ([`cut_note`]).
+    pub truncated: bool,
+}
+
+/// The warning for rules read only up to [`MAX_RULE_TOTAL`].
+pub fn cut_note() -> String {
+    format!("the designspace rules were cut at {MAX_RULE_TOTAL} entries")
 }
 
 /// The kept designspace document's rules, unless the reader made them alternate layers; `None`
@@ -53,9 +60,13 @@ pub fn document_rules(font: &Font) -> Option<DocRules> {
     let el = doc.root.child("rules")?;
     let mut rules = Vec::new();
     let mut left = MAX_RULE_TOTAL;
+    let mut truncated = false;
     let set_cost = font.axes.len().max(1);
     for r in el.elements().filter(|e| e.name() == "rule").take(MAX_RULE_ITEMS) {
-        let Some(after) = left.checked_sub(1) else { break };
+        let Some(after) = left.checked_sub(1) else {
+            truncated = true;
+            break;
+        };
         left = after;
         let mut spent = false;
         let mut sets = Vec::new();
@@ -88,10 +99,11 @@ pub fn document_rules(font: &Font) -> Option<DocRules> {
         }
         rules.push(DocRule { sets, subs });
         if spent {
+            truncated = true;
             break;
         }
     }
-    (!rules.is_empty()).then(|| DocRules { rules, last: el.attr("processing") == Some("last") })
+    (!rules.is_empty()).then(|| DocRules { rules, last: el.attr("processing") == Some("last"), truncated })
 }
 
 /// What [`condition_set`] read.
@@ -242,6 +254,7 @@ mod tests {
 </rules></designspace>"#;
         let rules = document_rules(&font(doc)).unwrap();
         assert_eq!(rules.rules.len(), 2);
+        assert!(!rules.truncated);
         assert!(rules.rules[1].sets.is_empty(), "a condition on an unknown axis holds nowhere");
         let has = |n: &str| n == "A" || n == "B";
         assert!(swaps_at(&rules, &[599.0], has).is_empty());
@@ -320,6 +333,7 @@ mod tests {
         let rules = document_rules(&font(&doc)).unwrap();
         let read: usize = rules.rules.iter().map(|r| 1 + r.sets.len() + r.subs.len()).sum();
         assert!(read <= MAX_RULE_TOTAL && read > MAX_RULE_TOTAL - 3_100, "{read}");
+        assert!(rules.truncated, "the cut is reported");
         let mut glyphs: Vec<Arc<Glyph>> = (0..glyphs_count)
             .map(|i| {
                 let mut g = Glyph::new(format!("g{i}"));
