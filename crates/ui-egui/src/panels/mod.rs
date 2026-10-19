@@ -132,6 +132,7 @@ pub struct PanelState {
     #[serde(skip)]
     pub axis_mappings: crate::dialogs::axis_mappings::AxisMappingsState,
     pub cross_axis: crate::dialogs::cross_axis::CrossAxisState,
+    pub tt_debugger: crate::dialogs::tt_debugger::TtDebuggerState,
     pub component_picker: crate::dialogs::glyph_picker_component::PickerState,
     pub smart_glyph: crate::dialogs::smart_glyph_settings::SmartGlyphState,
     pub smart_component: crate::dialogs::smart_component_settings::SmartComponentState,
@@ -175,6 +176,7 @@ impl Default for PanelState {
             shape_order_window: Default::default(),
             axis_mappings: Default::default(),
             cross_axis: Default::default(),
+            tt_debugger: Default::default(),
             component_picker: Default::default(),
             smart_glyph: Default::default(),
             smart_component: Default::default(),

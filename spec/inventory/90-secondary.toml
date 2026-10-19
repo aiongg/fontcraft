@@ -3109,7 +3109,25 @@ summary = "Runs a glyph's TrueType program one instruction at a time at a chosen
 ref = "FontForge main views › Outline Glyph View (Debugger pane); FontForge Hints menu › Debug"
 status = "docs"
 origin = "fontforge"
-notes = "As hint.tt.debugStep (M13.52)."
+notes = "Documented in the secondary reference's pages, not yet observed. Built (M13.52) as a window opened by `window.ttDebugger` (Window menu): fields for glyph, size and intent, the six actions of hint.tt.debugStep, the glyph program with click-to-toggle breakpoints, a glyph pane over the pixel grid, and collapsible inspector sections. The plain-language gloss of each instruction and watch points are not built yet."
+guesses = [
+  "The window lays out the instruction list, glyph pane and inspector side by side in one window, rather than in separate panes; the secondary reference's debugger window would settle it.",
+  "Changing the glyph, size or intent starts again at the first instruction instead of keeping the step; the secondary reference's behaviour when the size changes mid-session would settle it.",
+]
+
+[[command]]
+id = "window.ttDebugger"
+label = "TrueType Debugger"
+menu = ["Window"]
+shortcut = ""
+kind = "ui"
+params = "{open?: bool (default true), glyph?: name (default: the current glyph), ppem?: number (default 12), intent?: 'grayscale'|'cleartype'|'directwrite', action?: 'start'|'into'|'over'|'out'|'continue'|'stop', toggleBreakpoint?: byte offset} → {open, glyph, ppem, intent, breakpoints, state}"
+area = "hinting-tt"
+milestone = "M13"
+summary = "Shows or hides the TrueType Debugger window and steps its glyph with hint.tt.debugStep."
+ref = "FontForge Hints menu › Debug"
+status = "docs"
+origin = "fontforge"
 
 [[command]]
 id = "hint.tt.debugStep"
@@ -3117,14 +3135,19 @@ label = "Debugger Step"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph, master?: id, ppem: number, action: 'start' | 'into' | 'over' | 'out' | 'continue' | 'stop', breakpoints?: [number]}"
+params = "{glyph, instance?: name or master id, ppem: number, intent?: 'grayscale' | 'cleartype' | 'directwrite', action?: 'start' | 'into' | 'over' | 'out' | 'continue' | 'stop', step?: number, breakpoints?: [byte offset]}"
 area = "hinting-tt"
 milestone = "M13"
 summary = "Drives a debugging session and returns the interpreter state after the step: program counter, stack, graphics state, point positions in both zones, storage and control values."
 ref = "FontForge main views › Outline Glyph View (Debugger pane)"
 status = "docs"
 origin = "fontforge"
-notes = "Needs a TrueType interpreter that can stop after each instruction. M13.52 is built on M10's interpreter if it allows that; otherwise it waits (docs/plans/M13.md § 3)."
+notes = "Documented in the secondary reference's pages, not yet observed. Built (M13.52) on FontCraft's own interpreter (`crates/engine/src/ttvm`), ported from skrifa's, the one the hinted preview draws with, so the end points match the preview's. The result names the step reached; the next request passes it back, and the programs run again from the start up to the new stop. Each program run stops after 1,000,000 instructions."
+guesses = [
+  "A step is one instruction of the glyph program or of a function it calls, and the font and control value programs run without stops; the secondary reference's debugger would settle whether it steps through prep as well.",
+  "Breakpoints are byte offsets in the glyph program only, not inside functions; the secondary reference's breakpoint behaviour in fpgm would settle it.",
+  "Glyphs made of components are refused with a message; the secondary reference's debugger on a composite glyph would settle it.",
+]
 
 [[command]]
 id = "hint.tt.suggestDeltas"
@@ -3132,13 +3155,19 @@ label = "Suggest Deltas…"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyphs?, master?: id, ppemRange: [number, number], dpi?: number, within?: number}"
+params = "{glyphs?, instance?: name or master id, ppemRange: [number, number], intent?: 'grayscale' | 'cleartype' | 'directwrite', within?: number}"
 area = "hinting-tt"
 milestone = "M13"
 summary = "Rasterises the glyphs over a size range and reports the points and sizes at which a small delta would likely improve the result. The page read names the dialog but not its criteria, so the detection rule is ours to design."
 ref = "FontForge Hints menu › Suggest Deltas"
 status = "docs"
 origin = "fontforge"
+notes = "Built (M13.52). The rule is ours: each glyph's program runs to its end at every size, and wherever the hinted outline crosses a pixel row or column centre line within `within` pixels of a pixel centre, the nearest point of that edge gets a suggested delta that moves the edge at least `within` away, rounded up to whole delta steps. Sizes are pixels per em, so there is no resolution parameter."
+guesses = [
+  "An edge closer than `within` (default 0.1 pixel) to a pixel centre, measured along one axis, is what needs a delta; the secondary reference's suggestions on a glyph with edges at half pixels would settle it.",
+  "Where the interpreter is in backward compatibility mode (the smooth intents unless prep turns it off) only vertical deltas are suggested, as horizontal moves are ignored there; the secondary reference's suggestions on such a font would settle it.",
+  "Glyphs made of components are skipped and listed as skipped; the secondary reference's handling of composites would settle it.",
+]
 
 [[panel]]
 id = "dialog.stemHistogram"

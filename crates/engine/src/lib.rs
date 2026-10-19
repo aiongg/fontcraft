@@ -43,6 +43,7 @@ pub mod macros;
 pub mod params;
 pub mod project;
 pub mod settings;
+pub(crate) mod ttvm;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
