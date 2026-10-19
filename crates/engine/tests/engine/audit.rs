@@ -322,7 +322,7 @@ fn the_registry_is_listed_and_described() {
     let by_id = |id: &str| checks.iter().find(|c| c["id"] == id).unwrap().clone();
     assert_eq!(by_id("check.outlines.missingExtremes")["fixAvailable"], json!(true));
     assert_eq!(by_id("check.outlines.tinyContour")["fixAvailable"], json!(true));
-    assert_eq!(by_id("check.outlines.openCorners")["fixAvailable"], json!(false), "no command trims open corners yet");
+    assert_eq!(by_id("check.outlines.openCorners")["fixAvailable"], json!(true), "path.eraseOpenCorners trims them");
     assert_eq!(by_id("check.outlines.noContours")["fixable"], json!(false));
     let fixable = run(&mut s, "audit.list", json!({"fixable": true}));
     assert!(fixable["checks"].as_array().unwrap().iter().all(|c| c["fixable"] == json!(true)));

@@ -194,6 +194,9 @@ fn audit_fix_layer_steps_snap_align_and_clean_up() {
 fn audit_fix_zeroes_a_mark_width_reported_by_a_compiled_instance() {
     let mut s = Session::with_document();
     run(&mut s, "glyph.newGlyph", json!({"name": "acutecomb", "unicodes": [0x301], "width": 300}));
+    // The export zeroes the advance of a glyph stored as a non-spacing mark, so only a combining
+    // character stored with another subcategory keeps its width in the compiled font.
+    run(&mut s, "glyph.setCategory", json!({"glyphs": ["acutecomb"], "category": "Mark", "subCategory": "Spacing Combining"}));
     let select = json!({"profile": "strict", "checks": ["check.metrics.markWidths"]});
     let doc = run(&mut s, "audit.run", select.clone());
     let result =

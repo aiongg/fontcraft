@@ -7,11 +7,10 @@ use serde_json::json;
 use crate::FontcraftApp;
 use crate::panels::{SECTIONS, palette_anchor_context};
 
-/// `n` with a plain `top` and a contextual `*top` anchor, edited, Show Info on, the built-in
+/// The default document's `n` with a plain `top` and a contextual `*top` anchor, edited, Show Info on, the built-in
 /// Palette sections folded so the contextual section sits in view.
 fn app_with_anchors() -> FontcraftApp {
     let mut app = FontcraftApp::default();
-    app.run("glyph.newGlyph", &json!({"name": "n"})).unwrap();
     app.run("anchor.add", &json!({"glyph": "n", "name": "top", "x": 250, "y": 500})).unwrap();
     app.run("anchor.add", &json!({"glyph": "n", "name": "*top", "x": 300, "y": 520})).unwrap();
     app.run("view.editSelectedGlyphs", &json!({"glyphs": ["n"]})).unwrap();

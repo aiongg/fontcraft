@@ -386,6 +386,9 @@ mod tests {
     }
 
     fn name_table(records: &[(u16, &str)]) -> Vec<u8> {
+        // A compiled name table holds its records sorted.
+        let mut records = records.to_vec();
+        records.sort_by_key(|(id, _)| *id);
         let name = write_fonts::tables::name::Name::new(
             records
                 .iter()
@@ -428,7 +431,17 @@ mod tests {
 
     #[test]
     fn an_optical_size_alone_writes_the_other_as_zero() {
-        let mut os2 = Os2::default();
+        // The compiler's OS/2 is version 4, so every field below version 5 is present.
+        let mut os2 = Os2 {
+            ul_code_page_range_1: Some(0),
+            ul_code_page_range_2: Some(0),
+            sx_height: Some(0),
+            s_cap_height: Some(0),
+            us_default_char: Some(0),
+            us_break_char: Some(32),
+            us_max_context: Some(0),
+            ..Default::default()
+        };
         let values = fontcraft_fea::Os2Values { upper_optical_point_size: Some(240), fs_type: Some(0), ..Default::default() };
         os2.fs_type = 8;
         apply_os2(&values, &mut os2);

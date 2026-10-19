@@ -542,11 +542,10 @@ mod tests {
         let b = font.glyph_metrics(Size::unscaled(), LocationRef::default()).bounds(a).unwrap();
         assert_eq!((b.x_min, b.y_max), (50.0, 700.0), "the master layer stays as the outline");
 
-        // An interpolated instance would need interpolated colour layers: refused, unless no
-        // colour table is asked for.
+        // An instance between masters exports interpolated colour layers.
         Arc::make_mut(&mut f.instances).push(Instance { name: "Between".into(), location: vec![500.0], ..Default::default() });
-        let refused = compile(&f, &Target::Instance(2), Flavour::TrueType, &Options::default());
-        assert!(matches!(&refused, Err(crate::CompileError::ColorRefused(m)) if m.contains("Between")), "{:?}", refused.map(|c| c.glyph_order));
+        let between = compile(&f, &Target::Instance(2), Flavour::TrueType, &Options::default()).unwrap();
+        assert!(has_table(&between, b"COLR") && has_table(&between, b"CPAL"));
 
         // A font without colour layers gets no colour tables, palettes or not.
         let mut bare = Font::new("Bare");
@@ -641,7 +640,11 @@ mod tests {
             };
             self.events.push(match brush {
                 Brush::Solid { palette_index, alpha } => format!("solid {palette_index} {alpha}"),
-                Brush::LinearGradient { p0, p1, color_stops, .. } => format!("linear {} {} {} {} [{}]", p0.x, p0.y, p1.x, p1.y, stops(color_stops)),
+                Brush::LinearGradient { p0, p1, color_stops, .. } => {
+                    // The reader projects the end point onto the gradient line in floats.
+                    let r = |v: f32| (v * 100.0).round() / 100.0;
+                    format!("linear {} {} {} {} [{}]", r(p0.x), r(p0.y), r(p1.x), r(p1.y), stops(color_stops))
+                }
                 other => format!("{other:?}"),
             });
         }
