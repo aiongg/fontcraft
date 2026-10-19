@@ -5,6 +5,9 @@ use crate::io::{Failure, Outcome, execute, open, out, usage};
 use fontcraft_engine::Session;
 use serde_json::{Value, json};
 
+/// The user setting that opens UFO and designspace sources without aligning their composites.
+const DISABLE_ALIGNMENT_FOR_IMPORTED: &str = "user.disableAutomaticAlignmentForImportedFiles";
+
 pub const SUBCOMMAND: Subcommand =
     Subcommand { name: "compile", summary: "Compile sources to static or variable fonts", usage: USAGE, options: &[], actions: &[], run: compile };
 
@@ -42,7 +45,8 @@ const USAGE: &str = "\
       tables once (SOURCE.ttc, or .otc for CFF); -o FILE.ttc or FILE.otc does the same.
       --plan prints what would be built, without building.
       A project compile builds a font as the reference compiler's project workflow does (default
-      format otf). --project-file FILE reads a current.fpr project file first; the project
+      format otf): composites and overlaps stay as the source has them, coordinates keep two
+      decimals, and the metrics come from the glyphs and the full name. --project-file FILE reads a current.fpr project file first; the project
       options then apply left to right, a later one overriding an earlier: --release /
       --no-release (subroutinize, rename and order by the GlyphOrderAndAliasDB, stub DSIG),
       --subroutinize / --no-subroutinize, --apply-goadb / --no-apply-goadb, --subset-to-goadb /
@@ -213,7 +217,8 @@ fn compile(args: &[String]) -> Outcome {
         return Err(usage("compile needs at least one SOURCE"));
     }
     // A project compile: the subroutinize switches count among its ordered options.
-    if !project.is_empty() {
+    let is_project = !project.is_empty();
+    if is_project {
         if variable || formats.iter().any(|f| f.starts_with("variable")) {
             return Err(usage("a project compile builds static fonts: leave out --variable"));
         }
@@ -304,6 +309,11 @@ fn compile(args: &[String]) -> Outcome {
                 .settings_mut()
                 .set(fontcraft_engine::external_autohint::SETTING, json!(path))
                 .map_err(|e| usage(format!("--ttfautohint: {e}")))?;
+        }
+        // The reference compiler builds composites as the file places them, so a project
+        // compile opens the source without aligning them.
+        if is_project {
+            session.settings_mut().set(DISABLE_ALIGNMENT_FOR_IMPORTED, json!(true)).map_err(|e| usage(e.to_string()))?;
         }
         open(&mut session, source)?;
         execute(&mut session, command, &params)

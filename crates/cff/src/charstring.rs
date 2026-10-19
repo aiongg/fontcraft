@@ -30,6 +30,7 @@ pub(crate) fn build(
     width: Option<f64>,
     tolerance: f64,
     specialise: bool,
+    keep_topology: bool,
 ) -> Result<Built, Error> {
     let commands = pen_commands(path, tolerance);
     let what = format!("glyph `{glyph}`");
@@ -38,7 +39,7 @@ pub(crate) fn build(
         encode_t2_number(w, &what, &mut bytes)?;
     }
     let Some(hints) = hints.filter(|h| !h.is_empty()) else {
-        let commands = if specialise { specialize(commands, MAX_STACK) } else { commands };
+        let commands = if specialise { specialize(commands, MAX_STACK, keep_topology) } else { commands };
         let bounds = bounds(&commands);
         write_commands(&commands, &what, &mut bytes)?;
         bytes.push(14); // endchar
@@ -63,7 +64,7 @@ pub(crate) fn build(
     let mut run: Vec<Cmd> = Vec::new();
     let flush = |run: &mut Vec<Cmd>, drawn: &mut Vec<Cmd>, bytes: &mut Vec<u8>| -> Result<(), Error> {
         let taken = std::mem::take(run);
-        let cmds = if specialise { specialize(taken, MAX_STACK) } else { taken };
+        let cmds = if specialise { specialize(taken, MAX_STACK, keep_topology) } else { taken };
         write_commands(&cmds, &what, bytes)?;
         drawn.extend(cmds);
         Ok(())
@@ -300,17 +301,17 @@ mod tests {
 
     #[test]
     fn a_square_with_and_without_width() {
-        let b = build("a", &square(), None, None, 0.5, true).unwrap();
+        let b = build("a", &square(), None, None, 0.5, true, false).unwrap();
         // 100 hmoveto 300 700 -300 hlineto endchar
         assert_eq!(b.bytes, vec![239, 22, 247, 192, 249, 80, 251, 192, 6, 14]);
         assert_eq!(b.bounds.unwrap().round_out(), [100, 0, 400, 700]);
-        let b = build("a", &square(), None, Some(-20.0), 0.5, true).unwrap();
+        let b = build("a", &square(), None, Some(-20.0), 0.5, true, false).unwrap();
         assert_eq!(&b.bytes[..2], &[119, 239]);
     }
 
     #[test]
     fn unspecialised_output_keeps_generic_operators() {
-        let b = build("a", &square(), None, None, 0.5, false).unwrap();
+        let b = build("a", &square(), None, None, 0.5, false, false).unwrap();
         // 100 0 rmoveto 300 0 rlineto 0 700 rlineto -300 0 rlineto endchar
         assert_eq!(b.bytes, vec![239, 139, 21, 247, 192, 139, 5, 139, 249, 80, 5, 251, 192, 139, 5, 14]);
     }
@@ -318,17 +319,17 @@ mod tests {
     #[test]
     fn coordinates_round_half_up_before_differencing() {
         let path = [PathOp::MoveTo((10.5, -0.5)), PathOp::LineTo((20.4, -0.5))];
-        let b = build("a", &path, None, None, 0.5, false).unwrap();
+        let b = build("a", &path, None, None, 0.5, false, false).unwrap();
         // (11, 0) then (20, 0): 11 0 rmoveto 9 0 rlineto
         assert_eq!(b.bytes, vec![150, 139, 21, 148, 139, 5, 14]);
         // With rounding off the fractions survive as 16.16 numbers.
-        let b = build("a", &path, None, None, 0.0, false).unwrap();
+        let b = build("a", &path, None, None, 0.0, false, false).unwrap();
         assert_eq!(&b.bytes[..5], &[255, 0, 10, 0x80, 0]);
     }
 
     #[test]
     fn an_empty_glyph_is_endchar_alone() {
-        let b = build("space", &[], None, Some(100.0), 0.5, true).unwrap();
+        let b = build("space", &[], None, Some(100.0), 0.5, true, false).unwrap();
         assert_eq!(b.bytes, vec![239, 14]);
         assert_eq!(b.bounds, None);
     }
@@ -351,8 +352,8 @@ mod tests {
             PathOp::LineTo((395.0, 380.0)),
             PathOp::CurveTo((400.0, 390.0), (410.0, 395.0), (420.0, 397.0)),
         ];
-        let generic = build("g", &path, None, None, 0.5, false).unwrap();
-        let special = build("g", &path, None, None, 0.5, true).unwrap();
+        let generic = build("g", &path, None, None, 0.5, false, false).unwrap();
+        let special = build("g", &path, None, None, 0.5, true, false).unwrap();
         assert_eq!(generic.bounds, special.bounds);
         assert!(special.bytes.len() < generic.bytes.len());
     }

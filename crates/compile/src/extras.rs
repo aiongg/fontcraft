@@ -268,7 +268,7 @@ pub(crate) fn finish(font: Option<&Font>, compiled: &mut Compiled, options: &Opt
         }
     }
     if options.stub_dsig {
-        crate::makeotf::finish(compiled, &crate::makeotf::Finish { stub_dsig: true, stub_cmap4: false })?;
+        crate::makeotf::finish(compiled, &crate::makeotf::Finish { stub_dsig: true, ..Default::default() })?;
     }
     Ok(())
 }

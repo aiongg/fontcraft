@@ -131,7 +131,7 @@ pub fn build(font: &CidFont) -> Result<CidBuilt, Error> {
         let (default_width_x, nominal_width_x) = widths.get(g.fd).copied().unwrap_or((0, 0));
         let advance = g.glyph.advance;
         let width = if advance == default_width_x as f64 { None } else { Some(ot_round(advance - nominal_width_x as f64)) };
-        let built = charstring::build(&g.glyph.name, &g.glyph.path, g.glyph.hints.as_ref(), width, font.round_tolerance, font.specialise)?;
+        let built = charstring::build(&g.glyph.name, &g.glyph.path, g.glyph.hints.as_ref(), width, font.round_tolerance, font.specialise, false)?;
         if let Some(b) = built.bounds {
             font_box = Some(font_box.map_or(b, |f| f.union(b)));
         }
