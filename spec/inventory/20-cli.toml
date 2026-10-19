@@ -995,6 +995,8 @@ milestone = "M12"
 summary = "Produces an instance of a variable design: from a variable font, a static font or a variable font with fewer or narrower axes; from a designspace or other multi-master source, interpolated UFO or binary instances. Each axis can be pinned to a value, limited to a range, dropped at its default or left alone."
 ref = "fontTools varLib.instancer, varLib.mutator, varLib.interpolate_layout; AFDKO makeinstancesufo.py, tx -U / -UNC; fontmake -i"
 status = "docs"
+notes = "Built in M12.20 for compiled TrueType variable fonts with every axis pinned (a location, --static, or the named instances): a port of the full-instance path of fontTools varLib.instancer. Applied and removed: gvar (left-out deltas inferred), cvar, MVAR, HVAR, VVAR, GDEF and GPOS variation data, feature variations, fvar, avar; STAT keeps the axis values of the location and name records only the dropped tables used go; OS/2 xAvgCharWidth, usWeightClass, usWidthClass and post.italicAngle follow the location; head, hhea and vhea bounds are recomputed unless --no-recalc-bounds. Measured against fontTools 4.66.1 on a font built in code (between masters, at a master, with avar). Not yet: partial instances (M12.21), sources (M12.22), CFF2 outlines, a BASE table with variation data, VARC, --update-name-table and --downgrade-cff2 (refused with a message). Unlike fontTools, split subtables are not joined again and lookups no feature reaches are kept; neither changes behaviour."
+guesses = ["--named matches its pattern anywhere in the subfamily or PostScript name of an fvar named instance; checking makeinstancesufo and fontmake on a designspace with similar instance names would settle the matching rule.", "A named instance without a PostScript name is written as <input stem>-<subfamily without spaces>.<ext>; the reference tools name such files from the family and style names, which a run on such a font would show."]
 
 [[cli]]
 id = "merge"
@@ -2446,12 +2448,13 @@ label = "Instantiate"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{input: path, face?: int|name, location?: {axis: number | {min?: number, default?: number, max?: number} | \"drop\"}, static?: bool, named?: regex, all?: bool, indices?: [int], to?: \"same\"|\"ttf\"|\"otf\"|\"ufo\", output?: path, outputDir?: path, clamp?: bool, optimizeGvar?: bool, overlapFlag?: bool, removeOverlaps?: bool, ignoreOverlapErrors?: bool, updateNameTable?: bool, downgradeCff2?: bool, recalcBounds?: bool, round?: bool, autohint?: bool, normalize?: bool, strict?: bool, ufoVersion?: 2|3, layoutOnly?: bool, masterFinder?: string, timestamp?: \"keep\"|\"now\"|int}"
+params = "{input: path, face?: int|name, location?: {axis: number | {min?: number, default?: number, max?: number} | \"drop\"}, static?: bool, named?: regex, all?: bool, indices?: [int], to?: \"same\"|\"ttf\"|\"otf\"|\"ufo\", output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool, clamp?: bool, optimizeGvar?: bool, overlapFlag?: bool, removeOverlaps?: bool, ignoreOverlapErrors?: bool, updateNameTable?: bool, downgradeCff2?: bool, recalcBounds?: bool, round?: bool, autohint?: bool, normalize?: bool, strict?: bool, ufoVersion?: 2|3, layoutOnly?: bool, masterFinder?: string, timestamp?: \"keep\"|\"now\"|int}"
 area = "cli-tools"
 milestone = "M12"
 summary = "Pins, limits or drops axes of a variable font, or interpolates instances from a multi-master source, and returns one entry per result with its location, names and path. Works without opening a document; file.generateInstances is the editor command that turns instances into new documents."
 ref = "docs/spec/20-cli.md › instance"
 status = "docs"
+notes = "Built in M12.20 for compiled variable fonts with every axis pinned (see the `instance` row); refuses source-only parameters (autohint, normalize, strict, ufoVersion, layoutOnly, masterFinder), clamp false and round false for a compiled font. The default output is <name>.instance.<ext> beside the input; named instances go beside the input or into outputDir under their PostScript name. head.modified follows timestamp (default SOURCE_DATE_EPOCH, else the clock; keep leaves it). Result: {results: [{output, location, static, name?, postscriptName?}]}."
 
 [[command]]
 id = "font.merge"
