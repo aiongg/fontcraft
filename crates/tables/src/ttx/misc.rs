@@ -1,15 +1,20 @@
 //! TTX writer: kern, DSIG, the Apple tables and the hex form of unknown tables (M12.7).
 //!
-//! `kern`, `DSIG`, `FFTM`, `LTSH`, `VDMX` and the Apple `prop` table, each written element for
-//! element as fontTools' `ttx` writes it and read with the same checks: a table fontTools would
-//! refuse to read is an error here, and [`super::dump`] then writes it as hex. Tables no module
-//! knows are written as hex by [`super::dump`] itself. Ported from fontTools' `ttLib.tables`
-//! (MIT): `_k_e_r_n`, `D_S_I_G_`, `F_F_T_M_`, `L_T_S_H_`, `V_D_M_X_`, the `prop` part of
-//! `otData`, the `AATLookup` converter of `otConverters`, and `misc.timeTools`.
+//! `kern`, `DSIG`, `FFTM`, `LTSH`, `VDMX` and the Apple `prop`, `trak` and `ltag` tables, each
+//! written element for element as fontTools' `ttx` writes it and read with the same checks: a
+//! table fontTools would refuse to read is an error here, and [`super::dump`] then writes it as
+//! hex. The Apple tables `ankr`, `bsln`, `cidg`, `feat`, `gcid`, `lcar` and `opbd` go through the
+//! structured-table writer ([`super::otdata`]), whose layouts include them, as in fontTools.
+//! Tables no module knows are written as hex by [`super::dump`] itself. Ported from fontTools'
+//! `ttLib.tables` (MIT): `_k_e_r_n`, `D_S_I_G_`, `F_F_T_M_`, `L_T_S_H_`, `V_D_M_X_`, `_t_r_a_k`,
+//! `_l_t_a_g`, the `prop` part of `otData`, the `AATLookup` converter of `otConverters`, and
+//! `misc.timeTools`.
 //!
-//! Known differences: the Apple tables other than `prop` (`morx`, `kerx`, `trak`, `feat`, `ankr`,
-//! `bsln`, `lcar`, `opbd`, `ltag`, `gcid`, `cidg`, `mort`) are left to the structured-table
-//! writer ([`super::otdata`]) or written as hex.
+//! Known differences:
+//! - `mort` and `morx` (glyph metamorphosis, which fontTools reads) are written as hex; `kerx` and
+//!   `just`, which fontTools does not read either, are hex in both.
+//! - The name comment after a `trak` entry is written only when the font has a `name` table;
+//!   `ttx` stops with an error on a `trak` table in a font without one.
 
 #[cfg(test)]
 mod fonts;
@@ -18,11 +23,12 @@ mod tests;
 
 use std::collections::BTreeMap;
 
+use crate::limits::MAX_LAYOUT_ITEMS;
 use crate::sfnt::{SfntFont, Tag};
 use crate::{Result, TablesError};
 
 use super::core::glyph_name;
-use super::var::{bytes_at, i16_at, i32_at, slice, u8_at, u16_at, u32_at, u64_at};
+use super::var::{bytes_at, i16_at, i32_at, latin1, slice, u8_at, u16_at, u32_at, u64_at};
 use super::{XmlWriter, fixed_to_str, py_float};
 
 /// Writes table `tag` (bytes `data`, from `font`) into `w`. Returns false, writing nothing,
@@ -35,6 +41,9 @@ pub fn write_table(tag: Tag, data: &[u8], font: &SfntFont, w: &mut XmlWriter) ->
         b"LTSH" => ltsh(data, font, w)?,
         b"VDMX" => vdmx(data, w)?,
         b"prop" => prop(data, font, w)?,
+        b"trak" => trak(data, font, w)?,
+        b"ltag" => ltag(data, w)?,
+        b"ankr" | b"bsln" | b"cidg" | b"feat" | b"gcid" | b"lcar" | b"opbd" => super::otdata::write_layout_table(tag, data, font, w)?,
         _ => return Ok(false),
     }
     Ok(true)
@@ -512,4 +521,100 @@ impl Unfilled {
             *slot = gid + 1;
         }
     }
+}
+
+// ── trak ───────────────────────────────────────────────────────────────────────────────────────
+
+/// One direction of `trak`: tracks (value, name ID, per-size values) sorted by track value, as
+/// fontTools' `TrackData` holds them. A repeated track or size keeps the last values read.
+type TrackData = Vec<(f64, u16, Vec<(f64, i16)>)>;
+
+fn trak(data: &[u8], font: &SfntFont, w: &mut XmlWriter) -> Result<()> {
+    bytes_at(data, 0, 12)?;
+    let version = f64::from(i32_at(data, 0)?) / 65536.0;
+    let format = u16_at(data, 4)?;
+    let mut directions = Vec::with_capacity(2);
+    for at in [6usize, 8] {
+        let offset = usize::from(u16_at(data, at)?);
+        directions.push(if offset == 0 { Vec::new() } else { track_data(data, offset)? });
+    }
+    val(w, "version", py_float(version));
+    val(w, "format", format);
+    let names = font.get(*b"name");
+    for (name, tracks) in ["horizData", "vertData"].iter().zip(&directions) {
+        w.open(name, &[]);
+        let sizes = tracks.first().map_or(0, |t| t.2.len());
+        w.comment(&format!("nTracks={}, nSizes={sizes}", tracks.len()));
+        for (track, name_id, values) in tracks {
+            w.open("trackEntry", &[("value", &fixed_to_str(*track, 16)), ("nameIndex", &name_id.to_string())]);
+            if let Some(text) = names.and_then(|n| super::otdata::debug_name(n, i64::from(*name_id))) {
+                w.comment(&text);
+            }
+            for (size, value) in values {
+                w.simple("track", &[("size", &fixed_to_str(*size, 16)), ("value", &value.to_string())]);
+            }
+            w.close("trackEntry");
+            w.check()?;
+        }
+        w.close(name);
+    }
+    Ok(())
+}
+
+fn track_data(data: &[u8], offset: usize) -> Result<TrackData> {
+    let tracks = usize::from(u16_at(data, offset)?);
+    let sizes = usize::from(u16_at(data, offset + 2)?);
+    let size_table = u32_at(data, offset + 4)? as usize;
+    if tracks.saturating_mul(sizes) > MAX_LAYOUT_ITEMS {
+        return Err(TablesError::TooLarge { what: "the per-size values of a 'trak' table", limit: MAX_LAYOUT_ITEMS });
+    }
+    // Each distinct size (by its 16.16 value) and the last position it has in the size table.
+    let mut size_slots: BTreeMap<i32, usize> = BTreeMap::new();
+    for j in 0..sizes {
+        size_slots.insert(i32_at(data, size_table.saturating_add(4 * j))?, j);
+    }
+    let mut out: BTreeMap<i32, (u16, Vec<(f64, i16)>)> = BTreeMap::new();
+    for i in 0..tracks {
+        let at = offset + 8 + 8 * i;
+        let track = i32_at(data, at)?;
+        let name_id = u16_at(data, at + 4)?;
+        let values_at = usize::from(u16_at(data, at + 6)?);
+        let all = bytes_at(data, values_at, 2 * sizes)?;
+        let mut values = Vec::with_capacity(size_slots.len());
+        for (size, j) in &size_slots {
+            let value = i16_at(all, 2 * j)?;
+            values.push((f64::from(*size) / 65536.0, value));
+        }
+        out.insert(track, (name_id, values));
+    }
+    Ok(out.into_iter().map(|(track, (name_id, values))| (f64::from(track) / 65536.0, name_id, values)).collect())
+}
+
+// ── ltag ───────────────────────────────────────────────────────────────────────────────────────
+
+fn ltag(data: &[u8], w: &mut XmlWriter) -> Result<()> {
+    let version = u32_at(data, 0)?;
+    let flags = u32_at(data, 4)?;
+    let count = u32_at(data, 8)?;
+    if version != 1 {
+        return Err(TablesError::invalid(format!("unknown 'ltag' version {version}")));
+    }
+    let mut tags = Vec::new();
+    for i in 0..count as usize {
+        let pos = 12 + 4 * i;
+        let offset = usize::from(u16_at(data, pos)?);
+        let length = usize::from(u16_at(data, pos + 2)?);
+        let bytes = slice(data, offset, offset + length);
+        if !bytes.is_ascii() {
+            return Err(TablesError::invalid("an 'ltag' language tag is not ASCII"));
+        }
+        tags.push(latin1(bytes));
+    }
+    val(w, "version", version);
+    val(w, "flags", flags);
+    for tag in tags {
+        w.simple("LanguageTag", &[("tag", &tag)]);
+        w.check()?;
+    }
+    Ok(())
 }

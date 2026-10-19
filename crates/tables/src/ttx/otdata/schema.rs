@@ -69,6 +69,33 @@ static DEFS: &[Def] = &[
         ),
     },
     Def {
+        name: "AnchorGlyphData",
+        layout: Layout::Plain(&[
+            Field { name: "AnchorPointCount", ty: Count32, rep: Rep::One, cond: Cond::Always },
+            Field { name: "AnchorPoint", ty: Struct("AnchorPoint"), rep: Rep::Count("AnchorPointCount", 0), cond: Cond::Always },
+        ]),
+    },
+    Def {
+        name: "AnchorPoint",
+        layout: Layout::Plain(&[
+            Field { name: "XCoordinate", ty: I16, rep: Rep::One, cond: Cond::Always },
+            Field { name: "YCoordinate", ty: I16, rep: Rep::One, cond: Cond::Always },
+        ]),
+    },
+    Def {
+        name: "AnchorPoints",
+        layout: Layout::Formats(
+            Width::U16,
+            &[(
+                0,
+                &[
+                    Field { name: "Flags", ty: U16, rep: Rep::One, cond: Cond::Always },
+                    Field { name: "Anchors", ty: AatLookupData("AnchorGlyphData"), rep: Rep::One, cond: Cond::Always },
+                ],
+            )],
+        ),
+    },
+    Def {
         name: "AttachList",
         layout: Layout::Plain(&[
             Field { name: "Coverage", ty: Off16("Coverage"), rep: Rep::One, cond: Cond::Always },
@@ -294,6 +321,65 @@ static DEFS: &[Def] = &[
             Field { name: "BaseCoordCount", ty: Count16, rep: Rep::One, cond: Cond::Always },
             Field { name: "BaseCoord", ty: Off16("BaseCoord"), rep: Rep::Count("BaseCoordCount", 0), cond: Cond::Always },
         ]),
+    },
+    Def {
+        name: "Baseline",
+        layout: Layout::Formats(
+            Width::U16,
+            &[
+                (
+                    0,
+                    &[
+                        Field { name: "DefaultBaseline", ty: U16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "Delta", ty: U16, rep: Rep::Fixed(32), cond: Cond::Always },
+                    ],
+                ),
+                (
+                    1,
+                    &[
+                        Field { name: "DefaultBaseline", ty: U16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "Delta", ty: U16, rep: Rep::Fixed(32), cond: Cond::Always },
+                        Field { name: "BaselineValues", ty: AatLookup("uint16"), rep: Rep::One, cond: Cond::Always },
+                    ],
+                ),
+                (
+                    2,
+                    &[
+                        Field { name: "DefaultBaseline", ty: U16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "StandardGlyph", ty: Glyph, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "ControlPoint", ty: U16, rep: Rep::Fixed(32), cond: Cond::Always },
+                    ],
+                ),
+                (
+                    3,
+                    &[
+                        Field { name: "DefaultBaseline", ty: U16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "StandardGlyph", ty: Glyph, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "ControlPoint", ty: U16, rep: Rep::Fixed(32), cond: Cond::Always },
+                        Field { name: "BaselineValues", ty: AatLookup("uint16"), rep: Rep::One, cond: Cond::Always },
+                    ],
+                ),
+            ],
+        ),
+    },
+    Def {
+        name: "CIDGlyphMapping",
+        layout: Layout::Formats(
+            Width::U16,
+            &[(
+                0,
+                &[
+                    Field { name: "DataFormat", ty: U16, rep: Rep::One, cond: Cond::Always },
+                    Field { name: "StructLength", ty: Count32, rep: Rep::One, cond: Cond::Always },
+                    Field { name: "Registry", ty: U16, rep: Rep::One, cond: Cond::Always },
+                    Field { name: "RegistryName", ty: Char64, rep: Rep::One, cond: Cond::Always },
+                    Field { name: "Order", ty: U16, rep: Rep::One, cond: Cond::Always },
+                    Field { name: "OrderName", ty: Char64, rep: Rep::One, cond: Cond::Always },
+                    Field { name: "SupplementVersion", ty: U16, rep: Rep::One, cond: Cond::Always },
+                    Field { name: "Mapping", ty: CidGlyphMap, rep: Rep::One, cond: Cond::Always },
+                ],
+            )],
+        ),
     },
     Def {
         name: "COLR",
@@ -869,6 +955,25 @@ static DEFS: &[Def] = &[
             Field { name: "FeatureRecord", ty: Struct("FeatureRecord"), rep: Rep::Count("FeatureCount", 0), cond: Cond::Always },
         ]),
     },
+    Def {
+        name: "FeatureName",
+        layout: Layout::Plain(&[
+            Field { name: "FeatureType", ty: U16, rep: Rep::One, cond: Cond::Always },
+            Field { name: "SettingsCount", ty: Count16, rep: Rep::One, cond: Cond::Always },
+            Field { name: "Settings", ty: Off32("Settings"), rep: Rep::One, cond: Cond::Always },
+            Field { name: "FeatureFlags", ty: U16, rep: Rep::One, cond: Cond::Always },
+            Field { name: "FeatureNameID", ty: NameId, rep: Rep::One, cond: Cond::Always },
+        ]),
+    },
+    Def {
+        name: "FeatureNames",
+        layout: Layout::Plain(&[
+            Field { name: "FeatureNameCount", ty: Count16, rep: Rep::One, cond: Cond::Always },
+            Field { name: "Reserved1", ty: U16, rep: Rep::One, cond: Cond::Always },
+            Field { name: "Reserved2", ty: U32, rep: Rep::One, cond: Cond::Always },
+            Field { name: "FeatureName", ty: Struct("FeatureName"), rep: Rep::Count("FeatureNameCount", 0), cond: Cond::Always },
+        ]),
+    },
     Def { name: "FeatureParams", layout: Layout::Plain(&[]) },
     Def {
         name: "FeatureParamsCharacterVariants",
@@ -988,6 +1093,25 @@ static DEFS: &[Def] = &[
         ]),
     },
     Def {
+        name: "GlyphCIDMapping",
+        layout: Layout::Formats(
+            Width::U16,
+            &[(
+                0,
+                &[
+                    Field { name: "DataFormat", ty: U16, rep: Rep::One, cond: Cond::Always },
+                    Field { name: "StructLength", ty: Count32, rep: Rep::One, cond: Cond::Always },
+                    Field { name: "Registry", ty: U16, rep: Rep::One, cond: Cond::Always },
+                    Field { name: "RegistryName", ty: Char64, rep: Rep::One, cond: Cond::Always },
+                    Field { name: "Order", ty: U16, rep: Rep::One, cond: Cond::Always },
+                    Field { name: "OrderName", ty: Char64, rep: Rep::One, cond: Cond::Always },
+                    Field { name: "SupplementVersion", ty: U16, rep: Rep::One, cond: Cond::Always },
+                    Field { name: "Mapping", ty: GlyphCidMap, rep: Rep::One, cond: Cond::Always },
+                ],
+            )],
+        ),
+    },
+    Def {
         name: "GlyphPartRecord",
         layout: Layout::Plain(&[
             Field { name: "glyph", ty: Glyph, rep: Rep::One, cond: Cond::Always },
@@ -996,6 +1120,22 @@ static DEFS: &[Def] = &[
             Field { name: "FullAdvance", ty: U16, rep: Rep::One, cond: Cond::Always },
             Field { name: "PartFlags", ty: U16, rep: Rep::One, cond: Cond::Always },
         ]),
+    },
+    Def {
+        name: "GlyphProperties",
+        layout: Layout::Formats(
+            Width::U16,
+            &[
+                (0, &[Field { name: "DefaultProperties", ty: U16, rep: Rep::One, cond: Cond::Always }]),
+                (
+                    1,
+                    &[
+                        Field { name: "DefaultProperties", ty: U16, rep: Rep::One, cond: Cond::Always },
+                        Field { name: "Properties", ty: AatLookup("uint16"), rep: Rep::One, cond: Cond::Always },
+                    ],
+                ),
+            ],
+        ),
     },
     Def {
         name: "HVAR",
@@ -1121,11 +1261,25 @@ static DEFS: &[Def] = &[
         }]),
     },
     Def {
+        name: "LigCaretDistances",
+        layout: Layout::Plain(&[
+            Field { name: "DivsionPointCount", ty: Count16, rep: Rep::One, cond: Cond::Always },
+            Field { name: "DivisionPoint", ty: I16, rep: Rep::Count("DivsionPointCount", 0), cond: Cond::Always },
+        ]),
+    },
+    Def {
         name: "LigCaretList",
         layout: Layout::Plain(&[
             Field { name: "Coverage", ty: Off16("Coverage"), rep: Rep::One, cond: Cond::Always },
             Field { name: "LigGlyphCount", ty: Count16, rep: Rep::One, cond: Cond::Always },
             Field { name: "LigGlyph", ty: Off16("LigGlyph"), rep: Rep::Count("LigGlyphCount", 0), cond: Cond::Always },
+        ]),
+    },
+    Def {
+        name: "LigCaretPoints",
+        layout: Layout::Plain(&[
+            Field { name: "DivsionPointCount", ty: Count16, rep: Rep::One, cond: Cond::Always },
+            Field { name: "DivisionPoint", ty: I16, rep: Rep::Count("DivsionPointCount", 0), cond: Cond::Always },
         ]),
     },
     Def {
@@ -1156,6 +1310,16 @@ static DEFS: &[Def] = &[
             Field { name: "ComponentCount", ty: Count16, rep: Rep::One, cond: Cond::Always },
             Field { name: "ComponentRecord", ty: Struct("ComponentRecord"), rep: Rep::Count("ComponentCount", 0), cond: Cond::Always },
         ]),
+    },
+    Def {
+        name: "LigatureCarets",
+        layout: Layout::Formats(
+            Width::U16,
+            &[
+                (0, &[Field { name: "Carets", ty: AatLookup("LigCaretDistances"), rep: Rep::One, cond: Cond::Always }]),
+                (1, &[Field { name: "Carets", ty: AatLookup("LigCaretPoints"), rep: Rep::One, cond: Cond::Always }]),
+            ],
+        ),
     },
     Def {
         name: "LigatureSet",
@@ -1472,6 +1636,34 @@ static DEFS: &[Def] = &[
                 ],
             )],
         ),
+    },
+    Def {
+        name: "OpticalBounds",
+        layout: Layout::Formats(
+            Width::U16,
+            &[
+                (0, &[Field { name: "OpticalBoundsDeltas", ty: AatLookup("OpticalBoundsDeltas"), rep: Rep::One, cond: Cond::Always }]),
+                (1, &[Field { name: "OpticalBoundsPoints", ty: AatLookup("OpticalBoundsPoints"), rep: Rep::One, cond: Cond::Always }]),
+            ],
+        ),
+    },
+    Def {
+        name: "OpticalBoundsDeltas",
+        layout: Layout::Plain(&[
+            Field { name: "Left", ty: I16, rep: Rep::One, cond: Cond::Always },
+            Field { name: "Top", ty: I16, rep: Rep::One, cond: Cond::Always },
+            Field { name: "Right", ty: I16, rep: Rep::One, cond: Cond::Always },
+            Field { name: "Bottom", ty: I16, rep: Rep::One, cond: Cond::Always },
+        ]),
+    },
+    Def {
+        name: "OpticalBoundsPoints",
+        layout: Layout::Plain(&[
+            Field { name: "Left", ty: I16, rep: Rep::One, cond: Cond::Always },
+            Field { name: "Top", ty: I16, rep: Rep::One, cond: Cond::Always },
+            Field { name: "Right", ty: I16, rep: Rep::One, cond: Cond::Always },
+            Field { name: "Bottom", ty: I16, rep: Rep::One, cond: Cond::Always },
+        ]),
     },
     Def {
         name: "Paint",
@@ -1918,6 +2110,17 @@ static DEFS: &[Def] = &[
         ]),
     },
     Def {
+        name: "Setting",
+        layout: Layout::Plain(&[
+            Field { name: "SettingValue", ty: U16, rep: Rep::One, cond: Cond::Always },
+            Field { name: "SettingNameID", ty: NameId, rep: Rep::One, cond: Cond::Always },
+        ]),
+    },
+    Def {
+        name: "Settings",
+        layout: Layout::Plain(&[Field { name: "Setting", ty: Struct("Setting"), rep: Rep::Count("SettingsCount", 0), cond: Cond::Always }]),
+    },
+    Def {
         name: "SinglePos",
         layout: Layout::Formats(
             Width::U16,
@@ -2096,6 +2299,7 @@ static DEFS: &[Def] = &[
             Field { name: "VarData", ty: Off32("VarData"), rep: Rep::Count("VarDataCount", 0), cond: Cond::Always },
         ]),
     },
+    Def { name: "ankr", layout: Layout::Plain(&[Field { name: "AnchorPoints", ty: Struct("AnchorPoints"), rep: Rep::One, cond: Cond::Always }]) },
     Def {
         name: "avar",
         layout: Layout::Plain(&[
@@ -2105,6 +2309,49 @@ static DEFS: &[Def] = &[
             Field { name: "AxisSegmentMap", ty: Struct("AxisSegmentMap"), rep: Rep::Count("AxisCount", 0), cond: Cond::Always },
             Field { name: "VarIdxMap", ty: Off32("DeltaSetIndexMap"), rep: Rep::One, cond: Cond::AtLeast("Version", 0x20000) },
             Field { name: "VarStore", ty: Off32("VarStore"), rep: Rep::One, cond: Cond::AtLeast("Version", 0x20000) },
+        ]),
+    },
+    Def {
+        name: "bsln",
+        layout: Layout::Plain(&[
+            Field { name: "Version", ty: Version, rep: Rep::One, cond: Cond::Always },
+            Field { name: "Baseline", ty: Struct("Baseline"), rep: Rep::One, cond: Cond::Always },
+        ]),
+    },
+    Def {
+        name: "cidg",
+        layout: Layout::Plain(&[Field { name: "CIDGlyphMapping", ty: Struct("CIDGlyphMapping"), rep: Rep::One, cond: Cond::Always }]),
+    },
+    Def {
+        name: "feat",
+        layout: Layout::Plain(&[
+            Field { name: "Version", ty: Version, rep: Rep::One, cond: Cond::Always },
+            Field { name: "FeatureNames", ty: Struct("FeatureNames"), rep: Rep::One, cond: Cond::Always },
+        ]),
+    },
+    Def {
+        name: "gcid",
+        layout: Layout::Plain(&[Field { name: "GlyphCIDMapping", ty: Struct("GlyphCIDMapping"), rep: Rep::One, cond: Cond::Always }]),
+    },
+    Def {
+        name: "lcar",
+        layout: Layout::Plain(&[
+            Field { name: "Version", ty: Version, rep: Rep::One, cond: Cond::Always },
+            Field { name: "LigatureCarets", ty: Struct("LigatureCarets"), rep: Rep::One, cond: Cond::Always },
+        ]),
+    },
+    Def {
+        name: "opbd",
+        layout: Layout::Plain(&[
+            Field { name: "Version", ty: Version, rep: Rep::One, cond: Cond::Always },
+            Field { name: "OpticalBounds", ty: Struct("OpticalBounds"), rep: Rep::One, cond: Cond::Always },
+        ]),
+    },
+    Def {
+        name: "prop",
+        layout: Layout::Plain(&[
+            Field { name: "Version", ty: Fixed, rep: Rep::One, cond: Cond::Always },
+            Field { name: "GlyphProperties", ty: Struct("GlyphProperties"), rep: Rep::One, cond: Cond::Always },
         ]),
     },
 ];

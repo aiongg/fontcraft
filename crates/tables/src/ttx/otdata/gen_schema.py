@@ -15,12 +15,28 @@ import sys
 from fontTools.ttLib.tables.otData import otData
 from fontTools.ttLib.tables.otTables import _equivalents
 
-# The otData ranges the writer covers: the common layout tables up to the first Apple table,
-# the COLR layouts, then the avar layouts. Variable composites and multi-variation stores are
-# left out.
-RANGES = [("LookupOrder", "ankr"), ("COLR", "AxisValueMap")]
+# The otData ranges the writer covers: the common layout tables, the Apple tables, the COLR
+# layouts, then the avar layouts. Variable composites, multi-variation stores and the Apple
+# glyph metamorphosis tables (mort, morx) are left out.
+RANGES = [("LookupOrder", "TSIC"), ("COLR", "AxisValueMap")]
 EXTRA = {"AxisValueMap", "AxisSegmentMap", "avar"}
-SKIP = {
+MORPH = {
+    "mort",
+    "MortChain",
+    "MortSubtable",
+    "morx",
+    "MorxChain",
+    "MorphFeature",
+    "MorxSubtable",
+    "StateHeader",
+    "RearrangementMorph",
+    "ContextualMorph",
+    "LigatureMorph",
+    "NoncontextualMorph",
+    "InsertionMorph",
+    "MorphClass",
+}
+SKIP = MORPH | {
     "AATLookupSegment",
     "MultiVarData",
     "MultiVarStore",
@@ -52,7 +68,9 @@ SIMPLE = {
     "LookupFlag": "LookupFlag",
     "STATFlags": "StatFlags",
     "VarIndex": "VarIndex",
-    "Flags32": "Flags32",
+    "char64": "Char64",
+    "CIDGlyphMap": "CidGlyphMap",
+    "GlyphCIDMap": "GlyphCidMap",
     "Angle": "Angle",
     "BiasedAngle": "BiasedAngle",
     "ExtendMode": "ExtendMode",
@@ -107,6 +125,10 @@ def ty(t, name):
     m = re.match(r"(\w+)\((\w+)\)$", t)
     if m and m.group(1) in OFFSET_TO:
         return f'{OFFSET_TO[m.group(1)]}("{resolve(m.group(2))}")'
+    if m and m.group(1) == "AATLookup":
+        return f'AatLookup("{resolve(m.group(2))}")'
+    if m and m.group(1) == "AATLookupWithDataOffset":
+        return f'AatLookupData("{resolve(m.group(2))}")'
     if "(" in t or t[:1].islower() or t == "GlyphID32":
         raise Unsupported(t)
     return f'Struct("{resolve(t)}")'
@@ -129,6 +151,8 @@ def cond(aux):
 def field(spec):
     t, name, repeat, aux, _ = spec
     kind = ty(t, name)
+    if isinstance(repeat, int) and repeat:
+        return f'Field {{ name: "{name}", ty: {kind}, rep: Rep::Fixed({repeat}), cond: Cond::Always }}'
     if repeat:
         assert isinstance(repeat, str), (name, repeat)
         return f'Field {{ name: "{name}", ty: {kind}, rep: Rep::Count("{repeat}", {int(aux or 0)}), cond: Cond::Always }}'

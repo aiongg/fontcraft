@@ -56,14 +56,22 @@ pub(crate) enum Ty {
     VarDataValue,
     /// A variation index of 32 bits; `0xFFFFFFFF` (no variation) is written without a value.
     VarIndex,
-    /// 32 flag bits, written as `0x%08X`.
-    Flags32,
     /// An angle stored as an F2Dot14 fraction of 180 degrees; the biased kind adds 1.0 first.
     Angle,
     BiasedAngle,
     /// The `uint8` enumerations of COLR, written as their lower-case names.
     ExtendMode,
     CompositeMode,
+    /// 64 bytes of ASCII text, ended by the first zero byte.
+    Char64,
+    /// An AAT lookup table read in place: glyphs to 16-bit values, which are numbers (`uint16`) or
+    /// offsets to tables of the named layout.
+    AatLookup(&'static str),
+    /// Offsets to an AAT lookup and to the data its values count from (the `ankr` table).
+    AatLookupData(&'static str),
+    /// The CID to glyph map of `cidg`, and the glyph to CID map of `gcid`.
+    CidGlyphMap,
+    GlyphCidMap,
     /// A record read in place, of the named layout.
     Struct(&'static str),
     /// Offsets of 16, 32 and 24 bits to a table of the named layout.
@@ -84,6 +92,8 @@ pub(crate) enum Rep {
     One,
     /// As many times as the named count says, plus the adjustment.
     Count(&'static str, i32),
+    /// A fixed number of times.
+    Fixed(usize),
 }
 
 /// When a field is present.
@@ -332,15 +342,25 @@ impl<'a> Walker<'a> {
         index: Option<usize>,
         depth: usize,
     ) -> Result<()> {
+        let attrs: Vec<(&str, String)> = index.map(|i| vec![("index", i.to_string())]).unwrap_or_default();
+        self.write_struct_with(class, r, w, element, attrs, depth)
+    }
+
+    /// [`Self::write_struct`] with the element's leading attributes given (`index`, or the
+    /// `glyph` of an AAT lookup entry).
+    fn write_struct_with(
+        &self,
+        class: &str,
+        r: &mut Reader,
+        w: &mut XmlWriter,
+        element: &str,
+        mut attrs: Vec<(&'static str, String)>,
+        depth: usize,
+    ) -> Result<()> {
         if depth > MAX_NESTING {
             return Err(TablesError::TooLarge { what: "the nesting of subtables", limit: MAX_NESTING });
         }
         w.check()?;
-        let index_text = index.map(|i| i.to_string());
-        let mut attrs: Vec<(&str, String)> = Vec::new();
-        if let Some(i) = &index_text {
-            attrs.push(("index", i.clone()));
-        }
         match class {
             "Coverage" => return self.coverage(r, w, element, &attrs),
             "ClassDef" => return self.class_def(r, w, element, &attrs),
@@ -404,6 +424,10 @@ impl<'a> Walker<'a> {
                     };
                     self.array_field(class, f, n, r, w, &mut dict, depth)?;
                 }
+                Rep::Fixed(n) => {
+                    let n = i64::try_from(n).unwrap_or(0);
+                    self.array_field(class, f, n, r, w, &mut dict, depth)?;
+                }
             }
             w.check()?;
         }
@@ -464,7 +488,18 @@ impl<'a> Walker<'a> {
             }
             Ty::I16 | Ty::F2Dot14 | Ty::Angle | Ty::BiasedAngle => i64::from(self.u16(r)? as i16),
             Ty::U24 => i64::from(self.u24(r)?),
-            Ty::U32 | Ty::Count32 | Ty::Tag | Ty::VarIndex | Ty::Flags32 => i64::from(self.u32(r)?),
+            Ty::U32 | Ty::Count32 | Ty::Tag | Ty::VarIndex => i64::from(self.u32(r)?),
+            Ty::Char64 => {
+                let text = self.char64(r);
+                let mut attrs: Vec<(&str, &str)> = idx.map(|i| vec![("index", i)]).unwrap_or_default();
+                attrs.push(("value", &text));
+                w.simple(f.name, &attrs);
+                return Ok(());
+            }
+            Ty::AatLookup(value) => return self.aat_lookup(f.name, value, r, w, depth),
+            Ty::AatLookupData(table) => return self.aat_lookup_data(f.name, table, r, w, depth),
+            Ty::CidGlyphMap => return self.cid_glyph_map(f.name, r, w),
+            Ty::GlyphCidMap => return self.glyph_cid_map(f.name, r, w),
             Ty::Fixed | Ty::Version => i64::from(self.u32(r)? as i32),
             Ty::ValueRecord => {
                 let which = if f.name.ends_with('2') { "ValueFormat2" } else { "ValueFormat1" };
@@ -556,7 +591,6 @@ impl<'a> Walker<'a> {
             Ty::Version => version_text(v),
             Ty::Angle => angle_text(v, 0.0),
             Ty::BiasedAngle => angle_text(v, 1.0),
-            Ty::Flags32 => format!("0x{:08X}", v & 0xFFFF_FFFF),
             Ty::ExtendMode | Ty::CompositeMode => enum_name(ty, v).unwrap_or_default().to_string(),
             Ty::VarIndex if v == 0xFFFF_FFFF => {
                 match index {
@@ -1010,6 +1044,173 @@ impl<'a> Walker<'a> {
         w.open(element, &attrs);
         for (glyph, value) in by_name {
             w.simple("Map", &[("glyph", glyph), ("outer", &(value >> 16).to_string()), ("inner", &(value & 0xFFFF).to_string())]);
+            w.check()?;
+        }
+        w.close(element);
+        Ok(())
+    }
+
+    // ── The Apple tables ──────────────────────────────────────────────────────────────────────
+
+    /// 64 bytes as text up to the first zero byte, other bytes than ASCII replaced (fontTools'
+    /// `Char64`). Bytes past the table read as nothing; the reads after it fail.
+    fn char64(&self, r: &mut Reader) -> String {
+        let end = r.pos.saturating_add(64);
+        let bytes = self.data.get(r.pos.min(self.data.len())..end.min(self.data.len())).unwrap_or_default();
+        r.pos = end;
+        let text = bytes.split(|b| *b == 0).next().unwrap_or_default();
+        text.iter().map(|b| if b.is_ascii() { char::from(*b) } else { '\u{FFFD}' }).collect()
+    }
+
+    /// The entries of an AAT lookup table at the reader's position (fontTools' `AATLookup.read`):
+    /// glyph id to 16-bit value, a later segment replacing an earlier one. Arrays of numbers
+    /// (`table` false) are cut short where the data ends, as fontTools reads them; offsets are not.
+    fn aat_entries(&self, r: &mut Reader, table: bool) -> Result<BTreeMap<u32, u16>> {
+        let start = r.pos;
+        let format = self.u16(r)?;
+        let mut map = BTreeMap::new();
+        let mut work = 0usize;
+        let mut charge = |n: usize| -> Result<()> {
+            work = work.saturating_add(n);
+            if work > MAX_LAYOUT_ITEMS {
+                return Err(TablesError::TooLarge { what: "the glyphs of an AAT lookup", limit: MAX_LAYOUT_ITEMS });
+            }
+            Ok(())
+        };
+        let values = |r: &mut Reader, count: usize| -> Result<Vec<u32>> {
+            if table { (0..count).map(|_| self.u16(r).map(u32::from)).collect() } else { self.uints(r, i64::try_from(count).unwrap_or(i64::MAX), 2) }
+        };
+        match format {
+            0 => {
+                let count = self.order.len();
+                charge(count)?;
+                for (gid, v) in values(r, count)?.into_iter().enumerate() {
+                    map.insert(u32::try_from(gid).unwrap_or(u32::MAX), v as u16);
+                }
+            }
+            2 | 4 | 6 => {
+                let unit = usize::from(self.u16(r)?);
+                let units = self.u16(r)?;
+                let least = if format == 6 { 4 } else { 6 };
+                if unit < least {
+                    return Err(self.err(format!("an AAT lookup's unit size {unit} is too small")));
+                }
+                for i in 0..usize::from(units) {
+                    let mut seg = Reader { pos: start.saturating_add(i.saturating_mul(unit)).saturating_add(12), ..r.clone() };
+                    if format == 6 {
+                        let gid = self.u16(&mut seg)?;
+                        let value = self.u16(&mut seg)?;
+                        if gid != 0xFFFF {
+                            map.insert(u32::from(gid), value);
+                        }
+                        continue;
+                    }
+                    let last = self.u16(&mut seg)?;
+                    let first = self.u16(&mut seg)?;
+                    let value = self.u16(&mut seg)?;
+                    if last == 0xFFFF || last < first {
+                        continue;
+                    }
+                    let count = usize::from(last - first) + 1;
+                    charge(count)?;
+                    if format == 2 {
+                        for gid in u32::from(first)..=u32::from(last) {
+                            map.insert(gid, value);
+                        }
+                    } else {
+                        let mut array = Reader { pos: start.saturating_add(usize::from(value)), ..r.clone() };
+                        for (k, v) in values(&mut array, count)?.into_iter().enumerate() {
+                            map.insert(u32::from(first) + u32::try_from(k).unwrap_or(0), v as u16);
+                        }
+                    }
+                }
+            }
+            8 => {
+                let first = u32::from(self.u16(r)?);
+                let count = usize::from(self.u16(r)?);
+                charge(count)?;
+                for (k, v) in values(r, count)?.into_iter().enumerate() {
+                    map.insert(first + u32::try_from(k).unwrap_or(0), v as u16);
+                }
+            }
+            _ => return Err(self.err(format!("unsupported AAT lookup format {format}"))),
+        }
+        Ok(map)
+    }
+
+    /// Glyph-to-value entries sorted by glyph name, as fontTools writes a lookup's dictionary.
+    fn by_name(&self, map: BTreeMap<u32, u16>) -> Vec<(String, u16)> {
+        let mut out: Vec<(String, u16)> = map.into_iter().map(|(gid, v)| (self.name(gid), v)).collect();
+        out.sort();
+        out.dedup_by(|b, a| a.0 == b.0);
+        out
+    }
+
+    /// An AAT lookup table read in place (fontTools' `AATLookup.xmlWrite`): one `Lookup` per
+    /// glyph, holding a number, or the table its value points at (offsets count from the start of
+    /// the table that holds the lookup).
+    fn aat_lookup(&self, element: &str, value: &'static str, r: &mut Reader, w: &mut XmlWriter, depth: usize) -> Result<()> {
+        let table = value != "uint16";
+        let entries = self.by_name(self.aat_entries(r, table)?);
+        w.open(element, &[]);
+        for (glyph, v) in entries {
+            if !table {
+                w.simple("Lookup", &[("glyph", &glyph), ("value", &v.to_string())]);
+            } else if v == 0 {
+                w.simple("Lookup", &[("glyph", &glyph), ("empty", "1")]);
+            } else {
+                let mut sub = r.sub(u32::from(v));
+                self.write_struct_with(value, &mut sub, w, "Lookup", vec![("glyph", glyph)], depth.saturating_add(1))?;
+            }
+            w.check()?;
+        }
+        w.close(element);
+        Ok(())
+    }
+
+    /// The anchor lookup of `ankr` (fontTools' `AATLookupWithDataOffset`): an offset to an AAT
+    /// lookup of offsets, which count from the second offset.
+    fn aat_lookup_data(&self, element: &str, table: &'static str, r: &mut Reader, w: &mut XmlWriter, depth: usize) -> Result<()> {
+        let lookup = self.u32(r)?;
+        let data = self.u32(r)?;
+        let mut sub = r.sub(lookup);
+        let entries = self.by_name(self.aat_entries(&mut sub, false)?);
+        w.open(element, &[]);
+        for (glyph, v) in entries {
+            let offset = data.checked_add(u32::from(v)).ok_or_else(|| self.err("an anchor offset past 4 GiB"))?;
+            let mut at = r.sub(offset);
+            self.write_struct_with(table, &mut at, w, "Lookup", vec![("glyph", glyph)], depth.saturating_add(1))?;
+            w.check()?;
+        }
+        w.close(element);
+        Ok(())
+    }
+
+    /// The CID to glyph map of `cidg`: a count, then a glyph id per CID (0xFFFF for none).
+    fn cid_glyph_map(&self, element: &str, r: &mut Reader, w: &mut XmlWriter) -> Result<()> {
+        let count = self.u16(r)?;
+        let glyphs = self.uints(r, i64::from(count), 2)?;
+        w.open(element, &[]);
+        for (cid, gid) in glyphs.into_iter().enumerate() {
+            if gid != 0xFFFF {
+                w.simple("CID", &[("cid", &cid.to_string()), ("glyph", &self.name(gid))]);
+                w.check()?;
+            }
+        }
+        w.close(element);
+        Ok(())
+    }
+
+    /// The glyph to CID map of `gcid`: a count, then a CID per glyph (0xFFFF for none); entries
+    /// past the font's glyphs are dropped. Written sorted by glyph name.
+    fn glyph_cid_map(&self, element: &str, r: &mut Reader, w: &mut XmlWriter) -> Result<()> {
+        let count = self.u16(r)?;
+        let cids = self.uints(r, i64::from(count), 2)?;
+        let mut entries: Vec<(&str, u32)> = self.order.iter().zip(cids).filter(|(_, cid)| *cid != 0xFFFF).map(|(g, cid)| (g.as_str(), cid)).collect();
+        entries.sort();
+        w.open(element, &[]);
+        for (glyph, cid) in entries {
+            w.simple("CID", &[("glyph", glyph), ("value", &cid.to_string())]);
             w.check()?;
         }
         w.close(element);

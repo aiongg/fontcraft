@@ -294,11 +294,11 @@ pub(super) fn write_data(tag: Tag, data: &[u8], locator_data: &[u8], font: &Sfnt
 
 fn write_glyph(data: &[u8], format: u16, color: bool, name: &str, order: &[String], w: &mut XmlWriter) -> Result<()> {
     let (prefix, metrics, rest): (&str, Option<(&str, &[(&str, bool)])>, usize) = match format {
-        1 | 2 | 8 => ("ebdt", Some(("SmallGlyphMetrics", &SMALL_METRICS[..])), 5),
+        1 | 2 | 8 => ("ebdt", Some(("SmallGlyphMetrics", SMALL_METRICS.as_slice())), 5),
         5 => ("ebdt", None, 0),
-        6 | 7 | 9 => ("ebdt", Some(("BigGlyphMetrics", &BIG_METRICS[..])), 8),
-        17 if color => ("cbdt", Some(("SmallGlyphMetrics", &SMALL_METRICS[..])), 5),
-        18 if color => ("cbdt", Some(("BigGlyphMetrics", &BIG_METRICS[..])), 8),
+        6 | 7 | 9 => ("ebdt", Some(("BigGlyphMetrics", BIG_METRICS.as_slice())), 8),
+        17 if color => ("cbdt", Some(("SmallGlyphMetrics", SMALL_METRICS.as_slice())), 5),
+        18 if color => ("cbdt", Some(("BigGlyphMetrics", BIG_METRICS.as_slice())), 8),
         19 if color => ("cbdt", None, 0),
         _ => return Err(TablesError::invalid(format!("unknown bitmap image format {format}"))),
     };
