@@ -54,6 +54,16 @@ pub(crate) enum Ty {
     DeltaValue,
     VarIdxMapValue,
     VarDataValue,
+    /// A variation index of 32 bits; `0xFFFFFFFF` (no variation) is written without a value.
+    VarIndex,
+    /// 32 flag bits, written as `0x%08X`.
+    Flags32,
+    /// An angle stored as an F2Dot14 fraction of 180 degrees; the biased kind adds 1.0 first.
+    Angle,
+    BiasedAngle,
+    /// The `uint8` enumerations of COLR, written as their lower-case names.
+    ExtendMode,
+    CompositeMode,
     /// A record read in place, of the named layout.
     Struct(&'static str),
     /// Offsets of 16, 32 and 24 bits to a table of the named layout.
@@ -299,6 +309,12 @@ impl<'a> Walker<'a> {
     pub(crate) fn write_top(&self, class: &str, w: &mut XmlWriter) -> Result<()> {
         let def = schema::def(class).ok_or_else(|| self.err(format!("no layout for '{class}'")))?;
         let mut r = Reader::default();
+        if class == "COLR" {
+            // LayerRecordCount follows the offset of the array it counts (fontTools' `COLR.decompile`).
+            let mut at = Reader { pos: 12, ..Reader::default() };
+            let count = self.u16(&mut at)?;
+            r.set("LayerRecordCount", i64::from(count));
+        }
         let Layout::Plain(fields) = def.layout else {
             return Err(self.err(format!("'{class}' is not a top-level layout")));
         };
@@ -331,6 +347,7 @@ impl<'a> Walker<'a> {
             "SingleSubst" | "MultipleSubst" | "AlternateSubst" | "LigatureSubst" => return self.simple_subst(class, r, w, element, &attrs),
             "DeltaSetIndexMap" => return self.delta_set_index_map(r, w, element, &attrs),
             "VarIdxMap" => return self.var_idx_map(r, w, element, &attrs),
+            "ClipList" => return self.clip_list(r, w, element, &attrs, depth),
             _ => {}
         }
         let def = schema::def(class).ok_or_else(|| self.err(format!("no layout for '{class}'")))?;
@@ -348,6 +365,18 @@ impl<'a> Walker<'a> {
                     Width::U16 => self.u16(r)?,
                 };
                 attrs.push(("Format", format.to_string()));
+                if class == "Paint" {
+                    // A Paint names its format in a comment after the start tag (fontTools' `Paint.toXML`).
+                    let Some(kind) = PAINT_FORMATS.get(usize::from(format).wrapping_sub(1)) else {
+                        return Err(self.err(format!("unknown Paint format {format}")));
+                    };
+                    let fields = formats.iter().find(|(n, _)| *n == format).map_or(&[][..], |(_, f)| *f);
+                    let attrs: Vec<(&str, &str)> = attrs.iter().map(|(k, v)| (*k, v.as_str())).collect();
+                    w.open_with_comment(element, &attrs, kind);
+                    self.fields(class, fields, r, w, depth)?;
+                    w.close(element);
+                    return Ok(());
+                }
                 formats.iter().find(|(n, _)| *n == format).map_or(&[][..], |(_, f)| *f)
             }
         };
@@ -423,12 +452,19 @@ impl<'a> Walker<'a> {
         let idx = index_text.as_deref();
         let value: i64 = match f.ty {
             Ty::U8 | Ty::Count8 => i64::from(self.u8(r)?),
+            Ty::ExtendMode | Ty::CompositeMode => {
+                let v = i64::from(self.u8(r)?);
+                if enum_name(f.ty, v).is_none() {
+                    return Err(self.err(format!("'{class}' has an unknown {} {v}", f.name)));
+                }
+                v
+            }
             Ty::U16 | Ty::Count16 | Ty::NameId | Ty::StatFlags | Ty::LookupFlag | Ty::Glyph | Ty::DeciPoints | Ty::ValueFormat => {
                 i64::from(self.u16(r)?)
             }
-            Ty::I16 | Ty::F2Dot14 => i64::from(self.u16(r)? as i16),
+            Ty::I16 | Ty::F2Dot14 | Ty::Angle | Ty::BiasedAngle => i64::from(self.u16(r)? as i16),
             Ty::U24 => i64::from(self.u24(r)?),
-            Ty::U32 | Ty::Count32 | Ty::Tag => i64::from(self.u32(r)?),
+            Ty::U32 | Ty::Count32 | Ty::Tag | Ty::VarIndex | Ty::Flags32 => i64::from(self.u32(r)?),
             Ty::Fixed | Ty::Version => i64::from(self.u32(r)? as i32),
             Ty::ValueRecord => {
                 let which = if f.name.ends_with('2') { "ValueFormat2" } else { "ValueFormat1" };
@@ -518,6 +554,17 @@ impl<'a> Walker<'a> {
             Ty::Fixed => fixed_to_str(v as f64 / 65536.0, 16),
             Ty::F2Dot14 => fixed_to_str(v as f64 / 16384.0, 14),
             Ty::Version => version_text(v),
+            Ty::Angle => angle_text(v, 0.0),
+            Ty::BiasedAngle => angle_text(v, 1.0),
+            Ty::Flags32 => format!("0x{:08X}", v & 0xFFFF_FFFF),
+            Ty::ExtendMode | Ty::CompositeMode => enum_name(ty, v).unwrap_or_default().to_string(),
+            Ty::VarIndex if v == 0xFFFF_FFFF => {
+                match index {
+                    Some(i) => w.simple(name, &[("index", i)]),
+                    None => w.simple(name, &[]),
+                }
+                return;
+            }
             _ => v.to_string(),
         };
         let mut attrs: Vec<(&str, &str)> = Vec::with_capacity(2);
@@ -967,6 +1014,228 @@ impl<'a> Walker<'a> {
         }
         w.close(element);
         Ok(())
+    }
+
+    /// A COLR clip list, written as fontTools' `ClipList.toXML` writes it: the glyphs that share a
+    /// clip box grouped under one `Clip`, the groups in order of their first glyph name. A glyph
+    /// that two records give keeps the first record's box; glyph ids past the font are dropped.
+    fn clip_list(&self, r: &mut Reader, w: &mut XmlWriter, element: &str, attrs: &[(&str, String)], depth: usize) -> Result<()> {
+        let format = self.u8(r)?;
+        if format != 1 {
+            return Err(self.err(format!("unknown clip list format {format}")));
+        }
+        let count = self.u32(r)?;
+        let mut records = Vec::new();
+        for _ in 0..count {
+            let start = self.u16(r)?;
+            let end = self.u16(r)?;
+            let offset = self.u24(r)?;
+            records.push((start, end, offset));
+        }
+        // Every box is read, used or not, as fontTools reads them; a null offset is no box.
+        let mut keyed = Vec::with_capacity(records.len());
+        for (start, end, offset) in records {
+            let key = if offset == 0 { None } else { Some(self.clip_box_key(r, offset)?) };
+            keyed.push((start, end, offset, key));
+        }
+        // Each group: the box's values (its key), where the first box is, and its glyphs.
+        let mut groups: Vec<(Vec<i64>, u32, Vec<&str>)> = Vec::new();
+        let mut group_of: BTreeMap<Vec<i64>, usize> = BTreeMap::new();
+        let mut seen = vec![false; self.order.len()];
+        let mut work = 0usize;
+        for (start, end, offset, key) in keyed {
+            if start > end {
+                continue;
+            }
+            let last = usize::from(end).min(self.order.len().saturating_sub(1));
+            for gid in usize::from(start)..=last {
+                work = work.saturating_add(1);
+                if work > MAX_LAYOUT_ITEMS {
+                    return Err(TablesError::TooLarge { what: "the glyph ranges of a clip list", limit: MAX_LAYOUT_ITEMS });
+                }
+                let (Some(name), Some(done)) = (self.order.get(gid).map(String::as_str), seen.get_mut(gid)) else { continue };
+                if *done {
+                    continue;
+                }
+                *done = true;
+                let Some(key) = key.clone() else { return Err(self.err("a clip record without a clip box")) };
+                match group_of.get(&key).and_then(|i| groups.get_mut(*i)) {
+                    Some(group) => group.2.push(name),
+                    None => {
+                        group_of.insert(key.clone(), groups.len());
+                        groups.push((key, offset, vec![name]));
+                    }
+                }
+            }
+        }
+        for group in &mut groups {
+            group.2.sort_unstable();
+        }
+        groups.sort_by(|a, b| a.2.first().cmp(&b.2.first()));
+        let format_text = format.to_string();
+        let mut attrs: Vec<(&str, &str)> = attrs.iter().map(|(k, v)| (*k, v.as_str())).collect();
+        attrs.push(("Format", &format_text));
+        w.open(element, &attrs);
+        for (_, offset, glyphs) in groups {
+            w.open("Clip", &[]);
+            for glyph in glyphs {
+                w.simple("Glyph", &[("value", glyph)]);
+            }
+            let mut sub = r.sub(offset);
+            self.write_struct("ClipBox", &mut sub, w, "ClipBox", None, depth.saturating_add(1))?;
+            w.close("Clip");
+            w.check()?;
+        }
+        w.close(element);
+        Ok(())
+    }
+
+    /// What tells two clip boxes apart: the values of their format's fields, without the format.
+    fn clip_box_key(&self, r: &Reader, offset: u32) -> Result<Vec<i64>> {
+        let mut sub = r.sub(offset);
+        let format = self.u8(&mut sub)?;
+        let fields = match format {
+            1 => 4,
+            2 => 5,
+            _ => return Ok(Vec::new()),
+        };
+        let mut key = Vec::with_capacity(fields);
+        for _ in 0..4 {
+            key.push(i64::from(self.u16(&mut sub)? as i16));
+        }
+        if fields == 5 {
+            key.push(i64::from(self.u32(&mut sub)?));
+        }
+        Ok(key)
+    }
+}
+
+/// The names of the Paint formats 1 to 32 (fontTools' `PaintFormat`).
+const PAINT_FORMATS: [&str; 32] = [
+    "PaintColrLayers",
+    "PaintSolid",
+    "PaintVarSolid",
+    "PaintLinearGradient",
+    "PaintVarLinearGradient",
+    "PaintRadialGradient",
+    "PaintVarRadialGradient",
+    "PaintSweepGradient",
+    "PaintVarSweepGradient",
+    "PaintGlyph",
+    "PaintColrGlyph",
+    "PaintTransform",
+    "PaintVarTransform",
+    "PaintTranslate",
+    "PaintVarTranslate",
+    "PaintScale",
+    "PaintVarScale",
+    "PaintScaleAroundCenter",
+    "PaintVarScaleAroundCenter",
+    "PaintScaleUniform",
+    "PaintVarScaleUniform",
+    "PaintScaleUniformAroundCenter",
+    "PaintVarScaleUniformAroundCenter",
+    "PaintRotate",
+    "PaintVarRotate",
+    "PaintRotateAroundCenter",
+    "PaintVarRotateAroundCenter",
+    "PaintSkew",
+    "PaintVarSkew",
+    "PaintSkewAroundCenter",
+    "PaintVarSkewAroundCenter",
+    "PaintComposite",
+];
+
+/// The COLR composite modes, in the order of their numbers.
+const COMPOSITE_MODES: [&str; 28] = [
+    "clear",
+    "src",
+    "dest",
+    "src_over",
+    "dest_over",
+    "src_in",
+    "dest_in",
+    "src_out",
+    "dest_out",
+    "src_atop",
+    "dest_atop",
+    "xor",
+    "plus",
+    "screen",
+    "overlay",
+    "darken",
+    "lighten",
+    "color_dodge",
+    "color_burn",
+    "hard_light",
+    "soft_light",
+    "difference",
+    "exclusion",
+    "multiply",
+    "hsl_hue",
+    "hsl_saturation",
+    "hsl_color",
+    "hsl_luminosity",
+];
+
+/// The name of value `v` of a COLR enumeration; `None` for a number it does not define.
+fn enum_name(ty: Ty, v: i64) -> Option<&'static str> {
+    let i = usize::try_from(v).ok()?;
+    match ty {
+        Ty::ExtendMode => ["pad", "repeat", "reflect"].get(i).copied(),
+        Ty::CompositeMode => COMPOSITE_MODES.get(i).copied(),
+        _ => None,
+    }
+}
+
+/// An angle stored as F2Dot14 `raw`, as fontTools' `Angle.toString` writes it: `(raw / 16384 +
+/// bias) * 180`, in the shortest decimal closer to that multiple of 180 / 16384 than to any other.
+fn angle_text(raw: i64, bias: f64) -> String {
+    let value = (raw as f64 / 16384.0 + bias) * 180.0;
+    nearest_multiple_text(value, 180.0 / 16384.0)
+}
+
+/// fontTools' `nearestMultipleShortestRepr`: `value` rounded to a multiple of `factor`, in the
+/// fewest decimals that still single out that multiple.
+fn nearest_multiple_text(value: f64, factor: f64) -> String {
+    if value == 0.0 || !value.is_finite() {
+        return if value.is_finite() { "0.0".into() } else { py_float(value) };
+    }
+    let value = (value / factor + 0.5).floor() * factor;
+    let eps = 0.5 * factor;
+    let (lo, hi) = (value - eps, value + eps);
+    if lo.trunc() != hi.trunc() {
+        return py_float(value.round_ties_even());
+    }
+    let lo_s = format!("{lo:.8}");
+    let hi_s = format!("{hi:.8}");
+    if lo_s.len() != hi_s.len() || lo_s == hi_s {
+        return py_float(value);
+    }
+    let first_diff = lo_s.bytes().zip(hi_s.bytes()).position(|(a, b)| a != b).unwrap_or(lo_s.len());
+    let Some(period) = lo_s.find('.') else { return py_float(value) };
+    if first_diff <= period {
+        return py_float(value);
+    }
+    format!("{:.*}", first_diff.saturating_sub(period), value)
+}
+
+impl XmlWriter {
+    /// `<name a="v" …><!-- comment -->` and one level deeper, as fontTools writes a Paint.
+    pub(crate) fn open_with_comment(&mut self, name: &str, attributes: &[(&str, &str)], comment: &str) {
+        let e = if self.spent() {
+            super::super::Element::default()
+        } else {
+            let before = self.out.len();
+            self.start(name, attributes);
+            self.out.push('>');
+            self.comment_body(comment);
+            self.out.push('\n');
+            self.charge_text(before);
+            self.element(name, attributes)
+        };
+        self.depth = self.depth.saturating_add(1);
+        self.open_elements.push(e);
     }
 }
 
