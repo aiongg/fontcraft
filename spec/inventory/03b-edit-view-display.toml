@@ -2367,6 +2367,7 @@ summary = "Query returning the features available in the Features menu, which ar
 ref = "Edit View › Previewing & Testing › Previewing OpenType Features"
 status = "inferred"
 notes = "Also returns whether the document has a feature compile, whether the font changed since, the pairs Localized Forms offers and the reason the text could not be shaped, if any."
+guesses = ["A query of our own so agents can read the Features menu's state; the reference app shows the same features, active tags and script and language only in the menu, so comparing the reply with the open menu settles its contents."]
 
 [[behavior]]
 id = "features.menuNeedsCompile"

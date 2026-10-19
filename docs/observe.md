@@ -32,11 +32,11 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1296 rows to check: 2002 guesses and 471 observe steps.**
+**1306 rows to check: 2022 guesses and 471 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
-| **Built milestones (M0 to M6)** | all | **485** |
+| **Built milestones (M0 to M6)** | all | **486** |
 | Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 100 |
 | Built milestones (M0 to M6) | Edit View: text mode and preview | 32 |
 | Built milestones (M0 to M6) | Components and anchors | 83 |
@@ -47,11 +47,11 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Font Info and features | 9 |
 | Built milestones (M0 to M6) | Files: open, import, export | 40 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
-| Built milestones (M0 to M6) | Elsewhere | 4 |
-| **Later milestones (after M6)** | all | **811** |
+| Built milestones (M0 to M6) | Elsewhere | 5 |
+| **Later milestones (after M6)** | all | **820** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 80 |
-| Later milestones (after M6) | Edit View: text mode and preview | 15 |
-| Later milestones (after M6) | Components and anchors | 37 |
+| Later milestones (after M6) | Edit View: text mode and preview | 20 |
+| Later milestones (after M6) | Components and anchors | 39 |
 | Later milestones (after M6) | Filters | 5 |
 | Later milestones (after M6) | Spacing and metrics keys | 5 |
 | Later milestones (after M6) | Kerning and the Kerning window | 6 |
@@ -60,12 +60,12 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Interpolation | 71 |
 | Later milestones (after M6) | Hinting | 98 |
 | Later milestones (after M6) | Colour fonts | 54 |
-| Later milestones (after M6) | Files: open, import, export | 52 |
+| Later milestones (after M6) | Files: open, import, export | 54 |
 | Later milestones (after M6) | Settings and the window | 13 |
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 62 |
 | Later milestones (after M6) | Elsewhere | 19 |
 
-## Built milestones (M0 to M6) (485)
+## Built milestones (M0 to M6) (486)
 
 ### Edit View: drawing, guides, layers and the Palette (100)
 
@@ -1362,8 +1362,10 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `sampleStrings.groups` (setting, M5, handbook): Sample Strings
   - Guess: The built-in default holds groups of our own choosing: spacing strings built around n, o, H and O with placeholders, figures, and traditional pangrams for Latin, Greek and Cyrillic; no source lists the reference defaults we may copy.
 
-### Elsewhere (4)
+### Elsewhere (5)
 
+- [ ] `audit.outlineFixOrder` (behavior, M3, docs): Outline fixes run in a fixed order: coincident points, flat curves and…
+  - Guess: The findings of binary checks are not computed again between layer steps; their calls (widths, anchors, emptying a glyph) do not depend on point addresses. Comparing with a run that recompiles before each step would settle whether it matters.
 - [ ] `audit.run` (M3, docs, live): Run Audit
   - Guess: A source's instances are compiled as TrueType for the binary checks whatever outline format the source exports, and at most 32 of them; a run of the reference auditors on a source would settle whether the CFF flavour or every instance should be read.
   - Guess: On a source, the family checks receive every instance compiled from it, the variable font included; checks that should compare only the static instances would need the reference tools' behaviour on sources to settle it.
@@ -1378,7 +1380,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (811)
+## Later milestones (after M6) (820)
 
 ### Edit View: drawing, guides, layers and the Palette (80)
 
@@ -1649,7 +1651,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `path.setPenPoint` (fidelity, inferred): Set Pen Point
   - Open (our design, not confirmed): Writes or clears the pen-point data of a node or of a free pen point, the action behind the pen-point fields of the Info box. Clearing the data is how a pen point on a node is removed. The reference exposes this only as Info box fields.
 
-### Edit View: text mode and preview (15)
+### Edit View: text mode and preview (20)
 
 - [ ] `textToken.syntax` (behavior, M7, handbook): In text fields that support them, `{{{token}}}` is replaced by a computed…
   - Guess: A token FontCraft cannot resolve stays in the text as written, and the compile report names it, as glyphsLib leaves it; a misspelt token in the reference app settles it.
@@ -1669,6 +1671,10 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The bounds are spelled as the reference's scripting object names them (`bounds.origin.x`, `bounds.size.width`); the reference app with those tokens settles it.
 - [ ] `font.expandTextTokens` (M7, inferred, live): Expand Text Tokens
   - Guess: Tokens that name nothing are left as written and listed; a name field with an unknown token exported from the running app would settle it.
+- [ ] `features.previewScope` (behavior, M8, handbook): Edit View applies substitution features, kerning and cursive attachment
+  - Guess: Cursive attachment replaces the kerning of the pair it joins, and only the glyph layer's own `exit` and `entry` anchors count, not anchors a component brings; a kerned pair of attached Arabic glyphs in the reference app would settle it.
+- [ ] `features.buttonShowsActiveTags` (behavior, M8, handbook): The Features button displays the tags of all active features and is…
+  - Guess: The button reads Features when no feature is on, and Localized Forms alone also gives it the accent colour; the button with only Localized Forms on in the reference app would settle it.
 - [ ] `text.shaping` (behavior, M8, handbook): Edit View text is shaped with the compiled feature code: the substitution…
   - Guess: Only the features active in the Features menu apply, with no default features, so Arabic text shows its positional forms only when init, medi and fina are on; typing Arabic in an Edit View tab of the reference app with no feature active would settle it.
   - Guess: A glyph typed by name is shaped as a private-use character that maps to that glyph, so substitutions apply to it as to typed characters; typing /a.sc next to a feature that substitutes it in the reference app would settle it.
@@ -1683,11 +1689,18 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `textPreview.unicodeBidi` (behavior, M8, handbook): Text Preview orders mixed right-to-left and left-to-right text by the Unicode Bidirectional…
   - Guess: A paragraph separator inside a line (U+2029) starts a new bidirectional paragraph whose runs follow the line's earlier runs, each paragraph ordered on its own; pasting text with U+2029 into the reference app's Text Preview would settle it.
   - Observe: In F2 (Arabic), type "12 34" inside right-to-left text in Text Preview: note the order of the digits.
-- [ ] `editView.setLocalizedForms` (M8, handbook): Localized Forms
-  - Guess: The menu offers the script and language pairs that the font's enabled locl entries name in their `script` and `language` statements, in order of appearance; the menu's entries in the reference app would settle it.
+- [ ] `editView.toggleFeature` (M8, handbook, live): Toggle Feature
+  - Guess: A tag the last feature compile does not have is accepted and kept, and applies once a compile has it, so automation can turn a feature on before compiling; the reference app only offers compiled features in its menu, so nothing there settles it.
+- [ ] `editView.clearFeatures` (M8, handbook, live): Deactivate All Features
+  - Guess: The dash also turns Localized Forms off; choosing the dash with Localized Forms on in the reference app would settle it.
+- [ ] `editView.setLocalizedForms` (M8, handbook, live): Localized Forms
+  - Guess: The menu offers the script and language pairs the compiled locl feature is registered for, without the default language, in the compiled font's order; turned on without a pair, Localized Forms takes the first; the menu's entries in the reference app would settle it.
+  - Guess: Localized Forms' script tag replaces the script of every run of the tab's text for the OpenType lookup, and its language tag applies to all of it; Localized Forms with Turkish on mixed Latin and Greek text in the reference app would settle it.
   - Observe: In F1 (Latin features), turn on Localized Forms in Edit View, choose Turkish and type i: write down the menu's script and language entries and note the glyph shown.
-- [ ] `editView.getFeatures` (M8, inferred): Get Preview Features
-  - Open (our design, not confirmed): Query returning the features available in the Features menu, which are active in the tab, and the chosen script and language.
+- [ ] `editView.getFeatures` (M8, inferred, live): Get Preview Features
+  - Guess: A query of our own so agents can read the Features menu's state; the reference app shows the same features, active tags and script and language only in the menu, so comparing the reply with the open menu settles its contents.
+- [ ] `editView.featuresMenu` (panel, M8, handbook): Features menu
+  - Guess: Type-ahead highlights the matching entry and Return picks it, rather than toggling the entry as soon as it matches; typing a tag with the menu open in the reference app would settle it.
 - [ ] `preview.respectsInstanceData` (behavior, M9, handbook): Instance previews take intermediate and alternate layers into account and apply some,…
   - Guess: The preview of an instance applies the instance's interpolation parameters (Local Interpolation, InterpolationWeightY, manual interpolation), Rename Glyphs and Remove Glyphs, and no filters; settle by previewing an instance with a filter parameter in the reference app.
   - Observe: In F1 (two masters), put a filter parameter on the Regular instance and preview Regular: note whether the preview applies the filter.
@@ -1698,12 +1711,22 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `view.showDetailsAcrossGlyphs` (M13, docs, live): Details Across Glyphs
   - Guess: The other glyphs on the edited glyph's line (at most 200) get their nodes, handles and the display aids that are on (indexes, Tunni lines, tensions, lengths, beam values); selection and metric-line highlights stay with the edited glyph. The reference app on a word would settle which details it draws.
 
-### Components and anchors (37)
+### Components and anchors (39)
 
-- [ ] `anchor.setContext` (M8, inferred): Set Context
-  - Open (our design, not confirmed): Stores the context code of a contextual anchor, the action behind the Anchor Context field. The reference exposes it only as that field.
+- [ ] `anchors.contextual` (behavior, M8, handbook): An anchor whose name starts with an asterisk (for example *bottom) is…
+  - Guess: The contextual features are appended after the font's code, so their lookups come before the generated cursive and kerning lookups in the lookup list; a fontmake build with kerning, cursive and contextual anchors would settle the order.
+  - Guess: A variable font keeps the plain anchors and warns that the contexts were left out; fontmake's variable build would settle what the reference does.
+  - Guess: `abvm` and `blwm` take each contextual anchor by its own base name, where ufo2ft adds a context's whole anchor list to a feature when any one of them matches; a font with both kinds under one context would settle it.
+- [ ] `anchors.contextSyntax` (behavior, M8, handbook): The anchor context is OpenType feature code for a glyph sequence in…
+  - Guess: Tokens in a context are expanded with the compiled master's values before the context is read, as in feature code; a context whose token fails is left out with a warning.
+  - Guess: A context line without `*`, or with `{`, `}`, `#` or a double quote, leaves the anchor's context out with a warning, where ufo2ft passes it to the feature compiler; the running app would show whether it refuses such a context.
+  - Guess: With several semicolons the text up to the last one is the flag part, where ufo2ft fails on a second semicolon; the running app would settle it.
+- [ ] `anchor.setContext` (M8, inferred, live): Set Context
+  - Guess: Only an anchor whose name starts with `*` takes a context, a plain anchor is refused, since the mark writer reads contexts of `*` anchors only; the running app would show whether the field appears for other anchors.
+  - Guess: An empty or blank context removes the user-data key rather than storing an empty string; a file saved by the reference app after clearing the field would settle it.
   - Observe: In F6 (contextual anchors), type a context with a token into a `*top` anchor's Anchor Context field and save: note the user data key that stores it.
 - [ ] `palette.anchorContext` (panel, M8, handbook): Anchor Context
+  - Guess: The field is multi-line, since a context may hold several lines, commits when it loses the focus, and Escape restores the stored text; the running app would show its size and when it commits.
   - Observe: In F6 (contextual anchors), select a `*top` anchor in Edit View: note the Anchor Context field in the Palette and how it accepts a context with a token.
 - [ ] `cap.attachesToTwoAdjacentNodes` (behavior, M13, handbook): A cap component is bound to two nodes that are neighbours on…
   - Observe: Select two nodes that are not neighbours on one path, then two nodes on different paths, and open the context menu: note whether Add Cap Component is shown, disabled or missing.
@@ -1861,9 +1884,10 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `spaceCenter.inputSyntax` (behavior, M13, docs): The spacing text accepts plain characters, /name for a glyph by name,…
   - Guess: Space Center takes the reference spellings /name, /name@layer, /?, /!, /:group and \n unchanged; Edit View's text mode keeps the primary reference's escapes only.
 - [ ] `spacing.autoSpace` (M13, docs, live): Auto Space
-  - Guess: Method optical is FontCraft's own (open decision D11, docs/plans/M13.md § 3): for each side, the side profile sampled every `step` units (default 5) over a band from the baseline less its overshoot to the reference height plus its overshoot, clipped to `depth` (default 15% of the x-height) inward from its extreme, and the advance edge enclose a mean white per inked row equal to `area`. Neither FontLab nor FontForge documents its method; comparing the results on a font spaced in either app would show how far they differ.
-  - Guess: The mean white is taken over the rows with ink rather than over the whole band, so a glyph with ink in part of the band (a period, a hyphen) is not pushed away by the empty rows; FontLab's and FontForge's pages say nothing about such glyphs.
-  - Guess: Without `area`, the area of a group is the mean of the four sides of the font's own n and o (capitals and figures: H and O) as they stand, so those glyphs keep about their spacing; a group without its control glyphs takes the other group's, and a master without any is refused. FontForge asks for a separation instead; it accepts `separation` as twice the area.
+  - Guess: Method optical is FontCraft's own (open decision D11, docs/plans/M13.md § 3): for each side, the side profile sampled every `step` units (default 5) over a band from the baseline less its overshoot to the reference height plus its overshoot is clipped to `depth` inward from its extreme; the distance from the advance edge to the extreme plus a weight times the clipped profile's mean depth equals `area`. Neither FontLab nor FontForge documents its method; comparing the results on a font spaced in either app would show how far they differ.
+  - Guess: The clipping depth defaults to 10% of the x-height: on the corpus measure (docs/plans/M13.md § 5) shares from 5% to 10% did about equally well and 15% or more did worse. Spacing a test font in FontLab with its defaults would show whether its depth is similar.
+  - Guess: The mean depth is taken over the rows with ink rather than over the whole band, so a glyph with ink in part of the band (a period, a hyphen) is not pushed away by the empty rows; FontLab's and FontForge's pages say nothing about such glyphs.
+  - Guess: The area and the depth weight of a group are calibrated on the font's own n, o and v (capitals and figures: H, O and V) as they stand: a least-squares line through their six sides, white outside the extreme against mean depth, gives the weight as its slope (held between 0 and 2) and the area as its value at depth 0, so a straight, a round and a diagonal side keep about their spacing. With only straight controls the weight is 1. A group without its control glyphs takes the other group's; a master without any has weight 1 and is refused unless `area` is given, which replaces the area and keeps the weight. On the corpus measure at the same depth, fitting the weight lowered Inter's worst median error from 89% to 75% against a weight fixed at 1, with Oswald's about the same (12%). FontForge asks for a separation instead; it accepts `separation` as twice the area.
   - Guess: Capitals and figures (case upper or category Number) use the cap-height band, everything else the x-height band.
   - Guess: Without `glyphs`, every exported letter and figure is spaced; without `masters`, every master. Masters that take their widths from another are skipped.
   - Guess: Sidebearings are rounded to whole units, then held between `min` and `max`. Method custom defaults to 5% of the em.
@@ -1884,7 +1908,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `kerning.groupClassNames` (behavior, M8, handbook): Every kerning group is available in feature code as a glyph class…
   - Guess: Only the `@MMK_L_`/`@MMK_R_` classes the code refers to and no class entry defines are written, before the first entry, with the glyphs the target exports in font order, and a group without such glyphs stays undefined so the compiler names the reference; the expanded code of a reference export settles it.
 - [ ] `kerning.autoKern` (M13, docs, live): Auto Kern
-  - Guess: The proposed value is the target separation minus the pair's optical gap, the mean horizontal distance between the left glyph's right profile and the right glyph's left profile over the same band and depth clipping as auto-spacing, rounded to the nearest 5 units by default; the target separation defaults to the optical gap of a reference pair (n n for lowercase, H H for capitals) without kerning. FontLab documents neither K1 nor K2 (open decision D11).
+  - Guess: The proposed value is the target separation minus the pair's optical gap, rounded to the nearest 5 units by default; the target separation defaults to the optical gap of a reference pair (n n for lowercase, H H for capitals) without kerning. The optical gap is taken between the left glyph's right profile and the right glyph's left profile over auto-spacing's bands, each clipped to `depth` (default 30% of the x-height) inward from its extreme, as the power mean of order −2 of the row distances (each at least 1 unit), so the rows where the glyphs come closest count most. On the corpus measure (docs/plans/M13.md § 5) the depth of 15% that auto-spacing first used agreed in sign with Inter's kerning in 74% of pairs, 25% to 30% in about 85%, and the power mean added one to two points and raised the correlation. FontLab documents neither K1 nor K2 (open decision D11).
   - Guess: A pair mixing a capital or figure with any other glyph is measured over the x-height band, and its target is the mean of the two glyphs' reference gaps (n n and H H); comparing proposals for To, Av and the like with a font kerned in the reference app would settle it.
   - Guess: A group side is measured on one member: the glyph named like the group, else the group's first member in glyph order; FontLab's page does not say how class pairs are measured.
   - Guess: With `touching`, the gap and the reference gap are both measured at the outlines' closest approach, as Kern to Distance measures them; FontForge's Lookups page names the Touching option without describing its measure in detail.
@@ -3532,7 +3556,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The colour is stored as the text `R,G,B,A` with components from 0 to 255 (the picker also reads `#RRGGBBAA` and a list of numbers). Settled by saving a font with a Master Color from the reference and reading the stored value.
   - Guess: Opacity is the alpha slider of the colour picker. Settled by opening the picker in the reference.
 
-### Files: open, import, export (52)
+### Files: open, import, export (54)
 
 - [ ] `export.instanceExportFolder` (behavior, M7, handbook): An instance carrying the Export Folder custom parameter is written to that…
   - Guess: The sub-path is used as written, `..` segments included, as the handbook says; an absolute path, an empty segment, a folder name with a character such as `:` or `\`, or a path of more than 32 segments makes export skip that instance with the reason, one trailing `/` is ignored, and the warnings name every file written outside the export destination; an Export Folder of `../x` and one of `/tmp/x` in the reference app settle it.
@@ -3591,6 +3615,10 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: In F1 (Latin features), import a `.fea` file whose class and feature names already exist in the font: note how each clash is resolved.
 - [ ] `dialog.importFeatures` (panel, M8, handbook): Import Features
   - Guess: The file is typed as a path, as in the other import dialogs, until the shell has a file chooser limited to .fea files.
+- [ ] `compile.nameFeaOverrides` (behavior, M8, docs): Name records declared in a feature-file name table block replace generated records…
+  - Guess: In a variable font, whose axis and instance names are allocated after the layout stage, a code name whose ID meets one of them is left out with a warning, so the axis names stay right; allocating the variable names before the layout stage, as fontc does, would settle it.
+- [ ] `compile.feaTableOverrides` (behavior, M8, docs): Table blocks in feature code override computed values after the builders run:…
+  - Guess: An `OS/2` block with only one optical size writes the other as 0, the zero feaLib leaves in the fields a raised version adds; a fontmake build of a source with only `UpperOpSize` would settle it.
 - [ ] `file.exportVariable` (M9, handbook, live): Export Variable Fonts
   - Guess: A glyph that has no layer for the origin master does not vary and keeps the origin's empty outline, with a warning; exporting such a font from the reference app would settle it.
   - Guess: An intermediate layer that lies outside the axes of a variable font setting (one that disables masters) is left out of that font, with a note; exporting such a setting from the reference app would settle it.
