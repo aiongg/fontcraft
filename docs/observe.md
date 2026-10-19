@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1335 rows to check: 2091 guesses and 483 observe steps.**
+**1336 rows to check: 2098 guesses and 484 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,7 +48,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 40 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 5 |
-| **Later milestones (after M6)** | all | **849** |
+| **Later milestones (after M6)** | all | **850** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 85 |
 | Later milestones (after M6) | Edit View: text mode and preview | 25 |
 | Later milestones (after M6) | Components and anchors | 39 |
@@ -60,7 +60,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Interpolation | 71 |
 | Later milestones (after M6) | Hinting | 106 |
 | Later milestones (after M6) | Colour fonts | 54 |
-| Later milestones (after M6) | Files: open, import, export | 54 |
+| Later milestones (after M6) | Files: open, import, export | 55 |
 | Later milestones (after M6) | Settings and the window | 13 |
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 62 |
 | Later milestones (after M6) | Elsewhere | 19 |
@@ -1380,7 +1380,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (849)
+## Later milestones (after M6) (850)
 
 ### Edit View: drawing, guides, layers and the Palette (85)
 
@@ -1843,7 +1843,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `font.detectComposites` (M13, docs, live): Detect Composites
   - Guess: A match needs every point of the other glyph's outline within 0.5 unit after the best translation, or after a translation and flip when `flips` is on; FontLab gives no tolerance.
   - Guess: Only glyphs whose layer has closed paths and no components serve as bases; running it in the reference app on a font whose base glyphs are themselves composites would settle it.
-  - Guess: Bases are tried from the most nodes down, a base must have fewer nodes than the target or as many and come earlier in the glyph order (no cycles), and among bases of equal size one whose name (without suffix and 'comb') appears in the target's name goes first; comparing the reference app's choice between identical outlines (period and dotaccentcomb) would settle it.
+  - Guess: Bases are tried from the most nodes down, and a base must come before the target in an order of nodes, then combining marks (a name whose part before the first suffix ends in 'comb'), then fewer suffixes, then glyph order (no cycles), so of two glyphs with the same outline the combining mark, or the name without a suffix, is the base of the other; comparing the reference app's choice between identical outlines (acute and acutecomb, colon and colon.tf) would settle it.
+  - Guess: Of bases with the same outline that match the same paths, the one whose name (without suffix and 'comb') appears in the target's name goes first, then a combining mark, then the one that needs the shortest shift (two.numr rather than two.dnom in a fraction); the reference app's choice between identical outlines at different heights would settle it.
+  - Guess: A glyph that detection itself finds made of two or more glyphs (a copy of such a glyph counts too) is not used as a base for part of a larger glyph, unless it is a combining mark (stacked marks such as circumflexacutecomb are often built from other marks); it still serves a glyph whose whole outline it is. Running the reference app on a flattened font with Abreve and Abrevedotbelow would settle it.
   - Guess: Without `layer` or `layers` every master layer is searched, each on its own, and a glyph whose masters got different components is warned about; the reference app's behaviour on a multi-master font would settle it.
   - Guess: A mirrored match is a mirrored copy drawn in the opposite direction, as a mirrored component draws once decomposed; the offset is rounded to the font's grid when the match still holds.
   - Guess: A detected component keeps the default automatic alignment when aligning puts it where the outline was (within the tolerance) and leaves the width as it is; alignment is turned off on the components it would move, and on all new components of a layer whose width it would change, as the primary reference's Import Metrics does for metrics that alignment would change. Checking the alignment setting of components the reference app detected, with and without matching anchors, would settle it.
@@ -2848,15 +2850,18 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A master's export (a font without instances, or masters exported as fonts) has no Autohint parameter to turn on, so the string is reported as not used there; a reference export of a font without instances that carries the string would settle it.
   - Observe: T5: give one of two instances a Filter parameter `Autohinting`, export both as CFF with Autohint unticked, and note which font has hints; repeat with the instance's Autohint parameter set off.
 - [ ] `autohint.tt.option.increaseXHeight` (behavior, M10, handbook): The x-height increase limit (ttfautohint increase-x-height, default 14) makes the x-height round…
-  - Guess: From 6 PPM to the x-height increase limit the built-in autohinter rounds the xHeight zone up from an eighth of a pixel above a row; the ttfautohint manual says only that it rounds up much more often, and the x-height rows of the autohint measure compare the two.
+  - Guess: Under the built-in autohinter the zones round to the nearest row after the x-height scaling, as ttfautohint's output does, not by TTFZoneRoundingThreshold; zone and stem deltas still apply on top. The reference app autohinting a font with that parameter would settle it.
+  - Guess: The built-in autohinter scales the family zones it uses up to TTFFamilyZonesThreshold like the zones they replace; ttfautohint has no family zones.
+  - Guess: An autohinted export leaves out the xHeight zone, and with it the x-height scaling, when the font draws none of u, v, x, z, o, e, s, c, and the capHeight zone when it draws none of T, H, E, Z, O, C, Q, S: the letters the ttfautohint manual lists for those zones, without which ttfautohint's output on the corpus leaves those heights unsnapped. The reference app autohinting such a font would settle it.
 - [ ] `autohint.tt.option.windowsCompatibility` (behavior, M10, handbook): Windows compatibility (ttfautohint windows-compatibility) adds two blue zones at the OS/2 usWinAscent…
   - Guess: The built-in autohinter's Windows compatibility adds zones one unit high at usWinAscent and −usWinDescent, which snap extremes there to the nearest row rather than keeping them below the clipping line; a hinted export of a glyph that reaches usWinAscent, rendered under GDI, would settle it.
 - [ ] `autohint.tt.option.info` (behavior, M10, handbook): By default the autohinter appends its name and version to the version…
   - Guess: With FontCraft's own TrueType autohinter (decided in M10 § 7, question 2) the name strings are left alone unless detailed or plain info is asked for; the reference app's choice between its default and No Autohint Info would settle it.
   - Observe: T3: export as TTF with Autohint and the default TTFAutohint options; read name ID 5 and note whether autohinter version information was added to it.
 - [ ] `autohint.tt.controlInstructions.syntax` (behavior, M10, handbook): The control instructions are lines of text, one instruction each, starting with…
-  - Guess: The built-in autohinter turns a touch or point correction into a vertical Delta at its sizes, one cell up or down by the sign of the y shift; shifts under half a pixel and x shifts give none and are reported; both act before IUP. The external program applies them as its manual describes.
-  - Guess: The built-in autohinter makes left and right points a rounded horizontal Snap and keeps nodir points out of every instruction; the style forms (script feature @ glyphs, script feature width) are read and left out.
+  - Guess: The built-in autohinter turns the y shift of a touch correction into a vertical Delta before IUP, one pixel up or down for a shift of at least half a pixel; point shifts and every x shift move the point after IUP by the shift in eighths of a pixel. Stored by autohint.tt.run or hint.tt.autohintGlyph, point shifts become Deltas as touch shifts do and x shifts are reported. The external program applies them as its manual describes.
+  - Guess: The built-in autohinter treats each left or right point as a one-point segment from its x plus the left offset to its x plus the right offset: snapped to a zone it lies in, else a vertical Stem from the nearest flat run above or below that overlaps the segment within 1.5 times the glyph's widest horizontal stem, else rounded to the grid. The manual's own example (a stem formed with a neighbouring segment) is the case it covers; ttfautohint's output on a glyph with a left or right point would settle the rest.
+  - Guess: The built-in autohinter keeps nodir points out of every instruction, and reads the style forms (script feature @ glyphs, script feature width) and leaves them out.
 - [ ] `export.ttfAutohintBinary` (setting, M10, inferred): Trusted ttfautohint program
   - Guess: A document may only ask for the user's trusted ttfautohint program, unlike the reference app, which runs the program the parameter names; we chose this for safety because a document from elsewhere could otherwise run any program on the user's machine.
 - [ ] `Ignore Vertical Hints` (parameter, M10, handbook): In TrueType export, leaves out every manual stem hint linked to a…
@@ -3186,9 +3191,11 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: T1: turn on View › Show Hints, open n and try to drag a hint marker with the Select tool, then with each other tool; note which tools can move or edit a hint.
   - Observe: T1: with Show Hints on and off, right-click a node of n and note whether Add Horizontal Hint is in the menu each time.
 - [ ] `hinting.ps.manual.select` (behavior, M10, handbook): Clicking a hint's number badge selects the hint; Shift+click adds to or…
+  - Guess: The arrow keys move selected hints as they move selected nodes, the whole hint at once, so an end linked to a node becomes a number; an arrow along a hint's edges leaves it alone; with several hints selected each moves in its own undo step. The handbook says nothing about arrow keys and hints; pressing an arrow key with a linked hint selected in the reference app would settle it.
   - Guess: Tab after the last hint wraps to the first and Shift+Tab before the first wraps to the last; with several hints selected Tab moves on from the one latest in list order; trying it in the reference app would settle it.
   - Guess: A click on a hint's marker selects the hint as a click on its badge does; the reference app would settle it.
   - Observe: T1: in n, select the last hint and press Tab; note whether the selection wraps to the first hint. Then select two hints and press Tab; note which hint is selected next.
+  - Observe: T1: in n, select a stem hint linked to two nodes and press Up and then Shift+Up; note whether the hint moves, by how much, and whether its ends stay linked to the nodes.
 - [ ] `hinting.ps.manual.dragMarkers` (behavior, M10, handbook): A hint has two blue markers at its edges: a circle at…
   - Guess: Dragging the origin marker moves only that edge, and a dragged edge lands on whole units; the reference app would settle both.
   - Observe: T1: drag the circle of a stem hint of H whose ends are numbers and note whether the other edge stays or the whole hint moves; note whether the values are whole numbers.
@@ -3665,7 +3672,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The colour is stored as the text `R,G,B,A` with components from 0 to 255 (the picker also reads `#RRGGBBAA` and a list of numbers). Settled by saving a font with a Master Color from the reference and reading the stored value.
   - Guess: Opacity is the alpha slider of the colour picker. Settled by opening the picker in the reference.
 
-### Files: open, import, export (54)
+### Files: open, import, export (55)
 
 - [ ] `export.instanceExportFolder` (behavior, M7, handbook): An instance carrying the Export Folder custom parameter is written to that…
   - Guess: The sub-path is used as written, `..` segments included, as the handbook says; an absolute path, an empty segment, a folder name with a character such as `:` or `\`, or a path of more than 32 segments makes export skip that instance with the reason, one trailing `/` is ignored, and the warnings name every file written outside the export destination; an Export Folder of `../x` and one of `/tmp/x` in the reference app settle it.
@@ -3714,6 +3721,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: General fields an instance carries are shown read-only, since the project commands edit only the built-in fields and the custom parameters; editing a localized name in a project in the reference app settles whether they are editable there.
   - Observe: Open a new project, link font B, right-click an instance in the sidebar: note the context menu's items.
   - Observe: Edit an instance in an unsaved project and close the window: note whether a prompt appears and what it offers.
+- [ ] `compile.styleLinking` (behavior, M7, docs): Style-linked groups hold at most four fonts (Regular, Italic, Bold, Bold Italic)…
+  - Guess: A single-source designspace whose instance states no style-map names takes ufo2ft's fallbacks from the instance's style, where fontmake keeps the source UFO's style-map names; a fontmake build of such a source with style-map names in its UFO would settle it.
 - [ ] `open.reconstructsFeatures` (behavior, M8, handbook): OpenType layout from a compiled font is turned back into feature code…
   - Observe: Open a compiled OTF exported from F1 (Latin features) with a lookup used by two features and contextual kerning: note whether a prefix named Prefix holds the shared lookup, and what happens to the contextual kerning.
 - [ ] `file.importFeatures` (M8, handbook, live): Features…
