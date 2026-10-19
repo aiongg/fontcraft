@@ -154,7 +154,7 @@ fn gsub(ids: &Ids) -> Vec<u8> {
 fn gpos(ids: &Ids) -> Vec<u8> {
     let flag = wl::LookupFlag::empty();
     let x = |v: i16| wpos::ValueRecord::new().with_x_advance(v);
-    let mut firsts = vec![(ids.g("A"), ids.g("V"), -50), (ids.g("T"), ids.g("o"), -40)];
+    let mut firsts = [(ids.g("A"), ids.g("V"), -50), (ids.g("T"), ids.g("o"), -40)];
     firsts.sort_by_key(|p| p.0);
     let pairs = wpos::PositionLookup::Pair(wl::Lookup::new(
         flag,
@@ -176,9 +176,9 @@ fn gpos(ids: &Ids) -> Vec<u8> {
             ],
         )],
     ));
-    let mut marks = vec![(ids.g("acute"), wpos::AnchorTable::format_1(250, 500)), (ids.g("grave"), wpos::AnchorTable::format_1(240, 510))];
+    let mut marks = [(ids.g("acute"), wpos::AnchorTable::format_1(250, 500)), (ids.g("grave"), wpos::AnchorTable::format_1(240, 510))];
     marks.sort_by_key(|m| m.0);
-    let mut bases = vec![(ids.g("A"), wpos::AnchorTable::format_1(300, 700)), (ids.g("o"), wpos::AnchorTable::format_1(300, 450))];
+    let mut bases = [(ids.g("A"), wpos::AnchorTable::format_1(300, 700)), (ids.g("o"), wpos::AnchorTable::format_1(300, 450))];
     bases.sort_by_key(|b| b.0);
     let mut mark = wl::Lookup::new(
         wl::LookupFlag::USE_MARK_FILTERING_SET,
@@ -235,7 +235,8 @@ fn otl(result: &SubsetResult, tag: [u8; 4]) -> String {
 fn gdef_classes(result: &SubsetResult) -> Vec<(String, u16)> {
     let names = glyph_names(&result.font).unwrap();
     let t = read_fonts::tables::gdef::Gdef::read(FontData::new(result.font.get(*b"GDEF").unwrap())).unwrap();
-    let mut out: Vec<(String, u16)> = t.glyph_class_def().unwrap().unwrap().iter().filter(|(_, c)| *c != 0).map(|(g, c)| (names[g.to_u16() as usize].clone(), c)).collect();
+    let mut out: Vec<(String, u16)> =
+        t.glyph_class_def().unwrap().unwrap().iter().filter(|(_, c)| *c != 0).map(|(g, c)| (names[g.to_u16() as usize].clone(), c)).collect();
     out.sort();
     out
 }

@@ -976,7 +976,7 @@ pub(super) fn cff2_to_cff(cff2: &[u8], advances: &[u16], names: Option<&[String]
             (font_name, charset, None, None)
         }
         None => {
-            let registry = strings.sid("Adobe")?;
+            let registry = strings.sid("Adobe")?; // brand-ok: the CFF registry value
             let ordering = strings.sid("Identity")?;
             top.push(Entry::of_ints(OP_ROS, &[i64::from(registry), i64::from(ordering), 0])?);
             // CID n is glyph n: format 2 with one range.

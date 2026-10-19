@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1349 rows to check: 2137 guesses and 491 observe steps.**
+**1349 rows to check: 2144 guesses and 492 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -3763,7 +3763,15 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `compile.styleLinking` (behavior, M7, docs): Style-linked groups hold at most four fonts (Regular, Italic, Bold, Bold Italic)…
   - Guess: A single-source designspace whose instance states no style-map names takes ufo2ft's fallbacks from the instance's style, where fontmake keeps the source UFO's style-map names; a fontmake build of such a source with style-map names in its UFO would settle it.
 - [ ] `open.reconstructsFeatures` (behavior, M8, handbook): OpenType layout from a compiled font is turned back into feature code…
+  - Guess: Lookups that must come before a shared lookup to keep the lookup order go into Prefix as well; opening a font with a shared lookup in the middle of its lookup list in the reference app would settle it.
+  - Guess: The languagesystem statements go into a prefix named Languagesystems; the handbook names only the Prefix entry.
+  - Guess: A lookup only one feature uses is written inside that feature, where the feature first uses it; the handbook says only where shared lookups go.
+  - Guess: When the document's kerning cannot give back every kern pair lookup (other values, device tables, other lookup flags, kerning read in part), the kerning is cleared and the kern feature stays code, so export does not kern twice; opening such a font in the reference app would settle it.
+  - Guess: A font whose glyph names feature syntax cannot hold opens with every reconstructed entry turned off and a warning; no source says what the reference does.
+  - Guess: A font whose layout rules use glyph ids past its glyph count opens with every reconstructed entry turned off, a warning, and the kerning read kept; no source says what the reference does.
+  - Guess: A stylistic set's name comes back as the default-language label, read from the name table's English record.
   - Observe: Open a compiled OTF exported from F1 (Latin features) with a lookup used by two features and contextual kerning: note whether a prefix named Prefix holds the shared lookup, and what happens to the contextual kerning.
+  - Observe: Open the same OTF and note whether the languagesystem statements appear as their own prefix, and whether lookups used by one feature appear inside that feature or in Prefix.
 - [ ] `file.importFeatures` (M8, handbook, live): Features…
   - Guess: A class or prefix whose name the font already has gets the first free numeric suffix from 2 (`Upper2`), and the imported code's references to a renamed class follow it; importing into a font with clashing names in the reference app would settle it.
   - Guess: A feature whose tag the font already has is added as a second entry with that tag, because blocks of one tag add up in the feature-file language and a suffixed tag is not a tag; the same check would settle it.

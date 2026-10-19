@@ -612,7 +612,7 @@ mod tests {
     #[test]
     fn simple_glyphs_round_trip_through_the_glyf_reader() {
         let contour = vec![(0, 0, true), (0, 700, true), (300, 900, false), (600, 700, true), (600, 0, true)];
-        let (bytes, bbox) = encode_simple(&[contour.clone()]).unwrap();
+        let (bytes, bbox) = encode_simple(std::slice::from_ref(&contour)).unwrap();
         assert_eq!(bbox, Some([0, 0, 600, 900]));
         let glyph = read_fonts::tables::glyf::SimpleGlyph::read(FontData::new(&bytes)).unwrap();
         let read: Vec<(i32, i32, bool)> = glyph.points().map(|p| (i32::from(p.x), i32::from(p.y), p.on_curve)).collect();

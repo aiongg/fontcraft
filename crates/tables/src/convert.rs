@@ -639,22 +639,19 @@ fn post_table(old: Option<&[u8]>, format: PostFormat, names: &[String]) -> Resul
     for name in names {
         let index = match DEFAULT_GLYPH_NAMES.iter().position(|d| d == name) {
             Some(i) => i,
-            None => {
-                let i = match seen.get(name) {
-                    Some(i) => *i,
-                    None => {
-                        let bytes = name.as_bytes();
-                        let Ok(len) = u8::try_from(bytes.len()) else { return Ok((three(head), true)) };
-                        strings.push(len);
-                        strings.extend_from_slice(bytes);
-                        let i = 258 + extra;
-                        extra += 1;
-                        seen.insert(name.clone(), i);
-                        i
-                    }
-                };
-                i
-            }
+            None => match seen.get(name) {
+                Some(i) => *i,
+                None => {
+                    let bytes = name.as_bytes();
+                    let Ok(len) = u8::try_from(bytes.len()) else { return Ok((three(head), true)) };
+                    strings.push(len);
+                    strings.extend_from_slice(bytes);
+                    let i = 258 + extra;
+                    extra += 1;
+                    seen.insert(name.clone(), i);
+                    i
+                }
+            },
         };
         let Ok(index) = u16::try_from(index) else { return Ok((three(head), true)) };
         if index > 32_767 {

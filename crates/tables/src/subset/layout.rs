@@ -1435,7 +1435,7 @@ fn effective(v: &ValueRecord) -> ValueFormat {
         (v.y_advance, ValueFormat::Y_ADVANCE),
     ] {
         if value.is_some_and(|x| x != 0) {
-            f = f | flag;
+            f |= flag;
         }
     }
     for (device, flag) in [
@@ -1445,7 +1445,7 @@ fn effective(v: &ValueRecord) -> ValueFormat {
         (&v.y_advance_device, ValueFormat::Y_ADVANCE_DEVICE),
     ] {
         if device.as_ref().is_some() {
-            f = f | flag;
+            f |= flag;
         }
     }
     f

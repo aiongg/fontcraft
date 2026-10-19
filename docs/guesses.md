@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**2385 guesses on 1409 rows (586 of them live commands).**
+**2405 guesses on 1413 rows (588 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -741,6 +741,13 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `export.afmIsLossy` (behavior) | M5 | handbook | – | AFM values stay in the font's units and are not scaled to 1,000 units per em, so a round trip loses nothing; Adobe's note assumes 1,000. An AFM exported by the reference from a 2,048-unit font would settle it. |
 | `open.alignsCompositeMetrics` (behavior) | M6 | handbook | – | A UFO counts as an imported file and is aligned on opening, because the Source Formats page points a UFO to the importing behaviours and gives it its own Disable Automatic Alignment option in Font Info; the running app opening a UFO with an out-of-date composite would settle it. |
 | `open.alignsCompositeMetrics` (behavior) | M6 | handbook | – | Aligning on opening is not an undo step and does not mark the document as edited; the reference app's edited mark after opening a UFO with an out-of-date composite settles it. |
+| `open.reconstructsFeatures` (behavior) | M8 | handbook | – | Lookups that must come before a shared lookup to keep the lookup order go into Prefix as well; opening a font with a shared lookup in the middle of its lookup list in the reference app would settle it. |
+| `open.reconstructsFeatures` (behavior) | M8 | handbook | – | The languagesystem statements go into a prefix named Languagesystems; the handbook names only the Prefix entry. |
+| `open.reconstructsFeatures` (behavior) | M8 | handbook | – | A lookup only one feature uses is written inside that feature, where the feature first uses it; the handbook says only where shared lookups go. |
+| `open.reconstructsFeatures` (behavior) | M8 | handbook | – | When the document's kerning cannot give back every kern pair lookup (other values, device tables, other lookup flags, kerning read in part), the kerning is cleared and the kern feature stays code, so export does not kern twice; opening such a font in the reference app would settle it. |
+| `open.reconstructsFeatures` (behavior) | M8 | handbook | – | A font whose glyph names feature syntax cannot hold opens with every reconstructed entry turned off and a warning; no source says what the reference does. |
+| `open.reconstructsFeatures` (behavior) | M8 | handbook | – | A font whose layout rules use glyph ids past its glyph count opens with every reconstructed entry turned off, a warning, and the kerning read kept; no source says what the reference does. |
+| `open.reconstructsFeatures` (behavior) | M8 | handbook | – | A stylistic set's name comes back as the default-language label, read from the name table's English record. |
 | `open.kerningMostlyPreserved` (behavior) | M5 | handbook | – | A class read from a compiled font becomes a kerning group named after its first glyph in glyph order; no source says how the reference names recovered groups. |
 | `open.kerningMostlyPreserved` (behavior) | M5 | handbook | – | A glyph keeps the first class it is in on each side, and pairs of a later class with other members are stored as glyph pairs; opening a font whose subtables use overlapping classes in the reference app would settle it. |
 | `open.kerningMostlyPreserved` (behavior) | M5 | handbook | – | A `kern` feature record used only by right-to-left scripts fills the right-to-left kerning, any other the left-to-right kerning; opening an Arabic font in the reference app would settle it. |
@@ -1779,6 +1786,10 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 
 | Row | Milestone | Status | Live | Guess |
 |---|---|---|---|---|
+| `font.convert` | M12 | docs | yes | CFF to CFF2 writes the glyph names into post format 2 (fontTools leaves post as it was, usually format 3, so the names are lost); comparing with a reference app's CFF2 export would settle it. |
+| `font.convert` | M12 | docs | yes | CFF2 to CFF is name-keyed when post carries names and the table has one Font DICT, and CID-keyed Adobe-Identity-0 otherwise; fontTools always writes the CID-keyed form, so a reference user's expectation would settle it. |
+| `font.convert` | M12 | docs | yes | TrueType to CFF merges quadratic runs with fontTools' qu2cu at maxError (all curves cubic) by default; tx's own merging rule is not documented, so a corpus comparison of point counts with tx -cff would settle it. |
+| `font.convert` | M12 | docs | yes | The CFF Top DICT built from a TrueType font takes Notice from name ID 7, Copyright from name ID 0, FullName from ID 4, FamilyName from ID 16 or 1 and version from head.fontRevision; a comparison with tx and makeotf output would settle it. |
 | `font.transform` | M12 | docs | yes | A composite whose component glyph is transformed keeps showing it as before when the composite itself is not selected: the component's transform becomes the inverse of the matrix; a user transforming part of a font would settle whether the composite should follow its component instead. |
 | `font.transform` | M12 | docs | yes | scaleEm multiplies units per em by the absolute value of the matrix's a and changes nothing else, as rotatefont's -fm changes only the FontMatrix; a TrueType user would settle whether metrics should follow. |
 | `collection.unpack` | M12 | docs | yes | A member whose file name another member already takes gets the collection name plus -fontN, N its own index or the next number no other member uses; otc2otf on such a collection would settle it. |
@@ -1799,6 +1810,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `layout.decompileFeatures` | M12 | docs | yes | Mark classes are named @MC_lookup_subtable_class, one set per subtable, so a mark that has different anchors in two subtables of one lookup never collides. |
 | `layout.lintFeatures` | M12 | inferred | yes | Without a glyph set the compiler's messages about glyphs missing from the font are left out and hyphenated names are read as ranges; addfeatures always checks against a font. A request to check names against the code's own classes would change it. |
 | `source.merge` | M12 | inferred | yes | A merged designspace is refused when it would be written beside BASE without inPlace, because its UFOs would replace BASE's; a user workflow that wants that would settle it. |
+| `tableViewer.show` | M12 | inferred | yes | The Table Viewer opens from the Window menu with no shortcut; the companion tool is a separate application, so nothing settles a menu place. |
 | `cli.global.abbreviations` (behavior) | M12 | inferred | – | A subcommand or long option may be shortened to any prefix that names exactly one subcommand, or one option of that subcommand; an ambiguous prefix is a usage error listing the candidates. No source fixes the rule; a user complaint about a clash would settle it. |
 | `dump` (cli) | M12 | docs | – | A table view, @font or @glyphs given with --format ttx (the default) writes text as if --format text were given; a user of the reference command line would settle whether that should be refused instead. |
 | `dump` (cli) | M12 | docs | – | Where ttxn stops with a Python error (format-3 anchors, GPOS chaining contexts of format 2, --no-version on a Windows name ID 5), the normalised dump goes on: the anchor prints its coordinates, the rule prints in the GSUB form, and name ID 5 keeps the text before its first semicolon; a fixed ttxn would settle it. |
@@ -1822,8 +1834,14 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `metrics` (cli) | M12 | docs | – | The text form adds statistics, font-statistics and kerning sections in the same bracketed style as the glyph lines; a comparison with a future tx release or user feedback would settle the layout. |
 | `metrics` (cli) | M12 | docs | – | Glyph names come from post, then the CFF charset, then uniXXXX from the cmap, then glyphNNNNN, with #n added to repeats as fontTools does; tx's own fallback names (g1, g2) were not followed. |
 | `metrics` (cli) | M12 | docs | – | With several fonts on the command line the text forms print a '## FONT' line before each report. |
-| `subset` (cli) | M12 | docs | – | While variation subsetting is not built, a variable font loses every variation table together (fvar, avar, gvar, cvar, HVAR, VVAR, MVAR, STAT), so no subset claims axes without the data behind them; M12.19 replaces this. |
+| `convert` (cli) | M12 | docs | – | With IN OUT.woff or OUT.woff2 the output keeps the input's outline flavour; the reference tools have no such two-argument form, so user feedback would settle it. |
+| `subset` (cli) | M12 | docs | – | A variation index that names no delta set becomes no variation in the subset (pyftsubset stops with an error); a damaged corpus font would show what users expect. |
+| `subset` (cli) | M12 | docs | – | An sbix dupe or flip bitmap whose source glyph left the subset is dropped (pyftsubset stops with an error); a font that reuses bitmaps across glyphs would settle it. |
+| `subset` (cli) | M12 | docs | – | A CBLC index subtable of format 2 left with gaps is written as format 5 (pyftsubset stops with an error); a bitmap font with constant-size strikes would settle it. |
+| `subset` (cli) | M12 | docs | – | SVG documents keep the source text of what they keep, without blank text (pyftsubset writes them again through its XML library, so quoting and empty-element forms can differ); comparing documents after canonical XML on the corpus would settle it. |
 | `subset` (cli) | M12 | docs | – | Unused CFF subroutines stay in the subset (pyftsubset removes them); outlines are the same, the file is larger. Comparing sizes on the corpus would show whether pruning is worth porting. |
+| `subset` (cli) | M12 | docs | – | Feature, script and language tags shorter than four characters are padded with spaces before they are compared (pyftsubset pads scripts and languages only); a font with a short feature tag would settle it. |
+| `subset` (cli) | M12 | docs | – | References to lookups or features past the end of their lists, which make pyftsubset stop with an error, are dropped; a damaged corpus font would show what users expect. |
 | `instance` (cli) | M12 | docs | – | --named matches its pattern anywhere in the subfamily or PostScript name of an fvar named instance; checking makeinstancesufo and fontmake on a designspace with similar instance names would settle the matching rule. |
 | `instance` (cli) | M12 | docs | – | A named instance without a PostScript name is written as <input stem>-<subfamily without spaces>.<ext>; the reference tools name such files from the family and style names, which a run on such a font would show. |
 | `instance` (cli) | M12 | docs | – | A source instance at a location is named after the location (wght380), which sets its style name and file names; makeinstancesufo and fontmake only build the instances a designspace names, so no reference settles it. |
@@ -1884,8 +1902,10 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `sources diff` (cli) | M12 | inferred | – | Kerning groups are compared per glyph under the kerning part, and the non-kerning glyph groups of a UFO under the features part; how the companion tool groups them would settle it. |
 | `sources merge` (cli) | M12 | inferred | – | Merging is two-way only (base and other), with no common ancestor; a three-way merge needs version history, which FontCraft does not keep. A user workflow that needs three-way merging would settle it. |
 | `sources merge` (cli) | M12 | inferred | – | Without -o or --in-place the merge is refused rather than written beside BASE under a derived name; a user who expects a default output name would settle it. |
-| `tableViewer.show` | M12 | inferred | no | The Table Viewer opens from the Window menu with no shortcut; the companion tool is a separate application, so nothing settles a menu place. |
 | `sourceDiff.show` | M13 | inferred | no | Compare with File… sits in the File menu with no shortcut; nothing in the reference app settles a menu place. |
+| `window.tableViewer` (panel) | M12 | inferred | – | The table list is at the left and the selected table's view at the right, with the hex pane under the tree; a look at the companion tool's window would settle the layout. |
+| `window.tableViewer` (panel) | M12 | inferred | – | Differing tables are marked in the list by a byte comparison, and the field-level differences of one table are shown as a line comparison of its decoded text in a Differences view rather than as marks on tree records; the companion tool's comparison display would settle it. |
+| `window.tableViewer` (panel) | M12 | inferred | – | The search keeps the matching records with the records above them, and matches only records already read; the companion tool's search would settle whether it reads the whole table. |
 
 ## `21-qa-checks.toml`
 

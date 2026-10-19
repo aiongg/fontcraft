@@ -181,8 +181,11 @@ fn same_data(ours: &[u8], theirs: &[u8]) -> bool {
     ours.starts_with(theirs) && ours.len() - theirs.len() <= 1 && ours[theirs.len()..].iter().all(|b| *b == 0)
 }
 
+/// One item variation subtable: its region indices and rows.
+type Subtable = (Vec<u16>, Vec<Vec<i32>>);
+
 /// The region peaks, and each subtable's region indices and rows, of the store at `at`.
-fn store_view(table: &[u8], at: usize) -> (Vec<f32>, Vec<(Vec<u16>, Vec<Vec<i32>>)>) {
+fn store_view(table: &[u8], at: usize) -> (Vec<f32>, Vec<Subtable>) {
     let d = Data::new(*b"HVAR", table);
     let regions_at = at + d.u32_usize(at + 2).unwrap();
     let axes = usize::from(d.u16(regions_at).unwrap());
@@ -216,7 +219,7 @@ fn store_view(table: &[u8], at: usize) -> (Vec<f32>, Vec<(Vec<u16>, Vec<Vec<i32>
 }
 
 /// The regions (peaks), each subtable's region indices and rows, and the advance map of HVAR.
-type StoreView = (Vec<f32>, Vec<(Vec<u16>, Vec<Vec<i32>>)>, Option<Vec<u32>>);
+type StoreView = (Vec<f32>, Vec<Subtable>, Option<Vec<u32>>);
 
 fn hvar_view(table: &[u8], glyphs: usize) -> StoreView {
     let d = Data::new(*b"HVAR", table);

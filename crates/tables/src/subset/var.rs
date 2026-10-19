@@ -187,11 +187,14 @@ fn subset_metrics_variations(plan: &Plan, tag: Tag, bytes: &[u8]) -> Result<Vec<
 
 // ── Layout variation store ──
 
+/// A pruned table and its old → new variation index map.
+type Pruned = (Vec<u8>, BTreeMap<u32, u32>);
+
 /// The delta sets a layout table's devices use, renumbered: GDEF's store keeps only the delta
 /// sets in `used`, as `_pruneGDEF` does. Returns the new store bytes (`None` when no
 /// variation data is left) and the old → new variation index map; an index not in the map
 /// becomes "no variation".
-pub(crate) fn prune_layout_store(gdef: &[u8], used: &BTreeSet<u32>) -> Result<Option<(Vec<u8>, BTreeMap<u32, u32>)>> {
+pub(crate) fn prune_layout_store(gdef: &[u8], used: &BTreeSet<u32>) -> Result<Option<Pruned>> {
     let d = Data::new(*b"GDEF", gdef);
     if d.u16(0)? != 1 || d.u16(2)? < 3 {
         return Ok(None);
