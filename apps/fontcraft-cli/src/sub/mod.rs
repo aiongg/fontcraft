@@ -88,7 +88,7 @@ pub const ALL: &[Subcommand] = &[
 ];
 
 /// The subcommands whose packages have not landed: each prints its usage and refuses to run.
-pub const PLANNED: &[&str] = &["instance", "transform", "optimize"];
+pub const PLANNED: &[&str] = &["instance", "optimize"];
 
 /// The subcommand named `name`.
 pub fn find(name: &str) -> Option<&'static Subcommand> {
