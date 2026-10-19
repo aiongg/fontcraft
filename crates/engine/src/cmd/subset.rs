@@ -2,8 +2,8 @@
 //!
 //! Whole-file commands follow [`super::file_io`]: paths in, the input never changed, the output
 //! written atomically, a refusal on the web. Compiled fonts with TrueType or CFF outlines are
-//! subset with their layout tables; the variation and colour tables are dropped (the result
-//! lists them) until M12.19 subsets them.
+//! subset with their layout, variation, colour, bitmap and math tables; CFF2 fonts are refused
+//! and the tables the subsetter does not know are dropped (the result lists them).
 
 use std::path::PathBuf;
 

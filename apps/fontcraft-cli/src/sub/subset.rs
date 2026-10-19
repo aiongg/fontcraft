@@ -17,8 +17,7 @@ const USAGE: &str = "\
       Keep the chosen glyphs and every glyph they use (components, accent parts, .notdef), and
       remove the rest from every table. Glyphs the kept layout features can substitute in are
       kept too. The output is FONT.subset.EXT unless -o, --output-dir or --in-place says
-      otherwise. Variation and colour tables are dropped for now; --json lists every dropped
-      table and why.
+      otherwise. CFF2 fonts are refused; --json lists every dropped table and why.
 ";
 
 /// The options, as data.
