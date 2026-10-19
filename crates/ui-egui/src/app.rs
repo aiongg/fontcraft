@@ -383,6 +383,10 @@ impl FontcraftApp {
                 shell::pickers::import_outlines(self);
                 continue;
             }
+            if shell::pickers::wants_save_path(self, id, &params) {
+                shell::pickers::save_with_chooser(self, id, params);
+                continue;
+            }
             if shell::start_window::opens_chooser(self, id, &params) {
                 continue;
             }
