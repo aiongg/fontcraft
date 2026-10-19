@@ -134,6 +134,7 @@ mod stem_filters;
 mod stroke;
 mod subset_file;
 mod tables_file;
+mod tables_import;
 mod thickness;
 mod transform;
 mod transform_metrics;

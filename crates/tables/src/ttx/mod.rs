@@ -44,6 +44,7 @@ pub mod color;
 pub mod core;
 pub mod misc;
 pub mod otdata;
+mod read;
 pub mod read_cff;
 pub mod read_color;
 pub mod read_core;
@@ -778,14 +779,28 @@ fn cff_dict(data: &[u8]) -> Result<Vec<(u16, Vec<i64>)>> {
 pub struct ImportOptions {
     /// Tables to take from the text; empty takes every table it holds.
     pub tables: Vec<Tag>,
+    /// Keep the bounding boxes, `maxp` maxima and `hhea`/`vhea` extremes the text gives instead
+    /// of recalculating them from the outlines (`ttx -b`).
+    pub keep_bounds: bool,
 }
 
 /// `font` with the tables of the TTX `text` added or replaced. `font` may be empty
 /// ([`SfntFont::new`]) to build a font from text alone.
+///
+/// Each table element is compiled as fontTools' `ttx` compiles it (`ttx -m FONT DUMP.ttx`, the
+/// timestamp kept as the text gives it), names resolved against the text's `GlyphOrder` or, when
+/// it has none, the font's own glyph order; then the fields fontTools' compiler fills from other
+/// tables are filled (see the `read` module). A table element with `raw` or `ERROR`, or one no
+/// reader knows, is taken from its `hexdata`. A failure changes nothing: the font is returned
+/// only when every table was read.
 pub fn import(font: SfntFont, text: &str, options: &ImportOptions) -> Result<SfntFont> {
-    // M12.8: parse within the TTX limits, then the per-module dispatch.
-    let _ = (font, text, options);
-    Err(TablesError::NotBuilt("tables import"))
+    read::import(font, text, options)
+}
+
+/// [`import`] from a document already parsed (a split dump put together by the caller: every
+/// element that names another file with `src` replaced by that file's elements).
+pub fn import_tree(font: SfntFont, root: &Element, options: &ImportOptions) -> Result<SfntFont> {
+    read::import_tree(font, root, options)
 }
 
 /// One XML element of a TTX document.
@@ -813,9 +828,7 @@ impl Element {
 /// Parses TTX text into its root element within [`crate::limits::MAX_TTX_BYTES`],
 /// [`crate::limits::MAX_TTX_DEPTH`] and [`crate::limits::MAX_TTX_ELEMENTS`].
 pub fn parse(text: &str) -> Result<Element> {
-    // M12.8
-    let _ = text;
-    Err(TablesError::NotBuilt("TTX reading"))
+    read::parse(text)
 }
 
 /// Builds TTX text: indentation of two spaces per level, attributes in the order given, text and

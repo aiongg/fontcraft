@@ -99,7 +99,7 @@ const SHOW_DEPTH: usize = 3;
 // ── Reading and writing a font in its container ─────────────────────────────────────────────────
 
 /// How the font was stored, so it can be stored the same way again.
-enum Wrap {
+pub(super) enum Wrap {
     Plain,
     Woff(Extras),
     Woff2(woff2::Options),
@@ -107,10 +107,10 @@ enum Wrap {
     Collection(Vec<SfntFont>, usize),
 }
 
-struct Loaded {
-    path: PathBuf,
-    font: SfntFont,
-    wrap: Wrap,
+pub(super) struct Loaded {
+    pub(super) path: PathBuf,
+    pub(super) font: SfntFont,
+    pub(super) wrap: Wrap,
 }
 
 fn tables_err(e: impl Into<TablesError>) -> EngineError {
@@ -118,7 +118,7 @@ fn tables_err(e: impl Into<TablesError>) -> EngineError {
 }
 
 /// The font at `params[key]`, member `params[face_key]` of a collection.
-fn load(p: &Params<'_>, key: &str, face_key: &str) -> Result<Loaded> {
+pub(super) fn load(p: &Params<'_>, key: &str, face_key: &str) -> Result<Loaded> {
     let path = PathBuf::from(p.str(key)?);
     let input = file_io::read_input(&path)?;
     let face = p.get(face_key);
@@ -226,7 +226,7 @@ fn save(wrap: &Wrap, font: &SfntFont, order: TableOrder) -> Result<Vec<u8>> {
 
 /// Writes the edited font where the output parameters say; `suffix` names the operation in a
 /// derived file name.
-fn write_font(p: &Params<'_>, loaded: &Loaded, font: &SfntFont, order: TableOrder, suffix: &str) -> Result<PathBuf> {
+pub(super) fn write_font(p: &Params<'_>, loaded: &Loaded, font: &SfntFont, order: TableOrder, suffix: &str) -> Result<PathBuf> {
     let req = OutputRequest::from_params(p)?;
     let bytes = save(&loaded.wrap, font, order)?;
     let out = file_io::output_path(&loaded.path, &req, suffix, None)?;
