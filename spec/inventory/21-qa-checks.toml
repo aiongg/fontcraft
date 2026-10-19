@@ -3684,13 +3684,13 @@ label = "Fix Issues"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{target?: 'document'|path, results?: [resultId], profile?: id, checks?: [id|glob], exclude?: [id|glob], groups?: [group], glyphs?: [names], masters?: [ids], layers?: [ids], minSeverity?: 'info'|'warn'|'fail', config?: object, maxResults?: count, safeOnly?: bool, dryRun?: bool, keepOriginal?: 'backupLayer'|'none', decimal?: bool, keepContourOrder?: bool, output?: path}"
+params = "{target?: 'document'|path, results?: [resultId], profile?: id, checks?: [id|glob], exclude?: [id|glob], groups?: [group], glyphs?: [names], masters?: [ids], layers?: [ids], minSeverity?: 'info'|'warn'|'fail', config?: object, maxResults?: count, safeOnly?: bool, dryRun?: bool, keepOriginal?: 'backupLayer'|'none', decimal?: bool, keepContourOrder?: bool, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool}"
 area = "qa"
 milestone = "M3"
 summary = "Applies the registered fix of every selected result that has one, as a single undo step, then re-runs the affected checks and returns what changed and what remains. `dryRun` reports the planned edits only; `safeOnly` (default true) skips fixes that alter the design; `output` writes a fixed copy of a file target instead of overwriting it."
 ref = "AFDKO checkoutlinesufo -e, -o, -w, -d, --ignore-contour-order"
 status = "docs"
-notes = "M3 fixes the open document. `results` takes ids of the kept run and cannot be combined with the filters; a result whose glyph changed since the run is skipped. The first stage runs each selected Font Info fix (syncVerticalMetrics, syncVersion, syncStyleLinking, syncFamilyValues, sortZones, clearInfoFields, and the source side of cleanNameRecords and cleanInstances) once, through its font.info or font.instance command with that command's defaults, for findings of any scope; with filters, the checks of those fixes run in full, compiling the source when they read compiled fonts. Then each layer runs the outline steps of audit.outlineFixOrder. A fix whose call audit.fix cannot build yet (the glyph-data fixes, the component steps, the kerning, feature and hinting fixes, and the table fixes) is skipped with the reason, and its result reports `available: false`. The result cap does not hide findings from a fix. `decimal`, `keepContourOrder` and file targets wait for M12; `output` is refused."
+notes = "M3 fixes the open document. `results` takes ids of the kept run and cannot be combined with the filters; a result whose glyph changed since the run is skipped. The first stage runs each selected Font Info fix (syncVerticalMetrics, syncVersion, syncStyleLinking, syncFamilyValues, sortZones, clearInfoFields, and the source side of cleanNameRecords and cleanInstances) once, through its font.info or font.instance command with that command's defaults, for findings of any scope; with filters, the checks of those fixes run in full, compiling the source when they read compiled fonts. Then each layer runs the outline steps of audit.outlineFixOrder. A fix whose call audit.fix cannot build yet (the glyph-data fixes, the component steps, the kerning, feature and hinting fixes, and the table fixes) is skipped with the reason, and its result reports `available: false`. The result cap does not hide findings from a fix. On the open document `output` is refused. A compiled font file as target (M12.61) runs the checks on the file, then the table repairs of docs/spec/21-qa.md § 5 › Fix calls in that table's order on a temporary copy next to the output, each call reading the previous one's output; the copy replaces `output` (default FONT.fixed.EXT, or the input with `inPlace`) only when every call succeeded, and a failing call leaves nothing written. patchTable results pass their `table.field` to tables.recalculate (OS/2.fsType passes the project's value from the result); glyph-data and Font Info fixes, recompileCff and the CFF Top DICT fields are skipped with the reason. `results`, `masters`, `layers` and `keepOriginal` are refused on a file, and a family of files is fixed one file at a time. `decimal` and `keepContourOrder` wait for later packages."
 guesses = [
   "An outline fix on a composite glyph only reports unless `safeOnly` is false (21-qa question 4).",
   "The fixes of M12 run in the three stages and the order of docs/spec/21-qa.md § 5 › Fix calls (glyph data, then layers, then kerning, feature code and hints); no reference tool fixes all of these, so a case where the order changes the result would settle it.",
@@ -4386,14 +4386,15 @@ label = "Recalculate Table Fields"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{font: path, face?: int|name, fields?: [string], output?: path, inPlace?: bool} → {changed: [{field, old, new}]}"
+params = "{font: path, face?: int|name, fields?: [string], values?: {field: number|text}, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool} → {output, changed: [{field, old, new}]}"
 area = "cli-tools"
 milestone = "M12"
-summary = "Recomputes the fields of a compiled font that are derived from its other data: the head and glyph bounding boxes, maxp counts, hhea and vhea extents, OS/2 xAvgCharWidth, Unicode and code-page range bits and first and last character index, the head flags and the checksums. `fields` limits it to the named fields, written `table.field`; every other byte stays as it was."
+summary = "Recomputes the fields of a compiled font that are derived from its other data. Without `fields`: the glyph bounding boxes in glyf, the head box, hhea advanceWidthMax and extents, OS/2 xAvgCharWidth, first and last character index and the Unicode and code-page range bits. By name also: the sfnt version, head.flags bit 3 when the font has instructions, the hhea caret slope from post.italicAngle, post.underlineThickness (5% of the em when 0), post.isFixedPitch and the PANOSE proportion from the advances, the OS/2 version (raised to 4), USE_TYPO_METRICS, the strikeout and script fields, usWeightClass from the wght default, a gasp table with one range for all sizes, and smart dropout control in prep. Fields are written `table.field`; one field of a group (head.xMin) stands for the group. `values` writes fields the font cannot derive (OS/2.fsType). Every other byte stays as it was; the checksums are recomputed on writing."
 ref = "Our design; fontTools ttLib (recalcBBoxes, OS/2 range helpers); docs/spec/21-qa.md § 5 (fix patchTable)"
 status = "inferred"
 own = true
-notes = "The audit fix patchTable runs it on compiled fonts; added by the M12 spec pass."
+notes = "The audit fix patchTable runs it on compiled fonts; added by the M12 spec pass. Built in M12.61: each value is the one the matching check expects. The CFF Top DICT fields (FontBBox, isFixedPitch) and the vhea extents are not recomputed yet; maxp counts are written by the compiler and not recomputed."
+guesses = ["A monospaced font gets PANOSE proportion 9 (family kind 2) or spacing 3 (kinds 3 and 5), and a proportional font with proportion 9 gets 0; comparing with what a reference fixer writes on the same fonts would settle it.", "Code page bits 30 and 31 keep their stored values while the others are recomputed from the cmap, since the check does not compare them either; a reference fixer's output would settle it.", "Smart dropout control is appended to the end of an existing prep program; a hinting tool's fix of the same font would settle whether it goes first."]
 
 [[command]]
 id = "tables.cleanNameRecords"
@@ -4401,14 +4402,15 @@ label = "Clean Name Records"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{font: path, face?: int|name, dropMac?: bool, output?: path, inPlace?: bool} → {removed: count, changed: count}"
+params = "{font: path, face?: int|name, dropMac?: bool, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool} → {output, removed: count, changed: count}"
 area = "cli-tools"
 milestone = "M12"
 summary = "Trims and collapses white space in name records, removes empty and repeated records and, unless `dropMac` is false, the Macintosh-platform records, and makes the PostScript name records agree with name ID 6."
 ref = "Our design; docs/spec/21-qa.md § 5 (fix cleanNameRecords)"
 status = "inferred"
 own = true
-notes = "The audit fix cleanNameRecords runs it on compiled fonts; added by the M12 spec pass."
+notes = "The audit fix cleanNameRecords runs it on compiled fonts; added by the M12 spec pass. Built in M12.61: line breaks count as white space; records in an encoding other than UTF-16 or Mac Roman keep their bytes; the language-tag records of format 1 are kept."
+guesses = ["The PostScript name records take the CFF font name when the font has one, else the Windows English record; a reference fixer's choice on a font whose names disagree would settle it."]
 
 [[command]]
 id = "tables.rebuildCmap"
@@ -4416,14 +4418,15 @@ label = "Rebuild cmap"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{font: path, face?: int|name, output?: path, inPlace?: bool} → {mappings: count, conflicts: [{codepoint, kept, dropped}]}"
+params = "{font: path, face?: int|name, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool} → {output, mappings: count, conflicts: [{codepoint, kept, dropped}]}"
 area = "cli-tools"
 milestone = "M12"
 summary = "Rebuilds the cmap subtables from one mapping: the union of the existing Unicode subtables, where the platform 3 subtables win a conflict. It writes format 4 for the Basic Multilingual Plane, adds format 12 when a code point lies above it, and keeps format 14 variation sequences as they are."
 ref = "Our design; docs/spec/21-qa.md § 5 (fix rebuildCmap)"
 status = "inferred"
 own = true
-notes = "The audit fix rebuildCmap runs it on compiled fonts; added by the M12 spec pass."
+notes = "The audit fix rebuildCmap runs it on compiled fonts; added by the M12 spec pass. Built in M12.61: the subtables written are (0, 3) and (3, 1) format 4, and (0, 4) and (3, 10) format 12 when needed; format 14 is copied as (0, 5). A mapping whose format 4 subtable would pass 65,535 bytes is refused."
+guesses = ["Macintosh and other non-Unicode subtables are left out of the rebuilt table, as current compilers write it; a reference fixer's output on a font with a Mac Roman subtable would settle it."]
 
 [[command]]
 id = "tables.recompileCff"
@@ -4438,7 +4441,7 @@ summary = "Rewrites the CFF table without the charstring operators and dictionar
 ref = "Our design; Adobe Technical Note 5176 and 5177; docs/spec/21-qa.md § 5 (fix recompileCff)"
 status = "inferred"
 own = true
-notes = "The audit fix recompileCff runs it on compiled fonts; added by the M12 spec pass."
+notes = "The audit fix recompileCff runs it on compiled fonts; added by the M12 spec pass. Not built yet: audit.fix skips its findings with the reason."
 
 [[command]]
 id = "tables.cleanInstances"
@@ -4446,14 +4449,15 @@ label = "Clean Named Instances"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{font: path, face?: int|name, output?: path, inPlace?: bool} → {removed: count, reordered: bool}"
+params = "{font: path, face?: int|name, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool} → {output, removed: count, reordered: bool, droppedPostScriptNames: bool}"
 area = "cli-tools"
 milestone = "M12"
 summary = "Sorts the named instances of fvar by their coordinates, removes repeated ones, writes every record in the same form (all with a PostScript name ID or all without), and points the instance at the default location at the font's own subfamily name."
 ref = "Our design; docs/spec/21-qa.md § 5 (fix cleanInstances)"
 status = "inferred"
 own = true
-notes = "The audit fix cleanInstances runs it on compiled fonts; added by the M12 spec pass."
+notes = "The audit fix cleanInstances runs it on compiled fonts; added by the M12 spec pass. Built in M12.61: the default instance gets subfamily name ID 17 when the font has one, else 2, and PostScript name ID 6."
+guesses = ["Instances are sorted by the other axes in axis order, then by weight, so weights rise within each group; a reference fixer's order on a two-axis font would settle it.", "When some records lack a PostScript name (0xFFFF), the PostScript name field is removed from every record rather than names invented; a reference fixer's output would settle it."]
 
 [[command]]
 id = "tables.recompileLayout"
@@ -4461,7 +4465,7 @@ label = "Recompile Contextual Positioning"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{font: path, face?: int|name, output?: path, inPlace?: bool} → {converted: [lookup index]}"
+params = "{font: path, face?: int|name, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool} → {output, converted: [lookup index]}"
 area = "cli-tools"
 milestone = "M12"
 summary = "Rewrites each contextual positioning lookup of GPOS (type 7, also when it sits inside an extension lookup) as a chained contextual lookup (type 8) with empty backtrack and lookahead sequences, which applies the same rules. Formats 1, 2 and 3 become the same formats of type 8; lookup indices, lookup flags, mark filtering sets and every other table stay as they were. A font without such lookups is left unchanged."
@@ -4476,14 +4480,14 @@ label = "Drop Axis"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{font: path, face?: int|name, axis: tag, output?: path, inPlace?: bool}"
+params = "{font: path, face?: int|name, axis: tag, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool} → {output, axis}"
 area = "cli-tools"
 milestone = "M12"
 summary = "Removes a variation axis whose minimum equals its maximum: its fvar record and instance coordinates, its avar segment map, its STAT records, and its column in every variation region. An axis with a range is refused."
 ref = "Our design; docs/spec/21-qa.md § 5 (fix dropAxis)"
 status = "inferred"
 own = true
-notes = "The audit fix dropAxis runs it on compiled fonts; added by the M12 spec pass."
+notes = "The audit fix dropAxis runs it on compiled fonts; added by the M12 spec pass. Built in M12.61 on the instancer: the axis is pinned at its one value; when it is the only axis, the result is a static font."
 
 # ───────────────────────────── Font Info fixes (M12.63) ─────────────────────────────
 [[command]]
