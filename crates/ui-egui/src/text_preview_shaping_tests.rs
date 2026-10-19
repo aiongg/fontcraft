@@ -181,7 +181,7 @@ fn text_preview_builds_its_font_again_once_editing_pauses() {
 #[test]
 #[ignore = "speed measure"]
 fn text_preview_shapes_a_page_of_a_long_text_within_the_target() {
-    use fontcraft_engine::compile::preview::{PreviewKind, layout_font};
+    use fontcraft_engine::compile::preview::{PreviewKind, layout_font_with};
     use fontcraft_textlayout::{PreviewShaper, shape_line};
 
     let mut app = FontcraftApp::default();
@@ -193,7 +193,7 @@ fn text_preview_shapes_a_page_of_a_long_text_within_the_target() {
     let master = font.masters[0].id.clone();
     let index = app.session.kern_index().unwrap();
     let started = std::time::Instant::now();
-    let built = layout_font(&font, &master, PreviewKind::Full).unwrap();
+    let built = layout_font_with(&font, &master, PreviewKind::Full, &text_preview::build_options(&app.session)).unwrap();
     println!("the full preview font: {:?}", started.elapsed());
     let tags: Vec<_> = built.features.iter().map(|f| f.tag).collect();
     let shaper = PreviewShaper::new(std::sync::Arc::from(built.bytes.as_slice()), &built.glyph_order, &built.private_use, &tags).unwrap();
@@ -203,7 +203,7 @@ fn text_preview_shapes_a_page_of_a_long_text_within_the_target() {
     let mut text = String::new();
     while text.chars().count() < 100_000 {
         text.push_str(paragraph);
-        if text.len() % 7 == 0 {
+        if text.len().is_multiple_of(7) {
             text.push('\n');
         }
     }

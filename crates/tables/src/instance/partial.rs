@@ -209,7 +209,7 @@ struct Limits {
     /// The limited axes in tag order, the order fontTools rebases them in.
     order: Vec<usize>,
     /// The `avar` segment maps, one per axis (empty for none), as a dictionary keeps them.
-    avar: Option<Vec<Vec<(f64, f64)>>>,
+    avar: Option<Vec<SegmentMap>>,
 }
 
 impl Limits {
@@ -310,8 +310,11 @@ fn resolve_limits(font: &SfntFont, given: &[(Tag, AxisLimit)]) -> Result<Limits>
     Ok(Limits { axes, user, norm, plain, new_index, order, avar })
 }
 
+/// One axis's `avar` segment map: (from, to) pairs in normalised coordinates.
+type SegmentMap = Vec<(f64, f64)>;
+
 /// The `avar` segment maps (version 1), one per `fvar` axis; version 2 is refused.
-fn read_avar(font: &SfntFont, axis_count: usize) -> Result<Option<Vec<Vec<(f64, f64)>>>> {
+fn read_avar(font: &SfntFont, axis_count: usize) -> Result<Option<Vec<SegmentMap>>> {
     let Some(data) = font.get(*b"avar") else { return Ok(None) };
     let major = st::u16_at(data, 0).ok_or_else(|| bad("the avar table is truncated"))?;
     if major >= 2 {
@@ -1220,7 +1223,7 @@ fn valid_segment_map(map: &[(f64, f64)]) -> bool {
 /// range, renormalised on both sides, with −1, 0 and 1 mapping to themselves.
 fn partial_avar(out: &mut SfntFont, limits: &Limits) -> Result<()> {
     let Some(maps) = &limits.avar else { return Ok(()) };
-    let mut kept: Vec<Vec<(f64, f64)>> = Vec::new();
+    let mut kept: Vec<SegmentMap> = Vec::new();
     for (i, map) in maps.iter().enumerate() {
         if limits.is_pinned(i) {
             continue;

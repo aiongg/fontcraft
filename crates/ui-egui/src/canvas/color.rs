@@ -631,8 +631,8 @@ fn paint_drawables(px: &mut Pixels, drawables: &[Drawable], to_pixels: Affine) {
                 drawn = false;
                 break;
             };
-            for (c, p) in coverage.iter_mut().zip(mask.pixels.chunks_exact(4)) {
-                *c *= f32::from(p.get(3).copied().unwrap_or(0)) / 255.0;
+            for (c, p) in coverage.iter_mut().zip(mask.pixels.as_chunks::<4>().0) {
+                *c *= f32::from(p[3]) / 255.0;
             }
         }
         if !drawn {

@@ -124,7 +124,7 @@ pub fn rebase_tent(tent: Tent, range: AxisRange) -> Vec<(f64, Option<Tent>)> {
         return Vec::new();
     }
     let n = |v: f64| range.renormalize(v, true);
-    solve(tent, range, false, 0)
+    solve(tent, range, 0)
         .into_iter()
         .filter(|(scalar, _)| *scalar != 0.0)
         .map(|(scalar, t)| (scalar, t.map(|t| Tent { start: n(t.start), peak: n(t.peak), end: n(t.end) })))
@@ -133,7 +133,7 @@ pub fn rebase_tent(tent: Tent, range: AxisRange) -> Vec<(f64, Option<Tent>)> {
 
 /// `_solve`: the solutions in the old normalised space. Each call mirrors at most once and
 /// clips the peak at most once, so `depth` stays below 4.
-fn solve(tent: Tent, limit: AxisRange, negative: bool, depth: u8) -> Vec<(f64, Option<Tent>)> {
+fn solve(tent: Tent, limit: AxisRange, depth: u8) -> Vec<(f64, Option<Tent>)> {
     if depth > 4 {
         return Vec::new();
     }
@@ -142,10 +142,7 @@ fn solve(tent: Tent, limit: AxisRange, negative: bool, depth: u8) -> Vec<(f64, O
 
     // Mirror the problem so that the default is at or below the peak.
     if axis_def > peak {
-        return solve(tent.reverse_negate(), limit.reverse_negate(), !negative, depth + 1)
-            .into_iter()
-            .map(|(s, t)| (s, t.map(Tent::reverse_negate)))
-            .collect();
+        return solve(tent.reverse_negate(), limit.reverse_negate(), depth + 1).into_iter().map(|(s, t)| (s, t.map(Tent::reverse_negate))).collect();
     }
 
     // Case 1: the whole region lies beyond the new maximum.
@@ -157,7 +154,7 @@ fn solve(tent: Tent, limit: AxisRange, negative: bool, depth: u8) -> Vec<(f64, O
     if axis_max < peak {
         let mult = support(axis_max, tent);
         let clipped = Tent { start: lower, peak: axis_max, end: axis_max };
-        return solve(clipped, limit, negative, depth + 1).into_iter().map(|(s, t)| (s * mult, t)).collect();
+        return solve(clipped, limit, depth + 1).into_iter().map(|(s, t)| (s * mult, t)).collect();
     }
 
     // lower <= axis_def <= peak <= axis_max
@@ -215,7 +212,9 @@ mod tests {
         Tent { start, peak, end }
     }
 
-    fn close(got: &[(f64, Option<Tent>)], want: &[(f64, Option<(f64, f64, f64)>)]) {
+    type Want = (f64, Option<(f64, f64, f64)>);
+
+    fn close(got: &[(f64, Option<Tent>)], want: &[Want]) {
         assert_eq!(got.len(), want.len(), "{got:?}");
         for ((gs, gt), (ws, wt)) in got.iter().zip(want) {
             assert!((gs - ws).abs() < 1e-9, "{got:?}");

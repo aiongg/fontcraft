@@ -268,6 +268,34 @@ fn doc_settings(s: &Session) -> (DocumentSettings, Vec<String>) {
     s.active().map_or_else(|| (DocumentSettings::default(), Vec::new()), |d| DocumentSettings::read(&d.font))
 }
 
+/// The open document's and the user's profiles as `audit.profile.list` lists them, the effective
+/// default profile, and what of the stores could not be read.
+pub(crate) fn stored_profiles(s: &Session) -> (Vec<Value>, String, Vec<String>) {
+    let (doc, mut problems) = doc_settings(s);
+    let (user, more) = user_store(s);
+    problems.extend(more);
+    let (default, _, _) = default_profile(&doc, &user);
+    let profiles = Profiles { project: &doc.profiles, user: &user.profiles };
+    let mut out = Vec::with_capacity(doc.profiles.len() + user.profiles.len());
+    for (store, defs) in [(Store::Project, &doc.profiles), (Store::User, &user.profiles)] {
+        for def in defs {
+            // A project profile hides a user profile with the same id.
+            let shadowed = store == Store::User && doc.profiles.iter().any(|d| d.id == def.id);
+            let checks = if shadowed { Value::Null } else { profiles.resolve(&def.id).map_or(Value::Null, |r| json!(r.checks.len())) };
+            out.push(json!({
+                "id": def.id,
+                "label": def.label,
+                "checks": checks,
+                "builtIn": false,
+                "default": !shadowed && def.id == default,
+                "store": store.as_str(),
+                "shadowed": shadowed,
+            }));
+        }
+    }
+    (out, default, problems)
+}
+
 /// Stores `settings` in the open document as one undo step.
 fn write_settings(s: &mut Session, label: &str, settings: &DocumentSettings) -> Result<()> {
     s.edit(label, |font| {

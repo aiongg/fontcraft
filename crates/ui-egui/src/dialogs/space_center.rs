@@ -399,7 +399,7 @@ fn clip_line(at: (f64, f64), angle: f64, x: (f64, f64), y: (f64, f64)) -> Option
         t0 = t0.max(a.min(b));
         t1 = t1.min(a.max(b));
     }
-    (t0.is_finite() && t1.is_finite() && t0 <= t1).then(|| ((at.0 + t0 * dx, at.1 + t0 * dy), (at.0 + t1 * dx, at.1 + t1 * dy)))
+    (t0.is_finite() && t1.is_finite() && t0 <= t1).then_some(((at.0 + t0 * dx, at.1 + t0 * dy), (at.0 + t1 * dx, at.1 + t1 * dy)))
 }
 
 pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {

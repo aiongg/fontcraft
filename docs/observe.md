@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1336 rows to check: 2098 guesses and 484 observe steps.**
+**1349 rows to check: 2136 guesses and 491 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,22 +48,22 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 40 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 5 |
-| **Later milestones (after M6)** | all | **850** |
+| **Later milestones (after M6)** | all | **863** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 85 |
 | Later milestones (after M6) | Edit View: text mode and preview | 25 |
 | Later milestones (after M6) | Components and anchors | 39 |
 | Later milestones (after M6) | Filters | 5 |
-| Later milestones (after M6) | Spacing and metrics keys | 10 |
+| Later milestones (after M6) | Spacing and metrics keys | 12 |
 | Later milestones (after M6) | Kerning and the Kerning window | 12 |
 | Later milestones (after M6) | Font View | 16 |
 | Later milestones (after M6) | Font Info and features | 278 |
 | Later milestones (after M6) | Interpolation | 71 |
 | Later milestones (after M6) | Hinting | 106 |
-| Later milestones (after M6) | Colour fonts | 54 |
+| Later milestones (after M6) | Colour fonts | 58 |
 | Later milestones (after M6) | Files: open, import, export | 55 |
 | Later milestones (after M6) | Settings and the window | 13 |
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 62 |
-| Later milestones (after M6) | Elsewhere | 19 |
+| Later milestones (after M6) | Elsewhere | 26 |
 
 ## Built milestones (M0 to M6) (486)
 
@@ -364,9 +364,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `textPreview.setWritingDirection` (M5, handbook, live): Writing Direction
   - Guess: The default direction of the text comes from its first letter: right to left for Hebrew, Arabic and the other right-to-left scripts, else left to right. The reference follows the Unicode bidirectional algorithm; a mixed text in the reference app would settle how far we differ.
   - Guess: A selected range with the other direction is an embedding: its base direction changes, one level inside the text's, and its runs are ordered by it; it keeps its direction while text is typed around it; directions do nothing in vertical text. The reference app on a mixed text would settle it.
-  - Guess: Digits, Arabic-Indic digits included, form left-to-right runs; a neutral between two runs of the same direction takes that direction, else the base direction of the text or its range; a combining mark follows the character before it. Full UAX #9 at M8 would settle the cases where this differs.
-  - Guess: Digits count as left to right, so "12 34" in right-to-left text shows as "12 34" where full Unicode bidi gives "34 12"; M8's UAX #9 would settle it.
-  - Guess: Line breaking measures a trailing blank with the kern it has before its level is reset to the paragraph's, so a line can break up to one kern early; full bidi in M8 would settle how the reference measures it.
+  - Guess: Line breaking measures a trailing blank with the kern it has before its level is reset to the paragraph's, so a line can break up to one kern early; a right-to-left line that ends in a kerned blank, in the reference app, would settle how the reference measures it.
 - [ ] `textPreview.find` (M5, handbook, live): Find…
   - Guess: The search options are Ignore Case (on at first) and Contains, Starts With or Full Word, as the system find bar of the reference offers them; matches do not overlap.
   - Guess: Replace changes the current match, All changes every match; a replacement that would take the text past 1,000,000 characters is refused.
@@ -1380,7 +1378,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (850)
+## Later milestones (after M6) (863)
 
 ### Edit View: drawing, guides, layers and the Palette (85)
 
@@ -1707,9 +1705,14 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `textPreview.shaping` (behavior, M8, handbook): Text Preview shapes its text as an application would: every feature that…
   - Guess: The preview's font is rebuilt from the current feature code, kerning and anchors after edits, once editing pauses for half a second, without pressing Compile; editing a feature without compiling while the reference app's Text Preview is open would settle it.
   - Guess: Text is split into script runs by Script_Extensions, and characters without a script (Common, Inherited, unassigned and private-use) stay in the run around them, so a glyph typed by name is shaped with its neighbours; typing a glyph name between two letters that form a contextual substitution in the reference app would settle it.
+  - Guess: Lines are broken on the glyphs' own widths and the document's kerning before shaping, so a shaped line can end slightly short of or past the window's edge; a long Arabic paragraph in the reference app's Text Preview, compared at its line ends, would settle how the reference breaks shaped text.
+  - Guess: Vertical text is not shaped: it is laid out by code point with the vertical widths and origins; vertical text with a `vert` feature in the reference app would settle it.
+  - Guess: While a new font is built, the text stays shaped with the last font built for the same master; when the feature code does not compile, the text is laid out by code point with the compiler's message under it. Breaking a feature in the reference app while Text Preview is open would settle what it shows.
   - Observe: In F1 (Latin features), edit a feature without pressing Compile while Text Preview shows text the feature affects: note whether the preview follows the edit, and when.
 - [ ] `textPreview.unicodeBidi` (behavior, M8, handbook): Text Preview orders mixed right-to-left and left-to-right text by the Unicode Bidirectional…
   - Guess: A paragraph separator inside a line (U+2029) starts a new bidirectional paragraph whose runs follow the line's earlier runs, each paragraph ordered on its own; pasting text with U+2029 into the reference app's Text Preview would settle it.
+  - Guess: Every paragraph takes the text's base direction (set, or from the text's first letter), not its own first strong character; a text whose second paragraph starts in the other script, in the reference app, would settle it.
+  - Guess: A range set to the paragraph's own direction is an embedding too, one or two levels up as UAX #9 gives it, which changes only how neutral characters at its edges resolve; the reference app's Writing Direction on such a range would settle it.
   - Observe: In F2 (Arabic), type "12 34" inside right-to-left text in Text Preview: note the order of the digits.
 - [ ] `editView.toggleFeature` (M8, handbook, live): Toggle Feature
   - Guess: A tag the last feature compile does not have is accepted and kept, and applies once a compile has it, so automation can turn a feature on before compiling; the reference app only offers compiled features in its menu, so nothing there settles it.
@@ -1917,7 +1920,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A segment is split in half, at most 10 times, until its mapped curve is within the tolerance (default 0.5 units) of the mapped outline at a quarter, half and three quarters, and a bent straight segment becomes a curve; an affine expression only moves points. Settled by comparing results with the reference on our own fonts.
   - Guess: Unlocked anchors move with the outline; locked paths and anchors, components and images stay. Settled by running the reference on a glyph with anchors and components.
 
-### Spacing and metrics keys (10)
+### Spacing and metrics keys (12)
 
 - [ ] `spaceCenter.inputSyntax` (behavior, M13, docs): The spacing text accepts plain characters, /name for a glyph by name,…
   - Guess: Space Center takes the reference spellings /name, /name@layer, /?, /!, /:group and \n unchanged; Edit View's text mode keeps the primary reference's escapes only.
@@ -1951,8 +1954,28 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `edit.copyMetrics` (M13, docs, live): Copy Width / Sidebearings
   - Guess: FontCraft copies straight from `from` to the glyphs in `to` in one command, layer by layer with the same layer id (the first master by default); without `to` it only returns the values. FontForge copies to a clipboard and pastes later; commands take explicit targets, so the two steps are one.
   - Guess: The values apply in the order width, lsb, rsb, vertical advance, so copying lsb and rsb together decides the width. A copied value removes the metrics key its field showed, as typing a number does.
+- [ ] `window.spaceCenter` (M13, docs, live): Space Center
+  - Guess: A sample string's `/Placeholder` becomes `/?`, the glyph being edited, in the Space Center; the reference's Space Center reads its own sample strings, and choosing one with a placeholder there would settle it.
+  - Guess: The waterfall's sizes are 9, 10, 12, 14, 18, 24, 36, 48, 72 and 96 points up to the window's size, then the window's size; the reference app's waterfall would settle the series.
+  - Guess: In a waterfall the matrix keeps one column per glyph of the text and a click selects the glyph in every size; the reference app would settle it.
+  - Observe: In the reference's Space Center, switch to Waterfall with the size at 72: note each line's size.
+  - Observe: Choose a sample string from the text field's menu: note whether it replaces the text or is added to it.
 - [ ] `view.setSpacingCutOff` (M13, docs, live): Cut-Off Band
   - Guess: The band is drawn on every line across the whole preview width; the reference app would settle whether it stops at the text's ends.
+- [ ] `view.setSpaceCenterDisplay` (M13, docs, live): Space Center Display Options
+  - Guess: Right to left uses the font's right-to-left kerning, as an Edit View tab set right to left does; the reference's kerning is not split by direction, and a font with right-to-left pairs would settle it.
+  - Guess: Upside down turns the preview half a circle, as Text Preview's Flip does, rather than mirroring it top to bottom; the reference app would settle it.
+  - Guess: With the preview upside down the keys and drags keep their meaning for the glyph (Right still grows the right margin); the reference app would settle whether they follow the screen instead.
+  - Guess: The beam shares its height with Edit View's metrics beam and is switched on separately; the reference app would settle whether its Space Center beam has its own height.
+  - Guess: The margins on the beam are labelled on rows whose em is at least four label sizes, so small waterfall lines show only the beam; the reference app would settle it.
+  - Guess: Tracking adds its units between neighbouring glyphs after the lines are broken, so lines wrap as without tracking; the reference app's tracking near the window's edge would settle it.
+  - Guess: Guides are drawn within each glyph's advance box, the master's and the glyph's own; the reference app would settle whether a horizontal guide runs across the whole line.
+  - Guess: Overlay layers are offered by master name in the menu, and the command also takes layer names or ids; the reference's layer list would settle it.
+  - Guess: Line space multiplies the master's line height, from 0.5 to 4; the reference app's control would settle the range.
+  - Observe: In the reference's Space Center, turn on Right to Left with a Latin text: note the order and where the line starts.
+  - Observe: Turn on Upside Down: note whether the text is turned or mirrored, and press Right with a glyph selected: note which margin grows.
+  - Observe: Turn on Beam: note its default height, whether it can be dragged, and whether Edit View's beam moves with it.
+  - Observe: Turn on Guides with a horizontal font guide: note whether it runs across the line or within each glyph.
 - [ ] `palette.pairsAndPhrases` (panel, M13, docs): Pairs & Phrases
   - Guess: Automatic mode shows the pairs list while the showing tab is in text mode and the phrases list otherwise; the reference switches by its kerning tool, which FontCraft does not have.
   - Guess: A loaded list lasts for the session and is not stored with the window state.
@@ -3511,16 +3534,27 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: In the secondary reference, open Review Hints on a glyph with ghost hints and note what the width field shows for one.
   - Observe: Press Next on the last hint in the secondary reference's Review Hints and check whether it wraps to the first.
 
-### Colour fonts (54)
+### Colour fonts (58)
 
 - [ ] `color.fourKinds` (behavior, M11, handbook): Four colour workflows are supported: layered fonts (one font file per colour),…
   - Guess: A glyph may mix kinds: its palette and full-colour layers feed COLR, its iColor layers sbix and its svg layer the SVG table, each written by its own rule; an svg layer wins over a conversion by Color Layers to SVG for that glyph. Settled by exporting a glyph with a palette layer and an svg layer from the reference.
   - Observe: Palette font: give a glyph both a palette layer and an svg layer, export, and note which colour tables are written and which one carries that glyph.
 - [ ] `color.preview.editViewOtherGlyphs` (behavior, M11, handbook): In Edit View, when the layer selected in the current glyph is…
   - Guess: Other glyphs are drawn with the colour layers of the current master, in palette 0. Settled by selecting a colour layer in a tab of several colour glyphs in the reference.
+  - Guess: The edited glyph is drawn in colour too, all its colour layers of the master in paint order behind the edited outline, its active iColor or svg layer itself when that is the active layer. Settled by editing a palette layer of a glyph with several palette layers in the reference.
+  - Guess: Another glyph of the tab shows the colour kind of the active layer when it has it, else palette and full-colour layers, then its svg layer, then its iColor layer of the active layer's size or else its largest. Settled by a tab of glyphs with mixed colour kinds in the reference.
+  - Guess: A palette index the palette does not have is drawn in the text colour. Settled by setting a palette layer's index past the last row in the reference.
   - Observe: Palette font: select a palette layer of A and type AB in the Edit View tab; note whether B is drawn in colour and with which palette.
+- [ ] `color.preview.previewArea` (behavior, M11, handbook): Two previews, the strip that the eye button opens below the Edit…
+  - Guess: The colour glyphs are not inverted by Invert, and the text colour row draws in the preview's text colour. Settled by inverting the Preview Area of a palette font in the reference.
+  - Guess: A preview showing an instance or all instances draws every glyph in its text colour, since the instance has no selected layer. Settled by choosing an instance in the Preview Area of a palette font in the reference.
 - [ ] `color.layered.masterColor` (behavior, M11, handbook): The Master Color parameter on a master sets the colour its filled…
+  - Guess: The other glyphs of the tab are filled in the same masters' colours as the edited glyph. Settled by typing several glyphs in a tab of a layered font with all masters shown in the reference.
   - Observe: Layered font: show all masters in Edit View; note whether each master is drawn in its Master Color with its opacity, and whether Master Color Dark is used in dark appearance.
+- [ ] `color.layered.masterColorDark` (behavior, M11, handbook): Master Color Dark supplies an alternative preview colour used when the system…
+  - Guess: The app's dark theme stands for the system's dark appearance. Settled by switching the reference's appearance setting that keeps window content light, and looking at the masters.
+- [ ] `color.layered.editLikeMasters` (behavior, M11, handbook): Layers of a layered colour font are ordinary master layers and are…
+  - Guess: The masters shown are the active one and those whose layer eye is on in the edited glyph, for every glyph of the tab. Settled by showing a second master on one glyph of a tab in the reference and looking at the other glyphs.
 - [ ] `color.layered.stackingOrder` (behavior, M11, handbook): When several masters are shown together, their order in Font Info ›…
   - Observe: Layered font: show all masters in Edit View; note which master is drawn on top.
 - [ ] `color.layered.toSvg` (behavior, M11, handbook): An extra instance with both Color Layers to SVG and Export SVG…
@@ -3545,6 +3579,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `color.fullColor.gradientTypes` (behavior, M11, handbook): The chapter describes two gradient types, linear and radial, each with at…
   - Guess: A radial gradient with an end radius of 0 reaches from its centre to the farthest corner of the shape's bounds, which is how both oracles draw a version 3 `circle` gradient; a version 4 file writes such a gradient without `endRadius`. Settled by saving a version 3 radial gradient from the reference app as version 4.
   - Observe: Full-colour font: look in the Attributes inspector for conic gradients and for extend modes (pad, repeat, reflect); note whether any UI offers them.
+- [ ] `color.fullColor.gradientCanvasKnobs` (behavior, M11, handbook): While a path with a gradient is selected, Edit View shows draggable…
+  - Guess: A linear gradient's knob moves its own end and keeps the other; the radial knob moves the start circle and the end circle with it; a conic gradient has no knob. Settled by dragging each knob in the reference and reading the saved positions.
+  - Guess: A knob lies above the path's nodes, so a press on a knob drags the gradient even where a node lies under it. Settled by placing a knob on a node in the reference and dragging there.
 - [ ] `color.export.fullColorToSvg` (behavior, M11, handbook): With Color Layers to SVG checked on an instance, the paths of…
   - Guess: One uncompressed SVG document per glyph whose group has the id `glyph<ID>` and a transform that flips y at the baseline; centred strokes are SVG strokes, inside and outside strokes are expanded to outlines. Settled by exporting the full-colour test font with Color Layers to SVG from the reference and reading the documents.
   - Guess: A conic gradient, which SVG cannot draw, is written in the colour of its first stop, with a warning. Settled by exporting a conic gradient with Color Layers to SVG from the reference.
@@ -3565,6 +3602,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Glyphs 2 files mark sbix layers by the name `iColor n` alone, as the label reads. Settled by opening a Glyphs 2 sbix file from the reference app.
 - [ ] `color.sbix.sizeScalesImage` (behavior, M11, handbook): The image on an iColor layer is drawn at image pixels divided…
   - Guess: An image scaled, rotated or flipped on its iColor layer is exported at its pixel size, with a warning, and its box's bottom-left corner gives the origin offsets. Settled by scaling an image on an iColor layer in the reference, exporting, and reading sbix.
+  - Guess: Edit View draws an iColor layer's image opaque, as the glyph it is, not at a tracing image's 50 % opacity. Settled by selecting an iColor layer in the reference and comparing the image with the file.
   - Observe: sbix font: double-click an iColor layer entry and type 256; note whether the image is drawn half as large as at 128.
 - [ ] `color.layers.widthFollowsMaster` (behavior, M11, handbook): iColor and svg layers have no advance width of their own: a…
   - Guess: Palette and full-colour layers follow the master's width as iColor and svg layers do. Settled by changing a master width in the reference with a palette layer present.
@@ -4068,7 +4106,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Set steps take the scope through the macro arguments `glyphs` and `layers` when the command takes a `layers` list; for other commands the layer is fixed when the step is added. Running a saved FontLab action set on another layer scope would settle it.
   - Guess: The scope starts as the selected glyphs and the active layer; FontLab's starting scope is not documented.
 
-### Elsewhere (19)
+### Elsewhere (26)
 
 - [ ] `audit.glyphSelectionSyntax` (behavior, M12, docs): Wherever a glyph list is accepted on the command line, entries may…
   - Guess: A piece that is a glyph name is read as a name even when it holds a hyphen, and `/N` names the glyph `cidNNNNN` (five digits) before glyph index N; a CID-keyed source in the reference tool would settle it.
@@ -4104,10 +4142,30 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The underline thickness, which comparefamily does not print, is listed after the underline position and sorted the same way; the row's summary asks for it.
 - [ ] `audit.report.panose` (M12, docs, live): PANOSE Report
   - Guess: Two misspelled value names of comparefamily's tables are spelled correctly (Borders, Literals); a reader comparing text output would notice the difference.
-- [ ] `audit.showPanel` (M12, inferred): Font Audit
+- [ ] `audit.showPanel` (M12, inferred, live): Font Audit
   - Guess: The Font Audit panel opens from the Window menu with no shortcut, because the reference app has no audit panel; a later decision on shortcuts would settle it (21-qa.md question 1).
-- [ ] `audit.nextIssue` (M12, inferred): Next Issue
+  - Guess: The panel opens on the target This Font with the document's default profile; nothing in the reference app settles it.
+- [ ] `audit.panel.run` (M12, inferred, live): Run Font Audit
+  - Guess: Family of Open Fonts reads the saved files, not unsaved edits; an engine target for several open documents would settle it.
+- [ ] `audit.revealIssue` (M12, inferred, live): Reveal Issue
+  - Guess: Reveal reuses a tab that already edits the glyph instead of always opening a new one as the export results dialog's Show button does, so stepping through results does not pile up tabs; watching Show in the reference app with a tab already open settles how it treats an open tab.
+  - Guess: Font Info opens on the tab that holds the field without focusing the field; a Font Info command that focuses a field would settle it.
+  - Observe: Export a font that has a glyph named with a space; in the export results dialog press Show while a tab already shows that glyph, and note whether a second tab opens.
+- [ ] `audit.nextIssue` (M12, inferred, live): Next Issue
   - Guess: No menu item and no shortcut: the panel's arrow buttons and the Edit View marker badges run it, because the reference app has no audit panel (21-qa.md question 1).
-- [ ] `audit.previousIssue` (M12, inferred): Previous Issue
+- [ ] `audit.previousIssue` (M12, inferred, live): Previous Issue
   - Guess: No menu item and no shortcut: the panel's arrow buttons and the Edit View marker badges run it, because the reference app has no audit panel (21-qa.md question 1).
+- [ ] `audit.filterResults` (M12, inferred, live): Filter Audit Results
+  - Guess: The severity filter is three choices (all, warnings and failures, failures) rather than a toggle per severity, because the command takes a minimum severity; a later design review would settle it.
+- [ ] `audit.editProfile` (M12, inferred, live): Edit Audit Profile
+  - Guess: The reference app has no audit profile editor, so the dialog is our design: it opens on the panel's profile, else the default one; people using it would settle whether that is the profile they expect.
+- [ ] `audit.closeProfileDialog` (M12, inferred, live): Close Audit Profile
+  - Guess: Saving a draft with changed project values is one undo step (a command.batch of audit.config.set and audit.profile.save); the reference app has no such dialog, so people using it would settle it.
+- [ ] `window.fontAudit` (panel, M12, inferred): Font Audit
+  - Guess: Fix runs the selected rows' fixes with safeOnly false, since the person chose them, while Fix All Safe keeps safeOnly true; watching how people use the panel would settle it.
+  - Guess: Ignoring several rows at once is one undo step (a command.batch); nothing settles it.
+  - Guess: The panel sits at the top right of the window and lists sixteen rows before it scrolls; a layout review would settle it.
+- [ ] `dialog.auditProfile` (panel, M12, inferred): Audit Profile
+  - Guess: A built-in profile opens as a read-only draft that includes it, and Duplicate turns that into a user profile `<id>-copy` that includes the built-in one instead of listing its checks; nothing settles it.
+  - Guess: Project values are edited in the profile dialog although they belong to the document, not to the profile, because the inventory row lists them there; a design review would settle it.
 

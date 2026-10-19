@@ -124,7 +124,9 @@ fn textured(app: &FontcraftApp, shapes: &[Shape]) -> usize {
 #[test]
 fn color_preview_edit_view_other_glyphs_draw_in_colour_while_a_colour_layer_is_selected() {
     let mut app = colour_app(&["A", "B"], "layer.convertToColorPalette");
-    app.run("glyph.newGlyph", &json!({"name": "C"})).unwrap();
+    if app.session.font().unwrap().glyph("C").is_none() {
+        app.run("glyph.newGlyph", &json!({"name": "C"})).unwrap();
+    }
     app.run("path.addRectangle", &json!({"glyph": "C", "x": 100, "y": 100, "width": 200, "height": 200})).unwrap();
     app.run("editView.setText", &json!({"glyphs": ["A", "B", "C"]})).unwrap();
     app.run("editView.setCursor", &json!({"index": 0})).unwrap();
@@ -279,7 +281,7 @@ fn attributes_set_gradient_position_dragging_a_knob_equals_the_command() {
     let mut app = colour_app(&["A"], "layer.convertToColor");
     let layer = select_colour_layer(&mut app, "A");
     app.run("attributes.addGradient", &json!({"glyph": "A", "layer": layer})).unwrap();
-    app.state.tab_mut().unwrap().selection.shapes.insert(0);
+    app.run("selection.set", &json!({"shapes": [0]})).unwrap();
     let knobs = gradient_knobs::current(&app);
     let points: Vec<(f64, f64)> = knobs.iter().map(|k| (k.at.x, k.at.y)).collect();
     assert_eq!(points, [(100.0, 200.0), (300.0, 200.0)], "a linear gradient from the left middle to the right middle");

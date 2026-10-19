@@ -32,14 +32,14 @@ pub fn specs() -> Vec<CommandSpec> {
     v
 }
 
-/// `font.instantiate` on variable fonts: full instances (M12.20), then partial ones (M12.21) (M12.20).
+/// `font.instantiate` on variable fonts: full instances (M12.20) and partial ones (M12.21).
 fn binary_specs() -> Vec<CommandSpec> {
     vec![cmd!(
         "font.instantiate",
         "Instantiate",
         [],
         None,
-        "{input: path, face?: int, location?: {axis: number | {min?: number, default?: number, max?: number} | \"drop\"}, static?: bool, named?: regex, all?: bool, indices?: [int], to?: \"same\"|\"ttf\"|\"otf\"|\"ufo\", output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool, clamp?: bool, optimizeGvar?: bool, overlapFlag?: bool, removeOverlaps?: bool, ignoreOverlapErrors?: bool, updateNameTable?: bool, downgradeCff2?: bool, recalcBounds?: bool, round?: bool, timestamp?: \"keep\"|\"now\"|int, autohint?: bool, normalize?: bool, strict?: bool, ufoVersion?: 2|3, instanceDir?: path, layoutOnly?: bool, masterFinder?: string} instances a variable font: every axis pinned (a number, \"drop\" for the default, or static to pin the axes not named at their default) gives a static font; named, all and indices build fvar named instances instead, each named after its PostScript name; locations are clamped to the axis ranges; the output defaults to <name>.instance.<ext> beside the input; a designspace or other multi-master source gives static instances: at `location` (user values; axes not named at their default; clamped unless clamp is false) or the source's instances chosen by named, all or indices (default: every exporting one), written as UFOs (the default; to the file names the source records, or into instanceDir or outputDir; rounded unless round is false, PostScript-autohinted unless autohint is false, overlaps removed with removeOverlaps; ufoVersion default 3) or compiled with to ttf or otf as font.compile does; a glyph whose masters are not compatible is left out with a warning, or stops the run with strict → {results: [{output, location: {axis: number}, static: bool, name?, postscriptName?}], warnings?: [string]}",
+        "{input: path, face?: int, location?: {axis: number | {min?: number, default?: number, max?: number} | \"drop\"}, static?: bool, named?: regex, all?: bool, indices?: [int], to?: \"same\"|\"ttf\"|\"otf\"|\"ufo\", output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool, clamp?: bool, optimizeGvar?: bool, overlapFlag?: bool, removeOverlaps?: bool, ignoreOverlapErrors?: bool, updateNameTable?: bool, downgradeCff2?: bool, recalcBounds?: bool, round?: bool, timestamp?: \"keep\"|\"now\"|int, autohint?: bool, normalize?: bool, strict?: bool, ufoVersion?: 2|3, instanceDir?: path, layoutOnly?: bool, masterFinder?: string} instances a variable font: every axis pinned (a number, \"drop\" for the default, or static to pin the axes not named at their default) gives a static font; a range {min, default, max} (user values; a missing end keeps the axis end, default moves the default) narrows an axis and keeps it variable, and any axis left variable gives a partial instance, a smaller variable font with `static` false in its result (fonts with CFF2 or VARC outlines are refused); named, all and indices build fvar named instances instead, each named after its PostScript name; locations are clamped to the axis ranges; the output defaults to <name>.instance.<ext> beside the input; a designspace or other multi-master source gives static instances: at `location` (user values; axes not named at their default; clamped unless clamp is false) or the source's instances chosen by named, all or indices (default: every exporting one), written as UFOs (the default; to the file names the source records, or into instanceDir or outputDir; rounded unless round is false, PostScript-autohinted unless autohint is false, overlaps removed with removeOverlaps; ufoVersion default 3) or compiled with to ttf or otf as font.compile does; a glyph whose masters are not compatible is left out with a warning, or stops the run with strict → {results: [{output, location: {axis: number | {min, default, max}}, static: bool, name?, postscriptName?}], warnings?: [string]}",
         always,
         instantiate
     )
@@ -576,6 +576,31 @@ mod tests {
         assert!(s.execute("font.instantiate", &json!({ "input": input, "location": { "wght": 500 }, "clamp": false })).is_err());
         let refused = s.execute("font.instantiate", &json!({ "input": input, "location": { "wght": 650 }, "noClobber": true }));
         assert!(refused.is_err(), "the output exists and noClobber is set");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_range_gives_a_partial_instance() {
+        let dir = std::env::temp_dir().join(format!("fontcraft-instance-partial-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let input = dir.join("V.ttf");
+        std::fs::write(&input, variable_font()).unwrap();
+        let mut s = Session::new();
+        let out = dir.join("P.ttf");
+        let r = s
+            .execute(
+                "font.instantiate",
+                &json!({ "input": input, "location": { "wght": { "min": 300, "default": 500, "max": 700 } }, "output": out }),
+            )
+            .unwrap();
+        assert_eq!(r["results"][0]["static"], json!(false), "an axis left variable");
+        assert_eq!(r["results"][0]["location"]["wght"], json!({ "min": 300.0, "default": 500.0, "max": 700.0 }));
+        let font = fontcraft_tables::read(&std::fs::read(&out).unwrap(), 0).unwrap();
+        let axes = fontcraft_tables::variations::fvar_axes(&font).unwrap();
+        assert_eq!(axes.len(), 1);
+        assert_eq!((axes[0].minimum, axes[0].default, axes[0].maximum), (300.0, 500.0, 700.0), "the new range and default");
+        let named: Vec<f64> = instance::named_instances(&font).unwrap().iter().map(|n| n.coordinates[0].1).collect();
+        assert_eq!(named, [300.0, 700.0], "named instances inside the range are kept");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

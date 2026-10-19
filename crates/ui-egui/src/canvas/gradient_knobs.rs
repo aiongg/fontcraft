@@ -125,17 +125,14 @@ pub fn draw(c: &Painting, knobs: &[Knob]) {
 
 /// The parameters of `attributes.setGradientPosition` that put `knob` at `to`.
 pub fn invocation(glyph: &str, layer: &str, knob: &Knob, to: Point) -> Value {
-    let mut params = json!({"glyph": glyph, "layer": layer, "shapes": [knob.shape]});
-    match (knob.end, knob.finish) {
-        (End::Start, Some(e)) => {
-            params["start"] = json!([to.x, to.y]);
-            params["end"] = json!([e.x, e.y]);
-        }
-        (End::End, _) => {
-            params["start"] = json!([knob.start.x, knob.start.y]);
-            params["end"] = json!([to.x, to.y]);
-        }
-        (End::Start, None) => params["start"] = json!([to.x, to.y]),
+    let (start, end) = match (knob.end, knob.finish) {
+        (End::Start, Some(e)) => (to, Some(e)),
+        (End::End, _) => (knob.start, Some(to)),
+        (End::Start, None) => (to, None),
+    };
+    let mut params = json!({"glyph": glyph, "layer": layer, "shapes": [knob.shape], "start": [start.x, start.y]});
+    if let (Some(e), Value::Object(o)) = (end, &mut params) {
+        o.insert("end".into(), json!([e.x, e.y]));
     }
     params
 }

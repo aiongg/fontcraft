@@ -86,6 +86,31 @@ fn profiles_include_override_and_delete_in_both_stores() {
     let shown = run(&mut s, "audit.profile.show", json!({"profile": "repo-strict"}));
     assert!(!shown["resolved"]["checks"].as_array().unwrap().iter().any(|c| c == "check.outlines.overlap"));
 
+    // The list names every store: built-in first, then project, then user.
+    run(&mut s, "audit.profile.setDefault", json!({"profile": "repo", "target": "document"}));
+    let listed = run(&mut s, "audit.profile.list", json!({}));
+    let rows: Vec<(String, String, bool)> = listed["profiles"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| (p["id"].as_str().unwrap().to_string(), p["store"].as_str().unwrap().to_string(), p["default"] == true))
+        .collect();
+    let row = |id: &str, store: &str, default: bool| (id.to_string(), store.to_string(), default);
+    assert_eq!(
+        rows,
+        [
+            row("outlines", "builtIn", false),
+            row("opentype", "builtIn", false),
+            row("universal", "builtIn", false),
+            row("strict", "builtIn", false),
+            row("repo", "project", true),
+            row("repo-strict", "project", false),
+            row("house", "user", false),
+        ]
+    );
+    assert_eq!(listed["profiles"][6]["checks"], outlines - 1);
+    run(&mut s, "audit.profile.setDefault", json!({"profile": null, "target": "document"}));
+
     // Refusals change nothing.
     assert!(refused(&mut s, "audit.profile.save", json!({"profile": "strict", "include": ["universal"]})).contains("built-in"));
     assert!(refused(&mut s, "audit.profile.save", json!({"profile": "x", "include": ["house"], "store": "project"})).contains("project profile"));

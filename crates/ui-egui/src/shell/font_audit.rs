@@ -618,14 +618,19 @@ fn show_panel(app: &mut FontcraftApp, args: &Args) -> Result<Value, String> {
     Ok(panel_json(app))
 }
 
-/// Reads the profiles the pop-up lists: the built-in ones, the user's, and the effective default.
+/// Reads the profiles the pop-up lists: the built-in ones, the document's and the user's, and
+/// the effective default.
 pub fn refresh_profiles(app: &mut FontcraftApp) {
     let mut list: Vec<(String, String)> = BUILT_IN.iter().map(|(id, label)| (id.to_string(), label.to_string())).collect();
-    if let Ok(v) = app.session.query("settings.get", &json!({"id": "audit.userProfiles"}))
-        && let Some(user) = v.pointer("/value/profiles").and_then(Value::as_array)
+    let mut default = None;
+    if let Ok(v) = app.session.query("audit.profile.list", &json!({}))
+        && let Some(stored) = v.get("profiles").and_then(Value::as_array)
     {
-        for p in user.iter().take(MAX_PROFILES) {
+        for p in stored.iter().take(MAX_PROFILES + BUILT_IN.len()) {
             let Some(id) = p.get("id").and_then(Value::as_str) else { continue };
+            if p.get("default").and_then(Value::as_bool) == Some(true) {
+                default = Some(id.to_string());
+            }
             if list.iter().any(|(i, _)| i == id) {
                 continue;
             }
@@ -633,7 +638,6 @@ pub fn refresh_profiles(app: &mut FontcraftApp) {
             list.push((id.to_string(), label.to_string()));
         }
     }
-    let default = app.session.query("audit.config.get", &json!({})).ok().and_then(|v| v.get("profile").and_then(Value::as_str).map(str::to_string));
     let st = &mut app.state.panels.font_audit;
     for p in st.profile.iter().chain(default.iter()) {
         if !list.iter().any(|(i, _)| i == p) {
@@ -1047,10 +1051,12 @@ fn act(app: &mut FontcraftApp, run: &Run, action: Action, pending: &mut Pending)
             let steps = ids
                 .into_iter()
                 .map(|id| {
-                    let mut p = json!({"result": id});
+                    let mut p = serde_json::Map::new();
+                    p.insert("result".into(), json!(id));
                     if !reason.is_empty() {
-                        p["reason"] = json!(reason);
+                        p.insert("reason".into(), json!(reason));
                     }
+                    let p = Value::Object(p);
                     ("audit.ignoreIssue", p)
                 })
                 .collect();
@@ -1061,13 +1067,15 @@ fn act(app: &mut FontcraftApp, run: &Run, action: Action, pending: &mut Pending)
             let steps = items
                 .into_iter()
                 .map(|it| {
-                    let mut p = json!({"check": it.check});
+                    let mut p = serde_json::Map::new();
+                    p.insert("check".into(), json!(it.check));
                     if let Some(g) = it.glyph {
-                        p["glyph"] = json!(g);
+                        p.insert("glyph".into(), json!(g));
                     }
                     if let Some(m) = it.master {
-                        p["master"] = json!(m);
+                        p.insert("master".into(), json!(m));
                     }
+                    let p = Value::Object(p);
                     ("audit.unignoreIssue", p)
                 })
                 .collect();
@@ -1271,7 +1279,7 @@ fn result_row(ui: &mut egui::Ui, f: &Frame, item: &Item, line: f32, out: &mut Ou
     if !ui.is_rect_visible(rect) {
         return;
     }
-    let selected = f.st.selected.iter().any(|s| *s == item.id);
+    let selected = f.st.selected.contains(&item.id);
     let p = ui.painter_at(rect);
     if selected {
         p.rect_filled(rect, 0.0, t.row_selected);

@@ -176,7 +176,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "List Audit Profiles",
             [],
             None,
-            "{} the built-in profiles with the number of registered checks each runs → {profiles: [{id, checks, builtIn, default, description}]}",
+            "{} the built-in profiles, then the open document's and the user's, each with the number of registered checks it runs (null when it cannot be resolved) and its store; a user profile hidden by a project profile with the same id is shadowed; default marks the profile audit.run uses when the call names none → {profiles: [{id, label, checks, builtIn, default, store: \"builtIn\" | \"project\" | \"user\", description?, shadowed?}], problems?: [text]}",
             always,
             profile_list
         ),
@@ -1967,24 +1967,34 @@ fn describe(_: &mut Session, v: &Value) -> Result<Value> {
     }))
 }
 
-fn profile_list(_: &mut Session, _: &Value) -> Result<Value> {
+fn profile_list(s: &mut Session, _: &Value) -> Result<Value> {
+    let (stored, default, problems) = super::audit_profiles::stored_profiles(s);
     let about = |p: Profile| match p {
         Profile::Outlines => "Per-glyph outline checks of a source; fast enough to run after every edit",
         Profile::Opentype => "Conformance of a compiled font with the OpenType specification",
         Profile::Universal => "Outlines and OpenType, plus practices that hold for any professional font",
         Profile::Strict => "Every check, house-style and heuristic ones included",
     };
-    let profiles: Vec<Value> = Profile::ALL
+    let mut profiles: Vec<Value> = Profile::ALL
         .into_iter()
         .map(|p| {
             json!({
                 "id": p.as_str(),
+                "label": p.as_str(),
                 "checks": CHECKS.iter().filter(|c| p.includes(c.profile)).count(),
                 "builtIn": true,
-                "default": p == Profile::Universal,
+                "default": p.as_str() == default,
                 "description": about(p),
+                "store": prof::Store::BuiltIn.as_str(),
             })
         })
         .collect();
-    Ok(json!({ "profiles": profiles }))
+    profiles.extend(stored);
+    let mut out = json!({ "profiles": profiles });
+    if !problems.is_empty()
+        && let Value::Object(o) = &mut out
+    {
+        o.insert("problems".into(), json!(problems));
+    }
+    Ok(out)
 }

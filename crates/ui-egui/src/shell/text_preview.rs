@@ -460,7 +460,7 @@ impl FontSlot {
 
 /// The compile options a preview build reads: the session's glyph data and the folder the
 /// source's feature code includes files from, as `font.features.compile` reads them.
-fn build_options(session: &Session) -> fontcraft_engine::compile::Options {
+pub(crate) fn build_options(session: &Session) -> fontcraft_engine::compile::Options {
     let path = session.active().and_then(|d| d.path.clone());
     fontcraft_engine::compile::Options {
         glyph_data: fontcraft_engine::compile::DataRef(session.glyph_data().ok()),

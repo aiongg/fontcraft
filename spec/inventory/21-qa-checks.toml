@@ -3725,7 +3725,7 @@ milestone = "M3"
 summary = "Lists the built-in profiles (outlines, opentype, universal, strict) and any user or project profiles, each with its check count and where it is stored."
 ref = "fontbakery profiles"
 status = "docs"
-notes = "M3 lists the four built-in profiles; the counts are of the checks registered so far. User and project profiles wait for M12."
+notes = "The four built-in profiles come first, then the open document's (store `project`) and the user's (store `user`). The counts are of the checks registered so far. `default` marks the profile `audit.run` uses when the call names none: the document's default, else the application's, else universal."
 
 [[command]]
 id = "audit.profile.show"
@@ -4135,6 +4135,9 @@ summary = "Opens the Audit Profile dialog on a built-in, user or project profile
 ref = "Our design"
 status = "inferred"
 notes = "Built in M12.64. Without `profile` the dialog opens on the Font Audit panel's profile, else on the effective default profile. Run from the gear menu of the panel."
+guesses = [
+  "The reference app has no audit profile editor, so the dialog is our design: it opens on the panel's profile, else the default one; people using it would settle whether that is the profile they expect.",
+]
 
 [[command]]
 id = "audit.closeProfileDialog"
@@ -4149,6 +4152,9 @@ summary = "Closes the Audit Profile dialog, saving the draft with audit.profile.
 ref = "Our design"
 status = "inferred"
 notes = "Built in M12.64. A save with changed project values runs audit.config.set and audit.profile.save as one command.batch. A refused save or delete keeps the dialog open and changes nothing; a built-in profile cannot be saved."
+guesses = [
+  "Saving a draft with changed project values is one undo step (a command.batch of audit.config.set and audit.profile.save); the reference app has no such dialog, so people using it would settle it.",
+]
 
 # ---------------------------------------------------------------------------
 # Panels
@@ -4176,7 +4182,7 @@ milestone = "M12"
 summary = "Runs audits and lists their results. Selecting a row reveals the issue; fixes and ignores apply to the selected rows. Every control dispatches an audit.* command, so the panel holds no logic of its own."
 ref = "Our design; cf. fontbakery HTML report, fontTools varLib.interpolatable report"
 status = "inferred"
-notes = "Built in M12.64 (crates/ui-egui/src/shell/font_audit.rs). Click selects a row, Cmd-click adds or removes one, Shift-click selects a range; double-click or Return reveals the current row. The detail area shows the check's description, the location, the result's data and the fix's description with whether it is safe; a computed fix preview (audit.fix dryRun) is not built. Fix, Fix All Safe, Ignore and Stop Ignoring run their engine command and then run the audit again. The profile pop-up lists the built-in and the user's profiles; the document's project profiles are listed once audit.profile.list returns them. The gear menu has Edit Profiles and Thresholds, Clear Cache and Live Audit; Export Report is not built (it needs a save-file chooser), audit.export does it from the command line and the control channel. Progress and cancel are not built."
+notes = "Built in M12.64 (crates/ui-egui/src/shell/font_audit.rs). Click selects a row, Cmd-click adds or removes one, Shift-click selects a range; double-click or Return reveals the current row. The detail area shows the check's description, the location, the result's data and the fix's description with whether it is safe; a computed fix preview (audit.fix dryRun) is not built. Fix, Fix All Safe, Ignore and Stop Ignoring run their engine command and then run the audit again. The profile pop-up lists what audit.profile.list returns: the built-in profiles, the document's project profiles and the user's. The gear menu has Edit Profiles and Thresholds, Clear Cache and Live Audit; Export Report is not built (it needs a save-file chooser), audit.export does it from the command line and the control channel. Progress and cancel are not built."
 guesses = [
   "Fix runs the selected rows' fixes with safeOnly false, since the person chose them, while Fix All Safe keeps safeOnly true; watching how people use the panel would settle it.",
   "Ignoring several rows at once is one undo step (a command.batch); nothing settles it.",

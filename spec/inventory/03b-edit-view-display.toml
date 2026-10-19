@@ -1340,13 +1340,11 @@ milestone = "M5"
 summary = "Sets the base direction of the whole preview text or of the selected run, from the Writing Direction submenu of the field's context menu. The submenu items are not listed in the handbook, so the parameter values are our guess."
 ref = "Edit View › Entering Text › Text Preview"
 status = "handbook"
-notes = "Documented, not yet observed. A command takes the selection as `range` (character indexes); the context menu fills it from the field's selection. Runs of the other direction keep their own order: a Latin word in right-to-left text reads left to right, and only the order of the runs follows the base direction (simple rules in `crates/textlayout/src/bidi.rs`, `docs/spec/03b-edit-view-display.md` › Text Preview window). Edit View keeps one direction for its whole text until M8's shaping."
+notes = "Documented, not yet observed. A command takes the selection as `range` (character indexes); the context menu fills it from the field's selection. Runs of the other direction keep their own order: a Latin word in right-to-left text reads left to right, and only the order of the runs follows the base direction. Digits and neutral characters resolve by UAX #9 (row `textPreview.unicodeBidi`, `crates/textlayout/src/bidi.rs`), so \"12 34\" in right-to-left text reads \"34 12\". Edit View keeps one direction for its whole text."
 guesses = [
   "The default direction of the text comes from its first letter: right to left for Hebrew, Arabic and the other right-to-left scripts, else left to right. The reference follows the Unicode bidirectional algorithm; a mixed text in the reference app would settle how far we differ.",
   "A selected range with the other direction is an embedding: its base direction changes, one level inside the text's, and its runs are ordered by it; it keeps its direction while text is typed around it; directions do nothing in vertical text. The reference app on a mixed text would settle it.",
-  "Digits, Arabic-Indic digits included, form left-to-right runs; a neutral between two runs of the same direction takes that direction, else the base direction of the text or its range; a combining mark follows the character before it. Full UAX #9 at M8 would settle the cases where this differs.",
-  "Digits count as left to right, so \"12 34\" in right-to-left text shows as \"12 34\" where full Unicode bidi gives \"34 12\"; M8's UAX #9 would settle it.",
-  "Line breaking measures a trailing blank with the kern it has before its level is reset to the paragraph's, so a line can break up to one kern early; full bidi in M8 would settle how the reference measures it.",
+  "Line breaking measures a trailing blank with the kern it has before its level is reset to the paragraph's, so a line can break up to one kern early; a right-to-left line that ends in a kerned blank, in the reference app, would settle how the reference measures it.",
 ]
 
 [[command]]
