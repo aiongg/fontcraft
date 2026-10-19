@@ -611,7 +611,7 @@ pub(super) fn step_calls(fix: &str, font: &Font, glyph: &Glyph, layer: &Layer, f
         "fixCompatibility" => {
             for f in &findings {
                 match (f.code, f.location.points.first(), f.data.get("reverse").copied().unwrap_or(0.0)) {
-                    ("wrong-start-point", Some(&[shape, node]), r) if r == 0.0 => {
+                    ("wrong-start-point", Some(&[shape, node]), 0.0) => {
                         out.calls.push(("path.makeNodeFirst", json!({"glyph": g, "layer": l, "point": [shape, node]})));
                     }
                     _ => out.skipped.push((f.check, "the result does not say how to make the masters compatible".to_string())),

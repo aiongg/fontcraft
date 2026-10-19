@@ -60,7 +60,7 @@ fn the_full_preview_font_has_gpos() {
     let font = font();
     let built = layout_font(&font, &master(&font), PreviewKind::Full).unwrap();
     assert!(FontRef::new(&built.bytes).unwrap().gpos().is_ok());
-    assert!(built.features.iter().any(|s| s.tag.to_string() == "kern"));
+    assert!(built.features.iter().any(|s| s.tag == "kern"));
 }
 
 /// Feature code with an error gives the diagnostics, and an unknown master is refused.

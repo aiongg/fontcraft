@@ -9,8 +9,10 @@ pub const ENTRY: &str = "entry";
 /// The anchor a glyph's outstroke ends at.
 pub const EXIT: &str = "exit";
 
+type Point = (f64, f64);
+
 /// The layer's `entry` and `exit` anchors, when finite.
-pub(crate) fn anchors(layer: Option<&Layer>) -> (Option<(f64, f64)>, Option<(f64, f64)>) {
+pub(crate) fn anchors(layer: Option<&Layer>) -> (Option<Point>, Option<Point>) {
     let Some(layer) = layer else { return (None, None) };
     let find = |name: &str| layer.anchors.iter().find(|a| a.name == name && a.x.is_finite() && a.y.is_finite()).map(|a| (a.x, a.y));
     (find(ENTRY), find(EXIT))

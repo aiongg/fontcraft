@@ -136,13 +136,16 @@ impl Shaping<'_> {
     }
 }
 
+/// Per text item, the glyphs it shaped to (see [`shape_items`]).
+type ShapedItems = Vec<Option<Vec<Arc<str>>>>;
+
 /// The glyphs each item shows after shaping: `None` keeps the item's own glyph; an empty list
 /// means the item's glyph merged into an earlier item's (the components of a ligature after the
 /// first); more than one glyph means the item became several. The second value is the first
 /// shaping error.
-pub(crate) fn shape_items(font: &Font, text: &Text, direction: Direction, shaping: &Shaping<'_>) -> (Vec<Option<Vec<Arc<str>>>>, Option<String>) {
+pub(crate) fn shape_items(font: &Font, text: &Text, direction: Direction, shaping: &Shaping<'_>) -> (ShapedItems, Option<String>) {
     let items = text.items();
-    let mut out: Vec<Option<Vec<Arc<str>>>> = vec![None; items.len()];
+    let mut out: ShapedItems = vec![None; items.len()];
     let mut error = None;
     let settings = shaping.settings();
     let language = shaping.language();

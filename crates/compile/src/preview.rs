@@ -139,12 +139,10 @@ fn table_error<E: std::fmt::Display>(table: &'static str) -> impl Fn(E) -> Compi
 /// The font file: the metrics tables a shaper reads, `cmap` with the glyphs' own code points
 /// only, and the layout tables. Every glyph after `.notdef` without a code point gets the next
 /// private-use code point no glyph has, returned beside the bytes.
-fn tables(
-    resolved: &Resolved,
-    glyphs: &[ResolvedGlyph],
-    kind: PreviewKind,
-    layout: &LayoutTables,
-) -> Result<(Vec<u8>, Vec<(u32, u16)>), CompileError> {
+/// The font's bytes and the private-use code points given to unencoded glyphs.
+type PreviewBytes = (Vec<u8>, Vec<(u32, u16)>);
+
+fn tables(resolved: &Resolved, glyphs: &[ResolvedGlyph], kind: PreviewKind, layout: &LayoutTables) -> Result<PreviewBytes, CompileError> {
     let count = u16::try_from(glyphs.len()).map_err(|_| CompileError::TooManyGlyphs(glyphs.len()))?;
     let mut mappings: Vec<(char, GlyphId)> = Vec::new();
     let mut code_points: BTreeSet<u32> = BTreeSet::new();

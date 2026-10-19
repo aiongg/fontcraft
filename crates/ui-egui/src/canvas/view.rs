@@ -84,12 +84,15 @@ pub struct LayoutCache {
     pub sidebearings: RefCell<super::text::Sidebearings>,
 }
 
+/// A preview font and its shaper, or why the shaper could not be read.
+type CachedShaper = (Arc<PreviewFont>, Result<Arc<PreviewShaper>, String>);
+
 #[derive(Default)]
 struct LayoutCacheInner {
     kern: Option<Arc<KernIndex>>,
     entries: Vec<(LayoutKey, Arc<Layout>)>,
     /// The shaper of the last preview font a layout shaped with, or why it could not be read.
-    shaper: Option<(Arc<PreviewFont>, Result<Arc<PreviewShaper>, String>)>,
+    shaper: Option<CachedShaper>,
 }
 
 impl LayoutCache {
