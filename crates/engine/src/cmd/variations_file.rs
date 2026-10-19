@@ -431,16 +431,18 @@ fn plan_avar(_: &mut Session, params: &Value) -> Result<Value> {
     let plan = variations_model::plan_avar_with(&font, &options)?;
     let out = file_io::output_path(&input.path, &req, ".avar", None)?;
     if let Some(plot) = plot_path {
-        file_io::check_write(Path::new(plot))?;
-        if req.no_clobber && Path::new(plot).exists() {
-            return Err(p.bad(format!("{plot} exists and noClobber is set")));
+        let same = |a: &Path| same_place(Path::new(plot), a);
+        if same(&out) || same(&input.path) {
+            return Err(p.bad(format!("`plot` {plot} names the font file: give the plot a file of its own")));
+        }
+        if Path::new(plot).is_dir() {
+            return Err(p.bad(format!("`plot` {plot} is a folder: give a file name")));
         }
     }
     let bytes = fontcraft_tables::write(&plan.font, &WriteOptions { order: TableOrder::Recommended })?;
-    file_io::write_output(&out, &bytes, &req)?;
-    if let Some(plot) = plot_path {
-        let plot_req = OutputRequest { output: Some(plot.into()), output_dir: None, in_place: false, no_clobber: req.no_clobber };
-        file_io::write_output(Path::new(plot), variations_model::plan_plot(&plan.axes).as_bytes(), &plot_req)?;
+    match plot_path {
+        None => file_io::write_output(&out, &bytes, &req)?,
+        Some(plot) => write_with_plot(&out, &bytes, Path::new(plot), variations_model::plan_plot(&plan.axes).as_bytes(), &req)?,
     }
     let mut axes = Map::new();
     let mut designspace = String::new();
@@ -468,6 +470,41 @@ fn plan_avar(_: &mut Session, params: &Value) -> Result<Value> {
         obj.insert("plot".into(), json!(plot));
     }
     Ok(result)
+}
+
+/// Whether `a` and `b` name one file: the same file when both exist, else the same absolute path.
+fn same_place(a: &Path, b: &Path) -> bool {
+    match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => std::path::absolute(a).ok().zip(std::path::absolute(b).ok()).is_some_and(|(a, b)| a == b),
+    }
+}
+
+/// Writes the font and its plot together: both are staged beside their targets and moved into
+/// place only when both were written, so a plot that cannot be written leaves no font behind.
+fn write_with_plot(out: &Path, bytes: &[u8], plot: &Path, svg: &[u8], req: &OutputRequest) -> Result<()> {
+    for path in [out, plot] {
+        file_io::check_write(path)?;
+        if req.no_clobber && !(req.in_place && path == out) && path.exists() {
+            return Err(crate::EngineError::Io(format!("{} exists and noClobber is set", path.display())));
+        }
+    }
+    let created = file_io::create_output_dir(req)?;
+    let mut staged = Vec::with_capacity(2);
+    let written = super::instance::stage(plot, svg, 0)
+        .and_then(|s| {
+            staged.push(s);
+            super::instance::stage(out, bytes, 1)
+        })
+        .and_then(|s| {
+            staged.push(s);
+            super::instance::commit(&staged)
+        });
+    if written.is_err() {
+        super::instance::discard(&staged);
+        file_io::remove_created(&created);
+    }
+    written
 }
 
 #[cfg(test)]
@@ -669,6 +706,18 @@ versionMinor = 0;
         assert!(std::fs::read_to_string(&plot).unwrap().starts_with("<svg"));
         assert!(s.execute("variations.planAvar", &json!({ "font": out, "targets": { "ital": [1] } })).is_err(), "only four axes are planned");
         assert!(s.execute("variations.planAvar", &json!({ "font": out, "glyphs": ["missing"] })).is_err());
+
+        // A plot that cannot be written leaves no font behind, and a plot over a font is refused.
+        let avar = dir.join("Bare.hvar.avar.ttf");
+        std::fs::remove_file(&avar).unwrap();
+        assert!(s.execute("variations.planAvar", &json!({ "font": out, "plot": dir.join("missing").join("plan.svg") })).is_err());
+        assert!(!avar.exists(), "the font is not written when the plot fails");
+        assert!(s.execute("variations.planAvar", &json!({ "font": out, "plot": dir })).is_err(), "a folder");
+        assert!(s.execute("variations.planAvar", &json!({ "font": out, "plot": avar })).is_err(), "the output itself");
+        assert!(s.execute("variations.planAvar", &json!({ "font": out, "plot": out })).is_err(), "the input");
+        assert!(!avar.exists());
+        let temps = std::fs::read_dir(&dir).unwrap().filter(|e| e.as_ref().unwrap().file_name().to_string_lossy().ends_with(".tmp")).count();
+        assert_eq!(temps, 0, "no temporary file is left");
 
         let r = s.execute("variations.plot", &json!({ "font": out })).unwrap();
         assert_eq!(r["panels"], json!(1), "one region: {r}");

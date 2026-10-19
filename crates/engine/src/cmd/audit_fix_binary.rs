@@ -382,17 +382,6 @@ fn call_params(call: &Call, font: &Path, in_place: bool) -> Value {
     Value::Object(params)
 }
 
-/// The temporary copy next to `output` the calls work on.
-fn temporary(output: &Path) -> PathBuf {
-    let name = output.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "font".into());
-    output.with_file_name(format!(".{name}.fixing-{}", std::process::id()))
-}
-
-/// Removes the temporary copy; a copy that cannot be removed is left behind, which is harmless.
-fn discard(tmp: &Path) {
-    let _ = std::fs::remove_file(tmp);
-}
-
 /// `audit.fix` on a compiled font file.
 pub(super) fn fix_file(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("audit.fix", v)?;
@@ -436,9 +425,15 @@ pub(super) fn fix_file(s: &mut Session, v: &Value) -> Result<Value> {
     }
 
     file_io::check_write(&output)?;
-    let tmp = temporary(&output);
-    file_io::check_write(&tmp)?;
-    std::fs::write(&tmp, &source.bytes).map_err(|e| EngineError::Io(format!("cannot write {}: {e}", tmp.display())))?;
+    // The calls work on a new temporary copy beside the file the output replaces (the file a
+    // link points to, so the link stays), with that file's permissions.
+    let staged = super::instance::stage(&output, &source.bytes, 0)?;
+    let discard = |staged: &super::instance::Staged| super::instance::discard(std::slice::from_ref(staged));
+    if let Err(e) = file_io::check_write(staged.target()).and_then(|()| file_io::check_write(staged.temp())) {
+        discard(&staged);
+        return Err(e);
+    }
+    let tmp = staged.temp().to_path_buf();
     for call in &calls {
         match s.execute(call.command, &call_params(call, &tmp, true)) {
             Ok(result) => report.applied.push(json!({
@@ -449,20 +444,25 @@ pub(super) fn fix_file(s: &mut Session, v: &Value) -> Result<Value> {
                 "result": result,
             })),
             Err(e) => {
-                discard(&tmp);
+                discard(&staged);
                 return Err(EngineError::Io(format!("the fix {} ({}) failed, so nothing was written: {e}", call.fix, call.command)));
             }
         }
     }
     if req.no_clobber && !req.in_place && output.exists() {
-        discard(&tmp);
+        discard(&staged);
         return Err(EngineError::Io(format!("{} exists and noClobber is set", output.display())));
     }
-    if let Err(e) = std::fs::rename(&tmp, &output) {
-        discard(&tmp);
-        return Err(EngineError::Io(format!("cannot write {}: {e}", output.display())));
-    }
+    super::instance::commit(std::slice::from_ref(&staged))?;
+    // The fixed file is in place, so a check run that fails now is reported, not an error.
     run.insert("target".into(), json!(output));
-    let remaining = s.execute("audit.run", &Value::Object(run))?;
-    Ok(json!({"output": output, "applied": report.applied, "skipped": report.skipped, "remaining": remaining, "dryRun": false}))
+    let (remaining, warnings) = match s.execute("audit.run", &Value::Object(run)) {
+        Ok(remaining) => (remaining, None),
+        Err(e) => (Value::Null, Some(json!([format!("the fixed file was written, but checking it again failed: {e}")]))),
+    };
+    let mut result = json!({"output": output, "applied": report.applied, "skipped": report.skipped, "remaining": remaining, "dryRun": false});
+    if let (Some(warnings), Some(obj)) = (warnings, result.as_object_mut()) {
+        obj.insert("warnings".into(), warnings);
+    }
+    Ok(result)
 }

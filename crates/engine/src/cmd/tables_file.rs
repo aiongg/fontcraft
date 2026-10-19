@@ -203,7 +203,7 @@ fn postscript_name(font: &SfntFont) -> Option<String> {
 }
 
 /// The bytes of `font` stored as `wrap` says.
-fn save(wrap: &Wrap, font: &SfntFont, order: TableOrder) -> Result<Vec<u8>> {
+pub(super) fn save(wrap: &Wrap, font: &SfntFont, order: TableOrder) -> Result<Vec<u8>> {
     match wrap {
         Wrap::Plain => Ok(fontcraft_tables::write(font, &WriteOptions { order })?),
         Wrap::Woff(extras) => {

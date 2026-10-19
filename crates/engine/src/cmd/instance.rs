@@ -43,7 +43,7 @@ fn binary_specs() -> Vec<CommandSpec> {
         always,
         instantiate
     )
-    .files(const { &[FileParam::read("input"), FileParam::write("output"), FileParam::write("outputDir")] })
+    .files(const { &[FileParam::read("input"), FileParam::write("output"), FileParam::write("outputDir"), FileParam::write("instanceDir")] })
     .writes_files()]
 }
 
@@ -339,7 +339,7 @@ fn set_modified(font: &mut SfntFont, unix: i64) {
 /// An output written to a temporary file beside its target.
 // The browser writes no files, so nothing builds one there.
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
-struct Staged {
+pub(super) struct Staged {
     temp: PathBuf,
     /// The file the temporary replaces: the output, or the file it links to.
     target: PathBuf,
@@ -347,10 +347,23 @@ struct Staged {
     folder: bool,
 }
 
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+impl Staged {
+    /// The temporary file or folder.
+    pub(super) fn temp(&self) -> &Path {
+        &self.temp
+    }
+
+    /// What the temporary replaces once committed.
+    pub(super) fn target(&self) -> &Path {
+        &self.target
+    }
+}
+
 /// Writes `bytes` to a new temporary file beside `out` (beside the file it links to, for a
 /// link), with the permissions of the file it will replace.
 #[cfg(not(target_arch = "wasm32"))]
-fn stage(out: &Path, bytes: &[u8], n: usize) -> Result<Staged> {
+pub(super) fn stage(out: &Path, bytes: &[u8], n: usize) -> Result<Staged> {
     use std::io::Write as _;
     let io = |path: &Path, e: std::io::Error| EngineError::Io(format!("cannot write {}: {e}", path.display()));
     let target = if out.is_symlink() { std::fs::canonicalize(out).map_err(|e| io(out, e))? } else { out.to_path_buf() };
@@ -422,12 +435,13 @@ fn write_tree(root: &Path, target: &Path, files: &std::collections::BTreeMap<Str
 /// is moved aside first, then removed. If one cannot be moved, the ones after it are discarded
 /// and the error says which were written.
 #[cfg(not(target_arch = "wasm32"))]
-fn commit(staged: &[Staged]) -> Result<()> {
+pub(super) fn commit(staged: &[Staged]) -> Result<()> {
     for (i, s) in staged.iter().enumerate() {
         let moved = if s.folder { swap_folder(s) } else { std::fs::rename(&s.temp, &s.target) };
         if let Err(e) = moved {
             discard(staged.get(i..).unwrap_or_default());
-            return Err(EngineError::Io(format!("cannot write {}: {e}; the {i} outputs before it were written", s.target.display())));
+            let before = if i == 0 { String::new() } else { format!("; the {i} outputs before it were written") };
+            return Err(EngineError::Io(format!("cannot write {}: {e}{before}", s.target.display())));
         }
     }
     Ok(())
@@ -453,7 +467,7 @@ fn swap_folder(s: &Staged) -> std::io::Result<()> {
 
 /// Removes the temporaries that are still there.
 #[cfg(not(target_arch = "wasm32"))]
-fn discard(staged: &[Staged]) {
+pub(super) fn discard(staged: &[Staged]) {
     for s in staged {
         if s.folder {
             let _ = std::fs::remove_dir_all(&s.temp);
@@ -464,17 +478,17 @@ fn discard(staged: &[Staged]) {
 }
 
 #[cfg(target_arch = "wasm32")]
-fn stage(out: &Path, _: &[u8], _: usize) -> Result<Staged> {
+pub(super) fn stage(out: &Path, _: &[u8], _: usize) -> Result<Staged> {
     Err(EngineError::Unsupported(format!("writing {} in the browser", out.display())))
 }
 
 #[cfg(target_arch = "wasm32")]
-fn commit(_: &[Staged]) -> Result<()> {
+pub(super) fn commit(_: &[Staged]) -> Result<()> {
     Ok(())
 }
 
 #[cfg(target_arch = "wasm32")]
-fn discard(_: &[Staged]) {}
+pub(super) fn discard(_: &[Staged]) {}
 
 mod source;
 

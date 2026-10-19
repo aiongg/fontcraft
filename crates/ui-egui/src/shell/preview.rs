@@ -834,7 +834,20 @@ pub(crate) fn strip(app: &mut FontcraftApp, ui: &mut egui::Ui, rect: Rect, targe
         Drawn::All(list) => hash((2u8, list, tab.edited_glyph()), &[]),
     };
     let key = hash(
-        (doc, tab.id, tab.text.revision(), what, tab.direction, tab.kerning, options.invert, options.flip, ink.to_array(), paper.to_array()),
+        // The colour glyphs read image and svg assets, which change without a document revision.
+        (
+            doc,
+            tab.id,
+            tab.text.revision(),
+            what,
+            tab.direction,
+            tab.kerning,
+            options.invert,
+            options.flip,
+            ink.to_array(),
+            paper.to_array(),
+            app.images.revision,
+        ),
         &[
             placement.scale,
             placement.x0,

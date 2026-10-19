@@ -1,7 +1,8 @@
 //! `font.optimize` (M12.26; `fontcraft_tables::optimize`).
 //!
 //! Whole-file commands follow [`super::file_io`]: paths in, the input never changed, the output
-//! written atomically, a refusal on the web.
+//! written atomically, a refusal on the web. A WOFF, WOFF2 or collection input is written back
+//! as one, with the other members of a collection unchanged.
 //!
 //! Without a step named, every built lossless step runs: CFF widths and subroutines. Naming steps
 //! runs only those. Steps whose packages have not landed (GPOS compaction, variation store
@@ -12,10 +13,10 @@ use std::path::PathBuf;
 
 use fontcraft_tables::optimize::{OptimizeOptions, optimize};
 use fontcraft_tables::sfnt::tag_str;
-use fontcraft_tables::{SfntFont, TableOrder, WriteOptions};
+use fontcraft_tables::{SfntFont, TableOrder};
 use serde_json::{Value, json};
 
-use super::file_io::{self, InputKind, OutputRequest};
+use super::file_io::{self, OutputRequest};
 use super::{CommandSpec, FileParam, always, cmd};
 use crate::params::Params;
 use crate::{EngineError, Result, Session};
@@ -41,7 +42,7 @@ pub fn specs() -> Vec<CommandSpec> {
         "Optimize Font",
         [],
         None,
-        "{font: path, face?: int|name, preset?: \"size\", subroutinize?: bool, maxSubrs?: int, desubroutinize?: bool, cffWidths?: bool|\"exhaustive\", gposCompaction?: 0, varstore?: false, canonicalOrder?: bool, report?: bool, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool}. Re-encodes a compiled font more compactly without changing what it draws or how it shapes. Without a step named it chooses the CFF default and nominal widths again and subroutinises CFF and CFF2 charstrings; naming steps runs only those. maxSubrs caps the subroutines of one INDEX (1 to 65,535) and implies subroutinize. desubroutinize expands every subroutine. A step that would not make a table smaller is not applied, and a table the subroutiniser refuses is kept, with a note. canonicalOrder writes the tables in the recommended order (default: the input's). report measures without writing. Not built yet, refused when asked for: preset \"speed\", charstrings, gposCompaction above 0, varstore, gvarIup, dropImpliedOncurves, colrLayerReuse → {output: path|null, written, bytes, bytesBefore, bytesAfter, steps: [{step, table, before, after, applied}], tables: [{table, before, after}], notes}",
+        "{font: path, face?: int|name, preset?: \"size\", subroutinize?: bool, maxSubrs?: int, desubroutinize?: bool, cffWidths?: bool|\"exhaustive\", gposCompaction?: 0, varstore?: false, canonicalOrder?: bool, report?: bool, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool}. Re-encodes a compiled font more compactly without changing what it draws or how it shapes. Without a step named it chooses the CFF default and nominal widths again and subroutinises CFF and CFF2 charstrings; naming steps runs only those. maxSubrs caps the subroutines of one INDEX (1 to 65,535) and implies subroutinize. desubroutinize expands every subroutine. A step that would not make a table smaller is not applied, and a table the subroutiniser refuses is kept, with a note. canonicalOrder writes the tables in the recommended order (default: the input's). A WOFF, WOFF2 or collection is written as one, the other members of a collection unchanged. report measures without writing. Not built yet, refused when asked for: preset \"speed\", charstrings, gposCompaction above 0, varstore, gvarIup, dropImpliedOncurves, colrLayerReuse → {output: path|null, written, bytes, bytesBefore, bytesAfter, steps: [{step, table, before, after, applied}], tables: [{table, before, after}], notes}",
         always,
         optimize_font
     ).files(const { &[FileParam::read("font"), FileParam::write("output"), FileParam::write("outputDir")] }).writes_files()]
@@ -55,24 +56,17 @@ fn optimize_font(_: &mut Session, v: &Value) -> Result<Value> {
     let order = if p.bool_or("canonicalOrder", false)? { TableOrder::Recommended } else { TableOrder::Keep };
     let report_only = p.bool_or("report", false)?;
 
-    let file = file_io::read_input(&input)?;
-    if !file.kind.is_font() {
-        return Err(EngineError::Unsupported(format!("optimizing {}: give a compiled font, not a source", input.display())));
-    }
-    let face = super::dehint::face_index(&p, &file.bytes)?;
-    let font = fontcraft_tables::read(&file.bytes, face)?;
-    let result = optimize(&font, &options)?;
-    let bytes = fontcraft_tables::write(&result.font, &WriteOptions { order })?;
+    // The font is written back in its container (WOFF, WOFF2, or the collection with its other
+    // members), so `inPlace` never drops what the file held besides the optimised face.
+    let loaded = super::tables_file::load(&p, "font", "face")?;
+    let font = &loaded.font;
+    let result = optimize(font, &options)?;
+    let bytes = super::tables_file::save(&loaded.wrap, &result.font, order)?;
 
     let output = if report_only {
         None
     } else {
-        let extension = match file.kind {
-            InputKind::TrueType | InputKind::Cff => None,
-            _ if result.font.is_cff() => Some("otf"),
-            _ => Some("ttf"),
-        };
-        let path = file_io::output_path(&input, &request, ".optimized", extension)?;
+        let path = file_io::output_path(&input, &request, ".optimized", None)?;
         file_io::write_output(&path, &bytes, &request)?;
         Some(path.display().to_string())
     };
@@ -88,7 +82,7 @@ fn optimize_font(_: &mut Session, v: &Value) -> Result<Value> {
         "bytesBefore": result.bytes_before,
         "bytesAfter": result.bytes_after,
         "steps": steps,
-        "tables": table_sizes(&font, &result.font),
+        "tables": table_sizes(font, &result.font),
         "notes": result.notes,
     }))
 }
@@ -217,6 +211,38 @@ mod tests {
         assert!(both.is_err());
         let widths_only = session.execute("font.optimize", &json!({"font": font, "subroutinize": false, "report": true})).unwrap();
         assert!(!applied(&widths_only).contains(&"subroutinize"), "{widths_only}");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn font_optimize_in_place_keeps_the_container() {
+        use fontcraft_tables::collection::{PackOptions, pack, unpack};
+        let dir = std::env::temp_dir().join(format!("fontcraft-optimize-wrap-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let otf = plain_otf();
+        let member = fontcraft_tables::read(&otf, 0).unwrap();
+        let mut session = Session::new();
+
+        // Optimising one member of a collection in place keeps the other.
+        let ttc = dir.join("Fam.ttc");
+        std::fs::write(&ttc, pack(&[member.clone(), member.clone()], &PackOptions::default()).unwrap()).unwrap();
+        session.execute("font.optimize", &json!({"font": ttc.display().to_string(), "face": 1, "inPlace": true})).unwrap();
+        let bytes = std::fs::read(&ttc).unwrap();
+        assert_eq!(file_io::detect(&bytes), file_io::InputKind::Collection);
+        let fonts = unpack(&bytes).unwrap();
+        assert_eq!(fonts.len(), 2);
+        assert_eq!(fonts[0].get(*b"CFF "), member.get(*b"CFF "), "the other member is unchanged");
+        assert!(fonts[1].get(*b"CFF ").unwrap().len() < member.get(*b"CFF ").unwrap().len(), "the chosen member is optimised");
+
+        // A WOFF stays a WOFF, in place and under its default name.
+        let woff = dir.join("A.woff");
+        std::fs::write(&woff, fontcraft_container::woff::encode(&otf, &fontcraft_container::Extras::default()).unwrap()).unwrap();
+        let derived = session.execute("font.optimize", &json!({"font": woff.display().to_string()})).unwrap();
+        let out = dir.join("A.optimized.woff");
+        assert_eq!(derived["output"], json!(out.display().to_string()));
+        assert_eq!(file_io::detect(&std::fs::read(&out).unwrap()), file_io::InputKind::Woff);
+        session.execute("font.optimize", &json!({"font": woff.display().to_string(), "inPlace": true})).unwrap();
+        assert_eq!(file_io::detect(&std::fs::read(&woff).unwrap()), file_io::InputKind::Woff);
         std::fs::remove_dir_all(&dir).ok();
     }
 }

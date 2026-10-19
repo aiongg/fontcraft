@@ -98,6 +98,7 @@ mod tests {
         "output",
         "outputs",
         "outputdir",
+        "instancedir",
         "input",
         "inputs",
         "font",
