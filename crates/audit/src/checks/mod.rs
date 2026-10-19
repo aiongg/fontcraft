@@ -16,5 +16,6 @@ pub(crate) mod metrics_font;
 pub(crate) mod metrics_widths;
 pub(crate) mod names;
 pub(crate) mod sources;
+pub(crate) mod style_linking;
 pub(crate) mod tables;
 pub(crate) mod variations_binary;

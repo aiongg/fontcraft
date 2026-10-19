@@ -176,6 +176,18 @@ pub(super) const CHECKS: &[CheckSpec] = &[
         ..NAMES
     },
     CheckSpec {
+        id: "check.names.recommendedStyleLinking",
+        label: "Recommended style linking",
+        description: "A static instance departs from the recommended style-linking scheme: Bold, Italic and Bold Italic link to Regular, every other italic links to its upright, and no other style is marked bold, which would hide it from family pickers that show four styles.",
+        severity: Info,
+        scope: CheckScope::Source,
+        profile: Strict,
+        codes: &["ribbi-not-linked-to-regular", "italic-not-linked-to-upright", "bold-hides-style"],
+        preconditions: &[],
+        run: Runner::Source(crate::checks::style_linking::recommended_style_linking),
+        ..NAMES
+    },
+    CheckSpec {
         id: "check.names.noMacRecords",
         label: "No Macintosh name records",
         description: "The name table has Macintosh-platform records.",

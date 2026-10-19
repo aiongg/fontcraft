@@ -14,6 +14,7 @@ mod audit_fix_glyph;
 mod audit_fix_info;
 mod audit_modules;
 mod audit_profiles;
+mod audit_progress;
 mod audit_reports;
 mod audit_runner;
 mod author_docs;

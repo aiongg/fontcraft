@@ -267,6 +267,8 @@ pub struct DocState {
     pub stamp: Option<io::Stamp>,
     /// The last `audit.run` on this document, which `audit.results` and `audit.fix` read.
     pub(crate) audit: Option<Arc<cmd::audit::KeptRun>>,
+    /// A run of `audit.start` not yet finished or cancelled.
+    pub(crate) audit_staged: cmd::audit::Slot,
     /// The glyph data files beside the source, merged with the user's.
     pub(crate) glyph_data: glyph_data::CustomData,
 }
@@ -407,6 +409,7 @@ impl Session {
             #[cfg(not(target_arch = "wasm32"))]
             stamp,
             audit: None,
+            audit_staged: None,
             glyph_data: glyph_data::CustomData::default(),
         });
         self.active = Some(self.docs.len() - 1);

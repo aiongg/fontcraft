@@ -1473,6 +1473,22 @@ guesses = ["We read the style bits from OS/2 fsSelection rather than head.macSty
 observe = ["Style font (instances Light, Regular, Semibold and Bold, each with an Italic): link Semibold as the bold of Light, export, and note whether name ID 2 of Semibold and its fsSelection bold bit agree."]
 
 [[check]]
+id = "check.names.recommendedStyleLinking"
+severity = "info"
+scope = "source"
+fixable = false
+area = "qa"
+milestone = "M12"
+summary = "A static instance departs from the recommended style-linking scheme: Bold, Italic and Bold Italic link to Regular with the matching flags; every other italic links, as its italic, to the upright of the same name without Italic; no other instance is marked bold, since that hides it from family pickers that show four styles. Message codes: `ribbi-not-linked-to-regular`, `italic-not-linked-to-upright`, `bold-hides-style`."
+ref = "Font Info › Exports › Style Linking (fontInfo.styleLinking.recommendedScheme)"
+status = "handbook"
+notes = "Built in M12.64b. Documented, not yet observed. Reads the source's exporting static instances by style name; a Regular or an upright that the source does not have is not asked for. Results name the instance and the source field instance.linkStyle, so Reveal opens the Exports tab."
+guesses = [
+  "The check is in the strict profile, as an informational lint: the handbook calls linking a non-bold style as a bold allowed, so the universal profile would flag a legitimate choice; a reference report on such a family would settle it.",
+  "Styles are matched by their style names (Regular, Bold, Italic, Bold Italic, NAME Italic), not by weight class; a family named in another language would settle whether weight classes should be read too.",
+]
+
+[[check]]
 id = "check.names.noMacRecords"
 severity = "fail"
 scope = "binary"
@@ -3631,7 +3647,7 @@ milestone = "M3"
 summary = "Runs the selected checks on the open document, a source or font file, or a set of files treated as a family, and returns the result document described in docs/spec/21-qa.md. Defaults: the current document, the document's default profile, every glyph and master, and only glyphs changed since the last run unless `all` is set. Changes nothing in the font."
 ref = "fontbakery check-profile; AFDKO checkoutlinesufo; AFDKO comparefamily; fontTools varLib.interpolatable"
 status = "docs"
-notes = "M3 built the open-document target. M12.44 adds file targets (a source, a compiled font with each face of a collection and the contents of WOFF and WOFF2, several files or a folder of compiled fonts as one family), every check scope (glyph, source, binary and family checks besides the layer checks), preconditions, glyph selection entries and glyphFile (audit.glyphSelectionSyntax), the document's and the application's default profile and project or user profiles with their severity overrides and thresholds, network and includeIgnored. A source's exporting static instances, at most 32, and its variable font (with more than one master) are compiled in memory for the binary and family checks. Only a run on the open document is kept for audit.results and audit.fix. The per-glyph hash cache (`all`) is not built: every run examines every selected glyph."
+notes = "M3 built the open-document target. M12.44 adds file targets (a source, a compiled font with each face of a collection and the contents of WOFF and WOFF2, several files or a folder of compiled fonts as one family), every check scope (glyph, source, binary and family checks besides the layer checks), preconditions, glyph selection entries and glyphFile (audit.glyphSelectionSyntax), the document's and the application's default profile and project or user profiles with their severity overrides and thresholds, network and includeIgnored. A source's exporting static instances, at most 32, and its variable font (with more than one master) are compiled in memory for the binary and family checks. Only a run on the open document is kept for audit.results and audit.fix. Every result document has a `runId`, new for each run (M12.64b); audit.results, audit.fix and audit.export refuse a runId the document no longer keeps. The per-glyph hash cache (`all`) is not built: every run examines every selected glyph."
 guesses = ["A source's instances are compiled as TrueType for the binary checks whatever outline format the source exports, and at most 32 of them; a run of the reference auditors on a source would settle whether the CFF flavour or every instance should be read.", "On a source, the family checks receive every instance compiled from it, the variable font included; checks that should compare only the static instances would need the reference tools' behaviour on sources to settle it."]
 
 [[command]]
@@ -3669,14 +3685,14 @@ label = "Get Audit Results"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{target?: 'document'|path, checks?: [id|glob], exclude?: [id|glob], glyphs?: [names], minSeverity?: 'info'|'warn'|'fail', fixable?: bool, includeIgnored?: bool}"
+params = "{target?: 'document'|path, checks?: [id|glob], exclude?: [id|glob], glyphs?: [names], minSeverity?: 'info'|'warn'|'fail', fixable?: bool, includeIgnored?: bool, runId?: id}"
 area = "qa"
 milestone = "M3"
 summary = "Returns the cached results of the last run for a target without running anything, optionally filtered. Results for glyphs edited since that run are marked stale."
 ref = "Our design"
 status = "inferred"
 own = true
-notes = "M3 keeps the last run of each open document until the next run or until the document closes; saving keeps it. A glyph counts as edited when its layers differ from the run's."
+notes = "M3 keeps the last run of each open document until the next run or until the document closes; saving keeps it. A glyph counts as edited when its layers differ from the run's. The document carries the run's runId; a call with another runId is refused (M12.64b)."
 
 [[command]]
 id = "audit.fix"
@@ -3684,13 +3700,13 @@ label = "Fix Issues"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{target?: 'document'|path, results?: [resultId], profile?: id, checks?: [id|glob], exclude?: [id|glob], groups?: [group], glyphs?: [names], masters?: [ids], layers?: [ids], minSeverity?: 'info'|'warn'|'fail', config?: object, maxResults?: count, safeOnly?: bool, dryRun?: bool, keepOriginal?: 'backupLayer'|'none', decimal?: bool, keepContourOrder?: bool, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool}"
+params = "{target?: 'document'|path, results?: [resultId], runId?: id, profile?: id, checks?: [id|glob], exclude?: [id|glob], groups?: [group], glyphs?: [names], masters?: [ids], layers?: [ids], minSeverity?: 'info'|'warn'|'fail', config?: object, maxResults?: count, safeOnly?: bool, dryRun?: bool, keepOriginal?: 'backupLayer'|'none', decimal?: bool, keepContourOrder?: bool, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool}"
 area = "qa"
 milestone = "M3"
 summary = "Applies the registered fix of every selected result that has one, as a single undo step, then re-runs the affected checks and returns what changed and what remains. `dryRun` reports the planned edits only; `safeOnly` (default true) skips fixes that alter the design; `output` writes a fixed copy of a file target instead of overwriting it."
 ref = "AFDKO checkoutlinesufo -e, -o, -w, -d, --ignore-contour-order"
 status = "docs"
-notes = "M3 fixes the open document. `results` takes ids of the kept run and cannot be combined with the filters; a result whose glyph changed since the run is skipped. The first stage runs each selected Font Info fix (syncVerticalMetrics, syncVersion, syncStyleLinking, syncFamilyValues, sortZones, clearInfoFields, and the source side of cleanNameRecords and cleanInstances) once, through its font.info or font.instance command with that command's defaults, for findings of any scope; with filters, the checks of those fixes run in full, compiling the source when they read compiled fonts. Then each layer runs the outline steps of audit.outlineFixOrder. A fix whose call audit.fix cannot build yet (the glyph-data fixes, the component steps, the kerning, feature and hinting fixes, and the table fixes) is skipped with the reason, and its result reports `available: false`. The result cap does not hide findings from a fix. On the open document `output` is refused. A compiled font file as target (M12.61) runs the checks on the file, then the table repairs of docs/spec/21-qa.md § 5 › Fix calls in that table's order on a temporary copy next to the output, each call reading the previous one's output; the copy replaces `output` (default FONT.fixed.EXT, or the input with `inPlace`) only when every call succeeded, and a failing call leaves nothing written. When checking the written file again fails, the result has `remaining: null` and a warning. patchTable results pass their `table.field` to tables.recalculate (OS/2.fsType passes the project's value from the result); glyph-data and Font Info fixes, recompileCff and the CFF Top DICT fields are skipped with the reason. `results`, `masters`, `layers` and `keepOriginal` are refused on a file, and a family of files is fixed one file at a time. `decimal` and `keepContourOrder` wait for later packages."
+notes = "M3 fixes the open document. `results` takes ids of the kept run and cannot be combined with the filters; a result whose glyph changed since the run is skipped. The first stage runs each selected Font Info fix (syncVerticalMetrics, syncVersion, syncStyleLinking, syncFamilyValues, sortZones, clearInfoFields, and the source side of cleanNameRecords and cleanInstances) once, through its font.info or font.instance command with that command's defaults, for findings of any scope; with filters, the checks of those fixes run in full, compiling the source when they read compiled fonts. Then each layer runs the outline steps of audit.outlineFixOrder. A fix whose call audit.fix cannot build yet (the glyph-data fixes, the component steps, the kerning, feature and hinting fixes, and the table fixes) is skipped with the reason, and its result reports `available: false`. The result cap does not hide findings from a fix. On the open document `output` is refused. A compiled font file as target (M12.61) runs the checks on the file, then the table repairs of docs/spec/21-qa.md § 5 › Fix calls in that table's order on a temporary copy next to the output, each call reading the previous one's output; the copy replaces `output` (default FONT.fixed.EXT, or the input with `inPlace`) only when every call succeeded, and a failing call leaves nothing written. When checking the written file again fails, the result has `remaining: null` and a warning. patchTable results pass their `table.field` to tables.recalculate (OS/2.fsType passes the project's value from the result); glyph-data and Font Info fixes, recompileCff and the CFF Top DICT fields are skipped with the reason. `results`, `masters`, `layers` and `keepOriginal` are refused on a file, and a family of files is fixed one file at a time. `decimal` and `keepContourOrder` wait for later packages. `runId` (M12.64b) refuses the call when the document no longer keeps that run, so result ids cannot reach a later run. The Font Audit panel previews a fix with dryRun before applying it."
 guesses = [
   "An outline fix on a composite glyph only reports unless `safeOnly` is false (21-qa question 4).",
   "The fixes of M12 run in the three stages and the order of docs/spec/21-qa.md § 5 › Fix calls (glyph data, then layers, then kerning, feature code and hints); no reference tool fixes all of these, so a case where the order changes the result would settle it.",
@@ -3866,18 +3882,65 @@ label = "Export Audit Report"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{path: string, format?: 'json'|'text'|'markdown'|'html', target?: 'document'|path, results?: result document, minSeverity?: 'info'|'warn'|'fail', noClobber?: bool}"
+params = "{path: string, format?: 'json'|'text'|'markdown'|'html', target?: 'document'|path, results?: result document, runId?: id, minSeverity?: 'info'|'warn'|'fail', noClobber?: bool}"
 area = "qa"
 milestone = "M12"
 summary = "Writes the last results of a target to a file: the JSON result document, a plain-text log, a Markdown report grouped by check, or a self-contained HTML report."
 ref = "fontbakery --json, --ghmarkdown, --html; fontTools varLib.interpolatable --json, --html, --output; AFDKO comparefamily -l"
 status = "docs"
-notes = "The last results come from audit.results, so a path target works once the run on compiled fonts keeps its results; until then the command line passes the document it got from audit.run as `results`."
+notes = "The last results come from audit.results, so a path target works once the run on compiled fonts keeps its results; until then the command line passes the document it got from audit.run as `results`. `runId` (M12.64b) refuses the export when the document no longer keeps that run. The Font Audit panel exports the run it lists as `results`."
 guesses = [
   "Without `format`, the format follows the extension of `path` (.json, .txt, .md, .html) and is JSON for any other; a look at how the command line is used would settle it.",
   "A result document can be passed in as `results` instead of naming a target, so a run on files can be exported without being kept; settled once the run on compiled fonts keeps its results.",
   "The Markdown and HTML reports end with the checks that were skipped or failed to run, with their reasons; the reference tools' reports would settle whether to list them.",
 ]
+
+[[command]]
+id = "audit.start"
+label = "Start Audit"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{profile?, checks?, exclude?, groups?, scope?, glyphs?, glyphFile?, masters?, layers?, minSeverity?, config?, maxResults?, includePassed?, includeIgnored?, network?}"
+area = "qa"
+milestone = "M12"
+summary = "Starts an audit.run of the open document in steps, on a snapshot of the font, so a window can show progress and cancel it. Returns the run id and the amount of work. Changes nothing."
+ref = "Our design"
+status = "inferred"
+own = true
+notes = "Built in M12.64b. The work is the selected layers plus three later stages (glyph and source checks, compiling the instances, binary and family checks). Steps need no thread, so the web build runs them the same way. A run already in progress on the document is dropped. File and family targets are refused: audit.run audits them in one call."
+guesses = ["A run in steps examines the font as it was when it started, so edits made between steps make its results stale rather than changing them; people using the panel would settle whether a run should restart instead."]
+
+[[command]]
+id = "audit.step"
+label = "Continue Audit"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{runId: id, budget?: count}"
+area = "qa"
+milestone = "M12"
+summary = "Does the next part of a run started with audit.start: the next `budget` layers (default 256), else its next later stage, and reports how far the run is. The last step keeps the run as audit.run does and returns its result document."
+ref = "Our design"
+status = "inferred"
+own = true
+notes = "Built in M12.64b. The finished result document equals that of one audit.run on the snapshot, apart from its runId. Until the last step the document keeps its earlier run."
+guesses = ["A step examines 256 layers unless the call says otherwise; measuring the panel's frame time on a large font would settle the number."]
+
+[[command]]
+id = "audit.cancel"
+label = "Cancel Audit"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{runId: id}"
+area = "qa"
+milestone = "M12"
+summary = "Stops a run started with audit.start. The font and the kept run do not change; the reply holds the result document of what the run had examined, marked partial."
+ref = "Our design"
+status = "inferred"
+own = true
+notes = "Built in M12.64b. The partial document is not kept, so its fixes name checks and glyphs rather than result ids."
 
 [[command]]
 id = "audit.checkOutlines"
@@ -4010,16 +4073,79 @@ label = "Run Font Audit"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{profile?: id | null, target?: 'font'|'selectedGlyphs'|'currentGlyph'|'export'|'family', again?: bool}"
+params = "{profile?: id | null, target?: 'font'|'selectedGlyphs'|'currentGlyph'|'export'|'family', again?: bool, inSteps?: bool}"
 area = "qa"
 milestone = "M12"
 summary = "Runs audit.run with the Font Audit panel's profile and target, ignored results included, and lists its result document in the panel."
 ref = "Our design"
 status = "inferred"
-notes = "Built in M12.64. Selected Glyphs audits the glyphs of the Edit View tab, else the Font View selection; Export of This Font runs the binary and family checks on the compiled instances; Family of Open Fonts audits the saved files of every open document (two or more), whose results the engine does not keep, so Fix and Ignore are off for them. `again` repeats the last run's parameters: the panel runs it after Fix, Ignore and Stop Ignoring, and before them when live audit or an agent replaced the run the engine keeps (an unchanged font gives the same result ids). Progress and cancelling a run are not built: audit.run runs to the end in one call."
+notes = "Built in M12.64. Selected Glyphs audits the glyphs of the Edit View tab, else the Font View selection; Export of This Font runs the binary and family checks on the compiled instances; Family of Open Fonts audits the saved files of every open document (two or more), whose results the engine does not keep, so Fix and Ignore are off for them. `again` repeats the last run's parameters: the panel runs it after Fix, Ignore and Stop Ignoring, and before them when live audit or an agent replaced the run the engine keeps (an unchanged font gives the same result ids). With `inSteps` (the Run button, M12.64b) the run starts with audit.start and the panel continues it with audit.panel.continue once a frame, showing a progress bar and Cancel; a family of files still runs in one call. Agents get the whole run in one call without `inSteps`."
 guesses = [
   "Family of Open Fonts reads the saved files, not unsaved edits; an engine target for several open documents would settle it.",
 ]
+
+[[command]]
+id = "audit.panel.continue"
+label = "Continue Font Audit"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{budget?: count}"
+area = "qa"
+milestone = "M12"
+summary = "Does the next step of the run the Font Audit panel started in steps, and lists its results when it finishes."
+ref = "Our design"
+status = "inferred"
+own = true
+notes = "Built in M12.64b. The panel runs it every frame while its progress bar shows (one audit.step of 256 layers by default). A run whose document is no longer the active one is dropped with a message."
+
+[[command]]
+id = "audit.panel.cancel"
+label = "Cancel Font Audit"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{}"
+area = "qa"
+milestone = "M12"
+summary = "Stops the run the Font Audit panel started in steps and lists what it had found, marked partial. The font and the engine's kept run do not change."
+ref = "Our design"
+status = "inferred"
+own = true
+notes = "Built in M12.64b, through audit.cancel. Partial results are not the engine's kept run, so Fix, Preview Fix and Ignore are off for them; the summary says after how many of how many steps the run stopped."
+guesses = ["Cancel lists the partial results rather than going back to the earlier list; people using the panel would settle which they expect."]
+
+[[command]]
+id = "audit.panel.previewFix"
+label = "Preview Audit Fix"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{results?: [resultId], safeOnly?: bool}"
+area = "qa"
+milestone = "M12"
+summary = "Shows in the Font Audit panel's detail area the edits audit.fix would make for the selected results (a dry run), with an Apply button that makes them. Changes nothing."
+ref = "Our design"
+status = "inferred"
+own = true
+notes = "Built in M12.64b. Runs audit.fix with dryRun and the run's runId; each planned step is listed as fix, command, glyph and master, and skipped results with their reason. Apply runs the Fix action on the previewed results, then the audit again."
+guesses = ["A preview runs only when asked (Preview Fix), not on every selection change, because a dry run re-checks the layers; measuring a dry run on a large selection would settle whether it can follow the selection."]
+
+[[command]]
+id = "audit.panel.exportReport"
+label = "Export Font Audit Report"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{path: path, format?: 'json'|'markdown'|'html'|'text', minSeverity?: 'info'|'warn'|'fail'}"
+area = "qa"
+milestone = "M12"
+summary = "Writes the run the Font Audit panel lists to a report file with audit.export, including partial runs and runs on families of files that the engine does not keep."
+ref = "Our design; cf. fontbakery --html, --ghmarkdown, --json"
+status = "inferred"
+own = true
+notes = "Built in M12.64b. Export Report… in the gear menu shows a row with the file, the format (HTML first) and Export. The window has no save-file chooser yet, so the file is typed."
+guesses = ["The export row offers HTML first, as the most readable report; people using the panel would settle the default."]
 
 [[command]]
 id = "audit.revealIssue"
@@ -4027,13 +4153,13 @@ label = "Reveal Issue"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{result: resultId}"
+params = "{result: resultId, runId?: id}"
 area = "qa"
 milestone = "M12"
 summary = "Opens the glyph of a result in Edit View on the right master, selects the nodes, contours, components or anchors the result points at and zooms to them; for font-level results opens the matching Font Info field."
 ref = "Our design"
 status = "inferred"
-notes = "Built in M12.64. The result id comes from the Font Audit panel's last run, else from the document's last audit.run. A glyph result uses the tab already editing the glyph, else the tab holding exactly it, else a new tab, then selects the result's layer; the zoom shows the reported area at least 200 units wide. A result with a sourceField opens Font Info on the tab of the field (font, masters or exports), not on the field itself. A family result makes the first open document among its fonts active. A compiled-table result without a sourceField reveals nothing and says why. The closest thing in the reference app is the Show button of the export results dialog, which opens the glyph in a new tab (handbook, Glyph Naming Rules); documented but not yet observed."
+notes = "Built in M12.64. The result id comes from the Font Audit panel's last run, else from the document's last audit.run; `runId` (M12.64b) refuses the call unless the panel lists that run, and the reply names the run. A glyph result uses the tab already editing the glyph, else the tab holding exactly it, else a new tab, then selects the result's layer; the zoom shows the reported area at least 200 units wide. A result with a sourceField opens Font Info on the tab of the field (font, masters or exports), not on the field itself. A family result makes the first open document among its fonts active. A compiled-table result without a sourceField reveals nothing and says why. The closest thing in the reference app is the Show button of the export results dialog, which opens the glyph in a new tab (handbook, Glyph Naming Rules); documented but not yet observed."
 guesses = [
   "Reveal reuses a tab that already edits the glyph instead of always opening a new one as the export results dialog's Show button does, so stepping through results does not pile up tabs; watching Show in the reference app with a tab already open settles how it treats an open tab.",
   "Font Info opens on the tab that holds the field without focusing the field; a Font Info command that focuses a field would settle it.",
@@ -4048,7 +4174,7 @@ label = "Next Issue"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{scope?: 'glyph'|'font'}"
+params = "{scope?: 'glyph'|'font', runId?: id}"
 area = "qa"
 milestone = "M12"
 summary = "Reveals the next result after the current one, within the current glyph or across the font, wrapping at the end."
@@ -4063,7 +4189,7 @@ label = "Previous Issue"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{scope?: 'glyph'|'font'}"
+params = "{scope?: 'glyph'|'font', runId?: id}"
 area = "qa"
 milestone = "M12"
 summary = "Reveals the result before the current one, within the current glyph or across the font, wrapping at the start."
@@ -4169,6 +4295,7 @@ controls = [
   "profile pop-up (outlines, opentype, universal, strict, user and project profiles)",
   "target pop-up (this font, selected glyphs, current glyph, export of this font, family of open fonts)",
   "Run button with progress and cancel",
+  "export row: report file, format, Export",
   "summary counters for fail, warn, info, passed and skipped",
   "severity filter toggles, group filter, search field, 'fixable only' and 'current glyph only' toggles",
   "result outline grouped by check, by glyph or by severity; each row shows severity, glyph or table, master and message",
@@ -4183,7 +4310,7 @@ milestone = "M12"
 summary = "Runs audits and lists their results. Selecting a row reveals the issue; fixes and ignores apply to the selected rows. Every control dispatches an audit.* command, so the panel holds no logic of its own."
 ref = "Our design; cf. fontbakery HTML report, fontTools varLib.interpolatable report"
 status = "inferred"
-notes = "Built in M12.64 (crates/ui-egui/src/shell/font_audit.rs). Click selects a row, Cmd-click adds or removes one, Shift-click selects a range; double-click or Return reveals the current row. The detail area shows the check's description, the location, the result's data and the fix's description with whether it is safe; a computed fix preview (audit.fix dryRun) is not built. Fix, Fix All Safe, Ignore and Stop Ignoring run their engine command and then run the audit again. The profile pop-up lists what audit.profile.list returns: the built-in profiles, the document's project profiles and the user's. The gear menu has Edit Profiles and Thresholds, Clear Cache and Live Audit; Export Report is not built (it needs a save-file chooser), audit.export does it from the command line and the control channel. Progress and cancel are not built."
+notes = "Built in M12.64 (crates/ui-egui/src/shell/font_audit.rs). Click selects a row, Cmd-click adds or removes one, Shift-click selects a range; double-click or Return reveals the current row. The detail area shows the check's description, the location, the result's data and the fix's description with whether it is safe; Preview Fix (M12.64b) lists the edits a dry run of audit.fix plans, with Apply. Fix, Fix All Safe, Ignore and Stop Ignoring run their engine command and then run the audit again. The profile pop-up lists what audit.profile.list returns: the built-in profiles, the document's project profiles and the user's. The gear menu has Edit Profiles and Thresholds, Export Report, Clear Cache and Live Audit. Run (M12.64b) runs in steps with a progress bar and Cancel; a cancelled run lists its partial results, marked. Export Report shows a row with a typed file path, as the window has no save-file chooser yet."
 guesses = [
   "Fix runs the selected rows' fixes with safeOnly false, since the person chose them, while Fix All Safe keeps safeOnly true; watching how people use the panel would settle it.",
   "Ignoring several rows at once is one undo step (a command.batch); nothing settles it.",

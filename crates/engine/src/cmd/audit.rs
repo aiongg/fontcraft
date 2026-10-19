@@ -122,14 +122,24 @@ const STRAIGHTEN_MARGIN: f64 = 1e-6;
 const FIX_LABEL: &str = "Fix Audit Results";
 const NO_RUN: &str = "no audit has run on this document since it was opened: run audit.run first";
 
+mod staged;
+
+pub(crate) use staged::Slot;
+
 pub fn specs() -> Vec<CommandSpec> {
+    let mut v = run_specs();
+    v.extend(staged::specs());
+    v
+}
+
+fn run_specs() -> Vec<CommandSpec> {
     vec![
         cmd!(
             query "audit.run",
             "Run Audit",
             [],
             None,
-            "{target?: \"document\" | path | [paths] (default the open document; several files or a folder of compiled fonts are also one family), profile?: id (default the document's default profile, else the application's, else universal), checks?: [id | prefix*], exclude?: [id | prefix*], groups?: [group], scope?: [\"source\" | \"binary\" | \"family\"], glyphs?: [names, indexes, first-last ranges, /CID] (entries that match nothing are warned about), glyphFile?: path (the same entries in a file), masters?: [ids], layers?: [ids], minSeverity?: \"info\" | \"warn\" | \"fail\", config?: {checkId: {threshold: number}}, maxResults?: count = 100, includePassed?: bool = false, includeIgnored?: bool = false, network?: bool = false} runs the checks of every scope and changes nothing: layer checks on every layer of the selected glyphs except backup layers (or the layers in `layers`), glyph and source checks on the source, binary checks on each compiled font (a source's exporting instances and variable font are compiled in memory and their findings name the source field behind a compiled value), family checks on two or more fonts. Turned-on check modules (none in safe mode) run on the same layers under any profile with layer checks; their results have the check id check.plugin.<module>.<name>, group plugin and no fix, and a module that fails is listed once in checks with status error and a message. On a compiled font the outline checks read the decoded file and checks that need source data are skipped. A check whose preconditions do not hold is skipped with the reason. A pattern that matches no check is an error. A capped check with more than maxResults results in one font gives one info result with the count instead. Results on the source's ignore list are counted in summary.ignored and listed only with includeIgnored. A run on the open document is kept for audit.results and audit.fix. A result's fix gives the audit.fix call that carries it out: {results: [id]} on the open document, {checks, glyphs, layers} on a source file, {target, checks} on one compiled font file → {schema, tool, target: {kind, path, fonts: [{id, name, path, instance, format}]}, document?: {title, revision}, profile, config, summary: {fail, warn, info, passed, skipped, ignored, errors, truncated}, checks: [{id, status, results, reason?, message?}], results: [{id, check, code, severity, message, location: {font, glyph, master, layer, shapes?, points?, segments?, point?, bounds?, table?, field?, sourceField?, instance?, fonts?, masters?}, data, fix: {available, id?, safe?, description?, command?, params?, via?}, ignored, stale}], warnings?: [text]}",
+            "{target?: \"document\" | path | [paths] (default the open document; several files or a folder of compiled fonts are also one family), profile?: id (default the document's default profile, else the application's, else universal), checks?: [id | prefix*], exclude?: [id | prefix*], groups?: [group], scope?: [\"source\" | \"binary\" | \"family\"], glyphs?: [names, indexes, first-last ranges, /CID] (entries that match nothing are warned about), glyphFile?: path (the same entries in a file), masters?: [ids], layers?: [ids], minSeverity?: \"info\" | \"warn\" | \"fail\", config?: {checkId: {threshold: number}}, maxResults?: count = 100, includePassed?: bool = false, includeIgnored?: bool = false, network?: bool = false} runs the checks of every scope and changes nothing: layer checks on every layer of the selected glyphs except backup layers (or the layers in `layers`), glyph and source checks on the source, binary checks on each compiled font (a source's exporting instances and variable font are compiled in memory and their findings name the source field behind a compiled value), family checks on two or more fonts. Turned-on check modules (none in safe mode) run on the same layers under any profile with layer checks; their results have the check id check.plugin.<module>.<name>, group plugin and no fix, and a module that fails is listed once in checks with status error and a message. On a compiled font the outline checks read the decoded file and checks that need source data are skipped. A check whose preconditions do not hold is skipped with the reason. A pattern that matches no check is an error. A capped check with more than maxResults results in one font gives one info result with the count instead. Results on the source's ignore list are counted in summary.ignored and listed only with includeIgnored. A run on the open document is kept for audit.results and audit.fix. A result's fix gives the audit.fix call that carries it out: {results: [id]} on the open document, {checks, glyphs, layers} on a source file, {target, checks} on one compiled font file. Every run has a new runId, which audit.results, audit.fix and audit.export take to make sure the kept run is still that one → {schema, tool, runId, target: {kind, path, fonts: [{id, name, path, instance, format}]}, document?: {title, revision}, profile, config, summary: {fail, warn, info, passed, skipped, ignored, errors, truncated}, checks: [{id, status, results, reason?, message?}], results: [{id, check, code, severity, message, location: {font, glyph, master, layer, shapes?, points?, segments?, point?, bounds?, table?, field?, sourceField?, instance?, fonts?, masters?}, data, fix: {available, id?, safe?, description?, command?, params?, via?}, ignored, stale}], warnings?: [text]}",
             always,
             run
         )
@@ -157,7 +167,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Get Audit Results",
             [],
             None,
-            "{checks?: [id | prefix*], exclude?: [id | prefix*], glyphs?: [names], minSeverity?: \"info\" | \"warn\" | \"fail\", fixable?: bool, includeIgnored?: bool, target?: \"document\"} the result document of the last audit.run on the open document, without running anything, narrowed to the matching results. A result whose glyph changed since the run has `stale: true`. An error when no run is kept (none since the document was opened) → the result document of audit.run, with summary.stale",
+            "{checks?: [id | prefix*], exclude?: [id | prefix*], glyphs?: [names], minSeverity?: \"info\" | \"warn\" | \"fail\", fixable?: bool, includeIgnored?: bool, runId?: id (refused unless the kept run is that one), target?: \"document\"} the result document of the last audit.run on the open document, with its runId, without running anything, narrowed to the matching results. A result whose glyph changed since the run has `stale: true`. An error when no run is kept (none since the document was opened) → the result document of audit.run, with summary.stale",
             has_doc,
             results
         ),
@@ -166,7 +176,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Fix Issues",
             [],
             None,
-            "{results?: [result id] (from the last audit.run; not with the other filters), profile?, checks?: [id | prefix*], exclude?, groups?, glyphs?: [names], masters?: [ids], layers?: [ids], minSeverity?, config?, safeOnly?: bool = true, dryRun?: bool = false, keepOriginal?: \"backupLayer\" | \"none\" = \"backupLayer\", maxResults?: count = 100, target?: \"document\" | path, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool} repairs what the selected results report. On a compiled font file (target a path) it runs the checks on the file and then, on a copy, the table repairs in this order, each call reading the previous one's output: tables.delete, tables.recompileCff, tables.recompileLayout, tables.rebuildCmap, tables.cleanNameRecords, tables.cleanInstances, tables.dropAxis (one call per axis), variations.buildHvar, outlines.removeOverlaps (the reported glyphs) and tables.recalculate (the reported table fields); the copy replaces output (default FONT.fixed.EXT, or the input with inPlace) only when every call succeeded, and fixes that edit a source are skipped → {output, applied: [{fix, command, params, checks, result}], skipped, planned? (dryRun), remaining: the result document of the same checks on the output}. On the open document: First each selected Font Info fix runs once, whatever the scope of its findings: font.info.syncVerticalMetrics, font.info.syncVersion, font.instance.syncStyleLinking, font.info.syncFamilyValues, font.info.sortZones, font.info.clearGeneratedFields, font.info.cleanNames and font.instance.cleanUp, in that order (with filters, their checks run on the source and its compiled instances). Then each selected layer (a result of a compiled instance on every master layer of its source glyph), by running edit.delete (empty glyphs), component.flatten, edit.delete (repeated components), component.decompose, component.enableAutomaticAlignment, path.closeOpenPaths, edit.delete (duplicate contours), path.eraseOpenCorners, path.tidyUpPaths, path.removeOverlap, edit.delete (tiny contours), path.correctPathDirection, path.addExtremes, path.addInflections, path.convertToCubic or path.convertToQuadratic, path.toggleNodeType, selection.setPosition (kinked smooth nodes), path.harmonizeNodes, selection.setPosition (almost orthogonal handles), selection.move (points near a metric line), path.makeNodeFirst (start points, then start points that differ between masters), path.roundCoordinates, anchor.remove and anchor.add (repeated anchor names), glyph.setAnchors, spacing.setWidth and glyph.updateMetrics (widths from keys or the compared glyph) and spacing.setWidth (mark widths), in that order, on what the checks report then. The unfixed layer is first copied to a backup layer of its master unless keepOriginal is \"none\". All of it is one undo step. safeOnly skips fixes that change the design and the outline fixes of layers with components. A locked glyph, a stale result, a fix audit.fix cannot carry out yet and a step that fails are skipped and left as they were → {applied: [{fix, glyph?, layer?, master?, command, params, checks?, changed?}], backups: [{glyph, layer, backup}], skipped: [{glyph?, layer?, check?, fix?, reason}], planned?: [{fix, glyph?, layer?, master?, command, params, results?, checks?, changed?}] (dryRun), remaining: the result document of the selected checks on the glyphs involved, and of the Font Info fixes' checks on the whole font}",
+            "{results?: [result id] (from the last audit.run; not with the other filters), runId?: id (refused unless the document still keeps that run), profile?, checks?: [id | prefix*], exclude?, groups?, glyphs?: [names], masters?: [ids], layers?: [ids], minSeverity?, config?, safeOnly?: bool = true, dryRun?: bool = false, keepOriginal?: \"backupLayer\" | \"none\" = \"backupLayer\", maxResults?: count = 100, target?: \"document\" | path, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool} repairs what the selected results report. On a compiled font file (target a path) it runs the checks on the file and then, on a copy, the table repairs in this order, each call reading the previous one's output: tables.delete, tables.recompileCff, tables.recompileLayout, tables.rebuildCmap, tables.cleanNameRecords, tables.cleanInstances, tables.dropAxis (one call per axis), variations.buildHvar, outlines.removeOverlaps (the reported glyphs) and tables.recalculate (the reported table fields); the copy replaces output (default FONT.fixed.EXT, or the input with inPlace) only when every call succeeded, and fixes that edit a source are skipped → {output, applied: [{fix, command, params, checks, result}], skipped, planned? (dryRun), remaining: the result document of the same checks on the output}. On the open document: First each selected Font Info fix runs once, whatever the scope of its findings: font.info.syncVerticalMetrics, font.info.syncVersion, font.instance.syncStyleLinking, font.info.syncFamilyValues, font.info.sortZones, font.info.clearGeneratedFields, font.info.cleanNames and font.instance.cleanUp, in that order (with filters, their checks run on the source and its compiled instances). Then each selected layer (a result of a compiled instance on every master layer of its source glyph), by running edit.delete (empty glyphs), component.flatten, edit.delete (repeated components), component.decompose, component.enableAutomaticAlignment, path.closeOpenPaths, edit.delete (duplicate contours), path.eraseOpenCorners, path.tidyUpPaths, path.removeOverlap, edit.delete (tiny contours), path.correctPathDirection, path.addExtremes, path.addInflections, path.convertToCubic or path.convertToQuadratic, path.toggleNodeType, selection.setPosition (kinked smooth nodes), path.harmonizeNodes, selection.setPosition (almost orthogonal handles), selection.move (points near a metric line), path.makeNodeFirst (start points, then start points that differ between masters), path.roundCoordinates, anchor.remove and anchor.add (repeated anchor names), glyph.setAnchors, spacing.setWidth and glyph.updateMetrics (widths from keys or the compared glyph) and spacing.setWidth (mark widths), in that order, on what the checks report then. The unfixed layer is first copied to a backup layer of its master unless keepOriginal is \"none\". All of it is one undo step. safeOnly skips fixes that change the design and the outline fixes of layers with components. A locked glyph, a stale result, a fix audit.fix cannot carry out yet and a step that fails are skipped and left as they were → {applied: [{fix, glyph?, layer?, master?, command, params, checks?, changed?}], backups: [{glyph, layer, backup}], skipped: [{glyph?, layer?, check?, fix?, reason}], planned?: [{fix, glyph?, layer?, master?, command, params, results?, checks?, changed?}] (dryRun), remaining: the result document of the selected checks on the glyphs involved, and of the Font Info fixes' checks on the whole font}",
             always,
             fix
         )
@@ -490,8 +500,22 @@ type Raw = Vec<(usize, Finding)>;
 
 /// Runs the layer, glyph and source checks of `run` on `font`, the font at `fi` in the target.
 fn examine_font(font: &Font, fi: usize, run: &Run, facts: &audit::run::Facts, ex: &mut Examined, raw: &mut Raw, places: &mut HashMap<usize, Places>) {
-    let ctx = AuditContext::new(font);
-    let services = super::audit_services::EngineServices;
+    let layer_checks = start_font(font, fi, run, facts, ex, places);
+    let n = layers_of(font, run).len();
+    examine_layers(font, fi, run, &layer_checks, 0..n, ex, raw, places);
+    examine_rest(font, fi, run, facts, ex, raw);
+}
+
+/// Before a font's layers: records where its glyphs sort and returns the layer checks whose
+/// preconditions hold, counting the others as skipped.
+fn start_font(
+    font: &Font,
+    fi: usize,
+    run: &Run,
+    facts: &audit::run::Facts,
+    ex: &mut Examined,
+    places: &mut HashMap<usize, Places>,
+) -> Vec<&'static CheckSpec> {
     let mut layer_checks = Vec::new();
     for &c in run.checks.iter().filter(|c| c.scope == CheckScope::Layer) {
         match audit::run::unmet(c, facts, None) {
@@ -501,20 +525,46 @@ fn examine_font(font: &Font, fi: usize, run: &Run, facts: &audit::run::Facts, ex
     }
     let place = places.entry(fi).or_default();
     place.glyphs = font.glyphs.as_arcs().iter().enumerate().map(|(i, g)| (g.name.clone(), i)).collect();
+    layer_checks
+}
+
+/// Runs the layer checks and the check modules on the layers at `range` of [`layers_of`].
+#[allow(clippy::too_many_arguments)]
+fn examine_layers(
+    font: &Font,
+    fi: usize,
+    run: &Run,
+    layer_checks: &[&'static CheckSpec],
+    range: std::ops::Range<usize>,
+    ex: &mut Examined,
+    raw: &mut Raw,
+    places: &mut HashMap<usize, Places>,
+) {
+    let all = layers_of(font, run);
+    let Some(chosen) = all.get(range.start.min(all.len())..range.end.min(all.len())) else { return };
+    let ctx = AuditContext::new(font);
+    let place = places.entry(fi).or_default();
     if !layer_checks.is_empty() {
-        for (_, g, li, layer) in layers_of(font, run) {
-            let report = audit::audit_layer(&ctx, g, layer, &layer_checks, &run.config);
-            place.layers.insert((g.name.clone(), layer.id.clone()), (li, layer.master.clone()));
-            ex.tally.absorb(&layer_checks, report);
+        for (_, g, li, layer) in chosen {
+            let report = audit::audit_layer(&ctx, g, layer, layer_checks, &run.config);
+            place.layers.insert((g.name.clone(), layer.id.clone()), (*li, layer.master.clone()));
+            ex.tally.absorb(layer_checks, report);
         }
     }
     if !run.modules.is_empty() {
-        for (_, g, li, layer) in layers_of(font, run) {
-            place.layers.insert((g.name.clone(), layer.id.clone()), (li, layer.master.clone()));
+        for (_, g, li, layer) in chosen {
+            place.layers.insert((g.name.clone(), layer.id.clone()), (*li, layer.master.clone()));
             run.modules.run_layer(font, g, layer, &mut ex.modules, &mut ex.tally.findings);
         }
         ex.tally.truncated = ex.tally.truncated.saturating_add(std::mem::take(&mut ex.modules.truncated));
     }
+    raw.extend(ex.tally.findings.drain(..).map(|f| (fi, f)));
+}
+
+/// Runs the glyph and source checks of `run` on `font`.
+fn examine_rest(font: &Font, fi: usize, run: &Run, facts: &audit::run::Facts, ex: &mut Examined, raw: &mut Raw) {
+    let ctx = AuditContext::new(font);
+    let services = super::audit_services::EngineServices;
     audit::run::run_glyphs(&ctx, &services, &run.checks, &run.config, facts, run.glyphs.as_ref(), &mut ex.tally);
     audit::run::run_source(&ctx, &services, &run.checks, &run.config, facts, &mut ex.tally);
     raw.extend(ex.tally.findings.drain(..).map(|f| (fi, f)));
@@ -1127,6 +1177,7 @@ pub struct KeptRun {
     font: Arc<Font>,
     report: Value,
     refs: Vec<ResultRef>,
+    run_id: String,
 }
 
 fn kept_run(d: &DocState) -> Option<&KeptRun> {
@@ -1154,14 +1205,61 @@ fn run(s: &mut Session, v: &Value) -> Result<Value> {
             ("binary", Some(path)) => FixParams::File(path),
             _ => FixParams::BySelection,
         };
-        return document(&t, &run, &ex, how, false);
+        let mut report = document(&t, &run, &ex, how, false)?;
+        set_run_id(&mut report, &next_run_id());
+        return Ok(report);
     }
     let doc = s.doc()?;
     let mut t = document_target_of(doc);
-    let run = read_run(&p, s, &doc.font, &t.settings)?;
+    let font = doc.font.clone();
+    let run = read_run(&p, s, &font, &t.settings)?;
     let ex = examine_target(&mut t, &run);
-    let kept = document(&t, &run, &ex, FixParams::ById, true)?;
-    let report = if run.include_ignored { kept.clone() } else { document(&t, &run, &ex, FixParams::ById, false)? };
+    keep_run(s, &t, &run, &ex, font, next_run_id())
+}
+
+/// Ids of runs: unique for the life of the process, so a result list can tell whether the
+/// engine's kept run is still the one it shows.
+static RUNS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// A new run id.
+pub(super) fn next_run_id() -> String {
+    let n = RUNS.fetch_add(1, std::sync::atomic::Ordering::Relaxed).saturating_add(1);
+    format!("run{n}")
+}
+
+fn set_run_id(report: &mut Value, id: &str) {
+    if let Some(o) = report.as_object_mut() {
+        o.insert("runId".into(), json!(id));
+    }
+}
+
+/// The id of the run the open document keeps, if any.
+pub(super) fn kept_run_id(d: &DocState) -> Option<&str> {
+    kept_run(d).map(|k| k.run_id.as_str())
+}
+
+/// Refuses a call whose `runId` names a run other than the one the document keeps.
+pub(super) fn check_run_id(p: &Params, d: &DocState) -> Result<()> {
+    let Some(asked) = p.opt_str("runId")? else { return Ok(()) };
+    match kept_run_id(d) {
+        Some(kept) if kept == asked => Ok(()),
+        Some(kept) => Err(p.bad(format!("the results of run `{asked}` are no longer kept: the document keeps run `{kept}`; run the audit again"))),
+        None => Err(p.bad(format!("the results of run `{asked}` are no longer kept: {NO_RUN}"))),
+    }
+}
+
+/// Keeps the run `ex` of the open document (which examined `font`) for `audit.results` and
+/// `audit.fix` under `run_id`, and returns its result document.
+fn keep_run(s: &mut Session, t: &Target, run: &Run, ex: &Examined, font: Arc<Font>, run_id: String) -> Result<Value> {
+    let mut kept = document(t, run, ex, FixParams::ById, true)?;
+    set_run_id(&mut kept, &run_id);
+    let report = if run.include_ignored {
+        kept.clone()
+    } else {
+        let mut r = document(t, run, ex, FixParams::ById, false)?;
+        set_run_id(&mut r, &run_id);
+        r
+    };
     let refs = ex
         .hits
         .iter()
@@ -1173,8 +1271,7 @@ fn run(s: &mut Session, v: &Value) -> Result<Value> {
             layer: h.finding.location.layer.clone(),
         })
         .collect();
-    let font = s.doc()?.font.clone();
-    s.doc_mut()?.audit = Some(Arc::new(KeptRun { font, report: kept, refs }));
+    s.doc_mut()?.audit = Some(Arc::new(KeptRun { font, report: kept, refs, run_id }));
     Ok(report)
 }
 
@@ -1196,6 +1293,7 @@ fn results(s: &mut Session, v: &Value) -> Result<Value> {
     };
     let include_ignored = p.bool_or("includeIgnored", false)?;
     let doc = s.doc()?;
+    check_run_id(&p, doc)?;
     let last = kept_run(doc).ok_or_else(|| p.bad(NO_RUN))?;
     // The ignore list as it is now: entries added or removed since the run apply.
     let settings = DocumentSettings::read(&doc.font).0;
@@ -1372,6 +1470,7 @@ fn fix(s: &mut Session, v: &Value) -> Result<Value> {
         return super::audit_fix_binary::fix_file(s, v);
     }
     document_target(&p)?;
+    check_run_id(&p, s.doc()?)?;
     if p.get("output").is_some() {
         return Err(EngineError::Unsupported("writing a fixed copy to `output`; fix the open document and save it".into()));
     }
