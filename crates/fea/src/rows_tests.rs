@@ -1194,6 +1194,47 @@ fn a_lone_surrogate_in_a_name_is_refused() {
 }
 
 #[test]
+fn a_contextual_call_to_a_lookup_with_no_rules_is_refused() {
+    fails_with("lookup E { } E; feature calt { sub a' lookup E b; } calt;", "lookup `E`, which has no rules");
+    fails_with("lookup E { lookupflag IgnoreMarks; } E; feature kern { pos a' lookup E b; } kern;", "lookup `E`, which has no rules");
+    fails_with("lookup E { } E; feature calt { sub [a b]' lookup E c' lookup E d; } calt;", "lookup `E`");
+    // A feature that names the empty lookup directly is fine, and so is a call to one with rules.
+    ok("lookup E { } E; feature liga { lookup E; } liga;");
+    let c = ok("lookup F { sub a by b; } F; feature calt { sub a' lookup F b; } calt;");
+    assert!(gsub(&c).contains(&6), "{:?}", gsub(&c));
+}
+
+#[test]
+fn indices_past_16_bits_are_refused() {
+    let mut lookups: String = (0..65_537).map(|i| format!("lookup L{i} {{ sub a by b; }} L{i};\n")).collect();
+    lookups.push_str("feature liga { lookup L65536; } liga;");
+    fails_with(&lookups, "65535 GSUB lookups");
+
+    // Feature tags `Q` plus three letters or digits, none of them a tag fea-rs treats specially.
+    let chars: Vec<char> = ('A'..='Z').chain('a'..='z').chain('0'..='9').collect();
+    let tag = |i: usize| -> String {
+        [Some('Q'), chars.get(i / 3844).copied(), chars.get(i / 62 % 62).copied(), chars.get(i % 62).copied()].into_iter().flatten().collect()
+    };
+    let mut features = String::from("lookup X { sub a by b; } X;\n");
+    features.extend((0..65_537).map(|i| format!("feature {t} {{ lookup X; }} {t};\n", t = tag(i))));
+    fails_with(&features, "65535 features");
+
+    // Distinct sets of four of the 52 one-letter glyphs.
+    let letters: Vec<&str> = NAMES.split_whitespace().filter(|n| n.len() == 1).collect();
+    let n = letters.len();
+    let sets = (0..n).flat_map(|a| (a + 1..n).flat_map(move |b| (b + 1..n).flat_map(move |c| (c + 1..n).map(move |d| [a, b, c, d]))));
+    let mut flags = String::from("feature liga {\n");
+    flags.extend(sets.take(65_537).map(|set| format!("lookupflag UseMarkFilteringSet [{}];\n", set.map(|i| letters[i]).join(" "))));
+    flags.push_str("sub a by b; } liga;");
+    fails_with(&flags, "65535 mark filtering sets");
+
+    let mut labels = String::from("feature cv01 { cvParameters {\n");
+    labels.extend((0..65_536).map(|_| "ParamUILabelNameID { name \"x\"; };\n"));
+    labels.push_str("}; sub a by b; } cv01;");
+    fails_with(&labels, "named parameters");
+}
+
+#[test]
 fn a_panic_on_the_compiler_thread_is_reported() {
     let result: Result<(), Vec<Diagnostic>> = crate::run::on_big_stack(|| panic!("boom"));
     let d = result.unwrap_err();

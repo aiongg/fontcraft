@@ -12,6 +12,9 @@ pub(crate) struct Order {
 }
 
 impl Order {
+    /// The new id of a glyph a subset drops: no table may refer to it.
+    pub const DROPPED: u16 = u16::MAX;
+
     pub fn new(new_to_old: Vec<u16>) -> Self {
         let mut old_to_new = vec![0u16; new_to_old.len()];
         for (new, old) in new_to_old.iter().enumerate() {
@@ -26,9 +29,14 @@ impl Order {
         self.new_to_old.len()
     }
 
-    /// The new id of old glyph `old`; ids past the glyph count are an error.
+    /// The new id of old glyph `old`; ids past the glyph count, and glyphs a subset drops, are
+    /// an error.
     pub fn map(&self, old: u16) -> Result<u16> {
-        self.old_to_new.get(usize::from(old)).copied().ok_or_else(|| TablesError::invalid(format!("glyph id {old} is past the glyph count")))
+        match self.old_to_new.get(usize::from(old)).copied() {
+            None => Err(TablesError::invalid(format!("glyph id {old} is past the glyph count"))),
+            Some(Self::DROPPED) => Err(TablesError::invalid(format!("glyph id {old} is not in the subset but a table still refers to it"))),
+            Some(new) => Ok(new),
+        }
     }
 
     /// `items` (indexed by old glyph id) in the new order.

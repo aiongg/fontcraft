@@ -841,10 +841,10 @@ pub fn apply(plan: &Plan, input: &SfntFont, output: &mut SfntFont) -> Result<()>
     Ok(())
 }
 
-/// Input glyph id → output glyph id, for every input glyph (dropped ones map to 0, and no
-/// subset table refers to them).
+/// Input glyph id → output glyph id, for every input glyph; dropped ones map to
+/// [`Order::DROPPED`], which no subset table may refer to.
 fn output_order(plan: &Plan) -> Order {
-    let mut old_to_new = vec![0u16; plan.num_glyphs];
+    let mut old_to_new = vec![Order::DROPPED; plan.num_glyphs];
     let mut new_to_old = Vec::with_capacity(plan.new_to_old.len());
     for (new, old) in plan.new_to_old.iter().enumerate() {
         let old16 = u16::try_from(*old).unwrap_or(u16::MAX);

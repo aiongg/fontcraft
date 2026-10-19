@@ -196,6 +196,38 @@ fn subset_colr_closes_over_paints_rebuilds_layer_reuse_and_prunes_the_palette() 
     assert!(none.font.get(*b"COLR").is_none() && none.font.get(*b"CPAL").is_none(), "no color glyph is left");
 }
 
+#[test]
+fn subset_colr_skips_a_clip_record_whose_range_runs_backwards() {
+    let mut font = outlines(&[("A", 0x41), ("B", 0x42), ("C", 0x43)]);
+    let g = gids(&font);
+    let mut pool = Pool(Vec::new());
+    let pa = pool.add(paint_glyph(g["B"], 0));
+    let mut table = colr(&pool, &[(g["A"], pa)], &[]);
+    let clips = table.len();
+    table.splice(22..26, (clips as u32).to_be_bytes());
+    table.push(1);
+    be32(&mut table, 2);
+    for (start, end) in [(g["A"], g["A"]), (g["C"], g["A"])] {
+        be16(&mut table, start);
+        be16(&mut table, end);
+        table.extend_from_slice(&[0, 0, 19]);
+    }
+    table.push(1);
+    for v in [0u16, 0, 500, 700] {
+        be16(&mut table, v);
+    }
+    font.insert(*b"COLR", table);
+    font.insert(*b"CPAL", cpal(1));
+
+    // Before the guard, the backwards record (C to A) made the subsetter panic.
+    let result = run(&font, "A");
+    let out = result.font.get(*b"COLR").unwrap();
+    let d = Data::new(*b"COLR", out);
+    let list = d.u32_usize(22).unwrap();
+    assert_ne!(list, 0, "the clip list stays");
+    assert_eq!(d.u32(list + 1).unwrap(), 1, "only A's clip is left");
+}
+
 // ── MATH ──
 
 fn math(g: &BTreeMap<String, u16>) -> Vec<u8> {
@@ -277,6 +309,34 @@ fn svg_docs(table: &[u8]) -> Vec<(u16, u16, String)> {
 }
 
 const SVG_HEAD: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">"#;
+
+#[test]
+fn subset_svg_skips_a_backwards_record_and_reads_a_shared_document_once() {
+    let mut font = outlines(&[("A", 0x41), ("B", 0x42), ("C", 0x43)]);
+    let doc = format!(r#"{SVG_HEAD}<g id="glyph1"><path d="M0 0"/></g><g id="glyph2"><path d="M1 1"/></g></svg>"#);
+    // Two records over one document, and one whose first glyph (3) comes after its last (1).
+    let mut table = Vec::new();
+    be16(&mut table, 0);
+    be32(&mut table, 10);
+    be32(&mut table, 0);
+    be16(&mut table, 3);
+    let doc_at = 2 + 12 * 3;
+    for (start, end) in [(1u16, 1u16), (2, 2), (3, 1)] {
+        be16(&mut table, start);
+        be16(&mut table, end);
+        be32(&mut table, doc_at);
+        be32(&mut table, doc.len() as u32);
+    }
+    table.extend_from_slice(doc.as_bytes());
+    font.insert(*b"SVG ", table);
+
+    // Before the guard, the backwards record made the subsetter panic.
+    let result = run(&font, "AB");
+    let docs = svg_docs(result.font.get(*b"SVG ").unwrap());
+    assert_eq!(docs.len(), 2, "{docs:?}");
+    assert!(docs[0].2.contains("glyph1") && !docs[0].2.contains("glyph2"), "{docs:?}");
+    assert!(docs[1].2.contains("glyph2") && !docs[1].2.contains("glyph1"), "{docs:?}");
+}
 
 #[test]
 fn subset_svg_keeps_referenced_elements_and_renumbers_glyph_ids() {
@@ -398,6 +458,45 @@ fn glyph_tables_view(font: &SfntFont) -> GlyphTables {
         })
         .collect();
     (kern, vorg, hdmx, sbix)
+}
+
+/// An sbix for 4 glyphs whose strike list holds `list` (indices into `ppems`, one strike per
+/// ppem, every bitmap empty).
+fn sbix_strikes(ppems: &[u16], list: &[usize]) -> Vec<u8> {
+    let header = 8 + 4 * list.len();
+    let strike_len = 4 + 4 * 5;
+    let mut out = Vec::new();
+    be16(&mut out, 1);
+    be16(&mut out, 1);
+    be32(&mut out, list.len() as u32);
+    for i in list {
+        be32(&mut out, (header + i * strike_len) as u32);
+    }
+    for p in ppems {
+        be16(&mut out, *p);
+        be16(&mut out, 72);
+        for _ in 0..5 {
+            be32(&mut out, strike_len as u32);
+        }
+    }
+    out
+}
+
+#[test]
+fn subset_sbix_reads_a_repeated_strike_once_and_caps_the_strikes() {
+    let mut font = outlines(&[("A", 0x41), ("B", 0x42), ("C", 0x43)]);
+    let mut list = vec![0; 200_000];
+    list.push(1);
+    font.insert(*b"sbix", sbix_strikes(&[20, 40], &list));
+    let out = run(&font, "A");
+    let d = Data::new(*b"sbix", out.font.get(*b"sbix").unwrap());
+    assert_eq!(d.u32(4).unwrap(), 2, "one strike per ppem");
+
+    let ppems: Vec<u16> = (1..=257).collect();
+    let list: Vec<usize> = (0..257).collect();
+    font.insert(*b"sbix", sbix_strikes(&ppems, &list));
+    let err = subset(&font, &SubsetOptions { text: "A".into(), ..SubsetOptions::default() }).err().expect("refused");
+    assert!(err.to_string().contains("sbix strikes"), "{err}");
 }
 
 #[test]

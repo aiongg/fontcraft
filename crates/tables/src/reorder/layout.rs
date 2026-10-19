@@ -113,7 +113,7 @@ fn remap_classes(cd: &mut ClassDef, order: &Order) -> Result<()> {
         if work > budget {
             return Err(TablesError::invalid("a class definition has too many overlapping ranges"));
         }
-        if let Some(new) = order.old_to_new.get(g) {
+        if let Some(new) = order.old_to_new.get(g).filter(|new| **new != Order::DROPPED) {
             let new = usize::from(*new);
             if new < n {
                 entries.push((new, class));

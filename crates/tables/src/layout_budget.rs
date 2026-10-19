@@ -6,6 +6,7 @@
 //! hold, because the callers expand them.
 //!
 //! Parts that cannot be read count as one item: the owned conversion skips or defaults them too.
+//! `BASE` and `MATH` have their checks in `base_math`.
 
 use read_fonts::tables::gdef::{CaretValue, Gdef};
 use read_fonts::tables::gpos::{
@@ -25,6 +26,9 @@ use read_fonts::{FontData, FontRead, ReadError};
 
 use crate::limits::{MAX_LAYOUT_ITEMS, MAX_LOOKUP_NESTING};
 use crate::{Result, TablesError};
+
+mod base_math;
+pub(crate) use base_math::{check_base, check_math};
 
 /// The value-format bits of the four device offsets.
 const DEVICE_BITS: u16 = 0x00F0;

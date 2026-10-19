@@ -23,6 +23,18 @@ use crate::reorder::be::{Data, put_u16, put_u32, search_params, to_u16, to_u32};
 use crate::sfnt::{SfntFont, Tag};
 use crate::{Result, TablesError};
 
+/// Most bitmap strikes an `sbix` or `CBLC`/`EBLC` table may have.
+pub const MAX_BITMAP_STRIKES: usize = 256;
+/// Most bitmap index entries the strikes of one `CBLC`/`EBLC` table may list together.
+pub const MAX_BITMAP_ENTRIES: usize = 1 << 23;
+/// Most bitmap bytes the subset strikes of one table may hold together.
+pub const MAX_BITMAP_BYTES: usize = crate::limits::MAX_SFNT;
+
+fn charge_bitmap_bytes(budget: &mut usize, len: usize) -> Result<()> {
+    *budget = budget.checked_sub(len).ok_or(TablesError::TooLarge { what: "the subset bitmaps", limit: MAX_BITMAP_BYTES })?;
+    Ok(())
+}
+
 /// Writes the subset of the tables this module handles from `input` into `output`.
 pub fn apply(plan: &Plan, input: &SfntFont, output: &mut SfntFont) -> Result<()> {
     if let Some(bytes) = input.get(*b"BASE") {
@@ -236,10 +248,20 @@ fn subset_sbix(plan: &Plan, bytes: &[u8]) -> Result<Vec<u8>> {
     let count = d.u32_usize(4)?;
     // Each strike offset takes 4 bytes, so the table length bounds the count.
     d.slice(8, count.saturating_mul(4))?;
-    let mut strikes: BTreeMap<u16, Vec<u8>> = BTreeMap::new();
+    // The output keeps one strike per ppem, the last listed (as fontTools reads them), so only
+    // that one is subset; offsets repeated in the list cost one read each.
+    let mut last: BTreeMap<u16, usize> = BTreeMap::new();
     for s in 0..count {
         let at = d.u32_usize(8 + 4 * s)?;
-        let (ppem, ppi) = (d.u16(at)?, d.u16(at + 2)?);
+        last.insert(d.u16(at)?, at);
+    }
+    if last.len() > MAX_BITMAP_STRIKES {
+        return Err(TablesError::TooLarge { what: "the sbix strikes", limit: MAX_BITMAP_STRIKES });
+    }
+    let mut bytes_left = MAX_BITMAP_BYTES;
+    let mut strikes: BTreeMap<u16, Vec<u8>> = BTreeMap::new();
+    for (ppem, at) in last {
+        let ppi = d.u16(at + 2)?;
         let offset = |g: usize| -> Result<usize> { d.u32_usize(at + 4 + 4 * g) };
         let header = 4 + 4 * (plan.new_to_old.len() + 1);
         let mut data: Vec<u8> = Vec::new();
@@ -253,6 +275,7 @@ fn subset_sbix(plan: &Plan, bytes: &[u8]) -> Result<Vec<u8>> {
             let (start, end) = (offset(g)?, offset(g + 1)?);
             let len = end.checked_sub(start).ok_or_else(|| d.bad("has decreasing glyph data offsets"))?;
             let glyph = d.slice(at + start, len)?;
+            charge_bitmap_bytes(&mut bytes_left, len)?;
             match glyph.get(4..8) {
                 Some(b"dupe") | Some(b"flip") => {
                     let target = u32::from(Data::new(*b"sbix", glyph).u16(8)?);
@@ -308,8 +331,14 @@ fn subset_bitmaps(plan: &Plan, loc_tag: Tag, loc: &[u8], data_tag: Tag, data: &[
     let bd = Data::new(data_tag, data);
     let count = l.u32_usize(4)?;
     l.slice(8, count.saturating_mul(48))?;
+    if count > MAX_BITMAP_STRIKES {
+        return Err(TablesError::TooLarge { what: "the bitmap strikes", limit: MAX_BITMAP_STRIKES });
+    }
     let mut out_data = bd.slice(0, 4)?.to_vec();
     let mut strikes: Vec<(&[u8], Vec<IndexSubtable<'_>>)> = Vec::new();
+    // Strikes and index subtables may share their data, so the budgets cover the whole table.
+    let mut entries_left = MAX_BITMAP_ENTRIES;
+    let mut bytes_left = MAX_BITMAP_BYTES;
     for s in 0..count {
         let rec = 8 + 48 * s;
         let array_at = l.u32_usize(rec)?;
@@ -329,6 +358,13 @@ fn subset_bitmaps(plan: &Plan, loc_tag: Tag, loc: &[u8], data_tag: Tag, data: &[
                 return Err(TablesError::Unsupported("subsetting composite bitmap glyphs".into()));
             }
             let image_at = l.u32_usize(at + 4)?;
+            let listed = match index_format {
+                4 => l.u32_usize(at + 8)?,
+                5 => l.u32_usize(at + 20)?,
+                _ => last - first + 1,
+            };
+            entries_left =
+                entries_left.checked_sub(listed).ok_or(TablesError::TooLarge { what: "the bitmap index entries", limit: MAX_BITMAP_ENTRIES })?;
             let mut entries: Vec<(u32, usize, usize)> = Vec::new();
             let mut fixed = None;
             match index_format {
@@ -344,7 +380,7 @@ fn subset_bitmaps(plan: &Plan, loc_tag: Tag, loc: &[u8], data_tag: Tag, data: &[
                     let size = l.u32_usize(at + 8)?;
                     fixed = Some((size as u32, l.slice(at + 12, 8)?));
                     for (k, g) in (first..=last).enumerate() {
-                        entries.push((g as u32, k * size, (k + 1) * size));
+                        entries.push((g as u32, k.saturating_mul(size), (k + 1).saturating_mul(size)));
                     }
                 }
                 4 => {
@@ -361,7 +397,7 @@ fn subset_bitmaps(plan: &Plan, loc_tag: Tag, loc: &[u8], data_tag: Tag, data: &[
                     let n = l.u32_usize(at + 20)?;
                     l.slice(at + 24, n.saturating_mul(2))?;
                     for k in 0..n {
-                        entries.push((u32::from(l.u16(at + 24 + 2 * k)?), k * size, (k + 1) * size));
+                        entries.push((u32::from(l.u16(at + 24 + 2 * k)?), k.saturating_mul(size), (k + 1).saturating_mul(size)));
                     }
                 }
                 _ => return Err(l.bad(format!("has an index subtable of format {index_format}"))),
@@ -372,6 +408,7 @@ fn subset_bitmaps(plan: &Plan, loc_tag: Tag, loc: &[u8], data_tag: Tag, data: &[
                 if end <= start || !retained(plan, g) {
                     continue;
                 }
+                charge_bitmap_bytes(&mut bytes_left, end - start)?;
                 glyphs.push((new_id(plan, g)?, bd.slice(image_at.saturating_add(start), end - start)?));
             }
             glyphs.sort_by_key(|(g, _)| *g);

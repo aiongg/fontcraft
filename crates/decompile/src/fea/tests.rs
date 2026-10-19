@@ -238,3 +238,31 @@ fn layout_the_feature_compiler_refuses_opens_as_code_that_exports() {
     assert_eq!(d.font.kerning.ltr.get("m01", "A", "V"), Some(-80.0));
     compile_ttf(&d.font, &Options::default()).unwrap();
 }
+
+#[test]
+fn a_rule_whose_every_call_names_a_missing_lookup_opens_as_an_ignore_rule() {
+    use write_fonts::tables::gsub as ws;
+    use write_fonts::tables::layout as wl;
+    use write_fonts::types::GlyphId16 as WGid;
+
+    let base = compile_ttf(&glyphs(), &Options::default()).unwrap().bytes;
+    let n = names(&base);
+    let g = |name: &str| WGid::new(n.iter().position(|x| x == name).unwrap() as u16);
+    let flag = wl::LookupFlag::empty();
+    // calt's one rule calls lookup 9, which the lookup list (of three) does not have.
+    let call: wl::CoverageTable = [g("a")].into_iter().collect();
+    let calt = ws::SubstitutionLookup::ChainContextual(wl::Lookup::new(
+        flag,
+        vec![wl::ChainedSequenceContext::format_3(vec![], vec![call], vec![], vec![wl::SequenceLookupRecord::new(0, 9)]).into()],
+    ));
+    let single = ws::SubstitutionLookup::Single(wl::Lookup::new(flag, vec![ws::SingleSubst::format_2([g("a")].into_iter().collect(), vec![g("b")])]));
+    let lig = ws::Ligature::new(g("f_i"), vec![g("i")]);
+    let liga = ws::SubstitutionLookup::Ligature(wl::Lookup::new(
+        flag,
+        vec![ws::LigatureSubstFormat1::new([g("f")].into_iter().collect(), vec![ws::LigatureSet::new(vec![lig])])],
+    ));
+    let d = crate::decompile(&with_gsub(&base, vec![calt, single, liga]), None).unwrap();
+    let all: String = d.font.features.prefixes.iter().chain(&d.font.features.features).map(|s| format!("{}\n", s.code)).collect();
+    assert!(all.contains("ignore sub a';") && all.contains("does not exist"), "{all}");
+    compile_ttf(&d.font, &Options::default()).unwrap();
+}

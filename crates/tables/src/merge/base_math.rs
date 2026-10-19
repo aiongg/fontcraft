@@ -57,6 +57,7 @@ pub(super) fn merge(fonts: &[SfntFont], which: &[usize], plan: &Plan, skip: &BTr
         let mut parts = MathParts::default();
         for (i, bytes) in maths {
             order_for(plan, i)?;
+            crate::layout_budget::check_math(bytes)?;
             let table: write_fonts::tables::math::Math =
                 read_fonts::tables::math::Math::read(FontData::new(bytes)).map_err(|e| read_err(MATH, i, e))?.to_owned_table();
             parts.add(&table, &|g| new_id(plan, i, g))?;
@@ -69,6 +70,7 @@ pub(super) fn merge(fonts: &[SfntFont], which: &[usize], plan: &Plan, skip: &BTr
         let mut vert: Vec<(usize, Axis)> = Vec::new();
         for (i, bytes) in bases {
             order_for(plan, i)?;
+            crate::layout_budget::check_base(bytes)?;
             let mut table: Base = read_fonts::tables::base::Base::read(FontData::new(bytes)).map_err(|e| read_err(BASE, i, e))?.to_owned_table();
             if table.item_var_store.is_some() {
                 return Err(TablesError::Unsupported(format!("merging a 'BASE' table with variation data (font {})", i + 1)));
