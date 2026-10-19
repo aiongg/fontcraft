@@ -30,6 +30,8 @@ const REPEAT: u8 = 0x08;
 const X_SAME_OR_POSITIVE: u8 = 0x10;
 const Y_SAME_OR_POSITIVE: u8 = 0x20;
 const OVERLAP_SIMPLE: u8 = 0x40;
+/// The off-curve point is a cubic control point (fontTools' `flagCubic`).
+const CUBIC: u8 = 0x80;
 
 /// fontTools' `otRound`: halves round up.
 pub(super) fn ot_round(v: f64) -> f64 {
@@ -50,6 +52,7 @@ pub(super) struct Point {
     pub x: i32,
     pub y: i32,
     pub on: bool,
+    pub cubic: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -255,7 +258,7 @@ fn decode_simple(b: &[u8], contours: usize) -> std::result::Result<Simple, Strin
             v += i32::from(i16_at(b, at).ok_or(short)?);
             at += 2;
         }
-        points.push(Point { x, y: v, on: f & ON_CURVE != 0 });
+        points.push(Point { x, y: v, on: f & ON_CURVE != 0, cubic: f & CUBIC != 0 });
     }
     Ok(Simple { ends, points, instructions, overlap })
 }
@@ -433,6 +436,9 @@ fn encode_simple(s: &Simple, b: [i32; 4]) -> Result<Vec<u8>> {
     let (mut px, mut py) = (0i32, 0i32);
     for (i, p) in s.points.iter().enumerate() {
         let mut f = if p.on { ON_CURVE } else { 0 };
+        if p.cubic {
+            f |= CUBIC;
+        }
         if i == 0 && s.overlap {
             f |= OVERLAP_SIMPLE;
         }

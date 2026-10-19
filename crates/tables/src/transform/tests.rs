@@ -27,7 +27,7 @@ fn changed(shape: Shape) -> Glyph {
 
 /// `A`: (0, 0) (0, 700) (333, 700) (100, 0) with two instruction bytes.
 fn glyph_a() -> Vec<u8> {
-    let points = [(0, 0), (0, 700), (333, 700), (100, 0)].map(|(x, y)| Point { x, y, on: true }).to_vec();
+    let points = [(0, 0), (0, 700), (333, 700), (100, 0)].map(|(x, y)| Point { x, y, on: true, cubic: false }).to_vec();
     let g = changed(Shape::Simple(Simple { ends: vec![3], points, instructions: vec![0xB0, 0x00], overlap: false }));
     glyf::encode(&g, Some([0, 0, 333, 700])).unwrap()
 }
@@ -314,4 +314,24 @@ fn bad_options_and_inputs_are_refused() {
     g.truncate(g.len() - 6);
     cut_gvar.insert(*b"gvar", g);
     assert!(transform(&cut_gvar, &upem(2048)).is_err());
+}
+
+#[test]
+fn cubic_point_flags_survive_a_rewritten_glyph() {
+    // One contour: on, cubic off, cubic off, on; coordinates as words.
+    let mut raw: Vec<u8> = Vec::new();
+    for v in [1i16, 0, 0, 100, 100, 3, 0] {
+        raw.extend_from_slice(&v.to_be_bytes());
+    }
+    raw.extend_from_slice(&[0x01, 0x80, 0x80, 0x01]);
+    for v in [0i16, 0, 100, 0, 0, 100, 0, -100] {
+        raw.extend_from_slice(&v.to_be_bytes());
+    }
+    let mut glyphs = glyf::read_glyphs(&raw, &[0, raw.len()]).unwrap();
+    let mut g = glyphs.remove(0);
+    g.changed = true;
+    let out = glyf::encode(&g, Some([0, 0, 100, 100])).unwrap();
+    let back = glyf::read_glyphs(&out, &[0, out.len()]).unwrap();
+    let Shape::Simple(s) = &back[0].shape else { panic!("a simple glyph") };
+    assert_eq!(s.points.iter().map(|p| p.cubic).collect::<Vec<_>>(), [false, true, true, false]);
 }
