@@ -551,6 +551,8 @@ pub struct InstanceNames {
     pub postscript: Option<String>,
     /// The instance UFO's file name.
     pub filename: String,
+    /// `filename` is built from the family and instance names, the instance stating none.
+    pub filename_from_names: bool,
     pub style_map_family: String,
     pub style_map_style: &'static str,
 }
@@ -562,6 +564,7 @@ pub fn instance_names(font: &Font, inst: &Instance) -> InstanceNames {
     InstanceNames {
         postscript: instances::ps_name_of(inst),
         filename: instances::filename_of(inst, &family),
+        filename_from_names: !instances::states_filename(inst),
         style_map_family,
         style_map_style,
         family,

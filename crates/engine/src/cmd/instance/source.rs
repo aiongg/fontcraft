@@ -19,7 +19,7 @@
 // Nothing reads a source by path in the browser, so most of this is unused there.
 #![cfg_attr(target_arch = "wasm32", allow(dead_code, unused_imports))]
 
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use fontcraft_interp::compat::{self, MasterPairs};
 use fontcraft_interp::{Designspace, GlyphSources, UserLocation};
@@ -330,23 +330,37 @@ fn build_ufos(
     staged: &mut Vec<Staged>,
     created: &mut Vec<Vec<PathBuf>>,
 ) -> Result<Vec<Value>> {
+    let sources = source_paths(input)?;
     let mut outs: Vec<PathBuf> = Vec::with_capacity(jobs.len());
     let mut results = Vec::with_capacity(jobs.len());
     for job in jobs {
         let inst = font.instances.get(job.index).ok_or_else(|| p.bad(format!("there is no instance #{}", job.index)))?;
         let names = fontcraft_io_ufo::designspace::instance_names(font, inst);
         let label = inst.name.clone();
+        if names.filename_from_names && !job.from_location && (label.contains('/') || names.family.contains('/')) {
+            return Err(EngineError::Io(format!(
+                "instance `{label}`: a family or instance name with `/` gives no file name; give the instance a UFO file name"
+            )));
+        }
+        let out = ufo_path(input, req, instance_dir, job, &names.filename)?;
+        let at = resolved(&out);
+        if let Some(source) = sources.iter().find(|s| at.starts_with(s) || s.starts_with(&at)) {
+            return Err(p.bad(format!(
+                "instance `{label}` would be written to {}, which would replace {}, a file the source reads",
+                out.display(),
+                source.display()
+            )));
+        }
+        if outs.contains(&at) {
+            return Err(p.bad(format!("two instances would both be written to {}", out.display())));
+        }
+        file_io::check_write(&out)?;
         let (made, notes) = generated_font(p, font, job.index).map_err(|e| match e {
             EngineError::BadParams { message, .. } => p.bad(format!("instance `{label}`: {message}")),
             other => other,
         })?;
         warnings.extend(notes.into_iter().map(|n| format!("instance `{label}`: {n}")));
         let made = finish(p, font, made, inst, &names, steps, skipped, &label, warnings)?;
-        let out = ufo_path(input, req, instance_dir, job, &names.filename)?;
-        if out == input || outs.contains(&out) {
-            return Err(p.bad(format!("two instances, or an instance and the source, would both be written to {}", out.display())));
-        }
-        file_io::check_write(&out)?;
         if req.no_clobber && out.exists() {
             return Err(EngineError::Io(format!("{} exists and noClobber is set", out.display())));
         }
@@ -364,7 +378,7 @@ fn build_ufos(
                 obj.insert("postscriptName".into(), json!(ps));
             }
         }
-        outs.push(out);
+        outs.push(at);
         results.push(entry);
     }
     Ok(results)
@@ -382,8 +396,10 @@ fn ufo_path(input: &Path, req: &OutputRequest, instance_dir: Option<&Path>, job:
         let req = OutputRequest { output_dir: dir, ..req.clone() };
         return file_io::output_path(input, &req, ".instance", Some("ufo"));
     }
-    let bad = || EngineError::Io(format!("the instance file name `{filename}` is not a relative path"));
-    if filename.is_empty() || filename.contains('\\') || Path::new(filename).is_absolute() {
+    let bad = || EngineError::Io(format!("the instance file name `{filename}` is not a path inside the source's folder"));
+    // The name comes from the file, so it may not climb out of the folder or name the folder itself.
+    let inside = Path::new(filename).components().all(|c| matches!(c, Component::Normal(_))) && filename.split('/').all(|s| s != "." && s != "..");
+    if filename.is_empty() || filename.contains('\\') || !inside {
         return Err(bad());
     }
     match dir {
@@ -396,6 +412,44 @@ fn ufo_path(input: &Path, req: &OutputRequest, instance_dir: Option<&Path>, job:
             Ok(base.join(filename))
         }
     }
+}
+
+/// The source at `input` and every file opening it reads (a designspace's UFOs, the files of
+/// Import Font and Import Master parameters), each [`resolved`]. An instance is never written
+/// over one of them, inside one, or around one.
+#[cfg(not(target_arch = "wasm32"))]
+fn source_paths(input: &Path) -> Result<Vec<PathBuf>> {
+    let mut paths = vec![resolved(input)];
+    crate::io::check_references(input, &mut |p| {
+        paths.push(resolved(p));
+        Ok(())
+    })
+    .map_err(EngineError::Io)?;
+    Ok(paths)
+}
+
+/// `path` made absolute, with its longest existing part canonicalized (links followed) and the
+/// rest applied component by component, so that two spellings of one place compare equal.
+#[cfg(not(target_arch = "wasm32"))]
+fn resolved(path: &Path) -> PathBuf {
+    let abs = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
+    let parts: Vec<Component<'_>> = abs.components().collect();
+    for k in (1..=parts.len()).rev() {
+        let head: PathBuf = parts.iter().take(k).collect();
+        if let Ok(mut out) = std::fs::canonicalize(&head) {
+            for c in parts.iter().skip(k) {
+                match c {
+                    Component::ParentDir => {
+                        out.pop();
+                    }
+                    Component::CurDir => {}
+                    other => out.push(other),
+                }
+            }
+            return out;
+        }
+    }
+    abs
 }
 
 /// Creates the folders above `out` that are missing; answers them, deepest first.
@@ -547,8 +601,15 @@ fn compile_fonts(
         .iter()
         .map(|j| font.instances.get(j.index).map(|i| if i.name.is_empty() { format!("#{}", j.index) } else { i.name.clone() }).unwrap_or_default())
         .collect();
+    // font.compile chooses instances by name, and two instances can share one, so the jobs are
+    // chosen by index instead: they alone export, and font.compile builds every exporting one.
+    let instances = std::sync::Arc::make_mut(&mut font.instances);
+    for (i, inst) in instances.iter_mut().enumerate() {
+        if inst.kind.is_none() {
+            inst.exports = jobs.iter().any(|j| j.index == i);
+        }
+    }
     if let Some(on) = autohint {
-        let instances = std::sync::Arc::make_mut(&mut font.instances);
         for job in jobs {
             if let Some(inst) = instances.get_mut(job.index) {
                 inst.params.set("Autohint", PValue::Number(Number::int(i64::from(on))));
@@ -567,7 +628,7 @@ fn compile_fonts(
     if destination == input {
         return Err(p.bad(format!("the output {} would replace the source", destination.display())));
     }
-    let mut params = json!({ "formats": [ext], "instances": labels, "destination": destination.display().to_string() });
+    let mut params = json!({ "formats": [ext], "instances": true, "destination": destination.display().to_string() });
     if let Some(obj) = params.as_object_mut() {
         obj.insert("outlines".into(), json!({ "removeOverlaps": remove_overlaps }));
     }
@@ -603,20 +664,30 @@ fn compile_fonts(
         let reason = skip.get("reason").and_then(Value::as_str).unwrap_or("skipped");
         warnings.push(format!("instance `{name}` was not built: {reason}"));
     }
-    let mut results = Vec::new();
+    // font.compile reports its fonts in the font's order, so the n-th font labelled `label`
+    // belongs to the n-th job, by index, with that label.
+    let mut by_index: Vec<(&Job, &String)> = jobs.iter().zip(&labels).collect();
+    by_index.sort_by_key(|(j, _)| j.index);
+    let mut taken = vec![false; by_index.len()];
+    let mut built: Vec<(usize, Value)> = Vec::new();
     for f in r.get("fonts").and_then(Value::as_array).into_iter().flatten() {
         let label = f.get("instance").and_then(Value::as_str).unwrap_or_default();
-        let Some((job, _)) = jobs.iter().zip(&labels).find(|(_, l)| l.as_str() == label) else { continue };
+        let found = by_index.iter().zip(taken.iter_mut()).find(|((_, l), taken)| !**taken && l.as_str() == label);
+        let Some(((job, _), taken)) = found else { continue };
+        *taken = true;
+        let order = jobs.iter().position(|j| j.index == job.index).unwrap_or(usize::MAX);
         let entry_warnings = f.get("warnings").cloned().unwrap_or_else(|| json!([]));
         for file in f.get("files").and_then(Value::as_array).into_iter().flatten() {
             let mut entry = json!({ "output": file.get("path").cloned().unwrap_or(Value::Null), "location": job.location.clone(), "static": true, "warnings": entry_warnings.clone() });
             if let (false, Some(obj)) = (job.from_location, entry.as_object_mut()) {
                 obj.insert("name".into(), json!(label));
             }
-            results.push(entry);
+            built.push((order, entry));
         }
     }
-    Ok(results)
+    // In the order the jobs were asked for.
+    built.sort_by_key(|(order, _)| *order);
+    Ok(built.into_iter().map(|(_, entry)| entry).collect())
 }
 
 #[cfg(test)]
@@ -789,6 +860,113 @@ mod tests {
         std::fs::remove_dir_all(&target).unwrap();
         s.execute("font.instantiate", &json!({ "input": ds, "autohint": false })).unwrap();
         assert!(s.execute("font.instantiate", &json!({ "input": ds, "noClobber": true })).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Points the designspace's instance at `filename` (or at none) and gives it `style`.
+    fn retarget(ds: &Path, filename: Option<&str>, style: &str) {
+        let text = std::fs::read_to_string(ds).unwrap();
+        let file = filename.map(|f| format!(" filename=\"{f}\"")).unwrap_or_default();
+        let text = text.replace("stylename=\"Regular\" filename=\"instances/Test-Regular.ufo\"", &format!("stylename=\"{style}\"{file}"));
+        std::fs::write(ds, text).unwrap();
+    }
+
+    /// The names in `dir`, sorted.
+    fn names_in(dir: &Path) -> Vec<String> {
+        let mut v: Vec<String> = std::fs::read_dir(dir).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+        v.sort();
+        v
+    }
+
+    #[test]
+    fn instantiate_source_never_writes_over_a_source_ufo() {
+        let (dir, ds) = source("over-master");
+        let before = names_in(&dir);
+        let light = std::fs::read_to_string(dir.join("Light.ufo/fontinfo.plist")).unwrap();
+        let original = std::fs::read_to_string(&ds).unwrap();
+        let mut s = Session::new();
+        // The instance records a master's file name, spelled directly and with a detour.
+        for filename in ["Light.ufo", "instances/../Light.ufo", "./Light.ufo"] {
+            retarget(&ds, Some(filename), "Regular");
+            let err = s.execute("font.instantiate", &json!({ "input": ds, "autohint": false })).unwrap_err();
+            assert!(err.to_string().contains("Light.ufo"), "{filename}: {err}");
+            std::fs::write(&ds, &original).unwrap();
+        }
+        // outputDir is the source's folder and the recorded name ends in a master's name.
+        retarget(&ds, Some("out/Bold.ufo"), "Regular");
+        assert!(s.execute("font.instantiate", &json!({ "input": ds, "outputDir": dir, "autohint": false })).is_err());
+        // An instanceDir inside a master.
+        assert!(s.execute("font.instantiate", &json!({ "input": ds, "instanceDir": dir.join("Bold.ufo"), "autohint": false })).is_err());
+        assert_eq!(std::fs::read_to_string(dir.join("Light.ufo/fontinfo.plist")).unwrap(), light, "the master is as it was");
+        assert!(dir.join("Bold.ufo/glyphs/A_.glif").is_file());
+        assert_eq!(names_in(&dir), before, "nothing written beside the source");
+        assert_eq!(names_in(&dir.join("Bold.ufo")), ["fontinfo.plist", "glyphs", "layercontents.plist", "metainfo.plist"]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn instantiate_source_keeps_recorded_names_inside_the_source_folder() {
+        let (root, _) = source("escape");
+        let dir = root.join("family");
+        std::fs::create_dir_all(&dir).unwrap();
+        let ds = dir.join("Test.designspace");
+        for ufo in ["Light.ufo", "Bold.ufo"] {
+            std::fs::rename(root.join(ufo), dir.join(ufo)).unwrap();
+        }
+        std::fs::rename(root.join("Test.designspace"), &ds).unwrap();
+        // A victim UFO outside the source's folder, which a swap would remove.
+        let victim = root.join("victim.ufo");
+        ufo(&victim, "Victim", (0, 10, 20), &rect(0, 10));
+        let original = std::fs::read_to_string(&ds).unwrap();
+        let mut s = Session::new();
+        for (filename, out_dir) in
+            [("../victim.ufo", None), ("a/../../victim.ufo", None), ("..", Some(dir.join("out"))), (".", Some(dir.join("out")))]
+        {
+            retarget(&ds, Some(filename), "Regular");
+            let mut params = json!({ "input": ds, "autohint": false });
+            if let Some(o) = &out_dir {
+                params["outputDir"] = json!(o);
+            }
+            let err = s.execute("font.instantiate", &params).unwrap_err();
+            assert!(err.to_string().contains("not a path inside"), "{filename}: {err}");
+            std::fs::write(&ds, &original).unwrap();
+        }
+        // No recorded file name, and a style name that would climb out through the default name.
+        retarget(&ds, None, "/../../../victim");
+        let err = s.execute("font.instantiate", &json!({ "input": ds, "autohint": false })).unwrap_err();
+        assert!(err.to_string().contains("name with `/`"), "{err}");
+        assert_eq!(std::fs::read_to_string(victim.join("glyphs/A_.glif")).unwrap(), glif("A", "0041", 20, &rect(0, 10)));
+        assert_eq!(names_in(&root), ["family", "victim.ufo"], "nothing written outside");
+        assert_eq!(names_in(&dir), ["Bold.ufo", "Light.ufo", "Test.designspace"], "nothing written inside");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn instantiate_source_compiles_instances_that_share_a_name_by_index() {
+        let (dir, ds) = source("same-name");
+        let text = std::fs::read_to_string(&ds).unwrap();
+        let one = |family: &str, ps: &str, at: u32| {
+            format!(
+                "<instance familyname=\"{family}\" stylename=\"Regular\" postscriptfontname=\"{ps}\"><location><dimension name=\"Weight\" xvalue=\"{at}\"/></location></instance>"
+            )
+        };
+        let start = text.find("<instances>").unwrap();
+        let end = text.find("</instances>").unwrap();
+        let text =
+            format!("{}<instances>{}{}{}", &text[..start], one("Test", "Test-Regular", 400), one("Test Wide", "TestWide-Regular", 600), &text[end..]);
+        std::fs::write(&ds, text).unwrap();
+        let mut s = Session::new();
+        let r = s.execute("font.instantiate", &json!({ "input": ds, "to": "ttf", "outputDir": dir.join("both"), "timestamp": 0 })).unwrap();
+        let at: Vec<Value> = r["results"].as_array().unwrap().iter().map(|e| e["location"]["wght"].clone()).collect();
+        assert_eq!(at, [json!(400.0), json!(600.0)], "{r}");
+        let r = s
+            .execute("font.instantiate", &json!({ "input": ds, "indices": [1], "to": "ttf", "outputDir": dir.join("second"), "timestamp": 0 }))
+            .unwrap();
+        let results = r["results"].as_array().unwrap();
+        assert_eq!(results.len(), 1, "{r}");
+        assert_eq!(results[0]["location"]["wght"], json!(600.0));
+        let font = fontcraft_tables::read(&std::fs::read(results[0]["output"].as_str().unwrap()).unwrap(), 0).unwrap();
+        assert_eq!(font.get(*b"OS/2").unwrap()[4..6], 600u16.to_be_bytes(), "the second instance, not the first of that name");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

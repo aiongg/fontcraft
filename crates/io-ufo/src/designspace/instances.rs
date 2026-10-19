@@ -86,6 +86,12 @@ fn default_filename(inst: &Instance, family: &str) -> String {
     }
 }
 
+/// Whether an instance states its UFO file name in a parameter, rather than leaving it to
+/// [`filename_of`] to build from its names.
+pub(super) fn states_filename(inst: &Instance) -> bool {
+    [UFO_FILENAME, FULL_FILENAME, FILE_NAME].iter().any(|k| inst.params.get(k).and_then(Value::as_str).is_some())
+}
+
 /// The UFO file name of an instance: its `UFO Filename` parameter (or the full file name glyphsLib
 /// also accepts), else the default.
 pub(super) fn filename_of(inst: &Instance, family: &str) -> String {
