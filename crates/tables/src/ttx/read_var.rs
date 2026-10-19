@@ -72,6 +72,9 @@ impl Tuple {
                         None => peak.max(0),
                     };
                     t.axes.retain(|(a, _)| *a != axis);
+                    if t.axes.len() >= crate::limits::MAX_AXES {
+                        return Err(TablesError::TooLarge { what: "the axes of a delta set", limit: crate::limits::MAX_AXES });
+                    }
                     t.axes.push((axis, (start, peak, end)));
                 }
                 "delta" => {
@@ -280,12 +283,14 @@ fn store(tuples: &[&Tuple], tags: &[String], shared: &HashMap<Vec<u8>, usize>, s
     let mut kept: Vec<(&Tuple, Vec<usize>)> = Vec::new();
     // Point sets in the order first met, with how often each occurs.
     let mut sets: Vec<(Vec<usize>, usize, Vec<u8>)> = Vec::new();
+    let mut set_index: HashMap<Vec<usize>, usize> = HashMap::new();
     for t in tuples {
         let Some(points) = t.used() else { continue };
-        match sets.iter_mut().find(|(p, _, _)| *p == points) {
+        match set_index.get(&points).and_then(|&i| sets.get_mut(i)) {
             Some(s) => s.1 += 1,
             None => {
                 let compiled = compile_points(&points)?;
+                set_index.insert(points.clone(), sets.len());
                 sets.push((points.clone(), 1, compiled));
             }
         }
@@ -320,7 +325,7 @@ fn store(tuples: &[&Tuple], tags: &[String], shared: &HashMap<Vec<u8>, usize>, s
     let mut headers = Vec::new();
     for (t, points) in &kept {
         let compiled: &[u8] =
-            if Some(points) == shared_points { &[] } else { sets.iter().find(|(p, _, _)| p == points).map_or(&[], |s| s.2.as_slice()) };
+            if Some(points) == shared_points { &[] } else { set_index.get(points).and_then(|&i| sets.get(i)).map_or(&[], |s| s.2.as_slice()) };
         let (h, d) = t.compile(tags, shared, compiled, two)?;
         headers.extend_from_slice(&h);
         data.extend_from_slice(&d);
@@ -414,31 +419,32 @@ pub(crate) fn gvar(element: &Element, ctx: &ReadContext, font: &SfntFont, glyf: 
     let (tags, numeric) = axis_tags(font, axis_count)?;
     // Glyph name to its delta sets, in the order the glyphs first appear.
     let mut by_glyph: Vec<(String, Vec<Tuple>)> = Vec::new();
+    let mut glyph_index: HashMap<String, usize> = HashMap::new();
     for c in element.children.iter().filter(|c| c.name == "glyphVariations") {
         let glyph = c.attribute("glyph").ok_or_else(|| bad("glyph variations without a glyph"))?;
         let gid = usize::try_from(ctx.glyph_id(glyph)?).unwrap_or(usize::MAX);
         let n = *points.get(gid).ok_or_else(|| bad(format!("the glyph '{glyph}' is not in the 'glyf' table")))?;
         let tuples = c.children.iter().filter(|t| t.name == "tuple").map(|t| Tuple::read(t, n, numeric)).collect::<Result<Vec<_>>>()?;
-        match by_glyph.iter_mut().find(|(g, _)| g == glyph) {
+        match glyph_index.get(glyph).and_then(|&i| by_glyph.get_mut(i)) {
             Some(slot) => slot.1 = tuples,
-            None => by_glyph.push((glyph.to_string(), tuples)),
+            None => {
+                glyph_index.insert(glyph.to_string(), by_glyph.len());
+                by_glyph.push((glyph.to_string(), tuples));
+            }
         }
     }
     // `compileSharedTuples`: peaks used more than once, most used first, then by their bytes.
-    let mut uses: Vec<(Vec<u8>, usize)> = Vec::new();
+    let mut uses: HashMap<Vec<u8>, usize> = HashMap::new();
     for t in by_glyph.iter().flat_map(|(_, ts)| ts) {
-        let coord = t.coord(&tags)?;
-        match uses.iter_mut().find(|(c, _)| *c == coord) {
-            Some(u) => u.1 += 1,
-            None => uses.push((coord, 1)),
-        }
+        *uses.entry(t.coord(&tags)?).or_insert(0) += 1;
     }
+    let mut uses: Vec<(Vec<u8>, usize)> = uses.into_iter().collect();
     uses.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
     let shared: Vec<Vec<u8>> = uses.into_iter().take(0x1000).filter(|(_, n)| *n > 1).map(|(c, _)| c).collect();
     let indices: HashMap<Vec<u8>, usize> = shared.iter().enumerate().map(|(i, c)| (c.clone(), i)).collect();
     let mut glyphs: Vec<Vec<u8>> = Vec::with_capacity(order.len());
     for name in order {
-        let tuples: Vec<&Tuple> = by_glyph.iter().find(|(g, _)| g == name).map(|(_, ts)| ts.iter().collect()).unwrap_or_default();
+        let tuples: Vec<&Tuple> = glyph_index.get(name).and_then(|&i| by_glyph.get(i)).map(|(_, ts)| ts.iter().collect()).unwrap_or_default();
         if tuples.is_empty() {
             glyphs.push(Vec::new());
             continue;

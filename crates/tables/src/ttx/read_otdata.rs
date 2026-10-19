@@ -141,6 +141,9 @@ fn fvar(element: &Element) -> Result<Vec<u8>> {
                     let axis = c.attribute("axis").ok_or_else(|| bad("a coordinate without an axis"))?.to_string();
                     let value = fixed16(c.attribute("value").ok_or_else(|| bad("a coordinate without a value"))?)?;
                     coords.retain(|(a, _)| *a != axis);
+                    if coords.len() >= crate::limits::MAX_AXES {
+                        return Err(TablesError::TooLarge { what: "the coordinates of a named instance", limit: crate::limits::MAX_AXES });
+                    }
                     coords.push((axis, value));
                 }
                 instances.push(Instance { subfamily, flags, postscript, coords });

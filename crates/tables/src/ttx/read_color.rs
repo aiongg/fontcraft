@@ -197,6 +197,7 @@ fn cpal(element: &Element) -> Result<Vec<u8>> {
 fn colr_v0(element: &Element, ctx: &ReadContext) -> Result<Option<Vec<u8>>> {
     let mut version = 0i64;
     let mut glyphs: Vec<(String, Vec<(String, i64)>)> = Vec::new();
+    let mut index: HashMap<String, usize> = HashMap::new();
     for child in &element.children {
         match child.name.as_str() {
             "version" => version = int_lit(child.attribute("value").ok_or_else(|| bad("the COLR version has no value"))?)?,
@@ -208,8 +209,14 @@ fn colr_v0(element: &Element, ctx: &ReadContext) -> Result<Option<Vec<u8>>> {
                     let id = int_lit(l.attribute("colorID").ok_or_else(|| bad("a colour layer without a colour"))?)?;
                     layers.push((glyph, id));
                 }
-                glyphs.retain(|(g, _)| g != name);
-                glyphs.push((name.to_string(), layers));
+                // A glyph named twice keeps its first place and its last layers, as a dict does.
+                match index.get(name).and_then(|&i| glyphs.get_mut(i)) {
+                    Some(slot) => slot.1 = layers,
+                    None => {
+                        index.insert(name.to_string(), glyphs.len());
+                        glyphs.push((name.to_string(), layers));
+                    }
+                }
             }
             _ => return Ok(None),
         }

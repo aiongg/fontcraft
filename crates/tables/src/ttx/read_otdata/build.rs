@@ -875,6 +875,7 @@ impl<'a> Compiler<'a> {
     /// `DeltaSetIndexMap.preWrite` and `VarIdxMap.preWrite`.
     fn index_map(&mut self, class: &str, e: &Element, node: usize, state: &mut State, depth: usize) -> Result<()> {
         let mut mapping: Vec<i64> = Vec::new();
+        let mut moved = 0usize;
         if class == "DeltaSetIndexMap" {
             for m in &e.children {
                 let index = int_lit(m.attribute("index").ok_or_else(|| bad("a map entry without an index"))?)?;
@@ -887,8 +888,13 @@ impl<'a> Compiler<'a> {
                     return Err(TablesError::TooLarge { what: "the entries of a delta-set index map", limit: MAX_LAYOUT_ITEMS });
                 }
                 // Python's `list.insert`: past the end appends, a negative index counts from it.
+                // Entries out of order move the ones after them; that work is capped.
                 let len = i64::try_from(mapping.len()).unwrap_or(i64::MAX);
                 let at = if index < 0 { (len + index).max(0) } else { index.min(len) };
+                moved = moved.saturating_add(usize::try_from(len - at).unwrap_or(0));
+                if moved > MAX_LAYOUT_ITEMS {
+                    return Err(TablesError::TooLarge { what: "the reordering of a delta-set index map", limit: MAX_LAYOUT_ITEMS });
+                }
                 mapping.insert(usize::try_from(at).unwrap_or(0), (outer << 16) | inner);
             }
         } else {
