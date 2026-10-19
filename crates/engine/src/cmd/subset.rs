@@ -1,9 +1,9 @@
 //! `font.subset` (M12.17–M12.19; `fontcraft_tables::subset`).
 //!
 //! Whole-file commands follow [`super::file_io`]: paths in, the input never changed, the output
-//! written atomically, a refusal on the web. M12.17 subsets compiled fonts with TrueType or CFF
-//! outlines; the layout, variation and colour tables are dropped (the result lists them) until
-//! M12.18 and M12.19 subset them.
+//! written atomically, a refusal on the web. Compiled fonts with TrueType or CFF outlines are
+//! subset with their layout tables; the variation and colour tables are dropped (the result
+//! lists them) until M12.19 subsets them.
 
 use std::path::PathBuf;
 
@@ -46,7 +46,7 @@ pub fn specs() -> Vec<CommandSpec> {
         "Subset Font",
         [],
         None,
-        "{font: path, face?: int|name, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool, keep?: {glyphs?: [name]|\"*\", gids?: [int|\"a-b\"], unicodes?: [int|\"U+XXXX\"|\"XXXX-YYYY\"]|\"*\", text?: string}, ignoreMissingGlyphs?: bool, ignoreMissingUnicodes?: bool, retainGids?: bool, notdefGlyph?: bool, notdefOutline?: bool, recommendedGlyphs?: bool, bidiClosure?: bool, hinting?: bool, hintingTables?: [tag], dropTables?: [tag], passthroughTables?: bool, legacyKern?: bool, nameIds?: [int]|\"*\", nameLanguages?: [int]|\"*\", nameLegacy?: bool, glyphNames?: bool, legacyCmap?: bool, symbolCmap?: bool, pruneUnicodeRanges?: bool, pruneCodepageRanges?: bool}",
+        "{font: path, face?: int|name, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool, keep?: {glyphs?: [name]|\"*\", gids?: [int|\"a-b\"], unicodes?: [int|\"U+XXXX\"|\"XXXX-YYYY\"]|\"*\", text?: string}, ignoreMissingGlyphs?: bool, ignoreMissingUnicodes?: bool, retainGids?: bool, notdefGlyph?: bool, notdefOutline?: bool, recommendedGlyphs?: bool, bidiClosure?: bool, layoutClosure?: bool, layoutFeatures?: [tag]|\"*\"|{add?: [tag], remove?: [tag]}, layoutScripts?: [string]|\"*\", hinting?: bool, hintingTables?: [tag], dropTables?: [tag], passthroughTables?: bool, legacyKern?: bool, nameIds?: [int]|\"*\", nameLanguages?: [int]|\"*\", nameLegacy?: bool, glyphNames?: bool, legacyCmap?: bool, symbolCmap?: bool, pruneUnicodeRanges?: bool, pruneCodepageRanges?: bool}",
         always,
         run_subset
     )
@@ -113,6 +113,13 @@ fn options(p: &Params<'_>) -> Result<SubsetOptions> {
     o.notdef_outline = p.bool_or("notdefOutline", o.notdef_outline)?;
     o.recommended_glyphs = p.bool_or("recommendedGlyphs", o.recommended_glyphs)?;
     o.bidi_closure = p.bool_or("bidiClosure", o.bidi_closure)?;
+    o.layout_closure = p.bool_or("layoutClosure", o.layout_closure)?;
+    o.layout_features = layout_features(p)?;
+    match p.get("layoutScripts") {
+        None => {}
+        Some(Value::String(s)) if s == "*" => o.layout_scripts = None,
+        Some(_) => o.layout_scripts = p.opt_strings("layoutScripts")?.map(|v| v.into_iter().map(str::to_string).collect()),
+    }
     o.hinting = p.bool_or("hinting", o.hinting)?;
     o.passthrough_tables = p.bool_or("passthroughTables", o.passthrough_tables)?;
     o.legacy_kern = p.bool_or("legacyKern", o.legacy_kern)?;
@@ -139,6 +146,36 @@ fn options(p: &Params<'_>) -> Result<SubsetOptions> {
         Some(v) => o.name_languages = Some(u16_list(p, "nameLanguages", v)?),
     }
     Ok(o)
+}
+
+/// `layoutFeatures`: a list, `"*"` for all, or `{add, remove}` applied to the default list.
+fn layout_features(p: &Params<'_>) -> Result<Option<Vec<String>>> {
+    let tags = |v: Option<&Value>, key: &str| -> Result<Vec<String>> {
+        match v {
+            None => Ok(Vec::new()),
+            Some(Value::Array(a)) => {
+                a.iter().map(|t| t.as_str().map(str::to_string).ok_or_else(|| p.bad(format!("`{key}` items must be tags")))).collect()
+            }
+            Some(_) => Err(p.bad(format!("`{key}` must be a list of tags"))),
+        }
+    };
+    match p.get("layoutFeatures") {
+        None => Ok(None),
+        Some(Value::String(s)) if s == "*" => Ok(Some(vec!["*".to_string()])),
+        Some(Value::Object(edit)) => {
+            for key in edit.keys() {
+                if key != "add" && key != "remove" {
+                    return Err(p.bad(format!("`layoutFeatures.{key}` is not a parameter; give add or remove")));
+                }
+            }
+            let remove = tags(edit.get("remove"), "layoutFeatures.remove")?;
+            let mut list: Vec<String> = fontcraft_tables::subset::layout::DEFAULT_LAYOUT_FEATURES.iter().map(|t| t.to_string()).collect();
+            list.extend(tags(edit.get("add"), "layoutFeatures.add")?);
+            list.retain(|t| !remove.contains(t));
+            Ok(Some(list))
+        }
+        v => Ok(Some(tags(v, "layoutFeatures")?)),
+    }
 }
 
 fn read_keep(p: &Params<'_>, keep: &Map<String, Value>, o: &mut SubsetOptions) -> Result<()> {

@@ -1,5 +1,6 @@
-//! The glyph closure of a subset (M12.17 through `cmap`, composite glyphs and CFF `seac`;
-//! M12.18 adds the layout closure). Ported from fontTools' `Subsetter._closure_glyphs` (MIT).
+//! The glyph closure of a subset: through `cmap`, the GSUB substitutions of the kept features
+//! ([`super::layout::close_glyphs`]), composite glyphs and CFF `seac`, in that order. Ported
+//! from fontTools' `Subsetter._closure_glyphs` (MIT).
 //!
 //! Every closure is a work list over glyph ids: a glyph is visited at most once, so the work is
 //! bounded by the glyph count and the size of the outline tables, whatever the nesting depth.
@@ -97,6 +98,9 @@ pub fn plan(font: &SfntFont, options: &SubsetOptions) -> Result<Plan> {
     if options.recommended_glyphs && truetype {
         glyphs.extend(0..n.min(4) as u32);
     }
+
+    plan.features = super::layout::close_glyphs(font, options, &mut glyphs, n)?;
+    plan.layout_glyphs = glyphs.clone();
 
     if let Some(glyf) = Glyf::read(font, n)? {
         close(&mut glyphs, n, |g| glyf.components(g as usize))?;

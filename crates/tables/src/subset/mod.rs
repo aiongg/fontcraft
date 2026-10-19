@@ -54,9 +54,14 @@ pub struct SubsetOptions {
     pub ignore_missing_glyphs: bool,
     /// A requested code point the font does not map is skipped instead of refused.
     pub ignore_missing_unicodes: bool,
-    /// Layout features to keep; `None` keeps pyftsubset's default list of 64 features, `["*"]`
-    /// keeps all (M12.18).
+    /// Layout features to keep; `None` keeps [`layout::DEFAULT_LAYOUT_FEATURES`], a list
+    /// holding `"*"` keeps all.
     pub layout_features: Option<Vec<String>>,
+    /// Layout scripts to keep, each `script` or `script.LANG` (`script.dflt` keeps the default
+    /// language system, `script.*` all of them); `None` or a list holding `"*"` keeps all.
+    pub layout_scripts: Option<Vec<String>>,
+    /// Add the glyphs the kept GSUB features can substitute in.
+    pub layout_closure: bool,
     /// Keep glyph ids: dropped glyphs before the last kept one become empty instead of being
     /// removed.
     pub retain_gids: bool,
@@ -111,6 +116,8 @@ impl Default for SubsetOptions {
             ignore_missing_glyphs: false,
             ignore_missing_unicodes: true,
             layout_features: None,
+            layout_scripts: None,
+            layout_closure: true,
             retain_gids: false,
             hinting: true,
             hinting_tables: DEFAULT_HINTING_TABLES.to_vec(),
@@ -141,6 +148,9 @@ pub struct Plan {
     pub num_glyphs: usize,
     /// Glyph ids kept, after the closure, in the input's numbering.
     pub glyphs: BTreeSet<u32>,
+    /// The glyphs after the GSUB closure, before components and accent parts join: GSUB, GPOS
+    /// and GDEF are subset to these.
+    pub layout_glyphs: BTreeSet<u32>,
     /// Glyphs requested by name or id (they keep every code point that maps to them).
     pub requested: BTreeSet<u32>,
     /// Code points requested, with their mirrored partners under `bidi_closure`.
@@ -151,7 +161,7 @@ pub struct Plan {
     pub new_to_old: Vec<u32>,
     /// Input glyph id → output glyph id.
     pub glyph_map: BTreeMap<u32, u32>,
-    /// Layout feature tags kept.
+    /// Layout feature tags GSUB and GPOS keep before subsetting.
     pub features: BTreeSet<Tag>,
     /// Requested glyph names and ids the font lacks (with `ignore_missing_glyphs`).
     pub missing_glyphs: Vec<String>,
@@ -191,7 +201,7 @@ pub struct SubsetResult {
     pub missing_unicodes: Vec<u32>,
 }
 
-/// Tables that index glyphs and wait for M12.18.
+/// The layout tables ([`layout`]).
 const LAYOUT_TABLES: [Tag; 3] = [*b"GDEF", *b"GSUB", *b"GPOS"];
 /// Variation tables (M12.19); they go together, so no font claims variations it lost.
 const VARIATION_TABLES: [Tag; 10] = [*b"fvar", *b"avar", *b"gvar", *b"cvar", *b"HVAR", *b"VVAR", *b"MVAR", *b"STAT", *b"CFF2", *b"VARC"];
@@ -236,13 +246,11 @@ pub fn subset(font: &SfntFont, options: &SubsetOptions) -> Result<SubsetResult> 
             }
             continue;
         }
-        let reason = if LAYOUT_TABLES.contains(&tag) {
-            "subsetting layout tables is not built yet"
-        } else if VARIATION_TABLES.contains(&tag) {
+        let reason = if VARIATION_TABLES.contains(&tag) {
             "subsetting variation tables is not built yet"
         } else if OTHER_TABLES.contains(&tag) {
             "subsetting this table is not built yet"
-        } else if core::is_core(tag) {
+        } else if core::is_core(tag) || LAYOUT_TABLES.contains(&tag) {
             "empty after subsetting"
         } else {
             "the subsetter does not know this table"

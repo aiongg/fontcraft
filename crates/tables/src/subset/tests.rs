@@ -238,14 +238,15 @@ fn cff_closes_over_seac_and_keeps_the_notdef_width() {
 }
 
 #[test]
-fn layout_tables_are_dropped_with_a_reason() {
+fn tables_are_dropped_with_a_reason_and_layout_is_kept() {
     let mut font = built(CompileFlavour::TrueType);
     font.insert(*b"GSUB", vec![0, 1, 0, 0, 0, 0, 0, 0, 0, 0]);
     font.insert(*b"DSIG", vec![0, 0, 0, 1, 0, 0, 0, 0]);
     font.insert(*b"zzzz", vec![1, 2, 3]);
     let result = subset(&font, &SubsetOptions { text: "A".into(), ..SubsetOptions::default() }).unwrap();
     let reasons: BTreeMap<Tag, &str> = result.dropped.iter().map(|d| (d.tag, d.reason.as_str())).collect();
-    assert!(reasons[b"GSUB"].contains("not built"));
+    assert!(!reasons.contains_key(b"GSUB"), "layout tables are subset, not dropped");
+    assert!(result.font.get(*b"GSUB").is_some());
     assert_eq!(reasons[b"DSIG"], "dropped by the options");
     assert!(reasons.contains_key(b"zzzz"));
     let kept = subset(&font, &SubsetOptions { text: "A".into(), passthrough_tables: true, ..SubsetOptions::default() }).unwrap();
