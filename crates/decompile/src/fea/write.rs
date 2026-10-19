@@ -177,6 +177,32 @@ impl Line {
     pub fn is_subtable_break(&self) -> bool {
         matches!(self.pieces.as_slice(), [Piece::Text(t)] if t == "subtable;")
     }
+
+    /// A rule, not a comment or a subtable break.
+    fn is_rule(&self) -> bool {
+        !self.is_subtable_break() && !matches!(self.pieces.first(), Some(Piece::Text(t)) if t.starts_with('#'))
+    }
+}
+
+/// Removes the calls of contextual rules to the lookups of `empty` (lookups without rules). Such
+/// a call does nothing, and the feature compiler cannot give the called lookup a type. A rule
+/// left without calls still stops the lookup where it matches, which an `ignore` rule does too.
+fn drop_empty_calls(lookups: &mut HashMap<u16, LookupOut>, empty: &BTreeSet<u16>, calls: &HashSet<String>) {
+    for l in lookups.values_mut() {
+        for line in &mut l.body {
+            if !line.refs.iter().any(|r| empty.contains(r)) {
+                continue;
+            }
+            line.refs.retain(|r| !empty.contains(r));
+            line.pieces.retain(|p| !matches!(p, Piece::Text(t) if calls.contains(t)));
+            if line.refs.is_empty()
+                && let Some(Piece::Text(kw)) = line.pieces.first_mut()
+                && !kw.starts_with("ignore ")
+            {
+                *kw = format!("ignore {kw}");
+            }
+        }
+    }
 }
 
 /// One lookup read into lines.
@@ -254,6 +280,8 @@ pub(crate) struct Rendered {
     pub unsupported: Vec<String>,
     /// Glyph names used in the text that feature syntax cannot hold.
     pub bad_names: Vec<String>,
+    /// Glyph ids used in the text that the font does not have (no name can refer to them).
+    pub beyond: Vec<u16>,
 }
 
 pub(crate) struct Writer<'a> {
@@ -379,6 +407,11 @@ impl<'a> Writer<'a> {
                 queue.extend(lookup.refs.iter().copied().filter(|r| usize::from(*r) < count));
                 outs.insert(li, lookup);
             }
+            let empty: BTreeSet<u16> = outs.iter().filter(|(_, l)| !l.body.iter().any(Line::is_rule)).map(|(li, _)| *li).collect();
+            if !empty.is_empty() {
+                let calls: HashSet<String> = empty.iter().map(|li| format!(" lookup {}", self.lookup_name(table, *li))).collect();
+                drop_empty_calls(&mut outs, &empty, &calls);
+            }
             let mut order = Vec::new();
             let mut state: HashMap<u16, bool> = HashMap::new();
             let mut sorted: Vec<u16> = outs.keys().copied().collect();
@@ -441,7 +474,8 @@ impl<'a> Writer<'a> {
         for (g, class) in cd.iter() {
             self.budget.charge(1)?;
             let g = g.to_u16();
-            if class != 0 && seen.insert(g) {
+            // A class can list glyph ids past the font's glyphs; no glyph run holds them.
+            if class != 0 && usize::from(g) < self.count && seen.insert(g) {
                 by.entry(class).or_default().push(g);
             }
         }
@@ -620,10 +654,16 @@ impl<'a> Writer<'a> {
                     let cov = self.coverage(st.coverage(), &what)?;
                     for (g, set) in cov.into_iter().zip(st.ligature_sets().iter()) {
                         let set = set.map_err(|e| read_err(&what, e))?;
+                        // A shaper takes the first ligature of a set that matches, so a later one
+                        // with the same components never applies; the feature compiler refuses it.
+                        let mut seen: HashSet<Vec<u16>> = HashSet::new();
                         for lig in set.ligatures().iter() {
                             let lig = lig.map_err(|e| read_err(&what, e))?;
                             let comps = lig.component_glyph_ids();
                             self.budget.charge(comps.len().saturating_add(1))?;
+                            if !seen.insert(comps.iter().map(|c| c.get().to_u16()).collect()) {
+                                continue;
+                            }
                             let mut pieces = vec![Piece::Text("sub ".into()), Piece::Glyph(g)];
                             for c in comps {
                                 pieces.push(Piece::Text(" ".into()));
@@ -1484,6 +1524,7 @@ impl<'a> Writer<'a> {
             texts.push(text);
         }
         let mut bad_names = Vec::new();
+        let beyond: Vec<u16> = used_glyphs.iter().copied().filter(|g| usize::from(*g) >= self.count).collect();
         for g in used_glyphs {
             if let Some(raw) = self.raw.get(usize::from(g))
                 && !fea_glyph_name(raw).1
@@ -1497,7 +1538,7 @@ impl<'a> Writer<'a> {
                 unsupported.push(u);
             }
         }
-        Ok(Rendered { classes, texts, unsupported, bad_names })
+        Ok(Rendered { classes, texts, unsupported, bad_names, beyond })
     }
 }
 

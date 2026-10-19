@@ -34,8 +34,8 @@
 //! kerning is cleared and the `kern` feature stays code, so export does not kern twice.
 //!
 //! Whatever has no feature syntax is written as a `# not written:` comment and listed among the
-//! warnings. Glyph names feature syntax cannot hold leave every entry disabled, with a warning, so
-//! the font still exports. A font whose layout tables cannot be read opens without feature code
+//! warnings. Glyph names feature syntax cannot hold, and glyph ids past the font's glyphs, leave
+//! every entry disabled, with a warning, so the font still exports; the kerning read then stays. A font whose layout tables cannot be read opens without feature code
 //! and a warning; opening never fails because of them.
 //!
 //! Input is untrusted: the reader caps its work ([`write::MAX_LAYOUT_WORK`]), the text at
@@ -63,6 +63,8 @@ pub const MAX_NESTING: usize = 64;
 pub const PREFIX: &str = "Prefix";
 /// The prefix that holds the `languagesystem` statements.
 pub const LANGUAGESYSTEMS: &str = "Languagesystems";
+/// The end of the note on a glyph id past the font's glyphs ([`write::Writer`]).
+const BEYOND: &str = "beyond the font's glyph count";
 /// The marker where generated kerning goes in a `kern` entry.
 const AUTOMATIC_CODE: &str = "# Automatic Code";
 
@@ -103,7 +105,9 @@ pub(crate) fn import(font: &FontRef, d: &mut Decompiled) {
             return;
         }
     };
-    if rebuilt.kerning_as_code && !d.font.kerning.is_empty() {
+    let turned_off = !rebuilt.bad_names.is_empty() || !rebuilt.beyond.is_empty();
+    // Turned-off entries export nothing, so the kerning read stays and export still kerns.
+    if rebuilt.kerning_as_code && !turned_off && !d.font.kerning.is_empty() {
         d.font.kerning = Arc::default();
         for name in &names {
             if d.font.glyphs.get(name).is_some_and(|g| !g.kern_groups.is_empty())
@@ -126,9 +130,18 @@ pub(crate) fn import(font: &FontRef, d: &mut Decompiled) {
         *w = if left.is_empty() { String::new() } else { format!("{NOT_READ}{}", left.join(", ")) };
     }
     d.warnings.retain(|w| !w.is_empty());
-    if !rebuilt.unsupported.is_empty() {
-        let shown: Vec<&str> = rebuilt.unsupported.iter().take(MAX_LISTED).map(String::as_str).collect();
-        let more = rebuilt.unsupported.len().saturating_sub(MAX_LISTED);
+    let mut unsupported = rebuilt.unsupported;
+    if !rebuilt.beyond.is_empty() {
+        unsupported.retain(|u| !u.ends_with(BEYOND));
+        let shown: Vec<String> = rebuilt.beyond.iter().take(MAX_LISTED).map(u16::to_string).collect();
+        d.warnings.push(format!(
+            "the feature code made from the layout tables is turned off: its rules use glyph ids the font does not have ({}), which feature code cannot name",
+            shown.join(", ")
+        ));
+    }
+    if !unsupported.is_empty() {
+        let shown: Vec<&str> = unsupported.iter().take(MAX_LISTED).map(String::as_str).collect();
+        let more = unsupported.len().saturating_sub(MAX_LISTED);
         let more = if more > 0 { format!(" and {more} more") } else { String::new() };
         d.warnings.push(format!("the feature code made from the layout tables leaves out: {}{more}", shown.join("; ")));
     }
@@ -149,6 +162,8 @@ struct Rebuilt {
     kerning_as_code: bool,
     unsupported: Vec<String>,
     bad_names: Vec<String>,
+    /// Glyph ids the rules use that the font does not have.
+    beyond: Vec<u16>,
 }
 
 type Id = (T4, u16);
@@ -469,7 +484,7 @@ fn rebuild(font: &FontRef, names: &[String], kerning_read: bool) -> Result<Rebui
     }
 
     let rendered = w.render(&chunks, true)?;
-    let disabled = !rendered.bad_names.is_empty();
+    let disabled = !rendered.bad_names.is_empty() || !rendered.beyond.is_empty();
     let snippet = |name: String, code: &str| Snippet { name, code: code.trim_end().to_string(), disabled, ..Default::default() };
     let mut features = Features::default();
     for (name, members) in &rendered.classes {
@@ -492,7 +507,7 @@ fn rebuild(font: &FontRef, names: &[String], kerning_read: bool) -> Result<Rebui
         }
         features.features.push(entry);
     }
-    Ok(Rebuilt { features, kerning_as_code, unsupported: rendered.unsupported, bad_names: rendered.bad_names })
+    Ok(Rebuilt { features, kerning_as_code, unsupported: rendered.unsupported, bad_names: rendered.bad_names, beyond: rendered.beyond })
 }
 
 /// A lookup block. A rule calling a lookup not defined before it (a cycle) is commented out.

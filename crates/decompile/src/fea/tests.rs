@@ -178,3 +178,63 @@ fn a_font_without_features_opens_without_feature_entries() {
     assert!(d.font.features.features.is_empty() && d.font.features.classes.is_empty(), "{:#?}", d.font.features);
     assert!(!d.warnings.iter().any(|w| w.contains("feature code")), "{:?}", d.warnings);
 }
+
+/// A font with `lookups` in GSUB, `calt` using lookup 0 and `liga` lookup 2.
+fn with_gsub(base: &[u8], lookups: Vec<write_fonts::tables::gsub::SubstitutionLookup>) -> Vec<u8> {
+    use write_fonts::tables::gsub as ws;
+    use write_fonts::tables::layout as wl;
+    use write_fonts::types::Tag as WTag;
+    let gsub = ws::Gsub::new(
+        wl::ScriptList::new(vec![wl::ScriptRecord::new(WTag::new(b"DFLT"), wl::Script::new(Some(wl::LangSys::new(vec![0, 1])), vec![]))]),
+        wl::FeatureList::new(vec![
+            wl::FeatureRecord::new(WTag::new(b"calt"), wl::Feature::new(None, vec![0])),
+            wl::FeatureRecord::new(WTag::new(b"liga"), wl::Feature::new(None, vec![2])),
+        ]),
+        ws::SubstitutionLookupList::new(lookups),
+    );
+    let mut b = write_fonts::FontBuilder::new();
+    b.add_table(&gsub).unwrap();
+    b.copy_missing_tables(skrifa::raw::FontRef::new(base).unwrap());
+    b.build()
+}
+
+#[test]
+fn layout_the_feature_compiler_refuses_opens_as_code_that_exports() {
+    use write_fonts::tables::gsub as ws;
+    use write_fonts::tables::layout as wl;
+    use write_fonts::types::GlyphId16 as WGid;
+
+    let base = compile_ttf(&glyphs(), &Options::default()).unwrap().bytes;
+    let n = names(&base);
+    let g = |name: &str| WGid::new(n.iter().position(|x| x == name).unwrap() as u16);
+    let flag = wl::LookupFlag::empty();
+    // calt calls a lookup without subtables; liga has the same components twice in one set.
+    let call: wl::CoverageTable = [g("a")].into_iter().collect();
+    let calt = ws::SubstitutionLookup::ChainContextual(wl::Lookup::new(
+        flag,
+        vec![wl::ChainedSequenceContext::format_3(vec![], vec![call], vec![], vec![wl::SequenceLookupRecord::new(0, 1)]).into()],
+    ));
+    let empty = ws::SubstitutionLookup::Single(wl::Lookup::new(flag, vec![]));
+    let lig = |to: &str| ws::Ligature::new(g(to), vec![g("i")]);
+    let liga = ws::SubstitutionLookup::Ligature(wl::Lookup::new(
+        flag,
+        vec![ws::LigatureSubstFormat1::new([g("f")].into_iter().collect(), vec![ws::LigatureSet::new(vec![lig("f_i"), lig("a.alt")])])],
+    ));
+    let d = crate::decompile(&with_gsub(&base, vec![calt, empty, liga]), None).unwrap();
+    let all: String = d.font.features.prefixes.iter().chain(&d.font.features.features).map(|s| format!("{}\n", s.code)).collect();
+    assert!(all.contains("ignore sub a';") && all.contains("sub f i by f_i;") && !all.contains("by a.alt"), "{all}");
+    compile_ttf(&d.font, &Options::default()).unwrap();
+
+    // A substitution into a glyph id the font does not have: the entries open turned off.
+    let past = WGid::new(n.len() as u16 + 5);
+    let single =
+        |to: WGid| ws::SubstitutionLookup::Single(wl::Lookup::new(flag, vec![ws::SingleSubst::format_2([g("a")].into_iter().collect(), vec![to])]));
+    let mut kerned = glyphs();
+    Arc::make_mut(&mut kerned.kerning).ltr.set("m01", "A", "V", -80.0);
+    let base = compile_ttf(&kerned, &Options::default()).unwrap().bytes;
+    let d = crate::decompile(&with_gsub(&base, vec![single(past), single(g("b")), single(g("c"))]), None).unwrap();
+    assert!(d.font.features.features.iter().chain(&d.font.features.prefixes).all(|s| s.disabled), "{:#?}", d.font.features);
+    assert!(d.warnings.iter().any(|w| w.contains("glyph ids the font does not have")), "{:?}", d.warnings);
+    assert_eq!(d.font.kerning.ltr.get("m01", "A", "V"), Some(-80.0));
+    compile_ttf(&d.font, &Options::default()).unwrap();
+}
