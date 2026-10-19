@@ -449,6 +449,7 @@ fn shell_commands_that_name_files_declare_them() {
         ("url.show", "path", "inside `files`; refused whenever file access is restricted"),
         ("dialog.externalChanges", "font", "an open document's position"),
         ("file.openRecent", "path", "refused whenever file access is restricted (INDIRECT_COMMANDS)"),
+        ("tableViewer.show", "path", "a record's path inside a table, GPOS.lookupList.lookups[3]"),
     ];
     const PATH_NAMES: &[&str] =
         &["path", "paths", "file", "files", "folder", "folders", "destination", "directory", "output", "input", "font", "fonts"];

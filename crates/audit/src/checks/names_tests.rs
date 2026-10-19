@@ -1,6 +1,6 @@
 //! Behaviour tests of the `check.names.*` checks on fonts assembled byte by byte.
 
-use crate::{BinaryCtx, CheckGroup, Config, NoServices, Severity, audit_binary, find, select};
+use crate::{BinaryCtx, CheckGroup, CheckScope, Config, NoServices, Severity, audit_binary, find, select};
 
 type Rec = (u16, u16, u16, u16, String);
 
@@ -209,7 +209,8 @@ fn with(changes: Vec<Rec>) -> Vec<u8> {
 #[test]
 fn a_clean_font_passes_every_name_check() {
     let bytes = font(&clean(), 1.001, 0x0040);
-    let checks = select(None, &["check.names.*"], &["check.names.macRecordsComplete"]);
+    let checks: Vec<_> =
+        select(None, &["check.names.*"], &["check.names.macRecordsComplete"]).into_iter().filter(|s| s.scope == CheckScope::Binary).collect();
     assert_eq!(checks.len(), 17);
     for spec in checks {
         assert_eq!(spec.group, CheckGroup::Names);
@@ -343,7 +344,7 @@ fn variable_font_names_are_measured_per_instance_and_stat_combination() {
 #[test]
 fn hostile_name_tables_are_bounded() {
     let services = NoServices;
-    let names: Vec<_> = select(None, &["check.names.*"], &[]);
+    let names: Vec<_> = select(None, &["check.names.*"], &[]).into_iter().filter(|s| s.scope == CheckScope::Binary).collect();
 
     // 65,535 records that all point at one 65,534-byte string: 4 GB of text if decoded naively.
     let mut table = Vec::new();
