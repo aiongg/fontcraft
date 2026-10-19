@@ -7,6 +7,9 @@
 //! The tool used last per button comes from the toolbox (`Toolbox::last_in_group`), so a tool
 //! chosen by its key counts too. The buttons never take the keyboard focus, so the tool keys keep
 //! working after a click.
+//!
+//! A font with two or more masters shows their icons at the row's left end, before the tools
+//! ([`super::master_switcher`]).
 
 use std::time::Duration;
 
@@ -96,6 +99,7 @@ pub fn show(app: &FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'static s
     egui::Panel::top("edit_view_toolbar").frame(frame).show(ui, |ui| {
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = tokens.toolbar_gap;
+            super::master_switcher::show(app, ui, pending);
             for b in &buttons {
                 let Some(tool) = b.shown(active, app.tools.toolbox.last_in_group(b.key)) else { continue };
                 let on = b.tools.iter().any(|t| t.id == active);

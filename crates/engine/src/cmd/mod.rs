@@ -75,6 +75,7 @@ mod numbers;
 mod palette;
 mod path;
 mod pathops;
+pub mod preview;
 mod project;
 mod scale_upm;
 mod session;
@@ -371,6 +372,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(interpolation::specs());
         v.extend(instance_masters::specs());
         v.extend(compare::specs());
+        v.extend(preview::specs());
         v.extend(hint_ps::specs());
         v.extend(hint_tt_defs::specs());
         v.extend(hint_tt::specs());

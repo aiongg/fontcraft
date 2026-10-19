@@ -1,6 +1,8 @@
 //! The Preview Panel: a window with the same preview as the Preview Area, for the showing Edit
 //! View tab. It stays blank while Font View shows and fills in as soon as a tab shows
-//! (`preview.panelBlankWithoutEditTab`). Its commands live in [`super::preview`].
+//! (`preview.panelBlankWithoutEditTab`). It has its own instance pop-up, so it can show an
+//! instance or all instances while the Preview Area shows another (`preview.setInstance` with
+//! `target: "panel"`). Its commands live in [`super::preview`].
 
 use egui::{Rect, Sense, pos2, vec2};
 use serde_json::json;
@@ -16,6 +18,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     }
     let tab = app.state.tab().cloned();
     let options = *app.state.panels.preview.options(Target::Panel);
+    let menu = preview::instance_menu(app, Target::Panel);
     let ([w, h], row, ground) = (app.tokens.preview_panel_size, app.tokens.preview_controls_height, app.tokens.panel_darker);
     let mut open = true;
     egui::Window::new("Preview Panel")
@@ -38,7 +41,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
                     ui.painter_at(strip).rect_filled(strip, 0.0, ground);
                 }
             }
-            ui.scope_builder(egui::UiBuilder::new().max_rect(controls), |ui| preview::controls(ui, Target::Panel, &options, pending));
+            ui.scope_builder(egui::UiBuilder::new().max_rect(controls), |ui| preview::controls(ui, Target::Panel, &options, &menu, pending));
         });
     if !open {
         pending.push(("window.previewPanel", json!({"on": false})));

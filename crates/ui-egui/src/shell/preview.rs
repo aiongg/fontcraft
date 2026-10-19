@@ -2,24 +2,38 @@
 //! and the Preview Panel, [`super::preview_panel`]).
 //!
 //! A preview draws the tab's whole text filled, on one line without wrapping
-//! (`preview.singleLine`), in the tab's master and picked layers, direction and kerning mode.
-//! The strip reaches from the master's `Preview Descender` up to its `Preview Ascender`. The
-//! edited glyph sits in the middle while Always Center Active Glyph is on; otherwise the text
-//! keeps flush with the edge where it fits. Invert swaps text and ground, Flip turns the strip
-//! upside down, Blur softens it, and the offset (dragging the text) shifts it sideways.
-//! A double-click on a glyph makes it the edited glyph (`editView.setCursor`).
+//! (`preview.singleLine`), in the tab's direction and kerning mode. The strip reaches from the
+//! tab master's `Preview Descender` up to its `Preview Ascender`. The edited glyph sits in the
+//! middle while Always Center Active Glyph is on; otherwise the text keeps flush with the edge
+//! where it fits. Invert swaps text and ground, Flip turns the strip upside down, Blur softens
+//! it, and the offset (dragging the text) shifts it sideways. A double-click on a glyph makes it
+//! the edited glyph (`editView.setCursor`).
+//!
+//! What the line shows is each preview's own choice in its instance pop-up
+//! (`preview.setInstance`):
+//!
+//! | Choice | The strip shows |
+//! |---|---|
+//! | the dash (`master`) | the text in the tab's master and picked layers, following every master switch (`preview.dashFollowsMaster`) |
+//! | an instance | the text interpolated at the instance, with the instance's widths and kerning, from the document's instance view (`fontcraft_engine::interp_cache`) |
+//! | Show All Instances (`all`) | the edited glyph once for each static instance whose eye is on (`preview.showAllInstances`, `preview.toggleInstanceVisibility`) |
+//!
+//! Variable font settings are not instances here: the pop-up lists static instances only.
 //!
 //! The strip is one texture rasterised by the `render` crate, rebuilt only when what it shows
-//! changes; the one-line layout is cached beside it in egui's memory.
+//! changes; the one-line layouts are cached beside it in egui's memory, so a frame that changes
+//! nothing asks the engine for nothing.
 
+use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use egui::{Color32, ColorImage, Pos2, Rect, Sense, TextureHandle, TextureOptions, pos2, vec2};
 use fontcraft_engine::Session;
+use fontcraft_engine::cmd::preview::{blur_pixels, blur_radius, preview_range, turn_pixels};
+use fontcraft_engine::interp_cache::view_master_id;
 use fontcraft_geom::{Affine, BezPath};
-use fontcraft_model::plist::Value as Plist;
-use fontcraft_model::{Font, Master, Params, metric};
+use fontcraft_model::{Font, Master};
 use fontcraft_render::{Style, render_path};
 use fontcraft_textlayout::{Direction, Layout, Options};
 use serde::{Deserialize, Serialize};
@@ -28,27 +42,18 @@ use serde_json::{Value, json};
 use super::{Args, UiCommand};
 use crate::app::FontcraftApp;
 use crate::canvas::composite::CompositeCache;
+use crate::canvas::tt_pixels::instance_index;
 use crate::canvas::view;
 use crate::icons::Icon;
 use crate::panels::{Pending, widgets};
 use crate::state::{Tab, WritingDirection};
 use crate::theme::Tokens;
 
-/// The master parameters that set the strip's upper and lower edge.
-pub const PREVIEW_ASCENDER: &str = "Preview Ascender";
-pub const PREVIEW_DESCENDER: &str = "Preview Descender";
-/// The upper edge without `Preview Ascender`, in font units.
-pub const DEFAULT_PREVIEW_ASCENDER: f64 = 1000.0;
-/// The strongest blur, in screen points.
-pub const MAX_BLUR: f64 = 10.0;
+pub use fontcraft_engine::cmd::preview::{DEFAULT_PREVIEW_ASCENDER, MAX_BLUR, PREVIEW_ASCENDER, PREVIEW_DESCENDER};
 /// The tallest Preview Area, in screen points.
 pub const MAX_AREA_HEIGHT: f64 = 4000.0;
 /// The largest offset, in screen points either way.
 pub const MAX_OFFSET: f64 = 1.0e6;
-/// Largest absolute value read from `Preview Ascender`, `Preview Descender` and `winDescent`.
-const MAX_EDGE: f64 = 65_535.0;
-/// Box blur passes: three approximate a Gaussian.
-const BLUR_PASSES: usize = 3;
 
 /// One preview's options.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -94,9 +99,85 @@ pub struct PreviewState {
     /// The Preview Panel is open (`window.previewPanel`).
     pub panel_open: bool,
     pub panel: PreviewOptions,
+    /// What the area's and the panel's lines show (`preview.setInstance`).
+    pub area_shows: Shows,
+    pub panel_shows: Shows,
+}
+
+/// What a preview's line shows: the choice in its instance pop-up.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Shows {
+    /// The master Edit View draws (the dash).
+    #[default]
+    Master,
+    /// One instance, named as `hint.tt.showPixelPreview` names it: its name, or `#n` for the
+    /// instance at position n when the name does not find it.
+    Instance(String),
+    /// The edited glyph once for each visible static instance.
+    All,
+}
+
+impl Shows {
+    /// The `instance` value of `preview.setInstance` that chooses it.
+    pub fn name(&self) -> &str {
+        match self {
+            Shows::Master => "master",
+            Shows::Instance(key) => key,
+            Shows::All => "all",
+        }
+    }
+}
+
+/// What a preview draws this frame: [`Shows`] resolved against the font.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Drawn {
+    Master,
+    Instance(usize),
+    /// The static instances whose eye is on, in font order.
+    All(Vec<usize>),
+}
+
+/// Whether the instance at `index` is a static instance, not a variable font setting.
+pub fn is_static(font: &Font, index: usize) -> bool {
+    font.instances.get(index).is_some_and(|i| i.kind.as_deref() != Some("variable"))
+}
+
+/// How [`Shows::Instance`] and `hint.tt.showPixelPreview` name the instance at `index`: its
+/// name when that finds it, else `#index`.
+pub fn instance_key(font: &Font, index: usize) -> String {
+    match font.instances.get(index) {
+        Some(i) if !i.name.is_empty() && instance_index(font, &i.name) == Some(index) => i.name.clone(),
+        _ => format!("#{index}"),
+    }
+}
+
+/// What `shows` draws in `font`. An instance that is gone draws the master.
+pub fn drawn(font: &Font, shows: &Shows) -> Drawn {
+    match shows {
+        Shows::Master => Drawn::Master,
+        Shows::Instance(key) => instance_index(font, key).filter(|i| is_static(font, *i)).map_or(Drawn::Master, Drawn::Instance),
+        Shows::All => {
+            Drawn::All((0..font.instances.len()).filter(|i| is_static(font, *i) && font.instances.get(*i).is_some_and(|x| x.visible)).collect())
+        }
+    }
 }
 
 impl PreviewState {
+    pub fn shows(&self, target: Target) -> &Shows {
+        match target {
+            Target::Area => &self.area_shows,
+            Target::Panel => &self.panel_shows,
+        }
+    }
+
+    fn shows_mut(&mut self, target: Target) -> &mut Shows {
+        match target {
+            Target::Area => &mut self.area_shows,
+            Target::Panel => &mut self.panel_shows,
+        }
+    }
+
     pub fn options(&self, target: Target) -> &PreviewOptions {
         match target {
             Target::Area => &self.area,
@@ -194,6 +275,20 @@ pub const COMMANDS: &[UiCommand] = &[
         "",
         "{target?: \"area\" | \"panel\" (default area), x?: points, dx?: points} shift the preview line sideways to `x` screen points from where it would sit, or by `dx` more → {target, x}",
     ),
+    (
+        "preview.setInstance",
+        "Preview Instance",
+        &[],
+        "",
+        "{target?: \"area\" | \"panel\" (default area), instance: name | index | \"master\" | \"all\"} choose what the preview draws: a static instance (by name, `#n` or index from 0), interpolated as its static instance would be; \"master\" (the dash) for the master Edit View draws, following each master switch; \"all\" for the edited glyph once per visible instance. An instance or the dash also becomes the instance the TrueType Instructor previews → {target, instance, index (null for master and all)}",
+    ),
+    (
+        "preview.showAllInstances",
+        "Show All Instances",
+        &[],
+        "",
+        "{target?: \"area\" | \"panel\" (default area)} draw the edited glyph once for every static instance whose eye is on (preview.toggleInstanceVisibility), side by side, instead of the tab's text → {target, instance: \"all\"}",
+    ),
 ];
 
 pub fn run(app: &mut FontcraftApp, id: &str, args: &Args) -> Result<Value, String> {
@@ -251,33 +346,51 @@ pub fn run(app: &mut FontcraftApp, id: &str, args: &Args) -> Result<Value, Strin
             options.offset = x.clamp(-MAX_OFFSET, MAX_OFFSET);
             Ok(json!({"target": target.name(), "x": options.offset}))
         }
+        "preview.setInstance" => {
+            let target = Target::from_args(args)?;
+            let font = app.session.font().map_err(|e| e.to_string())?;
+            let given = args.get("instance").ok_or_else(|| args.err("give `instance`: a name, an index, \"master\" or \"all\""))?;
+            let index = match given {
+                Value::String(s) if s == "master" || s == "all" => None,
+                Value::String(s) => Some(instance_index(font, s).ok_or_else(|| args.err(format!("the font has no instance `{s}`")))?),
+                Value::Number(n) => Some(
+                    n.as_u64()
+                        .and_then(|i| usize::try_from(i).ok())
+                        .filter(|i| *i < font.instances.len())
+                        .ok_or_else(|| args.err(format!("the font has {} instances; there is no instance {n}", font.instances.len())))?,
+                ),
+                _ => return Err(args.err("`instance` must be a name, an index, \"master\" or \"all\"")),
+            };
+            let shows = match (index, given.as_str()) {
+                (Some(i), _) if !is_static(font, i) => {
+                    return Err(args.err(format!("`{}` is a variable font setting; the preview shows static instances", instance_key(font, i))));
+                }
+                (Some(i), _) => Shows::Instance(instance_key(font, i)),
+                (None, Some("all")) => Shows::All,
+                (None, _) => Shows::Master,
+            };
+            match &shows {
+                Shows::Master => app.state.tt_instructor.instance = None,
+                Shows::Instance(key) => app.state.tt_instructor.instance = Some(key.clone()),
+                Shows::All => {}
+            }
+            let name = shows.name().to_string();
+            *app.state.panels.preview.shows_mut(target) = shows;
+            Ok(json!({"target": target.name(), "instance": name, "index": index}))
+        }
+        "preview.showAllInstances" => {
+            let target = Target::from_args(args)?;
+            *app.state.panels.preview.shows_mut(target) = Shows::All;
+            Ok(json!({"target": target.name(), "instance": "all"}))
+        }
         other => Err(format!("unknown command `{other}`")),
     }
 }
 
-/// A master parameter as a finite number within ±[`MAX_EDGE`].
-fn number_param(params: &Params, name: &str) -> Option<f64> {
-    let v = match params.get(name)? {
-        Plist::Number(n) => n.value().as_f64(),
-        Plist::String(s) => s.as_str().trim().parse::<f64>().ok()?,
-        _ => return None,
-    };
-    (v.is_finite() && v.abs() <= MAX_EDGE).then_some(v)
-}
-
-/// The strip's lower and upper edge in font units for a master: `Preview Descender` (a distance
-/// below the baseline, of either sign), else the master's or the font's `winDescent` (the
-/// handbook names `winAscent`, read as a misprint), else the master's descender; and
-/// `Preview Ascender`, else 1000. Falls back to the master's descender and ascender when the
-/// edges would not enclose the baseline.
+/// The strip's lower and upper edge in font units for a master
+/// ([`fontcraft_engine::cmd::preview::preview_range`]).
 pub fn vertical_range(font: &Font, master: &Master) -> (f64, f64) {
-    let ascender = number_param(&master.params, PREVIEW_ASCENDER).unwrap_or(DEFAULT_PREVIEW_ASCENDER);
-    let descender = number_param(&master.params, PREVIEW_DESCENDER)
-        .or_else(|| number_param(&master.params, "winDescent"))
-        .or_else(|| number_param(&font.info.params, "winDescent"))
-        .map(|d| -d.abs())
-        .unwrap_or_else(|| font.metric_pos(master, metric::DESCENDER, -f64::from(font.units_per_em) * 0.2).min(0.0));
-    if ascender > 0.0 && ascender > descender { (descender, ascender) } else { view::vertical_span(font, master) }
+    preview_range(font, master)
 }
 
 /// Where a preview draws the tab's line: font units to screen points.
@@ -324,6 +437,21 @@ fn extent(layout: &Layout) -> (f64, f64) {
 /// placed along x by the options. `edited` is the item of the edited glyph. `None` for an empty
 /// strip or a range that encloses nothing.
 pub fn place(layout: &Layout, edited: Option<usize>, rect: Rect, range: (f64, f64), options: &PreviewOptions, margin: f64) -> Option<Placement> {
+    let focus = edited.and_then(|i| layout.placed.get(i)).map(|p| p.x + p.advance / 2.0);
+    place_line(extent(layout), focus, layout.direction == Direction::Rtl, rect, range, options, margin)
+}
+
+/// [`place`] for a line reaching over `(left, right)` in font units; `focus` is the x the
+/// middle keeps (the line's centre when `None`).
+fn place_line(
+    (left, right): (f64, f64),
+    focus: Option<f64>,
+    rtl: bool,
+    rect: Rect,
+    range: (f64, f64),
+    options: &PreviewOptions,
+    margin: f64,
+) -> Option<Placement> {
     let (low, high) = range;
     let span = high - low;
     let (w, h) = (f64::from(rect.width()), f64::from(rect.height()));
@@ -331,14 +459,13 @@ pub fn place(layout: &Layout, edited: Option<usize>, rect: Rect, range: (f64, f6
         return None;
     }
     let scale = h / span;
-    let (left, right) = extent(layout);
-    let focus = edited.and_then(|i| layout.placed.get(i)).map_or((left + right) / 2.0, |p| p.x + p.advance / 2.0);
+    let focus = focus.filter(|f| f.is_finite()).unwrap_or((left + right) / 2.0);
     let centred = w / 2.0 - focus * scale;
     let margin = if margin.is_finite() { margin.max(0.0) } else { 0.0 };
     let start = if options.always_center {
         centred
     } else if (right - left) * scale <= w - 2.0 * margin {
-        if layout.direction == Direction::Rtl { w - margin - right * scale } else { margin - left * scale }
+        if rtl { w - margin - right * scale } else { margin - left * scale }
     } else {
         // Too long to fit: as near the middle as the edges allow, never leaving a gap at either.
         centred.max(w - margin - right * scale).min(margin - left * scale)
@@ -404,12 +531,6 @@ pub struct Picture<'a> {
 /// and blurred as the options say. `None` for an empty or oversized strip.
 pub fn picture(p: &Picture, outlines: &mut CompositeCache) -> Option<ColorImage> {
     let rect = p.placement.rect;
-    let ppp = if p.ppp.is_finite() && p.ppp > 0.0 { p.ppp } else { 1.0 };
-    let (w, h) = ((rect.width() * ppp).round(), (rect.height() * ppp).round());
-    if !(w >= 1.0 && h >= 1.0) {
-        return None;
-    }
-    let (width, height) = (w as u32, h as u32);
     let s = p.placement.scale;
     // Glyphs whose advance lies more than an em beyond the strip cannot reach into it.
     let reach = f64::from(p.font.units_per_em) * s;
@@ -427,82 +548,98 @@ pub fn picture(p: &Picture, outlines: &mut CompositeCache) -> Option<ColorImage>
         outline.apply_affine(Affine::translate((placed.x, placed.y)));
         filled.extend(outline.elements().iter().copied());
     }
+    finish(&filled, p.placement, p.ppp, p.options, p.ink, p.paper)
+}
+
+/// One glyph of the line of all instances: the instance's view, its master id and the glyph's
+/// x in font units.
+#[derive(Clone)]
+pub struct AllItem {
+    pub view: Arc<Font>,
+    pub master: String,
+    pub x: f64,
+}
+
+/// The line of all instances: the edited glyph once per visible instance.
+#[derive(Clone, Default)]
+pub struct AllLine {
+    pub glyph: String,
+    pub items: Vec<AllItem>,
+    /// The line's length in font units.
+    pub length: f64,
+}
+
+/// The line of all instances for `glyph` at `instances`, from the instance views of the active
+/// document. An instance the glyph cannot be interpolated at is left out.
+pub fn all_line(session: &mut Session, glyph: &str, instances: &[usize]) -> AllLine {
+    let mut line = AllLine { glyph: glyph.to_string(), ..AllLine::default() };
+    let asked = [glyph.to_string()];
+    for &i in instances {
+        let Ok(view) = session.instance_view(i, &asked) else { continue };
+        let master = view_master_id(i);
+        let Some(width) = view.glyph(glyph).and_then(|g| g.layer(&master)).map(|l| l.width) else { continue };
+        line.items.push(AllItem { view, master, x: line.length });
+        line.length += if width.is_finite() { width.max(0.0) } else { 0.0 };
+    }
+    line
+}
+
+/// [`picture`] of the line of all instances.
+pub fn picture_all(
+    line: &AllLine,
+    placement: &Placement,
+    ppp: f32,
+    doc: (u64, u64),
+    style: (&PreviewOptions, Color32, Color32),
+    outlines: &mut CompositeCache,
+) -> Option<ColorImage> {
+    let mut filled = BezPath::new();
+    for item in &line.items {
+        let Some(layer) = item.view.glyph(&line.glyph).and_then(|g| g.layer(&item.master)) else { continue };
+        let Some(composite) = outlines.get(doc, &item.view, &line.glyph, layer) else { continue };
+        let mut outline = composite.outline.clone();
+        outline.apply_affine(Affine::translate((item.x, 0.0)));
+        filled.extend(outline.elements().iter().copied());
+    }
+    let (options, ink, paper) = style;
+    finish(&filled, placement, ppp, options, ink, paper)
+}
+
+/// `filled` (font units on the line) rasterised into the strip, inverted, turned and blurred.
+fn finish(filled: &BezPath, placement: &Placement, ppp: f32, options: &PreviewOptions, ink: Color32, paper: Color32) -> Option<ColorImage> {
+    let rect = placement.rect;
+    let ppp = if ppp.is_finite() && ppp > 0.0 { ppp } else { 1.0 };
+    let (w, h) = ((rect.width() * ppp).round(), (rect.height() * ppp).round());
+    if !(w >= 1.0 && h >= 1.0) {
+        return None;
+    }
+    let (width, height) = (w as u32, h as u32);
+    let s = placement.scale;
     let to_pixels = Affine::scale(f64::from(ppp))
-        * Affine::translate((p.placement.x0 - f64::from(rect.min.x), p.placement.baseline - f64::from(rect.min.y)))
+        * Affine::translate((placement.x0 - f64::from(rect.min.x), placement.baseline - f64::from(rect.min.y)))
         * Affine::scale_non_uniform(s, -s);
-    let (ink, paper) = if p.options.invert { (p.paper, p.ink) } else { (p.ink, p.paper) };
+    let (ink, paper) = if options.invert { (paper, ink) } else { (ink, paper) };
     let style = Style { ink: ink.to_srgba_unmultiplied(), background: paper.to_srgba_unmultiplied(), anti_alias: true };
-    let image = render_path(&filled, to_pixels, width, height, &style).ok()?;
+    let image = render_path(filled, to_pixels, width, height, &style).ok()?;
     let mut pixels = image.pixels;
-    if p.options.flip {
-        pixels = pixels.as_chunks::<4>().0.iter().rev().flatten().copied().collect();
+    if options.flip {
+        pixels = turn_pixels(&pixels);
     }
-    let radius = (p.options.blur() * f64::from(ppp) / BLUR_PASSES as f64).ceil();
-    if radius >= 1.0 {
-        box_blur(&mut pixels, width as usize, height as usize, radius as usize);
-    }
+    blur_pixels(&mut pixels, width as usize, height as usize, blur_radius(options.blur() * f64::from(ppp)));
     Some(ColorImage::from_rgba_premultiplied([width as usize, height as usize], &pixels))
 }
 
-/// Blurs RGBA pixels in place with [`BLUR_PASSES`] box blurs of `radius` pixels each way; the
-/// edges repeat.
-fn box_blur(pixels: &mut [u8], width: usize, height: usize, radius: usize) {
-    if width == 0 || height == 0 || radius == 0 || pixels.len() < width * height * 4 {
-        return;
-    }
-    let mut line = Vec::new();
-    for _ in 0..BLUR_PASSES {
-        for y in 0..height {
-            blur_run(pixels, y * width * 4, 4, width, radius, &mut line);
-        }
-        for x in 0..width {
-            blur_run(pixels, x * 4, width * 4, height, radius, &mut line);
-        }
-    }
-}
-
-/// One box blur along `n` pixels starting at byte `start`, `stride` bytes apart.
-fn blur_run(pixels: &mut [u8], start: usize, stride: usize, n: usize, radius: usize, line: &mut Vec<[u32; 4]>) {
-    line.clear();
-    for i in 0..n {
-        let o = start + i * stride;
-        let px = pixels.get(o..o + 4).unwrap_or(&[0; 4]);
-        line.push([0, 1, 2, 3].map(|c| px.get(c).copied().map_or(0, u32::from)));
-    }
-    let last = n.saturating_sub(1);
-    let at = |i: isize| line.get(i.clamp(0, last as isize) as usize).copied().unwrap_or([0; 4]);
-    let r = radius as isize;
-    let window = (2 * radius + 1) as u32;
-    let mut sum = [0u32; 4];
-    for k in -r..=r {
-        let v = at(k);
-        for c in 0..4 {
-            if let (Some(s), Some(v)) = (sum.get_mut(c), v.get(c)) {
-                *s += v;
-            }
-        }
-    }
-    for i in 0..n {
-        let o = start + i * stride;
-        if let Some(px) = pixels.get_mut(o..o + 4) {
-            for (dst, s) in px.iter_mut().zip(sum) {
-                *dst = (s / window).min(255) as u8;
-            }
-        }
-        let (add, sub) = (at(i as isize + r + 1), at(i as isize - r));
-        for c in 0..4 {
-            if let (Some(s), Some(a), Some(b)) = (sum.get_mut(c), add.get(c), sub.get(c)) {
-                *s = (*s + a).saturating_sub(*b);
-            }
-        }
-    }
-}
-
-/// A preview's layout and texture, and what they were made from, kept in egui's memory.
+/// A preview's layouts and texture, and what they were made from, kept in egui's memory.
 #[derive(Clone, Default)]
 struct Cache {
     layout_key: Option<u64>,
     layout: Option<Arc<Layout>>,
+    /// The line at an instance: the instance view it was laid out in and the layout.
+    instance_key: Option<u64>,
+    instance: Option<(Arc<Font>, Arc<Layout>)>,
+    /// The line of all instances.
+    all_key: Option<u64>,
+    all: Option<Arc<AllLine>>,
     picture_key: Option<u64>,
     texture: Option<TextureHandle>,
 }
@@ -511,10 +648,30 @@ fn cache_id(target: Target) -> egui::Id {
     egui::Id::new(("fontcraft.preview", target))
 }
 
+fn load_cache(ctx: &egui::Context, target: Target) -> Cache {
+    ctx.data(|d| d.get_temp::<Cache>(cache_id(target))).unwrap_or_default()
+}
+
+fn save_cache(ctx: &egui::Context, target: Target, cache: Cache) {
+    ctx.data_mut(|d| d.insert_temp(cache_id(target), cache));
+}
+
 /// The texture a preview drew last.
 #[cfg(test)]
 pub(crate) fn texture_id(ctx: &egui::Context, target: Target) -> Option<egui::TextureId> {
     ctx.data(|d| d.get_temp::<Cache>(cache_id(target))).and_then(|c| c.texture.map(|t| t.id()))
+}
+
+/// The line of all instances a preview drew last.
+#[cfg(test)]
+pub(crate) fn drawn_all(ctx: &egui::Context, target: Target) -> Option<Arc<AllLine>> {
+    ctx.data(|d| d.get_temp::<Cache>(cache_id(target))).and_then(|c| c.all)
+}
+
+/// The instance view and layout a preview drew last.
+#[cfg(test)]
+pub(crate) fn drawn_instance(ctx: &egui::Context, target: Target) -> Option<(Arc<Font>, Arc<Layout>)> {
+    ctx.data(|d| d.get_temp::<Cache>(cache_id(target))).and_then(|c| c.instance)
 }
 
 fn hash(parts: impl Hash, floats: &[f64]) -> u64 {
@@ -530,7 +687,7 @@ fn hash(parts: impl Hash, floats: &[f64]) -> u64 {
 fn cached_layout(app: &mut FontcraftApp, ctx: &egui::Context, target: Target, tab: &Tab) -> Option<Arc<Layout>> {
     let doc = app.session.active().map(|d| (d.id, d.revision))?;
     let key = hash((doc, tab.id, tab.text.revision(), &tab.master, &tab.layers, tab.direction, tab.kerning), &[]);
-    let mut cache = ctx.data(|d| d.get_temp::<Cache>(cache_id(target))).unwrap_or_default();
+    let mut cache = load_cache(ctx, target);
     if cache.layout_key == Some(key)
         && let Some(layout) = &cache.layout
     {
@@ -539,8 +696,68 @@ fn cached_layout(app: &mut FontcraftApp, ctx: &egui::Context, target: Target, ta
     let layout = line_layout(&mut app.session, tab).map(Arc::new);
     cache.layout_key = Some(key);
     cache.layout.clone_from(&layout);
-    ctx.data_mut(|d| d.insert_temp(cache_id(target), cache));
+    save_cache(ctx, target, cache);
     layout
+}
+
+/// The glyphs a layout draws, each once, in order.
+fn layout_glyphs(layout: &Layout) -> Vec<String> {
+    let mut seen = HashSet::new();
+    layout.placed.iter().filter_map(|p| p.glyph.as_deref()).filter(|g| seen.insert(*g)).map(str::to_string).collect()
+}
+
+/// The tab's text laid out on one line in the view of instance `instance`, with the instance's
+/// widths and kerning. `None` when the view cannot be built.
+pub fn instance_layout(session: &mut Session, tab: &Tab, master_layout: &Layout, instance: usize) -> Option<(Arc<Font>, Arc<Layout>)> {
+    let view = session.instance_view(instance, &layout_glyphs(master_layout)).ok()?;
+    let options = Options { direction: direction(tab), kerning: tab.kerning, single_line: true, ..Default::default() };
+    let layout = fontcraft_textlayout::layout(&view, &view_master_id(instance), &tab.text, &options).ok()?;
+    Some((view, Arc::new(layout)))
+}
+
+fn cached_instance(
+    app: &mut FontcraftApp,
+    ctx: &egui::Context,
+    target: Target,
+    tab: &Tab,
+    master_layout: &Layout,
+    instance: usize,
+) -> Option<(Arc<Font>, Arc<Layout>)> {
+    let doc = app.session.active().map(|d| (d.id, d.revision))?;
+    let key = hash((doc, tab.id, tab.text.revision(), tab.direction, tab.kerning, instance), &[]);
+    let mut cache = load_cache(ctx, target);
+    if cache.instance_key == Some(key) {
+        return cache.instance;
+    }
+    let line = instance_layout(&mut app.session, tab, master_layout, instance);
+    cache.instance_key = Some(key);
+    cache.instance.clone_from(&line);
+    save_cache(ctx, target, cache);
+    line
+}
+
+fn cached_all(app: &mut FontcraftApp, ctx: &egui::Context, target: Target, glyph: &str, instances: &[usize]) -> Option<Arc<AllLine>> {
+    let doc = app.session.active().map(|d| (d.id, d.revision))?;
+    let key = hash((doc, glyph, instances), &[]);
+    let mut cache = load_cache(ctx, target);
+    if cache.all_key == Some(key) {
+        return cache.all;
+    }
+    let line = Arc::new(all_line(&mut app.session, glyph, instances));
+    cache.all_key = Some(key);
+    cache.all = Some(Arc::clone(&line));
+    save_cache(ctx, target, cache);
+    Some(line)
+}
+
+/// What a frame's strip is drawn from, after its line was placed.
+enum Line {
+    /// The tab's text, in the master (`None` view) or in an instance's view.
+    Text {
+        view: Option<(usize, Arc<Font>)>,
+        layout: Arc<Layout>,
+    },
+    All(Arc<AllLine>),
 }
 
 /// Draws a preview of `tab` in `rect` and takes its input: dragging shifts the line, a
@@ -553,27 +770,41 @@ pub(crate) fn strip(app: &mut FontcraftApp, ui: &mut egui::Ui, rect: Rect, targe
     ui.painter_at(rect).rect_filled(rect, 0.0, ground);
     let response = ui.interact(rect, widgets::id(("preview.strip", target.name())), Sense::click_and_drag());
     let ctx = ui.ctx().clone();
+    let margin = f64::from(app.tokens.preview_margin);
     let Some(layout) = cached_layout(app, &ctx, target, tab) else { return };
-    let Ok(font) = app.session.font() else { return };
-    let Some(master) = view::tab_master(font, tab) else { return };
-    let range = vertical_range(font, master);
-    let Some(placement) = place(&layout, tab.edited_index(), rect, range, &options, f64::from(app.tokens.preview_margin)) else { return };
+    let (range, shown) = {
+        let Ok(font) = app.session.font() else { return };
+        let Some(master) = view::tab_master(font, tab) else { return };
+        (vertical_range(font, master), drawn(font, app.state.panels.preview.shows(target)))
+    };
+    let line = match &shown {
+        Drawn::Master => Line::Text { view: None, layout },
+        Drawn::Instance(i) => match cached_instance(app, &ctx, target, tab, &layout, *i) {
+            Some((view, layout)) => Line::Text { view: Some((*i, view)), layout },
+            None => return,
+        },
+        Drawn::All(list) => {
+            let Some(glyph) = tab.edited_glyph() else { return };
+            match cached_all(app, &ctx, target, glyph, list) {
+                Some(line) => Line::All(line),
+                None => return,
+            }
+        }
+    };
+    let placement = match &line {
+        Line::Text { layout, .. } => place(layout, tab.edited_index(), rect, range, &options, margin),
+        Line::All(all) => place_line((0.0, all.length), None, false, rect, range, &options, margin),
+    };
+    let Some(placement) = placement else { return };
     let doc = app.session.active().map(|d| (d.id, d.revision)).unwrap_or_default();
     let ppp = ctx.pixels_per_point();
+    let what = match &shown {
+        Drawn::Master => hash((0u8, &tab.master, &tab.layers), &[]),
+        Drawn::Instance(i) => hash((1u8, *i), &[]),
+        Drawn::All(list) => hash((2u8, list, tab.edited_glyph()), &[]),
+    };
     let key = hash(
-        (
-            doc,
-            tab.id,
-            tab.text.revision(),
-            &tab.master,
-            &tab.layers,
-            tab.direction,
-            tab.kerning,
-            options.invert,
-            options.flip,
-            ink.to_array(),
-            paper.to_array(),
-        ),
+        (doc, tab.id, tab.text.revision(), what, tab.direction, tab.kerning, options.invert, options.flip, ink.to_array(), paper.to_array()),
         &[
             placement.scale,
             placement.x0,
@@ -586,13 +817,27 @@ pub(crate) fn strip(app: &mut FontcraftApp, ui: &mut egui::Ui, rect: Rect, targe
             options.blur(),
         ],
     );
-    let mut cache = ctx.data(|d| d.get_temp::<Cache>(cache_id(target))).unwrap_or_default();
+    let mut cache = load_cache(&ctx, target);
     if cache.picture_key != Some(key) {
-        let p = Picture { font, tab, layout: &layout, placement: &placement, ppp, doc, options: &options, ink, paper };
+        let image = match &line {
+            Line::Text { view: None, layout } => {
+                let Ok(font) = app.session.font() else { return };
+                let p = Picture { font, tab, layout, placement: &placement, ppp, doc, options: &options, ink, paper };
+                picture(&p, &mut app.fill_cache.outlines)
+            }
+            Line::Text { view: Some((i, view)), layout } => {
+                // The instance view's one master stands in for the tab's.
+                let mut shown_tab = tab.clone();
+                shown_tab.master = Some(view_master_id(*i));
+                shown_tab.layers.clear();
+                let p = Picture { font: view, tab: &shown_tab, layout, placement: &placement, ppp, doc, options: &options, ink, paper };
+                picture(&p, &mut app.fill_cache.outlines)
+            }
+            Line::All(all) => picture_all(all, &placement, ppp, doc, (&options, ink, paper), &mut app.fill_cache.outlines),
+        };
         cache.picture_key = Some(key);
-        cache.texture = picture(&p, &mut app.fill_cache.outlines)
-            .map(|image| ctx.load_texture(format!("preview-{}", target.name()), image, TextureOptions::LINEAR));
-        ctx.data_mut(|d| d.insert_temp(cache_id(target), cache.clone()));
+        cache.texture = image.map(|image| ctx.load_texture(format!("preview-{}", target.name()), image, TextureOptions::LINEAR));
+        save_cache(&ctx, target, cache.clone());
     }
     if let Some(texture) = &cache.texture {
         ui.painter_at(rect).image(texture.id(), rect, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
@@ -603,9 +848,10 @@ pub(crate) fn strip(app: &mut FontcraftApp, ui: &mut egui::Ui, rect: Rect, targe
             pending.push(("preview.setOffset", json!({"target": target.name(), "dx": if options.flip { -dx } else { dx }})));
         }
     }
-    if response.double_clicked()
+    if let Line::Text { layout, .. } = &line
+        && response.double_clicked()
         && let Some(at) = response.interact_pointer_pos()
-        && let Some(index) = hit(&layout, tab, &placement, at)
+        && let Some(index) = hit(layout, tab, &placement, at)
     {
         pending.push(("editView.setCursor", json!({"tab": tab.id, "index": index})));
     }
@@ -618,10 +864,89 @@ pub(crate) fn strip(app: &mut FontcraftApp, ui: &mut egui::Ui, rect: Rect, targe
     });
 }
 
-/// A preview's controls row: Invert, Flip and the blur slider.
-pub(crate) fn controls(ui: &mut egui::Ui, target: Target, options: &PreviewOptions, pending: &mut Pending) {
+/// What a preview's instance pop-up lists.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct InstanceMenu {
+    pub shows: Shows,
+    /// The button's label: the dash, the instance's name or Show All Instances.
+    pub label: String,
+    /// Each static instance: its position, name and eye.
+    pub instances: Vec<(usize, String, bool)>,
+}
+
+/// The instance pop-up of `target` for the active document.
+pub fn instance_menu(app: &FontcraftApp, target: Target) -> InstanceMenu {
+    let shows = app.state.panels.preview.shows(target).clone();
+    let Ok(font) = app.session.font() else { return InstanceMenu { shows, label: DASH.to_string(), instances: Vec::new() } };
+    let instances: Vec<(usize, String, bool)> =
+        font.instances.iter().enumerate().filter(|(i, _)| is_static(font, *i)).map(|(i, inst)| (i, instance_key(font, i), inst.visible)).collect();
+    let label = match drawn(font, &shows) {
+        Drawn::Master => DASH.to_string(),
+        Drawn::Instance(i) => instance_key(font, i),
+        Drawn::All(_) => SHOW_ALL.to_string(),
+    };
+    InstanceMenu { shows, label, instances }
+}
+
+/// The pop-up entry that follows Edit View's master.
+pub const DASH: &str = "-";
+const SHOW_ALL: &str = "Show All Instances";
+
+/// The id of a preview's instance pop-up button.
+pub fn instance_button_id(target: Target) -> egui::Id {
+    widgets::id(("preview.instanceMenu", target.name()))
+}
+
+/// The instance pop-up: the dash, each static instance with its eye, and Show All Instances.
+fn instance_popup(ui: &mut egui::Ui, target: Target, menu: &InstanceMenu, pending: &mut Pending) {
+    let t = target.name();
+    let button = crate::panels::attributes::menu_button(ui, instance_button_id(target), &menu.label, "The instance the preview shows");
+    egui::Popup::menu(&button).id(instance_button_id(target).with("popup")).show(|ui| {
+        if widgets::button(
+            ui,
+            widgets::id(("preview.instance", t, "master")),
+            DASH,
+            "Follow the master Edit View shows",
+            true,
+            menu.shows == Shows::Master,
+        ) {
+            pending.push(("preview.setInstance", json!({"target": t, "instance": "master"})));
+            ui.close();
+        }
+        for (index, name, visible) in &menu.instances {
+            ui.horizontal(|ui| {
+                let eye_hover =
+                    if *visible { "Leave this instance out of Show All Instances" } else { "Include this instance in Show All Instances" };
+                if widgets::icon_button(ui, widgets::id(("preview.instanceEye", t, *index)), Icon::Preview, eye_hover, true, *visible) {
+                    pending.push(("preview.toggleInstanceVisibility", json!({ "instance": *index })));
+                }
+                let chosen = menu.shows == Shows::Instance(name.clone());
+                if widgets::button(ui, widgets::id(("preview.instance", t, *index)), name, "Preview this instance", true, chosen) {
+                    pending.push(("preview.setInstance", json!({"target": t, "instance": *index})));
+                    ui.close();
+                }
+            });
+        }
+        ui.separator();
+        if widgets::button(
+            ui,
+            widgets::id(("preview.instance", t, "all")),
+            SHOW_ALL,
+            "The edited glyph in every instance",
+            true,
+            menu.shows == Shows::All,
+        ) {
+            pending.push(("preview.showAllInstances", json!({ "target": t })));
+            ui.close();
+        }
+    });
+}
+
+/// A preview's controls row: the instance pop-up, Invert, Flip and the blur slider.
+pub(crate) fn controls(ui: &mut egui::Ui, target: Target, options: &PreviewOptions, menu: &InstanceMenu, pending: &mut Pending) {
     ui.horizontal_centered(|ui| {
         let t = target.name();
+        instance_popup(ui, target, menu, pending);
         if widgets::button(ui, widgets::id(("preview.invert", t)), "Invert", "Light text on a dark ground", true, options.invert) {
             pending.push(("preview.invert", json!({ "target": t })));
         }
@@ -650,6 +975,7 @@ pub fn area(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     let tab = tab.clone();
     let height = app.state.panels.preview.area_height(&app.tokens);
     let options = *app.state.panels.preview.options(Target::Area);
+    let menu = instance_menu(app, Target::Area);
     let (separator, row, fill, line) = (app.tokens.preview_separator, app.tokens.preview_controls_height, app.tokens.app_bar, app.tokens.border);
     let frame = egui::Frame::NONE.fill(fill);
     egui::Panel::bottom("edit_view_preview_area").resizable(false).exact_size(height as f32).frame(frame).show(ui, |ui| {
@@ -670,7 +996,7 @@ pub fn area(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
         if strip_rect.height() > 0.0 {
             strip(app, ui, strip_rect, Target::Area, &tab, pending);
         }
-        ui.scope_builder(egui::UiBuilder::new().max_rect(controls_rect), |ui| controls(ui, Target::Area, &options, pending));
+        ui.scope_builder(egui::UiBuilder::new().max_rect(controls_rect), |ui| controls(ui, Target::Area, &options, &menu, pending));
     });
 }
 

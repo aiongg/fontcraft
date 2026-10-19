@@ -2259,7 +2259,7 @@ milestone = "M3"
 summary = "Makes a master the one Edit View draws all glyphs in. Cmd+1 to Cmd+9 select the first nine masters; clicking a master's icon in the toolbar selects any of them."
 ref = "Edit View › Previewing & Testing › Previewing Masters"
 status = "handbook"
-notes = "Built in M3.10 without the toolbar icons (`preview.masterIconsInToolbar`, M9). The master belongs to the tab; a new tab takes the master of the tab it was opened from, or Font View's master when it was opened from Font View. `master` as an index counts from 0. Selecting a master drops the per-glyph layers `layers.select` chose. While Font View shows, the command picks Font View's master instead (M4): the master its cells, layer colours, smart-filter layer rules and Paste Special's Content of Active Layer use (`fontView.cell.followsMaster`)."
+notes = "Built in M3.10; the toolbar's master icons (`preview.masterIconsInToolbar`, M9.20) run it with the master's index. The master belongs to the tab; a new tab takes the master of the tab it was opened from, or Font View's master when it was opened from Font View. `master` as an index counts from 0. Selecting a master drops the per-glyph layers `layers.select` chose. While Font View shows, the command picks Font View's master instead (M4): the master its cells, layer colours, smart-filter layer rules and Paste Special's Content of Active Layer use (`fontView.cell.followsMaster`)."
 
 [[behavior]]
 id = "preview.masterIconsInToolbar"
@@ -2268,6 +2268,13 @@ milestone = "M9"
 summary = "The toolbar shows one icon per master, defined in Font Info > Masters; the highlighted icon is the master currently drawn in Edit View."
 ref = "Edit View › Previewing & Testing › Previewing Masters"
 status = "handbook"
+notes = "Built in M9.20 (`shell/master_switcher.rs`): one icon per master, drawn as its Font Info icon (a built-in n or a glyph of the font in that master), the showing tab's master highlighted; a click runs `view.selectMaster`, the hover text names the master and, for the first nine, Cmd+1 to Cmd+9. Documented, not yet observed."
+guesses = [
+  "The master icons sit at the toolbar's left end before the tools, and only while the font has two or more masters; settle by opening a one-master and a three-master font in the reference app.",
+]
+observe = [
+  "Open F4 (three named masters) and a copy reduced to one master: note where the master icons sit in the toolbar and whether the one-master font shows any.",
+]
 
 [[behavior]]
 id = "preview.masterPerGlyphViaLayers"
@@ -2506,6 +2513,7 @@ milestone = "M9"
 summary = "Strip under the editing canvas that renders the tab's text filled, as a chosen instance or as the current master. Apart from the Show All Instances mode it draws the whole tab text on a single line."
 ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
 status = "handbook"
+notes = "Built in M5.11a (strip, separator, Invert, Flip, Blur, offset, double-click, context menu) and M9.20 (the instance pop-up with the dash, the static instances with their eyes, and Show All Instances). Documented, not yet observed."
 
 [[panel]]
 id = "window.previewPanel"
@@ -2520,6 +2528,7 @@ milestone = "M9"
 summary = "Detached version of the Preview Area. It shows the glyphs of the active Edit View tab of the current font and is empty while no Edit View tab is active; it refreshes as soon as one is clicked."
 ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
 status = "handbook"
+notes = "Built in M5.11a and M9.20: the panel has its own instance pop-up and keeps its own choice (`preview.setInstance` with `target: \"panel\"`). Documented, not yet observed."
 
 [[command]]
 id = "preview.setInstance"
@@ -2533,6 +2542,11 @@ milestone = "M9"
 summary = "Chooses what the preview renders: a named instance (interpolated on the fly), the master used in Edit View (the dash entry), or all instances at once."
 ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
 status = "handbook"
+notes = "Built in M9.20. `instance` names a static instance by name, `#n` or index from 0; a variable font setting is refused. The line at an instance is laid out in the document's instance view: the instance's widths and kerning, each glyph interpolated as its static instance would be (`preview.respectsInstanceData`). A glyph that cannot be interpolated is left out of the line. Documented, not yet observed."
+guesses = [
+  "The Preview Area and the Preview Panel each keep their own instance choice, as they keep their own Invert and Flip; settle by choosing different instances in both in the reference app.",
+  "Choosing an instance or the dash in the preview also makes it the TrueType Instructor's previewed instance (`hint.tt.showPixelPreview`); settle by switching the preview's instance in the reference app with the Instructor active.",
+]
 
 [[command]]
 id = "preview.showAllInstances"
@@ -2546,19 +2560,27 @@ milestone = "M9"
 summary = "Switches the preview to showing only the current glyph, once for every instance of the font, instead of the tab's text in one instance."
 ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
 status = "handbook"
+notes = "Built in M9.20: the edited glyph once per static instance whose eye is on, in font order. Documented, not yet observed."
+guesses = [
+  "Show All Instances sets the glyphs side by side by their interpolated advances, without gaps, and centres the line like the text; settle by a screenshot of the reference app's preview with Show All Instances.",
+]
 
 [[command]]
 id = "preview.toggleInstanceVisibility"
 label = "Show Instance in Preview"
 menu = []
 shortcut = ""
-kind = "ui"
+kind = "engine"
 params = "{instance: name|index, on?: bool}"
 area = "proofing"
 milestone = "M9"
 summary = "Includes or excludes one instance from the Show All Instances line-up. It is the eye icon next to the instance name in the preview's pop-up."
 ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
 status = "handbook"
+notes = "Built in M9.20 as an engine command: the eye is the instance's stored visible flag (`Instance::visible`, the file format's `visible` key), changed as one undo step. Documented, not yet observed."
+guesses = [
+  "The eye toggle is saved with the document and can be undone, as the instance's visible flag is stored in the file; settle by checking whether the reference app marks the document edited after a click on an eye.",
+]
 
 [[command]]
 id = "preview.invert"
@@ -2655,6 +2677,11 @@ milestone = "M9"
 summary = "Renders the preview line to an image so an agent can inspect what the Preview Area would show. Not a reference feature."
 ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
 status = "inferred"
+notes = "Built in M9.20 (`engine/src/cmd/preview.rs`): the glyphs on one line with their advances and kerning, at the master or the instance view, scaled so the preview edges fill `size` pixels of height; PNG as base64 or SVG text."
+guesses = [
+  "`size` is the image height in pixels, the strip from Preview Descender to Preview Ascender filling it, as the Preview Area scales to its height.",
+  "`features` is accepted and not applied, with a warning, since the Preview Area lays its line out without feature code.",
+]
 
 [[behavior]]
 id = "preview.singleLine"
@@ -2685,6 +2712,7 @@ milestone = "M9"
 summary = "With the dash chosen in the instance pop-up, the preview is not interpolated: it mirrors whatever master Edit View is showing."
 ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
 status = "handbook"
+notes = "Built in M9.20: the dash (`preview.setInstance` with `master`) draws the tab's master and picked layers, so every master switch shows at once. Documented, not yet observed."
 
 [[behavior]]
 id = "preview.respectsInstanceData"
@@ -2693,11 +2721,12 @@ milestone = "M9"
 summary = "Instance previews take intermediate and alternate layers into account and apply some, not all, of the instance's custom parameters. The handbook does not list which."
 ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
 status = "handbook"
+notes = "Built in M9.20: the instance view interpolates each glyph through the static instance code (`fontcraft_interp::instance`), so intermediate and alternate layers, manual master weights, Local Interpolation and InterpolationWeightY apply. Documented in part; the handbook does not list which parameters apply."
 guesses = [
-  "The preview of an instance applies the instance's interpolation parameters (Local Interpolation, InterpolationWeightY, manual interpolation), Rename Glyphs and Remove Glyphs, and no filters; settle by previewing an instance with a filter parameter in the reference app.",
+  "The preview of an instance applies the instance's interpolation parameters (Local Interpolation, InterpolationWeightY, manual interpolation) and no export filters (Rename Glyphs, Remove Glyphs) or filters; settle by previewing an instance with Rename Glyphs and with a filter parameter in the reference app.",
 ]
 observe = [
-  "In F1 (two masters), put a filter parameter on the Regular instance and preview Regular: note whether the preview applies the filter.",
+  "In F1 (two masters), put a filter parameter and a Rename Glyphs parameter on the Regular instance and preview Regular: note whether the preview applies either.",
 ]
 
 [[behavior]]

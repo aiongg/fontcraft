@@ -1,0 +1,140 @@
+//! The engine half of the preview of instances: the instance views the preview draws
+//! (`Session::instance_view`, `Session::instance_layer`), `preview.render` and
+//! `preview.toggleInstanceVisibility`.
+// Integration tests may unwrap and panic, unlike shipped code (AGENTS.md › Never crash).
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
+
+use std::sync::Arc;
+
+use base64::Engine as _;
+use fontcraft_engine::Session;
+use fontcraft_engine::interp_cache::view_master_id;
+use fontcraft_engine::model::{Axis, Font, Glyph, GlyphTable, Instance, Layer, Master, Path, Shape};
+use serde_json::{Value, json};
+
+/// A box `w` wide, advance `w + 100`.
+fn layer(master: &str, w: f64) -> Layer {
+    let mut l = Layer::new(master, w + 100.0);
+    l.shapes = vec![Shape::Path(Path::rect(0.0, 0.0, w, 700.0))];
+    l
+}
+
+fn glyph(name: &str, unicode: u32, thin: f64, black: f64) -> Arc<Glyph> {
+    let mut g = Glyph::new(name);
+    g.unicodes = vec![unicode];
+    g.layers = vec![layer("thin", thin), layer("black", black)];
+    Arc::new(g)
+}
+
+/// Thin (100) and Black (900); instances Light (300), Regular (500) and a variable font
+/// setting; `a` is 100 to 300 wide, `b` 200 to 600; `a b` kerned −40 on Thin and −80 on Black.
+fn session() -> Session {
+    let mut f = Font::new("Preview");
+    f.axes = Arc::new(vec![Axis { name: "Weight".into(), tag: "wght".into(), ..Axis::default() }]);
+    f.masters = Arc::new(
+        [("thin", 100.0), ("black", 900.0)]
+            .iter()
+            .map(|(id, w)| Master { id: (*id).into(), name: (*id).into(), location: vec![*w], ..Master::default() })
+            .collect(),
+    );
+    f.instances = Arc::new(vec![
+        Instance { name: "Light".into(), location: vec![300.0], ..Instance::default() },
+        Instance { name: "Regular".into(), location: vec![500.0], ..Instance::default() },
+        Instance { name: "Variable".into(), kind: Some("variable".into()), ..Instance::default() },
+    ]);
+    f.glyphs = GlyphTable::from_glyphs(vec![glyph("a", 0x61, 100.0, 300.0), glyph("b", 0x62, 200.0, 600.0)]);
+    let mut s = Session::new();
+    s.add_document(f, None).unwrap();
+    for (master, value) in [("thin", -40), ("black", -80)] {
+        run(&mut s, "kerning.setPair", json!({"left": "a", "right": "b", "value": value, "master": master}));
+    }
+    s
+}
+
+fn run(s: &mut Session, id: &str, p: Value) -> Value {
+    s.execute(id, &p).unwrap_or_else(|e| panic!("{id} {p}: {e}"))
+}
+
+fn run_err(s: &mut Session, id: &str, p: Value) -> String {
+    let before = s.doc().unwrap().font.clone();
+    let e = s.execute(id, &p).err().unwrap_or_else(|| panic!("{id} {p} succeeded")).to_string();
+    assert!(Arc::ptr_eq(&before, &s.doc().unwrap().font), "{id} {p} failed but changed the font");
+    e
+}
+
+#[test]
+fn an_instance_view_has_the_instance_widths_and_kerning_and_an_edit_redoes_only_its_glyph() {
+    let mut s = session();
+    let names = ["a".to_string(), "b".to_string()];
+    let view = s.instance_view(1, &names).unwrap();
+    let id = view_master_id(1);
+    assert_eq!(view.glyph("a").unwrap().layer(&id).unwrap().width, 300.0);
+    assert_eq!(view.glyph("b").unwrap().layer(&id).unwrap().width, 500.0);
+    let pairs = &view.kerning.ltr.0;
+    assert_eq!(pairs.len(), 1);
+    assert_eq!(pairs[0].master, id, "the kerning is the view master's");
+
+    let b = s.instance_layer("b", 1).unwrap();
+    s.edit("widen a", |font| {
+        font.glyph_mut("a")?.layers[1].width = 600.0;
+        Ok(())
+    })
+    .unwrap();
+    assert_eq!(s.instance_layer("a", 1).unwrap().width, 400.0, "the edited glyph follows the edit");
+    assert!(Arc::ptr_eq(&s.instance_layer("b", 1).unwrap(), &b), "the other glyph is not interpolated again");
+    assert!(s.instance_layer("a", 9).is_err());
+    assert!(s.instance_layer("missing", 1).is_err());
+}
+
+#[test]
+fn render_draws_the_line_at_the_instance_with_its_widths() {
+    let mut s = session();
+    let master = run(&mut s, "preview.render", json!({"glyphs": ["a"], "size": 120}));
+    let regular = run(&mut s, "preview.render", json!({"glyphs": ["a"], "size": 120, "instance": "Regular"}));
+    assert_eq!(master["instance"], "master");
+    assert_eq!(master["master"], "thin");
+    assert_eq!(regular["instance"], "Regular");
+    assert_eq!(regular["glyphs"], json!(["a"]));
+    assert_eq!(regular["height"], 120);
+    // 8 pixels of padding on each side; the advance is 200 at Thin and 300 at Regular.
+    let line = |r: &Value| r["width"].as_f64().unwrap() - 16.0;
+    assert!((line(&regular) - 1.5 * line(&master)).abs() <= 1.5, "{} vs {}", line(&regular), line(&master));
+    let png = base64::engine::general_purpose::STANDARD.decode(regular["png"].as_str().unwrap()).unwrap();
+    assert_eq!(&png[1..4], b"PNG");
+
+    // Text maps characters to glyphs; a character no glyph has is skipped with a warning.
+    let text = run(&mut s, "preview.render", json!({"text": "abz", "format": "svg", "invert": true, "flip": true, "blur": 2}));
+    assert_eq!(text["glyphs"], json!(["a", "b"]));
+    assert!(text["svg"].as_str().unwrap().starts_with("<svg"));
+    assert_eq!(text["warnings"].as_array().unwrap().len(), 1);
+    let features = run(&mut s, "preview.render", json!({"glyphs": ["a"], "features": ["liga"]}));
+    assert_eq!(features["warnings"].as_array().unwrap().len(), 1, "feature code is not applied, and says so");
+
+    run_err(&mut s, "preview.render", json!({}));
+    run_err(&mut s, "preview.render", json!({"glyphs": ["a"], "format": "gif"}));
+    run_err(&mut s, "preview.render", json!({"glyphs": ["a"], "size": 0}));
+    run_err(&mut s, "preview.render", json!({"glyphs": ["a"], "instance": "Nope"}));
+    run_err(&mut s, "preview.render", json!({"glyphs": ["a"], "instance": "Regular", "master": "thin"}));
+    run_err(&mut s, "preview.render", json!({"glyphs": ["missing"]}));
+    run_err(&mut s, "preview.render", json!({"glyphs": vec!["a"; 1001]}));
+}
+
+#[test]
+fn toggle_instance_visibility_is_one_undo_step_and_a_no_op_changes_nothing() {
+    let mut s = session();
+    assert!(s.font().unwrap().instances[0].visible);
+    let r = run(&mut s, "preview.toggleInstanceVisibility", json!({"instance": "Light"}));
+    assert_eq!(r, json!({"instance": 0, "name": "Light", "on": false}));
+    assert!(!s.font().unwrap().instances[0].visible);
+    run(&mut s, "edit.undo", json!({}));
+    assert!(s.font().unwrap().instances[0].visible);
+
+    let before = s.doc().unwrap().font.clone();
+    let r = run(&mut s, "preview.toggleInstanceVisibility", json!({"instance": 1, "on": true}));
+    assert_eq!(r["on"], true);
+    assert!(Arc::ptr_eq(&before, &s.doc().unwrap().font), "setting the flag it already has changes nothing");
+
+    run_err(&mut s, "preview.toggleInstanceVisibility", json!({}));
+    run_err(&mut s, "preview.toggleInstanceVisibility", json!({"instance": "Nope"}));
+    run_err(&mut s, "preview.toggleInstanceVisibility", json!({"instance": 0, "on": "yes"}));
+}
