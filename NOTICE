@@ -376,5 +376,10 @@ bundled, the file says so in its header and the project is listed here with its 
   of its glyph loader that set up a glyph for hinting (src/outline/glyf/mod.rs), for the TrueType
   debugger and delta suggestions.
 
+  Static instances of designspace sources (crates/model/src/resolve.rs, crates/interp/src/instance.rs
+  and doc_rules.rs, crates/io-ufo/src/designspace/instances.rs) follow ufo2ft 3.x's instantiator.py
+  and fontInfoData.py (MIT License), glyphsLib 6.15.0's builder/instances.py (Apache License 2.0)
+  and fontTools' designspaceLib rule evaluation (MIT License).
+
 Product names mentioned in the documentation are trademarks of their owners and are used only to
 identify the products FontCraft is compared with or interoperates with.

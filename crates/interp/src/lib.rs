@@ -28,6 +28,7 @@
 
 pub mod compat;
 pub mod designspace;
+pub mod doc_rules;
 pub mod error;
 pub mod instance;
 pub mod labels;

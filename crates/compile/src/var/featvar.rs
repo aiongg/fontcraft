@@ -471,14 +471,52 @@ pub fn alternate_rules(font: &Font, designspace: &Designspace) -> Result<Vec<Ove
             rules.push(OverlayRule { boxes: vec![region], payload: vec![(sources.glyph.clone(), name)] });
         }
     }
+    rules.extend(document_rules(font, designspace)?);
     Ok(rules)
 }
+
+/// The `<rules>` of a designspace source that its reader did not make alternate layers
+/// ([`fontcraft_interp::doc_rules`]), after the alternate layers' own: one rule per `<rule>`, its
+/// condition sets as boxes, its substitutions of exported glyphs as the payload, as varLib reads
+/// them. None for a variable font setting that leaves axes out.
+fn document_rules(font: &Font, designspace: &Designspace) -> Result<Vec<OverlayRule<Substitutions>>, CompileError> {
+    if !fontcraft_model::is_ufo_family(font.source.format) || designspace.axes().len() != font.axes.len() {
+        return Ok(Vec::new());
+    }
+    let Some(doc) = fontcraft_interp::doc_rules::document_rules(font) else { return Ok(Vec::new()) };
+    let exported = |n: &str| font.glyph(n).is_some_and(|g| g.export);
+    let mut out = Vec::new();
+    for r in &doc.rules {
+        let payload: Substitutions = r.subs.iter().filter(|(a, b)| a != b && exported(a) && exported(b)).cloned().collect();
+        if payload.is_empty() || r.sets.is_empty() {
+            continue;
+        }
+        let boxes = r.sets.iter().map(|set| fontcraft_interp::RangeSet { axes: set.clone() }.to_box(designspace)).collect::<Result<Vec<_>, _>>()?;
+        out.push(OverlayRule { boxes, payload });
+    }
+    Ok(out)
+}
+
+/// The feature a designspace source's own rules go to: the first tag of fontTools' feature-tag
+/// lib key, else `rclt` for `processing="last"`; `None` when the source has no such rules.
+fn document_feature(font: &Font) -> Option<Tag> {
+    let doc = fontcraft_interp::doc_rules::document_rules(font)?;
+    let named = font.info.user_data.get(DOCUMENT_FEATURE_KEY).and_then(|v| v.as_str()).and_then(|t| t.split(',').next()).map(str::trim);
+    match named.filter(|t| !t.is_empty() && t.len() <= 4 && t.bytes().all(|b| (0x20..=0x7e).contains(&b))) {
+        Some(t) => Tag::new_checked(t.as_bytes()).ok(),
+        None => Some(Tag::new(if doc.last { b"rclt" } else { b"rvrn" })),
+    }
+}
+
+/// The designspace lib key naming the feature of its rules (fontTools'
+/// `FEAVAR_FEATURETAG_LIB_KEY`).
+const DOCUMENT_FEATURE_KEY: &str = "com.github.fonttools.varLib.featureVarsFeatureTag";
 
 /// The feature the font's Feature for Feature Variations parameter names, [`DEFAULT_FEATURE`]
 /// when it names none; a value that is not a feature tag gives the default and a warning.
 pub fn feature_tag(font: &Font, warnings: &mut Vec<String>) -> Tag {
     let default = Tag::new(b"rvrn");
-    let Some(value) = font.info.params.get(FEATURE_PARAMETER) else { return default };
+    let Some(value) = font.info.params.get(FEATURE_PARAMETER) else { return document_feature(font).unwrap_or(default) };
     let text = value.as_str().map(str::trim).unwrap_or_default();
     let tag = (!text.is_empty() && text.len() <= 4 && text.bytes().all(|b| (0x20..=0x7e).contains(&b)))
         .then(|| Tag::new_checked(text.as_bytes()).ok())

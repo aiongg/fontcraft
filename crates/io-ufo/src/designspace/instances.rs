@@ -39,9 +39,12 @@ const FILE_NAME: &str = "fileName";
 const FAMILY_PARAM: &str = "familyName";
 const PS_NAME: &str = "postscriptFontName";
 const FAMILY_NAMES: &str = "familyNames";
+/// The style-map family name an instance states when it is not the family name followed by a
+/// link style.
+const STYLE_MAP_FAMILY: &str = "styleMapFamilyName";
 /// Parameters the instance's attributes hold; the lib leaves them out (glyphsLib's blacklist,
 /// except `fileName`, `weightClass` and `widthClass`, which no attribute holds exactly).
-const IN_ATTRIBUTES: [&str; 4] = [FAMILY_PARAM, PS_NAME, UFO_FILENAME, FULL_FILENAME];
+const IN_ATTRIBUTES: [&str; 5] = [FAMILY_PARAM, PS_NAME, UFO_FILENAME, FULL_FILENAME, STYLE_MAP_FAMILY];
 
 /// The depth of an instance's `<dict>` inside `<lib>` in the document.
 const LIB_DICT_LEVEL: usize = 4;
@@ -126,8 +129,32 @@ pub(super) fn stylemap(inst: &Instance, family: &str) -> (String, &'static str) 
         Some(l) if l != "Regular" => l.to_string(),
         _ => implied_link(&inst.name, inst.is_bold, inst.is_italic),
     };
-    let fam = if linked.is_empty() { family.to_string() } else { format!("{family} {linked}") };
+    let fam = match inst.params.get(STYLE_MAP_FAMILY).and_then(Value::as_str) {
+        Some(f) => f.to_string(),
+        None if linked.is_empty() => family.to_string(),
+        None => format!("{family} {linked}"),
+    };
     (fam, style)
+}
+
+/// The four style-map styles.
+const RIBBI: [&str; 4] = ["regular", "bold", "italic", "bold italic"];
+
+/// The style-map names ufo2ft gives a font whose style-map names are not stated: the style when
+/// it is one of the four, else `regular`; the family with the style unless the style (or the
+/// stated style-map style) is one of the four. Ported from ufo2ft's `fontInfoData`
+/// (`styleMapFamilyNameFallback`, `styleMapStyleNameFallback`; MIT).
+fn style_map_fallback(family: &str, style: &str, stated_style: Option<&str>) -> (String, String) {
+    let lower = style.trim().to_lowercase();
+    let map_style = if RIBBI.contains(&lower.as_str()) { lower.clone() } else { "regular".to_string() };
+    let suffix = match stated_style {
+        Some(s) if !RIBBI.contains(&s) => s.to_string(),
+        Some(_) => String::new(),
+        None if RIBBI.contains(&lower.as_str()) => String::new(),
+        None => style.to_string(),
+    };
+    let map_family = [family, suffix.as_str()].iter().filter(|s| !s.is_empty()).copied().collect::<Vec<_>>().join(" ");
+    (map_family, map_style)
 }
 
 /// The OS/2 width class nearest a width in percent (the lower on a tie).
@@ -349,15 +376,22 @@ pub(super) fn read_static(el: &Element, ctx: &Ctx<'_>) -> Result<Instance> {
     {
         inst.params.set(UFO_FILENAME, text(f));
     }
-    if let Some(s) = el.attr("stylemapstylename") {
-        inst.is_bold = s.contains("bold");
-        inst.is_italic = s.contains("italic");
-    }
-    if let Some(smfn) = el.attr("stylemapfamilyname") {
-        let link = smfn.strip_prefix(family.as_str()).map_or(smfn, str::trim);
-        if link != implied_link(&inst.name, inst.is_bold, inst.is_italic) {
-            inst.link_style = Some(link.to_string());
-        }
+    // Style-map names the element leaves out are the ones ufo2ft gives the instance's font.
+    let stated_style = el.attr("stylemapstylename").map(|s| s.trim().to_lowercase()).filter(|s| !s.is_empty());
+    let (fallback_family, fallback_style) = style_map_fallback(&family, &inst.name, stated_style.as_deref());
+    let map_style = stated_style.unwrap_or(fallback_style);
+    inst.is_bold = map_style.contains("bold");
+    inst.is_italic = map_style.contains("italic");
+    let map_family = el.attr("stylemapfamilyname").filter(|s| !s.is_empty()).map_or(fallback_family, str::to_string);
+    let implied = implied_link(&inst.name, inst.is_bold, inst.is_italic);
+    let link =
+        if map_family == family { Some("") } else { map_family.strip_prefix(family.as_str()).and_then(|r| r.strip_prefix(' ')).map(str::trim) };
+    match link {
+        // A link style of `Regular` stands for the implied one, so it cannot state itself.
+        Some(l) if l == "Regular" && implied != "Regular" => inst.params.set(STYLE_MAP_FAMILY, text(&map_family)),
+        Some(l) if l != implied => inst.link_style = Some(l.to_string()),
+        Some(_) => {}
+        None => inst.params.set(STYLE_MAP_FAMILY, text(&map_family)),
     }
     let derived = derived_classes(ctx.axes, &inst.location);
     fill_classes(&mut inst, &typed, &derived);
@@ -631,6 +665,16 @@ mod tests {
         assert_eq!(stylemap(&i("Light", false, false), "Fam"), ("Fam Light".to_string(), "regular"));
         let linked = Instance { link_style: Some("Light".into()), ..i("Light Italic", false, true) };
         assert_eq!(stylemap(&linked, "Fam"), ("Fam Light".to_string(), "italic"));
+    }
+
+    #[test]
+    fn missing_style_map_names_are_ufo2ft_s() {
+        let f = |style: &str, stated: Option<&str>| style_map_fallback("Fam", style, stated);
+        assert_eq!(f("Bold", None), ("Fam".to_string(), "bold".to_string()));
+        assert_eq!(f("Bold Italic", None), ("Fam".to_string(), "bold italic".to_string()));
+        assert_eq!(f("Light", None), ("Fam Light".to_string(), "regular".to_string()));
+        assert_eq!(f("Light", Some("italic")), ("Fam".to_string(), "regular".to_string()), "a stated style-map style keeps the family alone");
+        assert_eq!(f("Light", Some("thin")), ("Fam thin".to_string(), "regular".to_string()));
     }
 
     #[test]

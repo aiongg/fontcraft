@@ -665,6 +665,22 @@ causes; none comes from the handbook's keys, which no corpus instance at a maste
 | A weight axis whose masters state no user location (no Axis Location, no weight class) | every location at 400, so `usWeightClass` 400 | the location through the axis mapping FontCraft derives for the font | 4 (`usWeightClass`) | 3 |
 
 
+**Static instances of designspace sources.** These follow fontmake's instancer (ufo2ft's
+`Instantiator`, then glyphsLib's `apply_instance_data_to_ufo`):
+
+| What | Where it comes from |
+|---|---|
+| Family, style, PostScript and style-map names | the `<instance>` element; style-map names it leaves out are ufo2ft's fallbacks from the style name |
+| Names of one style in the masters' UFOs (PostScript, full, typographic, WWS, compatible, unique id, style-map) | left out, unless the source has one master and the instance sits at it |
+| Other font information | the default source's; numbers interpolated over the masters |
+| `usWeightClass`, `usWidthClass` | the user location on a `wght` or `wdth` axis (weight truncated, width the nearest class), over the masters' classes; the instance's own parameters win |
+| `<rules>` the reader does not make alternate layers | glyphs swapped where a rule holds at the instance's design location; in a variable font, feature variations under the lib key's first tag, `rclt` for `processing="last"`, else `rvrn` |
+
+One case is known to differ: a single-source designspace whose instance states no style-map
+names takes ufo2ft's fallbacks, where fontmake keeps the UFO's own style-map names. A
+`featureVarsFeatureTag` lib key that lists several tags gives the first only; fontTools registers
+the rules under each.
+
 **Against the handbook.** TrueType composites with overlapping or transformed components stay
 composites by default, as fontc and fontmake keep them. The texts of the Keep Overlapping
 Components and Keep Transformed Components parameters imply that the reference app decomposes
