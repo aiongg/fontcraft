@@ -774,6 +774,8 @@ fn settings() -> Settings {
         flavour: Flavour::TrueType,
         tolerance: 1.0,
         keep_direction: false,
+        curves: outline::CurveMode::Cu2Qu,
+        drop_implied: true,
         max_expanded: MAX_EXPANDED_ELEMENTS,
         remove_overlap: false,
         overlap_time_limit: fontcraft_pathops::TIME_LIMIT,

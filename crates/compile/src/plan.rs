@@ -54,6 +54,7 @@ fn plan_stages(font: Option<&Font>, mut resolved: Resolved, flavour: Flavour, op
     let mut warnings = std::mem::take(&mut resolved.notes);
     fill_glyph_data(&mut resolved, options, &mut warnings);
     info::expand_tokens(font, &mut resolved, &mut warnings);
+    crate::export_params::without_subset_lists(&mut resolved, options.subset);
     let edits = crate::export_params::apply(font, &mut resolved, &mut warnings)?;
     let glyphs = preflight::run(std::mem::take(&mut resolved.glyphs), &mut warnings)?;
     let glyphs = order::final_order(glyphs, &resolved, &mut warnings)?;
@@ -66,6 +67,9 @@ fn plan_stages(font: Option<&Font>, mut resolved: Resolved, flavour: Flavour, op
     if crate::math::plan(font, &resolved, &edits).is_some() {
         layout_tags.push("MATH".into());
     }
+    if crate::extras::meta_table(&resolved.params, &mut Vec::new())?.is_some() {
+        layout_tags.push("meta".into());
+    }
     let final_names = if flavour == Flavour::Cff || glyphs.len() <= crate::MAX_POST_NAMES {
         names::final_names(&resolved, &glyphs, &mut warnings)
     } else {
@@ -73,8 +77,20 @@ fn plan_stages(font: Option<&Font>, mut resolved: Resolved, flavour: Flavour, op
     };
     let names = info::derive(&resolved, &options.style_name, &mut warnings);
     let style_name = if options.style_name.is_empty() { resolved.style_name.clone() } else { options.style_name.clone() };
+    let glyph_order: Vec<String> = glyphs.into_iter().map(|g| g.name).collect();
+    if flavour == Flavour::Cff && names.vertical {
+        layout_tags.push("VORG".into());
+    }
+    if options.stub_dsig || options.project.as_ref().is_some_and(|p| p.stub_dsig) {
+        layout_tags.push("DSIG".into());
+    }
+    if options.pass_through_tables
+        && let Some(font) = font
+    {
+        layout_tags.extend(crate::extras::passed_through(font, &glyph_order));
+    }
     Ok(Plan {
-        glyph_order: glyphs.into_iter().map(|g| g.name).collect(),
+        glyph_order,
         final_names,
         tables: tables(flavour, names.vertical, &layout_tags, &color_plan.tables()),
         postscript_name: names.name(6),
@@ -109,5 +125,6 @@ fn tables(flavour: Flavour, vertical: bool, layout: &[String], color: &[&'static
     tags.extend(layout.iter().map(String::as_str));
     tags.extend_from_slice(color);
     tags.sort_unstable();
+    tags.dedup();
     tags.into_iter().map(str::to_string).collect()
 }

@@ -16,6 +16,7 @@
 //! | Outline preparation | [`outline`] | decomposition (mixed glyphs, transforms beyond ±2, everything for CFF), overlap removal, cubic to quadratic, contour direction |
 //! | Hinting (M10) | [`cff_hints`], [`tt_hints`], [`points`], [`gasp`] | CFF stem hints, masks and flex; `cvt `, `fpgm`, `prep` and glyph programs against the point map; `gasp` |
 //! | Table builders and assembly | `build`, [`cff`], [`names`], [`kern_table`] | `glyf`/`loca` with composites, or `CFF ` (cubic outlines in their drawn direction, decomposed); `hmtx`, `hhea`, `maxp`, `head`, `cmap`, `OS/2`, `name`, `post` with production names, the layout tables, then the font file |
+//! | Extras | [`extras`] | `meta` from the meta Table parameter, `VORG` for CFF with vertical metrics; after assembly, the stored tables of an opened compiled font and a stub `DSIG` when the options ask |
 //!
 //! The output is a **static font** of one master, with TrueType outlines ([`Flavour::TrueType`],
 //! as fontc builds it) or CFF outlines ([`Flavour::Cff`], as fontmake builds it: `maxp` 0.5, `post`
@@ -46,6 +47,7 @@ pub mod color;
 pub mod components_opt;
 pub mod drawing;
 pub mod export_params;
+pub mod extras;
 pub mod gasp;
 pub mod info;
 mod kern;
@@ -213,6 +215,23 @@ pub struct Options {
     pub subroutinize: Option<bool>,
     /// What a project compile adds to the built font (`makeotf::finish`); `None` otherwise.
     pub project: Option<makeotf::Finish>,
+    /// How TrueType curves are made (`compile.ttfCurveModes`): converted from cubic (the
+    /// default) or written as the source draws them.
+    pub curves: outline::CurveMode,
+    /// Leave out of TrueType glyphs every on-curve point exactly halfway between two off-curve
+    /// points (`compile.dropImpliedOnCurves`; on by default, as fontc writes them). Off: only the
+    /// points the conversion and the source's quadratic splines imply are left out. A variable
+    /// font always leaves out the points that are implied in every source.
+    pub drop_implied_on_curves: bool,
+    /// Apply the Keep Glyphs and Remove Glyphs parameters (`compile.subsetOnExport`; on by
+    /// default). Off builds every glyph whose export flag is set, as the reference compiler's
+    /// `--no-subset` does.
+    pub subset: bool,
+    /// Add an empty `DSIG` table ([`makeotf::STUB_DSIG`]), for software that looks for one.
+    pub stub_dsig: bool,
+    /// Copy the tables a compiled font kept when it was opened ([`extras::stored_tables`]) into
+    /// the build when the glyph order is still theirs (`roundtrip.binaryPassThroughTables`).
+    pub pass_through_tables: bool,
 }
 
 /// The asset store a compile reads ([`Options::assets`]). Two are equal when they are the same
@@ -290,6 +309,11 @@ impl Default for Options {
             feature_axes: None,
             subroutinize: None,
             project: None,
+            curves: outline::CurveMode::Cu2Qu,
+            drop_implied_on_curves: true,
+            subset: true,
+            stub_dsig: false,
+            pass_through_tables: false,
         }
     }
 }
@@ -476,6 +500,7 @@ pub(crate) fn glyph_stages(
 ) -> Result<Vec<ResolvedGlyph>, CompileError> {
     fill_glyph_data(resolved, options, warnings);
     info::expand_tokens(font, resolved, warnings);
+    export_params::without_subset_lists(resolved, options.subset);
     export_params::apply(font, resolved, warnings)?;
     let glyphs = preflight::run(std::mem::take(&mut resolved.glyphs), warnings)?;
     let glyphs = order::final_order(glyphs, resolved, warnings)?;
@@ -494,6 +519,7 @@ pub(crate) fn compile_stages_with(
     let mut warnings = std::mem::take(&mut resolved.notes);
     fill_glyph_data(&mut resolved, options, &mut warnings);
     info::expand_tokens(font, &mut resolved, &mut warnings);
+    export_params::without_subset_lists(&mut resolved, options.subset);
     let edits = export_params::apply(font, &mut resolved, &mut warnings)?;
     let glyphs = preflight::run(std::mem::take(&mut resolved.glyphs), &mut warnings)?;
     let synthesised_notdef = !glyphs.iter().any(|g| g.name == ".notdef");
@@ -521,6 +547,8 @@ pub(crate) fn compile_stages_with(
         flavour,
         tolerance: upm * error,
         keep_direction: options.keep_direction,
+        curves: options.curves,
+        drop_implied: options.drop_implied_on_curves,
         max_expanded: expansion.left,
         remove_overlap: options.remove_overlap,
         overlap_time_limit: options.overlap_time_limit,
@@ -552,7 +580,9 @@ pub(crate) fn compile_stages_with(
         options,
         &mut warnings,
     )?;
-    Ok(Compiled { bytes, glyph_order: glyphs.into_iter().map(|g| g.name).collect(), warnings })
+    let mut compiled = Compiled { bytes, glyph_order: glyphs.into_iter().map(|g| g.name).collect(), warnings };
+    extras::finish(font, &mut compiled, options)?;
+    Ok(compiled)
 }
 
 /// The layout stage ([`layout::build`]), variable when `variable` gives the masters; nothing when

@@ -20,13 +20,21 @@
 //!    [`Settings::overlap_time_limit`] (docs/plans/M3.md › M3.6, rule 8): a glyph that runs out
 //!    of time or fails keeps its overlaps, with a warning naming it. In the browser the union
 //!    runs inline.
-//! 3. **Curves** (TrueType only, `compile.cu2quTolerance`): every cubic segment becomes a
-//!    quadratic spline within the tolerance, by kurbo's port of fontTools' cu2qu
-//!    (`cubics_to_quadratic_splines`), as fontc converts them. A segment it cannot convert within
-//!    100 pieces (not seen in practice) is approximated by kurbo's subdivision instead.
+//! 3. **Curves** (TrueType only, `compile.cu2quTolerance`, `compile.ttfCurveModes`): in the
+//!    default mode ([`CurveMode::Cu2Qu`]) every cubic segment becomes a quadratic spline within
+//!    the tolerance, by kurbo's port of fontTools' cu2qu (`cubics_to_quadratic_splines`), as fontc
+//!    converts them. A segment it cannot convert within 100 pieces (not seen in practice) is
+//!    approximated by kurbo's subdivision instead. [`CurveMode::KeepQuad`] converts nothing: the
+//!    source's curves must already be quadratic, and a glyph with a cubic segment stops the
+//!    compile, as fontmake's `keep-quad` mode refuses it.
 //! 4. **Direction** (TrueType only, `compile.reverseContourDirection`): contours are reversed,
 //!    from the PostScript convention sources use to the TrueType one, unless the options keep
 //!    the direction. Composites are not touched.
+//! 5. **Implied on-curve points** (TrueType only, `compile.dropImpliedOnCurves`): an on-curve
+//!    point exactly halfway between two off-curve points is left out by default, as fontc writes
+//!    glyphs. With [`Settings::drop_implied`] off, only the points that the conversion or a
+//!    quadratic spline of the source implies are left out, and every on-curve point the outline
+//!    has as a node is written, as fontmake writes glyphs by default.
 //!
 //! Rounding (`compile.rounding`) happens when the glyph is written: `write-fonts` rounds every
 //! point half up, and the table builders round component offsets and advances the same way
@@ -50,6 +58,33 @@ pub enum Flavour {
     Cff,
 }
 
+/// How the curves of a TrueType outline are made (`compile.ttfCurveModes`; the reference
+/// compiler's `--ttf-curves`). Its two modes that write cubic curves into `glyf` wait for that
+/// format to be final.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum CurveMode {
+    /// Every cubic segment becomes a quadratic spline (`cu2qu`).
+    #[default]
+    Cu2Qu,
+    /// No conversion: the outlines must be quadratic already (`keep-quad`).
+    KeepQuad,
+}
+
+impl CurveMode {
+    /// The mode's name as the reference compiler spells it.
+    pub fn name(self) -> &'static str {
+        match self {
+            CurveMode::Cu2Qu => "cu2qu",
+            CurveMode::KeepQuad => "keep-quad",
+        }
+    }
+
+    /// The mode called `name`; `None` for a name that is not one of [`Self::name`]'s.
+    pub fn parse(name: &str) -> Option<Self> {
+        [CurveMode::Cu2Qu, CurveMode::KeepQuad].into_iter().find(|m| m.name() == name)
+    }
+}
+
 /// How outlines are prepared.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Settings {
@@ -57,6 +92,11 @@ pub struct Settings {
     /// The most a quadratic curve may be from the cubic it replaces, in font units.
     pub tolerance: f64,
     pub keep_direction: bool,
+    /// How TrueType curves are made.
+    pub curves: CurveMode,
+    /// Leave out every on-curve point that two off-curve points imply, not only those the
+    /// conversion and the source's quadratic splines imply.
+    pub drop_implied: bool,
     /// Most path elements decomposition may create over all glyphs
     /// ([`crate::MAX_EXPANDED_ELEMENTS`] in a compile).
     pub max_expanded: usize,
@@ -275,8 +315,84 @@ fn simple(g: &ResolvedGlyph, contours: Vec<BezPath>, s: &Settings, warnings: &mu
     if has_open_contour(&path) {
         warnings.push(format!("glyph `{}` has an open path; TrueType outlines are closed, so it was closed", g.name));
     }
-    let quadratic = to_quadratic(&path, s.tolerance);
-    Ok(Prepared::Simple(if s.keep_direction { quadratic } else { quadratic.reverse_subpaths() }))
+    let quadratic = match s.curves {
+        CurveMode::Cu2Qu => to_quadratic(&path, s.tolerance),
+        CurveMode::KeepQuad => {
+            refuse_cubic(&g.name, [&path])?;
+            path.clone()
+        }
+    };
+    let quadratic = if s.keep_direction { quadratic } else { quadratic.reverse_subpaths() };
+    if s.drop_implied {
+        return Ok(Prepared::Simple(quadratic));
+    }
+    // Positions are not changed by the conversion's end points or by reversing, so the nodes of
+    // `path` find their points in `quadratic`.
+    let nodes = on_curve_nodes(&path);
+    Ok(match crate::points::interpolatable_glyphs(std::slice::from_ref(&quadratic), &nodes).and_then(|mut v| v.pop()) {
+        Some(glyph) => Prepared::Points(glyph),
+        None => Prepared::Simple(quadratic),
+    })
+}
+
+/// An error naming `glyph` when one of `paths` has a cubic segment: [`CurveMode::KeepQuad`]
+/// writes the curves as they are, and `glyf` stores only quadratic ones.
+pub(crate) fn refuse_cubic<'a>(glyph: &str, paths: impl IntoIterator<Item = &'a BezPath>) -> Result<(), CompileError> {
+    if paths.into_iter().any(|p| p.elements().iter().any(|el| matches!(el, PathEl::CurveTo(..)))) {
+        return Err(CompileError::Glyph {
+            glyph: glyph.to_string(),
+            message: "it has cubic curves, which the keep-quad curve mode writes as they are and a TrueType outline cannot hold; convert them to quadratic curves or use the cu2qu mode".into(),
+        });
+    }
+    Ok(())
+}
+
+/// The on-curve points of `path` that are nodes of the outline: every point a move, a line or a
+/// cubic segment ends at, and every end of a quadratic segment except the points a quadratic
+/// spline of the source implies (exactly halfway between its two off-curve neighbours, which is
+/// how [`fontcraft_model::Path::to_contour`] writes them). The points cu2qu adds inside a spline
+/// are not in `path` at all.
+pub(crate) fn on_curve_nodes(path: &BezPath) -> Vec<Point> {
+    let els = path.elements();
+    let mut out = Vec::new();
+    let mut start = None::<Point>;
+    for (i, el) in els.iter().enumerate() {
+        match *el {
+            PathEl::MoveTo(p) => {
+                start = Some(p);
+                // A closed subpath made only of off-curve nodes starts at an implied point: the
+                // one between its last and its first off-curve point.
+                let first = match els.get(i + 1) {
+                    Some(PathEl::QuadTo(c, _)) => Some(*c),
+                    _ => None,
+                };
+                let rest = els.get(i + 1..).unwrap_or_default();
+                let end = rest.iter().position(|e| matches!(e, PathEl::MoveTo(_))).unwrap_or(rest.len());
+                let closing = rest.get(..end).unwrap_or_default().iter().rev().find(|e| !matches!(e, PathEl::ClosePath));
+                let implied = match (first, closing) {
+                    (Some(a), Some(PathEl::QuadTo(b, q))) => *q == p && b.midpoint(a) == p,
+                    _ => false,
+                };
+                if !implied {
+                    out.push(p);
+                }
+            }
+            PathEl::LineTo(p) | PathEl::CurveTo(_, _, p) => out.push(p),
+            PathEl::QuadTo(c, p) => {
+                let implied = match els.get(i + 1) {
+                    Some(PathEl::QuadTo(next, _)) => c.midpoint(*next) == p,
+                    // The segment that closes the subpath ends at its start, which the move decided.
+                    Some(PathEl::ClosePath) => start == Some(p),
+                    _ => false,
+                };
+                if !implied {
+                    out.push(p);
+                }
+            }
+            PathEl::ClosePath => {}
+        }
+    }
+    out
 }
 
 /// `path` with every cubic segment replaced by a quadratic spline at most `tolerance` font units

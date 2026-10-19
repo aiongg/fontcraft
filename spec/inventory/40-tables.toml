@@ -465,12 +465,13 @@ status = "docs"
 tag = "VORG"
 flavour = ["otf", "variable-otf"]
 read = "read-fonts"
-write = "none-yet"
+write = "own"
 area = "compile"
 milestone = "M12"
 summary = "Default vertical origin Y and per-glyph exceptions for CFF fonts with vertical metrics. read-fonts reads it. write-fonts ships generated/generated_vorg.rs but no module includes it, so it is not usable as published. makeotf derives the default origin from the typo ascender."
 ref = "read-fonts src/tables/vorg.rs; write-fonts generated/generated_vorg.rs, src/tables.rs; AFDKO hotconv/hot.cpp"
 status = "docs"
+notes = "Written by crates/compile/src/extras.rs for a CFF font with vertical metrics, as ufo2ft's setupTable_VORG builds it: each glyph's origin is its own vertical origin or the typographic ascender, the most frequent origin is the default (the first in glyph order among equally frequent ones), and every other glyph gets a record."
 
 [[table]]
 tag = "kern"
@@ -490,9 +491,10 @@ read = "read-fonts"
 write = "write-fonts"
 area = "compile"
 milestone = "M12"
-summary = "Design languages (dlng) and supported languages (slng) as lists of ScriptLangTag strings from the source's meta values; invalid tags are dropped with a warning and the table is written only when the source provides values."
+summary = "Design languages (dlng) and supported languages (slng) from the source's meta Table values: each record is the data of every entry with its tag joined by commas, in entry order, and the table is written only when the source provides values."
 ref = "fontc fontbe/src/meta.rs; write-fonts src/tables/meta.rs"
 status = "docs"
+notes = "Written by crates/compile/src/extras.rs. Both reference compilers write the text as given: glyphsLib collects each entry's data and ufo2ft joins them with commas; fontc's .glyphs reader splits on commas without trimming and write-fonts joins the pieces with commas, so `Latn, Cyrl` keeps its space in both. Neither drops a malformed tag (write-fonts' ScriptLangTag::new accepts any text), so FontCraft writes it too and warns. Entries with a tag other than dlng and slng are left out with a warning, as fontc does. One difference between the oracles: for a UFO's public.openTypeMeta, fontc trims the pieces and fontmake does not; FontCraft follows fontmake there. write-fonts writes the header's reserved field as 0 where fontTools writes the data offset; the specification calls the field unused."
 
 [[table]]
 tag = "DSIG"
@@ -504,6 +506,8 @@ milestone = "M12"
 summary = "Digital signature container. write-fonts can write the header and signature blocks; real signing is out of scope. makeotf adds a minimal empty one by default in release mode; fontTools drops it when encoding WOFF2 and always orders it last."
 ref = "write-fonts src/tables/dsig.rs; AFDKO python/afdko/makeotf.py (-addDSIG/-omitDSIG); fonttools ttLib/woff2.py, ttLib/ttFont.py"
 status = "docs"
+notes = "font.compile's stubDsig (CLI --dsig) adds the 8-byte empty table a project compile's release mode writes (crates/compile/src/makeotf.rs, STUB_DSIG): version 1, no signatures, flags 1. Off by default: neither fontmake nor fontc writes a DSIG."
+guesses = ["The stub DSIG is off by default, as fontmake and fontc build fonts; settled by checking whether the reference app's export writes a DSIG table."]
 
 [[table]]
 tag = "hdmx"
@@ -515,6 +519,7 @@ milestone = "M12"
 summary = "Pre-computed hinted advance widths per ppem. read-fonts reads it; write-fonts ships generated/generated_hdmx.rs without a module that includes it. Only meaningful for hinted fonts, and producing it needs a TrueType interpreter run per size."
 ref = "read-fonts src/tables/hdmx.rs; write-fonts generated/generated_hdmx.rs, src/tables.rs"
 status = "docs"
+notes = "Copied unchanged into a build by font.compile's passThroughTables (CLI --pass-through-tables) from the bytes a compiled font kept when it was opened, only while the glyph order has the checksum they were stored with (crates/compile/src/extras.rs; roundtrip.binaryPassThroughTables). The reader side, storing them when a compiled font is opened, is not built yet. The binary tools copy the table byte for byte when they do not touch it."
 
 [[table]]
 tag = "LTSH"
@@ -526,6 +531,7 @@ milestone = "M12"
 summary = "Per-glyph ppem above which advances scale linearly. Neither fontations crate knows the table; it only appears as a name in write-fonts's recommended table order. Preserve on round trip, generate only if a hinted legacy target asks for it."
 ref = "write-fonts src/font_builder.rs; read-fonts src/table_provider.rs"
 status = "docs"
+notes = "Copied unchanged into a build by font.compile's passThroughTables (CLI --pass-through-tables) from the bytes a compiled font kept when it was opened, only while the glyph order has the checksum they were stored with (crates/compile/src/extras.rs; roundtrip.binaryPassThroughTables). The reader side, storing them when a compiled font is opened, is not built yet. The binary tools copy the table byte for byte when they do not touch it."
 
 [[table]]
 tag = "VDMX"
@@ -537,6 +543,7 @@ milestone = "M12"
 summary = "Vertical device metrics (yMax/yMin per ppem). Unknown to both fontations crates apart from its slot in the recommended table order. Same policy as LTSH."
 ref = "write-fonts src/font_builder.rs; read-fonts src/table_provider.rs"
 status = "docs"
+notes = "Copied unchanged into a build by font.compile's passThroughTables (CLI --pass-through-tables) from the bytes a compiled font kept when it was opened, only while the glyph order has the checksum they were stored with (crates/compile/src/extras.rs; roundtrip.binaryPassThroughTables). The reader side, storing them when a compiled font is opened, is not built yet. The binary tools copy the table byte for byte when they do not touch it."
 
 [[table]]
 tag = "MATH"
@@ -560,6 +567,7 @@ milestone = "M12"
 summary = "Justification table. Not present in read-fonts or write-fonts and not produced by fontc, fontmake or makeotf as documented. Kept as opaque bytes on round trip; no generation planned until a user needs it."
 ref = "read-fonts src/tables/; write-fonts src/tables.rs"
 status = "docs"
+notes = "Copied unchanged into a build by font.compile's passThroughTables (CLI --pass-through-tables) from the bytes a compiled font kept when it was opened, only while the glyph order has the checksum they were stored with (crates/compile/src/extras.rs; roundtrip.binaryPassThroughTables). The reader side, storing them when a compiled font is opened, is not built yet. The binary tools copy the table byte for byte when they do not touch it."
 
 [[table]]
 tag = "EBDT"
@@ -571,6 +579,7 @@ milestone = "M12"
 summary = "Embedded monochrome or grey bitmaps with their location table EBLC (and EBSC scaling). read-fonts reads EBDT and EBLC through the shared bitmap code; there is no writer."
 ref = "read-fonts src/tables/ebdt.rs, eblc.rs, bitmap.rs; write-fonts src/tables.rs"
 status = "docs"
+notes = "Copied unchanged into a build by font.compile's passThroughTables (CLI --pass-through-tables) from the bytes a compiled font kept when it was opened, only while the glyph order has the checksum they were stored with (crates/compile/src/extras.rs; roundtrip.binaryPassThroughTables). The reader side, storing them when a compiled font is opened, is not built yet. The binary tools copy the table byte for byte when they do not touch it."
 
 [[table]]
 tag = "morx"
@@ -582,6 +591,7 @@ milestone = "M12"
 summary = "Apple extended glyph metamorphosis, with the related feat (feature names) and ltag tables. read-fonts reads morx, mort, feat and ltag; nothing writes them and no reference compiler here generates them. Round-trip only."
 ref = "read-fonts src/tables/morx.rs, mort.rs, feat.rs, ltag.rs, aat.rs; write-fonts src/tables.rs"
 status = "docs"
+notes = "Copied unchanged into a build by font.compile's passThroughTables (CLI --pass-through-tables) from the bytes a compiled font kept when it was opened, only while the glyph order has the checksum they were stored with (crates/compile/src/extras.rs; roundtrip.binaryPassThroughTables). The reader side, storing them when a compiled font is opened, is not built yet. The binary tools copy the table byte for byte when they do not touch it."
 
 [[table]]
 tag = "kerx"
@@ -593,6 +603,7 @@ milestone = "M12"
 summary = "Apple extended kerning, with the related ankr anchor table. Readable through read-fonts, no writer. Round-trip only."
 ref = "read-fonts src/tables/kerx.rs, ankr.rs; write-fonts src/tables.rs"
 status = "docs"
+notes = "Copied unchanged into a build by font.compile's passThroughTables (CLI --pass-through-tables) from the bytes a compiled font kept when it was opened, only while the glyph order has the checksum they were stored with (crates/compile/src/extras.rs; roundtrip.binaryPassThroughTables). The reader side, storing them when a compiled font is opened, is not built yet. The binary tools copy the table byte for byte when they do not touch it."
 
 [[table]]
 tag = "trak"
@@ -604,6 +615,7 @@ milestone = "M12"
 summary = "Apple tracking table. Readable through read-fonts, no writer. Round-trip only."
 ref = "read-fonts src/tables/trak.rs; write-fonts src/tables.rs"
 status = "docs"
+notes = "Copied unchanged into a build by font.compile's passThroughTables (CLI --pass-through-tables) from the bytes a compiled font kept when it was opened, only while the glyph order has the checksum they were stored with (crates/compile/src/extras.rs; roundtrip.binaryPassThroughTables). The reader side, storing them when a compiled font is opened, is not built yet. The binary tools copy the table byte for byte when they do not touch it."
 
 [[table]]
 tag = "VARC"
@@ -615,6 +627,7 @@ milestone = "M12"
 summary = "Variable composites (draft specification): components with their own axis locations and variable transforms backed by a multi-item variation store. Both crates support it and write-fonts has a builder from composite glyphs; fontc's backend does not merge it into fonts. Experimental, off by default."
 ref = "write-fonts src/tables/varc.rs, variations/mivs_builder.rs; read-fonts src/tables/varc.rs; fontc fontbe/src/font.rs"
 status = "docs"
+notes = "Not written by font.compile: variable composites stay off until the draft specification is final, and fontc's backend does not merge the table either."
 
 [[table]]
 tag = "Debg"
@@ -626,6 +639,7 @@ milestone = "M12"
 summary = "Private debugging table mapping compiled lookups back to feature source locations. fontc adds it as raw bytes from fea-rs when --emit-lookup-debug-info is given. Useful for our feature editor's 'where did this lookup come from' view; never in release builds."
 ref = "fontc fontc/src/args.rs, fontbe/src/font.rs"
 status = "docs"
+notes = "Not written and not passed through by font.compile: it describes the lookups of the build that made it, which a recompile replaces."
 
 # ---------------------------------------------------------------------------------------------------
 # Behaviours: pipeline and preflight
@@ -845,6 +859,7 @@ milestone = "M12"
 summary = "fontmake --ttf-curves has four modes: cu2qu (default, everything quadratic), mixed (convert only when cheaper; needs draft glyf version 1), keep-quad and keep-cubic (no conversion). fontc always converts to quadratic. We ship cu2qu and keep-quad; the cubic-in-glyf modes wait for the format to be final."
 ref = "fontmake Lib/fontmake/__main__.py (--ttf-curves), font_project.py (CurveConversion)"
 status = "docs"
+notes = "Built in M12.42: font.compile's outlines.curves (CLI --ttf-curves) takes cu2qu (the default) or keep-quad; mixed and keep-cubic are refused as not available. keep-quad converts nothing and stops the build at a glyph with a cubic curve, as ufo2ft raises an error for cubic curves in glyf format 0; CFF outlines are not affected. A variable TrueType build applies the same check to every source."
 
 [[behavior]]
 id = "compile.reverseContourDirection"
@@ -861,6 +876,11 @@ milestone = "M12"
 summary = "Optional, off by default in fontmake: on-curve points lying exactly midway between two off-curve points are dropped from TrueType glyphs since the format implies them. Must be applied identically in all masters of a variable font."
 ref = "fontmake Lib/fontmake/__main__.py (--drop-implied-oncurves)"
 status = "docs"
+notes = "Built in M12.42: font.compile's outlines.dropImpliedOnCurves (CLI --drop-implied-oncurves, --keep-implied-oncurves). On by default, as fontc writes every glyph (write-fonts drops implied points always). Off keeps every on-curve node of the outline, so the glyph has the points fontmake writes by default: the points inside a converted spline and the implied points of a quadratic spline in the source are still left out. A variable font always leaves out the points implied in every source, as both compilers do with the option on."
+guesses = [
+  "Implied on-curve points are dropped by default, as fontc writes glyphs, where fontmake keeps them; settled by exporting a TrueType font from the reference app with a smooth node that lies halfway between the quadratic control points around it and counting the glyph's points.",
+  "With implied points kept, an on-curve node of a quadratic source contour that lies exactly halfway between its off-curve neighbours is written as implied, because the model's quadratic segments do not tell such a node from an implied point; settled by the same export of a TrueType source with such a node.",
+]
 
 [[behavior]]
 id = "compile.rounding"
@@ -1421,7 +1441,7 @@ area = "compile"
 milestone = "M12"
 summary = "A font collection stores byte-identical tables once and points several fonts at them; fontTools's TTCollection.save shares tables by default, and reads the timestamp once so head tables do not differ needlessly. write-fonts declares a TTCHeader type whose version computation panics as not supported yet, so the collection writer is ours. AFDKO has otf2otc and otc2otf for the same job."
 ref = "fonttools Lib/fontTools/ttLib/ttCollection.py; write-fonts src/font_builder.rs (TTCHeader); AFDKO python/afdko/otf2otc.py"
-notes = "The writer is fontcraft-container's assemble_collection: identical tables (same tag and bytes) are stored once; head keeps its bytes, checkSumAdjustment included, as otf2otc keeps them. Compiling straight to a collection is M12.42."
+notes = "The writer is fontcraft-container's assemble_collection: identical tables (same tag and bytes) are stored once; head keeps its bytes, checkSumAdjustment included, as otf2otc keeps them. font.compile builds straight into a collection with `collection` (CLI --collection) or a .ttc or .otc destination: every font is built in memory with one timestamp, and the fonts of each format are packed by fontcraft_tables::collection::pack, which shares identical tables."
 status = "docs"
 
 [[behavior]]
@@ -1827,6 +1847,7 @@ milestone = "M12"
 summary = "fontmake subsets an instance when it carries a Keep Glyphs parameter, unless --no-subset is given. We apply instance-level glyph filters before the glyph-order stage so removed glyphs never reach the builders."
 ref = "fontmake USAGE.md (--subset / --no-subset)"
 status = "docs"
+notes = "Built in M12.42: font.compile's subset (CLI --subset, --no-subset; on by default). Off ignores Keep Glyphs and Remove Glyphs, as fontmake's --no-subset skips its subsetting step; the export flags and Export Glyphs still apply. FontCraft applies the lists in the export-parameter stage instead of subsetting the built font, so the subset switch on has the same effect as fontmake's default whether or not the lists are set."
 
 [[behavior]]
 id = "compile.oracleComparison"

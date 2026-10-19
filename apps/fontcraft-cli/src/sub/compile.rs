@@ -12,6 +12,8 @@ const USAGE: &str = "\
   fontcraft-cli compile SOURCE... [--format ttf|otf]... [--container plain|woff|woff2]...
                         [-o FILE | --output-dir DIR] [--instances[=NAME,...]] [--masters-as-instances]
                         [--keep-overlaps] [--keep-direction] [--conversion-error EM] [--no-subroutinize]
+                        [--ttf-curves cu2qu|keep-quad] [--drop-implied-oncurves | --keep-implied-oncurves]
+                        [--subset | --no-subset] [--dsig] [--pass-through-tables] [--collection]
                         [--timestamp SECS|now] [--ttfautohint PATH] [--cbdt] [--plan]
                         [--project-file FILE] [--project-defaults] [--menu-names FILE] [--goadb FILE]
                         [--fontinfo FILE] [project options]
@@ -27,6 +29,16 @@ const USAGE: &str = "\
       sets Disable Subroutines. --ttfautohint PATH names the trusted ttfautohint program: a source whose TTFAutohint
       binary path parameter names that same file is autohinted by it (default: none runs).
       --cbdt also writes CBDT and CBLC bitmap tables from the iColor layers.
+      --ttf-curves: cu2qu (default) converts cubic curves to quadratic ones for TrueType;
+      keep-quad converts nothing, and a glyph with a cubic curve stops the build.
+      On-curve points halfway between two off-curve points are left out of TrueType glyphs;
+      --keep-implied-oncurves keeps every on-curve node and leaves out only the points the
+      conversion and quadratic splines imply (--drop-implied-oncurves: the default).
+      --no-subset ignores the Keep Glyphs and Remove Glyphs parameters (--subset: the default).
+      --dsig adds an empty DSIG table. --pass-through-tables copies the legacy, bitmap and Apple
+      tables a compiled SOURCE kept when it was opened, while its glyph order is unchanged.
+      --collection packs the fonts of each format into one collection that stores identical
+      tables once (SOURCE.ttc, or .otc for CFF); -o FILE.ttc or FILE.otc does the same.
       --plan prints what would be built, without building.
       A project compile builds a font as the reference compiler's project workflow does (default
       format otf). --project-file FILE reads a current.fpr project file first; the project
@@ -122,6 +134,25 @@ fn compile(args: &[String]) -> Outcome {
             }
             "--keep-direction" => {
                 outlines.insert("keepDirection".into(), json!(true));
+            }
+            "--ttf-curves" => {
+                let v = it.next().ok_or_else(|| usage("--ttf-curves needs cu2qu or keep-quad"))?;
+                outlines.insert("curves".into(), json!(v));
+            }
+            "--drop-implied-oncurves" | "--keep-implied-oncurves" => {
+                outlines.insert("dropImpliedOnCurves".into(), json!(arg == "--drop-implied-oncurves"));
+            }
+            "--subset" | "--no-subset" => {
+                params.insert("subset".into(), json!(arg == "--subset"));
+            }
+            "--dsig" => {
+                params.insert("stubDsig".into(), json!(true));
+            }
+            "--pass-through-tables" => {
+                params.insert("passThroughTables".into(), json!(true));
+            }
+            "--collection" => {
+                params.insert("collection".into(), json!(true));
             }
             "--conversion-error" => {
                 let v = it.next().ok_or_else(|| usage("--conversion-error needs a number"))?;
@@ -222,6 +253,7 @@ fn compile(args: &[String]) -> Outcome {
             || params.contains_key("mastersAsInstances")
             || params.contains_key("subroutinize")
             || params.contains_key("cbdt")
+            || ["subset", "stubDsig", "passThroughTables", "collection"].iter().any(|k| params.contains_key(*k))
         {
             return Err(usage("--variable takes only --format, --settings, --container, -o, --output-dir and --timestamp"));
         }

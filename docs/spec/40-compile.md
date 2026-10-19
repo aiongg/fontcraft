@@ -53,7 +53,8 @@ Input: the source model plus export options. Output: a list of errors and warnin
   interpolated (`compile.instanceLayoutInterpolation`).
 - Variable font: keep all masters; single-point axes are removed from the variation model
   (`compile.variableOnlyTables`).
-- Apply instance glyph filters here (`compile.subsetOnExport`).
+- Apply instance glyph filters here (`compile.subsetOnExport`): Keep Glyphs and Remove Glyphs
+  unless the subset switch is off, as fontmake's `--no-subset` ignores them.
 - Source preparation, before the master is resolved, as both references do when they load a
   source: corner components are fitted into their paths, then smart components are drawn as
   outlines (`fontcraft_compile::prepare_source`). A layer whose corners cannot be fitted, or a
@@ -88,9 +89,12 @@ convert curves.
    replaced by the composite of its shapes (`compositing.shapesCombineInOrder`): strokes
    expanded, masks applied in shape order. Details in § 3.8.
 3. **Curves** (TrueType only). Cubic to quadratic at 0.001 em tolerance (`compile.cu2quTolerance`),
-   all masters converted together segment by segment (`compile.cu2quAcrossMasters`). Other curve
-   modes are deferred (`compile.ttfCurveModes`). Optional implied-point removal
-   (`compile.dropImpliedOnCurves`).
+   all masters converted together segment by segment (`compile.cu2quAcrossMasters`). The
+   `keep-quad` mode converts nothing and refuses a glyph with a cubic curve; `mixed` and
+   `keep-cubic` write cubic curves into `glyf` and wait for that format to be final
+   (`compile.ttfCurveModes`). On-curve points halfway between two off-curve points are left out,
+   as fontc writes them; the option to keep every on-curve node writes glyphs as fontmake does by
+   default (`compile.dropImpliedOnCurves`).
 4. **Direction** (TrueType only). Reverse contours unless told to keep them
    (`compile.reverseContourDirection`).
 5. **Rounding.** Half-up everywhere, masters rounded before deltas (`compile.rounding`); CFF

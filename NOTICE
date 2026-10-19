@@ -387,5 +387,9 @@ bundled, the file says so in its header and the project is listed here with its 
   and fontInfoData.py (MIT License), glyphsLib 6.15.0's builder/instances.py (Apache License 2.0)
   and fontTools' designspaceLib rule evaluation (MIT License).
 
+  The VORG and meta tables of crates/compile/src/extras.rs (M12.42) follow ufo2ft's
+  outlineCompiler.py (setupTable_VORG, setupTable_meta) and glyphsLib's meta Table conversion
+  (MIT License and Apache License 2.0).
+
 Product names mentioned in the documentation are trademarks of their owners and are used only to
 identify the products FontCraft is compared with or interoperates with.
