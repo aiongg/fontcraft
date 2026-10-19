@@ -34,6 +34,7 @@ mod fontinfo;
 mod gdef;
 pub mod glif;
 pub mod glyphkeys;
+pub mod images;
 pub mod kerning;
 pub(crate) mod libkeys;
 pub mod names;

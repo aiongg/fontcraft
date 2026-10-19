@@ -148,6 +148,7 @@ mod transform_metrics;
 mod tt_assembly;
 mod tt_debug;
 mod ufo_color_layers;
+mod ufo_images;
 mod undo_steps;
 mod url_scheme;
 mod woff2;

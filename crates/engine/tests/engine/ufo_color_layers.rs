@@ -114,3 +114,51 @@ fn a_ufo_colour_layer_list_exports_colr_and_cpal_as_the_lib_says() {
         .collect();
     assert_eq!(palettes, [vec![(255, 0, 0, 255), (0, 0, 255, 255)], vec![(0, 255, 0, 255), (255, 255, 0, 255)]]);
 }
+
+#[test]
+fn a_ufo_colour_layer_paint_exports_colr_version_1_with_the_ufo_s_layer_glyphs() {
+    let mut files = ufo();
+    let pair = |n: &str, i: u16| format!("<array>\n<string>{n}</string>\n<integer>{i}</integer>\n</array>\n");
+    let pairs = format!("<key>a</key>\n<array>\n{}{}</array>\n", pair("a.color0", 0), pair("a.color1", 1));
+    let int = |k: &str, v: i64| format!("<key>{k}</key>\n<integer>{v}</integer>\n");
+    let stop = |i: i64, at: i64| format!("<dict>\n{}{}{}</dict>\n", int("Alpha", 1), int("PaletteIndex", i), int("StopOffset", at));
+    let solid = format!("<dict>\n<key>Alpha</key>\n<real>0.5</real>\n{}{}</dict>\n", int("Format", 2), int("PaletteIndex", 0));
+    // `a.color1` runs from 100 to 300 across: a gradient from its left to its right edge.
+    let line = format!(
+        "<key>ColorLine</key>\n<dict>\n<key>ColorStop</key>\n<array>\n{}{}</array>\n<key>Extend</key>\n<string>pad</string>\n</dict>\n",
+        stop(0, 0),
+        stop(1, 1)
+    );
+    let points: String = [("x0", 100), ("x1", 300), ("x2", 100), ("y0", 0), ("y1", 0), ("y2", -200)].iter().map(|(k, v)| int(k, *v)).collect();
+    let linear = format!("<dict>\n{line}{}{points}</dict>\n", int("Format", 4));
+    let glyph =
+        |n: &str, paint: &str| format!("<dict>\n{}<key>Glyph</key>\n<string>{n}</string>\n<key>Paint</key>\n{paint}</dict>\n", int("Format", 10));
+    let paint = format!(
+        "<key>a</key>\n<dict>\n{}<key>Layers</key>\n<array>\n{}{}</array>\n</dict>\n",
+        int("Format", 1),
+        glyph("a.color0", &solid),
+        glyph("a.color1", &linear)
+    );
+    let lib = String::from_utf8(files["lib.plist"].clone()).unwrap();
+    assert!(lib.contains(&pairs));
+    files.insert("lib.plist".into(), lib.replace(&pairs, &paint).into_bytes());
+
+    let font = fontcraft_io_ufo::ufo::read(&files).unwrap();
+    let a = font.glyph("a").unwrap();
+    let full: Vec<&str> = a
+        .layers
+        .iter()
+        .filter(|l| l.info.attrs.full_color)
+        .filter_map(|l| match l.shapes.as_slice() {
+            [Shape::Component(c)] => Some(c.glyph.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(full, ["a.color0", "a.color1"], "full-colour layers of the UFO's layer glyphs");
+
+    let out = compile(&font, &font.default_target().unwrap(), Flavour::TrueType, &Options::default()).unwrap();
+    let order: Vec<&str> = out.glyph_order.iter().map(String::as_str).filter(|n| *n != ".notdef").collect();
+    assert_eq!(order, ["a", "a.color0", "a.color1", "b", "b.color0"], "the layer glyphs are the UFO's own: {:?}", out.warnings);
+    let f = FontRef::new(&out.bytes).unwrap();
+    assert_eq!(f.colr().unwrap().version(), 1, "a gradient and an alpha need version 1");
+}

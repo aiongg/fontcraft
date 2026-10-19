@@ -557,6 +557,17 @@ fn family_name(f: Family) -> &'static str {
     }
 }
 
+/// `font` with the JPEG and TIFF images its UFOs hold as PNG files, decoded under the image
+/// limits ([`fontcraft_io_ufo::images`]); `None` when it has none. A file that does not decode
+/// stays as it is, and the loss report names it.
+fn ufo_images_as_png(font: &Font, files: FilesFrom) -> Option<Font> {
+    let convert = |bytes: &[u8]| -> Option<Vec<u8>> {
+        let image = fontcraft_imagery::decode_rgba(bytes, fontcraft_imagery::MAX_PIXELS).ok()?;
+        fontcraft_imagery::to_png(&image).ok()
+    };
+    fontcraft_io_ufo::images::to_png(font, files, &convert)
+}
+
 /// The result of a save.
 pub struct Saved {
     pub bytes: usize,
@@ -571,11 +582,14 @@ pub struct Saved {
 pub fn save(font: &Font, path: &Path, format: SaveFormat) -> Result<Saved> {
     let own = crate::linked::unlinked(font);
     let font: &Font = &own;
+    let files_from = if format == SaveFormat::Designspace { FilesFrom::Designspace } else { FilesFrom::Single };
+    let converted = if matches!(format, SaveFormat::Ufo | SaveFormat::Designspace) { ufo_images_as_png(font, files_from) } else { None };
+    let font: &Font = converted.as_ref().unwrap_or(font);
     let mut losses = if format == SaveFormat::Native { Vec::new() } else { losses(font, format.families()) };
     if matches!(format, SaveFormat::Ufo | SaveFormat::Designspace) {
         losses.extend(ufo_layer_losses(font, format == SaveFormat::Designspace));
         losses.extend(side_file_losses(font));
-        losses.extend(ufo_info_losses(font, if format == SaveFormat::Designspace { FilesFrom::Designspace } else { FilesFrom::Single }));
+        losses.extend(ufo_info_losses(font, files_from));
     }
     if matches!(format, SaveFormat::Glyphs | SaveFormat::GlyphsPackage) {
         losses.extend(glyphs_info_losses(font));
@@ -662,6 +676,9 @@ pub struct Exported {
 pub fn export_ufos(font: &Font, masters: &[String], destination: &Path) -> Result<Exported> {
     let mut font = font.clone();
     font.source.ufo_version = Some(3);
+    if let Some(converted) = ufo_images_as_png(&font, FilesFrom::PerMaster) {
+        font = converted;
+    }
     let mut losses = losses(&font, &[Family::Ufo]);
     losses.extend(ufo_layer_losses(&font, false));
     losses.extend(side_file_losses(&font));
