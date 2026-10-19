@@ -281,6 +281,7 @@ bundled, the file says so in its header and the project is listed here with its 
   Font merging (crates/tables/src/merge.rs and merge/, M12.23) ports fontTools' merge package (fontTools 4.66.1, MIT License, Copyright 2013 Google, Inc.): the glyph-order renaming, the cmap union and locl duplicate handling, the layout merge of scripts, features and lookups, and the field rules of head, hhea, vhea, maxp, OS/2 and post.
 
   The subsetter (crates/tables/src/subset, M12.17) ports fontTools' subset module (MIT License, Copyright 2013 Google, Inc.): the option defaults, the glyph closure over cmap, glyf components and CFF seac, and the table rules for cmap, glyf, CFF, hmtx, vmtx, post, name, OS/2 and maxp. Its bidirectional mirroring pairs (crates/tables/src/subset/mirror.rs) are the Unicode Character Database's BidiMirroring.txt 18.0.0 (Unicode License v3, LICENSE-Unicode.txt) as fontTools' unicodedata.Mirrored lists them.
+  Its layout part (crates/tables/src/subset/layout.rs, M12.18) ports the same module's GSUB closure and its GSUB, GPOS and GDEF subsetting and pruning rules, with the default layout feature list.
 
   Units-per-em scaling (crates/tables/src/transform.rs, M12.24) ports fontTools' ttLib.scaleUpem (MIT License): the scaled fields of each table, the rounding, and the item variation store layout after scaling.
 

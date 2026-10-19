@@ -39,3 +39,32 @@ fn font_subset_keeps_the_selection_and_reports_the_map() {
     assert!(s.execute("font.subset", &json!({ "font": ttf, "keep": {"text": "A"}, "desubroutinize": true })).is_err());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn font_subset_takes_the_layout_options() {
+    let dir = std::env::temp_dir().join(format!("fontcraft-subset-layout-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut s = Session::with_document();
+    let nodes = json!([{"x": 60, "y": 0}, {"x": 560, "y": 0}, {"x": 560, "y": 700}, {"x": 60, "y": 700}]);
+    run(&mut s, "path.addPath", json!({"glyph": "A", "nodes": nodes}));
+    let ttf = dir.join("Font.ttf");
+    run(&mut s, "file.exportStatic", json!({ "destination": ttf, "timestamp": 0 }));
+    for (i, extra) in [
+        json!({"layoutFeatures": "*", "layoutScripts": ["latn", "DFLT.dflt"], "layoutClosure": false}),
+        json!({"layoutFeatures": {"add": ["smcp"], "remove": ["kern"]}}),
+        json!({"layoutFeatures": [], "layoutScripts": "*"}),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let mut p = json!({ "font": ttf, "keep": {"text": "A"}, "output": dir.join(format!("{i}.ttf")) });
+        p.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+        let r = run(&mut s, "font.subset", p);
+        assert_eq!(r["retained"], json!([".notdef", "A"]));
+    }
+    let bad =
+        s.execute("font.subset", &json!({ "font": ttf, "keep": {"text": "A"}, "layoutFeatures": {"keep": ["kern"]}, "output": dir.join("bad.ttf") }));
+    assert!(bad.is_err(), "an edit takes add and remove only");
+    let _ = std::fs::remove_dir_all(&dir);
+}
