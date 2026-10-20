@@ -253,8 +253,22 @@ pub(crate) fn metrics(f: &SfntFont) -> ([i16; 4], u16, [i16; 6], (i16, i16)) {
     )
 }
 
+/// Every glyph's advance and left side bearing, the last advance repeated past `numberOfHMetrics`.
 pub(crate) fn hmtx(f: &SfntFont) -> Vec<(u16, i16)> {
-    f.get(*b"hmtx").unwrap().chunks(4).map(|c| (u16_at(c, 0), i16_at(c, 2))).collect()
+    let t = f.get(*b"hmtx").unwrap();
+    let long = usize::from(u16_at(f.get(*b"hhea").unwrap(), 34));
+    let count = usize::from(u16_at(f.get(*b"maxp").unwrap(), 4));
+    let mut advance = 0;
+    (0..count)
+        .map(|g| {
+            if g < long {
+                advance = u16_at(t, 4 * g);
+                (advance, i16_at(t, 4 * g + 2))
+            } else {
+                (advance, i16_at(t, 4 * long + 2 * (g - long)))
+            }
+        })
+        .collect()
 }
 
 /// Each entry of a DICT as its operator and operands.
