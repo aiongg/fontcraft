@@ -56,9 +56,9 @@ impl SaveFormat {
         }
     }
 
-    /// The format a path's extension names.
+    /// The format a path's extension names, in any case: a name typed as `Font.UFO` is a UFO.
     pub fn of_path(path: &Path) -> Option<Self> {
-        Self::parse(path.extension()?.to_str()?)
+        Self::parse(&path.extension()?.to_str()?.to_ascii_lowercase())
     }
 
     /// The format a document read from `source` is saved in by default.
@@ -793,6 +793,15 @@ fn write_allowed(path: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn save_formats_are_named_by_extensions_in_any_case() {
+        assert_eq!(SaveFormat::of_path(Path::new("dir/Font.UFO")), Some(SaveFormat::Ufo));
+        assert_eq!(SaveFormat::of_path(Path::new("Font.Glyphs")), Some(SaveFormat::Glyphs));
+        assert_eq!(SaveFormat::of_path(Path::new("Font.designspace")), Some(SaveFormat::Designspace));
+        assert_eq!(SaveFormat::of_path(Path::new("Font.otf")), None);
+        assert_eq!(SaveFormat::of_path(Path::new("Font")), None);
+    }
 
     #[test]
     fn native_files_are_told_from_glyphs_files() {

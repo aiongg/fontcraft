@@ -98,8 +98,8 @@ pub struct Staged {
     ex: Examined,
     raw: Raw,
     places: HashMap<usize, Places>,
-    /// What [`Staged::finish`] changes, as it was before the first call: a step or cancel
-    /// whose report then fails leaves the run as it was, and the next try finishes it again.
+    /// What [`Staged::finish`] changed, as it was before: a step or cancel whose report then
+    /// fails leaves the run in the slot, and the next finish or step undoes the change first.
     before_finish: Option<BeforeFinish>,
 }
 
@@ -140,6 +140,9 @@ impl Staged {
 
     /// Does the next piece of work.
     fn advance(&mut self, budget: usize) {
+        // A cancel whose document failed has finished the run; later stages add notes and
+        // truncation counts to the unfinished state.
+        self.undo_finish();
         match self.stage {
             Stage::Layers => {
                 let end = self.examined.saturating_add(budget).min(self.layers);
@@ -183,23 +186,24 @@ impl Staged {
     /// Sorts and caps what the run found, as the end of `audit.run` does. The findings stay in
     /// the run, so finishing again gives the same result.
     fn finish(&mut self) {
-        match &self.before_finish {
-            Some(b) => {
-                self.ex.tally.truncated = b.truncated;
-                self.ex.tally.notes = b.tally_notes.clone();
-                self.target.notes.truncate(b.target_notes);
-            }
-            None => {
-                self.before_finish = Some(BeforeFinish {
-                    truncated: self.ex.tally.truncated,
-                    tally_notes: self.ex.tally.notes.clone(),
-                    target_notes: self.target.notes.len(),
-                });
-            }
-        }
+        self.undo_finish();
+        self.before_finish = Some(BeforeFinish {
+            truncated: self.ex.tally.truncated,
+            tally_notes: self.ex.tally.notes.clone(),
+            target_notes: self.target.notes.len(),
+        });
         let ignore = self.target.settings.ignore_index();
         finish(self.raw.clone(), &self.run, &self.places, &ignore, true, &mut self.ex);
         self.target.notes.append(&mut self.ex.tally.notes);
+    }
+
+    /// Puts back what the last [`Staged::finish`] changed, if anything.
+    fn undo_finish(&mut self) {
+        if let Some(b) = self.before_finish.take() {
+            self.ex.tally.truncated = b.truncated;
+            self.ex.tally.notes = b.tally_notes;
+            self.target.notes.truncate(b.target_notes);
+        }
     }
 
     fn progress(&self) -> Value {
@@ -300,4 +304,62 @@ fn cancel(s: &mut Session, v: &Value) -> Result<Value> {
     drop(st);
     s.doc_mut()?.audit_staged = None;
     Ok(json!({"runId": id, "cancelled": true, "done": done, "total": total, "partial": partial}))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fontcraft_testkit::rect;
+
+    fn session() -> Session {
+        let mut s = Session::with_document();
+        for (g, at) in [("A", 0.0), ("B", 50.0), ("C", 100.0)] {
+            for p in [
+                json!({"glyph": g, "nodes": rect(0.0, 0.0, 100.0, 100.0), "closed": true}),
+                json!({"glyph": g, "nodes": rect(at, at, 150.0, 150.0), "closed": true}),
+            ] {
+                s.execute("path.addPath", &p).unwrap();
+            }
+        }
+        s
+    }
+
+    /// Runs a staged run to the end and returns its result document. With `interrupt` the run is
+    /// finished once during the layers, as a cancel whose document fails does. After the layers
+    /// both runs gain the same notes and truncation count, as compiling and later checks add them.
+    fn finished(s: &mut Session, interrupt: bool) -> Value {
+        start(s, &json!({"profile": "outlines"})).unwrap();
+        let staged = s.doc().unwrap().audit_staged.clone().unwrap();
+        let mut st = staged.lock().unwrap();
+        st.advance(1);
+        assert_eq!(st.stage, Stage::Layers);
+        if interrupt {
+            st.finish();
+        }
+        while st.stage == Stage::Layers {
+            st.advance(1);
+        }
+        st.advance(1);
+        st.target.notes.push("a note from compiling".into());
+        st.ex.tally.notes.push("a note from the binary checks".into());
+        st.ex.tally.truncated += 2;
+        while st.stage != Stage::Done {
+            st.advance(1);
+        }
+        st.finish();
+        let mut doc = document(&st.target, &st.run, &st.ex, FixParams::BySelection, false).unwrap();
+        doc.as_object_mut().unwrap().remove("runId");
+        doc
+    }
+
+    #[test]
+    fn a_run_finished_by_a_failed_cancel_goes_on_and_keeps_what_later_stages_add() {
+        let mut s = session();
+        let whole = finished(&mut s, false);
+        let resumed = finished(&mut s, true);
+        assert_eq!(resumed, whole);
+        let warnings = resumed["warnings"].to_string();
+        assert!(warnings.contains("a note from compiling") && warnings.contains("a note from the binary checks"), "{resumed}");
+        assert!(resumed["summary"]["truncated"].as_u64().unwrap() >= 2, "{resumed}");
+    }
 }
