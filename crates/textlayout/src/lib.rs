@@ -43,6 +43,14 @@
 //! one level in its own direction, with the script's default features and the compiled
 //! positioning, advances live from the model.
 //!
+//! # Line breaking ([`linebreak`], [`measure`])
+//! With [`Options::break_opportunities`] (Text Preview), lines break at the opportunities of the
+//! Unicode Line Breaking Algorithm (UAX #14): after spaces and hyphens, between ideographs, never
+//! before closing punctuation; a word wider than the line breaks between two clusters. With
+//! [`Options::measure`], the items are first measured through the full preview font, so kerning
+//! and substitutions decide where lines end. Levels come from the whole paragraph, lines break,
+//! then each line is reordered (UAX #9).
+//!
 //! The public API:
 //! ```text
 //! MAX_ITEMS = 10_000;  MAX_PREVIEW_ITEMS = 1_000_000;  PLACEHOLDER = "Placeholder"
@@ -70,6 +78,11 @@
 //! Shaping<'a> { shaper: &'a PreviewShaper, active: &'a [Tag], localized: Option<(Tag script, Tag language)> }
 //! Embedding { items: Range<usize>, rtl: bool };  bidi::MAX_EMBEDDINGS = 1_000
 //! bidi::is_strong_rtl(c: char) -> bool
+//! Options { …, break_opportunities: bool, measure: Option<Measure<'a>> }
+//! Measure<'a> { shaper: &'a PreviewShaper, cache: &'a WidthCache };  WidthCache::new();  len;  is_empty
+//! measure::{MAX_SEGMENT_CHARS = 128, MAX_CACHED_SEGMENTS = 65_536}
+//! linebreak::opportunities(chars: impl IntoIterator<Item = char>) -> Vec<Break>
+//! Break::{Never, Prohibited, Allowed, Mandatory}  (entry k: after character k)
 //! shape_line(font: &Font, master: &str, text: &Text, layout: &Layout, line: usize, shaper: &PreviewShaper) -> Option<ShapedLine>
 //! ShapedLine { placed: Vec<Placed>, length: f64, error: Option<String> }
 //! layout(font: &Font, master: &str, text: &Text, options: &Options) -> Result<Layout, LayoutError>
@@ -87,6 +100,8 @@ pub mod bidi;
 pub mod cursive;
 pub mod layout;
 pub mod line_shape;
+pub mod linebreak;
+pub mod measure;
 pub mod shape;
 pub mod text;
 
@@ -101,6 +116,8 @@ pub use layout::{
     line_height,
 };
 pub use line_shape::{ShapedLine, shape_line};
+pub use linebreak::Break;
+pub use measure::{Measure, WidthCache};
 pub use shape::{PreviewShaper, Shaping};
 pub use text::{Charmap, Item, PLACEHOLDER, Text, TextError, parse, parse_prefix, parse_with};
 
