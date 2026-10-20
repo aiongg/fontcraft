@@ -340,13 +340,12 @@ fn renumber_components<'a>(plan: &Plan, image_format: u16, image: &'a [u8]) -> R
     let end = head + 2 + 4 * count;
     let components = image.get(head + 2..end).ok_or_else(cut)?;
     let mut kept: Vec<[u8; 4]> = Vec::with_capacity(count);
-    for c in components.chunks_exact(4) {
-        let [g0, g1, dx, dy] = <[u8; 4]>::try_from(c).map_err(|_| cut())?;
+    for &[g0, g1, dx, dy] in components.as_chunks::<4>().0 {
         let Some(new) = plan.glyph_map.get(&u32::from(u16::from_be_bytes([g0, g1]))) else { continue };
         let [n0, n1] = to_u16(*new as usize, "a glyph id")?.to_be_bytes();
         kept.push([n0, n1, dx, dy]);
     }
-    if kept.len() == count && kept.iter().zip(components.chunks_exact(4)).all(|(k, c)| k.as_slice() == c) {
+    if kept.len() == count && kept.iter().zip(components.as_chunks::<4>().0).all(|(k, c)| k == c) {
         return Ok(Cow::Borrowed(image));
     }
     let mut out = image.get(..head).ok_or_else(cut)?.to_vec();

@@ -267,6 +267,9 @@ fn inverse(p: Linear) -> Option<Linear> {
 
 const IDENTITY: [f64; 6] = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
 
+/// Each glyph's exact CFF bounds once scaled.
+type CffBounds = Option<Vec<Option<[f64; 4]>>>;
+
 /// The tables every transform rewrites, decoded.
 struct Work {
     font: SfntFont,
@@ -276,7 +279,7 @@ struct Work {
     /// The `glyf` glyphs; empty for CFF outlines.
     glyphs: Vec<Glyph>,
     /// CFF outlines: whether they are in `CFF2`, and each glyph's exact bounds once scaled.
-    cff: Option<(bool, Option<Vec<Option<[f64; 4]>>>)>,
+    cff: Option<(bool, CffBounds)>,
     hmtx: fixed::Metrics,
     vmtx: Option<fixed::Metrics>,
     metrics_changed: bool,

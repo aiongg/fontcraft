@@ -362,7 +362,7 @@ pub(crate) fn subset(plan: &Plan, bytes: &[u8]) -> Result<Option<Vec<u8>>> {
     let mut work = MAX_SVG_WORK;
     let parse_limit = bytes.len().saturating_mul(MAX_SVG_PARSE_RATIO);
     let mut parse_left = parse_limit;
-    let inflate_limit = bytes.len().saturating_mul(MAX_SVG_INFLATE_RATIO).max(MIN_SVG_INFLATE).min(crate::limits::MAX_UNPACKED);
+    let inflate_limit = bytes.len().saturating_mul(MAX_SVG_INFLATE_RATIO).clamp(MIN_SVG_INFLATE, crate::limits::MAX_UNPACKED);
     let mut inflate_left = inflate_limit;
     let mut written = 0usize;
     // The subset texts of compressed documents, by text, to their documents.

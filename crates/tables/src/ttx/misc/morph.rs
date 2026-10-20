@@ -493,7 +493,7 @@ fn read_legacy(d: &[u8], kind: Kind, order: &[String], budget: &mut Budget) -> R
             budget.charge(1)?;
             let index = u8_at(d, at)?;
             at = add(at, 1);
-            if !entries.contains_key(&index) {
+            if let std::collections::btree_map::Entry::Vacant(slot) = entries.entry(index) {
                 let mut e = LegacyEntry { transition: Transition::default(), mark_offset: 0, current_offset: 0 };
                 let size = if kind == Kind::Ligature { 4 } else { kind.entry_size() };
                 let pos = add(usize::from(entry_off), u64::from(index) * size as u64);
@@ -524,7 +524,7 @@ fn read_legacy(d: &[u8], kind: Kind, order: &[String], budget: &mut Budget) -> R
                     return Err(invalid("invalid mort new-state offset"));
                 }
                 t.new_state = offset / i64::from(class_count);
-                entries.insert(index, e);
+                slot.insert(e);
             }
             row.push(index);
         }

@@ -85,7 +85,7 @@ fn look(s: &Shape) -> Option<(Look<'_>, &ShapeAttrs)> {
 enum Run {
     /// Consecutive shapes with one fill: a fill colour or gradient, or neither for the default
     /// grey. One layer glyph holds them.
-    Fill(ShapeAttrs, Vec<usize>),
+    Fill(Box<ShapeAttrs>, Vec<usize>),
     /// A component without paint of a glyph with full-colour layers (`coloured`), which paints
     /// that glyph's colour layers: a `PaintColrGlyph` of its own, as glyphsLib writes it.
     Colr(usize),
@@ -105,8 +105,10 @@ fn runs(l: &Layer, coloured: &dyn Fn(&str) -> bool) -> Option<Vec<Run>> {
         }
         match out.last_mut() {
             Some((Some(last), Run::Fill(_, shapes))) if *last == look => shapes.push(i),
-            _ => out
-                .push((Some(look), Run::Fill(ShapeAttrs { fill_color: a.fill_color, gradient: a.gradient.clone(), ..Default::default() }, vec![i]))),
+            _ => out.push((
+                Some(look),
+                Run::Fill(Box::new(ShapeAttrs { fill_color: a.fill_color, gradient: a.gradient.clone(), ..Default::default() }), vec![i]),
+            )),
         }
     }
     (!out.is_empty() && out.len() <= MAX_RUNS).then(|| out.into_iter().map(|(_, r)| r).collect())
@@ -295,7 +297,7 @@ pub(crate) fn expand_glyph(
             }
             let i = next(&l.master);
             let mut c = Component::new(g.name.as_str(), 0.0, 0.0);
-            c.info.attrs = attrs;
+            c.info.attrs = *attrs;
             let mut item = template;
             item.id = fresh_id(&mut ids, &l.master, i);
             item.shapes = vec![Shape::Component(c)];
@@ -310,7 +312,7 @@ pub(crate) fn expand_glyph(
                     let run: Vec<Shape> = shapes.iter().filter_map(|&s| l.shapes.get(s)).cloned().collect();
                     add_layer_glyph(&mut made, &name, &l.master, l.width, run, carry);
                     let mut c = Component::new(name.as_str(), 0.0, 0.0);
-                    c.info.attrs = attrs.clone();
+                    c.info.attrs = (**attrs).clone();
                     Shape::Component(c)
                 }
                 Run::Colr(s) => {

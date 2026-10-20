@@ -257,7 +257,7 @@ pub(crate) fn check_strikes(strikes: &[BitmapStrike]) -> Result<(), ModelError> 
 }
 
 /// Moves strike glyphs to the new names of renamed glyphs.
-pub(crate) fn rename_in_strikes(strikes: &mut Vec<BitmapStrike>, renames: &std::collections::HashMap<&str, &str>) {
+pub(crate) fn rename_in_strikes(strikes: &mut [BitmapStrike], renames: &std::collections::HashMap<&str, &str>) {
     for s in strikes.iter_mut() {
         for g in s.glyphs.iter_mut() {
             if let Some(new) = renames.get(g.glyph.as_str()) {

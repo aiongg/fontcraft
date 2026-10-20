@@ -116,10 +116,9 @@ pub(super) fn read(glyphs: usize, mut next: impl FnMut(usize) -> Result<Flat, Su
     t.clears.shrink_to_fit();
     mem.release(held.saturating_sub(t.held()));
     t.alphabet = t.spans.len() as u32;
-    let mut g = 0u32;
-    for id in t.text.iter_mut().filter(|id| **id == NONE) {
-        *id = t.alphabet + g;
-        g += 1;
+    let base = t.alphabet;
+    for (id, g) in t.text.iter_mut().filter(|id| **id == NONE).zip(0u32..) {
+        *id = base + g;
     }
     Ok(t)
 }

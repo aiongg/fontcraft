@@ -247,9 +247,9 @@ fn hostile_or_unmatched_files_are_refused_and_change_nothing() {
 fn a_strike_holds_whatever_the_bitmap_readers_accept() {
     use fontcraft_engine::model::strike;
     use fontcraft_io_bitmap as io;
-    assert!(strike::MAX_STRIKE_BITMAP_SIDE >= io::MAX_BITMAP_SIDE);
-    assert!(strike::MAX_STRIKE_BYTES >= io::MAX_TOTAL_BITMAP_BYTES);
-    assert!(strike::MAX_STRIKE_PROPERTIES >= io::MAX_PROPERTIES);
-    assert!(strike::MAX_STRIKE_STRING >= io::MAX_STRING_BYTES);
-    assert!(strike::MAX_STRIKE_COORDINATE >= io::MAX_COORDINATE);
+    const { assert!(strike::MAX_STRIKE_BITMAP_SIDE >= io::MAX_BITMAP_SIDE) };
+    const { assert!(strike::MAX_STRIKE_BYTES >= io::MAX_TOTAL_BITMAP_BYTES) };
+    const { assert!(strike::MAX_STRIKE_PROPERTIES >= io::MAX_PROPERTIES) };
+    const { assert!(strike::MAX_STRIKE_STRING >= io::MAX_STRING_BYTES) };
+    const { assert!(strike::MAX_STRIKE_COORDINATE >= io::MAX_COORDINATE) };
 }

@@ -41,7 +41,7 @@ fn cs(program: &str) -> Vec<u8> {
             put_cs_number(&mut out, f64::from(n)).unwrap();
         } else if let Some(hex) = word.strip_prefix('<').and_then(|w| w.strip_suffix('>')) {
             for k in (0..hex.len()).step_by(2) {
-                out.push(u8::from_str_radix(&hex[k..k + 2], 16).unwrap());
+                out.push(u8::from_str_radix(hex.get(k..k + 2).unwrap(), 16).unwrap());
             }
         } else {
             let (_, bytes) = OPS.iter().find(|(name, _)| *name == word).unwrap_or_else(|| panic!("unknown operator {word}"));
@@ -149,9 +149,7 @@ const CFF2_GLYPHS: [&str; 3] = [
 fn cff2_table(glyphs: &[&str]) -> Vec<u8> {
     let glyphs: Vec<Vec<u8>> = glyphs.iter().map(|p| cs(p)).collect();
     let mut ivs = Vec::new();
-    for v in [1u16] {
-        ivs.extend(v.to_be_bytes());
-    }
+    ivs.extend(1u16.to_be_bytes());
     ivs.extend(16u32.to_be_bytes());
     ivs.extend(2u16.to_be_bytes());
     ivs.extend(32u32.to_be_bytes());

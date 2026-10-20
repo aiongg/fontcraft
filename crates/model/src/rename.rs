@@ -101,7 +101,7 @@ pub fn rename_glyphs(font: &mut Font, renames: &[(String, String)]) -> Result<Re
     update_groups(font, &map, &mut report.updated);
     update_glyph_order(font, &map, &mut report.updated);
     if font.bitmap_strikes.iter().any(|s| s.glyphs.iter().any(|g| map.contains_key(g.glyph.as_str()))) {
-        crate::strike::rename_in_strikes(Arc::make_mut(&mut font.bitmap_strikes), &map);
+        crate::strike::rename_in_strikes(Arc::make_mut(&mut font.bitmap_strikes).as_mut_slice(), &map);
     }
     font_text_using(font, &map, &mut report.still_used);
     Ok(report)

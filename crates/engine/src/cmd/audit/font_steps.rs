@@ -147,8 +147,8 @@ fn source_glyphs(font: &Font, findings: &[&Finding], fix: &str, report: &mut Fix
 /// The kerning direction a finding's `direction` data names.
 fn direction(f: &Finding) -> &'static str {
     match f.data.get("direction").copied() {
-        Some(d) if d == 1.0 => "rtl",
-        Some(d) if d == 2.0 => "vertical",
+        Some(1.0) => "rtl",
+        Some(2.0) => "vertical",
         _ => "ltr",
     }
 }

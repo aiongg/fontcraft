@@ -49,12 +49,15 @@ struct Width {
     joined: bool,
 }
 
+/// Widths by text, left to right, then right to left.
+type WidthMaps = [HashMap<Box<str>, Box<[Width]>>; 2];
+
 /// Shaped segment widths by direction and text. It holds for one preview font and one state of
 /// the model's advances: the caller starts a new one when either changes.
 #[derive(Debug, Default)]
 pub struct WidthCache {
     /// Left to right, then right to left.
-    maps: Mutex<[HashMap<Box<str>, Box<[Width]>>; 2]>,
+    maps: Mutex<WidthMaps>,
 }
 
 impl WidthCache {
@@ -142,13 +145,7 @@ pub(crate) fn measure(
 }
 
 /// Measures the segment, from the cache when it holds it, into `out`, and empties it.
-fn flush(
-    seg: &mut Segment,
-    shaper: &PreviewShaper,
-    live: &dyn Fn(u16) -> Option<i32>,
-    maps: Option<&mut [HashMap<Box<str>, Box<[Width]>>; 2]>,
-    out: &mut Measured,
-) {
+fn flush(seg: &mut Segment, shaper: &PreviewShaper, live: &dyn Fn(u16) -> Option<i32>, maps: Option<&mut WidthMaps>, out: &mut Measured) {
     if seg.count == 0 {
         return;
     }
