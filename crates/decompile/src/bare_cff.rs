@@ -4,7 +4,8 @@
 //! The first font of the font set is read: name-keyed fonts with their charset and encoding
 //! (predefined, custom and supplements), CID-keyed fonts with glyphs named `cidNNNNN` and the first
 //! font dict's Private dict reported. Type 2 charstrings keep their hints in tx's form: hint masks
-//! become replacement sets, counter masks counter groups, the four flex operators flex.
+//! become replacement sets, a first counter mask of three stems on an axis `hstem3`/`vstem3`,
+//! other counter masks counter groups, the four flex operators flex.
 //!
 //! Input is untrusted: every offset and count is checked against the data, and charstrings run
 //! under the limits of [`crate::type1`].
@@ -338,6 +339,7 @@ fn read_cff_within(bytes: &[u8], warnings: &mut Vec<String>, mut budget: FontBud
         let fd = select.get(gid).copied().unwrap_or(0);
         let p = privates.get(fd).or(privates.first()).ok_or_else(|| bad("the CFF has no Private dict"))?;
         let mut run = T2Run::new(&gsubrs, &p.subrs);
+        run.global_coloring = p.dict.language_group == Some(1);
         let result = run.run(cs, 0).map(|_| ());
         let finished = run.finish();
         if let Err(e) = result.and(finished) {
@@ -527,6 +529,12 @@ struct T2Run<'a> {
     /// Every stem declared, in order: hint masks select from these.
     declared: Vec<PsOp>,
     hints: Hints,
+    /// The first counter mask's stems (indices into `declared`) until the next mask or moveto
+    /// decides, as tx does, whether they are `hstem3`/`vstem3` or a counter group.
+    first_counter: Option<Vec<usize>>,
+    counter_settled: bool,
+    /// The Private dict's `LanguageGroup` is 1: counter masks are always counter groups.
+    global_coloring: bool,
     ops: Vec<PsOp>,
     work: usize,
 }
@@ -543,6 +551,9 @@ impl<'a> T2Run<'a> {
             width_seen: false,
             declared: Vec::new(),
             hints: Hints::default(),
+            first_counter: None,
+            counter_settled: false,
+            global_coloring: false,
             ops: Vec::new(),
             work: 0,
         }
@@ -584,8 +595,51 @@ impl<'a> T2Run<'a> {
         if !op.in_range() {
             return Err(format!("a point lies outside the coordinate range of ±{MAX_COORDINATE}"));
         }
+        if matches!(op, PsOp::Move(..)) {
+            self.settle_counter(false)?;
+        }
         self.hints.flush(&mut self.ops)?;
         self.ops.push(op);
+        Ok(())
+    }
+
+    /// Decides the first counter mask: three horizontal and/or three vertical stems, with no
+    /// second counter mask after it and `LanguageGroup` not 1, mark those stems `hstem3`/`vstem3`;
+    /// anything else is a counter group.
+    fn settle_counter(&mut self, another: bool) -> Result<(), String> {
+        let Some(first) = self.first_counter.take() else { return Ok(()) };
+        self.counter_settled = true;
+        let horizontal = first.iter().filter(|&&k| matches!(self.declared.get(k), Some(PsOp::HStem { .. }))).count();
+        let stem3 = matches!((horizontal, first.len().saturating_sub(horizontal)), (0, 3) | (3, 0) | (3, 3));
+        if another || self.global_coloring || !stem3 {
+            let active: Vec<PsOp> = first.iter().filter_map(|&k| self.declared.get(k).cloned()).collect();
+            return self.counter_group(active);
+        }
+        for k in first {
+            let Some(op) = self.declared.get_mut(k) else { continue };
+            let plain = op.clone();
+            match op {
+                PsOp::HStem { kind, .. } | PsOp::VStem { kind, .. } => *kind = StemKind::Stem3,
+                _ => {}
+            }
+            let marked = op.clone();
+            for p in self.hints.pending.iter_mut().filter(|p| **p == plain) {
+                *p = marked.clone();
+            }
+        }
+        Ok(())
+    }
+
+    fn counter_group(&mut self, active: Vec<PsOp>) -> Result<(), String> {
+        if self.ops.len().saturating_add(active.len()).saturating_add(1) > MAX_GLYPH_OPS {
+            return Err(TOO_MANY_OPS.into());
+        }
+        self.ops.push(PsOp::NewGroup);
+        self.ops.extend(active.into_iter().map(|op| match op {
+            PsOp::HStem { y, dy, .. } => PsOp::HStem { y, dy, kind: StemKind::Counter },
+            PsOp::VStem { x, dx, .. } => PsOp::VStem { x, dx, kind: StemKind::Counter },
+            other => other,
+        }));
         Ok(())
     }
 
@@ -618,23 +672,15 @@ impl<'a> T2Run<'a> {
     }
 
     fn mask(&mut self, counter: bool, bytes: &[u8]) -> Result<(), String> {
-        let active: Vec<PsOp> = self
-            .declared
-            .iter()
-            .enumerate()
-            .filter(|(k, _)| bytes.get(k / 8).is_some_and(|b| b & (0x80 >> (k % 8)) != 0))
-            .map(|(_, op)| op.clone())
-            .collect();
+        self.settle_counter(counter)?;
+        let on = |k: usize| bytes.get(k / 8).is_some_and(|b| b & (0x80 >> (k % 8)) != 0);
+        if counter && !self.counter_settled {
+            self.first_counter = Some((0..self.declared.len()).filter(|&k| on(k)).collect());
+            return Ok(());
+        }
+        let active: Vec<PsOp> = self.declared.iter().enumerate().filter(|(k, _)| on(*k)).map(|(_, op)| op.clone()).collect();
         if counter {
-            if self.ops.len().saturating_add(active.len()).saturating_add(1) > MAX_GLYPH_OPS {
-                return Err(TOO_MANY_OPS.into());
-            }
-            self.ops.push(PsOp::NewGroup);
-            self.ops.extend(active.into_iter().map(|op| match op {
-                PsOp::HStem { y, dy, .. } => PsOp::HStem { y, dy, kind: StemKind::Counter },
-                PsOp::VStem { x, dx, .. } => PsOp::VStem { x, dx, kind: StemKind::Counter },
-                other => other,
-            }));
+            self.counter_group(active)?;
         } else {
             if self.hints.emitted {
                 self.hints.replacing = true;

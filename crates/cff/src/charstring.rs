@@ -38,7 +38,8 @@ pub(crate) fn build(
     if let Some(w) = width {
         encode_t2_number(w, &what, &mut bytes)?;
     }
-    let Some(hints) = hints.filter(|h| !h.is_empty()) else {
+    // Flex is drawn even in a glyph without stems, as tx writes it.
+    let Some(hints) = hints.filter(|h| !h.is_empty() || !h.flex.is_empty()) else {
         let commands = if specialise { specialize(commands, MAX_STACK, keep_topology) } else { commands };
         let bounds = bounds(&commands);
         write_commands(&commands, &what, &mut bytes)?;

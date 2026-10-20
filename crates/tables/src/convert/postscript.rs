@@ -187,8 +187,11 @@ fn r2(v: f64) -> f64 {
     (v * DECIMALS).round() / DECIMALS
 }
 
+/// A `seac` call: the accent's offset, then the base and accent character codes.
+type SeacArgs = (f64, f64, u8, u8);
+
 /// The outline of a glyph's operations, and the seac call if it ends with one.
-fn draw(ops: &[PsOp]) -> (Vec<PathOp>, Option<(f64, f64, u8, u8)>) {
+fn draw(ops: &[PsOp]) -> (Vec<PathOp>, Option<SeacArgs>) {
     let mut path = Vec::new();
     let mut seac = None;
     for op in ops {
@@ -274,7 +277,7 @@ fn hints(ops: &[PsOp]) -> Option<CharstringHints> {
             PsOp::Seac { .. } => {}
         }
     }
-    if h.is_empty() && v.is_empty() {
+    if h.is_empty() && v.is_empty() && flex.is_empty() {
         return None;
     }
     let (nh, nv) = (h.len(), v.len());
@@ -424,7 +427,7 @@ fn type1_table(ps: &PsFont, notes: &mut Vec<String>) -> Result<(Vec<u8>, Vec<Gly
 /// The glyphs of a bare CFF font, in its own order.
 fn bare_glyphs(ps: &PsFont) -> Vec<GlyphInfo> {
     let by_name: HashMap<&str, usize> = ps.glyphs.iter().enumerate().map(|(i, g)| (g.name.as_str(), i)).collect();
-    let drawn: Vec<(Option<[f64; 4]>, Option<(f64, f64, u8, u8)>)> = ps
+    let drawn: Vec<(Option<[f64; 4]>, Option<SeacArgs>)> = ps
         .glyphs
         .iter()
         .map(|g| {
