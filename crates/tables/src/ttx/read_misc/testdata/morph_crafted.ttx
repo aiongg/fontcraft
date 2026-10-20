@@ -1,0 +1,341 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ttFont sfntVersion="\x00\x01\x00\x00" ttLibVersion="4.66">
+
+  <GlyphOrder>
+    <!-- The 'id' attribute is only for humans; it is ignored when parsed. -->
+    <GlyphID id="0" name=".notdef"/>
+    <GlyphID id="1" name="A"/>
+    <GlyphID id="2" name="B"/>
+    <GlyphID id="3" name="C"/>
+    <GlyphID id="4" name="D"/>
+    <GlyphID id="5" name="E"/>
+    <GlyphID id="6" name="f_f"/>
+    <GlyphID id="7" name="f_f_i"/>
+    <GlyphID id="8" name="f"/>
+    <GlyphID id="9" name="i"/>
+  </GlyphOrder>
+
+  <maxp>
+    <!-- Most of this table will be recalculated by the compiler -->
+    <tableVersion value="0x10000"/>
+    <numGlyphs value="10"/>
+    <maxPoints value="0"/>
+    <maxContours value="0"/>
+    <maxCompositePoints value="0"/>
+    <maxCompositeContours value="0"/>
+    <maxZones value="2"/>
+    <maxTwilightPoints value="0"/>
+    <maxStorage value="0"/>
+    <maxFunctionDefs value="0"/>
+    <maxInstructionDefs value="0"/>
+    <maxStackElements value="0"/>
+    <maxSizeOfInstructions value="0"/>
+    <maxComponentElements value="0"/>
+    <maxComponentDepth value="0"/>
+  </maxp>
+
+  <post>
+    <formatType value="2.0"/>
+    <italicAngle value="0"/>
+    <underlinePosition value="0"/>
+    <underlineThickness value="0"/>
+    <isFixedPitch value="0"/>
+    <minMemType42 value="0"/>
+    <maxMemType42 value="0"/>
+    <minMemType1 value="0"/>
+    <maxMemType1 value="0"/>
+    <psNames>
+      <!-- This file uses unique glyph names based on the information
+           found in the 'post' table. Since these names might not be unique,
+           we have to invent artificial names in case of clashes. In order to
+           be able to retain the original information, we need a name to
+           ps name mapping for those cases where they differ. That's what
+           you see below.
+            -->
+    </psNames>
+    <extraNames>
+      <!-- following are the name that are not taken from the standard Mac glyph order -->
+    </extraNames>
+  </post>
+
+  <morx>
+    <Version value="2"/>
+    <Reserved value="0"/>
+    <!-- MorphChainCount=1 -->
+    <MorphChain index="0">
+      <DefaultFlags value="0x00000001"/>
+      <!-- StructLength=106 -->
+      <!-- MorphFeatureCount=0 -->
+      <!-- MorphSubtableCount=2 -->
+      <MorphSubtable index="0">
+        <!-- StructLength=24 -->
+        <TextDirection value="Horizontal"/>
+        <ProcessingOrder value="LogicalOrder"/>
+        <!-- MorphType=4 -->
+        <SubFeatureFlags value="0x00000001"/>
+        <NoncontextualMorph>
+          <Substitution>
+            <Lookup glyph="A" value="B"/>
+            <Lookup glyph="B" value="C"/>
+            <Lookup glyph="C" value="D"/>
+          </Substitution>
+        </NoncontextualMorph>
+      </MorphSubtable>
+      <MorphSubtable index="1">
+        <!-- StructLength=66 -->
+        <TextDirection value="Any"/>
+        <ProcessingOrder value="ReversedLayoutOrder"/>
+        <Reserved value="0x30005"/>
+        <!-- MorphType=0 -->
+        <SubFeatureFlags value="0x00000002"/>
+        <RearrangementMorph>
+          <StateTable>
+            <!-- GlyphClassCount=4 -->
+            <GlyphClass glyph="A" value="3"/>
+            <GlyphClass glyph="B" value="3"/>
+            <State index="0">
+              <Transition onGlyphClass="0">
+                <NewState value="0"/>
+                <Verb value="0"/><!-- no change -->
+              </Transition>
+              <Transition onGlyphClass="1">
+                <NewState value="0"/>
+                <Verb value="0"/><!-- no change -->
+              </Transition>
+              <Transition onGlyphClass="2">
+                <NewState value="0"/>
+                <Verb value="0"/><!-- no change -->
+              </Transition>
+              <Transition onGlyphClass="3">
+                <NewState value="1"/>
+                <Flags value="MarkFirst"/>
+                <Verb value="0"/><!-- no change -->
+              </Transition>
+            </State>
+            <State index="1">
+              <Transition onGlyphClass="0">
+                <NewState value="0"/>
+                <Verb value="0"/><!-- no change -->
+              </Transition>
+              <Transition onGlyphClass="1">
+                <NewState value="0"/>
+                <Verb value="0"/><!-- no change -->
+              </Transition>
+              <Transition onGlyphClass="2">
+                <NewState value="0"/>
+                <Verb value="0"/><!-- no change -->
+              </Transition>
+              <Transition onGlyphClass="3">
+                <NewState value="0"/>
+                <Flags value="MarkLast"/>
+                <ReservedFlags value="0x0100"/>
+                <Verb value="3"/><!-- AxD ⇒ DxA -->
+              </Transition>
+            </State>
+          </StateTable>
+        </RearrangementMorph>
+      </MorphSubtable>
+    </MorphChain>
+  </morx>
+
+  <mort>
+    <Version value="0x00010000"/>
+    <!-- MorphChainCount=1 -->
+    <MorphChain index="0">
+      <DefaultFlags value="0x00000001"/>
+      <!-- StructLength=216 -->
+      <!-- MorphFeatureCount=1 -->
+      <!-- MorphSubtableCount=2 -->
+      <MorphFeature index="0">
+        <FeatureType value="1"/>
+        <FeatureSetting value="0"/>
+        <EnableFlags value="0x00000001"/>
+        <DisableFlags value="0xFFFFFFFE"/>
+      </MorphFeature>
+      <MorphSubtable index="0">
+        <!-- StructLength=104 -->
+        <CoverageFlags value="128"/>
+        <!-- MorphType=1 -->
+        <SubFeatureFlags value="0x00000002"/>
+        <ContextualMorph>
+          <StateTable>
+            <!-- GlyphClassCount=6 -->
+            <GlyphClass glyph="A" value="4"/>
+            <GlyphClass glyph="B" value="1"/>
+            <GlyphClass glyph="C" value="4"/>
+            <GlyphClass glyph="D" value="5"/>
+            <State index="0">
+              <Transition onGlyphClass="0">
+                <NewState value="0"/>
+                <MarkIndex value="65535"/>
+                <CurrentIndex value="65535"/>
+              </Transition>
+              <Transition onGlyphClass="1">
+                <NewState value="0"/>
+                <MarkIndex value="65535"/>
+                <CurrentIndex value="65535"/>
+              </Transition>
+              <Transition onGlyphClass="2">
+                <NewState value="0"/>
+                <MarkIndex value="65535"/>
+                <CurrentIndex value="65535"/>
+              </Transition>
+              <Transition onGlyphClass="3">
+                <NewState value="0"/>
+                <MarkIndex value="65535"/>
+                <CurrentIndex value="65535"/>
+              </Transition>
+              <Transition onGlyphClass="4">
+                <NewState value="1"/>
+                <Flags value="SetMark"/>
+                <MarkIndex value="65535"/>
+                <CurrentIndex value="65535"/>
+              </Transition>
+              <Transition onGlyphClass="5">
+                <NewState value="0"/>
+                <MarkIndex value="65535"/>
+                <CurrentIndex value="65535"/>
+              </Transition>
+            </State>
+            <State index="1">
+              <Transition onGlyphClass="0">
+                <NewState value="0"/>
+                <MarkIndex value="65535"/>
+                <CurrentIndex value="65535"/>
+              </Transition>
+              <Transition onGlyphClass="1">
+                <NewState value="0"/>
+                <MarkIndex value="65535"/>
+                <CurrentIndex value="65535"/>
+              </Transition>
+              <Transition onGlyphClass="2">
+                <NewState value="0"/>
+                <MarkIndex value="65535"/>
+                <CurrentIndex value="65535"/>
+              </Transition>
+              <Transition onGlyphClass="3">
+                <NewState value="0"/>
+                <MarkIndex value="65535"/>
+                <CurrentIndex value="65535"/>
+              </Transition>
+              <Transition onGlyphClass="4">
+                <NewState value="1"/>
+                <Flags value="SetMark"/>
+                <MarkIndex value="65535"/>
+                <CurrentIndex value="65535"/>
+              </Transition>
+              <Transition onGlyphClass="5">
+                <NewState value="0"/>
+                <MarkIndex value="1"/>
+                <CurrentIndex value="0"/>
+              </Transition>
+            </State>
+            <PerGlyphLookup index="0">
+              <Lookup glyph="B" value="B"/>
+              <Lookup glyph="D" value="D"/>
+              <Lookup glyph="E" value="A"/>
+            </PerGlyphLookup>
+            <PerGlyphLookup index="1">
+              <Lookup glyph="A" value="B"/>
+              <Lookup glyph="C" value="D"/>
+              <Lookup glyph="D" value="A"/>
+            </PerGlyphLookup>
+          </StateTable>
+        </ContextualMorph>
+      </MorphSubtable>
+      <MorphSubtable index="1">
+        <!-- StructLength=88 -->
+        <CoverageFlags value="0"/>
+        <!-- MorphType=2 -->
+        <SubFeatureFlags value="0x00000004"/>
+        <LigatureMorph>
+          <StateTable>
+            <!-- GlyphClassCount=6 -->
+            <GlyphClass glyph="f" value="4"/>
+            <GlyphClass glyph="i" value="5"/>
+            <State index="0">
+              <Transition onGlyphClass="0">
+                <NewState value="0"/>
+              </Transition>
+              <Transition onGlyphClass="1">
+                <NewState value="0"/>
+              </Transition>
+              <Transition onGlyphClass="2">
+                <NewState value="0"/>
+              </Transition>
+              <Transition onGlyphClass="3">
+                <NewState value="0"/>
+              </Transition>
+              <Transition onGlyphClass="4">
+                <NewState value="1"/>
+                <Flags value="SetComponent"/>
+              </Transition>
+              <Transition onGlyphClass="5">
+                <NewState value="0"/>
+              </Transition>
+            </State>
+            <State index="1">
+              <Transition onGlyphClass="0">
+                <NewState value="0"/>
+              </Transition>
+              <Transition onGlyphClass="1">
+                <NewState value="0"/>
+              </Transition>
+              <Transition onGlyphClass="2">
+                <NewState value="0"/>
+              </Transition>
+              <Transition onGlyphClass="3">
+                <NewState value="0"/>
+              </Transition>
+              <Transition onGlyphClass="4">
+                <NewState value="2"/>
+                <Flags value="SetComponent"/>
+              </Transition>
+              <Transition onGlyphClass="5">
+                <NewState value="0"/>
+              </Transition>
+            </State>
+            <State index="2">
+              <Transition onGlyphClass="0">
+                <NewState value="0"/>
+              </Transition>
+              <Transition onGlyphClass="1">
+                <NewState value="0"/>
+              </Transition>
+              <Transition onGlyphClass="2">
+                <NewState value="0"/>
+              </Transition>
+              <Transition onGlyphClass="3">
+                <NewState value="0"/>
+              </Transition>
+              <Transition onGlyphClass="4">
+                <NewState value="0"/>
+              </Transition>
+              <Transition onGlyphClass="5">
+                <NewState value="0"/>
+                <Flags value="SetComponent"/>
+                <Action GlyphIndexDelta="-9"/>
+                <Action GlyphIndexDelta="-7"/>
+                <Action GlyphIndexDelta="-6" Flags="Store"/>
+              </Transition>
+            </State>
+            <LigComponents>
+              <LigComponent index="0" value="0"/>
+              <LigComponent index="1" value="1"/>
+              <LigComponent index="2" value="0"/>
+              <LigComponent index="3" value="4"/>
+            </LigComponents>
+            <MortLigatureRebase>
+              <Component index="2"/>
+            </MortLigatureRebase>
+            <Ligatures>
+              <Ligature glyph="f_f" index="0"/>
+              <Ligature glyph="f_f_i" index="1"/>
+            </Ligatures>
+          </StateTable>
+        </LigatureMorph>
+      </MorphSubtable>
+    </MorphChain>
+  </mort>
+
+</ttFont>

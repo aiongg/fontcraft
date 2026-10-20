@@ -4,20 +4,24 @@
 //! written element for element as fontTools' `ttx` writes it and read with the same checks: a
 //! table fontTools would refuse to read is an error here, and [`super::dump`] then writes it as
 //! hex. The Apple tables `ankr`, `bsln`, `cidg`, `feat`, `gcid`, `lcar` and `opbd` go through the
-//! structured-table writer ([`super::otdata`]), whose layouts include them, as in fontTools.
+//! structured-table writer ([`super::otdata`]), whose layouts include them, as in fontTools; the
+//! glyph metamorphosis tables `mort` and `morx` have a writer of their own (`misc::morph`).
 //! Tables no module knows are written as hex by [`super::dump`] itself. Ported from fontTools'
 //! `ttLib.tables` (MIT): `_k_e_r_n`, `D_S_I_G_`, `F_F_T_M_`, `L_T_S_H_`, `V_D_M_X_`, `_t_r_a_k`,
 //! `_l_t_a_g`, the `prop` part of `otData`, the `AATLookup` converter of `otConverters`, and
 //! `misc.timeTools`.
 //!
 //! Known differences:
-//! - `mort` and `morx` (glyph metamorphosis, which fontTools reads) are written as hex; `kerx` and
-//!   `just`, which fontTools does not read either, are hex in both.
+//! - `kerx` and `just`, which fontTools does not read, are hex in both.
+//! - `mort` and `morx` tables past the limits of `misc::morph` are written as hex.
 //! - The name comment after a `trak` entry is written only when the font has a `name` table;
 //!   `ttx` stops with an error on a `trak` table in a font without one.
 
 #[cfg(test)]
 mod fonts;
+pub(crate) mod morph;
+#[cfg(test)]
+mod morph_tests;
 #[cfg(test)]
 mod tests;
 
@@ -43,6 +47,8 @@ pub fn write_table(tag: Tag, data: &[u8], font: &SfntFont, w: &mut XmlWriter) ->
         b"prop" => prop(data, font, w)?,
         b"trak" => trak(data, font, w)?,
         b"ltag" => ltag(data, w)?,
+        b"mort" => morph::write(data, font, w, true)?,
+        b"morx" => morph::write(data, font, w, false)?,
         b"ankr" | b"bsln" | b"cidg" | b"feat" | b"gcid" | b"lcar" | b"opbd" => super::otdata::write_layout_table(tag, data, font, w)?,
         _ => return Ok(false),
     }
