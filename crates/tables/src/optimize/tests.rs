@@ -121,11 +121,100 @@ fn optimize_refuses_contradicting_options_and_keeps_fonts_without_cff() {
     let result = optimize(&tt, &OptimizeOptions::default()).unwrap();
     assert_eq!(result.font, tt);
     assert!(result.steps.is_empty());
-    assert!(result.notes.iter().any(|n| n.contains("GPOS")), "{:?}", result.notes);
 
     let mut junk = font.clone();
     junk.insert(*b"CFF ", vec![1, 0, 4, 1, 0, 0]);
     let result = optimize(&junk, &OptimizeOptions::default()).unwrap();
     assert_eq!(result.font, junk, "a table that cannot be read is left alone");
     assert!(result.notes.iter().any(|n| n.starts_with("CFF")), "{:?}", result.notes);
+}
+
+/// PaintGlyph of glyph `g` filled with PaintSolid of palette entry `p` (the solid right after).
+fn paint_glyph(g: u16, p: u16) -> Vec<u8> {
+    let mut v = vec![10, 0, 0, 6];
+    v.extend(g.to_be_bytes());
+    v.push(2);
+    v.extend(p.to_be_bytes());
+    v.extend(0x4000u16.to_be_bytes());
+    v
+}
+
+/// COLR 1 whose glyph `g` draws layers `first..first + n` of `layers`, for each `(g, first, n)`.
+fn colr_v1(bases: &[(u16, u32, u8)], layers: &[Vec<u8>]) -> Vec<u8> {
+    let base_at = 34usize;
+    let layer_at = base_at + 4 + 6 * bases.len();
+    let mut paints: Vec<Vec<u8>> = bases
+        .iter()
+        .map(|(_, first, n)| {
+            let mut v = vec![1, *n];
+            v.extend(first.to_be_bytes());
+            v
+        })
+        .collect();
+    paints.extend(layers.iter().cloned());
+    let mut at = layer_at + 4 + 4 * layers.len();
+    let mut offsets = Vec::new();
+    for p in &paints {
+        offsets.push(at);
+        at += p.len();
+    }
+    let mut out = vec![0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    for v in [base_at, layer_at, 0, 0, 0] {
+        out.extend((v as u32).to_be_bytes());
+    }
+    out.extend((bases.len() as u32).to_be_bytes());
+    for (i, (g, _, _)) in bases.iter().enumerate() {
+        out.extend(g.to_be_bytes());
+        out.extend(((offsets[i] - base_at) as u32).to_be_bytes());
+    }
+    out.extend((layers.len() as u32).to_be_bytes());
+    for o in &offsets[bases.len()..] {
+        out.extend(((o - layer_at) as u32).to_be_bytes());
+    }
+    for p in paints {
+        out.extend(p);
+    }
+    out
+}
+
+/// A paint as text: `G<glyph>/<palette>` or `L<first>+<count>`.
+fn describe(t: &[u8], at: usize) -> String {
+    let u16_at = |i: usize| u16::from_be_bytes([t[i], t[i + 1]]);
+    let u32_at = |i: usize| u32::from_be_bytes([t[i], t[i + 1], t[i + 2], t[i + 3]]);
+    match t[at] {
+        10 => {
+            let solid = at + ((usize::from(t[at + 1]) << 16) | usize::from(u16_at(at + 2)));
+            format!("G{}/{}", u16_at(at + 4), u16_at(solid + 1))
+        }
+        1 => format!("L{}+{}", u32_at(at + 2), t[at + 1]),
+        f => format!("?{f}"),
+    }
+}
+
+/// Expected values from fontTools 4.66: `colorLib.builder.buildColrV1` on the same two glyphs.
+#[test]
+fn colr_layer_reuse_shares_runs_as_the_reference_does() {
+    let mut font = SfntFont::new(Flavour::TrueType);
+    let mut maxp = vec![0u8; 6];
+    maxp[1] = 1;
+    maxp[4..6].copy_from_slice(&7u16.to_be_bytes());
+    font.insert(*b"maxp", maxp);
+    let a = [paint_glyph(3, 0), paint_glyph(4, 1), paint_glyph(5, 2)];
+    let layers: Vec<Vec<u8>> = a.iter().cloned().chain(a.iter().cloned()).chain([paint_glyph(6, 3)]).collect();
+    let input = colr_v1(&[(1, 0, 3), (2, 3, 4)], &layers);
+    font.insert(*b"COLR", input.clone());
+
+    let out = colr::run(&font).unwrap().unwrap();
+    let u32_at = |i: usize| u32::from_be_bytes([out[i], out[i + 1], out[i + 2], out[i + 3]]) as usize;
+    let list = u32_at(18);
+    let layers: Vec<String> = (0..u32_at(list)).map(|i| describe(&out, list + u32_at(list + 4 + 4 * i))).collect();
+    assert_eq!(layers, ["G3/0", "G4/1", "G5/2", "L0+3", "G6/3"]);
+    let base = u32_at(14);
+    let bases: Vec<String> = (0..u32_at(base)).map(|i| describe(&out, base + u32_at(base + 6 + 6 * i))).collect();
+    assert_eq!(bases, ["L0+3", "L3+2"]);
+    assert!(out.len() < input.len());
+
+    let result = optimize(&font, &OptimizeOptions::default()).unwrap();
+    assert_eq!(result.font.get(*b"COLR"), Some(out.as_slice()));
+    assert!(result.steps.iter().any(|s| s.step == "colrLayerReuse" && s.applied), "{:?}", result.steps);
 }
