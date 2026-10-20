@@ -5,8 +5,8 @@
 //! is a UFO and one with `fontinfo.plist` a `.glyphspackage`, a file that starts with an sfnt,
 //! collection, WOFF or WOFF2 signature is a compiled font, a JSON file whose `format` is
 //! `fontcraft` is a native file, XML whose root is `<designspace>` a designspace (opened with the
-//! UFOs it names, relative to its folder), a ZIP archive a UFOZ, a BDF or PCF file a bitmap-only
-//! font (module `bitmap_font`), and other text that starts with `{` is a `.glyphs` file. Every read is bounded ([`MAX_PACKAGE_FILES`],
+//! UFOs it names, relative to its folder), a ZIP archive a UFOZ, a BDF, PCF, Windows FNT or FON file (or a `.pcf.gz` or `.bdf.gz`) a
+//! bitmap-only font (module `bitmap_font`), and other text that starts with `{` is a `.glyphs` file. Every read is bounded ([`MAX_PACKAGE_FILES`],
 //! [`fontcraft_format::MAX_BYTES`] in all) and follows no symlinked folders, so a hostile folder
 //! can neither exhaust memory nor loop.
 
@@ -246,6 +246,9 @@ pub fn open(path: &Path, face: Option<u32>) -> Result<(Font, Vec<String>)> {
         let (mut font, warnings) = fontcraft_io_ufo::ufo::read_reporting(&files)?;
         font.source.format = SourceFormat::Ufoz;
         return Ok((font, warnings));
+    }
+    if bitmap_font::is_gzipped_bitmap_font(path, &bytes) {
+        return bitmap_font::open(path, &bytes);
     }
     if fontcraft_format::is_compressed(&bytes) {
         return Ok((fontcraft_format::load(&bytes)?, Vec::new()));

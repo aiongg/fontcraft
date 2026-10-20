@@ -1,6 +1,6 @@
 [package]
 name = "fontcraft-io-bitmap"
-description = "FontCraft reader and writer for bitmap fonts: BDF text files and X11 PCF files (L3)"
+description = "FontCraft reader and writer for bitmap fonts: BDF, X11 PCF (plain or gzip-compressed) and Windows FNT and FON files (L3)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -12,3 +12,5 @@ workspace = true
 
 [dependencies]
 thiserror.workspace = true
+# gzip for `.pcf.gz` and `.bdf.gz`.
+fontcraft-container.workspace = true

@@ -1,4 +1,8 @@
-//! A bitmap font file (BDF or PCF) opened on its own as a bitmap-only font (M13.55d).
+//! A bitmap font file (BDF, PCF, either gzip-compressed, Windows FNT or FON) opened on its own as
+//! a bitmap-only font (M13.55d, M13.55e).
+//!
+//! The glyphs come from the file's first font; each further font of a FON file becomes another
+//! strike, holding the bitmaps whose names the first font has.
 //!
 //! Every bitmap of the file becomes a glyph of the same name, in file order, with an empty
 //! outline. Its code becomes the glyph's code point when the file's codes are Unicode
@@ -26,15 +30,25 @@ pub const UNITS_PER_EM: u16 = 1000;
 /// Bytes kept free for a `.N` suffix when a name repeats: a dot and up to seven digits.
 const SUFFIX_ROOM: usize = 8;
 
-/// Whether `bytes` start like a BDF or PCF file.
+/// Whether `bytes` start like a BDF, PCF, FNT or FON file.
 pub(super) fn is_bitmap_font(bytes: &[u8]) -> bool {
-    fontcraft_io_bitmap::is_bdf(bytes) || fontcraft_io_bitmap::is_pcf(bytes)
+    use fontcraft_io_bitmap as io;
+    io::is_bdf(bytes) || io::is_pcf(bytes) || io::is_fnt(bytes) || io::is_fon(bytes)
 }
 
-/// The font a BDF or PCF file holds, with what reading it passed over.
+/// Whether `bytes` are gzip data in a file named `.pcf.gz` or `.bdf.gz`. Other gzip data is a
+/// compressed FontCraft document.
+pub(super) fn is_gzipped_bitmap_font(path: &Path, bytes: &[u8]) -> bool {
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or_default().to_ascii_lowercase();
+    fontcraft_io_bitmap::is_gzip(bytes) && (name.ends_with(".pcf.gz") || name.ends_with(".bdf.gz"))
+}
+
+/// The font a bitmap font file holds, with what reading it passed over.
 pub(super) fn open(path: &Path, bytes: &[u8]) -> Result<(Font, Vec<String>)> {
     let bad = |message: String| EngineError::Io(format!("cannot read the bitmap font {}: {message}", path.display()));
-    let import = fontcraft_io_bitmap::read(bytes).map_err(|e| bad(e.to_string()))?;
+    let mut imports = fontcraft_io_bitmap::read_all(bytes).map_err(|e| bad(e.to_string()))?.into_iter();
+    let import = imports.next().ok_or_else(|| bad("it holds no fonts".into()))?;
+    let others: Vec<_> = imports.collect();
     let mut warnings = import.warnings;
     let file = import.font;
     if file.glyphs.len() > MAX_GLYPHS {
@@ -47,6 +61,7 @@ pub(super) fn open(path: &Path, bytes: &[u8]) -> Result<(Font, Vec<String>)> {
     let units = |pixels: i32| (f64::from(pixels) * scale).round();
 
     let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
+    let stem = [".pcf", ".bdf", ".PCF", ".BDF"].iter().find_map(|x| stem.strip_suffix(x)).unwrap_or(stem);
     let family = [file.text_property("FAMILY_NAME").unwrap_or_default(), stem].into_iter().map(clean).find(|n| !n.trim().is_empty());
     let mut font = Font::new(family.unwrap_or_else(|| "Untitled".into()));
     font.source.format = SourceFormat::Binary;
@@ -98,7 +113,30 @@ pub(super) fn open(path: &Path, bytes: &[u8]) -> Result<(Font, Vec<String>)> {
     if let Some(x) = height("X_HEIGHT", u32::from('x')) {
         font.set_metric_pos(&master, metric::X_HEIGHT, units(x))?;
     }
-    font.bitmap_strikes = Arc::new(vec![strike]);
+    let mut strikes = vec![strike];
+    for other in others {
+        warnings.extend(other.warnings);
+        let file = other.font;
+        if file.pixel_size == 0 || strikes.iter().any(|s| s.ppem == file.pixel_size && s.depth == file.depth) {
+            warnings.push(format!("a further font of {} pixels per em was left out: the font has a strike of that size", file.pixel_size));
+            continue;
+        }
+        let mut more = strike_of(&file);
+        let mut left_out = 0usize;
+        for g in &file.glyphs {
+            if g.bitmap.depth == file.depth && names.seen.contains(&g.name) {
+                more.glyphs.push(strike_glyph(g.name.clone(), g));
+            } else {
+                left_out += 1;
+            }
+        }
+        if left_out > 0 {
+            warnings.push(format!("{left_out} bitmaps of the {} pixel font have no glyph of the same name and were left out", file.pixel_size));
+        }
+        strikes.push(more);
+    }
+    strikes.sort_by_key(|s| (s.ppem, s.depth));
+    font.bitmap_strikes = Arc::new(strikes);
     font.check()?;
 
     if renamed > 0 {
