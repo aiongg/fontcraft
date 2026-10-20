@@ -5,7 +5,8 @@
 //! The steps, in fontTools' order:
 //!
 //! 1. Each limit becomes a user range (pins and drops are ranges of zero width), clamped to the
-//!    `fvar` range, then a normalised range through `avar` (version 1), quantised to F2Dot14.
+//!    `fvar` range, then a normalised range through the `avar` segment maps, quantised to
+//!    F2Dot14.
 //! 2. Every tuple variation (`gvar`, `cvar`) and every item-variation-store region (`MVAR`,
 //!    `HVAR`, `VVAR`, `GDEF`) is rebased axis by axis, in tag order, by the region solver
 //!    ([`super::solver`]). Parts that no longer depend on any axis are summed into the new
@@ -26,12 +27,18 @@
 //!    without `glyf` by their default parts. `BASE` coordinates take theirs, keeping their
 //!    devices while its store has regions. With `update_names`, the style names come from the
 //!    `STAT` axis values at the new default location (see `names.rs`).
+//! 8. `COLR` (see `colr.rs`): its store is rebased and its varied fields take their default
+//!    parts, as `GDEF` does; fontTools leaves `COLR` as it is.
+//! 9. With `avar` version 2 (see `avar2.rs`), the variation tables stay in the input's final
+//!    coordinates and the `avar` table makes up the difference; only self-contained pinned
+//!    axes are instanced in them.
+//! 10. A `VARC` table (see `varc.rs`) has its axis indexes renumbered.
 //!
 //! The item variation stores keep their subtables and item counts, so every variation index
 //! stays valid; fontTools reorders and packs them afterwards, which changes no value.
 //!
-//! Refused: `VARC`, `avar` version 2, a `COLR` table with variation data, feature-variation
-//! conditions other than axis ranges, an `avar` map that is not valid.
+//! Refused: limits on an axis a `VARC` table uses, feature-variation conditions other than axis
+//! ranges, an `avar` map that is not valid.
 
 use std::collections::{HashMap, HashSet};
 
@@ -102,15 +109,14 @@ pub fn partial_instance_with(font: &SfntFont, options: &InstanceOptions) -> Resu
     if font.get(*b"gvar").is_some() && font.get(*b"glyf").is_none() {
         return Err(bad("the font has a gvar table but no glyf table"));
     }
-    if font.get(*b"VARC").is_some() {
-        return Err(TablesError::Unsupported("instancing a VARC table".into()));
-    }
     let limits = resolve_limits(font, &options.limits)?;
+    let tags: Vec<Tag> = limits.axes.iter().map(|a| a.tag).collect();
+    let limited: Vec<bool> = limits.user.iter().map(Option::is_some).collect();
+    super::varc::check_limits(font, &tags, &limited)?;
     if limits.new_count() == 0 {
         let pinned: Vec<(Tag, f64)> = limits.axes.iter().zip(&limits.user).filter_map(|(a, u)| u.map(|u| (a.tag, u.default))).collect();
         return full::full_instance_with(font, &pinned, options);
     }
-    refuse_unhandled(font)?;
 
     let mut out = font.clone();
     out.remove(*b"DSIG");
@@ -122,19 +128,30 @@ pub fn partial_instance_with(font: &SfntFont, options: &InstanceOptions) -> Resu
     let names_before = st::variation_name_ids(&out);
     let glyph_count = out.get(*b"maxp").and_then(|m| st::u16_at(m, 4)).map(usize::from);
 
-    let gvar_result = if out.get(*b"gvar").is_some() { Some(partial_gvar(&mut out, &limits, options.recalc_bounds, &mut budget)?) } else { None };
-    partial_cvar(&mut out, &limits, &mut budget)?;
-    partial_mvar(&mut out, &limits, &mut budget)?;
-    partial_metrics_store(&mut out, *b"HVAR", &limits, &mut budget)?;
-    partial_metrics_store(&mut out, *b"VVAR", &limits, &mut budget)?;
-    partial_cff2(&mut out, &limits, options, &mut budget)?;
-    partial_base(&mut out, &limits, &mut budget)?;
-    partial_layout(&mut out, &limits, &mut budget)?;
+    let avar2 = out.get(*b"avar").and_then(|d| st::u16_at(d, 0)).is_some_and(|v| v >= 2);
+    let mut removed: Vec<bool> = (0..limits.axes.len()).map(|i| limits.is_pinned(i)).collect();
+    let gvar_result = if avar2 {
+        // The variation tables stay in the input's final coordinates; only self-contained
+        // pinned axes are instanced in them. The result is still variable, so CFF2 stays.
+        let rebased = avar2::instantiate_avar2(&mut out, &limits, &mut budget)?;
+        removed = (0..limits.axes.len()).map(|i| rebased.self_contained.iter().any(|(j, _)| *j == i)).collect();
+        if rebased.self_contained.is_empty() {
+            None
+        } else {
+            let sc = avar2::self_contained_limits(&limits, &rebased.self_contained);
+            let sc_options = InstanceOptions { downgrade_cff2: false, ..options.clone() };
+            instance_tables(&mut out, &sc, &sc_options, &mut budget)?
+        }
+    } else {
+        let metrics = instance_tables(&mut out, &limits, options, &mut budget)?;
+        partial_avar(&mut out, &limits)?;
+        metrics
+    };
 
-    partial_avar(&mut out, &limits)?;
     let ranges: Vec<(Tag, f64, f64)> = limits.axes.iter().zip(&limits.user).filter_map(|(a, u)| u.map(|u| (a.tag, u.min, u.max))).collect();
     st::reduce_stat_ranges(&mut out, &ranges)?;
-    partial_fvar(&mut out, &limits)?;
+    partial_fvar(&mut out, &limits, &removed)?;
+    super::varc::renumber(&mut out, &removed)?;
     let names_after = st::variation_name_ids(&out);
     let unused: Vec<u16> = names_before.into_iter().filter(|id| !names_after.contains(id)).collect();
     st::prune_names(&mut out, &unused)?;
@@ -168,15 +185,28 @@ pub fn partial_instance_with(font: &SfntFont, options: &InstanceOptions) -> Resu
     Ok(out)
 }
 
-/// Refuses tables whose variation data a partial instance would leave stale.
-fn refuse_unhandled(font: &SfntFont) -> Result<()> {
-    if let Some(data) = font.get(*b"COLR")
-        && st::u16_at(data, 0).is_some_and(|v| v >= 1)
-        && data.get(30..34).is_some_and(|o| o.iter().any(|b| *b != 0))
-    {
-        return Err(TablesError::Unsupported("instancing a COLR table that holds variation data".into()));
-    }
-    Ok(())
+/// Every variation table rebased by `limits`; answers the new metrics when `gvar` was applied.
+fn instance_tables(out: &mut SfntFont, limits: &Limits, options: &InstanceOptions, budget: &mut usize) -> Result<Option<Metrics>> {
+    let metrics = if out.get(*b"gvar").is_some() { Some(partial_gvar(out, limits, options.recalc_bounds, budget)?) } else { None };
+    partial_cvar(out, limits, budget)?;
+    partial_mvar(out, limits, budget)?;
+    partial_metrics_store(out, *b"HVAR", limits, budget)?;
+    partial_metrics_store(out, *b"VVAR", limits, budget)?;
+    partial_cff2(out, limits, options, budget)?;
+    partial_base(out, limits, budget)?;
+    partial_layout(out, limits, budget)?;
+    partial_colr(out, limits, budget)?;
+    Ok(metrics)
+}
+
+/// `COLR`: the store is rebased and the varied fields take their default parts (see `colr.rs`);
+/// with no region left, the variation data goes.
+fn partial_colr(out: &mut SfntFont, limits: &Limits, budget: &mut usize) -> Result<()> {
+    let Some(offset) = super::colr::store_offset(out) else { return Ok(()) };
+    let data = out.get(*b"COLR").unwrap_or_default().to_vec();
+    let rebased = rebase_store(&data, offset, limits, budget)?;
+    let store = if rebased.regions == 0 { None } else { Some(rebased.owned()?) };
+    super::colr::apply(out, &StoreDeltas::from_rows(rebased.defaults), store)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -311,12 +341,12 @@ fn resolve_limits(font: &SfntFont, given: &[(Tag, AxisLimit)]) -> Result<Limits>
 /// One axis's `avar` segment map: (from, to) pairs in normalised coordinates.
 type SegmentMap = Vec<(f64, f64)>;
 
-/// The `avar` segment maps (version 1), one per `fvar` axis; version 2 is refused.
+/// The `avar` segment maps, one per `fvar` axis (of a version 2 table too).
 fn read_avar(font: &SfntFont, axis_count: usize) -> Result<Option<Vec<SegmentMap>>> {
     let Some(data) = font.get(*b"avar") else { return Ok(None) };
     let major = st::u16_at(data, 0).ok_or_else(|| bad("the avar table is truncated"))?;
-    if major >= 2 {
-        return Err(TablesError::Unsupported("partial instancing of a font with an avar version 2 table".into()));
+    if major > 2 {
+        return Err(TablesError::Unsupported(format!("instancing an avar table of version {major}")));
     }
     let count = usize::from(st::u16_at(data, 6).ok_or_else(|| bad("the avar table is truncated"))?);
     let mut maps = Vec::with_capacity(axis_count);
@@ -832,6 +862,19 @@ impl RebasedStore {
 /// fontTools' `instantiateItemVariationStore`: every subtable keeps its item count, so the
 /// variation indexes stay valid.
 fn rebase_store(table: &[u8], offset: usize, limits: &Limits, budget: &mut usize) -> Result<RebasedStore> {
+    let mut defaults = Vec::new();
+    let mut subtables: Vec<(usize, Vec<TupleVar>)> = Vec::new();
+    for (count, vars) in read_store(table, offset, budget)? {
+        let rebased = rebase_vars(vars, limits, budget)?;
+        defaults.push(rebased.default.unwrap_or_else(|| vec![0.0; count]));
+        subtables.push((count, rebased.kept));
+    }
+    write_store(&subtables, &limits.new_index, limits.new_count()).map(|(bytes, regions)| RebasedStore { bytes, defaults, regions })
+}
+
+/// The subtables of the item variation store at `offset` in `table`, each as its item count
+/// and one variation per region column.
+fn read_store(table: &[u8], offset: usize, budget: &mut usize) -> Result<Vec<(usize, Vec<TupleVar>)>> {
     let data = table.get(offset..).ok_or_else(|| bad("an item variation store offset points past the end of its table"))?;
     let store = ReadStore::read(FontData::new(data)).map_err(|e| bad(format!("an item variation store cannot be read: {e}")))?;
     let list = store.variation_region_list().map_err(|e| bad(format!("the variation region list cannot be read: {e}")))?;
@@ -850,12 +893,10 @@ fn rebase_store(table: &[u8], offset: usize, limits: &Limits, budget: &mut usize
         charge(budget, axes.len().saturating_add(1))?;
         regions.push(axes);
     }
-    let mut defaults = Vec::new();
     let mut subtables: Vec<(usize, Vec<TupleVar>)> = Vec::new();
     for i in 0..store.item_variation_data_count() {
         let sub = match store.item_variation_data().get(usize::from(i)) {
             None => {
-                defaults.push(Vec::new());
                 subtables.push((0, Vec::new()));
                 continue;
             }
@@ -877,17 +918,15 @@ fn rebase_store(table: &[u8], offset: usize, limits: &Limits, budget: &mut usize
             let axes = regions.get(*r).cloned().ok_or_else(|| bad(format!("item variation data {i} names region {r}, which the store lacks")))?;
             vars.push(TupleVar { axes, deltas });
         }
-        let rebased = rebase_vars(vars, limits, budget)?;
-        defaults.push(rebased.default.unwrap_or_else(|| vec![0.0; count]));
-        subtables.push((count, rebased.kept));
+        subtables.push((count, vars));
     }
-    write_store(&subtables, limits).map(|(bytes, regions)| RebasedStore { bytes, defaults, regions })
+    Ok(subtables)
 }
 
 /// Serialises a store: the regions in first-use order, each subtable with the regions its
-/// variations use and deltas of one width (8, 16 or 32 bits) for every column.
-fn write_store(subtables: &[(usize, Vec<TupleVar>)], limits: &Limits) -> Result<(Vec<u8>, usize)> {
-    let new_axes = limits.new_count();
+/// variations use and deltas of one width (8, 16 or 32 bits) for every column. `new_index` gives
+/// each input axis's index among the `new_axes` axes written, `None` for an axis that goes.
+fn write_store(subtables: &[(usize, Vec<TupleVar>)], new_index: &[Option<usize>], new_axes: usize) -> Result<(Vec<u8>, usize)> {
     let mut region_index: HashMap<Vec<(usize, [i16; 3])>, u16> = HashMap::new();
     let mut regions: Vec<Vec<(usize, [i16; 3])>> = Vec::new();
     let mut datas: Vec<Vec<u8>> = Vec::with_capacity(subtables.len());
@@ -897,9 +936,7 @@ fn write_store(subtables: &[(usize, Vec<TupleVar>)], limits: &Limits) -> Result<
             let mut key: Vec<(usize, [i16; 3])> = var
                 .axes
                 .iter()
-                .filter_map(|(old, t)| {
-                    limits.new_index.get(*old).copied().flatten().map(|j| (j, [t.start, t.peak, t.end].map(|v| to_f2(v).to_bits())))
-                })
+                .filter_map(|(old, t)| new_index.get(*old).copied().flatten().map(|j| (j, [t.start, t.peak, t.end].map(|v| to_f2(v).to_bits()))))
                 .collect();
             key.sort_unstable();
             let idx = match region_index.get(&key) {
@@ -1103,7 +1140,7 @@ fn partial_cff2(out: &mut SfntFont, limits: &Limits, options: &InstanceOptions, 
         kept_subtables.push((0, rebased.kept));
     }
     table.resolve(&cff2::Resolved { add: &add, deltas: Some(&new_deltas), majors: &majors })?;
-    let store = if kept_subtables.is_empty() { None } else { Some(write_store(&kept_subtables, limits)?.0) };
+    let store = if kept_subtables.is_empty() { None } else { Some(write_store(&kept_subtables, &limits.new_index, limits.new_count())?.0) };
     cff2::finish(out, &table, store.as_deref(), options.downgrade_cff2, options.recalc_bounds)
 }
 
@@ -1315,13 +1352,16 @@ fn valid_segment_map(map: &[(f64, f64)]) -> bool {
     has(-1.0) && has(0.0) && has(1.0) && map.windows(2).all(|w| matches!(w, [(_, a), (_, b)] if a <= b))
 }
 
-/// `avar` (version 1): pinned axes' maps go; a limited axis's map keeps the points inside the
-/// range, renormalised on both sides, with −1, 0 and 1 mapping to themselves.
-fn partial_avar(out: &mut SfntFont, limits: &Limits) -> Result<()> {
-    let Some(maps) = &limits.avar else { return Ok(()) };
-    let mut kept: Vec<SegmentMap> = Vec::new();
+/// fontTools' rebasing of the `avar` segment maps, one entry per input axis: a limited axis keeps
+/// the points inside its range, renormalised on both sides, with −1, 0 and 1 mapping to
+/// themselves; an axis left alone keeps its map. A pinned axis's map goes (`None`), or, for
+/// `avar` version 2 (`identity_pins`), becomes the identity map.
+fn rebased_segment_maps(limits: &Limits, identity_pins: bool) -> Result<Vec<Option<SegmentMap>>> {
+    let Some(maps) = &limits.avar else { return Ok(Vec::new()) };
+    let mut out: Vec<Option<SegmentMap>> = Vec::with_capacity(maps.len());
     for (i, map) in maps.iter().enumerate() {
         if limits.is_pinned(i) {
+            out.push(identity_pins.then(|| vec![(-1.0, -1.0), (0.0, 0.0), (1.0, 1.0)]));
             continue;
         }
         let tag = limits.axes.get(i).map(|a| tag_str(a.tag)).unwrap_or_default();
@@ -1329,7 +1369,7 @@ fn partial_avar(out: &mut SfntFont, limits: &Limits) -> Result<()> {
             return Err(TablesError::Unsupported(format!("rebasing the avar map of the `{}` axis, which is not a valid map", tag.trim_end())));
         }
         let Some(range) = limits.plain.get(i).copied().flatten().filter(|_| !map.is_empty()) else {
-            kept.push(map.clone());
+            out.push(Some(map.clone()));
             continue;
         };
         let mapped = AxisRange {
@@ -1356,30 +1396,61 @@ fn partial_avar(out: &mut SfntFont, limits: &Limits) -> Result<()> {
             set(k, k);
         }
         new_map.sort_by(|a, b| a.0.total_cmp(&b.0));
-        kept.push(new_map);
+        out.push(Some(new_map));
     }
+    Ok(out)
+}
+
+/// `avar` (version 1): pinned axes' maps go; limited axes' maps are rebased.
+fn partial_avar(out: &mut SfntFont, limits: &Limits) -> Result<()> {
+    if limits.avar.is_none() {
+        return Ok(());
+    }
+    let kept: Vec<SegmentMap> = rebased_segment_maps(limits, false)?.into_iter().flatten().collect();
+    out.insert(*b"avar", write_avar(&kept, None)?);
+    Ok(())
+}
+
+/// An `avar` table: version 1 with the segment maps alone, version 2 when `v2` gives the bytes
+/// of its delta-set index map (empty for none) and item variation store.
+fn write_avar(maps: &[SegmentMap], v2: Option<(&[u8], &[u8])>) -> Result<Vec<u8>> {
     let mut avar = Vec::new();
-    for v in [1u16, 0, 0, u16::try_from(kept.len()).map_err(|_| bad("too many axes"))?] {
+    let major = if v2.is_some() { 2u16 } else { 1 };
+    for v in [major, 0, 0, u16::try_from(maps.len()).map_err(|_| bad("too many axes"))?] {
         avar.extend_from_slice(&v.to_be_bytes());
     }
-    for map in &kept {
+    for map in maps {
         avar.extend_from_slice(&u16::try_from(map.len()).map_err(|_| bad("an avar map is too long"))?.to_be_bytes());
         for (from, to) in map {
             avar.extend_from_slice(&to_f2(*from).to_bits().to_be_bytes());
             avar.extend_from_slice(&to_f2(*to).to_bits().to_be_bytes());
         }
     }
-    out.insert(*b"avar", avar);
-    Ok(())
+    if let Some((index_map, store)) = v2 {
+        let start = avar.len() + 8;
+        let offset = |at: usize| u32::try_from(at).map_err(|_| TablesError::TooLarge { what: "the avar table", limit: MAX_SFNT });
+        let map_at = if index_map.is_empty() { 0 } else { offset(start)? };
+        let store_at = if store.is_empty() { 0 } else { offset(start + index_map.len())? };
+        avar.extend_from_slice(&map_at.to_be_bytes());
+        avar.extend_from_slice(&store_at.to_be_bytes());
+        avar.extend_from_slice(index_map);
+        avar.extend_from_slice(store);
+        if avar.len() > MAX_SFNT {
+            return Err(TablesError::TooLarge { what: "the avar table", limit: MAX_SFNT });
+        }
+    }
+    Ok(avar)
 }
 
 fn fixed(v: f64) -> [u8; 4] {
     (ot_round(v * 65536.0).clamp(f64::from(i32::MIN), f64::from(i32::MAX)) as i32).to_be_bytes()
 }
 
-/// `fvar` without the pinned axes, with the limited axes' new ranges, keeping the named
-/// instances that sit at the pinned values and inside the new ranges.
-fn partial_fvar(out: &mut SfntFont, limits: &Limits) -> Result<()> {
+/// `fvar` without the `removed` axes, with the limited axes' new ranges, keeping the named
+/// instances that sit at the pinned values and inside the new ranges. A pinned axis that stays
+/// (`avar` version 2) is hidden, its range the pinned value.
+fn partial_fvar(out: &mut SfntFont, limits: &Limits, removed: &[bool]) -> Result<()> {
+    let removed = |i: usize| removed.get(i).copied().unwrap_or(false);
     let data = out.get(*b"fvar").ok_or_else(|| TablesError::MissingTable("fvar".into()))?;
     let field = |at: usize| st::u16_at(data, at).map(usize::from).ok_or_else(|| bad("the fvar table is truncated"));
     let (axes_at, axis_count, axis_size, instance_count, instance_size) = (field(4)?, field(8)?, field(10)?, field(12)?, field(14)?);
@@ -1389,10 +1460,10 @@ fn partial_fvar(out: &mut SfntFont, limits: &Limits) -> Result<()> {
     let fixed_at = |at: usize| -> Option<f64> {
         data.get(at..at + 4).and_then(|b| <[u8; 4]>::try_from(b).ok()).map(|b| f64::from(i32::from_be_bytes(b)) / 65536.0)
     };
-    let new_count = limits.new_count();
+    let new_count = (0..axis_count).filter(|i| !removed(*i)).count();
     let mut axes = Vec::with_capacity(20 * new_count);
     for i in 0..axis_count {
-        if limits.is_pinned(i) {
+        if removed(i) {
             continue;
         }
         let at = axes_at + i * axis_size;
@@ -1403,7 +1474,9 @@ fn partial_fvar(out: &mut SfntFont, limits: &Limits) -> Result<()> {
                 for v in [u.min, u.default, u.max] {
                     axes.extend_from_slice(&fixed(v));
                 }
-                axes.extend_from_slice(record.get(16..20).unwrap_or_default());
+                let flags = st::u16_at(record, 16).unwrap_or(0) | u16::from(u.pinned());
+                axes.extend_from_slice(&flags.to_be_bytes());
+                axes.extend_from_slice(record.get(18..20).unwrap_or_default());
             }
             None => axes.extend_from_slice(record),
         }
@@ -1425,7 +1498,7 @@ fn partial_fvar(out: &mut SfntFont, limits: &Limits) -> Result<()> {
             None => true,
         });
         if fits {
-            let rest = coords.iter().enumerate().filter(|(i, _)| !limits.is_pinned(*i)).map(|(_, c)| *c).collect();
+            let rest = coords.iter().enumerate().filter(|(i, _)| !removed(*i)).map(|(_, c)| *c).collect();
             kept.push((name, flags, rest, ps));
         }
     }
@@ -1451,6 +1524,9 @@ fn partial_fvar(out: &mut SfntFont, limits: &Limits) -> Result<()> {
     out.insert(*b"fvar", table);
     Ok(())
 }
+
+#[path = "avar2.rs"]
+mod avar2;
 
 #[cfg(test)]
 #[path = "partial_tests.rs"]
