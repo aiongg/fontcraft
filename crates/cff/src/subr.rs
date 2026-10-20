@@ -49,11 +49,11 @@ mod table;
 use std::fmt;
 
 pub use prune::prune_unused;
-pub use table::{TableRewrite, rewrite_table};
 pub use table::{
     SubrMode, TableSubset, WidthsReport, charstrings_of_table, desubroutinize_table, desubroutinize_table_within, optimize_widths_table,
     subroutinize_table, subset_table, subset_table_noted,
 };
+pub use table::{TableRewrite, rewrite_table};
 
 /// Deepest subroutine nesting the charstring formats allow: a glyph's own charstring is depth 0
 /// and every call adds one.

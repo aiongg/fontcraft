@@ -69,11 +69,7 @@ fn font() -> SfntFont {
         Glyph {
             name: "A".into(),
             advance: 600.0,
-            path: vec![
-                PathOp::MoveTo((10.0, 0.0)),
-                PathOp::LineTo((590.0, 0.0)),
-                PathOp::CurveTo((500.0, 300.0), (400.0, 600.0), (300.0, 700.0)),
-            ],
+            path: vec![PathOp::MoveTo((10.0, 0.0)), PathOp::LineTo((590.0, 0.0)), PathOp::CurveTo((500.0, 300.0), (400.0, 600.0), (300.0, 700.0))],
             ..Glyph::default()
         },
         Glyph { name: "acute".into(), advance: 300.0, path: square(50.0, 600.0, 120.0), ..Glyph::default() },
@@ -115,8 +111,10 @@ fn recompile_cff_draws_seac_out_keeps_outlines_and_subroutinises() {
     assert_eq!(r.seac_glyphs, 1);
     assert_eq!(r.removed_keys, vec!["ForceBold"]);
     assert!(after.len() < before.len(), "repeated charstrings go into subroutines: {} → {}", before.len(), after.len());
-    assert!(fontcraft_cff::subr::charstrings_of_table(&after, false).unwrap().local_subrs.iter().any(|l| !l.is_empty())
-        || !fontcraft_cff::subr::charstrings_of_table(&after, false).unwrap().global_subrs.is_empty());
+    assert!(
+        fontcraft_cff::subr::charstrings_of_table(&after, false).unwrap().local_subrs.iter().any(|l| !l.is_empty())
+            || !fontcraft_cff::subr::charstrings_of_table(&after, false).unwrap().global_subrs.is_empty()
+    );
 
     let (old, new) = (drawn(&before), drawn(&after));
     assert_eq!(old.len(), new.len());

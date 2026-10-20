@@ -441,7 +441,12 @@ fn audit_fix_on_a_file_recompiles_the_cff_table_without_unique_ids() {
             .map_while(|g| outlines.get(skrifa::GlyphId::new(g)))
             .map(|glyph| {
                 let mut pen = Pen::default();
-                glyph.draw(skrifa::outline::DrawSettings::unhinted(skrifa::instance::Size::unscaled(), skrifa::instance::LocationRef::default()), &mut pen).unwrap();
+                glyph
+                    .draw(
+                        skrifa::outline::DrawSettings::unhinted(skrifa::instance::Size::unscaled(), skrifa::instance::LocationRef::default()),
+                        &mut pen,
+                    )
+                    .unwrap();
                 pen.0
             })
             .collect()

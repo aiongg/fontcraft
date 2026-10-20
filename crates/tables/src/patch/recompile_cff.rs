@@ -74,8 +74,8 @@ const FLEX1: u16 = 1237;
 
 const STEMS: [u16; 4] = [HSTEM, VSTEM, HSTEMHM, VSTEMHM];
 const PATHS: [u16; 17] = [
-    RMOVETO, HMOVETO, VMOVETO, RLINETO, HLINETO, VLINETO, RRCURVETO, RCURVELINE, RLINECURVE, VVCURVETO, HHCURVETO, VHCURVETO, HVCURVETO, HFLEX,
-    FLEX, HFLEX1, FLEX1,
+    RMOVETO, HMOVETO, VMOVETO, RLINETO, HLINETO, VLINETO, RRCURVETO, RCURVELINE, RLINECURVE, VVCURVETO, HHCURVETO, VHCURVETO, HVCURVETO, HFLEX, FLEX,
+    HFLEX1, FLEX1,
 ];
 
 /// One fixed-point unit (16.16).
@@ -177,7 +177,9 @@ pub fn recompile_cff(font: &SfntFont) -> Result<CffRecompile> {
 
     let back = subr::charstrings_of_table(&table, false).and_then(|s| subr::desubroutinize_within(&s, MAX_CHARSTRING_MEMORY)).map_err(from_subr)?;
     if let Some(gid) = (0..expected.len().max(back.charstrings.len())).find(|&g| back.charstrings.get(g) != expected.get(g)) {
-        return Err(TablesError::invalid(format!("glyph {gid} would draw differently after the CFF table is written again; the font was left as it was")));
+        return Err(TablesError::invalid(format!(
+            "glyph {gid} would draw differently after the CFF table is written again; the font was left as it was"
+        )));
     }
 
     let bytes_before = data.len();
