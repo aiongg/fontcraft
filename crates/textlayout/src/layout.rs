@@ -91,9 +91,10 @@ pub struct Options<'a> {
     /// ([`crate::linebreak`]), and a word wider than the line breaks between two clusters. Off,
     /// they break after the last space of the line, else before the glyph that overflows.
     pub break_opportunities: bool,
-    /// Text Preview, horizontal text: the items are measured through the full preview font
-    /// ([`crate::measure`]) before lines break, so kerning and substitutions decide where a line
-    /// ends. Measured items do not kern from the document's kerning.
+    /// Text Preview: the items are measured through the full preview font ([`crate::measure`])
+    /// before lines break, so kerning and substitutions decide where a line ends. Measured items
+    /// do not kern from the document's kerning in horizontal text; in vertical text they do, since
+    /// the compiled font holds no vertical kerning of the document.
     pub measure: Option<Measure<'a>>,
 }
 
@@ -394,17 +395,18 @@ pub fn layout(font: &Font, master: &str, text: &Text, options: &Options<'_>) -> 
         (options.break_opportunities || options.measure.is_some()).then(|| linebreak::item_opportunities(text.items()));
     let mut measured: Vec<bool> = Vec::new();
     let mut joined: Vec<bool> = Vec::new();
-    if let (Some(m), Some(breaks)) = (options.measure.as_ref(), opportunities.as_deref())
-        && direction != Direction::Vertical
-    {
-        let shaped = measure::measure(font, master, text.items(), levels.as_deref(), u8::from(direction == Direction::Rtl), breaks, m);
+    if let (Some(m), Some(breaks)) = (options.measure.as_ref(), opportunities.as_deref()) {
+        let shaped = measure::measure(font, master, text.items(), levels.as_deref(), direction, breaks, m);
         if shaping_error.is_none() {
             shaping_error = shaped.error;
         }
         for (item, advance) in items.iter_mut().zip(&shaped.advances) {
             if let Some(a) = advance {
                 item.advance = finite_or_zero(f64::from(*a));
-                item.width = item.advance;
+                // In vertical text the width only centres the glyph in its column.
+                if direction != Direction::Vertical {
+                    item.width = item.advance;
+                }
             }
         }
         measured = shaped.advances.iter().map(Option::is_some).collect();
@@ -441,8 +443,9 @@ pub fn layout(font: &Font, master: &str, text: &Text, options: &Options<'_>) -> 
             return shift;
         }
         let Some(p) = (if options.shaping.is_some() { before.get(i).copied().flatten() } else { i.checked_sub(1) }) else { return 0.0 };
-        // The shaped widths hold the compiled kerning already.
-        if measured.get(i).copied().unwrap_or(false) && measured.get(p).copied().unwrap_or(false) {
+        // The shaped widths hold the compiled kerning already. The model's vertical kerning is
+        // not compiled, so vertical text keeps it.
+        if direction != Direction::Vertical && measured.get(i).copied().unwrap_or(false) && measured.get(p).copied().unwrap_or(false) {
             return 0.0;
         }
         let table = match levels {

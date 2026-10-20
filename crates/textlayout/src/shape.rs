@@ -219,6 +219,7 @@ impl Run {
                 language: request.language,
                 features: request.settings,
                 advances: None,
+                vertical: None,
             };
             let mut glyphs = match fontcraft_shaping::shape(&shaper.font, &shape_request) {
                 Ok(g) => g,
