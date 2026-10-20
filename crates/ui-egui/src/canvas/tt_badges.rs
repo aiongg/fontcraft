@@ -4,7 +4,8 @@
 //!
 //! Rows: `hinting.tt.instructions.badgeColours`, `hinting.tt.tool.otherDirectionDimmed`,
 //! `hinting.tt.tool.masterOutline`, `hint.tt.toggleDirection`, `hint.tt.increasePixelSize`,
-//! `hint.tt.decreasePixelSize`, `hint.tt.showPointIndexes`, `hint.tt.selectInstructions`.
+//! `hint.tt.decreasePixelSize`, `hint.tt.showPointIndexes`, `hint.tt.selectInstructions`,
+//! `hint.tt.moveInstruction`, `hint.tt.deleteInstructions`, `hinting.tt.instructions.addFromSelection`.
 //!
 //! The view state is [`InstructorState`], at `UiState::tt_instructor`; the tool reads its
 //! direction through `ToolSettings::tt_direction`. What later packages build on:
@@ -20,7 +21,9 @@
 //! Badges sit beside the point an instruction moves (Snap, Delta, Interpolate, with a leader line
 //! to it; Interpolate also has lines to its two references) or halfway along the arrow from origin
 //! to target (Stem, Shift). Badges on one spot stack away from the point. Clicking a badge of the
-//! current direction runs `hint.tt.selectInstructions`; Shift+click toggles it.
+//! current direction runs `hint.tt.selectInstructions`; Shift+click toggles it. Dragging one and
+//! dropping it on a node or handle runs `hint.tt.moveInstruction` on its target; Delete or
+//! Backspace runs `hint.tt.deleteInstructions` on the selected instructions ([`key`]).
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
@@ -410,7 +413,80 @@ pub fn draw(ui: &egui::Ui, c: &Painting, scene: &Scene, pending: &mut Pending) {
             let shift = ui.input(|i| i.modifiers.shift);
             pending.push(("hint.tt.selectInstructions", json!({"instructions": [b.index], "mode": if shift { "toggle" } else { "replace" }})));
         }
+        let pointer = ui.input(|i| i.pointer.latest_pos());
+        if response.dragged()
+            && let Some(at) = pointer
+        {
+            // The badge follows the pointer, tied to the point it would act on after the drop.
+            let to = node_at(scene.layer, c.view, at, c.tokens.hit_tolerance).map_or(at, |(_, p)| p);
+            let colour = b.kind.colour(&c.tokens.tt);
+            c.painter.line_segment([b.target, to], Stroke::new(c.tokens.tt.line_width, colour));
+            c.painter.circle(at, c.tokens.tt.badge_radius, colour, Stroke::new(1.0, c.tokens.selection));
+        }
+        if response.drag_stopped()
+            && let Some(at) = pointer
+            && let Some((node, _)) = node_at(scene.layer, c.view, at, c.tokens.hit_tolerance)
+        {
+            pending.push(("hint.tt.moveInstruction", json!({"glyph": glyph, "layer": scene.layer.id, "instruction": b.index, "point": node})));
+        }
     }
+}
+
+/// The node or handle of `layer` nearest to the screen point `at`, within `tolerance` screen
+/// points: as `[path, node]` with `path` counting paths only, and where it is on screen.
+fn node_at(layer: &Layer, view: View, at: Pos2, tolerance: f32) -> Option<(Value, Pos2)> {
+    let mut best: Option<(f32, Value, Pos2)> = None;
+    let paths = layer.shapes.iter().filter_map(|s| if let ModelShape::Path(p) = s { Some(p) } else { None });
+    for (p, path) in paths.enumerate() {
+        for (n, node) in path.nodes.iter().enumerate() {
+            let s = view.to_screen(Point::new(node.x, node.y));
+            let screen = Pos2::new(s.x as f32, s.y as f32);
+            let d = screen.distance(at);
+            if d.is_finite() && d <= tolerance && best.as_ref().is_none_or(|(b, _, _)| d < *b) {
+                best = Some((d, json!([p, n]), screen));
+            }
+        }
+    }
+    best.map(|(_, node, screen)| (node, screen))
+}
+
+/// Delete or Backspace with no modifier, while the Instructor is active and instructions of the
+/// edited layer are selected: `hint.tt.deleteInstructions` on them, then no instruction is
+/// selected, since the positions after them change. `None` for any other key, so it goes on to
+/// the tool.
+pub fn key(app: &mut FontcraftApp, ev: &fontcraft_tools::KeyEvent) -> Option<Vec<String>> {
+    use fontcraft_tools::Key;
+    let m = ev.mods;
+    if !ev.pressed || !matches!(ev.key, Key::Delete | Key::Backspace) || m.shift || m.alt || m.cmd || m.ctrl {
+        return None;
+    }
+    if app.tools.toolbox.base_id() != INSTRUCTOR || app.tools.toolbox.busy() {
+        return None;
+    }
+    let (glyph, layer, instructions) = {
+        let font = app.session.font().ok()?;
+        let tab = app.state.tab()?;
+        if tab.text_mode || tab.edit_background {
+            return None;
+        }
+        let glyph = tab.edited_glyph()?.to_string();
+        let layer = super::view::active_layer(font, tab)?;
+        let count = tt_instructions(layer).map(|l| l.len()).unwrap_or(0);
+        let selected: Vec<usize> = app.state.tt_instructor.selected_in(&glyph, &layer.id).iter().copied().filter(|&i| i < count).collect();
+        (glyph, layer.id.clone(), selected)
+    };
+    if instructions.is_empty() {
+        return None;
+    }
+    let params = json!({"glyph": glyph, "layer": layer, "instructions": instructions});
+    let errors = match app.run_from_shell("hint.tt.deleteInstructions", &params) {
+        Ok(_) => {
+            app.state.tt_instructor.selected.instructions.clear();
+            Vec::new()
+        }
+        Err(e) => vec![e],
+    };
+    Some(errors)
 }
 
 /// One badge: its lines, the badge, and the ring when it is selected.
@@ -729,6 +805,56 @@ mod tests {
         }
         assert_eq!(app.tools.toolbox.active_id(), INSTRUCTOR);
         assert_eq!(layer(&app), layer(&headless), "unbound letters change nothing");
+    }
+
+    #[test]
+    fn a_badge_dropped_on_a_node_equals_move_instruction_and_delete_equals_delete_instructions() {
+        let mut app = squares();
+        add(&mut app, "hint.tt.snapPoint", json!([[0, 0], [0, 1]]), "vertical");
+        let mut headless = squares();
+        add(&mut headless, "hint.tt.snapPoint", json!([[0, 0], [0, 1]]), "vertical");
+        edit(&mut app);
+        let w = Window::new();
+        w.frame(&mut app, Vec::new());
+        let list = tt_instructions(&layer(&app)).unwrap();
+        let view = tools_glue::current_view(&app).unwrap();
+        let from = badges(&layer(&app), &list, view, &app.tokens.tt, TtDirection::Vertical)[0].at;
+        let edited = layer(&app);
+        let ModelShape::Path(second) = &edited.shapes[1] else { panic!("path 1 is a path") };
+        let node = second.nodes[0].clone();
+        let to = view.to_screen(Point::new(node.x, node.y));
+        let to = Pos2::new(to.x as f32, to.y as f32);
+        let points = app.state.tab().unwrap().selection.clone();
+        let button = |pos, pressed| Event::PointerButton { pos, button: PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
+        w.frame(&mut app, vec![Event::PointerMoved(from)]);
+        w.frame(&mut app, vec![button(from, true)]);
+        w.frame(&mut app, vec![Event::PointerMoved(from.lerp(to, 0.5))]);
+        w.frame(&mut app, vec![Event::PointerMoved(to)]);
+        w.frame(&mut app, vec![button(to, false)]);
+        w.frame(&mut app, Vec::new());
+        headless.run("hint.tt.moveInstruction", &json!({"glyph": "A", "instruction": 0, "point": [1, 0]})).unwrap();
+        assert_eq!(layer(&app), layer(&headless), "the drop moves Snap 0 to node 0 of path 1");
+        assert_eq!(app.state.tab().unwrap().selection, points, "the drag selects no nodes");
+
+        // A drop on empty canvas changes nothing.
+        let from = badges(&layer(&app), &tt_instructions(&layer(&app)).unwrap(), view, &app.tokens.tt, TtDirection::Vertical)[1].at;
+        let empty = from + Vec2::new(-150.0, 0.0);
+        w.frame(&mut app, vec![Event::PointerMoved(from)]);
+        w.frame(&mut app, vec![button(from, true)]);
+        w.frame(&mut app, vec![Event::PointerMoved(empty)]);
+        w.frame(&mut app, vec![button(empty, false)]);
+        w.frame(&mut app, Vec::new());
+        assert_eq!(layer(&app), layer(&headless));
+
+        // Delete with nothing selected leaves the outline and the instructions; with an
+        // instruction selected it deletes that instruction and clears the selection.
+        key(&mut app, "Delete");
+        assert_eq!(layer(&app), layer(&headless));
+        app.run("hint.tt.selectInstructions", &json!({"instructions": [1]})).unwrap();
+        key(&mut app, "Backspace");
+        headless.run("hint.tt.deleteInstructions", &json!({"glyph": "A", "instructions": [1]})).unwrap();
+        assert_eq!(layer(&app), layer(&headless));
+        assert!(app.state.tt_instructor.selected_in("A", &layer(&app).id).is_empty());
     }
 
     #[test]

@@ -430,6 +430,22 @@ guesses = [
 observe = ["T1: select a hint linked to two nodes, type a new origin in the Info box, then move one of the nodes; note whether the hint follows the node (link kept) or stays at the typed value (link broken)."]
 
 [[command]]
+id = "hint.ps.moveHints"
+label = "Move Hints"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, layer?: id, hints: [hintIndex], dx?: number, dy?: number}"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Moves several hints across their edges at once: horizontal hints by dy, vertical ones by dx. This is what an arrow key does while hints are selected in Edit View."
+ref = "PostScript Hinting › Stem Hints"
+status = "inferred"
+notes = "X.ui3, crates/engine/src/cmd/hint_ps.rs: one undo step for all the listed hints; each moved hint keeps its size and its ends become numbers; a hint whose distance is missing or 0 stays, and a call that moves none is refused. The Select tool's arrow keys run it (crates/tools/src/hint_drag.rs). The handbook does not mention moving hints with the keyboard; inferred."
+guesses = ["Moving several hints with one arrow key press is one undo step, as moving several nodes is; pressing an arrow key with two hints selected in the reference app and then Undo once would settle it."]
+observe = ["T1: in n, select two horizontal hints, press Up, then choose Edit › Undo once; note whether both hints go back or only one."]
+
+[[command]]
 id = "hint.ps.attachHintToNode"
 label = "Attach Hint to Node"
 menu = []
@@ -593,9 +609,9 @@ milestone = "M10"
 summary = "Clicking a hint's number badge selects the hint; Shift+click adds to or removes from the hint selection. The selected hint's values appear in the Info box."
 ref = "PostScript Hinting › Stem Hints"
 status = "handbook"
-notes = "The hint selection is part of the Edit View selection (`hints`, by list position; crates/tools/src/selection.rs). A click on a badge or marker selects that hint alone, Shift+click toggles it, a click elsewhere replaces it; hiding hints deselects them. Delete removes the selected hints (hint.ps.deleteHints). The arrow keys move the selected hints across the arrow (Up and Down horizontal hints, Left and Right vertical ones) by the font's keyboard increments (plain, Shift, Cmd), one hint.ps.setHintValues each, and the hints stay selected (crates/tools/src/hint_drag.rs). Documented in the handbook, not yet observed; the handbook does not mention arrow keys for hints."
+notes = "The hint selection is part of the Edit View selection (`hints`, by list position; crates/tools/src/selection.rs). A click on a badge or marker selects that hint alone, Shift+click toggles it, a click elsewhere replaces it; hiding hints deselects them. Delete removes the selected hints (hint.ps.deleteHints). The arrow keys move the selected hints across the arrow (Up and Down horizontal hints, Left and Right vertical ones) by the font's keyboard increments (plain, Shift, Cmd), all of them in one hint.ps.moveHints, and the hints stay selected (crates/tools/src/hint_drag.rs). Documented in the handbook, not yet observed; the handbook does not mention arrow keys for hints."
 guesses = [
-  "The arrow keys move selected hints as they move selected nodes, the whole hint at once, so an end linked to a node becomes a number; an arrow along a hint's edges leaves it alone; with several hints selected each moves in its own undo step. The handbook says nothing about arrow keys and hints; pressing an arrow key with a linked hint selected in the reference app would settle it.",
+  "The arrow keys move selected hints as they move selected nodes, the whole hint at once, so an end linked to a node becomes a number; an arrow along a hint's edges leaves it alone; with several hints selected they move in one undo step. The handbook says nothing about arrow keys and hints; pressing an arrow key with a linked hint selected in the reference app would settle it.",
   "Tab after the last hint wraps to the first and Shift+Tab before the first wraps to the last; with several hints selected Tab moves on from the one latest in list order; trying it in the reference app would settle it.",
   "A click on a hint's marker selects the hint as a click on its badge does; the reference app would settle it.",
 ]

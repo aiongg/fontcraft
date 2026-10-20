@@ -17,7 +17,8 @@
 //!
 //! Every other character key is taken and does nothing, so letters never switch tools while the
 //! Instructor is active (the toolbar does). The arrow keys, Return, Delete and Backspace are taken
-//! too: the outline is there to pick points, not to edit. Tab, Escape (outside a gesture), Space
+//! too: the outline is there to pick points, not to edit (with instructions selected, the shell
+//! takes Delete and Backspace first and deletes them). Tab, Escape (outside a gesture), Space
 //! and keys with Cmd, Ctrl or Alt go on to the shell, so Tab steps through the nodes and Autohint
 //! (Cmd+Ctrl+Alt+Shift+I) runs as a menu shortcut.
 //!
@@ -29,7 +30,8 @@
 //! Pointer: a click on a node or handle selects it (Shift toggles it); a drag from anywhere else
 //! draws a rectangle that selects the nodes and handles inside it (Shift toggles them into the
 //! selection); a click on nothing clears the selection. Instruction badges belong to the canvas
-//! (`canvas::tt_badges` in the egui shell), which takes clicks on them before the tool sees them.
+//! (`canvas::tt_badges` in the egui shell), which takes clicks and drags on them before the tool
+//! sees them.
 
 use fontcraft_geom::Point;
 use fontcraft_model::{LayerSide, Shape};
