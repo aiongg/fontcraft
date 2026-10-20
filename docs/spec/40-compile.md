@@ -315,7 +315,7 @@ reference compilers.
 | glyf | S V | read-fonts | write-fonts | no instruction assembler; no cubic outlines |
 | loca | S V | read-fonts | write-fonts | none |
 | CFF  | O | read-fonts | none-yet | whole writer: DICTs, INDEXes, charsets, charstrings, specialiser, subroutiniser, CID structures |
-| CFF2 | C | read-fonts | own (M9.13, M12.25c) | hints and FDSelect not written |
+| CFF2 | C | read-fonts | own (M9.13, M12.25c, M12.25d) | FDSelect not written; hints only where every master's hints share one structure |
 | vhea, vmtx | s o v c | read-fonts | write-fonts | none |
 | VORG | o c | read-fonts | none-yet | generated code exists in the repository but is not compiled into the crate |
 | GSUB | s o v c | read-fonts | write-fonts | none (contextual lookups assembled by fea-rs) |
