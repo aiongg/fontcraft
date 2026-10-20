@@ -287,6 +287,152 @@ fn detect_composites_makes_the_suffixed_copy_the_composite() {
     assert_eq!(parts(&s, "colon.tf"), vec![part("colon", 0.0, 0.0)]);
 }
 
+/// Gives glyph `name` the code point `cp`.
+fn code(s: &mut Session, name: &str, cp: u32) {
+    s.edit("fixture", |f| {
+        f.glyph_mut(name)?.unicodes = vec![cp];
+        Ok(())
+    })
+    .unwrap();
+}
+
+/// A large closed outline, for enclosing shapes.
+const RING: [(f64, f64); 8] =
+    [(100.0, -50.0), (500.0, -50.0), (650.0, 100.0), (650.0, 600.0), (500.0, 750.0), (100.0, 750.0), (-50.0, 600.0), (-50.0, 100.0)];
+
+/// Of bases with the same outline, the one whose code point is in the glyph's canonical
+/// decomposition wins over the one drawn where the glyph has it: `Ddotbelow` (D + U+0323) takes
+/// `dotlow` (U+0323), not `period`.
+#[test]
+fn detect_composites_takes_the_base_the_glyph_database_names() {
+    let stem = || Shape::Path(Path::rect(0.0, 0.0, 200.0, 700.0));
+    let mut s = only(vec![
+        ("D", vec![stem()]),
+        ("period", vec![poly(&DOT, 250.0, 0.0)]),
+        ("dotlow", vec![poly(&DOT, 0.0, 700.0)]),
+        ("Ddotbelow", vec![stem(), poly(&DOT, 250.0, 0.0)]),
+    ]);
+    code(&mut s, "dotlow", 0x0323);
+    run(&mut s, "font.detectComposites", json!({"glyphs": ["Ddotbelow"]}));
+    assert_eq!(parts(&s, "Ddotbelow"), vec![part("D", 0.0, 0.0), part("dotlow", 250.0, -700.0)]);
+}
+
+/// The base whose name spells more of the glyph's name wins, with `sub` read as `below`:
+/// `dcircumflexbelow` takes `circumflexsubcomb`, though `circumflexcomb` is drawn in place.
+#[test]
+fn detect_composites_takes_the_base_named_longest_in_the_glyph_name() {
+    let stem = || Shape::Path(Path::rect(0.0, 0.0, 200.0, 700.0));
+    let mut s = only(vec![
+        ("d", vec![stem()]),
+        ("circumflexcomb", vec![poly(&BREVE, 300.0, -700.0)]),
+        ("circumflexsubcomb", vec![poly(&BREVE, 0.0, 0.0)]),
+        ("dcircumflexbelow", vec![stem(), poly(&BREVE, 300.0, -700.0)]),
+    ]);
+    run(&mut s, "font.detectComposites", json!({"glyphs": ["dcircumflexbelow"]}));
+    assert_eq!(parts(&s, "dcircumflexbelow"), vec![part("d", 0.0, 0.0), part("circumflexsubcomb", 300.0, -700.0)]);
+}
+
+/// A base of another case than the glyph loses to one of its case: lowercase `amacron` takes
+/// `macron.lc`, not the combining `macroncomb.uc` drawn in place.
+#[test]
+fn detect_composites_takes_the_base_of_the_glyph_case() {
+    let stem = || Shape::Path(Path::rect(0.0, 0.0, 200.0, 500.0));
+    let mut s = only(vec![
+        ("a", vec![stem()]),
+        ("macroncomb.uc", vec![poly(&BREVE, 100.0, 0.0)]),
+        ("macron.lc", vec![poly(&BREVE, 0.0, 0.0)]),
+        ("amacron", vec![stem(), poly(&BREVE, 100.0, 0.0)]),
+    ]);
+    run(&mut s, "font.detectComposites", json!({"glyphs": ["amacron"]}));
+    assert_eq!(parts(&s, "amacron"), vec![part("a", 0.0, 0.0), part("macron.lc", 100.0, 0.0)]);
+}
+
+/// A base with suffixes the glyph lacks loses to one without: `one.circled` takes `one`, not
+/// `one.tf` drawn in place.
+#[test]
+fn detect_composites_takes_the_base_without_suffixes_the_glyph_lacks() {
+    let mut s = only(vec![
+        ("ring", vec![poly(&RING, 0.0, 0.0)]),
+        ("one", vec![poly(&TWO, 0.0, 0.0)]),
+        ("one.tf", vec![poly(&TWO, 200.0, 200.0)]),
+        ("one.circled", vec![poly(&RING, 0.0, 0.0), poly(&TWO, 200.0, 200.0)]),
+    ]);
+    run(&mut s, "font.detectComposites", json!({"glyphs": ["one.circled"]}));
+    assert_eq!(parts(&s, "one.circled"), vec![part("ring", 0.0, 0.0), part("one", 200.0, 200.0)]);
+}
+
+/// An enclosing mark does not count as a combining mark: `enclosingcirclecomb` is a copy of
+/// `largeCircle`, and `A.circled` takes `largeCircle`, which is drawn in place.
+#[test]
+fn detect_composites_builds_from_the_symbol_rather_than_the_enclosing_mark() {
+    let mut s = only(vec![
+        ("A", vec![poly(&A_OUTER, 0.0, 0.0), poly(&A_COUNTER, 0.0, 0.0)]),
+        ("largeCircle", vec![poly(&RING, 0.0, 0.0)]),
+        ("enclosingcirclecomb", vec![poly(&RING, -700.0, 0.0)]),
+        ("A.circled", vec![poly(&A_OUTER, 0.0, 0.0), poly(&A_COUNTER, 0.0, 0.0), poly(&RING, 0.0, 0.0)]),
+    ]);
+    run(&mut s, "font.detectComposites", json!({}));
+    assert_eq!(parts(&s, "enclosingcirclecomb"), vec![part("largeCircle", -700.0, 0.0)]);
+    assert_eq!(parts(&s, "A.circled"), vec![part("A", 0.0, 0.0), part("largeCircle", 0.0, 0.0)]);
+}
+
+/// A copy of a basic Latin letter loses even where the glyph database's recipe and the glyph's
+/// name point at it: `Alpha` is a copy of `A`, and `Alphatonos` is built from `A`.
+#[test]
+fn detect_composites_builds_from_the_latin_letter_a_look_alike_copies() {
+    let mut s = only(vec![
+        ("A", vec![poly(&A_OUTER, 0.0, 0.0), poly(&A_COUNTER, 0.0, 0.0)]),
+        ("Alpha", vec![poly(&A_OUTER, 0.0, 0.0), poly(&A_COUNTER, 0.0, 0.0)]),
+        ("tonos", vec![poly(&ACUTE, 0.0, 0.0)]),
+        ("Alphatonos", vec![poly(&A_OUTER, 0.0, 0.0), poly(&A_COUNTER, 0.0, 0.0), poly(&ACUTE, 0.0, 200.0)]),
+    ]);
+    code(&mut s, "Alpha", 0x0391);
+    run(&mut s, "font.detectComposites", json!({}));
+    assert_eq!(parts(&s, "Alpha"), vec![part("A", 0.0, 0.0)]);
+    assert_eq!(parts(&s, "Alphatonos"), vec![part("A", 0.0, 0.0), part("tonos", 0.0, 200.0)]);
+}
+
+/// A suffix that gives a base the glyph's case wins over the copy drawn in place: capital
+/// `uni1F09` (Alpha with dasia) takes `uni1FFE.tonos`, lowercase `uni1F01` (alpha with dasia)
+/// takes `dasia`.
+#[test]
+fn detect_composites_takes_the_mark_suffixed_for_the_glyph_case() {
+    let stem = || Shape::Path(Path::rect(0.0, 0.0, 200.0, 500.0));
+    let mut s = only(vec![
+        ("A", vec![poly(&A_OUTER, 0.0, 0.0), poly(&A_COUNTER, 0.0, 0.0)]),
+        ("alpha", vec![stem()]),
+        ("dasia", vec![poly(&BREVE, 0.0, 700.0)]),
+        ("uni1FFE.tonos", vec![poly(&BREVE, 0.0, 0.0)]),
+        ("uni1F09", vec![poly(&A_OUTER, 0.0, 0.0), poly(&A_COUNTER, 0.0, 0.0), poly(&BREVE, 0.0, 700.0)]),
+        ("uni1F01", vec![stem(), poly(&BREVE, 0.0, 0.0)]),
+    ]);
+    run(&mut s, "font.detectComposites", json!({"glyphs": ["uni1F09", "uni1F01"]}));
+    assert_eq!(parts(&s, "uni1F09"), vec![part("A", 0.0, 0.0), part("uni1FFE.tonos", 0.0, 700.0)]);
+    assert_eq!(parts(&s, "uni1F01"), vec![part("alpha", 0.0, 0.0), part("dasia", 0.0, -700.0)]);
+}
+
+/// Glyphs made of several glyphs that still serve as parts: a letter the glyph database does
+/// not decompose (`i`, an undotted stem and a dot) and a mark by the glyph database
+/// (`psilivaria`, made of `psili` and `varia`).
+#[test]
+fn detect_composites_keeps_undecomposed_letters_and_stacked_marks_as_parts() {
+    let stem = |x: f64| Shape::Path(Path::rect(x, 0.0, x + 80.0, 500.0));
+    let mut s = only(vec![
+        ("idotless", vec![stem(0.0)]),
+        ("dotaccentcomb", vec![poly(&DOT, 40.0, 700.0)]),
+        ("psili", vec![poly(&BREVE, 0.0, 0.0)]),
+        ("varia", vec![poly(&ACUTE, 0.0, 0.0)]),
+        ("i", vec![stem(0.0), poly(&DOT, 40.0, 700.0)]),
+        ("psilivaria", vec![poly(&BREVE, 0.0, 0.0), poly(&ACUTE, 200.0, 0.0)]),
+        ("tworoman", vec![stem(0.0), poly(&DOT, 40.0, 700.0), stem(300.0), poly(&DOT, 340.0, 700.0)]),
+        ("iotapsilivaria", vec![stem(0.0), poly(&BREVE, 40.0, 200.0), poly(&ACUTE, 240.0, 200.0)]),
+    ]);
+    run(&mut s, "font.detectComposites", json!({}));
+    assert_eq!(parts(&s, "i"), vec![part("idotless", 0.0, 0.0), part("dotaccentcomb", 0.0, 0.0)]);
+    assert_eq!(parts(&s, "tworoman"), vec![part("i", 0.0, 0.0), part("i", 300.0, 0.0)]);
+    assert_eq!(parts(&s, "iotapsilivaria"), vec![part("idotless", 0.0, 0.0), part("psilivaria", 40.0, 200.0)]);
+}
+
 fn read_tree(dir: &std::path::Path, root: &std::path::Path, out: &mut fontcraft_io_glyphs::Files) {
     for e in std::fs::read_dir(dir).unwrap().flatten() {
         let p = e.path();
