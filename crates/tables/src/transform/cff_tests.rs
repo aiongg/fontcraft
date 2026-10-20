@@ -350,6 +350,12 @@ fn cff_font_matrix_follows_the_factor() {
     for (got, want) in m.iter().zip([0.00025, 0.0, 0.0, 0.00025, 0.0, 0.0]) {
         assert!((got - want).abs() < 1e-12, "{m:?}");
     }
+    // fontTools writes each value as a real with eight significant digits, zeros too.
+    let third = transform(&input, &upem(3000)).unwrap();
+    let t = Table::read(third.get(*b"CFF ").unwrap(), false).unwrap();
+    let raw = t.top.iter().find(|e| e.op == 1207).map(|e| e.raw.clone()).unwrap();
+    let (a, zero): (&[u8], &[u8]) = (&[0x1E, 0x33, 0x33, 0x33, 0x33, 0xC1, 0x1F], &[0x1E, 0x0F]);
+    assert_eq!(raw, [a, zero, zero, a, zero, zero].concat());
 }
 
 #[test]
@@ -373,4 +379,13 @@ fn hostile_cff_tables_are_refused() {
     }
     assert!(matches!(scale_upem_within(&table, false, 2.0, 64), Err(TablesError::TooLarge { .. })), "the memory budget holds");
     assert!(scale_upem_within(&table, false, f64::NAN, 1 << 20).is_err());
+}
+
+#[test]
+fn a_move_that_draws_nothing_still_counts_in_the_bounds() {
+    // fontTools' bounds take in every point a move goes to: here the last one, (400, -400).
+    let glyph = "0 0 rmoveto 100 0 rlineto 0 100 rlineto 300 -500 rmoveto endchar";
+    let f = font(*b"CFF ", cff_table(&["endchar", glyph, "endchar", "endchar"], None), 1000, &[(500u16, 0i16); 4]);
+    let out = transform(&f, &upem(2000)).unwrap();
+    assert_eq!(metrics(&out).0, [0, -800, 800, 200]);
 }

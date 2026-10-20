@@ -723,14 +723,25 @@ pub(crate) fn restore_empty_pair_records(gpos: &mut write_fonts::tables::gpos::G
 
 /// The classes of `cd`, with class 0, counted as write-fonts counts them for the header.
 fn owned_class_count(cd: &write_fonts::tables::layout::ClassDef) -> usize {
-    cd.iter().map(|(_, c)| c).chain(std::iter::once(0)).collect::<std::collections::BTreeSet<u16>>().len()
+    owned_classes(cd).len()
+}
+
+/// The distinct classes of `cd`, with class 0, in order.
+fn owned_classes(cd: &write_fonts::tables::layout::ClassDef) -> std::collections::BTreeSet<u16> {
+    use write_fonts::tables::layout::ClassDef;
+    let mut classes = std::collections::BTreeSet::from([0u16]);
+    match cd {
+        ClassDef::Format1(t) => classes.extend(t.class_value_array.iter().copied()),
+        ClassDef::Format2(t) => classes.extend(t.class_range_records.iter().map(|r| r.class)),
+    }
+    classes
 }
 
 fn restore_pair(w: &mut Walk, p: &mut write_fonts::tables::gpos::PairPos) -> Result<()> {
     use write_fonts::tables::gpos::{Class1Record, Class2Record, PairPos as Owned, ValueRecord as Value};
     let Owned::Format2(f) = p else { return Ok(()) };
     if !f.class1_records.is_empty() {
-        return Ok(());
+        return fit_pair_classes(w, f);
     }
     let n1 = owned_class_count(&f.class_def1);
     let n2 = owned_class_count(&f.class_def2);
@@ -738,6 +749,54 @@ fn restore_pair(w: &mut Walk, p: &mut write_fonts::tables::gpos::PairPos) -> Res
     let row = Class1Record::new(vec![Class2Record::new(Value::default(), Value::default()); n2]);
     f.class1_records = vec![row; n1];
     Ok(())
+}
+
+/// write-fonts writes a `PairPosFormat2` with one class record per distinct class of each class
+/// definition (class 0 included) and refuses any other number of records. A subtable whose
+/// class counts run past its highest class, or whose classes skip numbers, keeps the records
+/// of the classes its definitions use, and those classes are numbered 0, 1, 2… in order.
+/// Lookups give the same results. A class with no record is refused.
+fn fit_pair_classes(w: &mut Walk, f: &mut write_fonts::tables::gpos::PairPosFormat2) -> Result<()> {
+    use write_fonts::tables::gpos::Class1Record;
+    let classes1 = owned_classes(&f.class_def1);
+    let classes2 = owned_classes(&f.class_def2);
+    if f.class1_records.len() == classes1.len() && f.class1_records.iter().all(|r| r.class2_records.len() == classes2.len()) {
+        return Ok(());
+    }
+    w.charge(classes1.len().saturating_mul(1 + classes2.len()))?;
+    let missing = |which: u8, class: u16| {
+        TablesError::invalid(format!(
+            "a class pair adjustment names class {class} of its {}, which has no record",
+            if which == 1 { "first glyphs" } else { "second glyphs" }
+        ))
+    };
+    let mut rows = Vec::with_capacity(classes1.len());
+    for c1 in &classes1 {
+        let row = f.class1_records.get(usize::from(*c1)).ok_or_else(|| missing(1, *c1))?;
+        let mut cells = Vec::with_capacity(classes2.len());
+        for c2 in &classes2 {
+            cells.push(row.class2_records.get(usize::from(*c2)).cloned().ok_or_else(|| missing(2, *c2))?);
+        }
+        rows.push(Class1Record::new(cells));
+    }
+    f.class1_records = rows;
+    renumber_classes(&mut f.class_def1, &classes1);
+    renumber_classes(&mut f.class_def2, &classes2);
+    Ok(())
+}
+
+/// Numbers the `classes` of `cd` 0, 1, 2… in order.
+fn renumber_classes(cd: &mut write_fonts::tables::layout::ClassDef, classes: &std::collections::BTreeSet<u16>) {
+    use write_fonts::tables::layout::ClassDef;
+    if classes.iter().enumerate().all(|(i, c)| usize::from(*c) == i) {
+        return;
+    }
+    let new: std::collections::HashMap<u16, u16> = classes.iter().zip(0u16..).map(|(c, i)| (*c, i)).collect();
+    let map = |c: &mut u16| *c = new.get(c).copied().unwrap_or(0);
+    match cd {
+        ClassDef::Format1(t) => t.class_value_array.iter_mut().for_each(map),
+        ClassDef::Format2(t) => t.class_range_records.iter_mut().for_each(|r| map(&mut r.class)),
+    }
 }
 
 #[cfg(test)]

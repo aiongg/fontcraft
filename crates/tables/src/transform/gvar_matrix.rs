@@ -13,6 +13,11 @@ use crate::instance::iup::iup_delta;
 use crate::limits::{MAX_SFNT, MAX_TUPLE_VARIATIONS};
 use crate::{Result, TablesError};
 
+/// Most points the tuples of one `gvar` table may be filled in to, summed over the tuples of each
+/// glyph that is filled in (tuples × points). Each costs work and, after a turn or a shear,
+/// usually a written delta.
+pub(super) const MAX_DENSIFIED_POINTS: usize = 1 << 27;
+
 /// One glyph as the deltas need it, read before the matrix changes it.
 #[derive(Clone, Debug, Default)]
 pub(super) struct GlyphDeltas {
@@ -47,6 +52,7 @@ pub(super) fn transform_gvar(b: &[u8], glyphs: &[GlyphDeltas]) -> Result<Vec<u8>
     };
     let mut data = Vec::new();
     let mut offsets = Vec::with_capacity(glyph_count + 1);
+    let mut densified = 0usize;
     for g in 0..glyph_count {
         offsets.push(data.len());
         let (s, e) = (offset(g)?, offset(g + 1)?);
@@ -56,6 +62,14 @@ pub(super) fn transform_gvar(b: &[u8], glyphs: &[GlyphDeltas]) -> Result<Vec<u8>
         let glyph = b.get(array_offset.checked_add(s).ok_or_else(cut)?..array_offset.checked_add(e).ok_or_else(cut)?).ok_or_else(cut)?;
         match glyphs.get(g).filter(|d| d.linear.is_some()) {
             Some(d) => {
+                // Charged before the work, as if every tuple left points out.
+                if d.densify {
+                    let tuples = usize::from(u16_at(glyph, 0).ok_or_else(cut)? & COUNT_MASK);
+                    densified = densified.saturating_add(tuples.saturating_mul(d.coords.len()));
+                    if densified > MAX_DENSIFIED_POINTS {
+                        return Err(TablesError::TooLarge { what: "the gvar points filled in under a matrix", limit: MAX_DENSIFIED_POINTS });
+                    }
+                }
                 let rewritten = transform_glyph(glyph, axes, d).map_err(|e| TablesError::Invalid(format!("gvar, glyph {g}: {e}")))?;
                 data.extend_from_slice(&rewritten);
             }
@@ -105,6 +119,10 @@ fn read_points(b: &[u8], mut at: usize, all: usize) -> Result<(Option<Vec<usize>
     } else {
         usize::from(first)
     };
+    // A count of 0 in the two-byte form also means every point, as fontTools reads it.
+    if count == 0 {
+        return Ok((None, at));
+    }
     let mut points = Vec::with_capacity(count.min(all));
     let mut last = 0usize;
     while points.len() < count {
@@ -213,17 +231,33 @@ fn transform_glyph(b: &[u8], axes: usize, d: &GlyphDeltas) -> Result<Vec<u8>> {
         let n = points.as_ref().map_or(all, Vec::len);
         let (xs, pos) = read_deltas(tuple, pos, n)?;
         let (ys, _) = read_deltas(tuple, pos, n)?;
-        let mut explicit: Vec<Option<(f64, f64)>> = vec![None; all];
-        let named: Vec<usize> = points.clone().unwrap_or_else(|| (0..all).collect());
-        for ((p, x), y) in named.iter().zip(&xs).zip(&ys) {
-            if let Some(slot) = explicit.get_mut(*p) {
-                *slot = Some((f64::from(*x), f64::from(*y)));
+        let given = xs.iter().zip(&ys).map(|(x, y)| (f64::from(*x), f64::from(*y)));
+        let (named, deltas): (Option<Vec<usize>>, Vec<(f64, f64)>) = match points {
+            Some(points) if d.densify => {
+                let mut explicit: Vec<Option<(f64, f64)>> = vec![None; all];
+                for (p, delta) in points.iter().zip(given) {
+                    if let Some(slot) = explicit.get_mut(*p) {
+                        *slot = Some(delta);
+                    }
+                }
+                (None, iup_delta(&explicit, &d.coords, &d.ends))
             }
-        }
-        let (named, deltas): (Option<Vec<usize>>, Vec<(f64, f64)>) = if d.densify && points.is_some() {
-            (None, iup_delta(&explicit, &d.coords, &d.ends))
-        } else {
-            (points, named.iter().map(|p| explicit.get(*p).copied().flatten().unwrap_or((0.0, 0.0))).collect())
+            points => {
+                let mut deltas: Vec<(f64, f64)> = given.collect();
+                // Point numbers never decrease, so a point named twice is named in a row; each
+                // copy takes the last delta, as a dense array of the points would give.
+                if let Some(points) = &points {
+                    for i in (1..points.len()).rev() {
+                        if points.get(i) == points.get(i - 1)
+                            && let Some(last) = deltas.get(i).copied()
+                            && let Some(slot) = deltas.get_mut(i - 1)
+                        {
+                            *slot = last;
+                        }
+                    }
+                }
+                (points, deltas)
+            }
         };
         let order: Vec<usize> = named.clone().unwrap_or_else(|| (0..all).collect());
         let mut new_x = Vec::with_capacity(order.len());

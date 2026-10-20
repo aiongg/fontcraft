@@ -1179,22 +1179,15 @@ pub(crate) fn dict_number(v: f64) -> Result<Vec<u8>> {
     if v.fract() == 0.0 && v.abs() <= f64::from(i32::MAX) {
         return Ok(dict_int(v as i64));
     }
-    let text = format!("{v}");
-    let mut nibbles: Vec<u8> = Vec::with_capacity(text.len() + 1);
-    for ch in text.chars() {
-        nibbles.push(match ch {
-            '0'..='9' => ch as u8 - b'0',
-            '.' => 0xA,
-            '-' => 0xE,
-            _ => return Err(invalid(format!("the number {v} cannot be written in a DICT"))),
-        });
-    }
-    nibbles.push(0xF);
-    if nibbles.len() % 2 == 1 {
-        nibbles.push(0xF);
-    }
-    let mut out = vec![30];
-    out.extend(nibbles.chunks(2).map(|p| (p.first().copied().unwrap_or(0xF) << 4) | p.get(1).copied().unwrap_or(0xF)));
+    dict_real(v)
+}
+
+/// `v` as a DICT real number, also when it is whole, spelled as fontTools spells it (eight
+/// significant digits).
+pub(crate) fn dict_real(v: f64) -> Result<Vec<u8>> {
+    let mut out = Vec::new();
+    fontcraft_cff::encode_dict_number(fontcraft_cff::Number::Real(v), "a DICT number", &mut out)
+        .map_err(|e| invalid(format!("the number {v} cannot be written in a DICT: {e}")))?;
     Ok(out)
 }
 
@@ -1684,6 +1677,8 @@ struct BoundsSink {
     contours: Vec<Contour>,
     open: Option<Contour>,
     pos: Pt,
+    /// Every point a move goes to, drawn from or not: fontTools' `BoundsPen` counts them all.
+    moves: Option<[f64; 4]>,
 }
 
 impl BoundsSink {
@@ -1700,7 +1695,12 @@ fn fixed(v: read_fonts::types::Fixed) -> f64 {
 impl read_fonts::ps::cs::CommandSink for BoundsSink {
     fn move_to(&mut self, x: read_fonts::types::Fixed, y: read_fonts::types::Fixed) {
         self.close();
-        self.pos = Pt { x: fixed(x), y: fixed(y) };
+        let (x, y) = (fixed(x), fixed(y));
+        self.pos = Pt { x, y };
+        self.moves = Some(match self.moves {
+            None => [x, y, x, y],
+            Some([x0, y0, x1, y1]) => [x0.min(x), y0.min(y), x1.max(x), y1.max(y)],
+        });
     }
 
     fn line_to(&mut self, x: read_fonts::types::Fixed, y: read_fonts::types::Fixed) {
@@ -1735,8 +1735,9 @@ impl read_fonts::ps::cs::CommandSink for BoundsSink {
     }
 }
 
-/// Each glyph's exact bounds (curve extremes, not control points) at the default, as
-/// fontTools' `BoundsPen` gives them; `None` for a glyph that draws nothing.
+/// Each glyph's exact bounds (curve extremes, not control points, and every point a move goes
+/// to) at the default, as fontTools' `BoundsPen` gives them; `None` for a glyph that neither
+/// draws nor moves.
 pub(crate) fn glyph_bounds(table: &[u8]) -> Result<Vec<Option<[f64; 4]>>> {
     use read_fonts::ps::cff::CffFontRef;
     use read_fonts::ps::cs::CommandSink;
@@ -1751,7 +1752,10 @@ pub(crate) fn glyph_bounds(table: &[u8]) -> Result<Vec<Option<[f64; 4]>>> {
         let mut sink = BoundsSink::default();
         cff.evaluate_charstring(&sub, id, &[], &mut sink).map_err(|e| invalid(format!("the charstring of glyph {gid} cannot be read: {e}")))?;
         sink.close();
-        out.push(exact_bounds(&sink.contours));
+        out.push(match (exact_bounds(&sink.contours), sink.moves) {
+            (Some([x0, y0, x1, y1]), Some([mx0, my0, mx1, my1])) => Some([x0.min(mx0), y0.min(my0), x1.max(mx1), y1.max(my1)]),
+            (drawn, moves) => drawn.or(moves),
+        });
     }
     Ok(out)
 }

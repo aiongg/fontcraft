@@ -22,7 +22,7 @@
 
 use super::glyf::ot_round;
 use crate::dehint::cff::{Entry, Table, encode_dict};
-use crate::instance::cff2::{dict_number, font_bbox, glyph_bounds, put_cs_number, read_dict_number};
+use crate::instance::cff2::{dict_number, dict_real, font_bbox, glyph_bounds, put_cs_number, read_dict_number};
 use crate::limits::{CharstringMemory, MAX_CFF_STACK, MAX_CFF2_STACK, MAX_CHARSTRING, MAX_CHARSTRING_MEMORY, MAX_SFNT};
 use crate::{Result, TablesError};
 
@@ -122,7 +122,20 @@ pub(super) fn scale_upem_within(data: &[u8], cff2: bool, factor: f64, max_bytes:
     {
         let m: Vec<f64> = m.iter().map(|v| v / factor).collect();
         let default = m.iter().zip(DEFAULT_MATRIX).all(|(v, d)| (v - d).abs() <= 1e-12);
-        set_entry(&mut table.top, OP_FONT_MATRIX, (!default).then_some(m))?;
+        if default {
+            set_entry(&mut table.top, OP_FONT_MATRIX, None)?;
+        } else {
+            // fontTools divides each value, so all six are written as reals, zeros too.
+            let mut raw = Vec::new();
+            for v in &m {
+                raw.extend(dict_real(*v)?);
+            }
+            let entry = Entry { op: OP_FONT_MATRIX, raw, ints: vec![None; m.len()] };
+            match table.top.iter_mut().find(|e| e.op == OP_FONT_MATRIX) {
+                Some(e) => *e = entry,
+                None => table.top.push(entry),
+            }
+        }
     }
 
     let first = table.write(&charstrings, &privates)?;
