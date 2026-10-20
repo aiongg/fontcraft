@@ -327,3 +327,56 @@ fn an_empty_or_unrepetitive_set_comes_back_unchanged() {
     let none = CharstringSet::default();
     assert_eq!(subroutinize(&none, &SubrOptions::default()).unwrap().charstrings, Vec::<Vec<u8>>::new());
 }
+
+#[test]
+fn work_beyond_the_memory_budget_is_refused_with_a_message() {
+    let table = build(&sample_font()).unwrap().table;
+    let set = charstrings_of_table(&table, false).unwrap();
+    let options = SubrOptions::default();
+    let (result, stats) = subroutinize_measured(&set, &options, MAX_SUBR_MEMORY).unwrap();
+    assert!(stats.tokens > set.charstrings.len() && stats.candidates > 0 && stats.peak_memory > 0, "{stats:?}");
+    assert_eq!(result, subroutinize(&set, &options).unwrap());
+    // The budget is charged the same way every time: its peak is enough, one byte less is not.
+    assert_eq!(subroutinize_measured(&set, &options, stats.peak_memory).unwrap(), (result, stats));
+    let refused = subroutinize_measured(&set, &options, stats.peak_memory - 1);
+    assert!(matches!(refused, Err(SubrError::TooLarge { .. })), "{refused:?}");
+}
+
+/// Subroutinises the `CFF ` table of the font that `FONTCRAFT_CJK_FONT` names (a full CJK font,
+/// read where it is) and reports what it took. Run with `--ignored --nocapture`.
+#[test]
+#[ignore = "needs a large CFF font named by FONTCRAFT_CJK_FONT"]
+fn a_full_cjk_font_subroutinises() {
+    let Some(path) = std::env::var_os("FONTCRAFT_CJK_FONT") else {
+        eprintln!("skipped: set FONTCRAFT_CJK_FONT to the path of an OpenType font with a CFF table");
+        return;
+    };
+    let data = std::fs::read(&path).unwrap();
+    let font = read_fonts::FontRef::new(&data).unwrap();
+    let table = font.table_data(read_fonts::types::Tag::new(b"CFF ")).expect("the font has no CFF table");
+    let set = charstrings_of_table(table.as_bytes(), false).unwrap();
+    let plain = desubroutinize(&set).unwrap();
+    let started = std::time::Instant::now();
+    let (result, stats) = subroutinize_measured(&set, &SubrOptions::default(), MAX_SUBR_MEMORY).unwrap();
+    let took = started.elapsed();
+    assert_eq!(desubroutinize(&result).unwrap().charstrings, plain.charstrings, "the result expands to the input");
+    let (before, after, input) = (plain.index_bytes(), result.index_bytes(), set.index_bytes());
+    let mb = |b: usize| b as f64 / 1e6;
+    eprintln!(
+        "{}: {} glyphs, {} Font DICTs, {} tokens, {} candidates; {:.1} s; charstrings and subroutines {:.2} MB, unsubroutinised {:.2} MB ({:.3}), input {:.2} MB; peak memory {:.0} MB of {:.0} MB ({:.1} bytes per token)",
+        std::path::Path::new(&path).display(),
+        set.charstrings.len(),
+        set.fd_count(),
+        stats.tokens,
+        stats.candidates,
+        took.as_secs_f64(),
+        mb(after),
+        mb(before),
+        after as f64 / before as f64,
+        mb(input),
+        mb(stats.peak_memory),
+        mb(MAX_SUBR_MEMORY),
+        stats.peak_memory as f64 / stats.tokens as f64,
+    );
+    assert!(after < before);
+}

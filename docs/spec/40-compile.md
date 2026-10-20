@@ -892,6 +892,22 @@ the binary only; compilation never changes the source.
    Answer (M12.25): the subroutiniser (`crates/cff/src/subr`) follows compreffor's method; the
    measure compares outlines after expansion and the bytes of the CharStrings and subroutine
    INDEXes, with a budget of 2% above cffsubr (`crates/cff/crosscheck/subr_check.py`).
+   Large fonts (M12.25b): like compreffor, one text holds the glyphs of every Font DICT, and the
+   Font DICTs that reach a subroutine decide whether it is global or local. Memory grows linearly
+   with the tokens:
+
+   | Phase | Held per token |
+   |---|---|
+   | reading (one glyph expanded at a time) | text, stack depth, clears flag: 7 bytes |
+   | suffix array (prefix doubling) | the text plus 16 bytes |
+   | two walks over the tree of repeats | the text, suffix and LCP arrays, entry depths and prefix sums: 21 bytes, plus 16 per sequence that saves bytes in the first walk and about 100 per candidate kept |
+   | market rounds | text, depth and deepest candidate: 10 bytes, plus about 80 per candidate |
+
+   The tree is never stored. The candidates are kept best first until their tokens reach
+   8,388,608 or the text's token count, whichever is larger, so the rounds stay proportional to
+   the text. Limits: 67,108,864 tokens and 4 GiB on a 64-bit target, 16,777,216 tokens and
+   512 MiB on a 32-bit one (wasm). A full CJK font (Source Han Serif TC Bold: 65,535 glyphs, 18
+   Font DICTs, 25.5 million tokens) fits twice over on 64-bit.
 10. **makeotf's "Development" wording.** The user guide says release mode removes the word from
     the version string; the exact non-release string was not located in the addfeatures source read
     (`name.cpp` builds `Version x.xxx;addfeatures <client>`). Observe makeotf output if we want the
