@@ -247,8 +247,13 @@ fn read_fd_select(d: Data<'_>, at: usize, n: usize) -> Result<Vec<u16>> {
                 let first = first_of(r)?;
                 let p = start.saturating_add(r * record).saturating_add(first_len);
                 let fd = if wide { d.u16(p)? } else { u16::from(d.u8(p)?) };
-                let end = first_of(r + 1)?.min(n);
-                for slot in out.iter_mut().take(end).skip(first) {
+                let end = first_of(r + 1)?;
+                // In order, the ranges cover each glyph once; out of order they would cost
+                // ranges times glyphs.
+                if first > end {
+                    return Err(d.bad("has FDSelect ranges out of order"));
+                }
+                for slot in out.iter_mut().take(end.min(n)).skip(first) {
                     *slot = fd;
                 }
             }
@@ -457,4 +462,24 @@ fn encode_private(p: &Private<'_>) -> Result<Vec<u8>> {
     }
     let len = encode(&p.dict, &[(SUBRS, vec![0])])?.len();
     encode(&p.dict, &[(SUBRS, vec![len])])
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+    use super::*;
+
+    /// Ranges whose starts go back would each fill up to every glyph again.
+    #[test]
+    fn fd_select_ranges_out_of_order_are_refused() {
+        let d = |bytes: &'static [u8]| Data::new(*b"CFF2", bytes);
+        // Format 3, ranges [0, 3, 0, 3] with Font DICTs 0, 1, 0, 1, sentinel 4.
+        let bad: &[u8] = &[3, 0, 4, 0, 0, 0, 0, 3, 1, 0, 0, 0, 0, 3, 1, 0, 4];
+        assert!(read_fd_select(d(bad), 0, 4).is_err());
+        let good: &[u8] = &[3, 0, 2, 0, 0, 0, 0, 3, 1, 0, 4];
+        assert_eq!(read_fd_select(d(good), 0, 4).unwrap(), [0, 0, 0, 1]);
+        // Format 4: u32 first glyphs, u16 Font DICTs.
+        let bad4: &[u8] = &[4, 0, 0, 0, 2, 0, 0, 0, 3, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4];
+        assert!(read_fd_select(d(bad4), 0, 4).is_err());
+    }
 }

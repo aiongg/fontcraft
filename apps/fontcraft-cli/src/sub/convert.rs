@@ -46,11 +46,11 @@ const OPTIONS: &[OptSpec] = &[
     OptSpec::value(
         "curve-conversion",
         "optimized|exact",
-        "optimized",
-        "quadratic to cubic: merge curves within the error, or raise each one exactly",
+        "",
+        "quadratic to cubic: merge curves within the error (optimized, the default), or raise each one exactly",
     ),
     OptSpec::switch("keep-direction", false, "do not reverse contours when the curve degree changes"),
-    OptSpec::value("post-format", "2|3", "2", "keep glyph names in post (2) or drop them (3)"),
+    OptSpec::value("post-format", "2|3", "", "keep glyph names in post (2, the default) or drop them (3)"),
     OptSpec::switch("subroutinize", false, "subroutinise CFF and CFF2 results (default: sfnt results yes, bare tables no)"),
     OptSpec::value("max-subrs", "N", "", "most subroutines per INDEX"),
     OptSpec::switch("no-hints", false, "drop stem hints when CFF outlines stay CFF"),
@@ -208,6 +208,32 @@ fn flavour_of(path: &str) -> Result<&'static str, Failure> {
 }
 
 fn convert_fonts(parsed: &args::Parsed, raw: &[String]) -> Outcome {
+    let params = font_params(parsed, raw)?;
+    let result = execute(&mut Session::new(), "font.convert", &Value::Object(params)).map_err(|f| match f {
+        Failure::Failed(m) if m.contains("cannot open") || m.contains("cannot read") => Failure::Input(m),
+        other => other,
+    })?;
+    let results = result.get("results").and_then(Value::as_array).cloned().unwrap_or_default();
+    for r in &results {
+        if parsed.switch("json") {
+            out_json_line(r)?;
+        } else {
+            let left: Vec<&str> =
+                r.get("leftBehind").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_str).collect()).unwrap_or_default();
+            out(&format!(
+                "{} -> {}{}",
+                r.get("input").and_then(Value::as_str).unwrap_or("?"),
+                r.get("output").and_then(Value::as_str).unwrap_or("?"),
+                if left.is_empty() { String::new() } else { format!(" (left behind: {})", left.join("; ")) }
+            ))?;
+        }
+    }
+    Ok(())
+}
+
+/// The `font.convert` parameters of a command line. An option left out is left out of the
+/// parameters too, so the command's own defaults apply.
+fn font_params(parsed: &args::Parsed, raw: &[String]) -> Result<Map<String, Value>, Failure> {
     let mut params = Map::new();
     let mut inputs: Vec<String> = parsed.positional.clone();
     let mut container = parsed.value("container").unwrap_or("plain").to_string();
@@ -249,11 +275,18 @@ fn convert_fonts(parsed: &args::Parsed, raw: &[String]) -> Outcome {
         let max_error = v.parse::<f64>().map_err(|_| usage("--max-error needs a number"))?;
         curves.insert("maxError".into(), json!(max_error));
     }
-    curves.insert("conversion".into(), json!(parsed.value("curve-conversion").unwrap_or("optimized")));
-    curves.insert("keepDirection".into(), json!(parsed.switch("keep-direction")));
-    params.insert("curves".into(), Value::Object(curves));
-    let post = parsed.value("post-format").unwrap_or("2").parse::<u64>().map_err(|_| usage("--post-format needs 2 or 3"))?;
-    params.insert("postFormat".into(), json!(post));
+    if let Some(v) = parsed.value("curve-conversion").filter(|v| !v.is_empty()) {
+        curves.insert("conversion".into(), json!(v));
+    }
+    if parsed.switch("keep-direction") {
+        curves.insert("keepDirection".into(), json!(true));
+    }
+    if !curves.is_empty() {
+        params.insert("curves".into(), Value::Object(curves));
+    }
+    if let Some(v) = parsed.value("post-format").filter(|v| !v.is_empty()) {
+        params.insert("postFormat".into(), json!(v.parse::<u64>().map_err(|_| usage("--post-format needs 2 or 3"))?));
+    }
     let mut cff = Map::new();
     if raw.iter().any(|a| a == "--no-subroutinize") {
         cff.insert("subroutinize".into(), json!(false));
@@ -266,7 +299,9 @@ fn convert_fonts(parsed: &args::Parsed, raw: &[String]) -> Outcome {
     if !cff.is_empty() {
         params.insert("cff".into(), Value::Object(cff));
     }
-    params.insert("hints".into(), json!(!parsed.switch("no-hints")));
+    if parsed.switch("no-hints") {
+        params.insert("hints".into(), json!(false));
+    }
     if let Some(ros) = parsed.value("cid-keyed") {
         let keyed = if ros.is_empty() {
             json!(true)
@@ -314,7 +349,9 @@ fn convert_fonts(parsed: &args::Parsed, raw: &[String]) -> Outcome {
             let (axis, value) = item.split_once('=').ok_or_else(|| usage(format!("--location takes AXIS=VALUE, not {item}")))?;
             let value: f64 =
                 value.parse().ok().filter(|v: &f64| v.is_finite()).ok_or_else(|| usage(format!("--location: {value} is not a number")))?;
-            axes.insert(axis.to_string(), json!(value));
+            if axes.insert(axis.to_string(), json!(value)).is_some() {
+                return Err(usage(format!("--location names the axis {axis} twice")));
+            }
         }
         params.insert("location".into(), Value::Object(axes));
         params.insert("clamp".into(), json!(!parsed.switch("no-clamp")));
@@ -337,24 +374,29 @@ fn convert_fonts(parsed: &args::Parsed, raw: &[String]) -> Outcome {
     if let Some(face) = parsed.value("face").filter(|v| !v.is_empty()) {
         params.insert("face".into(), face.parse::<u64>().map(Value::from).unwrap_or_else(|_| json!(face)));
     }
-    let result = execute(&mut Session::new(), "font.convert", &Value::Object(params)).map_err(|f| match f {
-        Failure::Failed(m) if m.contains("cannot open") || m.contains("cannot read") => Failure::Input(m),
-        other => other,
-    })?;
-    let results = result.get("results").and_then(Value::as_array).cloned().unwrap_or_default();
-    for r in &results {
-        if parsed.switch("json") {
-            out_json_line(r)?;
-        } else {
-            let left: Vec<&str> =
-                r.get("leftBehind").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_str).collect()).unwrap_or_default();
-            out(&format!(
-                "{} -> {}{}",
-                r.get("input").and_then(Value::as_str).unwrap_or("?"),
-                r.get("output").and_then(Value::as_str).unwrap_or("?"),
-                if left.is_empty() { String::new() } else { format!(" (left behind: {})", left.join("; ")) }
-            ))?;
-        }
+    Ok(params)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn params(list: &[&str]) -> Result<Map<String, Value>, Failure> {
+        let raw: Vec<String> = list.iter().map(|s| s.to_string()).collect();
+        font_params(&args::parse(OPTIONS, &raw).unwrap(), &raw)
     }
-    Ok(())
+
+    #[test]
+    fn convert_options_become_engine_parameters() {
+        let p = params(&["A.ttf", "--to", "ufo"]).unwrap();
+        for key in ["curves", "postFormat", "hints", "cff", "timestamp"] {
+            assert!(!p.contains_key(key), "{key}: options left out leave the command's defaults");
+        }
+        let p = params(&["A.ttf", "--to", "otf", "--no-hints", "--post-format", "3", "--keep-direction", "--location", "wght=300,wdth=80"]).unwrap();
+        assert_eq!(p["hints"], json!(false));
+        assert_eq!(p["postFormat"], json!(3));
+        assert_eq!(p["curves"], json!({ "keepDirection": true }));
+        assert_eq!(p["location"], json!({ "wght": 300.0, "wdth": 80.0 }));
+        assert!(params(&["A.ttf", "--to", "otf", "--location", "wght=1,wght=2"]).is_err(), "an axis given twice is refused");
+    }
 }
