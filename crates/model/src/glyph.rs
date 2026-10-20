@@ -4,7 +4,7 @@ use fontcraft_geom::{Affine, BezPath, Point};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    AnchorInfoBox, ComponentInfoBox, Extra, Family, GlyphInfoBox, Image, KernGroups, LayerInfoBox, MAX_COORDINATE, NodeInfo, NodeInfoBox,
+    AnchorInfoBox, ComponentInfoBox, Extra, Family, GlyphInfoBox, Hoi, Image, KernGroups, LayerInfoBox, MAX_COORDINATE, NodeInfo, NodeInfoBox,
     Orientation, PathInfoBox, UserData, in_range,
 };
 use fontcraft_plist::Value;
@@ -175,7 +175,7 @@ pub struct Node {
 }
 
 /// A node in the native file: one flat object (`x`, `y`, `type`, then what is set of `smooth`,
-/// `tangent`, `locked`, `orientation`, `name`, `identifier`, `user_data`, `extra`).
+/// `tangent`, `locked`, `orientation`, `name`, `identifier`, `user_data`, `hoi`, `extra`).
 #[derive(Serialize)]
 struct NodeOut<'a> {
     x: f64,
@@ -196,6 +196,8 @@ struct NodeOut<'a> {
     identifier: Option<&'a str>,
     #[serde(skip_serializing_if = "UserData::is_empty")]
     user_data: &'a UserData,
+    #[serde(skip_serializing_if = "Hoi::is_empty")]
+    hoi: &'a Hoi,
     #[serde(skip_serializing_if = "Extra::is_empty")]
     extra: &'a Extra,
 }
@@ -221,6 +223,8 @@ struct NodeIn {
     #[serde(default)]
     user_data: UserData,
     #[serde(default)]
+    hoi: Hoi,
+    #[serde(default)]
     extra: Extra,
 }
 
@@ -242,6 +246,7 @@ impl Serialize for Node {
             name: i.name.as_deref(),
             identifier: i.identifier.as_deref(),
             user_data: &i.user_data,
+            hoi: &i.hoi,
             extra: &i.extra,
         }
         .serialize(s)
@@ -251,7 +256,7 @@ impl Serialize for Node {
 impl<'de> Deserialize<'de> for Node {
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let n = NodeIn::deserialize(d)?;
-        let info = NodeInfo { name: n.name, identifier: n.identifier, user_data: n.user_data, extra: n.extra };
+        let info = NodeInfo { name: n.name, identifier: n.identifier, user_data: n.user_data, hoi: n.hoi, extra: n.extra };
         Ok(Node {
             x: n.x,
             y: n.y,

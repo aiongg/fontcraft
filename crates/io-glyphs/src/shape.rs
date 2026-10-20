@@ -5,6 +5,7 @@
 //! |---|---|---|---|
 //! | node | `kind`, `smooth`, `tangent`, `orientation`, `locked` | the flags `l`/`c`/`q`/`o`, then `s` or `t`, then `R` or `C`, then `X` | `LINE`, `CURVE`, `QCURVE`, `OFFCURVE`, ` SMOOTH` |
 //! | node | `info.name`, `info.user_data` | the fourth item, `{name, userData}` | a dictionary after the type, `{name = …;}` |
+//! | node | `info.hoi` | version 4: `hoi` in the fourth item ([`fontcraft_model::hoi`]); version 3: none | none |
 //! | path | `info.locked`, `info.attrs` | `locked = 1`, `attr` | none |
 //! | component | `info.alignment` | `alignment` (−1, 1, 3) | the same |
 //! | component | `info.anchor`, `info.smart_values`, `info.master_id`, `info.locked`, `info.orientation` | `anchor`, `piece`, `masterId`, `locked = 1`, `orientation` (1, 2) | `anchor`, `piece`, `locked = 1` |
@@ -24,8 +25,8 @@
 //! Written from the GlyphsSDK format documents (Apache-2.0).
 
 use fontcraft_model::{
-    Alignment, Anchor, AnchorInfo, Component, ComponentInfo, Dimension, Family, MAX_PART_PROPERTIES, Node, NodeInfo, NodeKind, Orientation, Path,
-    PathInfo, Rare, Shape, ShapeAttrs, SmartValue, Transform, UserData,
+    Alignment, Anchor, AnchorInfo, Component, ComponentInfo, Dimension, Family, Hoi, MAX_PART_PROPERTIES, Node, NodeInfo, NodeKind, Orientation,
+    Path, PathInfo, Rare, Shape, ShapeAttrs, SmartValue, Transform, UserData,
 };
 use fontcraft_plist::{Array, Dict, Layout, Num, Str, Value};
 
@@ -91,11 +92,12 @@ pub(crate) fn write_flags(out: &mut String, n: &Node, version: u32) {
     }
 }
 
-/// A node's attributes (the fourth item of a node, a version 2 node's dictionary): the name and
-/// the user data as fields; other keys stay under `attr`. `None` when the dictionary is empty or
-/// would not be written back the same; the caller then keeps it whole.
+/// A node's attributes (the fourth item of a node, a version 2 node's dictionary): the name, the
+/// user data and (version 4) the higher-order interpolation data as fields; other keys stay under
+/// `attr`. `None` when the dictionary is empty or would not be written back the same; the caller
+/// then keeps it whole.
 pub(crate) fn read_node_attr(v: &Value, version: u32) -> Option<NodeInfo> {
-    node_attr_fields(v, version).filter(|info| write_node_attr(info).is_some_and(|w| same_text(&w, v, version)))
+    node_attr_fields(v, version).filter(|info| write_node_attr(info, version).is_some_and(|w| same_text(&w, v, version)))
 }
 
 /// [`read_node_attr`] without the check that it writes back the same (version 2 checks the whole
@@ -107,20 +109,30 @@ pub(crate) fn node_attr_fields(v: &Value, version: u32) -> Option<NodeInfo> {
     }
     let mut info = NodeInfo { name: take_text(&mut d, "name", version), ..Default::default() };
     info.user_data = crate::info::take_user_data(&mut d);
+    if version >= 4 {
+        info.hoi = take_same(&mut d, "hoi", version, Hoi::from_value, Hoi::to_value).unwrap_or_default();
+    }
     if !d.is_empty() {
         info.extra.push(Family::Glyphs, "attr", Value::Dict(d));
     }
     Some(info)
 }
 
-/// The node's attribute dictionary, or `None` when it has nothing to write.
-pub(crate) fn write_node_attr(info: &NodeInfo) -> Option<Value> {
+/// The node's attribute dictionary, or `None` when it has nothing to write. Versions before 4
+/// leave out the higher-order interpolation data ([`losses`] counts it).
+pub(crate) fn write_node_attr(info: &NodeInfo, version: u32) -> Option<Value> {
     let kept = info.extra.get(Family::Glyphs, "attr");
     let mut e: Entries = Vec::new();
     if let Some(n) = &info.name {
         e.push(("name".into(), string(n)));
     }
     crate::info::push_user_data(&mut e, &info.user_data);
+    if version >= 4
+        && !info.hoi.is_empty()
+        && let Some(hoi) = info.hoi.to_value()
+    {
+        e.push(("hoi".into(), hoi));
+    }
     if e.is_empty() {
         // Nothing typed: the dictionary as the file had it.
         return kept.cloned();
@@ -154,7 +166,8 @@ fn read_node(v: &Value, version: u32) -> Option<Node> {
         if !f.rest.is_empty() {
             info.extra.push(Family::Glyphs, "flags", Value::String(f.rest.into()));
         }
-        if let (Some(a), true) = (attr, info.name.is_none() && info.user_data.is_empty() && info.extra.get(Family::Glyphs, "attr").is_none()) {
+        let untyped = info.name.is_none() && info.user_data.is_empty() && info.hoi.is_empty() && info.extra.get(Family::Glyphs, "attr").is_none();
+        if let (Some(a), true) = (attr, untyped) {
             info.extra.push(Family::Glyphs, "attr", a.clone());
         }
         node.info = Rare::new(info);
@@ -171,7 +184,7 @@ fn write_node(n: &Node, at: &str, version: u32) -> Result<Value> {
     });
     write_flags(&mut flags, n, version);
     let mut items = vec![num(n.x, at)?, num(n.y, at)?, string(&flags)];
-    if let Some(attr) = write_node_attr(&n.info) {
+    if let Some(attr) = write_node_attr(&n.info, version) {
         items.push(attr);
     }
     Ok(Value::Array(Array { items, layout: Layout::Compact, ..Default::default() }))
@@ -624,9 +637,10 @@ fn paint_needs_v4(a: &ShapeAttrs) -> bool {
 /// What a format version cannot hold of the shapes' data, one line per kind with the number of
 /// objects that have it: the identifiers and anchor colours UFO sources give, tangent joins before
 /// version 4 (written as smooth), node locks and orientations and path drawing attributes in
-/// version 2, and the version 4 paint attributes version 3 lacks.
+/// version 2, the version 4 paint attributes version 3 lacks, and the nodes' higher-order
+/// interpolation data before version 4.
 pub(crate) fn losses(glyphs: &[std::sync::Arc<fontcraft_model::Glyph>], version: u32) -> Vec<String> {
-    let mut counts = [0usize; 8];
+    let mut counts = [0usize; 9];
     let shapes =
         glyphs.iter().flat_map(|g| g.layers.iter()).flat_map(|l| l.shapes.iter().chain(l.info.background.iter().flat_map(|b| b.shapes.iter())));
     for s in shapes {
@@ -638,6 +652,7 @@ pub(crate) fn losses(glyphs: &[std::sync::Arc<fontcraft_model::Glyph>], version:
                 counts[5] += usize::from(!p.info.attrs.is_empty());
                 counts[6] += usize::from(paint_needs_v4(&p.info.attrs));
                 counts[7] += usize::from(p.info.attrs.stroke_pos.as_ref().is_some_and(paint::stroke_pos_unconvertible));
+                counts[8] += p.nodes.iter().filter(|n| !n.info.hoi.is_empty()).count();
             }
             Shape::Component(c) => counts[1] += usize::from(c.info.identifier.is_some()),
             Shape::Image(_) | Shape::Raw(_) => {}
@@ -650,6 +665,7 @@ pub(crate) fn losses(glyphs: &[std::sync::Arc<fontcraft_model::Glyph>], version:
     }
     if version >= 4 {
         counts[3] = 0;
+        counts[8] = 0;
     }
     if version != 2 {
         counts[4] = 0;
@@ -668,6 +684,7 @@ pub(crate) fn losses(glyphs: &[std::sync::Arc<fontcraft_model::Glyph>], version:
         "the paths' drawing attributes",
         "the paths' conic gradients, extend modes, gradient radii and colours finer than 8 bits",
         "stroke positions given as expressions, written without conversion to the version 3 convention",
+        "the nodes' higher-order interpolation curves",
     ];
     what.iter().zip(counts).filter(|(_, n)| *n > 0).map(|(w, n)| format!("{w} ({n})")).collect()
 }

@@ -703,7 +703,7 @@ fn node_string(n: &Node) -> String {
     };
     let smooth = if n.smooth { " SMOOTH" } else { "" };
     let mut s = format!("{} {} {kind}{smooth}", fmt(n.x), fmt(n.y));
-    if let Some(attr) = crate::shape::write_node_attr(&n.info) {
+    if let Some(attr) = crate::shape::write_node_attr(&n.info, 2) {
         s.push(' ');
         s.push_str(&inline_dict(&attr));
     }

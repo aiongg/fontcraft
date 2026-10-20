@@ -461,4 +461,43 @@ mod tests {
             let _ = load(&bad);
         }
     }
+
+    #[test]
+    fn node_interpolation_curves_round_trip_and_bad_ones_are_refused() {
+        use fontcraft_model::{Glyph, HoiAxis, HoiCenter, HoiCurve, HoiDirection, HoiTiming, Layer, Node, NodeInfo, NodeKind, Path, Rare, Shape};
+        let mut font = Font::new("Curves");
+        let master = font.masters.first().map(|m| m.id.clone()).unwrap();
+        let curves = [
+            HoiCurve::Point { x: 520.0, y: 40.5 },
+            HoiCurve::Rotation { center: Some(HoiCenter::At { x: 300.0, y: 350.0 }), direction: Some(HoiDirection::Clockwise) },
+            HoiCurve::Timing(HoiTiming { lower_amplitude: Some(10.0), upper_time: Some(0.25), ..Default::default() }),
+        ];
+        let nodes = [(500.0, 0.0), (300.0, 700.0), (100.0, 0.0)].into_iter().zip(curves).map(|((x, y), curve)| {
+            let mut n = Node::new(x, y, NodeKind::Line);
+            let hoi = fontcraft_model::Hoi(vec![
+                HoiAxis { axis: "wght".into(), curve },
+                HoiAxis { axis: "wdth".into(), curve: HoiCurve::Rotation { center: Some(HoiCenter::Auto), direction: None } },
+            ]);
+            n.info = Rare::new(NodeInfo { hoi, ..Default::default() });
+            n
+        });
+        let mut layer = Layer::new(master, 600.0);
+        layer.shapes.push(Shape::Path(Path::new(true, nodes.collect())));
+        let mut glyph = Glyph::new("A");
+        glyph.layers.push(layer);
+        font.glyphs.push(glyph);
+        let bytes = save(&font).unwrap();
+        assert_eq!(load(&bytes).unwrap(), font);
+        assert_eq!(save(&load(&bytes).unwrap()).unwrap(), bytes);
+        assert!(String::from_utf8(bytes).unwrap().contains("\"hoi\""));
+        // A value beyond the coordinate range is refused on load, not kept.
+        {
+            let mut g = font.glyphs.get_mut("A").unwrap();
+            let Some(Shape::Path(p)) = g.layers.first_mut().and_then(|l| l.shapes.first_mut()) else { panic!() };
+            let mut info = (*p.nodes[0].info).clone();
+            info.hoi.0[0].curve = HoiCurve::Point { x: 1e300, y: 0.0 };
+            p.nodes[0].info = Rare::new(info);
+        }
+        assert!(load(&save(&font).unwrap()).is_err());
+    }
 }

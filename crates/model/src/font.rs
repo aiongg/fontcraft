@@ -1142,6 +1142,9 @@ fn check_shapes(shapes: &[Shape], bad: &dyn Fn(String) -> ModelError) -> Result<
         match shape {
             Shape::Path(p) => {
                 p.to_bez().map_err(bad)?;
+                for n in p.nodes.iter().filter(|n| !n.info.is_default()) {
+                    n.info.hoi.check().map_err(bad)?;
+                }
                 if !p.info.is_default() {
                     crate::shape_info::check_attrs(&p.info.attrs).map_err(bad)?;
                 }

@@ -11,7 +11,7 @@
 //! | the order of paths and components, in a layer with both | `com.schriftgestaltung.Glyphs.shapeOrder` (`P` and `C`); the contours are written first |
 //! | a component's alignment and attachment anchor | `com.schriftgestaltung.Glyphs.ComponentInfo`: `{name, index, alignment, anchor}` for each component that has one |
 //! | the components' locks and smart-component values | `com.schriftgestaltung.componentsLocked`, `…componentsSmartComponentValues`: one entry per component |
-//! | a node's user data and other keys of its attribute dictionary | `com.schriftgestaltung.Glyphs.nodeUserData.<path>.<node>` (indices as the `.glyphs` format counts them: paths only, a closed path's start node last) |
+//! | a node's user data, higher-order interpolation data (`hoi`) and other keys of its attribute dictionary | `com.schriftgestaltung.Glyphs.nodeUserData.<path>.<node>` (indices as the `.glyphs` format counts them: paths only, a closed path's start node last) |
 //! | an anchor's user data | `public.objectLibs`, under the anchor's identifier |
 //!
 //! glyphsLib writes `shapeOrder` whenever a layer has both kinds of shape, so it follows the
@@ -22,7 +22,7 @@
 //! layer, so that saving twice writes the same file (glyphsLib makes a random one); reading takes
 //! that identifier off again.
 
-use fontcraft_model::{Alignment, Anchor, Family, Node, NodeInfo, Rare, Shape, SmartValue, UserData};
+use fontcraft_model::{Alignment, Anchor, Family, Hoi, Node, NodeInfo, Rare, Shape, SmartValue, UserData};
 use fontcraft_plist::{Dict, Num, Value};
 
 use crate::glyphkeys::{Glif, Written, array, coordinate, dict, int, number, string};
@@ -88,6 +88,9 @@ fn node_dict(n: &Node) -> Option<Value> {
     let mut d = Dict::new();
     if !n.info.user_data.is_empty() {
         d.insert("userData", sorted_keys(Value::Dict(n.info.user_data.0.clone()).without_spellings()));
+    }
+    if let Some(hoi) = n.info.hoi.to_value().filter(|_| !n.info.hoi.is_empty()) {
+        d.insert("hoi", hoi);
     }
     // A node with a name or user data keeps its other keys under `attr`; one the reader kept whole
     // has them there with its name.
@@ -409,18 +412,20 @@ fn node_user_data(shapes: &mut [Shape], key: &str, v: &Value) -> bool {
         Some(_) => return false,
         None => UserData::default(),
     };
+    let hoi = d.get("hoi").and_then(Hoi::from_value);
     let mut rest = Dict::new();
-    for (k, x) in d.entries.iter().filter(|(k, _)| k.as_str() != "userData") {
+    for (k, x) in d.entries.iter().filter(|(k, _)| k.as_str() != "userData" && (hoi.is_none() || k.as_str() != "hoi")) {
         rest.insert(k.as_str(), x.clone());
     }
     let Some(Shape::Path(path)) = shapes.iter_mut().filter(|s| is_contour(s)).nth(pi) else { return false };
     let (closed, len) = (path.closed, path.nodes.len());
     let Some(node) = path.nodes.get_mut(model_index(closed, len, gi)).filter(|_| gi < len) else { return false };
-    if !node.info.user_data.is_empty() || node.info.extra.get(Family::Glyphs, "attr").is_some() {
+    if !node.info.user_data.is_empty() || !node.info.hoi.is_empty() || node.info.extra.get(Family::Glyphs, "attr").is_some() {
         return false;
     }
     let mut info: NodeInfo = (*node.info).clone();
     info.user_data = user;
+    info.hoi = hoi.unwrap_or_default();
     if !rest.is_empty() {
         info.extra.push(Family::Glyphs, "attr", Value::Dict(rest));
     }
