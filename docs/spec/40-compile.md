@@ -882,8 +882,21 @@ and Top DICT values, the metrics and the bounds match it on the test fonts. Diff
 `font.transform` with a matrix on CFF and CFF2 outlines (`transform/cff_matrix.rs`) follows
 AFDKO rotatefont 5.0.1 (`c/rotatefont/rotateFont.cpp`):
 
+- A transformed glyph is read as rotatefont's charstring reader (`t2cstr`) reads it: coordinates
+  and stem edges add up in single precision, and the end point of each segment is rounded to
+  0.01 (`roundf(v · 100) / 100`). The control points of a curve are not rounded. A flex kept as
+  flex rounds its sixth point only; a flex read as two curves rounds the third and the sixth.
 - Each absolute point becomes `RND(a·x + c·y + e)`, `RND(b·x + d·y + f)`, in single precision,
   halves up.
+- Stems and hint masks then follow rotatefont's charstring writer:
+  - a stem whose width comes out negative has its edges swapped, except a ghost stem of
+    width -20 or -21;
+  - every stem is in force before the first hint mask, or from the first move when no mask comes
+    before it; a hint mask that repeats the stems in force goes;
+  - stems that no hint group or counter mask uses go;
+  - a glyph left with one hint group gets plain `hstem` and `vstem`, without hint masks;
+  - the last vertical stem operator before a first hint or counter mask is left out, as the mask
+    implies it.
 - Hints follow the linear part:
 
 | Linear part | Stems | Private DICT |
@@ -902,7 +915,7 @@ Differences kept:
 | `-rt` with an angle that is not a multiple of 90° | turns by half the angle (it converts degrees with π/360) | `rotate` turns by the full angle | the option is documented in degrees; compare with `-matrix` |
 | Output | a bare CFF or Type 1 font from the default master | the whole OpenType font: `hmtx` widths and side bearings, `head` and `hhea` extents, `CFF2` deltas | an OpenType font in, an OpenType font out |
 | `CFF2` blends | the default master only | each delta transformed by the linear part as an absolute point delta, rounded on its own | keeps the font variable |
-| Charstring operators | the writer picks its own specialised forms and hint substitution | general forms with a few single-curve and axis-line forms; stems sorted, masks remapped | the outline and hints read the same |
+| Charstring operators | the writer picks its own specialised forms | general forms with a few single-curve and axis-line forms; stems sorted, masks remapped | the outline and hints read the same |
 | `defaultWidthX`, `nominalWidthX` | chosen by the writer | chosen again for the new widths, by the method of `font.optimize --cff-widths` | the widths read the same |
 | A negative advance (half turn, mirror) | written into the charstring | 0 in `hmtx` and the charstring, with a warning | `hmtx` holds no negative advance |
 | The accent offset of a `seac` `endchar` | kept | turned by the linear part; refused when the glyphs do not all take one matrix | the accent stays on its base |
