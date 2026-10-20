@@ -14,6 +14,7 @@
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::MAX_ASSET_BYTES;
 
@@ -57,10 +58,21 @@ pub trait AssetStore: Send + Sync {
     }
 }
 
-/// Files held in memory, keyed by stored path.
-#[derive(Clone, Debug, Default, PartialEq)]
+/// The version the next write to any [`MemoryAssets`] gets. One counter for every store, so a
+/// store rebuilt from scratch or cloned never repeats a version another write had.
+static NEXT_VERSION: AtomicU64 = AtomicU64::new(1);
+
+/// Files held in memory, keyed by stored path, each with the version of its last write.
+#[derive(Clone, Debug, Default)]
 pub struct MemoryAssets {
-    files: BTreeMap<String, Arc<[u8]>>,
+    files: BTreeMap<String, (Arc<[u8]>, u64)>,
+}
+
+/// Two stores are equal when they hold the same bytes at the same paths, whatever their versions.
+impl PartialEq for MemoryAssets {
+    fn eq(&self, other: &Self) -> bool {
+        self.files.len() == other.files.len() && self.files.iter().zip(&other.files).all(|((p, (a, _)), (q, (b, _)))| p == q && a == b)
+    }
 }
 
 impl MemoryAssets {
@@ -71,11 +83,12 @@ impl MemoryAssets {
     /// Adds or replaces the file at `path`. A file over [`MAX_ASSET_BYTES`] is kept, and
     /// [`AssetStore::read`] refuses it, as a file store would.
     pub fn insert(&mut self, path: impl Into<String>, bytes: impl Into<Arc<[u8]>>) {
-        self.files.insert(path.into(), bytes.into());
+        let version = NEXT_VERSION.fetch_add(1, Ordering::Relaxed);
+        self.files.insert(path.into(), (bytes.into(), version));
     }
 
     pub fn remove(&mut self, path: &str) -> Option<Arc<[u8]>> {
-        self.files.remove(path)
+        self.files.remove(path).map(|(bytes, _)| bytes)
     }
 
     /// The stored paths, sorted.
@@ -86,7 +99,7 @@ impl MemoryAssets {
 
 impl AssetStore for MemoryAssets {
     fn read(&self, path: &str) -> Result<Arc<[u8]>, AssetError> {
-        let bytes = self.files.get(path).ok_or_else(|| AssetError::Missing(path.to_string()))?;
+        let (bytes, _) = self.files.get(path).ok_or_else(|| AssetError::Missing(path.to_string()))?;
         if bytes.len() > MAX_ASSET_BYTES {
             return Err(AssetError::TooLarge { path: path.to_string(), size: bytes.len() as u64, limit: MAX_ASSET_BYTES });
         }
@@ -97,8 +110,28 @@ impl AssetStore for MemoryAssets {
         self.files.contains_key(path)
     }
 
-    /// Replacing a file stores a new buffer: its address and length tell the versions apart.
+    /// Every write gets a new version, so a file replaced by one of the same length is told apart.
     fn version(&self, path: &str) -> Option<u64> {
-        self.files.get(path).map(|b| (b.as_ptr() as usize as u64) ^ (b.len() as u64).rotate_left(32))
+        self.files.get(path).map(|(_, version)| *version)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{AssetStore, MemoryAssets};
+
+    #[test]
+    fn replacing_a_file_changes_its_version() {
+        let mut assets = MemoryAssets::new();
+        assets.insert("a.png", vec![1u8, 2, 3]);
+        let first = assets.version("a.png");
+        // Same length, and the freed buffer may be reused for the new one.
+        assets.insert("a.png", vec![4u8, 5, 6]);
+        let second = assets.version("a.png");
+        assert!(first.is_some() && second.is_some() && first != second, "{first:?} {second:?}");
+        assert_eq!(assets.version("missing.png"), None);
+        let mut other = MemoryAssets::new();
+        other.insert("a.png", vec![4u8, 5, 6]);
+        assert_eq!(assets, other, "equality compares the bytes, not the versions");
     }
 }

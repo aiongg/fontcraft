@@ -238,17 +238,23 @@ fn ds_str<'a>(x: &'a Extra, key: &str) -> Option<&'a str> {
 /// or the files the plain reading writes; otherwise a sparse source is a master made of a UFO
 /// layer's glyphs and a rule's glyphs are glyphs of their own.
 pub fn read(text: &str, ufos: &BTreeMap<String, Files>) -> Result<Font> {
-    let (plain, _) = read_as(text, ufos, false)?;
+    read_reporting(text, ufos).map(|(font, _)| font)
+}
+
+/// [`read`], with warnings about what was read in a plainer form than the files allow.
+pub fn read_reporting(text: &str, ufos: &BTreeMap<String, Files>) -> Result<(Font, Vec<String>)> {
+    let (font, _, warnings) = read_as(text, ufos, false)?;
+    let plain = (font, warnings);
     let doc = xml::parse(text).map_err(|e| UfoError::Syntax { file: DOC.into(), error: e })?;
     let candidates = source_elements(&doc.root).iter().any(|s| s.attr("layer").is_some()) || doc.root.child("rules").is_some();
     if !candidates {
         return Ok(plain);
     }
-    let Ok((converted, true)) = read_as(text, ufos, true) else { return Ok(plain) };
+    let Ok((converted, true, warnings)) = read_as(text, ufos, true) else { return Ok(plain) };
     let Ok(ours) = write(&converted) else { return Ok(plain) };
     // The files as read, or as the plain reading writes them.
     let as_read = ours.document == text && ours.ufos.len() == ufos.len() && ours.ufos.iter().all(|(k, v)| ufos.get(k) == Some(v));
-    if as_read || write(&plain).is_ok_and(|b| b.document == ours.document && b.ufos == ours.ufos) { Ok(converted) } else { Ok(plain) }
+    if as_read || write(&plain.0).is_ok_and(|b| b.document == ours.document && b.ufos == ours.ufos) { Ok((converted, warnings)) } else { Ok(plain) }
 }
 
 /// The coordinates of source `i` when it is a sparse source as glyphsLib writes one for
@@ -271,8 +277,8 @@ fn brace_source(i: usize, elements: &[&Element], sources: &[SourceInfo], main_of
 }
 
 /// Reads a designspace; with `convert`, sparse sources and rules in glyphsLib's form as the
-/// layers they were made from. Whether anything was so read.
-fn read_as(text: &str, ufos: &BTreeMap<String, Files>, convert: bool) -> Result<(Font, bool)> {
+/// layers they were made from. Whether anything was so read, and the reading's warnings.
+fn read_as(text: &str, ufos: &BTreeMap<String, Files>, convert: bool) -> Result<(Font, bool, Vec<String>)> {
     let doc = xml::parse(text).map_err(|e| UfoError::Syntax { file: DOC.into(), error: e })?;
     let root = &doc.root;
     if root.name() != "designspace" {
@@ -489,7 +495,7 @@ fn read_as(text: &str, ufos: &BTreeMap<String, Files>, convert: bool) -> Result<
     }
     crate::glyphkeys::read(&mut font, &default_id);
     crate::libkeys::read(&mut font, true, &default_id);
-    crate::colorkeys::read(&mut font);
+    let warnings: Vec<String> = crate::colorkeys::read(&mut font).into_iter().collect();
     crate::gdef::strip_derived(&mut font, &default_id);
     let mut converted = intermediate.iter().any(|b| *b);
     if convert
@@ -512,7 +518,7 @@ fn read_as(text: &str, ufos: &BTreeMap<String, Files>, convert: bool) -> Result<
         converted = true;
     }
     font.check()?;
-    Ok((font, converted))
+    Ok((font, converted, warnings))
 }
 
 /// Whether a designspace holds an alternate layer, as a glyph of its own that a rule substitutes

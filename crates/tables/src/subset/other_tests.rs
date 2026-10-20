@@ -339,6 +339,40 @@ fn subset_svg_skips_a_backwards_record_and_reads_a_shared_document_once() {
 }
 
 #[test]
+fn subset_svg_refuses_many_lengths_over_one_large_document_quickly() {
+    let mut font = outlines(&[("A", 0x41)]);
+    // A 1 MB document with 65,535 bytes of trailing spaces; every record reads it with a
+    // different length, so no two records share a document.
+    let mut doc = b"<svg><!--".to_vec();
+    doc.resize(doc.len() + (1 << 20), b'x');
+    doc.extend_from_slice(b"--></svg>");
+    let base = doc.len();
+    let count = usize::from(u16::MAX);
+    doc.resize(base + count, b' ');
+    let mut table = Vec::new();
+    be16(&mut table, 0);
+    be32(&mut table, 10);
+    be32(&mut table, 0);
+    be16(&mut table, count as u16);
+    let doc_at = (2 + 12 * count) as u32;
+    for i in 0..count {
+        be16(&mut table, 1);
+        be16(&mut table, 1);
+        be32(&mut table, doc_at);
+        be32(&mut table, (base + i) as u32);
+    }
+    table.extend_from_slice(&doc);
+    font.insert(*b"SVG ", table);
+
+    // Before the cap on bytes read, each record parsed the whole document again.
+    let started = std::time::Instant::now();
+    let result = subset(&font, &SubsetOptions { text: "A".into(), ..SubsetOptions::default() });
+    assert!(started.elapsed().as_secs() < 10, "took {:?}", started.elapsed());
+    let err = result.err().expect("the overlapping documents are refused");
+    assert!(err.to_string().contains("SVG documents read"), "{err}");
+}
+
+#[test]
 fn subset_svg_keeps_referenced_elements_and_renumbers_glyph_ids() {
     let mut font = outlines(&[("A", 0x41), ("B", 0x42), ("C", 0x43)]);
     let doc = format!(

@@ -36,7 +36,10 @@
 //!
 //! Gradients need the box of their layer glyph's outline. While a [`Scope`] is open each box is
 //! measured once per glyph and master, and the measuring shares [`MAX_BOX_SEGMENTS`]; the reader
-//! and the writer's entry points open one.
+//! and the writer's entry points open one, the writer one per master. A layer whose box is past
+//! the budget is not listed: the reader leaves its entry as user data and says so
+//! ([`read`]), and the writer's loss lines count the layers it writes as UFO layers instead
+//! ([`losses`]).
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -81,6 +84,8 @@ struct Boxes {
     /// `Some(None)` when it has no segment.
     cache: HashMap<BoxKey, Option<Option<[f64; 4]>>>,
     left: usize,
+    /// How many boxes were not measured because `left` was spent.
+    refused: usize,
 }
 
 thread_local! {
@@ -97,12 +102,17 @@ impl Scope {
     pub(crate) fn enter() -> Scope {
         let outer = BOXES.with(|b| match b.try_borrow_mut() {
             Ok(mut b) if b.is_none() => {
-                *b = Some(Boxes { cache: HashMap::new(), left: MAX_BOX_SEGMENTS });
+                *b = Some(Boxes { cache: HashMap::new(), left: MAX_BOX_SEGMENTS, refused: 0 });
                 true
             }
             _ => false,
         });
         Scope { outer }
+    }
+
+    /// How many boxes the open scope has refused to measure so far; 0 without one.
+    fn refused() -> usize {
+        BOXES.with(|b| b.try_borrow().ok().and_then(|b| b.as_ref().map(|b| b.refused)).unwrap_or(0))
     }
 }
 
@@ -242,29 +252,26 @@ fn close_at(a: &Value, b: &Value, depth: usize) -> bool {
 /// What the list leaves out of the full-colour layers it holds, one line per kind with the
 /// number of layers.
 pub(crate) fn losses(font: &Font) -> Vec<String> {
-    let _boxes = Scope::enter();
-    let (mut added, mut other) = (0usize, 0usize);
-    for l in font.glyphs.iter().flat_map(|g| g.layers.iter()) {
-        let Some(Item::Paint(c)) = listed(font, l) else { continue };
-        let a = &c.info.attrs;
-        let colors: Vec<Color> = match &a.gradient {
-            Some(g) => g.stops.iter().map(|s| s.color).collect(),
-            None => vec![a.fill_color.unwrap_or(Color::Rgba(DEFAULT_FILL))],
-        };
-        added += usize::from(colors.iter().any(|c| matches!(c, Color::Rgba(_))));
-        let kept = match &a.gradient {
-            Some(g) => ShapeAttrs { gradient: Some(g.clone()), ..Default::default() },
-            None => ShapeAttrs { fill_color: a.fill_color, ..Default::default() },
-        };
-        let geometry = a.gradient.as_ref().is_some_and(|g| match g.kind {
-            GradientKind::Radial { angle, .. } => angle != 0.0,
-            GradientKind::Conic { control_radius, .. } => control_radius != 0.0,
-            GradientKind::Linear { .. } => false,
-        });
-        let info = ComponentInfo { attrs: kept, ..Default::default() };
-        other += usize::from(*c.info != info || geometry);
+    let (mut added, mut other, mut unmeasured) = (0usize, 0usize, 0usize);
+    for master in font.masters.iter() {
+        // As the writer does, each master's layers share a scope of their own.
+        let _boxes = Scope::enter();
+        for l in font.glyphs.iter().flat_map(|g| g.layers.iter()).filter(|l| l.master == master.id) {
+            let before = Scope::refused();
+            let item = listed(font, l);
+            if item.is_none() && Scope::refused() > before {
+                unmeasured += 1;
+            }
+            let Some(Item::Paint(c)) = item else { continue };
+            paint_losses(c, &mut added, &mut other);
+        }
     }
     let mut out = Vec::new();
+    if unmeasured > 0 {
+        out.push(format!(
+            "colour layers of the colour layer list written as UFO layers, because measuring their outlines' boxes went past {MAX_BOX_SEGMENTS} outline segments ({unmeasured})"
+        ));
+    }
     if added > 0 {
         out.push(format!(
             "the colours of full-colour layers in the colour layer list that are not palette entries, added to the end of each colour palette ({added})"
@@ -278,11 +285,34 @@ pub(crate) fn losses(font: &Font) -> Vec<String> {
     out
 }
 
+/// Counts what the list leaves out of one listed full-colour layer's component `c`.
+fn paint_losses(c: &Component, added: &mut usize, other: &mut usize) {
+    let a = &c.info.attrs;
+    let colors: Vec<Color> = match &a.gradient {
+        Some(g) => g.stops.iter().map(|s| s.color).collect(),
+        None => vec![a.fill_color.unwrap_or(Color::Rgba(DEFAULT_FILL))],
+    };
+    *added += usize::from(colors.iter().any(|c| matches!(c, Color::Rgba(_))));
+    let kept = match &a.gradient {
+        Some(g) => ShapeAttrs { gradient: Some(g.clone()), ..Default::default() },
+        None => ShapeAttrs { fill_color: a.fill_color, ..Default::default() },
+    };
+    let geometry = a.gradient.as_ref().is_some_and(|g| match g.kind {
+        GradientKind::Radial { angle, .. } => angle != 0.0,
+        GradientKind::Conic { control_radius, .. } => control_radius != 0.0,
+        GradientKind::Linear { .. } => false,
+    });
+    let info = ComponentInfo { attrs: kept, ..Default::default() };
+    *other += usize::from(*c.info != info || geometry);
+}
+
 /// Turns the entries of each master's list into colour layers, where the writer gives the entry
-/// back; the other entries stay user data.
-pub(crate) fn read(font: &mut Font) {
+/// back; the other entries stay user data. A warning when some entries stayed user data because
+/// their boxes were past the budget.
+pub(crate) fn read(font: &mut Font) -> Option<String> {
     // Adding colour layers leaves the master layers, and so the outlines, as they are.
     let _boxes = Scope::enter();
+    let before = Scope::refused();
     let lists: Vec<(String, Dict)> =
         font.masters.iter().filter_map(|m| m.user_data.get(COLOR_LAYERS).and_then(Value::as_dict).map(|d| (m.id.clone(), d.clone()))).collect();
     for (master, list) in lists {
@@ -306,6 +336,12 @@ pub(crate) fn read(font: &mut Font) {
             }
         }
     }
+    let refused = Scope::refused().saturating_sub(before);
+    (refused > 0).then(|| {
+        format!(
+            "some entries of the colour layer list stay user data, not colour layers: measuring their outlines' boxes went past {MAX_BOX_SEGMENTS} outline segments"
+        )
+    })
 }
 
 /// Adds the colour layers `entry` describes to `base` in `master` when the writer gives `entry`
@@ -823,7 +859,16 @@ fn glyph_box(font: &Font, master: &str, glyph: &str) -> Option<Option<[f64; 4]>>
     match open {
         None => measure(font, master, glyph).0,
         Some((Some(hit), _)) => hit,
-        Some((None, 0)) => None,
+        Some((None, 0)) => {
+            BOXES.with(|b| {
+                if let Ok(mut b) = b.try_borrow_mut()
+                    && let Some(b) = b.as_mut()
+                {
+                    b.refused = b.refused.saturating_add(1);
+                }
+            });
+            None
+        }
         Some((None, _)) => {
             let (value, cost) = measure(font, master, glyph);
             BOXES.with(|b| {

@@ -114,8 +114,10 @@ impl Walk<'_> {
             }
             Kind::AaltFeatureNode => {
                 self.count_features(node);
-                // aalt builds at most a single and an alternate substitution lookup.
-                self.add_lookups(node, false, 2);
+                // aalt builds a single and an alternate substitution lookup at most, and its
+                // rules go into those, so they are not counted as rules of a block.
+                let holds_rule = node.iter_children().filter_map(NodeOrToken::as_node).any(|n| is_rule(n.kind()));
+                self.add_lookups(node, false, usize::from(holds_rule));
             }
             Kind::ScriptNode | Kind::LanguageNode => self.count_features(node),
             Kind::LookupFlagNode if node.iter_tokens().any(|t| t.kind == Kind::UseMarkFilteringSetKw) => {
@@ -151,7 +153,7 @@ impl Walk<'_> {
             }
             _ => {}
         }
-        if !is_rule(node.kind()) {
+        if !is_rule(node.kind()) && node.kind() != Kind::AaltFeatureNode {
             self.count_lookups(node);
         }
         for child in node.iter_children() {
@@ -278,27 +280,93 @@ impl Walk<'_> {
         }
     }
 
-    /// Counts the lookups a block's own rules start (a feature, lookup or variation block): one at each change of
-    /// rule kind and after any other statement, and one more for each contextual rule with an
-    /// inline substitution or value record. fea-rs merges more than that, never less.
+    /// Counts the lookups a block's own rules start, from below, as fea-rs 1.0.0's
+    /// `compile_ctx.rs` groups them. A rule joins the current lookup when it is of the same
+    /// kind (an `ignore` rule is contextual; single and multiple substitutions share one) under
+    /// the same lookup flags. The current lookup ends at a `language` statement, a `script`
+    /// statement that changes the language system, and a nested lookup block; a lookup
+    /// reference, a `subtable` break or a class definition does not end it. The inline
+    /// substitutions and value records of a contextual lookup share anonymous lookups until a
+    /// `subtable` break, so each part with one counts once. Where fea-rs's state cannot be
+    /// read from the tree (flags inherited by a lookup block, a `script` statement whose
+    /// effect depends on it), the count assumes the case that makes fewer lookups: the guard
+    /// may miss an overflow (fea-rs's panic is then reported) but never refuses valid code.
     fn count_lookups(&mut self, block: &Node) {
-        let mut previous = None;
+        let in_feature = block.kind() == Kind::FeatureNode;
+        // The flags in force (`None`: not known), the current lookup's kind and flags, and
+        // whether its part since the last `subtable` break has an anonymous lookup.
+        let mut flags: Option<u16> = in_feature.then_some(0);
+        let mut current: Option<(Kind, Option<u16>)> = None;
+        let mut anonymous = false;
+        let mut system = if in_feature { System::Default } else { System::Unknown };
         for child in block.iter_children().filter_map(NodeOrToken::as_node) {
             let kind = child.kind();
-            if !is_rule(kind) {
-                previous = None;
-                continue;
+            match kind {
+                Kind::LookupFlagNode => {
+                    flags = flag_key(child);
+                    continue;
+                }
+                Kind::SubtableNode => {
+                    anonymous = false;
+                    continue;
+                }
+                Kind::LanguageNode => {
+                    current = None;
+                    let dflt = tag_text(child).is_some_and(|t| t == "dflt");
+                    system = match system {
+                        System::Unknown => System::Unknown,
+                        System::Default => System::Set("DFLT".into(), dflt),
+                        System::Set(script, _) => System::Set(script, dflt),
+                    };
+                    continue;
+                }
+                Kind::ScriptNode => {
+                    let script = tag_text(child).unwrap_or_default();
+                    // fea-rs ignores `script X` while the system is already X with the default
+                    // language, and otherwise ends the lookup and clears the flags.
+                    match &system {
+                        System::Set(s, true) if *s == script => {}
+                        System::Unknown => flags = None,
+                        _ => {
+                            current = None;
+                            flags = Some(0);
+                        }
+                    }
+                    system = System::Set(script, true);
+                    continue;
+                }
+                Kind::LookupBlockNode => {
+                    // The flags set inside it stay in force after it.
+                    current = None;
+                    flags = None;
+                    continue;
+                }
+                _ if !is_rule(kind) => continue,
+                _ => {}
             }
-            let gpos = is_gpos(kind);
-            let mut added = usize::from(previous != Some(kind));
+            let group = match kind {
+                Kind::GsubIgnore => Kind::GsubType6,
+                Kind::GposIgnore => Kind::GposType8,
+                Kind::GsubType1 => Kind::GsubType2,
+                other => other,
+            };
+            let joins = current.is_some_and(|(k, f)| k == group && (f.is_none() || flags.is_none() || f == flags));
+            let mut added = 0;
+            if !joins {
+                added += 1;
+                current = Some((group, flags));
+                anonymous = false;
+            }
             let inline = match kind {
                 Kind::GsubType6 => child.iter_children().any(|c| c.kind() == Kind::InlineSubNode),
                 Kind::GposType8 => has_kind(child, Kind::ValueRecordNode, 0),
                 _ => false,
             };
-            added += usize::from(inline);
-            self.add_lookups(child, gpos, added);
-            previous = Some(kind);
+            if inline && !anonymous {
+                added += 1;
+                anonymous = true;
+            }
+            self.add_lookups(child, is_gpos(kind), added);
         }
     }
 
@@ -459,6 +527,44 @@ fn is_rule(kind: Kind) -> bool {
             | GposType8
             | GposIgnore
     )
+}
+
+/// The language system a block's `script` and `language` statements have set, as far as the
+/// tree shows it.
+enum System {
+    /// Inherited from outside the block.
+    Unknown,
+    /// None set yet in a feature block.
+    Default,
+    /// A script and whether the language is the default one.
+    Set(String, bool),
+}
+
+/// The lookup flags a `lookupflag` statement sets, as far as the tree shows them: the low
+/// bits, plus 0x100 for a mark attachment class (whose number depends on the classes). Two
+/// statements with different keys set different flags; the same key may still differ in the
+/// class or set named.
+fn flag_key(node: &Node) -> Option<u16> {
+    let mut key = 0u16;
+    for token in node.iter_children().filter_map(NodeOrToken::as_token) {
+        match token.kind {
+            // fea-rs keeps the low byte of a number, as fontTools does.
+            Kind::Number => return token.text.parse::<u16>().ok().map(|n| n & 0xff),
+            Kind::RightToLeftKw => key |= 1,
+            Kind::IgnoreBaseGlyphsKw => key |= 2,
+            Kind::IgnoreLigaturesKw => key |= 4,
+            Kind::IgnoreMarksKw => key |= 8,
+            Kind::UseMarkFilteringSetKw => key |= 0x10,
+            Kind::MarkAttachmentTypeKw => key |= 0x100,
+            _ => {}
+        }
+    }
+    Some(key)
+}
+
+/// The tag of a `script` or `language` statement.
+fn tag_text(node: &Node) -> Option<String> {
+    node.iter_children().filter_map(NodeOrToken::as_token).find(|t| t.kind == Kind::Tag).map(|t| t.text.to_string())
 }
 
 /// Whether a node is or holds a rule; lookup blocks hold statements only a few levels deep.

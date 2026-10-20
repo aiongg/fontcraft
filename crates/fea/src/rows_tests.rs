@@ -1235,6 +1235,31 @@ fn indices_past_16_bits_are_refused() {
 }
 
 #[test]
+fn rules_that_share_lookups_are_not_counted_as_many_lookups() {
+    // `ignore sub` and contextual `sub` rules go into one contextual lookup, and their inline
+    // substitutions into one anonymous lookup: two lookups, not 120,000.
+    let mut calt = String::from("feature calt {\n");
+    calt.extend((0..40_000).map(|_| "ignore sub a' b;\nsub a' c by d;\n"));
+    calt.push_str("} calt;");
+    let c = ok(&calt);
+    assert!(gsub(&c).len() <= 2, "{:?}", gsub(&c));
+
+    // Inline value records that agree share one anonymous single positioning lookup.
+    let mut kern = String::from("feature kern {\n");
+    kern.extend((0..70_000).map(|_| "pos a' -20 b;\n"));
+    kern.push_str("} kern;");
+    let c = ok(&kern);
+    assert!(gpos(&c).len() <= 2, "{:?}", gpos(&c));
+
+    // Lookup references and flags set again to the same value do not end a lookup.
+    let mut mixed = String::from("lookup X { sub e by f; } X;\nfeature liga {\n");
+    mixed.extend((0..40_000).map(|_| "lookupflag IgnoreMarks;\nsub a by b;\nlookup X;\nlookupflag 8;\nsub c by d;\n"));
+    mixed.push_str("} liga;");
+    let c = ok(&mixed);
+    assert!(gsub(&c).len() <= 2, "{:?}", gsub(&c));
+}
+
+#[test]
 fn a_panic_on_the_compiler_thread_is_reported() {
     let result: Result<(), Vec<Diagnostic>> = crate::run::on_big_stack(|| panic!("boom"));
     let d = result.unwrap_err();

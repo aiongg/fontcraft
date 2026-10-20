@@ -12,9 +12,11 @@
 //!
 //! The XML reader is a small one of our own: elements, attributes, text, CDATA, comments,
 //! processing instructions and a doctype; nesting is capped by [`MAX_SVG_DEPTH`]. Each document
-//! is read once however many records point to it, and the work of all records together is
-//! capped by [`MAX_SVG_WORK`]. Documents compressed with gzip are refused. A record whose first
-//! glyph comes after its last covers no glyph, as in fontTools.
+//! is read once however many records point to it, and its parse tree is dropped after the last
+//! record that needs it. The bytes of all documents read are capped by [`MAX_SVG_PARSE_RATIO`]
+//! times the table's length, and the work of all records together by [`MAX_SVG_WORK`].
+//! Documents compressed with gzip are refused. A record whose first glyph comes after its last
+//! covers no glyph, as in fontTools.
 
 use std::collections::{HashMap, HashSet};
 
@@ -27,6 +29,10 @@ pub const MAX_SVG_DEPTH: usize = 256;
 /// Most node visits the subsetting of the whole table may make: each record's pass over its
 /// document plus its reference closure.
 pub const MAX_SVG_WORK: usize = 1 << 26;
+/// Most bytes the document reads of one table may scan together, as a multiple of the table's
+/// length. Documents that do not overlap scan at most the table once; records whose documents
+/// overlap (one start, many lengths) would otherwise scan the same bytes once per record.
+pub const MAX_SVG_PARSE_RATIO: usize = 4;
 /// Most bytes of subset documents the output may hold.
 pub const MAX_SVG_OUTPUT: usize = 1 << 27;
 
@@ -316,9 +322,9 @@ pub(crate) fn subset(plan: &Plan, bytes: &[u8]) -> Result<Option<Vec<u8>>> {
     let mut records: Vec<(u16, u16, usize)> = Vec::new();
     let mut docs: Vec<Vec<u8>> = Vec::new();
     let mut doc_index: HashMap<Vec<u8>, usize> = HashMap::new();
-    let mut parsed: HashMap<(usize, usize), Parsed<'_>> = HashMap::new();
-    let mut work = MAX_SVG_WORK;
-    let mut written = 0usize;
+    // The records that cover a kept glyph, and the last of them to use each document.
+    let mut uses: Vec<(u16, u16, (usize, usize))> = Vec::new();
+    let mut last_use: HashMap<(usize, usize), usize> = HashMap::new();
     for i in 0..count {
         let r = list + 2 + 12 * i;
         let (start, end) = (d.u16(r)?, d.u16(r + 2)?);
@@ -326,19 +332,38 @@ pub(crate) fn subset(plan: &Plan, bytes: &[u8]) -> Result<Option<Vec<u8>>> {
             continue;
         }
         let place = (list + d.u32_usize(r + 4)?, d.u32_usize(r + 8)?);
-        let doc = d.slice(place.0, place.1)?;
-        let gids: Vec<u32> = plan.glyphs.range(u32::from(start)..=u32::from(end)).copied().collect();
-        if gids.is_empty() {
+        d.slice(place.0, place.1)?;
+        if plan.glyphs.range(u32::from(start)..=u32::from(end)).next().is_none() {
             continue;
         }
+        last_use.insert(place, uses.len());
+        uses.push((start, end, place));
+    }
+    let mut parsed: HashMap<(usize, usize), Parsed<'_>> = HashMap::new();
+    let mut work = MAX_SVG_WORK;
+    let parse_limit = bytes.len().saturating_mul(MAX_SVG_PARSE_RATIO);
+    let mut parse_left = parse_limit;
+    let mut written = 0usize;
+    for (u, (start, end, place)) in uses.into_iter().enumerate() {
+        let doc = d.slice(place.0, place.1)?;
+        let gids: Vec<u32> = plan.glyphs.range(u32::from(start)..=u32::from(end)).copied().collect();
         if doc.starts_with(&[0x1F, 0x8B]) {
             return Err(TablesError::Unsupported("subsetting gzip-compressed SVG documents".into()));
         }
-        let parsed = match parsed.entry(place) {
+        let parsed_doc = match parsed.entry(place) {
             std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),
-            std::collections::hash_map::Entry::Vacant(e) => e.insert(Parsed::new(doc)?),
+            std::collections::hash_map::Entry::Vacant(e) => {
+                parse_left = parse_left
+                    .checked_sub(doc.len())
+                    .ok_or(TablesError::TooLarge { what: "the bytes of the SVG documents read", limit: parse_limit })?;
+                e.insert(Parsed::new(doc)?)
+            }
         };
-        let Some(text) = subset_doc(plan, parsed, &gids, &mut work)? else { continue };
+        let text = subset_doc(plan, parsed_doc, &gids, &mut work)?;
+        if last_use.get(&place) == Some(&u) {
+            parsed.remove(&place);
+        }
+        let Some(text) = text else { continue };
         let index = match doc_index.get(&text) {
             Some(i) => *i,
             None => {

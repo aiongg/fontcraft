@@ -375,3 +375,28 @@ fn a_layer_glyph_box_is_measured_once_while_a_scope_is_open() {
     assert_eq!(entries, 1, "one glyph in one master");
     assert!(spent < 10, "the outline was measured once: {spent} segments charged");
 }
+
+#[test]
+fn a_spent_box_budget_is_reported_on_save_and_on_read() {
+    let mut font = plain();
+    let m = master(&font);
+    let linear = GradientKind::Linear { start: (0.25, 0.5).into(), end: (1.0, 0.5).into() };
+    font.glyph_mut("a").unwrap().layers.push(full(&m, 0, painted("a.color1", Transform::default(), gradient(linear, Extend::Pad))));
+    let out = crate::ufo::write(&font).unwrap();
+    assert!(!losses(&font).iter().any(|l| l.contains("outline segments")));
+    let (_, warnings) = crate::ufo::read_reporting(&out).unwrap();
+    assert!(warnings.is_empty(), "{warnings:?}");
+
+    // With the budget spent, the gradient layer cannot be listed, and both sides say so.
+    let _scope = Scope::enter();
+    BOXES.with(|b| {
+        if let Some(b) = b.borrow_mut().as_mut() {
+            b.left = 0;
+        }
+    });
+    let lines = losses(&font);
+    assert!(lines.iter().any(|l| l.contains("written as UFO layers") && l.ends_with("(1)")), "{lines:?}");
+    let (back, warnings) = crate::ufo::read_reporting(&out).unwrap();
+    assert!(warnings.iter().any(|w| w.contains("stay user data")), "{warnings:?}");
+    assert!(back.masters[0].user_data.get(COLOR_LAYERS).is_some(), "the entry stays user data");
+}

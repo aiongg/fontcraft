@@ -219,13 +219,13 @@ pub fn feature_dir(path: &Path) -> Option<std::path::PathBuf> {
 }
 
 /// Reads the source at `path`, recognising its format by content, with what reading it left out
-/// (compiled fonts only). `face` chooses a member of a font collection.
+/// or read in a plainer form. `face` chooses a member of a font collection.
 pub fn open(path: &Path, face: Option<u32>) -> Result<(Font, Vec<String>)> {
     let meta = std::fs::metadata(path).map_err(|e| io_err("open", path, e))?;
     if meta.is_dir() {
         if path.join("metainfo.plist").is_file() {
             let files = read_folder(path)?;
-            return Ok((fontcraft_io_ufo::ufo::read(&files)?, Vec::new()));
+            return Ok(fontcraft_io_ufo::ufo::read_reporting(&files)?);
         }
         if path.join("fontinfo.plist").is_file() {
             let files = read_folder(path)?;
@@ -240,9 +240,9 @@ pub fn open(path: &Path, face: Option<u32>) -> Result<(Font, Vec<String>)> {
     let bytes = read_file(path)?;
     if fontcraft_io_ufo::zip::is_zip(&bytes) {
         let files = fontcraft_io_ufo::zip::read_ufoz(&bytes)?;
-        let mut font = fontcraft_io_ufo::ufo::read(&files)?;
+        let (mut font, warnings) = fontcraft_io_ufo::ufo::read_reporting(&files)?;
         font.source.format = SourceFormat::Ufoz;
-        return Ok((font, Vec::new()));
+        return Ok((font, warnings));
     }
     if fontcraft_format::is_compressed(&bytes) {
         return Ok((fontcraft_format::load(&bytes)?, Vec::new()));
@@ -271,7 +271,7 @@ pub fn open(path: &Path, face: Option<u32>) -> Result<(Font, Vec<String>)> {
         if !is_designspace(body) {
             return Err(EngineError::Io(format!("{} is XML but neither a designspace nor an SVG font", path.display())));
         }
-        return Ok((open_designspace(path, text)?, Vec::new()));
+        return open_designspace(path, text);
     }
     if !body.starts_with('{') {
         return Err(EngineError::Io(format!("{} is not a font source this build can read", path.display())));
@@ -335,8 +335,9 @@ fn is_designspace(body: &str) -> bool {
 }
 
 /// A designspace and the UFOs it names, read relative to its folder, within the same bounds as
-/// one package. While automation roots are in force, a UFO outside the read root is refused.
-fn open_designspace(path: &Path, text: &str) -> Result<Font> {
+/// one package, with the reading's warnings. While automation roots are in force, a UFO outside
+/// the read root is refused.
+fn open_designspace(path: &Path, text: &str) -> Result<(Font, Vec<String>)> {
     let dir = path.parent().unwrap_or(Path::new("."));
     let mut ufos = BTreeMap::new();
     let mut total = text.len();
@@ -353,7 +354,7 @@ fn open_designspace(path: &Path, text: &str) -> Result<Font> {
         }
         ufos.insert(rel, files);
     }
-    Ok(fontcraft_io_ufo::designspace::read(text, &ufos)?)
+    Ok(fontcraft_io_ufo::designspace::read_reporting(text, &ufos)?)
 }
 
 /// Most files [`check_references`] passes to its callback for one source.

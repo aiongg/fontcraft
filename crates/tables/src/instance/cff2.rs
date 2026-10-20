@@ -827,7 +827,8 @@ fn operands_fit(op: u16, n: usize) -> bool {
         6 | 7 => n >= 1,
         8 => n >= 6 && n.is_multiple_of(6),
         24 => n >= 8 && (n - 2).is_multiple_of(6),
-        25 => n >= 8 && n.is_multiple_of(2),
+        // One curve with no line before it is accepted, as fontTools' pen and the converter do.
+        25 => n >= 6 && n.is_multiple_of(2),
         26 | 27 | 30 | 31 => n >= 4 && n % 4 <= 1,
         1234 => n == 7,
         1235 => n == 13,
@@ -942,7 +943,7 @@ fn generalize(op: u16, args: &[Val]) -> Result<Option<Vec<RelSeg>>> {
             out.push(RelSeg::Line(g(a.len() - 2), g(a.len() - 1)));
         }
         25 => {
-            if a.len() < 8 || !(a.len() - 6).is_multiple_of(2) {
+            if a.len() < 6 || !(a.len() - 6).is_multiple_of(2) {
                 return Err(wrong());
             }
             let lines = (a.len() - 6) / 2;
