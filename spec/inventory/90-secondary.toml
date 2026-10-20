@@ -3422,7 +3422,8 @@ origin = "fontforge"
 guesses = [
   "A bitmap goes to the glyph whose code point is its code when the file's codes are Unicode, else to the glyph of its name; the summary names both keys but not their order. Importing a BDF whose names and codes disagree into the secondary reference would settle it.",
   "Bitmaps that match no glyph are left out and listed; no glyph is created for them. Importing a BDF with an extra glyph into a font without it, in the secondary reference, would settle it.",
-  "A file none of whose bitmaps matches a glyph is refused, changing nothing.",
+  "A file none of whose strikes has a bitmap that matches a glyph is refused, changing nothing; a strike that matches nothing in a file whose other strikes match (such as a symbol font in a FON file) is left out with a warning.",
+  "When the files of one import hold two strikes of one size and depth, the first is added and the second left out with a warning, as opening the file does; the two are not merged. Importing a FON with a regular and a bold font of one size into the secondary reference would settle it.",
   "Importing a strike whose size and depth the font has replaces the strike's name, metrics and properties and the bitmaps of the glyphs the file holds, and keeps the strike's other bitmaps.",
   "A strike keeps each bitmap's code from the file and writes it back on export, so a strike in a non-Unicode encoding survives a round trip.",
 ]

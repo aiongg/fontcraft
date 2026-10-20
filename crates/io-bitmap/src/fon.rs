@@ -37,9 +37,12 @@ fn ne_offset(bytes: &[u8]) -> Option<usize> {
     u32_at(bytes, 0x3C).map(|at| at as usize)
 }
 
-/// Whether `bytes` are a 16-bit Windows executable, the container of FON fonts.
+/// Whether `bytes` are a Windows executable: a 16-bit (NE) one, the container of FON fonts, or a
+/// 32-bit (PE) one, which [`read_fon`] refuses with a message.
 pub fn is_fon(bytes: &[u8]) -> bool {
-    ne_offset(bytes).is_some_and(|at| at.checked_add(2).and_then(|end| bytes.get(at..end)) == Some(b"NE".as_slice()))
+    ne_offset(bytes)
+        .and_then(|at| at.checked_add(2).and_then(|end| bytes.get(at..end)))
+        .is_some_and(|magic| magic == b"NE".as_slice() || magic == b"PE".as_slice())
 }
 
 /// Reads every font of a FON file, in resource table order. A font that cannot be read is left
@@ -159,6 +162,7 @@ pub fn write_fon(fonts: &[BitmapFont]) -> Result<Written> {
     }
     let mut warnings = Warnings::default();
     let mut fnts = Vec::with_capacity(fonts.len());
+    let mut total = 0usize;
     for font in fonts {
         let mut own = Warnings::default();
         let bytes = fnt::build(font, &mut own).map_err(|e| match e {
@@ -167,6 +171,11 @@ pub fn write_fon(fonts: &[BitmapFont]) -> Result<Written> {
         })?;
         for m in own.finish() {
             warnings.push(format!("the {} pixel strike: {m}", font.pixel_size));
+        }
+        // Stop as soon as the fonts cannot fit, rather than building every one first.
+        total = total.saturating_add(bytes.len());
+        if total > MAX_FILE_BYTES {
+            return Err(BitmapError::Write(format!("the strikes take more than {MAX_FILE_BYTES} bytes as FNT fonts, the limit of a FON file")));
         }
         fnts.push(bytes);
     }

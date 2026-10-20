@@ -75,6 +75,8 @@ pub const MAX_PROPERTIES: usize = 4_096;
 pub const MAX_STRING_BYTES: usize = 65_536;
 /// Largest absolute value of a coordinate, offset, advance or width.
 pub const MAX_COORDINATE: i32 = 32_767;
+/// Largest glyph code kept, the largest a font's strike holds.
+pub const MAX_CODE: u32 = 0x7FFF_FFFF;
 /// Most warnings kept; the rest are counted in the last one.
 pub const MAX_WARNINGS: usize = 100;
 
@@ -345,7 +347,12 @@ pub fn read(bytes: &[u8]) -> Result<Import> {
         }
         Some(Format::Mac) => {
             let mut strikes = read_mac(bytes)?.into_iter();
-            strikes.next().ok_or_else(|| BitmapError::Malformed { format: "Mac font", message: "it holds no strike".into() })
+            let mut first = strikes.next().ok_or_else(|| BitmapError::Malformed { format: "Mac font", message: "it holds no strike".into() })?;
+            let more = strikes.len();
+            if more > 0 && first.warnings.len() < MAX_WARNINGS {
+                first.warnings.push(format!("the file holds {more} more strikes, which were left out"));
+            }
+            Ok(first)
         }
         None => Err(BitmapError::Unknown),
     }

@@ -218,6 +218,10 @@ fn hostile_fnt_headers_are_refused_with_a_message() {
         let e = read_fnt(bytes).unwrap_err().to_string();
         assert!(e.contains(words), "{words}: {e}");
     }
+    // A point size beyond what a strike holds is cut to the limit, with a warning.
+    let large = read_fnt(&patched(68, &40_000u16.to_le_bytes())).unwrap();
+    assert_eq!(large.font.point_size, f64::from(MAX_COORDINATE));
+    assert!(large.warnings.iter().any(|w| w.contains("point size 40000")), "{:?}", large.warnings);
     let mut backwards = good.clone();
     backwards[95] = 0x90;
     backwards[96] = 0x20;
@@ -285,6 +289,10 @@ fn hostile_fon_files_are_refused_with_a_message() {
         let e = read_fon(bytes).unwrap_err().to_string();
         assert!(e.contains(words), "{words}: {e}");
     }
+    // A 32-bit executable is taken for a font file, so reading it says why it is refused.
+    let pe = patched(ne, b"PE");
+    assert!(is_fon(&pe));
+    assert!(read(&pe).unwrap_err().to_string().contains("32-bit"));
     // One font out of reach: the other is read, with a warning.
     let mut fonts_moved = good.clone();
     let second = table + 2 + 20 + 8 + 12;

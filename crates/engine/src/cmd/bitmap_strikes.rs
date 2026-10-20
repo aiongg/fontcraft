@@ -41,7 +41,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Import Bitmap Strikes…",
             ["File", "Import"],
             None,
-            "{paths: [path of a bitmap font file: .bdf, .pcf, .pcf.gz, .bdf.gz, Windows .fnt or .fon, TeX .pk or .gf, or a Mac bitmap font (a resource fork, .dfont, AppleSingle, AppleDouble or MacBinary file)], asBackground?: false} adds the strikes each file holds to the font, as one undo step: one per file, each font of a .fon file, or each plain-style size of a Mac font family; at most 64 strikes in all. A bitmap goes to the glyph whose code point is the file's code for it (when the file's codes are Unicode), else to the glyph of its name; bitmaps that match no glyph are left out and listed, and no glyph is created. A strike of the same size and depth as one the font has replaces that strike's name, metrics and properties and the bitmaps of the glyphs it holds; the strike's other bitmaps stay. Refused, changing nothing: a file in none of these formats, gzip data that does not inflate to a PCF or BDF file, a grey Mac font, a packed run that overflows its glyph's box, a file beyond the bitmap readers' limits, files that hold more than 64 strikes together, a file none of whose bitmaps match a glyph, asBackground (not built) → {strikes: [{path, ppem, depth, label, glyphs, replaced, leftOut: [name], leftOutCount}], warnings: [string]}",
+            "{paths: [path of a bitmap font file: .bdf, .pcf, .pcf.gz, .bdf.gz, Windows .fnt or .fon, TeX .pk or .gf, or a Mac bitmap font (a resource fork, .dfont, AppleSingle, AppleDouble or MacBinary file)], asBackground?: false} adds the strikes each file holds to the font, as one undo step: one per file, each font of a .fon file, or each plain-style size of a Mac font family; at most 64 strikes in all. A bitmap goes to the glyph whose code point is the file's code for it (when the file's codes are Unicode), else to the glyph of its name; bitmaps that match no glyph are left out and listed, and no glyph is created. A TeX PK or GF file's codes are not Unicode, so its bitmaps match by name. A strike none of whose bitmaps match is left out with a warning when another strike of its file matches, and so is a strike of a size and depth an earlier strike of the files has. A strike of the same size and depth as one the font has replaces that strike's name, metrics and properties and the bitmaps of the glyphs it holds; the strike's other bitmaps stay. Refused, changing nothing: a file in none of these formats, gzip data that does not inflate to a PCF or BDF file, a grey Mac font, a packed run that overflows its glyph's box, a file beyond the bitmap readers' limits, files that hold more than 64 strikes together, a file none of whose strikes has a bitmap that matches a glyph, asBackground (not built) → {strikes: [{path, ppem, depth, label, glyphs, replaced, leftOut: [name], leftOutCount}], warnings: [string]}",
             has_doc,
             import_strikes
         )
@@ -163,13 +163,35 @@ fn import_strikes(s: &mut Session, v: &Value) -> Result<Value> {
         }
     }
     let font = s.font()?;
-    let mut incoming = Vec::with_capacity(files.len());
+    let mut incoming: Vec<Incoming> = Vec::with_capacity(files.len());
+    // A file is refused when none of its strikes matches; an unmatched strike of a file whose
+    // other strikes match is left out with a warning.
+    let mut unmatched: Vec<(&str, String, usize)> = Vec::new();
+    let mut matched_paths: HashSet<&str> = HashSet::new();
     for (path, bitmap_font) in &files {
         let one = to_strike(font, path, bitmap_font, &mut warnings);
         if one.strike.glyphs.is_empty() {
-            return Err(p.bad(format!("{path}: none of its {} bitmaps matches a glyph of the font by code or name", bitmap_font.glyphs.len())));
+            unmatched.push((path.as_str(), one.strike.label(), bitmap_font.glyphs.len()));
+            continue;
+        }
+        matched_paths.insert(path.as_str());
+        // Two strikes of one size and depth would merge into one; the first is kept, as opening
+        // the file keeps it.
+        if incoming.iter().any(|i| i.strike.ppem == one.strike.ppem && i.strike.depth == one.strike.depth) {
+            warnings.push(format!(
+                "{path}: a further strike of {} was left out: an earlier strike of the files has that size and depth",
+                one.strike.label()
+            ));
+            continue;
         }
         incoming.push(one);
+    }
+    for (path, label, count) in unmatched {
+        let none = format!("none of its {count} bitmaps matches a glyph of the font by code or name");
+        if !matched_paths.contains(path) {
+            return Err(p.bad(format!("{path}: {none}")));
+        }
+        warnings.push(format!("{path}: the {label} strike was left out: {none}"));
     }
     let replaced = s.edit("Import Bitmap Strikes", |font| {
         let strikes = std::sync::Arc::make_mut(&mut font.bitmap_strikes);
