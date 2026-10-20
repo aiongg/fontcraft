@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use egui::{Event, Key, Modifiers, PointerButton, Pos2};
 use fontcraft_engine::fontinfo::Scope;
-use fontcraft_model::{Axis, Font, Instance, Master};
+use fontcraft_model::{Axis, Font, Glyph, GlyphTable, Instance, Layer, Master, Path, Shape};
 use serde_json::json;
 
 use super::*;
@@ -208,7 +208,7 @@ fn exports_tab_preview_draws_aang126_or_the_instance_preview_glyphs_at_a_masters
     assert!(kept.and_then(|k| k.texture).is_some(), "the preview is drawn");
 
     // Two masters on a weight axis: an instance at a master's location draws that master; one
-    // between them shows a message.
+    // between them draws its interpolated view.
     let mut font = Font::new("Two");
     Arc::make_mut(&mut font.axes).push(Axis { name: "Weight".into(), tag: "wght".into(), ..Axis::default() });
     let light = Master { id: "light".into(), name: "Light".into(), location: vec![300.0], ..Master::default() };
@@ -217,7 +217,42 @@ fn exports_tab_preview_draws_aang126_or_the_instance_preview_glyphs_at_a_masters
     let at = |w: f64| Instance { name: "X".into(), location: vec![w], ..Instance::default() };
     *Arc::make_mut(&mut font.instances) = vec![at(700.0), at(500.0)];
     assert_eq!(preview_glyphs(&font, 0).map(|(m, _)| m), Ok("bold".to_string()));
-    assert!(preview_glyphs(&font, 1).is_err(), "an instance between masters is not drawn");
+    assert_eq!(preview_glyphs(&font, 1).map(|(m, _)| m), Ok(view_master_id(1)), "an instance between masters draws its view");
+}
+
+#[test]
+fn exports_tab_preview_draws_an_instance_between_masters_interpolated() {
+    let mut app = FontcraftApp::default();
+    app.session
+        .edit("setup", |font| {
+            font.axes = Arc::new(vec![Axis { name: "Weight".into(), tag: "wght".into(), ..Axis::default() }]);
+            let mut light = font.default_master()?.clone();
+            light.id = "light".into();
+            light.name = "Light".into();
+            light.location = vec![300.0];
+            let mut bold = light.clone();
+            bold.id = "bold".into();
+            bold.name = "Bold".into();
+            bold.location = vec![700.0];
+            font.masters = Arc::new(vec![light, bold]);
+            font.instances = Arc::new(vec![Instance { name: "Medium".into(), location: vec![500.0], ..Instance::default() }]);
+            let layer = |master: &str, w: f64| {
+                let mut l = Layer::new(master, w + 100.0);
+                l.shapes = vec![Shape::Path(Path::rect(0.0, 0.0, w, 700.0))];
+                l
+            };
+            let mut a = Glyph::new("A");
+            a.unicodes = vec![0x41];
+            a.layers = vec![layer("light", 100.0), layer("bold", 300.0)];
+            font.glyphs = GlyphTable::from_glyphs(vec![Arc::new(a)]);
+            Ok(())
+        })
+        .unwrap();
+    app.run("font.info", &json!({"tab": "exports"})).unwrap();
+    assert_eq!(preview_glyphs(app.session.font().unwrap(), 0), Ok((view_master_id(0), vec!["A".to_string()])));
+    let w = open(&mut app);
+    let kept: Option<PreviewTexture> = w.ctx.data(|d| d.get_temp(preview_id().with("texture")));
+    assert!(kept.and_then(|k| k.texture).is_some(), "the interpolated line is drawn");
 }
 
 #[test]

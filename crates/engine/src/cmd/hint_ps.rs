@@ -1,7 +1,7 @@
 //! PostScript hint commands (`hint.ps.*`): add horizontal and vertical hints, ghosts, edge values, node links, delete, clear, list, the font hints and their check.
 //!
 //! Rows: `hint.ps.addHorizontalHint`, `hint.ps.addVerticalHint`, `hint.ps.makeGhostHint`,
-//! `hint.ps.setGhostDirection`, `hint.ps.setHintValues`, `hint.ps.attachHintToNode`,
+//! `hint.ps.setGhostDirection`, `hint.ps.setHintValues`, `hint.ps.moveHints`, `hint.ps.attachHintToNode`,
 //! `hint.ps.deleteHints`, `hint.ps.clearGlyphHints`, `hint.ps.listHints`, `hint.ps.getFontHints`,
 //! `hint.ps.validateFontHints`, `hinting.ps.manual.ghostFromSingleNode`,
 //! `hinting.ps.manual.overlapAllowed`, `hinting.ps.manual.horizontalHintsNeedExactY`,
@@ -93,6 +93,16 @@ pub fn specs() -> Vec<CommandSpec> {
             "{glyph: name, layer?: id (default: the main master's layer), hint: index, origin?: number, size?: number} type a hint's values. A typed origin unlinks the origin end; a stem's other end keeps its node link, or, when it is a number, the hint keeps its size. A typed size puts the other end at origin + size, unlinked; a ghost hint given a size becomes a stem hint → {hints: [index], selection: {glyph, layer}}",
             has_doc,
             set_values
+        )
+        .targets(ONE_LAYER),
+        cmd!(
+            "hint.ps.moveHints",
+            "Move Hints",
+            [],
+            None,
+            "{glyph: name, layer?: id (default: the main master's layer), hints: [index], dx?: number, dy?: number} move the listed hints across their edges, together as one step: horizontal hints by dy, vertical ones by dx. A moved hint keeps its size; its ends become numbers, unlinked from their nodes. A hint whose distance is missing or 0 stays where it is; when none of the hints moves, nothing changes → {hints: [index], selection: {glyph, layer}}",
+            has_doc,
+            move_hints
         )
         .targets(ONE_LAYER),
         cmd!(
@@ -562,6 +572,42 @@ fn set_values(s: &mut Session, v: &Value) -> Result<Value> {
         }
     }
     write(s, &p, "Set Hint Values", &r, &list, json!({"hints": [i]}))
+}
+
+fn move_hints(s: &mut Session, v: &Value) -> Result<Value> {
+    let p = Params::new("hint.ps.moveHints", v)?;
+    let font = s.font()?;
+    let mut r = read(&p, font)?;
+    let layer = r.target.resolve(font)?.layer;
+    let ix = hint_indexes(&p, &r.list)?;
+    let dx = coordinate(&p, "dx")?.unwrap_or(0.0);
+    let dy = coordinate(&p, "dy")?.unwrap_or(0.0);
+    let mut list = std::mem::take(&mut r.list);
+    let mut moved = Vec::new();
+    for &i in &ix {
+        let Some(h) = list.get_mut(i) else { continue };
+        let horizontal = h.horizontal;
+        let by = if horizontal { dy } else { dx };
+        if by == 0.0 {
+            continue;
+        }
+        let shifted = |e: &Edge| -> Result<f64> {
+            let at = e.position(layer, horizontal).map_err(|e| p.bad(format!("hint {i}: {e}")))? + by;
+            if !at.is_finite() || at.abs() > MAX_COORDINATE {
+                return Err(p.bad(format!("hint {i} would move to {at}, beyond ±{MAX_COORDINATE}")));
+            }
+            Ok(at)
+        };
+        let origin = shifted(&h.origin)?;
+        let other = h.other.as_ref().map(shifted).transpose()?;
+        h.origin = Edge::Value(origin);
+        h.other = other.map(Edge::Value);
+        moved.push(i);
+    }
+    if moved.is_empty() {
+        return Err(p.bad("none of the hints moves: horizontal hints move by `dy`, vertical ones by `dx`"));
+    }
+    write(s, &p, "Move Hints", &r, &list, json!({"hints": moved}))
 }
 
 fn attach(s: &mut Session, v: &Value) -> Result<Value> {

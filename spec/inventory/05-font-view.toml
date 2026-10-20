@@ -1422,9 +1422,10 @@ milestone = "M4"
 summary = "Every grid cell draws the glyph's layer for the master currently selected in the font window, so switching masters redraws the whole grid."
 ref = "Font View › Grid View"
 status = "handbook"
-notes = "Font View's master is chosen with view.selectMaster while Font View shows (Cmd+1 to Cmd+9); the toolbar's master icons are M9 (`preview.masterIconsInToolbar`)."
+notes = "Font View's master is chosen with view.selectMaster while Font View shows (Cmd+1 to Cmd+9); the toolbar's master icons are M9 (`preview.masterIconsInToolbar`). Each open document keeps its own Font View master (crates/ui-egui/src/state.rs, `DocumentTabs`): a document shown for the first time starts in its first master, and a tab opened from its Font View takes that one (X.ui3)."
 guesses = [
   "Font View's master is its own: choosing a master in a tab does not change it, and a tab opened from Font View starts in it. Settled by observation.",
+  "Each document window keeps its own selected master, as each font has its own window in the reference app; switching between two open fonts there would settle it.",
 ]
 
 [[behavior]]

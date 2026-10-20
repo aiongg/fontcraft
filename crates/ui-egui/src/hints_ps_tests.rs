@@ -216,7 +216,7 @@ fn arrow_keys_in_a_frame_move_the_selected_hint_and_keep_it_selected() {
     let h = hints(&mut app);
     assert_eq!((h[0]["origin"].as_f64(), h[0]["size"].as_f64()), (Some(10.0), Some(80.0)));
     assert_eq!(selected_hints(&app), vec![0], "the hint stays selected");
-    assert_eq!(undo_labels(&app).last().map(String::as_str), Some("Set Hint Values"));
+    assert_eq!(undo_labels(&app).last().map(String::as_str), Some("Move Hints"));
     // Left and Right move vertical hints only: hint 0 stays where it is.
     w.frame(&mut app, press(Key::ArrowRight, Modifiers::NONE));
     assert_eq!(hints(&mut app)[0]["origin"].as_f64(), Some(10.0));
@@ -227,6 +227,16 @@ fn arrow_keys_in_a_frame_move_the_selected_hint_and_keep_it_selected() {
     let h = hints(&mut app);
     assert_eq!((h[1]["origin"].as_f64(), h[1]["size"].as_f64()), (Some(101.0), Some(200.0)));
     assert_eq!(selected_hints(&app), vec![1]);
+    // Several selected hints move together, as one undo step.
+    app.state.tab_mut().unwrap().selection = Selection::from_items([Item::Hint(0), Item::Hint(2)]);
+    let (before, steps) = (hints(&mut app), undo_labels(&app).len());
+    w.frame(&mut app, press(Key::ArrowDown, Modifiers::NONE));
+    let h = hints(&mut app);
+    assert_eq!((h[0]["origin"].as_f64(), h[2]["origin"].as_f64()), (Some(9.0), Some(699.0)));
+    assert_eq!(undo_labels(&app).len(), steps + 1, "one undo step for both hints");
+    assert_eq!(selected_hints(&app), vec![0, 2]);
+    app.run("edit.undo", &json!({})).unwrap();
+    assert_eq!(hints(&mut app), before);
 }
 
 #[test]

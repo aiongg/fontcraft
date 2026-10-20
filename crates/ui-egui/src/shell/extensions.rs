@@ -7,6 +7,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+pub mod dropped;
 pub mod external_changes;
 pub mod manager;
 pub mod reporters;

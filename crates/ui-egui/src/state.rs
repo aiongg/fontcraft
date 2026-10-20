@@ -72,6 +72,9 @@ pub struct DocumentTabs {
     pub tabs: Vec<Tab>,
     pub active_tab: Option<usize>,
     pub closed_tabs: Vec<(usize, Tab)>,
+    /// The master Font View drew for that document: master ids repeat across documents, so
+    /// another document's choice must not carry over to its cells or to a tab opened from them.
+    pub font_view_master: Option<String>,
 }
 
 impl Default for UiState {
@@ -119,8 +122,8 @@ impl UiState {
         self.tabs.iter().position(|t| t.id == id)
     }
 
-    /// Makes `tabs`, `active_tab` and `closed_tabs` those of document `active` (`None`: no
-    /// document is open). The ones shown until now are kept for their document while `is_open`
+    /// Makes `tabs`, `active_tab`, `closed_tabs` and Font View's master those of document
+    /// `active` (`None`: no document is open; a document with none kept gets its first master). The ones shown until now are kept for their document while `is_open`
     /// says it is still open, and dropped with it otherwise. Returns whether the tabs changed
     /// hands.
     pub fn follow_document(&mut self, active: Option<u64>, is_open: impl Fn(u64) -> bool) -> bool {
@@ -133,10 +136,11 @@ impl UiState {
                     tabs: std::mem::take(&mut self.tabs),
                     active_tab: self.active_tab.take(),
                     closed_tabs: std::mem::take(&mut self.closed_tabs),
+                    font_view_master: self.font_view.master.take(),
                 };
                 if let Some(shown) = shown
                     && is_open(shown)
-                    && (!kept.tabs.is_empty() || !kept.closed_tabs.is_empty())
+                    && (!kept.tabs.is_empty() || !kept.closed_tabs.is_empty() || kept.font_view_master.is_some())
                 {
                     self.other_documents.insert(shown, kept);
                 }
@@ -144,6 +148,7 @@ impl UiState {
                     self.tabs = back.tabs;
                     self.active_tab = back.active_tab.filter(|i| *i < self.tabs.len());
                     self.closed_tabs = back.closed_tabs;
+                    self.font_view.master = back.font_view_master;
                 }
                 true
             }

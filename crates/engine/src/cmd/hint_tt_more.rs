@@ -2,7 +2,7 @@
 //! instructions, validated against the touched state (`fontcraft_hinting::TouchedState`).
 //!
 //! Rows: `hint.tt.shiftPoints`, `hint.tt.interpolate`, `hint.tt.addDelta`, `hint.tt.setDeltas`,
-//! `hint.tt.deleteInstructions`, `hint.tt.removeHints`, `hint.tt.listInstructions`,
+//! `hint.tt.moveInstruction`, `hint.tt.deleteInstructions`, `hint.tt.removeHints`, `hint.tt.listInstructions`,
 //! `hinting.tt.shift.*`, `hinting.tt.interpolate.*`, `hinting.tt.delta.restrictions`.
 //!
 //! Parameters follow `hint_tt`: `glyph`, `layer` (the main master's layer when absent), points as
@@ -24,7 +24,9 @@ use fontcraft_hinting::{
 use fontcraft_model::{Font, Layer};
 use serde_json::{Map, Value, json};
 
-use super::hint_tt::{Read, all_of, append, direction, indexes, point, points, points_in, read, rounding_named, settings, triple_of, write};
+use super::hint_tt::{
+    Read, all_of, append, direction, indexes, point, points, points_in, read, rounding_named, settings, triple_of, type_name, write,
+};
 use super::*;
 use crate::params::{Params, TargetKind, Targets};
 
@@ -89,6 +91,16 @@ pub fn specs() -> Vec<CommandSpec> {
             "{glyph: name, layer?: id (default: the main master's layer), instructions: [index]} delete instructions by their position in the list. Deleting a member of a triple hint dissolves that triple hint. Later instructions whose needs the deleted ones met (a Shift origin, Interpolate references, an untouched point) stay and are reported → {deleted: [index], dissolved: [index], unmet: [{instruction: index, reason}], selection: {glyph, layer}}; `dissolved` and `unmet` count positions in the new list",
             has_doc,
             delete_instructions
+        )
+        .targets(ONE_LAYER),
+        cmd!(
+            "hint.tt.moveInstruction",
+            "Move Instruction",
+            [],
+            None,
+            "{glyph: name, layer?: id (default: the main master's layer), instruction: index, point: point, end?: \"target\" | \"origin\" | \"other\" (default target)} put one point of an instruction on another point, as dropping its badge on a node in the TrueType Instructor does. `target` is the point the instruction moves, `origin` the reference of Stem and Shift or the first reference of Interpolate, `other` the second reference of Interpolate. A point is `[path, node]`, `[p1, n1, p2, n2]` (an intersection) or \"lsb\" / \"rsb\". The instructions before it must still meet the moved instruction's needs, and no later instruction may lose a need that was met; otherwise nothing changes → {instructions: [index], selection: {glyph, layer}}",
+            has_doc,
+            move_instruction
         )
         .targets(ONE_LAYER),
         cmd!(
@@ -407,6 +419,39 @@ fn delete_instructions(s: &mut Session, v: &Value) -> Result<Value> {
         .collect();
     let deleted: Vec<usize> = gone.into_iter().collect();
     write(s, &p, "Delete Instructions", &r, &list, json!({"deleted": deleted, "dissolved": dissolved, "unmet": unmet}))
+}
+
+fn move_instruction(s: &mut Session, v: &Value) -> Result<Value> {
+    let p = Params::new("hint.tt.moveInstruction", v)?;
+    let font = s.font()?;
+    let mut r = read(&p, font)?;
+    let layer = r.target.resolve(font)?.layer;
+    let raw = p.get("instruction").ok_or_else(|| p.bad("`instruction` is required"))?;
+    let i = raw.as_u64().and_then(|i| usize::try_from(i).ok()).ok_or_else(|| p.bad(format!("`instruction` must be an index, found {raw}")))?;
+    let to = one_point(&p, "point", layer)?;
+    let mut list = std::mem::take(&mut r.list);
+    let count = list.len();
+    let unmet_before: BTreeSet<usize> = unmet_needs(&list).into_iter().map(|(k, _)| k).collect();
+    let t = list.get_mut(i).ok_or_else(|| p.bad(format!("`instruction`: {i} does not resolve: the layer has {count} instructions")))?;
+    let name = type_name(t);
+    let slot = match p.opt_str("end")?.unwrap_or("target") {
+        "target" => Some(&mut t.target),
+        "origin" => t.origin.as_mut(),
+        "other" => t.other.as_mut(),
+        other => return Err(p.bad(format!("`end` must be \"target\", \"origin\" or \"other\", got \"{other}\""))),
+    };
+    let slot = slot.ok_or_else(|| p.bad(format!("instruction {i} is {name} instruction: it has no such point")))?;
+    if *slot == to {
+        return Err(p.bad(format!("instruction {i} is on that point already")));
+    }
+    *slot = to;
+    if let Some(t) = list.get(i) {
+        TouchedState::replay(&list, i).check(t).map_err(|e| p.bad(format!("instruction {i} cannot sit there: {e}")))?;
+    }
+    if let Some((k, reason)) = unmet_needs(&list).into_iter().find(|(k, _)| *k != i && !unmet_before.contains(k)) {
+        return Err(p.bad(format!("instruction {k} builds on instruction {i} and would lose it: {reason}")));
+    }
+    write(s, &p, "Move Instruction", &r, &list, json!({"instructions": [i]}))
 }
 
 fn remove_hints(s: &mut Session, v: &Value) -> Result<Value> {

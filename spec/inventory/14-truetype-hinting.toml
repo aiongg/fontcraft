@@ -737,8 +737,8 @@ milestone = "M10"
 summary = "Edit View tool for placing glyph-level TrueType instructions on the main master's nodes. While it is active the layer shows three outlines (master, unhinted instance, grid-fitted instance), the Info box shows pixel size and hinting direction, and the preview area becomes a size waterfall at the right. The appendix gives I as its shortcut, the same key the handbook gives the Higher-Order Interpolation tool; which one wins when both exist is open."
 ref = "TrueType Hinting › Glyph-level Hints"
 status = "handbook"
-guesses = ["The tool sits after the Measurement and Thickness tools in the toolbar and node selection works as with the Select tool (click, Shift+click, rubber band, Select All on the layer); the custom-parameter descriptions give its shortcut as I; the reference app would settle the rest.", "S pairs the selected points along the stems: for vertical hinting by x, then y, each pair from the lower point (the origin) to the upper one; for horizontal hinting by y, then x, from left to right; the reference app would show how it pairs four or more points.", "Arrow keys, Return, Delete and Backspace do nothing in the Instructor, so the outline cannot be edited by accident; the reference app would settle whether they move nodes there."]
-notes = "The custom-parameter descriptions (TTFStems, TTFZones) name the tool with the shortcut I (checked by the M10 planning pass). M10.25, crates/tools/src/tt_instructor.rs: the tool sits after the Thickness tool; a click selects a node or handle and Shift+click toggles it, a drag selects by rectangle, nodes never move; A, S, F, G and E run hint.tt.snapPoint, addStemHint, shiftPoints, interpolate and addDelta on the selected points in the current direction; X, Period, Plus, Comma and Minus run the view commands; the Autohint shortcut runs through the menus. Badge clicks (crates/ui-egui/src/canvas/tt_badges.rs) run hint.tt.selectInstructions. Not yet: dragging badges, the context menu, extra nodes, and Delete on selected instructions. Documented, not yet observed."
+guesses = ["The tool sits after the Measurement and Thickness tools in the toolbar and node selection works as with the Select tool (click, Shift+click, rubber band, Select All on the layer); the custom-parameter descriptions give its shortcut as I; the reference app would settle the rest.", "S pairs the selected points along the stems: for vertical hinting by x, then y, each pair from the lower point (the origin) to the upper one; for horizontal hinting by y, then x, from left to right; the reference app would show how it pairs four or more points.", "Arrow keys and Return do nothing in the Instructor, and Delete and Backspace delete only the selected instructions, so the outline cannot be edited by accident; the reference app would settle whether they move or delete nodes there."]
+notes = "The custom-parameter descriptions (TTFStems, TTFZones) name the tool with the shortcut I (checked by the M10 planning pass). M10.25, crates/tools/src/tt_instructor.rs: the tool sits after the Thickness tool; a click selects a node or handle and Shift+click toggles it, a drag selects by rectangle, nodes never move; A, S, F, G and E run hint.tt.snapPoint, addStemHint, shiftPoints, interpolate and addDelta on the selected points in the current direction; X, Period, Plus, Comma and Minus run the view commands; the Autohint shortcut runs through the menus. Badge clicks (crates/ui-egui/src/canvas/tt_badges.rs) run hint.tt.selectInstructions; a badge dropped on a node runs hint.tt.moveInstruction; Delete or Backspace with instructions selected runs hint.tt.deleteInstructions on them (X.ui3). Not yet: extra nodes. Documented, not yet observed."
 observe = ["T3: find the TrueType Instructor in the toolbar and note its position and shortcut; select nodes by rubber band, by Shift+click and with Select All, and note which of these gestures work."]
 
 [[behavior]]
@@ -1107,7 +1107,8 @@ milestone = "M10"
 summary = "An instruction is added by selecting the nodes it should act on and choosing its type from the context menu or pressing its letter key. Instructions may sit on any node the tool shows, including off-curve points and extra nodes. A placed instruction can be dragged to reposition it."
 ref = "TrueType Hinting › Instructions; Points in Overlapping Intersections"
 status = "handbook"
-guesses = ["Dragging an instruction badge moves only the badge's drawn position, which is view state and not saved; dropping it on another node does not re-target it; the reference app would settle what the drag changes."]
+notes = "X.ui3: dragging a badge of the current direction and dropping it on a node or handle of the edited layer runs hint.tt.moveInstruction on the instruction's target (crates/ui-egui/src/canvas/tt_badges.rs); a drop elsewhere changes nothing. Documented, not yet observed."
+guesses = ["Dragging an instruction badge onto another node moves the instruction's target point there, and the drag is not saved as a badge position; the reference app would settle what the drag changes."]
 observe = ["T3: drag an instruction badge, save, reopen, and note what the drag changed and whether it was saved; then drag a badge onto another node and note whether the instruction moves to that node."]
 
 [[behavior]]
@@ -1163,9 +1164,25 @@ milestone = "M10"
 summary = "Removes only the selected instructions. The handbook does not describe deleting single TT instructions (the Delete key is the likely gesture, as for PostScript hints); verify before binding a key."
 ref = "TrueType Hinting › Instructions"
 status = "inferred"
-notes = "M10.7, crates/engine/src/cmd/hint_tt_more.rs: deletes the instructions named by list position in one undo step. Later instructions whose needs the deleted ones met stay and are reported under `unmet` (fontcraft_hinting::unmet_needs, new failures only); deleting a member of a triple hint dissolves that triple hint. Not documented; inferred."
+notes = "M10.7, crates/engine/src/cmd/hint_tt_more.rs: deletes the instructions named by list position in one undo step. In the Instructor, Delete or Backspace runs it on the selected instructions and clears the instruction selection (X.ui3, crates/ui-egui/src/canvas/tt_badges.rs). Later instructions whose needs the deleted ones met stay and are reported under `unmet` (fontcraft_hinting::unmet_needs, new failures only); deleting a member of a triple hint dissolves that triple hint. Not documented; inferred."
 guesses = ["The Delete key removes the selected instructions, as for PostScript hints; the reference app would settle it.", "Deleting an instruction that later ones build on deletes it and reports those later ones, which stay in the list; the reference app would settle whether it refuses, deletes them too or keeps them silently.", "Deleting one member of a triple hint dissolves the triple hint and keeps the other two Stem instructions; the reference app would settle it."]
 observe = ["T3: with the TrueType Instructor, select an instruction badge and press Delete; note whether the instruction is removed.", "T3: with the TrueType Instructor, add a Snap and a Shift from the snapped point, delete the Snap and note what happens to the Shift."]
+
+[[command]]
+id = "hint.tt.moveInstruction"
+label = "Move Instruction"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, layer?: id, instruction: index, point: point, end?: 'target'|'origin'|'other'}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Puts one point of a placed instruction on another point: what dropping an instruction's badge on a node in the TrueType Instructor does. The handbook says only that instructions are dragged to reposition them."
+ref = "TrueType Hinting › Instructions"
+status = "handbook"
+notes = "X.ui3, crates/engine/src/cmd/hint_tt_more.rs: one undo step; the moved instruction is checked against the touched state of the instructions before it, and a move that takes away a need a later instruction had met is refused. The Instructor's badge drag runs it with `end: target` (crates/ui-egui/src/canvas/tt_badges.rs). Documented, not yet observed."
+guesses = ["Repositioning an instruction moves the point it acts on, not only its badge; a drop away from any node changes nothing; dragging a Snap badge onto another node in the reference app would settle it.", "A move that leaves a later instruction without a touched origin or reference is refused rather than reported; the reference app would settle it."]
+observe = ["T3: drag a Snap badge onto another untouched node and note whether the Snap moves to it; then drag it onto a node a Shift uses as its origin and note what happens."]
 
 [[command]]
 id = "hint.tt.listInstructions"

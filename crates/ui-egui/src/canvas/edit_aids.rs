@@ -15,10 +15,11 @@
 //! | Lock Outline badge | `aids.lock_badge` |
 //! | label text | `aids.label_size` |
 
-use egui::{Align2, Color32, FontId, Pos2, Stroke, StrokeKind};
+use egui::{Align2, Color32, CursorIcon, FontId, Pos2, Rect, Sense, Stroke, StrokeKind};
 use fontcraft_geom::{CubicBez, ParamCurveArclen, Piece, Point, Segment, Shape as _, segments};
 use fontcraft_model::{Font, Layer, Shape};
 use fontcraft_tools::View;
+use serde_json::json;
 
 use super::{Painting, Scene};
 use crate::panels::Pending;
@@ -40,12 +41,12 @@ thread_local! {
 
 /// Draws this overlay for the edited layer.
 pub fn draw(ui: &egui::Ui, c: &Painting, scene: &Scene, pending: &mut Pending) {
-    let _ = (ui, pending);
     let aids = &scene.state.panels.edit_aids;
     ghost(c, scene);
     let beam = aids.beam.then(|| beam_height(aids, scene.font, scene.doc.0, scene.tab)).filter(|y| y.is_finite());
     if let Some(y) = beam {
         beam_line(c, y);
+        beam_drag(ui, c, scene.layer, y, pending);
     }
     let mut budget = MAX_LABELS;
     if aids.details_across_glyphs {
@@ -211,6 +212,35 @@ fn beam_line(c: &Painting, y: f64) {
     let Some(at) = screen(c.view, Point::new(0.0, y)) else { return };
     let stroke = Stroke::new(c.tokens.aids.beam_width, c.tokens.aids.beam);
     c.painter.line_segment([Pos2::new(c.rect.left(), at.y), Pos2::new(c.rect.right(), at.y)], stroke);
+}
+
+/// Dragging the beam up or down runs `view.showMetricsBeam` with the height under the pointer, in
+/// whole units. The beam is grabbed only where it lies beside the edited glyph, left of its
+/// origin and right of its advance width, so nodes on the beam stay with the tools.
+fn beam_drag(ui: &egui::Ui, c: &Painting, layer: &Layer, y: f64, pending: &mut Pending) {
+    let width = if layer.width.is_finite() { layer.width } else { 0.0 };
+    let (Some(origin), Some(advance)) = (screen(c.view, Point::new(0.0, y)), screen(c.view, Point::new(width, y))) else { return };
+    let reach = c.tokens.hit_tolerance;
+    let (top, bottom) = (origin.y - reach, origin.y + reach);
+    let sides = [
+        Rect::from_min_max(Pos2::new(c.rect.left(), top), Pos2::new(origin.x.min(advance.x) - reach, bottom)),
+        Rect::from_min_max(Pos2::new(origin.x.max(advance.x) + reach, top), Pos2::new(c.rect.right(), bottom)),
+    ];
+    for (side, area) in sides.into_iter().enumerate() {
+        let area = area.intersect(c.rect);
+        if !area.is_positive() {
+            continue;
+        }
+        let response = ui.interact(area, ui.id().with(("metrics-beam", side)), Sense::DRAG).on_hover_cursor(CursorIcon::ResizeVertical);
+        if response.dragged()
+            && let Some(p) = ui.input(|i| i.pointer.latest_pos())
+        {
+            let to = c.view.to_font(Point::new(f64::from(p.x), f64::from(p.y))).y.round();
+            if to.is_finite() && to != y {
+                pending.push(("view.showMetricsBeam", json!({"y": to})));
+            }
+        }
+    }
 }
 
 /// The sidebearings measured on the beam, each centred over its gap.

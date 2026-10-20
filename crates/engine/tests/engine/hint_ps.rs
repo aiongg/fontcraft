@@ -209,6 +209,34 @@ fn typed_values_unlink_ends_and_attach_links_them_again() {
 }
 
 #[test]
+fn move_hints_moves_several_hints_across_their_edges_in_one_undo_step() {
+    let mut s = session();
+    // 0: horizontal stem linked to y 0 and 700; 1: horizontal unlinked; 2: a bottom ghost on
+    // y 0; 3: vertical stem linked to x 100 and 180.
+    run(&mut s, "hint.ps.addHorizontalHint", json!({"nodes": [[0, 0], [0, 3]]}));
+    run(&mut s, "hint.ps.addHorizontalHint", json!({"origin": 200, "size": 30}));
+    run(&mut s, "hint.ps.addHorizontalHint", json!({"nodes": [[1, 0]]}));
+    run(&mut s, "hint.ps.addVerticalHint", json!({"nodes": [[0, 0], [0, 1]]}));
+    let ghost = hints(&s)[2].kind;
+
+    // `run` checks that a single undo gives back the font from before all the moves.
+    let out = run(&mut s, "hint.ps.moveHints", json!({"hints": [0, 1, 2, 3], "dy": 10}));
+    assert_eq!(out["hints"], json!([0, 1, 2]), "the vertical hint stays");
+    let list = hints(&s);
+    assert_eq!((list[0].origin, list[0].other), (Edge::Value(10.0), Some(Edge::Value(710.0))), "linked ends become numbers");
+    assert_eq!((list[1].origin, list[1].other), (Edge::Value(210.0), Some(Edge::Value(240.0))));
+    assert_eq!((list[2].origin, list[2].other, list[2].kind), (Edge::Value(10.0), None, ghost), "a ghost stays a ghost");
+    assert_eq!((list[3].origin, list[3].other), (node(0, 0), Some(node(0, 1))));
+
+    run(&mut s, "hint.ps.moveHints", json!({"hints": [3], "dx": -5, "dy": 0}));
+    assert_eq!((hints(&s)[3].origin, hints(&s)[3].other), (Edge::Value(95.0), Some(Edge::Value(175.0))));
+    let e = refused(&mut s, "hint.ps.moveHints", json!({"hints": [0, 1], "dx": 5}));
+    assert!(e.contains("none of the hints moves"), "{e}");
+    refused(&mut s, "hint.ps.moveHints", json!({"hints": [9], "dy": 5}));
+    refused(&mut s, "hint.ps.moveHints", json!({"hints": [0], "dy": 1e9}));
+}
+
+#[test]
 fn delete_and_clear_remove_hints() {
     let mut s = session();
     run(&mut s, "hint.ps.addHorizontalHint", json!({"nodes": [[0, 0], [0, 3]]}));

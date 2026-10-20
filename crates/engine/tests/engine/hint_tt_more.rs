@@ -167,6 +167,36 @@ fn delta_is_vertical_main_master_only_with_bounded_cells() {
 }
 
 #[test]
+fn moving_an_instruction_keeps_every_need_met() {
+    let mut s = session(&[snap(0, 0), snap(0, 1)]);
+    run(&mut s, "hint.tt.shiftPoints", json!({"nodes": [[0, 0], [1, 0]]}));
+    // Nothing builds on Snap 1: its point can move.
+    let out = run(&mut s, "hint.tt.moveInstruction", json!({"instruction": 1, "point": [1, 1]}));
+    assert_eq!(out["instructions"], json!([1]));
+    assert_eq!(tt(&s)[1].target, pt(1, 1));
+    // The Shift's origin moves to the point Snap 1 touches now.
+    run(&mut s, "hint.tt.moveInstruction", json!({"instruction": 2, "end": "origin", "point": [1, 1]}));
+    assert_eq!((tt(&s)[2].origin, tt(&s)[2].target), (Some(pt(1, 1)), pt(1, 0)));
+
+    let move_to = |instruction: usize, end: &str, point: Value| json!({"instruction": instruction, "end": end, "point": point});
+    // Snap 1 now carries the Shift's origin.
+    let e = refused(&mut s, "hint.tt.moveInstruction", move_to(1, "target", json!([0, 2])));
+    assert!(e.contains("builds on instruction 1"), "{e}");
+    // A Shift target must be untouched.
+    let e = refused(&mut s, "hint.tt.moveInstruction", move_to(2, "target", json!([0, 0])));
+    assert!(e.contains("cannot sit there"), "{e}");
+    let e = refused(&mut s, "hint.tt.moveInstruction", move_to(2, "other", json!([0, 3])));
+    assert!(e.contains("no such point"), "{e}");
+    refused(&mut s, "hint.tt.moveInstruction", move_to(2, "target", json!([1, 0])));
+    refused(&mut s, "hint.tt.moveInstruction", move_to(2, "middle", json!([0, 3])));
+    refused(&mut s, "hint.tt.moveInstruction", move_to(3, "target", json!([0, 3])));
+    refused(&mut s, "hint.tt.moveInstruction", move_to(0, "target", json!([0, 9])));
+    // An intersection point is a point too.
+    run(&mut s, "hint.tt.moveInstruction", move_to(2, "target", json!([0, 2, 1, 3])));
+    assert_eq!(tt(&s)[2].target, TtPoint::Intersection { a: NodeRef::new(0, 2), b: NodeRef::new(1, 3) });
+}
+
+#[test]
 fn deleting_an_instruction_reports_the_later_ones_that_needed_it() {
     let mut stem = TtInstruction::new(TtKind::Stem { stem: StemRef::Auto, triple: None }, Direction::Vertical, pt(0, 2));
     stem.origin = Some(pt(0, 1));
