@@ -239,6 +239,12 @@ fn bad(msg: impl Into<String>) -> DecompileError {
 /// Reads a PFA or PFB font into a [`PsFont`]. Glyphs whose charstrings cannot be run are kept
 /// empty and named in `warnings`.
 pub fn read_type1(bytes: &[u8], warnings: &mut Vec<String>) -> Result<PsFont, DecompileError> {
+    read_type1_within(bytes, warnings, MAX_FONT_OPS)
+}
+
+/// [`read_type1`] keeping at most `max_ops` hint and path operations for the whole font (never
+/// more than [`MAX_FONT_OPS`]), for callers with a smaller memory budget.
+pub fn read_type1_within(bytes: &[u8], warnings: &mut Vec<String>, max_ops: usize) -> Result<PsFont, DecompileError> {
     if bytes.len() > MAX_PS_BYTES {
         return Err(bad(format!("the font is {} bytes; the limit is {MAX_PS_BYTES}", bytes.len())));
     }
@@ -273,7 +279,7 @@ pub fn read_type1(bytes: &[u8], warnings: &mut Vec<String>) -> Result<PsFont, De
         }
     }
     let mut failed = Vec::new();
-    let mut budget = FontBudget::new();
+    let mut budget = FontBudget::with_limits(max_ops.min(MAX_FONT_OPS), MAX_FONT_WORK);
     for i in order {
         let Some((name, cs)) = charstrings.get(i) else { continue };
         let mut run = T1Run::new(&subrs);

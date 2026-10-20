@@ -3,15 +3,19 @@
 //! Whole-file commands follow [`super::file_io`]: paths in, the input never changed, the output
 //! written atomically, a refusal on the web.
 //!
-//! Compiled fonts (TrueType, OpenType CFF or CFF2, one face of a collection, WOFF, WOFF2) are
-//! converted between outline flavours and to bare CFF or CFF2 tables, and a result can be
-//! wrapped in WOFF or WOFF2. Each output is written to a temporary file beside its target as
+//! Compiled fonts (TrueType, OpenType CFF or CFF2, one face of a collection, WOFF, WOFF2), TTX
+//! text, Type 1 fonts (PFA, PFB) and bare CFF tables are converted between outline flavours and
+//! to bare CFF or CFF2 tables, and a result can be wrapped in WOFF or WOFF2. Each output is written to a temporary file beside its target as
 //! soon as its input is converted, so memory holds one font at a time; only when all of them
 //! are there are they moved into place, so a failing conversion writes nothing.
 
 use std::path::{Path, PathBuf};
 
-use fontcraft_tables::convert::{ConvertOptions, ConvertTarget, PostFormat, QuadToCubic, convert_with};
+use fontcraft_tables::convert::{
+    ConvertOptions, ConvertTarget, PostFormat, PsSource, QuadToCubic, convert_postscript, convert_with, read_postscript,
+};
+use fontcraft_tables::ttx::{ImportOptions, import_tree};
+use fontcraft_tables::{Flavour, SfntFont};
 use serde_json::{Value, json};
 
 use super::file_io::{self, InputKind, OutputRequest};
@@ -56,7 +60,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Convert Font Format",
             [],
             None,
-            "{inputs: [path] | input: path, to: \"ttf\"|\"otf\"|\"otf-cff2\"|\"cff\"|\"cff2\", output?: path (one input), outputDir?: path, inPlace?: bool, noClobber?: bool, face?: int|name, container?: \"plain\"|\"woff\"|\"woff2\", nameBy?: \"filename\", curves?: {maxError?: em fraction (default one font unit), conversion?: \"optimized\"|\"exact\", keepDirection?: bool}, postFormat?: 2|3, cff?: {subroutinize?: bool, maxSubrs?: int}, hints?: bool, timestamp?: \"keep\"|\"now\"|int (seconds since 1970)}. Compiled fonts only: CFF or static CFF2 to TrueType (cubic to quadratic within maxError, contours reversed), TrueType to CFF or CFF2 (components decomposed, instructions dropped), CFF to CFF2 and back with hints kept, or the bare outline table (cff, cff2). Without output the result goes beside the input with the new extension → {results: [{input, output, bytes, glyphs, leftBehind: [text]}]}",
+            "{inputs: [path] | input: path, to: \"ttf\"|\"otf\"|\"otf-cff2\"|\"cff\"|\"cff2\", output?: path (one input), outputDir?: path, inPlace?: bool, noClobber?: bool, face?: int|name, container?: \"plain\"|\"woff\"|\"woff2\", nameBy?: \"filename\", curves?: {maxError?: em fraction (default one font unit), conversion?: \"optimized\"|\"exact\", keepDirection?: bool}, postFormat?: 2|3, cff?: {subroutinize?: bool, maxSubrs?: int}, hints?: bool, timestamp?: \"keep\"|\"now\"|int (seconds since 1970)}. Inputs: compiled fonts, TTX text (compiled first), Type 1 fonts (PFA, PFB) and bare CFF tables (wrapped in an OpenType CFF font first; bare tables are written without subroutines unless cff.subroutinize says otherwise). CFF or static CFF2 to TrueType (cubic to quadratic within maxError, contours reversed), TrueType to CFF or CFF2 (components decomposed, instructions dropped), CFF to CFF2 and back with hints kept, or the bare outline table (cff, cff2). Without output the result goes beside the input with the new extension → {results: [{input, output, bytes, glyphs, leftBehind: [text]}]}",
             always,
             convert_fonts
         )
@@ -314,22 +318,42 @@ fn now() -> Result<i64> {
     Err(EngineError::Unsupported("the current time in the browser".into()))
 }
 
+fn units_per_em(font: &SfntFont) -> f64 {
+    font.get(*b"head").and_then(|h| h.get(18..20)).and_then(|b| <[u8; 2]>::try_from(b).ok()).map_or(1000.0, |b| f64::from(u16::from_be_bytes(b)))
+}
+
 fn convert_one(p: &Params<'_>, input: &Path, settings: &Settings, container: Container) -> Result<Converted> {
     let file = file_io::read_input(input)?;
-    match file.kind {
-        k if k.is_font() => {}
-        InputKind::Ttx => return Err(EngineError::Unsupported("converting TTX: compile it with tables import first".into())),
+    let no_face = || -> Result<()> {
+        if p.get("face").is_some() {
+            return Err(p.bad("`face` names a font of a collection; this input holds one font"));
+        }
+        Ok(())
+    };
+    let converted = match file.kind {
+        k if k.is_font() => {
+            let face = super::dehint::face_index(p, &file.bytes)?;
+            let font = fontcraft_tables::read(&file.bytes, face)?;
+            convert_with(&font, &settings.options(units_per_em(&font))?)?
+        }
+        // TTX text is compiled as the reference compiles it without a font to merge into.
+        InputKind::Ttx => {
+            no_face()?;
+            let root = super::tables_import::read_dump(input)?;
+            let font = import_tree(SfntFont::new(Flavour::TrueType), &root, &ImportOptions::default())?;
+            convert_with(&font, &settings.options(units_per_em(&font))?)?
+        }
+        _ if PsSource::sniff(&file.bytes).is_some() => {
+            no_face()?;
+            let ps = read_postscript(&file.bytes)?;
+            convert_postscript(&ps, &settings.options(units_per_em(&ps.font))?)?
+        }
         _ => {
             return Err(EngineError::Unsupported(
-                "font.convert takes compiled fonts; a source is converted with file.saveAs or compiled with file.exportStatic".into(),
+                "font.convert takes compiled fonts, TTX, Type 1 fonts and bare CFF tables; a source is converted with file.saveAs or compiled with file.exportStatic".into(),
             ));
         }
-    }
-    let face = super::dehint::face_index(p, &file.bytes)?;
-    let font = fontcraft_tables::read(&file.bytes, face)?;
-    let upem =
-        font.get(*b"head").and_then(|h| h.get(18..20)).and_then(|b| <[u8; 2]>::try_from(b).ok()).map_or(1000.0, |b| f64::from(u16::from_be_bytes(b)));
-    let converted = convert_with(&font, &settings.options(upem)?)?;
+    };
     let bytes = match container {
         Container::Plain => converted.bytes,
         Container::Woff => fontcraft_container::woff::encode(&converted.bytes, &fontcraft_container::Extras::default())

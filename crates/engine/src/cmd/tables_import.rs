@@ -70,7 +70,7 @@ fn inside_folder(folder: &Path, file: &Path, by: &Path, src: &str) -> Result<Pat
 }
 
 /// The dump at `path` parsed, with the parts of a split dump read in where `src` names them.
-fn read_dump(path: &Path) -> Result<Element> {
+pub(super) fn read_dump(path: &Path) -> Result<Element> {
     let mut budget = ParseBudget::default();
     let mut root = parse_within(&read_text(path)?, &mut budget).map_err(|e| EngineError::Io(format!("{}: {e}", path.display())))?;
     let parts = root.children.iter().filter(|c| c.attribute("src").is_some()).count();

@@ -12,8 +12,8 @@
 use skrifa::raw::ps::string::STANDARD_STRINGS;
 
 use crate::type1::{
-    FontBudget, Hints, MAX_CHARSTRING_WORK, MAX_GLYPH_OPS, MAX_PS_BYTES, MAX_STACK, MAX_SUBR_DEPTH, PrivateDict, PsFont, PsGlyph, PsKind, PsOp,
-    StemKind, TOO_MANY_OPS, TopDict, be_i32, list, short_number, to_font,
+    FontBudget, Hints, MAX_CHARSTRING_WORK, MAX_FONT_OPS, MAX_FONT_WORK, MAX_GLYPH_OPS, MAX_PS_BYTES, MAX_STACK, MAX_SUBR_DEPTH, PrivateDict, PsFont,
+    PsGlyph, PsKind, PsOp, StemKind, TOO_MANY_OPS, TopDict, be_i32, list, short_number, to_font,
 };
 use crate::{DecompileError, Decompiled};
 use fontcraft_model::MAX_COORDINATE;
@@ -227,6 +227,12 @@ fn private<'a>(data: &'a [u8], range: &[f64]) -> Result<Private<'a>, DecompileEr
 /// Reads the first font of a bare CFF font set into a [`PsFont`].
 pub fn read_cff(bytes: &[u8], warnings: &mut Vec<String>) -> Result<PsFont, DecompileError> {
     read_cff_within(bytes, warnings, FontBudget::new())
+}
+
+/// [`read_cff`] keeping at most `max_ops` hint and path operations for the whole font (never
+/// more than [`MAX_FONT_OPS`]), for callers with a smaller memory budget.
+pub fn read_cff_with_ops(bytes: &[u8], warnings: &mut Vec<String>, max_ops: usize) -> Result<PsFont, DecompileError> {
+    read_cff_within(bytes, warnings, FontBudget::with_limits(max_ops.min(MAX_FONT_OPS), MAX_FONT_WORK))
 }
 
 /// [`read_cff`] under a given font-wide budget.

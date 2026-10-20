@@ -819,6 +819,8 @@ glyph order, with the outlines as fontTools draws them:
 | TrueType → CFF | `tx -cff` | drawn area within 0.5 % and drawn bounds within 1 unit |
 | CFF → CFF2 | fontTools `CFFToCFF2` | the drawn path |
 | CFF2 → CFF | fontTools `CFF2ToCFF` | the drawn path |
+| Type 1 → bare CFF, bare CFF2 | `tx -cff`, `tx -cff2` | glyph names in order, advance widths and the drawn path |
+| bare CFF → bare CFF, bare CFF2 | `tx -cff`, `tx -cff2` | glyph names in order, advance widths and the drawn path |
 
 The rules FontCraft takes from the oracles:
 
@@ -831,6 +833,11 @@ The rules FontCraft takes from the oracles:
 - **seac to TrueType.** A `seac` glyph becomes a composite: the base at the origin and the
   accent at `(adx, ady)` rounded, both with `ROUND_XY_TO_GRID`, as otf2ttf's `TTGlyphPen`
   writes the two components fontTools draws. `maxp` holds the composite fields.
+- **Type 1 input.** The CFF table is the one `tx -cff` writes: `.notdef` first, then the glyphs
+  whose names are CFF standard strings in standard-string order, then the others in file
+  order; coordinates kept to two decimals; every segment kept, a closing line included;
+  `hstem3` and `vstem3` stems in one counter mask; `seac` kept; FontBBox from the drawn glyphs
+  without the `seac` glyphs. The other targets convert that table as they convert any CFF.
 - **Left side bearing.** TrueType to CFF moves each glyph so that the `xMin` of its `glyf`
   header sits at its `hmtx` left side bearing. tx and fontTools' glyph set both draw a
   TrueType glyph there; the two values differ only in fonts edited by hand.
@@ -844,6 +851,8 @@ Differences kept:
 | Merging quadratic runs, TrueType → CFF | tx merges by its own rule, which is not documented; on some glyphs of the old Oswald fonts its curves stray up to 3 % in area from the source | fontTools' qu2cu within the error bound, every curve cubic | both are valid cubic outlines; FontCraft's stay within the stated bound |
 | Glyph names of a TrueType font without `post` names, TrueType → CFF | tx names glyphs from the cmap with Adobe Glyph List names (`Gcommaaccent`, `ff`) and `g<gid>` otherwise | `glyphNNNNN` | tx's name table is not documented, and fontTools names the same glyphs differently again (`uni0122`, `glyph00001`); the measure compares outlines by glyph index |
 | A path operator with operands `T2OutlineExtractor` cannot draw (an `rrcurveto` with five), CFF ↔ CFF2 | `CFFToCFF2` and `CFF2ToCFF` do not check its operands | the conversion is refused with a message | every conversion reads each charstring once into operators under one memory limit, and an operator that cannot be drawn is refused as it is read |
+| A Type 1 glyph whose replacement hint set holds two overlapping stems | `tx` writes the hint masks and warns | the glyph's hints dropped, with a note | the CFF writer refuses overlapping stems in one hint mask, which the format forbids |
+| Charstring operators of a Type 1 glyph | `tx` chooses its own operators | the CFF writer's specialised operators, `hstemhm` when a counter mask is present | the drawn paths are the same; the operators are not compared |
 | CFF2 → CFF oracle | fontTools 4.66 `CFF2ToCFF` fails on a table with local subroutines, and on recalculating `hhea` after it renames the glyphs | — | the measure expands the subroutines first and keeps the stated bounds |
 
 ---

@@ -1507,6 +1507,85 @@ pub(super) fn cff2_to_cff(cff2: &[u8], advances: &[u16], names: Option<&[String]
 }
 
 /// Latin-1 bytes of `s`; other characters become `?`.
+/// An accented glyph as `seac` writes it: the advance, the accent's offset from the base, and
+/// the standard codes of the base and the accent.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct SeacCall {
+    pub width: i64,
+    pub adx: f64,
+    pub ady: f64,
+    pub base: u8,
+    pub accent: u8,
+}
+
+/// `table`, a name-keyed `CFF ` table of one font without subroutines or a custom encoding (as
+/// `fontcraft_cff::build` writes it), with the charstrings of the glyphs `seac` names replaced
+/// by `[width] adx ady base accent endchar`, the width written when it is not `default_width`.
+/// The table is laid out again, since the CharStrings INDEX changes length.
+pub(super) fn with_seac(table: &[u8], seac: &[(usize, SeacCall)], default_width: i64, nominal_width: i64) -> Result<Vec<u8>> {
+    if seac.is_empty() {
+        return Ok(table.to_vec());
+    }
+    let hdr_size = usize::from(*table.get(2).ok_or_else(|| invalid("the CFF header is cut short"))?);
+    let names = read_index(table, hdr_size, false)?;
+    let tops = read_index(table, names.end, false)?;
+    let strings = read_index(table, tops.end, false)?;
+    if !read_index(table, strings.end, false)?.items.is_empty() || tops.items.len() != 1 {
+        return Err(invalid("the CFF table is not one font without global subroutines"));
+    }
+    let top = parse_dict(tops.items.first().copied().unwrap_or_default(), false)?;
+    let offset = |op: u16| -> Result<Option<usize>> {
+        match top.iter().find(|e| e.op == op) {
+            None => Ok(None),
+            Some(e) => e.int(0).and_then(|v| usize::try_from(v).ok()).map(Some).ok_or_else(|| invalid("a Top DICT offset is not a positive integer")),
+        }
+    };
+    if offset(16)?.is_some_and(|at| at > 1) || offset(OP_FDARRAY)?.is_some() {
+        return Err(invalid("the CFF table has a custom encoding or Font DICTs"));
+    }
+    let cs_at = offset(OP_CHARSTRINGS)?.ok_or_else(|| invalid("the Top DICT has no CharStrings"))?;
+    let charset = match offset(OP_CHARSET)? {
+        Some(at) if at > 2 => Some(table.get(at..cs_at).ok_or_else(|| invalid("the charset does not sit before the CharStrings"))?.to_vec()),
+        _ => None,
+    };
+    let (size, at) = private_ref(&top)?.ok_or_else(|| invalid("the Top DICT has no Private DICT"))?;
+    let private = blob(table, at, size)?.to_vec();
+    if parse_dict(&private, false)?.iter().any(|e| e.op == OP_SUBRS) {
+        return Err(invalid("the Private DICT has local subroutines"));
+    }
+    let mut charstrings: Vec<Vec<u8>> = read_index(table, cs_at, false)?.items.iter().map(|c| c.to_vec()).collect();
+    for (gid, call) in seac {
+        let slot = charstrings.get_mut(*gid).ok_or_else(|| invalid(format!("no glyph {gid} to write an accented glyph into")))?;
+        let mut code = Vec::new();
+        if call.width != default_width {
+            encode_num(call.width.saturating_sub(nominal_width).saturating_mul(ONE), &mut code)?;
+        }
+        for v in [call.adx, call.ady] {
+            if !v.is_finite() || v.abs() > 32_767.0 {
+                return Err(invalid(format!("the accent offset of glyph {gid} does not fit in a charstring")));
+            }
+            encode_num((v * ONE as f64).round() as i64, &mut code)?;
+        }
+        encode_num(i64::from(call.base) * ONE, &mut code)?;
+        encode_num(i64::from(call.accent) * ONE, &mut code)?;
+        code.push(ENDCHAR as u8);
+        *slot = code;
+    }
+    let keep = |e: &Entry| !(e.op == OP_CHARSTRINGS || e.op == OP_PRIVATE || (e.op == OP_CHARSET && charset.is_some()));
+    Parts {
+        cff2: false,
+        name: names.items.first().copied().unwrap_or_default().to_vec(),
+        strings: strings.items.iter().map(|s| s.to_vec()).collect(),
+        top: top.iter().filter(|e| keep(e)).cloned().collect(),
+        charset,
+        fd_select: None,
+        charstrings,
+        font_dicts: None,
+        privates: vec![private],
+    }
+    .write()
+}
+
 fn latin1(s: &str) -> Vec<u8> {
     s.chars().map(|c| u8::try_from(u32::from(c)).unwrap_or(b'?')).collect()
 }
