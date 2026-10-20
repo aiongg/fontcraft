@@ -325,6 +325,29 @@ mod tests {
     }
 
     #[test]
+    fn pruning_that_passes_a_limit_keeps_the_subroutines_and_says_so() {
+        // Glyph 3 calls global subroutine 2 a thousand times, and it calls global subroutine 0 a
+        // thousand times: about five million operators run, past the marking pass's limit for
+        // one glyph.
+        let input = fixture();
+        let table = Table::read(&input, true).unwrap();
+        let mut set = table.set.clone();
+        set.global_subrs.push(cs(&"-107 callgsubr ".repeat(1000)));
+        set.charstrings[3] = cs(&format!("0 0 rmoveto {}", "-105 callgsubr ".repeat(1000)));
+        let heavy = table.write(&set).unwrap();
+        let before = parts(&heavy);
+
+        let subset = TableSubset { glyphs: None, emptied: &[], subroutines: SubrMode::Prune, max_expanded: usize::MAX };
+        let mut notes = Vec::new();
+        let out = subset_table_noted(&heavy, true, &subset, &mut notes).unwrap();
+        let after = parts(&out);
+        assert_eq!((after.global_subrs, after.local_subrs), (before.global_subrs, before.local_subrs), "every subroutine is kept");
+        assert_eq!(after.charstrings, before.charstrings);
+        assert_eq!(notes.len(), 1, "{notes:?}");
+        assert!(notes[0].contains("subroutines were kept") && notes[0].contains("operators run by one glyph"), "{notes:?}");
+    }
+
+    #[test]
     fn hostile_subsets_fail_with_a_message() {
         let input = fixture();
         for glyphs in [&[][..], &[0, 9][..]] {

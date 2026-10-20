@@ -669,12 +669,20 @@ impl Turtle<'_> {
     }
 }
 
+#[cfg(test)]
+thread_local! {
+    /// Operators [`run`] has drawn on this thread, for tests that count work.
+    pub(super) static OPS_RUN: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 /// Draws expanded charstring operators into `pen` from the origin; answers the pen position
 /// at the end.
 fn run(program: &Program, pen: &mut Collect) -> Result<(i64, i64)> {
     let mut t = Turtle { pen, at: (0, 0), moved: false };
     let mut wide: Vec<i64> = Vec::new();
     for op in program.ops() {
+        #[cfg(test)]
+        OPS_RUN.with(|n| n.set(n.get().saturating_add(1)));
         wide.clear();
         wide.extend(op.args.iter().map(|v| i64::from(*v)));
         let a = wide.as_slice();
