@@ -2,10 +2,11 @@
 //! reads from an `SVG ` document, applied to the layer a filtered group is drawn on.
 //!
 //! Contract:
-//! - A filter works on the pixels of its region's bounding box on the sprite, premultiplied
-//!   RGBA with 8 bits a channel; the layer is clear outside that box afterwards. A region of
-//!   more than [`MAX_FILTER_PIXELS`] pixels is not run, and the group is drawn unfiltered with a
-//!   warning.
+//! - A filter works on the pixels of its region's bounding box on the sprite, within the box its
+//!   group can paint ([`reach`]), premultiplied RGBA with 8 bits a channel; the layer is clear
+//!   outside that box afterwards. A box of more than [`MAX_FILTER_PIXELS`] pixels is not run,
+//!   and the group is drawn unfiltered with a warning.
+//! - Primitives whose result nothing reads, other than the last, are not run.
 //! - Each primitive converts its inputs to its colour space (linear RGB unless
 //!   `color-interpolation-filters` says sRGB) and its result is clear outside its subregion.
 //! - Lengths scale from user space to pixels by the lengths of the transform's axes, as resvg
@@ -35,9 +36,9 @@ pub(super) struct Plan {
 }
 
 /// The plan for `filter` on a `width` × `height` sprite whose pixels `to_pixels` maps the
-/// filter's user space to; `Err` with a warning when it is not run.
-pub(super) fn plan(filter: &SvgFilter, to_pixels: Affine, width: u32, height: u32) -> Result<Plan, String> {
-    let region = PixBox::of(filter.region, to_pixels, width, height);
+/// filter's user space to, within `limit`; `Err` with a warning when it is not run.
+pub(super) fn plan(filter: &SvgFilter, to_pixels: Affine, width: u32, height: u32, limit: PixBox) -> Result<Plan, String> {
+    let region = PixBox::of(filter.region, to_pixels, width, height).intersect(limit);
     if region.area() > MAX_FILTER_PIXELS {
         return Err(format!("an SVG filter region of {} pixels is drawn unfiltered; at most {MAX_FILTER_PIXELS} are filtered", region.area()));
     }
@@ -53,6 +54,44 @@ pub(super) fn plan(filter: &SvgFilter, to_pixels: Affine, width: u32, height: u3
     let sprite = u64::from(width) * u64::from(height);
     let cost = region.area().saturating_mul(weight.saturating_add(2)).saturating_add(sprite);
     Ok(Plan { region, to_pixels, cost })
+}
+
+/// How far `filter` can move or spread what it reads, font units along x and along y, at
+/// `scale` sprite pixels per font unit: the sum over its primitives, as primitives can read each
+/// other's results, with two pixels for each to cover rounding. `None` when a primitive can paint
+/// where everything it reads is clear: a flood, a colour matrix adding alpha, or an arithmetic
+/// composite with a positive `k4`.
+pub(super) fn reach(filter: &SvgFilter, scale: f64) -> Option<(f64, f64)> {
+    let pixel = if scale.is_finite() && scale > 0.0 { 1.0 / scale } else { return None };
+    let [a, b, c, d, _, _] = filter.to_font.as_coeffs();
+    let (axis_x, axis_y) = (a.hypot(b), c.hypot(d));
+    let blur = |(sx, sy): (f64, f64)| {
+        // Deviations are clamped in sprite pixels when the blur runs.
+        let most = MAX_BLUR_SIGMA * pixel;
+        (3.0 * (sx.abs() * axis_x).min(most), 3.0 * (sy.abs() * axis_y).min(most))
+    };
+    let shift = |dx: f64, dy: f64| {
+        let v = filter.to_font * Point::new(dx, dy) - filter.to_font * Point::ORIGIN;
+        (v.x.abs(), v.y.abs())
+    };
+    let (mut x, mut y) = (0.0f64, 0.0f64);
+    for p in &filter.primitives {
+        let (gx, gy) = match &p.kind {
+            FilterKind::Flood { .. } => return None,
+            FilterKind::ColorMatrix { matrix, .. } if matrix.get(19).is_none_or(|v| v.is_nan() || *v > 0.0) => return None,
+            FilterKind::Composite { operator: CompositeOperator::Arithmetic([_, _, _, k4]), .. } if k4.is_nan() || *k4 > 0.0 => return None,
+            FilterKind::Blur { std_dev, .. } => blur(*std_dev),
+            FilterKind::Offset { dx, dy, .. } => shift(*dx, *dy),
+            FilterKind::DropShadow { dx, dy, std_dev, .. } => {
+                let ((bx, by), (ox, oy)) = (blur(*std_dev), shift(*dx, *dy));
+                (bx + ox, by + oy)
+            }
+            _ => (0.0, 0.0),
+        };
+        x += gx + 2.0 * pixel;
+        y += gy + 2.0 * pixel;
+    }
+    (x.is_finite() && y.is_finite()).then_some((x, y))
 }
 
 /// Premultiplied RGBA over the filter region, rows top to bottom.
@@ -146,10 +185,14 @@ pub(super) fn run(filter: &SvgFilter, plan: &Plan, layer: &mut [u8], width: u32)
     let mut run = Run { w, h, spaces: Spaces::new(), source: Img { px: source, linear: false }, results: Vec::new(), to_pixels: plan.to_pixels };
     let last_use = last_uses(filter);
     for (i, p) in filter.primitives.iter().enumerate() {
-        let sub = PixBox::of(p.subregion, plan.to_pixels, u32::MAX, u32::MAX).intersect(r);
-        let mut out = run.primitive(&p.kind, p.linear_rgb);
-        clear_outside(&mut out.px, w, sub, r);
-        run.results.push(Some(out));
+        // A result nothing reads is not made.
+        let out = (last_use.get(i).copied().flatten() != Some(i)).then(|| {
+            let sub = PixBox::of(p.subregion, plan.to_pixels, u32::MAX, u32::MAX).intersect(r);
+            let mut out = run.primitive(&p.kind, p.linear_rgb);
+            clear_outside(&mut out.px, w, sub, r);
+            out
+        });
+        run.results.push(out);
         // Results nothing later reads are dropped, so memory follows what is still needed.
         for (k, slot) in run.results.iter_mut().enumerate() {
             if last_use.get(k).copied().flatten() == Some(i) {
@@ -171,16 +214,17 @@ pub(super) fn run(filter: &SvgFilter, plan: &Plan, layer: &mut [u8], width: u32)
     }
 }
 
-/// For each primitive, the last primitive that reads its result (`None` for none; the last
-/// primitive's result is the filter's).
+/// For each primitive, the last primitive that reads its result, or its own index when none
+/// does, so the result can be dropped (or never made) once that one has run; `None` for the last
+/// primitive, whose result is the filter's.
 fn last_uses(filter: &SvgFilter) -> Vec<Option<usize>> {
-    let mut out = vec![None; filter.primitives.len()];
+    let mut out: Vec<Option<usize>> = (0..filter.primitives.len()).map(Some).collect();
     for (i, p) in filter.primitives.iter().enumerate() {
         for input in inputs(&p.kind) {
             if let FilterInput::Result(k) = input
                 && let Some(slot) = out.get_mut(k)
             {
-                *slot = Some(i);
+                *slot = (*slot).max(Some(i));
             }
         }
     }
@@ -511,6 +555,9 @@ fn blur(px: &mut [u8], w: usize, h: usize, (sx, sy): (f64, f64)) {
 
 #[cfg(test)]
 mod tests {
+    use fontcraft_color::svg_filter::FilterPrimitive;
+    use fontcraft_geom::Rect;
+
     use super::*;
 
     #[test]
@@ -532,6 +579,20 @@ mod tests {
         let a = |x: usize| big[(20 * w + x) * 4 + 3];
         assert!(a(19) == a(21) && a(19) > 0 && a(20) > a(19), "{} {} {}", a(19), a(20), a(21));
         assert_eq!(big[(19 * w + 20) * 4 + 3], 0, "no blur along y");
+    }
+
+    #[test]
+    fn results_nothing_reads_are_not_kept() {
+        let square = Rect::new(0.0, 0.0, 10.0, 10.0);
+        let p = |kind| FilterPrimitive { subregion: square, linear_rgb: false, kind };
+        let flood = || FilterKind::Flood { color: [1.0, 0.0, 0.0, 1.0] };
+        let mut f = SvgFilter { to_font: Affine::IDENTITY, region: square, primitives: vec![p(flood()), p(flood()), p(flood())] };
+        assert_eq!(last_uses(&f), vec![Some(0), Some(1), None], "three floods keep only the last result");
+        // An offset that a merge two primitives on reads is kept until then.
+        let offset = FilterKind::Offset { input: FilterInput::SourceGraphic, dx: 1.0, dy: 1.0 };
+        let merge = FilterKind::Merge { inputs: vec![FilterInput::Result(0), FilterInput::Result(1)] };
+        f.primitives = vec![p(offset), p(flood()), p(merge)];
+        assert_eq!(last_uses(&f), vec![Some(2), Some(2), None]);
     }
 
     #[test]

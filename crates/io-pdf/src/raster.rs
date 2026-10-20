@@ -57,9 +57,12 @@ pub(crate) fn render(page: &PageDrawing, pixels_per_point: f64, max_pixels: u64)
     if !(scale > 0.0 && width <= side && height <= side && width * height <= budget.max(1.0)) {
         return Err(PdfError::TooMuchWork);
     }
+    // The page's bottom edge is the image's, as the image is placed from its bottom-left corner;
+    // a part row from rounding the height up lies at the top.
+    let bottom = height;
     let (width, height) = (width as usize, height as usize);
     let mut canvas = Canvas { width, height, pixels: vec![0; width.saturating_mul(height).saturating_mul(4)], work: 0, edges: 0 };
-    let to_px = |(x, y): Pt| ((x - x0) * scale, (y1 - y) * scale);
+    let to_px = |(x, y): Pt| ((x - x0) * scale, bottom - (y - y0) * scale);
 
     for p in &page.painted {
         if let Some(rule) = p.fill {
