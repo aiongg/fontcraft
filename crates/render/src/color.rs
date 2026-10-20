@@ -6,38 +6,55 @@
 //! | Table | Drawn |
 //! |---|---|
 //! | `COLR` (versions 0 and 1) with `CPAL` | through skrifa's colour painter: clips, solid fills, linear, radial and sweep gradients, transforms, and composite layers, with the palette [`ColorOptions::palette`] |
-//! | `SVG ` | the glyph's document through the SVG drawing of `fontcraft_color` ([`svg_draw`]): filled outlines with solid or gradient paint |
+//! | `SVG ` | the glyph's document, inflated first when it is gzip-compressed, through the SVG drawing of `fontcraft_color` ([`svg_draw::items`]): filled outlines with solid or gradient paint, and embedded PNG and JPEG images |
 //! | `sbix` | the PNG or JPEG image of the strike nearest the pixel size: the smallest strike at least that large, else the largest |
+//! | `CBDT` with `CBLC` | the image of the strike nearest the pixel size, by the same rule: PNG data, 32-bit colour, and masks of 1 to 8 bits drawn in the text colour |
 //!
-//! A glyph in more than one table is drawn from `COLR`, else `SVG `, else `sbix`, the order in
-//! which Edit View picks a glyph's colour layers. Palette index 65,535, and a row the palette
-//! lacks, draw in [`ColorOptions::text_color`].
+//! A glyph in more than one table is drawn from `COLR`, else `SVG `, else `sbix`, else `CBDT`;
+//! the first three are the order in which Edit View picks a glyph's colour layers. Palette index
+//! 65,535, and a row the palette lacks, draw in [`ColorOptions::text_color`].
 //!
 //! Contract:
 //! - Each glyph is rasterised once per palette, text colour and scale into a sprite whose pixel
 //!   grid has the glyph origin on a pixel corner ([`GlyphRaster`]); [`composite`] lays sprites
 //!   onto a page. Sprites are kept in a bounded cache ([`MAX_CACHE_GLYPHS`], [`MAX_CACHE_BYTES`]),
 //!   the least recently used evicted.
+//! - What a glyph draws is read once, whatever the scale: its `SVG ` document inflated, parsed
+//!   and its images decoded, or the decoded image of one strike. These sources are kept in a
+//!   second bounded cache ([`MAX_CACHE_GLYPHS`], [`MAX_SOURCE_BYTES`]).
 //! - Work is counted in pixel operations. One glyph may take [`MIN_GLYPH_WORK`], or
 //!   [`WORK_PER_PIXEL`] per pixel of its sprite when that is more; a glyph past its budget, a
 //!   sprite larger than [`MAX_GLYPH_SIDE`] or [`MAX_GLYPH_PIXELS`], or data that cannot be read
 //!   is [`Painted::Refused`], and the caller draws its outline. A [`FrameBudget`] spreads the
 //!   first rasterisation of many glyphs over several frames: once it is spent, further glyphs
-//!   are [`Painted::Deferred`].
-//! - Not drawn: compressed SVG documents, documents that give their own width, height or
-//!   viewBox (the compiler writes none), embedded images, patterns, clip paths, masks and
-//!   filters inside SVG documents (as Edit View), `sbix` graphic types other than `png `, `jpg `
-//!   and `dupe`, and `CBDT`.
+//!   are [`Painted::Deferred`]. Reading a source counts its bytes and decoded pixels.
+//! - An `SVG ` document's user space has the glyph origin at its origin, y down, one unit per
+//!   font unit. A document whose root gives a `viewBox`, `width` or `height` has its viewport
+//!   (usvg's size: `width` and `height`, else the `viewBox`'s) fitted to the em square, which
+//!   runs from the glyph origin `units_per_em` right and down, by the root's
+//!   `preserveAspectRatio` (by default centred, the whole viewport shown), as the OpenType
+//!   `SVG ` table defines.
+//! - A compressed document inflates to at most `fontcraft_color::MAX_SVG_FILE_BYTES`; the images
+//!   of one document decode to at most [`MAX_BITMAP_PIXELS`] pixels together, and an image that
+//!   cannot be decoded or would pass that budget is left out. An image used twice is decoded once.
+//! - Not drawn: patterns, clip paths, masks and filters inside SVG documents (as Edit View),
+//!   embedded images other than PNG and JPEG, `sbix` graphic types other than `png `, `jpg `
+//!   and `dupe`, and `EBDT` strikes.
 //! - The `sbix` image's bottom left sits at the record's origin offsets from the glyph origin, a
-//!   strike pixel being `units_per_em ÷ ppem` units, which is how the compiler places it.
+//!   strike pixel being `units_per_em ÷ ppem` units, which is how the compiler places it. A
+//!   `CBDT` image's top left sits at its bearings, in strike pixels right of and above the
+//!   glyph origin.
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use fontcraft_color::paint::{ColorLine, ColorRef, Paint as ColorPaint};
-use fontcraft_color::svg_draw;
+use fontcraft_color::svg_draw::{self, SvgImage, SvgItem, SvgShape};
+use fontcraft_container::gzip::{GunzipError, MAGIC as GZIP_MAGIC, gunzip};
 use fontcraft_geom::{Affine, BezPath, Point, Rect, Shape as _};
 use fontcraft_model::Extend as ModelExtend;
+use skrifa::bitmap::{BitmapData, BitmapFormat, BitmapGlyph, BitmapStrikes, Origin};
 use skrifa::color::{Brush, Color, ColorPainter, CompositeMode, Extend, Transform};
 use skrifa::instance::{LocationRef, Size};
 use skrifa::outline::{DrawSettings, OutlinePen};
@@ -65,13 +82,15 @@ pub const MAX_CACHE_BYTES: usize = 64 << 20;
 pub const MAX_CLIP_DEPTH: usize = 32;
 /// Deepest nesting of composite layers in one glyph.
 pub const MAX_LAYER_DEPTH: usize = 8;
-/// Largest image read from an `sbix` record.
+/// Largest image read from an `sbix` or `CBDT` record, and most pixels of the images of one `SVG ` document.
 pub const MAX_BITMAP_PIXELS: u64 = 1 << 22;
 /// Most outlines kept while one glyph is drawn.
 const MAX_OUTLINES: usize = 4_096;
-/// The size usvg gives a document without width, height or viewBox.
-const SVG_DEFAULT_SIDE: f64 = 100.0;
-/// Samples per side for one sprite pixel when an `sbix` image is drawn smaller than its pixels.
+/// Most bytes of read colour sources kept: parsed SVG documents and decoded images.
+pub const MAX_SOURCE_BYTES: usize = 64 << 20;
+/// Most attributes read from an SVG document's root element.
+const MAX_ROOT_ATTRIBUTES: usize = 64;
+/// Samples per side for one sprite pixel when an image is drawn smaller than its pixels.
 const MAX_BITMAP_SAMPLES: u32 = 4;
 
 /// The tables a colour glyph is drawn from.
@@ -80,6 +99,7 @@ pub enum ColorKind {
     Colr,
     Svg,
     Sbix,
+    Cbdt,
 }
 
 /// How glyphs are drawn.
@@ -166,6 +186,7 @@ pub struct ColorRenderer {
     kinds: HashMap<u16, Option<ColorKind>>,
     cache: HashMap<CacheKey, Entry>,
     bytes: usize,
+    sources: Sources,
     tick: u64,
 }
 
@@ -191,7 +212,7 @@ impl ColorRenderer {
         for (gid, name) in (0u16..=u16::MAX).zip(glyph_order) {
             ids.entry(Arc::from(name.as_str())).or_insert(gid);
         }
-        Ok(Self { font, ids, kinds: HashMap::new(), cache: HashMap::new(), bytes: 0, tick: 0 })
+        Ok(Self { font, ids, kinds: HashMap::new(), cache: HashMap::new(), bytes: 0, sources: Sources::default(), tick: 0 })
     }
 
     /// The font bytes.
@@ -234,7 +255,7 @@ impl ColorRenderer {
         }
         let font = self.font.clone();
         let (painted, work) = match FontRef::new(&font) {
-            Ok(f) => match draw(&f, gid, kind, options) {
+            Ok(f) => match draw(&f, gid, kind, options, &mut self.sources, self.tick) {
                 Ok((raster, work)) => (Painted::Color(Arc::new(raster)), work),
                 Err(Refusal { reason, work }) => (Painted::Refused(Arc::from(reason)), work),
             },
@@ -304,7 +325,10 @@ fn kind_of(font: &FontRef, gid: u16) -> Option<ColorKind> {
     if font.svg().ok().and_then(|s| s.glyph_data(id)).is_some() {
         return Some(ColorKind::Svg);
     }
-    sbix_record(font, gid, f64::MAX).map(|_| ColorKind::Sbix)
+    if sbix_record(font, gid, f64::MAX).is_some() {
+        return Some(ColorKind::Sbix);
+    }
+    cbdt_glyph(font, gid, f64::MAX).map(|_| ColorKind::Cbdt)
 }
 
 struct Refusal {
@@ -320,14 +344,24 @@ impl Refusal {
 
 type Done = (GlyphRaster, u64);
 
-fn draw(font: &FontRef, gid: u16, kind: ColorKind, options: &ColorOptions) -> Result<Done, Refusal> {
+fn draw(font: &FontRef, gid: u16, kind: ColorKind, options: &ColorOptions, sources: &mut Sources, tick: u64) -> Result<Done, Refusal> {
     if !(options.scale.is_finite() && options.scale > 0.0 && options.scale <= MAX_SCALE) {
         return Err(Refusal::new("the scale must be a positive number of at most 64 pixels per unit", 0));
     }
-    match kind {
-        ColorKind::Colr => draw_colr(font, gid, options),
-        ColorKind::Svg => draw_svg(font, gid, options),
-        ColorKind::Sbix => draw_sbix(font, gid, options),
+    if kind == ColorKind::Colr {
+        return draw_colr(font, gid, options);
+    }
+    let ppem = options.scale * units_per_em(font);
+    let Some(strike) = strike_of(font, gid, kind, ppem) else { return Err(Refusal::new("the glyph has no colour image", 0)) };
+    let (source, read) = sources.get((gid, kind, strike), tick, || prepare(font, gid, kind, ppem));
+    let source = source.map_err(|e| Refusal::new(e.to_string(), read))?;
+    let drawn = match kind {
+        ColorKind::Svg => draw_svg(font, &source, options),
+        _ => draw_bitmaps(font, &source, kind, options),
+    };
+    match drawn {
+        Ok((raster, work)) => Ok((raster, work.saturating_add(read))),
+        Err(Refusal { reason, work }) => Err(Refusal { reason, work: work.saturating_add(read) }),
     }
 }
 
@@ -655,6 +689,24 @@ fn blend(data: &mut [u8], at: usize, color: [f32; 4], coverage: f32) {
     }
 }
 
+/// Lays premultiplied `color` (channels from 0 to 1) over the premultiplied pixel at byte `at`.
+fn blend_premultiplied(data: &mut [u8], at: usize, color: [f64; 4]) {
+    let [r, g, b, a] = color.map(|v| if v.is_finite() { v.clamp(0.0, 1.0) } else { 0.0 });
+    if a <= 0.0 {
+        return;
+    }
+    let Some(px) = data.get_mut(at..at + 4) else { return };
+    let keep = 1.0 - a;
+    for (d, s) in px.iter_mut().zip([r, g, b, a]) {
+        *d = (s * 255.0 + f64::from(*d) * keep).round().clamp(0.0, 255.0) as u8;
+    }
+}
+
+/// The unit square an image is placed from.
+fn unit() -> Rect {
+    Rect::new(0.0, 0.0, 1.0, 1.0)
+}
+
 // ── composite modes ────────────────────────────────────────────────────────────────────────────
 
 fn lum(c: [f32; 3]) -> f32 {
@@ -980,6 +1032,73 @@ impl<'a, 'f> Raster<'a, 'f> {
         }
     }
 
+    /// Lays `bitmap`, placed by `place` from its unit square (y down from its top left) to font
+    /// units, over the current layer within the current clip. Where the image is drawn smaller
+    /// than its pixels, each sprite pixel averages up to [`MAX_BITMAP_SAMPLES`]² samples.
+    fn draw_bitmap(&mut self, bitmap: &Bitmap, place: Affine, opacity: f32) {
+        if self.refused.is_some() || bitmap.width == 0 || bitmap.height == 0 {
+            return;
+        }
+        let (bw, bh) = (f64::from(bitmap.width), f64::from(bitmap.height));
+        let to_pixels = self.ctm() * place * Affine::scale_non_uniform(1.0 / bw, 1.0 / bh);
+        let to_image = to_pixels.inverse();
+        if !finite_affine(to_pixels) || !finite_affine(to_image) {
+            return;
+        }
+        let parent = self.clips.last().map_or(self.full(), |c| c.bbox);
+        let area = PixBox::of(Rect::new(0.0, 0.0, bw, bh), to_pixels, self.width, self.height).intersect(parent);
+        if area.is_empty() {
+            return;
+        }
+        // Sprite pixels per image pixel, along the image's shorter side.
+        let [a, b, c, d, _, _] = to_pixels.as_coeffs();
+        let pixel = a.hypot(b).min(c.hypot(d));
+        let n = if pixel >= 1.0 { 1 } else { ((1.0 / pixel).ceil().min(f64::from(MAX_BITMAP_SAMPLES)) as u32).max(1) };
+        if !self.spend(area.area().saturating_mul(u64::from(n * n))) {
+            return;
+        }
+        let tint = bitmap.mask.then_some(self.text);
+        let opacity = if opacity.is_finite() { f64::from(opacity.clamp(0.0, 1.0)) } else { 0.0 };
+        let (iw, ih) = (bitmap.width as usize, bitmap.height as usize);
+        let width = self.width as usize;
+        let k = 1.0 / f64::from(n * n);
+        let step = 1.0 / f64::from(n);
+        let clip = self.clips.last();
+        let Some(layer) = self.layers.last_mut() else { return };
+        for y in area.y0..area.y1 {
+            for x in area.x0..area.x1 {
+                let coverage = clip.map_or(255, |c| c.coverage(x, y));
+                if coverage == 0 {
+                    continue;
+                }
+                let mut sum = [0.0f64; 4];
+                for j in 0..n {
+                    for i in 0..n {
+                        let q = to_image * Point::new(f64::from(x) + (f64::from(i) + 0.5) * step, f64::from(y) + (f64::from(j) + 0.5) * step);
+                        if !(q.x >= 0.0 && q.y >= 0.0 && q.x < bw && q.y < bh) {
+                            continue;
+                        }
+                        let from = ((q.y as usize).min(ih - 1) * iw + (q.x as usize).min(iw - 1)) * 4;
+                        let Some(&[r, g, b, a]) = bitmap.pixels.get(from..from + 4).and_then(|s| <&[u8; 4]>::try_from(s).ok()) else { continue };
+                        let a = f64::from(a) / 255.0;
+                        let [r, g, b, a] = match tint {
+                            Some([tr, tg, tb, ta]) => [f64::from(tr), f64::from(tg), f64::from(tb), f64::from(ta) * a],
+                            None => [f64::from(r) / 255.0, f64::from(g) / 255.0, f64::from(b) / 255.0, a],
+                        };
+                        for (s, v) in sum.iter_mut().zip([r * a, g * a, b * a, a]) {
+                            *s += v * k;
+                        }
+                    }
+                }
+                if sum[3] <= 0.0 {
+                    continue;
+                }
+                let scale = opacity * f64::from(coverage) / 255.0;
+                blend_premultiplied(layer, (y as usize * width + x as usize) * 4, sum.map(|v| v * scale));
+            }
+        }
+    }
+
     fn finish(mut self, left: i32, top: i32, kind: ColorKind) -> Result<Done, Refusal> {
         if let Some(reason) = self.refused.take() {
             return Err(Refusal::new(reason, self.work));
@@ -1159,12 +1278,303 @@ fn blank(kind: ColorKind) -> Result<Done, Refusal> {
     Ok((GlyphRaster { image, left: 0, top: 0, kind }, 1))
 }
 
-/// Whether the root element of `doc` gives its own size.
-fn sized_root(doc: &[u8]) -> bool {
-    let Some(start) = doc.windows(4).position(|w| w == b"<svg") else { return true };
-    let rest = doc.get(start..).unwrap_or_default();
-    let head = rest.get(..rest.iter().position(|b| *b == b'>').unwrap_or(rest.len())).unwrap_or_default();
-    [&b"viewBox"[..], b" width", b" height", b"\twidth", b"\theight", b"\nwidth", b"\nheight"].iter().any(|k| head.windows(k.len()).any(|w| w == *k))
+// ── colour sources ─────────────────────────────────────────────────────────────────────────────
+
+/// A decoded image: straight RGBA, rows top to bottom.
+#[derive(Debug)]
+struct Bitmap {
+    width: u32,
+    height: u32,
+    pixels: Vec<u8>,
+    /// A mask (`CBDT` bit depths 1 to 8): the alpha is coverage of the text colour.
+    mask: bool,
+}
+
+impl Bitmap {
+    fn decode(data: &[u8], max_pixels: u64) -> Result<Self, String> {
+        let image = fontcraft_imagery::decode_rgba(data, max_pixels).map_err(|e| e.to_string())?;
+        Ok(Bitmap { width: image.width, height: image.height, pixels: image.pixels, mask: false })
+    }
+
+    fn pixel_count(&self) -> u64 {
+        u64::from(self.width) * u64::from(self.height)
+    }
+}
+
+/// What a colour glyph draws, ready to rasterise at any scale, in font units, y up.
+enum Drawable {
+    Shape(SvgShape),
+    /// An image placed by an affine from its unit square (y down from its top left).
+    Image {
+        bitmap: Arc<Bitmap>,
+        place: Affine,
+        opacity: f32,
+    },
+}
+
+/// A glyph's colour source read once: its inflated and parsed `SVG ` document, or the decoded
+/// image of one `sbix` or `CBDT` strike.
+struct Source {
+    items: Vec<Drawable>,
+}
+
+impl Source {
+    fn bytes(&self) -> usize {
+        self.items
+            .iter()
+            .map(|d| match d {
+                Drawable::Shape(s) => 64 + 32 * s.outline.elements().len(),
+                Drawable::Image { bitmap, .. } => 64 + bitmap.pixels.len(),
+            })
+            .sum()
+    }
+}
+
+type Prepared = Result<Arc<Source>, Arc<str>>;
+
+/// A source: glyph, table, and the strike's pixels per em (0 for `SVG `).
+type SourceKey = (u16, ColorKind, u16);
+
+struct SourceEntry {
+    source: Prepared,
+    bytes: usize,
+    used: u64,
+}
+
+/// Sources read so far, the least recently used evicted past [`MAX_CACHE_GLYPHS`] entries or
+/// [`MAX_SOURCE_BYTES`].
+#[derive(Default)]
+struct Sources {
+    map: HashMap<SourceKey, SourceEntry>,
+    bytes: usize,
+}
+
+impl Sources {
+    /// The source for `key`, read by `prepare` when it is not kept, and the work reading took.
+    fn get(&mut self, key: SourceKey, tick: u64, prepare: impl FnOnce() -> (Prepared, u64)) -> (Prepared, u64) {
+        if let Some(e) = self.map.get_mut(&key) {
+            e.used = tick;
+            return (e.source.clone(), 0);
+        }
+        let (source, work) = prepare();
+        let bytes = source.as_ref().map_or(0, |s| s.bytes());
+        if self.map.len() >= MAX_CACHE_GLYPHS || self.bytes.saturating_add(bytes) > MAX_SOURCE_BYTES {
+            let mut ticks: Vec<u64> = self.map.values().map(|e| e.used).collect();
+            ticks.sort_unstable();
+            let cut = ticks.get(ticks.len() / 4).copied().unwrap_or(0);
+            self.map.retain(|_, e| e.used > cut);
+            self.bytes = self.map.values().map(|e| e.bytes).sum();
+            while self.bytes.saturating_add(bytes) > MAX_SOURCE_BYTES {
+                let Some(oldest) = self.map.iter().min_by_key(|(_, e)| e.used).map(|(k, _)| *k) else { break };
+                if let Some(gone) = self.map.remove(&oldest) {
+                    self.bytes = self.bytes.saturating_sub(gone.bytes);
+                }
+            }
+        }
+        // A source larger than the whole cache is drawn but not kept.
+        if bytes <= MAX_SOURCE_BYTES {
+            self.bytes = self.bytes.saturating_add(bytes);
+            self.map.insert(key, SourceEntry { source: source.clone(), bytes, used: tick });
+        }
+        (source, work)
+    }
+}
+
+fn units_per_em(font: &FontRef) -> f64 {
+    f64::from(font.head().map(|h| h.units_per_em()).unwrap_or(1000).max(1))
+}
+
+/// The strike glyph `gid` of `kind` is drawn from at `ppem` pixels per em (0 for `SVG `).
+fn strike_of(font: &FontRef, gid: u16, kind: ColorKind, ppem: f64) -> Option<u16> {
+    match kind {
+        ColorKind::Colr | ColorKind::Svg => Some(0),
+        ColorKind::Sbix => sbix_record(font, gid, ppem).map(|r| r.0),
+        ColorKind::Cbdt => cbdt_glyph(font, gid, ppem).map(|(size, _)| size),
+    }
+}
+
+fn prepare(font: &FontRef, gid: u16, kind: ColorKind, ppem: f64) -> (Prepared, u64) {
+    let (result, work) = match kind {
+        ColorKind::Colr => (Err("COLR glyphs are painted, not read".to_string()), 0),
+        ColorKind::Svg => prepare_svg(font, gid),
+        ColorKind::Sbix => prepare_sbix(font, gid, ppem),
+        ColorKind::Cbdt => prepare_cbdt(font, gid, ppem),
+    };
+    (result.map(Arc::new).map_err(Arc::from), work)
+}
+
+// ── SVG documents ──────────────────────────────────────────────────────────────────────────────
+
+/// The attributes of the document's root element, as written (at most [`MAX_ROOT_ATTRIBUTES`]).
+fn root_attributes(doc: &[u8]) -> Vec<(&[u8], &[u8])> {
+    let mut out = Vec::new();
+    let Some(start) =
+        doc.windows(5).position(|w| w.starts_with(b"<svg") && w.get(4).is_some_and(|b| b.is_ascii_whitespace() || *b == b'>' || *b == b'/'))
+    else {
+        return out;
+    };
+    let mut at = start + 4;
+    let byte = |i: usize| doc.get(i).copied();
+    while out.len() < MAX_ROOT_ATTRIBUTES {
+        while byte(at).is_some_and(|b| b.is_ascii_whitespace()) {
+            at += 1;
+        }
+        match byte(at) {
+            None | Some(b'>') | Some(b'/') => break,
+            _ => {}
+        }
+        let name_start = at;
+        while byte(at).is_some_and(|b| !b.is_ascii_whitespace() && b != b'=' && b != b'>' && b != b'/') {
+            at += 1;
+        }
+        let name = doc.get(name_start..at).unwrap_or_default();
+        while byte(at).is_some_and(|b| b.is_ascii_whitespace()) {
+            at += 1;
+        }
+        if byte(at) != Some(b'=') {
+            if name.is_empty() {
+                break;
+            }
+            continue;
+        }
+        at += 1;
+        while byte(at).is_some_and(|b| b.is_ascii_whitespace()) {
+            at += 1;
+        }
+        let Some(quote) = byte(at).filter(|b| *b == b'"' || *b == b'\'') else { break };
+        let value_start = at + 1;
+        let Some(len) = doc.get(value_start..).and_then(|rest| rest.iter().position(|b| *b == quote)) else { break };
+        out.push((name, doc.get(value_start..value_start + len).unwrap_or_default()));
+        at = value_start + len + 1;
+    }
+    out
+}
+
+/// How a document that gives its own size is fitted to the em square: the alignment along x
+/// and y (0, ½ or 1) and the scaling, from the root's `preserveAspectRatio`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Fit {
+    align: Option<(f64, f64)>,
+    slice: bool,
+}
+
+/// The fit of a document whose root gives a `viewBox`, `width` or `height`; `None` for one
+/// that gives none, whose user units are font units.
+fn root_fit(doc: &[u8]) -> Option<Fit> {
+    let attributes = root_attributes(doc);
+    if !attributes.iter().any(|(n, _)| matches!(*n, b"viewBox" | b"width" | b"height")) {
+        return None;
+    }
+    let mut fit = Fit { align: Some((0.5, 0.5)), slice: false };
+    let Some((_, par)) = attributes.iter().find(|(n, _)| *n == b"preserveAspectRatio") else { return Some(fit) };
+    let text = String::from_utf8_lossy(par);
+    let mut words = text.split_ascii_whitespace().filter(|w| *w != "defer");
+    let along = |w: &str| match w {
+        "Min" => Some(0.0),
+        "Mid" => Some(0.5),
+        "Max" => Some(1.0),
+        _ => None,
+    };
+    match words.next() {
+        Some("none") => fit.align = None,
+        Some(a) if a.len() == 8 && a.starts_with('x') && a.get(4..5) == Some("Y") => {
+            if let (Some(x), Some(y)) = (a.get(1..4).and_then(along), a.get(5..8).and_then(along)) {
+                fit.align = Some((x, y));
+            }
+        }
+        _ => {}
+    }
+    fit.slice = words.next() == Some("slice");
+    Some(fit)
+}
+
+/// The affine from the viewport as `svg_draw` places it (y up, its bottom left at the origin,
+/// `w × h`) to font units: the document's user space with the glyph origin at its origin, y
+/// down, and a document that gives its own size fitted to the em square, as the OpenType `SVG `
+/// table defines.
+fn svg_place(fit: Option<Fit>, upem: f64, w: f64, h: f64) -> Option<Affine> {
+    let (a, d, e, f) = match fit {
+        None => (1.0, 1.0, 0.0, 0.0),
+        Some(fit) => {
+            if !(w.is_finite() && h.is_finite() && w > 0.0 && h > 0.0) {
+                return None;
+            }
+            let (sx, sy) = (upem / w, upem / h);
+            match fit.align {
+                None => (sx, sy, 0.0, 0.0),
+                Some((ax, ay)) => {
+                    let s = if fit.slice { sx.max(sy) } else { sx.min(sy) };
+                    (s, s, ax * (upem - s * w), ay * (upem - s * h))
+                }
+            }
+        }
+    };
+    // A viewport point (x, y) y down arrives as (x, h − y); it goes to (a·x + e, −(d·y + f)).
+    let place = Affine::new([a, 0.0, 0.0, d, e, -d * h - f]);
+    finite_affine(place).then_some(place)
+}
+
+fn prepare_svg(font: &FontRef, gid: u16) -> (Result<Source, String>, u64) {
+    let Some(stored) = font.svg().ok().and_then(|s| s.glyph_data(GlyphId::new(u32::from(gid)))) else {
+        return (Err("the glyph has no SVG document".into()), 0);
+    };
+    let mut work = stored.len() as u64;
+    let doc: Cow<[u8]> = if stored.starts_with(&GZIP_MAGIC) {
+        match gunzip(stored, fontcraft_color::MAX_SVG_FILE_BYTES) {
+            Ok(plain) => Cow::Owned(plain),
+            Err(GunzipError::TooLarge) => {
+                let limit = fontcraft_color::MAX_SVG_FILE_BYTES;
+                return (Err(format!("the compressed SVG document inflates to more than {limit} bytes")), work);
+            }
+            Err(GunzipError::Invalid(what)) => return (Err(format!("the compressed SVG document cannot be read: {what}")), work),
+        }
+    } else {
+        Cow::Borrowed(stored)
+    };
+    work = work.saturating_add(doc.len() as u64);
+    let upem = units_per_em(font);
+    let fit = root_fit(&doc);
+    let mut unplaced = false;
+    let place = |w: f64, h: f64| {
+        svg_place(fit, upem, w, h).unwrap_or_else(|| {
+            unplaced = true;
+            Affine::IDENTITY
+        })
+    };
+    let items = match svg_draw::items(&doc, place) {
+        Ok(items) => items,
+        Err(e) => return (Err(format!("the SVG document cannot be drawn: {e}")), work),
+    };
+    if unplaced {
+        return (Err("the SVG document's width, height or viewBox is empty".into()), work);
+    }
+    let mut decoded: HashMap<*const Vec<u8>, Option<Arc<Bitmap>>> = HashMap::new();
+    let mut pixels_left = MAX_BITMAP_PIXELS;
+    let mut out = Vec::with_capacity(items.len());
+    for item in items {
+        match item {
+            SvgItem::Shape(s) => out.push(Drawable::Shape(s)),
+            SvgItem::Image(SvgImage { data, place, opacity }) => {
+                // An image used more than once is decoded once; one that cannot be read, or
+                // that would pass the glyph's pixel budget, is left out.
+                let bitmap = decoded
+                    .entry(Arc::as_ptr(&data))
+                    .or_insert_with(|| {
+                        let b = Bitmap::decode(&data, pixels_left).ok()?;
+                        pixels_left = pixels_left.saturating_sub(b.pixel_count());
+                        work = work.saturating_add(b.pixel_count());
+                        Some(Arc::new(b))
+                    })
+                    .clone();
+                if let Some(bitmap) = bitmap
+                    && finite_affine(place)
+                {
+                    out.push(Drawable::Image { bitmap, place, opacity: opacity as f32 });
+                }
+            }
+        }
+    }
+    (Ok(Source { items: out }), work)
 }
 
 fn svg_leaf(paint: &ColorPaint) -> Option<Leaf> {
@@ -1206,30 +1616,30 @@ fn svg_leaf(paint: &ColorPaint) -> Option<Leaf> {
     }
 }
 
-fn draw_svg(font: &FontRef, gid: u16, options: &ColorOptions) -> Result<Done, Refusal> {
-    let Some(doc) = font.svg().ok().and_then(|s| s.glyph_data(GlyphId::new(u32::from(gid)))) else {
-        return Err(Refusal::new("the glyph has no SVG document", 0));
-    };
-    if doc.starts_with(&[0x1f, 0x8b]) {
-        return Err(Refusal::new("compressed SVG documents are not drawn", 0));
-    }
-    if sized_root(doc) {
-        return Err(Refusal::new("SVG documents with their own width, height or viewBox are not drawn", 0));
-    }
-    // svg_draw reads a file's user space y down from its top left; a document's user space has
-    // the glyph origin at its origin, so the file's default height moves it back.
-    let shapes = svg_draw::shapes(doc, Affine::translate((0.0, -SVG_DEFAULT_SIDE)))
-        .map_err(|e| Refusal::new(format!("the SVG document cannot be drawn: {e}"), 0))?;
-    let rect = shapes.iter().map(|s| s.outline.bounding_box()).filter(|r| has_area(*r)).reduce(|a, b| a.union(b));
+fn draw_svg(font: &FontRef, source: &Source, options: &ColorOptions) -> Result<Done, Refusal> {
+    let rect = source
+        .items
+        .iter()
+        .map(|d| match d {
+            Drawable::Shape(s) => s.outline.bounding_box(),
+            Drawable::Image { place, .. } => place.transform_rect_bbox(unit()),
+        })
+        .filter(|r| has_area(*r) && finite_rect(*r))
+        .reduce(|a, b| a.union(b));
     let Some(rect) = rect else { return blank(ColorKind::Svg) };
     let sprite = sprite(rect, options.scale)?;
     let mut outlines = Outlines::new(font);
     let mut raster = Raster::new(&sprite, &mut outlines, &[], options.text_color);
-    for shape in &shapes {
-        let Some(leaf) = svg_leaf(&shape.paint) else { continue };
-        raster.push_clip_path(&shape.outline);
-        raster.fill_leaf(&leaf);
-        raster.clips.pop();
+    for item in &source.items {
+        match item {
+            Drawable::Shape(shape) => {
+                let Some(leaf) = svg_leaf(&shape.paint) else { continue };
+                raster.push_clip_path(&shape.outline);
+                raster.fill_leaf(&leaf);
+                raster.clips.pop();
+            }
+            Drawable::Image { bitmap, place, opacity } => raster.draw_bitmap(bitmap, *place, *opacity),
+        }
         if raster.refused.is_some() {
             break;
         }
@@ -1256,82 +1666,142 @@ fn sbix_record<'a>(font: &FontRef<'a>, gid: u16, ppem: f64) -> Option<(u16, i16,
             continue;
         }
         let record = (size, data.origin_offset_x(), data.origin_offset_y(), data.graphic_type(), data.data());
-        let better = match best {
-            None => true,
-            Some((b, ..)) => {
-                let (s, b) = (f64::from(size), f64::from(b));
-                (s >= ppem && (b < ppem || s < b)) || (b < ppem && s > b)
-            }
-        };
-        if better {
+        if nearer(size, best.map(|b| b.0), ppem) {
             best = Some(record);
         }
     }
     best
 }
 
-fn draw_sbix(font: &FontRef, gid: u16, options: &ColorOptions) -> Result<Done, Refusal> {
-    let upm = f64::from(font.head().map(|h| h.units_per_em()).unwrap_or(1000).max(1));
-    let Some((ppem, ox, oy, tag, data)) = sbix_record(font, gid, options.scale * upm) else {
-        return Err(Refusal::new("the glyph has no sbix image", 0));
+/// Whether a strike of `size` pixels per em is a better match for `ppem` than `best`: the
+/// smallest strike at least that large, else the largest.
+fn nearer(size: u16, best: Option<u16>, ppem: f64) -> bool {
+    match best {
+        None => true,
+        Some(b) => {
+            let (s, b) = (f64::from(size), f64::from(b));
+            (s >= ppem && (b < ppem || s < b)) || (b < ppem && s > b)
+        }
+    }
+}
+
+fn prepare_sbix(font: &FontRef, gid: u16, ppem: f64) -> (Result<Source, String>, u64) {
+    let upm = units_per_em(font);
+    let Some((size, ox, oy, tag, data)) = sbix_record(font, gid, ppem) else {
+        return (Err("the glyph has no sbix image".into()), 0);
     };
     if tag != Tag::new(b"png ") && tag != Tag::new(b"jpg ") {
-        return Err(Refusal::new(format!("sbix images of type `{tag}` are not drawn"), 0));
+        return (Err(format!("sbix images of type `{tag}` are not drawn")), 0);
     }
-    let image =
-        fontcraft_imagery::decode_rgba(data, MAX_BITMAP_PIXELS).map_err(|e| Refusal::new(format!("the sbix image cannot be read: {e}"), 0))?;
-    if image.width == 0 || image.height == 0 {
-        return blank(ColorKind::Sbix);
+    let bitmap = match Bitmap::decode(data, MAX_BITMAP_PIXELS) {
+        Ok(b) => b,
+        Err(e) => return (Err(format!("the sbix image cannot be read: {e}")), data.len() as u64),
+    };
+    let unit = upm / f64::from(size);
+    let (w, h) = (f64::from(bitmap.width), f64::from(bitmap.height));
+    let place = Affine::new([w * unit, 0.0, 0.0, -h * unit, f64::from(ox) * unit, (f64::from(oy) + h) * unit]);
+    let work = bitmap.pixel_count().saturating_add(data.len() as u64);
+    (Ok(Source { items: vec![Drawable::Image { bitmap: Arc::new(bitmap), place, opacity: 1.0 }] }), work)
+}
+
+// ── CBDT ───────────────────────────────────────────────────────────────────────────────────────
+
+/// The `CBDT` glyph drawn for `gid` at `ppem` pixels per em, by the rule `sbix` follows, and its
+/// strike's pixels per em.
+fn cbdt_glyph<'a>(font: &FontRef<'a>, gid: u16, ppem: f64) -> Option<(u16, BitmapGlyph<'a>)> {
+    let strikes = BitmapStrikes::with_format(font, BitmapFormat::Cbdt)?;
+    let id = GlyphId::new(u32::from(gid));
+    let mut best: Option<(u16, BitmapGlyph<'a>)> = None;
+    for strike in strikes.iter().take(fontcraft_color::MAX_STRIKES) {
+        let size = strike.ppem();
+        if !(size >= 1.0 && size <= f32::from(u16::MAX)) {
+            continue;
+        }
+        let size = size as u16;
+        let Some(glyph) = strike.get(id) else { continue };
+        if nearer(size, best.as_ref().map(|b| b.0), ppem) {
+            best = Some((size, glyph));
+        }
     }
-    let unit = upm / f64::from(ppem);
-    let place = Affine::translate((f64::from(ox) * unit, f64::from(oy) * unit)) * Affine::scale(unit);
-    let rect = place.transform_rect_bbox(Rect::new(0.0, 0.0, f64::from(image.width), f64::from(image.height)));
+    best
+}
+
+fn prepare_cbdt(font: &FontRef, gid: u16, ppem: f64) -> (Result<Source, String>, u64) {
+    let upm = units_per_em(font);
+    let Some((_, glyph)) = cbdt_glyph(font, gid, ppem) else {
+        return (Err("the glyph has no CBDT image".into()), 0);
+    };
+    let (gw, gh) = (glyph.width, glyph.height);
+    let declared = u64::from(gw) * u64::from(gh);
+    let bitmap = match glyph.data {
+        BitmapData::Png(data) => Bitmap::decode(data, MAX_BITMAP_PIXELS).map_err(|e| format!("the CBDT image cannot be read: {e}")),
+        _ if declared > MAX_BITMAP_PIXELS => Err(format!("the CBDT image is {gw} × {gh} pixels; at most {MAX_BITMAP_PIXELS} are drawn")),
+        BitmapData::Bgra(data) => {
+            let n = declared as usize * 4;
+            match data.get(..n) {
+                Some(bgra) => {
+                    // Premultiplied BGRA to straight RGBA.
+                    let pixels = bgra
+                        .as_chunks::<4>()
+                        .0
+                        .iter()
+                        .flat_map(|&[b, g, r, a]| {
+                            let straight = |c: u8| if a == 0 { 0 } else { ((u16::from(c) * 255 + u16::from(a) / 2) / u16::from(a)).min(255) as u8 };
+                            [straight(r), straight(g), straight(b), a]
+                        })
+                        .collect();
+                    Ok(Bitmap { width: gw, height: gh, pixels, mask: false })
+                }
+                None => Err("the CBDT image data is cut short".to_string()),
+            }
+        }
+        BitmapData::Mask(mask) => match mask.decode(gw, gh) {
+            Ok(alpha) => Ok(Bitmap { width: gw, height: gh, pixels: alpha.into_iter().flat_map(|a| [255, 255, 255, a]).collect(), mask: true }),
+            Err(e) => Err(format!("the CBDT mask cannot be read: {e:?}")),
+        },
+    };
+    let bitmap = match bitmap {
+        Ok(b) => b,
+        Err(e) => return (Err(e), declared),
+    };
+    if bitmap.width == 0 || bitmap.height == 0 {
+        return (Ok(Source { items: Vec::new() }), 0);
+    }
+    // The bearings put the image's top left that many strike pixels right of and above the
+    // glyph origin; a strike pixel is `units_per_em ÷ ppem` units.
+    let ux = upm / f64::from(glyph.ppem_x.max(1.0));
+    let uy = upm / f64::from(glyph.ppem_y.max(1.0));
+    let (w, h) = (f64::from(bitmap.width), f64::from(bitmap.height));
+    let (bx, by) = (f64::from(glyph.inner_bearing_x), f64::from(glyph.inner_bearing_y));
+    let place = match glyph.placement_origin {
+        Origin::TopLeft => Affine::new([w * ux, 0.0, 0.0, -h * uy, bx * ux, by * uy]),
+        Origin::BottomLeft => Affine::new([w * ux, 0.0, 0.0, -h * uy, bx * ux, (by + h) * uy]),
+    };
+    let work = bitmap.pixel_count();
+    (Ok(Source { items: vec![Drawable::Image { bitmap: Arc::new(bitmap), place, opacity: 1.0 }] }), work)
+}
+
+/// A glyph drawn from a bitmap source (`sbix` or `CBDT`).
+fn draw_bitmaps(font: &FontRef, source: &Source, kind: ColorKind, options: &ColorOptions) -> Result<Done, Refusal> {
+    let rect = source
+        .items
+        .iter()
+        .filter_map(|d| match d {
+            Drawable::Image { place, .. } => Some(place.transform_rect_bbox(unit())),
+            Drawable::Shape(_) => None,
+        })
+        .filter(|r| has_area(*r) && finite_rect(*r))
+        .reduce(|a, b| a.union(b));
+    let Some(rect) = rect else { return blank(kind) };
     let sprite = sprite(rect, options.scale)?;
     let mut outlines = Outlines::new(font);
     let mut raster = Raster::new(&sprite, &mut outlines, &[], options.text_color);
-    // Sprite pixels to image pixels (y up from the image's bottom left).
-    let to_image = (sprite.base * place).inverse();
-    let pixel = options.scale * unit;
-    let n = if pixel >= 1.0 { 1 } else { ((1.0 / pixel).ceil() as u32).clamp(1, MAX_BITMAP_SAMPLES) };
-    let area = PixBox::of(rect, sprite.base, sprite.width, sprite.height);
-    if !finite_affine(to_image) || !raster.spend(area.area().saturating_mul(u64::from(n * n))) {
-        return raster.finish(sprite.left, sprite.top, ColorKind::Sbix);
-    }
-    let (iw, ih) = (image.width as usize, image.height as usize);
-    let width = sprite.width as usize;
-    let k = 1.0 / f64::from(n * n);
-    let Some(layer) = raster.layers.first_mut() else { return Err(Refusal::new("no layer", 0)) };
-    for y in area.y0..area.y1 {
-        for x in area.x0..area.x1 {
-            let mut sum = [0.0f64; 4];
-            for j in 0..n {
-                for i in 0..n {
-                    let q =
-                        to_image * Point::new(f64::from(x) + (f64::from(i) + 0.5) / f64::from(n), f64::from(y) + (f64::from(j) + 0.5) / f64::from(n));
-                    if !(q.x >= 0.0 && q.y >= 0.0 && q.x < iw as f64 && q.y < ih as f64) {
-                        continue;
-                    }
-                    let (sx, sy) = (q.x as usize, ih - 1 - (q.y as usize).min(ih - 1));
-                    let from = (sy * iw + sx) * 4;
-                    let Some(&[r, g, b, a]) = image.pixels.get(from..from + 4).and_then(|s| <&[u8; 4]>::try_from(s).ok()) else { continue };
-                    let a = f64::from(a) / 255.0;
-                    for (s, v) in sum.iter_mut().zip([f64::from(r) / 255.0 * a, f64::from(g) / 255.0 * a, f64::from(b) / 255.0 * a, a]) {
-                        *s += v * k;
-                    }
-                }
-            }
-            if sum[3] <= 0.0 {
-                continue;
-            }
-            let at = (y as usize * width + x as usize) * 4;
-            if let Some(px) = layer.get_mut(at..at + 4) {
-                for (d, v) in px.iter_mut().zip(sum) {
-                    *d = (v * 255.0).round().clamp(0.0, 255.0) as u8;
-                }
-            }
+    for item in &source.items {
+        if let Drawable::Image { bitmap, place, opacity } = item {
+            raster.draw_bitmap(bitmap, *place, *opacity);
         }
     }
-    raster.finish(sprite.left, sprite.top, ColorKind::Sbix)
+    raster.finish(sprite.left, sprite.top, kind)
 }
 
 #[cfg(test)]
@@ -1381,5 +1851,164 @@ mod tests {
         // A quarter turn clockwise in y-up space lies below the centre.
         let below = leaf.eval(Point::new(0.0, -1.0)).unwrap();
         assert!((below[0] - 0.25).abs() < 1e-3, "{below:?}");
+    }
+
+    // ── fonts built in code ──
+
+    /// An sfnt of `tables` with a 1000-unit em and `glyphs` glyphs.
+    fn sfnt(glyphs: u16, extra: Vec<([u8; 4], Vec<u8>)>) -> Arc<[u8]> {
+        let mut head = vec![0u8; 54];
+        head[..4].copy_from_slice(&0x0001_0000u32.to_be_bytes());
+        head[12..16].copy_from_slice(&0x5F0F_3CF5u32.to_be_bytes());
+        head[18..20].copy_from_slice(&1000u16.to_be_bytes());
+        let mut maxp = 0x0000_5000u32.to_be_bytes().to_vec();
+        maxp.extend(glyphs.to_be_bytes());
+        let mut tables = vec![(*b"head", head), (*b"maxp", maxp)];
+        tables.extend(extra);
+        tables.sort_by_key(|t| t.0);
+        let mut out = 0x0001_0000u32.to_be_bytes().to_vec();
+        out.extend((tables.len() as u16).to_be_bytes());
+        out.extend([0u8; 6]);
+        let mut offset = 12 + 16 * tables.len();
+        let mut body = Vec::new();
+        for (tag, mut data) in tables {
+            out.extend(tag);
+            out.extend(0u32.to_be_bytes());
+            out.extend((offset as u32).to_be_bytes());
+            out.extend((data.len() as u32).to_be_bytes());
+            data.resize(data.len().div_ceil(4) * 4, 0);
+            offset += data.len();
+            body.extend(data);
+        }
+        out.extend(body);
+        Arc::from(out)
+    }
+
+    /// An `SVG ` table with document `doc` for glyph 1.
+    fn svg_table(doc: &[u8]) -> ([u8; 4], Vec<u8>) {
+        let mut t = vec![0, 0, 0, 0, 0, 10, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1];
+        t.extend(14u32.to_be_bytes());
+        t.extend((doc.len() as u32).to_be_bytes());
+        t.extend(doc);
+        (*b"SVG ", t)
+    }
+
+    fn png(width: u32, height: u32, rgba: [u8; 4]) -> Vec<u8> {
+        fontcraft_imagery::to_png(&fontcraft_imagery::Rgba8 { width, height, pixels: rgba.repeat((width * height) as usize) }).unwrap()
+    }
+
+    fn base64(data: &[u8]) -> String {
+        const ABC: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        let mut out = String::new();
+        for chunk in data.chunks(3) {
+            let b = [chunk[0], chunk.get(1).copied().unwrap_or(0), chunk.get(2).copied().unwrap_or(0)];
+            let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
+            for i in 0..4 {
+                if i <= chunk.len() {
+                    out.push(char::from(ABC[((n >> (18 - 6 * i)) & 63) as usize]));
+                } else {
+                    out.push('=');
+                }
+            }
+        }
+        out
+    }
+
+    /// Glyph 1 drawn at `scale`.
+    fn glyph1(font: Arc<[u8]>, scale: f64) -> Arc<GlyphRaster> {
+        let mut r = ColorRenderer::new(font, &["g0".to_string(), "g1".to_string()]).unwrap();
+        let options = ColorOptions { scale, palette: 0, text_color: [0, 0, 0, 255] };
+        match r.glyph(1, &options, &mut FrameBudget::frame()) {
+            Painted::Color(raster) => raster,
+            other => panic!("glyph 1 is not drawn in colour: {other:?}"),
+        }
+    }
+
+    /// The pixels with ink, as a box in pixels right of and above the glyph origin.
+    fn ink(raster: &GlyphRaster) -> (i32, i32, i32, i32) {
+        let (mut x0, mut x1, mut y0, mut y1) = (i32::MAX, i32::MIN, i32::MAX, i32::MIN);
+        for py in 0..raster.image.height {
+            for px in 0..raster.image.width {
+                if raster.image.pixel(px, py).unwrap()[3] > 128 {
+                    let (x, y_down) = (raster.left + px as i32, raster.top + py as i32);
+                    (x0, x1, y0, y1) = (x0.min(x), x1.max(x + 1), y0.min(-y_down - 1), y1.max(-y_down));
+                }
+            }
+        }
+        (x0, x1, y0, y1)
+    }
+
+    /// The colour at pixel `(x, y)` right of and above the glyph origin.
+    fn colour_at(raster: &GlyphRaster, x: i32, y: i32) -> [u8; 4] {
+        let (px, py) = (x - raster.left, -y - 1 - raster.top);
+        raster.image.pixel(px as u32, py as u32).unwrap()
+    }
+
+    #[test]
+    fn a_compressed_svg_document_is_inflated_and_its_view_box_fitted_to_the_em() {
+        // The viewBox's top left lands on the glyph origin, a tenth of the em square per user
+        // unit; the rect sits above the box, so above the baseline.
+        let doc = r##"<svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 100 100 100"><rect id="glyph1" x="10" y="50" width="20" height="50" fill="#0000FF"/></svg>"##;
+        let font = sfnt(2, vec![svg_table(&fontcraft_container::gzip::gzip(doc.as_bytes()))]);
+        let raster = glyph1(font, 0.1);
+        assert_eq!(raster.kind, ColorKind::Svg);
+        assert_eq!(ink(&raster), (10, 30, 0, 50), "x 100 to 300 units, y 0 to 500");
+        assert_eq!(colour_at(&raster, 20, 25), [0, 0, 255, 255]);
+
+        // width and height without a viewBox: a 2000-unit viewport is the 1000-unit em.
+        let doc = r##"<svg xmlns="http://www.w3.org/2000/svg" width="2000" height="2000"><rect x="200" y="-800" width="400" height="800" fill="#00FF00"/></svg>"##;
+        assert_eq!(ink(&glyph1(sfnt(2, vec![svg_table(doc.as_bytes())]), 0.1)), (10, 30, 0, 40));
+
+        // A damaged stream is refused, and the glyph drawn as its outline.
+        let mut broken = fontcraft_container::gzip::gzip(doc.as_bytes());
+        let n = broken.len();
+        broken[n - 6] ^= 0xFF;
+        let mut r = ColorRenderer::new(sfnt(2, vec![svg_table(&broken)]), &[]).unwrap();
+        let options = ColorOptions { scale: 0.1, palette: 0, text_color: [0, 0, 0, 255] };
+        assert!(matches!(r.glyph(1, &options, &mut FrameBudget::frame()), Painted::Refused(_)));
+    }
+
+    #[test]
+    fn an_svg_document_draws_its_embedded_png_images() {
+        let data = base64(&png(2, 2, [0, 255, 0, 255]));
+        let doc = format!(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" viewBox="0 1000 1000 1000"><image id="glyph1" x="100" y="800" width="200" height="200" xlink:href="data:image/png;base64,{data}"/></svg>"#
+        );
+        let raster = glyph1(sfnt(2, vec![svg_table(doc.as_bytes())]), 0.1);
+        assert_eq!(ink(&raster), (10, 30, 0, 20), "x 100 to 300 units, y 0 to 200");
+        assert_eq!(colour_at(&raster, 20, 10), [0, 255, 0, 255]);
+    }
+
+    /// `CBLC` and `CBDT` with one strike of `ppem` holding glyph 1 as `png` (format 17), its top
+    /// left `bearing` strike pixels right of and above the origin.
+    fn cbdt_tables(ppem: u8, png: &[u8], size: (u8, u8), bearing: (i8, i8)) -> Vec<([u8; 4], Vec<u8>)> {
+        let mut cblc = vec![0, 3, 0, 0, 0, 0, 0, 1];
+        cblc.extend(56u32.to_be_bytes());
+        cblc.extend(24u32.to_be_bytes());
+        cblc.extend(1u32.to_be_bytes());
+        cblc.extend(0u32.to_be_bytes());
+        cblc.extend([0u8; 24]);
+        cblc.extend([0, 1, 0, 1, ppem, ppem, 32, 1]);
+        cblc.extend([0, 1, 0, 1, 0, 0, 0, 8]);
+        let record = 5 + 4 + png.len() as u32;
+        cblc.extend([0, 1, 0, 17, 0, 0, 0, 4]);
+        cblc.extend(0u32.to_be_bytes());
+        cblc.extend(record.to_be_bytes());
+        let mut cbdt = vec![0, 3, 0, 0, size.1, size.0, bearing.0 as u8, bearing.1 as u8, size.0];
+        cbdt.extend((png.len() as u32).to_be_bytes());
+        cbdt.extend(png);
+        vec![(*b"CBLC", cblc), (*b"CBDT", cbdt)]
+    }
+
+    #[test]
+    fn a_cbdt_glyph_is_drawn_from_its_strike_scaled_to_the_text_size() {
+        let font = sfnt(2, cbdt_tables(100, &png(20, 10, [255, 0, 0, 255]), (20, 10), (5, 30)));
+        // 100 pixels per em: one image pixel per sprite pixel, the top left at (5, 30).
+        let raster = glyph1(font.clone(), 0.1);
+        assert_eq!(raster.kind, ColorKind::Cbdt);
+        assert_eq!(ink(&raster), (5, 25, 20, 30));
+        assert_eq!(colour_at(&raster, 10, 25), [255, 0, 0, 255]);
+        // 200 pixels per em: the only strike, twice as large.
+        assert_eq!(ink(&glyph1(font, 0.2)), (10, 50, 40, 60));
     }
 }

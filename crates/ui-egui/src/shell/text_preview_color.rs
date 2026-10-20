@@ -13,6 +13,8 @@
 //!   chooses. The text colour (palette index 65,535) is the preview's glyph colour.
 //! - A glyph the compiled font has no colour for, one past the drawing limits, and one not yet
 //!   drawn in a frame whose budget is spent are drawn as their outline, as before.
+//! - When the colour font cannot be built, every glyph is drawn as its outline and the reason
+//!   shows under the text, as it does when the preview's own font cannot be built.
 //! - The glyphs drawn in colour are laid onto one texture of the area in view, made again only
 //!   when what is drawn changes.
 
@@ -54,6 +56,8 @@ pub struct ColorPreview {
     wanted: Option<(Key, f64)>,
     running: Option<(Key, Landing)>,
     renderer: Option<(Key, ColorRenderer)>,
+    /// The font this frame wants, when the document has colour layers.
+    current: Option<Key>,
     /// This frame: how glyphs are drawn (`None`: not in colour), the budget, the glyphs drawn in
     /// colour and where, and a hash of what was drawn.
     options: Option<ColorOptions>,
@@ -162,10 +166,12 @@ impl ColorPreview {
         if !colour {
             self.renderer = None;
             self.built = None;
+            self.current = None;
             return;
         }
         let (label, target) = target_of(font, style, master);
         let key: Key = (doc.0, doc.1, label);
+        self.current = Some(key.clone());
         self.step(&key, target, now, session, ctx);
         if let Some((k, _)) = &self.renderer
             && k.0 == key.0
@@ -314,10 +320,11 @@ impl ColorPreview {
         self.renderer.is_some()
     }
 
-    /// Why the last colour font could not be built.
+    /// Why the colour font of the shown document and style could not be built; Text Preview
+    /// shows it under the text, which is drawn in outlines.
     pub fn error(&self) -> Option<&str> {
-        match &self.built {
-            Some((_, Err(e))) => Some(e),
+        match (&self.built, &self.current) {
+            (Some((k, Err(e))), Some(c)) if k.0 == c.0 && k.2 == c.2 => Some(e),
             _ => None,
         }
     }
@@ -566,6 +573,26 @@ mod tests {
         assert!(tp.cache.color.drawn().is_empty(), "{:?}", tp.cache.color.drawn());
         assert!(tp.cache.color.page().is_none());
         assert_eq!(tp.cache.drawn.glyphs.len(), 3, "the glyphs are still drawn, as outlines");
+    }
+
+    #[test]
+    fn color_preview_text_preview_shows_why_the_colour_font_was_not_built() {
+        let mut app = colour_app();
+        exec(&mut app, "window.textPreview", json!({}));
+        exec(&mut app, "textPreview.setText", json!({"text": "AB"}));
+        let w = Window::new();
+        w.settle(&mut app);
+        assert_eq!(app.state.panels.text_preview.cache.drawn.message, None);
+        // The build for the shown document and style failed.
+        let c = &mut app.state.panels.text_preview.cache.color;
+        let key = c.current.clone().unwrap();
+        let reason = "The colour glyphs are drawn as outlines: the font could not be built";
+        c.built = Some((key, Err(reason.to_string())));
+        w.frame(&mut app, 0.01);
+        let tp = &app.state.panels.text_preview;
+        assert!(tp.cache.color.drawn().is_empty(), "every glyph is an outline");
+        assert_eq!(tp.cache.drawn.glyphs.len(), 2);
+        assert_eq!(tp.cache.drawn.message.as_deref(), Some(reason), "the reason shows under the text");
     }
 
     #[test]

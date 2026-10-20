@@ -8,6 +8,7 @@
 //!   one Brotli stream (quality 11, window 22, font mode). The `glyf`/`loca` transform and the
 //!   `hmtx` transform are written when [`woff2::Options`] asks for them and read back.
 //! - [`to_sfnt`]: whatever the container, the sfnt (or collection) inside.
+//! - [`gzip`]: gzip streams, the compression of `SVG ` table documents.
 //!
 //! Byte choices (table order, padding, checksums, header versions, the metadata and private
 //! blocks) follow fontTools, whose `ttLib/sfnt.py` and `ttLib/woff2.py` (MIT) these modules port.
@@ -22,6 +23,7 @@
 #![forbid(unsafe_code)]
 
 mod compress;
+pub mod gzip;
 pub mod sfnt;
 pub mod woff;
 pub mod woff2;

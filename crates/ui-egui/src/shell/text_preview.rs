@@ -1264,6 +1264,9 @@ fn area(
     let length = tp.length;
     let ppp = ui.ctx().pixels_per_point();
     tp.cache.color.begin(session, font, tp.style.as_deref(), master, doc, now, ui.ctx(), f64::from(scale) * f64::from(ppp), tokens.glyph_fill);
+    if drawn.message.is_none() {
+        drawn.message = tp.cache.color.error().map(str::to_string);
+    }
 
     let scroll = egui::ScrollArea::both().id_salt(widgets::id(("textPreview", "scroll"))).auto_shrink([false, false]).max_height(size.y);
     scroll.stick_to_right(vertical).show_viewport(ui, |ui, viewport| {

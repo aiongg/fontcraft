@@ -1427,6 +1427,7 @@ name = "fontcraft-render"
 version = "0.0.1"
 dependencies = [
  "fontcraft-color",
+ "fontcraft-container",
  "fontcraft-geom",
  "fontcraft-imagery",
  "fontcraft-model",
