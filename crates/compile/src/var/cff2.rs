@@ -285,5 +285,6 @@ pub fn cff2_font(
         private,
         font_matrix,
         round_tolerance: CFF2_ROUND_TOLERANCE,
+        generic: false,
     })
 }

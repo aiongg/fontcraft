@@ -5,7 +5,38 @@
 //! and `preserveTopology=False`, and the helpers it uses; MIT, Copyright (c) 2017 Just van Rossum
 //! and contributors). The reference compiler specialises through it, so this follows its passes in
 //! order, including its choices on ties, rather than searching for a shortest encoding of its own.
-//! Blend arguments (CFF2) are not supported.
+//!
+//! The passes are generic over the operand ([`SpecArg`]): a plain number for `CFF `, or for
+//! `CFF2` a number that may be blended (a default with one delta per region). A blended operand
+//! is never zero, two blended operands add delta by delta, and while it is pushed a blended
+//! operand takes its default, its deltas and the blend count on the stack, as the reference's
+//! `_addArgs` and `_argsStackUse` count them.
+
+/// An operand the specialiser can move, test for zero, add and count on the stack.
+pub(crate) trait SpecArg: Clone {
+    /// The plain number 0.
+    fn zero() -> Self;
+    /// A plain 0 (a blended operand never is).
+    fn is_zero(&self) -> bool;
+    /// The sum of two operands; `None` when they cannot be added (blends over different regions).
+    fn add(&self, other: &Self) -> Option<Self>;
+    /// Most stack slots the operand takes while it is pushed (it leaves one).
+    fn peak(&self) -> usize {
+        1
+    }
+}
+
+impl SpecArg for f64 {
+    fn zero() -> Self {
+        0.0
+    }
+    fn is_zero(&self) -> bool {
+        *self == 0.0
+    }
+    fn add(&self, other: &Self) -> Option<Self> {
+        Some(self + other)
+    }
+}
 
 /// Which components of a vector are zero: `Zero` both, `H` only y (a horizontal vector, one
 /// argument: dx), `V` only x (vertical, one argument: dy), `R` neither (two arguments).
@@ -34,15 +65,15 @@ pub(crate) const RLINETO: Op = Op::Line(Cat::R);
 pub(crate) const RRCURVETO: Op = Op::Curve(Cat::R, Cat::R);
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct Cmd {
+pub(crate) struct Cmd<A = f64> {
     pub op: Op,
-    pub args: Vec<f64>,
+    pub args: Vec<A>,
 }
 
-fn categorize(x: f64, y: f64) -> (Cat, Vec<f64>) {
-    if x == 0.0 {
-        if y == 0.0 { (Cat::Zero, vec![x]) } else { (Cat::V, vec![y]) }
-    } else if y == 0.0 {
+fn categorize<A: SpecArg>(x: A, y: A) -> (Cat, Vec<A>) {
+    if x.is_zero() {
+        if y.is_zero() { (Cat::Zero, vec![x]) } else { (Cat::V, vec![y]) }
+    } else if y.is_zero() {
         (Cat::H, vec![x])
     } else {
         (Cat::R, vec![x, y])
@@ -67,16 +98,27 @@ fn negate(a: Cat) -> Cat {
     }
 }
 
-fn arg(args: &[f64], i: usize) -> f64 {
-    args.get(i).copied().unwrap_or(0.0)
+fn arg<A: SpecArg>(args: &[A], i: usize) -> A {
+    args.get(i).cloned().unwrap_or_else(A::zero)
+}
+
+/// Most stack slots `args` take while they are pushed (the reference's `_argsStackUse`).
+fn stack_use<A: SpecArg>(args: &[A]) -> usize {
+    let mut pushed = 0usize;
+    let mut peak = 0usize;
+    for a in args {
+        peak = peak.max(pushed.saturating_add(a.peak()));
+        pushed += 1;
+    }
+    peak.max(pushed)
 }
 
 /// Specialise `commands` (generic `rmoveto`/`rlineto`/`rrcurveto` only) for an operand stack of
 /// `max_stack`. `keep_topology` skips pass 3, so every segment stays (the reference's
 /// `preserveTopology=True`).
-pub(crate) fn specialize(commands: Vec<Cmd>, max_stack: usize, keep_topology: bool) -> Vec<Cmd> {
+pub(crate) fn specialize<A: SpecArg>(commands: Vec<Cmd<A>>, max_stack: usize, keep_topology: bool) -> Vec<Cmd<A>> {
     let commands = combine_moves(commands);
-    let commands: Vec<Cmd> = commands.into_iter().map(specialize_one).collect();
+    let commands: Vec<Cmd<A>> = commands.into_iter().map(specialize_one).collect();
     let mut commands = if keep_topology { commands } else { drop_redundant(commands) };
     peephole(&mut commands);
     let mut commands = combine(commands, max_stack);
@@ -88,16 +130,25 @@ pub(crate) fn specialize(commands: Vec<Cmd>, max_stack: usize, keep_topology: bo
 
 /// Pass 1: successive `rmoveto`s become one. The reference merges from the end, so the sum is
 /// formed right to left.
-fn combine_moves(commands: Vec<Cmd>) -> Vec<Cmd> {
-    let mut out: Vec<Cmd> = Vec::with_capacity(commands.len());
-    let mut run: Vec<Cmd> = Vec::new();
-    let flush = |run: &mut Vec<Cmd>, out: &mut Vec<Cmd>| {
-        if let Some(mut acc) = run.pop() {
-            while let Some(prev) = run.pop() {
-                acc.args = vec![arg(&prev.args, 0) + arg(&acc.args, 0), arg(&prev.args, 1) + arg(&acc.args, 1)];
+fn combine_moves<A: SpecArg>(commands: Vec<Cmd<A>>) -> Vec<Cmd<A>> {
+    let mut out: Vec<Cmd<A>> = Vec::with_capacity(commands.len());
+    let mut run: Vec<Cmd<A>> = Vec::new();
+    let flush = |run: &mut Vec<Cmd<A>>, out: &mut Vec<Cmd<A>>| {
+        let Some(mut acc) = run.pop() else { return };
+        // Moves that cannot be added (never in one glyph) stay apart.
+        let mut kept_rev: Vec<Cmd<A>> = Vec::new();
+        while let Some(prev) = run.pop() {
+            let x = arg(&prev.args, 0).add(&arg(&acc.args, 0));
+            let y = arg(&prev.args, 1).add(&arg(&acc.args, 1));
+            if let (Some(x), Some(y)) = (x, y) {
+                acc.args = vec![x, y];
+            } else {
+                kept_rev.push(acc);
+                acc = prev;
             }
-            out.push(acc);
         }
+        out.push(acc);
+        out.extend(kept_rev.into_iter().rev());
     };
     for c in commands {
         if c.op == RMOVETO {
@@ -112,7 +163,7 @@ fn combine_moves(commands: Vec<Cmd>) -> Vec<Cmd> {
 }
 
 /// Pass 2: categorise every vector, turning each operator into its zero/horizontal/vertical form.
-fn specialize_one(c: Cmd) -> Cmd {
+fn specialize_one<A: SpecArg>(c: Cmd<A>) -> Cmd<A> {
     match c.op {
         Op::Move(Cat::R) | Op::Line(Cat::R) => {
             let (cat, args) = categorize(arg(&c.args, 0), arg(&c.args, 1));
@@ -134,8 +185,8 @@ fn specialize_one(c: Cmd) -> Cmd {
 /// Pass 3, walked from the end as the reference walks it: a curve whose first and last vectors
 /// are zero becomes a line, a zero-length line is dropped, and runs of `hlineto` (or `vlineto`)
 /// are summed into one.
-fn drop_redundant(commands: Vec<Cmd>) -> Vec<Cmd> {
-    let mut out_rev: Vec<Cmd> = Vec::with_capacity(commands.len());
+fn drop_redundant<A: SpecArg>(commands: Vec<Cmd<A>>) -> Vec<Cmd<A>> {
+    let mut out_rev: Vec<Cmd<A>> = Vec::with_capacity(commands.len());
     let mut rest = commands.into_iter().rev().peekable();
     let mut current = rest.next();
     while let Some(mut c) = current {
@@ -148,9 +199,12 @@ fn drop_redundant(commands: Vec<Cmd>) -> Vec<Cmd> {
             continue;
         }
         if matches!(c.op, Op::Line(Cat::H) | Op::Line(Cat::V))
-            && let Some(prev) = rest.next_if(|p| p.op == c.op)
+            && let Some(prev) = rest.peek()
+            && prev.op == c.op
+            && let Some(sum) = arg(&c.args, 0).add(&arg(&prev.args, 0))
         {
-            current = Some(Cmd { op: c.op, args: vec![arg(&c.args, 0) + arg(&prev.args, 0)] });
+            rest.next();
+            current = Some(Cmd { op: c.op, args: vec![sum] });
             continue;
         }
         out_rev.push(c);
@@ -162,7 +216,7 @@ fn drop_redundant(commands: Vec<Cmd>) -> Vec<Cmd> {
 
 /// Pass 4: an h/v form between two generic ones of its kind goes back to the generic form, which
 /// lets the three combine later.
-fn peephole(commands: &mut [Cmd]) {
+fn peephole<A: SpecArg>(commands: &mut [Cmd<A>]) {
     let len = commands.len();
     for i in 1..len.saturating_sub(1) {
         let (Some(prv), Some(nxt)) = (commands.get(i - 1).map(|c| c.op), commands.get(i + 1).map(|c| c.op)) else {
@@ -172,7 +226,7 @@ fn peephole(commands: &mut [Cmd]) {
         match c.op {
             Op::Line(Cat::Zero | Cat::H | Cat::V) if prv == RLINETO && nxt == RLINETO => {
                 let a = arg(&c.args, 0);
-                c.args = if c.op == Op::Line(Cat::V) { vec![0.0, a] } else { vec![a, 0.0] };
+                c.args = if c.op == Op::Line(Cat::V) { vec![A::zero(), a] } else { vec![a, A::zero()] };
                 c.op = RLINETO;
             }
             Op::Curve(first, last) if c.args.len() == 5 && prv == RRCURVETO && nxt == RRCURVETO => {
@@ -185,7 +239,7 @@ fn peephole(commands: &mut [Cmd]) {
                 } else {
                     5
                 };
-                c.args.insert(pos.min(c.args.len()), 0.0);
+                c.args.insert(pos.min(c.args.len()), A::zero());
                 c.op = RRCURVETO;
             }
             _ => {}
@@ -249,31 +303,31 @@ fn pair(op1: Op, op2: Op, len2: usize) -> Pair {
 
 /// Pass 5, from the end: neighbours combine into one operator while the combined operands stay
 /// below `max_stack` (one slot is kept free, as the reference keeps it for subroutine calls).
-fn combine(commands: Vec<Cmd>, max_stack: usize) -> Vec<Cmd> {
+fn combine<A: SpecArg>(commands: Vec<Cmd<A>>, max_stack: usize) -> Vec<Cmd<A>> {
     let mut rest = commands.into_iter().rev();
     let Some(mut current) = rest.next() else { return Vec::new() };
-    let mut out_rev: Vec<Cmd> = Vec::new();
-    let mut stack_use = current.args.len();
+    let mut out_rev: Vec<Cmd<A>> = Vec::new();
+    let mut used = stack_use(&current.args);
     for prev in rest {
-        let args1_use = prev.args.len();
+        let args1_use = stack_use(&prev.args);
         match pair(prev.op, current.op, current.args.len()) {
             Pair::Merge(op) => {
-                let combined = args1_use.max(args1_use + stack_use);
+                let combined = args1_use.max(prev.args.len().saturating_add(used));
                 if combined < max_stack {
                     let mut args = prev.args;
                     args.extend(current.args);
                     current = Cmd { op, args };
-                    stack_use = combined;
+                    used = combined;
                 } else {
                     out_rev.push(current);
                     current = prev;
-                    stack_use = args1_use;
+                    used = args1_use;
                 }
             }
             Pair::Keep => {
                 out_rev.push(current);
                 current = prev;
-                stack_use = args1_use;
+                used = args1_use;
             }
             Pair::Skip => {
                 out_rev.push(current);
@@ -288,7 +342,7 @@ fn combine(commands: Vec<Cmd>, max_stack: usize) -> Vec<Cmd> {
 
 /// Pass 6: the intermediate forms become real operators, reordering arguments where the real
 /// operator expects them in another order.
-fn resolve(c: &mut Cmd) {
+fn resolve<A>(c: &mut Cmd<A>) {
     match c.op {
         Op::Move(Cat::Zero) => c.op = Op::Move(Cat::H),
         Op::Line(Cat::Zero) => c.op = Op::Line(Cat::H),
