@@ -12,17 +12,19 @@
 //! | `hmtx`, `vmtx` | concatenated; `hhea` and `vhea` extents recomputed from the glyphs |
 //! | `cmap` | Unicode mappings united, the earlier font keeping a code point; format 4, 12 when needed, 14 for variation sequences |
 //! | `GSUB`, `GPOS` | lookups concatenated; features of a script several fonts share merged by tag; unused features and lookups dropped |
-//! | `GDEF` | classes, attachment points, carets and mark sets united |
+//! | `GDEF` | classes, attachment points, carets and mark sets united; variation stores concatenated, each font's variation indices moved to its part (FontCraft's rule: fontTools refuses them) |
 //! | `MATH`, `BASE` | glyph-keyed data united, constants and baselines shared ([`base_math`]) |
 //! | `head`, `hhea`, `vhea`, `maxp`, `OS/2`, `post` | field by field: extents take the largest value, bits are OR-ed, the rest comes from the first font |
 //! | `post` names | the highest version of the fonts: 1 and 3 store none, 2 the merged names, 4 a code point for each merged name |
 //! | `maxp`, `head` | then the point, contour and component maxima, the font bounds and `head.flags` bit 1 recalculated from the merged glyphs (`maxp.recalc`), in both forms of merge |
 //! | `name`, `cvt `, `fpgm`, `prep`, `gasp` | the first font's |
-//! | anything else | dropped, with a warning; for a variable font this leaves its default outlines |
+//! | variation tables | variable TrueType fonts with equal axes stay variable ([`var`]; fontTools has no rule for them) |
+//! | anything else | dropped, with a warning |
 //!
 //! Refused, as fontTools cannot merge them: CID-keyed CFF and `CFF2` fonts, `JSTF` tables
-//! (unless dropped), and `GDEF` or `BASE` with variation data. The fonts must all have TrueType
-//! outlines or all CFF outlines.
+//! (unless dropped), and `BASE` with variation data. The fonts must all have TrueType outlines
+//! or all CFF outlines. Variable fonts must all be variable, with the same axes; with `fvar`
+//! dropped they merge as their default outlines instead.
 //!
 //! A code point several fonts map stays with the first; each later font gets a `locl` lookup
 //! under its scripts that substitutes its own glyph (it needs a `GSUB` table).
@@ -38,6 +40,7 @@ mod fixed;
 mod glyphs;
 mod layout;
 mod plan;
+mod var;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -222,6 +225,9 @@ pub fn merge_with_report(fonts: &[SfntFont], options: &MergeOptions) -> Result<M
         return Err(TablesError::Unsupported(format!("merging 'JSTF' tables (font {}); leave 'JSTF' out with dropTables", i + 1)));
     }
     units_per_em(fonts)?;
+    // Leaving `fvar` out merges variable fonts as their default outlines.
+    let axes = if drop.contains(b"fvar") { None } else { var::check(fonts)? };
+    let variations = axes.as_ref().map(|a| var::Glyphs::read(fonts, a.len())).transpose()?;
 
     let (names, stored_names): (Vec<Vec<String>>, Vec<_>) = fonts.iter().map(plan::font_glyph_names).collect::<Result<Vec<_>>>()?.into_iter().unzip();
     let expanded: Vec<Vec<u8>> = if is_cff { fonts.iter().enumerate().map(|(i, f)| cff::expand(f, i)).collect::<Result<_>>()? } else { Vec::new() };
@@ -234,7 +240,7 @@ pub fn merge_with_report(fonts: &[SfntFont], options: &MergeOptions) -> Result<M
     };
     let same = |a: (usize, u16), b: (usize, u16)| -> bool {
         match (sources.get(a.0), sources.get(b.0)) {
-            (Some(x), Some(y)) => x.glyph(a.1) == y.glyph(b.1) && x.metric(a.1) == y.metric(b.1),
+            (Some(x), Some(y)) => x.glyph(a.1) == y.glyph(b.1) && x.metric(a.1) == y.metric(b.1) && variations.as_ref().is_none_or(|v| v.same(a, b)),
             _ => false,
         }
     };
@@ -242,7 +248,7 @@ pub fn merge_with_report(fonts: &[SfntFont], options: &MergeOptions) -> Result<M
     let mut warnings: Vec<String> = Vec::new();
     let mut conflicts = plan.conflicts.clone();
     for (i, font) in fonts.iter().enumerate() {
-        if font.get(*b"fvar").is_some() {
+        if variations.is_none() && font.get(*b"fvar").is_some() {
             warnings.push(format!("font {} is variable: the result is static, with its default outlines", i + 1));
         }
     }
@@ -332,8 +338,12 @@ pub fn merge_with_report(fonts: &[SfntFont], options: &MergeOptions) -> Result<M
             base_math::merge(fonts, &all, &plan, &drop, &mut out)?;
         }
     }
+    if let Some(variations) = &variations {
+        var::write(fonts, &plan, variations, &mut out, &mut warnings)?;
+    }
     // Everything else is dropped, as fontTools drops tables it has no rule for.
-    let handled: BTreeSet<Tag> = out.tables.keys().copied().chain(HANDLED.iter().copied()).collect();
+    let var_tables: &[Tag] = if variations.is_some() { &var::TABLES } else { &[] };
+    let handled: BTreeSet<Tag> = out.tables.keys().copied().chain(HANDLED.iter().copied()).chain(var_tables.iter().copied()).collect();
     let mut dropped: BTreeMap<Tag, Vec<usize>> = BTreeMap::new();
     for (i, font) in fonts.iter().enumerate() {
         for tag in font.tags() {
@@ -437,3 +447,5 @@ fn timestamp(fonts: &[SfntFont], given: Option<i64>) -> Result<(i64, i64)> {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod var_tests;

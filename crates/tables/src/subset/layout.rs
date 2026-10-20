@@ -954,7 +954,7 @@ fn prune_variation_store(g: &mut Gdef, bytes: &[u8], mut gpos: Option<&mut Layou
     Ok(())
 }
 
-type DeviceFn<'f> = dyn FnMut(&mut DeviceOrVariationIndex) + 'f;
+pub(crate) type DeviceFn<'f> = dyn FnMut(&mut DeviceOrVariationIndex) + 'f;
 
 /// Calls `f` on every device table and variation index of GDEF's caret values and of the live
 /// GPOS lookups.
@@ -1000,7 +1000,7 @@ fn anchors_devices<'a>(anchors: impl Iterator<Item = &'a mut NullableOffsetMarke
 }
 
 /// A GPOS lookup or subtable whose device tables can be visited.
-trait Devices {
+pub(crate) trait Devices {
     fn devices(&mut self, f: &mut DeviceFn<'_>);
 }
 

@@ -1264,10 +1264,26 @@ DICTs are kept, and each later glyph's width operand is rewritten for the first 
 and `nominalWidthX`; `merge` then subroutinises the result again. `MATH` and `BASE` are merged too: the
 first font's constants and baselines, every font's glyph data and scripts.
 
-A variable font merges as its default outlines, its variation tables left out, as fontTools leaves
-them out. Refused, because fontTools cannot merge them either: `CFF2` fonts, CID-keyed CFF fonts,
-`JSTF` tables (leave them out with `--drop-tables JSTF`), and `GDEF` or `BASE` tables with variation
-data.
+Refused, because fontTools cannot merge them either: `CFF2` fonts, CID-keyed CFF fonts, `JSTF`
+tables (leave them out with `--drop-tables JSTF`), and `BASE` tables with variation data.
+
+**Variable fonts.** fontTools' merge has no rule for variation tables: it drops them and keeps the
+default outlines. `merge` keeps variable TrueType fonts variable when they share their axes. The rules
+are FontCraft's own:
+
+| Table | Rule |
+|---|---|
+| `fvar` | Every font must be variable, with the same axes (tag, minimum, default, maximum, in order); otherwise the merge is refused. The result has the first font's axis records and the named instances of every font; an instance at coordinates an earlier font already names is left out. A later font's instance names are copied into the result's `name` table. |
+| `avar` | Must be the same in every font. |
+| `gvar` | Each glyph keeps its variation data. The shared tuples of all fonts are united and the tuple headers renumbered. |
+| `HVAR`, `VVAR` | Each font's store keeps the delta sets its glyphs use. The stores are joined (equal regions shared) and the index maps rewritten for the merged glyph order. A side-bearing or origin map is kept only when every font has one. When a font lacks the table, the result has none and its advances vary through `gvar`. |
+| `GDEF`, `GPOS` | The `GDEF` variation stores are joined. Each font's variation indices in `GPOS` value records and anchors and in `GDEF` carets move to its part of the joined store. |
+| `MVAR`, `STAT`, `cvar` | The first font's, as `OS/2`, `name` and `cvt ` are. A warning names a font whose `MVAR` differs. |
+
+The test of these rules: instancing the merged font at a location gives the same glyphs, advances and
+kerning as merging the inputs instanced at that location. With `--drop-tables fvar` the fonts merge as
+their default outlines, as fontTools merges them. Not yet merged: feature variations in `GSUB` or
+`GPOS` (refused), variable `COLR` and `VARC` (left out with a warning).
 
 Engine command: `font.merge`.
 

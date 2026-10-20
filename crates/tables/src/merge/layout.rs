@@ -18,12 +18,13 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use read_fonts::{FontData, FontRead};
 use write_fonts::from_obj::ToOwnedTable;
-use write_fonts::tables::gdef::{AttachList, AttachPoint, Gdef, LigCaretList, LigGlyph, MarkGlyphSets};
+use write_fonts::tables::gdef::{AttachList, AttachPoint, CaretValue, Gdef, LigCaretList, LigGlyph, MarkGlyphSets};
 use write_fonts::tables::gpos::{self, Gpos, PositionLookup, PositionLookupList};
 use write_fonts::tables::gsub::{self, Gsub, SingleSubst, SingleSubstFormat1, SingleSubstFormat2, SubstitutionLookup, SubstitutionLookupList};
 use write_fonts::tables::layout::{
-    ChainedSequenceContext, ClassDef, ClassDefFormat1, ClassDefFormat2, ClassRangeRecord, CoverageFormat1, CoverageFormat2, CoverageTable, Feature,
-    FeatureList, FeatureRecord, LangSys, LangSysRecord, Lookup, LookupFlag, RangeRecord, Script, ScriptList, ScriptRecord, SequenceContext,
+    ChainedSequenceContext, ClassDef, ClassDefFormat1, ClassDefFormat2, ClassRangeRecord, CoverageFormat1, CoverageFormat2, CoverageTable,
+    DeviceOrVariationIndex, Feature, FeatureList, FeatureRecord, LangSys, LangSysRecord, Lookup, LookupFlag, RangeRecord, Script, ScriptList,
+    ScriptRecord, SequenceContext,
 };
 use write_fonts::types::{GlyphId16, Tag as OtTag};
 
@@ -32,6 +33,7 @@ use crate::limits::MAX_LAYOUT_ITEMS;
 use crate::reorder::layout as remap;
 use crate::reorder::tables::Order;
 use crate::sfnt::{SfntFont, Tag, tag_str};
+use crate::subset::layout::Devices;
 use crate::{Result, TablesError};
 
 type G = GlyphId16;
@@ -100,6 +102,11 @@ pub(super) fn merge(
         orders.push(if has_layout(font) { Some(order_for(plan, i)?) } else { None });
     }
 
+    // The GDEF variation stores are concatenated, each font's variation indices moved.
+    let gdef_bytes: Vec<Option<&[u8]>> =
+        fonts.iter().enumerate().map(|(i, f)| table(f, GDEF, skip).filter(|_| orders.get(i).is_some_and(Option::is_some))).collect();
+    let mut stores = super::var::LayoutStores::read(&gdef_bytes)?;
+
     // GDEF first: its mark glyph sets number the lookups' mark filtering sets.
     let mut gdefs: Vec<Gdef> = Vec::new();
     let mut mark_offsets: Vec<u16> = vec![0; fonts.len()];
@@ -110,15 +117,17 @@ pub(super) fn merge(
         }
         let (Some(bytes), Some(order)) = (table(font, GDEF, skip), orders.get(i).and_then(Option::as_ref)) else { continue };
         let moved = remap::gdef(bytes, order)?;
-        let gdef: Gdef = read_fonts::tables::gdef::Gdef::read(FontData::new(&moved)).map_err(|e| read_err(GDEF, e))?.to_owned_table();
-        if gdef.item_var_store.is_some() {
-            return Err(TablesError::Unsupported(format!("merging a 'GDEF' table with variation data (font {})", i + 1)));
-        }
+        let mut gdef: Gdef = read_fonts::tables::gdef::Gdef::read(FontData::new(&moved)).map_err(|e| read_err(GDEF, e))?.to_owned_table();
+        move_caret_devices(&mut gdef, &mut |d| stores.move_index(i, d));
         mark_sets += gdef.mark_glyph_sets_def.as_ref().map_or(0, |m| m.coverages.len());
         gdefs.push(gdef);
     }
     if !gdefs.is_empty() {
-        out.insert(GDEF, write_fonts::dump_table(&merge_gdef(gdefs)?).map_err(|e| write_err(GDEF, e))?);
+        let mut gdef = merge_gdef(gdefs)?;
+        if let Some(store) = stores.store.take() {
+            gdef.item_var_store = Some(store).into();
+        }
+        out.insert(GDEF, write_fonts::dump_table(&gdef).map_err(|e| write_err(GDEF, e))?);
     }
 
     let mut gsub_parts: Vec<(usize, Part<SubstitutionLookup>)> = Vec::new();
@@ -153,13 +162,13 @@ pub(super) fn merge(
             let moved = remap::gpos(bytes, order)?;
             let mut table: Gpos = read_fonts::tables::gpos::Gpos::read(FontData::new(&moved)).map_err(|e| read_err(GPOS, e))?.to_owned_table();
             crate::layout_budget::restore_empty_pair_records(&mut table)?;
+            let mut lookups: Vec<PositionLookup> = table.lookup_list.into_inner().lookups.into_iter().map(|l| l.into_inner()).collect();
+            for lookup in &mut lookups {
+                lookup.devices(&mut |d| stores.move_index(i, d));
+            }
             gpos_parts.push((
                 i,
-                Part {
-                    scripts: table.script_list.into_inner().script_records,
-                    features: table.feature_list.into_inner().feature_records,
-                    lookups: table.lookup_list.into_inner().lookups.into_iter().map(|l| l.into_inner()).collect(),
-                },
+                Part { scripts: table.script_list.into_inner().script_records, features: table.feature_list.into_inner().feature_records, lookups },
             ));
         }
     }
@@ -640,7 +649,7 @@ fn compact(used: &[bool]) -> Vec<Option<u16>> {
 // ── GDEF ──
 
 /// The (glyph, class) pairs of a class definition, class 0 left out.
-fn class_entries(cd: &ClassDef, out: &mut BTreeMap<u16, u16>) -> Result<()> {
+pub(super) fn class_entries(cd: &ClassDef, out: &mut BTreeMap<u16, u16>) -> Result<()> {
     let mut work = 0usize;
     let mut set = |g: u16, class: u16| -> Result<()> {
         work += 1;
@@ -687,6 +696,19 @@ fn class_def(entries: &BTreeMap<u16, u16>) -> ClassDef {
         ClassDef::Format1(ClassDefFormat1::new(G::new(first), values))
     } else {
         ClassDef::Format2(ClassDefFormat2::new(ranges))
+    }
+}
+
+/// Calls `f` on the device table or variation index of every caret value of `gdef`.
+fn move_caret_devices(gdef: &mut Gdef, f: &mut dyn FnMut(&mut DeviceOrVariationIndex)) {
+    if let Some(list) = gdef.lig_caret_list.as_mut() {
+        for lig in &mut list.lig_glyphs {
+            for caret in &mut lig.caret_values {
+                if let CaretValue::Format3(c) = &mut **caret {
+                    f(&mut c.device);
+                }
+            }
+        }
     }
 }
 

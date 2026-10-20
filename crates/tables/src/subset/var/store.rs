@@ -260,6 +260,38 @@ impl Subset {
         self.data.is_empty()
     }
 
+    /// One store holding the subtables of every part in order, equal regions shared. Answers
+    /// the store and, per part, the number its outer indices are moved up by.
+    pub fn concat(parts: Vec<Subset>) -> Result<(Subset, Vec<u16>)> {
+        let mut regions: Vec<Vec<u8>> = Vec::new();
+        let mut data = Vec::new();
+        let mut bases = Vec::with_capacity(parts.len());
+        let mut axis_count = 0u16;
+        for part in parts {
+            bases.push(to_u16(data.len(), "the merged item variation data count")?);
+            axis_count = axis_count.max(part.axis_count);
+            let mut moved = Vec::with_capacity(part.regions.len());
+            for region in part.regions {
+                let at = match regions.iter().position(|r| *r == region) {
+                    Some(at) => at,
+                    None => {
+                        regions.push(region);
+                        regions.len() - 1
+                    }
+                };
+                moved.push(to_u16(at, "the merged variation region count")?);
+            }
+            for mut d in part.data {
+                for r in &mut d.regions {
+                    *r = moved.get(usize::from(*r)).copied().unwrap_or(0);
+                }
+                data.push(d);
+            }
+        }
+        to_u16(data.len(), "the merged item variation data count")?;
+        Ok((Subset { format: 1, axis_count, regions, data }, bases))
+    }
+
     /// The store in the binary format.
     pub fn write(&self) -> Result<Vec<u8>> {
         let mut regions = Vec::new();

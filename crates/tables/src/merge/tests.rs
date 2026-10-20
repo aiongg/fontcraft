@@ -401,7 +401,7 @@ fn cff_fonts_merge_their_charstrings_under_the_first_fonts_private_dict() {
 }
 
 #[test]
-fn cff2_jstf_and_variable_inputs_follow_fonttools() {
+fn cff2_jstf_and_variable_inputs_with_static_ones() {
     let mut cff2 = first();
     cff2.insert(*b"CFF2", vec![2, 0, 5, 0, 0]);
     let e = merge(&[cff2, second()], &MergeOptions::default()).unwrap_err();
@@ -414,11 +414,15 @@ fn cff2_jstf_and_variable_inputs_follow_fonttools() {
     let dropped = MergeOptions { drop_tables: vec![*b"JSTF"], ..MergeOptions::default() };
     assert!(merge(&[first(), jstf], &dropped).unwrap().get(*b"JSTF").is_none());
 
-    // A variable font merges as its default outlines, its variation tables left out.
+    // A variable font does not merge with a static one; without its fvar it merges as its
+    // default outlines, its variation tables left out, as fontTools merges it.
     let mut variable = first();
     variable.insert(*b"fvar", vec![0; 16]);
     variable.insert(*b"gvar", vec![0; 20]);
-    let result = merge_with_report(&[variable, second()], &MergeOptions::default()).unwrap();
+    let e = merge(&[variable.clone(), second()], &MergeOptions::default()).unwrap_err();
+    assert!(e.to_string().contains("font 2 is static"), "{e}");
+    let static_merge = MergeOptions { drop_tables: vec![*b"fvar"], ..MergeOptions::default() };
+    let result = merge_with_report(&[variable, second()], &static_merge).unwrap();
     assert!(result.font.get(*b"fvar").is_none() && result.font.get(*b"gvar").is_none());
     assert!(result.warnings.iter().any(|w| w.contains("font 1 is variable")), "{:?}", result.warnings);
 }
