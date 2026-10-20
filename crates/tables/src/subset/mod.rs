@@ -4,8 +4,8 @@
 //!
 //! [`subset`] drops the tables the options remove, resolves the selection into a [`Plan`]
 //! ([`closure`]), then each table module writes its tables into the output: [`core`] (M12.17),
-//! [`layout`] (M12.18), [`var`] and [`other`] (M12.19); [`core`] hands `CFF2` and the subroutine
-//! steps of both CFF flavours to `cff2` (M12.19b). Each module has
+//! [`layout`] (M12.18), [`var`] and [`other`] (M12.19), `varc` (M12.19c); [`core`] hands `CFF2`
+//! and the subroutine steps of both CFF flavours to `cff2` (M12.19b). Each module has
 //! `apply(plan, input, output) -> Result<()>` and leaves the tables it does not handle alone.
 //! A table of the input that no module wrote is dropped, and [`SubsetResult::dropped`] says why:
 //! no table that indexes glyphs is ever copied unchanged into a subset.
@@ -18,6 +18,7 @@ pub mod layout;
 mod mirror;
 pub mod other;
 pub mod var;
+mod varc;
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -219,7 +220,7 @@ pub struct SubsetResult {
 
 /// The layout tables ([`layout`]).
 const LAYOUT_TABLES: [Tag; 3] = [*b"GDEF", *b"GSUB", *b"GPOS"];
-/// Variation tables ([`var`], `CFF2` in [`core`]; VARC is not subset yet).
+/// Variation tables ([`var`], `CFF2` in [`core`], `VARC` in `varc`).
 const VARIATION_TABLES: [Tag; 10] = [*b"fvar", *b"avar", *b"gvar", *b"cvar", *b"HVAR", *b"VVAR", *b"MVAR", *b"STAT", *b"CFF2", *b"VARC"];
 /// Other tables pyftsubset subsets ([`other`]).
 const OTHER_TABLES: [Tag; 13] =
@@ -249,6 +250,7 @@ pub fn subset(font: &SfntFont, options: &SubsetOptions) -> Result<SubsetResult> 
     core::apply(&plan, &input, &mut output)?;
     layout::apply(&plan, &input, &mut output)?;
     var::apply(&plan, &input, &mut output)?;
+    varc::apply(&plan, &input, &mut output)?;
     other::apply(&plan, &input, &mut output)?;
     // The name table also keeps the names the other output tables refer to.
     let referenced = var::name_ids_in_use(&output);
@@ -269,9 +271,7 @@ pub fn subset(font: &SfntFont, options: &SubsetOptions) -> Result<SubsetResult> 
             }
             continue;
         }
-        let reason = if tag == *b"VARC" {
-            "subsetting this table is not built yet"
-        } else if [*b"CBDT", *b"CBLC", *b"EBDT", *b"EBLC"].contains(&tag) {
+        let reason = if [*b"CBDT", *b"CBLC", *b"EBDT", *b"EBLC"].contains(&tag) {
             "its bitmap location or data table is missing"
         } else if tag == *b"CPAL" {
             "no color table uses its palettes"
