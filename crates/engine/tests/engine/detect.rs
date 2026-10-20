@@ -390,6 +390,41 @@ fn detect_composites_builds_from_the_latin_letter_a_look_alike_copies() {
     run(&mut s, "font.detectComposites", json!({}));
     assert_eq!(parts(&s, "Alpha"), vec![part("A", 0.0, 0.0)]);
     assert_eq!(parts(&s, "Alphatonos"), vec![part("A", 0.0, 0.0), part("tonos", 0.0, 200.0)]);
+
+    // With `Alpha` first in the font, `A` becomes the copy, and `Alphatonos` still uses `A`.
+    let mut s = only(vec![
+        ("Alpha", vec![poly(&A_OUTER, 0.0, 0.0), poly(&A_COUNTER, 0.0, 0.0)]),
+        ("A", vec![poly(&A_OUTER, 0.0, 0.0), poly(&A_COUNTER, 0.0, 0.0)]),
+        ("tonos", vec![poly(&ACUTE, 0.0, 0.0)]),
+        ("Alphatonos", vec![poly(&A_OUTER, 0.0, 0.0), poly(&A_COUNTER, 0.0, 0.0), poly(&ACUTE, 0.0, 200.0)]),
+    ]);
+    code(&mut s, "Alpha", 0x0391);
+    run(&mut s, "font.detectComposites", json!({}));
+    assert_eq!(parts(&s, "A"), vec![part("Alpha", 0.0, 0.0)]);
+    assert_eq!(parts(&s, "Alphatonos"), vec![part("A", 0.0, 0.0), part("tonos", 0.0, 200.0)]);
+}
+
+/// Hundreds of identical dots and hundreds of glyphs that copy one, all named with long runs
+/// of suffixes the others lack: choosing among the dots looks each dot's suffixes up among the
+/// glyph's, not compares every pair, so the run ends quickly.
+#[test]
+fn detect_composites_on_identical_bases_with_long_suffix_runs_finishes_quickly() {
+    let mut s = only(Vec::new());
+    s.edit("fixture", |f| {
+        for i in 0..300u32 {
+            add_glyph(f, &format!("d{i}{}", ".a".repeat(120)), vec![poly(&DOT, 0.0, 0.0)]);
+        }
+        for i in 0..300u32 {
+            add_glyph(f, &format!("t{i}{}", ".b".repeat(120)), vec![poly(&DOT, 50.0, 700.0)]);
+        }
+        Ok(())
+    })
+    .unwrap();
+    let start = std::time::Instant::now();
+    let out = run(&mut s, "font.detectComposites", json!({}));
+    // Comparing every pair of suffixes took about ten times as long.
+    assert!(start.elapsed() < std::time::Duration::from_secs(15), "{:?}", start.elapsed());
+    assert_eq!(out["components"], 599, "every glyph but the first dot copies a dot: {out}");
 }
 
 /// A suffix that gives a base the glyph's case wins over the copy drawn in place: capital

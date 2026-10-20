@@ -1126,9 +1126,11 @@ fn kept_layouts_an_edit_made_stale_are_dropped_from_a_copy() {
     let text = V3
         .replace("unitsPerEm = 1000;", "numbers = ({name = gap;});\nunitsPerEm = 1000;")
         .replace("associatedMasterId = m01;\n", "associatedMasterId = m01;\nattr = {axisRules = ({min = 600;});};\n")
-        .replace("layerId = m01;\nshapes", "attr = {axisRules = ({max = 400;});};\nlayerId = m01;\nshapes");
+        .replace("layerId = m01;\nshapes", "attr = {axisRules = ({max = 400;});};\nguides = ({pos = (100,0);});\nlayerId = m01;\nshapes");
     let font = read(&text).unwrap();
     assert_eq!(keeps_layouts(&font), (true, true));
+    assert_eq!(font.glyph("A").unwrap().layers[0].info.guides.len(), 1, "a one-line guide reaches the model");
+    assert_eq!(write(&font).unwrap(), text);
     assert!(without_stale_layouts(&font).is_none(), "nothing is stale before an edit");
 
     // A font-level value: the numbers.
@@ -1143,9 +1145,18 @@ fn kept_layouts_an_edit_made_stale_are_dropped_from_a_copy() {
     edited.glyph_mut("A").unwrap().layers[0].info.attrs.axis_rules[0].max = Some(500.0);
     let pruned = without_stale_layouts(&edited).unwrap();
     let layers = &pruned.glyph("A").unwrap().layers;
-    assert!(!layers[0].extra.iter().any(|e| e.key.as_str().starts_with(LAYOUT_KEY)));
+    let kept = |l: &fontcraft_model::Layer, key: &str| l.extra.iter().any(|e| e.key.as_str() == format!("{LAYOUT_KEY}{key}"));
+    assert!(!kept(&layers[0], "attr") && kept(&layers[0], "guides"), "only the edited value's layout goes");
     assert!(layers[1].extra.iter().any(|e| e.key.as_str().starts_with(LAYOUT_KEY)));
     assert!(pruned.extra.iter().any(|e| e.key.as_str().starts_with(LAYOUT_KEY)), "the numbers still hold");
+    assert_eq!(write(&pruned).unwrap(), write(&edited).unwrap());
+
+    // A layer's guides: one guide more.
+    let mut edited = font.clone();
+    edited.glyph_mut("A").unwrap().layers[0].info.guides.push(fontcraft_model::Guide { x: 200.0, ..Default::default() });
+    let pruned = without_stale_layouts(&edited).unwrap();
+    let layers = &pruned.glyph("A").unwrap().layers;
+    assert!(kept(&layers[0], "attr") && !kept(&layers[0], "guides"));
     assert_eq!(write(&pruned).unwrap(), write(&edited).unwrap());
     assert!(Arc::ptr_eq(pruned.glyphs.get("B").unwrap(), font.glyphs.get("B").unwrap()), "untouched glyphs are shared");
 }

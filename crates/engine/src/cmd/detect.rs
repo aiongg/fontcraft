@@ -61,7 +61,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Detect Composites",
             ["Font"],
             None,
-            "{glyphs?: [names] (default: every glyph), layer?: id or layers?: [ids] (default: every master layer), tolerance?: number (font units, 0 to 10, default 0.5), flips?: bool (default false: translation only)} in each layer, replace every group of closed, unlocked paths that repeats the whole outline of another glyph's layer with the same id (closed paths, no components) by a component of that glyph. Bases are tried from the largest down; a base must have fewer nodes than the glyph, or as many and be a combining mark (`…comb`) where the glyph is not, or have fewer suffixes, or come earlier in the font. An enclosing mark (`enclosingcirclecomb`) does not count as a combining mark. A glyph that holds two or more other glyphs' outlines itself is a base only for a glyph whose whole outline it is, unless it is a mark, or a letter with marks that the glyph database does not decompose (`i`). Of bases with the same outline, in order: one that is not a copy of a basic Latin letter (`A` rather than `Alpha`); one whose code point is in the glyph's canonical decomposition, or that the glyph database's recipe names; the one whose name spells more of the glyph's name (`sub` read as `below`); one whose suffix gives it the glyph's case (`.lc` in a lowercase glyph, `.tonos` in a capital), and not one of another case; one with fewer suffixes the glyph lacks; a combining mark; the one drawn closest to where the glyph has it. With `flips`, mirrored and half-turned copies are found too. A component's offset is rounded to the font's grid when the match still holds. New components keep automatic alignment where aligning leaves them and the width in place (within the tolerance); it is turned off on the others. Locked glyphs are skipped and listed; master layers that end up with different components are named in `warnings`. Past the work limit the run stops, keeps what it found and says so in `stopped` → {glyphs: [names], components: number, skipped: [{glyph, layer?, reason}], warnings: [string], stopped: string | null}",
+            "{glyphs?: [names] (default: every glyph), layer?: id or layers?: [ids] (default: every master layer), tolerance?: number (font units, 0 to 10, default 0.5), flips?: bool (default false: translation only)} in each layer, replace every group of closed, unlocked paths that repeats the whole outline of another glyph's layer with the same id (closed paths, no components) by a component of that glyph. Bases are tried from the largest down; a base must have fewer nodes than the glyph, or as many and be a combining mark (`…comb` or `…cmb`) where the glyph is not, or have fewer suffixes, or come earlier in the font. An enclosing mark (`enclosingcirclecomb`) does not count as a combining mark. A glyph that holds two or more other glyphs' outlines itself is a base only for a glyph whose whole outline it is, unless it is a mark, or a letter with marks that the glyph database does not decompose (`i`). Of bases with the same outline, in order: one that is not a copy of a basic Latin letter among them, nor the original of such a copy (`A` rather than `Alpha`, in either font order); one whose code point is in the glyph's canonical decomposition, or that the glyph database's recipe names; the one whose name spells more of the glyph's name (`sub` read as `below`); one whose suffix gives it the glyph's case (`.uc`, `.case` and `.tonos` upper, `.lc` lower, `.sc`, `.c2sc` and `.smcp` small capitals), and not one of another case; one with fewer suffixes the glyph lacks; a combining mark; the one drawn closest to where the glyph has it. With `flips`, mirrored and half-turned copies are found too. A component's offset is rounded to the font's grid when the match still holds. New components keep automatic alignment where aligning leaves them and the width in place (within the tolerance); it is turned off on the others. Locked glyphs are skipped and listed; master layers that end up with different components are named in `warnings`. Past the work limit the run stops, keeps what it found and says so in `stopped` → {glyphs: [names], components: number, skipped: [{glyph, layer?, reason}], warnings: [string], stopped: string | null}",
             has_doc,
             detect_composites
         )
@@ -100,7 +100,7 @@ fn contour(path: &Path) -> Contour {
 
 /// Where a glyph stands in the order that keeps one run free of cycles: a base must come
 /// strictly before the glyph it is found in. Fewer nodes first; among as many nodes, a
-/// combining mark (`…comb`) before other glyphs, a name with fewer suffixes before one with
+/// combining mark ([`is_comb`]) before other glyphs, a name with fewer suffixes before one with
 /// more (`colon` before `colon.tf`), then the font's order. So of two glyphs with the same
 /// outline, `acute` becomes a component of `acutecomb` and `colon.tf` of `colon`.
 type Rank = (usize, bool, usize, usize);
@@ -114,16 +114,17 @@ fn stem(name: &str) -> &str {
     name.split('.').next().unwrap_or(name)
 }
 
-/// A combining mark by name: the part before the first suffix ends in `comb`, and the glyph
-/// database does not call it an enclosing mark (`enclosingcirclecomb` is usually a copy of
-/// the spacing symbol, `largeCircle`, and composites use the symbol).
+/// A combining mark by name: the part before the first suffix ends in `comb` or `cmb`
+/// (`perispomenigreekcmb`), and the glyph database does not call it an enclosing mark
+/// (`enclosingcirclecomb` is usually a copy of the spacing symbol, `largeCircle`, and
+/// composites use the symbol).
 fn is_comb(data: &GlyphData, name: &str) -> bool {
     let stem = stem(name);
-    stem.ends_with("comb") && data.lookup(stem, &[]).sub_category.is_none_or(|s| s.value != SubCategory::Enclosing)
+    (stem.ends_with("comb") || stem.ends_with("cmb")) && data.lookup(stem, &[]).sub_category.is_none_or(|s| s.value != SubCategory::Enclosing)
 }
 
 /// The case a suffix gives a glyph: `.uc`, `.case` and `.tonos` (a Greek accent drawn for the
-/// left of a capital) upper, `.lc` lower, `.sc` and `.c2sc` small capitals.
+/// left of a capital) upper, `.lc` lower, `.sc`, `.c2sc` and `.smcp` small capitals.
 fn suffix_case(name: &str) -> Option<Case> {
     name.split('.').skip(1).find_map(|suffix| match suffix {
         "uc" | "case" | "tonos" => Some(Case::Upper),
@@ -244,21 +245,49 @@ impl<'f> Bases<'f> {
             && !base.comb
             && !base.mark
             && self.parts.get(b).copied().flatten().unwrap_or(0) >= COMPOSITE_PARTS
-            && (base.decomposes || !self.has_mark(b))
+            && !self.undecomposed_with_mark(b)
     }
 
-    /// Whether detection found base `b`'s own layer to be a copy of one basic Latin letter
-    /// (`Alpha` of `A`).
-    fn latin_copy(&self, b: usize) -> bool {
-        let Some(Some(found)) = self.found.get(b) else { return false };
+    /// The glyph whose whole outline detection found base `b`'s own layer to be, if any.
+    fn copy_of(&self, b: usize) -> Option<&str> {
+        let Some(Some(found)) = self.found.get(b) else { return None };
         let whole = !found.layer.shapes.iter().any(|s| matches!(s, Shape::Path(_)));
-        whole && matches!(found.components.as_slice(), [only] if only.len() == 1 && only.bytes().all(|c| c.is_ascii_alphabetic()))
+        match found.components.as_slice() {
+            [only] if whole => Some(only.as_str()),
+            _ => None,
+        }
     }
 
-    /// Whether detection found a mark among the components of base `b`'s own layer.
-    fn has_mark(&self, b: usize) -> bool {
-        let Some(Some(found)) = self.found.get(b) else { return false };
-        found.components.iter().any(|c| self.by_name.get(c.as_str()).and_then(|&i| self.list.get(i)).is_some_and(|p| p.comb || p.mark))
+    /// Which of `twins`, bases with the same outline, lose to a basic Latin letter among them:
+    /// those that are not one themselves where detection found either one to be a copy of the
+    /// other (`Alpha` beside `A`, whichever comes first in the font).
+    fn latin_copies(&self, twins: &[&Base]) -> Vec<bool> {
+        let letters: Vec<&str> = twins.iter().map(|t| t.name).filter(|n| latin_letter(n)).collect();
+        let copy_of = |name: &str| self.by_name.get(name).and_then(|&b| self.copy_of(b));
+        twins.iter().map(|t| !latin_letter(t.name) && letters.iter().any(|&l| copy_of(t.name) == Some(l) || copy_of(l) == Some(t.name))).collect()
+    }
+
+    /// Whether detection found a mark among the components of base `b`'s own layer and the glyph
+    /// database gives `b` no canonical decomposition; for a whole copy of another glyph, that
+    /// glyph decides when `b` holds no mark itself (`icyr`, a copy of `i`, holds the dot of `i`;
+    /// a copy of `Abreve` decomposes as `Abreve` does).
+    fn undecomposed_with_mark(&self, b: usize) -> bool {
+        let mut b = b;
+        // A copy ranks after its original, so the chain ends; the bound only guards it.
+        for _ in 0..self.list.len() {
+            let (Some(base), Some(Some(found))) = (self.list.get(b), self.found.get(b)) else { return false };
+            if base.decomposes {
+                return false;
+            }
+            if found.components.iter().any(|c| self.by_name.get(c.as_str()).and_then(|&i| self.list.get(i)).is_some_and(|p| p.comb || p.mark)) {
+                return true;
+            }
+            match self.copy_of(b).and_then(|n| self.by_name.get(n)) {
+                Some(&a) => b = a,
+                None => return false,
+            }
+        }
+        false
     }
 
     /// How many components count for a base whose own layer detection made `found`: a base
@@ -279,6 +308,11 @@ impl<'f> Bases<'f> {
 /// a copy of the base.
 fn needs_parts(base: &Base, nodes: usize) -> bool {
     base.nodes <= nodes && !base.comb
+}
+
+/// Whether `name` is one basic Latin letter (`A`).
+fn latin_letter(name: &str) -> bool {
+    name.len() == 1 && name.bytes().all(|c| c.is_ascii_alphabetic())
 }
 
 /// Whether every signature of `small` (sorted) is in `big` (sorted), counting repeats.
@@ -663,15 +697,15 @@ impl Recipe {
 type Pref = (bool, bool, Reverse<usize>, u8, usize, bool, f64, Rank);
 
 /// How well a base that matched fits the glyph, among bases with the same outline; smaller is
-/// better. In order: not a copy of a basic Latin letter (fonts build `Alphatonos` from `A`, not
-/// from `Alpha`, though the recipe and the name point at `Alpha`); part of the glyph database's
-/// recipe for the glyph ([`Recipe`]); the longer part of the glyph's name it spells
+/// better. In order: not `latin_copy` ([`Bases::latin_copies`]: fonts build `Alphatonos` from
+/// `A`, not from `Alpha`, though the recipe and the name point at `Alpha`); part of the glyph
+/// database's recipe for the glyph ([`Recipe`]); the longer part of the glyph's name it spells
 /// ([`named_len`]); of the glyph's case by a suffix, then of no other case, then of another (a
 /// `.lc` mark in a lowercase glyph rather than a `.uc` one, `uni1FFE.tonos` in a capital rather
-/// than `dasia`); fewer suffixes the glyph lacks (`one`
-/// rather than `one.tf` in `one.circled`); a combining mark; the shorter shift (the copy drawn
-/// where the glyph uses it, such as `two.numr` in a fraction); [`Rank`].
-fn preference(base: &Base, bases: &Bases, target: &str, recipe: &Recipe, m: &Match) -> Pref {
+/// than `dasia`); fewer suffixes the glyph lacks (`one` rather than `one.tf` in `one.circled`;
+/// `suffixes` are the glyph's); a combining mark; the shorter shift (the copy drawn where the
+/// glyph uses it, such as `two.numr` in a fraction); [`Rank`].
+fn preference(base: &Base, latin_copy: bool, target: &str, suffixes: &HashSet<&str>, recipe: &Recipe, m: &Match) -> Pref {
     let [.., e, f] = m.transform.as_coeffs();
     // Only a suffix makes a base preferred for its case: by the glyph database alone, `macroncomb`
     // is lowercase and would beat `macronsubcomb` in `blinebelow`.
@@ -680,8 +714,7 @@ fn preference(base: &Base, bases: &Bases, target: &str, recipe: &Recipe, m: &Mat
         (Some(_), Some(_)) if suffix_case(base.name).is_some() => 0,
         _ => 1,
     };
-    let extra = base.name.split('.').skip(1).filter(|s| !target.split('.').skip(1).any(|t| t == *s)).count();
-    let latin_copy = bases.by_name.get(base.name).is_some_and(|&b| bases.latin_copy(b));
+    let extra = base.name.split('.').skip(1).filter(|s| !suffixes.contains(s)).count();
     (latin_copy, !recipe.holds(base), Reverse(named_len(base.name, target)), case_fit, extra, !base.comb, e.hypot(f).round(), base.rank)
 }
 
@@ -750,9 +783,15 @@ fn finish(layer: &Layer, name: &str, t: Target, bases: &Bases, opts: &MatchOptio
             twins.push((twin, theirs));
         }
         let mut best = 0;
-        if twins.len() > 1 {
+        // Each twin's suffixes are compared with the glyph's below.
+        let compares = twins.iter().fold(0usize, |n, (b, _)| n.saturating_add(b.name.matches('.').count()));
+        if twins.len() > 1 && spend(work, compares) {
             let r = recipe_of.get_or_insert_with(|| recipe(bases.font, bases.data, name));
-            let prefs: Vec<Option<Pref>> = twins.iter().map(|(b, f)| f.first().map(|m| preference(b, bases, name, r, m))).collect();
+            let suffixes: HashSet<&str> = name.split('.').skip(1).collect();
+            let group: Vec<&Base> = twins.iter().map(|(b, _)| *b).collect();
+            let latin = bases.latin_copies(&group);
+            let prefs: Vec<Option<Pref>> =
+                twins.iter().zip(latin).map(|((b, f), l)| f.first().map(|m| preference(b, l, name, &suffixes, r, m))).collect();
             for (i, p) in prefs.iter().enumerate() {
                 if let (Some(p), Some(Some(q))) = (p, prefs.get(best))
                     && better(p, q)

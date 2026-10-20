@@ -13,7 +13,8 @@ use serde_json::{Value, json};
 /// The prefix of the keys under which the reader keeps a value's layout.
 const LAYOUT: &str = "com.fontcraft.glyphsLayout.";
 
-/// `A` with its code point spelled with a leading zero, and the master's guide list on one line.
+/// `A` with its code point spelled with a leading zero, and the guide lists of the master and of
+/// `A`'s layer on one line.
 const V3: &str = "{
 .appVersion = \"3343\";
 .formatVersion = 3;
@@ -30,6 +31,7 @@ glyphs = (
 glyphname = A;
 layers = (
 {
+guides = ({pos = (100,0);});
 layerId = m01;
 width = 600;
 }
@@ -169,9 +171,13 @@ fn a_native_save_leaves_out_layouts_an_edit_made_stale() {
     let source = dir.join("Kept.glyphs");
     std::fs::write(&source, V3).unwrap();
     let mut s = open(&source);
-    // Untouched, the guide list's layout travels in the native file.
+    // Untouched, both guide lists' layouts travel in the native file.
     run(&mut s, "file.saveAs", json!({ "path": dir.join("Before.fontcraft") }));
-    assert!(read(&dir.join("Before.fontcraft")).contains(LAYOUT));
+    assert_eq!(read(&dir.join("Before.fontcraft")).matches(LAYOUT).count(), 2);
+
+    run(&mut s, "guide.add", json!({ "glyph": "A", "x": 200 }));
+    run(&mut s, "file.saveAs", json!({ "path": dir.join("Layer.fontcraft") }));
+    assert_eq!(read(&dir.join("Layer.fontcraft")).matches(LAYOUT).count(), 1, "the master's layout still holds");
 
     run(&mut s, "guide.addGlobal", json!({ "x": 200 }));
     run(&mut s, "file.saveAs", json!({ "path": dir.join("After.fontcraft") }));
@@ -181,6 +187,7 @@ fn a_native_save_leaves_out_layouts_an_edit_made_stale() {
     run(&mut s, "file.saveAs", json!({ "path": dir.join("After.glyphs") }));
     let mut back = open(&dir.join("After.fontcraft"));
     assert_eq!(back.font().unwrap().masters[0].guides.len(), 2);
+    assert_eq!(back.font().unwrap().glyph("A").unwrap().layers[0].info.guides.len(), 2);
     run(&mut back, "file.saveAs", json!({ "path": dir.join("Back.glyphs") }));
     let text = read(&dir.join("After.glyphs"));
     assert_eq!(read(&dir.join("Back.glyphs")), text);

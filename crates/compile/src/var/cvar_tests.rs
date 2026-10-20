@@ -192,7 +192,7 @@ fn a_master_with_dehint_on_is_left_out_of_cvar() {
         let cvar = font.table_data(skrifa::Tag::new(b"cvar")).unwrap_or_else(|| panic!("a cvar table: {:?}", var.compiled.warnings));
         tuples(cvar.as_bytes(), 1, entries).into_iter().map(|(peak, _)| peak).collect::<Vec<_>>()
     };
-    assert_eq!(peaks(&three_masters(None)), vec![vec![0.5], vec![1.0]], "Medium's zones differ from the interpolated ones");
+    assert_eq!(peaks(&three_masters(None)), vec![vec![0.5], vec![1.0]], "Medium's zones differ from Regular's");
     assert_eq!(peaks(&three_masters(Some("--dehint"))), vec![vec![1.0]], "Medium has no control values; Bold still varies them");
 }
 

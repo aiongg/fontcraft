@@ -104,7 +104,9 @@ fn take_relaid<T>(d: &mut Dict, key: &str, version: u32, read: impl Fn(&Value) -
 }
 
 /// The list under `key`, item by item, when it has from 1 to `max` items and every item writes
-/// back as the same text; otherwise empty, and the list stays in `d`.
+/// back as the same text, or as the same text in the layout it was read with (a one-line
+/// dictionary); the list as read then stays beside the field for its layout
+/// ([`crate::LAYOUT_KEY`]). Otherwise empty, and the list stays in `d`.
 fn take_list<T>(
     d: &mut Dict,
     key: &str,
@@ -118,13 +120,23 @@ fn take_list<T>(
         return Vec::new();
     }
     let mut out = Vec::with_capacity(a.items.len());
+    let mut relayout = a.layout != Layout::Multiline;
     for item in &a.items {
-        match read(item) {
-            Some(t) if write(&t).is_some_and(|w| same_text(&w, item, version)) => out.push(t),
-            _ => return Vec::new(),
+        let Some(t) = read(item) else { return Vec::new() };
+        let Some(w) = write(&t) else { return Vec::new() };
+        if !same_text(&w, item, version) {
+            if !same_text(&crate::relaid(&w, item), item, version) {
+                return Vec::new();
+            }
+            relayout = true;
         }
+        out.push(t);
     }
-    take(d, key);
+    if let Some(source) = take(d, key)
+        && relayout
+    {
+        crate::keep_layout(d, key, source);
+    }
     out
 }
 

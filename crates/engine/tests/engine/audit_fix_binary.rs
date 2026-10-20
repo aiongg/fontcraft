@@ -437,8 +437,12 @@ fn audit_fix_on_a_file_recompiles_the_cff_table_without_unique_ids() {
         let bytes = fontcraft_tables::write(font, &WriteOptions { order: TableOrder::Keep }).unwrap();
         let f = skrifa::FontRef::new(&bytes).unwrap();
         let outlines = skrifa::MetadataProvider::outline_glyphs(&f);
-        // `get` also answers past the last glyph, so the count comes from `maxp`.
+        // `get` also answers past the last glyph, so the count comes from `maxp`, and the
+        // CharStrings INDEX (Top DICT operator 17) must hold exactly that many.
         let count = skrifa::raw::TableProvider::maxp(&f).unwrap().num_glyphs();
+        let at = usize::try_from(cff_top_ints(font, 17).unwrap().unwrap()[0]).unwrap();
+        let cff = font.get(*b"CFF ").unwrap();
+        assert_eq!(u16::from_be_bytes([cff[at], cff[at + 1]]), count, "the CharStrings count");
         (0..u32::from(count))
             .map(|g| outlines.get(skrifa::GlyphId::new(g)).unwrap())
             .map(|glyph| {
