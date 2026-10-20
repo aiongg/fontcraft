@@ -776,6 +776,39 @@ fn ufo_instance_info(font: &Font, location: &[f64], weights: &[(String, f64)], o
             master.params.0.push(Param::new(p.name.clone(), Value::Number(n)));
         }
     }
+    // A number the font does not set and only some masters do: fontMath counts it as 0 where
+    // a master lacks it, so the instance has it wherever a weighted master sets it.
+    let mut names: Vec<&str> = Vec::new();
+    for (id, _) in weights.iter().filter(|(_, w)| *w != 0.0) {
+        let Some(m) = masters.get(id.as_str()) else { continue };
+        for p in m.params.0.iter().filter(|p| !p.disabled && matches!(p.value, Value::Number(_))) {
+            if !names.contains(&p.name.as_str()) {
+                names.push(&p.name);
+            }
+        }
+    }
+    for name in names {
+        if NOT_INTERPOLATED.contains(&name) || MASTER_LINKS.contains(&name) || font.info.params.get(name).is_some() {
+            continue;
+        }
+        let of = |id: &str| masters.get(id).and_then(|m| m.params.get(name)).and_then(Value::as_num);
+        let mut whole = true;
+        let sum = weighted(weights, |id| {
+            Some(of(id).map_or(0.0, |n| {
+                whole &= matches!(n, fontcraft_model::plist::Num::Int(_));
+                n.as_f64()
+            }))
+        });
+        let Some(sum) = sum else { continue };
+        #[allow(clippy::cast_possible_truncation)]
+        let number = if whole { Some(Number::int(ot_round(sum) as i64)) } else { Number::float(sum) };
+        master.params.0.retain(|p| p.name != name);
+        // A class of 0 is not a class: the instance has none, as ufoLib2 refuses it.
+        let class = matches!(name, "weightClass" | "widthClass" | "openTypeOS2WeightClass" | "openTypeOS2WidthClass");
+        if let Some(n) = number.filter(|n| !(class && n.value().as_f64() < 1.0)) {
+            master.params.0.push(Param::new(name.to_string(), Value::Number(n)));
+        }
+    }
     if font.masters.len() == 1 && font.master_at(location).is_some() {
         return;
     }
