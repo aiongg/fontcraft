@@ -26,7 +26,8 @@
 //! custom encodings (the standard encoding is implied), and the seldom-used Top
 //! DICT entries (UniqueID, XUID, PostScript, BaseFontName, SyntheticBase). The `CFF2` table of a
 //! variable font, with blends, is [`cff2`]'s. The subroutiniser, which works on any `CFF ` or
-//! `CFF2` table, is [`subr`]'s.
+//! `CFF2` table, is [`subr`]'s. The INDEX, DICT, FDSelect and number pieces that tools passing
+//! charstrings through share are [`raw`]'s.
 //!
 //! Every input is untrusted: counts, lengths and numbers are checked against the limits below, and
 //! anything out of range returns an [`Error`]; nothing panics.
@@ -42,6 +43,7 @@ mod error;
 pub mod hints;
 mod index;
 mod number;
+pub mod raw;
 mod specialize;
 mod strings;
 pub mod subr;

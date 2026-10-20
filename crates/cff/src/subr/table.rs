@@ -5,6 +5,8 @@
 //! byte, and every DICT keeps its entries except the offsets and `Subrs`, which are written as
 //! five-byte integers so that the DICT sizes are known before the offsets.
 
+use crate::raw::{DictEntry as Entry, blob, index_len, parse_dict, read_fd_select, read_index, read_u16, read_u32, write_index};
+
 use super::{CFF_STACK, CFF2_DEFAULT_STACK, CharstringSet, MAX_FONT_DICTS, MAX_GLYPHS, MAX_STACK_LIMIT, SubrError, SubrOptions};
 
 mod rewrite;
@@ -14,8 +16,6 @@ pub use rewrite::{TableRewrite, rewrite_table};
 pub use subset::{SubrMode, TableSubset, subset_table, subset_table_noted};
 pub use widths::{WidthsReport, optimize_widths_table};
 
-/// Most entries one DICT may hold.
-const MAX_DICT_ENTRIES: usize = 4_096;
 /// Largest table read or written.
 const MAX_TABLE: usize = crate::MAX_TABLE_SIZE;
 
@@ -60,21 +60,6 @@ pub fn desubroutinize_table_within(data: &[u8], cff2: bool, max_bytes: usize) ->
 
 fn invalid(what: impl Into<String>) -> SubrError {
     SubrError::Invalid(what.into())
-}
-
-/// One DICT entry: its operator, its operand bytes as found, and the operands as integers
-/// (`None` for reals and `CFF2` blends).
-#[derive(Clone, Debug)]
-struct Entry {
-    op: u16,
-    raw: Vec<u8>,
-    ints: Vec<Option<i64>>,
-}
-
-impl Entry {
-    fn int(&self, i: usize) -> Option<i64> {
-        self.ints.get(i).copied().flatten()
-    }
 }
 
 struct Table<'a> {
@@ -183,7 +168,7 @@ impl<'a> Table<'a> {
         };
         let (fd_map, fd_select) = match offset(OP_FDSELECT)? {
             Some(at) => {
-                let (map, len) = read_fd_select(data, at, glyphs, cff2)?;
+                let crate::raw::FdSelect { map, len, .. } = read_fd_select(data, at, glyphs, cff2)?;
                 if map.iter().any(|&fd| usize::from(fd) >= private_refs.len()) {
                     return Err(invalid("the FDSelect names a Font DICT that does not exist"));
                 }
@@ -328,7 +313,7 @@ impl<'a> Table<'a> {
         for (p, l) in private_bytes.iter().zip(&locals) {
             out.extend_from_slice(p);
             if !l.is_empty() {
-                write_index(&mut out, l, cff2)?;
+                write_index(&mut out, *l, cff2)?;
             }
         }
         if out.len() != pos {
@@ -379,178 +364,6 @@ fn private_ref(entries: &[Entry]) -> Result<Option<(usize, usize)>, SubrError> {
     let size = usize::try_from(size).map_err(|_| invalid("a negative Private DICT size"))?;
     let at = usize::try_from(at).map_err(|_| invalid("a negative Private DICT offset"))?;
     Ok(Some((size, at)))
-}
-
-fn blob(data: &[u8], at: usize, len: usize) -> Result<&[u8], SubrError> {
-    at.checked_add(len).and_then(|end| data.get(at..end)).ok_or_else(|| invalid("a CFF structure lies outside the table"))
-}
-
-struct Index<'a> {
-    items: Vec<&'a [u8]>,
-    end: usize,
-}
-
-/// The INDEX at `at`: a 16-bit count in `CFF `, a 32-bit count in `CFF2`.
-fn read_index(data: &[u8], at: usize, cff2: bool) -> Result<Index<'_>, SubrError> {
-    let cut = || invalid("an INDEX is cut short");
-    let (count, head) = if cff2 { (read_u32(data, at).ok_or_else(cut)? as usize, 4) } else { (usize::from(read_u16(data, at).ok_or_else(cut)?), 2) };
-    let start = at.checked_add(head).ok_or_else(cut)?;
-    if count == 0 {
-        return Ok(Index { items: Vec::new(), end: start });
-    }
-    let off_size = usize::from(*data.get(start).ok_or_else(cut)?);
-    if !(1..=4).contains(&off_size) {
-        return Err(invalid(format!("an INDEX has offset size {off_size}")));
-    }
-    // Every item takes at least one offset's bytes, so a count beyond the data is a lie.
-    let offsets_len = count.checked_add(1).and_then(|n| n.checked_mul(off_size)).filter(|n| *n <= data.len()).ok_or_else(cut)?;
-    let offsets_at = start + 1;
-    let base = (offsets_at + offsets_len).checked_sub(1).ok_or_else(cut)?;
-    let read_off = |i: usize| -> Result<usize, SubrError> {
-        let p = offsets_at + i * off_size;
-        let bytes = data.get(p..p + off_size).ok_or_else(cut)?;
-        Ok(bytes.iter().fold(0usize, |acc, b| (acc << 8) | usize::from(*b)))
-    };
-    let mut items = Vec::with_capacity(count);
-    let mut prev = read_off(0)?;
-    if prev != 1 {
-        return Err(invalid("an INDEX does not start at offset 1"));
-    }
-    for i in 1..=count {
-        let next = read_off(i)?;
-        let (a, b) = (base.checked_add(prev).ok_or_else(cut)?, base.checked_add(next).ok_or_else(cut)?);
-        items.push(data.get(a..b).ok_or_else(|| invalid("an INDEX item lies outside the table"))?);
-        prev = next;
-    }
-    Ok(Index { items, end: base + prev })
-}
-
-fn index_len(lens: impl Iterator<Item = usize>, cff2: bool) -> usize {
-    let head = if cff2 { 4 } else { 2 };
-    let (mut count, mut total) = (0usize, 0usize);
-    for l in lens {
-        count += 1;
-        total = total.saturating_add(l);
-    }
-    if count == 0 {
-        return head;
-    }
-    head + 1 + (count + 1) * off_size(total + 1) + total
-}
-
-fn off_size(last: usize) -> usize {
-    match last {
-        0..=0xFF => 1,
-        0x100..=0xFFFF => 2,
-        0x1_0000..=0xFF_FFFF => 3,
-        _ => 4,
-    }
-}
-
-fn write_index<T: AsRef<[u8]>>(out: &mut Vec<u8>, items: &[T], cff2: bool) -> Result<(), SubrError> {
-    let count = items.len();
-    if cff2 {
-        let c = u32::try_from(count).map_err(|_| SubrError::TooLarge { what: "items in an INDEX", limit: u32::MAX as usize })?;
-        out.extend_from_slice(&c.to_be_bytes());
-    } else {
-        let c = u16::try_from(count).map_err(|_| SubrError::TooLarge { what: "items in an INDEX", limit: 65_535 })?;
-        out.extend_from_slice(&c.to_be_bytes());
-    }
-    if count == 0 {
-        return Ok(());
-    }
-    let total: usize = items.iter().map(|i| i.as_ref().len()).sum();
-    let size = off_size(total + 1);
-    out.push(size as u8);
-    let put = |out: &mut Vec<u8>, v: usize| {
-        let bytes = (v as u32).to_be_bytes();
-        out.extend_from_slice(bytes.get(4 - size..).unwrap_or_default());
-    };
-    let mut offset = 1usize;
-    put(out, offset);
-    for item in items {
-        offset += item.as_ref().len();
-        put(out, offset);
-    }
-    for item in items {
-        out.extend_from_slice(item.as_ref());
-    }
-    Ok(())
-}
-
-/// The DICT entries of `bytes`. In `CFF2`, `blend` (23) belongs to the operands of the entry it
-/// appears in.
-fn parse_dict(bytes: &[u8], cff2: bool) -> Result<Vec<Entry>, SubrError> {
-    let cut = || invalid("a DICT is cut short");
-    let mut entries = Vec::new();
-    let mut raw = Vec::new();
-    let mut ints = Vec::new();
-    let mut i = 0usize;
-    while let Some(&b0) = bytes.get(i) {
-        match b0 {
-            28 => {
-                let v = read_u16(bytes, i + 1).ok_or_else(cut)? as i16;
-                raw.extend_from_slice(bytes.get(i..i + 3).ok_or_else(cut)?);
-                ints.push(Some(i64::from(v)));
-                i += 3;
-            }
-            29 => {
-                let v = read_u32(bytes, i + 1).ok_or_else(cut)? as i32;
-                raw.extend_from_slice(bytes.get(i..i + 5).ok_or_else(cut)?);
-                ints.push(Some(i64::from(v)));
-                i += 5;
-            }
-            30 => {
-                let start = i;
-                i += 1;
-                loop {
-                    let b = *bytes.get(i).ok_or_else(cut)?;
-                    i += 1;
-                    if b >> 4 == 0xF || b & 0xF == 0xF {
-                        break;
-                    }
-                }
-                raw.extend_from_slice(bytes.get(start..i).ok_or_else(cut)?);
-                ints.push(None);
-            }
-            32..=246 => {
-                raw.push(b0);
-                ints.push(Some(i64::from(b0) - 139));
-                i += 1;
-            }
-            247..=254 => {
-                let b1 = i64::from(*bytes.get(i + 1).ok_or_else(cut)?);
-                let v = if b0 <= 250 { (i64::from(b0) - 247) * 256 + b1 + 108 } else { -(i64::from(b0) - 251) * 256 - b1 - 108 };
-                raw.extend_from_slice(&[b0, b1 as u8]);
-                ints.push(Some(v));
-                i += 2;
-            }
-            23 if cff2 => {
-                raw.push(b0);
-                ints.push(None);
-                i += 1;
-            }
-            0..=27 => {
-                let op = if b0 == 12 {
-                    let b1 = *bytes.get(i + 1).ok_or_else(cut)?;
-                    i += 2;
-                    1200 + u16::from(b1)
-                } else {
-                    i += 1;
-                    u16::from(b0)
-                };
-                if entries.len() >= MAX_DICT_ENTRIES {
-                    return Err(SubrError::TooLarge { what: "entries in a DICT", limit: MAX_DICT_ENTRIES });
-                }
-                entries.push(Entry { op, raw: std::mem::take(&mut raw), ints: std::mem::take(&mut ints) });
-            }
-            _ => return Err(invalid(format!("byte {b0} is reserved in a DICT"))),
-        }
-    }
-    if !raw.is_empty() {
-        return Err(invalid("a DICT ends with operands and no operator"));
-    }
-    Ok(entries)
 }
 
 fn push_int29(v: i64, out: &mut Vec<u8>) -> Result<(), SubrError> {
@@ -623,47 +436,6 @@ fn encoding_len(data: &[u8], at: usize) -> Result<usize, SubrError> {
     Ok(len)
 }
 
-/// The Font DICT of every glyph, and the FDSelect's length in bytes.
-fn read_fd_select(data: &[u8], at: usize, glyphs: usize, cff2: bool) -> Result<(Vec<u16>, usize), SubrError> {
-    let cut = || invalid("the FDSelect is cut short");
-    let format = *data.get(at).ok_or_else(cut)?;
-    match format {
-        0 => {
-            let map = data.get(at + 1..at + 1 + glyphs).ok_or_else(cut)?.iter().map(|b| u16::from(*b)).collect();
-            Ok((map, 1 + glyphs))
-        }
-        3 | 4 if format == 3 || cff2 => {
-            let wide = format == 4;
-            let (count, mut p) = if wide {
-                (read_u32(data, at + 1).ok_or_else(cut)? as usize, at + 5)
-            } else {
-                (usize::from(read_u16(data, at + 1).ok_or_else(cut)?), at + 3)
-            };
-            if count == 0 || count > glyphs {
-                return Err(invalid(format!("the FDSelect has {count} ranges for {glyphs} glyphs")));
-            }
-            let mut map = vec![0u16; glyphs];
-            let read_first = |p: usize| if wide { read_u32(data, p).map(|v| v as usize) } else { read_u16(data, p).map(usize::from) };
-            let mut first = read_first(p).ok_or_else(cut)?;
-            for _ in 0..count {
-                let fd = if wide { read_u16(data, p + 4).ok_or_else(cut)? } else { u16::from(*data.get(p + 2).ok_or_else(cut)?) };
-                p += if wide { 6 } else { 3 };
-                let next = read_first(p).ok_or_else(cut)?;
-                if next < first || next > glyphs {
-                    return Err(invalid("the FDSelect ranges are out of order"));
-                }
-                for slot in map.get_mut(first..next).ok_or_else(cut)? {
-                    *slot = fd;
-                }
-                first = next;
-            }
-            let sentinel = if wide { 4 } else { 2 };
-            Ok((map, p + sentinel - at))
-        }
-        other => Err(invalid(format!("FDSelect format {other}"))),
-    }
-}
-
 /// The region count of each item variation data of a variation store.
 fn region_counts(store: &[u8]) -> Result<Vec<usize>, SubrError> {
     let cut = || invalid("the variation store is cut short");
@@ -674,14 +446,4 @@ fn region_counts(store: &[u8]) -> Result<Vec<usize>, SubrError> {
         out.push(usize::from(read_u16(store, at.checked_add(4).ok_or_else(cut)?).ok_or_else(cut)?));
     }
     Ok(out)
-}
-
-fn read_u16(b: &[u8], at: usize) -> Option<u16> {
-    let s = b.get(at..at.checked_add(2)?)?;
-    Some(u16::from_be_bytes([*s.first()?, *s.get(1)?]))
-}
-
-fn read_u32(b: &[u8], at: usize) -> Option<u32> {
-    let s = b.get(at..at.checked_add(4)?)?;
-    Some(u32::from_be_bytes([*s.first()?, *s.get(1)?, *s.get(2)?, *s.get(3)?]))
 }
