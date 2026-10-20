@@ -156,6 +156,9 @@ add formats (`open.compiledFormats`).
   glyph, and glyph pairs are added wherever the group pairs would not give the compiled value, so
   every covered pair keeps it. Limits: 2,000,000 covered pairs; a class table over 1,000,000
   class pairs is skipped with a warning.
+  When the rebuilt entries open turned off (glyph names feature syntax cannot hold, or glyph ids
+  past the font's glyphs), the kerning read stays and the `kern` entry holds none of the pair
+  lookups it came from, so turning the entry back on kerns each pair once.
 - Variable fonts (TrueType and CFF2) open into axes, masters and intermediate layers. Limits:
   1,024 masters and intermediate locations; 2,000,000 added layers (glyphs times the masters
   other than the default, plus intermediate layers); 20,000,000 nodes and components; and

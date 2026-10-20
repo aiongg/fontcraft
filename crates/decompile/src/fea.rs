@@ -35,14 +35,17 @@
 //!
 //! Whatever has no feature syntax is written as a `# not written:` comment and listed among the
 //! warnings. Glyph names feature syntax cannot hold, and glyph ids past the font's glyphs, leave
-//! every entry disabled, with a warning, so the font still exports; the kerning read then stays. A font whose layout tables cannot be read opens without feature code
-//! and a warning; opening never fails because of them.
+//! every entry disabled, with a warning, so the font still exports. The kerning read then stays,
+//! and the `kern` entry leaves out every pair lookup the kerning was read from, even one the
+//! kerning gives back only in part, so turning the entry back on does not kern twice. A font
+//! whose layout tables cannot be read opens without feature code and a warning; opening never
+//! fails because of them.
 //!
 //! Input is untrusted: the reader caps its work ([`write::MAX_LAYOUT_WORK`]), the text at
 //! [`MAX_TEXT`] bytes and lookup nesting at [`MAX_NESTING`]; the layout moves at most 16 features
 //! into the prefix one at a time before it puts every lookup there.
 
-mod write;
+pub mod write;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
@@ -53,7 +56,7 @@ use skrifa::raw::{FileRef, FontRef, TableProvider};
 use skrifa::string::StringId;
 
 use crate::{DecompileError, Decompiled, MAX_CLASS_RECORDS};
-use write::{FeaError, GPOS, GSUB, Layout, Line, LookupOut, Piece, SysKey, Systems, T4, Writer, fea_tag};
+use write::{FeaError, GPOS, GSUB, Layout, Line, LookupOut, Piece, ReadOptions, SysKey, Systems, T4, Writer, fea_tag};
 
 /// Most bytes of feature code written for one font.
 pub const MAX_TEXT: usize = 16 * 1024 * 1024;
@@ -98,15 +101,25 @@ pub(crate) fn import(font: &FontRef, d: &mut Decompiled) {
         return;
     }
     let kerning_read = !d.font.kerning.is_empty() && !d.warnings.iter().any(|w| PARTIAL_KERNING.iter().any(|p| w.contains(p)));
-    let rebuilt = match rebuild(font, &names, kerning_read) {
+    let not_written = |d: &mut Decompiled, e: FeaError| d.warnings.push(format!("the layout tables were not turned into feature code: {e}"));
+    let mut rebuilt = match rebuild(font, &names, kerning_read, false) {
         Ok(r) => r,
-        Err(FeaError(e)) => {
-            d.warnings.push(format!("the layout tables were not turned into feature code: {e}"));
-            return;
-        }
+        Err(e) => return not_written(d, e),
     };
-    let turned_off = !rebuilt.bad_names.is_empty() || !rebuilt.beyond.is_empty();
-    // Turned-off entries export nothing, so the kerning read stays and export still kerns.
+    // Turned-off entries export nothing, so the kerning read stays and export still kerns. The
+    // kern entry then leaves out the pair lookups the kerning was read from: turned back on, it
+    // would kern every pair a second time.
+    if rebuilt.kerning_as_code && rebuilt.turned_off() && !d.font.kerning.is_empty() {
+        rebuilt = match rebuild(font, &names, kerning_read, true) {
+            Ok(r) => r,
+            Err(e) => return not_written(d, e),
+        };
+        d.warnings.push(
+            "the kern feature's pair lookups were left out of its code because the kerning read from them stays; values the kerning cannot hold are lost"
+                .into(),
+        );
+    }
+    let turned_off = rebuilt.turned_off();
     if rebuilt.kerning_as_code && !turned_off && !d.font.kerning.is_empty() {
         d.font.kerning = Arc::default();
         for name in &names {
@@ -164,6 +177,13 @@ struct Rebuilt {
     bad_names: Vec<String>,
     /// Glyph ids the rules use that the font does not have.
     beyond: Vec<u16>,
+}
+
+impl Rebuilt {
+    /// The entries open turned off: feature code cannot name some of the glyphs they use.
+    fn turned_off(&self) -> bool {
+        !self.bad_names.is_empty() || !self.beyond.is_empty()
+    }
 }
 
 type Id = (T4, u16);
@@ -252,9 +272,12 @@ struct Plan {
     splits: Vec<usize>,
 }
 
-fn rebuild(font: &FontRef, names: &[String], kerning_read: bool) -> Result<Rebuilt, FeaError> {
+/// Lays out the entries. `kerning_read`: the document's kerning was read in full from the
+/// `kern` feature's pair lookups. `kerning_stays`: the kerning stays whatever those lookups hold,
+/// so they are left out of the code even when the kerning gives them back only in part.
+fn rebuild(font: &FontRef, names: &[String], kerning_read: bool, kerning_stays: bool) -> Result<Rebuilt, FeaError> {
     let mut w = Writer::new(names);
-    let mut layout: Layout = w.read(font, &[])?;
+    let mut layout: Layout = w.read(font, &ReadOptions { set_names: true, ..ReadOptions::ALL })?;
     let variable = font.fvar().is_ok();
     let kinds: HashMap<Id, u16> = layout.lookups.iter().map(|l| ((l.table, l.index), l.kind)).collect();
 
@@ -264,7 +287,8 @@ fn rebuild(font: &FontRef, names: &[String], kerning_read: bool) -> Result<Rebui
         .get(&KERN)
         .map(|s| s.values().flat_map(|(_, ids)| ids.iter().copied()).filter(|id| id.0 == GPOS && kinds.get(id) == Some(&2)).collect())
         .unwrap_or_default();
-    let replace = kerning_read && !kern_pairs.is_empty() && kern_pairs.iter().all(|id| write::plain_pair(font, id.1, variable, MAX_CLASS_RECORDS));
+    let replace = !kern_pairs.is_empty()
+        && (kerning_stays || kerning_read && kern_pairs.iter().all(|id| write::plain_pair(font, id.1, variable, MAX_CLASS_RECORDS)));
     let kerning_as_code = !replace && !kern_pairs.is_empty();
     let dropped: HashSet<Id> = if replace { kern_pairs.iter().copied().collect() } else { HashSet::new() };
 
@@ -483,7 +507,7 @@ fn rebuild(font: &FontRef, names: &[String], kerning_read: bool) -> Result<Rebui
         tags.push(tag);
     }
 
-    let rendered = w.render(&chunks, true)?;
+    let rendered = w.render(&chunks, true, MAX_TEXT)?;
     let disabled = !rendered.bad_names.is_empty() || !rendered.beyond.is_empty();
     let snippet = |name: String, code: &str| Snippet { name, code: code.trim_end().to_string(), disabled, ..Default::default() };
     let mut features = Features::default();
@@ -592,7 +616,8 @@ pub fn layout_summary(bytes: &[u8], names: &[String], exclude: &[&str]) -> Resul
         })
         .collect();
     let mut w = Writer::new(names);
-    let mut layout = w.read(&font, &exclude).map_err(|FeaError(e)| DecompileError::Unreadable(e))?;
+    let options = ReadOptions { exclude: &exclude, set_names: true, ..ReadOptions::ALL };
+    let mut layout = w.read(&font, &options).map_err(|e| DecompileError::Unreadable(e.to_string()))?;
     let mut chunks: Vec<Vec<Line>> = Vec::new();
     let mut meta: Vec<(T4, u16, u16, Vec<u16>)> = Vec::new();
     for l in std::mem::take(&mut layout.lookups) {
@@ -616,7 +641,7 @@ pub fn layout_summary(bytes: &[u8], names: &[String], exclude: &[&str]) -> Resul
     }
     let names_of: Vec<String> = meta.iter().map(|(t, i, _, _)| w.lookup_name(*t, *i)).collect();
     chunks.push(std::mem::take(&mut layout.gdef));
-    let rendered = w.render(&chunks, false).map_err(|FeaError(e)| DecompileError::Unreadable(e))?;
+    let rendered = w.render(&chunks, false, MAX_TEXT).map_err(|e| DecompileError::Unreadable(e.to_string()))?;
     let mut summary = LayoutSummary { unsupported: rendered.unsupported, ..Default::default() };
     let mut texts = rendered.texts.into_iter();
     let mut tables: BTreeMap<T4, TableSummary> = BTreeMap::new();

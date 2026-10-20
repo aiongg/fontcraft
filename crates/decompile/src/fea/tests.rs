@@ -266,3 +266,54 @@ fn a_rule_whose_every_call_names_a_missing_lookup_opens_as_an_ignore_rule() {
     assert!(all.contains("ignore sub a';") && all.contains("does not exist"), "{all}");
     compile_ttf(&d.font, &Options::default()).unwrap();
 }
+
+#[test]
+fn a_kern_entry_turned_back_on_kerns_each_pair_once() {
+    use write_fonts::tables::gsub as ws;
+    use write_fonts::tables::layout as wl;
+    use write_fonts::types::{GlyphId16 as WGid, Tag as WTag};
+
+    // A pair value the kerning cannot hold (a y placement), and a contextual rule after it, so
+    // the kern feature keeps an entry.
+    let mut f = glyphs();
+    let features = Arc::make_mut(&mut f.features);
+    features.prefixes.push(entry("context", "lookup TIGHT { pos T -20; } TIGHT;"));
+    features.features.push(entry("kern", "pos A V <0 10 -80 0>;\npos T' lookup TIGHT o;"));
+    let base = compile_ttf(&f, &Options::default()).unwrap().bytes;
+    // A substitution into a glyph id the font does not have turns every entry off on open.
+    let n = names(&base);
+    let a = WGid::new(n.iter().position(|x| x == "a").unwrap() as u16);
+    let past = WGid::new(n.len() as u16 + 5);
+    let single = ws::SubstitutionLookup::Single(wl::Lookup::new(
+        wl::LookupFlag::empty(),
+        vec![ws::SingleSubst::format_2([a].into_iter().collect(), vec![past])],
+    ));
+    let gsub = ws::Gsub::new(
+        wl::ScriptList::new(vec![wl::ScriptRecord::new(WTag::new(b"DFLT"), wl::Script::new(Some(wl::LangSys::new(vec![0])), vec![]))]),
+        wl::FeatureList::new(vec![wl::FeatureRecord::new(WTag::new(b"calt"), wl::Feature::new(None, vec![0]))]),
+        ws::SubstitutionLookupList::new(vec![single]),
+    );
+    let mut b = write_fonts::FontBuilder::new();
+    b.add_table(&gsub).unwrap();
+    b.copy_missing_tables(skrifa::raw::FontRef::new(&base).unwrap());
+    let bytes = b.build();
+
+    let mut d = crate::decompile(&bytes, None).unwrap();
+    let fea = &d.font.features;
+    assert!(fea.features.iter().chain(&fea.prefixes).all(|s| s.disabled), "{fea:#?}");
+    // The kerning read stays, so the kern entry keeps the contextual rule but not the pairs.
+    assert_eq!(d.font.kerning.ltr.get("m01", "A", "V"), Some(-80.0));
+    let kern = code(&fea.features, "kern");
+    assert!(kern.contains(AUTOMATIC_CODE) && kern.contains("pos T'") && !kern.contains("pos A V"), "{kern}");
+    assert!(d.warnings.iter().any(|w| w.contains("kerning read from them stays")), "{:?}", d.warnings);
+
+    // Every entry back on except the one that names the missing glyph: the export kerns A V once.
+    let fea = Arc::make_mut(&mut d.font.features);
+    for s in fea.classes.iter_mut().chain(fea.prefixes.iter_mut()).chain(fea.features.iter_mut()) {
+        s.disabled = s.name == "calt";
+    }
+    let again = compile_ttf(&d.font, &Options::default()).unwrap().bytes;
+    let back = crate::decompile(&again, None).unwrap();
+    assert_eq!(back.font.kerning.ltr.get("m01", "A", "V"), Some(-80.0));
+    assert!(code(&back.font.features.features, "kern").contains("pos T'"), "{:#?}", back.font.features);
+}
