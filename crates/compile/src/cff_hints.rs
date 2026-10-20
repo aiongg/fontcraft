@@ -33,7 +33,7 @@ use fontcraft_cff::{CharstringHints, MAX_STEM_HINTS, Mask, Number, PathOp, Priva
 use fontcraft_geom::{BezPath, PathEl, Point};
 use fontcraft_hinting::ps::ps_hint_layer;
 use fontcraft_hinting::{HintSettings, PsHintKind, ps_hints};
-use fontcraft_model::{Font, ResolvedGlyph, Target};
+use fontcraft_model::{Font, Layer, ResolvedGlyph, Target};
 
 use crate::cff::ROUND_TOLERANCE;
 use crate::{CompileError, ot_round};
@@ -295,7 +295,7 @@ pub fn contours(path: &[PathOp]) -> (Vec<BezPath>, Vec<usize>) {
 /// contour's implicit closing line goes before that contour's own moveto (the hinter walks each
 /// contour from its closing line), after the start mask for the first contour. The mask on the
 /// second curve of a flex is dropped, as the reference does.
-fn charstring_hints(hints: &GlyphHints, starts: &[usize], ops: usize) -> CharstringHints {
+pub(crate) fn charstring_hints(hints: &GlyphHints, starts: &[usize], ops: usize) -> CharstringHints {
     let stem = |s: &fontcraft_autohint::Stem| StemHint { edge: s.lb, width: s.rt - s.lb };
     let mask = |m: &HintMask| Mask { h: m.h.clone(), v: m.v.clone() };
     let op_of = |pos: &ElementPos| -> Option<usize> {
@@ -337,6 +337,31 @@ pub fn manual_hints(font: &Font, settings: &HintSettings, name: &str, path: &[Pa
     let glyph = font.glyph(name)?;
     let built = glyph.layer(&settings.master)?;
     let source = ps_hint_layer(font, glyph, settings, built)?;
+    hints_on_layer(name, source, built, path, warnings)
+}
+
+/// The manual hints of glyph `name` resolved on its intermediate layer `layer_id` (in a
+/// variable font): the layer's own hints, else those the master of `settings` uses, through
+/// node links. `None` when neither has any.
+pub fn intermediate_manual_hints(
+    font: &Font,
+    settings: &HintSettings,
+    name: &str,
+    layer_id: &str,
+    path: &[PathOp],
+    warnings: &mut Vec<String>,
+) -> Option<CharstringHints> {
+    let glyph = font.glyph(name)?;
+    let built = glyph.layers.iter().find(|l| l.id == layer_id)?;
+    let source = match ps_hint_layer(font, glyph, settings, built) {
+        Some(own) => own,
+        None => ps_hint_layer(font, glyph, settings, glyph.layer(&settings.master)?)?,
+    };
+    hints_on_layer(name, source, built, path, warnings)
+}
+
+/// The PostScript hints of `source` with their node references read on `built`.
+fn hints_on_layer(name: &str, source: &Layer, built: &Layer, path: &[PathOp], warnings: &mut Vec<String>) -> Option<CharstringHints> {
     let hints = match ps_hints(source) {
         Ok(h) => h,
         Err(e) => {

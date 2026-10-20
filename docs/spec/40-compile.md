@@ -315,7 +315,7 @@ reference compilers.
 | glyf | S V | read-fonts | write-fonts | no instruction assembler; no cubic outlines |
 | loca | S V | read-fonts | write-fonts | none |
 | CFF  | O | read-fonts | none-yet | whole writer: DICTs, INDEXes, charsets, charstrings, specialiser, subroutiniser, CID structures |
-| CFF2 | C | read-fonts | own (M9.13, M12.25c, M12.25d) | FDSelect not written; hints only where every master's hints share one structure |
+| CFF2 | C | read-fonts | own (M9.13, M12.25c, M12.25d) | FDSelect not written; hints only where every source's hints share one structure |
 | vhea, vmtx | s o v c | read-fonts | write-fonts | none |
 | VORG | o c | read-fonts | none-yet | generated code exists in the repository but is not compiled into the crate |
 | GSUB | s o v c | read-fonts | write-fonts | none (contextual lookups assembled by fea-rs) |
@@ -421,14 +421,14 @@ FontCraft.
 subroutine INDEX, one Font DICT in the FDArray (no FDSelect), a Private DICT with `blend`, the
 charstrings with `blend` and `vsindex`, and the item variation store with no items. The
 charstrings are specialised as fontTools specialises a `CFF2` merge, and the export subroutinises
-the table when that makes it smaller (M12.25c). Not written: hints and FDSelect for CID-keyed
-fonts.
+the table when that makes it smaller (M12.25c), and writes blended hints (M12.25d, M12.25e). Not
+written: FDSelect for CID-keyed fonts.
 
 | What | fontmake `-o variable-cff2` | FontCraft |
 |---|---|---|
 | Charstrings | specialised (`hlineto`, `hvcurveto`…, fontTools `specializeCommands` with blended operands, up to 512 operands) and subroutinised by `tx` (cffsubr) | specialised the same way, byte for byte on the test glyphs; subroutinised by our port of compreffor's method, kept when smaller, off with Disable Subroutines or `subroutinize: false`. A subroutine may hold some operands of a `blend` while the call site holds the rest: the operand stack is shared across calls, and the call number never overflows it |
 | Blend runs | varying operands share a `blend` while the run stays below the 513-operand stack | the same; a run past the stack is split |
-| Hints | the hints of the masters' CFF tables, merged into blended stems and masks | none, with a warning when the source has manual PostScript hints |
+| Hints | the hints of the masters' CFF tables, merged into blended stems and masks | the same merge over every source of the glyph, intermediate and alternate layers included; autohinted sources are hinted together, so they share one structure; a glyph whose sources' hints still differ in structure is written without hints, with a warning |
 | Private DICT | blended where the masters differ; a list some master lacks keeps the default's | the same, with a warning; BlueScale, BlueShift and BlueFuzz blended too |
 | Composites | decomposed in each master; a composite follows its components' intermediate layers | the same: a decomposed composite gains its components' intermediate locations as sources |
 | `post` | 2.0 with names (varLib switches CFF2 fonts to it) | 2.0 with names |
