@@ -1904,7 +1904,7 @@ fn root_clips(doc: &[u8]) -> bool {
             let (name, value) = declaration.split_at(declaration.iter().position(|b| *b == b':')?);
             name.trim_ascii().eq_ignore_ascii_case(b"overflow").then(|| value.get(1..).unwrap_or_default().trim_ascii())
         })
-        .last();
+        .next_back();
     let overflow = styled.or_else(|| attributes.iter().find(|(n, _)| *n == b"overflow").map(|(_, v)| v.trim_ascii()));
     !overflow.is_some_and(|v| v.eq_ignore_ascii_case(b"visible") || v.eq_ignore_ascii_case(b"auto"))
 }

@@ -493,8 +493,11 @@ mod tests {
         out
     }
 
-    /// A resource fork holding `resources` (type, id, name, data), each type's in the order given.
-    fn fork_of(resources: &[([u8; 4], i16, Option<&str>, Vec<u8>)]) -> Vec<u8> {
+    /// A resource's type, id, name and data.
+    type Resource<'a> = ([u8; 4], i16, Option<&'a str>, Vec<u8>);
+
+    /// A resource fork holding `resources`, each type's in the order given.
+    fn fork_of(resources: &[Resource<'_>]) -> Vec<u8> {
         let mut data = Vec::new();
         let mut offsets = Vec::new();
         for (.., bytes) in resources {

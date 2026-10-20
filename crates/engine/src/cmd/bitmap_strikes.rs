@@ -424,8 +424,10 @@ fn export_strikes(s: &mut Session, v: &Value) -> Result<Value> {
     for ((label, glyphs, bytes, file_warnings), target) in out.into_iter().zip(targets) {
         write_file(&target, &bytes)?;
         let mut entry = json!({"strike": label, "path": target.to_string_lossy(), "glyphs": glyphs, "bytes": bytes.len()});
-        if !file_warnings.is_empty() {
-            entry["warnings"] = json!(file_warnings);
+        if !file_warnings.is_empty()
+            && let Some(o) = entry.as_object_mut()
+        {
+            o.insert("warnings".into(), json!(file_warnings));
         }
         files.push(entry);
     }
@@ -444,8 +446,10 @@ fn export_fon(font: &Font, p: &Params<'_>, chosen: &[&BitmapStrike], path: Optio
     let labels: Vec<String> = chosen.iter().map(|s| s.label()).collect();
     let glyphs: usize = chosen.iter().map(|s| s.glyphs.len()).sum();
     let mut entry = json!({"strike": labels.join(", "), "strikes": labels, "path": path, "glyphs": glyphs, "bytes": written.bytes.len()});
-    if !written.warnings.is_empty() {
-        entry["warnings"] = json!(written.warnings);
+    if !written.warnings.is_empty()
+        && let Some(o) = entry.as_object_mut()
+    {
+        o.insert("warnings".into(), json!(written.warnings));
     }
     Ok(json!({ "format": "fon", "files": [entry] }))
 }

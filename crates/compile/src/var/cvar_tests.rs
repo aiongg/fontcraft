@@ -44,11 +44,13 @@ fn at(bytes: &[u8], default: &[i16], location: &[f32]) -> Vec<f64> {
 }
 
 type Case = (u16, Vec<i16>, Vec<(Vec<f64>, Vec<i16>)>);
+/// A tuple's peak and its deltas.
+type Peaked = (Vec<f32>, Vec<i32>);
 
 /// Masters as fontTools' `VariationModel.getDeltasAndSupports(round=round)` sees them in
 /// `_merge_TTHinting`; the expected tuples are what it printed for each (fontTools 4, the
 /// version fontmake 3.12.1 ships).
-fn cases() -> Vec<(&'static str, Case, Vec<(Vec<f32>, Vec<i32>)>)> {
+fn cases() -> Vec<(&'static str, Case, Vec<Peaked>)> {
     vec![
         ("two masters", (1, vec![100, 50, -10], vec![(vec![1.0], vec![121, 50, -20])]), vec![(vec![1.0], vec![21, 0, -10])]),
         (
@@ -153,7 +155,8 @@ fn two_masters(bold_cap_height: f64) -> Font {
 }
 
 /// [`two_masters`] with Bold's cap height at 720 and a third master, Medium, halfway between,
-/// drawn like Regular; `medium_options` are its TTFAutohint options.
+/// drawn like Regular but with its cap height at 705; `medium_options` are its TTFAutohint
+/// options. Medium's region carries its difference from Regular, so it needs one of its own.
 fn three_masters(medium_options: Option<&str>) -> Font {
     use fontcraft_model::Param;
     use fontcraft_model::plist::{Str, Value};
@@ -163,6 +166,7 @@ fn three_masters(medium_options: Option<&str>) -> Font {
     medium.id = "m03".into();
     medium.name = "Medium".into();
     medium.location = vec![150.0];
+    medium.metric_values[1].pos = 705.0;
     if let Some(text) = medium_options {
         medium.params.0.push(Param::new(fontcraft_hinting::settings::TTF_AUTOHINT_OPTIONS, Value::String(Str::new(text))));
     }

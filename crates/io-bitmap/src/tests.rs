@@ -254,8 +254,8 @@ fn pcf_refuses_hostile_tables() {
     many_tables.extend(le(&[1_000_000], 4));
     assert_eq!(limit(read_pcf(&many_tables)), "PCF tables");
 
-    let gzip = [0x1f, 0x8b, 8, 0, 0, 0, 0, 0];
-    assert!(matches!(read(&gzip), Err(BitmapError::NotPcf(m)) if m.contains("gzip")));
+    let truncated_gzip = [0x1f, 0x8b, 8, 0, 0, 0, 0, 0];
+    assert!(matches!(read(&truncated_gzip), Err(BitmapError::Gzip(_))));
 
     let many_glyphs = pcf_file(&[(4, 0, le(&[1_000_000], 4)), (8, 0, bitmaps.clone())]);
     assert_eq!(limit(read_pcf(&many_glyphs)), "glyphs in one font");

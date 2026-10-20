@@ -13,13 +13,14 @@ use serde_json::{Value, json};
 /// The prefix of the keys under which the reader keeps a value's layout.
 const LAYOUT: &str = "com.fontcraft.glyphsLayout.";
 
-/// `A` with its code point spelled with a leading zero and a guide list on one line.
+/// `A` with its code point spelled with a leading zero, and the master's guide list on one line.
 const V3: &str = "{
 .appVersion = \"3343\";
 .formatVersion = 3;
 familyName = Kept;
 fontMaster = (
 {
+guides = ({pos = (100,0);});
 id = m01;
 name = Regular;
 }
@@ -29,7 +30,6 @@ glyphs = (
 glyphname = A;
 layers = (
 {
-guides = ({pos = (100,0);});
 layerId = m01;
 width = 600;
 }
@@ -123,8 +123,8 @@ fn read(path: &Path) -> String {
 /// The text of glyph `name` in `text`, from its name to its last line `last`.
 fn glyph_text<'a>(text: &'a str, name: &str, last: &str) -> &'a str {
     let start = text.find(&format!("glyphname = {name};")).unwrap();
-    let end = start + text[start..].find(last).unwrap() + last.len();
-    &text[start..end]
+    let end = start + text.get(start..).unwrap().find(last).unwrap() + last.len();
+    text.get(start..end).unwrap()
 }
 
 #[test]
@@ -173,14 +173,14 @@ fn a_native_save_leaves_out_layouts_an_edit_made_stale() {
     run(&mut s, "file.saveAs", json!({ "path": dir.join("Before.fontcraft") }));
     assert!(read(&dir.join("Before.fontcraft")).contains(LAYOUT));
 
-    run(&mut s, "guide.add", json!({ "glyph": "A", "x": 200 }));
+    run(&mut s, "guide.addGlobal", json!({ "x": 200 }));
     run(&mut s, "file.saveAs", json!({ "path": dir.join("After.fontcraft") }));
     let native = read(&dir.join("After.fontcraft"));
     assert!(!native.contains(LAYOUT), "{native}");
     // The native file reads back to the same font: both write the same `.glyphs` text.
     run(&mut s, "file.saveAs", json!({ "path": dir.join("After.glyphs") }));
     let mut back = open(&dir.join("After.fontcraft"));
-    assert_eq!(back.font().unwrap().glyph("A").unwrap().layers[0].info.guides.len(), 2);
+    assert_eq!(back.font().unwrap().masters[0].guides.len(), 2);
     run(&mut back, "file.saveAs", json!({ "path": dir.join("Back.glyphs") }));
     let text = read(&dir.join("After.glyphs"));
     assert_eq!(read(&dir.join("Back.glyphs")), text);

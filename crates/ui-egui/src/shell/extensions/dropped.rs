@@ -82,7 +82,7 @@ mod tests {
             dropped_files: vec![dropped],
             ..Default::default()
         };
-        let _ = ctx.run_ui(input, |ui| app.ui(ui));
+        ctx.run_ui(input, |ui| app.ui(ui)).textures_delta.clear();
         assert!(data.join("Macros").join("tighten.fcmacro").exists(), "{}", app.state.status);
         let _ = std::fs::remove_dir_all(&data);
     }

@@ -728,9 +728,9 @@ impl Table {
 
         let mut out = Vec::with_capacity(pos);
         out.extend_from_slice(&[1, 0, 4, 4]);
-        write_index(&mut out, [name].into_iter(), false)?;
-        write_index(&mut out, [top.as_slice()].into_iter(), false)?;
-        write_index(&mut out, strings.into_iter(), false)?;
+        write_index(&mut out, [name], false)?;
+        write_index(&mut out, [top.as_slice()], false)?;
+        write_index(&mut out, strings, false)?;
         write_index(&mut out, std::iter::empty::<&[u8]>(), false)?;
         out.extend_from_slice(&charset);
         out.extend_from_slice(&fd_select);

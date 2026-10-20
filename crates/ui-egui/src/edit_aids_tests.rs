@@ -284,7 +284,7 @@ fn dragging_the_metrics_beam_beside_the_glyph_equals_view_show_metrics_beam() {
     let events = |ctx: &egui::Context, app: &mut FontcraftApp, events: Vec<egui::Event>| {
         let input =
             egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(Pos2::ZERO, egui::vec2(1280.0, 800.0))), events, ..Default::default() };
-        let _ = ctx.run_ui(input, |ui| app.ui(ui));
+        ctx.run_ui(input, |ui| app.ui(ui)).textures_delta.clear();
     };
     let button = |pos, pressed| egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE };
     // Left of the glyph's origin, where the beam can be grabbed.
@@ -313,7 +313,7 @@ fn a_marquee_started_near_the_metrics_beam_selects_and_leaves_the_beam() {
     let events = |ctx: &egui::Context, app: &mut FontcraftApp, events: Vec<egui::Event>| {
         let input =
             egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(Pos2::ZERO, egui::vec2(1280.0, 800.0))), events, ..Default::default() };
-        let _ = ctx.run_ui(input, |ui| app.ui(ui));
+        ctx.run_ui(input, |ui| app.ui(ui)).textures_delta.clear();
     };
     let button = |pos, pressed| egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE };
     // Left of the glyph's origin, within the node hit tolerance of the beam but not on it.

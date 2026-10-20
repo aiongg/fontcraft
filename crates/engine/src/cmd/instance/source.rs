@@ -1384,7 +1384,7 @@ mod tests {
         let text = std::fs::read_to_string(&ds).unwrap();
         let start = text.find("<axes>").unwrap();
         let end = text.find("</axes>").unwrap() + "</axes>".len();
-        std::fs::write(&ds, format!("{}{}", &text[..start], &text[end..])).unwrap();
+        std::fs::write(&ds, format!("{}{}", text.get(..start).unwrap(), text.get(end..).unwrap())).unwrap();
         let mut s = Session::new();
         let err = s.execute("font.instantiate", &json!({ "input": ds, "autohint": false })).unwrap_err().to_string();
         assert!(err.contains("defines no axes") && !err.contains(".notdef"), "{err}");

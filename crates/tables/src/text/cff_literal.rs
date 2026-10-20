@@ -203,6 +203,9 @@ fn fd_of(d: &[u8], ops: &[(u16, Vec<f64>)]) -> Result<Fd> {
     Ok(Fd { private: Some((offset, end)), local, subrs })
 }
 
+/// Writes one item of an INDEX: its index as printed and its byte range.
+type IndexItem<'a> = dyn FnMut(&mut Flow<'_>, usize, (usize, usize)) -> Result<()> + 'a;
+
 /// The flowed text of `tx`: separators that depend on whether flowed data is broken into lines.
 struct Flow<'a> {
     out: &'a mut Out,
@@ -763,7 +766,7 @@ pub fn dump(d: &[u8], base: u32, parts: &str, level: CffLevel, wrap: bool) -> Re
         }
     };
     // An INDEX with each item written by `item` (index as printed, range).
-    let index = |f: &mut Flow, title: &str, index: &Index, item: &mut dyn FnMut(&mut Flow, usize, (usize, usize)) -> Result<()>| -> Result<()> {
+    let index = |f: &mut Flow, title: &str, index: &Index, item: &mut IndexItem<'_>| -> Result<()> {
         tag_line(f, title, index.begin, index.end)?;
         if level == CffLevel::Offsets {
             return Ok(());
@@ -966,6 +969,5 @@ pub fn dump(d: &[u8], base: u32, parts: &str, level: CffLevel, wrap: bool) -> Re
             })?;
         }
     }
-    drop(f);
     Ok(out.text)
 }

@@ -32,11 +32,11 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1371 rows to check: 2227 guesses and 501 observe steps.**
+**1380 rows to check: 2262 guesses and 505 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
-| **Built milestones (M0 to M6)** | all | **491** |
+| **Built milestones (M0 to M6)** | all | **493** |
 | Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 101 |
 | Built milestones (M0 to M6) | Edit View: text mode and preview | 32 |
 | Built milestones (M0 to M6) | Components and anchors | 83 |
@@ -45,10 +45,10 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Kerning and the Kerning window | 42 |
 | Built milestones (M0 to M6) | Font View | 108 |
 | Built milestones (M0 to M6) | Font Info and features | 9 |
-| Built milestones (M0 to M6) | Files: open, import, export | 44 |
+| Built milestones (M0 to M6) | Files: open, import, export | 45 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
-| Built milestones (M0 to M6) | Elsewhere | 5 |
-| **Later milestones (after M6)** | all | **880** |
+| Built milestones (M0 to M6) | Elsewhere | 6 |
+| **Later milestones (after M6)** | all | **887** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 86 |
 | Later milestones (after M6) | Edit View: text mode and preview | 26 |
 | Later milestones (after M6) | Components and anchors | 39 |
@@ -58,14 +58,14 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Font View | 19 |
 | Later milestones (after M6) | Font Info and features | 279 |
 | Later milestones (after M6) | Interpolation | 72 |
-| Later milestones (after M6) | Hinting | 106 |
+| Later milestones (after M6) | Hinting | 108 |
 | Later milestones (after M6) | Colour fonts | 60 |
-| Later milestones (after M6) | Files: open, import, export | 63 |
+| Later milestones (after M6) | Files: open, import, export | 68 |
 | Later milestones (after M6) | Settings and the window | 13 |
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 62 |
 | Later milestones (after M6) | Elsewhere | 26 |
 
-## Built milestones (M0 to M6) (491)
+## Built milestones (M0 to M6) (493)
 
 ### Edit View: drawing, guides, layers and the Palette (101)
 
@@ -76,7 +76,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `edit.copy` (M3, inferred, live): Copy
   - Guess: The clipboard text is our JSON format with an SVG flavour; what the reference puts on the clipboard is not documented.
 - [ ] `edit.paste` (M3, inferred, live): Paste
-  - Guess: Paste reads our JSON clipboard format or SVG; which other clipboard data the reference accepts is not documented.
+  - Guess: Paste reads our JSON clipboard format, SVG or PDF; which other clipboard data the reference accepts is not documented.
+  - Guess: A pasted PDF keeps one font unit per point with its page's bottom-left corner on the glyph's origin, as a pasted SVG keeps its own coordinates; pasting a PDF of known geometry from a drawing app into the reference would settle it.
+  - Guess: When several flavours are given, JSON is read first, then SVG, then PDF, and one that cannot be read gives way to the next; which flavour the reference prefers when a drawing app offers both SVG and PDF is not documented.
 - [ ] `menus.switchCheckMarks` (behavior, M3, handbook): A menu item that switches something on and off shows a check…
   - Guess: Every on/off switch shows a check mark, including Lock Outline, Power Nudge, Edit Background, Palette, Preview Panel and Font Audit; opening the reference app's View, Path and Window menus with each switch on and off settles which ones do.
   - Guess: View › Show Indexes shows a check mark while any kind of index is shown. Settled by turning on a single kind in the reference app and opening the View menu.
@@ -927,6 +929,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: With allMasters, master layers with the same node structure are converted together (one spline length for all), so they stay compatible.
 - [ ] `fontView.cell.followsMaster` (behavior, M4, handbook): Every grid cell draws the glyph's layer for the master currently selected…
   - Guess: Font View's master is its own: choosing a master in a tab does not change it, and a tab opened from Font View starts in it. Settled by observation.
+  - Guess: Each document window keeps its own selected master, as each font has its own window in the reference app; switching between two open fonts there would settle it.
 - [ ] `fontView.cell.contentBySize` (behavior, M4, handbook): Large cells show outline, glyph name and Unicode information; small cells show…
   - Guess: Names and Unicode markers show from a cell size of 64 points up. Settled by observation.
 - [ ] `fontView.cell.unicodeIndicator` (behavior, M4, handbook): A glyph with a code point shows a small marker at the…
@@ -1236,7 +1239,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `Decompose Glyphs` (parameter, M6, handbook): List of glyph names whose components are turned into outlines at export
   - Guess: A text value is read as glyph names separated by commas or spaces, besides the documented list; the reference app with a text value would settle it.
 
-### Files: open, import, export (44)
+### Files: open, import, export (45)
 
 - [ ] `file.save` (M1, handbook, live): Save
   - Guess: The save chooser offers one filter with every source extension, and the chosen extension picks the format (no extension: the native format); the reference's format pop-up in its save sheet is documented but its layout is not observed.
@@ -1244,6 +1247,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Save As offers one filter with every source extension and no format or version pop-up, so the extension picks the format; the reference's save sheet picks the format from a pop-up, which observing it would let us match.
 - [ ] `file.open` (M1, handbook, live): Open…
   - Guess: The menu label and place are our assumption, and the shortcut is the platform convention; the chapter states neither.
+- [ ] `roundtrip.editsAreLocal` (behavior, M1, inferred): Changing one value changes only the lines that encode that value (plus…
+  - Guess: Node flags are read for `R`, `C` and `X` in any order (the first of `R` and `C` wins); when an edit changes the lock or orientation, the fields are written in the writer's order followed by the letters the model does not read, in their order. A file from the reference app with such flags would settle what it keeps.
 - [ ] `roundtrip.lossReport` (behavior, M1, inferred): Every save or export to a format that cannot hold part of…
   - Open (our design, not confirmed): Every save or export to a format that cannot hold part of the document returns a structured list of losses (object path, concept, what was done: dropped, decomposed, moved to lib). The UI shows it as a warning before the write is committed and the command line prints it; with `strict` set the write fails instead.
 - [ ] `glyphs3` (format, M1, docs): Glyphs file, format version 3
@@ -1381,8 +1386,11 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `sampleStrings.groups` (setting, M5, handbook): Sample Strings
   - Guess: The built-in default holds groups of our own choosing: spacing strings built around n, o, H and O with placeholders, figures, and traditional pangrams for Latin, Greek and Cyrillic; no source lists the reference defaults we may copy.
 
-### Elsewhere (5)
+### Elsewhere (6)
 
+- [ ] `audit.glyphHashCache` (behavior, M3, docs): For source targets the auditor stores a hash of each glyph's outline…
+  - Guess: Only the layer checks are cached: several glyph checks read glyphs no component names (kerning groups, metrics keys), and the reference's hash map covers only its outline checks; a profile of long runs would show whether glyph checks need a cache with their own dependencies.
+  - Guess: Edit-tab texts and the font note are left out of what the cache compares, since no layer check reads them.
 - [ ] `audit.outlineFixOrder` (behavior, M3, docs): Outline fixes run in a fixed order: coincident points, flat curves and…
   - Guess: The findings of binary checks are not computed again between layer steps; their calls (widths, anchors, emptying a glyph) do not depend on point addresses. Comparing with a run that recompiles before each step would settle whether it matters.
 - [ ] `audit.run` (M3, docs, live): Run Audit
@@ -1401,7 +1409,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (880)
+## Later milestones (after M6) (887)
 
 ### Edit View: drawing, guides, layers and the Palette (86)
 
@@ -1883,9 +1891,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `font.detectComposites` (M13, docs, live): Detect Composites
   - Guess: A match needs every point of the other glyph's outline within 0.5 unit after the best translation, or after a translation and flip when `flips` is on; FontLab gives no tolerance.
   - Guess: Only glyphs whose layer has closed paths and no components serve as bases; running it in the reference app on a font whose base glyphs are themselves composites would settle it.
-  - Guess: Bases are tried from the most nodes down, and a base must come before the target in an order of nodes, then combining marks (a name whose part before the first suffix ends in 'comb'), then fewer suffixes, then glyph order (no cycles), so of two glyphs with the same outline the combining mark, or the name without a suffix, is the base of the other; comparing the reference app's choice between identical outlines (acute and acutecomb, colon and colon.tf) would settle it.
-  - Guess: Of bases with the same outline that match the same paths, the one whose name (without suffix and 'comb') appears in the target's name goes first, then a combining mark, then the one that needs the shortest shift (two.numr rather than two.dnom in a fraction); the reference app's choice between identical outlines at different heights would settle it.
-  - Guess: A glyph that detection itself finds made of two or more glyphs (a copy of such a glyph counts too) is not used as a base for part of a larger glyph, unless it is a combining mark (stacked marks such as circumflexacutecomb are often built from other marks); it still serves a glyph whose whole outline it is. Running the reference app on a flattened font with Abreve and Abrevedotbelow would settle it.
+  - Guess: Bases are tried from the most nodes down, and a base must come before the target in an order of nodes, then combining marks (a name whose part before the first suffix ends in 'comb', unless the glyph database calls it an enclosing mark), then fewer suffixes, then glyph order (no cycles), so of two glyphs with the same outline the combining mark, or the name without a suffix, is the base of the other, and largeCircle is the base of enclosingcirclecomb; comparing the reference app's choice between identical outlines (acute and acutecomb, colon and colon.tf, largeCircle and enclosingcirclecomb) would settle it.
+  - Guess: Of bases with the same outline that match the same paths, in order: one that detection did not find to be a copy of a basic Latin letter (A rather than Alpha in Alphatonos, though Alpha is in the recipe and the name); one whose code point is in the target's canonical decomposition or that the glyph database's recipe for the target names; the one whose name without suffixes and 'comb' or 'cmb' spells the longest part of the target's name, reading 'sub' as 'below' (circumflexsubcomb in dcircumflexbelow); one whose suffix gives it the target's case (.uc, .case and .tonos upper, .lc lower, .sc small capitals; uni1FFE.tonos rather than dasia in uni1F09), then one of no other case (the case from a suffix, else the glyph database); fewer suffixes the target lacks (one rather than one.tf in one.circled); a combining mark; the shortest shift (two.numr rather than two.dnom in a fraction). Running the reference app on flattened fonts with such pairs would settle each step.
+  - Guess: A glyph that detection itself finds made of two or more glyphs (a copy of such a glyph counts too) is not used as a base for part of a larger glyph, unless it is a combining mark or a mark by the glyph database (stacked marks such as circumflexacutecomb and psilivaria are often built from other marks), or it holds a mark and the glyph database gives it no canonical decomposition (i, carondot.lc); it still serves a glyph whose whole outline it is. Running the reference app on a flattened font with Abreve and Abrevedotbelow, and i and tworoman, would settle it.
   - Guess: Without `layer` or `layers` every master layer is searched, each on its own, and a glyph whose masters got different components is warned about; the reference app's behaviour on a multi-master font would settle it.
   - Guess: A mirrored match is a mirrored copy drawn in the opposite direction, as a mirrored component draws once decomposed; the offset is rounded to the font's grid when the match still holds.
   - Guess: A detected component keeps the default automatic alignment when aligning puts it where the outline was (within the tolerance) and leaves the width as it is; alignment is turned off on the components it would move, and on all new components of a layer whose width it would change, as the primary reference's Import Metrics does for metrics that alignment would change. Checking the alignment setting of components the reference app detected, with and without matching anchors, would settle it.
@@ -1983,6 +1991,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A side whose field holds a metrics key keeps its value, and a layer with a width key or under automatic alignment is skipped, so keys stay in sync. FontLab's page does not say what auto-spacing does with its own metrics expressions.
   - Guess: `beam` applies to tight and custom: both sidebearings are measured where the outline meets the beam. Optical refuses it, as the profiles cover the whole band.
 - [ ] `view.showMetricsBeam` (M13, docs, live): Metrics Beam
+  - Guess: The beam is dragged in whole units, only on the line itself (within half the node hit tolerance) and only outside the advance boxes of the edited glyph and the other glyphs on its line, so nodes and marquees near it stay with the tools; the reference apps' pages do not say where the line can be grabbed.
   - Guess: The beam is one height per font, shared by Edit View and Space Center, and sidebearing commands take it as an optional `beam` parameter; FontLab's and RoboFont's pages do not say whether it is per font or per window.
   - Guess: The beam starts at half the x-height of the tab's master, like the measurement line, and giving only a height also shows it. The reference app's first use of the metrics line would settle the start height.
 - [ ] `spacing.centerInWidth` (M13, docs, live): Center in Width
@@ -2184,7 +2193,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A note longer than 256 KiB is shown without highlighting so typing stays fast; a long note in the reference app settles whether it stops highlighting.
   - Observe: In font A (m7-one), type `# Head`, `*it*`, `**bold**` and `<https://example.org>` in the Notes tab: note how each is highlighted.
 - [ ] `fontInfo.exports.instancePreview` (behavior, M7, handbook): The Exports tab shows a short preview of the selected instance drawn…
-  - Guess: The preview sits above the instance's fields, one line high, and draws the first selected instance; an instance between masters shows a message until M9 interpolates, and a variable font setting shows none; the Exports tab of the reference app settles placement.
+  - Guess: The preview sits above the instance's fields, one line high, and draws the first selected instance; an instance between masters is drawn interpolated, and a variable font setting shows none; the Exports tab of the reference app settles placement.
   - Guess: The default `Aang126` is read as characters and drawn with the glyphs mapped to them, skipping characters the font lacks; the reference app settles whether it names glyphs instead.
   - Observe: In font B (m7-two), look at an instance's preview on the Exports tab: note where it is and what it shows.
 - [ ] `font.info.selectTab` (M7, inferred, live): Select Font Info Tab
@@ -3221,7 +3230,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Edits collect in a draft that Apply writes, rather than each edit changing the font at once; watching the secondary reference's undo after editing a card would settle it.
   - Guess: A new mapping starts with no axis ticked and each value at the default master's location; the secondary reference's new card would settle it.
 
-### Hinting (106)
+### Hinting (108)
 
 - [ ] `hinting.ps.standardStems.privateDictMapping` (behavior, M10, docs): At export the first horizontal stem becomes StdHW and the first vertical…
   - Guess: More than twelve stems in one direction: the export writes the first twelve in list order and warns, and hint.ps.validateFontHints reports it; an export from the reference app with thirteen stems would settle it.
@@ -3270,7 +3279,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: T1: turn on View › Show Hints, open n and try to drag a hint marker with the Select tool, then with each other tool; note which tools can move or edit a hint.
   - Observe: T1: with Show Hints on and off, right-click a node of n and note whether Add Horizontal Hint is in the menu each time.
 - [ ] `hinting.ps.manual.select` (behavior, M10, handbook): Clicking a hint's number badge selects the hint; Shift+click adds to or…
-  - Guess: The arrow keys move selected hints as they move selected nodes, the whole hint at once, so an end linked to a node becomes a number; an arrow along a hint's edges leaves it alone; with several hints selected each moves in its own undo step. The handbook says nothing about arrow keys and hints; pressing an arrow key with a linked hint selected in the reference app would settle it.
+  - Guess: The arrow keys move selected hints as they move selected nodes, the whole hint at once, so an end linked to a node becomes a number; an arrow along a hint's edges leaves it alone; with several hints selected they move in one undo step. The handbook says nothing about arrow keys and hints; pressing an arrow key with a linked hint selected in the reference app would settle it.
   - Guess: Tab after the last hint wraps to the first and Shift+Tab before the first wraps to the last; with several hints selected Tab moves on from the one latest in list order; trying it in the reference app would settle it.
   - Guess: A click on a hint's marker selects the hint as a click on its badge does; the reference app would settle it.
   - Observe: T1: in n, select the last hint and press Tab; note whether the selection wraps to the first hint. Then select two hints and press Tab; note which hint is selected next.
@@ -3296,9 +3305,10 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: When the main master has no hints for a glyph and several other masters do, the first of them in master order is used; a reference export of such a glyph would settle it.
   - Observe: T2: export the three masters as CFF and read e in the master 1 font (e has manual hints only in masters 2 and 3); note whether its hints come from master 2, from master 3, or from the autohinter.
 - [ ] `hinting.ps.cff2.sharedHintStructure` (behavior, M10, inferred): In a variable CFF2 font a glyph has one hint list and…
-  - Guess: In variable CFF2 output the hints come from the main master's manual hints resolved through node links in every master, or else from the autohinter run on each master on its own; unlinked manual hints keep one value in every master; a variable export from the reference app would settle it.
-  - Guess: A glyph whose masters' hints differ in structure (fontTools refuses the merge with VarLibCFFHintTypeMergeError or a hint mask error) is written without hints and with a warning, so the rest of the font still exports; autohinted masters differ often, as the autohinter does not yet hint the masters together (autohint.ps.variable.*).
-  - Guess: A glyph that varies with an intermediate or alternate layer is written without hints, with a warning: its hints are read on master layers only; hinting the special layer through its own node links would be the next step.
+  - Guess: In variable CFF2 output the hints come from the main master's manual hints resolved through node links in every source, or else from the autohinter run on all sources together; unlinked manual hints keep one value in every master; a variable export from the reference app would settle it.
+  - Guess: A glyph whose sources' hints differ in structure (fontTools refuses the merge with VarLibCFFHintTypeMergeError or a hint mask error) is written without hints and with a warning, so the rest of the font still exports.
+  - Guess: An intermediate layer without PostScript hints of its own takes the hints its master uses through node links, as master layers do, so a variable font keeps the glyph's hints; a variable export from the reference app of a glyph with an unhinted intermediate layer would settle it.
+  - Guess: Autohinted CFF2 glyphs are hinted without flex, as the merge draws flex as two curves; static exports keep the autohinter's flex. Running otfautohint on a CFF2 font would show whether it adds flex there.
   - Observe: T2: export as a variable CFF2 font and read the charstrings; note whether all masters share one hint structure and what happens to I's unlinked hint.
 - [ ] `autohint.ps.inputs` (behavior, M10, docs): The reference autohinter accepts bare CFF, name-keyed and CID-keyed OTF, UFO with…
   - Guess: Identical zones are merged before the autohinter reads them: glyphsLib's mapping (and FontCraft's Private dict) keeps duplicates, which otfautohint rejects as overlapping zones (Oswald Italic, ascender equal to cap height); the export still writes the Private dict as fontmake does.
@@ -3324,6 +3334,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Typing a value for a linked end unlinks that end and keeps the typed number; the reference app would settle it.
   - Guess: A typed origin leaves a linked other end on its node and, when the other end is a number, keeps the hint's size; typing an origin for a hint linked at one end in the reference app would settle it.
   - Observe: T1: select a hint linked to two nodes, type a new origin in the Info box, then move one of the nodes; note whether the hint follows the node (link kept) or stays at the typed value (link broken).
+- [ ] `hint.ps.moveHints` (M10, inferred, live): Move Hints
+  - Guess: Moving several hints with one arrow key press is one undo step, as moving several nodes is; pressing an arrow key with two hints selected in the reference app and then Undo once would settle it.
+  - Observe: T1: in n, select two horizontal hints, press Up, then choose Edit › Undo once; note whether both hints go back or only one.
 - [ ] `hint.ps.attachHintToNode` (M10, inferred, live): Attach Hint to Node
   - Guess: Dropping a marker on a node links that end, and dragging it off onto empty space unlinks it, keeping the current number; the reference app would settle the unlinking gesture.
   - Observe: T1: drag a linked hint marker off its node to empty space, then move that node; note whether that end of the hint is now unlinked.
@@ -3348,6 +3361,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Stem instructions flagged as triple form groups of three in list order; a file with two triple hints in one glyph would show how they are kept apart.
   - Guess: A delta cell is stored as 8 (up) or −8 (down) under its PPM, in a column keyed by the instance's axis values in braces padded to six, as the one format sample shows; a file with deltas set for two instances would confirm both.
   - Guess: An instruction of a TrueType type that lacks a point its type needs (the corpus has place-only Snap and Stem hints and a Stem without target) is detached: kept as stored, never listed or compiled; the reference app's export of such a glyph would settle it.
+  - Guess: Special layers' own TrueType instructions: an intermediate (brace) layer's are never exported, and an alternate (bracket) layer's are exported for its alternate glyph in a variable font when the layer belongs to the main master, since it is then that glyph's main-master layer; exporting a glyph whose special layers carry their own instructions from the reference app would settle both.
+  - Observe: T3: give a glyph an intermediate layer and an alternate layer on the main master, each with its own Snap, export a variable TTF and a static instance inside the alternate range, and note which instructions each glyph program carries.
   - Observe: T3: give n one Stem of each rounding mode, including Round only in GDI ClearType, save as .glyphs and note each options value.
   - Observe: T3: set a Snap of n to a named zone and make one triple hint in E; save as .glyphs and note the keys each stores.
   - Observe: T3: set one Delta of n up at 12 PPM in one instance and down at 13 PPM in another; save as .glyphs and note the deltaV keys and values.
@@ -3403,7 +3418,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A Delta instruction leaves its point untouched in the model, since it moves the point only at the sizes it lists; the reference app would settle whether a point with only a Delta can still take a Snap.
   - Observe: T3: add a Delta instruction to an untouched node, then select that node alone and press A; note whether a Snap instruction is added.
 - [ ] `hinting.tt.instructions.addFromSelection` (behavior, M10, handbook): An instruction is added by selecting the nodes it should act on…
-  - Guess: Dragging an instruction badge moves only the badge's drawn position, which is view state and not saved; dropping it on another node does not re-target it; the reference app would settle what the drag changes.
+  - Guess: Dragging an instruction badge onto another node moves the instruction's target point there, and the drag is not saved as a badge position; the reference app would settle what the drag changes.
   - Observe: T3: drag an instruction badge, save, reopen, and note what the drag changed and whether it was saved; then drag a badge onto another node and note whether the instruction moves to that node.
 - [ ] `hinting.tt.instructions.badgeColours` (behavior, M10, handbook): Each instruction is drawn with a clickable badge whose colour identifies its…
   - Guess: Delta badges are orange, a colour no other instruction uses; the reference app would settle it.
@@ -3501,6 +3516,10 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Deleting one member of a triple hint dissolves the triple hint and keeps the other two Stem instructions; the reference app would settle it.
   - Observe: T3: with the TrueType Instructor, select an instruction badge and press Delete; note whether the instruction is removed.
   - Observe: T3: with the TrueType Instructor, add a Snap and a Shift from the snapped point, delete the Snap and note what happens to the Shift.
+- [ ] `hint.tt.moveInstruction` (M10, handbook, live): Move Instruction
+  - Guess: Repositioning an instruction moves the point it acts on, not only its badge; a drop away from any node changes nothing; dragging a Snap badge onto another node in the reference app would settle it.
+  - Guess: A move that leaves a later instruction without a touched origin or reference is refused rather than reported; the reference app would settle it.
+  - Observe: T3: drag a Snap badge onto another untouched node and note whether the Snap moves to it; then drag it onto a node a Shift uses as its origin and note what happens.
 - [ ] `hint.tt.setSnapZone` (M10, handbook, live): Set Snap Zone
   - Guess: A named zone on a horizontal Snap instruction is refused, since zones are vertical; the reference app would show whether its pop-up offers zone names in horizontal mode.
   - Observe: T3: in horizontal mode, select a Snap instruction and open the zone pop-up of the Info box; note whether zone names are listed.
@@ -3556,7 +3575,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `trueTypeInstructor` (tool, M10, handbook): TrueType Instructor
   - Guess: The tool sits after the Measurement and Thickness tools in the toolbar and node selection works as with the Select tool (click, Shift+click, rubber band, Select All on the layer); the custom-parameter descriptions give its shortcut as I; the reference app would settle the rest.
   - Guess: S pairs the selected points along the stems: for vertical hinting by x, then y, each pair from the lower point (the origin) to the upper one; for horizontal hinting by y, then x, from left to right; the reference app would show how it pairs four or more points.
-  - Guess: Arrow keys, Return, Delete and Backspace do nothing in the Instructor, so the outline cannot be edited by accident; the reference app would settle whether they move nodes there.
+  - Guess: Arrow keys and Return do nothing in the Instructor, and Delete and Backspace delete only the selected instructions, so the outline cannot be edited by accident; the reference app would settle whether they move or delete nodes there.
   - Observe: T3: find the TrueType Instructor in the toolbar and note its position and shortcut; select nodes by rubber band, by Shift+click and with Select All, and note which of these gestures work.
 - [ ] `hint.tt.editInstructions` (M13, docs, live): Edit TrueType Instructions…
   - Guess: The command has no menu item, since the app has no Hints menu; it runs from the command search, the console and agents. Adding a Hints menu would settle where it goes.
@@ -3615,10 +3634,12 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A glyph with a CBDT image and no other colour is drawn from the CBDT strike nearest the pixel size by the sbix rule, its top left at the image's bearings. Settled only outside the reference, which does not export CBDT; compare with a system text engine on a nanoemoji-built CBDT font.
   - Guess: An SVG document's embedded image that cannot be decoded, or that would take its document past 4,194,304 decoded pixels, is left out and the rest of the document drawn. Settled by previewing an SVG glyph with a damaged embedded PNG in the reference.
   - Guess: An SVG mask's luminance is taken from its sRGB values with the weights 0.2125, 0.7154 and 0.0721, without converting to linear RGB first. Settled by previewing an SVG glyph masked by a mid-grey rectangle in the reference.
-  - Guess: An SVG document fitted to the em square with preserveAspectRatio slice is not clipped to the em square; content outside it still draws. Settled by previewing such a glyph whose content overflows the em in the reference.
-  - Guess: SVG filters are not drawn; the filtered content draws unfiltered. Settled by previewing an SVG glyph with a blur filter in the reference.
+  - Guess: An SVG document fitted to the em square with preserveAspectRatio slice is clipped to the em square unless its root's overflow (its style property, else its attribute) is visible or auto; a document fitted with meet is not clipped. Settled by previewing such a glyph whose content overflows the em in the reference.
+  - Guess: SVG filters work on 8-bit premultiplied pixels in linear RGB unless color-interpolation-filters says sRGB; blur deviations and offsets scale by the lengths of the transform's axes, so a rotated element's blur is not rotated, and offsets round to whole pixels. Settled by previewing an SVG glyph with a blur and an offset shadow in the reference.
+  - Guess: An SVG element whose filters use a primitive other than blur, offset, flood, colour matrix, composite, merge, blend and drop shadow, hold more than 32 primitives (each feMerge input counting as one), nest inside 4 filtered elements, could paint more than 1,048,576 sprite pixels (what the element draws grown by its blurs and offsets, or the whole filter region when a flood or similar primitive paints where its input is clear), or would take the glyph past its work budget is drawn unfiltered with a warning, and the glyph is still drawn in colour; blurs past a deviation of 256 pixels blur by 256. Settled by previewing an SVG glyph with feTurbulence in the reference.
   - Guess: An SVG glyph whose masks and clip paths nest more than 8 layers deep, or that uses more than 4,096 pattern tiles, is drawn as its outline. Settled by previewing such a glyph in the reference.
   - Observe: Palette font with an instance whose Export COLR Table is off: open Text Preview, choose the instance in the style pop-up and note whether the glyphs show as plain outlines.
+  - Observe: SVG font with a glyph filtered by feGaussianBlur and one by feTurbulence: open Text Preview and note whether each filter shows, and whether the second glyph draws unfiltered.
 - [ ] `color.layered.masterColor` (behavior, M11, handbook): The Master Color parameter on a master sets the colour its filled…
   - Guess: The other glyphs of the tab are filled in the same masters' colours as the edited glyph. Settled by typing several glyphs in a tab of a layered font with all masters shown in the reference.
   - Observe: Layered font: show all masters in Edit View; note whether each master is drawn in its Master Color with its opacity, and whether Master Color Dark is used in dark appearance.
@@ -3787,7 +3808,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: At 1 bit a pixel is on when the outline covers at least half of it, with no grid-fitting or hinting; the secondary reference's rasteriser may differ at the edges. Rasterising a glyph with a half-covered row in the secondary reference would settle it.
   - Guess: Each bitmap spans the outline's box rounded out to whole pixels, so an empty glyph has a 0 × 0 bitmap that keeps its advance.
 
-### Files: open, import, export (63)
+### Files: open, import, export (68)
 
 - [ ] `export.instanceExportFolder` (behavior, M7, handbook): An instance carrying the Export Folder custom parameter is written to that…
   - Guess: The sub-path is used as written, `..` segments included, as the handbook says; an absolute path, an empty segment, a folder name with a character such as `:` or `\`, or a path of more than 32 segments makes export skip that instance with the reason, one trailing `/` is ignored, and the warnings name every file written outside the export destination; an Export Folder of `../x` and one of `/tmp/x` in the reference app settle it.
@@ -3951,6 +3972,28 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `pcf` (format, M13, docs): Portable Compiled Format (X11 bitmap font)
   - Guess: A PCF file without a glyph names table names its glyphs `glyph0`, `glyph1`…; opening such a file in the reference app would show what it calls them.
   - Guess: When several codes of the encodings table point at one glyph, the glyph keeps the lowest and a warning counts the rest; the reference may add copies instead. A PCF with a shared glyph opened in the reference app would settle it.
+  - Guess: `.pcf.gz` is written as one gzip member at the best compression, with no file name and time 0. Whether the reference writes `.pcf.gz` at all is not documented; a font folder written by it would settle it.
+- [ ] `fnt` (format, M13, docs): Windows bitmap font (FNT)
+  - Guess: Glyphs read from an FNT file are named `uniXXXX` from their code point in the ANSI character set, and `charNNN` from their 8-bit code in any other; opening an FNT in the secondary reference would show the names it picks.
+  - Guess: Codes whose table entry repeats the default character's width and offset are read as missing, not as copies of it, and the writer fills codes without a glyph that way; an FNT written by the secondary reference with a gap in its codes would settle it.
+  - Guess: Pixels per em are the cell height minus the internal leading, and the writer sets the internal leading to the cell height minus the strike's pixels per em; the format states only point size and resolution. An FNT the secondary reference writes from a known strike would settle it.
+  - Guess: Character sets other than ANSI are kept as raw 8-bit codes under registry `MICROSOFT`; a strike in another X registry is written with the ANSI character set and its codes unchanged. A non-ANSI FNT exported by the secondary reference would settle it.
+  - Guess: `WEIGHT_NAME` maps to and from the Windows weight through Thin 100, ExtraLight 200, Light 300, Medium or Regular 400, SemiBold 600, Bold 700, ExtraBold 800 and Black 900, and reading picks the nearest name.
+- [ ] `fon` (format, M13, docs): Windows bitmap font resource file (FON)
+  - Guess: Opening a FON file gives one font whose glyphs come from its first font, with one strike per font; the secondary reference may open each font as its own document. Opening a two-size FON in the secondary reference would settle it.
+  - Guess: The writer uses the smallest resource alignment, from 16 bytes up, that addresses every resource, a module name made from the face name, and resource flags moveable and preloaded for the directory and moveable, pure and discardable for the fonts; a FON written by the secondary reference would settle these.
+- [ ] `pk` (format, M13, docs): TeX packed font (PK)
+  - Guess: A PK or GF strike is `design size × vertical pixels per point` pixels per em, rounded, and its resolution is the pixels per point times 72.27 (TeX points per inch), rounded; the format states no pixel size. Opening a PK file in the secondary reference would show the size it gives the strike.
+  - Guess: A PK or GF glyph is named after its code: the character itself for an ASCII letter or digit, else `char` and the decimal code; the file has no names. Importing a PK font into the secondary reference would show the names it picks.
+  - Guess: PK and GF codes are in the TeX font's own encoding (OT1, T1 and others; code 123 is an en dash in cmr10), so a PK or GF strike is marked `CHARSET_REGISTRY` `TeX`, `CHARSET_ENCODING` `FontSpecific` and its bitmaps match glyphs by name only, and opening one gives glyphs without code points; letters and digits still match by their names. A PK written from a Unicode strike reads back the same way. Importing a cmr10 PK into the secondary reference would show whether it maps TeX codes to Unicode.
+  - Guess: Writing PK leaves out bitmaps without a code and bitmaps whose code an earlier bitmap has, and gives the file a design size that reads back at the strike's pixel size.
+- [ ] `gf` (format, M13, docs): METAFONT generic font (GF)
+  - Guess: GF codes are in the METAFONT program's own encoding, not Unicode, so a GF strike is marked `CHARSET_REGISTRY` `TeX`, `CHARSET_ENCODING` `FontSpecific` and its bitmaps match glyphs by name only, as for `pk`. Importing a GF font into the secondary reference would settle it.
+- [ ] `nfnt` (format, M13, docs): Mac OS bitmap font resources (NFNT, FONT)
+  - Guess: Only the first font family of a Mac file, and only its plain style, is read; a family's bold or italic strikes are separate fonts, not strikes. Opening a Mac suitcase with several styles in the secondary reference would settle it.
+  - Guess: A Mac strike without a font family record is taken to be its ascent plus descent pixels per em, with a warning; only the family record states the point size of an `NFNT`.
+  - Guess: Mac codes below 32 map to the same code points; a font that draws symbols there (such as command-key glyphs) gets control-character code points for them.
+  - Guess: Blank rows above and below a Mac character's bitmap are trimmed so its box is tight, as BDF and PCF boxes are; the record keeps every character as tall as the font rectangle.
 - [ ] `sfd` (format, M13, docs): FontForge Spline Font Database
   - Guess: A contour is closed when its last point equals its first and open otherwise; the page does not say how an open contour is written. A file from the originating editor with an open path would settle it.
   - Guess: In a quadratic layer a `c` line is read as a quadratic segment when both controls are the same point or are exactly two thirds of the way to one point; the page does not say how quadratic splines are written. A quadratic file from the editor would settle it.
@@ -4006,7 +4049,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `bitmap.importStrikes` (M13, docs, live): Import Bitmap Strikes…
   - Guess: A bitmap goes to the glyph whose code point is its code when the file's codes are Unicode, else to the glyph of its name; the summary names both keys but not their order. Importing a BDF whose names and codes disagree into the secondary reference would settle it.
   - Guess: Bitmaps that match no glyph are left out and listed; no glyph is created for them. Importing a BDF with an extra glyph into a font without it, in the secondary reference, would settle it.
-  - Guess: A file none of whose bitmaps matches a glyph is refused, changing nothing.
+  - Guess: A file none of whose strikes has a bitmap that matches a glyph is refused, changing nothing; a strike that matches nothing in a file whose other strikes match (such as a symbol font in a FON file) is left out with a warning.
+  - Guess: When the files of one import hold two strikes of one size and depth, the first is added and the second left out with a warning, as opening the file does; the two are not merged. Importing a FON with a regular and a bold font of one size into the secondary reference would settle it.
   - Guess: Importing a strike whose size and depth the font has replaces the strike's name, metrics and properties and the bitmaps of the glyphs the file holds, and keeps the strike's other bitmaps.
   - Guess: A strike keeps each bitmap's code from the file and writes it back on export, so a strike in a non-Unicode encoding survives a round trip.
 - [ ] `bitmap.exportStrikes` (M13, docs, live): Export Bitmap Strikes…
@@ -4016,6 +4060,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: An `.otb` keeps every glyph of the compiled font, and its `loca` has one zero entry per glyph plus one; the secondary reference's page says `maxp` counts the bitmap glyphs and `loca` holds one entry. We keep a `loca` that validators and every reader accept. Opening an `.otb` the secondary reference writes in ttx would settle it.
   - Guess: The line metrics give the strike's ascent and descent (from the bitmaps when both are 0), the widest advance as `widthMax`, an upright caret (1/0), and the extremes of the bitmaps with pixels; the vertical line metrics are zero. An embedded strike the secondary reference writes would settle it.
   - Guess: A bitmap that does not fit the embedded formats (over 255 pixels, offsets beyond -128..127) refuses the export instead of being left out.
+  - Guess: `fon` puts every chosen strike into one file, as Windows font files hold one face at several sizes, while `fnt` writes one file per strike; the secondary reference's Generate Font output for several strikes would settle it.
+  - Guess: `fnt` and `fon` leave out glyphs without an 8-bit code and pixels outside the advance, listing them in `warnings`, rather than refusing the export; the secondary reference's behaviour on such a strike would settle it.
   - Guess: `embedded` without `font` compiles the open font as TrueType with the default export settings; the secondary reference embeds strikes as part of its Generate Fonts dialog.
 - [ ] `file.importMetricsFile` (M13, docs, live): Import Kerning from Metrics File…
   - Guess: `replace` gives a pair the master already has the file's value and keeps every other pair; `addMissing` adds only pairs the master lacks; the reference documentation does not say what happens to existing pairs. Merging a file into a font that already kerns one of its pairs in the reference app would settle it.
@@ -4257,10 +4303,12 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The Markdown and HTML reports end with the checks that were skipped or failed to run, with their reasons; the reference tools' reports would settle whether to list them.
 - [ ] `audit.checkOutlines` (M12, docs, live): Check Outlines
   - Guess: A fix of a file given by path is refused; the command line opens the source, fixes it and saves it, so the engine command only fixes the open document.
+  - Guess: `quiet` drops the results list and keeps the counts; the reference's quiet mode still prints how many glyphs it skipped, which the summary covers.
 - [ ] `audit.checkInterpolation` (M12, docs, live): Check Interpolation
   - Guess: `showAll` lists the glyphs without problems in `glyphsWithoutProblems` instead of one line per glyph as the reference prints; its JSON output would settle the shape.
 - [ ] `audit.compareFamily` (M12, docs, live): Check Family
   - Guess: The label is Check Family and the results go to the Font Audit panel, never to the Compare Family window, so the two features with similar names stay apart; the id stays for the command line (21-qa.md question 13).
+  - Guess: `reports` only adds the tables; the reference's -rm also turns on its menu-name checks, which run here whenever their test numbers are selected. Running the reference with and without -rm on our fonts would settle whether the checks should follow the option.
 - [ ] `audit.report.metrics` (M12, docs, live): Font Metrics Report
   - Guess: The underline thickness, which comparefamily does not print, is listed after the underline position and sorted the same way; the row's summary asks for it.
 - [ ] `audit.report.panose` (M12, docs, live): PANOSE Report

@@ -56,6 +56,19 @@ fn paths_only(cmds: &[String]) -> Vec<String> {
     cmds.iter().filter(|c| matches!(c.chars().next(), Some('M' | 'L' | 'C' | 'Z' | 'w'))).cloned().collect()
 }
 
+/// The width and the contours of `cmds`, in sorted order.
+fn contours(cmds: &[String]) -> Vec<Vec<String>> {
+    let mut out: Vec<Vec<String>> = vec![Vec::new()];
+    for c in paths_only(cmds) {
+        if c.starts_with('M') {
+            out.push(Vec::new());
+        }
+        out.last_mut().unwrap().push(c);
+    }
+    out[1..].sort();
+    out
+}
+
 fn square(x: f64, y: f64, size: f64) -> Vec<PathOp> {
     vec![PathOp::MoveTo((x, y)), PathOp::LineTo((x + size, y)), PathOp::LineTo((x + size, y + size)), PathOp::LineTo((x, y + size))]
 }
@@ -120,8 +133,10 @@ fn recompile_cff_draws_seac_out_keeps_outlines_and_subroutinises() {
     assert_eq!(old.len(), new.len());
     for (gid, (o, n)) in old.iter().zip(&new).enumerate() {
         if gid == 3 {
-            // The accent's hints go; its outline stays where seac put it.
-            assert_eq!(paths_only(o), paths_only(n), "glyph {gid}");
+            // The accent's hints go; its outline stays where seac put it. The reader draws an
+            // endchar seac's accent first, as FreeType does; the drawn-out glyph has the base
+            // first, as fontTools draws it.
+            assert_eq!(contours(o), contours(n), "glyph {gid}");
             assert!(n.iter().any(|c| c.starts_with('M')));
         } else {
             assert_eq!(o, n, "glyph {gid}");

@@ -437,8 +437,10 @@ fn audit_fix_on_a_file_recompiles_the_cff_table_without_unique_ids() {
         let bytes = fontcraft_tables::write(font, &WriteOptions { order: TableOrder::Keep }).unwrap();
         let f = skrifa::FontRef::new(&bytes).unwrap();
         let outlines = skrifa::MetadataProvider::outline_glyphs(&f);
-        (0..u32::from(u16::MAX))
-            .map_while(|g| outlines.get(skrifa::GlyphId::new(g)))
+        // `get` also answers past the last glyph, so the count comes from `maxp`.
+        let count = skrifa::raw::TableProvider::maxp(&f).unwrap().num_glyphs();
+        (0..u32::from(count))
+            .map(|g| outlines.get(skrifa::GlyphId::new(g)).unwrap())
             .map(|glyph| {
                 let mut pen = Pen::default();
                 glyph

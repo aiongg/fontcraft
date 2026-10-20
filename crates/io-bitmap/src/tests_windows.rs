@@ -66,8 +66,11 @@ fn ink(g: &BitmapGlyph) -> BTreeSet<(i32, i32)> {
     out
 }
 
+/// A glyph's code, advance and ink.
+type GlyphShape = (Option<u32>, i32, BTreeSet<(i32, i32)>);
+
 /// Code, advance and ink of every glyph, in code order.
-fn shapes(font: &BitmapFont) -> Vec<(Option<u32>, i32, BTreeSet<(i32, i32)>)> {
+fn shapes(font: &BitmapFont) -> Vec<GlyphShape> {
     let mut out: Vec<_> = font.glyphs.iter().map(|g| (g.encoding, g.advance, ink(g))).collect();
     out.sort_by_key(|(code, _, _)| *code);
     out

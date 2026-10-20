@@ -435,9 +435,12 @@ fn strikes_go_into_compiled_fonts_and_read_back_through_ttx() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
+/// A bitmap's glyph name, code, advance and lit pixels.
+type BitmapShape = (String, Option<u32>, i32, std::collections::BTreeSet<(i32, i32)>);
+
 /// Each bitmap of a strike by glyph name: its code, advance and lit pixels from the origin (x
 /// to the right, y up), so strikes whose bitmaps are boxed differently compare alike.
-fn shapes(strike: &BitmapStrike) -> Vec<(String, Option<u32>, i32, std::collections::BTreeSet<(i32, i32)>)> {
+fn shapes(strike: &BitmapStrike) -> Vec<BitmapShape> {
     let mut out: Vec<_> = strike
         .glyphs
         .iter()

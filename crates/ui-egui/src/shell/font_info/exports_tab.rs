@@ -648,7 +648,7 @@ fn preview(ui: &mut egui::Ui, tokens: &Tokens, font: &Font, index: usize, doc: O
     };
     let drawn: &Font = if master == view_master_id(index) {
         match view {
-            Some(Ok(view)) => &**view,
+            Some(Ok(view)) => view,
             Some(Err(e)) => return message(ui, &format!("The instance could not be interpolated: {e}")),
             None => return message(ui, "The instance could not be interpolated."),
         }

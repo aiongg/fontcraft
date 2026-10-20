@@ -1126,10 +1126,9 @@ fn kept_layouts_an_edit_made_stale_are_dropped_from_a_copy() {
     let text = V3
         .replace("unitsPerEm = 1000;", "numbers = ({name = gap;});\nunitsPerEm = 1000;")
         .replace("associatedMasterId = m01;\n", "associatedMasterId = m01;\nattr = {axisRules = ({min = 600;});};\n")
-        .replace("layerId = m01;\nshapes", "guides = ({pos = (100,0);});\nlayerId = m01;\nshapes");
+        .replace("layerId = m01;\nshapes", "attr = {axisRules = ({max = 400;});};\nlayerId = m01;\nshapes");
     let font = read(&text).unwrap();
     assert_eq!(keeps_layouts(&font), (true, true));
-    assert_eq!(font.glyph("A").unwrap().layers[0].info.guides.len(), 1);
     assert!(without_stale_layouts(&font).is_none(), "nothing is stale before an edit");
 
     // A font-level value: the numbers.
@@ -1139,9 +1138,9 @@ fn kept_layouts_an_edit_made_stale_are_dropped_from_a_copy() {
     assert_eq!(keeps_layouts(&pruned), (false, true), "the glyph's layouts still hold");
     assert_eq!(write(&pruned).unwrap(), write(&edited).unwrap());
 
-    // A layer's value: one guide more. The other layer's kept attributes stay.
+    // A layer's value: its axis rule. The other layer's kept attributes stay.
     let mut edited = font.clone();
-    edited.glyph_mut("A").unwrap().layers[0].info.guides.push(fontcraft_model::Guide { x: 200.0, ..Default::default() });
+    edited.glyph_mut("A").unwrap().layers[0].info.attrs.axis_rules[0].max = Some(500.0);
     let pruned = without_stale_layouts(&edited).unwrap();
     let layers = &pruned.glyph("A").unwrap().layers;
     assert!(!layers[0].extra.iter().any(|e| e.key.as_str().starts_with(LAYOUT_KEY)));
