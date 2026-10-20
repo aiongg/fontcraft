@@ -19,6 +19,10 @@
 //! paused for [`REBUILD_PAUSE`] seconds. Until a font is ready, and when it cannot be built, the
 //! text shows as laid out by code point, with the reason under the text.
 //!
+//! Vertical text goes through the same font for its substitutions only ([`VERTICAL_FEATURES`],
+//! `vert` among them), before its columns break; vertical widths, origins and kerning come from
+//! the model, a glyph without a vertical width taking the ascender minus the descender.
+//!
 //! | Control | Does |
 //! |---|---|
 //! | style pop-up | `textPreview.setStyle`: a master, an instance at a master's location, or the master of the showing tab |
@@ -45,7 +49,7 @@ use fontcraft_render::{Style, render_path};
 use fontcraft_spacing::kerning::KernIndex;
 use fontcraft_textlayout::{
     Charmap, Direction, Embedding, Item, KerningMode, LENGTH_RANGE, Layout, MAX_PREVIEW_ITEMS, Measure, Options, Placed, PreviewShaper, ShapedLine,
-    Text, WidthCache, bidi,
+    Shaping, Text, WidthCache, bidi, shaping::Tag,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
@@ -665,10 +669,15 @@ pub fn base_is_rtl(text: &str, direction: BaseDirection) -> bool {
     }
 }
 
+/// The features vertical text is shaped with: those a shaper applies to vertical text by default
+/// that substitute glyphs.
+pub const VERTICAL_FEATURES: [Tag; 4] = [Tag::new(b"ccmp"), Tag::new(b"locl"), Tag::new(b"rlig"), Tag::new(b"vert")];
+
 /// Lays the preview text out in `master`, lines wrapping at `line_width` font units at UAX #14
 /// break opportunities: one item per character, kerning on, measured through the preview font
-/// with `measure`, runs of the other direction and the ranges with their own direction ordered by
-/// `textlayout::bidi` within each line.
+/// with `measure` (in vertical text, substituted with [`VERTICAL_FEATURES`]), runs of the other
+/// direction and the ranges with their own direction ordered by `textlayout::bidi` within each
+/// line.
 pub fn lay_out(
     font: &Font,
     master: &str,
@@ -689,6 +698,8 @@ pub fn lay_out(
     };
     let line_width = line_width.clamp(*LENGTH_RANGE.start(), *LENGTH_RANGE.end());
     let embeddings: Vec<Embedding> = state.runs.iter().map(|r| Embedding { items: r.start..r.end, rtl: r.direction == BaseDirection::Rtl }).collect();
+    let vertical = direction == Direction::Vertical;
+    let shaping = measure.filter(|_| vertical).map(|m| Shaping { shaper: m.shaper, active: &VERTICAL_FEATURES, localized: None });
     let options = Options {
         direction,
         kerning: KerningMode::Kerning,
@@ -697,7 +708,8 @@ pub fn lay_out(
         bidi: true,
         embeddings: &embeddings,
         break_opportunities: true,
-        measure,
+        measure: measure.filter(|_| !vertical),
+        shaping,
         ..Options::default()
     };
     let layout = fontcraft_textlayout::layout(font, master, &text, &options).map_err(|e| e.to_string())?;
@@ -1182,7 +1194,7 @@ fn area(
     // The preview font, and the widths shaped through it that lines break on.
     let now = ui.input(|i| i.time);
     let font_key: FontKey = (doc.0, doc.1, master.to_string());
-    let shaper = if vertical { None } else { tp.cache.font.step(&font_key, now, session, ui.ctx()) };
+    let shaper = tp.cache.font.step(&font_key, now, session, ui.ctx());
     let shaper_id = shaper.as_ref().map(|s| Arc::as_ptr(s) as usize);
     match shaper_id {
         None => tp.cache.widths = None,
@@ -1231,7 +1243,7 @@ fn area(
         tp.cache.shaped.clear();
     }
 
-    let message = tp.cache.error.clone().or_else(|| if vertical { None } else { tp.cache.font.error(&font_key).map(str::to_string) });
+    let message = tp.cache.error.clone().or_else(|| tp.cache.font.error(&font_key).map(str::to_string));
     let mut drawn =
         Drawn { em: tp.size as f32, master: Some(master.to_string()), message, building: tp.cache.font.running.is_some(), ..Drawn::default() };
     let (Some(layout), Some(text)) = (tp.cache.layout.clone(), tp.cache.text.clone()) else {
@@ -1280,7 +1292,7 @@ fn area(
         // Shaping: the lines in view first, then up to a screen's worth more per frame from the
         // two screens around them.
         let mut shaping_error = None;
-        if let Some(shaper) = shaper.as_deref() {
+        if let Some(shaper) = shaper.as_deref().filter(|_| !vertical) {
             let page = last.saturating_sub(first).max(1);
             let around = first.saturating_sub(2 * page)..last.saturating_add(2 * page).min(layout.lines.len());
             if tp.cache.shaped.len() > MAX_SHAPED_LINES {
@@ -1356,7 +1368,9 @@ fn area(
                 drawn.current = whole;
             }
         }
-        drawn.shaped = (first..last).filter(|l| shaped.contains_key(l)).count();
+        // Vertical text is shaped with the layout.
+        drawn.shaped =
+            if vertical && shaper.is_some() { last.saturating_sub(first) } else { (first..last).filter(|l| shaped.contains_key(l)).count() };
         // Glyph outlines, filled into one texture of the area in view.
         let mut outline = BezPath::new();
         let mut add = |name: &str, x: f64, y: f64, drawn: &mut Drawn| {
@@ -1392,7 +1406,7 @@ fn area(
             }
         }
         if drawn.message.is_none() {
-            drawn.message = shaping_error;
+            drawn.message = shaping_error.or_else(|| layout.shaping_error.clone());
         }
         let mut th = std::collections::hash_map::DefaultHasher::new();
         (shaped_key, drawn.shaped, tp.cache.color.key()).hash(&mut th);

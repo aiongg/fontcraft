@@ -301,3 +301,23 @@ fn text_preview_wraps_a_long_line_at_word_boundaries_within_the_window() {
     let right = d.glyphs.iter().map(|(_, p)| p.x).fold(f32::MIN, f32::max);
     assert!(right < 1280.0, "{right}");
 }
+
+#[test]
+fn text_preview_shapes_vertical_text_with_vert_and_breaks_it_into_columns() {
+    let mut app = FontcraftApp::default();
+    exec(&mut app, "glyph.newGlyph", json!({"name": "A.vert", "unicodes": [], "width": 600}));
+    exec(&mut app, "font.features.addFeature", json!({"tag": "vert", "code": "sub A by A.vert;"}));
+    exec(&mut app, "window.textPreview", json!({}));
+    exec(&mut app, "textPreview.setLayoutOrientation", json!({"orientation": "vertical"}));
+    exec(&mut app, "textPreview.setText", json!({"text": "AB"}));
+    let w = Window::new();
+    let d = w.settle(&mut app);
+    assert_eq!(names(&d), ["A.vert", "B"], "vert applies in vertical text");
+    let (a, b) = (at(&d, "A.vert"), at(&d, "B"));
+    assert!(near(a.x, b.x) && a.y < b.y, "one column, top to bottom: {a:?} {b:?}");
+
+    exec(&mut app, "textPreview.setText", json!({"text": "AB ".repeat(200)}));
+    let d = w.settle(&mut app);
+    assert!(d.lines > 1, "the text breaks into columns: {}", d.lines);
+    assert!(names(&d).iter().all(|n| *n != "A"), "every A is substituted");
+}

@@ -1323,7 +1323,7 @@ milestone = "M5"
 summary = "Switches the Text Preview field between horizontal and vertical text layout. In the reference it is the Layout Orientation > Vertical entry of the field's context menu; the name of the horizontal entry is not given."
 ref = "Edit View › Entering Text › Text Preview"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Vertical text is shaped with `vert` through the preview font and breaks into columns at the window's height at UAX #14 opportunities (rows `textPreview.shaping`, `textPreview.lineBreaking`)."
 guesses = [
   "Vertical text runs in columns from right to left, with the vertical widths and origins Edit View uses; the reference app on our own vertical font would settle it.",
 ]
@@ -2480,11 +2480,11 @@ milestone = "M8"
 summary = "Text Preview shapes its text as an application would: every feature that a shaper turns on by default for the script applies, positioning features included, with the generated kerning and mark attachment of the master or instance shown."
 ref = "Edit View › Entering Text › Text Preview"
 status = "handbook"
-notes = "Documented, not yet observed. The reference uses the operating system's shaper; FontCraft uses its own (M8 planning pass, `docs/plans/M8.md` § 3): a full preview font of the shown master (`GSUB` and `GPOS`, generated kerning and marks included) built on a thread of its own, harfrust with the script's default features and no others, each run of one bidirectional level shaped in its own direction (`crates/textlayout/src/line_shape.rs`). Advances come live from the model. Lines break on widths shaped through the same font (row `textPreview.lineBreaking`), then the lines in view and up to two screens around them are shaped. Until the font is built, and when it cannot be built, the text is laid out by code point and the reason shows under it."
+notes = "Documented, not yet observed. The reference uses the operating system's shaper; FontCraft uses its own (M8 planning pass, `docs/plans/M8.md` § 3): a full preview font of the shown master (`GSUB` and `GPOS`, generated kerning and marks included) built on a thread of its own, harfrust with the script's default features and no others, each run of one bidirectional level shaped in its own direction (`crates/textlayout/src/line_shape.rs`). Advances come live from the model. Lines break on widths shaped through the same font (row `textPreview.lineBreaking`), then the lines in view and up to two screens around them are shaped. Vertical text goes through the same font for its substitutions (`vert` among them) before its columns break (`crates/ui-egui/src/shell/text_preview.rs`, `VERTICAL_FEATURES`). Until the font is built, and when it cannot be built, the text is laid out by code point and the reason shows under it."
 guesses = [
   "The preview's font is rebuilt from the current feature code, kerning and anchors after edits, once editing pauses for half a second, without pressing Compile; editing a feature without compiling while the reference app's Text Preview is open would settle it.",
   "Text is split into script runs by Script_Extensions, and characters without a script (Common, Inherited, unassigned and private-use) stay in the run around them, so a glyph typed by name is shaped with its neighbours; typing a glyph name between two letters that form a contextual substitution in the reference app would settle it.",
-  "Vertical text is not shaped: it is laid out by code point with the vertical widths and origins; vertical text with a `vert` feature in the reference app would settle it.",
+  "Vertical text is shaped for its substitutions only, with `ccmp`, `locl`, `rlig` and `vert` (not `vrt2`), as a shaper does for vertical text by default; vertical widths, origins and kerning come from the model, a glyph without a vertical width taking the ascender minus the descender. Vertical text with `vert` and `vrt2` features and vertical positioning in the reference app would settle it.",
   "While a new font is built, the text stays shaped with the last font built for the same master; when the feature code does not compile, the text is laid out by code point with the compiler's message under it. Breaking a feature in the reference app while Text Preview is open would settle what it shows.",
 ]
 observe = [
