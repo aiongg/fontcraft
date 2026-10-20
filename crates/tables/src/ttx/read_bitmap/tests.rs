@@ -224,3 +224,88 @@ fn a_huge_fixed_image_size_is_refused_before_it_is_allocated() {
         assert!(err.to_string().contains("image size") || err.to_string().contains("bitmap data table"), "{err}");
     }
 }
+
+// ---------- M12.7f: the writer's image forms ----------
+
+use crate::ttx::{BitmapForm, dump_with_images};
+
+/// What `ttx -z row`, `-z bitwise` and `-z extfile` write of the data tables of the fonts
+/// fontTools compiles from `forms_row.ttx`, `bitmap.ttx` and `cbdt.ttx`
+/// (`testdata/oracle.py writer`).
+const WRITER_ROW: &str = include_str!("testdata/writer_row.txt");
+const WRITER_BITWISE: &str = include_str!("testdata/writer_bitwise.txt");
+const WRITER_EXTFILE: &str = include_str!("testdata/writer_extfile.txt");
+const WRITER_FILES: &str = include_str!("testdata/writer_extfile_files.txt");
+
+/// The sources of the writer cases: the file name the oracle gives, its text, and the data
+/// tables written.
+const WRITER_SOURCES: [(&str, &str, &[Tag]); 3] =
+    [("forms_row.ttx", FORMS_ROW.0, &[*b"EBDT"]), ("bitmap.ttx", BITMAP.0, &[*b"EBDT", *b"bdat"]), ("cbdt.ttx", CBDT.0, &[*b"CBDT"])];
+
+/// The table element `tag` of `source` in an oracle file.
+fn oracle_block(file: &str, source: &str, tag: Tag) -> Option<String> {
+    let header = format!("== {source} {}\n", String::from_utf8_lossy(&tag));
+    let start = file.find(&header)? + header.len();
+    let end = file[start..].find("\n== ").map_or(file.len(), |i| start + i);
+    Some(file[start..end].to_string())
+}
+
+fn form_options(tags: &[Tag], form: BitmapForm) -> DumpOptions {
+    DumpOptions { tables: tags.to_vec(), strict: true, bitmap_form: form, ..DumpOptions::default() }
+}
+
+#[test]
+fn bitmap_images_are_written_in_each_form_as_ttx_writes_them() {
+    for (form, oracle) in [(BitmapForm::Row, WRITER_ROW), (BitmapForm::Bitwise, WRITER_BITWISE), (BitmapForm::ExtFile, WRITER_EXTFILE)] {
+        for (source, text, tags) in WRITER_SOURCES {
+            let font = import(SfntFont::new(Flavour::TrueType), text, &ImportOptions::default()).unwrap();
+            let (ours, images) = dump_with_images(&font, &form_options(tags, form)).unwrap();
+            let mut checked = 0;
+            for tag in tags {
+                // fontTools fails on colour images in the bitwise form; they are written raw.
+                let Some(want) = oracle_block(oracle, source, *tag) else { continue };
+                assert_eq!(strip_comments(&block(&ours, *tag)), strip_comments(&want), "{form:?} {source} {}", String::from_utf8_lossy(tag));
+                checked += 1;
+            }
+            assert!(checked > 0 || (form == BitmapForm::Bitwise && source == "cbdt.ttx"), "{form:?} {source}");
+            if form != BitmapForm::ExtFile {
+                assert!(images.is_empty());
+                continue;
+            }
+            // A later table's image replaces an earlier one at the same path, as in ttx.
+            let mut ours: Vec<(String, String)> = Vec::new();
+            for image in images {
+                let bytes = image.bytes.iter().map(|b| format!("{b:02x}")).collect::<String>();
+                ours.retain(|(p, _)| *p != image.path);
+                ours.push((image.path, bytes));
+            }
+            ours.sort();
+            let mut want: Vec<(String, String)> = WRITER_FILES
+                .lines()
+                .filter_map(|l| l.strip_prefix(source)?.strip_prefix(' ')?.split_once(' '))
+                .map(|(p, b)| (p.to_string(), b.to_string()))
+                .collect();
+            want.sort();
+            assert_eq!(ours, want, "{source}");
+        }
+    }
+    let font = import(SfntFont::new(Flavour::TrueType), BITMAP.0, &ImportOptions::default()).unwrap();
+    let err = dump(&font, &form_options(&[*b"EBDT"], BitmapForm::ExtFile)).unwrap_err();
+    assert!(err.to_string().contains("files of their own"), "{err}");
+}
+
+#[test]
+fn bitmap_images_written_as_rows_read_back_unchanged() {
+    // The row form keeps every pixel; the bitwise form keeps those of one-bit strikes.
+    for (form, (text, _)) in [(BitmapForm::Row, FORMS_ROW), (BitmapForm::Row, BITMAP), (BitmapForm::Bitwise, BITMAP)] {
+        let font = import(SfntFont::new(Flavour::TrueType), text, &ImportOptions::default()).unwrap();
+        let tags = [*b"EBDT", *b"EBLC"];
+        let first = dump(&font, &form_options(&tags, form)).unwrap();
+        // Imported into the font, whose `post` names the glyphs, as `ttx -m` would.
+        let back = import(font.clone(), &first, &ImportOptions::default()).unwrap();
+        assert_eq!(dump(&back, &form_options(&tags, form)).unwrap(), first, "{form:?}");
+        if form == BitmapForm::Row && text == FORMS_ROW.0 {
+            assert_eq!(back.get(*b"EBDT"), font.get(*b"EBDT"));
+        }
+    }
+}

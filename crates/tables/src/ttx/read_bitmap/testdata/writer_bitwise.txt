@@ -1,0 +1,337 @@
+== forms_row.ttx EBDT
+  <EBDT>
+    <header version="2.0"/>
+    <strikedata index="0">
+      <ebdt_bitmap_format_2 name="A">
+        <SmallGlyphMetrics>
+          <height value="3"/>
+          <width value="3"/>
+          <BearingX value="0"/>
+          <BearingY value="3"/>
+          <Advance value="4"/>
+        </SmallGlyphMetrics>
+        <bitwiseimagedata bitDepth="2" height="3" width="3">
+          <row value="@.@"/>
+          <row value="@.@"/>
+          <row value="@.@"/>
+        </bitwiseimagedata>
+      </ebdt_bitmap_format_2>
+      <ebdt_bitmap_format_7 name="B">
+        <BigGlyphMetrics>
+          <height value="2"/>
+          <width value="5"/>
+          <horiBearingX value="0"/>
+          <horiBearingY value="2"/>
+          <horiAdvance value="6"/>
+          <vertBearingX value="-1"/>
+          <vertBearingY value="0"/>
+          <vertAdvance value="3"/>
+        </BigGlyphMetrics>
+        <bitwiseimagedata bitDepth="2" height="2" width="5">
+          <row value="@..@@"/>
+          <row value="@...."/>
+        </bitwiseimagedata>
+      </ebdt_bitmap_format_7>
+      <ebdt_bitmap_format_6 name="C">
+        <BigGlyphMetrics>
+          <height value="2"/>
+          <width value="3"/>
+          <horiBearingX value="0"/>
+          <horiBearingY value="2"/>
+          <horiAdvance value="4"/>
+          <vertBearingX value="-1"/>
+          <vertBearingY value="0"/>
+          <vertAdvance value="3"/>
+        </BigGlyphMetrics>
+        <bitwiseimagedata bitDepth="2" height="2" width="3">
+          <row value="@@@"/>
+          <row value="..."/>
+        </bitwiseimagedata>
+      </ebdt_bitmap_format_6>
+    </strikedata>
+    <strikedata index="1">
+      <ebdt_bitmap_format_5 name="A">
+        <bitwiseimagedata bitDepth="4" height="2" width="3">
+          <row value="..."/>
+          <row value="@.."/>
+        </bitwiseimagedata>
+      </ebdt_bitmap_format_5>
+      <ebdt_bitmap_format_5 name="B">
+        <bitwiseimagedata bitDepth="4" height="2" width="3">
+          <row value="@.@"/>
+          <row value=".@."/>
+        </bitwiseimagedata>
+      </ebdt_bitmap_format_5>
+      <ebdt_bitmap_format_1 name="C">
+        <SmallGlyphMetrics>
+          <height value="2"/>
+          <width value="3"/>
+          <BearingX value="0"/>
+          <BearingY value="2"/>
+          <Advance value="4"/>
+        </SmallGlyphMetrics>
+        <bitwiseimagedata bitDepth="4" height="2" width="3">
+          <row value="@@@"/>
+          <row value="@.@"/>
+        </bitwiseimagedata>
+      </ebdt_bitmap_format_1>
+    </strikedata>
+    <strikedata index="2">
+      <ebdt_bitmap_format_7 name=".notdef">
+        <BigGlyphMetrics>
+          <height value="3"/>
+          <width value="5"/>
+          <horiBearingX value="0"/>
+          <horiBearingY value="3"/>
+          <horiAdvance value="6"/>
+          <vertBearingX value="-1"/>
+          <vertBearingY value="0"/>
+          <vertAdvance value="4"/>
+        </BigGlyphMetrics>
+        <bitwiseimagedata bitDepth="1" height="3" width="5">
+          <row value="@.@.."/>
+          <row value="@.@@@"/>
+          <row value="@@..@"/>
+        </bitwiseimagedata>
+      </ebdt_bitmap_format_7>
+      <ebdt_bitmap_format_2 name="A">
+        <SmallGlyphMetrics>
+          <height value="2"/>
+          <width value="9"/>
+          <BearingX value="0"/>
+          <BearingY value="2"/>
+          <Advance value="10"/>
+        </SmallGlyphMetrics>
+        <bitwiseimagedata bitDepth="1" height="2" width="9">
+          <row value="@@@@@@@@@"/>
+          <row value=".......@@"/>
+        </bitwiseimagedata>
+      </ebdt_bitmap_format_2>
+    </strikedata>
+  </EBDT>
+== bitmap.ttx EBDT
+  <EBDT>
+    <header version="2.0"/>
+    <strikedata index="0">
+      <ebdt_bitmap_format_1 name="A">
+        <SmallGlyphMetrics>
+          <height value="3"/>
+          <width value="3"/>
+          <BearingX value="0"/>
+          <BearingY value="3"/>
+          <Advance value="4"/>
+        </SmallGlyphMetrics>
+        <bitwiseimagedata bitDepth="1" height="3" width="3">
+          <row value="@@@"/>
+          <row value="@.."/>
+          <row value=""/>
+        </bitwiseimagedata>
+      </ebdt_bitmap_format_1>
+      <ebdt_bitmap_format_1 name="C">
+        <SmallGlyphMetrics>
+          <height value="1"/>
+          <width value="8"/>
+          <BearingX value="-1"/>
+          <BearingY value="1"/>
+          <Advance value="9"/>
+        </SmallGlyphMetrics>
+        <bitwiseimagedata bitDepth="1" height="1" width="8">
+          <row value="@@@@@@@@"/>
+        </bitwiseimagedata>
+      </ebdt_bitmap_format_1>
+    </strikedata>
+    <strikedata index="1">
+      <ebdt_bitmap_format_5 name="A">
+        <bitwiseimagedata bitDepth="1" height="2" width="8">
+          <row value="...@..@."/>
+          <row value="..@@.@.."/>
+        </bitwiseimagedata>
+      </ebdt_bitmap_format_5>
+      <ebdt_bitmap_format_5 name="B">
+        <bitwiseimagedata bitDepth="1" height="2" width="8">
+          <row value=".@.@.@@."/>
+          <row value=".@@@@..."/>
+        </bitwiseimagedata>
+      </ebdt_bitmap_format_5>
+      <ebdt_bitmap_format_6 name="C">
+        <BigGlyphMetrics>
+          <height value="1"/>
+          <width value="4"/>
+          <horiBearingX value="0"/>
+          <horiBearingY value="1"/>
+          <horiAdvance value="5"/>
+          <vertBearingX value="-2"/>
+          <vertBearingY value="0"/>
+          <vertAdvance value="2"/>
+        </BigGlyphMetrics>
+        <bitwiseimagedata bitDepth="1" height="1" width="4">
+          <row value="@@@@"/>
+        </bitwiseimagedata>
+      </ebdt_bitmap_format_6>
+    </strikedata>
+    <strikedata index="2">
+      <ebdt_bitmap_format_7 name=".notdef">
+        <BigGlyphMetrics>
+          <height value="5"/>
+          <width value="5"/>
+          <horiBearingX value="0"/>
+          <horiBearingY value="5"/>
+          <horiAdvance value="6"/>
+          <vertBearingX value="-2"/>
+          <vertBearingY value="0"/>
+          <vertAdvance value="6"/>
+        </BigGlyphMetrics>
+        <bitwiseimagedata bitDepth="1" height="5" width="5">
+          <row value="@@@@@"/>
+          <row value="@@@@@"/>
+          <row value="@@@@@"/>
+          <row value="@@@@@"/>
+          <row value="@@@@@"/>
+        </bitwiseimagedata>
+      </ebdt_bitmap_format_7>
+      <ebdt_bitmap_format_7 name="A">
+        <BigGlyphMetrics>
+          <height value="1"/>
+          <width value="3"/>
+          <horiBearingX value="1"/>
+          <horiBearingY value="1"/>
+          <horiAdvance value="4"/>
+          <vertBearingX value="-1"/>
+          <vertBearingY value="0"/>
+          <vertAdvance value="1"/>
+        </BigGlyphMetrics>
+        <bitwiseimagedata bitDepth="1" height="1" width="3">
+          <row value="@.@"/>
+        </bitwiseimagedata>
+      </ebdt_bitmap_format_7>
+      <ebdt_bitmap_format_7 name="B">
+        <BigGlyphMetrics>
+          <height value="2"/>
+          <width value="2"/>
+          <horiBearingX value="1"/>
+          <horiBearingY value="2"/>
+          <horiAdvance value="3"/>
+          <vertBearingX value="-1"/>
+          <vertBearingY value="-1"/>
+          <vertAdvance value="3"/>
+        </BigGlyphMetrics>
+        <bitwiseimagedata bitDepth="1" height="2" width="2">
+          <row value="@@"/>
+          <row value=".."/>
+        </bitwiseimagedata>
+      </ebdt_bitmap_format_7>
+    </strikedata>
+  </EBDT>
+== bitmap.ttx bdat
+  <bdat>
+    <header version="2.0"/>
+    <strikedata index="0">
+      <ebdt_bitmap_format_1 name="A">
+        <SmallGlyphMetrics>
+          <height value="3"/>
+          <width value="3"/>
+          <BearingX value="0"/>
+          <BearingY value="3"/>
+          <Advance value="4"/>
+        </SmallGlyphMetrics>
+        <bitwiseimagedata bitDepth="1" height="3" width="3">
+          <row value="@@@"/>
+          <row value="@.."/>
+          <row value=""/>
+        </bitwiseimagedata>
+      </ebdt_bitmap_format_1>
+      <ebdt_bitmap_format_1 name="C">
+        <SmallGlyphMetrics>
+          <height value="1"/>
+          <width value="8"/>
+          <BearingX value="-1"/>
+          <BearingY value="1"/>
+          <Advance value="9"/>
+        </SmallGlyphMetrics>
+        <bitwiseimagedata bitDepth="1" height="1" width="8">
+          <row value="@@@@@@@@"/>
+        </bitwiseimagedata>
+      </ebdt_bitmap_format_1>
+    </strikedata>
+    <strikedata index="1">
+      <ebdt_bitmap_format_5 name="A">
+        <bitwiseimagedata bitDepth="1" height="2" width="8">
+          <row value="...@..@."/>
+          <row value="..@@.@.."/>
+        </bitwiseimagedata>
+      </ebdt_bitmap_format_5>
+      <ebdt_bitmap_format_5 name="B">
+        <bitwiseimagedata bitDepth="1" height="2" width="8">
+          <row value=".@.@.@@."/>
+          <row value=".@@@@..."/>
+        </bitwiseimagedata>
+      </ebdt_bitmap_format_5>
+      <ebdt_bitmap_format_6 name="C">
+        <BigGlyphMetrics>
+          <height value="1"/>
+          <width value="4"/>
+          <horiBearingX value="0"/>
+          <horiBearingY value="1"/>
+          <horiAdvance value="5"/>
+          <vertBearingX value="-2"/>
+          <vertBearingY value="0"/>
+          <vertAdvance value="2"/>
+        </BigGlyphMetrics>
+        <bitwiseimagedata bitDepth="1" height="1" width="4">
+          <row value="@@@@"/>
+        </bitwiseimagedata>
+      </ebdt_bitmap_format_6>
+    </strikedata>
+    <strikedata index="2">
+      <ebdt_bitmap_format_7 name=".notdef">
+        <BigGlyphMetrics>
+          <height value="5"/>
+          <width value="5"/>
+          <horiBearingX value="0"/>
+          <horiBearingY value="5"/>
+          <horiAdvance value="6"/>
+          <vertBearingX value="-2"/>
+          <vertBearingY value="0"/>
+          <vertAdvance value="6"/>
+        </BigGlyphMetrics>
+        <bitwiseimagedata bitDepth="1" height="5" width="5">
+          <row value="@@@@@"/>
+          <row value="@@@@@"/>
+          <row value="@@@@@"/>
+          <row value="@@@@@"/>
+          <row value="@@@@@"/>
+        </bitwiseimagedata>
+      </ebdt_bitmap_format_7>
+      <ebdt_bitmap_format_7 name="A">
+        <BigGlyphMetrics>
+          <height value="1"/>
+          <width value="3"/>
+          <horiBearingX value="1"/>
+          <horiBearingY value="1"/>
+          <horiAdvance value="4"/>
+          <vertBearingX value="-1"/>
+          <vertBearingY value="0"/>
+          <vertAdvance value="1"/>
+        </BigGlyphMetrics>
+        <bitwiseimagedata bitDepth="1" height="1" width="3">
+          <row value="@.@"/>
+        </bitwiseimagedata>
+      </ebdt_bitmap_format_7>
+      <ebdt_bitmap_format_7 name="B">
+        <BigGlyphMetrics>
+          <height value="2"/>
+          <width value="2"/>
+          <horiBearingX value="1"/>
+          <horiBearingY value="2"/>
+          <horiAdvance value="3"/>
+          <vertBearingX value="-1"/>
+          <vertBearingY value="-1"/>
+          <vertAdvance value="3"/>
+        </BigGlyphMetrics>
+        <bitwiseimagedata bitDepth="1" height="2" width="2">
+          <row value="@@"/>
+          <row value=".."/>
+        </bitwiseimagedata>
+      </ebdt_bitmap_format_7>
+    </strikedata>
+  </bdat>

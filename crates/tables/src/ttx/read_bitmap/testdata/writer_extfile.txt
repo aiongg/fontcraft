@@ -1,0 +1,308 @@
+== forms_row.ttx EBDT
+  <EBDT>
+    <header version="2.0"/>
+    <strikedata index="0">
+      <ebdt_bitmap_format_2 name="A">
+        <SmallGlyphMetrics>
+          <height value="3"/>
+          <width value="3"/>
+          <BearingX value="0"/>
+          <BearingY value="3"/>
+          <Advance value="4"/>
+        </SmallGlyphMetrics>
+        <extfileimagedata value="bitmaps/strike0/A.bin"/>
+      </ebdt_bitmap_format_2>
+      <ebdt_bitmap_format_7 name="B">
+        <BigGlyphMetrics>
+          <height value="2"/>
+          <width value="5"/>
+          <horiBearingX value="0"/>
+          <horiBearingY value="2"/>
+          <horiAdvance value="6"/>
+          <vertBearingX value="-1"/>
+          <vertBearingY value="0"/>
+          <vertAdvance value="3"/>
+        </BigGlyphMetrics>
+        <extfileimagedata value="bitmaps/strike0/B.bin"/>
+      </ebdt_bitmap_format_7>
+      <ebdt_bitmap_format_6 name="C">
+        <BigGlyphMetrics>
+          <height value="2"/>
+          <width value="3"/>
+          <horiBearingX value="0"/>
+          <horiBearingY value="2"/>
+          <horiAdvance value="4"/>
+          <vertBearingX value="-1"/>
+          <vertBearingY value="0"/>
+          <vertAdvance value="3"/>
+        </BigGlyphMetrics>
+        <extfileimagedata value="bitmaps/strike0/C.bin"/>
+      </ebdt_bitmap_format_6>
+    </strikedata>
+    <strikedata index="1">
+      <ebdt_bitmap_format_5 name="A">
+        <extfileimagedata value="bitmaps/strike1/A.bin"/>
+      </ebdt_bitmap_format_5>
+      <ebdt_bitmap_format_5 name="B">
+        <extfileimagedata value="bitmaps/strike1/B.bin"/>
+      </ebdt_bitmap_format_5>
+      <ebdt_bitmap_format_1 name="C">
+        <SmallGlyphMetrics>
+          <height value="2"/>
+          <width value="3"/>
+          <BearingX value="0"/>
+          <BearingY value="2"/>
+          <Advance value="4"/>
+        </SmallGlyphMetrics>
+        <extfileimagedata value="bitmaps/strike1/C.bin"/>
+      </ebdt_bitmap_format_1>
+    </strikedata>
+    <strikedata index="2">
+      <ebdt_bitmap_format_7 name=".notdef">
+        <BigGlyphMetrics>
+          <height value="3"/>
+          <width value="5"/>
+          <horiBearingX value="0"/>
+          <horiBearingY value="3"/>
+          <horiAdvance value="6"/>
+          <vertBearingX value="-1"/>
+          <vertBearingY value="0"/>
+          <vertAdvance value="4"/>
+        </BigGlyphMetrics>
+        <extfileimagedata value="bitmaps/strike2/.notdef.bin"/>
+      </ebdt_bitmap_format_7>
+      <ebdt_bitmap_format_2 name="A">
+        <SmallGlyphMetrics>
+          <height value="2"/>
+          <width value="9"/>
+          <BearingX value="0"/>
+          <BearingY value="2"/>
+          <Advance value="10"/>
+        </SmallGlyphMetrics>
+        <extfileimagedata value="bitmaps/strike2/A.bin"/>
+      </ebdt_bitmap_format_2>
+    </strikedata>
+  </EBDT>
+== bitmap.ttx EBDT
+  <EBDT>
+    <header version="2.0"/>
+    <strikedata index="0">
+      <ebdt_bitmap_format_1 name="A">
+        <SmallGlyphMetrics>
+          <height value="3"/>
+          <width value="3"/>
+          <BearingX value="0"/>
+          <BearingY value="3"/>
+          <Advance value="4"/>
+        </SmallGlyphMetrics>
+        <extfileimagedata value="bitmaps/strike0/A.bin"/>
+      </ebdt_bitmap_format_1>
+      <ebdt_bitmap_format_1 name="C">
+        <SmallGlyphMetrics>
+          <height value="1"/>
+          <width value="8"/>
+          <BearingX value="-1"/>
+          <BearingY value="1"/>
+          <Advance value="9"/>
+        </SmallGlyphMetrics>
+        <extfileimagedata value="bitmaps/strike0/C.bin"/>
+      </ebdt_bitmap_format_1>
+    </strikedata>
+    <strikedata index="1">
+      <ebdt_bitmap_format_5 name="A">
+        <extfileimagedata value="bitmaps/strike1/A.bin"/>
+      </ebdt_bitmap_format_5>
+      <ebdt_bitmap_format_5 name="B">
+        <extfileimagedata value="bitmaps/strike1/B.bin"/>
+      </ebdt_bitmap_format_5>
+      <ebdt_bitmap_format_6 name="C">
+        <BigGlyphMetrics>
+          <height value="1"/>
+          <width value="4"/>
+          <horiBearingX value="0"/>
+          <horiBearingY value="1"/>
+          <horiAdvance value="5"/>
+          <vertBearingX value="-2"/>
+          <vertBearingY value="0"/>
+          <vertAdvance value="2"/>
+        </BigGlyphMetrics>
+        <extfileimagedata value="bitmaps/strike1/C.bin"/>
+      </ebdt_bitmap_format_6>
+    </strikedata>
+    <strikedata index="2">
+      <ebdt_bitmap_format_7 name=".notdef">
+        <BigGlyphMetrics>
+          <height value="5"/>
+          <width value="5"/>
+          <horiBearingX value="0"/>
+          <horiBearingY value="5"/>
+          <horiAdvance value="6"/>
+          <vertBearingX value="-2"/>
+          <vertBearingY value="0"/>
+          <vertAdvance value="6"/>
+        </BigGlyphMetrics>
+        <extfileimagedata value="bitmaps/strike2/.notdef.bin"/>
+      </ebdt_bitmap_format_7>
+      <ebdt_bitmap_format_7 name="A">
+        <BigGlyphMetrics>
+          <height value="1"/>
+          <width value="3"/>
+          <horiBearingX value="1"/>
+          <horiBearingY value="1"/>
+          <horiAdvance value="4"/>
+          <vertBearingX value="-1"/>
+          <vertBearingY value="0"/>
+          <vertAdvance value="1"/>
+        </BigGlyphMetrics>
+        <extfileimagedata value="bitmaps/strike2/A.bin"/>
+      </ebdt_bitmap_format_7>
+      <ebdt_bitmap_format_7 name="B">
+        <BigGlyphMetrics>
+          <height value="2"/>
+          <width value="2"/>
+          <horiBearingX value="1"/>
+          <horiBearingY value="2"/>
+          <horiAdvance value="3"/>
+          <vertBearingX value="-1"/>
+          <vertBearingY value="-1"/>
+          <vertAdvance value="3"/>
+        </BigGlyphMetrics>
+        <extfileimagedata value="bitmaps/strike2/B.bin"/>
+      </ebdt_bitmap_format_7>
+    </strikedata>
+  </EBDT>
+== bitmap.ttx bdat
+  <bdat>
+    <header version="2.0"/>
+    <strikedata index="0">
+      <ebdt_bitmap_format_1 name="A">
+        <SmallGlyphMetrics>
+          <height value="3"/>
+          <width value="3"/>
+          <BearingX value="0"/>
+          <BearingY value="3"/>
+          <Advance value="4"/>
+        </SmallGlyphMetrics>
+        <extfileimagedata value="bitmaps/strike0/A.bin"/>
+      </ebdt_bitmap_format_1>
+      <ebdt_bitmap_format_1 name="C">
+        <SmallGlyphMetrics>
+          <height value="1"/>
+          <width value="8"/>
+          <BearingX value="-1"/>
+          <BearingY value="1"/>
+          <Advance value="9"/>
+        </SmallGlyphMetrics>
+        <extfileimagedata value="bitmaps/strike0/C.bin"/>
+      </ebdt_bitmap_format_1>
+    </strikedata>
+    <strikedata index="1">
+      <ebdt_bitmap_format_5 name="A">
+        <extfileimagedata value="bitmaps/strike1/A.bin"/>
+      </ebdt_bitmap_format_5>
+      <ebdt_bitmap_format_5 name="B">
+        <extfileimagedata value="bitmaps/strike1/B.bin"/>
+      </ebdt_bitmap_format_5>
+      <ebdt_bitmap_format_6 name="C">
+        <BigGlyphMetrics>
+          <height value="1"/>
+          <width value="4"/>
+          <horiBearingX value="0"/>
+          <horiBearingY value="1"/>
+          <horiAdvance value="5"/>
+          <vertBearingX value="-2"/>
+          <vertBearingY value="0"/>
+          <vertAdvance value="2"/>
+        </BigGlyphMetrics>
+        <extfileimagedata value="bitmaps/strike1/C.bin"/>
+      </ebdt_bitmap_format_6>
+    </strikedata>
+    <strikedata index="2">
+      <ebdt_bitmap_format_7 name=".notdef">
+        <BigGlyphMetrics>
+          <height value="5"/>
+          <width value="5"/>
+          <horiBearingX value="0"/>
+          <horiBearingY value="5"/>
+          <horiAdvance value="6"/>
+          <vertBearingX value="-2"/>
+          <vertBearingY value="0"/>
+          <vertAdvance value="6"/>
+        </BigGlyphMetrics>
+        <extfileimagedata value="bitmaps/strike2/.notdef.bin"/>
+      </ebdt_bitmap_format_7>
+      <ebdt_bitmap_format_7 name="A">
+        <BigGlyphMetrics>
+          <height value="1"/>
+          <width value="3"/>
+          <horiBearingX value="1"/>
+          <horiBearingY value="1"/>
+          <horiAdvance value="4"/>
+          <vertBearingX value="-1"/>
+          <vertBearingY value="0"/>
+          <vertAdvance value="1"/>
+        </BigGlyphMetrics>
+        <extfileimagedata value="bitmaps/strike2/A.bin"/>
+      </ebdt_bitmap_format_7>
+      <ebdt_bitmap_format_7 name="B">
+        <BigGlyphMetrics>
+          <height value="2"/>
+          <width value="2"/>
+          <horiBearingX value="1"/>
+          <horiBearingY value="2"/>
+          <horiAdvance value="3"/>
+          <vertBearingX value="-1"/>
+          <vertBearingY value="-1"/>
+          <vertAdvance value="3"/>
+        </BigGlyphMetrics>
+        <extfileimagedata value="bitmaps/strike2/B.bin"/>
+      </ebdt_bitmap_format_7>
+    </strikedata>
+  </bdat>
+== cbdt.ttx CBDT
+  <CBDT>
+    <header version="3.0"/>
+    <strikedata index="0">
+      <cbdt_bitmap_format_17 name="A">
+        <SmallGlyphMetrics>
+          <height value="4"/>
+          <width value="4"/>
+          <BearingX value="0"/>
+          <BearingY value="4"/>
+          <Advance value="5"/>
+        </SmallGlyphMetrics>
+        <extfileimagedata value="bitmaps/strike0/A.png"/>
+      </cbdt_bitmap_format_17>
+      <cbdt_bitmap_format_18 name="B">
+        <BigGlyphMetrics>
+          <height value="4"/>
+          <width value="4"/>
+          <horiBearingX value="0"/>
+          <horiBearingY value="4"/>
+          <horiAdvance value="5"/>
+          <vertBearingX value="-2"/>
+          <vertBearingY value="0"/>
+          <vertAdvance value="5"/>
+        </BigGlyphMetrics>
+        <extfileimagedata value="bitmaps/strike0/B.png"/>
+      </cbdt_bitmap_format_18>
+    </strikedata>
+    <strikedata index="1">
+      <cbdt_bitmap_format_19 name="A">
+        <extfileimagedata value="bitmaps/strike1/A.png"/>
+      </cbdt_bitmap_format_19>
+      <cbdt_bitmap_format_19 name="C">
+        <extfileimagedata value="bitmaps/strike1/C.png"/>
+      </cbdt_bitmap_format_19>
+      <ebdt_bitmap_format_1 name="B">
+        <SmallGlyphMetrics>
+          <height value="1"/>
+          <width value="1"/>
+          <BearingX value="0"/>
+          <BearingY value="1"/>
+          <Advance value="2"/>
+        </SmallGlyphMetrics>
+        <extfileimagedata value="bitmaps/strike1/B.bin"/>
+      </ebdt_bitmap_format_1>
+    </strikedata>
+  </CBDT>

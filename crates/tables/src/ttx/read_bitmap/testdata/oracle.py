@@ -14,12 +14,21 @@ case that fontTools compiles from `<name>.ttx`, one table a line.
 
 `python -I oracle.py forms` writes only the M12.7e cases, `forms_row` and `forms_bitwise`:
 bitmap tables of bit depths 1, 2 and 4 whose images `ttx -z row` and `ttx -z bitwise` write.
+
+`python -I oracle.py writer` writes the M12.7f writer cases: fontTools compiles `forms_row.ttx`,
+`bitmap.ttx` and `cbdt.ttx` and writes their bitmap data tables with `ttx -z row`, `-z bitwise`
+(not `cbdt.ttx`: fontTools fails on colour images in that form) and `-z extfile`, run in the
+folder of the dump so the image paths are relative to it. `writer_<form>.txt` holds each table
+element after a line `== <source> <tag>`; `writer_extfile_files.txt` lists each image file
+written, as `<source> <path> <hex of its bytes>`.
 """
 
 import hashlib
 import io
+import os
 import re
 import sys
+import tempfile
 from pathlib import Path
 
 from fontTools.fontBuilder import FontBuilder
@@ -212,7 +221,43 @@ def case(out_dir, name, text, tags, image_form="raw"):
     (out_dir / f"{name}.digest").write_text("".join(lines), encoding="utf-8")
 
 
+WRITER_CASES = [("forms_row.ttx", ["EBDT"]), ("bitmap.ttx", ["EBDT", "bdat"]), ("cbdt.ttx", ["CBDT"])]
+
+
+def writer_cases():
+    files = []
+    for form in ["row", "bitwise", "extfile"]:
+        out = []
+        for source, tags in WRITER_CASES:
+            if form == "bitwise" and source == "cbdt.ttx":
+                continue
+            font = TTFont()
+            font.importXML(str(HERE / source))
+            data = io.BytesIO()
+            font.save(data)
+            back = TTFont(io.BytesIO(data.getvalue()))
+            home = os.getcwd()
+            with tempfile.TemporaryDirectory() as tmp:
+                os.chdir(tmp)
+                try:
+                    back.saveXML("dump.ttx", tables=tags, newlinestr="\n", bitmapGlyphDataFormat=form)
+                    text = Path("dump.ttx").read_text(encoding="utf-8")
+                    for path in sorted(Path(".").rglob("*")):
+                        if path.is_file() and path.name != "dump.ttx":
+                            files.append(f"{source} {path.as_posix()} {path.read_bytes().hex()}\n")
+                finally:
+                    os.chdir(home)
+            for tag in tags:
+                m = re.search(rf"\n  <{tag}>\n.*?\n  </{tag}>\n", text, flags=re.S)
+                out.append(f"== {source} {tag}\n" + m.group(0)[1:])
+        (HERE / f"writer_{form}.txt").write_text("".join(out), encoding="utf-8")
+    (HERE / "writer_extfile_files.txt").write_text("".join(files), encoding="utf-8")
+
+
 def main():
+    if sys.argv[1:] == ["writer"]:
+        writer_cases()
+        return
     if sys.argv[1:] == ["forms"]:
         for form in ["row", "bitwise"]:
             case(OUT["bitmap"], f"forms_{form}", forms_tables(), ["EBDT", "EBLC"], form)

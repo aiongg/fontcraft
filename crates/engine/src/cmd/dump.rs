@@ -19,7 +19,7 @@ fn ttx_specs() -> Vec<CommandSpec> {
         "Dump Tables",
         [],
         None,
-        "{font: path, face?: number, tables?: [tag | {tag, view?}], excludeTables?: [tag], format?: \"ttx\"|\"json\"|\"hex\"|\"text\", split?: \"tables\"|\"glyphs\", output?: path, outputDir?: path, noClobber?: bool, disassemble?: bool, strict?: bool, newline?: \"lf\"|\"cr\"|\"crlf\", normalize?: bool, version?: bool, hints?: bool, showExtensions?: bool, glyphs?: [name] | string, glyphDetail?: \"short\"|\"medium\"|\"long\"} the tables of a compiled font, collection face, WOFF or WOFF2 file as TTX (the XML of the reference dump tool), the same tree as JSON, or hex; tables that cannot be read are written as hex unless strict; tables leaves the glyph order out; split writes one file per table beside the main file (glyphs also one file per glyph outline). Text views: a table with a view ({tag: \"GPOS\", view: \"fea\"|\"normalized\"}), the pseudo-tables @font (the font program's DICTs) and @glyphs (index, name, encoding and, with glyphDetail medium or long, the path with hints unless hints is false), written as text. normalize writes the normalised dump: tables sorted, values that always differ zeroed, outlines as text paths, GSUB and GPOS as rules (version false also blanks the version fields, showExtensions marks extension lookups) → {format, text} or {format, json} without an output, {format, paths} with one",
+        "{font: path, face?: number, tables?: [tag | {tag, view?}], excludeTables?: [tag], format?: \"ttx\"|\"json\"|\"hex\"|\"text\", split?: \"tables\"|\"glyphs\", output?: path, outputDir?: path, noClobber?: bool, disassemble?: bool, bitmapFormat?: \"raw\"|\"row\"|\"bitwise\"|\"extfile\", strict?: bool, newline?: \"lf\"|\"cr\"|\"crlf\", normalize?: bool, version?: bool, hints?: bool, showExtensions?: bool, glyphs?: [name] | string, glyphDetail?: \"short\"|\"medium\"|\"long\"} the tables of a compiled font, collection face, WOFF or WOFF2 file as TTX (the XML of the reference dump tool), the same tree as JSON, or hex; tables that cannot be read are written as hex unless strict; tables leaves the glyph order out; split writes one file per table beside the main file (glyphs also one file per glyph outline); bitmapFormat writes bitmap images as hex (raw, the default), hex per pixel row (row), a character per pixel (bitwise) or one file each under bitmaps/strikeN/ beside the dump (extfile, TTX with an output only; every file is written or none). Text views: a table with a view ({tag: \"GPOS\", view: \"fea\"|\"normalized\"}), the pseudo-tables @font (the font program's DICTs) and @glyphs (index, name, encoding and, with glyphDetail medium or long, the path with hints unless hints is false), written as text. normalize writes the normalised dump: tables sorted, values that always differ zeroed, outlines as text paths, GSUB and GPOS as rules (version false also blanks the version fields, showExtensions marks extension lookups) → {format, text} or {format, json} without an output, {format, paths, images} with one (images: how many bitmap images extfile wrote to files)",
         super::always,
         ttx::run
     ).files(const { &[FileParam::read("font"), FileParam::write("output"), FileParam::write("outputDir")] }).writes_files()]
@@ -29,7 +29,7 @@ mod ttx {
     use std::path::{Path, PathBuf};
 
     use fontcraft_tables::sfnt::parse_tag;
-    use fontcraft_tables::ttx::{DumpFormat, DumpOptions, dump, dump_split, dump_split_glyphs};
+    use fontcraft_tables::ttx::{BitmapForm, DumpFormat, DumpOptions, ImageFile, dump_split_with_images, dump_with_images};
     use serde_json::{Value, json};
 
     use super::super::file_io::{OutputRequest, output_path, read_input, write_output};
@@ -88,6 +88,19 @@ mod ttx {
         if p.bool_or("normalize", false)? {
             return Err(EngineError::Unsupported("the normalised dump is not built yet".into()));
         }
+        let bitmap_form = match p.opt_str("bitmapFormat")?.unwrap_or("raw") {
+            "raw" => BitmapForm::Raw,
+            "row" => BitmapForm::Row,
+            "bitwise" => BitmapForm::Bitwise,
+            "extfile" => BitmapForm::ExtFile,
+            other => return Err(p.bad(format!("`bitmapFormat` must be \"raw\", \"row\", \"bitwise\" or \"extfile\", got \"{other}\""))),
+        };
+        if bitmap_form != BitmapForm::Raw && format == DumpFormat::Hex {
+            return Err(p.bad("`bitmapFormat` applies to the TTX and JSON formats"));
+        }
+        if bitmap_form == BitmapForm::ExtFile && format != DumpFormat::Ttx {
+            return Err(p.bad("`bitmapFormat` \"extfile\" works with the TTX format only"));
+        }
         let options = DumpOptions {
             format,
             tables,
@@ -96,6 +109,7 @@ mod ttx {
             no_version: false,
             no_disassemble: !p.bool_or("disassemble", true)?,
             strict: p.bool_or("strict", false)?,
+            bitmap_form,
         };
         let request = OutputRequest::from_params(&p)?;
         if request.in_place {
@@ -104,6 +118,9 @@ mod ttx {
         let writes = request.output.is_some() || request.output_dir.is_some();
         if split && !writes {
             return Err(p.bad("`split` writes files: give `output` or `outputDir`"));
+        }
+        if bitmap_form == BitmapForm::ExtFile && !writes {
+            return Err(p.bad("`bitmapFormat` \"extfile\" writes image files: give `output` or `outputDir`"));
         }
 
         let input = read_input(path)?;
@@ -122,30 +139,39 @@ mod ttx {
             let main = output_path(path, &request, "", Some(ext))?;
             let stem = main.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| "dump".into());
             let dir = main.parent().map(Path::to_path_buf).unwrap_or_default();
-            let parts = if split_glyphs {
-                dump_split_glyphs(&font, &options, &stem, &format!(".{ext}"))?
-            } else {
-                dump_split(&font, &options, &stem, &format!(".{ext}"))?
-            };
-            let mut paths: Vec<PathBuf> = Vec::with_capacity(parts.len());
-            for (name, text) in parts {
-                let target = dir.join(name);
-                write_output(&target, lines(text).as_bytes(), &request)?;
-                paths.push(target);
-            }
-            return Ok(json!({ "format": format_name, "paths": paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>() }));
+            let (parts, images) = dump_split_with_images(&font, &options, &stem, &format!(".{ext}"), split_glyphs)?;
+            let parts: Vec<(PathBuf, Vec<u8>)> = parts.into_iter().map(|(name, text)| (dir.join(name), lines(text).into_bytes())).collect();
+            return written(format_name, parts, &dir, images, &request);
         }
-        let text = dump(&font, &options)?;
+        let (text, images) = dump_with_images(&font, &options)?;
         if writes {
             let target = output_path(path, &request, "", Some(ext))?;
-            write_output(&target, lines(text).as_bytes(), &request)?;
-            return Ok(json!({ "format": format_name, "paths": [target.display().to_string()] }));
+            let dir = target.parent().map(Path::to_path_buf).unwrap_or_default();
+            return written(format_name, vec![(target, lines(text).into_bytes())], &dir, images, &request);
         }
         if format == DumpFormat::Json {
             let tree: Value = serde_json::from_str(&text).map_err(|e| EngineError::Io(format!("the JSON dump could not be read back: {e}")))?;
             return Ok(json!({ "format": format_name, "json": tree }));
         }
         Ok(json!({ "format": format_name, "text": lines(text) }))
+    }
+
+    /// Writes the dump's files and the image files of its bitmap tables, which go below `dir`,
+    /// the folder of the main file. Without images each file is written atomically on its own;
+    /// with them every file is staged first, so all are written or none.
+    fn written(format_name: &str, files: Vec<(PathBuf, Vec<u8>)>, dir: &Path, images: Vec<ImageFile>, request: &OutputRequest) -> Result<Value> {
+        let paths: Vec<String> = files.iter().map(|(p, _)| p.display().to_string()).collect();
+        let count = images.len();
+        if images.is_empty() {
+            for (target, bytes) in &files {
+                write_output(target, bytes, request)?;
+            }
+        } else {
+            let mut all = files;
+            all.extend(images.into_iter().map(|image| (dir.join(image.path), image.bytes)));
+            super::staged::write_all(all, request)?;
+        }
+        Ok(json!({ "format": format_name, "paths": paths, "images": count }))
     }
 
     #[cfg(test)]
@@ -416,5 +442,109 @@ mod views {
             }
             let _ = std::fs::remove_dir_all(&dir);
         }
+    }
+}
+
+/// Writing a dump and its image files together: each file goes to a temporary name in its
+/// folder first, and only when all are written are they renamed into place.
+mod staged {
+    use std::collections::HashMap;
+    use std::io::Write as _;
+    use std::path::{Path, PathBuf};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use super::super::file_io::{OutputRequest, check_write, create_output_dir, remove_created};
+    use crate::{EngineError, Result};
+
+    /// How many names a temporary file tries before giving up.
+    const TRIES: usize = 16;
+
+    /// Writes `files` (path, bytes). A later file for the same path replaces an earlier one, as
+    /// `ttx` overwrites an image two tables name. Every path must pass the automation write
+    /// check (which refuses every path on the web, so nothing past it runs there), and with
+    /// `noClobber` none may exist. When a file cannot be written, the temporary files and the
+    /// folders made for them are removed and nothing is replaced.
+    pub(super) fn write_all(files: Vec<(PathBuf, Vec<u8>)>, request: &OutputRequest) -> Result<()> {
+        let mut unique: Vec<(PathBuf, Vec<u8>)> = Vec::with_capacity(files.len());
+        let mut index: HashMap<PathBuf, usize> = HashMap::new();
+        for (path, bytes) in files {
+            match index.get(&path).and_then(|&i| unique.get_mut(i)) {
+                Some(slot) => slot.1 = bytes,
+                None => {
+                    index.insert(path.clone(), unique.len());
+                    unique.push((path, bytes));
+                }
+            }
+        }
+        for (path, _) in &unique {
+            check_write(path)?;
+            if request.no_clobber && std::fs::symlink_metadata(path).is_ok() {
+                return Err(EngineError::Io(format!("{} exists and noClobber is set", path.display())));
+            }
+        }
+        // Folders in the order they were made; removed in the reverse order, deepest first.
+        let mut made: Vec<PathBuf> = create_output_dir(request)?.into_iter().rev().collect();
+        let mut staged: Vec<(PathBuf, &Path)> = Vec::with_capacity(unique.len());
+        let mut failure = None;
+        for (path, bytes) in &unique {
+            match stage(path, bytes, &mut made) {
+                Ok(tmp) => staged.push((tmp, path)),
+                Err(e) => {
+                    failure = Some(e);
+                    break;
+                }
+            }
+        }
+        if failure.is_none()
+            && let Some((_, target)) = staged.iter().find(|(_, target)| target.is_dir())
+        {
+            failure = Some(EngineError::Io(format!("cannot write {}: a folder has that name", target.display())));
+        }
+        if let Some(e) = failure {
+            for (tmp, _) in &staged {
+                let _ = std::fs::remove_file(tmp);
+            }
+            made.reverse();
+            remove_created(&made);
+            return Err(e);
+        }
+        for (i, (tmp, target)) in staged.iter().enumerate() {
+            if let Err(e) = std::fs::rename(tmp, target) {
+                for (rest, _) in staged.iter().skip(i) {
+                    let _ = std::fs::remove_file(rest);
+                }
+                return Err(EngineError::Io(format!("cannot write {}: {e} ({i} of {} files were written)", target.display(), staged.len())));
+            }
+        }
+        Ok(())
+    }
+
+    /// Writes `bytes` to a new temporary file beside `path`, making the folders on the way.
+    fn stage(path: &Path, bytes: &[u8], made: &mut Vec<PathBuf>) -> Result<PathBuf> {
+        let dir = path.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(Path::new("."));
+        let missing: Vec<&Path> = dir.ancestors().take_while(|d| !d.as_os_str().is_empty() && std::fs::symlink_metadata(d).is_err()).collect();
+        for d in missing.into_iter().rev() {
+            std::fs::create_dir(d).map_err(|e| EngineError::Io(format!("cannot create {}: {e}", d.display())))?;
+            made.push(d.to_path_buf());
+        }
+        let cannot = |e: std::io::Error| EngineError::Io(format!("cannot write {}: {e}", path.display()));
+        static NEXT: AtomicUsize = AtomicUsize::new(0);
+        for _ in 0..TRIES {
+            let n = NEXT.fetch_add(1, Ordering::Relaxed);
+            let tmp = dir.join(format!(".fontcraft-dump-{}-{n}.tmp", std::process::id()));
+            let mut file = match std::fs::OpenOptions::new().write(true).create_new(true).open(&tmp) {
+                Ok(f) => f,
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(e) => return Err(cannot(e)),
+            };
+            let written = file.write_all(bytes).and_then(|()| file.sync_all());
+            drop(file);
+            if let Err(e) = written {
+                let _ = std::fs::remove_file(&tmp);
+                return Err(cannot(e));
+            }
+            return Ok(tmp);
+        }
+        Err(cannot(std::io::Error::from(std::io::ErrorKind::AlreadyExists)))
     }
 }

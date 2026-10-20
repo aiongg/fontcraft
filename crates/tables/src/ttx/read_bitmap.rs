@@ -4,8 +4,9 @@
 //! A location table and its data table compile together, as in fontTools, where the data table
 //! is compiled first and tells the location table where each image went: [`bitmap_pair`] takes
 //! both elements. Images are read from `rawimagedata`, the form the writer and `ttx` write by
-//! default, and from the row and bitwise forms of `ttx -z` (module `forms`); the external-file
-//! form is refused. Ported from fontTools' `ttLib.tables` (MIT): `E_B_L_C_`, `E_B_D_T_`,
+//! default, and from the row and bitwise forms of `ttx -z` (module `forms`). This crate reads no
+//! files: an image in the external-file form is read only after the caller, which knows the
+//! dump's folder, has put the file's bytes in its place as `rawimagedata`. Ported from fontTools' `ttLib.tables` (MIT): `E_B_L_C_`, `E_B_D_T_`,
 //! `C_B_L_C_`, `C_B_D_T_`, `E_B_S_C_`, `BitmapGlyphMetrics`, `_s_b_i_x`, `sbixStrike` and
 //! `sbixGlyph`.
 

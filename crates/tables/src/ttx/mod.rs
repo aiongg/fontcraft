@@ -80,6 +80,29 @@ pub enum DumpFormat {
     Hex,
 }
 
+/// How the images of the bitmap data tables (`EBDT`, `CBDT`, `bdat`) are written, as `ttx -z`
+/// chooses.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum BitmapForm {
+    /// One block of hex per image (`rawimagedata`).
+    #[default]
+    Raw,
+    /// One line of hex per pixel row (`rowimagedata`).
+    Row,
+    /// One line per pixel row, a character per pixel (`bitwiseimagedata`).
+    Bitwise,
+    /// Each image in a file of its own, named by `extfileimagedata` ([`dump_with_images`]).
+    ExtFile,
+}
+
+/// A bitmap image written to a file of its own ([`BitmapForm::ExtFile`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ImageFile {
+    /// The path the dump names, relative to the dump's folder: `bitmaps/strike<N>/<file>`.
+    pub path: String,
+    pub bytes: Vec<u8>,
+}
+
 /// What [`dump`] writes.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct DumpOptions {
@@ -97,24 +120,47 @@ pub struct DumpOptions {
     pub no_disassemble: bool,
     /// Stop at the first table that cannot be read instead of writing it as hex.
     pub strict: bool,
+    /// How bitmap images are written.
+    pub bitmap_form: BitmapForm,
 }
 
-/// The font's tables as text, within [`MAX_TTX_OUTPUT`].
+/// The font's tables as text, within [`MAX_TTX_OUTPUT`]. Images kept in files of their own
+/// ([`BitmapForm::ExtFile`]) need [`dump_with_images`].
 pub fn dump(font: &SfntFont, options: &DumpOptions) -> Result<String> {
     dump_within(font, options, MAX_TTX_OUTPUT)
 }
 
 /// [`dump`] with a budget of `limit` bytes.
 pub(crate) fn dump_within(font: &SfntFont, options: &DumpOptions, limit: usize) -> Result<String> {
+    no_image_files(options)?;
+    Ok(dump_images_within(font, options, limit)?.0)
+}
+
+/// The font's tables as text, and the bitmap images [`BitmapForm::ExtFile`] keeps in files of
+/// their own, which the caller writes beside the dump. The images count against the dump's
+/// budget, [`MAX_TTX_OUTPUT`].
+pub fn dump_with_images(font: &SfntFont, options: &DumpOptions) -> Result<(String, Vec<ImageFile>)> {
+    dump_images_within(font, options, MAX_TTX_OUTPUT)
+}
+
+fn no_image_files(options: &DumpOptions) -> Result<()> {
+    if options.bitmap_form == BitmapForm::ExtFile {
+        return Err(TablesError::BadOptions("bitmap images in files of their own are written only with the dump's image files".into()));
+    }
+    Ok(())
+}
+
+fn dump_images_within(font: &SfntFont, options: &DumpOptions, limit: usize) -> Result<(String, Vec<ImageFile>)> {
     check_options(options)?;
     match options.format {
-        DumpFormat::Hex => Ok(hex_dump(font, options)),
+        DumpFormat::Hex => Ok((hex_dump(font, options), Vec::new())),
         DumpFormat::Ttx => {
             let mut w = writer_for(font, options);
             w.limit = limit;
             write_document(font, options, &mut w)?;
             w.check()?;
-            Ok(w.finish())
+            let images = w.take_images();
+            Ok((w.finish(), images))
         }
         DumpFormat::Json => {
             let mut w = writer_for(font, options);
@@ -126,7 +172,7 @@ pub(crate) fn dump_within(font: &SfntFont, options: &DumpOptions, limit: usize) 
                 element_json(&mut out, element, 0)?;
                 out.push('\n');
             }
-            Ok(out)
+            Ok((out, w.take_images()))
         }
     }
 }
@@ -135,17 +181,28 @@ pub(crate) fn dump_within(font: &SfntFont, options: &DumpOptions, limit: usize) 
 /// one file per table. Each item is a file name and its text; the main file is `{stem}{ext}` and
 /// a table's file is `{stem}.{identifier}{ext}` ([`tag_to_identifier`]), as `ttx` names them.
 pub fn dump_split(font: &SfntFont, options: &DumpOptions, stem: &str, ext: &str) -> Result<Vec<(String, String)>> {
-    split_dump(font, options, stem, ext, false)
+    no_image_files(options)?;
+    Ok(split_dump(font, options, stem, ext, false)?.0)
 }
 
 /// [`dump_split`] with `glyf` split further, as `ttx -g` splits it: the `glyf` file names one
 /// file per glyph that has an outline, `{stem}._g_l_y_f.{glyph}{ext}` with the glyph name made
 /// safe for file systems as fontTools' `userNameToFileName` makes it.
 pub fn dump_split_glyphs(font: &SfntFont, options: &DumpOptions, stem: &str, ext: &str) -> Result<Vec<(String, String)>> {
-    split_dump(font, options, stem, ext, true)
+    no_image_files(options)?;
+    Ok(split_dump(font, options, stem, ext, true)?.0)
 }
 
-fn split_dump(font: &SfntFont, options: &DumpOptions, stem: &str, ext: &str, glyphs: bool) -> Result<Vec<(String, String)>> {
+/// [`dump_split`] (or, with `glyphs`, [`dump_split_glyphs`]) with the bitmap images
+/// [`BitmapForm::ExtFile`] keeps in files of their own, as [`dump_with_images`] gives them.
+pub fn dump_split_with_images(font: &SfntFont, options: &DumpOptions, stem: &str, ext: &str, glyphs: bool) -> Result<SplitDump> {
+    split_dump(font, options, stem, ext, glyphs)
+}
+
+/// The files of a split dump (name, text), and the image files of its bitmap tables.
+pub type SplitDump = (Vec<(String, String)>, Vec<ImageFile>);
+
+fn split_dump(font: &SfntFont, options: &DumpOptions, stem: &str, ext: &str, glyphs: bool) -> Result<SplitDump> {
     check_options(options)?;
     if options.format != DumpFormat::Ttx {
         return Err(TablesError::BadOptions("only the TTX form can be split into one file per table".into()));
@@ -156,6 +213,7 @@ fn split_dump(font: &SfntFont, options: &DumpOptions, stem: &str, ext: &str, gly
     let attrs: Vec<(&str, &str)> = root_attrs.iter().map(|(k, v)| (*k, v.as_str())).collect();
     main.open("ttFont", &attrs);
     let mut files = Vec::new();
+    let mut images = Vec::new();
     for entry in entries(font, options) {
         let ident = match entry {
             Entry::GlyphOrder => "GlyphOrder".to_string(),
@@ -205,6 +263,7 @@ fn split_dump(font: &SfntFont, options: &DumpOptions, stem: &str, ext: &str, gly
         }
         part.close("ttFont");
         part.check()?;
+        images.extend(part.take_images());
         files.push((name, part.finish()));
         files.extend(glyph_files);
     }
@@ -212,7 +271,7 @@ fn split_dump(font: &SfntFont, options: &DumpOptions, stem: &str, ext: &str, gly
     main.check()?;
     let mut out = vec![(format!("{stem}{ext}"), main.finish())];
     out.extend(files);
-    Ok(out)
+    Ok((out, images))
 }
 
 fn check_options(options: &DumpOptions) -> Result<()> {
@@ -225,6 +284,7 @@ fn check_options(options: &DumpOptions) -> Result<()> {
 fn writer_for(font: &SfntFont, options: &DumpOptions) -> XmlWriter {
     let mut w = XmlWriter::new();
     w.disassemble = !options.no_disassemble;
+    w.bitmap_form = options.bitmap_form;
     w.tree = options.format == DumpFormat::Json;
     w.glyph_order = Some(glyph_order(font).map(Rc::new));
     w
@@ -903,6 +963,9 @@ pub struct XmlWriter {
     used: Rc<Cell<usize>>,
     /// The budget for `used`.
     limit: usize,
+    bitmap_form: BitmapForm,
+    /// Bitmap images written to files of their own; a writer dropped unappended drops them.
+    images: Vec<ImageFile>,
 }
 
 impl Default for XmlWriter {
@@ -917,6 +980,8 @@ impl Default for XmlWriter {
             tree: true,
             used: Rc::new(Cell::new(0)),
             limit: MAX_TTX_OUTPUT,
+            bitmap_form: BitmapForm::Raw,
+            images: Vec::new(),
         }
     }
 }
@@ -1127,7 +1192,23 @@ impl XmlWriter {
             tree: self.tree,
             used: Rc::clone(&self.used),
             limit: self.limit,
+            bitmap_form: self.bitmap_form,
+            images: Vec::new(),
         }
+    }
+
+    /// Keeps `bytes` as the image file `path`, charged to the budget.
+    pub(crate) fn image_file(&mut self, path: String, bytes: Vec<u8>) {
+        if self.spent() {
+            return;
+        }
+        self.charge(bytes.len().saturating_add(path.len()));
+        self.images.push(ImageFile { path, bytes });
+    }
+
+    /// The image files kept so far, taken out of the writer.
+    pub(crate) fn take_images(&mut self) -> Vec<ImageFile> {
+        std::mem::take(&mut self.images)
     }
 
     /// Appends what `other` wrote: its text, and its finished elements as children of the
@@ -1137,6 +1218,7 @@ impl XmlWriter {
             return;
         }
         self.out.push_str(&other.out);
+        self.images.extend(other.images);
         if self.glyph_order.is_none() {
             self.glyph_order = other.glyph_order;
         }
