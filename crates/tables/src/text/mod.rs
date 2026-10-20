@@ -143,19 +143,20 @@ pub fn table_offsets(bytes: &[u8], face: u32) -> Vec<(Tag, u32)> {
         if face >= n {
             return Vec::new();
         }
-        let Some(at) = rd(12 + 4 * face as usize) else { return Vec::new() };
-        at as usize
+        let Some(at) = usize::try_from(face).ok().and_then(|f| f.checked_mul(4)?.checked_add(12)).and_then(rd) else { return Vec::new() };
+        let Ok(at) = usize::try_from(at) else { return Vec::new() };
+        at
     } else {
         0
     };
     if !matches!(rd(start), Some(0x0001_0000 | 0x4F54_544F | 0x7472_7565 | 0x7479_7031)) {
         return Vec::new();
     }
-    let Some(count) = rd(start + 4).map(|v| (v >> 16) as usize) else { return Vec::new() };
+    let Some(count) = start.checked_add(4).and_then(rd).map(|v| (v >> 16) as usize) else { return Vec::new() };
     let mut out = Vec::with_capacity(count.min(1024));
     for i in 0..count {
-        let rec = start + 12 + 16 * i;
-        let (Some(tag), Some(offset)) = (bytes.get(rec..rec + 4), rd(rec + 8)) else { break };
+        let Some(rec) = i.checked_mul(16).and_then(|r| r.checked_add(12)).and_then(|r| r.checked_add(start)) else { break };
+        let (Some(tag), Some(offset)) = (rec.checked_add(4).and_then(|end| bytes.get(rec..end)), rec.checked_add(8).and_then(rd)) else { break };
         let Ok(tag) = <[u8; 4]>::try_from(tag) else { break };
         out.push((tag, offset));
     }

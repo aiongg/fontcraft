@@ -925,3 +925,26 @@ fn glyphs_view_leaves_out_the_excluded_glyphs() {
     let unknown = view(&f, &ViewOptions { view: GLYPHS_VIEW.into(), exclude_glyphs: vec!["no such glyph".into()], ..Default::default() });
     assert!(matches!(unknown, Err(TablesError::BadOptions(_))), "{unknown:?}");
 }
+
+#[test]
+fn excluding_every_glyph_of_a_full_font_is_quick() {
+    let mut f = SfntFont::new(Flavour::TrueType);
+    f.insert(*b"maxp", dump_table(&Maxp::new(65_535)).unwrap());
+    let names = crate::ttx::glyph_order(&f).unwrap();
+    assert_eq!(names.len(), 65_535);
+    let started = std::time::Instant::now();
+    let out = view(&f, &ViewOptions { view: GLYPHS_VIEW.into(), exclude_glyphs: names, ..Default::default() }).unwrap();
+    assert_eq!(out.lines().count(), 1, "only the header line: {out}");
+    assert!(started.elapsed() < std::time::Duration::from_secs(5));
+}
+
+#[test]
+fn a_collection_face_past_the_address_space_has_no_offsets() {
+    // numFonts 0xFFFFFFFF: face 0x40000000 passes the count, and 4 × face overflows 32 bits.
+    let mut bytes = b"ttcf".to_vec();
+    bytes.extend(0x0001_0000u32.to_be_bytes());
+    bytes.extend(u32::MAX.to_be_bytes());
+    bytes.extend([0; 16]);
+    assert!(super::table_offsets(&bytes, 0x4000_0000).is_empty());
+    assert!(super::table_offsets(&bytes, u32::MAX - 1).is_empty());
+}

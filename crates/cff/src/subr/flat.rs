@@ -3,9 +3,10 @@
 //! Only what the token boundaries need is tracked: the operand stack (for the subroutine number
 //! of a call, the operand count of `blend` and the stem count), the stem count (for the length of
 //! a hint mask) and the `vsindex` in force. A call's subroutine number disappears from the flat
-//! output together with the call; everything else keeps its bytes.
+//! output together with the call, and so does a `CFF2` `dotsection` (`CFF2` has no such operator
+//! and it draws nothing); everything else keeps its bytes.
 
-use super::{CharstringSet, MAX_CALL_DEPTH, MAX_CHARSTRING, MAX_OPS_PER_GLYPH, SubrError, bias};
+use super::{CharstringSet, MAX_CALL_DEPTH, MAX_CHARSTRING, MAX_OPS_PER_GLYPH, MAX_STACK_LIMIT, SubrError, bias};
 
 /// One token of a flat charstring: a number, an operator, or `hintmask`/`cntrmask` with its mask
 /// bytes.
@@ -62,10 +63,19 @@ struct Run<'a, 'b> {
     vsindex: usize,
     ops: usize,
     budget: &'b mut usize,
+    /// Bytes of the tokens deleted so far (subroutine numbers).
+    dead: usize,
+    /// Most bytes the flat output may hold.
+    max_bytes: usize,
 }
 
 /// Glyph `gid` of `set`, its calls expanded. `budget` counts operators down across glyphs.
 pub(super) fn flatten(set: &CharstringSet, gid: usize, budget: &mut usize) -> Result<Flat, SubrError> {
+    flatten_within(set, gid, budget, MAX_CHARSTRING)
+}
+
+/// [`flatten`], the flat output held to `max_bytes`.
+pub(super) fn flatten_within(set: &CharstringSet, gid: usize, budget: &mut usize, max_bytes: usize) -> Result<Flat, SubrError> {
     let code = set.charstrings.get(gid).ok_or_else(|| SubrError::Invalid(format!("there is no glyph {gid}")))?;
     let fd = set.fd_of(gid);
     let mut run = Run {
@@ -79,6 +89,8 @@ pub(super) fn flatten(set: &CharstringSet, gid: usize, budget: &mut usize) -> Re
         vsindex: set.fd_vsindex.get(fd).map_or(0, |&v| usize::from(v)),
         ops: 0,
         budget,
+        dead: 0,
+        max_bytes,
     };
     run.run(code, 0)?;
     run.finish()
@@ -93,12 +105,12 @@ impl Run<'_, '_> {
             }
             let start = t.start as usize;
             let src = self.bytes.get(start..start + t.len as usize).unwrap_or_default();
-            let at = u32::try_from(flat.bytes.len()).map_err(|_| too_long())?;
+            let at = u32::try_from(flat.bytes.len()).map_err(|_| too_long(self.max_bytes))?;
             flat.bytes.extend_from_slice(src);
             flat.tokens.push(Token { start: at, ..*t });
         }
-        if flat.bytes.len() > MAX_CHARSTRING {
-            return Err(too_long());
+        if flat.bytes.len() > self.max_bytes {
+            return Err(too_long(self.max_bytes));
         }
         Ok(flat)
     }
@@ -115,14 +127,18 @@ impl Run<'_, '_> {
 
     /// Appends a token and returns its index.
     fn emit(&mut self, bytes: &[u8], clears: bool, blend_vsindex: Option<u16>) -> Result<usize, SubrError> {
-        // The flat output may hold subroutine numbers that are deleted later, hence the slack.
-        if self.bytes.len() + bytes.len() > 2 * MAX_CHARSTRING {
-            return Err(too_long());
+        // Only a number still on the stack can be deleted later (as a call's subroutine number),
+        // so the bytes kept may pass the limit by those numbers alone; `finish` checks exactly.
+        // The deleted numbers take at most five bytes per operator run.
+        let live = self.bytes.len().saturating_sub(self.dead);
+        if live.saturating_add(bytes.len()) > self.max_bytes.saturating_add(5 * MAX_STACK_LIMIT) {
+            return Err(too_long(self.max_bytes));
         }
-        let start = self.bytes.len() as u32;
+        let start = u32::try_from(self.bytes.len()).map_err(|_| too_long(self.max_bytes))?;
+        let len = u32::try_from(bytes.len()).map_err(|_| too_long(self.max_bytes))?;
         let depth = u16::try_from(self.stack.len()).map_err(|_| SubrError::Invalid("the operand stack overflows".into()))?;
         self.bytes.extend_from_slice(bytes);
-        self.tokens.push(Token { start, len: bytes.len() as u32, depth, clears, blend_vsindex });
+        self.tokens.push(Token { start, len, depth, clears, blend_vsindex });
         self.deleted.push(false);
         if clears {
             self.stack.clear();
@@ -156,8 +172,11 @@ impl Run<'_, '_> {
                     let slot = self.pop("a subroutine call")?;
                     let n = slot.int.ok_or_else(|| SubrError::Invalid("a subroutine number that is not an integer".into()))?;
                     let token = slot.token.ok_or_else(|| SubrError::Unsupported("a computed subroutine number".into()))?;
-                    if let Some(d) = self.deleted.get_mut(token) {
+                    if let Some(d) = self.deleted.get_mut(token)
+                        && !*d
+                    {
                         *d = true;
+                        self.dead += self.tokens.get(token).map_or(0, |t| t.len as usize);
                     }
                     let subrs: &[Vec<u8>] = if b0 == 10 { self.local } else { &set.global_subrs };
                     let index = n.checked_add(bias(subrs.len())).and_then(|v| usize::try_from(v).ok());
@@ -221,8 +240,14 @@ impl Run<'_, '_> {
                 12 => {
                     let b1 = *code.get(i + 1).ok_or_else(|| SubrError::Invalid("an escaped operator is cut short".into()))?;
                     match b1 {
-                        0 if !cff2 => {}
-                        34..=37 => {}
+                        0 if cff2 => {
+                            if !self.stack.is_empty() {
+                                return Err(SubrError::Invalid("dotsection with operands".into()));
+                            }
+                            i += 2;
+                            continue;
+                        }
+                        0 | 34..=37 => {}
                         _ => return Err(SubrError::Unsupported(format!("charstring operator 12 {b1}"))),
                     }
                     self.emit(&[12, b1], true, None)?;
@@ -252,6 +277,6 @@ fn number(code: &[u8], i: usize) -> Result<(usize, Option<i64>), SubrError> {
     })
 }
 
-fn too_long() -> SubrError {
-    SubrError::TooLarge { what: "bytes in one expanded charstring", limit: MAX_CHARSTRING }
+fn too_long(limit: usize) -> SubrError {
+    SubrError::TooLarge { what: "bytes in one expanded charstring", limit }
 }

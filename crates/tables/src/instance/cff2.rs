@@ -29,8 +29,10 @@
 //!
 //! Counts read from the table are capped (glyphs, Font DICTs, DICT entries, operators per glyph
 //! and per table, items and their deltas, subroutine nesting), and so is the memory the
-//! operators and items take ([`MAX_CHARSTRING_MEMORY`]). Each charstring, as stored and with its
-//! calls expanded, is held to 65,535 bytes, and the stack to 513 values while calls are expanded.
+//! operators and items take ([`MAX_CHARSTRING_MEMORY`]); a charstring, as stored and with its
+//! calls expanded, is held to that memory too. Each charstring written is held to 65,535 bytes,
+//! and the stack to 513 values, read and written, whatever `maxstack` says. A `dotsection`, which
+//! `CFF2` does not have and which draws nothing, is left out.
 //! A path operator with an operand count the specification does not allow is refused.
 
 #[cfg(test)]
@@ -41,7 +43,7 @@ use fontcraft_cff::cff2::{Arg, Cff2Error, OperandStyle, write_operands};
 use fontcraft_cff::raw::{
     self, FdSelectFormat, RelSeg, blob as raw_blob, index_len, operands_fit, operator_len as op_len, push_operator as put_op, read_u16, read_u32,
 };
-use fontcraft_cff::subr::{CharstringSet, Expander, MAX_STACK_LIMIT, SubrError};
+use fontcraft_cff::subr::{CharstringSet, Expander, SubrError};
 use read_fonts::tables::variations::ItemVariationStore as ReadStore;
 use read_fonts::{FontData, FontRead};
 
@@ -325,10 +327,9 @@ impl Table {
                 }
             }
         };
-        let stack_limit = match top.iter().find(|e| e.op == OP_MAXSTACK).and_then(|e| e.vals.first()) {
-            Some(v) if v.v.is_finite() && v.v > MAX_CFF2_STACK as f64 => (v.v as usize).min(u16::MAX as usize),
-            _ => MAX_CFF2_STACK,
-        };
+        // fontTools takes the stack as 513 values whatever `maxstack` says, and a blend run
+        // written deeper could not be read back, so `maxstack` is not read.
+        let stack_limit = MAX_CFF2_STACK;
 
         let (regions, datas) = match offset(OP_VSTORE)? {
             Some(at) => {
@@ -404,9 +405,12 @@ impl Table {
             fd_select: fd_select.as_ref().map(|(m, _)| m.clone()).unwrap_or_default(),
             fd_vsindex: privates.iter().map(|p| u16::try_from(p.vsindex).unwrap_or(u16::MAX)).collect(),
             regions: region_counts.clone(),
-            max_stack: stack_limit.min(MAX_STACK_LIMIT),
+            max_stack: stack_limit,
         };
-        let mut expander = Expander::new(&set, MAX_OPS_PER_TABLE).map_err(cff)?;
+        // An expanded glyph may pass the 65,535 bytes a charstring holds: its instance resolves
+        // the blends and is checked as it is written. Its operators and items are charged to
+        // `limit` as they are read.
+        let mut expander = Expander::with_limits(&set, MAX_OPS_PER_TABLE, limit).map_err(cff)?;
         let mut glyphs = Vec::with_capacity(glyph_count);
         let mut ops_total = 0usize;
         for gid in 0..glyph_count {
@@ -837,8 +841,8 @@ impl Run<'_, '_> {
                     let b1 = *code.get(i + 1).ok_or_else(cut)?;
                     i += 2;
                     match b1 {
-                        // dotsection and the flex operators
-                        0 | 34..=37 => self.emit(1200 + u16::from(b1), &[])?,
+                        // The flex operators; the expander leaves `dotsection` out.
+                        34..=37 => self.emit(1200 + u16::from(b1), &[])?,
                         3..=5 | 9..=12 | 14 | 15 | 18 | 20..=24 | 26..=30 => {
                             return Err(TablesError::Unsupported(format!("the charstring arithmetic operator 12 {b1}")));
                         }
@@ -1020,11 +1024,15 @@ fn put_offset(out: &mut Vec<u8>, v: usize) -> Result<()> {
 /// The `vsindex` of a Private DICT (0 when it states none).
 fn private_vsindex(bytes: &[u8]) -> Result<usize> {
     let entries = raw::parse_dict(bytes, true).map_err(cff)?;
-    match entries.iter().find(|e| e.op == OP_VSINDEX).map(|e| e.int(0)) {
-        Some(Some(v)) if (0..65_536).contains(&v) => Ok(v as usize),
-        Some(_) => Err(invalid("a Private DICT vsindex is not a small positive integer")),
-        None => Ok(0),
-    }
+    let Some(e) = entries.iter().find(|e| e.op == OP_VSINDEX) else { return Ok(0) };
+    let not_small = || invalid("a Private DICT vsindex is not a small positive integer");
+    let v = match e.int(0) {
+        Some(v) => v as f64,
+        // A whole number may be spelled as a real.
+        None if !e.ints.is_empty() => read_dict_number(&e.raw, 0).map_err(|_| not_small())?.0,
+        None => return Err(not_small()),
+    };
+    if v >= 0.0 && v.fract() == 0.0 && v < 65_536.0 { Ok(v as usize) } else { Err(not_small()) }
 }
 
 /// The entries of a DICT. `blend_with` is the region count and the subtable a `blend` uses;
