@@ -5,8 +5,9 @@
 //!
 //! Compiled fonts (TrueType, OpenType CFF or CFF2, one face of a collection, WOFF, WOFF2), TTX
 //! text, Type 1 fonts (PFA, PFB) and bare CFF tables are converted between outline flavours, to
-//! bare CFF or CFF2 tables and to UFO, and a result can be wrapped in WOFF or WOFF2. A snapshot at
-//! a design location, a glyph subset, a GOADB and overlap removal run around the conversion
+//! bare CFF or CFF2 tables and to UFO, a CFF result can be made CID-keyed, and a result can be
+//! wrapped in WOFF or WOFF2. A snapshot at a design location, a glyph subset (by name, glyph id,
+//! CID or Font DICT), a GOADB and overlap removal run around the conversion
 //! (`fontcraft_tables::convert::prepare`). A UFO is the font as `file.open` reads it, written by
 //! the UFO writer. Each output is written to a temporary file (a folder, for a UFO) beside its
 //! target as soon as its input is converted, so memory holds one font at a time; only when all
@@ -14,9 +15,11 @@
 
 use std::path::{Path, PathBuf};
 
+use std::collections::BTreeSet;
+
 use fontcraft_tables::convert::{
-    ConvertOptions, ConvertTarget, GoadbUse, PostFormat, PrepareOptions, PsSource, QuadToCubic, convert_postscript, convert_prepared, prepare,
-    read_postscript,
+    CidCollection, ConvertOptions, ConvertTarget, FontDictFilter, GoadbUse, PostFormat, PrepareOptions, PsSource, QuadToCubic, convert_postscript,
+    convert_prepared, glyph_cids, prepare, read_postscript,
 };
 use fontcraft_tables::sfnt::parse_tag;
 use fontcraft_tables::ttx::{ImportOptions, import_tree};
@@ -36,23 +39,12 @@ const EPOCH_1904: i64 = 2_082_844_800;
 const MAX_GOADB_BYTES: usize = 64 << 20;
 /// Most axes a location names.
 const MAX_LOCATION_AXES: usize = fontcraft_tables::limits::MAX_AXES;
+/// Most Font DICTs a CFF table holds (an FDSelect index is one byte).
+const MAX_FONT_DICTS: usize = 256;
 
 /// Parameters of the row this version does not act on yet; naming one is refused, so a call
 /// never silently does less than it asks.
-const NOT_YET: [&str; 12] = [
-    "type1",
-    "newline",
-    "cid",
-    "fdSelect",
-    "excludeFd",
-    "ufo",
-    "svg",
-    "recalcBounds",
-    "rebuildTables",
-    "optimizeFor",
-    "validateSources",
-    "smartComponents",
-];
+const NOT_YET: [&str; 9] = ["type1", "newline", "ufo", "svg", "recalcBounds", "rebuildTables", "optimizeFor", "validateSources", "smartComponents"];
 
 /// The commands of this module.
 pub fn specs() -> Vec<CommandSpec> {
@@ -62,7 +54,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Convert Font Format",
             [],
             None,
-            "{inputs: [path] | input: path, to: \"ttf\"|\"otf\"|\"otf-cff2\"|\"cff\"|\"cff2\"|\"ufo\", output?: path (one input), outputDir?: path, inPlace?: bool, noClobber?: bool, face?: int|name, container?: \"plain\"|\"woff\"|\"woff2\", nameBy?: \"filename\", curves?: {maxError?: em fraction (default one font unit), conversion?: \"optimized\"|\"exact\", keepDirection?: bool}, postFormat?: 2|3, cff?: {subroutinize?: bool, maxSubrs?: int}, hints?: bool, glyphs?: selector, excludeGlyphs?: selector, goadb?: path, goadbRename?: bool (default true), goadbSubset?: bool, goadbOrder?: bool, location?: {axis: number}, clamp?: bool (default true), removeOverlaps?: bool, ignoreOverlapErrors?: bool, timestamp?: \"keep\"|\"now\"|int (seconds since 1970)}. Inputs: compiled fonts, TTX text (compiled first), Type 1 fonts (PFA, PFB) and bare CFF tables (wrapped in an OpenType CFF font first; bare tables are written without subroutines unless cff.subroutinize says otherwise). CFF or static CFF2 to TrueType (cubic to quadratic within maxError, contours reversed), TrueType to CFF or CFF2 (components decomposed, instructions dropped), CFF to CFF2 and back with hints kept, the bare outline table (cff, cff2), or a UFO of the font as file.open reads it (a variable font at its default location). Before converting: location snapshots a variable font (axes not named at their default; clamped to the axis ranges unless clamp is false), glyphs and excludeGlyphs keep a subset (names, glyph ids, ranges such as 3-9, U+0041; .notdef always stays), goadb renames glyphs from its second column to its first (goadbRename), keeps only the glyphs it lists (goadbSubset) and orders them as it does (goadbOrder); removeOverlaps merges overlapping TrueType contours (before converting a TrueType font, after converting to TrueType), and ignoreOverlapErrors keeps a glyph that cannot be merged. Without output the result goes beside the input with the new extension → {results: [{input, output, bytes, glyphs, leftBehind: [text]}]}",
+            "{inputs: [path] | input: path, to: \"ttf\"|\"otf\"|\"otf-cff2\"|\"cff\"|\"cff2\"|\"ufo\", output?: path (one input), outputDir?: path, inPlace?: bool, noClobber?: bool, face?: int|name, container?: \"plain\"|\"woff\"|\"woff2\", nameBy?: \"filename\", curves?: {maxError?: em fraction (default one font unit), conversion?: \"optimized\"|\"exact\", keepDirection?: bool}, postFormat?: 2|3, cff?: {subroutinize?: bool, maxSubrs?: int}, hints?: bool, cid?: {keyed?: bool|\"REGISTRY-ORDERING-SUPPLEMENT\"}, glyphs?: selector, excludeGlyphs?: selector, fdSelect?: [int], excludeFd?: [int], goadb?: path, goadbRename?: bool (default true), goadbSubset?: bool, goadbOrder?: bool, location?: {axis: number}, clamp?: bool (default true), removeOverlaps?: bool, ignoreOverlapErrors?: bool, timestamp?: \"keep\"|\"now\"|int (seconds since 1970)}. Inputs: compiled fonts, TTX text (compiled first), Type 1 fonts (PFA, PFB) and bare CFF tables (wrapped in an OpenType CFF font first; bare tables are written without subroutines unless cff.subroutinize says otherwise). CFF or static CFF2 to TrueType (cubic to quadratic within maxError, contours reversed), TrueType to CFF or CFF2 (components decomposed, instructions dropped), CFF to CFF2 and back with hints kept, the bare outline table (cff, cff2), or a UFO of the font as file.open reads it. A variable font converted to UFO or to another outline flavour is snapshotted at its default location unless location is given. cid.keyed makes a name-keyed CFF result CID-keyed, CID n for glyph n (true: the Identity ordering, supplement 0; or a REGISTRY-ORDERING-SUPPLEMENT string). Before converting: location snapshots a variable font (axes not named at their default; clamped to the axis ranges unless clamp is false), glyphs and excludeGlyphs keep a subset (names, glyph ids, ranges such as 3-9, U+0041, and in a CID-keyed font /CID or /CID-CID; .notdef always stays), fdSelect and excludeFd keep the glyphs of some Font DICTs of a CID-keyed CFF or a CFF2 font (indexes from 0), goadb renames glyphs from its second column to its first (goadbRename), keeps only the glyphs it lists (goadbSubset) and orders them as it does (goadbOrder); removeOverlaps merges overlapping contours (TrueType outlines before converting a TrueType font or after converting to TrueType; CFF and CFF2 outlines before converting, a merged glyph losing its stem hints), and ignoreOverlapErrors keeps a glyph that cannot be merged. Without output the result goes beside the input with the new extension → {results: [{input, output, bytes, glyphs, leftBehind: [text]}]}",
             always,
             convert_fonts
         )
@@ -206,6 +198,8 @@ struct Settings {
     max_subrs: Option<usize>,
     hints: bool,
     timestamp: Timestamp,
+    /// `cid.keyed`: the character collection of a CID-keyed result.
+    cid_keyed: Option<CidCollection>,
     /// The steps around the conversion; the glyph selection is resolved for each input.
     prepare: PrepareOptions,
 }
@@ -284,8 +278,13 @@ impl Settings {
             Some(_) => return Err(p.bad("`timestamp` must be keep, now or whole seconds since 1970")),
         };
         let prepare = Self::prepare(p)?;
+        let cid_keyed = Self::cid(p)?;
+        if cid_keyed.is_some() && !matches!(to, "otf" | "cff") {
+            return Err(p.bad("`cid.keyed` needs CFF output (otf or cff)"));
+        }
         Ok(Settings {
             prepare,
+            cid_keyed,
             to,
             max_error_em,
             quad_to_cubic,
@@ -298,7 +297,59 @@ impl Settings {
         })
     }
 
-    /// `location`, `clamp`, the GOADB keys and the overlap keys.
+    /// `cid`: only `keyed` is acted on; `true` is Adobe-Identity-0, a string names
+    /// registry-ordering-supplement.
+    fn cid(p: &Params<'_>) -> Result<Option<CidCollection>> {
+        let Some(cid) = p.opt_object("cid")? else { return Ok(None) };
+        let mut keyed = None;
+        for (key, value) in cid {
+            match (key.as_str(), value) {
+                ("keyed", Value::Bool(false)) => {}
+                ("keyed", Value::Bool(true)) => keyed = Some(("Adobe", "Identity", 0)), // brand-ok: the CFF registry value
+                ("keyed", Value::String(ros)) => {
+                    let bad = || {
+                        p.bad(format!("`cid.keyed` `{ros}` is not REGISTRY-ORDERING-SUPPLEMENT (three parts joined by hyphens, the last a number)"))
+                    };
+                    let (rest, supplement) = ros.rsplit_once('-').ok_or_else(bad)?;
+                    let (registry, ordering) = rest.split_once('-').ok_or_else(bad)?;
+                    let supplement: i64 = supplement.parse().map_err(|_| bad())?;
+                    keyed = Some((registry, ordering, supplement));
+                }
+                ("keyed", _) => return Err(p.bad("`cid.keyed` must be true, false or REGISTRY-ORDERING-SUPPLEMENT")),
+                (other, _) => return Err(EngineError::Unsupported(format!("`cid.{other}` in font.convert"))),
+            }
+        }
+        Ok(keyed.map(|(registry, ordering, supplement)| CidCollection { registry: registry.to_string(), ordering: ordering.to_string(), supplement }))
+    }
+
+    /// `fdSelect` and `excludeFd`: Font DICT indexes.
+    fn font_dicts(p: &Params<'_>) -> Result<Option<FontDictFilter>> {
+        let list = |key: &str| -> Result<Option<BTreeSet<u16>>> {
+            let Some(value) = p.get(key) else { return Ok(None) };
+            let items = value.as_array().ok_or_else(|| p.bad(format!("`{key}` must be a list of Font DICT indexes")))?;
+            if items.len() > MAX_FONT_DICTS {
+                return Err(p.bad(format!("`{key}` lists more than {MAX_FONT_DICTS} Font DICTs")));
+            }
+            items
+                .iter()
+                .map(|v| {
+                    v.as_u64()
+                        .and_then(|n| u16::try_from(n).ok())
+                        .filter(|n| usize::from(*n) < MAX_FONT_DICTS)
+                        .ok_or_else(|| p.bad(format!("`{key}` items must be Font DICT indexes from 0 to {}", MAX_FONT_DICTS - 1)))
+                })
+                .collect::<Result<BTreeSet<u16>>>()
+                .map(Some)
+        };
+        let keep = list("fdSelect")?;
+        let exclude = list("excludeFd")?;
+        if keep.is_none() && exclude.is_none() {
+            return Ok(None);
+        }
+        Ok(Some(FontDictFilter { keep, exclude: exclude.unwrap_or_default() }))
+    }
+
+    /// `location`, `clamp`, the GOADB keys, the Font DICT keys and the overlap keys.
     fn prepare(p: &Params<'_>) -> Result<PrepareOptions> {
         let location = match p.opt_object("location")? {
             None => None,
@@ -342,6 +393,7 @@ impl Settings {
             clamp: p.bool_or("clamp", true)?,
             glyphs: None,
             goadb,
+            font_dicts: Self::font_dicts(p)?,
             remove_overlaps: p.bool_or("removeOverlaps", false)?,
             ignore_overlap_errors: p.bool_or("ignoreOverlapErrors", false)?,
         })
@@ -351,7 +403,10 @@ impl Settings {
     /// `excludeGlyphs` select in it, then the conversion.
     fn run(&self, p: &Params<'_>, font: &SfntFont) -> Result<Converted> {
         let mut steps = self.prepare.clone();
-        steps.glyphs = super::dehint::selection(p, font)?;
+        steps.glyphs = match cid_selectors(p, font)? {
+            Some(rewritten) => super::dehint::selection(&Params::new("font.convert", &rewritten)?, font)?,
+            None => super::dehint::selection(p, font)?,
+        };
         if self.to == "ufo" {
             return ufo(font, steps);
         }
@@ -376,6 +431,7 @@ impl Settings {
         o.subroutinize = self.subroutinize;
         o.max_subrs = self.max_subrs;
         o.hints = self.hints;
+        o.cid_keyed = self.cid_keyed.clone();
         o.modified = match self.timestamp {
             Timestamp::Keep => None,
             Timestamp::At(unix) => Some(unix.saturating_add(EPOCH_1904)),
@@ -395,6 +451,68 @@ impl Settings {
             _ => "otf",
         }
     }
+}
+
+/// `glyphs` and `excludeGlyphs` with the `/CID` items of the reference converter (`/17`,
+/// `/100-200`) replaced by glyph id ranges; `None` when neither has one. A CID range keeps the
+/// CIDs the font has; a single CID the font lacks is refused, as a missing name is.
+fn cid_selectors(p: &Params<'_>, font: &SfntFont) -> Result<Option<Value>> {
+    let mut out = serde_json::Map::new();
+    let mut by_cid: Option<std::collections::HashMap<u32, u16>> = None;
+    for key in ["glyphs", "excludeGlyphs"] {
+        let Some(value) = p.get(key) else { continue };
+        let items: Vec<&str> = match value {
+            Value::String(s) => s.split([',', ' ']).filter(|w| !w.is_empty()).collect(),
+            Value::Array(a) => a.iter().filter_map(Value::as_str).collect(),
+            _ => Vec::new(),
+        };
+        if !items.iter().any(|i| i.starts_with('/')) {
+            out.insert(key.to_string(), value.clone());
+            continue;
+        }
+        if by_cid.is_none() {
+            let cids = glyph_cids(font)?.ok_or_else(|| p.bad(format!("`{key}`: /CID items need a CID-keyed CFF font")))?;
+            by_cid = Some(cids.iter().enumerate().filter_map(|(g, c)| u16::try_from(g).ok().map(|g| (u32::from(*c), g))).collect());
+        }
+        let map = by_cid.as_ref().ok_or_else(|| p.bad("no CID map"))?;
+        let mut list = Vec::with_capacity(items.len());
+        for item in items {
+            let Some(spec) = item.strip_prefix('/') else {
+                list.push(Value::String(item.to_string()));
+                continue;
+            };
+            let cid = |t: &str| t.parse::<u32>().ok().filter(|c| *c <= 65_535).ok_or_else(|| p.bad(format!("`{item}` is not a CID or a CID range")));
+            let (low, high) = match spec.split_once('-') {
+                Some((a, b)) => (cid(a)?, cid(b)?),
+                None => {
+                    let c = cid(spec)?;
+                    let g = map.get(&c).ok_or_else(|| p.bad(format!("the font has no CID {c}")))?;
+                    list.push(Value::String(format!("gid{g}")));
+                    continue;
+                }
+            };
+            if low > high {
+                return Err(p.bad(format!("the range `{item}` runs backwards")));
+            }
+            // Runs of consecutive glyph ids go in as one range each.
+            let mut gids: Vec<u16> = (low..=high).filter_map(|c| map.get(&c).copied()).collect();
+            gids.sort_unstable();
+            let mut run: Option<(u16, u16)> = None;
+            for g in gids.into_iter().map(Some).chain([None]) {
+                match (run, g) {
+                    (Some((a, b)), Some(g)) if u32::from(b) + 1 == u32::from(g) => run = Some((a, g)),
+                    (current, next) => {
+                        if let Some((a, b)) = current {
+                            list.push(Value::String(format!("gid{a}..gid{b}")));
+                        }
+                        run = next.map(|g| (g, g));
+                    }
+                }
+            }
+        }
+        out.insert(key.to_string(), Value::Array(list));
+    }
+    Ok(by_cid.is_some().then_some(Value::Object(out)))
 }
 
 #[cfg(not(target_arch = "wasm32"))]

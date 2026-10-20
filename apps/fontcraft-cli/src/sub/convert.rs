@@ -31,9 +31,12 @@ const USAGE: &str = "\
       only the CFF or CFF2 table (cff, cff2), or a UFO of the font as the editor opens it. With
       IN OUT the extension of OUT says what to write; .woff and .woff2 keep the input's outlines.
       Each output is INPUT.EXT unless -o, --output-dir or --in-place says otherwise.
+      A variable font written as UFO or with other outlines is snapshotted at its default
+      location unless --location says where. --cid-keyed makes a CFF result CID-keyed.
       Before converting: --location snapshots a variable font, --glyphs and --exclude-glyphs
-      keep part of the glyph set, --goadb renames, subsets or orders the glyphs, and
-      --remove-overlaps merges overlapping TrueType contours.
+      keep part of the glyph set (names, glyph ids, /CID in a CID-keyed font), --fd-select and
+      --exclude-fd keep the glyphs of some Font DICTs, --goadb renames, subsets or orders the
+      glyphs, and --remove-overlaps merges overlapping contours.
 ";
 
 const OPTIONS: &[OptSpec] = &[
@@ -51,16 +54,23 @@ const OPTIONS: &[OptSpec] = &[
     OptSpec::switch("subroutinize", false, "subroutinise CFF and CFF2 results (default: sfnt results yes, bare tables no)"),
     OptSpec::value("max-subrs", "N", "", "most subroutines per INDEX"),
     OptSpec::switch("no-hints", false, "drop stem hints when CFF outlines stay CFF"),
+    OptSpec::optional_value(
+        "cid-keyed",
+        "R-O-S",
+        "make a name-keyed CFF result CID-keyed, CID n for glyph n (default Identity ordering, supplement 0); give a collection as --cid-keyed=R-O-S",
+    ),
     OptSpec::value("timestamp", "keep|now|SECONDS", "", "head.modified: keep it, the current time, or seconds since 1970"),
     OptSpec::value("glyphs", "SELECTOR", "", "keep only these glyphs and .notdef: names, glyph ids, ranges (3-9), U+0041"),
     OptSpec::value("exclude-glyphs", "SELECTOR", "", "leave these glyphs out"),
+    OptSpec::list("fd-select", "N,...", "", "keep only the glyphs of these Font DICTs (CID-keyed CFF or CFF2, numbered from 0)"),
+    OptSpec::list("exclude-fd", "N,...", "", "leave out the glyphs of these Font DICTs"),
     OptSpec::value("goadb", "FILE", "", "rename glyphs from the GOADB's second column to its first"),
     OptSpec::switch("no-rename", false, "use the GOADB without renaming"),
     OptSpec::switch("subset-to-goadb", false, "keep only the glyphs the GOADB lists"),
     OptSpec::switch("goadb-order", false, "order the glyphs as the GOADB lists them"),
     OptSpec::list("location", "AXIS=VALUE", "", "snapshot a variable font at this location first (axis tags; others at their default)"),
     OptSpec::switch("no-clamp", false, "refuse a location outside the axis ranges instead of clamping it"),
-    OptSpec::switch("remove-overlaps", false, "merge overlapping contours (TrueType outlines)"),
+    OptSpec::switch("remove-overlaps", false, "merge overlapping contours (a merged CFF glyph loses its stem hints)"),
     OptSpec::switch("ignore-overlap-errors", false, "keep a glyph whose overlaps cannot be merged as it is"),
     OptSpec::value("smart-components", "components|outlines", "", "sources: how a UFO or designspace holds smart components"),
     OptSpec::value("output", "OUT", "", "the output file (one input only)").short('o'),
@@ -84,7 +94,8 @@ fn convert(raw: &[String]) -> Outcome {
     }
     let [input, output] = parsed.positional.as_slice() else { return Err(usage("convert needs IN and OUT")) };
     let given = ["glyphs", "exclude-glyphs", "goadb"].into_iter().find(|name| parsed.value(name).is_some_and(|v| !v.is_empty()));
-    let given = given.or_else(|| (!parsed.list("location").is_empty()).then_some("location"));
+    let given = given.or_else(|| ["location", "fd-select", "exclude-fd"].into_iter().find(|name| !parsed.list(name).is_empty()));
+    let given = given.or_else(|| parsed.value("cid-keyed").is_some().then_some("cid-keyed"));
     let given = given.or_else(|| {
         ["no-rename", "subset-to-goadb", "goadb-order", "no-clamp", "remove-overlaps", "ignore-overlap-errors"]
             .into_iter()
@@ -256,6 +267,31 @@ fn convert_fonts(parsed: &args::Parsed, raw: &[String]) -> Outcome {
         params.insert("cff".into(), Value::Object(cff));
     }
     params.insert("hints".into(), json!(!parsed.switch("no-hints")));
+    if let Some(ros) = parsed.value("cid-keyed") {
+        let keyed = if ros.is_empty() {
+            json!(true)
+        } else {
+            let well_formed = ros.rsplit_once('-').is_some_and(|(rest, s)| rest.contains('-') && s.parse::<u32>().is_ok());
+            if !well_formed {
+                return Err(usage(format!(
+                    "--cid-keyed takes REGISTRY-ORDERING-SUPPLEMENT, not `{ros}` (write --cid-keyed=R-O-S, or put --cid-keyed after the inputs)"
+                )));
+            }
+            json!(ros)
+        };
+        params.insert("cid".into(), json!({ "keyed": keyed }));
+    }
+    for (key, name) in [("fdSelect", "fd-select"), ("excludeFd", "exclude-fd")] {
+        let items = parsed.list(name);
+        if items.is_empty() {
+            continue;
+        }
+        let mut fds = Vec::new();
+        for item in items.iter().flat_map(|l| l.split([' ', ','])).filter(|w| !w.is_empty()) {
+            fds.push(item.parse::<u64>().map_err(|_| usage(format!("--{name} takes Font DICT numbers, not {item}")))?);
+        }
+        params.insert(key.into(), json!(fds));
+    }
     if let Some(t) = parsed.value("timestamp").filter(|v| !v.is_empty()) {
         params.insert("timestamp".into(), t.parse::<i64>().map(Value::from).unwrap_or_else(|_| json!(t)));
     }

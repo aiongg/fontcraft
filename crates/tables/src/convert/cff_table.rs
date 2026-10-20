@@ -837,6 +837,11 @@ impl Programs {
         self.programs.len()
     }
 
+    /// The width operand of a CFF glyph (16.16, against its Private DICT's nominalWidthX).
+    pub(super) fn width(&self, gid: usize) -> Option<i64> {
+        self.programs.get(gid).and_then(|p| p.width)
+    }
+
     pub(super) fn is_accented(&self, gid: usize) -> bool {
         self.programs.get(gid).is_some_and(|p| p.seac.is_some())
     }
@@ -994,6 +999,47 @@ fn encode_parts<T: Copy + Into<i64>>(code: u16, args: &[T], mask: &[u8], out: &m
         return Err(TablesError::TooLarge { what: "an expanded charstring", limit: MAX_CHARSTRING });
     }
     Ok(())
+}
+
+/// An unhinted charstring that draws `path`: the width operand first when given, then
+/// `rmoveto`, `rlineto` and `rrcurveto`, and `endchar` in CFF (CFF2 has none). Coordinates are
+/// kept to 16.16 fixed point; whole numbers are written as integers.
+pub(super) fn path_charstring(width: Option<i64>, path: &[fontcraft_cff::PathOp], cff2: bool) -> Result<Vec<u8>> {
+    use fontcraft_cff::PathOp;
+    let fixed = |v: f64| -> Result<i64> {
+        let f = (v * ONE as f64).round();
+        if !f.is_finite() || f.abs() > f64::from(i32::MAX) {
+            return Err(invalid(format!("the coordinate {v} does not fit in a charstring")));
+        }
+        Ok(f as i64)
+    };
+    let mut out = Vec::new();
+    let mut width = if cff2 { None } else { width };
+    let mut at = (0i64, 0i64);
+    let mut rel = |p: (f64, f64)| -> Result<[i64; 2]> {
+        let q = (fixed(p.0)?, fixed(p.1)?);
+        let d = [q.0 - at.0, q.1 - at.1];
+        at = q;
+        Ok(d)
+    };
+    for op in path {
+        let (code, args): (u16, Vec<i64>) = match *op {
+            PathOp::MoveTo(p) => (21, rel(p)?.to_vec()),
+            PathOp::LineTo(p) => (5, rel(p)?.to_vec()),
+            PathOp::CurveTo(a, b, c) => (8, [rel(a)?, rel(b)?, rel(c)?].concat()),
+        };
+        if let Some(w) = width.take() {
+            encode_num(w, &mut out)?;
+        }
+        encode_parts(code, &args, &[], &mut out)?;
+    }
+    if !cff2 {
+        if let Some(w) = width {
+            encode_num(w, &mut out)?;
+        }
+        out.push(ENDCHAR as u8);
+    }
+    Ok(out)
 }
 
 /// `op` as operators of at most `limit` operands each, with the same drawing.

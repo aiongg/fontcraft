@@ -12,17 +12,20 @@
 //! | → bare CFF or CFF2 | as above | only the outline table is written |
 //!
 //! The CFF writers lay the table out without subroutines; [`ConvertOptions::subroutinize`]
-//! runs the subroutiniser over the result. Variable fonts (`gvar`, a blending `CFF2`) are
-//! refused: instantiate them first. A conversion that fails returns an error and no bytes.
-//! [`convert_prepared`] adds `tx`'s input steps around a conversion: a snapshot at a design
-//! location, a glyph subset, GOADB renaming, subsetting and ordering, and overlap removal
-//! ([`prepare`], M12.30c).
+//! runs the subroutiniser over the result. [`ConvertOptions::cid_keyed`] makes a name-keyed CFF
+//! result CID-keyed (CID n for glyph n, one Font DICT, as makeotf `-cn` does). [`convert_with`]
+//! refuses variable fonts (`gvar`, a blending `CFF2`) when the outline flavour changes; a
+//! conversion that fails returns an error and no bytes. [`convert_prepared`] snapshots such a
+//! font at its default location first, and adds `tx`'s input steps around a conversion: a
+//! snapshot at a design location, a glyph subset (by glyph or Font DICT), GOADB renaming,
+//! subsetting and ordering, and overlap removal ([`prepare`], M12.30c and M12.30d).
 //!
 //! AFDKO's otf2ttf (Apache-2.0, Copyright 2014 Adobe) and fontTools' `cffLib` converters (MIT)
 //! were read and their rules written anew here.
 
 mod cff_table;
 mod outline;
+mod overlaps;
 mod postscript;
 mod prepare;
 #[cfg(test)]
@@ -39,10 +42,11 @@ use read_fonts::{FontData, FontRead};
 
 use crate::sfnt::{Flavour, SfntFont, Tag, WriteOptions};
 use crate::{Result, TablesError};
+pub use fontcraft_cff::cid::Ros as CidCollection;
 pub use outline::QuadToCubic;
 use outline::{Contour, GlyfOutlines, PsOutlines};
 pub use postscript::{PsInput, PsSource, convert_postscript, read_postscript};
-pub use prepare::{GoadbUse, PrepareOptions, convert_prepared, prepare};
+pub use prepare::{FontDictFilter, GoadbUse, PrepareOptions, convert_prepared, glyph_cids, prepare};
 
 /// Largest error bound accepted, in font units.
 pub const MAX_ERROR_UNITS: f64 = 1_000.0;
@@ -110,6 +114,9 @@ pub struct ConvertOptions {
     pub hints: bool,
     /// `head.modified`, in seconds since 1904; `None` keeps it.
     pub modified: Option<i64>,
+    /// Make a name-keyed CFF result CID-keyed with this character collection (makeotf `-cn`
+    /// writes Adobe-Identity-0): CID n is glyph n, one Font DICT.
+    pub cid_keyed: Option<fontcraft_cff::cid::Ros>,
 }
 
 impl ConvertOptions {
@@ -126,6 +133,7 @@ impl ConvertOptions {
             max_subrs: None,
             hints: true,
             modified: None,
+            cid_keyed: None,
         }
     }
 }
@@ -170,6 +178,9 @@ pub fn convert_with(font: &SfntFont, options: &ConvertOptions) -> Result<Convert
         return Err(TablesError::MissingTable("glyf, CFF or CFF2".into()));
     };
     let to = options.target.outlines();
+    if options.cid_keyed.is_some() && to != Outlines::Cff {
+        return Err(TablesError::BadOptions("a CID-keyed result needs CFF outlines (otf or cff)".into()));
+    }
     if from == Outlines::TrueType && font.get(*b"gvar").is_some() && to != Outlines::TrueType {
         return Err(TablesError::Unsupported("converting a variable TrueType font: instantiate it first".into()));
     }
@@ -197,6 +208,9 @@ pub fn convert_with(font: &SfntFont, options: &ConvertOptions) -> Result<Convert
         }
         (Outlines::Cff, Outlines::Cff2) => cff_to_cff2(&mut work, options, &mut left_behind)?,
         (Outlines::Cff2, Outlines::Cff) => cff2_to_cff(&mut work, &mut left_behind)?,
+    }
+    if let Some(ros) = &options.cid_keyed {
+        cid_key(&mut work, ros, &mut left_behind)?;
     }
     if to != Outlines::TrueType {
         let subroutinize = options.subroutinize.unwrap_or(changed_outlines && !options.target.bare());
@@ -591,6 +605,40 @@ fn cff2_to_cff(font: &mut SfntFont, left_behind: &mut Vec<String>) -> Result<()>
     font.remove(CFF2);
     font.insert(CFF, cff);
     font.insert(*b"post", post);
+    Ok(())
+}
+
+/// Makes the `CFF ` table of `font` CID-keyed with `ros`. A table already CID-keyed with the
+/// same collection is kept; another collection is refused, since its CIDs would mean other
+/// characters.
+fn cid_key(font: &mut SfntFont, ros: &fontcraft_cff::cid::Ros, left_behind: &mut Vec<String>) -> Result<()> {
+    let printable = |s: &str| !s.is_empty() && s.len() <= 127 && s.bytes().all(|b| b.is_ascii_graphic() && !b"[](){}<>/%".contains(&b));
+    if !printable(&ros.registry) || !printable(&ros.ordering) {
+        return Err(TablesError::BadOptions("the registry and ordering must be ASCII words without spaces or PostScript delimiters".into()));
+    }
+    if !(0..=fontcraft_cff::cid::MAX_SUPPLEMENT).contains(&ros.supplement) {
+        return Err(TablesError::BadOptions(format!("the supplement must be 0 to {}", fontcraft_cff::cid::MAX_SUPPLEMENT)));
+    }
+    let n = num_glyphs(font)?;
+    let fd_name = postscript_name(font);
+    let data = table(font, CFF)?;
+    let cff = crate::reorder::cff::parse(data, n)?;
+    if cff.is_cid() {
+        return match cff.ros() {
+            Some((r, o, s)) if r == ros.registry && o == ros.ordering && s == ros.supplement => Ok(()),
+            Some((r, o, s)) => Err(TablesError::Unsupported(format!(
+                "the font is already CID-keyed as {r}-{o}-{s}; moving it to {}-{}-{} would change what its CIDs mean",
+                ros.registry, ros.ordering, ros.supplement
+            ))),
+            None => Err(TablesError::invalid("the CID-keyed CFF table has no readable ROS")),
+        };
+    }
+    let keyed = cff.to_cid_keyed(&ros.registry, &ros.ordering, ros.supplement, &fd_name)?;
+    font.insert(CFF, keyed);
+    let post_names = font.get(*b"post").and_then(|p| u32_at(p, 0)) == Some(0x0002_0000);
+    if !post_names {
+        left_behind.push("glyph names (the CFF table is CID-keyed)".into());
+    }
     Ok(())
 }
 

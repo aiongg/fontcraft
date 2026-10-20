@@ -159,3 +159,46 @@ fn font_convert_writes_ufos_glyph_subsets_and_goadb_names() {
     run(&mut s, "font.convert", json!({ "input": otf, "to": "ttf", "output": dir.join("Merged.ttf"), "removeOverlaps": true }));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn font_convert_makes_cff_cid_keyed_and_selects_by_cid_and_font_dict() {
+    let dir = std::env::temp_dir().join(format!("fontcraft-convert-cid-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut s = Session::with_document();
+    let square = json!([{"x": 60, "y": 0}, {"x": 560, "y": 0}, {"x": 560, "y": 700}, {"x": 60, "y": 700}]);
+    run(&mut s, "path.addPath", json!({"glyph": "A", "nodes": square}));
+    run(&mut s, "path.addPath", json!({"glyph": "B", "nodes": square}));
+    let ttf = dir.join("Font.ttf");
+    run(&mut s, "file.exportStatic", json!({ "destination": ttf, "timestamp": 0 }));
+    let glyphs = fontcraft_tables::reorder::glyph_names(&fontcraft_tables::read(&std::fs::read(&ttf).unwrap(), 0).unwrap()).unwrap();
+    let b = glyphs.iter().position(|n| n == "B").unwrap();
+
+    // Name-keyed to CID-keyed: CID n is glyph n.
+    let cid_otf = dir.join("Font-CID.otf");
+    run(&mut s, "font.convert", json!({ "input": ttf, "to": "otf", "output": cid_otf, "cid": {"keyed": true} }));
+    let font = fontcraft_tables::read(&std::fs::read(&cid_otf).unwrap(), 0).unwrap();
+    let cids = fontcraft_tables::convert::glyph_cids(&font).unwrap().expect("a CID-keyed CFF table");
+    assert_eq!(cids, (0..glyphs.len() as u16).collect::<Vec<_>>());
+
+    // tx's /CID selector picks glyphs by CID; a Font DICT selection keeps the glyphs of dict 0.
+    let r = run(&mut s, "font.convert", json!({ "input": cid_otf, "to": "otf", "output": dir.join("B.otf"), "glyphs": format!("/{b}") }));
+    assert_eq!(r["results"][0]["glyphs"], json!(2));
+    let r = run(&mut s, "font.convert", json!({ "input": cid_otf, "to": "otf", "output": dir.join("All.otf"), "fdSelect": [0] }));
+    assert_eq!(r["results"][0]["glyphs"], json!(glyphs.len()));
+
+    // Refused: a Font DICT the font lacks, a Font DICT or a CID in a name-keyed font, a CID the
+    // font lacks, and CID keying of TrueType output.
+    for bad in [
+        json!({ "input": cid_otf, "to": "otf", "output": dir.join("x.otf"), "fdSelect": [1] }),
+        json!({ "input": ttf, "to": "otf", "output": dir.join("x.otf"), "fdSelect": [0] }),
+        json!({ "input": ttf, "to": "otf", "output": dir.join("x.otf"), "glyphs": "/1" }),
+        json!({ "input": cid_otf, "to": "otf", "output": dir.join("x.otf"), "glyphs": "/9999" }),
+        json!({ "input": ttf, "to": "ttf", "output": dir.join("x.ttf"), "cid": {"keyed": true} }),
+        json!({ "input": ttf, "to": "otf", "output": dir.join("x.otf"), "cid": {"keyed": "Adobe-Identity"} }),
+    ] {
+        assert!(s.execute("font.convert", &bad).is_err(), "{bad}");
+    }
+    assert!(!dir.join("x.otf").exists() && !dir.join("x.ttf").exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}
