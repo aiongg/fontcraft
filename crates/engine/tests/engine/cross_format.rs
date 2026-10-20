@@ -937,8 +937,11 @@ fn font_information_survives_a_designspace() {
             *exercised.entry(what).or_default() += usize::from(on);
         }
         let losses = designspace::info_losses(&font);
+        // Colours a colour layer list adds to the palettes come back as part of each palette.
+        let palettes_grow = losses.iter().any(|l| l.contains("added to the end of each colour palette"));
         for d in info_trip(&font) {
-            let listed = losses.iter().any(|l| d.contains(l.split(" (").next().unwrap_or(l).split(':').next().unwrap_or(l)));
+            let listed = losses.iter().any(|l| d.contains(l.split(" (").next().unwrap_or(l).split(':').next().unwrap_or(l)))
+                || (palettes_grow && d.ends_with("parameter `Color Palettes`"));
             if !listed {
                 failures.push(format!("{}: {d}", path.display()));
             }
