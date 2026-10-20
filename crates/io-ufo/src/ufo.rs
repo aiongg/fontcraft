@@ -1126,6 +1126,9 @@ fn sorted(mut v: Vec<String>) -> Vec<String> {
 
 /// The files of one master's UFO.
 pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
+    // Full-colour layers of paths are written as layer glyphs of their own.
+    let expanded = crate::colorglyphs::expand(font);
+    let font = expanded.as_ref().unwrap_or(font);
     // Colour layers in the list are measured once for the whole walk.
     let _boxes = crate::colorkeys::Scope::enter();
     let (master, default) = (target.master, target.default);
@@ -1375,8 +1378,9 @@ pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
     // list keeps it while the default master's still agrees.
     // The glyphs a designspace makes of alternate layers stay out of a new list, as glyphsLib
     // leaves them out.
-    let made = |g: &Glyph| g.extra.get(Family::Designspace, crate::designspace::BRACKET_GLYPH).is_some();
-    let order: Vec<String> = font.glyphs.iter().map(|g| g.name.clone()).collect();
+    // So do the layer glyphs of full-colour layers, which are not in the model's order at all.
+    let made = |g: &Glyph| g.extra.get(Family::Designspace, crate::designspace::BRACKET_GLYPH).is_some() || crate::colorglyphs::is_generated(g);
+    let order: Vec<String> = font.glyphs.iter().filter(|g| !crate::colorglyphs::is_generated(g)).map(|g| g.name.clone()).collect();
     let listed: Vec<String> = font.glyphs.iter().filter(|g| !made(g)).map(|g| g.name.clone()).collect();
     let agrees = |kept: &[String]| {
         let named: Vec<&String> = order.iter().filter(|n| kept.contains(n)).collect();
@@ -1410,6 +1414,9 @@ pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
     };
     let (own_lib, default_lib_classes) = (lib.clone(), default_lib.clone());
     patch_glyph_map(&mut lib, OPENTYPE_CATEGORIES, font, is_default, &default_lib, |g| {
+        if crate::colorglyphs::is_generated(g) {
+            return None;
+        }
         g.info.opentype_category.as_deref().or_else(|| {
             let class = derived.get(&g.name).copied()?;
             let kept = |d: &Dict| kept_classes(d, g).as_deref() == Some(class);
@@ -1666,6 +1673,10 @@ pub fn info_losses_for(font: &Font, files: FilesFrom) -> Vec<String> {
 /// What the UFOs of `font` (the sources of a designspace, or one UFO) leave out of the font's and
 /// the masters' information, one line each.
 pub(crate) fn font_losses(font: &Font, files: FilesFrom) -> Vec<String> {
+    // The layers and glyphs as the writer writes them.
+    let original = font;
+    let expanded = crate::colorglyphs::expand(font);
+    let font = expanded.as_ref().unwrap_or(font);
     let designspace = files == FilesFrom::Designspace;
     let mut out: Vec<String> = Vec::new();
     for m in font.masters.iter().filter(|m| m.extra.get(Family::Designspace, "layer").is_none()) {
@@ -1683,6 +1694,7 @@ pub(crate) fn font_losses(font: &Font, files: FilesFrom) -> Vec<String> {
     out.extend(glyph_losses(font));
     out.extend(layer_losses(font, files));
     out.extend(crate::colorkeys::losses(font));
+    out.extend(crate::colorglyphs::losses(original));
     out.extend(shape_losses(font, designspace));
     out.extend(crate::features::losses(&font.features));
     out.extend(kerning::losses(font));
@@ -2132,7 +2144,7 @@ fn plan_add<'a>(plan: &mut Plan<'a>, name: String, g: &'a Glyph, part: Part<'a>,
 pub fn ufo_layer_name(font: &Font, l: &Layer) -> Option<String> {
     use fontcraft_model::PaletteEntry;
     let a = &l.info.attrs;
-    if !a.axis_rules.is_empty() || crate::colorkeys::listed(font, l).is_some() {
+    if !a.axis_rules.is_empty() || crate::colorkeys::listed(font, l).is_some() || crate::colorglyphs::expands(l) {
         return None;
     }
     if let Some(p) = a.color_palette {
@@ -2178,6 +2190,8 @@ pub(crate) fn braced_coordinates(name: &str) -> Option<Vec<f64>> {
 /// designspace (`designspace`) holds alternate layers, as glyphs of their own and rules, in a
 /// font with axes.
 pub fn layers_left_out(font: &Font, designspace: bool) -> usize {
+    let expanded = crate::colorglyphs::expand(font);
+    let font = expanded.as_ref().unwrap_or(font);
     // Colour layers in the list are measured once for the whole walk.
     let _boxes = crate::colorkeys::Scope::enter();
     let layer_master = |id: &str| font.masters.iter().any(|m| m.id == id && m.extra.get(Family::Designspace, "layer").is_some());
