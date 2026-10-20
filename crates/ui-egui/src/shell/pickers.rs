@@ -26,11 +26,12 @@ pub trait Picker: Send {
     fn save(&mut self, title: &str, kind: &str, extensions: &[&str], suggested: &str) -> Option<PathBuf>;
 }
 
-/// The chosen `path`, with `.{default}` added when its extension is none of `extensions`: some
-/// choosers return the name as typed. `Err` says why nothing should run: the name with the
-/// extension added is a file that exists, and the chooser asked only about the name without it.
+/// The chosen `path`, with `.{default}` added when its extension, in any case, is none of
+/// `extensions`: some choosers return the name as typed. `Err` says why nothing should run: the
+/// name with the extension added is a file that exists, and the chooser asked only about the name
+/// without it.
 pub fn with_extension(path: PathBuf, extensions: &[&str], default: &str) -> Result<PathBuf, String> {
-    if path.extension().and_then(|e| e.to_str()).is_some_and(|e| extensions.contains(&e)) {
+    if path.extension().and_then(|e| e.to_str()).is_some_and(|e| extensions.iter().any(|x| x.eq_ignore_ascii_case(e))) {
         return Ok(path);
     }
     let mut name = path.into_os_string();
@@ -365,6 +366,8 @@ mod tests {
         // name with an accepted extension stays as it is.
         assert_eq!(with_extension(dir.join("a.v2"), &SAVE_EXTENSIONS, "ufo").unwrap(), dir.join("a.v2.ufo"));
         assert_eq!(with_extension(dir.join("a.glyphs"), &SAVE_EXTENSIONS, "ufo").unwrap(), dir.join("a.glyphs"));
+        assert_eq!(with_extension(dir.join("Font.UFO"), &SAVE_EXTENSIONS, "glyphs").unwrap(), dir.join("Font.UFO"));
+        assert_eq!(with_extension(dir.join("x.JSON"), &["json"], "json").unwrap(), dir.join("x.JSON"));
         // The name with the extension added is a file the chooser did not ask about: refused.
         assert!(with_extension(dir.join("Mine"), &SAVE_EXTENSIONS, "fontcraft").unwrap_err().contains("exists"));
         let _ = std::fs::remove_dir_all(&dir);

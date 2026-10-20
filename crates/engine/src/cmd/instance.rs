@@ -387,7 +387,9 @@ pub(super) fn stage(out: &Path, bytes: &[u8], n: usize) -> Result<Staged> {
 const MAX_FOLDER_FILES: usize = crate::io::MAX_PACKAGE_FILES;
 
 /// Writes `files` (paths relative to the folder, `/`-separated) into a new temporary folder
-/// beside `out`. An existing `out` must be a folder that `is_replaceable` accepts.
+/// beside `out` (beside the folder it links to, for a link). An existing `out` must be a folder
+/// that `is_replaceable` accepts. Both the folder replaced and the temporary must pass the write
+/// check before anything is created.
 #[cfg(not(target_arch = "wasm32"))]
 fn stage_folder(out: &Path, files: &std::collections::BTreeMap<String, Vec<u8>>, n: usize, is_replaceable: impl Fn(&Path) -> bool) -> Result<Staged> {
     let io = |path: &Path, e: std::io::Error| EngineError::Io(format!("cannot write {}: {e}", path.display()));
@@ -400,6 +402,8 @@ fn stage_folder(out: &Path, files: &std::collections::BTreeMap<String, Vec<u8>>,
     }
     let name = target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "instance".into());
     let temp = target.with_file_name(format!(".{name}.{}-{n}.tmp", std::process::id()));
+    file_io::check_write(&target)?;
+    file_io::check_write(&temp)?;
     std::fs::create_dir(&temp).map_err(|e| io(&temp, e))?;
     let staged = Staged { temp, target, folder: true };
     let written = write_tree(&staged.temp, &staged.target, files);
@@ -653,6 +657,34 @@ mod tests {
         let outside: Vec<_> = std::fs::read_dir(base.join("outside")).unwrap().map(|e| e.unwrap().file_name()).collect();
         assert_eq!(outside, ["T.ttf"], "no temporary file beside the link's target");
         assert_eq!(std::fs::read(base.join("outside/T.ttf")).unwrap(), b"old");
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    /// Outputs reached through a linked folder inside the write root, or that are links to a
+    /// folder outside it, are refused before anything is created outside: a file, a new UFO
+    /// folder, and an existing UFO folder.
+    #[cfg(unix)]
+    #[test]
+    fn staged_outputs_through_links_out_of_the_write_root_are_refused() {
+        let base = std::env::temp_dir().join(format!("fontcraft-instance-linked-dir-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(base.join("out")).unwrap();
+        std::fs::create_dir_all(base.join("outside/Old.ufo")).unwrap();
+        std::fs::write(base.join("outside/Old.ufo/metainfo.plist"), b"old").unwrap();
+        std::os::unix::fs::symlink(base.join("outside"), base.join("out/linked")).unwrap();
+        std::os::unix::fs::symlink(base.join("outside/Old.ufo"), base.join("out/Old.ufo")).unwrap();
+        let roots = crate::file_access::AutomationRoots::new(None, Some(&base.join("out"))).unwrap().unwrap();
+        let files: std::collections::BTreeMap<String, Vec<u8>> = [("metainfo.plist".to_string(), b"new".to_vec())].into();
+        let any = |_: &Path| true;
+        crate::file_access::confine(Some(&roots), || {
+            let refused = |r: Result<Staged>| r.is_err_and(|e| e.to_string().contains("outside the write root"));
+            assert!(refused(stage(&base.join("out/linked/T.ttf"), b"new", 0)), "a file in a linked folder");
+            assert!(refused(stage_folder(&base.join("out/linked/New.ufo"), &files, 0, any)), "a new UFO in a linked folder");
+            assert!(refused(stage_folder(&base.join("out/Old.ufo"), &files, 0, any)), "a link to a UFO outside");
+        });
+        let outside: Vec<_> = std::fs::read_dir(base.join("outside")).unwrap().map(|e| e.unwrap().file_name()).collect();
+        assert_eq!(outside, ["Old.ufo"], "nothing is created outside");
+        assert_eq!(std::fs::read(base.join("outside/Old.ufo/metainfo.plist")).unwrap(), b"old");
         std::fs::remove_dir_all(&base).unwrap();
     }
 }

@@ -666,7 +666,7 @@ fn paint_drawables_within(px: &mut Pixels, drawables: &[Drawable], to_pixels: Af
     }
     let work = work(drawables, to_pixels, px.width, px.height, least);
     if work.cost > work.budget {
-        paint_plain(px, drawables, to_pixels, work.all, plain);
+        paint_plain(px, drawables, to_pixels, &work, plain);
         return false;
     }
     for (d, b) in drawables.iter().zip(&work.boxes) {
@@ -701,24 +701,77 @@ fn paint_drawables_within(px: &mut Pixels, drawables: &[Drawable], to_pixels: Af
     true
 }
 
-/// Fills the outer outline of every drawable, as one path, in `color` within the box `all`: one
-/// pass over the glyph's pixels whatever the number of drawables. Each outline is turned to one
-/// winding first, so layers wound in opposite directions add up under the nonzero rule instead
-/// of cancelling where they overlap.
-fn paint_plain(px: &mut Pixels, drawables: &[Drawable], to_pixels: Affine, all: Option<(u32, u32, u32, u32)>, color: [f32; 4]) {
-    let Some((x0, y0, x1, y1)) = all else { return };
-    let (w, h) = (x1 - x0, y1 - y0);
-    let outline =
-        concat(drawables.iter().filter_map(|d| d.clips.first()).map(|c| if c.area() < 0.0 { c.reverse_subpaths() } else { c.clone() }).collect());
-    let shift = Affine::translate((-f64::from(x0), -f64::from(y0))) * to_pixels;
-    let Ok(mask) = render_path(&outline, shift, w, h, &MASK) else { return };
-    for (i, p) in mask.pixels.as_chunks::<4>().0.iter().enumerate() {
-        if p[3] == 0 {
+/// A pixel box: left, top, right, bottom.
+type PixelBox = (u32, u32, u32, u32);
+
+/// Fills the outer outline of every drawable in `color` within the box `work.all`.
+fn paint_plain(px: &mut Pixels, drawables: &[Drawable], to_pixels: Affine, work: &Work, color: [f32; 4]) {
+    let Some(all) = work.all else { return };
+    let coverage = match layer_coverage(drawables, &work.boxes, to_pixels, all, work.budget) {
+        Some(c) => c,
+        None => {
+            let Some(c) = joined_coverage(drawables, to_pixels, all) else { return };
+            c
+        }
+    };
+    let (x0, y0, x1, _) = all;
+    let w = x1.saturating_sub(x0).max(1);
+    for (i, cov) in coverage.iter().enumerate() {
+        if *cov <= 0.0 {
             continue;
         }
         let (x, y) = (x0 + i as u32 % w, y0 + i as u32 / w);
-        blend(px.data, (y as usize * px.width as usize + x as usize) * 4, color, f32::from(p[3]) / 255.0);
+        blend(px.data, (y as usize * px.width as usize + x as usize) * 4, color, *cov);
     }
+}
+
+/// The coverage of the box `all`, row by row, by the outer outlines of `drawables`: each
+/// outline is rendered on its own box (`boxes`) and a pixel takes the most any one gives it, so
+/// an outline cannot cut a hole in another whatever their windings. `None` when that costs more
+/// than `budget` pixel operations.
+fn layer_coverage(drawables: &[Drawable], boxes: &[Option<PixelBox>], to_pixels: Affine, all: PixelBox, budget: u64) -> Option<Vec<f32>> {
+    let area = |(x0, y0, x1, y1): PixelBox| u64::from(x1.saturating_sub(x0)) * u64::from(y1.saturating_sub(y0));
+    let cost = boxes.iter().flatten().fold(area(all), |sum, &b| sum.saturating_add(area(b)));
+    if cost > budget {
+        return None;
+    }
+    let (ax0, ay0, ax1, ay1) = all;
+    let aw = ax1.saturating_sub(ax0);
+    let mut coverage = vec![0.0f32; aw as usize * ay1.saturating_sub(ay0) as usize];
+    for (d, b) in drawables.iter().zip(boxes) {
+        let (Some(outline), Some((x0, y0, x1, y1))) = (d.clips.first(), *b) else { continue };
+        let (w, h) = (x1.saturating_sub(x0), y1.saturating_sub(y0));
+        if w == 0 || h == 0 {
+            continue;
+        }
+        let shift = Affine::translate((-f64::from(x0), -f64::from(y0))) * to_pixels;
+        let Ok(mask) = render_path(outline, shift, w, h, &MASK) else { continue };
+        for (i, p) in mask.pixels.as_chunks::<4>().0.iter().enumerate() {
+            if p[3] == 0 {
+                continue;
+            }
+            let col = x0.saturating_sub(ax0) + i as u32 % w;
+            let row = y0.saturating_sub(ay0) + i as u32 / w;
+            if let Some(c) = coverage.get_mut(row as usize * aw as usize + col as usize) {
+                *c = c.max(f32::from(p[3]) / 255.0);
+            }
+        }
+    }
+    Some(coverage)
+}
+
+/// The coverage of the box `all`, row by row, by the outer outlines of `drawables` joined as one
+/// path: one pass over the glyph's pixels whatever the number of drawables. Each outline is
+/// turned to one winding first, so layers wound in opposite directions add up under the nonzero
+/// rule; a layer that holds parts of both windings can still cancel another where they overlap.
+fn joined_coverage(drawables: &[Drawable], to_pixels: Affine, all: PixelBox) -> Option<Vec<f32>> {
+    let (x0, y0, x1, y1) = all;
+    let (w, h) = (x1.saturating_sub(x0), y1.saturating_sub(y0));
+    let outline =
+        concat(drawables.iter().filter_map(|d| d.clips.first()).map(|c| if c.area() < 0.0 { c.reverse_subpaths() } else { c.clone() }).collect());
+    let shift = Affine::translate((-f64::from(x0), -f64::from(y0))) * to_pixels;
+    let mask = render_path(&outline, shift, w, h, &MASK).ok()?;
+    Some(mask.pixels.as_chunks::<4>().0.iter().map(|p| f32::from(p[3]) / 255.0).collect())
 }
 
 /// Paints the bitmap of `image` (straight RGBA, rows top to bottom) into `px`: `place` maps the
@@ -1100,6 +1153,39 @@ mod tests {
         let all = paint_drawables_within(&mut Pixels { data: &mut data, width: 64, height: 64 }, &list, Affine::IDENTITY, 100 * 64 * 64 * 2, green);
         assert!(!all, "the budget runs out");
         assert!(data.chunks(4).all(|p| p == &[0, 255, 0, 255][..]), "the overlap is filled solid");
+    }
+
+    #[test]
+    fn the_plain_fill_has_no_hole_where_a_layer_holds_both_windings() {
+        let rect = |x0: f64, y0: f64, x1: f64, y1: f64| {
+            let mut p = BezPath::new();
+            p.move_to((x0, y0));
+            p.line_to((x1, y0));
+            p.line_to((x1, y1));
+            p.line_to((x0, y1));
+            p.close_path();
+            p
+        };
+        // One layer: a large square and, apart from it, a small one wound the other way; nonzero
+        // fills both. The other layer covers the small square, wound like the large one.
+        let mut mixed = rect(0.0, 0.0, 100.0, 100.0);
+        mixed.extend(rect(200.0, 20.0, 220.0, 40.0).reverse_subpaths().elements().iter().copied());
+        let red = Leaf::Solid([1.0, 0.0, 0.0, 1.0]);
+        let list = vec![Drawable { clips: vec![mixed], leaf: red.clone() }, Drawable { clips: vec![rect(190.0, 10.0, 230.0, 50.0)], leaf: red }];
+        let (width, height) = (240u32, 110u32);
+        let work = work(&list, Affine::IDENTITY, width, height, 0);
+        let all = work.all.unwrap();
+        let at = |x: u32, y: u32| ((y - all.1) * (all.2 - all.0) + (x - all.0)) as usize;
+        let joined = joined_coverage(&list, Affine::IDENTITY, all).unwrap();
+        assert!(joined[at(210, 30)] < 0.5, "joined as one path, the windings cancel there");
+        let green = [0.0, 1.0, 0.0, 1.0];
+        let mut data = vec![0u8; (width * height * 4) as usize];
+        paint_plain(&mut Pixels { data: &mut data, width, height }, &list, Affine::IDENTITY, &work, green);
+        let pixel = |x: u32, y: u32| data[((y * width + x) * 4) as usize..][..4].to_vec();
+        assert_eq!(pixel(210, 30), [0, 255, 0, 255], "the overlap is filled");
+        assert_eq!(pixel(195, 15), [0, 255, 0, 255], "the covering layer is filled");
+        assert_eq!(pixel(50, 50), [0, 255, 0, 255], "the large square is filled");
+        assert_eq!(pixel(150, 50), [0, 0, 0, 0], "between them nothing is");
     }
 
     #[test]
