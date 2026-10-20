@@ -199,12 +199,12 @@ fn range(min: f64, max: f64) -> InstanceOptions {
 
 /// Each command of a glyph: operator and operand defaults.
 fn program(t: &Table, gid: usize) -> Vec<(u16, Vec<f64>)> {
-    t.glyphs[gid].iter().map(|c| (c.op, c.args.iter().map(|a| a.v).collect())).collect()
+    t.glyphs[gid].cmds().map(|c| (c.op, c.args.iter().map(|a| a.v).collect())).collect()
 }
 
 /// The deltas of each blended operand of one command (empty for a plain one).
 fn deltas(t: &Table, gid: usize, cmd: usize) -> Vec<Vec<f64>> {
-    t.glyphs[gid][cmd].args.iter().map(|a| a.item.map(|i| t.items[i].deltas.clone()).unwrap_or_default()).collect()
+    t.glyphs[gid].cmds().nth(cmd).unwrap().args.iter().map(|a| a.item.map(|i| t.items[i].deltas.clone()).unwrap_or_default()).collect()
 }
 
 fn blue_values(t: &Table) -> Vec<f64> {
@@ -230,7 +230,7 @@ fn cff2_full_instance_between_masters_matches_the_instancer() {
         vec![(1, vec![0.0, 712.0]), (3, vec![95.0, 410.0]), (19, vec![]), (21, vec![95.0, 0.0]), (5, vec![0.0, 712.0, 410.0, 0.0, 0.0, -712.0])],
         "hints kept, the subroutine inlined"
     );
-    assert_eq!(t.glyphs[1][2].mask, vec![0xC0]);
+    assert_eq!(t.glyphs[1].cmds().nth(2).unwrap().mask, [0xC0]);
     assert_eq!(program(&t, 2), vec![(21, vec![50.0, 0.0]), (8, vec![0.0, 100.0, 100.0, 100.0, 100.0, -95.0])]);
     assert_eq!(blue_values(&t), vec![-10.0, 20.0, 692.0, 8.0], "−10 10 702 710: the delta goes to the absolute value");
     assert_eq!(advances(&out), vec![500, 610, 512], "HVAR moves the advances; 12.5 rounds to 12");
@@ -339,6 +339,8 @@ fn nested_subroutines_past_the_memory_limit_are_refused() {
     let err = Table::read_within(&table, 0, limit).unwrap_err();
     assert!(matches!(err, TablesError::TooLarge { limit: l, .. } if l == limit), "{err}");
     assert!(started.elapsed() < std::time::Duration::from_secs(5));
+    // 32 MiB: the operators fit (22 bytes each), their operands held in one buffer per glyph.
+    assert_eq!(Table::read_within(&table, 0, 32 << 20).unwrap().glyph_count(), 64);
     // A path operator without its operands is refused as it is read.
     let bare = crate::tests::nested_subr_cff2(1, 3, 4, &[5]);
     assert!(matches!(Table::read(&bare, 0), Err(TablesError::Invalid(m)) if m.contains("operator 5")));

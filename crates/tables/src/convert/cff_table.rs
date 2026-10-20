@@ -368,7 +368,7 @@ fn read_fd_select(data: &[u8], at: usize, glyphs: usize, cff2: bool) -> Result<V
 
 /// One charstring operator with its operands (16.16 fixed point) and, for `hintmask` and
 /// `cntrmask`, its mask bytes. `code` is the operator byte, or 1200 plus the byte after the
-/// escape.
+/// escape. Operators are held in this form only while one glyph is written.
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Op {
     code: u16,
@@ -376,15 +376,89 @@ struct Op {
     mask: Vec<u8>,
 }
 
-/// An expanded charstring cut into operators.
+/// One operator of a [`Program`]: its code and how many operands and mask bytes it takes, in
+/// order, from the program's buffers.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct OpRecord {
+    code: u16,
+    args: u16,
+    mask: u16,
+}
+
+/// An operator of a [`Program`] with its operands and mask bytes.
+#[derive(Clone, Copy, Debug)]
+struct OpRef<'a> {
+    code: u16,
+    args: &'a [i32],
+    mask: &'a [u8],
+}
+
+impl OpRef<'_> {
+    fn owned(self) -> Op {
+        Op { code: self.code, args: self.args.iter().map(|v| i64::from(*v)).collect(), mask: self.mask.to_vec() }
+    }
+}
+
+/// An expanded charstring cut into operators. A whole table of these is held at once, so the
+/// operands and the mask bytes sit in one buffer each, in operator order, and each operand
+/// takes 32 bits: every number a charstring can state fits in 16.16 fixed point.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct Program {
     /// CFF: the width operand of the first stack-clearing operator.
     width: Option<i64>,
     /// Every operator but `endchar`.
-    ops: Vec<Op>,
+    ops: Vec<OpRecord>,
+    args: Vec<i32>,
+    masks: Vec<u8>,
     /// CFF: the operands of an accented `endchar` (seac): adx, ady, base code, accent code.
     seac: Option<[i64; 4]>,
+}
+
+impl Program {
+    /// Adds an operator; answers the bytes it adds to the buffers.
+    fn push(&mut self, code: u16, args: &[i64], mask: &[u8]) -> Result<usize> {
+        let record = OpRecord {
+            code,
+            args: u16::try_from(args.len()).map_err(|_| invalid(format!("operator {code} has more than 65535 operands")))?,
+            mask: u16::try_from(mask.len()).map_err(|_| invalid("a hint mask is longer than 65535 bytes"))?,
+        };
+        for v in args {
+            self.args.push(i32::try_from(*v).map_err(|_| invalid("a charstring operand does not fit in 16.16 fixed point"))?);
+        }
+        self.masks.extend_from_slice(mask);
+        self.ops.push(record);
+        Ok(std::mem::size_of::<OpRecord>() + args.len() * std::mem::size_of::<i32>() + mask.len())
+    }
+
+    fn ops(&self) -> Ops<'_> {
+        Ops { records: self.ops.iter(), args: &self.args, masks: &self.masks }
+    }
+
+    fn shrink_to_fit(&mut self) {
+        self.ops.shrink_to_fit();
+        self.args.shrink_to_fit();
+        self.masks.shrink_to_fit();
+    }
+}
+
+/// The operators of a [`Program`] in order.
+struct Ops<'a> {
+    records: std::slice::Iter<'a, OpRecord>,
+    args: &'a [i32],
+    masks: &'a [u8],
+}
+
+impl<'a> Iterator for Ops<'a> {
+    type Item = OpRef<'a>;
+
+    fn next(&mut self) -> Option<OpRef<'a>> {
+        let r = self.records.next()?;
+        let (args, rest) = self.args.split_at_checked(usize::from(r.args)).unwrap_or((self.args, &[]));
+        self.args = rest;
+        let (mask, rest) = self.masks.split_at_checked(usize::from(r.mask)).unwrap_or((self.masks, &[]));
+        self.masks = rest;
+        Some(OpRef { code: r.code, args, mask })
+    }
 }
 
 const HINTMASK: u16 = 19;
@@ -392,7 +466,8 @@ const CNTRMASK: u16 = 20;
 const ENDCHAR: u16 = 14;
 const DOTSECTION: u16 = 1200;
 
-/// Cuts an expanded charstring into operators, each charged to `memory`. A variable CFF2
+/// Cuts an expanded charstring into operators, each charged to `memory` by the bytes it
+/// holds. A variable CFF2
 /// charstring (`blend`, `vsindex`), the arithmetic operators and a path operator that cannot
 /// be drawn with its operands are refused.
 fn parse_program(code: &[u8], cff2: bool, memory: &mut CharstringMemory) -> Result<Program> {
@@ -464,13 +539,13 @@ fn parse_program(code: &[u8], cff2: bool, memory: &mut CharstringMemory) -> Resu
             }
             cleared = true;
         }
-        let mut mask = Vec::new();
+        let mut mask: &[u8] = &[];
         match op {
             1 | 3 | 18 | 23 => stems += args.len() / 2,
             HINTMASK | CNTRMASK => {
                 stems += args.len() / 2;
                 let n = stems.div_ceil(8);
-                mask = code.get(i..i + n).ok_or_else(|| invalid("a hint mask is cut short"))?.to_vec();
+                mask = code.get(i..i + n).ok_or_else(|| invalid("a hint mask is cut short"))?;
                 i += n;
             }
             ENDCHAR if !cff2 => {
@@ -502,8 +577,8 @@ fn parse_program(code: &[u8], cff2: bool, memory: &mut CharstringMemory) -> Resu
         if !drawable(op, args.len()) {
             return Err(invalid(format!("operator {op} cannot take {} operands", args.len())));
         }
-        memory.charge(std::mem::size_of::<Op>() + args.capacity() * std::mem::size_of::<i64>() + mask.capacity())?;
-        program.ops.push(Op { code: op, args: std::mem::take(&mut args), mask });
+        memory.charge(program.push(op, &args, mask)?)?;
+        args.clear();
     }
     if !args.is_empty() {
         return Err(invalid("operands are left at the end of the charstring"));
@@ -511,6 +586,7 @@ fn parse_program(code: &[u8], cff2: bool, memory: &mut CharstringMemory) -> Resu
     if !cff2 && !ended {
         return Err(invalid("the charstring has no endchar"));
     }
+    program.shrink_to_fit();
     Ok(program)
 }
 
@@ -595,10 +671,13 @@ impl Turtle<'_> {
 
 /// Draws expanded charstring operators into `pen` from the origin; answers the pen position
 /// at the end.
-fn run(ops: &[Op], pen: &mut Collect) -> Result<(i64, i64)> {
+fn run(program: &Program, pen: &mut Collect) -> Result<(i64, i64)> {
     let mut t = Turtle { pen, at: (0, 0), moved: false };
-    for op in ops {
-        let a = op.args.as_slice();
+    let mut wide: Vec<i64> = Vec::new();
+    for op in program.ops() {
+        wide.clear();
+        wide.extend(op.args.iter().map(|v| i64::from(*v)));
+        let a = wide.as_slice();
         let bad = || invalid(format!("operator {} cannot take {} operands", op.code, a.len()));
         match (op.code, a) {
             (21, [x, y]) => t.move_by(*x, *y),
@@ -757,7 +836,7 @@ impl Programs {
     pub(super) fn draw(&self, gid: usize) -> Result<Drawing> {
         let p = self.programs.get(gid).ok_or_else(|| invalid(format!("glyph {gid} is beyond the CharStrings")))?;
         let mut pen = Collect::default();
-        run(&p.ops, &mut pen).map_err(|e| in_glyph(e, gid))?;
+        run(p, &mut pen).map_err(|e| in_glyph(e, gid))?;
         let code = |v: i64| u8::try_from(v / ONE).unwrap_or(0);
         let seac = p.seac.map(|[adx, ady, base, accent]| Seac { adx: fixed(adx), ady: fixed(ady), base: code(base), accent: code(accent) });
         Ok(Drawing { contours: pen.done()?, seac })
@@ -776,10 +855,10 @@ fn expand(table: &[u8], cff2: bool, limit: usize) -> Result<(Vec<u8>, Charstring
 /// A `seac` part, parsed once for the whole table: many accented glyphs name the same part.
 struct SeacPart {
     /// Every operator.
-    ops: Vec<Op>,
+    ops: Program,
     /// The operators without the hints, for a part whose hints are dropped: an accented
     /// glyph then costs only what it writes.
-    paths: Vec<Op>,
+    paths: Program,
     /// Where the part's drawing ends.
     end: (i64, i64),
 }
@@ -793,7 +872,7 @@ type SeacParts = std::collections::HashMap<usize, std::rc::Rc<SeacPart>>;
 /// and kept in `parts`.
 fn flatten_seac(
     charstrings: &[&[u8]],
-    own: &[Op],
+    own: &Program,
     seac: [i64; 4],
     standard_glyph: &dyn Fn(u8) -> Option<usize>,
     parts: &mut SeacParts,
@@ -811,22 +890,27 @@ fn flatten_seac(
         if p.seac.is_some() {
             return Err(invalid("a seac part is itself accented"));
         }
-        let end = run(&p.ops, &mut Collect::default())?;
-        let paths: Vec<Op> = p.ops.iter().filter(|op| !STEM_OPS.contains(&op.code)).cloned().collect();
-        memory.charge(paths.iter().fold(0usize, |n, op| n.saturating_add(std::mem::size_of::<Op>() + op.args.len() * 8 + op.mask.len())))?;
-        let p = std::rc::Rc::new(SeacPart { ops: p.ops, paths, end });
+        let end = run(&p, &mut Collect::default())?;
+        let mut paths = Program::default();
+        memory.charge(std::mem::size_of::<Program>())?;
+        for op in p.ops().filter(|op| !STEM_OPS.contains(&op.code)) {
+            let wide: Vec<i64> = op.args.iter().map(|v| i64::from(*v)).collect();
+            memory.charge(paths.push(op.code, &wide, op.mask)?)?;
+        }
+        paths.shrink_to_fit();
+        let p = std::rc::Rc::new(SeacPart { ops: p, paths, end });
         parts.insert(gid, p.clone());
         Ok(Some(p))
     };
-    let keep_base_hints = !own.iter().any(|op| STEM_OPS.contains(&op.code) || is_path(op.code));
-    let mut out: Vec<Op> = own.to_vec();
+    let keep_base_hints = !own.ops().any(|op| STEM_OPS.contains(&op.code) || is_path(op.code));
+    let mut out: Vec<Op> = own.ops().map(OpRef::owned).collect();
     let mut at = run(own, &mut Collect::default())?;
     for (program, shift, hints) in [(part(base)?, (0, 0), keep_base_hints), (part(accent)?, (adx, ady), false)] {
         let Some(program) = program else { continue };
         let end = program.end;
         let mut first = true;
-        for op in if hints { &program.ops } else { &program.paths } {
-            let op = op.clone();
+        for op in if hints { program.ops.ops() } else { program.paths.ops() } {
+            let op = op.owned();
             if STEM_OPS.contains(&op.code) {
                 out.push(op);
                 continue;
@@ -885,15 +969,19 @@ fn encode_num(v: i64, out: &mut Vec<u8>) -> Result<()> {
 }
 
 fn encode_op(op: &Op, out: &mut Vec<u8>) -> Result<()> {
-    for a in &op.args {
-        encode_num(*a, out)?;
+    encode_parts(op.code, &op.args, &op.mask, out)
+}
+
+fn encode_parts<T: Copy + Into<i64>>(code: u16, args: &[T], mask: &[u8], out: &mut Vec<u8>) -> Result<()> {
+    for a in args {
+        encode_num((*a).into(), out)?;
     }
-    if op.code >= 1200 {
-        out.extend_from_slice(&[12, (op.code - 1200) as u8]);
+    if code >= 1200 {
+        out.extend_from_slice(&[12, (code - 1200) as u8]);
     } else {
-        out.push(op.code as u8);
+        out.push(code as u8);
     }
-    out.extend_from_slice(&op.mask);
+    out.extend_from_slice(mask);
     if out.len() > MAX_CHARSTRING {
         return Err(TablesError::TooLarge { what: "an expanded charstring", limit: MAX_CHARSTRING });
     }
@@ -1242,19 +1330,30 @@ pub(super) fn cff_to_cff2(cff: &[u8], standard_glyph: &dyn Fn(u8) -> Option<usiz
         // budget. The seac parts are kept for the whole table and charged to the budget itself.
         let mut scratch = memory.clone();
         let program = parse_program(code, false, &mut scratch).map_err(|e| in_glyph(e, gid))?;
-        let ops = match program.seac {
-            None => program.ops,
-            Some(seac) => {
-                flatten_seac(&flat.charstrings, &program.ops, seac, standard_glyph, &mut seac_parts, &mut memory).map_err(|e| in_glyph(e, gid))?
-            }
-        };
         let mut out = Vec::new();
-        for op in &ops {
-            if op.code == DOTSECTION {
+        let mut write = |code: u16, args: &[i64], mask: &[u8], out: &mut Vec<u8>| -> Result<()> {
+            if code == DOTSECTION {
                 dropped_dotsection = true;
-                continue;
+                return Ok(());
             }
-            encode_op(op, &mut out).map_err(|e| in_glyph(e, gid))?;
+            encode_parts(code, args, mask, out).map_err(|e| in_glyph(e, gid))
+        };
+        match program.seac {
+            None => {
+                let mut wide: Vec<i64> = Vec::new();
+                for op in program.ops() {
+                    wide.clear();
+                    wide.extend(op.args.iter().map(|v| i64::from(*v)));
+                    write(op.code, &wide, op.mask, &mut out)?;
+                }
+            }
+            Some(seac) => {
+                let ops =
+                    flatten_seac(&flat.charstrings, &program, seac, standard_glyph, &mut seac_parts, &mut memory).map_err(|e| in_glyph(e, gid))?;
+                for op in &ops {
+                    write(op.code, &op.args, &op.mask, &mut out)?;
+                }
+            }
         }
         total = total.saturating_add(out.len());
         if total > MAX_SFNT {
@@ -1313,7 +1412,7 @@ pub(super) fn cff2_to_cff(cff2: &[u8], advances: &[u16], names: Option<&[String]
         let width = i64::from(advances.get(gid).copied().unwrap_or(0));
         let mut out = Vec::new();
         let mut first = true;
-        for op in program.ops {
+        for op in program.ops().map(OpRef::owned) {
             if first && width != 0 {
                 // The first operator clears the stack; the width goes in front of its operands.
                 if op.args.len() + 1 > MAX_CFF_STACK {
@@ -1515,7 +1614,7 @@ mod tests {
         code.push(14);
         let p = parse_program(&code, false, &mut CharstringMemory::new(MAX_CHARSTRING_MEMORY)).unwrap();
         assert_eq!(p.width, Some(500 * ONE));
-        assert_eq!(p.ops, vec![op(21, &[10, 20]), op(6, &[30])]);
+        assert_eq!(p.ops().map(OpRef::owned).collect::<Vec<_>>(), vec![op(21, &[10, 20]), op(6, &[30])]);
         // seac keeps its operands for the converters; a code past 255 is refused.
         let p =
             parse_program(&test_charstring(&[(&[600.0, 150.5, 20.0, 65.0, 194.0], 14)]), false, &mut CharstringMemory::new(MAX_CHARSTRING_MEMORY))

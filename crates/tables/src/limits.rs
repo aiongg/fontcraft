@@ -64,10 +64,11 @@ pub const MAX_CFF2_STACK: usize = 513;
 /// Longest charstring, in bytes.
 pub const MAX_CHARSTRING: usize = 65_535;
 /// Most memory the charstrings of one `CFF ` or `CFF2` table may take once their subroutine
-/// calls are expanded and they are read into operators, by an estimate counting each operator
-/// and operand with its allocation. The expanded charstrings, their operators and the table
-/// written from them are held at the same time, so a 32-bit target (wasm) gets a quarter.
-pub const MAX_CHARSTRING_MEMORY: usize = if usize::BITS >= 64 { 1 << 30 } else { 256 << 20 };
+/// calls are expanded and they are read into operators, counted as the bytes the expanded
+/// charstrings, the operator records, the operands and the mask bytes hold. A full CJK font
+/// (65,535 glyphs, 4.7M operators, 20.1M operands, 30 MB expanded) takes about 150 MB to read
+/// for drawing. A 32-bit target (wasm) gets half, which leaves the rest of its 4 GiB to the app.
+pub const MAX_CHARSTRING_MEMORY: usize = if usize::BITS >= 64 { 1 << 30 } else { 512 << 20 };
 
 /// What the charstrings of one table may still take under a memory limit
 /// ([`MAX_CHARSTRING_MEMORY`] outside tests).
@@ -87,8 +88,16 @@ impl CharstringMemory {
             what: "the memory the charstrings of one table take, subroutine calls expanded",
             limit: self.limit,
         })?;
+        #[cfg(test)]
+        CHARSTRING_PEAK.with(|p| p.set(p.get().max(self.limit.saturating_sub(self.left))));
         Ok(())
     }
+}
+
+#[cfg(test)]
+thread_local! {
+    /// The most any [`CharstringMemory`] on this thread has had charged, for tests that measure.
+    pub(crate) static CHARSTRING_PEAK: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 /// Most axes an instancing location or limit names.
