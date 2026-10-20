@@ -10,7 +10,10 @@ works on, and fontTools does the same work on the same font:
                  must list the same points with the same deltas.
     implied:     ours `optimize FONT --drop-implied-oncurves`; theirs: `dropImpliedOnCurvePoints`
                  on each glyph without instructions, given the default glyph and the glyph at the
-                 peak of every gvar tuple (instanced by fontTools). The glyf points must match.
+                 peak of every gvar tuple (instanced by fontTools). Glyphs whose point numbers
+                 other data uses (components of point-matched or instructed composites, GPOS
+                 anchors and GDEF attachment points and carets on contour points) are left out
+                 on both sides, as ours keeps them. The glyf points must match.
     varstore:    ours `optimize FONT --varstore`; theirs `fonttools varLib.varStore FONT OUT`.
                  The TTX of GDEF and GPOS must be equal.
     gpos:        ours `optimize FONT --gpos-compaction LEVEL`; theirs `fonttools otlLib.optimize
@@ -18,7 +21,8 @@ works on, and fontTools does the same work on the same font:
                  Every pair lookup must hold the same subtables with the same classes (each
                  class as its set of glyph names) and the same non-zero values; extension
                  subtables are looked through. Prints both GPOS sizes. Ours keeps GPOS when it
-                 would not get smaller, which shows as "kept".
+                 would not get smaller, which shows as "kept" and counts as equal when
+                 fontTools' GPOS is no smaller either. Fonts fontTools fails on count apart.
     colr:        ours `optimize FONT --colr-layer-reuse`; theirs `unbuildColrV1` then
                  `buildColrV1`. The TTX of COLR must be equal. `--build N` writes N random
                  COLR 1 fonts without layer reuse (the corpus holds none).
@@ -26,7 +30,8 @@ works on, and fontTools does the same work on the same font:
     VENV/bin/python -I crates/tables/crosscheck/optimize.py [--cli PATH] [--build N] [--gpos-level L] [--only STEP] OUT_DIR [FONT_OR_DIR ...]
 
 VENV needs fontTools 4.66.1 (the fontmake tool environment has it). PATH defaults to
-target/release/fontcraft-cli. Prints one line per font and step, then the totals.
+target/release/fontcraft-cli. Prints one line per font and step, then the totals. Each run
+writes its intermediate files to a directory of its own under OUT_DIR, so runs can share it.
 """
 
 import argparse
@@ -34,6 +39,7 @@ import os
 import random
 import subprocess
 import sys
+import tempfile
 
 from fontTools.ttLib import TTFont
 
@@ -103,6 +109,71 @@ def check_gvar(cli, font, out_dir):
     return "equal" if not differ else f"{len(differ)} of {len(b)} glyphs differ, first {differ[:5]}"
 
 
+def numbered(font):
+    """Names of the glyphs whose point numbers other data uses."""
+    glyf = font["glyf"]
+    roots = []
+    for name in glyf.keys():
+        g = glyf[name]
+        if g.isComposite():
+            instructed = hasattr(g, "program") and g.program.getBytecode()
+            if instructed or any(hasattr(c, "firstPt") for c in g.components):
+                roots.extend(c.glyphName for c in g.components)
+
+    def mark(coverage, i, anchor):
+        if anchor is not None and anchor.Format == 2:
+            roots.append(coverage.glyphs[i])
+
+    if "GPOS" in font and font["GPOS"].table.LookupList:
+        for lookup in font["GPOS"].table.LookupList.Lookup:
+            subs = lookup.SubTable
+            if lookup.LookupType == 9:
+                subs = [e.ExtSubTable for e in subs]
+            for s in subs:
+                kind = s.LookupType
+                if kind == 3:
+                    for i, r in enumerate(s.EntryExitRecord):
+                        mark(s.Coverage, i, r.EntryAnchor)
+                        mark(s.Coverage, i, r.ExitAnchor)
+                elif kind in (4, 5, 6):
+                    marks = s.MarkArray if kind != 6 else s.Mark1Array
+                    cov1 = s.MarkCoverage if kind != 6 else s.Mark1Coverage
+                    for i, r in enumerate(marks.MarkRecord):
+                        mark(cov1, i, r.MarkAnchor)
+                    if kind == 4:
+                        for i, r in enumerate(s.BaseArray.BaseRecord):
+                            for a in r.BaseAnchor:
+                                mark(s.BaseCoverage, i, a)
+                    elif kind == 6:
+                        for i, r in enumerate(s.Mark2Array.Mark2Record):
+                            for a in r.Mark2Anchor:
+                                mark(s.Mark2Coverage, i, a)
+                    else:
+                        for i, attach in enumerate(s.LigatureArray.LigatureAttach):
+                            for c in attach.ComponentRecord:
+                                for a in c.LigatureAnchor:
+                                    mark(s.LigatureCoverage, i, a)
+    if "GDEF" in font:
+        gdef = font["GDEF"].table
+        if getattr(gdef, "AttachList", None):
+            for i, p in enumerate(gdef.AttachList.AttachPoint):
+                if p.PointCount:
+                    roots.append(gdef.AttachList.Coverage.glyphs[i])
+        if getattr(gdef, "LigCaretList", None):
+            for i, lig in enumerate(gdef.LigCaretList.LigGlyph):
+                for c in lig.CaretValue:
+                    mark(gdef.LigCaretList.Coverage, i, c)
+    seen = set()
+    while roots:
+        name = roots.pop()
+        if name in seen or name not in glyf:
+            continue
+        seen.add(name)
+        if glyf[name].isComposite():
+            roots.extend(c.glyphName for c in glyf[name].components)
+    return seen
+
+
 def their_implied(font):
     from fontTools.ttLib.tables._g_l_y_f import dropImpliedOnCurvePoints
 
@@ -113,11 +184,15 @@ def their_implied(font):
         for variations in font["gvar"].variations.values():
             for v in variations:
                 peaks.add(tuple(sorted((tag, peak) for tag, (_, peak, _) in v.axes.items())))
-        sets = [font.getGlyphSet(location=dict(peak), normalized=True) for peak in sorted(peaks)]
+        # The glyf glyph set itself: a VARC table would otherwise put its own glyphs in front.
+        from fontTools.ttLib.ttGlyphSet import _TTGlyphSetGlyf
+
+        sets = [_TTGlyphSetGlyf(font, dict(peak)) for peak in sorted(peaks)]
     glyf = font["glyf"]
+    keep = numbered(font)
     for name in glyf.keys():
         g = glyf[name]
-        if g.numberOfContours < 1 or (hasattr(g, "program") and g.program.getBytecode()):
+        if g.numberOfContours < 1 or (hasattr(g, "program") and g.program.getBytecode()) or name in keep:
             continue
         masters = [s[name]._getGlyphAndOffset()[0] for s in sets]
         dropImpliedOnCurvePoints(g, *masters)
@@ -207,14 +282,18 @@ def check_gpos(cli, font, out_dir, level):
     ok, err = ours(cli, font, ["--gpos-compaction", str(level)], o)
     if not ok:
         return f"ours failed: {err}"
-    subprocess.run([sys.executable, "-I", "-m", "fontTools.otlLib.optimize", font, "-o", t, "--gpos-compression-level", str(level)], check=True, capture_output=True)
     size = lambda p: len(TTFont(p).reader["GPOS"])
+    r = subprocess.run([sys.executable, "-I", "-m", "fontTools.otlLib.optimize", font, "-o", t, "--gpos-compression-level", str(level)], capture_output=True, text=True)
+    if r.returncode != 0:
+        last = (r.stderr.strip().splitlines() or [""])[-1]
+        return f"theirs failed: {last}; GPOS {size(font)} -> ours {size(o)}"
     sizes = f"GPOS {size(font)} -> ours {size(o)}, theirs {size(t)}"
     a, b = gpos_view(TTFont(o)), gpos_view(TTFont(t))
     if a == b:
         return f"equal; {sizes}"
     if size(o) == size(font) and a == gpos_view(TTFont(font)):
-        return f"kept; {sizes}"
+        # Ours keeps a table the step would not make smaller.
+        return f"{'equal (kept, theirs no smaller)' if size(t) >= size(font) else 'kept'}; {sizes}"
     first = next((i for i, (x, y) in enumerate(zip(a, b)) if x != y), min(len(a), len(b)))
     return f"{len(a)} and {len(b)} pair subtables, first difference at subtable {first}; {sizes}"
 
@@ -284,6 +363,7 @@ def main():
         p = os.path.join(a.out_dir, f"colr-{i}.ttf")
         build_colr(p, i)
         fonts.append(p)
+    work = tempfile.mkdtemp(prefix="run-", dir=a.out_dir)
     totals = {}
     for font in fonts:
         try:
@@ -308,14 +388,14 @@ def main():
         steps = [s for s in steps if a.only in (None, s[0])]
         for step, check in steps:
             try:
-                result = check(a.cli, font, a.out_dir)
+                result = check(a.cli, font, work)
             except Exception as e:
                 result = f"error: {e}"
-            totals.setdefault(step, [0, 0])
-            totals[step][0 if result.startswith("equal") else 1] += 1
-            print(f"{step:9} {font}: {result}")
-    for step, (same, other) in sorted(totals.items()):
-        print(f"{step}: {same} equal, {other} different or failed")
+            totals.setdefault(step, [0, 0, 0])
+            totals[step][0 if result.startswith("equal") else 2 if result.startswith("theirs failed") else 1] += 1
+            print(f"{step:9} {font}: {result}", flush=True)
+    for step, (same, other, theirs) in sorted(totals.items()):
+        print(f"{step}: {same} equal, {other} different or failed, {theirs} where fontTools failed")
 
 
 if __name__ == "__main__":

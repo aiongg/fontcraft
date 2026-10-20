@@ -14,8 +14,8 @@
 //! `GPOS` keeps its bytes but for the variation indices of its device tables, patched in place.
 //! `GDEF` is written again with the new store and its caret device tables remapped.
 //!
-//! Limits: [`MAX_STORE_CELLS`] deltas after widening, [`MAX_MERGE_WORK`] for the merge search,
-//! [`MAX_DEVICE_WALK`] records visited in `GPOS`.
+//! Limits: [`MAX_STORE_CELLS`] deltas after widening, [`MAX_MERGE_WORK`] for the merge search
+//! and [`MAX_MERGE_HEAP`] for the merges it holds, [`MAX_DEVICE_WALK`] records visited in `GPOS`.
 
 use std::cmp::{Ordering, Reverse};
 use std::collections::{BTreeSet, BinaryHeap, HashMap};
@@ -38,6 +38,8 @@ type Table = (Tag, Vec<u8>);
 pub const MAX_STORE_CELLS: usize = 1 << 24;
 /// Most work (characteristic words compared) the merge search may do.
 pub const MAX_MERGE_WORK: usize = 1 << 28;
+/// Most candidate merges the search may hold at once (24 bytes each).
+pub const MAX_MERGE_HEAP: usize = 1 << 24;
 /// Most lookups, subtables and records visited in `GPOS` looking for device tables.
 pub const MAX_DEVICE_WALK: usize = crate::limits::MAX_LAYOUT_ITEMS;
 /// Largest quantum.
@@ -101,6 +103,13 @@ fn read_store(b: &[u8]) -> std::result::Result<Store, String> {
         if wc > rc {
             return Err("a subtable has more word columns than regions".into());
         }
+        // Region indices may repeat and many offsets may share one subtable, so every
+        // subtable is charged for its own columns, and widened rows for the store's regions.
+        let row_cells = rc.max(regions.len()).max(1);
+        cells = cells.saturating_add(rc).saturating_add(items.saturating_mul(row_cells));
+        if cells > MAX_STORE_CELLS {
+            return Err(format!("the store would hold more than {MAX_STORE_CELLS} deltas"));
+        }
         let mut idx = Vec::with_capacity(rc);
         for r in 0..rc {
             let v = u16_at(b, at + 6 + 2 * r).ok_or("truncated subtable")?;
@@ -108,10 +117,6 @@ fn read_store(b: &[u8]) -> std::result::Result<Store, String> {
                 return Err(format!("a subtable uses region {v}, which the store lacks"));
             }
             idx.push(v);
-        }
-        cells = cells.saturating_add(items.saturating_mul(regions.len().max(1)));
-        if cells > MAX_STORE_CELLS {
-            return Err(format!("the store would hold more than {MAX_STORE_CELLS} deltas"));
         }
         let (wide, narrow) = if long { (4, 2) } else { (2, 1) };
         let mut p = at + 6 + 2 * rc;
@@ -221,6 +226,16 @@ impl Encoding {
     }
 }
 
+type MergeHeap = BinaryHeap<Reverse<(i64, usize, usize)>>;
+
+fn push(heap: &mut MergeHeap, entry: (i64, usize, usize)) -> std::result::Result<(), String> {
+    if heap.len() >= MAX_MERGE_HEAP {
+        return Err(format!("merging the store's subtables needs more than {MAX_MERGE_HEAP} candidate merges"));
+    }
+    heap.push(Reverse(entry));
+    Ok(())
+}
+
 /// The optimised store's bytes and the old → new variation indices.
 fn optimize_store(store: &Store, quantum: u32) -> std::result::Result<(Vec<u8>, HashMap<u32, u32>), String> {
     let n = store.regions.len();
@@ -284,7 +299,8 @@ fn optimize_store(store: &Store, quantum: u32) -> std::result::Result<(Vec<u8>, 
             .ok_or_else(|| format!("merging the store's subtables needs more than {MAX_MERGE_WORK} steps"))?;
         Ok(())
     };
-    let mut heap: BinaryHeap<Reverse<(i64, usize, usize)>> = BinaryHeap::new();
+    let mut heap = MergeHeap::new();
+
     let len = todo.len();
     spend(len.saturating_mul(len) / 2)?;
     for i in 0..len {
@@ -292,7 +308,7 @@ fn optimize_store(store: &Store, quantum: u32) -> std::result::Result<(Vec<u8>, 
             if let (Some(Some(a)), Some(Some(b))) = (todo.get(i), todo.get(j)) {
                 let g = a.gain(b);
                 if g > 0 {
-                    heap.push(Reverse((-g, i, j)));
+                    push(&mut heap, (-g, i, j))?;
                 }
             }
         }
@@ -316,7 +332,7 @@ fn optimize_store(store: &Store, quantum: u32) -> std::result::Result<(Vec<u8>, 
             }
             let g = combined.gain(e);
             if g > 0 {
-                heap.push(Reverse((-g, k, next)));
+                push(&mut heap, (-g, k, next))?;
             }
         }
         todo.push(Some(combined));

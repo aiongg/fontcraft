@@ -10,7 +10,7 @@
 //! | `desubroutinize` | `CFF `, `CFF2` | expands every subroutine call; no subroutines are left | the subroutiniser's expansion |
 //! | `cffWidths` | `CFF ` | chooses `defaultWidthX` and `nominalWidthX` again (`cffLib.width`) and rewrites every width | each glyph's advance read back |
 //! | `subroutinize` | `CFF `, `CFF2` | moves repeated charstring fragments into subroutines (compreffor's method) | every glyph expanded again and compared byte for byte |
-//! | `dropImpliedOncurves` | `glyf` (and `gvar`) | removes on-curve points halfway between their off-curve neighbours at every location ([`glyf_gvar`]) | |
+//! | `dropImpliedOncurves` | `glyf` (and `gvar`) | removes on-curve points halfway between their off-curve neighbours at every location ([`glyf_gvar`]); off unless asked for | |
 //! | `gvarIup` | `gvar` | keeps only the deltas IUP cannot infer, or writes every delta ([`glyf_gvar`]) | |
 //! | `varstore` | `GDEF`, `GPOS` | merges and packs the shared item variation store again ([`varstore`]) | |
 //! | `gposCompaction` | `GPOS` | splits class-kerning subtables into smaller, denser ones ([`gpos`]); off unless a level is given | `GPOS` read back |
@@ -26,6 +26,7 @@
 pub mod colr;
 pub mod glyf_gvar;
 pub mod gpos;
+pub mod numbered;
 pub mod varstore;
 
 pub use glyf_gvar::DeltaMode;
@@ -56,7 +57,8 @@ pub struct OptimizeOptions {
     pub max_subrs: Option<usize>,
     /// What happens to `gvar` deltas; `None` leaves `gvar` alone.
     pub gvar: Option<DeltaMode>,
-    /// Remove implied on-curve points from `glyf`.
+    /// Remove implied on-curve points from `glyf`. Off by default, as in the reference tools:
+    /// it renumbers points, and data outside `glyf` can number them.
     pub drop_implied_oncurves: bool,
     /// Build a version 1 `COLR` again with shared layers.
     pub colr_layer_reuse: bool,
@@ -74,7 +76,7 @@ impl Default for OptimizeOptions {
             desubroutinize: false,
             max_subrs: None,
             gvar: Some(DeltaMode::Optimize),
-            drop_implied_oncurves: true,
+            drop_implied_oncurves: false,
             colr_layer_reuse: true,
             // The reference tool's level defaults to 0.
             gpos_compaction: 0,
@@ -213,7 +215,16 @@ fn optimize_glyf_gvar(out: &mut SfntFont, options: &OptimizeOptions, steps: &mut
         steps.push(OptimizeStep { step: "dropImpliedOncurves", table: *b"glyf", before: size(out, b"glyf"), after, applied: dropped });
     }
     if result.hinted_kept > 0 {
-        notes.push(format!("glyf: {} glyphs with instructions keep their implied on-curve points", result.hinted_kept));
+        notes.push(format!(
+            "glyf: {} glyphs keep their implied on-curve points: instructions, composites, anchors or carets number them",
+            result.hinted_kept
+        ));
+    }
+    if result.implied_skipped > 0 {
+        notes.push(format!(
+            "glyf: {} glyphs keep their implied on-curve points: testing them at every location needs too much work",
+            result.implied_skipped
+        ));
     }
     if result.iup_skipped > 0 {
         notes.push(format!("gvar: the deltas of {} glyphs were kept as they were: their contours are too long to optimise", result.iup_skipped));

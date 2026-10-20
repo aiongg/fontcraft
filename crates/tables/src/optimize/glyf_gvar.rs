@@ -1,22 +1,28 @@
 //! The `glyf` and `gvar` steps of `font.optimize`: implied on-curve points and `gvar` delta
 //! optimisation (IUP). Ports of fontTools' `ttLib.tables._g_l_y_f.dropImpliedOnCurvePoints` and
 //! of `TupleVariation.calcInferredDeltas`, `roundDeltas` and `optimize` as the instancer runs
-//! them (MIT, Copyright 2013 Google, Inc. and the fontTools authors). The optimiser itself is
+//! them, and of `varLib.models.supportScalar` (MIT, Copyright 2013 Google, Inc. and the fontTools
+//! authors). The optimiser itself is
 //! `write-fonts`' port of `varLib.iup.iup_delta_optimize`.
 //!
 //! Every glyph's tuples are first expanded to a delta per point (inferred deltas filled in by
 //! IUP) and rounded. Then:
 //!
 //! - An on-curve point of a simple glyph is dropped when it lies halfway between its off-curve
-//!   neighbours (before or after rounding) in the default outline and in the outline each tuple
-//!   moves it to, and both neighbours have the same flags. A glyph with instructions keeps its
-//!   points, since the instructions number them.
+//!   neighbours (before or after rounding) in the default outline and in the outline at the peak
+//!   of every tuple of the font (the stand-ins for its masters), and both neighbours have the
+//!   same flags. A glyph keeps its points when its instructions, a composite, an anchor or a
+//!   caret numbers them ([`super::numbered`]).
 //! - With [`DeltaMode::Optimize`] each tuple keeps only the deltas IUP cannot infer within half a
 //!   unit; a tuple that moves nothing is dropped. [`DeltaMode::All`] writes every delta;
 //!   [`DeltaMode::Keep`] keeps the points each tuple listed, except in a glyph that lost points.
 //!
 //! The optimiser is quadratic in the points of a contour: contours past
 //! [`MAX_IUP_CONTOUR_POINTS`], and glyphs met after [`MAX_IUP_WORK`] is spent, keep their points.
+//! The implied-point test looks at [`MAX_IMPLIED_LOCATIONS`] peaks at most; past that, or once
+//! [`MAX_IMPLIED_WORK`] is spent, glyphs that vary keep their points.
+
+use std::collections::BTreeSet;
 
 use fontcraft_geom::{Point, Vec2};
 use read_fonts::tables::gvar::Gvar as ReadGvar;
@@ -37,6 +43,10 @@ pub const MAX_IUP_CONTOUR_POINTS: usize = 4_096;
 pub const MAX_IUP_WORK: usize = 1 << 30;
 /// Most deltas held at once (every tuple of every glyph, expanded to all its points).
 pub const MAX_HELD_DELTAS: usize = 1 << 25;
+/// Most distinct tuple peaks the implied-point test looks at.
+pub const MAX_IMPLIED_LOCATIONS: usize = 1_024;
+/// Most implied-point work (locations × tuples × points of the glyphs tested) in one font.
+pub const MAX_IMPLIED_WORK: usize = 1 << 30;
 /// fontTools' tolerance: an inferred delta within half a unit of the real one is left out.
 const IUP_TOLERANCE: f64 = 0.5;
 
@@ -48,6 +58,9 @@ const X_SAME: u8 = 0x10;
 const Y_SAME: u8 = 0x20;
 /// The flag bits that belong to a point rather than to its encoding (on-curve, overlap, cubic).
 const KEPT_FLAGS: u8 = 0x01 | 0x40 | 0x80;
+/// Component flags: arguments are offsets (clear: point numbers), and instructions follow.
+const ARGS_ARE_XY_VALUES: u16 = 0x0002;
+const WE_HAVE_INSTRUCTIONS: u16 = 0x0100;
 
 /// What happens to the explicit points of each `gvar` tuple.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -66,8 +79,11 @@ pub struct GlyfGvarResult {
     /// `glyf`, `loca`, `head` and `maxp` when points were dropped; `gvar` when the font has one.
     pub tables: Vec<(Tag, Vec<u8>)>,
     pub dropped_points: usize,
-    /// Glyphs that kept points because of their instructions.
+    /// Glyphs that kept points because instructions, a composite, an anchor or a caret number
+    /// them.
     pub hinted_kept: usize,
+    /// Glyphs that kept points because of the implied-point limits.
+    pub implied_skipped: usize,
     /// Glyphs whose deltas were not optimised because of the work limits.
     pub iup_skipped: usize,
 }
@@ -107,16 +123,22 @@ fn parse_glyph(b: &[u8]) -> std::result::Result<Shape, String> {
     }
     let contours = u16_at(b, 0).ok_or("truncated header")? as i16;
     if contours < 0 {
-        return components(b).map(Shape::Composite);
+        return components(b).map(|(ids, _)| Shape::Composite(ids));
     }
     parse_simple(b, contours as usize).map(Shape::Simple)
 }
 
-fn components(b: &[u8]) -> std::result::Result<Vec<u16>, String> {
+/// The component glyph ids, and whether the composite numbers its components' points: it
+/// places a component by point numbers or has instructions.
+fn components(b: &[u8]) -> std::result::Result<(Vec<u16>, bool), String> {
     let mut at = 10usize;
     let mut out = Vec::new();
+    let mut numbers = false;
+    let mut instructions = false;
     loop {
         let flags = u16_at(b, at).ok_or("truncated component")?;
+        numbers |= flags & ARGS_ARE_XY_VALUES == 0;
+        instructions |= flags & WE_HAVE_INSTRUCTIONS != 0;
         out.push(u16_at(b, at + 2).ok_or("truncated component")?);
         if out.len() > usize::from(u16::MAX) {
             return Err("too many components".into());
@@ -132,7 +154,11 @@ fn components(b: &[u8]) -> std::result::Result<Vec<u16>, String> {
             0
         };
         if flags & 0x0020 == 0 {
-            return Ok(out);
+            // An empty program numbers nothing; a length that cannot be read counts as one.
+            if instructions {
+                numbers |= u16_at(b, at).is_none_or(|n| n > 0);
+            }
+            return Ok((out, numbers));
         }
     }
 }
@@ -240,23 +266,67 @@ fn is_mid_point(p0: Pair, p1: Pair, p2: Pair) -> bool {
         || (ot_round(p0.0) + ot_round(p2.0) == ot_round(p1.0) * 2.0 && ot_round(p0.1) + ot_round(p2.1) == ot_round(p1.1) * 2.0)
 }
 
-/// One tuple of a glyph: its tents, which points it listed, and every point's delta.
+/// One tuple of a glyph: its tents, its region per axis (start, peak, end), which points it
+/// listed, and every point's delta.
 struct TupleIn {
     tents: Vec<Tent>,
+    support: Vec<(f64, f64, f64)>,
     explicit: Vec<bool>,
     full: Vec<Pair>,
 }
 
-/// The on-curve points of `s` that every location implies.
-fn implied_points(s: &Simple, tuples: &[TupleIn]) -> Vec<bool> {
+/// fontTools' `supportScalar` with the OpenType rules: the share of a tuple at `loc`.
+fn support_scalar(loc: &[f64], support: &[(f64, f64, f64)]) -> f64 {
+    let mut scalar = 1.0;
+    for (i, &(lower, peak, upper)) in support.iter().enumerate() {
+        if peak == 0.0 || lower > peak || peak > upper || (lower < 0.0 && upper > 0.0) {
+            continue;
+        }
+        let v = loc.get(i).copied().unwrap_or(0.0);
+        if v == peak {
+            continue;
+        }
+        if v <= lower || upper <= v {
+            return 0.0;
+        }
+        scalar *= if v < peak { (v - lower) / (peak - lower) } else { (v - upper) / (peak - upper) };
+    }
+    scalar
+}
+
+/// Every distinct peak of the font's tuples, in normalised coordinates; `None` past
+/// [`MAX_IMPLIED_LOCATIONS`].
+fn peak_locations(gvar: &ReadGvar, count: usize, axis_count: u16) -> Result<Option<Vec<Vec<f64>>>> {
+    let mut peaks: BTreeSet<Vec<i16>> = BTreeSet::new();
+    for g in 0..count {
+        let data = gvar.glyph_variation_data(GlyphId::new(g as u32)).map_err(|e| bad(format!("the gvar data of glyph {g} cannot be read: {e}")))?;
+        for tuple in data.iter().flat_map(|d| d.tuples()).take(MAX_TUPLE_VARIATIONS) {
+            let peak = tuple.peak();
+            let bits: Vec<i16> = (0..usize::from(axis_count)).map(|i| peak.get(i).unwrap_or(F2Dot14::ZERO).to_bits()).collect();
+            if bits.iter().any(|b| *b != 0) {
+                peaks.insert(bits);
+                if peaks.len() > MAX_IMPLIED_LOCATIONS {
+                    return Ok(None);
+                }
+            }
+        }
+    }
+    Ok(Some(peaks.into_iter().map(|p| p.into_iter().map(|b| f64::from(b) / 16384.0).collect()).collect()))
+}
+
+/// The on-curve points of `s` that every location implies, as fontTools'
+/// `dropImpliedOnCurvePoints` finds them given the default glyph and the glyph at each of
+/// `locations` (`None`: too many to test). `None` when the glyph varies and the locations or
+/// `work` do not allow the test.
+fn implied_points(s: &Simple, tuples: &[TupleIn], locations: Option<&[Vec<f64>]>, work: &mut usize) -> Option<Vec<bool>> {
     let n = s.points.len();
-    let mut drop = vec![false; n];
-    let point = |k: usize, delta: Option<&[Pair]>| {
-        let (x, y) = s.points.get(k).copied().unwrap_or((0, 0));
-        let (dx, dy) = delta.and_then(|d| d.get(k)).copied().unwrap_or((0.0, 0.0));
-        (f64::from(x) + dx, f64::from(y) + dy)
-    };
     let flag = |k: usize| s.flags.get(k).copied().unwrap_or(0);
+    let default: Vec<Pair> = s.points.iter().map(|&(x, y)| (f64::from(x), f64::from(y))).collect();
+    let mid = |coords: &[Pair], (prv, i, nxt): (usize, usize, usize)| match (coords.get(prv), coords.get(i), coords.get(nxt)) {
+        (Some(a), Some(b), Some(c)) => is_mid_point(*a, *b, *c),
+        _ => false,
+    };
+    let mut candidates = Vec::new();
     let mut start = 0usize;
     for &last in &s.ends {
         for i in start..=last {
@@ -268,17 +338,44 @@ fn implied_points(s: &Simple, tuples: &[TupleIn]) -> Vec<bool> {
             if flag(prv) & ON != 0 || flag(prv) != flag(nxt) {
                 continue;
             }
-            let at = |d: Option<&[Pair]>| is_mid_point(point(prv, d), point(i, d), point(nxt, d));
-            if at(None)
-                && tuples.iter().all(|t| at(Some(&t.full)))
-                && let Some(slot) = drop.get_mut(i)
-            {
-                *slot = true;
+            if mid(&default, (prv, i, nxt)) {
+                candidates.push((prv, i, nxt));
             }
         }
         start = last + 1;
     }
-    drop
+    if !candidates.is_empty() && !tuples.is_empty() {
+        let locations = locations?;
+        let cost = locations.len().saturating_mul(tuples.len()).saturating_mul(n.saturating_add(tuples.first().map_or(0, |t| t.support.len())));
+        *work = work.checked_sub(cost)?;
+        for loc in locations {
+            let scalars: Vec<f64> = tuples.iter().map(|t| support_scalar(loc, &t.support)).collect();
+            if scalars.iter().all(|s| *s == 0.0) {
+                continue;
+            }
+            let mut coords = default.clone();
+            for (t, scalar) in tuples.iter().zip(&scalars) {
+                if *scalar == 0.0 {
+                    continue;
+                }
+                for (c, d) in coords.iter_mut().zip(&t.full) {
+                    c.0 += d.0 * scalar;
+                    c.1 += d.1 * scalar;
+                }
+            }
+            candidates.retain(|p| mid(&coords, *p));
+            if candidates.is_empty() {
+                break;
+            }
+        }
+    }
+    let mut drop = vec![false; n];
+    for (_, i, _) in candidates {
+        if let Some(slot) = drop.get_mut(i) {
+            *slot = true;
+        }
+    }
+    Some(drop)
 }
 
 /// Removes the `drop` points from `s` and from every tuple.
@@ -453,6 +550,20 @@ pub fn run(font: &SfntFont, drop_implied: bool, mode: DeltaMode) -> Result<GlyfG
         return Err(bad(format!("the gvar table has {} glyphs and maxp {count}", g.glyph_count())));
     }
     let mut result = GlyfGvarResult::default();
+    let (numbered, locations) = if drop_implied {
+        let composites: Vec<(Vec<u16>, bool)> = slices
+            .iter()
+            .map(|b| if u16_at(b, 0).is_some_and(|c| (c as i16) < 0) { components(b).unwrap_or_default() } else { (Vec::new(), false) })
+            .collect();
+        let locations = match &gvar {
+            Some(g) => peak_locations(g, count, axis_count)?,
+            None => Some(Vec::new()),
+        };
+        (super::numbered::numbered_glyphs(font, &composites), locations)
+    } else {
+        (Vec::new(), Some(Vec::new()))
+    };
+    let mut implied_work = MAX_IMPLIED_WORK;
     let mut new_glyphs: Vec<Option<Vec<u8>>> = vec![None; count];
     let mut shapes: Vec<(usize, Vec<u16>)> = Vec::with_capacity(count);
     let mut variations = Vec::with_capacity(if gvar.is_some() { count } else { 0 });
@@ -490,6 +601,16 @@ pub fn run(font: &SfntFont, drop_implied: bool, mode: DeltaMode) -> Result<GlyfG
                 }
                 let peak = tuple.peak();
                 let (start, end) = (tuple.intermediate_start(), tuple.intermediate_end());
+                // As fontTools reads a tuple without intermediate coordinates: from 0 to its peak.
+                let support = (0..usize::from(axis_count))
+                    .map(|i| {
+                        let p = f64::from(peak.get(i).unwrap_or(F2Dot14::ZERO).to_bits()) / 16384.0;
+                        match (start.as_ref().and_then(|t| t.get(i)), end.as_ref().and_then(|t| t.get(i))) {
+                            (Some(s), Some(e)) => (f64::from(s.to_bits()) / 16384.0, p, f64::from(e.to_bits()) / 16384.0),
+                            _ => (p.min(0.0), p, p.max(0.0)),
+                        }
+                    })
+                    .collect();
                 let tents = (0..usize::from(axis_count))
                     .map(|i| {
                         let p = peak.get(i).unwrap_or(F2Dot14::ZERO);
@@ -512,15 +633,19 @@ pub fn run(font: &SfntFont, drop_implied: bool, mode: DeltaMode) -> Result<GlyfG
                 } else {
                     iup_delta(&explicit, &coords, &ends)
                 };
-                tuples.push(TupleIn { tents, explicit: listed, full });
+                tuples.push(TupleIn { tents, support, explicit: listed, full });
             }
         }
         let mut changed = false;
         if drop_implied && let Some(s) = simple.as_mut() {
-            let drop = implied_points(s, &tuples);
+            let drop = implied_points(s, &tuples, locations.as_deref(), &mut implied_work);
+            if drop.is_none() {
+                result.implied_skipped += 1;
+            }
+            let drop = drop.unwrap_or_default();
             let dropped = drop.iter().filter(|d| **d).count();
             if dropped > 0 {
-                if s.instructions.is_empty() {
+                if s.instructions.is_empty() && !numbered.get(g).copied().unwrap_or(false) {
                     apply_drop(s, &mut tuples, &drop);
                     let encoded = encode_simple(s).map_err(|e| bad(format!("glyph {g} cannot be written: {e}")))?;
                     if let Some(slot) = new_glyphs.get_mut(g) {
