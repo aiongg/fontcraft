@@ -42,6 +42,10 @@ fn point_numbers(b: &[u8], mut at: usize, all: usize) -> Result<(usize, usize)> 
     } else {
         usize::from(first)
     };
+    // A count of 0 in the two-byte form also means every point, as fontTools reads it.
+    if count == 0 {
+        return Ok((all, at));
+    }
     let mut seen = 0;
     while seen < count {
         let control = *b.get(at).ok_or_else(cut)?;

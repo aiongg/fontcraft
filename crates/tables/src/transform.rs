@@ -45,10 +45,11 @@
 //! `xMin`.
 //!
 //! On a variable TrueType font a matrix transforms the `gvar` deltas by each glyph's linear part
-//! ([`gvar_matrix`]); the advance deltas of the phantom points follow [`Widths`]. `HVAR` is
-//! scaled when every glyph takes the same horizontal scale and its widths are transformed, kept
-//! when the widths are kept, and dropped otherwise, which leaves the advance variations to the
-//! phantom points.
+//! ([`gvar_matrix`]); the advance deltas of the phantom points follow [`Widths`]. On both
+//! TrueType and CFF2 outlines, `HVAR` is scaled when every glyph takes the same horizontal scale
+//! and its widths are transformed, kept when the widths are kept, and dropped otherwise. Without
+//! it a TrueType font's advance variations come from the phantom points; a CFF2 font's advances
+//! no longer vary.
 
 mod cff;
 mod cff_matrix;
@@ -481,7 +482,9 @@ impl Work {
                 *t = gvar_matrix::transform_gvar(t, &deltas)?;
                 Ok(())
             })?;
-            self.follow_hvar(m, &deltas, report)?;
+            let factors: Vec<Option<f64>> = deltas.iter().filter(|d| d.linear.is_some()).map(|d| d.advance_factor).collect();
+            let every = factors.len() == deltas.len();
+            self.follow_hvar(m, &factors, every, "HVAR is dropped: the advance width variations follow the gvar phantom points", report)?;
         }
         Ok(())
     }
@@ -524,18 +527,7 @@ impl Work {
             let lsb = self.hmtx.bearings.get(gid).map_or(0.0, |b| f64::from(*b));
             let advance = self.hmtx.advances.get(gid).map_or(0.0, |a| f64::from(*a));
             coords.extend([(x_min - lsb, 0.0), (x_min - lsb + advance, 0.0), (0.0, 0.0), (0.0, 0.0)]);
-            let advance_factor = own.and_then(|own| {
-                if glyph_advance(o, gid).is_some() {
-                    return Some(0.0);
-                }
-                match o.widths {
-                    Widths::Keep => None,
-                    Widths::Em => Some(0.0),
-                    Widths::Transform => Some(own[0]),
-                    Widths::Auto if own[1] == 0.0 => Some(own[0]),
-                    Widths::Auto => Some(0.0),
-                }
-            });
+            let advance_factor = own.and_then(|own| advance_factor(o, own, gid));
             out.push(gvar_matrix::GlyphDeltas {
                 coords,
                 ends,
@@ -548,16 +540,17 @@ impl Work {
     }
 
     /// `HVAR` after a matrix: kept when no advance delta changed, scaled when every glyph takes
-    /// one positive horizontal scale with no turn or shear, otherwise dropped.
-    fn follow_hvar(&mut self, m: [f64; 6], deltas: &[gvar_matrix::GlyphDeltas], report: &mut TransformReport) -> Result<()> {
+    /// one positive horizontal scale with no turn or shear, otherwise dropped with `dropped` as
+    /// the warning. `changed` holds the advance factor of each glyph the matrix applies to;
+    /// `every` says whether it applies to all of them.
+    fn follow_hvar(&mut self, m: [f64; 6], changed: &[Option<f64>], every: bool, dropped: &str, report: &mut TransformReport) -> Result<()> {
         if self.font.get(*b"HVAR").is_none() {
             return Ok(());
         }
-        let changed: Vec<Option<f64>> = deltas.iter().filter(|d| d.linear.is_some()).map(|d| d.advance_factor).collect();
         if changed.iter().all(Option::is_none) {
             return Ok(());
         }
-        let uniform = changed.len() == deltas.len() && m[1] == 0.0 && m[2] == 0.0 && m[0] > 0.0 && changed.iter().all(|f| *f == Some(m[0]));
+        let uniform = every && m[1] == 0.0 && m[2] == 0.0 && m[0] > 0.0 && changed.iter().all(|f| *f == Some(m[0]));
         if uniform {
             patch(&mut self.font, *b"HVAR", &mut |t| {
                 *t = layout::scale_hvar(t, Scaler { factor: m[0] })?;
@@ -565,7 +558,7 @@ impl Work {
             })
         } else {
             self.font.remove(*b"HVAR");
-            report.warnings.push("HVAR is dropped: the advance width variations follow the gvar phantom points".into());
+            report.warnings.push(dropped.into());
             Ok(())
         }
     }
@@ -624,6 +617,11 @@ impl Work {
         report.warnings.extend(out.warnings);
         self.cff = Some((cff2, Some(out.bounds)));
         self.cff_changed = Some(out.glyphs_changed);
+        if cff2 {
+            let factors: Vec<Option<f64>> = matrices.iter().enumerate().filter_map(|(gid, own)| own.map(|own| advance_factor(o, own, gid))).collect();
+            let every = factors.len() == matrices.len();
+            self.follow_hvar(m, &factors, every, "HVAR is dropped: the advance widths no longer vary", report)?;
+        }
         Ok(())
     }
 
@@ -857,6 +855,21 @@ fn glyph_advance(o: &TransformOptions, gid: usize) -> Option<f64> {
 }
 
 /// A transformed glyph's advance width before rounding, from its old advance `old`.
+/// How a glyph's advance width deltas follow its matrix `own`: `None` when the advance keeps
+/// its deltas, otherwise the factor they take (0 when the advance no longer varies).
+fn advance_factor(o: &TransformOptions, own: [f64; 6], gid: usize) -> Option<f64> {
+    if glyph_advance(o, gid).is_some() {
+        return Some(0.0);
+    }
+    match o.widths {
+        Widths::Keep => None,
+        Widths::Em => Some(0.0),
+        Widths::Transform => Some(own[0]),
+        Widths::Auto if own[1] == 0.0 => Some(own[0]),
+        Widths::Auto => Some(0.0),
+    }
+}
+
 fn new_advance(widths: Widths, m: [f64; 6], old: u16, upem: u16) -> f64 {
     let old = f64::from(old);
     match widths {

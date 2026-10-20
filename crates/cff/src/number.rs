@@ -80,8 +80,9 @@ pub(crate) fn round_with_tolerance(v: f64, tolerance: f64) -> f64 {
     }
 }
 
-/// Append a DICT number.
-pub(crate) fn encode_dict_number(n: Number, what: &str, out: &mut Vec<u8>) -> Result<(), Error> {
+/// Append a DICT number: an integer in its shortest form, a real spelled with eight significant
+/// digits as the reference spells it.
+pub fn encode_dict_number(n: Number, what: &str, out: &mut Vec<u8>) -> Result<(), Error> {
     match n {
         Number::Int(i) => encode_dict_int(i, what, out),
         Number::Real(r) => encode_dict_real(r, what, out),

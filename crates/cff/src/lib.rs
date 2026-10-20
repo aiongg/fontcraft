@@ -52,7 +52,7 @@ use std::collections::HashSet;
 pub use bounds::Bounds;
 pub use error::Error;
 pub use hints::{BOTTOM_GHOST, CharstringHints, MAX_COUNTER_MASKS, MAX_STEM_HINTS, Mask, StemHint, TOP_GHOST, writable_stems};
-pub use number::Number;
+pub use number::{Number, encode_dict_number};
 
 use charset::Charset;
 use dict::{Pointers, TopSids};

@@ -14,8 +14,11 @@ use crate::{Result, TablesError};
 
 /// Most condition tables visited in one `VARC` table.
 const MAX_CONDITIONS: usize = 1 << 16;
-/// Most values in one `VARC` table's axis index lists.
+/// Most values in one `VARC` table's axis index lists; an empty list counts as one.
 const MAX_AXIS_INDEXES: usize = 1 << 20;
+/// Most axis records read from the regions of one `VARC` table's store. Regions at different
+/// offsets can overlap, so the bytes of the table do not bound this on their own.
+const MAX_REGION_AXIS_RECORDS: usize = 1 << 20;
 
 fn bad(what: impl Into<String>) -> TablesError {
     TablesError::invalid(what)
@@ -62,9 +65,18 @@ fn axis_records(data: &[u8]) -> Result<AxisRecords> {
     if store != 0 {
         let regions = add(store, u32_at(data, add(store, 2)?)?)?;
         let count = u16_at(data, regions)?;
+        let mut seen: BTreeSet<usize> = BTreeSet::new();
+        let mut records = 0usize;
         for r in 0..count {
             let region = add(regions, u32_at(data, regions + 2 + 4 * r)?)?;
+            if !seen.insert(region) {
+                continue;
+            }
             let axes = u16_at(data, region)?;
+            records = records.saturating_add(axes);
+            if records > MAX_REGION_AXIS_RECORDS {
+                return Err(TablesError::TooLarge { what: "the region axis records of a VARC table", limit: MAX_REGION_AXIS_RECORDS });
+            }
             for k in 0..axes {
                 let at = region + 2 + 8 * k;
                 u16_at(data, at)?;
@@ -131,7 +143,7 @@ fn read_index(data: &[u8], at: usize) -> Result<Vec<Vec<i64>>> {
         let (start, end) = (offset(i)?, offset(i + 1)?);
         let item = data.get(base.saturating_add(start)..base.saturating_add(end)).ok_or_else(|| bad("the VARC axis index list is truncated"))?;
         let values = unpack(item)?;
-        total = total.saturating_add(values.len());
+        total = total.saturating_add(values.len().max(1));
         if total > MAX_AXIS_INDEXES {
             return Err(TablesError::TooLarge { what: "the axis indexes of a VARC table", limit: MAX_AXIS_INDEXES });
         }
@@ -312,6 +324,46 @@ mod tests {
         t.extend_from_slice(&[1, 1 + item.len() as u8]);
         t.extend_from_slice(&item);
         t
+    }
+
+    /// A `VARC` table with only a store whose region list holds 65,535 offsets from `offset(k)`,
+    /// followed by `regions`.
+    fn varc_with_regions(offset: impl Fn(u32) -> u32, regions: &[u8]) -> Vec<u8> {
+        let mut t = vec![0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 24];
+        t.resize(24, 0);
+        t.extend_from_slice(&[0, 1, 0, 0, 0, 8, 0, 0]);
+        t.extend_from_slice(&[0xFF, 0xFF]);
+        for k in 0..0xFFFF {
+            t.extend_from_slice(&offset(k).to_be_bytes());
+        }
+        t.extend_from_slice(regions);
+        t
+    }
+
+    #[test]
+    fn repeated_or_overlapping_regions_finish_quickly() {
+        let after_list = 2 + 4 * 0xFFFF;
+        // Every offset names one region with 60,000 axis records on axis 0.
+        let mut one = vec![0xEA, 0x60];
+        one.resize(2 + 8 * 60_000, 0);
+        let mut font = SfntFont::new(crate::sfnt::Flavour::TrueType);
+        font.insert(*b"VARC", varc_with_regions(|_| after_list, &one));
+        check_limits(&font, &[*b"wght"], &[false]).unwrap();
+        // Offsets two bytes apart into 0x7F bytes: 65,535 regions of 32,639 records each.
+        font.insert(*b"VARC", varc_with_regions(|k| after_list + 2 * k, &std::iter::repeat_n(0x7F, 400_000).collect::<Vec<u8>>()));
+        assert!(matches!(check_limits(&font, &[*b"wght"], &[false]), Err(TablesError::TooLarge { .. })));
+    }
+
+    #[test]
+    fn empty_axis_index_lists_count_against_the_limit() {
+        let count = MAX_AXIS_INDEXES as u32 + 1;
+        let mut t = vec![0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 24, 0, 0, 0, 0];
+        t.extend_from_slice(&count.to_be_bytes());
+        t.push(1);
+        t.resize(t.len() + count as usize + 1, 1);
+        let mut font = SfntFont::new(crate::sfnt::Flavour::TrueType);
+        font.insert(*b"VARC", t);
+        assert!(matches!(check_limits(&font, &[*b"wght"], &[false]), Err(TablesError::TooLarge { .. })));
     }
 
     #[test]
