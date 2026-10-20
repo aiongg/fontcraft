@@ -4,12 +4,18 @@
 //! Commands: `font.features.compile`, `listErrors`, `applyFix`, `jumpToError`, `showErrorDetails`,
 //! `evaluateToken`, `complete`, `previewName`.
 //!
-//! Compile assembles the entries for one master (tokens expanded, extensions lowered) and runs
-//! the feature compiler over the whole code, substitutions and positioning, without the
-//! generated kerning and marks; with no errors it builds the preview font. The result, errors
+//! Compile assembles the entries for one master (tokens expanded, extensions lowered) and
+//! builds the preview fonts (`crate::feature_state::build_previews`): one run of the feature
+//! compiler over the whole code, substitutions and positioning, with the generated kerning and
+//! marks, gives Edit View's font, Text Preview's font and the diagnostics. The result, errors
 //! mapped to the entries, is the document's feature state. Compiling the same input again (the
 //! same assembled files, glyph order, master and include folder) reuses the state instead of
-//! running the compiler, so the Features tab may compile after each pause in typing.
+//! running the compiler, so the Features tab may compile after each pause in typing; a build
+//! Text Preview already made of the same revision and master is taken instead of compiling.
+//!
+//! When the full build fails for a reason outside the code's entries (a positioning table that
+//! overflows, a glyph set the export refuses), the code is compiled on its own for its
+//! diagnostics and Edit View's font is built without `GPOS`, as far as it can be.
 //!
 //! A diagnostic's id is its index in the last compile. `listErrors`, `jumpToError` and
 //! `showErrorDetails` return the data the Features tab draws (inline markers, sidebar icons,
@@ -24,7 +30,8 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use fontcraft_compile::preview::{self, PreviewFont, PreviewKind};
+use fontcraft_compile::CompileError;
+use fontcraft_compile::preview::{self, PreviewBuild, PreviewFont, PreviewKind};
 use fontcraft_fea::{CompileRequest, Diagnostic, GlyphOrder, LayoutTable, MAX_DIAGNOSTICS, MAX_GLYPHS, Severity};
 use fontcraft_features::edit::{self, CompletionKind, CompletionNames, Definitions, Fix, MAX_FIXES};
 use fontcraft_features::tokens::{self, TokenValue};
@@ -33,7 +40,7 @@ use fontcraft_model::{Features, Font, Snippet};
 use serde_json::{Value, json};
 
 use super::*;
-use crate::feature_state::FeatureState;
+use crate::feature_state::{FeatureState, PreviewBuilds, SharedBuild};
 use crate::params::Params;
 use crate::{EngineError, Result, Session};
 
@@ -60,7 +67,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Compile",
             [],
             None,
-            "{master?: id|name (default: the first master; the Features tab passes the master of the active Edit View tab), force?: bool (compile even when the code, glyph order and master are those of the last compile; default false)} compiles the feature code of one master so Edit View can preview it, and keeps the result as the document's feature state (no undo step, never saved). Feature code with errors is not a failure: the errors come back → {master, ok: bool (no errors), cached: bool (the last compile's result, reused), errors: n, warnings: n, features: [{tag, table: \"GSUB\"|\"GPOS\", languageSystems: [[script, language]], lookups: n}], diagnostics: [as font.features.listErrors], preview: bool (the preview font was built), previewMessage?: string}",
+            "{master?: id|name (default: the first master; the Features tab passes the master of the active Edit View tab), force?: bool (compile even when the code, glyph order and master are those of the last compile, or a preview build of this revision is kept; default false)} compiles the feature code of one master so Edit View can preview it, and keeps the result as the document's feature state (no undo step, never saved). Feature code with errors is not a failure: the errors come back → {master, ok: bool (no errors), cached: bool (the last compile's result, reused), errors: n, warnings: n, features: [{tag, table: \"GSUB\"|\"GPOS\", languageSystems: [[script, language]], lookups: n}], diagnostics: [as font.features.listErrors], preview: bool (the preview font was built), previewMessage?: string}",
             has_doc,
             compile
         ),
@@ -236,6 +243,50 @@ fn build_preview(font: &Font, master: &str, options: &fontcraft_compile::Options
             None
         }
     }
+}
+
+/// What a preview build is kept and found by.
+struct BuildKey<'a> {
+    doc: u64,
+    revision: u64,
+    master: &'a str,
+    /// The compile's cache key ([`FeatureState::source_hash`]).
+    hash: u64,
+    /// The code includes files.
+    includes: bool,
+    /// Compile even when a build of this revision is kept.
+    force: bool,
+}
+
+/// The preview build of `key`'s revision and master: the one kept when there is one, else a new
+/// one, kept for Text Preview. A build Text Preview made is taken only for code that includes
+/// no files: it read them without keying them.
+fn shared_build(
+    font: &Font,
+    options: &fontcraft_compile::Options,
+    builds: &PreviewBuilds,
+    key: &BuildKey,
+) -> std::result::Result<Arc<PreviewBuild>, Arc<CompileError>> {
+    let kept = builds.get(key.doc, key.revision, key.master).filter(|b| !key.force && b.source_hash.map_or(!key.includes, |h| h == key.hash));
+    if let Some(kept) = kept {
+        return kept.result.clone();
+    }
+    let result = crate::feature_state::build_previews(font, key.master, options).map(Arc::new).map_err(Arc::new);
+    builds.put(SharedBuild {
+        doc: key.doc,
+        revision: key.revision,
+        master: key.master.to_string(),
+        source_hash: Some(key.hash),
+        result: result.clone(),
+    });
+    result
+}
+
+/// The diagnostics hold an error, and every error is in an entry's code: the code itself does
+/// not compile, so compiling it again on its own would find the same errors.
+fn in_entries(found: &[EntryDiagnostic]) -> bool {
+    let mut errors = found.iter().filter(|d| d.diagnostic.is_error()).peekable();
+    errors.peek().is_some() && errors.all(|d| d.place.is_some())
 }
 
 /// The file names `text` includes (`include(name)`), unchecked: a match in a comment only adds a
@@ -414,6 +465,15 @@ fn compile(s: &mut Session, raw: &Value) -> Result<Value> {
             let includes_keyed = include_dir.as_deref().is_none_or(|dir| hash_included_files(&files, dir, &mut hasher));
             // Zero marks a state that compiled nothing.
             let hash = hasher.finish().max(1);
+            let key = BuildKey {
+                doc: doc_id,
+                revision,
+                master: &master,
+                hash,
+                includes: files.iter().any(|(_, text)| include_names(text).next().is_some()),
+                force,
+            };
+            let builds = s.preview_builds();
             match previous.filter(|prev| !force && includes_keyed && prev.source_hash == hash && prev.master == master) {
                 Some(prev) => {
                     cached = true;
@@ -428,25 +488,44 @@ fn compile(s: &mut Session, raw: &Value) -> Result<Value> {
                     } else if prev.revision == revision {
                         prev.preview.clone()
                     } else {
-                        build_preview(font, &master, &preview_options, &mut preview_message)
+                        match shared_build(font, &preview_options, &builds, &key) {
+                            Ok(build) => Some(build.gsub_only.clone()),
+                            Err(_) => build_preview(font, &master, &preview_options, &mut preview_message),
+                        }
                     };
                     FeatureState { revision, diagnostics, preview, ..prev.as_ref().clone() }
                 }
-                None => {
-                    let (features, diagnostics) = match GlyphOrder::new(names) {
-                        Err(d) => (Vec::new(), vec![EntryDiagnostic { place: None, diagnostic: d }]),
-                        Ok(order) => {
-                            let request = CompileRequest::new(&files, &order);
-                            match fontcraft_fea::compile(&request) {
-                                Ok(compiled) => (compiled.features, compiled.warnings.into_iter().map(|d| assembly.map.map(d)).collect()),
-                                Err(found) => (Vec::new(), found.into_iter().map(|d| assembly.map.map(d)).collect()),
+                None => match GlyphOrder::new(names) {
+                    Err(d) => FeatureState {
+                        revision,
+                        master: master.clone(),
+                        preview: None,
+                        features: Vec::new(),
+                        diagnostics: vec![EntryDiagnostic { place: None, diagnostic: d }],
+                        source_hash: hash,
+                    },
+                    Ok(order) => {
+                        let built = shared_build(font, &preview_options, &builds, &key);
+                        let failed = built.as_ref().err().map(|e| e.as_ref());
+                        let (preview, features, diagnostics) = match (&built, failed) {
+                            (Ok(build), _) => (Some(build.gsub_only.clone()), build.code_features.clone(), build.diagnostics.clone()),
+                            (Err(_), Some(CompileError::Features(found))) if in_entries(found) => (None, Vec::new(), found.clone()),
+                            (Err(_), _) => {
+                                // The code on its own, for its diagnostics, as the build could not
+                                // give them; then Edit View's font without `GPOS`.
+                                let request = CompileRequest::new(&files, &order);
+                                let (features, diagnostics): (_, Vec<EntryDiagnostic>) = match fontcraft_fea::compile(&request) {
+                                    Ok(compiled) => (compiled.features, compiled.warnings.into_iter().map(|d| assembly.map.map(d)).collect()),
+                                    Err(found) => (Vec::new(), found.into_iter().map(|d| assembly.map.map(d)).collect()),
+                                };
+                                let errors = diagnostics.iter().any(|d| d.diagnostic.is_error());
+                                let preview = if errors { None } else { build_preview(font, &master, &preview_options, &mut preview_message) };
+                                (preview, features, diagnostics)
                             }
-                        }
-                    };
-                    let errors = diagnostics.iter().any(|d: &EntryDiagnostic| d.diagnostic.is_error());
-                    let preview = if errors { None } else { build_preview(font, &master, &preview_options, &mut preview_message) };
-                    FeatureState { revision, master: master.clone(), preview, features, diagnostics, source_hash: hash }
-                }
+                        };
+                        FeatureState { revision, master: master.clone(), preview, features, diagnostics, source_hash: hash }
+                    }
+                },
             }
         }
     };

@@ -104,10 +104,21 @@ impl<'a> CompileRequest<'a> {
 /// Compiles the request's files to layout tables. Errors and warnings fea-rs reports, and
 /// refusals of the pre-checks, come back as diagnostics; at most [`Limits::diagnostics`] of them.
 pub fn compile(req: &CompileRequest) -> Result<Compiled, Vec<Diagnostic>> {
+    COMPILES.with(|n| n.set(n.get().saturating_add(1)));
     match run::run(req, run::Mode::Build)? {
         run::Output::Compiled(compiled) => Ok(*compiled),
         run::Output::FirstPass(_) => Err(vec![Diagnostic::request(Severity::Error, "the compiler stopped early")]),
     }
+}
+
+thread_local! {
+    static COMPILES: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// How many times [`compile`] has been called on this thread: a test hook for callers that
+/// must compile the code once per edit. [`first_pass`] and [`validate`] are not counted.
+pub fn compiles_on_this_thread() -> u64 {
+    COMPILES.with(std::cell::Cell::get)
 }
 
 /// Parses and validates the request's files and compiles `GSUB` alone, without the generated
