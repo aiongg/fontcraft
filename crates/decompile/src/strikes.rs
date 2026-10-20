@@ -15,9 +15,11 @@
 //!   every image that cannot be read.
 //! - The colour tables (`CBLC`, `CBDT`) are not read here.
 //!
-//! The work is bounded by [`MAX_ENTRIES`] index entries for all strikes together, and composite
-//! images by [`MAX_COMPOSITE_DEPTH`] levels and [`MAX_COMPOSITE_WORK`] pixels and components
-//! drawn. Past either total, no strike is kept.
+//! The work is bounded by [`MAX_ENTRIES`] index entries and [`MAX_DECODED_BYTES`] bytes of
+//! images decoded for all strikes together, kept or not, and composite images by
+//! [`MAX_COMPOSITE_DEPTH`] levels and [`MAX_COMPOSITE_WORK`] pixels and components drawn. Past
+//! any of these totals, no strike is kept. Images that several glyphs or strikes share (the same
+//! data at the same depth and size) are decoded once.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -40,6 +42,11 @@ pub const MAX_ENTRIES: usize = MAX_STRIKES * 65_536;
 pub const MAX_COMPOSITE_DEPTH: usize = 8;
 /// Most pixels and components drawn while flattening composite images, for the whole font.
 pub const MAX_COMPOSITE_WORK: u64 = 64 << 20;
+/// Most bytes of images decoded for the whole font, counting the images of strikes left out and
+/// every copy of a shared image: room for every strike the model keeps, and one strike more.
+pub const MAX_DECODED_BYTES: usize = MAX_ALL_STRIKES_BYTES + MAX_STRIKE_BYTES;
+/// Most bytes of decoded images kept for reuse by glyphs and strikes that share them.
+pub const MAX_IMAGE_CACHE_BYTES: usize = MAX_STRIKE_BYTES;
 
 /// The location and data tables, as pairs of tags.
 const PAIRS: [([u8; 4], [u8; 4]); 2] = [(*b"EBLC", *b"EBDT"), (*b"bloc", *b"bdat")];
@@ -80,11 +87,19 @@ enum Stop {
     Image(String),
 }
 
-/// The work done so far, against [`MAX_ENTRIES`] and [`MAX_COMPOSITE_WORK`].
+/// What identifies the pixels of an image that is not a composite: its data, and the depth and
+/// size it is read at.
+type ImageKey = (u16, usize, usize, u8, u8, u8);
+
+/// The work done so far, against [`MAX_ENTRIES`], [`MAX_DECODED_BYTES`] and
+/// [`MAX_COMPOSITE_WORK`], and the decoded images kept for reuse.
 #[derive(Default)]
 struct Budget {
     entries: usize,
     work: u64,
+    decoded: usize,
+    cache: HashMap<ImageKey, Vec<u8>>,
+    cache_bytes: usize,
 }
 
 impl Budget {
@@ -103,6 +118,21 @@ impl Budget {
         }
         Ok(())
     }
+
+    fn decoded(&mut self, n: usize) -> Result<(), Stop> {
+        self.decoded = self.decoded.saturating_add(n);
+        if self.decoded > MAX_DECODED_BYTES {
+            return Err(Stop::Limit(format!("the bitmap images decode to more than {MAX_DECODED_BYTES} bytes")));
+        }
+        Ok(())
+    }
+
+    fn keep(&mut self, key: ImageKey, data: &[u8]) {
+        if self.cache_bytes.saturating_add(data.len()) <= MAX_IMAGE_CACHE_BYTES {
+            self.cache_bytes += data.len();
+            self.cache.insert(key, data.to_vec());
+        }
+    }
 }
 
 /// The strikes of a location table and its data table, given the font's glyph names by glyph
@@ -119,6 +149,10 @@ pub fn read(location: FontData<'_>, data: FontData<'_>, names: &[String], warnin
             warnings.push(format!("the font has more than {MAX_STRIKES} bitmap strikes; the first {MAX_STRIKES} were read"));
             break;
         }
+        if strikes.iter().any(|s| s.ppem == u16::from(size.ppem_y()) && s.depth == size.bit_depth()) {
+            warnings.push(format!("bitmap strike {label} was left out: an earlier strike has the same size and depth"));
+            continue;
+        }
         let (strike, skipped) = match read_strike(&eblc, &ebdt, size, names, &mut budget) {
             Ok(read) => read,
             Err(Stop::Limit(m)) => return Err(m),
@@ -132,10 +166,6 @@ pub fn read(location: FontData<'_>, data: FontData<'_>, names: &[String], warnin
         }
         if strike.glyphs.is_empty() {
             warnings.push(format!("bitmap strike {label} was left out: it has no image for a glyph of the font"));
-            continue;
-        }
-        if strikes.iter().any(|s| s.ppem == strike.ppem && s.depth == strike.depth) {
-            warnings.push(format!("bitmap strike {label} was left out: an earlier strike has the same size and depth"));
             continue;
         }
         if let Err(m) = strike.check() {
@@ -298,8 +328,21 @@ fn image(
     };
     let stride = row_stride(width, depth);
     let len = stride * usize::from(height);
+    // Every image is charged, composite or not and decoded or reused, so strikes left out and
+    // shared images still count toward the font's total.
+    budget.decoded(len)?;
+    let key: ImageKey = (location.format, location.data_offset, location.data_size, depth, width, height);
+    if !matches!(read.content, BitmapContent::Composite(_))
+        && let Some(data) = budget.cache.get(&key)
+    {
+        return Ok(Image { width, height, left, top, advance, data: data.clone() });
+    }
     let data = match read.content {
-        BitmapContent::Data(BitmapDataFormat::ByteAligned, bytes) if bytes.len() == len => bytes.to_vec(),
+        BitmapContent::Data(BitmapDataFormat::ByteAligned, bytes) if bytes.len() == len => {
+            let data = bytes.to_vec();
+            budget.keep(key, &data);
+            data
+        }
         BitmapContent::Data(BitmapDataFormat::BitAligned, bytes) => {
             let mut out = vec![0u8; len];
             for y in 0..usize::from(height) {
@@ -308,6 +351,7 @@ fn image(
                     set_pixel(&mut out, stride, depth, x, y, pixel_at(bytes, bit, depth));
                 }
             }
+            budget.keep(key, &out);
             out
         }
         BitmapContent::Composite(components) => {

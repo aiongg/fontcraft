@@ -182,13 +182,13 @@ fn apply_records<'r>(records: impl Iterator<Item = &'r mut ValueRecord>, deltas:
 /// The deltas one pass adds to `GPOS` values, and whether the variation-index devices stay (a
 /// partial instance, whose store still varies them) or go (a full instance).
 #[derive(Clone, Copy)]
-pub(super) struct Fold<'a> {
+pub(crate) struct Fold<'a> {
     pub deltas: &'a StoreDeltas,
     pub keep_devices: bool,
 }
 
 /// Adds the rounded delta of every variation-index device in `GPOS` to the value it varies.
-pub(super) fn apply_gpos(gpos: &mut Gpos, fold: Fold<'_>) {
+pub(crate) fn apply_gpos(gpos: &mut Gpos, fold: Fold<'_>) {
     for lookup in gpos.lookup_list.lookups.iter_mut() {
         lookup_deltas(lookup, fold);
     }

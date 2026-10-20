@@ -29,7 +29,7 @@ mod glyf;
 pub mod iup;
 pub mod ivs;
 mod names;
-mod otl;
+pub(crate) mod otl;
 pub mod partial;
 pub mod solver;
 mod static_tables;

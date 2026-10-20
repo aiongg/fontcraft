@@ -1077,7 +1077,7 @@ guesses = [
   "STAT and cvar are the first font's, as the name and cvt tables they refer to are; a fontTools rule for variable merging would settle it.",
   "HVAR or VVAR is left out, with a warning, when one font lacks it (the advances then vary through gvar's phantom points), and a side-bearing or origin map is kept only when every font has it; a fontTools rule for variable merging would settle it.",
   "Two identical glyphs are shared under --duplicates first, last or error only when their gvar data is identical too; HVAR deltas are not compared, as gvar's phantom points carry the same advances.",
-  "With --drop-tables fvar the merged GDEF keeps the concatenated variation stores and the GPOS devices keep pointing into them (inert without fvar); fontTools refuses GDEF stores, so a user who drops fvar would settle whether the stores should go.",
+  "When the result is static (--drop-tables fvar, or no font is variable) the GDEF variation stores are dropped and every variation-index device goes, so GPOS values, anchors and ligature carets keep their default values, as a full instance at the default location does; fontTools refuses fonts with GDEF stores, so a user who merges such fonts would settle whether they should be refused instead.",
 ]
 
 [[cli]]
