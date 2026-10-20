@@ -221,6 +221,10 @@ the fonts can be checked with other readers (fontTools' `TTFont(...).ensureDecom
   (`--cli`, default `target/release/fontcraft-cli`).
   - `crates/cff/crosscheck/subr_check.py`: the CFF subroutiniser (through the `subr_measure` example) against
     cffsubr over the corpus: outlines, fontTools warnings and size. tx needs a writable temporary folder.
+  - `crates/cff/crosscheck/cff2_export_check.py`: variable CFF2 exports against fontmake's `variable-cff2`: every
+    glyph drawn by fontTools at the default and at each axis's extremes without a warning, the CFF2 table size
+    against fontmake's default build, and each charstring, subroutines expanded, token for token against fontmake's
+    `--optimize-cff 1` build. fontmake's default build needs tx.
   - `crates/tables/crosscheck/morph.py`: the TTX writer and reader of `mort` and `morx` against ttx. The corpus
     has neither table, so `--build N` writes random fonts of each with fontTools.
   - `crates/tables/crosscheck/optimize.py`: the `optimize` steps (`gvar` IUP, implied on-curve points, variation
