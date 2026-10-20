@@ -1029,10 +1029,11 @@ status = "docs"
 id = "compile.cmapLegacyOptions"
 area = "compile"
 milestone = "M12"
-summary = "makeotf has two legacy cmap switches, both off by default. -dbl gives ten glyphs a second code point when no other glyph has it: Delta U+0394, Omega U+03A9, mu U+03BC, hyphen U+00AD, space U+00A0, macron U+02C9, periodcentered U+2219, fraction U+2215, Tcommaaccent U+021A, tcommaaccent U+021B. -stubCmap4 writes two format 4 subtables (0,3 and 3,1) that map only the space, and no format 12; the Macintosh subtable stays. We expose them only as project compile options (legacy-double-mapping, stub-cmap4)."
+summary = "makeotf has two legacy cmap switches, both off by default. -dbl gives ten glyphs a second code point when no other glyph has it: Delta U+0394, Omega U+03A9, mu U+03BC, hyphen U+00AD, space U+00A0, macron U+02C9, periodcentered U+2219, fraction U+2215, Tcommaaccent U+021A, tcommaaccent U+021B. -stubCmap4 writes two format 4 subtables (0,3 and 3,1) that map only the space, and no format 12; the Macintosh subtable stays, and so does a format 14 subtable of Unicode Variation Sequences. We expose them only as project compile options (legacy-double-mapping, stub-cmap4)."
 ref = "AFDKO python/afdko/makeotf.py (-dbl, -stubCmap4)"
 status = "observed"
 notes = "Observed with makeotf 5.0.1 on synthetic UFOs: with -dbl a glyph uni0394 kept U+0394 and Delta stayed single; Scedilla, nbspace and the other candidates got no second code point. makeotf also writes a Macintosh format 0 subtable (with tab and carriage return mapped to the space), which our compile does not; the measure leaves that subtable out. Built in M12.40."
+guesses = ["The stub keeps a format 14 subtable of Unicode Variation Sequences, as it keeps the Macintosh subtable; settled by a makeotf build with -stubCmap4 and -ci."]
 
 [[behavior]]
 id = "compile.postVersion"

@@ -37,6 +37,7 @@ use std::sync::Arc;
 
 use fontcraft_model::plist::Value;
 use fontcraft_model::{DONT_USE_PRODUCTION_NAMES, Font, GlyphTable, Param, Params, Resolved};
+use read_fonts::tables::cmap::PlatformId;
 use read_fonts::{FontRef, TableProvider};
 use write_fonts::FontBuilder;
 use write_fonts::types::{GlyphId, Tag};
@@ -1300,14 +1301,28 @@ fn os2_finished(mut table: Vec<u8>, plan: Os2Plan, warnings: &mut Vec<String>) -
     Ok(table)
 }
 
-/// A `cmap` with only the space mapping in its two format 4 subtables (the other BMP mapping
-/// with the lowest code point when the font has no space), as the reference's stub option
-/// writes it.
+/// The font's `cmap` with each format 4 subtable replaced by one that maps only the space (the
+/// other BMP mapping with the lowest code point when the font has no space) and no format 12,
+/// as the reference's stub option writes it. Macintosh subtables and the variation sequences
+/// (format 14) are kept as they are.
 fn stub_cmap(font: &FontRef, warnings: &mut Vec<String>) -> std::result::Result<Vec<u8>, String> {
+    let stub = stub_cmap4(font, warnings)?;
+    match font.table_data(Tag::new(b"cmap")) {
+        Some(old) => keep_other_subtables(old.as_bytes(), &stub),
+        None => Ok(stub),
+    }
+}
+
+/// A `cmap` whose two format 4 subtables map only the character [`stub_cmap`] keeps.
+fn stub_cmap4(font: &FontRef, warnings: &mut Vec<String>) -> std::result::Result<Vec<u8>, String> {
     use write_fonts::tables::cmap::Cmap;
     let charmap = font.cmap().map_err(|e| e.to_string())?;
     let mut mappings: Vec<(u32, GlyphId)> = Vec::new();
     for record in charmap.encoding_records() {
+        // Macintosh subtables map their own character codes, not Unicode.
+        if record.platform_id() == PlatformId::Macintosh {
+            continue;
+        }
         if let Ok(subtable) = record.subtable(charmap.offset_data()) {
             mappings.extend(subtable.iter().take(crate::MAX_FONT_GLYPHS * 4).filter(|(c, _)| *c <= 0xFFFF));
         }
@@ -1327,10 +1342,127 @@ fn stub_cmap(font: &FontRef, warnings: &mut Vec<String>) -> std::result::Result<
     write_fonts::dump_table(&cmap).map_err(|e| e.to_string())
 }
 
+/// The encoding records of the `cmap` table `t`: platform, encoding, subtable offset, format.
+fn cmap_records(t: &[u8]) -> Option<Vec<(u16, u16, usize, u16)>> {
+    let u16_at = |at: usize| t.get(at..at.checked_add(2)?).and_then(|b| <[u8; 2]>::try_from(b).ok()).map(u16::from_be_bytes);
+    let u32_at = |at: usize| t.get(at..at.checked_add(4)?).and_then(|b| <[u8; 4]>::try_from(b).ok()).map(u32::from_be_bytes);
+    (0..usize::from(u16_at(2)?))
+        .map(|i| {
+            let at = 4 + 8 * i;
+            let offset = usize::try_from(u32_at(at + 4)?).ok()?;
+            Some((u16_at(at)?, u16_at(at + 2)?, offset, u16_at(offset)?))
+        })
+        .collect()
+}
+
+/// The bytes of the subtable at `at` of the `cmap` table `t`, as long as its format says.
+fn subtable_bytes(t: &[u8], at: usize) -> Option<&[u8]> {
+    let u16_at = |i: usize| t.get(i..i.checked_add(2)?).and_then(|b| <[u8; 2]>::try_from(b).ok()).map(u16::from_be_bytes);
+    let u32_at = |i: usize| t.get(i..i.checked_add(4)?).and_then(|b| <[u8; 4]>::try_from(b).ok()).map(u32::from_be_bytes);
+    let length = match u16_at(at)? {
+        0 | 2 | 4 | 6 => usize::from(u16_at(at.checked_add(2)?)?),
+        8 | 10 | 12 | 13 => usize::try_from(u32_at(at.checked_add(4)?)?).ok()?,
+        14 => usize::try_from(u32_at(at.checked_add(2)?)?).ok()?,
+        _ => return None,
+    };
+    t.get(at..at.checked_add(length)?)
+}
+
+/// `stub` (a `cmap` with format 4 subtables only) with the Macintosh and format 14 subtables of
+/// `old` added, in place of `old`'s format 4 subtables where it has them. Subtables that records
+/// share stay shared.
+fn keep_other_subtables(old: &[u8], stub: &[u8]) -> std::result::Result<Vec<u8>, String> {
+    let bad = || "the cmap cannot be read".to_string();
+    let old_records = cmap_records(old).ok_or_else(bad)?;
+    let kept = |r: &(u16, u16, usize, u16)| r.0 == 1 || r.3 == 14;
+    if !old_records.iter().any(kept) {
+        return Ok(stub.to_vec());
+    }
+    let stub_records = cmap_records(stub).ok_or_else(bad)?;
+    let stub4 = stub_records.first().and_then(|r| subtable_bytes(stub, r.2)).ok_or_else(bad)?;
+    // Each record and its subtable: `None` for the stub's format 4, else an offset into `old`.
+    let mut records: Vec<(u16, u16, Option<usize>)> =
+        old_records.iter().filter_map(|r| if kept(r) { Some((r.0, r.1, Some(r.2))) } else { (r.3 == 4).then_some((r.0, r.1, None)) }).collect();
+    if !old_records.iter().any(|r| r.3 == 4 && !kept(r)) {
+        records.extend(stub_records.iter().map(|&(p, e, _, _)| (p, e, None)));
+    }
+    records.sort_by_key(|&(p, e, _)| (p, e));
+    let count = u16::try_from(records.len()).map_err(|_| bad())?;
+    let mut body: Vec<u8> = Vec::new();
+    let mut placed: Vec<(Option<usize>, usize)> = Vec::new();
+    let mut directory: Vec<u8> = Vec::new();
+    let body_at = 4 + 8 * records.len();
+    for (p, e, source) in records {
+        let at = match placed.iter().find(|(s, _)| *s == source) {
+            Some(&(_, at)) => at,
+            None => {
+                let bytes = match source {
+                    Some(o) => subtable_bytes(old, o).ok_or_else(bad)?,
+                    None => stub4,
+                };
+                let at = body_at + body.len();
+                body.extend_from_slice(bytes);
+                placed.push((source, at));
+                at
+            }
+        };
+        directory.extend_from_slice(&p.to_be_bytes());
+        directory.extend_from_slice(&e.to_be_bytes());
+        directory.extend_from_slice(&u32::try_from(at).map_err(|_| "the cmap is too large".to_string())?.to_be_bytes());
+    }
+    let mut out = Vec::with_capacity(body_at + body.len());
+    out.extend_from_slice(&0u16.to_be_bytes());
+    out.extend_from_slice(&count.to_be_bytes());
+    out.extend(directory);
+    out.extend(body);
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
     use super::*;
+
+    #[test]
+    fn the_stub_cmap_replaces_only_the_format_4_subtables() {
+        use read_fonts::FontRead;
+        use read_fonts::tables::cmap::{Cmap, CmapSubtable};
+        let base =
+            write_fonts::dump_table(&write_fonts::tables::cmap::Cmap::from_mappings([(' ', GlyphId::new(1)), ('A', GlyphId::new(2))]).unwrap())
+                .unwrap();
+        // A format 14 subtable with one selector and no sequences, as platform 0, encoding 5.
+        let format14: Vec<u8> = [&14u16.to_be_bytes()[..], &21u32.to_be_bytes(), &1u32.to_be_bytes(), &[0x00, 0xFE, 0x00], &[0; 8]].concat();
+        let records = cmap_records(&base).unwrap();
+        let mut all: Vec<(u16, u16, u32)> = records.iter().map(|&(p, e, o, _)| (p, e, u32::try_from(o + 8).unwrap())).collect();
+        all.push((0, 5, u32::try_from(base.len() + 8).unwrap()));
+        all.sort();
+        let mut old = [0u16.to_be_bytes(), u16::try_from(all.len()).unwrap().to_be_bytes()].concat();
+        for (p, e, o) in all {
+            old.extend([&p.to_be_bytes()[..], &e.to_be_bytes(), &o.to_be_bytes()].concat());
+        }
+        old.extend(&base[4 + 8 * records.len()..]);
+        old.extend(&format14);
+        let mut builder = FontBuilder::new();
+        builder.add_raw(Tag::new(b"cmap"), old);
+        let bytes = builder.build();
+
+        let stub = stub_cmap(&FontRef::new(&bytes).unwrap(), &mut Vec::new()).unwrap();
+        let cmap = Cmap::read(read_fonts::FontData::new(&stub)).unwrap();
+        let format = |r: &read_fonts::tables::cmap::EncodingRecord| match r.subtable(cmap.offset_data()).unwrap() {
+            CmapSubtable::Format4(_) => 4,
+            CmapSubtable::Format14(_) => 14,
+            _ => 0,
+        };
+        let kinds: Vec<(PlatformId, u16, u16)> = cmap.encoding_records().iter().map(|r| (r.platform_id(), r.encoding_id(), format(r))).collect();
+        assert_eq!(kinds, [(PlatformId::Unicode, 3, 4), (PlatformId::Unicode, 5, 14), (PlatformId::Windows, 1, 4)]);
+        for r in cmap.encoding_records() {
+            let subtable = r.subtable(cmap.offset_data()).unwrap();
+            if matches!(subtable, CmapSubtable::Format4(_)) {
+                assert_eq!(subtable.iter().collect::<Vec<_>>(), [(0x20, GlyphId::new(1))]);
+            }
+        }
+        assert_eq!(subtable_bytes(&stub, cmap_records(&stub).unwrap()[1].2).unwrap(), &format14[..]);
+    }
 
     #[test]
     fn later_options_override_earlier_ones_with_the_reference_quirks() {

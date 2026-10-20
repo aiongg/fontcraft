@@ -27,7 +27,7 @@ use fontcraft_model::plist::Value;
 use fontcraft_model::{Font, Glyph, ModelError, Params, Target, param_flag};
 
 use crate::layers::{ColorLayerKind, ICOLOR_SIZES, color_layers, export_kind};
-use crate::paint::{ColorRef, Paint, PaintVariation, ShapeRef, drawn_shapes, glyph_paint_warn};
+use crate::paint::{ColorRef, MasterPaints, Paint, PaintVariation, ShapeRef, drawn_shapes};
 use crate::palette::{self, FOREGROUND_INDEX};
 use crate::strike::{self, Strike};
 use crate::{ColorError, Palettes, Rgba};
@@ -353,14 +353,15 @@ pub fn plan_master(font: &Font, master_id: &str, switches: &Switches) -> ExportP
 
     let mut colr_glyphs = Vec::new();
     let mut documents = Vec::new();
+    let mut paints = MasterPaints::new(font, master_id);
     for glyph in fontcraft_model::glyph_order(font).into_iter().filter_map(|i| font.glyphs.as_arcs().get(i)) {
         if !glyph.export {
             continue;
         }
         let own = match &palettes {
-            Some(p) => {
+            Some(_) => {
                 let mut notes = Vec::new();
-                let paint = glyph_paint_warn(font, glyph, master_id, p, &mut notes).unwrap_or_else(|e| {
+                let paint = paints.paint(glyph, &mut notes).unwrap_or_else(|e| {
                     plan.problems.push(warning(Some(&glyph.name), format!("its colour layers are not exported: {e}")));
                     None
                 });

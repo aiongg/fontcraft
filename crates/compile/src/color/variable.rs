@@ -19,12 +19,12 @@
 
 use std::collections::HashMap;
 
+use fontcraft_color::MAX_COLOR_LAYERS;
 use fontcraft_color::export::{ColrPlan, Problem, ProblemKind, Switches, has_color_layers, plan_master};
 use fontcraft_color::layers::{ColorLayerKind, kind, with_kind};
 use fontcraft_color::paint::{
-    Paint, PaintVariation, ShapeRef, glyph_paint, interpolate_paint_attrs, numbered_shape_refs, same_structure, shape_refs,
+    MasterPaints, Paint, PaintVariation, ShapeRef, interpolate_paint_attrs, numbered_shape_refs, same_structure, shape_refs,
 };
-use fontcraft_color::{MAX_COLOR_LAYERS, Palettes};
 use fontcraft_interp::instance::{InterpOptions, interpolate_layer, master_weights};
 use fontcraft_interp::{Designspace, GlyphSources, MasterPairs};
 use fontcraft_model::{Font, Glyph, Layer, Shape};
@@ -298,13 +298,12 @@ pub fn split_layer_glyphs(
     all.extend(others.iter().copied());
     let scope = MasterPairs { masters: designspace.masters().iter().map(|m| m.id.clone()).collect(), indicators: true };
     let mut out = font.clone();
+    let mut per_master: Vec<MasterPaints<'_>> = others.iter().map(|m| MasterPaints::new(font, m)).collect();
     for (gi, split) in names {
         let (Some(cg), Some(source)) = (colr.glyphs.get(gi), colr.glyphs.get(gi).and_then(|cg| font.glyph(&cg.glyph))) else { continue };
         let refs = numbered_refs(&cg.paint);
-        let paints: Vec<Option<Paint>> = others
-            .iter()
-            .map(|m| glyph_paint(font, source, m, &Palettes::default()).ok().flatten().filter(|p| same_structure(&cg.paint, p)))
-            .collect();
+        let paints: Vec<Option<Paint>> =
+            per_master.iter_mut().map(|mp| mp.paint(source, &mut Vec::new()).ok().flatten().filter(|p| same_structure(&cg.paint, p))).collect();
         let slots = slots(source, &all, warnings);
         for (i, name) in split {
             let Some(default) = refs.get(&i).and_then(|s| layer_glyph_layer(source, s, &origin)) else { continue };
@@ -344,6 +343,7 @@ pub fn split_layer_glyphs(
 pub fn variation(font: &Font, colr: &ColrPlan, origin: &str, others: &[(String, Vec<f64>)], problems: &mut Vec<Problem>) -> PaintVariation {
     let mut out = PaintVariation { locations: others.iter().map(|(_, l)| l.clone()).collect(), ..PaintVariation::default() };
     out.layer_glyphs = split_names(font, colr, origin).into_iter().flat_map(|(_, names)| names.into_iter().map(|(_, n)| n)).collect();
+    let mut per_master: Vec<MasterPaints<'_>> = others.iter().map(|(m, _)| MasterPaints::new(font, m)).collect();
     for cg in &colr.glyphs {
         let Some(source) = font.glyph(&cg.glyph) else { continue };
         if !own_layers(source, &cg.paint, origin) {
@@ -352,8 +352,9 @@ pub fn variation(font: &Font, colr: &ColrPlan, origin: &str, others: &[(String, 
         let mut missing: Vec<String> = Vec::new();
         let per: Vec<Option<Paint>> = others
             .iter()
-            .map(|(m, _)| {
-                let p = glyph_paint(font, source, m, &Palettes::default()).ok().flatten().filter(|p| same_structure(&cg.paint, p));
+            .zip(per_master.iter_mut())
+            .map(|((m, _), mp)| {
+                let p = mp.paint(source, &mut Vec::new()).ok().flatten().filter(|p| same_structure(&cg.paint, p));
                 if p.is_none() {
                     missing.push(font.master(m).map_or_else(|_| m.clone(), |master| master.name.clone()));
                 }

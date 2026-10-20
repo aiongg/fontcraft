@@ -46,6 +46,9 @@ pub(crate) fn tree(root: &Node, glyph_count: usize, limits: &Limits, files: &BTr
         lookups: [0; 2],
         features: 0,
         filter_sets: 0,
+        nested: false,
+        flag_ids: HashMap::new(),
+        flag_count: 0,
         refusals: Vec::new(),
     };
     walk.node(root, 0);
@@ -79,6 +82,13 @@ struct Walk<'a> {
     features: usize,
     /// `lookupflag` statements with a mark filtering set.
     filter_sets: usize,
+    /// Set while the walk enters a lookup block written directly in a feature block: the
+    /// feature's count covers its rules, with the flags and language system it inherits.
+    nested: bool,
+    /// A number for each distinct `flag_key`; flags the tree does not show get a number of
+    /// their own each time.
+    flag_ids: HashMap<String, usize>,
+    flag_count: usize,
     refusals: Vec<(String, String)>,
 }
 
@@ -90,6 +100,7 @@ impl Walk<'_> {
     }
 
     fn node(&mut self, node: &Node, depth: usize) {
+        let nested = std::mem::take(&mut self.nested);
         if depth > MAX_TREE_DEPTH {
             self.refuse(node, "the feature code is nested too deeply".into());
             return;
@@ -153,12 +164,15 @@ impl Walk<'_> {
             }
             _ => {}
         }
-        if !is_rule(node.kind()) && node.kind() != Kind::AaltFeatureNode {
+        if !is_rule(node.kind()) && node.kind() != Kind::AaltFeatureNode && !nested {
             self.count_lookups(node);
         }
         for child in node.iter_children() {
             match child {
-                NodeOrToken::Node(n) => self.node(n, depth + 1),
+                NodeOrToken::Node(n) => {
+                    self.nested = node.kind() == Kind::FeatureNode && n.kind() == Kind::LookupBlockNode;
+                    self.node(n, depth + 1);
+                }
                 NodeOrToken::Token(t) => self.token(node, t),
             }
         }
@@ -280,30 +294,61 @@ impl Walk<'_> {
         }
     }
 
-    /// Counts the lookups a block's own rules start, from below, as fea-rs 1.0.0's
-    /// `compile_ctx.rs` groups them. A rule joins the current lookup when it is of the same
-    /// kind (an `ignore` rule is contextual; single and multiple substitutions share one) under
-    /// the same lookup flags. The current lookup ends at a `language` statement, a `script`
-    /// statement that changes the language system, and a nested lookup block; a lookup
-    /// reference, a `subtable` break or a class definition does not end it. The inline
-    /// substitutions and value records of a contextual lookup share anonymous lookups until a
-    /// `subtable` break, so each part with one counts once. Where fea-rs's state cannot be
-    /// read from the tree (flags inherited by a lookup block, a `script` statement whose
-    /// effect depends on it), the count assumes the case that makes fewer lookups: the guard
-    /// may miss an overflow (fea-rs's panic is then reported) but never refuses valid code.
+    /// Counts the lookups a block's own rules start, from above, as fea-rs 1.0.0's
+    /// `compile_ctx.rs` groups them. A rule joins the current lookup only when it is of the
+    /// same kind (an `ignore` rule is contextual; single and multiple substitutions share one)
+    /// under lookup flags known to be the same. The current lookup ends at a `language`
+    /// statement, a `script` statement that changes the language system, and a nested lookup
+    /// block; a lookup reference, a `subtable` break or a class definition does not end it.
+    /// The inline substitutions and value records of a contextual lookup share anonymous
+    /// lookups until a `subtable` break, so each part with one counts once. A lookup block
+    /// written in a feature block is counted with the feature: it starts with the feature's
+    /// flags and language system, and the flags it sets stay in force after it. Where the tree
+    /// does not show fea-rs's flags (a `script` statement outside a feature, a flag number that
+    /// does not parse), they count as different from all others: the count may then exceed
+    /// fea-rs's by a lookup there, but is never below it, so fea-rs never passes a 16-bit index.
     fn count_lookups(&mut self, block: &Node) {
+        let (flags, system) = match block.kind() {
+            Kind::FeatureNode => (self.known_flags("0".into()), System::Default),
+            // fea-rs clears the flags when a lookup block outside a feature starts.
+            Kind::LookupBlockNode => (self.known_flags("0".into()), System::Unknown),
+            _ => (self.unknown_flags(), System::Unknown),
+        };
+        self.count_block(block, flags, system);
+    }
+
+    /// The number of the flags a `flag_key` stands for.
+    fn known_flags(&mut self, key: String) -> usize {
+        if let Some(&id) = self.flag_ids.get(&key) {
+            return id;
+        }
+        let id = self.unknown_flags();
+        self.flag_ids.insert(key, id);
+        id
+    }
+
+    /// A number for flags the tree does not show, equal to no other.
+    fn unknown_flags(&mut self) -> usize {
+        self.flag_count = self.flag_count.saturating_add(1);
+        self.flag_count
+    }
+
+    /// Counts a block's lookups from the flags and language system in force when it starts,
+    /// and returns those in force at its end.
+    fn count_block(&mut self, block: &Node, mut flags: usize, mut system: System) -> (usize, System) {
         let in_feature = block.kind() == Kind::FeatureNode;
-        // The flags in force (`None`: not known), the current lookup's kind and flags, and
-        // whether its part since the last `subtable` break has an anonymous lookup.
-        let mut flags: Option<u16> = in_feature.then_some(0);
-        let mut current: Option<(Kind, Option<u16>)> = None;
+        // The current lookup's kind and flags, and whether its part since the last `subtable`
+        // break has an anonymous lookup.
+        let mut current: Option<(Kind, usize)> = None;
         let mut anonymous = false;
-        let mut system = if in_feature { System::Default } else { System::Unknown };
         for child in block.iter_children().filter_map(NodeOrToken::as_node) {
             let kind = child.kind();
             match kind {
                 Kind::LookupFlagNode => {
-                    flags = flag_key(child);
+                    flags = match flag_key(child) {
+                        Some(key) => self.known_flags(key),
+                        None => self.unknown_flags(),
+                    };
                     continue;
                 }
                 Kind::SubtableNode => {
@@ -326,19 +371,25 @@ impl Walk<'_> {
                     // language, and otherwise ends the lookup and clears the flags.
                     match &system {
                         System::Set(s, true) if *s == script => {}
-                        System::Unknown => flags = None,
+                        System::Unknown => {
+                            current = None;
+                            flags = self.unknown_flags();
+                        }
                         _ => {
                             current = None;
-                            flags = Some(0);
+                            flags = self.known_flags("0".into());
                         }
                     }
                     system = System::Set(script, true);
                     continue;
                 }
                 Kind::LookupBlockNode => {
-                    // The flags set inside it stay in force after it.
                     current = None;
-                    flags = None;
+                    if in_feature {
+                        (flags, system) = self.count_block(child, flags, system);
+                    } else {
+                        flags = self.unknown_flags();
+                    }
                     continue;
                 }
                 _ if !is_rule(kind) => continue,
@@ -350,7 +401,7 @@ impl Walk<'_> {
                 Kind::GsubType1 => Kind::GsubType2,
                 other => other,
             };
-            let joins = current.is_some_and(|(k, f)| k == group && (f.is_none() || flags.is_none() || f == flags));
+            let joins = current.is_some_and(|(k, f)| k == group && f == flags);
             let mut added = 0;
             if !joins {
                 added += 1;
@@ -368,6 +419,7 @@ impl Walk<'_> {
             }
             self.add_lookups(child, is_gpos(kind), added);
         }
+        (flags, system)
     }
 
     fn add_lookups(&mut self, node: &Node, gpos: bool, added: usize) {
@@ -540,26 +592,42 @@ enum System {
     Set(String, bool),
 }
 
-/// The lookup flags a `lookupflag` statement sets, as far as the tree shows them: the low
-/// bits, plus 0x100 for a mark attachment class (whose number depends on the classes). Two
-/// statements with different keys set different flags; the same key may still differ in the
-/// class or set named.
-fn flag_key(node: &Node) -> Option<u16> {
+/// A key for the lookup flags a `lookupflag` statement sets: the low bits (0x100 standing for
+/// a mark attachment class), then the text of each class it names. Statements that set
+/// different flags get different keys; statements with different keys may still set the same
+/// flags (a class named once by name and once by its glyphs), which only makes the lookup
+/// count higher.
+fn flag_key(node: &Node) -> Option<String> {
     let mut key = 0u16;
-    for token in node.iter_children().filter_map(NodeOrToken::as_token) {
+    let mut classes = String::new();
+    for child in node.iter_children() {
+        let Some(token) = child.as_token() else {
+            if let Some(class) = child.as_node() {
+                classes.push('|');
+                for t in class.iter_tokens().filter(|t| !matches!(t.kind, Kind::Whitespace | Kind::Comment)) {
+                    classes.push_str(&t.text);
+                    classes.push(' ');
+                }
+            }
+            continue;
+        };
         match token.kind {
             // fea-rs keeps the low byte of a number, as fontTools does.
-            Kind::Number => return token.text.parse::<u16>().ok().map(|n| n & 0xff),
+            Kind::Number => return token.text.parse::<u32>().ok().map(|n| (n & 0xff).to_string()),
             Kind::RightToLeftKw => key |= 1,
             Kind::IgnoreBaseGlyphsKw => key |= 2,
             Kind::IgnoreLigaturesKw => key |= 4,
             Kind::IgnoreMarksKw => key |= 8,
             Kind::UseMarkFilteringSetKw => key |= 0x10,
             Kind::MarkAttachmentTypeKw => key |= 0x100,
+            Kind::NamedGlyphClass => {
+                classes.push('|');
+                classes.push_str(&token.text);
+            }
             _ => {}
         }
     }
-    Some(key)
+    Some(format!("{key}{classes}"))
 }
 
 /// The tag of a `script` or `language` statement.

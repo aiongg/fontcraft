@@ -1263,6 +1263,19 @@ fn rules_that_share_lookups_are_not_counted_as_many_lookups() {
     mixed.push_str("} liga;");
     let c = ok(&mixed);
     assert!(gsub(&c).len() <= 2, "{:?}", gsub(&c));
+
+    // Flags that change after a nested lookup block start a lookup each time, as elsewhere:
+    // these make 70,000 lookups and must be refused before fea-rs passes a 16-bit index.
+    let mut nested = String::from("feature liga {\nlookup N { sub e by f; } N;\nsub a by b;\n");
+    nested.extend((0..35_000).map(|_| "lookupflag 8;\nsub a by b;\nlookupflag 0;\nsub c by d;\n"));
+    nested.push_str("} liga;");
+    fails_with(&nested, "65535 GSUB lookups");
+
+    // So do flags that differ only in the mark attachment class they name.
+    let mut classes = String::from("@A = [a];\n@B = [c];\nfeature liga {\n");
+    classes.extend((0..35_000).map(|_| "lookupflag MarkAttachmentType @A;\nsub a by b;\nlookupflag MarkAttachmentType @B;\nsub c by d;\n"));
+    classes.push_str("} liga;");
+    fails_with(&classes, "65535 GSUB lookups");
 }
 
 #[test]

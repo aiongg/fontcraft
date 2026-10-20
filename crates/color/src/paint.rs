@@ -34,7 +34,7 @@
 //!   the same structure ([`same_structure`], [`PaintVariation`]); an interpolated instance mixes
 //!   its colour layers' paint attributes with the master weights ([`interpolate_paint_attrs`]).
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use fontcraft_geom::{Affine, BezPath, Point, Rect, Shape as _};
 use fontcraft_model::{Color, Component, Dimension, Extend, Font, Glyph, Gradient, GradientKind, Layer, PaletteEntry, Shape, ShapeAttrs};
@@ -171,7 +171,23 @@ pub fn glyph_paint_warn(
     warnings: &mut Vec<String>,
 ) -> Result<Option<Paint>, ColorError> {
     let _ = palettes;
-    Refs { font, master: master_id, painted: HashMap::new() }.paint(glyph, warnings, 0)
+    MasterPaints::new(font, master_id).paint(glyph, warnings)
+}
+
+/// [`glyph_paint_warn`] for many glyphs of one master: what it learns about the glyphs that
+/// components refer to is kept from one glyph to the next, so a glyph many others refer to is
+/// read once, not once for each.
+pub struct MasterPaints<'a>(Refs<'a>);
+
+impl<'a> MasterPaints<'a> {
+    pub fn new(font: &'a Font, master_id: &'a str) -> Self {
+        MasterPaints(Refs { font, master: master_id, painted: HashMap::new(), reach: Reach::default() })
+    }
+
+    /// The paint graph of `glyph` in the master, as [`glyph_paint_warn`] gives it.
+    pub fn paint(&mut self, glyph: &Glyph, warnings: &mut Vec<String>) -> Result<Option<Paint>, ColorError> {
+        self.0.paint(glyph, warnings, 0)
+    }
 }
 
 /// Paint graphs of one master, with what is known of the glyphs components refer to.
@@ -180,6 +196,7 @@ struct Refs<'a> {
     master: &'a str,
     /// Whether a glyph has a paint graph, for each glyph a component referred to.
     painted: HashMap<String, bool>,
+    reach: Reach,
 }
 
 impl Refs<'_> {
@@ -282,7 +299,7 @@ impl Refs<'_> {
         }
         let why = if !target.export {
             Some(format!("`{}` does not export", c.glyph))
-        } else if depth >= crate::MAX_PAINT_DEPTH || colr_reaches(font, self.master, &c.glyph, &base.name) {
+        } else if depth >= crate::MAX_PAINT_DEPTH || self.reach.leads_back(font, self.master, &c.glyph, &base.name) {
             Some(format!("its colour layers lead back to `{}` or nest more than {} deep", base.name, crate::MAX_PAINT_DEPTH))
         } else if !self.paints(target, depth + 1) {
             Some(format!("`{}` has no colour layers that paint", c.glyph))
@@ -330,20 +347,104 @@ fn has_full_color(g: &Glyph, master: &str) -> bool {
     g.layers.iter().any(|l| l.master == master && l.info.attrs.coordinates.is_empty() && export_kind(l) == Some(ColorLayerKind::FullColor))
 }
 
-/// Whether the components that [`colr_glyph_target`] allows lead from glyph `from` to glyph
-/// `target` in `master`, or nest deeper than [`crate::MAX_PAINT_DEPTH`]. Each glyph is looked at
-/// once.
-fn colr_reaches(font: &Font, master: &str, from: &str, target: &str) -> bool {
-    let mut seen: HashSet<String> = HashSet::new();
-    let mut todo = vec![(from.to_string(), 0usize)];
-    while let Some((name, depth)) = todo.pop() {
-        if name == target || depth > crate::MAX_PAINT_DEPTH {
-            return true;
+/// The graph of the components that [`colr_glyph_target`] allows in one master, from each
+/// glyph's full-colour layers to the glyphs they name, read as far as queries need it. Its
+/// strongly connected components are found once (Tarjan's algorithm, without recursion), so
+/// each glyph and component is looked at once per master however many references are checked.
+#[derive(Default)]
+struct Reach {
+    ids: HashMap<String, usize>,
+    names: Vec<String>,
+    /// Per glyph id: the ids its components name, read when the glyph is visited.
+    edges: Vec<Vec<usize>>,
+    /// Per glyph id: its visit number, its lowest reachable visit number, whether it is on the
+    /// stack, and its strongly connected component once that is complete.
+    index: Vec<Option<usize>>,
+    low: Vec<usize>,
+    on_stack: Vec<bool>,
+    comp: Vec<Option<usize>>,
+    /// Per component: the longest chain of references from it to other components, capped
+    /// just past [`crate::MAX_PAINT_DEPTH`].
+    height: Vec<usize>,
+    stack: Vec<usize>,
+    visits: usize,
+}
+
+impl Reach {
+    fn id(&mut self, name: &str) -> usize {
+        if let Some(&id) = self.ids.get(name) {
+            return id;
         }
-        if !seen.insert(name.clone()) {
-            continue;
+        let id = self.edges.len();
+        self.ids.insert(name.to_string(), id);
+        self.names.push(name.to_string());
+        self.edges.push(Vec::new());
+        self.index.push(None);
+        self.low.push(0);
+        self.on_stack.push(false);
+        self.comp.push(None);
+        id
+    }
+
+    /// Whether the components lead from `from` back to `base`, which has a component of `from`,
+    /// or nest more than [`crate::MAX_PAINT_DEPTH`] deep from `from`.
+    fn leads_back(&mut self, font: &Font, master: &str, from: &str, base: &str) -> bool {
+        let from = self.id(from);
+        if self.index.get(from).copied().flatten().is_none() {
+            self.visit(font, master, from);
         }
-        let Some(g) = font.glyph(&name) else { continue };
+        let comp = self.comp.get(from).copied().flatten();
+        // `base` names `from`, so `from` reaches `base` exactly when they share a component;
+        // a `base` the walk from `from` never met is not reached.
+        let same = self.ids.get(base).is_some_and(|&b| self.comp.get(b).copied().flatten() == comp);
+        same || comp.and_then(|c| self.height.get(c)).is_some_and(|&h| h > crate::MAX_PAINT_DEPTH)
+    }
+
+    /// Tarjan's algorithm from `root`, which has not been visited.
+    fn visit(&mut self, font: &Font, master: &str, root: usize) {
+        let mut work: Vec<(usize, usize)> = vec![(root, 0)];
+        while let Some((u, pos)) = work.pop() {
+            if pos == 0 {
+                self.open(font, master, u);
+            }
+            let next = self.edges.get(u).and_then(|e| e.get(pos)).copied();
+            if let Some(v) = next {
+                work.push((u, pos + 1));
+                match self.index.get(v).copied().flatten() {
+                    None => work.push((v, 0)),
+                    Some(iv) if self.on_stack.get(v).copied().unwrap_or(false) => self.lower(u, iv),
+                    Some(_) => {}
+                }
+                continue;
+            }
+            let low = self.low.get(u).copied().unwrap_or(0);
+            if self.index.get(u).copied().flatten() == Some(low) {
+                self.close(u);
+            }
+            if let Some(&(parent, _)) = work.last() {
+                self.lower(parent, low);
+            }
+        }
+    }
+
+    fn lower(&mut self, u: usize, to: usize) {
+        if let Some(l) = self.low.get_mut(u) {
+            *l = (*l).min(to);
+        }
+    }
+
+    /// Numbers glyph `u` and reads the glyphs its components name.
+    fn open(&mut self, font: &Font, master: &str, u: usize) {
+        let visit = self.visits;
+        self.visits = self.visits.saturating_add(1);
+        if let (Some(i), Some(l), Some(s)) = (self.index.get_mut(u), self.low.get_mut(u), self.on_stack.get_mut(u)) {
+            *i = Some(visit);
+            *l = visit;
+            *s = true;
+        }
+        self.stack.push(u);
+        let Some(g) = self.names.get(u).and_then(|n| font.glyph(n)) else { return };
+        let mut out = Vec::new();
         let layers = g
             .layers
             .iter()
@@ -353,12 +454,40 @@ fn colr_reaches(font: &Font, master: &str, from: &str, target: &str) -> bool {
                 if let Shape::Component(c) = s
                     && colr_glyph_target(font, c, master)
                 {
-                    todo.push((c.glyph.clone(), depth + 1));
+                    out.push(self.id(&c.glyph));
                 }
             }
         }
+        if let Some(e) = self.edges.get_mut(u) {
+            *e = out;
+        }
     }
-    false
+
+    /// Closes the strongly connected component whose first glyph is `u` and measures it.
+    fn close(&mut self, u: usize) {
+        let c = self.height.len();
+        let mut members = Vec::new();
+        while let Some(w) = self.stack.pop() {
+            if let (Some(s), Some(k)) = (self.on_stack.get_mut(w), self.comp.get_mut(w)) {
+                *s = false;
+                *k = Some(c);
+            }
+            members.push(w);
+            if w == u {
+                break;
+            }
+        }
+        // Every glyph these name is in this component or in one closed before it.
+        let mut height = 0usize;
+        for w in members {
+            for v in self.edges.get(w).map_or(&[][..], Vec::as_slice) {
+                if let Some(k) = self.comp.get(*v).copied().flatten().filter(|&k| k != c) {
+                    height = height.max(self.height.get(k).copied().unwrap_or(0).saturating_add(1));
+                }
+            }
+        }
+        self.height.push(height.min(crate::MAX_PAINT_DEPTH + 1));
+    }
 }
 
 /// What drawing code that follows no other glyph fills the `shape` of a [`Paint::ColrGlyph`]
@@ -1093,5 +1222,50 @@ mod tests {
         }
         let (d, _) = paint("D");
         assert_eq!(d, Paint::Layers(vec![solid("D-c", vec![0], None, grey)]));
+    }
+
+    #[test]
+    fn references_through_a_shared_glyph_take_linear_work() {
+        // `hub` refers to 5,000 colour glyphs and 5,000 glyphs refer to `hub`. Each reference
+        // checks whether it leads back; walking the hub's references once per check is 25
+        // million steps, once per master is 10,000.
+        let mut font = Font::new("Hub");
+        let master = font.masters[0].id.clone();
+        let red = || path([0.0, 0.0, 400.0, 400.0], |a| a.fill_color = Some(Color::Rgba([1.0, 0.0, 0.0, 1.0])));
+        let add = |font: &mut Font, name: &str, shapes: Vec<Shape>| {
+            let mut g = Glyph::new(name);
+            g.layers.push(colour_layer(&master, &format!("{name}-c"), shapes));
+            font.glyphs.push(g);
+        };
+        let n = 5_000;
+        for i in 0..n {
+            add(&mut font, &format!("leaf{i}"), vec![red()]);
+        }
+        add(&mut font, "hub", (0..n).map(|i| Shape::Component(Component::new(&format!("leaf{i}"), 0.0, 0.0))).collect());
+        for i in 0..n {
+            add(&mut font, &format!("user{i}"), vec![Shape::Component(Component::new("hub", 0.0, 0.0))]);
+        }
+        // A chain of 70 references: one that leads more than 64 deep is drawn as an outline.
+        for i in 0..70 {
+            add(&mut font, &format!("link{i}"), vec![Shape::Component(Component::new(&format!("link{}", i + 1), 0.0, 0.0))]);
+        }
+        add(&mut font, "link70", vec![red()]);
+
+        let start = std::time::Instant::now();
+        let mut paints = MasterPaints::new(&font, &master);
+        for i in 0..n {
+            let mut warnings = Vec::new();
+            let p = paints.paint(font.glyph(&format!("user{i}")).unwrap(), &mut warnings).unwrap().unwrap();
+            assert_eq!(colr_glyph_refs(&p), ["hub"]);
+            assert!(warnings.is_empty(), "{warnings:?}");
+        }
+        assert!(start.elapsed() < std::time::Duration::from_secs(20), "{:?}", start.elapsed());
+
+        let mut warnings = Vec::new();
+        let deep = paints.paint(font.glyph("link0").unwrap(), &mut warnings).unwrap().unwrap();
+        assert!(colr_glyph_refs(&deep).is_empty(), "{deep:?}");
+        assert!(warnings.iter().any(|w| w.contains("nest more than")), "{warnings:?}");
+        let shallow = paints.paint(font.glyph("link10").unwrap(), &mut Vec::new()).unwrap().unwrap();
+        assert_eq!(colr_glyph_refs(&shallow), ["link11"]);
     }
 }
