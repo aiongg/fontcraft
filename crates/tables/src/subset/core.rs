@@ -167,12 +167,11 @@ impl<'a> Glyf<'a> {
         Ok(Some(Glyf { glyphs }))
     }
 
-    #[cfg(test)]
     pub(crate) fn len(&self) -> usize {
         self.glyphs.len()
     }
 
-    #[cfg(test)]
+    /// The bytes of glyph `g`; empty past the end.
     pub(crate) fn glyph(&self, g: usize) -> &[u8] {
         self.glyphs.get(g).copied().unwrap_or_default()
     }
@@ -637,10 +636,10 @@ pub(crate) fn subset_name(plan: &Plan, bytes: &[u8], referenced: &BTreeSet<u16>)
     let storage = usize::from(d.u16(4)?);
     let o = &plan.options;
     let ids: BTreeSet<u16> = o.name_ids.clone().unwrap_or_else(|| super::DEFAULT_NAME_IDS.to_vec()).into_iter().collect();
-    let languages: Option<BTreeSet<u16>> = match &o.name_languages {
-        None => Some(super::DEFAULT_NAME_LANGUAGES.iter().copied().collect()),
-        Some(list) if list.is_empty() => None,
-        Some(list) => Some(list.iter().copied().collect()),
+    let languages: Option<BTreeSet<u16>> = if o.all_name_languages {
+        None
+    } else {
+        Some(o.name_languages.clone().unwrap_or_else(|| super::DEFAULT_NAME_LANGUAGES.to_vec()).into_iter().collect())
     };
     let mut records: Vec<([u16; 4], &[u8])> = Vec::new();
     for i in 0..count {

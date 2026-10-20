@@ -7,8 +7,10 @@
 
 use std::path::PathBuf;
 
-use fontcraft_tables::sfnt::{parse_tag, tag_str};
-use fontcraft_tables::subset::{SubsetOptions, subset};
+use fontcraft_tables::sfnt::{Tag, parse_tag, tag_str};
+use fontcraft_tables::subset::{
+    DEFAULT_DROP_TABLES, DEFAULT_HINTING_TABLES, DEFAULT_NAME_IDS, DEFAULT_NAME_LANGUAGES, DEFAULT_NO_SUBSET_TABLES, SubsetOptions, subset,
+};
 use fontcraft_tables::{TableOrder, WriteOptions};
 use serde_json::{Map, Value, json};
 
@@ -21,22 +23,15 @@ use crate::{EngineError, Result, Session};
 const MAX_LIST_ITEMS: usize = 1_114_112;
 
 /// Parameters of the row that are not built yet: giving one is refused rather than ignored.
-const NOT_BUILT: [&str; 14] = [
-    "excludeGlyphs",
-    "fd",
-    "excludeFd",
-    "random",
-    "goadb",
-    "exportFlags",
-    "noSubsetTables",
-    "obfuscateNames",
-    "recalcBounds",
-    "recalcAverageWidth",
-    "recalcMaxContext",
-    "canonicalOrder",
-    "container",
-    "prettySvg",
-];
+const NOT_BUILT: [&str; 7] = ["excludeGlyphs", "fd", "excludeFd", "random", "goadb", "exportFlags", "prettySvg"];
+
+/// The container of the output.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Container {
+    Plain,
+    Woff,
+    Woff2,
+}
 
 /// The commands of this module.
 pub fn specs() -> Vec<CommandSpec> {
@@ -45,7 +40,7 @@ pub fn specs() -> Vec<CommandSpec> {
         "Subset Font",
         [],
         None,
-        "{font: path, face?: int|name, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool, keep?: {glyphs?: [name]|\"*\", gids?: [int|\"a-b\"], unicodes?: [int|\"U+XXXX\"|\"XXXX-YYYY\"]|\"*\", text?: string}, ignoreMissingGlyphs?: bool, ignoreMissingUnicodes?: bool, retainGids?: bool, notdefGlyph?: bool, notdefOutline?: bool, recommendedGlyphs?: bool, bidiClosure?: bool, layoutClosure?: bool, layoutFeatures?: [tag]|\"*\"|{add?: [tag], remove?: [tag]}, layoutScripts?: [string]|\"*\", hinting?: bool, hintingTables?: [tag], desubroutinize?: bool, dropTables?: [tag], passthroughTables?: bool, legacyKern?: bool, nameIds?: [int]|\"*\", nameLanguages?: [int]|\"*\", nameLegacy?: bool, glyphNames?: bool, legacyCmap?: bool, symbolCmap?: bool, pruneUnicodeRanges?: bool, pruneCodepageRanges?: bool}",
+        "{font: path, face?: int|name, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool, keep?: {glyphs?: [name]|\"*\", gids?: [int|\"a-b\"], unicodes?: [int|\"U+XXXX\"|\"XXXX-YYYY\"]|\"*\", text?: string}, ignoreMissingGlyphs?: bool, ignoreMissingUnicodes?: bool, retainGids?: bool, notdefGlyph?: bool, notdefOutline?: bool, recommendedGlyphs?: bool, bidiClosure?: bool, layoutClosure?: bool, layoutFeatures?: [tag]|\"*\"|{add?: [tag], remove?: [tag]}, layoutScripts?: [string]|\"*\"|{add?: [string], remove?: [string]}, hinting?: bool, hintingTables?: [tag]|{add?: [tag], remove?: [tag]}, desubroutinize?: bool, dropTables?: [tag]|{add?: [tag], remove?: [tag]}, passthroughTables?: bool, legacyKern?: bool, nameIds?: [int]|\"*\"|{add?: [int], remove?: [int]}, nameLanguages?: [int]|\"*\"|{add?: [int], remove?: [int]}, nameLegacy?: bool, glyphNames?: bool, legacyCmap?: bool, symbolCmap?: bool, pruneUnicodeRanges?: bool, pruneCodepageRanges?: bool, noSubsetTables?: [tag]|{add?: [tag], remove?: [tag]}, obfuscateNames?: bool, recalcBounds?: bool, timestamp?: \"keep\"|\"now\"|int, recalcAverageWidth?: bool, recalcMaxContext?: bool, canonicalOrder?: bool, container?: \"plain\"|\"woff\"|\"woff2\", zopfli?: bool} every list parameter takes a list, which replaces its default, or {add, remove}, which edits the default; dropTables defaults to JSTF DSIG EBDT EBLC EBSC PCLT LTSH Feat Glat Gloc Silf Sill, noSubsetTables to the tables copied as they are (avar BASE fvar gasp head hhea maxp vhea OS/2 loca name cvt fpgm prep VDMX DSIG CPAL MVAR cvar STAT: one left out is dropped unless passthroughTables, an unknown one added is kept as it is), hintingTables to cvt cvar fpgm prep hdmx VDMX. timestamp sets the modification time in seconds since 1970, now meaning SOURCE_DATE_EPOCH, else the clock (default keep); canonicalOrder writes the tables in the recommended order instead of the input's; container defaults to the input's (zopfli compression is not available) → {output, bytes, glyphCount, retained, glyphMap, tables, dropped, missingGlyphs, missingUnicodes, warnings}",
         always,
         run_subset
     )
@@ -68,13 +63,41 @@ fn run_subset(_: &mut Session, v: &Value) -> Result<Value> {
     if !file.kind.is_font() {
         return Err(EngineError::Unsupported(format!("subsetting {}: give a compiled font (subsetting sources is not built yet)", input.display())));
     }
+    let container = match p.opt_str("container")? {
+        None => match file.kind {
+            InputKind::Woff => Container::Woff,
+            InputKind::Woff2 => Container::Woff2,
+            _ => Container::Plain,
+        },
+        Some("plain" | "none") => Container::Plain,
+        Some("woff") => Container::Woff,
+        Some("woff2") => Container::Woff2,
+        Some(other) => return Err(p.bad(format!("`container` is plain, woff or woff2, not `{other}`"))),
+    };
+    if p.bool_or("zopfli", false)? && container == Container::Woff {
+        return Err(EngineError::Unsupported("zopfli compression for WOFF is not available; leave out zopfli to use zlib".into()));
+    }
+    let order = if p.bool_or("canonicalOrder", false)? { TableOrder::Recommended } else { TableOrder::Keep };
     let face = super::dehint::face_index(&p, &file.bytes)?;
     let font = fontcraft_tables::read(&file.bytes, face)?;
     let result = subset(&font, &options)?;
-    let bytes = fontcraft_tables::write(&result.font, &WriteOptions { order: TableOrder::Keep })?;
+    let sfnt = fontcraft_tables::write(&result.font, &WriteOptions { order })?;
+    let bytes = match container {
+        Container::Plain => sfnt,
+        Container::Woff => {
+            fontcraft_container::woff::encode(&sfnt, &extras(file.kind, &file.bytes)).map_err(|e| EngineError::Io(format!("WOFF: {e}")))?
+        }
+        Container::Woff2 => {
+            let options =
+                fontcraft_container::woff2::Options { extras: extras(file.kind, &file.bytes), ..fontcraft_container::woff2::Options::default() };
+            fontcraft_container::woff2::encode(&sfnt, &options).map_err(|e| EngineError::Io(format!("WOFF2: {e}")))?
+        }
+    };
 
-    let extension = match file.kind {
-        InputKind::TrueType | InputKind::Cff => None,
+    let extension = match (container, file.kind) {
+        (Container::Woff, _) => Some("woff"),
+        (Container::Woff2, _) => Some("woff2"),
+        (_, InputKind::TrueType | InputKind::Cff) => None,
         _ if result.font.is_cff() => Some("otf"),
         _ => Some("ttf"),
     };
@@ -100,6 +123,100 @@ fn run_subset(_: &mut Session, v: &Value) -> Result<Value> {
     }))
 }
 
+/// The version, metadata and private data of a WOFF or WOFF2 input, which a WOFF or WOFF2
+/// output keeps; none for other inputs or when they cannot be read.
+fn extras(kind: InputKind, bytes: &[u8]) -> fontcraft_container::Extras {
+    let none = fontcraft_container::Extras::default();
+    match kind {
+        InputKind::Woff => fontcraft_container::woff::decode(bytes).map_or(none, |u| fontcraft_container::Extras {
+            version: Some(u.version),
+            metadata: u.metadata,
+            private: u.private,
+        }),
+        InputKind::Woff2 => {
+            let Ok(dir) = fontcraft_container::woff2::directory(bytes) else { return none };
+            let Ok((metadata, private)) = fontcraft_container::woff2::extras(bytes, &dir) else { return none };
+            fontcraft_container::Extras { version: Some(dir.version), metadata, private }
+        }
+        _ => none,
+    }
+}
+
+/// A list parameter: a list replaces `default`, `{add, remove}` edits it. Items compare as
+/// text; `None` when the parameter is absent.
+fn edited_list(p: &Params<'_>, key: &str, default: &[String]) -> Result<Option<Vec<Value>>> {
+    let items = |v: Option<&Value>, what: &str| -> Result<Vec<Value>> {
+        match v {
+            None => Ok(Vec::new()),
+            Some(Value::Array(a)) => Ok(a.clone()),
+            Some(_) => Err(p.bad(format!("`{what}` must be a list"))),
+        }
+    };
+    match p.get(key) {
+        None => Ok(None),
+        Some(Value::Object(edit)) => {
+            for k in edit.keys() {
+                if k != "add" && k != "remove" {
+                    return Err(p.bad(format!("`{key}.{k}` is not a parameter; give add or remove")));
+                }
+            }
+            let remove = items(edit.get("remove"), &format!("{key}.remove"))?;
+            let mut list: Vec<Value> = default.iter().map(|d| json!(d)).collect();
+            for v in items(edit.get("add"), &format!("{key}.add"))? {
+                if !list.contains(&v) {
+                    list.push(v);
+                }
+            }
+            list.retain(|v| !remove.contains(v));
+            Ok(Some(list))
+        }
+        v => Ok(Some(items(v, key)?)),
+    }
+}
+
+/// A list of table tags (`edited_list`).
+fn tag_list(p: &Params<'_>, key: &str, default: &[Tag]) -> Result<Option<Vec<Tag>>> {
+    let default: Vec<String> = default.iter().map(|t| tag_str(*t)).collect();
+    let Some(items) = edited_list(p, key, &default)? else { return Ok(None) };
+    let mut tags = Vec::with_capacity(items.len());
+    for item in &items {
+        let text = item.as_str().ok_or_else(|| p.bad(format!("`{key}` items must be table tags")))?;
+        let tag = parse_tag(text).map_err(|e| p.bad(e.to_string()))?;
+        if !tags.contains(&tag) {
+            tags.push(tag);
+        }
+    }
+    Ok(Some(tags))
+}
+
+/// A list of name or language IDs: `"*"`, a list, or `{add, remove}` on `default`, the IDs
+/// compared by value.
+fn id_list(p: &Params<'_>, key: &str, default: &[u16]) -> Result<Option<IdList>> {
+    match p.get(key) {
+        None => Ok(None),
+        Some(Value::String(s)) if s == "*" => Ok(Some(IdList::All)),
+        Some(Value::Object(edit)) => {
+            for k in edit.keys() {
+                if k != "add" && k != "remove" {
+                    return Err(p.bad(format!("`{key}.{k}` is not a parameter; give add or remove")));
+                }
+            }
+            let part = |k: &str| edit.get(k).map(|v| u16_list(p, &format!("{key}.{k}"), v)).transpose().map(Option::unwrap_or_default);
+            let (add, remove) = (part("add")?, part("remove")?);
+            let mut list = default.to_vec();
+            list.extend(add.into_iter().filter(|a| !default.contains(a)));
+            list.retain(|v| !remove.contains(v));
+            Ok(Some(IdList::Some(list)))
+        }
+        Some(v) => Ok(Some(IdList::Some(u16_list(p, key, v)?))),
+    }
+}
+
+enum IdList {
+    All,
+    Some(Vec<u16>),
+}
+
 /// The subsetter options the parameters ask for; defaults follow the reference subsetter.
 fn options(p: &Params<'_>) -> Result<SubsetOptions> {
     let mut o = SubsetOptions::default();
@@ -115,10 +232,14 @@ fn options(p: &Params<'_>) -> Result<SubsetOptions> {
     o.bidi_closure = p.bool_or("bidiClosure", o.bidi_closure)?;
     o.layout_closure = p.bool_or("layoutClosure", o.layout_closure)?;
     o.layout_features = layout_features(p)?;
-    match p.get("layoutScripts") {
-        None => {}
-        Some(Value::String(s)) if s == "*" => o.layout_scripts = None,
-        Some(_) => o.layout_scripts = p.opt_strings("layoutScripts")?.map(|v| v.into_iter().map(str::to_string).collect()),
+    if !matches!(p.get("layoutScripts"), Some(Value::String(s)) if s == "*")
+        && let Some(scripts) = edited_list(p, "layoutScripts", &["*".to_string()])?
+    {
+        let scripts: Vec<String> = scripts
+            .iter()
+            .map(|v| v.as_str().map(str::to_string).ok_or_else(|| p.bad("`layoutScripts` items must be strings")))
+            .collect::<Result<_>>()?;
+        o.layout_scripts = if scripts.iter().any(|s| s == "*") { None } else { Some(scripts) };
     }
     o.hinting = p.bool_or("hinting", o.hinting)?;
     o.desubroutinize = p.bool_or("desubroutinize", o.desubroutinize)?;
@@ -130,21 +251,35 @@ fn options(p: &Params<'_>) -> Result<SubsetOptions> {
     o.symbol_cmap = p.bool_or("symbolCmap", o.symbol_cmap)?;
     o.prune_unicode_ranges = p.bool_or("pruneUnicodeRanges", o.prune_unicode_ranges)?;
     o.prune_codepage_ranges = p.bool_or("pruneCodepageRanges", o.prune_codepage_ranges)?;
-    if let Some(tags) = p.opt_strings("hintingTables")? {
-        o.hinting_tables = tags.iter().map(|t| parse_tag(t)).collect::<std::result::Result<_, _>>().map_err(|e| p.bad(e.to_string()))?;
-    }
-    if let Some(tags) = p.opt_strings("dropTables")? {
-        o.drop_tables = tags.iter().map(|t| parse_tag(t)).collect::<std::result::Result<_, _>>().map_err(|e| p.bad(e.to_string()))?;
-    }
-    match p.get("nameIds") {
+    o.obfuscate_names = p.bool_or("obfuscateNames", o.obfuscate_names)?;
+    o.recalc_bounds = p.bool_or("recalcBounds", o.recalc_bounds)?;
+    o.recalc_average_width = p.bool_or("recalcAverageWidth", o.recalc_average_width)?;
+    o.recalc_max_context = p.bool_or("recalcMaxContext", o.recalc_max_context)?;
+    match p.get("timestamp") {
         None => {}
-        Some(Value::String(s)) if s == "*" => o.all_name_ids = true,
-        Some(v) => o.name_ids = Some(u16_list(p, "nameIds", v)?),
+        Some(Value::String(s)) if s == "keep" => {}
+        Some(Value::String(s)) if s == "now" => o.recalc_timestamp = Some(super::file::default_timestamp()),
+        // Years 1904 to 9999, which is what the head table's date can sensibly hold.
+        Some(_) => o.recalc_timestamp = p.opt_int("timestamp", -2_082_844_800, 253_402_300_799)?,
     }
-    match p.get("nameLanguages") {
+    if let Some(tags) = tag_list(p, "hintingTables", &DEFAULT_HINTING_TABLES)? {
+        o.hinting_tables = tags;
+    }
+    if let Some(tags) = tag_list(p, "dropTables", &DEFAULT_DROP_TABLES)? {
+        o.drop_tables = tags;
+    }
+    if let Some(tags) = tag_list(p, "noSubsetTables", &DEFAULT_NO_SUBSET_TABLES)? {
+        o.no_subset_tables = tags;
+    }
+    match id_list(p, "nameIds", &DEFAULT_NAME_IDS)? {
         None => {}
-        Some(Value::String(s)) if s == "*" => o.name_languages = Some(Vec::new()),
-        Some(v) => o.name_languages = Some(u16_list(p, "nameLanguages", v)?),
+        Some(IdList::All) => o.all_name_ids = true,
+        Some(IdList::Some(ids)) => o.name_ids = Some(ids),
+    }
+    match id_list(p, "nameLanguages", &DEFAULT_NAME_LANGUAGES)? {
+        None => {}
+        Some(IdList::All) => o.all_name_languages = true,
+        Some(IdList::Some(ids)) => o.name_languages = Some(ids),
     }
     Ok(o)
 }

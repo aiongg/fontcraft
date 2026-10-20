@@ -1,11 +1,11 @@
-//! `fontcraft-cli subset` (M12.17–M12.19b): one `font.subset` run per input, with the option
+//! `fontcraft-cli subset` (M12.17–M12.19b, M12.18b): one `font.subset` run per input, with the option
 //! names of the reference subsetter.
 
 use fontcraft_engine::Session;
 use serde_json::{Map, Value, json};
 
-use crate::args::{self, OptSpec};
-use crate::io::{Failure, Outcome, execute, out, out_json_line, usage};
+use crate::args::{self, OptSpec, Parsed};
+use crate::io::{self, Failure, Outcome, execute, out, out_json_line, usage};
 
 use super::Subcommand;
 
@@ -17,8 +17,10 @@ const USAGE: &str = "\
       Keep the chosen glyphs and every glyph they use (components, accent parts, .notdef), and
       remove the rest from every table. Glyphs the kept layout features can substitute in are
       kept too. The output is FONT.subset.EXT unless -o, --output-dir or --in-place says
-      otherwise. Unused CFF and CFF2 subroutines are removed; --json lists every dropped table
-      and why.
+      otherwise, in the input's container unless --flavor says otherwise. Unused CFF and CFF2
+      subroutines are removed; --json lists every dropped table and why.
+      A list option replaces its list with --opt=a,b (--opt= empties it), adds to it with
+      --opt+=a,b and removes from it with --opt-=a,b; each list starts as its default.
 ";
 
 /// The options, as data.
@@ -44,24 +46,50 @@ const OPTIONS: &[OptSpec] = &[
     OptSpec::switch("hinting", true, "keep hints and instructions"),
     OptSpec::list("hinting-tables", "TAG", "cvt,cvar,fpgm,prep,hdmx,VDMX", "tables --no-hinting removes"),
     OptSpec::switch("desubroutinize", false, "expand every CFF and CFF2 subroutine instead of removing only the unused ones"),
-    OptSpec::list("drop-tables", "TAG", "", "more tables to remove"),
+    OptSpec::list("drop-tables", "TAG", DEFAULT_DROP_TABLES, "tables removed before subsetting"),
+    OptSpec::list(
+        "no-subset-tables",
+        "TAG",
+        DEFAULT_NO_SUBSET_TABLES,
+        "tables copied without subsetting; an unknown table listed is kept, a default one left out is dropped",
+    ),
     OptSpec::switch("passthrough-tables", false, "keep tables the subsetter does not know"),
     OptSpec::switch("legacy-kern", false, "keep the kern table when GPOS exists"),
-    OptSpec::list("name-ids", "LIST", "0,1,2,3,4,5,6", "name IDs to keep; '*' keeps all"),
+    OptSpec::list("name-ids", "LIST", "0,1,2,3,4,5,6", "name IDs to keep; '*' keeps all (also spelled --name-IDs)"),
     OptSpec::list("name-languages", "LIST", "0x409", "name language IDs to keep; '*' keeps all"),
     OptSpec::switch("name-legacy", false, "keep name records that are not Unicode"),
+    OptSpec::switch("obfuscate-names", false, "replace the names that install the font with placeholders"),
     OptSpec::switch("glyph-names", false, "keep the glyph names of a TrueType font"),
     OptSpec::switch("legacy-cmap", false, "keep cmap subtables that are neither Unicode nor symbol"),
     OptSpec::switch("symbol-cmap", false, "keep symbol cmap subtables"),
+    OptSpec::switch("recalc-bounds", false, "recompute the font bounding box, maxp maxima and hhea/vhea extremes"),
+    OptSpec::switch("recalc-timestamp", false, "set the modification time to now (SOURCE_DATE_EPOCH when set)"),
     OptSpec::switch("prune-unicode-ranges", true, "clear the OS/2 Unicode ranges no kept character falls in"),
     OptSpec::switch("prune-codepage-ranges", true, "clear the OS/2 code pages the kept characters no longer cover"),
+    OptSpec::switch("recalc-average-width", false, "recompute OS/2 xAvgCharWidth from the kept glyphs"),
+    OptSpec::switch("recalc-max-context", false, "recompute OS/2 usMaxContext from the kept layout rules"),
+    OptSpec::switch("canonical-order", false, "write the tables in the recommended order instead of the input's"),
+    OptSpec::value("flavor", "woff|woff2|none", "", "the container of the output (default: the input's)"),
+    OptSpec::switch("with-zopfli", false, "compress WOFF with zopfli (not available: refused with --flavor woff)"),
+    OptSpec::switch("harfbuzz-repacker", true, "accepted for compatibility; the layout tables are packed the same either way"),
+    OptSpec::switch("lazy", true, "accepted for compatibility; has no effect"),
     OptSpec::value("output", "OUT", "", "the output file").short('o'),
+    OptSpec::value("output-file", "OUT", "", "the same as --output"),
     OptSpec::value("output-dir", "DIR", "", "the folder the output goes into"),
     OptSpec::switch("in-place", false, "replace the input"),
     OptSpec::switch("no-clobber", false, "refuse to replace an existing output"),
     OptSpec::value("face", "N|NAME", "", "the face of a collection"),
+    OptSpec::value("font-number", "N", "", "the same as --face N"),
     OptSpec::switch("json", false, "print the result as JSON"),
+    OptSpec::switch("verbose", false, "also print the dropped tables and the warnings on stderr").short('v'),
+    OptSpec::switch("timing", false, "accepted for compatibility; has no effect"),
 ];
+
+/// The default of `--drop-tables`.
+const DEFAULT_DROP_TABLES: &str = "JSTF,DSIG,EBDT,EBLC,EBSC,PCLT,LTSH,Feat,Glat,Gloc,Silf,Sill";
+
+/// The default of `--no-subset-tables`.
+const DEFAULT_NO_SUBSET_TABLES: &str = "avar,BASE,fvar,gasp,head,hhea,maxp,vhea,OS/2,loca,name,cvt,fpgm,prep,VDMX,DSIG,CPAL,MVAR,cvar,STAT";
 
 /// The default of `--layout-features`, as the subsetter's default list.
 const DEFAULT_LAYOUT_FEATURES: &str = "abvf,abvm,abvs,akhn,blwf,blwm,blws,calt,ccmp,cfar,chws,cjct,clig,cswh,curs,dist,dnom,fin2,fin3,fina,frac,half,haln,halt,init,isol,jalt,kern,liga,ljmo,locl,ltra,ltrm,mark,med2,medi,mkmk,mset,nukt,numr,palt,pref,pres,pstf,psts,rand,rclt,rkrf,rlig,rphf,rtla,rtlm,rvrn,stch,tjmo,valt,vatu,vchw,vert,vhal,vjmo,vkrn,vpal,vrt2";
@@ -92,6 +120,40 @@ fn run(args: &[String]) -> Outcome {
     if parsed.help {
         return out(&super::help(&SUBCOMMAND));
     }
+    let Some(font) = parsed.positional.first() else { return Err(usage(super::help(&SUBCOMMAND))) };
+    let params = params(&parsed)?;
+    let result = execute(&mut Session::new(), "font.subset", &params).map_err(|f| match f {
+        Failure::Failed(m) if m.contains("cannot open") || m.contains("cannot read") => Failure::Input(m),
+        other => other,
+    })?;
+    if parsed.switch("verbose") {
+        io::set_verbosity(2);
+        for d in result.get("dropped").and_then(Value::as_array).into_iter().flatten() {
+            let field = |k: &str| d.get(k).and_then(Value::as_str).unwrap_or("?").to_string();
+            io::detail(&format!("dropped '{}': {}", field("tag"), field("reason")));
+        }
+        for w in result.get("warnings").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str) {
+            io::detail(w);
+        }
+    }
+    if parsed.switch("json") {
+        return out_json_line(&result);
+    }
+    let dropped: Vec<&str> = result
+        .get("dropped")
+        .and_then(Value::as_array)
+        .map(|a| a.iter().filter_map(|d| d.get("tag").and_then(Value::as_str)).collect())
+        .unwrap_or_default();
+    out(&format!(
+        "{font} -> {}: {} glyphs kept; tables dropped: {}",
+        result.get("output").and_then(Value::as_str).unwrap_or("?"),
+        result.get("glyphCount").and_then(Value::as_u64).unwrap_or(0),
+        if dropped.is_empty() { "none".to_string() } else { dropped.join(" ") }
+    ))
+}
+
+/// The `font.subset` parameters of a parsed command line.
+fn params(parsed: &Parsed) -> Result<Value, Failure> {
     let Some((font, glyph_args)) = parsed.positional.split_first() else { return Err(usage(super::help(&SUBCOMMAND))) };
 
     let mut keep = Map::new();
@@ -145,11 +207,16 @@ fn run(args: &[String]) -> Outcome {
         ("passthroughTables", "passthrough-tables"),
         ("legacyKern", "legacy-kern"),
         ("nameLegacy", "name-legacy"),
+        ("obfuscateNames", "obfuscate-names"),
         ("glyphNames", "glyph-names"),
         ("legacyCmap", "legacy-cmap"),
         ("symbolCmap", "symbol-cmap"),
+        ("recalcBounds", "recalc-bounds"),
         ("pruneUnicodeRanges", "prune-unicode-ranges"),
         ("pruneCodepageRanges", "prune-codepage-ranges"),
+        ("recalcAverageWidth", "recalc-average-width"),
+        ("recalcMaxContext", "recalc-max-context"),
+        ("canonicalOrder", "canonical-order"),
         ("inPlace", "in-place"),
         ("noClobber", "no-clobber"),
     ] {
@@ -159,8 +226,9 @@ fn run(args: &[String]) -> Outcome {
         let items = parsed.list(name);
         params.insert(key.into(), if items.iter().any(|i| i == "*") { json!("*") } else { json!(items) });
     }
-    params.insert("hintingTables".into(), json!(parsed.list("hinting-tables")));
-    params.insert("dropTables".into(), json!(parsed.list("drop-tables")));
+    for (key, name) in [("hintingTables", "hinting-tables"), ("dropTables", "drop-tables"), ("noSubsetTables", "no-subset-tables")] {
+        params.insert(key.into(), json!(parsed.list(name)));
+    }
     for (key, name) in [("nameIds", "name-ids"), ("nameLanguages", "name-languages")] {
         let items = parsed.list(name);
         if items.iter().any(|i| i == "*") {
@@ -177,31 +245,100 @@ fn run(args: &[String]) -> Outcome {
         }
         params.insert(key.into(), json!(numbers));
     }
-    for (key, name) in [("output", "output"), ("outputDir", "output-dir")] {
+    if parsed.switch("recalc-timestamp") {
+        params.insert("timestamp".into(), json!("now"));
+    }
+    match parsed.value("flavor") {
+        None => {}
+        Some("" | "none") => {
+            params.insert("container".into(), json!("plain"));
+        }
+        Some(flavor @ ("woff" | "woff2")) => {
+            params.insert("container".into(), json!(flavor));
+        }
+        Some(other) => return Err(usage(format!("--flavor is woff, woff2 or none, not `{other}`"))),
+    }
+    if parsed.switch("with-zopfli") {
+        params.insert("zopfli".into(), json!(true));
+    }
+    if parsed.value("output").is_some() && parsed.value("output-file").is_some() {
+        return Err(usage("give --output or --output-file, not both"));
+    }
+    for (key, name) in [("output", "output"), ("output", "output-file"), ("outputDir", "output-dir")] {
         if let Some(v) = parsed.value(name) {
             params.insert(key.into(), json!(v));
         }
     }
-    if let Some(face) = parsed.value("face") {
+    let face = match (parsed.value("face"), parsed.value("font-number")) {
+        (Some(_), Some(_)) => return Err(usage("give --face or --font-number, not both")),
+        (face, number) => face.or(number),
+    };
+    if let Some(face) = face {
         params.insert("face".into(), face.parse::<u64>().map(Value::from).unwrap_or_else(|_| json!(face)));
     }
+    Ok(Value::Object(params))
+}
 
-    let result = execute(&mut Session::new(), "font.subset", &Value::Object(params)).map_err(|f| match f {
-        Failure::Failed(m) if m.contains("cannot open") || m.contains("cannot read") => Failure::Input(m),
-        other => other,
-    })?;
-    if parsed.switch("json") {
-        return out_json_line(&result);
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
+
+    use super::*;
+
+    fn params_of(line: &[&str]) -> Value {
+        let args: Vec<String> = line.iter().map(|s| s.to_string()).collect();
+        params(&args::parse(OPTIONS, &args).unwrap()).unwrap()
     }
-    let dropped: Vec<&str> = result
-        .get("dropped")
-        .and_then(Value::as_array)
-        .map(|a| a.iter().filter_map(|d| d.get("tag").and_then(Value::as_str)).collect())
-        .unwrap_or_default();
-    out(&format!(
-        "{font} -> {}: {} glyphs kept; tables dropped: {}",
-        result.get("output").and_then(Value::as_str).unwrap_or("?"),
-        result.get("glyphCount").and_then(Value::as_u64).unwrap_or(0),
-        if dropped.is_empty() { "none".to_string() } else { dropped.join(" ") }
-    ))
+
+    #[test]
+    fn list_options_take_the_reference_subsetter_syntax() {
+        let p = params_of(&["f.ttf", "A"]);
+        assert_eq!(p["dropTables"], json!(DEFAULT_DROP_TABLES.split(',').collect::<Vec<_>>()), "the default list is sent in full");
+        assert_eq!(p["noSubsetTables"].as_array().unwrap().len(), 20);
+        assert_eq!(p["nameIds"], json!([0, 1, 2, 3, 4, 5, 6]));
+
+        let p = params_of(&["f.ttf", "A", "--drop-tables="]);
+        assert_eq!(p["dropTables"], json!([]), "`=` with nothing empties the list: EBDT and the rest are kept");
+        let p = params_of(&["f.ttf", "A", "--drop-tables+=BASE", "--drop-tables-=DSIG,LTSH"]);
+        assert_eq!(p["dropTables"], json!(["JSTF", "EBDT", "EBLC", "EBSC", "PCLT", "Feat", "Glat", "Gloc", "Silf", "Sill", "BASE"]));
+        let p = params_of(&["f.ttf", "A", "--name-IDs+=7,8", "--name-languages-=1033", "--name-languages+=0x412"]);
+        assert_eq!(p["nameIds"], json!([0, 1, 2, 3, 4, 5, 6, 7, 8]));
+        assert_eq!(p["nameLanguages"], json!([0x412]), "1033 removes 0x409");
+        let p = params_of(&["f.ttf", "A", "--layout-features-=kern", "--layout-scripts=latn", "--hinting-tables+=gasp"]);
+        assert!(!p["layoutFeatures"].as_array().unwrap().contains(&json!("kern")));
+        assert_eq!(p["layoutScripts"], json!(["latn"]));
+        assert_eq!(p["hintingTables"], json!(["cvt", "cvar", "fpgm", "prep", "hdmx", "VDMX", "gasp"]));
+        let p = params_of(&["f.ttf", "A", "--layout-features=*", "--name-IDs=*", "--no-subset-tables+=LTSH"]);
+        assert_eq!((p["layoutFeatures"].clone(), p["nameIds"].clone()), (json!("*"), json!("*")));
+        assert_eq!(p["noSubsetTables"].as_array().unwrap().last(), Some(&json!("LTSH")));
+    }
+
+    #[test]
+    fn reference_option_names_reach_the_command() {
+        let p = params_of(&[
+            "f.ttf",
+            "--text=A",
+            "--recalc-bounds",
+            "--recalc-timestamp",
+            "--recalc-average-width",
+            "--recalc-max-context",
+            "--canonical-order",
+            "--obfuscate-names",
+            "--flavor=woff2",
+            "--font-number=1",
+            "--output-file=o.woff2",
+            "--no-harfbuzz-repacker",
+            "--timing",
+            "--no-lazy",
+        ]);
+        for key in ["recalcBounds", "recalcAverageWidth", "recalcMaxContext", "canonicalOrder", "obfuscateNames"] {
+            assert_eq!(p[key], json!(true), "{key}");
+        }
+        assert_eq!(p["timestamp"], json!("now"));
+        assert_eq!((p["container"].clone(), p["face"].clone(), p["output"].clone()), (json!("woff2"), json!(1), json!("o.woff2")));
+        assert_eq!(params_of(&["f.ttf", "A", "--flavor="])["container"], json!("plain"));
+        assert!(params_of(&["f.ttf", "A"]).get("container").is_none(), "the input's container by default");
+        let bad: Vec<String> = ["f.ttf", "A", "--flavor=zip"].iter().map(|s| s.to_string()).collect();
+        assert!(params(&args::parse(OPTIONS, &bad).unwrap()).is_err());
+    }
 }

@@ -8,12 +8,15 @@
 //! and the subroutine steps of both CFF flavours to `cff2` (M12.19b). Each module has
 //! `apply(plan, input, output) -> Result<()>` and leaves the tables it does not handle alone.
 //! A table of the input that no module wrote is dropped, and [`SubsetResult::dropped`] says why:
-//! no table that indexes glyphs is ever copied unchanged into a subset.
+//! no table that indexes glyphs is ever copied unchanged into a subset. Last, `finish` (M12.18b)
+//! applies the options that act on the font as a whole: name obfuscation and the recalculated
+//! bounds, `OS/2` fields and timestamp.
 
 mod cff2;
 pub mod closure;
 pub mod core;
 mod cs;
+mod finish;
 pub mod layout;
 mod mirror;
 pub mod other;
@@ -28,6 +31,12 @@ use crate::sfnt::{SfntFont, Tag};
 /// Tables pyftsubset drops unless told otherwise.
 pub const DEFAULT_DROP_TABLES: [Tag; 12] =
     [*b"JSTF", *b"DSIG", *b"EBDT", *b"EBLC", *b"EBSC", *b"PCLT", *b"LTSH", *b"Feat", *b"Glat", *b"Gloc", *b"Silf", *b"Sill"];
+
+/// Tables pyftsubset copies without subsetting them (its default `--no-subset-tables`).
+pub const DEFAULT_NO_SUBSET_TABLES: [Tag; 20] = [
+    *b"avar", *b"BASE", *b"fvar", *b"gasp", *b"head", *b"hhea", *b"maxp", *b"vhea", *b"OS/2", *b"loca", *b"name", *b"cvt ", *b"fpgm", *b"prep",
+    *b"VDMX", *b"DSIG", *b"CPAL", *b"MVAR", *b"cvar", *b"STAT",
+];
 
 /// Font-wide tables `hinting: false` drops (pyftsubset's default `--hinting-tables`).
 pub const DEFAULT_HINTING_TABLES: [Tag; 6] = [*b"cvt ", *b"cvar", *b"fpgm", *b"prep", *b"hdmx", *b"VDMX"];
@@ -93,8 +102,10 @@ pub struct SubsetOptions {
     pub name_ids: Option<Vec<u16>>,
     /// Keep every name ID below 256.
     pub all_name_ids: bool,
-    /// Name language IDs to keep; `None` keeps [`DEFAULT_NAME_LANGUAGES`], `Some([])` keeps all.
+    /// Name language IDs to keep; `None` keeps [`DEFAULT_NAME_LANGUAGES`], `Some([])` none.
     pub name_languages: Option<Vec<u16>>,
+    /// Keep the name records of every language.
+    pub all_name_languages: bool,
     /// Keep name records that are not Unicode.
     pub name_legacy: bool,
     /// Keep the `kern` table even when there is a `GPOS` table.
@@ -105,8 +116,25 @@ pub struct SubsetOptions {
     pub prune_unicode_ranges: bool,
     /// Clear the `OS/2` code page bits the kept code points no longer support.
     pub prune_codepage_ranges: bool,
-    /// Tables to drop besides [`DEFAULT_DROP_TABLES`].
+    /// Tables to drop before subsetting (default [`DEFAULT_DROP_TABLES`]).
     pub drop_tables: Vec<Tag>,
+    /// Tables copied without subsetting (default [`DEFAULT_NO_SUBSET_TABLES`]). A table the
+    /// subsetter does not know is kept when listed here; one of the default tables left out is
+    /// dropped unless `passthrough_tables`; a table that indexes glyphs is subset all the same.
+    pub no_subset_tables: Vec<Tag>,
+    /// Replace the family, subfamily, unique, full and PostScript names (IDs 1 to 4 and 6) with
+    /// placeholders and drop the typographic names (IDs 16 to 18), so the font cannot be
+    /// installed.
+    pub obfuscate_names: bool,
+    /// Recompute the font bounding box (`head`, the CFF `FontBBox`), the `maxp` maxima and the
+    /// `hhea` and `vhea` extremes from the kept glyphs.
+    pub recalc_bounds: bool,
+    /// Seconds since 1970 to write as `head.modified`; `None` keeps the input's.
+    pub recalc_timestamp: Option<i64>,
+    /// Recompute `OS/2.xAvgCharWidth` from the kept advances.
+    pub recalc_average_width: bool,
+    /// Recompute `OS/2.usMaxContext` from the kept layout lookups.
+    pub recalc_max_context: bool,
 }
 
 impl Default for SubsetOptions {
@@ -137,12 +165,19 @@ impl Default for SubsetOptions {
             name_ids: None,
             all_name_ids: false,
             name_languages: None,
+            all_name_languages: false,
             name_legacy: false,
             legacy_kern: false,
             passthrough_tables: false,
             prune_unicode_ranges: true,
             prune_codepage_ranges: true,
-            drop_tables: Vec::new(),
+            drop_tables: DEFAULT_DROP_TABLES.to_vec(),
+            no_subset_tables: DEFAULT_NO_SUBSET_TABLES.to_vec(),
+            obfuscate_names: false,
+            recalc_bounds: false,
+            recalc_timestamp: None,
+            recalc_average_width: false,
+            recalc_max_context: false,
         }
     }
 }
@@ -236,7 +271,7 @@ pub fn subset(font: &SfntFont, options: &SubsetOptions) -> Result<SubsetResult> 
         }
     };
     for tag in font.tags() {
-        if DEFAULT_DROP_TABLES.contains(&tag) || options.drop_tables.contains(&tag) {
+        if options.drop_tables.contains(&tag) {
             drop(&mut input, tag, "dropped by the options");
         } else if !options.hinting && options.hinting_tables.contains(&tag) {
             drop(&mut input, tag, "a hinting table");
@@ -259,13 +294,34 @@ pub fn subset(font: &SfntFont, options: &SubsetOptions) -> Result<SubsetResult> 
     {
         output.insert(*b"name", core::subset_name(&plan, name, &referenced)?);
     }
+    if options.obfuscate_names {
+        finish::obfuscate_names(&mut output, &referenced)?;
+    }
 
     for tag in input.tags() {
+        let known = LAYOUT_TABLES.contains(&tag) || VARIATION_TABLES.contains(&tag) || OTHER_TABLES.contains(&tag) || core::is_core(tag);
+        let listed = options.no_subset_tables.contains(&tag);
+        if listed && known && !DEFAULT_NO_SUBSET_TABLES.contains(&tag) {
+            plan.warnings.borrow_mut().push(format!(
+                "'{}' refers to glyphs, so it is subset although the tables to copy without subsetting list it",
+                crate::sfnt::tag_str(tag)
+            ));
+        }
+        if !listed && DEFAULT_NO_SUBSET_TABLES.contains(&tag) && !options.passthrough_tables && output.tables.contains_key(&tag) {
+            output.remove(tag);
+            dropped.push(DroppedTable { tag, reason: "left out of the tables to copy without subsetting".to_string() });
+            continue;
+        }
         if output.tables.contains_key(&tag) {
             continue;
         }
-        let known = LAYOUT_TABLES.contains(&tag) || VARIATION_TABLES.contains(&tag) || OTHER_TABLES.contains(&tag) || core::is_core(tag);
-        if options.passthrough_tables && !known {
+        if tag == *b"DSIG" && (listed || options.passthrough_tables) {
+            if let Some(bytes) = input.get(tag) {
+                output.insert(tag, finish::empty_dsig(bytes)?);
+            }
+            continue;
+        }
+        if (options.passthrough_tables || listed) && !known {
             if let Some(bytes) = input.get(tag) {
                 output.insert(tag, bytes.to_vec());
             }
@@ -282,6 +338,7 @@ pub fn subset(font: &SfntFont, options: &SubsetOptions) -> Result<SubsetResult> 
         };
         dropped.push(DroppedTable { tag, reason: reason.to_string() });
     }
+    finish::apply(&plan, &mut output)?;
     // Keep the input's table order for the tables that remain.
     output.order = font.tags().into_iter().filter(|t| output.tables.contains_key(t)).collect();
     dropped.sort_by_key(|d| d.tag);
