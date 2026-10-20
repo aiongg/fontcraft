@@ -19,8 +19,10 @@ const USAGE: &str = "\
                         [--subset | --no-subset] [--dsig] [--pass-through-tables] [--collection]
                         [--timestamp SECS|now] [--ttfautohint PATH] [--cbdt] [--plan]
                         [--project-file FILE] [--project-defaults] [--menu-names FILE] [--goadb FILE]
-                        [--fontinfo FILE] [project options]
-                        [--cid-cmap FILE] [--mac-cmap FILE] [--mac-script N] [--mac-language N]
+                        [--fontinfo FILE] [--feature-file FILE] [--license-code CODE]
+                        [--fs-selection-on N]... [--fs-selection-off N]... [--os2-version N] [project options]
+                        [--cid-cmap FILE] [--mac-cmap FILE] [--mac-script N] [--mac-language N] [--uvs FILE]
+  fontcraft-cli compile --project-file FILE [options]
   fontcraft-cli compile SOURCE... --variable [--format ttf|otf] [--settings NAME,...] [--container plain|woff|woff2]...
                         [-o FILE | --output-dir DIR] [--timestamp SECS|now]
       Compile each SOURCE to static fonts: every exportable instance (or the named ones; a font
@@ -54,13 +56,22 @@ const USAGE: &str = "\
       --no-italic, --mac-names / --no-mac-names, --stub-cmap4, --legacy-double-mapping,
       --kern-class0-optimization / --no-kern-class0-optimization; --fontinfo FILE fills what is
       still unset. --menu-names FILE is a FontMenuNameDB, --goadb FILE a GlyphOrderAndAliasDB
-      (its code points always apply). --project-defaults finds fontinfo beside the source and
-      FontMenuNameDB and GlyphOrderAndAliasDB beside it or up to 4 folders above.
+      (its code points always apply). --project-defaults finds fontinfo and a features or
+      features.fea file beside the source and FontMenuNameDB and GlyphOrderAndAliasDB beside it
+      or up to 4 folders above. The paths a project file names are relative to it; without
+      SOURCE its InputFontPath is built, and without -o or --output-dir the font goes where its
+      OutputFontPath says. --feature-file FILE (-ff) replaces the source's feature code.
+      --license-code CODE (-lic) is appended to the unique font identifier (name ID 3).
+      --fs-selection-on N (-osbOn) and --fs-selection-off N (-osbOff) turn an OS/2 fsSelection
+      bit on or off (each may be given more than once; bits 7, 8 and 9 all need a value when one
+      is turned on); --os2-version N (-osv) sets the OS/2 version where the table needs no
+      higher one (default 3, or 4 with bits 7 to 9).
       A CID-keyed SOURCE builds a CID-keyed CFF. --cid-cmap FILE (-ch) is a Unicode (UTF-32)
       CMap of its character collection, which then gives every code point of the cmap table;
       --mac-cmap FILE (-cm) a one-byte Macintosh CMap, written as a Macintosh cmap subtable with
       the script --mac-script N (-cs; default: from the ordering) and the language
-      --mac-language N (-cl; default 0).
+      --mac-language N (-cl; default 0). --uvs FILE (-ci) adds the Unicode Variation Sequences
+      the file lists, for any SOURCE, as a cmap format 14 subtable.
       --variable builds variable fonts instead: one per variable font setting (or the settings
       --settings names), or one for the whole designspace when the source has none, with
       TrueType outlines, or CFF2 outlines with --format otf; files are named by the setting's file
@@ -83,6 +94,7 @@ fn compile(args: &[String]) -> Outcome {
     let mut autohinter: Option<&String> = None;
     let mut project_words: Vec<String> = Vec::new();
     let mut project = serde_json::Map::new();
+    let mut project_file: Option<&String> = None;
     let mut it = args.iter();
     let list = |v: &str| -> Vec<String> { v.split(',').map(str::trim).filter(|s| !s.is_empty()).map(str::to_string).collect() };
     while let Some(arg) = it.next() {
@@ -129,15 +141,46 @@ fn compile(args: &[String]) -> Outcome {
                 project_words.push(arg.trim_start_matches('-').to_string());
                 project.insert("projectOptions".into(), Value::Null);
             }
-            "--project-file" | "--menu-names" | "--goadb" | "--fontinfo" => {
+            "--project-file" | "--menu-names" | "--goadb" | "--fontinfo" | "--feature-file" | "-ff" => {
                 let key = match arg.as_str() {
                     "--project-file" => "projectFile",
                     "--menu-names" => "menuNames",
                     "--goadb" => "goadb",
-                    _ => "fontinfo",
+                    "--fontinfo" => "fontinfo",
+                    _ => "featureFile",
                 };
                 let file = it.next().ok_or_else(|| usage(format!("{arg} needs a file")))?;
+                if key == "projectFile" {
+                    project_file = Some(file);
+                }
                 project.insert(key.into(), json!(file));
+            }
+            "--license-code" | "-lic" => {
+                let code = it.next().ok_or_else(|| usage(format!("{arg} needs a licence code")))?;
+                project.insert("licenseCode".into(), json!(code));
+            }
+            "--fs-selection-on" | "-osbOn" | "--fs-selection-off" | "-osbOff" => {
+                let key = if matches!(arg.as_str(), "--fs-selection-on" | "-osbOn") { "os2BitsOn" } else { "os2BitsOff" };
+                let v = it.next().ok_or_else(|| usage(format!("{arg} needs a bit number")))?;
+                let bit = v.parse::<i64>().map_err(|_| usage(format!("{arg} must be a bit number from 0 to 15, got `{v}`")))?;
+                if let Some(Value::Array(bits)) = project.get_mut(key) {
+                    bits.push(json!(bit));
+                } else {
+                    project.insert(key.into(), json!([bit]));
+                }
+            }
+            "--os2-version" | "-osv" => {
+                let v = it.next().ok_or_else(|| usage(format!("{arg} needs a number")))?;
+                let n = v
+                    .parse::<u16>()
+                    .ok()
+                    .filter(|n| *n >= 1)
+                    .ok_or_else(|| usage(format!("{arg} must be a whole number from 1 to 65535, got `{v}`")))?;
+                project.insert("os2Version".into(), json!(n));
+            }
+            "--uvs" | "-ci" => {
+                let file = it.next().ok_or_else(|| usage(format!("{arg} needs a Unicode Variation Sequences file")))?;
+                params.insert("uvsFile".into(), json!(file));
             }
             "--cid-cmap" | "-ch" | "--mac-cmap" | "-cm" => {
                 let key = if matches!(arg.as_str(), "--cid-cmap" | "-ch") { "cidCmap" } else { "cidMacCmap" };
@@ -213,8 +256,16 @@ fn compile(args: &[String]) -> Outcome {
             },
         }
     }
+    let (input, project_output) = match project_file {
+        Some(file) => project_paths(file)?,
+        None => (None, None),
+    };
+    let input = input.map(|p| p.to_string_lossy().into_owned());
     if sources.is_empty() {
-        return Err(usage("compile needs at least one SOURCE"));
+        match &input {
+            Some(path) => sources.push(path),
+            None => return Err(usage("compile needs at least one SOURCE, or a --project-file whose InputFontPath names one")),
+        }
     }
     // A project compile: the subroutinize switches count among its ordered options.
     let is_project = !project.is_empty();
@@ -232,11 +283,15 @@ fn compile(args: &[String]) -> Outcome {
     let destination = match (output, output_dir) {
         (Some(_), Some(_)) => return Err(usage("use either -o or --output-dir")),
         (Some(_), None) if sources.len() > 1 => return Err(usage("-o names one file; with several sources use --output-dir")),
-        (Some(file), None) => file.clone(),
-        (None, Some(dir)) => dir.clone(),
-        (None, None) => ".".to_string(),
+        (Some(file), None) => Some(file.clone()),
+        (None, Some(dir)) => Some(dir.clone()),
+        // The compile writes where the project file's OutputFontPath says.
+        (None, None) if is_project && project_output.is_some() => None,
+        (None, None) => Some(".".to_string()),
     };
-    params.insert("destination".into(), json!(destination));
+    if let Some(destination) = destination {
+        params.insert("destination".into(), json!(destination));
+    }
     if !formats.is_empty() {
         params.insert("formats".into(), json!(formats));
     }
@@ -334,4 +389,22 @@ fn compile(args: &[String]) -> Outcome {
         }
     }
     if failed > 0 { Err(Failure::Failed(format!("{failed} of {} sources did not build", sources.len()))) } else { Ok(()) }
+}
+
+/// The `InputFontPath` and `OutputFontPath` a project file names, relative to its folder: one
+/// `Key value` per line, `#` lines skipped. The compile reads the rest of the file.
+fn project_paths(file: &str) -> Result<(Option<std::path::PathBuf>, Option<std::path::PathBuf>), Failure> {
+    let text = std::fs::read_to_string(file).map_err(|e| usage(format!("--project-file: cannot read {file}: {e}")))?;
+    let folder = std::path::Path::new(file).parent().unwrap_or_else(|| std::path::Path::new(""));
+    let (mut input, mut output) = (None, None);
+    for line in text.lines().map(str::trim).filter(|l| !l.starts_with('#')) {
+        let Some((key, value)) = line.split_once(char::is_whitespace) else { continue };
+        let slot = match key {
+            "InputFontPath" => &mut input,
+            "OutputFontPath" => &mut output,
+            _ => continue,
+        };
+        *slot = Some(folder.join(value.trim()));
+    }
+    Ok((input, output))
 }

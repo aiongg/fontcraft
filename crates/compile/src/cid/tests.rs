@@ -152,7 +152,7 @@ fn a_unicode_cmap_gives_the_code_points_and_a_mac_cmap_a_format_6_subtable() {
     let f = cid_source();
     let target = f.default_target().unwrap();
     let mut o = options();
-    o.cid = CidOptions { unicode_cmap: Some(UNI_CMAP.into()), mac_cmap: Some(MAC_CMAP.into()), mac_script: None, mac_language: None };
+    o.cid = CidOptions { unicode_cmap: Some(UNI_CMAP.into()), mac_cmap: Some(MAC_CMAP.into()), mac_script: None, mac_language: None, uvs: None };
     let out = compile(&f, &target, Flavour::Cff, &o).unwrap();
     let font = FontRef::new(&out.bytes).unwrap();
     let cmap = font.cmap().unwrap();

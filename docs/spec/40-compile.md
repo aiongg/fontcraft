@@ -269,6 +269,12 @@ above. The rules are recorded so the mode can be implemented without re-reading 
 - Legacy switches we expose only here: `compile.cmapLegacyOptions`,
   `compile.kernClassOptimisation`. Synthetic glyphs are not reproduced
   (`compile.makeotfSyntheticGlyphs`).
+- The paths a project file names, relative to the project file and under the automation roots,
+  its feature file and licence code (`compile.makeotfOptionPrecedence`).
+- `OS/2` selection bits and version with the reference's checks and quirks
+  (`compile.os2FsSelection`, `compile.os2Version`).
+- Unicode Variation Sequences files, written as a `cmap` format 14 subtable for any font
+  (`compile.cidCmapResources`).
 
 ### 1.12 Export
 

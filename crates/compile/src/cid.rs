@@ -25,6 +25,7 @@
 //! instead.
 
 pub mod cmap;
+pub mod uvs;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
@@ -57,11 +58,14 @@ pub struct CidOptions {
     pub mac_script: Option<u16>,
     /// The Macintosh subtable's language (`-cl`); `None`: 0.
     pub mac_language: Option<u16>,
+    /// A Unicode Variation Sequences file (`-ci`), written as a format 14 subtable ([`uvs`]);
+    /// used by every font, CID-keyed or not.
+    pub uvs: Option<Vec<u8>>,
 }
 
 impl CidOptions {
     fn is_empty(&self) -> bool {
-        *self == CidOptions::default()
+        *self == CidOptions { uvs: self.uvs.clone(), ..CidOptions::default() }
     }
 }
 

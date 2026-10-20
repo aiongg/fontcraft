@@ -482,6 +482,7 @@ pub fn assemble(
     }
     let blocks = &layout.compiled;
     let generated_version = info.name(5);
+    let generated_unique = info.name(3);
     if let Some(code_names) = &blocks.name {
         // A variable font's names are allocated after the layout stage, so the code's IDs may
         // meet them; those names keep their IDs.
@@ -495,6 +496,12 @@ pub fn assemble(
     {
         let text = crate::makeotf::metrics::version_string(revision);
         info.names.iter_mut().filter(|r| r.id == 5).for_each(|r| r.text.clone_from(&text));
+    }
+    // A project compile's licence code ends a unique identifier the feature code does not set.
+    if let Some(code) = options.project.as_ref().and_then(|p| p.licence.as_deref())
+        && info.name(3) == generated_unique
+    {
+        info.names.iter_mut().filter(|r| r.id == 3).for_each(|r| r.text = format!("{};{code}", r.text));
     }
     if options.version_stamp {
         info::stamp_version(&mut info, font);

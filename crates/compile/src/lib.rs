@@ -598,6 +598,9 @@ pub(crate) fn compile_stages_with(
     if let Some(plan) = &extra.cid {
         cid::finish(&mut compiled, plan)?;
     }
+    if let Some(uvs) = &options.cid.uvs {
+        cid::uvs::finish(&mut compiled, uvs, extra.cid.as_ref())?;
+    }
     extras::finish(font, &mut compiled, options)?;
     Ok(compiled)
 }

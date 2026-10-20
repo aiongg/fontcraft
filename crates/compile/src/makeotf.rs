@@ -98,6 +98,10 @@ enum Key {
     StubCmap4,
     DoubleMap,
     SuppressKernClass0,
+    BitsOn,
+    Os2Version,
+    Licence,
+    MacScript,
 }
 
 /// Files a project file names, relative to the project file's folder.
@@ -108,6 +112,33 @@ pub struct ProjectPaths {
     pub features: Option<String>,
     pub menu_names: Option<String>,
     pub goadb: Option<String>,
+    /// A CID-keyed font's Macintosh CMap (`MacEncodingCMAPPath`).
+    pub mac_cmap: Option<String>,
+    /// A CID-keyed font's Unicode CMap (`H_UniEncodingCMAPPath`).
+    pub unicode_cmap: Option<String>,
+    /// A Unicode Variation Sequences file (`UVSPath`).
+    pub uvs: Option<String>,
+}
+
+/// The `OS/2` settings of a project: `fsSelection` bits to turn on and off, in the order given,
+/// and the table version.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Os2Settings {
+    pub bits_on: Vec<u16>,
+    pub bits_off: Vec<u16>,
+    /// The version asked for; `None`: the reference's rule (3, or 4 with bits 7 to 9).
+    pub version: Option<u16>,
+    /// Whether bits 7, 8 and 9 were each given a value, on or off.
+    seen: [bool; 3],
+}
+
+/// What a project compile does to the built `OS/2` table ([`finish`]): the masks the reference
+/// applies to `fsSelection` after it sets the style bits, and the version it asks for (0: none).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Os2Plan {
+    pub on_mask: Option<u16>,
+    pub off_mask: Option<u16>,
+    pub version: u16,
 }
 
 /// What the project file, the option words and the `fontinfo` file ask for. Apply them in that
@@ -131,6 +162,13 @@ pub struct Settings {
     /// first-class 0, so the output is the same either way.
     pub suppress_kern_class0: bool,
     pub paths: ProjectPaths,
+    pub os2: Os2Settings,
+    /// Text appended to the unique font identifier (name ID 3), after a semicolon.
+    pub licence: Option<String>,
+    /// The Macintosh `cmap` script and language of a CID-keyed font (`MacCmapScriptID`,
+    /// `MacCmapLanguageID`).
+    pub mac_script: Option<u16>,
+    pub mac_language: Option<u16>,
     seen: BTreeSet<Key>,
 }
 
@@ -174,6 +212,7 @@ impl Settings {
             Key::StubCmap4 => &mut self.stub_cmap4,
             Key::DoubleMap => &mut self.double_map,
             Key::SuppressKernClass0 => &mut self.suppress_kern_class0,
+            Key::BitsOn | Key::Os2Version | Key::Licence | Key::MacScript => return,
         };
         *slot = on;
     }
@@ -268,6 +307,60 @@ impl Settings {
                     path(&mut self.paths.goadb);
                     continue;
                 }
+                "MacEncodingCMAPPath" => {
+                    path(&mut self.paths.mac_cmap);
+                    continue;
+                }
+                "H_UniEncodingCMAPPath" => {
+                    path(&mut self.paths.unicode_cmap);
+                    continue;
+                }
+                "UVSPath" => {
+                    path(&mut self.paths.uvs);
+                    continue;
+                }
+                "LicenseCode" => {
+                    self.apply_licence(value);
+                    continue;
+                }
+                "kSetfsSelectionBitsOn" | "kSetfsSelectionBitsOff" => {
+                    let on = key == "kSetfsSelectionBitsOn";
+                    let bits = project_bits(value).ok_or_else(|| {
+                        ProjectError(format!(
+                            "project file line {line_no}: {key} is `{value}`; it takes a bit number from 0 to 15, or a list of them"
+                        ))
+                    })?;
+                    for bit in bits {
+                        self.apply_os2_bit(on, bit).map_err(|e| ProjectError(format!("project file line {line_no}: {e}")))?;
+                    }
+                    // As the reference does: a project file's bits count as giving 7, 8 and 9 a value.
+                    if on {
+                        self.os2.seen = [true; 3];
+                    }
+                    continue;
+                }
+                "kSetOS2Version" => {
+                    let version = value
+                        .parse::<i64>()
+                        .map_err(|_| ProjectError(format!("project file line {line_no}: {key} is `{value}`; it takes a whole number")))?;
+                    // The reference's project file takes 0 as "not set".
+                    if version != 0 {
+                        self.apply_os2_version(version).map_err(|e| ProjectError(format!("project file line {line_no}: {e}")))?;
+                    }
+                    continue;
+                }
+                "MacCmapScriptID" | "MacCmapLanguageID" => {
+                    let id = value.parse::<u16>().ok().filter(|v| *v <= 32_767).ok_or_else(|| {
+                        ProjectError(format!("project file line {line_no}: {key} is `{value}`; it takes a whole number from 0 to 32767"))
+                    })?;
+                    if key == "MacCmapScriptID" {
+                        self.set(Key::MacScript, true);
+                        self.mac_script = Some(id);
+                    } else {
+                        self.mac_language = Some(id);
+                    }
+                    continue;
+                }
                 "ReleaseMode" => Key::Release,
                 "DoSubroutinization" => Key::Subroutinize,
                 "DoAliasAndOrder" => Key::Alias,
@@ -296,6 +389,67 @@ impl Settings {
         Ok(unused)
     }
 
+    /// Turns an `OS/2` `fsSelection` bit on or off (the reference's `-osbOn` and `-osbOff`).
+    /// Bits are turned on in the order given and off after that. Bit 0 cannot be turned off,
+    /// as in the reference.
+    pub fn apply_os2_bit(&mut self, on: bool, bit: i64) -> Result<()> {
+        let lowest = if on { 0 } else { 1 };
+        let Some(bit) = u16::try_from(bit).ok().filter(|b| (lowest..=15).contains(b)) else {
+            return err(format!("fsSelection bit {bit} cannot be turned {}: give a bit from {lowest} to 15", if on { "on" } else { "off" }));
+        };
+        if let Some(seen) = bit.checked_sub(7).and_then(|i| self.os2.seen.get_mut(usize::from(i))) {
+            *seen = true;
+        }
+        if on {
+            self.set(Key::BitsOn, true);
+            self.os2.bits_on.push(bit);
+        } else {
+            self.os2.bits_off.push(bit);
+        }
+        Ok(())
+    }
+
+    /// Sets the `OS/2` table version (the reference's `-osv`): 1 or more. It applies only where
+    /// the table's contents ask for no higher version.
+    pub fn apply_os2_version(&mut self, version: i64) -> Result<()> {
+        let Some(version) = u16::try_from(version).ok().filter(|v| *v >= 1) else {
+            return err(format!("the OS/2 version {version} is not 1 to 65535"));
+        };
+        self.set(Key::Os2Version, true);
+        self.os2.version = Some(version);
+        Ok(())
+    }
+
+    /// Sets the text appended to the unique font identifier (the reference's `-lic`).
+    pub fn apply_licence(&mut self, code: &str) {
+        self.set(Key::Licence, true);
+        self.licence = Some(code.to_string());
+    }
+
+    /// What [`finish`] does to `OS/2`, checked as the reference checks it: bits turned on and
+    /// also off are left out of the bits turned on; when the first of the remaining bits, sorted
+    /// as text (so 10 comes before 7), is above 6, bits 7, 8 and 9 must each have a value and
+    /// the version is 4 unless one is given.
+    pub fn os2_plan(&self) -> Result<Os2Plan> {
+        let o = &self.os2;
+        let mut on = o.bits_on.clone();
+        for off in &o.bits_off {
+            if let Some(at) = on.iter().position(|b| b == off) {
+                on.remove(at);
+            }
+        }
+        let new_bits = on.iter().map(u16::to_string).min().and_then(|t| t.parse::<u16>().ok()).is_some_and(|b| b > 6);
+        if new_bits && o.seen.contains(&false) {
+            let missing: Vec<String> = o.seen.iter().zip(7..).filter(|(seen, _)| !**seen).map(|(_, bit)| bit.to_string()).collect();
+            return err(format!(
+                "fsSelection bits 7, 8 and 9 must each be turned on or off when one of them is turned on; no value was given for bit {}",
+                missing.join(", ")
+            ));
+        }
+        let version = o.version.unwrap_or(if new_bits { 4 } else { 0 });
+        Ok(Os2Plan { on_mask: selection_mask(&on), off_mask: selection_mask(&o.bits_off), version })
+    }
+
     /// Applies the keywords of a `fontinfo` file that nothing else set: `IsBoldStyle`,
     /// `IsWindowsBold`, `IsItalicStyle`, `OmitMacNames`, `SuppressKernOptimization` and
     /// `AddStubDSIG`, each followed by `true` (or `True`, or `1`).
@@ -319,7 +473,94 @@ impl Settings {
         if unset(self, Key::Dsig) && keyword_on(text, "AddStubDSIG", false) {
             self.stub_dsig = true;
         }
+        if unset(self, Key::Licence)
+            && let Some(code) = keyword_value(text, "LicenseCode")
+        {
+            self.licence = Some(code.to_string());
+        }
+        // Bits 7, 8 and 9 come from these keywords only when nothing turned a bit on; the
+        // second spelling of bit 8's keyword is the one the reference's guide uses.
+        if unset(self, Key::BitsOn) {
+            for (keywords, bit) in [
+                (&["PreferOS/2TypoMetrics"][..], 7u16),
+                (&["IsOS/2WidthWeightSlopeOnly", "IsOS/2WidthWeigthSlopeOnly"][..], 8),
+                (&["IsOS/2OBLIQUE"][..], 9),
+            ] {
+                let Some(on) = keywords.iter().find_map(|k| fontinfo_switch(text, k)) else { continue };
+                if let Some(seen) = self.os2.seen.get_mut(usize::from(bit - 7)) {
+                    *seen = true;
+                }
+                if on {
+                    self.os2.bits_on.push(bit);
+                }
+            }
+        }
+        if unset(self, Key::MacScript) {
+            let script = match keyword_value(text, "Language").and_then(|v| v.strip_prefix('(')).and_then(|v| v.split(')').next()).map(str::trim) {
+                Some("Japanese") => Some(1),
+                Some("Chinese") => Some(2),
+                Some("TraditionalChinese") => Some(25),
+                Some("Korean") => Some(3),
+                _ => None,
+            };
+            if script.is_some() {
+                self.mac_script = script;
+            }
+        }
         Ok(())
+    }
+}
+
+/// The bits a project file's `kSetfsSelectionBitsOn` or `kSetfsSelectionBitsOff` value gives:
+/// one number, or a list as the reference writes one (`['7', '8']`).
+fn project_bits(value: &str) -> Option<Vec<i64>> {
+    let inner = value.trim().strip_prefix('[').and_then(|v| v.strip_suffix(']')).unwrap_or(value);
+    let bits: Option<Vec<i64>> = inner
+        .split(',')
+        .map(|item| item.trim().trim_matches(|c| c == '\'' || c == '"').trim())
+        .filter(|item| !item.is_empty())
+        .map(|item| item.parse::<i64>().ok())
+        .collect();
+    bits.filter(|b| !b.is_empty() && b.len() <= 16)
+}
+
+/// The mask the reference makes from `bits`: it keeps the mask in a signed 16-bit number that
+/// starts at -1 (no mask), a bit added while the mask is negative replaces it, and a negative
+/// mask is not applied. So bit 15 never takes effect and drops the bits before it.
+fn selection_mask(bits: &[u16]) -> Option<u16> {
+    let mut mask: i16 = -1;
+    for bit in bits {
+        let value = i16::from_be_bytes(1u16.checked_shl(u32::from(*bit)).unwrap_or(0).to_be_bytes());
+        mask = if mask >= 0 { mask | value } else { value };
+    }
+    u16::try_from(mask).ok()
+}
+
+/// The rest of the first line where `keyword` is followed by blanks and a value, trimmed.
+fn keyword_value<'a>(text: &'a str, keyword: &str) -> Option<&'a str> {
+    let mut rest = text;
+    while let Some(at) = rest.find(keyword) {
+        let after = rest.get(at + keyword.len()..)?;
+        let value = after.trim_start_matches([' ', '\t']);
+        if value.len() < after.len() {
+            let line = value.lines().next().unwrap_or("").trim();
+            if !line.is_empty() {
+                return Some(line);
+            }
+        }
+        rest = after;
+    }
+    None
+}
+
+/// The yes or no value after `keyword` in a `fontinfo` file (`true`, `True` or `1`; `false`,
+/// `False` or `0`), as the reference matches the `OS/2` bit keywords.
+fn fontinfo_switch(text: &str, keyword: &str) -> Option<bool> {
+    let value = keyword_value(text, keyword)?;
+    match value.split_whitespace().next()? {
+        v if v.starts_with("true") || v.starts_with("True") || v.starts_with('1') => Some(true),
+        v if v.starts_with("false") || v.starts_with("False") || v.starts_with('0') => Some(false),
+        _ => None,
     }
 }
 
@@ -331,21 +572,12 @@ const KNOWN_UNUSED_KEYS: &[&str] = &[
     "UseSuppliedCFF",
     "Renumber",
     "MaxSubrs",
-    "kSetfsSelectionBitsOn",
-    "kSetfsSelectionBitsOff",
-    "SetOS2Version",
     "XUID",
     "ConvertToCID",
     "SuppressHintWarnings",
     "SuppressWidthOptimization",
-    "MacCmapScriptID",
-    "MacCmapLanguageID",
-    "MacEncodingCMAPPath",
-    "H_UniEncodingCMAPPath",
     "V_UniEncodingCMAPPath",
-    "UVSPath",
     "OverrideMenuNames",
-    "LicenseCode",
     "ShowFinalNames",
     "VerboseWarnings",
     "MVAR",
@@ -632,6 +864,12 @@ pub struct Project {
     pub settings: Settings,
     pub menu_db: Option<MenuDb>,
     pub aliases: Option<Vec<GlyphAlias>>,
+    /// The feature file the project names, which replaces the source's feature code.
+    pub features: Option<String>,
+    /// The folder that feature file's `include` statements read from.
+    pub feature_dir: Option<std::path::PathBuf>,
+    /// The CMap and variation sequence files the project file names, read by the caller.
+    pub cid: crate::cid::CidOptions,
 }
 
 /// What a project compile changes in the build: [`finish`] adds the stub tables, the compile
@@ -647,6 +885,11 @@ pub struct Finish {
     /// The weight, width, style bits and vertical metrics worked out by [`metrics::apply`]
     /// instead of read from the source.
     pub metrics: Option<metrics::Source>,
+    /// The `fsSelection` masks and version [`finish`] gives `OS/2`; `None` leaves the table as
+    /// the build wrote it.
+    pub os2: Option<Os2Plan>,
+    /// Appended to a generated unique font identifier (name ID 3) after a semicolon.
+    pub licence: Option<String>,
 }
 
 /// The source as the project compile builds it, with what the compile needs to know.
@@ -888,6 +1131,10 @@ impl Project {
         }
 
         leave_out_unread(&mut font);
+        if let Some(code) = &self.features {
+            let prefix = fontcraft_model::Snippet { code: code.clone(), ..Default::default() };
+            font.features = Arc::new(fontcraft_model::Features { prefixes: vec![prefix], ..Default::default() });
+        }
 
         // Menu names.
         let target = font.default_target().map_err(|e| ProjectError(e.to_string()))?;
@@ -957,6 +1204,8 @@ impl Project {
             stub_cmap4: s.stub_cmap4,
             two_decimals: true,
             metrics: Some(metrics::Source { full_name, bold: s.bold, italic: s.italic }),
+            os2: Some(s.os2_plan()?),
+            licence: s.licence.clone(),
         };
         Ok(Prepared { font, subroutinize: s.subroutinize, finish, warnings })
     }
@@ -967,10 +1216,10 @@ impl Project {
 /// The 8-byte `DSIG` of a release build: version 1, no signatures, flags 1.
 pub const STUB_DSIG: [u8; 8] = [0, 0, 0, 1, 0, 0, 0, 1];
 
-/// Adds a stub `DSIG` and replaces `cmap` by a stub, as `f` asks. Every other table is copied as
-/// it is.
+/// Adds a stub `DSIG`, replaces `cmap` by a stub and sets the `OS/2` selection bits and version,
+/// as `f` asks. Every other table is copied as it is.
 pub fn finish(compiled: &mut Compiled, f: &Finish) -> std::result::Result<(), crate::CompileError> {
-    if !f.stub_dsig && !f.stub_cmap4 {
+    if !f.stub_dsig && !f.stub_cmap4 && f.os2.is_none() {
         return Ok(());
     }
     let table_error = |e: String| crate::CompileError::Table { table: "cmap", message: e };
@@ -978,13 +1227,18 @@ pub fn finish(compiled: &mut Compiled, f: &Finish) -> std::result::Result<(), cr
     let mut builder = FontBuilder::new();
     let dsig = Tag::new(b"DSIG");
     let cmap = Tag::new(b"cmap");
+    let os2 = Tag::new(b"OS/2");
     for record in font.table_directory().table_records() {
         let tag = record.tag();
         if (tag == dsig && f.stub_dsig) || (tag == cmap && f.stub_cmap4) {
             continue;
         }
         if let Some(data) = font.table_data(tag) {
-            builder.add_raw(tag, data.as_bytes().to_vec());
+            let mut bytes = data.as_bytes().to_vec();
+            if let (true, Some(plan)) = (tag == os2, f.os2) {
+                bytes = os2_finished(bytes, plan, &mut compiled.warnings).map_err(|message| crate::CompileError::Table { table: "OS/2", message })?;
+            }
+            builder.add_raw(tag, bytes);
         }
     }
     if f.stub_cmap4 {
@@ -995,6 +1249,55 @@ pub fn finish(compiled: &mut Compiled, f: &Finish) -> std::result::Result<(), cr
     }
     compiled.bytes = builder.build();
     Ok(())
+}
+
+/// Offsets in `OS/2`: the third and fourth Unicode range words, `fsSelection`, the lower optical
+/// size of version 5, and the length of versions 2 to 4.
+const OS2_RANGE_3: usize = 50;
+const OS2_RANGE_4: usize = 54;
+const OS2_SELECTION: usize = 62;
+const OS2_LOWER_SIZE: usize = 96;
+const OS2_V4_LENGTH: usize = 96;
+const OS2_V5_LENGTH: usize = 100;
+
+/// `table` (an `OS/2` table) with the plan's masks applied to `fsSelection`, on first, and the
+/// version the reference writes: 5 with a lower optical size, else 4 when a bit from 7 up is
+/// set or a Unicode range bit from 93 up, else the version asked for, else 3. The table keeps
+/// every version 4 field; a version above 4 adds the optical sizes.
+fn os2_finished(mut table: Vec<u8>, plan: Os2Plan, warnings: &mut Vec<String>) -> std::result::Result<Vec<u8>, String> {
+    let read16 = |t: &[u8], at: usize| t.get(at..at + 2).and_then(|b| <[u8; 2]>::try_from(b).ok()).map(u16::from_be_bytes);
+    let read32 = |t: &[u8], at: usize| t.get(at..at + 4).and_then(|b| <[u8; 4]>::try_from(b).ok()).map(u32::from_be_bytes);
+    let short = || "the table is shorter than version 2".to_string();
+    let mut selection = read16(&table, OS2_SELECTION).ok_or_else(short)?;
+    if let Some(on) = plan.on_mask {
+        selection |= on;
+    }
+    if let Some(off) = plan.off_mask {
+        selection &= !off;
+    }
+    let range_3 = read32(&table, OS2_RANGE_3).ok_or_else(short)?;
+    let range_4 = read32(&table, OS2_RANGE_4).ok_or_else(short)?;
+    let old_version = read16(&table, 0).ok_or_else(short)?;
+    let lower_size = if old_version >= 5 { read16(&table, OS2_LOWER_SIZE).unwrap_or(0) } else { 0 };
+    let version = if lower_size > 0 {
+        5
+    } else if selection >= 0x80 || range_3 >= 1 << 29 || range_4 != 0 {
+        4
+    } else if plan.version != 0 {
+        plan.version
+    } else {
+        3
+    };
+    if version > 5 {
+        warnings.push(format!("OS/2 version {version} is not one OpenType defines; many programs cannot read the table"));
+    }
+    table.resize(if version > 4 { OS2_V5_LENGTH } else { OS2_V4_LENGTH }, 0);
+    for (at, value) in [(0, version), (OS2_SELECTION, selection)] {
+        if let Some(slot) = table.get_mut(at..at + 2) {
+            slot.copy_from_slice(&value.to_be_bytes());
+        }
+    }
+    Ok(table)
 }
 
 /// A `cmap` with only the space mapping in its two format 4 subtables (the other BMP mapping
@@ -1137,5 +1440,43 @@ mod tests {
         assert!(!keyword_on("IsBoldStyle false", "IsBoldStyle", true));
         assert!(keyword_on("OmitMacNamesTrue", "OmitMacNames", false));
         assert!(!keyword_on("OmitMacNames true", "OmitMacNames", false));
+    }
+
+    #[test]
+    fn os2_settings_come_from_the_project_file_options_and_fontinfo_in_order() {
+        let mut s = Settings::default();
+        let unused = s
+            .apply_project("kSetfsSelectionBitsOn ['7', '8']\nkSetOS2Version 2\nLicenseCode ABC\nMacCmapScriptID 1\nUVSPath seq.uvs\nH_UniEncodingCMAPPath U-H\n")
+            .unwrap();
+        assert!(unused.is_empty(), "{unused:?}");
+        assert_eq!(s.os2.bits_on, vec![7, 8]);
+        assert_eq!(s.os2_plan().unwrap(), Os2Plan { on_mask: Some(0x180), off_mask: None, version: 2 });
+        assert_eq!((s.licence.as_deref(), s.mac_script), (Some("ABC"), Some(1)));
+        assert_eq!((s.paths.uvs.as_deref(), s.paths.unicode_cmap.as_deref()), (Some("seq.uvs"), Some("U-H")));
+        // fontinfo fills only what is unset: the bits and the licence are taken.
+        s.apply_fontinfo("PreferOS/2TypoMetrics true\nIsOS/2OBLIQUE 1\nLicenseCode XYZ\n").unwrap();
+        assert_eq!((s.os2.bits_on.clone(), s.licence.as_deref()), (vec![7, 8], Some("ABC")));
+
+        let mut f = Settings::default();
+        f.apply_fontinfo("LicenseCode  XYZ\nPreferOS/2TypoMetrics true\nIsOS/2WidthWeigthSlopeOnly false\nIsOS/2OBLIQUE 0\nLanguage (Korean)\n")
+            .unwrap();
+        assert_eq!(f.licence.as_deref(), Some("XYZ"));
+        assert_eq!(f.os2_plan().unwrap(), Os2Plan { on_mask: Some(0x80), off_mask: None, version: 4 });
+        assert_eq!(f.mac_script, Some(3));
+        // Without values for bits 8 and 9 the reference refuses bit 7.
+        let mut g = Settings::default();
+        g.apply_os2_bit(true, 7).unwrap();
+        assert!(g.os2_plan().unwrap_err().0.contains("bit 8, 9"));
+    }
+
+    #[test]
+    fn selection_masks_keep_the_reference_signed_mask() {
+        assert_eq!(selection_mask(&[]), None);
+        assert_eq!(selection_mask(&[7, 8]), Some(0x180));
+        assert_eq!(selection_mask(&[7, 15]), None);
+        assert_eq!(selection_mask(&[15, 7]), Some(0x80));
+        assert_eq!(project_bits("7"), Some(vec![7]));
+        assert_eq!(project_bits("['7', '9']"), Some(vec![7, 9]));
+        assert_eq!(project_bits("seven"), None);
     }
 }
