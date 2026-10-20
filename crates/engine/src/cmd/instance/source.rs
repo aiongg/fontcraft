@@ -86,13 +86,17 @@ pub(super) fn instantiate(p: &Params<'_>, input: &Path, req: &OutputRequest) -> 
     if p.bool_or("layoutOnly", false)? {
         return super::layout::instantiate(p, input, req);
     }
-    if p.get("masterFinder").is_some() {
-        return Err(p.bad("`masterFinder` finds the compiled masters `layoutOnly` reads: give `layoutOnly` too"));
+    let binary = binary_layout(p)?;
+    if p.get("masterFinder").is_some() && binary.is_none() {
+        return Err(p.bad("`masterFinder` finds the compiled masters `layoutOnly` and `interpolateBinaryLayout` read: give one of them too"));
     }
     if req.in_place {
         return Err(p.bad("an instance never replaces its source: give `output` or `outputDir`"));
     }
     let kind = kind(p, req)?;
+    if binary.is_some() && kind == Kind::Ufo {
+        return Err(p.bad("`interpolateBinaryLayout` replaces the layout of compiled instances: give `to` \"ttf\" or \"otf\""));
+    }
     let instance_dir = p.opt_str("instanceDir")?.map(PathBuf::from);
     if instance_dir.is_some() && (kind != Kind::Ufo || req.output.is_some() || req.output_dir.is_some()) {
         return Err(p.bad("`instanceDir` is the folder for UFO instances: give it alone, without `output`, `outputDir` or a compiled `to`"));
@@ -130,10 +134,25 @@ pub(super) fn instantiate(p: &Params<'_>, input: &Path, req: &OutputRequest) -> 
             if !p.bool_or("round", true)? {
                 return Err(p.bad("a compiled instance always has rounded coordinates"));
             }
-            compile_fonts(p, font, input, req, &jobs, ext, autohint, remove_overlaps, &mut warnings)?
+            let layout = match &binary {
+                Some(dir) => Some(super::layout::BinaryLayout::load(p, input, &font, &designspace, &jobs, ext, dir.as_deref())?),
+                None => None,
+            };
+            compile_fonts(p, font, input, req, &jobs, ext, autohint, remove_overlaps, layout.as_ref(), &mut warnings)?
         }
     };
     Ok(json!({ "results": results, "warnings": warnings }))
+}
+
+/// `interpolateBinaryLayout`: `None` when off, else the folder of the compiled masters it names
+/// (`None` inside for the default).
+fn binary_layout(p: &Params<'_>) -> Result<Option<Option<String>>> {
+    match p.get("interpolateBinaryLayout") {
+        None | Some(Value::Bool(false)) => Ok(None),
+        Some(Value::Bool(true)) => Ok(Some(None)),
+        Some(Value::String(dir)) if !dir.is_empty() => Ok(Some(Some(dir.clone()))),
+        Some(_) => Err(p.bad("`interpolateBinaryLayout` is true, false or the folder of the compiled masters")),
+    }
 }
 
 /// The output kind: `to`, else the extension of `output`, else UFO.
@@ -761,6 +780,7 @@ fn compile_fonts(
     ext: &'static str,
     autohint: Option<bool>,
     remove_overlaps: bool,
+    layout: Option<&super::layout::BinaryLayout>,
     warnings: &mut Vec<String>,
 ) -> Result<Vec<Value>> {
     let mut font = font;
@@ -863,6 +883,11 @@ fn compile_fonts(
     }
     // In the order the jobs were asked for.
     built.sort_by_key(|(order, ..)| *order);
+    if let Some(layout) = layout {
+        let outputs: Vec<(usize, PathBuf)> =
+            built.iter().filter_map(|(order, entry, _)| Some((jobs.get(*order)?.index, PathBuf::from(entry.get("output")?.as_str()?)))).collect();
+        layout.apply(p, &outputs)?;
+    }
     Ok(built.into_iter().map(|(_, entry, _)| entry).collect())
 }
 

@@ -1186,7 +1186,9 @@ normalised; overlap removal is opt-in. `--to ttf|otf` compiles them in the same 
 --instances`. Glyphs whose masters are not compatible are skipped with a warning, or stop the run with
 `--strict`.
 
-**Layout only.** `--layout-only` reads only the designspace and its compiled masters: each source names its master font or TTX file, or `--master-finder` turns the source's file name into the master's (`{fullname}`, `{dirname}`, `{basename}`, `{stem}`, `{ext}`; default `master_ttf_interpolatable/{stem}.ttf`, relative to the designspace's folder). The result is the base master with its `GPOS` interpolated at the location, as fontTools' `varLib.interpolate_layout` makes it; `GDEF`, `GSUB` and every other table stay the base master's. Masters whose `GPOS` tables differ in structure are refused.
+**Layout only.** `--layout-only` reads only the designspace (not its UFOs), or a `.glyphs` or `.glyphspackage` source, and the compiled masters. A designspace source names its master font or TTX file, or `--master-finder` turns the source's file name into the master's (`{fullname}`, `{dirname}`, `{basename}`, `{stem}`, `{ext}`; default `master_ttf_interpolatable/{stem}.ttf`, relative to the source's folder). For a `.glyphs` source the file names are those glyphsLib gives the master UFOs when fontmake builds its designspace: `master_ufo/` beside the source, the master's `UFO Filename` parameter, else `Family-Master.ufo` with the spaces taken out. The result is the base master with its `GPOS` interpolated at the location, as fontTools' `varLib.interpolate_layout` makes it; `GDEF`, `GSUB` and every other table stay the base master's. Masters whose `GPOS` tables differ in structure are refused.
+
+**Binary layout.** `--interpolate-binary-layout [DIR]` with `--to ttf|otf` is fontmake's compiled-instance path: each instance is compiled, then its `GPOS` is replaced by the one interpolated from the compiled masters, and its `GDEF` and `GSUB` by the default master's when that master has them. The masters are `DIR/{stem}.ttf` (or `.otf`), `DIR` defaulting to `master_ttf` (or `master_otf`) beside the source; `--master-finder` names them another way. The masters are read before anything is compiled, so a missing master writes nothing.
 
 **Extrapolation.** Locations are clamped to the axis range unless `--no-clamp`. Extrapolation needs the
 masters themselves and is only possible from a source or for CFF2 and multiple-master input.
@@ -1229,7 +1231,7 @@ Engine command: `font.instantiate`.
 | fontmake | `-i / --interpolate [NAME]` | instance SOURCE --all \| --named REGEX (binary output: compile --instances) |  |
 | fontmake | `--round-instances` | --round |  |
 | fontmake | `--instance-dir` | --instance-dir |  |
-| fontmake | `--interpolate-binary-layout` | --layout-only (or compile --interpolate-binary-layout) |  |
+| fontmake | `--interpolate-binary-layout` | --to ttf\|otf --interpolate-binary-layout [DIR] (or --layout-only for the base master alone) |  |
 | tx | `-U` | AXIS=LOC... (a bare number list is read in axis order) |  |
 | tx | `-UNC` | --no-clamp |  |
 

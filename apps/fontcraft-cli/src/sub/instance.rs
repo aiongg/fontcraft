@@ -1,6 +1,7 @@
 //! `fontcraft-cli instance` (M12.20–M12.22): runs `font.instantiate`. Static and named
 //! instances of compiled variable fonts (M12.20); partial instances (M12.21); UFO and compiled
-//! instances of designspaces and other multi-master sources (M12.22).
+//! instances of designspaces and other multi-master sources (M12.22); layout interpolated from
+//! compiled masters (M12.22c, M12.22d).
 
 use serde_json::{Map, Value, json};
 
@@ -54,11 +55,45 @@ const OPTIONS: &[OptSpec] = &[
     OptSpec::value("ufo-version", "2|3", "", "format version of UFO instances (default 3)"),
     OptSpec::value("instance-dir", "DIR", "", "the folder for UFO instances (default: the paths the source records)"),
     OptSpec::switch("layout-only", false, "interpolate only the layout tables of compiled masters"),
-    OptSpec::value("master-finder", "TEMPLATE", "", "how to find the compiled master of each source, with --layout-only"),
+    OptSpec::value(
+        "master-finder",
+        "TEMPLATE",
+        "",
+        "how to find the compiled master of each source, with --layout-only or --interpolate-binary-layout",
+    ),
+    // M12.22d
+    OptSpec::value(
+        "interpolate-binary-layout",
+        "[DIR]",
+        "",
+        "compile instances with GPOS interpolated from the compiled masters in DIR (default master_ttf or master_otf), and GDEF and GSUB from the default one",
+    ),
 ];
 
+/// The option whose value is optional, as in the reference tool.
+const BINARY_LAYOUT: &str = "--interpolate-binary-layout";
+
+/// `args` with an empty value after a bare `--interpolate-binary-layout`, which stands for the
+/// default folder. A following argument is its folder unless it is an option, a location
+/// (`AXIS=LOC`) or a response file.
+fn optional_values(args: &[String]) -> Vec<String> {
+    let mut out = Vec::with_capacity(args.len() + 1);
+    let mut it = args.iter().peekable();
+    while let Some(arg) = it.next() {
+        out.push(arg.clone());
+        if arg == "--" {
+            out.extend(it.by_ref().cloned());
+            break;
+        }
+        if arg == BINARY_LAYOUT && !it.peek().is_some_and(|next| !next.starts_with(['-', '@']) && !next.contains('=')) {
+            out.push(String::new());
+        }
+    }
+    out
+}
+
 fn run(args: &[String]) -> Outcome {
-    let parsed = args::parse(OPTIONS, args)?;
+    let parsed = args::parse(OPTIONS, &optional_values(args))?;
     if parsed.help {
         return out(&super::help(&SUBCOMMAND));
     }
@@ -174,6 +209,9 @@ fn params(parsed: &Parsed) -> Result<Value, Failure> {
             p.insert(key.into(), json!(v));
         }
     }
+    if let Some(dir) = parsed.value("interpolate-binary-layout") {
+        p.insert("interpolateBinaryLayout".into(), if dir.is_empty() { json!(true) } else { json!(dir) });
+    }
     if let Some(face) = parsed.value("face").filter(|v| !v.is_empty()) {
         let face: u32 = face.parse().map_err(|_| usage(format!("--face takes a whole number, got `{face}`")))?;
         p.insert("face".into(), json!(face));
@@ -227,5 +265,20 @@ mod tests {
         assert_eq!(p["ufoVersion"], json!(2));
         assert_eq!(p["instanceDir"], json!("out"));
         assert!(params(&parsed(&["F.designspace", "--ufo-version", "4"])).is_err());
+    }
+
+    #[test]
+    fn interpolate_binary_layout_takes_an_optional_folder() {
+        let with = |args: &[&str]| {
+            params(&args::parse(OPTIONS, &optional_values(&args.iter().map(|s| s.to_string()).collect::<Vec<_>>())).unwrap()).unwrap()
+        };
+        assert!(with(&["F.glyphs", "--to", "ttf"]).get("interpolateBinaryLayout").is_none());
+        assert_eq!(with(&["F.glyphs", "--interpolate-binary-layout"])["interpolateBinaryLayout"], json!(true));
+        assert_eq!(with(&["F.glyphs", "--interpolate-binary-layout", "--to", "ttf"])["interpolateBinaryLayout"], json!(true));
+        let p = with(&["F.glyphs", "--interpolate-binary-layout", "wght=400"]);
+        assert_eq!(p["interpolateBinaryLayout"], json!(true), "a location is not the folder");
+        assert_eq!(p["location"]["wght"], json!(400.0));
+        assert_eq!(with(&["F.glyphs", "--interpolate-binary-layout", "build/ttf"])["interpolateBinaryLayout"], json!("build/ttf"));
+        assert_eq!(with(&["F.glyphs", "--interpolate-binary-layout=build"])["interpolateBinaryLayout"], json!("build"));
     }
 }
