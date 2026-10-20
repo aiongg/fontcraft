@@ -32,6 +32,7 @@ mod bitmap_open;
 mod bitmap_strikes;
 mod cid;
 mod clipboard;
+mod clipboard_pdf;
 mod clipboard_scale;
 mod color_export;
 mod color_layers;

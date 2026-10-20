@@ -11,8 +11,9 @@
 //!   [`MAX_TIFF_IFD_ENTRIES`] directory entries.
 //! - [`resolution`] reads the pixels per inch a header states, which Add Image uses to place an
 //!   image at one point per font unit.
-//! - PDF and PSD are recognised and kept as references; they are not decoded
-//!   ([`ImageError::Unsupported`]), and the editor draws an unsupported-image marker.
+//! - PDF and PSD are recognised and kept as references; they are not decoded here
+//!   ([`ImageError::Unsupported`]). `fontcraft-io-pdf`, which builds on this crate, draws a PDF's
+//!   first page; a PSD is shown as an unsupported-image marker.
 //! - Backed by the `image` crate with its `png`, `jpeg` and `tiff` decoders only. Nothing here
 //!   panics on input: errors are [`ImageError`].
 #![forbid(unsafe_code)]
