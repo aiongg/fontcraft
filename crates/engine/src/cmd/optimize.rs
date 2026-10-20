@@ -6,11 +6,13 @@
 //!
 //! Without a step named, every built lossless step runs: CFF widths and subroutines, implied
 //! on-curve points, `gvar` delta optimisation, the `GDEF` variation store and `COLR` layer reuse.
-//! Naming steps runs only those. Steps whose packages have not landed (GPOS compaction,
-//! charstring rewriting, the speed preset) are refused when named.
+//! Naming steps runs only those. GPOS compaction runs only when a level above 0 is given, as in
+//! the reference tool. Steps whose packages have not landed (charstring rewriting, the speed
+//! preset) are refused when named.
 
 use std::path::PathBuf;
 
+use fontcraft_tables::optimize::gpos::MAX_LEVEL;
 use fontcraft_tables::optimize::varstore::MAX_QUANTUM;
 use fontcraft_tables::optimize::{DeltaMode, OptimizeOptions, optimize};
 use fontcraft_tables::sfnt::tag_str;
@@ -43,7 +45,7 @@ pub fn specs() -> Vec<CommandSpec> {
         "Optimize Font",
         [],
         None,
-        "{font: path, face?: int|name, preset?: \"size\", subroutinize?: bool, maxSubrs?: int, desubroutinize?: bool, cffWidths?: bool|\"exhaustive\", gposCompaction?: 0, varstore?: bool|{quantum: int}, gvarIup?: bool, dropImpliedOncurves?: bool, colrLayerReuse?: bool, canonicalOrder?: bool, report?: bool, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool}. Re-encodes a compiled font more compactly without changing what it draws or how it shapes. Without a step named it chooses the CFF default and nominal widths again, subroutinises CFF and CFF2 charstrings, drops implied on-curve points, optimises gvar deltas, merges the GDEF variation store and shares COLR layers; naming steps runs only those. maxSubrs caps the subroutines of one INDEX (1 to 65,535) and implies subroutinize. desubroutinize expands every subroutine. gvarIup true keeps only the gvar deltas interpolation cannot infer, false writes every delta. varstore {quantum} rounds the store's deltas to multiples of quantum (1 to 32,767) first, which is lossy above 1. dropImpliedOncurves removes on-curve points halfway between their off-curve neighbours at every location, except in glyphs with instructions. colrLayerReuse builds a version 1 COLR table again, sharing runs of layers. A step that would not make a table smaller is not applied, and a step that fails keeps its tables, with a note. canonicalOrder writes the tables in the recommended order (default: the input's). A WOFF, WOFF2 or collection is written as one, the other members of a collection unchanged. report measures without writing. Not built yet, refused when asked for: preset \"speed\", charstrings, gposCompaction above 0 → {output: path|null, written, bytes, bytesBefore, bytesAfter, steps: [{step, table, before, after, applied}], tables: [{table, before, after}], notes}",
+        "{font: path, face?: int|name, preset?: \"size\", subroutinize?: bool, maxSubrs?: int, desubroutinize?: bool, cffWidths?: bool|\"exhaustive\", gposCompaction?: 0..9, varstore?: bool|{quantum: int}, gvarIup?: bool, dropImpliedOncurves?: bool, colrLayerReuse?: bool, canonicalOrder?: bool, report?: bool, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool}. Re-encodes a compiled font more compactly without changing what it draws or how it shapes. Without a step named it chooses the CFF default and nominal widths again, subroutinises CFF and CFF2 charstrings, drops implied on-curve points, optimises gvar deltas, merges the GDEF variation store and shares COLR layers; naming steps runs only those. maxSubrs caps the subroutines of one INDEX (1 to 65,535) and implies subroutinize. desubroutinize expands every subroutine. gvarIup true keeps only the gvar deltas interpolation cannot infer, false writes every delta. varstore {quantum} rounds the store's deltas to multiples of quantum (1 to 32,767) first, which is lossy above 1. dropImpliedOncurves removes on-curve points halfway between their off-curve neighbours at every location, except in glyphs with instructions. colrLayerReuse builds a version 1 COLR table again, sharing runs of layers. gposCompaction 1 to 8 splits each class-kerning subtable into denser ones, accepting up to that many extra subtables per halving of its size; 9 splits as long as that saves bytes; 0 (the default, also in a run without steps named) leaves class kerning alone. A step that would not make a table smaller is not applied, and a step that fails keeps its tables, with a note. canonicalOrder writes the tables in the recommended order (default: the input's). A WOFF, WOFF2 or collection is written as one, the other members of a collection unchanged. report measures without writing. Not built yet, refused when asked for: preset \"speed\", charstrings → {output: path|null, written, bytes, bytesBefore, bytesAfter, steps: [{step, table, before, after, applied}], tables: [{table, before, after}], notes}",
         always,
         optimize_font
     ).files(const { &[FileParam::read("font"), FileParam::write("output"), FileParam::write("outputDir")] }).writes_files()]
@@ -100,11 +102,10 @@ fn options(p: &Params<'_>) -> Result<OptimizeOptions> {
         Some("speed") => return Err(not_built("the speed preset")),
         Some(other) => return Err(p.bad(format!("`preset` must be \"size\" or \"speed\", got \"{other}\""))),
     }
-    for (key, what) in [("charstrings", "rewriting charstrings"), ("gposCompaction", "GPOS compaction")] {
-        if named(key) {
-            return Err(not_built(what));
-        }
+    if named("charstrings") {
+        return Err(not_built("rewriting charstrings"));
     }
+    let gpos_compaction = p.opt_int("gposCompaction", 0, i64::from(MAX_LEVEL))?.and_then(|n| u8::try_from(n).ok()).unwrap_or(0);
     // `gvarIup: false` names a step too: writing every delta.
     let gvar = match p.get("gvarIup") {
         None | Some(Value::Null) => None,
@@ -145,6 +146,7 @@ fn options(p: &Params<'_>) -> Result<OptimizeOptions> {
             variation_store: !off("varstore"),
             drop_implied_oncurves: !off("dropImpliedOncurves"),
             colr_layer_reuse: !off("colrLayerReuse"),
+            gpos_compaction,
             ..d
         });
     }
@@ -159,6 +161,7 @@ fn options(p: &Params<'_>) -> Result<OptimizeOptions> {
         gvar,
         drop_implied_oncurves,
         colr_layer_reuse,
+        gpos_compaction,
     })
 }
 
@@ -236,7 +239,7 @@ mod tests {
         assert!(flat.exists());
 
         for bad in [
-            json!({"font": font, "gposCompaction": 3}),
+            json!({"font": font, "gposCompaction": 10}),
             json!({"font": font, "preset": "speed"}),
             json!({"font": font, "cffWidths": 2}),
             json!({"font": font, "varstore": {"quantum": 0}}),
@@ -244,6 +247,9 @@ mod tests {
         ] {
             assert!(session.execute("font.optimize", &bad).is_err(), "{bad}");
         }
+        // A font without class kerning: the step runs alone and changes nothing.
+        let kern = session.execute("font.optimize", &json!({"font": font, "gposCompaction": 3, "report": true})).unwrap();
+        assert!(applied(&kern).is_empty(), "{kern}");
         let both = session.execute("font.optimize", &json!({"font": font, "subroutinize": true, "desubroutinize": true}));
         assert!(both.is_err());
         let widths_only = session.execute("font.optimize", &json!({"font": font, "subroutinize": false, "report": true})).unwrap();

@@ -1,4 +1,4 @@
-"""Cross-check the glyf, gvar, variation-store and COLR steps of `fontcraft-cli optimize`
+"""Cross-check the glyf, gvar, variation-store, GPOS compaction and COLR steps of `fontcraft-cli optimize`
 against fontTools. Run locally; not part of the gate.
 
 Each step runs on every font under the paths given (by default corpus/) that has the table it
@@ -13,11 +13,17 @@ works on, and fontTools does the same work on the same font:
                  peak of every gvar tuple (instanced by fontTools). The glyf points must match.
     varstore:    ours `optimize FONT --varstore`; theirs `fonttools varLib.varStore FONT OUT`.
                  The TTX of GDEF and GPOS must be equal.
+    gpos:        ours `optimize FONT --gpos-compaction LEVEL`; theirs `fonttools otlLib.optimize
+                 FONT --gpos-compression-level LEVEL` (LEVEL from `--gpos-level`, default 5).
+                 Every pair lookup must hold the same subtables with the same classes (each
+                 class as its set of glyph names) and the same non-zero values; extension
+                 subtables are looked through. Prints both GPOS sizes. Ours keeps GPOS when it
+                 would not get smaller, which shows as "kept".
     colr:        ours `optimize FONT --colr-layer-reuse`; theirs `unbuildColrV1` then
                  `buildColrV1`. The TTX of COLR must be equal. `--build N` writes N random
                  COLR 1 fonts without layer reuse (the corpus holds none).
 
-    VENV/bin/python -I crates/tables/crosscheck/optimize.py [--cli PATH] [--build N] OUT_DIR [FONT_OR_DIR ...]
+    VENV/bin/python -I crates/tables/crosscheck/optimize.py [--cli PATH] [--build N] [--gpos-level L] [--only STEP] OUT_DIR [FONT_OR_DIR ...]
 
 VENV needs fontTools 4.66.1 (the fontmake tool environment has it). PATH defaults to
 target/release/fontcraft-cli. Prints one line per font and step, then the totals.
@@ -44,7 +50,8 @@ def fonts_under(paths):
 
 
 def ours(cli, font, flag, out):
-    r = subprocess.run([cli, "optimize", font, flag, "-o", out], capture_output=True, text=True)
+    flags = flag if isinstance(flag, list) else [flag]
+    r = subprocess.run([cli, "optimize", font, *flags, "-o", out], capture_output=True, text=True)
     return r.returncode == 0, r.stderr.strip()
 
 
@@ -143,6 +150,75 @@ def check_varstore(cli, font, out_dir):
     return ("equal" if a == b else f"TTX differs at line {next(i for i, (x, y) in enumerate(zip(a + [''], b + [''])) if x != y)}") + f"; {sizes}"
 
 
+def has_class_kerning(font):
+    for lookup in font["GPOS"].table.LookupList.Lookup:
+        for s in pair_subtables(lookup):
+            if s.Format == 2:
+                return True
+    return False
+
+
+def pair_subtables(lookup):
+    subs = lookup.SubTable
+    if lookup.LookupType == 9:
+        subs = [e.ExtSubTable for e in subs if e.ExtensionLookupType == 2]
+    elif lookup.LookupType != 2:
+        subs = []
+    return subs
+
+
+def value_view(v):
+    if v is None:
+        return None
+    out = []
+    for k, x in sorted(v.__dict__.items()):
+        if not x:
+            continue
+        if hasattr(x, "__dict__"):
+            x = tuple(sorted((a, tuple(b) if isinstance(b, list) else b) for a, b in x.__dict__.items()))
+        out.append((k, x))
+    return tuple(out)
+
+
+def gpos_view(font):
+    view = []
+    for index, lookup in enumerate(font["GPOS"].table.LookupList.Lookup):
+        for s in pair_subtables(lookup):
+            if s.Format != 2:
+                view.append((index, "format 1"))
+                continue
+            c1, c2 = {}, {}
+            for g in s.Coverage.glyphs:
+                c1.setdefault(s.ClassDef1.classDefs.get(g, 0), set()).add(g)
+            for g, c in s.ClassDef2.classDefs.items():
+                c2.setdefault(c, set()).add(g)
+            values = {}
+            for i, row in enumerate(s.Class1Record):
+                for j, rec in enumerate(row.Class2Record):
+                    v = (value_view(getattr(rec, "Value1", None)), value_view(getattr(rec, "Value2", None)))
+                    if any(v):
+                        values[(i, j)] = v
+            view.append((index, [sorted(c1[k]) for k in sorted(c1)], [sorted(c2[k]) for k in sorted(c2)], values))
+    return view
+
+
+def check_gpos(cli, font, out_dir, level):
+    o, t = os.path.join(out_dir, "ours.ttf"), os.path.join(out_dir, "theirs.ttf")
+    ok, err = ours(cli, font, ["--gpos-compaction", str(level)], o)
+    if not ok:
+        return f"ours failed: {err}"
+    subprocess.run([sys.executable, "-I", "-m", "fontTools.otlLib.optimize", font, "-o", t, "--gpos-compression-level", str(level)], check=True, capture_output=True)
+    size = lambda p: len(TTFont(p).reader["GPOS"])
+    sizes = f"GPOS {size(font)} -> ours {size(o)}, theirs {size(t)}"
+    a, b = gpos_view(TTFont(o)), gpos_view(TTFont(t))
+    if a == b:
+        return f"equal; {sizes}"
+    if size(o) == size(font) and a == gpos_view(TTFont(font)):
+        return f"kept; {sizes}"
+    first = next((i for i, (x, y) in enumerate(zip(a, b)) if x != y), min(len(a), len(b)))
+    return f"{len(a)} and {len(b)} pair subtables, first difference at subtable {first}; {sizes}"
+
+
 def check_colr(cli, font, out_dir):
     from fontTools.colorLib.builder import buildColrV1
     from fontTools.colorLib.unbuilder import unbuildColrV1
@@ -197,6 +273,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--cli", default="target/release/fontcraft-cli")
     ap.add_argument("--build", type=int, default=0)
+    ap.add_argument("--gpos-level", type=int, default=5)
+    ap.add_argument("--only", default=None, help="run only this step")
     ap.add_argument("out_dir")
     ap.add_argument("paths", nargs="*", default=["corpus"])
     a = ap.parse_args()
@@ -213,6 +291,7 @@ def main():
             tags = set(f.keys())
             store = "GDEF" in tags and getattr(f["GDEF"].table, "VarStore", None) is not None
             colr1 = "COLR" in tags and f["COLR"].version == 1
+            kerning = "GPOS" in tags and has_class_kerning(f)
         except Exception:
             continue
         steps = []
@@ -222,8 +301,11 @@ def main():
             steps.append(("implied", check_implied))
         if store:
             steps.append(("varstore", check_varstore))
+        if kerning:
+            steps.append(("gpos", lambda cli, font, out_dir: check_gpos(cli, font, out_dir, a.gpos_level)))
         if colr1:
             steps.append(("colr", check_colr))
+        steps = [s for s in steps if a.only in (None, s[0])]
         for step, check in steps:
             try:
                 result = check(a.cli, font, a.out_dir)

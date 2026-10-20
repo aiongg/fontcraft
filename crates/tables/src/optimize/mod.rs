@@ -1,5 +1,5 @@
 //! Size optimisation that keeps behaviour (M12.26; rows `optimize`, `font.optimize`). Oracles:
-//! fontTools `otlLib.optimize`, `cffLib.width`, `varLib.varStore`, `varLib.iup`,
+//! fontTools `otlLib.optimize` (its `gpos` module), `cffLib.width`, `varLib.varStore`, `varLib.iup`,
 //! `ttLib.tables._g_l_y_f.dropImpliedOnCurvePoints` and `colorLib`. Subroutinising uses the CFF
 //! subroutiniser of `fontcraft-cff` (M12.25).
 //!
@@ -13,6 +13,7 @@
 //! | `dropImpliedOncurves` | `glyf` (and `gvar`) | removes on-curve points halfway between their off-curve neighbours at every location ([`glyf_gvar`]) | |
 //! | `gvarIup` | `gvar` | keeps only the deltas IUP cannot infer, or writes every delta ([`glyf_gvar`]) | |
 //! | `varstore` | `GDEF`, `GPOS` | merges and packs the shared item variation store again ([`varstore`]) | |
+//! | `gposCompaction` | `GPOS` | splits class-kerning subtables into smaller, denser ones ([`gpos`]); off unless a level is given | `GPOS` read back |
 //! | `colrLayerReuse` | `COLR` | builds the version 1 paint graphs again, sharing layer runs ([`colr`]) | |
 //!
 //! A step whose result is not smaller is not applied, and a table that would come out larger
@@ -24,6 +25,7 @@
 
 pub mod colr;
 pub mod glyf_gvar;
+pub mod gpos;
 pub mod varstore;
 
 pub use glyf_gvar::DeltaMode;
@@ -58,6 +60,8 @@ pub struct OptimizeOptions {
     pub drop_implied_oncurves: bool,
     /// Build a version 1 `COLR` again with shared layers.
     pub colr_layer_reuse: bool,
+    /// Split class-kerning subtables at this level, 1 to 9; 0 leaves them alone.
+    pub gpos_compaction: u8,
 }
 
 impl Default for OptimizeOptions {
@@ -72,6 +76,8 @@ impl Default for OptimizeOptions {
             gvar: Some(DeltaMode::Optimize),
             drop_implied_oncurves: true,
             colr_layer_reuse: true,
+            // The reference tool's level defaults to 0.
+            gpos_compaction: 0,
         }
     }
 }
@@ -80,7 +86,7 @@ impl Default for OptimizeOptions {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OptimizeStep {
     /// `desubroutinize`, `cffWidths`, `subroutinize`, `dropImpliedOncurves`, `gvarIup`,
-    /// `varstore` or `colrLayerReuse`.
+    /// `varstore`, `gposCompaction` or `colrLayerReuse`.
     pub step: &'static str,
     pub table: Tag,
     pub before: usize,
@@ -109,6 +115,9 @@ pub fn optimize(font: &SfntFont, options: &OptimizeOptions) -> Result<OptimizeRe
         && !(1..=MAX_SUBRS_PER_INDEX).contains(&n)
     {
         return Err(TablesError::BadOptions(format!("the subroutine limit must be 1 to {MAX_SUBRS_PER_INDEX}, not {n}")));
+    }
+    if options.gpos_compaction > gpos::MAX_LEVEL {
+        return Err(TablesError::BadOptions(format!("the GPOS compaction level must be 0 to {}, not {}", gpos::MAX_LEVEL, options.gpos_compaction)));
     }
     let keep = WriteOptions { order: TableOrder::Keep };
     let bytes_before = crate::write(font, &keep)?.len();
@@ -143,6 +152,9 @@ pub fn optimize(font: &SfntFont, options: &OptimizeOptions) -> Result<OptimizeRe
             Err(e) => notes.push(format!("GDEF and GPOS: variation store left as it was: {e}")),
         }
     }
+    if options.gpos_compaction > 0 && out.get(*b"GPOS").is_some() {
+        compact_gpos(&mut out, options.gpos_compaction, &mut steps, &mut notes);
+    }
     if options.colr_layer_reuse && out.get(*b"COLR").is_some() {
         match colr::run(&out) {
             Ok(Some(table)) => {
@@ -159,6 +171,29 @@ pub fn optimize(font: &SfntFont, options: &OptimizeOptions) -> Result<OptimizeRe
     }
     let bytes_after = crate::write(&out, &keep)?.len();
     Ok(OptimizeResult { font: out, bytes_before, bytes_after, steps, notes })
+}
+
+/// The `gposCompaction` step, applied when `GPOS` comes out smaller.
+fn compact_gpos(out: &mut SfntFont, level: u8, steps: &mut Vec<OptimizeStep>, notes: &mut Vec<String>) {
+    match gpos::run(out, level) {
+        Ok(Some(c)) => {
+            notes.extend(c.notes);
+            let Some(table) = c.table else { return };
+            let before = out.get(*b"GPOS").map_or(0, <[u8]>::len);
+            let applied = table.len() < before;
+            steps.push(OptimizeStep { step: "gposCompaction", table: *b"GPOS", before, after: table.len(), applied });
+            if applied {
+                out.insert(*b"GPOS", table);
+            } else {
+                notes.push(format!(
+                    "GPOS: splitting {} class-kerning subtables into {} would not make it smaller, so it was kept",
+                    c.split, c.produced
+                ));
+            }
+        }
+        Ok(None) => {}
+        Err(e) => notes.push(format!("GPOS: class kerning left as it was: {e}")),
+    }
 }
 
 /// The `glyf` and `gvar` steps: implied on-curve points, then the `gvar` deltas.

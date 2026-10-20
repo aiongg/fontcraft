@@ -19,8 +19,9 @@ const USAGE: &str = "\
       optimised, the GDEF variation store is merged and COLR layers are shared; naming
       optimisations runs only those. A step that would not make a table smaller is not
       applied. Each output is INPUT.optimized.EXT unless -o, --output-dir or --in-place says
-      otherwise; --report only measures.
-      Not built yet: --for speed, --charstrings and --gpos-compaction above 0.
+      otherwise; --report only measures. --gpos-compaction 1 to 9 splits class-kerning
+      subtables (default 0: left alone).
+      Not built yet: --for speed and --charstrings.
 ";
 
 /// The options, as data (M12.26).
