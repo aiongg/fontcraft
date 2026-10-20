@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1365 rows to check: 2194 guesses and 497 observe steps.**
+**1367 rows to check: 2199 guesses and 498 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,7 +48,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 43 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 5 |
-| **Later milestones (after M6)** | all | **876** |
+| **Later milestones (after M6)** | all | **878** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 86 |
 | Later milestones (after M6) | Edit View: text mode and preview | 26 |
 | Later milestones (after M6) | Components and anchors | 39 |
@@ -60,7 +60,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Interpolation | 72 |
 | Later milestones (after M6) | Hinting | 106 |
 | Later milestones (after M6) | Colour fonts | 60 |
-| Later milestones (after M6) | Files: open, import, export | 61 |
+| Later milestones (after M6) | Files: open, import, export | 63 |
 | Later milestones (after M6) | Settings and the window | 13 |
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 62 |
 | Later milestones (after M6) | Elsewhere | 26 |
@@ -1382,6 +1382,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.fix` (M3, docs, live): Fix Issues
   - Guess: An outline fix on a composite glyph only reports unless `safeOnly` is false (21-qa question 4).
   - Guess: The fixes of M12 run in the three stages and the order of docs/spec/21-qa.md § 5 › Fix calls (glyph data, then layers, then kerning, feature code and hints); no reference tool fixes all of these, so a case where the order changes the result would settle it.
+  - Guess: On a family of files, syncFamilyValues takes the widest vertical metrics and the underline values of the font the check compares the others with, as the source fix does with masters; a reference fixer's output on such a family would settle it.
   - Guess: alignHandles turns both handles onto the line that bisects their two directions, keeping their lengths; a type designer's review of fixed kinks would settle whether one handle should stay put instead.
   - Guess: setGdefClasses makes a glyph that must not be a mark a Symbol when the glyph database classes it as a mark; a review of the fixed glyphs' categories would settle it.
   - Guess: cleanKerning leaves a tabular glyph that is kerned through a group shared with other glyphs in the report, because removing the group pair would change their kerning; an exception pair of zero is the other choice, which a review of fixed fonts would settle.
@@ -1391,7 +1392,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (876)
+## Later milestones (after M6) (878)
 
 ### Edit View: drawing, guides, layers and the Palette (86)
 
@@ -3761,7 +3762,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A strike to remove given without a depth removes every depth of that size, and one to add without a depth is black and white; the secondary reference's dialog lists sizes with their depth, so its behaviour for a bare size would settle it.
   - Guess: Adding a strike the font already has is refused rather than ignored.
 
-### Files: open, import, export (61)
+### Files: open, import, export (63)
 
 - [ ] `export.instanceExportFolder` (behavior, M7, handbook): An instance carrying the Export Folder custom parameter is written to that…
   - Guess: The sub-path is used as written, `..` segments included, as the handbook says; an absolute path, an empty segment, a folder name with a character such as `:` or `\`, or a path of more than 32 segments makes export skip that instance with the reason, one trailing `/` is ignored, and the warnings name every file written outside the export destination; an Export Folder of `../x` and one of `/tmp/x` in the reference app settle it.
@@ -3865,6 +3866,11 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A full-colour Color layer exports as COLR version 1 without any parameter, as both oracles do; the handbook names only SVG for these layers. Settled by exporting the full-colour test font from the reference with no parameters.
   - Guess: A path on a full-colour layer with neither a fill colour nor a gradient, and not a stroke alone, is painted 50 % gray, the colour a new shape gets, and a fill or stroke colour with zero opacity paints nothing; fontc refuses such a path and fontmake strokes it 1 unit wide. Settled by exporting a full-colour path without paint attributes from the reference.
   - Observe: Full-colour font: export with no colour parameters and read it with fontTools; note whether COLR version 1, an SVG table or neither is written.
+- [ ] `color.export.colrGlyphComponent` (behavior, M11, inferred): A component on a full-colour layer whose glyph has full-colour layers of…
+  - Guess: The reference app writes a component of a colour glyph as a PaintColrGlyph of that glyph, as glyphsLib does, rather than as its outline. Settled by exporting a full-colour glyph holding a moved component of another full-colour glyph from the reference and reading its COLR.
+  - Guess: Shapes keep their order on the layer: glyphsLib puts a layer's paths below its components, FontCraft keeps the order of the shapes, as fontc does for master layers. Settled by exporting a full-colour layer with a component below a path from the reference.
+  - Guess: A component whose transform differs between masters is written with the default master's transform; fontmake would write a variable transform. Settled by a variable full-colour font with a moved colour component in the reference.
+  - Observe: Full-colour font: glyph A with a red square, glyph B whose Color layer holds a component of A moved by (100, 50); export and read COLR; note whether B's paint is a PaintTranslate around a PaintColrGlyph of A.
 - [ ] `color.export.colrVersionChoice` (behavior, M11, docs): The compiler writes COLR version 0 when every colour glyph is a…
   - Guess: Solid-only full-colour layers export as COLR version 0, as fontc does, not version 1 as fontmake does. Settled by exporting the full-colour test font with only solid fills from the reference.
   - Observe: Full-colour font with the gradient and stroke paths deleted (solid fills only): export and read COLR; note whether it is version 0 or version 1.
@@ -3894,6 +3900,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: With implied points kept, an on-curve node of a quadratic source contour that lies exactly halfway between its off-curve neighbours is written as implied, because the model's quadratic segments do not tell such a node from an implied point; settled by the same export of a TrueType source with such a node.
 - [ ] `compile.os2WeightAdvice` (behavior, M12, docs): AFDKO's Windows guidance: weight classes 100 and 200 can trigger smeared or…
   - Guess: The project compile checks only the lower limit (a weight class below 250), since it builds one font at a time; checking the bold partner's range needs the family, which a family-level check would settle.
+- [ ] `compile.makeotfOptionPrecedence` (behavior, M12, docs): makeotf reads settings in increasing priority from the fontinfo file, then the…
+  - Guess: makeotf 5.0.1 stops with a Python error on a project file whose kSetOS2Version, kSetfsSelectionBitsOff, MacCmapScriptID or MacCmapLanguageID holds a number (its wrapper passes the number on unconverted, read from its source, not run); FontCraft takes the number as the key documents it. A makeotf release that reads them would settle it.
 - [ ] `glyphsproject` (format, M13, handbook): Glyphs project
   - Observe: Make a Project from the instances test font (two masters, three instances, one with a custom parameter), set an export destination, save it, and send back the `.glyphsproject` file: its keys show where the instances, the link to the source and the destination are stored.
 - [ ] `ufo1` (format, M13, docs): Unified Font Object 1
