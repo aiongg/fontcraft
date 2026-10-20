@@ -218,7 +218,9 @@ pub struct PdfOutlines {
 /// What [`render_pdf`] drew.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PdfRaster {
-    /// The page, rows top to bottom, transparent where nothing is painted.
+    /// The page, rows top to bottom, transparent where nothing is painted. The page's
+    /// bottom-left corner is the image's; when the page's size in pixels is not whole, the part
+    /// pixels lie along the top and right edges.
     pub image: Rgba8,
     /// Pixels per point of the image: the one asked for, or less when the page would have had
     /// more pixels than allowed. An image placed at `72 × pixels_per_point` pixels per inch lands

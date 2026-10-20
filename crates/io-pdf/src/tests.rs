@@ -277,3 +277,19 @@ fn pdf_page_renders_as_an_image() {
     let small = render_pdf(&bytes, 4.0, 200 * 100).unwrap();
     assert_eq!((small.image.width, small.image.height, small.pixels_per_point), (200, 100, 1.0));
 }
+
+#[test]
+fn pdf_page_drawn_smaller_keeps_its_bottom_edge_on_the_image_bottom() {
+    // 100.1 points tall at about half a pixel per point: 49.5 pixel rows in a 50-row image. The
+    // bottom 10 points are black and must reach the image's last row whole, as the traced or
+    // shown image is placed from its bottom-left corner.
+    let page = Object::Array(vec![Object::Integer(0), Object::Integer(0), Object::Integer(20), Object::Real(100.1)]);
+    let bytes = save(document(&["0 0 0 rg 0 0 20 10 re f".as_bytes()], Dictionary::new(), dictionary! { "MediaBox" => page }, false));
+    let out = render_pdf(&bytes, 4.0, 500).unwrap();
+    assert!(out.pixels_per_point < 0.5, "{}", out.pixels_per_point);
+    let (w, h) = (out.image.width as usize, out.image.height as usize);
+    let alpha = |row: usize| out.image.pixels[(row * w + w / 2) * 4 + 3];
+    assert!(alpha(h - 1) >= 250, "the last row is whole: {}", alpha(h - 1));
+    let top = (10.0 * out.pixels_per_point).ceil() as usize;
+    assert_eq!(alpha(h - 1 - top), 0, "nothing above 10 points");
+}

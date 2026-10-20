@@ -43,13 +43,17 @@
 //!   drawn under those clips directly, as are pattern tiles. Each layer, and each clip or mask
 //!   drawn, counts the sprite's pixels against the glyph's work, so masks nested past
 //!   [`MAX_LAYER_DEPTH`] layers, or clips past [`MAX_CLIP_DEPTH`], refuse the glyph.
-//! - A group with filters is drawn on a layer of its own too; its filters run on that layer
-//!   (module `filter`) before its clips and masks, and its opacity applies last. The sprite
-//!   covers the last filter's region, where a blur or an offset can reach. A filter that cannot
-//!   be drawn leaves the group unfiltered, with a line in [`GlyphRaster::warnings`].
+//! - A group with filters is drawn on a layer of its own too, without the clips of enclosing
+//!   groups; its filters run on that layer (module `filter`), then its clips, masks and opacity
+//!   apply, and last the clips of enclosing groups. The sprite covers what the filters can
+//!   paint: what the group draws grown by how far its blurs and offsets reach, or the whole
+//!   filter region when a primitive paints where its input is clear (a flood), within the
+//!   filter regions. Filters that can paint more than [`MAX_FILTER_PIXELS`] pixels, that cannot
+//!   be drawn, or that would take the glyph past its work leave the group unfiltered, with a
+//!   line in [`GlyphRaster::warnings`]; the glyph is not refused for them.
 //! - A document whose root slices its viewport (`preserveAspectRatio` with `slice`) is clipped
-//!   to the em square, the viewport it is fitted to, unless the root's `overflow` is `visible`
-//!   or `auto`.
+//!   to the em square, the viewport it is fitted to, unless the root's `overflow` (its `style`
+//!   property, else its attribute) is `visible` or `auto`.
 //! - Not drawn: embedded images other than PNG and JPEG, `sbix`
 //!   graphic types other than `png `, `jpg ` and `dupe`, and `EBDT` strikes.
 //! - The `sbix` image's bottom left sits at the record's origin offsets from the glyph origin, a
@@ -105,7 +109,7 @@ pub const MAX_SOURCE_BYTES: usize = 64 << 20;
 const MAX_ROOT_ATTRIBUTES: usize = 64;
 /// Samples per side for one sprite pixel when an image is drawn smaller than its pixels.
 const MAX_BITMAP_SAMPLES: u32 = 4;
-/// Most sprite pixels of one SVG filter region; a group with a larger region is drawn unfiltered.
+/// Most sprite pixels SVG filters may paint for one group; a group whose filters can paint more is drawn unfiltered.
 pub const MAX_FILTER_PIXELS: u64 = 1 << 20;
 /// Largest blur standard deviation in sprite pixels; a larger one blurs by this much.
 pub const MAX_BLUR_SIGMA: f64 = 256.0;
@@ -457,6 +461,8 @@ impl PixBox {
 struct Sprite {
     width: u32,
     height: u32,
+    /// Sprite pixels per font unit.
+    scale: f64,
     base: Affine,
     left: i32,
     top: i32,
@@ -480,7 +486,7 @@ fn sprite(rect: Rect, scale: f64) -> Result<Sprite, Refusal> {
         ));
     }
     let base = Affine::translate((-left, -top)) * Affine::scale_non_uniform(scale, -scale);
-    Ok(Sprite { width: w as u32, height: h as u32, base, left: left as i32, top: top as i32 })
+    Ok(Sprite { width: w as u32, height: h as u32, scale, base, left: left as i32, top: top as i32 })
 }
 
 fn budget_for(sprite: &Sprite) -> u64 {
@@ -898,6 +904,8 @@ impl Clip {
 struct Raster<'a, 'f> {
     width: u32,
     height: u32,
+    /// Sprite pixels per font unit.
+    scale: f64,
     base: Affine,
     transforms: Vec<Affine>,
     clips: Vec<Clip>,
@@ -918,6 +926,7 @@ impl<'a, 'f> Raster<'a, 'f> {
         Raster {
             width: sprite.width,
             height: sprite.height,
+            scale: sprite.scale,
             base: sprite.base,
             transforms: Vec::new(),
             clips: Vec::new(),
@@ -1096,12 +1105,31 @@ impl<'a, 'f> Raster<'a, 'f> {
             }
             return;
         }
+        let limit = if group.filters.is_empty() {
+            None
+        } else {
+            match filtered_extent(&group.filters, extent(&group.items, self.scale), self.scale) {
+                // The filters leave nothing.
+                None => return,
+                Some(r) if filter_fits(r, self.scale) => Some(PixBox::of(r, self.ctm(), self.width, self.height)),
+                Some(r) => {
+                    let pixels = r.area() * self.scale * self.scale;
+                    self.warn(format!(
+                        "an SVG filter that can paint {pixels:.0} pixels is drawn unfiltered; at most {MAX_FILTER_PIXELS} are filtered"
+                    ));
+                    None
+                }
+            }
+        };
         if !self.open_layer() {
             return;
         }
+        // A filter reads what its group draws before the clips of enclosing groups, which then
+        // apply to its result.
+        let outer = limit.map(|_| std::mem::take(&mut self.clips));
         self.draw_items(&group.items);
-        for f in &group.filters {
-            self.apply_filter(f);
+        if let Some(limit) = limit {
+            self.apply_filters(&group.filters, limit);
         }
         for clip in &group.clips {
             if let Some(coverage) = self.coverage(clip, None, false) {
@@ -1116,29 +1144,64 @@ impl<'a, 'f> Raster<'a, 'f> {
         if group.opacity < 1.0 {
             self.fade_top(group.opacity);
         }
+        if let Some(outer) = outer {
+            self.clips = outer;
+            self.clip_top();
+        }
         self.close_layer();
     }
 
-    /// Runs `f` on the top layer, or leaves the layer as it is with a warning when the filter's
-    /// region is too large.
-    fn apply_filter(&mut self, f: &SvgFilter) {
+    /// Runs `filters` one after another on the top layer within `limit`, or, with a warning,
+    /// none of them when one cannot be placed, has too large a region, or takes more work than
+    /// the glyph has left.
+    fn apply_filters(&mut self, filters: &[SvgFilter], limit: PixBox) {
         if self.refused.is_some() {
             return;
         }
-        let to_pixels = self.ctm() * f.to_font;
-        if !finite_affine(to_pixels) {
-            return;
+        let mut plans = Vec::with_capacity(filters.len());
+        let mut cost = 0u64;
+        for f in filters {
+            let to_pixels = self.ctm() * f.to_font;
+            if !finite_affine(to_pixels) {
+                return self.warn("an SVG filter cannot be placed on the glyph and is drawn unfiltered".into());
+            }
+            match filter::plan(f, to_pixels, self.width, self.height, limit) {
+                Ok(plan) => {
+                    cost = cost.saturating_add(plan.cost);
+                    plans.push(plan);
+                }
+                Err(warning) => return self.warn(warning),
+            }
         }
-        let plan = match filter::plan(f, to_pixels, self.width, self.height) {
-            Ok(plan) => plan,
-            Err(warning) => return self.warn(warning),
-        };
-        if !self.spend(plan.cost) {
+        if self.work.saturating_add(cost) > self.budget {
+            return self.warn("an SVG filter takes more work than the glyph may take and is drawn unfiltered".into());
+        }
+        if !self.spend(cost) {
             return;
         }
         let width = self.width;
         if let Some(layer) = self.layers.last_mut() {
-            filter::run(f, &plan, layer, width);
+            for (f, plan) in filters.iter().zip(&plans) {
+                filter::run(f, plan, layer, width);
+            }
+        }
+    }
+
+    /// Multiplies the top layer by the coverage of the current clip.
+    fn clip_top(&mut self) {
+        let area = self.area();
+        if self.clips.is_empty() || self.refused.is_some() || !self.spend(area) {
+            return;
+        }
+        let width = (self.width as usize).max(1);
+        let (Some(clip), Some(top)) = (self.clips.last(), self.layers.last_mut()) else { return };
+        for (i, px) in top.as_chunks_mut::<4>().0.iter_mut().enumerate() {
+            let c = clip.coverage((i % width) as u32, (i / width) as u32);
+            if c < 255 {
+                for v in px.iter_mut() {
+                    *v = ((u16::from(*v) * u16::from(c) + 127) / 255) as u8;
+                }
+            }
         }
     }
 
@@ -1572,21 +1635,27 @@ fn drawable_bytes(items: &[Drawable]) -> usize {
         .sum()
 }
 
-/// The area `items` may paint, font units: a group's within its clips and mask regions, a
-/// filtered group's its last filter's region, where its result lies.
-fn extent(items: &[Drawable]) -> Option<Rect> {
+/// The area `items` may paint at `scale` sprite pixels per font unit, font units: a group's
+/// within its clips and mask regions, a filtered group's where its filters can paint
+/// ([`filtered_extent`]), or its unfiltered items' when that is past the filter limit.
+fn extent(items: &[Drawable], scale: f64) -> Option<Rect> {
     items
         .iter()
         .filter_map(|d| match d {
             Drawable::Shape(s) => Some(s.outline.bounding_box()),
             Drawable::Image { place, .. } => Some(place.transform_rect_bbox(unit())),
             Drawable::Group(g) => {
-                let mut r = match g.filters.last() {
-                    Some(f) => Some(f.to_font.transform_rect_bbox(f.region)).filter(|r| finite_rect(*r))?,
-                    None => extent(&g.items)?,
+                let content = extent(&g.items, scale);
+                let mut r = if g.filters.is_empty() {
+                    content?
+                } else {
+                    match filtered_extent(&g.filters, content, scale)? {
+                        r if filter_fits(r, scale) => r,
+                        _ => content?,
+                    }
                 };
                 for clip in &g.clips {
-                    r = r.intersect(extent(clip)?);
+                    r = r.intersect(extent(clip, scale)?);
                 }
                 for mask in &g.masks {
                     r = r.intersect(mask.region.bounding_box());
@@ -1596,6 +1665,33 @@ fn extent(items: &[Drawable]) -> Option<Rect> {
         })
         .filter(|r| has_area(*r))
         .reduce(|a, b| a.union(b))
+}
+
+/// The box, font units, that `filters` run one after another can paint when what they read lies
+/// within `content`: within each filter's region, and within `content` grown by how far the
+/// filters move and spread it ([`filter::reach`]), unless a primitive paints where its inputs
+/// are clear. `None` when that is nothing.
+fn filtered_extent(filters: &[SvgFilter], content: Option<Rect>, scale: f64) -> Option<Rect> {
+    let mut r = content;
+    for f in filters {
+        let region = f.to_font.transform_rect_bbox(f.region);
+        if !finite_rect(region) {
+            return None;
+        }
+        r = match filter::reach(f, scale) {
+            None => Some(region),
+            Some((x, y)) => r.map(|c| c.inflate(x, y).intersect(region)),
+        }
+        .filter(|r| has_area(*r));
+    }
+    r
+}
+
+/// Whether filters that can paint `r` (font units) are run at `scale`: it covers at most
+/// [`MAX_FILTER_PIXELS`] sprite pixels.
+fn filter_fits(r: Rect, scale: f64) -> bool {
+    let pixels = r.area() * scale * scale;
+    pixels.is_finite() && pixels <= MAX_FILTER_PIXELS as f64
 }
 
 /// A glyph's colour source read once: its inflated and parsed `SVG ` document, or the decoded
@@ -1796,10 +1892,21 @@ fn svg_place(fit: Option<Fit>, upem: f64, w: f64, h: f64) -> Option<Affine> {
     finite_affine(place).then_some(place)
 }
 
-/// Whether the document's root clips to its viewport: its `overflow` is not `visible` or
-/// `auto`.
+/// Whether the document's root clips to its viewport: its `overflow`, from its `style` when that
+/// sets one, else from the attribute, is not `visible` or `auto`.
 fn root_clips(doc: &[u8]) -> bool {
-    !root_attributes(doc).iter().any(|(n, v)| *n == b"overflow" && matches!(v.trim_ascii(), b"visible" | b"auto"))
+    let attributes = root_attributes(doc);
+    let styled = attributes
+        .iter()
+        .filter(|(n, _)| *n == b"style")
+        .flat_map(|(_, v)| v.split(|b| *b == b';'))
+        .filter_map(|declaration| {
+            let (name, value) = declaration.split_at(declaration.iter().position(|b| *b == b':')?);
+            name.trim_ascii().eq_ignore_ascii_case(b"overflow").then(|| value.get(1..).unwrap_or_default().trim_ascii())
+        })
+        .last();
+    let overflow = styled.or_else(|| attributes.iter().find(|(n, _)| *n == b"overflow").map(|(_, v)| v.trim_ascii()));
+    !overflow.is_some_and(|v| v.eq_ignore_ascii_case(b"visible") || v.eq_ignore_ascii_case(b"auto"))
 }
 
 fn prepare_svg(font: &FontRef, gid: u16) -> (Result<Source, String>, u64) {
@@ -1939,7 +2046,7 @@ fn svg_leaf(paint: &ColorPaint) -> Option<Leaf> {
 }
 
 fn draw_svg(font: &FontRef, source: &Source, options: &ColorOptions) -> Result<Done, Refusal> {
-    let Some(rect) = extent(&source.items) else { return blank(ColorKind::Svg) };
+    let Some(rect) = extent(&source.items, options.scale) else { return blank(ColorKind::Svg) };
     let sprite = sprite(rect, options.scale)?;
     let mut outlines = Outlines::new(font);
     let mut raster = Raster::new(&sprite, &mut outlines, &[], options.text_color);
@@ -2251,6 +2358,13 @@ mod tests {
         raster.image.pixel(px as u32, py as u32).unwrap()
     }
 
+    /// The alpha at pixel `(x, y)` right of and above the glyph origin; 0 outside the sprite.
+    fn alpha_at(raster: &GlyphRaster, x: i32, y: i32) -> u8 {
+        let (px, py) = (x - raster.left, -y - 1 - raster.top);
+        let inside = px >= 0 && py >= 0;
+        if inside { raster.image.pixel(px as u32, py as u32).map_or(0, |p| p[3]) } else { 0 }
+    }
+
     #[test]
     fn a_compressed_svg_document_is_inflated_and_its_view_box_fitted_to_the_em() {
         // The viewBox's top left lands on the glyph origin, a tenth of the em square per user
@@ -2395,7 +2509,7 @@ mod tests {
         assert!(mid[3] > 160 && mid[0] == mid[3] && mid[1] == 0 && mid[2] == 0, "{mid:?}");
         assert!(colour_at(&raster, 32, 25)[3] > 0, "the blur spreads 2 pixels beyond the edge");
         assert!(colour_at(&raster, 25, 18)[3] > 0);
-        assert_eq!(colour_at(&raster, 45, 25)[3], 0, "but not 15");
+        assert_eq!(alpha_at(&raster, 45, 25), 0, "but not 15");
 
         // A shadow of the square's alpha moved 10 pixels right and 10 down, under the square.
         let square = r##"<rect x="100" y="-400" width="100" height="100" fill="#FF0000"/>"##;
@@ -2425,19 +2539,63 @@ mod tests {
         assert_eq!(raster.warnings.len(), 1, "{:?}", raster.warnings);
         assert!(raster.warnings[0].contains("feTurbulence"), "{:?}", raster.warnings);
 
-        // A region of 1,200 × 1,200 sprite pixels is past the filter limit: drawn unfiltered.
+        // A blur in a region of 1,200 × 1,200 sprite pixels runs over the part its square can
+        // reach.
         let doc = r##"<svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 1000 1000"><defs><filter id="f" filterUnits="userSpaceOnUse" x="0" y="-1000" width="1000" height="1000"><feGaussianBlur stdDeviation="50"/></filter></defs><rect x="200" y="-300" width="100" height="100" fill="#FF0000" filter="url(#f)"/></svg>"##;
         let raster = glyph1(sfnt(2, vec![svg_table(doc.as_bytes())]), 1.2);
-        assert_eq!(colour_at(&raster, 300, 300), [255, 0, 0, 255]);
-        assert_eq!(colour_at(&raster, 362, 300)[3], 0, "not blurred");
-        assert!(raster.warnings.iter().any(|w| w.contains("unfiltered")), "{:?}", raster.warnings);
+        let mid = colour_at(&raster, 300, 300);
+        assert!(mid[3] > 64 && mid[0] == mid[3] && mid[1] == 0, "{mid:?}");
+        assert!(alpha_at(&raster, 362, 300) > 0, "blurred");
+        assert!(raster.warnings.is_empty(), "{:?}", raster.warnings);
 
-        // A region far larger than any sprite refuses the glyph before any pixel is drawn.
-        let doc = doc.replace(r#"width="1000" height="1000""#, r#"width="100000000" height="100000000""#);
-        let mut r = ColorRenderer::new(sfnt(2, vec![svg_table(doc.as_bytes())]), &[]).unwrap();
-        let options = ColorOptions { scale: 0.1, palette: 0, text_color: [0, 0, 0, 255] };
-        let Painted::Refused(reason) = r.glyph(1, &options, &mut FrameBudget::frame()) else { panic!("an enormous filter region is drawn") };
-        assert!(reason.contains("pixels"), "{reason}");
+        // A flood over that region would paint past the filter limit: drawn unfiltered.
+        let flood = r##"<feFlood flood-color="#0000FF" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>"##;
+        let flooded = doc.replace(r#"<feGaussianBlur stdDeviation="50"/>"#, flood);
+        let raster = glyph1(sfnt(2, vec![svg_table(flooded.as_bytes())]), 1.2);
+        assert_eq!(colour_at(&raster, 300, 300), [255, 0, 0, 255]);
+        assert_eq!(alpha_at(&raster, 362, 300), 0, "no flood");
+        assert!(raster.warnings.iter().any(|w| w.contains("can paint")), "{:?}", raster.warnings);
+
+        // Regions far larger than any sprite: the blur still runs where the square reaches, and
+        // the flood leaves the square unfiltered rather than hiding the glyph.
+        let huge = |doc: &str| doc.replace(r#"width="1000" height="1000""#, r#"width="100000000" height="100000000""#);
+        let raster = glyph1(sfnt(2, vec![svg_table(huge(doc).as_bytes())]), 0.1);
+        let mid = colour_at(&raster, 25, 25);
+        assert!(mid[3] > 0 && mid[0] == mid[3] && mid[1] == 0, "{mid:?}");
+        assert!(alpha_at(&raster, 31, 25) > 0, "blurred");
+        let raster = glyph1(sfnt(2, vec![svg_table(huge(&flooded).as_bytes())]), 0.1);
+        assert_eq!(colour_at(&raster, 25, 25), [255, 0, 0, 255]);
+        assert!(raster.warnings.iter().any(|w| w.contains("can paint")), "{:?}", raster.warnings);
+
+        // A drop shadow over a million pixels takes more work than the glyph may: drawn
+        // unfiltered rather than refused.
+        let shadow = r##"<feGaussianBlur in="SourceAlpha" stdDeviation="20"/><feOffset dx="30" dy="30" result="o"/><feFlood flood-color="#000000" flood-opacity="0.5"/><feComposite in2="o" operator="in" result="s"/><feMerge><feMergeNode in="s"/><feMergeNode in="SourceGraphic"/></feMerge>"##;
+        let shadowed = doc.replace(r#"<feGaussianBlur stdDeviation="50"/>"#, shadow);
+        let raster = glyph1(sfnt(2, vec![svg_table(shadowed.as_bytes())]), 1.0);
+        assert_eq!(colour_at(&raster, 250, 250), [255, 0, 0, 255]);
+        assert_eq!(alpha_at(&raster, 320, 180), 0, "no shadow");
+        assert!(raster.warnings.iter().any(|w| w.contains("more work")), "{:?}", raster.warnings);
+    }
+
+    #[test]
+    fn enclosing_clips_apply_to_what_a_filter_paints() {
+        // A flood over a 500-unit region inside a group clipped to the left 250 units, beside a
+        // green bar that makes the sprite 500 units wide.
+        let raster = svg_glyph(
+            r##"<defs><clipPath id="c"><rect x="0" y="-500" width="250" height="500"/></clipPath>
+            <filter id="f" filterUnits="userSpaceOnUse" x="0" y="-500" width="500" height="500"><feFlood flood-color="#0000FF"/></filter></defs>
+            <g clip-path="url(#c)"><rect x="0" y="-300" width="100" height="100" fill="#FF0000" filter="url(#f)"/></g>
+            <rect x="450" y="-100" width="50" height="100" fill="#00FF00"/>"##,
+        );
+        assert_eq!(colour_at(&raster, 10, 10), [0, 0, 255, 255]);
+        assert_eq!(colour_at(&raster, 24, 45), [0, 0, 255, 255]);
+        assert_eq!(colour_at(&raster, 47, 5), [0, 255, 0, 255]);
+        assert_eq!((alpha_at(&raster, 30, 25), alpha_at(&raster, 40, 45)), (0, 0), "nothing right of the clip");
+
+        // A sliced document's shadow moved past the em square's right edge stays within the em.
+        let doc = r##"<svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 1000 500" preserveAspectRatio="xMidYMid slice"><defs><filter id="f" filterUnits="userSpaceOnUse" x="0" y="0" width="1000" height="500"><feOffset dx="100" dy="0"/></filter></defs><rect x="600" y="100" width="100" height="100" fill="#00FF00" filter="url(#f)"/></svg>"##;
+        let raster = glyph1(sfnt(2, vec![svg_table(doc.as_bytes())]), 0.1);
+        assert_eq!(ink(&raster), (90, 100, -40, -20));
     }
 
     #[test]
@@ -2452,6 +2610,9 @@ mod tests {
         assert_eq!(ink(&clipped), (0, 100, -100, 0));
         let visible = glyph1(sfnt(2, vec![svg_table(doc(r#" overflow="visible""#).as_bytes())]), 0.1);
         assert_eq!(ink(&visible), (-50, 150, -100, 0));
+        // The style sets overflow too, over the attribute.
+        let styled = glyph1(sfnt(2, vec![svg_table(doc(r#" overflow="hidden" style="stroke: none; overflow : Visible""#).as_bytes())]), 0.1);
+        assert_eq!(ink(&styled), (-50, 150, -100, 0));
     }
 
     #[test]
