@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1367 rows to check: 2199 guesses and 498 observe steps.**
+**1367 rows to check: 2201 guesses and 498 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -1034,6 +1034,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `glyph.removeGlyph` (M4, handbook, live): Remove Glyph
   - Guess: Decompose replaces each component of a removed glyph with that glyph's shapes from the matching layer; components inside it that point at glyphs that stay remain components. Settled by observation.
   - Guess: A metrics key points at a glyph when its formula starts with that glyph's name (=H, =|H, =O-4); the longest leading name that is a glyph wins, since names may contain hyphens. Settled by observation.
+  - Guess: A removed glyph's bitmaps leave every bitmap strike with it, so a new glyph with the same name starts without one. Settled by observing whether the reference app keeps a deleted glyph's bitmap for a new glyph of that name.
 - [ ] `window.glyphInfo` (M4, handbook, live): Glyph Info
   - Guess: The table adds a Description column (ours). Settled by observing the window.
   - Guess: With an empty search field the table lists the whole database in the sorted order, up to the search's limit of 10,000 rows (the CJK ideographs past it are reached by searching). Settled by observing the window when it opens.
@@ -3870,6 +3871,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The reference app writes a component of a colour glyph as a PaintColrGlyph of that glyph, as glyphsLib does, rather than as its outline. Settled by exporting a full-colour glyph holding a moved component of another full-colour glyph from the reference and reading its COLR.
   - Guess: Shapes keep their order on the layer: glyphsLib puts a layer's paths below its components, FontCraft keeps the order of the shapes, as fontc does for master layers. Settled by exporting a full-colour layer with a component below a path from the reference.
   - Guess: A component whose transform differs between masters is written with the default master's transform; fontmake would write a variable transform. Settled by a variable full-colour font with a moved colour component in the reference.
+  - Guess: A component of a colour glyph that Remove Glyphs or Keep Glyphs leaves out is drawn as its outline in its own layer glyph, with a warning, rather than stopping the export. Settled by exporting such a font from the reference with the referenced glyph removed.
   - Observe: Full-colour font: glyph A with a red square, glyph B whose Color layer holds a component of A moved by (100, 50); export and read COLR; note whether B's paint is a PaintTranslate around a PaintColrGlyph of A.
 - [ ] `color.export.colrVersionChoice` (behavior, M11, docs): The compiler writes COLR version 0 when every colour glyph is a…
   - Guess: Solid-only full-colour layers export as COLR version 0, as fontc does, not version 1 as fontmake does. Settled by exporting the full-colour test font with only solid fills from the reference.
