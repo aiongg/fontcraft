@@ -25,7 +25,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_json::value::RawValue;
 
-use crate::capped::{capped_opt, charge_values, with_budget};
+use crate::capped::{Uncounted, capped_opt, charge_values, with_budget};
 pub use crate::error::{MAX_LOG_LINE_CHARS, MAX_LOG_LINES};
 use crate::{Error, Result};
 
@@ -162,8 +162,14 @@ fn log_lines<'de, D: serde::Deserializer<'de>>(d: D) -> std::result::Result<Vec<
 
 /// Parses `raw` items as `T` once all of them, counted together against `left`, fit.
 fn counted<T: serde::de::DeserializeOwned>(raw: &[&RawValue], left: &mut usize) -> Result<Vec<T>> {
-    if !raw.iter().all(|r| charge_values(r, left)) {
-        return Err(Error::Output(format!("the shapes and anchors hold more than {MAX_OUTPUT_VALUES} JSON values")));
+    for r in raw {
+        match charge_values(r, left) {
+            Ok(()) => {}
+            Err(Uncounted::TooMany) => {
+                return Err(Error::Output(format!("the shapes and anchors hold more than {MAX_OUTPUT_VALUES} JSON values")));
+            }
+            Err(Uncounted::TooDeep(e)) => return Err(Error::Output(format!("the shapes and anchors nest too deeply: {e}"))),
+        }
     }
     raw.iter().map(|r| serde_json::from_str::<T>(r.get()).map_err(|e| Error::Output(e.to_string()))).collect()
 }

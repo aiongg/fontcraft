@@ -344,3 +344,25 @@ fn the_registry_is_listed_and_described() {
     assert!(n("outlines") <= n("universal") && n("universal") <= n("strict"));
     assert_eq!(p.iter().filter(|x| x["default"] == json!(true)).count(), 1);
 }
+
+/// A WOFF whose header claims a wrapped font larger than a run may hold is refused by the run's
+/// byte limit before any table is inflated.
+#[test]
+fn a_woff_claiming_a_huge_font_is_refused_before_it_is_unwrapped() {
+    let dir = std::env::temp_dir().join(format!("fontcraft-audit-woff-claim-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("Claim.woff");
+    let mut woff = Vec::new();
+    woff.extend_from_slice(b"wOFF");
+    woff.extend_from_slice(&0x0001_0000u32.to_be_bytes()); // flavor
+    woff.extend_from_slice(&64u32.to_be_bytes()); // length
+    woff.extend_from_slice(&1u16.to_be_bytes()); // numTables
+    woff.extend_from_slice(&0u16.to_be_bytes()); // reserved
+    woff.extend_from_slice(&u32::MAX.to_be_bytes()); // totalSfntSize
+    woff.resize(64, 0);
+    std::fs::write(&path, &woff).unwrap();
+    let mut s = Session::new();
+    let e = s.execute("audit.run", &json!({"target": path, "scope": ["binary"]})).unwrap_err().to_string();
+    assert!(e.contains("bytes; audit fewer fonts at a time"), "{e}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

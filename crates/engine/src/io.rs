@@ -380,7 +380,13 @@ fn follow_references(
         *left = left.checked_sub(1).ok_or_else(|| format!("{} refers to more than {MAX_REFERENCES} files", path.display()))?;
         admit(p)
     };
-    if !path.is_dir() {
+    let Ok(meta) = std::fs::metadata(path) else { return Ok(()) };
+    if !meta.is_dir() {
+        // A named pipe or a device refers to nothing, and opening one can wait for a writer
+        // forever.
+        if !meta.is_file() {
+            return Ok(());
+        }
         // A compiled font refers to nothing; a few bytes tell, where opening it would decompile it.
         let mut head = Vec::new();
         let Ok(file) = std::fs::File::open(path) else { return Ok(()) };
@@ -820,6 +826,45 @@ mod tests {
         let (font, _) = open(&path, None).unwrap();
         assert!(font.glyphs.iter().any(|g| g.name == "A"));
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A link inside a folder is not followed, whether it leads to a folder or a file, so a
+    /// package cannot make a read reach outside it.
+    #[cfg(unix)]
+    #[test]
+    fn folder_links_are_not_followed() {
+        let base = std::env::temp_dir().join(format!("fontcraft-read-folder-links-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(base.join("pkg")).unwrap();
+        std::fs::create_dir_all(base.join("outside/glyphs")).unwrap();
+        std::fs::write(base.join("pkg/metainfo.plist"), "in").unwrap();
+        std::fs::write(base.join("outside/glyphs/a.glif"), "out").unwrap();
+        std::fs::write(base.join("outside/secret"), "out").unwrap();
+        std::os::unix::fs::symlink(base.join("outside/glyphs"), base.join("pkg/glyphs")).unwrap();
+        std::os::unix::fs::symlink(base.join("outside/secret"), base.join("pkg/secret")).unwrap();
+        let files = read_folder(&base.join("pkg")).unwrap();
+        assert_eq!(files.keys().collect::<Vec<_>>(), ["metainfo.plist"]);
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    /// Checking the references of a named pipe returns at once: opening it would wait for a
+    /// writer.
+    #[cfg(unix)]
+    #[test]
+    fn a_named_pipe_refers_to_nothing() {
+        let dir = std::env::temp_dir().join(format!("fontcraft-references-fifo-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let fifo = dir.join("Font.designspace");
+        assert!(std::process::Command::new("mkfifo").arg(&fifo).status().unwrap().success());
+        let mut seen = Vec::new();
+        check_references(&fifo, &mut |p| {
+            seen.push(p.to_path_buf());
+            Ok(())
+        })
+        .unwrap();
+        assert!(seen.is_empty(), "{seen:?}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

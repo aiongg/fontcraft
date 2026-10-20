@@ -181,7 +181,7 @@ pub struct Plan {
     pub missing_unicodes: Vec<u32>,
     /// Charstring operations left of the font's `MAX_FONT_CHARSTRING_OPS` after the
     /// closure; the `.notdef` width scan takes from it.
-    pub charstring_ops_left: usize,
+    pub(crate) charstring_ops_left: usize,
     pub options: SubsetOptions,
     /// What the table modules tell the person, one sentence each (see
     /// [`SubsetResult::warnings`]).

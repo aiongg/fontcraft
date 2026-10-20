@@ -258,7 +258,7 @@ fn file_access_subset_output_beside_an_input_in_the_read_root_is_refused() {
 
 #[cfg(unix)]
 #[test]
-fn file_access_audit_folder_link_out_of_the_read_root_is_refused() {
+fn file_access_audit_folder_link_out_of_the_read_root_is_skipped_with_a_note() {
     let (base, roots) = folders("audit-link");
     let fonts = base.join("in/fonts");
     std::fs::create_dir_all(&fonts).unwrap();
@@ -269,8 +269,11 @@ fn file_access_audit_folder_link_out_of_the_read_root_is_refused() {
         let r = run(&mut s, "audit.run", json!({"target": fonts, "scope": ["binary"]}));
         assert_eq!(r["target"]["fonts"].as_array().unwrap().len(), 1);
         std::os::unix::fs::symlink(base.join("outside/Secret.ttf"), fonts.join("Secret.ttf")).unwrap();
-        let e = refused(&mut s, "audit.run", json!({"target": fonts, "scope": ["binary"]}));
-        assert!(e.contains("outside the read root") && e.contains("Secret.ttf"), "{e}");
+        // The rest of the folder is still audited; the link is named in the run's warnings.
+        let r = run(&mut s, "audit.run", json!({"target": fonts, "scope": ["binary"]}));
+        assert_eq!(r["target"]["fonts"].as_array().unwrap().len(), 1, "{r}");
+        let warnings = r["warnings"].to_string();
+        assert!(warnings.contains("outside the read root") && warnings.contains("Secret.ttf"), "{warnings}");
     });
     let _ = std::fs::remove_dir_all(&base);
 }

@@ -78,11 +78,25 @@ pub(crate) fn capped_opt<'de, D: Deserializer<'de>, T: serde::Deserialize<'de>>(
     d.deserialize_option(V(PhantomData))
 }
 
+/// Why [`charge_values`] stopped before the end of a value.
+#[derive(Debug)]
+pub(crate) enum Uncounted {
+    /// `left` ran out.
+    TooMany,
+    /// The value nests deeper than the JSON reader's depth limit (128 levels).
+    TooDeep(String),
+}
+
 /// Takes from `left` one for every JSON value in `raw`: the value itself and each list item and
-/// object entry at any depth. False when `left` runs out before the end; nothing is built.
-pub(crate) fn charge_values(raw: &RawValue, left: &mut usize) -> bool {
+/// object entry at any depth. Nothing is built.
+pub(crate) fn charge_values(raw: &RawValue, left: &mut usize) -> Result<(), Uncounted> {
     let mut d = serde_json::Deserializer::from_str(raw.get());
-    Counter(left).deserialize(&mut d).is_ok()
+    Counter(left).deserialize(&mut d).map_err(|e| match e.classify() {
+        // The counter's own error; `raw` is already known to be valid JSON, so any other error is
+        // the reader's depth limit.
+        serde_json::error::Category::Data => Uncounted::TooMany,
+        _ => Uncounted::TooDeep(e.to_string()),
+    })
 }
 
 struct Counter<'b>(&'b mut usize);
