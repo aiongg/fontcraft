@@ -41,6 +41,7 @@
 //! | [`diff`] | font diff | M12.32 |
 //! | [`variations`], [`variations_model`] | variation utilities | M12.33, M12.34 |
 //! | [`patch`] | table patches for audit fixes | M12.61 |
+//! | [`embedded_bitmaps`] | `EBDT` and `EBLC` from the model's strikes, bitmap-only fonts | M13.55c |
 #![forbid(unsafe_code)]
 
 pub mod collection;
@@ -49,6 +50,7 @@ pub mod curves;
 pub mod dehint;
 pub mod diff;
 pub mod edit;
+pub mod embedded_bitmaps;
 mod error;
 pub mod fea_write;
 pub mod features;
