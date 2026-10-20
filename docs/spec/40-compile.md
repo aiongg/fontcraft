@@ -688,13 +688,14 @@ causes; none comes from the handbook's keys, which no corpus instance at a maste
 | Family, style, PostScript and style-map names | the `<instance>` element; style-map names it leaves out are ufo2ft's fallbacks from the style name |
 | Names of one style in the masters' UFOs (PostScript, full, typographic, WWS, compatible, unique id, style-map) | left out, unless the source has one master and the instance sits at it |
 | Other font information | the default source's; numbers interpolated over the masters |
+| PostScript weight name, between masters | from the interpolated weight class, rounded to hundreds (fontMath's names, `Thin` to `Black`) |
+| PANOSE, between masters | the digits every source with PANOSE shares, 0 where they differ; none when all are 0 or the default source has none |
+| Embedding type, underline thickness and position | glyphsLib's `[3]`, 50 and -100 where no source states them |
 | `usWeightClass`, `usWidthClass` | the user location on a `wght` or `wdth` axis (weight truncated, width the nearest class), over the masters' classes; the instance's own parameters win |
-| `<rules>` the reader does not make alternate layers | glyphs swapped where a rule holds at the instance's design location; in a variable font, feature variations under the lib key's first tag, `rclt` for `processing="last"`, else `rvrn` |
+| `<rules>` the reader does not make alternate layers | glyphs swapped where a rule holds at the instance's design location; in a variable font, feature variations under each tag of the lib key, `rclt` for `processing="last"`, else `rvrn` |
 
 One case is known to differ: a single-source designspace whose instance states no style-map
-names takes ufo2ft's fallbacks, where fontmake keeps the UFO's own style-map names. A
-`featureVarsFeatureTag` lib key that lists several tags gives the first only; fontTools registers
-the rules under each.
+names takes ufo2ft's fallbacks, where fontmake keeps the UFO's own style-map names.
 
 **Against the handbook.** TrueType composites with overlapping or transformed components stay
 composites by default, as fontc and fontmake keep them. The texts of the Keep Overlapping

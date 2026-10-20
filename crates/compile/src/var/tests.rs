@@ -354,6 +354,27 @@ fn alternate_layers_become_glyphs_switched_by_rvrn() {
     assert_eq!(variation_subs(&build(&f, None), 1.0)[0].0, "rclt");
 }
 
+/// A comma-separated feature list (the designspace lib key fontTools reads, which glyphsLib fills
+/// from the parameter): every feature gets the record's lookups, in one record per region, as
+/// fontmake builds the CustomFeatures source.
+#[test]
+fn a_feature_list_gives_each_feature_the_variation_lookups() {
+    let mut f = with_alternates();
+    Arc::make_mut(&mut f.info).params.0.push(Param::new(featvar::FEATURE_PARAMETER, fontcraft_model::plist::Value::String("salt, rclt,salt".into())));
+    let v = build(&f, None);
+    let font = FontRef::new(&v.compiled.bytes).unwrap();
+    let gsub = font.gsub().unwrap();
+    let tags: Vec<String> = gsub.feature_list().unwrap().feature_records().iter().map(|r| r.feature_tag().to_string()).collect();
+    assert_eq!(tags, ["rclt", "salt"]);
+    assert_eq!(gsub.lookup_list().unwrap().lookup_count(), 1);
+    assert_eq!(gsub.feature_variations().unwrap().unwrap().feature_variation_records().len(), 1);
+    let mut subs = variation_subs(&v, 1.0);
+    subs.sort();
+    let want = |tag: &str| ["a", "c", "d"].map(|p| (tag.to_string(), p.to_string(), format!("{p}.BRACKET.varAlt01")));
+    assert_eq!(subs, [want("rclt"), want("salt")].concat());
+    assert!(variation_subs(&v, 0.5).is_empty());
+}
+
 #[test]
 fn alternate_glyphs_join_feature_code_and_kerning() {
     use fontcraft_features::evaluate::PairEvaluator;

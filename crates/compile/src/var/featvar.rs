@@ -26,14 +26,15 @@
 //!   treat them like any glyph. The parents keep their main sources only.
 //! - The sets' boxes go through `fontcraft_interp::overlay` twice ([`AlternateRules`]), as both
 //!   oracles overlay the rules once when they read the source and again when they build `GSUB`.
-//!   Each record becomes a [`FeatureVariation`] of single substitutions under the feature the
+//!   Each record becomes a [`FeatureVariation`] of single substitutions under the features the
 //!   Feature for Feature Variations parameter names, [`DEFAULT_FEATURE`] when it names none or a
-//!   tag that is not one (`docs/plans/M9.md` § 7 question 2, decided).
+//!   tag that is not one (`docs/plans/M9.md` § 7 question 2, decided). A comma-separated list
+//!   names several features: fontTools gives each the record's lookups ([`feature_tags`]).
 //! - Conditions are in normalized coordinates after `avar`, as `GSUB` stores them.
 //! - The layout stage hands the variations to `fontcraft_fea`, which merges them into the feature
-//!   code's `GSUB`: their lookups go first when the feature is `rvrn` alone and after the code's
-//!   for any other feature, and the records keep the overlay's order (the first that holds
-//!   applies). [`build_gsub`] writes a `GSUB` holding only these lookups, as fontTools'
+//!   code's `GSUB`: their lookups go first when the features are `rvrn` alone and after the code's
+//!   otherwise, and the records keep the overlay's order (the first that holds applies).
+//!   [`build_gsub`] writes a `GSUB` holding only these lookups, as fontTools'
 //!   `addFeatureVariations` does for a font without one.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -64,11 +65,14 @@ pub const FEATURE_PARAMETER: &str = "Feature for Feature Variations";
 /// What an alternate glyph's name adds to its parent's, before the two-digit number.
 pub const BRACKET_INFIX: &str = ".BRACKET.varAlt";
 
+/// The most feature tags one feature-tag list may name.
+pub const MAX_FEATURE_TAGS: usize = 64;
+
 /// One feature variation: where it applies and what it substitutes.
 #[derive(Clone, Debug, PartialEq)]
 pub struct FeatureVariation {
-    /// The feature whose lookups the record replaces.
-    pub tag: Tag,
+    /// The features whose lookups the record replaces, sorted, at least one.
+    pub tags: Vec<Tag>,
     /// `(axis tag, min, max)` in normalized coordinates; all must hold.
     pub conditions: Vec<(Tag, f64, f64)>,
     pub substitutions: Vec<(GlyphId16, GlyphId16)>,
@@ -405,7 +409,8 @@ fn copy_kerning(master: &mut MasterKerning, renames: &[(String, String)], work: 
 /// alternate rules and the feature they go under.
 #[derive(Clone, Debug, PartialEq)]
 pub struct AlternateRules {
-    pub feature: Tag,
+    /// Sorted, at least one.
+    pub features: Vec<Tag>,
     pub axes: VarAxes,
     pub records: Vec<OverlayRecord<Substitutions>>,
 }
@@ -452,12 +457,12 @@ impl AlternateRules {
                 OverlayRecord { region: r.region, payloads: vec![map.into_iter().collect()] }
             })
             .collect();
-        Ok(Some(AlternateRules { feature: feature_tag(font, warnings), axes: VarAxes::from_designspace(designspace)?, records }))
+        Ok(Some(AlternateRules { features: feature_tags(font, warnings), axes: VarAxes::from_designspace(designspace)?, records }))
     }
 
     /// The feature variations with glyph ids from `glyph_order`.
     pub fn variations(&self, glyph_order: &[String]) -> Result<Vec<FeatureVariation>, CompileError> {
-        feature_variations(&self.records, &self.axes, self.feature, glyph_order)
+        feature_variations(&self.records, &self.axes, &self.features, glyph_order)
     }
 }
 
@@ -502,32 +507,42 @@ fn document_rules(font: &Font, designspace: &Designspace, warnings: &mut Vec<Str
     Ok(out)
 }
 
-/// The feature a designspace source's own rules go to: the first tag of fontTools' feature-tag
-/// lib key, else `rclt` for `processing="last"`; `None` when the source has no such rules.
-fn document_feature(font: &Font) -> Option<Tag> {
+/// The features a designspace source's own rules go to: the tags of fontTools' feature-tag lib
+/// key, else `rclt` for `processing="last"`; `None` when the source has no such rules.
+fn document_features(font: &Font) -> Option<Vec<Tag>> {
     let doc = fontcraft_interp::doc_rules::document_rules(font)?;
-    let named = font.info.user_data.get(DOCUMENT_FEATURE_KEY).and_then(|v| v.as_str()).and_then(|t| t.split(',').next()).map(str::trim);
-    match named.filter(|t| !t.is_empty() && t.len() <= 4 && t.bytes().all(|b| (0x20..=0x7e).contains(&b))) {
-        Some(t) => Tag::new_checked(t.as_bytes()).ok(),
-        None => Some(Tag::new(if doc.last { b"rclt" } else { b"rvrn" })),
-    }
+    let named = font.info.user_data.get(DOCUMENT_FEATURE_KEY).and_then(|v| v.as_str()).and_then(parse_tags);
+    Some(named.unwrap_or_else(|| vec![Tag::new(if doc.last { b"rclt" } else { b"rvrn" })]))
 }
 
-/// The designspace lib key naming the feature of its rules (fontTools'
+/// The designspace lib key naming the features of its rules (fontTools'
 /// `FEAVAR_FEATURETAG_LIB_KEY`).
 const DOCUMENT_FEATURE_KEY: &str = "com.github.fonttools.varLib.featureVarsFeatureTag";
 
-/// The feature the font's Feature for Feature Variations parameter names, [`DEFAULT_FEATURE`]
-/// when it names none; a value that is not a feature tag gives the default and a warning.
-pub fn feature_tag(font: &Font, warnings: &mut Vec<String>) -> Tag {
-    let default = Tag::new(b"rvrn");
-    let Some(value) = font.info.params.get(FEATURE_PARAMETER) else { return document_feature(font).unwrap_or(default) };
-    let text = value.as_str().map(str::trim).unwrap_or_default();
-    let tag = (!text.is_empty() && text.len() <= 4 && text.bytes().all(|b| (0x20..=0x7e).contains(&b)))
-        .then(|| Tag::new_checked(text.as_bytes()).ok())
-        .flatten();
-    match tag {
-        Some(tag) => tag,
+/// The tags of a comma-separated list, each trimmed, sorted and without repeats, as fontTools'
+/// `_feature_variations_tags` reads them; `None` when one is not a feature tag, or the list is
+/// empty or names more than [`MAX_FEATURE_TAGS`].
+fn parse_tags(text: &str) -> Option<Vec<Tag>> {
+    let mut tags = Vec::new();
+    for part in text.split(',').map(str::trim) {
+        if tags.len() >= MAX_FEATURE_TAGS || part.is_empty() || part.len() > 4 || !part.bytes().all(|b| (0x20..=0x7e).contains(&b)) {
+            return None;
+        }
+        tags.push(Tag::new_checked(part.as_bytes()).ok()?);
+    }
+    tags.sort();
+    tags.dedup();
+    (!tags.is_empty()).then_some(tags)
+}
+
+/// The features the font's Feature for Feature Variations parameter names (one tag, or a
+/// comma-separated list, which glyphsLib hands on to fontTools as it is), [`DEFAULT_FEATURE`]
+/// when it names none; a value that is not a list of feature tags gives the default and a warning.
+pub fn feature_tags(font: &Font, warnings: &mut Vec<String>) -> Vec<Tag> {
+    let default = vec![Tag::new(b"rvrn")];
+    let Some(value) = font.info.params.get(FEATURE_PARAMETER) else { return document_features(font).unwrap_or(default) };
+    match value.as_str().and_then(parse_tags) {
+        Some(tags) => tags,
         None => {
             warnings.push(format!("the {FEATURE_PARAMETER} parameter does not name a feature tag; alternate layers were put in `{DEFAULT_FEATURE}`"));
             default
@@ -536,7 +551,7 @@ pub fn feature_tag(font: &Font, warnings: &mut Vec<String>) -> Tag {
 }
 
 /// The feature variations of `font` in `designspace`: [`alternate_rules`] overlaid, under the
-/// feature [`feature_tag`] gives. Empty when no exported glyph has alternate layers.
+/// features [`feature_tags`] gives. Empty when no exported glyph has alternate layers.
 pub fn from_font(
     font: &Font,
     designspace: &Designspace,
@@ -549,7 +564,7 @@ pub fn from_font(
         return Ok(Vec::new());
     }
     let records = overlay_substitutions(&rules, MAX_OVERLAY_WORK)?;
-    feature_variations(&records, axes, feature_tag(font, warnings), glyph_order)
+    feature_variations(&records, axes, &feature_tags(font, warnings), glyph_order)
 }
 
 /// The tag of the axis at `index` in `axes`.
@@ -572,15 +587,19 @@ fn glyph_id(ids: &HashMap<&str, usize>, name: &str) -> Result<GlyphId16, Compile
 }
 
 /// The feature variations of the overlay's `records` (each payload a list of (glyph, alternate
-/// glyph) names), with glyph ids from `glyph_order` and condition axes from `axes`.
+/// glyph) names), with glyph ids from `glyph_order` and condition axes from `axes`, each under
+/// `features` (sorted and without repeats).
 pub fn feature_variations(
     records: &[OverlayRecord<Vec<(String, String)>>],
     axes: &VarAxes,
-    feature: Tag,
+    features: &[Tag],
     glyph_order: &[String],
 ) -> Result<Vec<FeatureVariation>, CompileError> {
     if records.len() > MAX_OVERLAY_RECORDS {
         return Err(table_error(format!("more than {MAX_OVERLAY_RECORDS} feature variation records")));
+    }
+    if features.is_empty() || features.len() > MAX_FEATURE_TAGS {
+        return Err(table_error(format!("feature variations need 1 to {MAX_FEATURE_TAGS} features")));
     }
     let ids = glyph_ids(glyph_order);
     let mut out = Vec::with_capacity(records.len());
@@ -599,18 +618,19 @@ pub fn feature_variations(
             map.insert(glyph.as_str(), alternate.as_str());
         }
         let substitutions = map.into_iter().map(|(g, a)| Ok((glyph_id(&ids, g)?, glyph_id(&ids, a)?))).collect::<Result<Vec<_>, CompileError>>()?;
-        out.push(FeatureVariation { tag: feature, conditions, substitutions });
+        out.push(FeatureVariation { tags: features.to_vec(), conditions, substitutions });
     }
     Ok(out)
 }
 
 /// A `GSUB` holding only `variations`, whose conditions name axes of `axes` and whose glyph ids
-/// index `glyph_order`; `None` when there are none. The variations must share one feature.
+/// index `glyph_order`; `None` when there are none. The variations must share their features,
+/// each of which gets every record's lookups.
 pub fn build_gsub(variations: &[FeatureVariation], axes: &VarAxes, glyph_order: &[String]) -> Result<Option<Gsub>, CompileError> {
     let Some(first) = variations.first() else { return Ok(None) };
-    let feature = first.tag;
-    if variations.iter().any(|v| v.tag != feature) {
-        return Err(table_error("feature variations for more than one feature"));
+    let features = &first.tags;
+    if features.is_empty() || features.len() > MAX_FEATURE_TAGS || variations.iter().any(|v| &v.tags != features) {
+        return Err(table_error("feature variations for different features"));
     }
     if variations.len() > MAX_OVERLAY_RECORDS {
         return Err(table_error(format!("more than {MAX_OVERLAY_RECORDS} feature variation records")));
@@ -678,13 +698,16 @@ pub fn build_gsub(variations: &[FeatureVariation], axes: &VarAxes, glyph_order: 
             .map(|p| lookup_index.get(&sorted(p)).copied().ok_or_else(|| table_error("a feature variation lost its lookup")))
             .collect::<Result<Vec<u16>, _>>()?;
         let condition_set = (!conditions.is_empty()).then(|| ConditionSet::new(conditions));
-        let substitution = FeatureTableSubstitution::new(vec![FeatureTableSubstitutionRecord::new(0, Feature::new(None, lookup_indices))]);
-        fv_records.push(FeatureVariationRecord::new(condition_set, Some(substitution)));
+        // `features` is sorted, so feature index `i` is its `i`th tag.
+        let substitutions =
+            (0u16..).zip(features).map(|(i, _)| FeatureTableSubstitutionRecord::new(i, Feature::new(None, lookup_indices.clone()))).collect();
+        fv_records.push(FeatureVariationRecord::new(condition_set, Some(FeatureTableSubstitution::new(substitutions))));
     }
 
-    let script = Script::new(Some(LangSys::new(vec![0])), Vec::new());
+    let indices: Vec<u16> = (0u16..).zip(features).map(|(i, _)| i).collect();
+    let script = Script::new(Some(LangSys::new(indices)), Vec::new());
     let script_list = ScriptList::new(vec![ScriptRecord::new(Tag::new(b"DFLT"), script)]);
-    let feature_list = FeatureList::new(vec![FeatureRecord::new(feature, Feature::new(None, Vec::new()))]);
+    let feature_list = FeatureList::new(features.iter().map(|t| FeatureRecord::new(*t, Feature::new(None, Vec::new()))).collect());
     let mut gsub = Gsub::new(script_list, feature_list, SubstitutionLookupList::new(lookups));
     gsub.feature_variations = FeatureVariations::new(fv_records).into();
     Ok(Some(gsub))
@@ -766,12 +789,12 @@ mod tests {
     fn the_feature_parameter_names_the_feature() {
         let mut font = Font::new("Feature");
         let mut warnings = Vec::new();
-        assert_eq!(feature_tag(&font, &mut warnings), Tag::new(b"rvrn"));
+        assert_eq!(feature_tags(&font, &mut warnings), vec![Tag::new(b"rvrn")]);
         Arc::make_mut(&mut font.info).params.set(FEATURE_PARAMETER, fontcraft_model::plist::Value::String("rlig".into()));
-        assert_eq!(feature_tag(&font, &mut warnings), Tag::new(b"rlig"));
+        assert_eq!(feature_tags(&font, &mut warnings), vec![Tag::new(b"rlig")]);
         assert!(warnings.is_empty());
         Arc::make_mut(&mut font.info).params.set(FEATURE_PARAMETER, fontcraft_model::plist::Value::String("not a tag".into()));
-        assert_eq!(feature_tag(&font, &mut warnings), Tag::new(b"rvrn"));
+        assert_eq!(feature_tags(&font, &mut warnings), vec![Tag::new(b"rvrn")]);
         assert_eq!(warnings.len(), 1);
     }
 
@@ -785,14 +808,14 @@ mod tests {
             record(&[(1, 0.0, 1.0), (0, 0.8, 1.0)], &[&[("a", "a.BRACKET.varAlt01")], &[("a", "a.BRACKET.varAlt02")]]),
             record(&[(0, 0.5, 0.8)], &[&[("a", "a.BRACKET.varAlt01")]]),
         ];
-        let out = feature_variations(&records, &axes, Tag::new(b"rvrn"), &glyphs).unwrap();
+        let out = feature_variations(&records, &axes, &[Tag::new(b"rvrn")], &glyphs).unwrap();
         assert_eq!(out.len(), 2);
         assert_eq!(out[0].conditions, vec![(Tag::new(b"wdth"), 0.0, 1.0), (Tag::new(b"wght"), 0.8, 1.0)]);
         assert_eq!(out[0].substitutions, vec![(GlyphId16::new(1), GlyphId16::new(3))]);
         assert_eq!(out[1].substitutions, vec![(GlyphId16::new(1), GlyphId16::new(2))]);
-        assert!(out.iter().all(|v| v.tag == Tag::new(b"rvrn")));
+        assert!(out.iter().all(|v| v.tags == [Tag::new(b"rvrn")]));
 
-        let missing = feature_variations(&records, &axes, Tag::new(b"rvrn"), &order(&[".notdef", "a"]));
+        let missing = feature_variations(&records, &axes, &[Tag::new(b"rvrn")], &order(&[".notdef", "a"]));
         assert!(matches!(missing, Err(CompileError::Table { .. })), "{missing:?}");
     }
 
@@ -807,8 +830,8 @@ mod tests {
         let (dollar, cent, cent_alt, dollar_alt) = (GlyphId16::new(1), GlyphId16::new(2), GlyphId16::new(3), GlyphId16::new(4));
         let wght = Tag::new(b"wght");
         let variations = vec![
-            FeatureVariation { tag: Tag::new(b"rvrn"), conditions: vec![(wght, 0.5, 1.0)], substitutions: vec![(dollar, dollar_alt)] },
-            FeatureVariation { tag: Tag::new(b"rvrn"), conditions: vec![(wght, 0.25, 1.0)], substitutions: vec![(cent, cent_alt)] },
+            FeatureVariation { tags: vec![Tag::new(b"rvrn")], conditions: vec![(wght, 0.5, 1.0)], substitutions: vec![(dollar, dollar_alt)] },
+            FeatureVariation { tags: vec![Tag::new(b"rvrn")], conditions: vec![(wght, 0.25, 1.0)], substitutions: vec![(cent, cent_alt)] },
         ];
         let gsub = build_gsub(&variations, &axes, &glyphs).unwrap().unwrap();
         assert_eq!(gsub.feature_list.feature_records.len(), 1);
@@ -825,7 +848,7 @@ mod tests {
         assert_eq!(lookups_of(&records[1]), vec![0]);
 
         assert_eq!(build_gsub(&[], &axes, &glyphs).unwrap(), None);
-        let mixed = vec![variations[0].clone(), FeatureVariation { tag: Tag::new(b"rlig"), ..variations[1].clone() }];
+        let mixed = vec![variations[0].clone(), FeatureVariation { tags: vec![Tag::new(b"rlig")], ..variations[1].clone() }];
         assert!(build_gsub(&mixed, &axes, &glyphs).is_err());
     }
 
@@ -835,8 +858,11 @@ mod tests {
     fn a_record_without_conditions_applies_everywhere() {
         let axes = axes(&["wght"]);
         let glyphs = order(&[".notdef", "A", "A.BRACKET.varAlt01"]);
-        let variations =
-            vec![FeatureVariation { tag: Tag::new(b"rvrn"), conditions: Vec::new(), substitutions: vec![(GlyphId16::new(1), GlyphId16::new(2))] }];
+        let variations = vec![FeatureVariation {
+            tags: vec![Tag::new(b"rvrn")],
+            conditions: Vec::new(),
+            substitutions: vec![(GlyphId16::new(1), GlyphId16::new(2))],
+        }];
         let gsub = build_gsub(&variations, &axes, &glyphs).unwrap().unwrap();
         let records = &fv(&gsub).feature_variation_records;
         assert_eq!(records.len(), 1);
@@ -906,7 +932,7 @@ mod tests {
         let mut warnings = Vec::new();
         let variations = from_font(&font, &designspace, &axes, &glyphs, &mut warnings).unwrap();
         assert_eq!(variations.len(), 1);
-        assert_eq!(variations[0].tag, Tag::new(b"rvrn"));
+        assert_eq!(variations[0].tags, [Tag::new(b"rvrn")]);
         let a = glyphs.iter().position(|g| g == "a").unwrap();
         let alt = glyphs.iter().position(|g| g == "a.BRACKET.varAlt01").unwrap();
         assert_eq!(variations[0].substitutions, vec![(GlyphId16::new(a as u16), GlyphId16::new(alt as u16))]);

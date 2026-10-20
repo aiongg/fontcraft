@@ -188,7 +188,12 @@ fn add_feature_variations(builder: &mut FeatureBuilder, generated: &GeneratedLoo
             };
             ids.push(id);
         }
-        conditions.push((condition_set(&v.conditions, &generated.axes), ids));
+        let set = condition_set(&v.conditions, &generated.axes);
+        // A record under several features comes as one entry per feature, side by side.
+        if conditions.last().is_some_and(|(last, last_ids)| *last == set && *last_ids == ids) {
+            continue;
+        }
+        conditions.push((set, ids));
     }
     builder.add_feature_variations(tags, conditions);
 }

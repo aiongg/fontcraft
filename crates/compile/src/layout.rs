@@ -346,13 +346,19 @@ pub fn build(input: &LayoutInput, opts: &LayoutOptions, warnings: &mut Vec<Strin
     // The alternate layers' substitutions, merged into the code's `GSUB` by fea-rs.
     if let Some(variable) = input.variable {
         if let Some(alternates) = variable.alternates {
+            // One entry per feature of a record, side by side: fea-rs gives every record to the
+            // union of the entries' features, and the provider merges the repeats.
             generated_lookups.feature_variations = alternates
                 .variations(&names)?
                 .into_iter()
-                .map(|v| fontcraft_fea::FeatureVariation {
-                    tag: v.tag,
-                    conditions: v.conditions.into_iter().map(|(axis, min, max)| fontcraft_fea::Condition { axis, min, max }).collect(),
-                    substitutions: v.substitutions,
+                .flat_map(|v| {
+                    let conditions: Vec<fontcraft_fea::Condition> =
+                        v.conditions.iter().map(|&(axis, min, max)| fontcraft_fea::Condition { axis, min, max }).collect();
+                    v.tags.into_iter().map(move |tag| fontcraft_fea::FeatureVariation {
+                        tag,
+                        conditions: conditions.clone(),
+                        substitutions: v.substitutions.clone(),
+                    })
                 })
                 .collect();
         }
