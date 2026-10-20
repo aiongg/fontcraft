@@ -11,9 +11,12 @@
 //! As in fontTools' `_merge_TTHinting` (`varLib/__init__.py`, MIT; fontmake runs it), deltas are
 //! rounded half to even one region at a time, each later region taken from the rounded earlier
 //! ones, and a region whose deltas are all zero is left out; write-fonts chooses between all
-//! entries and a sparse point list per tuple. Masters at the default's location, or at one an
-//! earlier master took, add no region. Intermediate (brace) layers have no control values of
-//! their own and add none either.
+//! entries and a sparse point list per tuple. A master with Dehint on has no `cvt ` and adds no
+//! region, the way fontTools treats a master without one as sparse; the regions come from the
+//! other masters. Masters at the default's location, or at one an earlier master took, add no
+//! region either, with a warning when their values differ from the earlier master's (fontTools
+//! refuses two masters at one location). Intermediate (brace) layers have no control values of
+//! their own and add none.
 //!
 //! No `cvar` is written, with a warning, when the masters' values do not line up: a master with a
 //! different number of entries, zones or stems in a different order, a different source (cvt
@@ -54,9 +57,9 @@ struct MasterValues {
 }
 
 /// The control values of master `master`, chosen as [`crate::tt_hints::tt_hinting`] chooses the
-/// default master's. `win_metrics` are the default master's, so the zones Windows
-/// compatibility adds do not vary.
-fn master_values(source: &Font, master: &str, options: &Options, win_metrics: (f64, f64)) -> Result<MasterValues, String> {
+/// default master's, or `None` when Dehint leaves the master without TrueType hinting.
+/// `win_metrics` are the default master's, so the zones Windows compatibility adds do not vary.
+fn master_values(source: &Font, master: &str, options: &Options, win_metrics: (f64, f64)) -> Result<Option<MasterValues>, String> {
     let mut settings = HintSettings::for_master(source, master).map_err(|e| e.to_string())?;
     let names = |s: &HintSettings, family: &[TtZone]| -> Vec<String> {
         let mut out: Vec<String> = s.tt_zones.iter().map(|z| format!("zone {}", z.name)).collect();
@@ -65,7 +68,9 @@ fn master_values(source: &Font, master: &str, options: &Options, win_metrics: (f
         out
     };
     if autohinted(&settings, options) {
-        let auto = AutoSetup::new(&settings, &mut Vec::new()).ok_or("Dehint is on")?;
+        let Some(auto) = AutoSetup::new(&settings, &mut Vec::new()) else {
+            return Ok(None);
+        };
         drop_unmeasured_zones(source, &mut settings);
         if auto.options.windows_compatibility {
             let (ascent, descent) = win_metrics;
@@ -81,14 +86,14 @@ fn master_values(source: &Font, master: &str, options: &Options, win_metrics: (f
         values.extend(extra);
         let mut layout = names(&settings, &family);
         layout.insert(0, "autohinter".into());
-        return Ok(MasterValues { values, layout });
+        return Ok(Some(MasterValues { values, layout }));
     }
     if imported(&settings) {
-        return Ok(MasterValues { values: settings.cvt.unwrap_or_default(), layout: vec!["cvt Table".into()] });
+        return Ok(Some(MasterValues { values: settings.cvt.unwrap_or_default(), layout: vec!["cvt Table".into()] }));
     }
     let family = family_tt_zones(source).map_err(|e| e.to_string())?;
     let (_, values) = control_values(&settings, &family).map_err(|e| e.to_string())?;
-    Ok(MasterValues { values, layout: names(&settings, &family) })
+    Ok(Some(MasterValues { values, layout: names(&settings, &family) }))
 }
 
 /// The `cvar` table of a variable font whose `cvt ` is `written`, or `None` when no master's
@@ -111,7 +116,8 @@ pub(crate) fn font_cvar(
         None
     };
     let origin = match master_values(source, &masters.origin, options, win_metrics) {
-        Ok(v) => v,
+        Ok(Some(v)) => v,
+        Ok(None) => return left_out("the default master has Dehint on".into()),
         Err(e) => return left_out(format!("the default master's control values cannot be read: {e}")),
     };
     if origin.values != written {
@@ -121,7 +127,9 @@ pub(crate) fn font_cvar(
     for (id, location) in &masters.masters {
         let name = source.master(id).map_or(id.as_str(), |m| m.name.as_str());
         let values = match master_values(source, id, options, win_metrics) {
-            Ok(v) => v,
+            Ok(Some(v)) => v,
+            // Sparse, as in fontTools: the other masters still vary the values.
+            Ok(None) => continue,
             Err(e) => return left_out(format!("the control values of master `{name}` cannot be read: {e}")),
         };
         if values.layout != origin.layout || values.values.len() != origin.values.len() {
@@ -129,15 +137,19 @@ pub(crate) fn font_cvar(
         }
         sources.push((location.clone(), values.values));
     }
-    match build_cvar(masters.axis_count, written, &sources) {
+    let mut notes = Vec::new();
+    let table = match build_cvar(masters.axis_count, written, &sources, &mut notes) {
         Ok(table) => table,
         Err(e) => left_out(e),
-    }
+    };
+    warnings.extend(notes);
+    table
 }
 
 /// The `cvar` table for `default` (the `cvt ` written) and each master's values at its
-/// normalized location, or `None` when no master differs.
-pub fn build_cvar(axis_count: u16, default: &[i16], masters: &[(Vec<f64>, Vec<i16>)]) -> Result<Option<Vec<u8>>, String> {
+/// normalized location, or `None` when no master differs. A master at a location already taken
+/// is left out, with a warning in `warnings` when its values differ.
+pub fn build_cvar(axis_count: u16, default: &[i16], masters: &[(Vec<f64>, Vec<i16>)], warnings: &mut Vec<String>) -> Result<Option<Vec<u8>>, String> {
     if default.len() > MAX_CVAR_ENTRIES {
         return Err(format!("{} control values; `cvar` varies at most {MAX_CVAR_ENTRIES}", default.len()));
     }
@@ -151,7 +163,14 @@ pub fn build_cvar(axis_count: u16, default: &[i16], masters: &[(Vec<f64>, Vec<i1
         if cvt.len() != default.len() {
             return Err(format!("a master has {} control values; the default master has {}", cvt.len(), default.len()));
         }
-        if locations.iter().any(|l| l == location) {
+        if let Some(i) = locations.iter().position(|l| l == location) {
+            let earlier = values.get(i).is_some_and(|e| e.iter().zip(cvt).all(|(a, b)| *a == f64::from(*b)));
+            if !earlier {
+                let whose = if i == 0 { "the default master's" } else { "an earlier master's" };
+                warnings.push(format!(
+                    "a master at normalized location {location:?} shares {whose} location but has different control values; `cvar` ignores its values"
+                ));
+            }
             continue;
         }
         // Checked before the model is built: one region per master.

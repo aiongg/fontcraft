@@ -251,7 +251,7 @@ fn glyph_hints(
             .zip(ops)
             .map(|(p, path)| match p {
                 Plan::Manual(h) => Some(h),
-                Plan::Auto(dict) => crate::cff_hints::autohinted_on_steps(name, path, dict, &fontcraft_autohint::Options::default(), &mut notes),
+                Plan::Auto(dict) => crate::cff_hints::autohinted_on_steps(name, path, dict, &cff2_autohint_options(), &mut notes),
                 Plan::Unhinted => None,
             })
             .collect(),
