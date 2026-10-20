@@ -1241,13 +1241,13 @@ mod tests {
         for i in 0..n {
             add(&mut font, &format!("leaf{i}"), vec![red()]);
         }
-        add(&mut font, "hub", (0..n).map(|i| Shape::Component(Component::new(&format!("leaf{i}"), 0.0, 0.0))).collect());
+        add(&mut font, "hub", (0..n).map(|i| Shape::Component(Component::new(format!("leaf{i}"), 0.0, 0.0))).collect());
         for i in 0..n {
             add(&mut font, &format!("user{i}"), vec![Shape::Component(Component::new("hub", 0.0, 0.0))]);
         }
         // A chain of 70 references: one that leads more than 64 deep is drawn as an outline.
         for i in 0..70 {
-            add(&mut font, &format!("link{i}"), vec![Shape::Component(Component::new(&format!("link{}", i + 1), 0.0, 0.0))]);
+            add(&mut font, &format!("link{i}"), vec![Shape::Component(Component::new(format!("link{}", i + 1), 0.0, 0.0))]);
         }
         add(&mut font, "link70", vec![red()]);
 
