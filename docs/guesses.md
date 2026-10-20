@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**2585 guesses on 1451 rows (599 of them live commands).**
+**2590 guesses on 1452 rows (599 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -1869,6 +1869,11 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `source.merge` | M12 | inferred | yes | A merged designspace is refused when it would be written beside BASE without inPlace, because its UFOs would replace BASE's; a user workflow that wants that would settle it. |
 | `tableViewer.show` | M12 | inferred | yes | The Table Viewer opens from the Window menu with no shortcut; the companion tool is a separate application, so nothing settles a menu place. |
 | `cli.global.abbreviations` (behavior) | M12 | inferred | – | A subcommand or long option may be shortened to any prefix that names exactly one subcommand, or one option of that subcommand; an ambiguous prefix is a usage error listing the candidates. No source fixes the rule; a user complaint about a clash would settle it. |
+| `compile` (cli) | M2 | docs | – | --interpolate-binary-layout resolves its folder (default master_ttf or master_otf) against the source's folder; fontmake resolves it against the working folder, which is the same folder when fontmake runs beside the source. |
+| `compile` (cli) | M2 | docs | – | With --interpolate-binary-layout the instances are compiled with the automatic features as usual, and fontmake compiles them without (it turns its feature writers off); the difference shows only in a GDEF or GSUB the default master lacks, which a fontmake run on masters without GSUB and with feature code would show. |
+| `compile` (cli) | M2 | docs | – | An instance compiled with --interpolate-binary-layout from masters without GPOS has no GPOS; fontmake stops with an error there, so nothing settles a better choice. |
+| `compile` (cli) | M2 | docs | – | --interpolate-binary-layout takes the next argument as its folder only when it is not an option and does not end in a source extension (.glyphs, .designspace, .ufo, a font…); fontmake's parser takes any next argument that is not an option. Nothing in fontmake's documentation says which callers rely on that. |
+| `compile` (cli) | M2 | docs | – | The file exports (file.exportStatic, file.exportAll) share the compile's naming, so a .glyphs source without a family name exports to Unnamedfont-Regular too; the reference app's export of such a file has not been observed. |
 | `dump` (cli) | M12 | docs | – | A table view, @font or @glyphs given with --format ttx (the default) writes text as if --format text were given; a user of the reference command line would settle whether that should be refused instead. |
 | `dump` (cli) | M12 | docs | – | Where ttxn stops with a Python error (format-3 anchors, GPOS chaining contexts of format 2, --no-version on a Windows name ID 5), the normalised dump goes on: the anchor prints its coordinates, the rule prints in the GSUB form, and name ID 5 keeps the text before its first semicolon; a fixed ttxn would settle it. |
 | `dump` (cli) | M12 | docs | – | @glyphs names a TrueType glyph by its post name where tx printed g<index> for an unencoded glyph of a font built with fontTools; reading when tx ignores post names would settle it. |
