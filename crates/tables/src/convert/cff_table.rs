@@ -1446,6 +1446,48 @@ pub(super) fn cff_to_cff2(cff: &[u8], standard_glyph: &dyn Fn(u8) -> Option<usiz
     Ok((parts.write()?, dropped_dotsection))
 }
 
+/// The `seac` glyphs of a name-keyed `CFF ` table drawn out, by glyph id: each charstring holds
+/// the width operand, the glyph's own operators, the base and the accent as [`cff_to_cff2`]
+/// writes them (the base's hints kept when the glyph has none of its own, the accent's dropped),
+/// and `endchar`. A CID-keyed table has no charset names or StandardEncoding to find the parts
+/// through, so these replace the `seac` charstrings when a table is CID-keyed. Empty when no
+/// glyph uses `seac`.
+pub(super) fn seac_drawn_out(cff: &[u8], standard_glyph: &dyn Fn(u8) -> Option<usize>) -> Result<std::collections::HashMap<usize, Vec<u8>>> {
+    let (expanded, mut memory) = expand(cff, false, MAX_CHARSTRING_MEMORY)?;
+    let flat = Flat::read(&expanded, false)?;
+    let mut out = std::collections::HashMap::new();
+    let mut seac_parts = SeacParts::new();
+    let mut total = 0usize;
+    for (gid, code) in flat.charstrings.iter().enumerate() {
+        let program = parse_program(code, false, &mut memory.clone()).map_err(|e| in_glyph(e, gid))?;
+        let Some(seac) = program.seac else { continue };
+        let ops = flatten_seac(&flat.charstrings, &program, seac, standard_glyph, &mut seac_parts, &mut memory).map_err(|e| in_glyph(e, gid))?;
+        let mut bytes = Vec::new();
+        // The width goes with the first operator, which clears the stack.
+        let mut width = program.width;
+        for op in &ops {
+            match width.take() {
+                Some(w) => {
+                    let mut args = Vec::with_capacity(op.args.len() + 1);
+                    args.push(w);
+                    args.extend_from_slice(&op.args);
+                    encode_parts(op.code, &args, &op.mask, &mut bytes)
+                }
+                None => encode_op(op, &mut bytes),
+            }
+            .map_err(|e| in_glyph(e, gid))?;
+        }
+        encode_parts(ENDCHAR, width.as_slice(), &[], &mut bytes).map_err(|e| in_glyph(e, gid))?;
+        total = total.saturating_add(bytes.len());
+        if total > MAX_SFNT {
+            return Err(TablesError::TooLarge { what: "the drawn-out accented charstrings", limit: MAX_SFNT });
+        }
+        memory.charge(bytes.capacity())?;
+        out.insert(gid, bytes);
+    }
+    Ok(out)
+}
+
 /// The `CFF ` table for a static `CFF2` table: `advances` are the `hmtx` widths in glyph order.
 /// With `names` (one per glyph, `.notdef` first) and one Font DICT the result is name-keyed;
 /// otherwise it is CID-keyed, Adobe-Identity-0 with CID n for glyph n, as the reference writes.

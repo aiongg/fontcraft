@@ -41,6 +41,8 @@ const MAX_GOADB_BYTES: usize = 64 << 20;
 const MAX_LOCATION_AXES: usize = fontcraft_tables::limits::MAX_AXES;
 /// Most Font DICTs a CFF table holds (an FDSelect index is one byte).
 const MAX_FONT_DICTS: usize = 256;
+/// Most items a glyph selector lists, the bound `font.dehint` and the other selectors use.
+const MAX_SELECTOR_ITEMS: usize = 65_536;
 
 /// Parameters of the row this version does not act on yet; naming one is refused, so a call
 /// never silently does less than it asks.
@@ -54,7 +56,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Convert Font Format",
             [],
             None,
-            "{inputs: [path] | input: path, to: \"ttf\"|\"otf\"|\"otf-cff2\"|\"cff\"|\"cff2\"|\"ufo\", output?: path (one input), outputDir?: path, inPlace?: bool, noClobber?: bool, face?: int|name, container?: \"plain\"|\"woff\"|\"woff2\", nameBy?: \"filename\", curves?: {maxError?: em fraction (default one font unit), conversion?: \"optimized\"|\"exact\", keepDirection?: bool}, postFormat?: 2|3, cff?: {subroutinize?: bool, maxSubrs?: int}, hints?: bool, cid?: {keyed?: bool|\"REGISTRY-ORDERING-SUPPLEMENT\"}, glyphs?: selector, excludeGlyphs?: selector, fdSelect?: [int], excludeFd?: [int], goadb?: path, goadbRename?: bool (default true), goadbSubset?: bool, goadbOrder?: bool, location?: {axis: number}, clamp?: bool (default true), removeOverlaps?: bool, ignoreOverlapErrors?: bool, timestamp?: \"keep\"|\"now\"|int (seconds since 1970)}. Inputs: compiled fonts, TTX text (compiled first), Type 1 fonts (PFA, PFB) and bare CFF tables (wrapped in an OpenType CFF font first; bare tables are written without subroutines unless cff.subroutinize says otherwise). CFF or static CFF2 to TrueType (cubic to quadratic within maxError, contours reversed), TrueType to CFF or CFF2 (components decomposed, instructions dropped), CFF to CFF2 and back with hints kept, the bare outline table (cff, cff2), or a UFO of the font as file.open reads it. A variable font converted to UFO or to another outline flavour is snapshotted at its default location unless location is given. cid.keyed makes a name-keyed CFF result CID-keyed, CID n for glyph n (true: the Identity ordering, supplement 0; or a REGISTRY-ORDERING-SUPPLEMENT string). Before converting: location snapshots a variable font (axes not named at their default; clamped to the axis ranges unless clamp is false), glyphs and excludeGlyphs keep a subset (names, glyph ids, ranges such as 3-9, U+0041, and in a CID-keyed font /CID or /CID-CID; .notdef always stays), fdSelect and excludeFd keep the glyphs of some Font DICTs of a CID-keyed CFF or a CFF2 font (indexes from 0), goadb renames glyphs from its second column to its first (goadbRename), keeps only the glyphs it lists (goadbSubset) and orders them as it does (goadbOrder); removeOverlaps merges overlapping contours (TrueType outlines before converting a TrueType font or after converting to TrueType; CFF and CFF2 outlines before converting, a merged glyph losing its stem hints), and ignoreOverlapErrors keeps a glyph that cannot be merged. Without output the result goes beside the input with the new extension → {results: [{input, output, bytes, glyphs, leftBehind: [text]}]}",
+            "{inputs: [path] | input: path, to: \"ttf\"|\"otf\"|\"otf-cff2\"|\"cff\"|\"cff2\"|\"ufo\", output?: path (one input), outputDir?: path, inPlace?: bool, noClobber?: bool, face?: int|name, container?: \"plain\"|\"woff\"|\"woff2\", nameBy?: \"filename\", curves?: {maxError?: em fraction (default one font unit), conversion?: \"optimized\"|\"exact\", keepDirection?: bool}, postFormat?: 2|3, cff?: {subroutinize?: bool, maxSubrs?: int}, hints?: bool, cid?: {keyed?: bool|\"REGISTRY-ORDERING-SUPPLEMENT\"}, glyphs?: selector, excludeGlyphs?: selector, fdSelect?: [int], excludeFd?: [int], goadb?: path, goadbRename?: bool (default true), goadbSubset?: bool, goadbOrder?: bool, location?: {axis: number}, clamp?: bool (default true), removeOverlaps?: bool, ignoreOverlapErrors?: bool, timestamp?: \"keep\"|\"now\"|int (seconds since 1970)}. Inputs: compiled fonts, TTX text (compiled first), Type 1 fonts (PFA, PFB) and bare CFF tables (wrapped in an OpenType CFF font first; bare tables are written without subroutines unless cff.subroutinize says otherwise). CFF or static CFF2 to TrueType (cubic to quadratic within maxError, contours reversed), TrueType to CFF or CFF2 (components decomposed, instructions dropped), CFF to CFF2 and back with hints kept, the bare outline table (cff, cff2), or a UFO of the font as file.open reads it (curves, postFormat, cff, hints and timestamp shape compiled output only and are refused with ufo). A variable font converted to UFO or to another outline flavour is snapshotted at its default location unless location is given. cid.keyed makes a name-keyed CFF result CID-keyed, CID n for glyph n (true: the Identity ordering, supplement 0; or a REGISTRY-ORDERING-SUPPLEMENT string). Before converting: location snapshots a variable font (axes not named at their default; clamped to the axis ranges unless clamp is false), glyphs and excludeGlyphs keep a subset (names, glyph ids, ranges such as 3-9, U+0041, and in a CID-keyed font /CID or /CID-CID; .notdef always stays), fdSelect and excludeFd keep the glyphs of some Font DICTs of a CID-keyed CFF or a CFF2 font (indexes from 0), goadb renames glyphs from its second column to its first (goadbRename), keeps only the glyphs it lists (goadbSubset) and orders them as it does (goadbOrder); removeOverlaps merges overlapping contours (TrueType outlines before converting a TrueType font or after converting to TrueType; CFF and CFF2 outlines before converting, a merged glyph losing its stem hints), and ignoreOverlapErrors keeps a glyph that cannot be merged. Without output the result goes beside the input with the new extension → {results: [{input, output, bytes, glyphs, leftBehind: [text]}]}",
             always,
             convert_fonts
         )
@@ -227,6 +229,14 @@ impl Settings {
             "svg-font" => return Err(EngineError::Unsupported("`to: svg-font`".into())),
             other => return Err(p.bad(format!("`to` must be ttf, otf, otf-cff2, cff, cff2 or ufo, not `{other}`"))),
         };
+        // A UFO holds the outlines as drawn: these keys shape a compiled result only.
+        if to == "ufo" {
+            for key in ["curves", "postFormat", "cff", "hints", "timestamp"] {
+                if p.get(key).is_some() {
+                    return Err(p.bad(format!("`{key}` has no effect on a UFO")));
+                }
+            }
+        }
         let curves = p.opt_object("curves")?;
         let curve = |key: &str| curves.and_then(|c| c.get(key));
         for key in curves.map(|c| c.keys().cloned().collect::<Vec<_>>()).unwrap_or_default() {
@@ -376,8 +386,7 @@ impl Settings {
                 None
             }
             Some(path) => {
-                let read = file_io::read_input_up_to(Path::new(path), MAX_GOADB_BYTES)?;
-                let text = String::from_utf8(read.bytes).map_err(|_| EngineError::Io(format!("{path} is not UTF-8 text")))?;
+                let text = goadb_text(Path::new(path), MAX_GOADB_BYTES)?;
                 let goadb = fontcraft_tables::goadb::parse(text.strip_prefix('\u{feff}').unwrap_or(&text))
                     .map_err(|e| p.bad(format!("`goadb` {path}: {e}")))?;
                 Some(GoadbUse {
@@ -453,19 +462,33 @@ impl Settings {
     }
 }
 
+/// The text of a GOADB file of at most `limit` bytes; a larger file is refused, not cut.
+fn goadb_text(path: &Path, limit: usize) -> Result<String> {
+    let read = file_io::read_input_up_to(path, limit)?;
+    if read.bytes.len() > limit {
+        return Err(EngineError::Io(format!("the GOADB {} is larger than {limit} bytes", path.display())));
+    }
+    String::from_utf8(read.bytes).map_err(|_| EngineError::Io(format!("{} is not UTF-8 text", path.display())))
+}
+
 /// `glyphs` and `excludeGlyphs` with the `/CID` items of the reference converter (`/17`,
 /// `/100-200`) replaced by glyph id ranges; `None` when neither has one. A CID range keeps the
-/// CIDs the font has; a single CID the font lacks is refused, as a missing name is.
+/// CIDs the font has; a single CID the font lacks is refused, as a missing name is. The CID
+/// ranges are merged before the glyphs are looked up, and the glyphs are written as runs once,
+/// so the work and the rewritten list stay within the glyph count whatever the ranges repeat.
 fn cid_selectors(p: &Params<'_>, font: &SfntFont) -> Result<Option<Value>> {
     let mut out = serde_json::Map::new();
-    let mut by_cid: Option<std::collections::HashMap<u32, u16>> = None;
+    let mut by_cid: Option<std::collections::BTreeMap<u32, u16>> = None;
     for key in ["glyphs", "excludeGlyphs"] {
         let Some(value) = p.get(key) else { continue };
         let items: Vec<&str> = match value {
             Value::String(s) => s.split([',', ' ']).filter(|w| !w.is_empty()).collect(),
-            Value::Array(a) => a.iter().filter_map(Value::as_str).collect(),
+            Value::Array(a) => a.iter().map(|v| v.as_str().ok_or_else(|| p.bad(format!("`{key}` items must be strings")))).collect::<Result<_>>()?,
             _ => Vec::new(),
         };
+        if items.len() > MAX_SELECTOR_ITEMS {
+            return Err(p.bad(format!("`{key}` lists more than {MAX_SELECTOR_ITEMS} items")));
+        }
         if !items.iter().any(|i| i.starts_with('/')) {
             out.insert(key.to_string(), value.clone());
             continue;
@@ -476,37 +499,51 @@ fn cid_selectors(p: &Params<'_>, font: &SfntFont) -> Result<Option<Value>> {
         }
         let map = by_cid.as_ref().ok_or_else(|| p.bad("no CID map"))?;
         let mut list = Vec::with_capacity(items.len());
+        let mut gids: BTreeSet<u16> = BTreeSet::new();
+        let mut ranges: Vec<(u32, u32)> = Vec::new();
         for item in items {
             let Some(spec) = item.strip_prefix('/') else {
                 list.push(Value::String(item.to_string()));
                 continue;
             };
             let cid = |t: &str| t.parse::<u32>().ok().filter(|c| *c <= 65_535).ok_or_else(|| p.bad(format!("`{item}` is not a CID or a CID range")));
-            let (low, high) = match spec.split_once('-') {
-                Some((a, b)) => (cid(a)?, cid(b)?),
+            match spec.split_once('-') {
+                Some((a, b)) => {
+                    let (low, high) = (cid(a)?, cid(b)?);
+                    if low > high {
+                        return Err(p.bad(format!("the range `{item}` runs backwards")));
+                    }
+                    ranges.push((low, high));
+                }
                 None => {
                     let c = cid(spec)?;
-                    let g = map.get(&c).ok_or_else(|| p.bad(format!("the font has no CID {c}")))?;
-                    list.push(Value::String(format!("gid{g}")));
-                    continue;
+                    gids.insert(*map.get(&c).ok_or_else(|| p.bad(format!("the font has no CID {c}")))?);
                 }
-            };
-            if low > high {
-                return Err(p.bad(format!("the range `{item}` runs backwards")));
             }
-            // Runs of consecutive glyph ids go in as one range each.
-            let mut gids: Vec<u16> = (low..=high).filter_map(|c| map.get(&c).copied()).collect();
-            gids.sort_unstable();
-            let mut run: Option<(u16, u16)> = None;
-            for g in gids.into_iter().map(Some).chain([None]) {
-                match (run, g) {
-                    (Some((a, b)), Some(g)) if u32::from(b) + 1 == u32::from(g) => run = Some((a, g)),
-                    (current, next) => {
-                        if let Some((a, b)) = current {
-                            list.push(Value::String(format!("gid{a}..gid{b}")));
-                        }
-                        run = next.map(|g| (g, g));
+        }
+        ranges.sort_unstable();
+        let mut merged: Vec<(u32, u32)> = Vec::with_capacity(ranges.len());
+        for (low, high) in ranges {
+            match merged.last_mut() {
+                Some(last) if low <= last.1.saturating_add(1) => last.1 = last.1.max(high),
+                _ => merged.push((low, high)),
+            }
+        }
+        for (low, high) in merged {
+            gids.extend(map.range(low..=high).map(|(_, g)| *g));
+        }
+        // Runs of consecutive glyph ids go in as one range each.
+        let mut run: Option<(u16, u16)> = None;
+        for g in gids.into_iter().map(Some).chain([None]) {
+            match (run, g) {
+                (Some((a, b)), Some(g)) if u32::from(b) + 1 == u32::from(g) => run = Some((a, g)),
+                (current, next) => {
+                    match current {
+                        Some((a, b)) if a == b => list.push(Value::String(format!("gid{a}"))),
+                        Some((a, b)) => list.push(Value::String(format!("gid{a}..gid{b}"))),
+                        None => {}
                     }
+                    run = next.map(|g| (g, g));
                 }
             }
         }
@@ -622,20 +659,43 @@ struct StagedOutput {
 
 #[cfg(not(target_arch = "wasm32"))]
 impl StagedOutput {
-    /// Puts the temporary in place; an existing folder is set aside, then removed.
-    fn move_in(&self) -> std::io::Result<()> {
+    /// Puts the temporary in place. An existing folder is set aside first, and the path it was
+    /// moved to is returned: [`Staging::commit`] removes it once every output is in place, or
+    /// puts it back when a later output fails.
+    fn move_in(&self) -> std::result::Result<Option<PathBuf>, String> {
         if !(self.folder && self.existed) {
-            return std::fs::rename(&self.temp, &self.target);
+            return std::fs::rename(&self.temp, &self.target).map(|()| None).map_err(|e| e.to_string());
         }
-        let name = self.target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "font.ufo".into());
-        let aside = self.target.with_file_name(format!(".{name}.{}.old", std::process::id()));
-        std::fs::rename(&self.target, &aside)?;
+        let aside = self.beside("old");
+        std::fs::rename(&self.target, &aside).map_err(|e| e.to_string())?;
         if let Err(e) = std::fs::rename(&self.temp, &self.target) {
-            let _ = std::fs::rename(&aside, &self.target);
-            return Err(e);
+            if let Err(back) = std::fs::rename(&aside, &self.target) {
+                return Err(format!("{e}; the existing UFO could not be put back ({back}) and is at {}", aside.display()));
+            }
+            return Err(e.to_string());
         }
-        let _ = std::fs::remove_dir_all(&aside);
-        Ok(())
+        Ok(Some(aside))
+    }
+
+    /// Puts the folder set aside at `aside` back in place of the new one; false when it cannot,
+    /// and then the new folder stays and the old one stays at `aside`.
+    fn restore(&self, aside: &Path) -> bool {
+        let new = self.beside("new");
+        if std::fs::rename(&self.target, &new).is_err() {
+            return false;
+        }
+        if std::fs::rename(aside, &self.target).is_err() {
+            let _ = std::fs::rename(&new, &self.target);
+            return false;
+        }
+        let _ = std::fs::remove_dir_all(&new);
+        true
+    }
+
+    /// A hidden path beside the target, for a folder moved out of the way.
+    fn beside(&self, what: &str) -> PathBuf {
+        let name = self.target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "font.ufo".into());
+        self.target.with_file_name(format!(".{name}.{}.{what}", std::process::id()))
     }
 
     fn remove(path: &Path, folder: bool) {
@@ -672,26 +732,47 @@ impl Staging {
     }
 
     /// Moves every temporary into place. When a move fails, the outputs already moved that
-    /// replaced nothing are removed again; an output already replaced keeps its new content, and
-    /// the message says how many there are.
+    /// replaced nothing are removed again, and an existing UFO already replaced gets its old
+    /// folder back; an existing file already replaced keeps its new content, and the message
+    /// says how many there are.
     fn commit(mut self) -> Result<()> {
+        // The existing folders set aside so far, by output index.
+        let mut asides: Vec<(usize, PathBuf)> = Vec::new();
         for (i, s) in self.staged.iter().enumerate() {
-            if let Err(e) = s.move_in() {
-                let mut replaced = 0;
-                for moved in self.staged.iter().take(i) {
-                    if moved.existed {
-                        replaced += 1;
-                    } else {
-                        StagedOutput::remove(&moved.target, moved.folder);
-                    }
+            let e = match s.move_in() {
+                Ok(aside) => {
+                    asides.extend(aside.map(|a| (i, a)));
+                    continue;
                 }
-                let kept = if replaced == 0 {
-                    "nothing was written".to_string()
-                } else {
-                    format!("{replaced} existing files before it were already replaced; the new files were removed")
-                };
-                return Err(EngineError::Io(format!("cannot write {}: {e}; {kept}", s.target.display())));
+                Err(e) => e,
+            };
+            let mut replaced = 0;
+            let mut kept_aside = Vec::new();
+            for (j, moved) in self.staged.iter().enumerate().take(i) {
+                if !moved.existed {
+                    StagedOutput::remove(&moved.target, moved.folder);
+                    continue;
+                }
+                if let Some((_, aside)) = asides.iter().find(|(k, _)| *k == j) {
+                    if moved.restore(aside) {
+                        continue;
+                    }
+                    kept_aside.push(format!("{} is at {}", moved.target.display(), aside.display()));
+                }
+                replaced += 1;
             }
+            let mut kept = if replaced == 0 {
+                "nothing was written".to_string()
+            } else {
+                format!("{replaced} existing outputs before it were already replaced; the new files were removed")
+            };
+            if !kept_aside.is_empty() {
+                kept.push_str(&format!("; the previous content of {}", kept_aside.join(", of ")));
+            }
+            return Err(EngineError::Io(format!("cannot write {}: {e}; {kept}", s.target.display())));
+        }
+        for (_, aside) in asides {
+            let _ = std::fs::remove_dir_all(aside);
         }
         self.staged.clear();
         self.created.clear();
@@ -784,4 +865,18 @@ fn stage_folder(out: &Path, files: &fontcraft_io_ufo::Files, n: usize) -> Result
         }
     }
     Ok((temp, target))
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_goadb_over_the_limit_is_refused_not_cut() {
+        let path = std::env::temp_dir().join(format!("fontcraft-goadb-limit-{}", std::process::id()));
+        std::fs::write(&path, "A a\nB b\n\n").unwrap();
+        assert!(goadb_text(&path, 8).is_err(), "9 bytes against a limit of 8");
+        assert_eq!(goadb_text(&path, 9).unwrap(), "A a\nB b\n\n");
+        let _ = std::fs::remove_file(&path);
+    }
 }

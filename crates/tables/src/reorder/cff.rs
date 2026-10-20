@@ -429,8 +429,13 @@ fn read_fd_select(d: Data<'_>, at: usize, n: usize) -> Result<Vec<u8>> {
             for r in 0..ranges {
                 let first = usize::from(d.u16(at + 3 + r * 3)?);
                 let fd = d.u8(at + 5 + r * 3)?;
-                let end = usize::from(d.u16(at + 6 + r * 3)?).min(n);
-                for slot in out.iter_mut().take(end).skip(first) {
+                let end = usize::from(d.u16(at + 6 + r * 3)?);
+                // In order, the ranges cover each glyph once; out of order they would cost
+                // ranges times glyphs.
+                if first > end {
+                    return Err(d.bad("has FDSelect ranges out of order"));
+                }
+                for slot in out.iter_mut().take(end.min(n)).skip(first) {
                     *slot = fd;
                 }
             }
@@ -492,8 +497,15 @@ impl<'a> Cff<'a> {
     /// The table made CID-keyed: CID n is glyph n, one Font DICT named `fd_name` takes the
     /// Private DICT and its subroutines, the Top DICT gets `ROS` (first, as the specification
     /// requires) and `CIDCount`, and the Encoding goes. Charstrings and subroutines are copied
-    /// byte for byte.
-    pub(crate) fn to_cid_keyed(&self, registry: &str, ordering: &str, supplement: i64, fd_name: &str) -> Result<Vec<u8>> {
+    /// byte for byte, but for the charstrings of `replace` (by glyph id).
+    pub(crate) fn to_cid_keyed(
+        &self,
+        registry: &str,
+        ordering: &str,
+        supplement: i64,
+        fd_name: &str,
+        replace: &HashMap<usize, Vec<u8>>,
+    ) -> Result<Vec<u8>> {
         if self.cid {
             return Err(TablesError::Unsupported("the CFF table is already CID-keyed".into()));
         }
@@ -534,7 +546,7 @@ impl<'a> Cff<'a> {
             cid.privates.push(Private { dict: Vec::new(), subrs: None, subrs_at: None, local: None });
         }
         let identity: Vec<u16> = (0..n).map(|g| to_u16(g, "a glyph id")).collect::<Result<_>>()?;
-        cid.rebuild(&identity, None)
+        cid.rebuild_with(&identity, None, replace, false)
     }
 
     /// Gives the Top DICT operator `op` the integer operands `values`, replacing its entry or
@@ -833,5 +845,15 @@ mod tests {
         // Offsets that go backwards.
         let bad = [0u8, 2, 1, 1, 3, 2, b'a', b'b'];
         assert!(index(Data::new(TAG, &bad), 0).is_err());
+    }
+
+    /// Ranges whose starts go back would each fill up to every glyph again.
+    #[test]
+    fn fd_select_ranges_out_of_order_are_refused() {
+        // Format 3, 2 ranges: glyphs 0-2 in Font DICT 0, 3 in 1; sentinel 4.
+        let good = [3u8, 0, 2, 0, 0, 0, 0, 3, 1, 0, 4];
+        assert_eq!(read_fd_select(Data::new(TAG, &good), 0, 4).unwrap(), [0, 0, 0, 1]);
+        let bad = [3u8, 0, 4, 0, 0, 0, 0, 3, 1, 0, 0, 0, 0, 3, 1, 0, 4];
+        assert!(read_fd_select(Data::new(TAG, &bad), 0, 4).is_err());
     }
 }

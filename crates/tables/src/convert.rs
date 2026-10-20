@@ -13,8 +13,9 @@
 //!
 //! The CFF writers lay the table out without subroutines; [`ConvertOptions::subroutinize`]
 //! runs the subroutiniser over the result. [`ConvertOptions::cid_keyed`] makes a name-keyed CFF
-//! result CID-keyed (CID n for glyph n, one Font DICT, as makeotf `-cn` does). [`convert_with`]
-//! refuses variable fonts (`gvar`, a blending `CFF2`) when the outline flavour changes; a
+//! result CID-keyed (CID n for glyph n, one Font DICT, as makeotf `-cn` does; `seac` glyphs are
+//! drawn out, since a CID-keyed table cannot name their parts). [`convert_with`] refuses
+//! variable fonts (`gvar`, a blending `CFF2`) when the outline flavour changes; a
 //! conversion that fails returns an error and no bytes. [`convert_prepared`] snapshots such a
 //! font at its default location first, and adds `tx`'s input steps around a conversion: a
 //! snapshot at a design location, a glyph subset (by glyph or Font DICT), GOADB renaming,
@@ -633,8 +634,25 @@ fn cid_key(font: &mut SfntFont, ros: &fontcraft_cff::cid::Ros, left_behind: &mut
             None => Err(TablesError::invalid("the CID-keyed CFF table has no readable ROS")),
         };
     }
-    let keyed = cff.to_cid_keyed(&ros.registry, &ros.ordering, ros.supplement, &fd_name)?;
+    // A seac part is found through the charset names and StandardEncoding, which a CID-keyed
+    // table lacks: the accented glyphs are drawn out first.
+    let names: std::cell::OnceCell<std::collections::HashMap<String, usize>> = std::cell::OnceCell::new();
+    let standard_glyph = |code: u8| -> Option<usize> {
+        let by_name = names.get_or_init(|| {
+            let mut map = std::collections::HashMap::new();
+            for (gid, name) in cff.glyph_names().into_iter().enumerate() {
+                map.entry(name).or_insert(gid);
+            }
+            map
+        });
+        by_name.get(read_fonts::ps::encoding::PredefinedEncoding::Standard.name(code)).copied()
+    };
+    let drawn = cff_table::seac_drawn_out(data, &standard_glyph)?;
+    let keyed = cff.to_cid_keyed(&ros.registry, &ros.ordering, ros.supplement, &fd_name, &drawn)?;
     font.insert(CFF, keyed);
+    if !drawn.is_empty() {
+        left_behind.push(format!("the accent hints of the seac glyphs drawn out for CID keying ({})", drawn.len()));
+    }
     let post_names = font.get(*b"post").and_then(|p| u32_at(p, 0)) == Some(0x0002_0000);
     if !post_names {
         left_behind.push("glyph names (the CFF table is CID-keyed)".into());

@@ -343,6 +343,35 @@ fn cff_to_cff2_writes_the_seac_base_and_accent_into_the_charstring() {
     assert_eq!(ps_contours(&seac_font(), CFF, 3), expected, "the CFF glyph drawn out gives the same");
 }
 
+/// A CID-keyed table has no charset names or StandardEncoding to find seac parts through, so
+/// CID keying draws the accented glyphs out; the width operand stays.
+#[test]
+fn cid_keying_draws_seac_glyphs_out() {
+    let mut font = seac_font();
+    let cs = cff_table::test_charstring;
+    let charstrings = vec![
+        cs(&[(&[], 14)]),
+        cs(&[(&[10.5, 0.0], 21), (&[300.0, 0.0, 0.0, 700.0, -300.0, 0.0], 5), (&[], 14)]),
+        // The accent's stem hint is dropped once it is drawn into Aacute.
+        cs(&[(&[750.0, 50.0], 1), (&[100.0, 750.0], 21), (&[50.0, 0.0, 0.0, 50.0], 5), (&[], 14)]),
+        cs(&[(&[100.0, 150.5, 20.0, 65.0, 194.0], 14)]),
+    ];
+    font.insert(CFF, cff_table::test_table(&[".notdef", "A", "acute", "Aacute"], charstrings, &[]));
+    let ros = fontcraft_cff::cid::Ros { registry: "Adobe".into(), ordering: "Identity".into(), supplement: 0 };
+    let result =
+        convert_with(&font, &ConvertOptions { cid_keyed: Some(ros), subroutinize: Some(false), ..ConvertOptions::new(ConvertTarget::Cff) }).unwrap();
+    let keyed = result.font.unwrap();
+    assert_eq!(glyph_cids(&keyed).unwrap(), Some(vec![0, 1, 2, 3]));
+    let programs = cff_table::Programs::read(keyed.get(CFF).unwrap(), false).unwrap();
+    assert!((0..4).all(|g| !programs.is_accented(g)), "no charstring ends in a four-operand endchar");
+    assert_eq!(programs.width(3), Some(100 << 16), "the width operand is kept");
+    let mut expected = ps_contours(&font, CFF, 1);
+    expected.extend(ps_contours(&font, CFF, 2).iter().map(|c| c.translated(150.5, 20.0)));
+    assert_eq!(ps_contours(&keyed, CFF, 3), expected, "base plus the accent moved by the seac offset");
+    assert_eq!(ps_contours(&keyed, CFF, 3), ps_contours(&font, CFF, 3));
+    assert!(result.left_behind.iter().any(|n| n.contains("accent hints")), "{:?}", result.left_behind);
+}
+
 /// Many accented glyphs, each with a contour of its own, naming one accent of 20,000 stem
 /// hints: the accent is parsed and drawn once, not once for each glyph that names it. Drawing it
 /// for each glyph would run 3000 x 20,000 operators.
