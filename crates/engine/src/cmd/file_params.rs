@@ -131,6 +131,11 @@ mod tests {
         ("hint.ps.*", &["nodes", "node"], "[outline path index, node index] pairs"),
         ("path.replaceOutlinePattern", &["replacement"], "outline paths given inline"),
         ("font.setCrossAxisMappings", &["input", "output"], "axis locations by tag"),
+        (
+            "font.instantiate",
+            &["interpolateBinaryLayout"],
+            "true or a folder relative to the source's folder; each master file read from it is checked against the automation roots when opened",
+        ),
         ("plugin.installFromFile", &["dataBase64"], "the file's bytes; `path` is the declared one"),
         // Only a macro the session already lists in its Macros folder matches, and its file
         // moves to the Removed folder beside it; a path naming anything else is refused.

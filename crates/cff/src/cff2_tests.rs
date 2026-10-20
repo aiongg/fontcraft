@@ -256,7 +256,7 @@ fn mask(h: &[bool], v: &[bool]) -> Mask {
 /// height (first master, second master).
 fn two_boxes() -> Cff2Glyph {
     let (w, x2, h) = (b(80.0, &[20.0]), b(150.0, &[10.0]), b(400.0, &[20.0]));
-    let right = |x: &Blend| b(x.default + w.default, &[x.deltas[0] + w.deltas[0]]);
+    let right = |x: &Blend| b(x.default + w.default, &[x.deltas.first().unwrap_or(&0.0) + w.deltas[0]]);
     glyph(
         "a",
         0,

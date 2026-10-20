@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1371 rows to check: 2216 guesses and 501 observe steps.**
+**1371 rows to check: 2226 guesses and 501 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -1735,7 +1735,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `textPreview.shaping` (behavior, M8, handbook): Text Preview shapes its text as an application would: every feature that…
   - Guess: The preview's font is rebuilt from the current feature code, kerning and anchors after edits, once editing pauses for half a second, without pressing Compile; editing a feature without compiling while the reference app's Text Preview is open would settle it.
   - Guess: Text is split into script runs by Script_Extensions, and characters without a script (Common, Inherited, unassigned and private-use) stay in the run around them, so a glyph typed by name is shaped with its neighbours; typing a glyph name between two letters that form a contextual substitution in the reference app would settle it.
-  - Guess: Vertical text is shaped for its substitutions only, with `ccmp`, `locl`, `rlig` and `vert` (not `vrt2`), as a shaper does for vertical text by default; vertical widths, origins and kerning come from the model, a glyph without a vertical width taking the ascender minus the descender. Vertical text with `vert` and `vrt2` features and vertical positioning in the reference app would settle it.
+  - Guess: Vertical text is shaped with the shaper's vertical defaults plus `vkrn`, and with `vrt2` instead of `vert` when the font has `vrt2`; `vpal`, `vhal` and `valt` stay off, as horizontal text keeps optional features off. A font with `vrt2`, `vpal` and `vhal` in the reference app's vertical Text Preview would settle it.
+  - Guess: In vertical text a glyph without a vertical width advances by the ascender minus the descender, one without a vertical origin hangs from the ascender, and the document's vertical kerning applies on top of the compiled `vkrn` (the compiled font holds none of it). A vertical font with vertical kerning in the reference app's Text Preview would settle it.
   - Guess: While a new font is built, the text stays shaped with the last font built for the same master; when the feature code does not compile, the text is laid out by code point with the compiler's message under it. Breaking a feature in the reference app while Text Preview is open would settle what it shows.
   - Observe: In F1 (Latin features), edit a feature without pressing Compile while Text Preview shows text the feature affects: note whether the preview follows the edit, and when.
 - [ ] `textPreview.unicodeBidi` (behavior, M8, handbook): Text Preview orders mixed right-to-left and left-to-right text by the Unicode Bidirectional…
@@ -3295,7 +3296,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: When the main master has no hints for a glyph and several other masters do, the first of them in master order is used; a reference export of such a glyph would settle it.
   - Observe: T2: export the three masters as CFF and read e in the master 1 font (e has manual hints only in masters 2 and 3); note whether its hints come from master 2, from master 3, or from the autohinter.
 - [ ] `hinting.ps.cff2.sharedHintStructure` (behavior, M10, inferred): In a variable CFF2 font a glyph has one hint list and…
-  - Guess: In variable CFF2 output the hints come from the main master's manual hints resolved through node links in every master, or else from the multiple-master autohinter; unlinked manual hints keep one value in every master; a variable export from the reference app would settle it.
+  - Guess: In variable CFF2 output the hints come from the main master's manual hints resolved through node links in every master, or else from the autohinter run on each master on its own; unlinked manual hints keep one value in every master; a variable export from the reference app would settle it.
+  - Guess: A glyph whose masters' hints differ in structure (fontTools refuses the merge with VarLibCFFHintTypeMergeError or a hint mask error) is written without hints and with a warning, so the rest of the font still exports; autohinted masters differ often, as the autohinter does not yet hint the masters together (autohint.ps.variable.*).
+  - Guess: A glyph that varies with an intermediate or alternate layer is written without hints, with a warning: its hints are read on master layers only; hinting the special layer through its own node links would be the next step.
   - Observe: T2: export as a variable CFF2 font and read the charstrings; note whether all masters share one hint structure and what happens to I's unlinked hint.
 - [ ] `autohint.ps.inputs` (behavior, M10, docs): The reference autohinter accepts bare CFF, name-keyed and CID-keyed OTF, UFO with…
   - Guess: Identical zones are merged before the autohinter reads them: glyphsLib's mapping (and FontCraft's Private dict) keeps duplicates, which otfautohint rejects as overlapping zones (Oswald Italic, ascender equal to cap height); the export still writes the Private dict as fontmake does.
@@ -3611,6 +3614,10 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A colour glyph larger than 4,096 pixels on a side, or than 2,097,152 pixels, is drawn as its outline. Settled by previewing a colour font at the largest text size in the reference.
   - Guess: A glyph with a CBDT image and no other colour is drawn from the CBDT strike nearest the pixel size by the sbix rule, its top left at the image's bearings. Settled only outside the reference, which does not export CBDT; compare with a system text engine on a nanoemoji-built CBDT font.
   - Guess: An SVG document's embedded image that cannot be decoded, or that would take its document past 4,194,304 decoded pixels, is left out and the rest of the document drawn. Settled by previewing an SVG glyph with a damaged embedded PNG in the reference.
+  - Guess: An SVG mask's luminance is taken from its sRGB values with the weights 0.2125, 0.7154 and 0.0721, without converting to linear RGB first. Settled by previewing an SVG glyph masked by a mid-grey rectangle in the reference.
+  - Guess: An SVG document fitted to the em square with preserveAspectRatio slice is not clipped to the em square; content outside it still draws. Settled by previewing such a glyph whose content overflows the em in the reference.
+  - Guess: SVG filters are not drawn; the filtered content draws unfiltered. Settled by previewing an SVG glyph with a blur filter in the reference.
+  - Guess: An SVG glyph whose masks and clip paths nest more than 8 layers deep, or that uses more than 4,096 pattern tiles, is drawn as its outline. Settled by previewing such a glyph in the reference.
   - Observe: Palette font with an instance whose Export COLR Table is off: open Text Preview, choose the instance in the style pop-up and note whether the glyphs show as plain outlines.
 - [ ] `color.layered.masterColor` (behavior, M11, handbook): The Master Color parameter on a master sets the colour its filled…
   - Guess: The other glyphs of the tab are filled in the same masters' colours as the edited glyph. Settled by typing several glyphs in a tab of a layered font with all masters shown in the reference.
@@ -3865,7 +3872,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `cff2.open` (format, M9, inferred): Variable OpenType, CFF2 outlines (opened for editing)
   - Guess: Every region of the CFF2 variation store becomes a master, since the charstrings do not say which glyphs use which region without evaluating them. Settled by opening CFF2 fonts built from sources with intermediate layers and comparing.
 - [ ] `cff2.export` (format, M9, docs): Variable OpenType, CFF2 outlines (export)
-  - Guess: Manual PostScript hints are left out of a CFF2 font, with a warning, where fontmake would write blended stems; comparing the hinted output of the two would settle whether blended hints are worth writing.
+  - Guess: A glyph whose masters' PostScript hints differ in structure, or that varies with an intermediate layer, is written without hints and with a warning, where fontTools' merge of hinted masters refuses the whole font; a variable CFF2 export from another tool chain that hints such glyphs would settle what to write instead.
 - [ ] `compile.instanceInterpolation` (behavior, M9, docs): Static instances are produced by interpolating masters at the instance location before…
   - Guess: Copied from fontmake's instancer: a glyph with no layer in the origin master is left out of the instance; a glyph whose layer is empty in some masters but drawn at the origin interpolates without the empty ones; outlines are not rounded before the compile; a glyph that does not export and cannot interpolate keeps its nearest layer instead of failing the instance. Settle each with an instance export from the reference app.
 - [ ] `compile.instanceLayoutInterpolation` (behavior, M9, docs): fontmake's feature writers interpolate kerning and anchors for instances but not explicit…
@@ -3937,6 +3944,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Glyph codes count as Unicode code points when `CHARSET_REGISTRY` is ISO10646, or ISO8859 with `CHARSET_ENCODING` 1, or missing; other registries match glyphs by name only. Importing a BDF in another registry into the reference app would settle it.
   - Guess: A glyph with no `DWIDTH` and no font-wide default advances by its bitmap's right edge, with a warning. The note requires `DWIDTH`, so only a malformed file reaches this.
   - Guess: Grey BDF is read from and written as `STARTFONT 2.3` with bits per pixel as the fourth `SIZE` value; TN 5005 covers 1 bit per pixel only. A grey BDF exported by the reference app would settle it.
+  - Guess: A bitmap font opened on its own gets 1,000 units per em, the default of a new font, with widths and vertical metrics scaled from pixels and rounded to whole units; no handbook page covers opening bitmap fonts. Opening a BDF in the secondary reference would settle the units per em it picks.
+  - Guess: A bitmap font opened on its own gets no `.notdef` and no outlines; its glyphs are the file's bitmaps only. Opening a BDF in the secondary reference would settle it.
+  - Guess: When a bitmap font names two glyphs alike, the later one is renamed `.1`, `.2`…; when two glyphs share a code, the later one opens without a code point but its bitmap keeps the code. A BDF with repeated names and codes opened in the secondary reference would settle it.
 - [ ] `pcf` (format, M13, docs): Portable Compiled Format (X11 bitmap font)
   - Guess: A PCF file without a glyph names table names its glyphs `glyph0`, `glyph1`…; opening such a file in the reference app would show what it calls them.
   - Guess: When several codes of the encodings table point at one glyph, the glyph keeps the lowest and a warning counts the rest; the reference may add copies instead. A PCF with a shared glyph opened in the reference app would settle it.

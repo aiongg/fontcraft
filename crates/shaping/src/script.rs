@@ -44,6 +44,11 @@ pub fn itemize(text: &str) -> Vec<ScriptRun> {
         if !set.iter().any(is_scripted) {
             continue;
         }
+        // A combining mark stays on the character before it even when its Script_Extensions
+        // leave that script out (U+0301 lists Latin and Greek but not Han).
+        if data.get_script_val(ch) == Script::Inherited && !current.iter().any(|s| set.contains(s)) {
+            continue;
+        }
         if current.is_empty() {
             current.extend(set.iter().filter(|s| is_scripted(*s)));
         } else if current.iter().any(|s| set.contains(s)) {
@@ -94,6 +99,12 @@ mod tests {
     fn leading_digits_and_marks_join_the_first_scripted_run() {
         assert_eq!(summary("1 a\u{0301}b"), vec![(0..6, Tag::new(b"Latn"))]);
         assert_eq!(summary("123 !"), vec![(0..5, COMMON)]);
+    }
+
+    #[test]
+    fn a_mark_stays_with_the_character_before_it() {
+        // U+4E00 U+0301 is 5 bytes; the acute's Script_Extensions do not list Han.
+        assert_eq!(summary("\u{4E00}\u{0301}B"), vec![(0..5, Tag::new(b"Hani")), (5..6, Tag::new(b"Latn"))]);
     }
 
     #[test]

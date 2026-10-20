@@ -629,9 +629,12 @@ impl skrifa::raw::ps::cs::CommandSink for StemSink {
     }
 }
 
-/// The stems of `name` in the `CFF2` table of `v` at `wght`, as (lower, upper) edges, and its
+/// Stems as (lower, upper) edges.
+type Stems = Vec<(i32, i32)>;
+
+/// The horizontal and vertical stems of `name` in the `CFF2` table of `v` at `wght`, and its
 /// number of hint masks.
-fn cff2_stems(v: &VariableFont, name: &str, wght: f32) -> (Vec<(i32, i32)>, Vec<(i32, i32)>, usize) {
+fn cff2_stems(v: &VariableFont, name: &str, wght: f32) -> (Stems, Stems, usize) {
     let font = FontRef::new(&v.compiled.bytes).unwrap();
     let table = font.table_data(skrifa::raw::types::Tag::new(b"CFF2")).unwrap();
     let cff = skrifa::raw::ps::cff::CffFontRef::new_cff2(table.as_bytes(), None).unwrap();
