@@ -16,7 +16,9 @@
 //! Placement: a PDF's y axis points up, like a glyph's. The frame is the page's crop box, else its
 //! media box, else the bounds of the drawing. [`Placement::Unscaled`] keeps one point per font
 //! unit and moves the frame's top edge to `top`; [`Placement::FitEm`] scales the frame's height
-//! to the em, with its top edge at the ascender and its left edge at x = 0.
+//! to the em, with its top edge at the ascender and its left edge at x = 0;
+//! [`Placement::Origin`] keeps one point per font unit with the frame's bottom-left corner at the
+//! glyph's origin, as a paste does.
 //!
 //! PDF input is untrusted. Before the parser sees the file, its size and its number of streams
 //! are checked; every stream is decoded with a bound of [`MAX_PDF_EXPANSION`] times its stored
@@ -143,6 +145,9 @@ pub enum Placement {
     /// The frame's height becomes `units_per_em`, its top edge lands at `ascender` and its left
     /// edge at x = 0.
     FitEm { units_per_em: f64, ascender: f64 },
+    /// One point per font unit, the frame's bottom-left corner at `(0, 0)`: a point at page
+    /// `(x, y)` lands at `(x - frame left, y - frame bottom)`.
+    Origin,
 }
 
 /// What reading a page left out because it is not outline geometry.

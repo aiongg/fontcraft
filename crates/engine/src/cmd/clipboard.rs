@@ -2,12 +2,15 @@
 //!
 //! The engine never touches the system clipboard. Copy and Cut return the clipboard text in two
 //! flavours (our JSON fragment and an SVG document for other apps), Paste takes clipboard text in
-//! its parameters, and the desktop shell moves the text to and from the system clipboard.
+//! its parameters (and a drawing app's PDF flavour as base64), and the desktop shell moves the
+//! data to and from the system clipboard.
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;
 
+use base64::Engine as _;
 use fontcraft_geom::{Point, Rect, Segment, bounds, round_to_grid};
+use fontcraft_io_pdf as io_pdf;
 use fontcraft_io_svg::clipboard::{self, Fragment, FragmentGuide, FragmentShape, GuideScope as FragmentScope};
 use fontcraft_io_svg::{Placement, glyph_name_for_file, looks_like_eps, looks_like_svg, read_eps, read_svg, shapes_to_svg};
 use fontcraft_model::{Component, Font, MAX_COORDINATE, MAX_LAYER_GUIDES, MAX_NAME_LEN, NodeKind, Path, Shape, Transform, metric};
@@ -22,6 +25,8 @@ use crate::params::{GuideRef, GuideScope, Params, TargetKind, Targets};
 const MAX_IMPORT_FILES: usize = 4096;
 /// Most nodes one `file.importOutlines` call adds, over all its files.
 const MAX_IMPORT_NODES: usize = 2_000_000;
+/// Largest PDF `edit.paste` reads from the clipboard, in bytes.
+const MAX_PASTED_PDF_BYTES: usize = 64 << 20;
 
 const COPY_TARGETS: &[TargetKind] =
     &[TargetKind::Layer, TargetKind::Points, TargetKind::Segments, TargetKind::Shapes, TargetKind::Anchors, TargetKind::Guides];
@@ -53,7 +58,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Paste",
             ["Edit"],
             Some("Cmd+V"),
-            "{glyph: name, layer?: id (default: the first master's layer), side?: \"foreground\" | \"background\", json?: string, svg?: string, text?: string, at?: [x, y], points?: [[shape, node]]} adds clipboard contents to the layer. `json` is our fragment, `svg` a drawing read at one font unit per SVG unit with SVG y = 0 on the baseline, `text` either one, told apart by its content; `json` wins, and `svg` is used when `json` cannot be read. Pasted things keep their coordinates, or with `at` the bottom left of their box lands there. Coordinates are rounded to the font's grid unless its spacing is 0. A pasted anchor replaces the layer's anchor of the same name, global guides go to the layer's master. `outOfBounds` is true when the pasted box lies more than half an em outside the glyph box, and `correction` is the move that puts its bottom left at the origin. A locked glyph refuses it. When `json` or `text` holds copied glyphs (edit.copy with `glyphs`), each is added as a new glyph at its place in the default sort order, with the first free counter suffix (A.001) and no code points when its name is taken, and no `glyph` is needed. Copied corner components (edit.copy with `corners`) go onto the nodes in `points`: one corner onto every node, several onto as many nodes in order; any other selection is refused → {pasted: count, flavour: \"json\" | \"svg\" | \"glyphs\" | \"corners\", glyphs?: [names], corners?: [hint index], renamed?: [{from, to}], outOfBounds: bool, bounds?: [xMin, yMin, xMax, yMax], correction?: [dx, dy], notes?: what the SVG reader left out, selection}",
+            "{glyph: name, layer?: id (default: the first master's layer), side?: \"foreground\" | \"background\", json?: string, svg?: string, pdf?: base64, text?: string, at?: [x, y], points?: [[shape, node]]} adds clipboard contents to the layer. `json` is our fragment, `svg` a drawing read at one font unit per SVG unit with SVG y = 0 on the baseline, `pdf` a drawing app's PDF clipboard data as base64 (at most 64 MiB), read as outlines at one font unit per point with the page's bottom-left corner on the origin, `text` either `json` or `svg`, told apart by its content. `json` wins, then `svg`, then `pdf`: a flavour that cannot be read gives way to the next one given. Pasted things keep their coordinates, or with `at` the bottom left of their box lands there. Coordinates are rounded to the font's grid unless its spacing is 0. A pasted anchor replaces the layer's anchor of the same name, global guides go to the layer's master. `outOfBounds` is true when the pasted box lies more than half an em outside the glyph box, and `correction` is the move that puts its bottom left at the origin. A locked glyph refuses it. When `json` or `text` holds copied glyphs (edit.copy with `glyphs`), each is added as a new glyph at its place in the default sort order, with the first free counter suffix (A.001) and no code points when its name is taken, and no `glyph` is needed. Copied corner components (edit.copy with `corners`) go onto the nodes in `points`: one corner onto every node, several onto as many nodes in order; any other selection is refused → {pasted: count, flavour: \"json\" | \"svg\" | \"pdf\" | \"glyphs\" | \"corners\", glyphs?: [names], corners?: [hint index], renamed?: [{from, to}], outOfBounds: bool, bounds?: [xMin, yMin, xMax, yMax], correction?: [dx, dy], notes?: what the SVG or PDF reader left out, selection}",
             has_doc,
             paste
         )
@@ -63,7 +68,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Outlines…",
             ["File", "Import"],
             None,
-            "{files: [paths], glyphs?: [names], layer?: id (default: the first master's layer), onMissingGlyph?: \"add\" | \"skip\" (default skip), scale?: \"unscaled\" | \"em\" (default unscaled)} imports SVG or EPS files (EPS by its `%!` or DOS EPS header) as outlines, added to the glyph's layer after its shapes, as one undo step. Each file goes to the glyph named by its base name (A.svg into A), or to the glyph at the same position in `glyphs`. A file whose glyph does not exist is listed in `unmatched`, or with add the glyph is created. unscaled reads one font unit per SVG unit with SVG y = 0 at the master's ascender; em scales the drawing's box to the em with its top edge at the ascender. Coordinates are rounded to the grid; styling is dropped and named in `notes`. A file that cannot be read is listed in `failed`; when no file is imported and one failed, the command fails. At most 4096 files and 2,000,000 nodes → {imported: [{file, glyph, paths, notes?}], added: [names], unmatched: [files], failed: [{file, error}]}",
+            "{files: [paths], glyphs?: [names], layer?: id (default: the first master's layer), onMissingGlyph?: \"add\" | \"skip\" (default skip), scale?: \"unscaled\" | \"em\" (default unscaled)} imports SVG, EPS or PDF files (EPS by its `%!` or DOS EPS header, PDF by its `%PDF-` header) as outlines, added to the glyph's layer after its shapes, as one undo step. Each file goes to the glyph named by its base name (A.svg into A), or to the glyph at the same position in `glyphs`. A file whose glyph does not exist is listed in `unmatched`, or with add the glyph is created. unscaled reads one font unit per SVG unit with SVG y = 0 at the master's ascender (a PDF: one unit per point with the top of its page at the ascender); em scales the drawing's box to the em with its top edge at the ascender. Coordinates are rounded to the grid; styling is dropped and named in `notes`; a PDF path's line width is kept as its stroke width. A PDF gives the paths of its first page. A file that cannot be read is listed in `failed`; when no file is imported and one failed, the command fails. At most 4096 files and 2,000,000 nodes → {imported: [{file, glyph, paths, notes?}], added: [names], unmatched: [files], failed: [{file, error}]}",
             has_doc,
             import_outlines
         ).files(const { &[FileParam::read("files")] }),
@@ -256,10 +261,10 @@ fn open_path(path: &Path, run: &[&Segment]) -> Option<Path> {
 
 // ── Paste ───────────────────────────────────────────────────────────────────────────────────────
 
-/// The pasted contents, the flavour they came in, and what the SVG reader left out.
+/// The pasted contents, the flavour they came in, and what the SVG or PDF reader left out.
 type Incoming = (Fragment, &'static str, Option<String>);
 
-/// Reads the clipboard text in `json`, `svg` or `text`.
+/// Reads the clipboard data in `json`, `svg`, `pdf` or `text`.
 fn incoming(p: &Params) -> Result<Incoming> {
     let from_json = |text: &str| -> Result<Incoming> {
         let f = clipboard::decode(text).map_err(|e| p.bad(format!("the clipboard fragment cannot be pasted: {e}")))?;
@@ -270,17 +275,49 @@ fn incoming(p: &Params) -> Result<Incoming> {
         let shapes = read.paths.into_iter().map(FragmentShape::Path).collect();
         Ok((Fragment { shapes, ..Fragment::default() }, "svg", read.dropped.summary()))
     };
-    match (p.opt_str("json")?, p.opt_str("svg")?, p.opt_str("text")?) {
-        (Some(j), svg, _) => match (from_json(j), svg) {
-            (Err(_), Some(svg)) => from_svg(svg),
-            (r, _) => r,
-        },
-        (None, Some(svg), _) => from_svg(svg),
-        (None, None, Some(text)) if clipboard::looks_like_fragment(text) => from_json(text),
-        (None, None, Some(text)) if looks_like_svg(text) => from_svg(text),
-        (None, None, Some(_)) => Err(p.bad("the text is neither a clipboard fragment nor an SVG document")),
-        (None, None, None) => Err(p.bad("give the clipboard text as `json`, `svg` or `text`")),
+    let from_pdf = |data: &str| -> Result<Incoming> {
+        let read = pasted_pdf(data).map_err(|why| p.bad(format!("the PDF cannot be pasted: {why}")))?;
+        let shapes = read.paths.into_iter().map(FragmentShape::Path).collect();
+        Ok((Fragment { shapes, ..Fragment::default() }, "pdf", read.dropped.summary()))
+    };
+    // Each flavour given is tried in turn; the last one's error is reported when none reads.
+    let mut failed = None;
+    for (flavour, data) in [("json", p.opt_str("json")?), ("svg", p.opt_str("svg")?), ("pdf", p.opt_str("pdf")?)] {
+        let Some(data) = data else { continue };
+        let read = match flavour {
+            "json" => from_json(data),
+            "svg" => from_svg(data),
+            _ => from_pdf(data),
+        };
+        match read {
+            Ok(read) => return Ok(read),
+            Err(e) => failed = Some(e),
+        }
     }
+    if let Some(e) = failed {
+        return Err(e);
+    }
+    match p.opt_str("text")? {
+        Some(text) if clipboard::looks_like_fragment(text) => from_json(text),
+        Some(text) if looks_like_svg(text) => from_svg(text),
+        Some(_) => Err(p.bad("the text is neither a clipboard fragment nor an SVG document")),
+        None => Err(p.bad("give the clipboard data as `json`, `svg`, `pdf` or `text`")),
+    }
+}
+
+/// The outlines of a pasted PDF given as base64: one unit per point, the page's bottom-left
+/// corner on the origin, as a pasted SVG keeps its own coordinates.
+fn pasted_pdf(data: &str) -> std::result::Result<io_pdf::PdfOutlines, String> {
+    let data = data.trim();
+    // Four characters hold three bytes; anything longer would decode past the limit.
+    if data.len() > MAX_PASTED_PDF_BYTES / 3 * 4 + 4 {
+        return Err(format!("it is larger than the limit of {} MiB", MAX_PASTED_PDF_BYTES >> 20));
+    }
+    let bytes = base64::engine::general_purpose::STANDARD.decode(data).map_err(|e| format!("`pdf` is not base64: {e}"))?;
+    if bytes.len() > MAX_PASTED_PDF_BYTES {
+        return Err(format!("it is larger than the limit of {} MiB", MAX_PASTED_PDF_BYTES >> 20));
+    }
+    io_pdf::read_pdf(&bytes, io_pdf::Placement::Origin).map_err(|e| e.to_string())
 }
 
 /// An `[x, y]` parameter: finite numbers within the model's coordinate range.
@@ -565,10 +602,14 @@ fn import_outlines(s: &mut Session, p: &Value) -> Result<Value> {
         let master = font.master(&master_id)?;
         let ascender = font.metric_pos(master, metric::ASCENDER, em * 0.8);
         let placement = if fit_em { Placement::FitEm { units_per_em: em, ascender } } else { Placement::Unscaled { top: ascender } };
-        // EPS files run through the PostScript subset reader; everything else is read as SVG.
+        let pdf_placement =
+            if fit_em { io_pdf::Placement::FitEm { units_per_em: em, ascender } } else { io_pdf::Placement::Unscaled { top: ascender } };
+        // PDF and EPS files are told apart by their headers; everything else is read as SVG.
         let read = read_bytes(file).and_then(|bytes| {
             if looks_like_eps(&bytes) {
                 read_eps(&bytes, placement).map(|r| (r.paths, r.dropped.summary())).map_err(|e| EngineError::Io(e.to_string()))
+            } else if io_pdf::looks_like_pdf(&bytes) {
+                io_pdf::read_pdf(&bytes, pdf_placement).map(|r| (r.paths, r.dropped.summary())).map_err(|e| EngineError::Io(e.to_string()))
             } else {
                 read_svg(&bytes, placement).map(|r| (r.paths, r.dropped.summary())).map_err(|e| EngineError::Io(e.to_string()))
             }
