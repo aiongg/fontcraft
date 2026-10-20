@@ -1391,24 +1391,24 @@ mod tests {
     fn many_references_to_one_colour_glyph_walk_its_graph_once() {
         use fontcraft_model::{Color, LayerAttrs, Path};
 
-        // `D`'s full-colour layer is a red square; the drawn paint refers to `D` 5000 times.
+        // `dot`'s full-colour layer is a red square; the drawn paint refers to `dot` 5000 times.
         let mut font = Font::new("References");
         let master = font.masters[0].id.clone();
         font.add_glyph("top", Vec::new(), 600.0).unwrap();
-        font.add_glyph("D", Vec::new(), 600.0).unwrap();
+        font.add_glyph("dot", Vec::new(), 600.0).unwrap();
         {
-            let mut g = font.glyph_mut("D").unwrap();
+            let mut g = font.glyph_mut("dot").unwrap();
             let mut red = Path::rect(0.0, 0.0, 100.0, 100.0);
             red.info.attrs.fill_color = Some(Color::Rgba([1.0, 0.0, 0.0, 1.0]));
             let mut l = Layer::new(master.as_str(), 600.0);
-            l.id = "D-full".into();
+            l.id = "dot-full".into();
             l.info.attrs = kinds::with_kind(&LayerAttrs::default(), Some(ColorLayerKind::FullColor));
             l.shapes = vec![Shape::Path(red)];
             g.layers.push(l);
         }
         let shape = ShapeRef { layer: master.clone(), shapes: vec![0], stroke: None };
         let references =
-            Paint::Layers((0..5000).map(|_| Paint::ColrGlyph { glyph: "D".into(), transform: Affine::IDENTITY, shape: shape.clone() }).collect());
+            Paint::Layers((0..5000).map(|_| Paint::ColrGlyph { glyph: "dot".into(), transform: Affine::IDENTITY, shape: shape.clone() }).collect());
         let mut c = collector(&font, &master);
         let top = font.glyph("top").unwrap();
         c.collect(top, &references, &mut Vec::new(), Affine::IDENTITY, 0);

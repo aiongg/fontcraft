@@ -249,10 +249,15 @@ fn top_dict(table: &[u8]) -> &[u8] {
 
 #[test]
 fn maxstack_is_written_only_when_a_charstring_needs_more_than_the_default() {
-    // The sample glyphs fit the default stack: the Top DICT ends with `vstore`, as fontTools
-    // writes it.
-    let built = write_cff2(&font(sample_glyphs())).unwrap();
+    // The sample glyphs other than the wave fit the default stack: the Top DICT ends with
+    // `vstore`, as fontTools writes it.
+    let fitting = sample_glyphs().into_iter().filter(|g| g.name != "wave").collect();
+    let built = write_cff2(&font(fitting)).unwrap();
     assert_eq!(top_dict(&built.table).last(), Some(&24));
+    // The wave's curve run is specialised up to 513 operands, as fontTools does, so it needs
+    // `maxstack` (which fontTools leaves out).
+    let built = write_cff2(&font(sample_glyphs())).unwrap();
+    assert!(top_dict(&built.table).ends_with(&[248, 149, 25]), "{}", hex(top_dict(&built.table)));
 
     // One blended value over 200 regions takes 202 operands.
     let regions = 200;

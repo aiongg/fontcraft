@@ -275,6 +275,11 @@ fn fonts_with_different_axes_or_a_static_font_are_refused() {
 /// `font` with `count` named instances, each with its own subfamily name ID (from 1000) and name
 /// "I<n>", at weights 100 + n / 100 for n from `first`.
 fn with_instances(font: &SfntFont, first: u32, count: u16) -> SfntFont {
+    with_labelled_instances(font, first, count, |k| format!("I{k}"))
+}
+
+/// [`with_instances`] with instance `k` named `label(k)`.
+fn with_labelled_instances(font: &SfntFont, first: u32, count: u16, label: fn(u32) -> String) -> SfntFont {
     use write_fonts::tables::fvar::{Fvar, InstanceRecord};
     use write_fonts::tables::name::{Name, NameRecord};
     use write_fonts::types::{Fixed, NameId};
@@ -289,7 +294,7 @@ fn with_instances(font: &SfntFont, first: u32, count: u16) -> SfntFont {
         })
         .collect();
     for k in 0..count {
-        name.name_record.push(NameRecord::new(3, 1, 0x409, NameId::new(1000 + k), format!("I{}", first + u32::from(k)).into()));
+        name.name_record.push(NameRecord::new(3, 1, 0x409, NameId::new(1000 + k), label(first + u32::from(k)).into()));
     }
     name.name_record.sort();
     let mut out = font.clone();
@@ -300,9 +305,9 @@ fn with_instances(font: &SfntFont, first: u32, count: u16) -> SfntFont {
 
 #[test]
 fn many_named_instances_merge_without_rescanning_the_names() {
-    // 12,000 instances in each font, every name of the second copied: rebuilding the name
-    // index for each copy would compare hundreds of millions of records.
-    let count = 12_000u16;
+    // 900 instances in each font, every name of the second copied: rebuilding the name
+    // index for each copy would compare millions of records.
+    let count = 900u16;
     let merged = merge(&[with_instances(&one(), 0, count), with_instances(&two(), 20_000, count)], &MergeOptions::default()).unwrap();
     let fvar = read_fonts::tables::fvar::Fvar::read(FontData::new(merged.get(*b"fvar").unwrap())).unwrap();
     let instances = fvar.instances().unwrap();
@@ -312,6 +317,12 @@ fn many_named_instances_merge_without_rescanning_the_names() {
     let strings: Vec<String> =
         name.name_record().iter().filter(|r| r.name_id() == last).map(|r| r.string(name.string_data()).unwrap().to_string()).collect();
     assert_eq!(strings, [format!("I{}", 20_000 + u32::from(count) - 1)]);
+
+    // More name records than a `name` table can hold are refused. Short labels keep each
+    // input's strings within the table's 16-bit offsets.
+    let hex = |k: u32| format!("{k:x}");
+    let err = merge(&[with_labelled_instances(&one(), 0, 2_800, hex), with_labelled_instances(&two(), 20_000, 2_800, hex)], &MergeOptions::default());
+    assert!(matches!(err, Err(crate::TablesError::TooLarge { .. })), "{err:?}");
 
     // An instance at coordinates the first font already names is left out.
     let merged = merge(&[with_instances(&one(), 0, 3), with_instances(&two(), 1, 3)], &MergeOptions::default()).unwrap();

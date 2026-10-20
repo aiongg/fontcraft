@@ -285,8 +285,10 @@ fn squares() -> Session {
 }
 
 /// A document with `count` glyphs, each a 500-unit square: 1,024 × 1,024 pixels at 2,048 ppem.
+/// The new document's `.notdef` is removed: it would be over 1,024 pixels tall.
 fn big_squares(count: usize) -> Session {
     let mut s = Session::with_document();
+    run(&mut s, "glyph.removeGlyph", json!({ "glyphs": [".notdef"] }));
     for i in 0..count {
         let name = format!("sq{i}");
         run(&mut s, "glyph.newGlyph", json!({ "name": name }));
@@ -302,7 +304,8 @@ fn big_squares(count: usize) -> Session {
 fn rasterising_refuses_oversized_bitmaps_and_strikes_before_drawing() {
     let mut s = squares();
     let e = refused(&mut s, "bitmap.setStrikes", json!({ "add": [{"ppem": 2100}] }));
-    assert!(e.contains("would be 1050 × ") && e.contains("at most 1024 on a side"), "{e}");
+    // The new document's `.notdef` (400 × 700 units) is measured first.
+    assert!(e.contains("glyph `.notdef` would be 840 × 1470") && e.contains("at most 1024 on a side"), "{e}");
     assert!(strikes(&s).is_empty());
 
     // 65 bitmaps of 1 Mi pixels each.

@@ -48,6 +48,9 @@ const TUPLE_INDEX: u16 = 0x0FFF;
 const MAX_INSTANCES: usize = u16::MAX as usize;
 /// Highest name ID a copied instance name may take.
 const MAX_NAME_ID: u16 = 32_767;
+/// Most records a `name` table can hold: its 16-bit storage offset follows a six-byte header and
+/// twelve bytes per record.
+const MAX_NAME_RECORDS: usize = (u16::MAX as usize - 6) / 12;
 
 fn describe(axes: &[FvarAxis]) -> String {
     axes.iter().map(|a| format!("{} {}–{}–{}", tag_str(a.tag).trim_end(), a.minimum, a.default, a.maximum)).collect::<Vec<_>>().join(", ")
@@ -373,6 +376,11 @@ fn fvar(fonts: &[SfntFont], out: &mut SfntFont) -> Result<()> {
     }
     out.insert(FVAR, write_fonts::dump_table(&merged).map_err(|e| TablesError::invalid(format!("the merged 'fvar' table cannot be written: {e}")))?);
     if let Some(mut name) = name {
+        let lang_tags = name.lang_tag_record.as_ref().map_or(0, Vec::len);
+        let header = name.name_record.len().saturating_mul(12).saturating_add(lang_tags.saturating_mul(4)).saturating_add(6);
+        if header > usize::from(u16::MAX) {
+            return Err(TablesError::TooLarge { what: "the records of the merged 'name' table", limit: MAX_NAME_RECORDS });
+        }
         name.name_record.sort();
         out.insert(
             *b"name",
