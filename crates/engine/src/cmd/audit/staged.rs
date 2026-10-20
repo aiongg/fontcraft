@@ -217,7 +217,8 @@ fn start(s: &mut Session, v: &Value) -> Result<Value> {
     let doc = s.doc()?;
     let target = document_target_of(doc);
     let font = doc.font.clone();
-    let run = read_run(&p, s, &font, &target.settings)?;
+    let mut run = read_run(&p, s, &font, &target.settings)?;
+    run.keeps_cache = true;
     let values: BTreeSet<String> = target.settings.values.keys().cloned().collect();
     let mut staged = Staged {
         id: next_run_id(),

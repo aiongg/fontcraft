@@ -416,3 +416,53 @@ fn a_second_run_reuses_the_layer_reports_of_unchanged_glyphs() {
     run(&mut s, "audit.run", select);
     assert_eq!(examined() - at, full, "a cleared cache examines every glyph");
 }
+
+/// The cache is keyed on the thresholds the run resolves, so a changed user profile threshold
+/// examines the glyphs again (`audit.glyphHashCache`).
+#[test]
+fn a_changed_profile_threshold_examines_the_glyphs_again() {
+    let mut s = Session::with_document();
+    // A 10 × 10 square: tiny below a minimum area of 200, not below 50.
+    add(&mut s, "A", rect(0.0, 0.0, 10.0, 10.0), true);
+    let save = |s: &mut Session, min_area: f64| {
+        run(
+            s,
+            "audit.profile.save",
+            json!({
+                "profile": "house",
+                "checks": ["check.outlines.tinyContour"],
+                "config": {"check.outlines.tinyContour": {"minArea": min_area}},
+            }),
+        );
+    };
+    let select = json!({"profile": "house", "glyphs": ["A"]});
+    let examined = || fontcraft_audit::layers_examined();
+
+    save(&mut s, 50.0);
+    let first = run(&mut s, "audit.run", select.clone());
+    assert_eq!(count(&first, "check.outlines.tinyContour"), 0);
+
+    save(&mut s, 200.0);
+    let at = examined();
+    let second = run(&mut s, "audit.run", select.clone());
+    assert!(examined() > at, "a changed threshold examines the layers again");
+    let mut all = select;
+    all["all"] = json!(true);
+    let fresh = run(&mut s, "audit.run", all);
+    assert_eq!(count(&second, "check.outlines.tinyContour"), 1);
+    assert_eq!(second["results"].as_array().unwrap().len(), fresh["results"].as_array().unwrap().len());
+    assert_eq!(second["summary"], fresh["summary"]);
+}
+
+/// `all` is checked for file targets too.
+#[test]
+fn a_file_target_refuses_an_all_that_is_not_a_boolean() {
+    let dir = std::env::temp_dir().join(format!("fontcraft-audit-all-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("Any.ttf");
+    std::fs::write(&path, b"not a font").unwrap();
+    let mut s = Session::new();
+    let e = s.execute("audit.run", &json!({"target": path, "all": "x"})).unwrap_err().to_string();
+    assert!(e.contains("`all` must be true or false"), "{e}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

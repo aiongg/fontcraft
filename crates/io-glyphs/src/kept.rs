@@ -18,7 +18,7 @@ use fontcraft_plist::Value;
 use crate::LAYOUT_KEY;
 
 /// Kept values by key, per glyph name (`None` for the objects outside the glyphs).
-type ByScope = HashMap<Option<String>, Vec<(String, Value)>>;
+type ByScope = HashMap<Option<String>, HashMap<String, Vec<Value>>>;
 
 #[derive(Default)]
 struct Recording {
@@ -38,7 +38,7 @@ pub(crate) fn record(kept: &HashMap<&str, &Value>, written: &[&str]) {
         let Some(r) = r.as_mut() else { return };
         for (key, value) in kept {
             let into = if written.contains(key) { &mut r.written } else { &mut r.left_out };
-            into.entry(r.glyph.clone()).or_default().push(((*key).to_string(), (*value).clone()));
+            into.entry(r.glyph.clone()).or_default().entry((*key).to_string()).or_default().push((*value).clone());
         }
     });
 }
@@ -99,11 +99,18 @@ pub fn without_stale_layouts(font: &Font) -> Option<Font> {
     drop(stop);
     let recording = recording.filter(|_| written)?;
     let mut stale: ByScope = HashMap::new();
-    for (scope, values) in recording.left_out {
+    for (scope, by_key) in recording.left_out {
         let kept = recording.written.get(&scope);
-        let values: Vec<_> = values.into_iter().filter(|v| !kept.is_some_and(|k| k.contains(v))).collect();
-        if !values.is_empty() {
-            stale.insert(scope, values);
+        let mut left: HashMap<String, Vec<Value>> = HashMap::new();
+        for (key, values) in by_key {
+            let written = kept.and_then(|k| k.get(&key));
+            let values: Vec<_> = values.into_iter().filter(|v| !written.is_some_and(|w| w.contains(v))).collect();
+            if !values.is_empty() {
+                left.insert(key, values);
+            }
+        }
+        if !left.is_empty() {
+            stale.insert(scope, left);
         }
     }
     if stale.is_empty() {
@@ -114,7 +121,7 @@ pub fn without_stale_layouts(font: &Font) -> Option<Font> {
         let mut prune = |x: &mut Extra| {
             x.retain(|e| {
                 let key = e.key.as_str().strip_prefix(LAYOUT_KEY);
-                !(matches!(e.family, Family::Native | Family::Glyphs) && key.is_some_and(|k| values.iter().any(|(sk, sv)| sk == k && *sv == e.value)))
+                !(matches!(e.family, Family::Native | Family::Glyphs) && key.and_then(|k| values.get(k)).is_some_and(|vs| vs.contains(&e.value)))
             });
         };
         match scope {

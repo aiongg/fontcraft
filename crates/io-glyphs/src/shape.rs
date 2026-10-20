@@ -44,32 +44,49 @@ pub(crate) struct Flags<'a> {
     pub tangent: bool,
     pub orientation: Orientation,
     pub locked: bool,
-    /// What follows that the model does not read (kept as written).
+    /// The flags after the join as written, when the writer would spell them otherwise; empty
+    /// when it would not.
     pub rest: &'a str,
 }
 
-/// The flags after the type: `s` (or from version 4 `t`), then `R` or `C`, then `X`, in that
-/// order.
+/// The flags after the type: `s` (or from version 4 `t`), then `R` or `C`, then `X`. `R`, `C`
+/// and `X` are read in any order; flags the writer would not spell the same way (another order,
+/// a repeated or unknown letter) are also kept as written in `rest`.
 pub(crate) fn read_flags(s: &str, version: u32) -> Flags<'_> {
     let (smooth, tangent, after) = match s.as_bytes().first() {
         Some(b's') => (true, false, s.get(1..).unwrap_or("")),
         Some(b't') if version >= 4 => (true, true, s.get(1..).unwrap_or("")),
         _ => (false, false, s),
     };
-    let (orientation, after2) = match after.as_bytes().first() {
-        Some(b'R') => (Orientation::Right, after.get(1..).unwrap_or("")),
-        Some(b'C') => (Orientation::Center, after.get(1..).unwrap_or("")),
-        _ => (Orientation::Left, after),
-    };
-    let (locked, rest) = match after2.strip_prefix('X') {
-        Some(r) => (true, r),
-        None => (false, after2),
-    };
-    if rest.is_empty() {
-        Flags { smooth, tangent, orientation, locked, rest }
-    } else {
-        // Flags in an order the writer does not use stay as written after the join.
-        Flags { smooth, tangent, orientation: Orientation::Left, locked: false, rest: after }
+    let (orientation, locked) = orientation_and_lock(after);
+    let mut written = String::new();
+    push_orientation_and_lock(&mut written, orientation, locked);
+    let rest = if written == after { "" } else { after };
+    Flags { smooth, tangent, orientation, locked, rest }
+}
+
+/// The orientation and lock that `R`, `C` and `X` give, in any order; of `R` and `C` the first
+/// counts.
+fn orientation_and_lock(flags: &str) -> (Orientation, bool) {
+    let orientation = flags
+        .chars()
+        .find_map(|c| match c {
+            'R' => Some(Orientation::Right),
+            'C' => Some(Orientation::Center),
+            _ => None,
+        })
+        .unwrap_or(Orientation::Left);
+    (orientation, flags.contains('X'))
+}
+
+fn push_orientation_and_lock(out: &mut String, orientation: Orientation, locked: bool) {
+    match orientation {
+        Orientation::Left => {}
+        Orientation::Right => out.push('R'),
+        Orientation::Center => out.push('C'),
+    }
+    if locked {
+        out.push('X');
     }
 }
 
@@ -78,23 +95,19 @@ pub(crate) fn write_flags(out: &mut String, n: &Node, version: u32) {
     if n.smooth {
         out.push(if n.tangent && version >= 4 { 't' } else { 's' });
     }
-    // Flags kept as written stand for the orientation and lock while the model has neither (the
-    // reader sets neither when it keeps them). Once an edit sets one they are stale, and the
-    // fields are written instead: the reader could not take the fields from them anyway.
-    let edited = n.orientation != Orientation::Left || n.locked;
-    if let Some(rest) = n.info.extra.get(Family::Glyphs, "flags").and_then(Value::as_str)
-        && !edited
+    // Flags kept as written stand for the orientation and lock while they still give the model's.
+    // Once an edit changes either, the fields are written, followed by the kept letters the
+    // model does not read.
+    let kept = n.info.extra.get(Family::Glyphs, "flags").and_then(Value::as_str);
+    if let Some(rest) = kept
+        && orientation_and_lock(rest) == (n.orientation, n.locked)
     {
         out.push_str(rest);
         return;
     }
-    match n.orientation {
-        Orientation::Left => {}
-        Orientation::Right => out.push('R'),
-        Orientation::Center => out.push('C'),
-    }
-    if n.locked {
-        out.push('X');
+    push_orientation_and_lock(out, n.orientation, n.locked);
+    if let Some(rest) = kept {
+        out.extend(rest.chars().filter(|c| !matches!(c, 'R' | 'C' | 'X')));
     }
 }
 

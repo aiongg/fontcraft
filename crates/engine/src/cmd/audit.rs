@@ -221,6 +221,8 @@ struct Run {
     modules: crate::extensions::ModuleChecks,
     /// The layer reports of the document's kept run, reused where nothing they read changed.
     cache: Option<Arc<cache::LayerCache>>,
+    /// Whether the run records layer reports for the next one: only a run on the open document.
+    keeps_cache: bool,
 }
 
 /// Only the open document can be audited so far.
@@ -397,6 +399,7 @@ fn read_run(p: &Params, s: &Session, font: &Font, settings: &DocumentSettings) -
         warnings,
         modules,
         cache: None,
+        keeps_cache: false,
     })
 }
 
@@ -552,14 +555,15 @@ fn examine_layers(
     let place = places.entry(fi).or_default();
     if !layer_checks.is_empty() {
         // Only the open document (the first and only font of its target) keeps a cache.
-        let cached = run.cache.as_deref().filter(|c| fi == 0 && c.key_matches(ctx, run, layer_checks));
-        if fi == 0 {
+        let keeps = run.keeps_cache && fi == 0;
+        let cached = run.cache.as_deref().filter(|c| keeps && c.key_matches(ctx, run, layer_checks));
+        if keeps {
             ex.cache.start(ctx, run, layer_checks);
         }
         for (_, g, li, layer) in chosen {
             let kept = cached.and_then(|c| c.reports(ctx, g)).and_then(|r| r.iter().find(|(id, _)| *id == layer.id)).map(|(_, r)| r.clone());
             let report = kept.unwrap_or_else(|| audit::audit_layer(ctx, g, layer, layer_checks, &run.config));
-            if fi == 0 {
+            if keeps {
                 ex.cache.record(font, g, &layer.id, &report);
             }
             place.layers.insert((g.name.clone(), layer.id.clone()), (*li, layer.master.clone()));
@@ -1250,6 +1254,7 @@ fn glyph_changed(then: &Font, now: &Font, glyph: &str) -> bool {
 
 fn run(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("audit.run", v)?;
+    let all = p.bool_or("all", false)?;
     if let Some(paths) = target_paths(&p)? {
         let mut t = load_paths(&paths)?;
         let first = t.srcs.first().map(|s| s.model.clone()).unwrap_or_else(|| Arc::new(Font::new("")));
@@ -1267,7 +1272,8 @@ fn run(s: &mut Session, v: &Value) -> Result<Value> {
     let mut t = document_target_of(doc);
     let font = doc.font.clone();
     let mut run = read_run(&p, s, &font, &t.settings)?;
-    if !p.bool_or("all", false)? {
+    run.keeps_cache = true;
+    if !all {
         run.cache = kept_run(doc).and_then(|k| k.cache.clone());
     }
     let mut ex = examine_target(&mut t, &run);
