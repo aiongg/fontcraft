@@ -8,12 +8,15 @@
 //! - `--x` turns a switch on and `--no-x` off.
 //! - A value follows as `--opt=v` or `--opt v`; a list is comma-separated (`--opt=a,b`) and
 //!   replaces the current list, unless every item starts with `+` or `-`, which adds or removes
-//!   items from it (`--opt=+c,-a`). The current list starts as the default.
+//!   items from it (`--opt=+c,-a`). `--opt+=a,b` adds items and `--opt-=a,b` removes them, and
+//!   `--opt=` empties the list. The current list starts as the default. Items that are numbers
+//!   compare by value when removed (`0x409` removes `1033`).
 //! - `@FILE` and `--options FILE` are replaced by the arguments the file holds (whitespace
 //!   separated, quotes group, `#` starts a comment line), at most [`MAX_RESPONSE_FILE`] bytes,
 //!   nested at most [`MAX_RESPONSE_DEPTH`] deep, a file that includes itself refused.
 //! - Later options win: the command line is read left to right after expansion.
-//! - A long option may be shortened to any prefix that names one option only.
+//! - A long option may be shortened to any prefix that names one option only; a name that
+//!   differs from an option only in letter case names that option (`--name-IDs`).
 //! - `--` ends the options; `-h` and `--help` ask for help; a lone `-` is a positional (stdin).
 
 use std::collections::BTreeMap;
@@ -133,11 +136,18 @@ pub fn parse(specs: &[OptSpec], args: &[String]) -> Result<Parsed, Failure> {
             continue;
         }
         if let Some(body) = arg.strip_prefix("--") {
-            let (name, inline) = match body.split_once('=') {
-                Some((n, v)) => (n, Some(v.to_string())),
-                None => (body, None),
+            let (name, edit, inline) = match body.split_once('=') {
+                Some((n, v)) => match (n.strip_suffix('+'), n.strip_suffix('-')) {
+                    (Some(n), _) => (n, Edit::Add, Some(v.to_string())),
+                    (_, Some(n)) => (n, Edit::Remove, Some(v.to_string())),
+                    _ => (n, Edit::Set, Some(v.to_string())),
+                },
+                None => (body, Edit::Set, None),
             };
             let (spec, on) = resolve(specs, name)?;
+            if edit != Edit::Set && spec.kind != Kind::List {
+                return Err(usage(format!("--{}: += and -= edit list options only", spec.name)));
+            }
             match spec.kind {
                 Kind::Switch => {
                     if inline.is_some() {
@@ -153,7 +163,7 @@ pub fn parse(specs: &[OptSpec], args: &[String]) -> Result<Parsed, Failure> {
                         Some(v) => v,
                         None => it.next().ok_or_else(|| usage(format!("--{} needs a value", spec.name)))?,
                     };
-                    set_value(&mut parsed, spec, value);
+                    set_value(&mut parsed, spec, value, edit);
                 }
             }
             continue;
@@ -167,7 +177,7 @@ pub fn parse(specs: &[OptSpec], args: &[String]) -> Result<Parsed, Failure> {
                 }
                 Kind::Value | Kind::List => {
                     let value = it.next().ok_or_else(|| usage(format!("-{c} needs a value")))?;
-                    set_value(&mut parsed, spec, value);
+                    set_value(&mut parsed, spec, value, Edit::Set);
                 }
             }
             continue;
@@ -177,31 +187,72 @@ pub fn parse(specs: &[OptSpec], args: &[String]) -> Result<Parsed, Failure> {
     Ok(parsed)
 }
 
-fn set_value(parsed: &mut Parsed, spec: &OptSpec, value: String) {
+/// How a list option's value changes the current list: `=`, `+=` or `-=`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Edit {
+    Set,
+    Add,
+    Remove,
+}
+
+fn set_value(parsed: &mut Parsed, spec: &OptSpec, value: String, edit: Edit) {
     match spec.kind {
         Kind::Value => {
             parsed.values.insert(spec.name, OptValue::Value(value));
         }
         Kind::List => {
             let items = split_list(&value);
+            let mut current = parsed.list(spec.name).to_vec();
             let edits = !items.is_empty() && items.iter().all(|i| i.len() > 1 && (i.starts_with('+') || i.starts_with('-')));
-            let list = if edits {
-                let mut current = parsed.list(spec.name).to_vec();
-                for item in items {
-                    let (op, name) = item.split_at(1);
-                    current.retain(|c| c != name);
-                    if op == "+" {
-                        current.push(name.to_string());
+            let list = match edit {
+                Edit::Add => {
+                    for item in items {
+                        if !current.iter().any(|c| same_item(c, &item)) {
+                            current.push(item);
+                        }
                     }
+                    current
                 }
-                current
-            } else {
-                items
+                Edit::Remove => {
+                    current.retain(|c| !items.iter().any(|i| same_item(c, i)));
+                    current
+                }
+                Edit::Set if edits => {
+                    for item in items {
+                        let (op, name) = item.split_at(1);
+                        current.retain(|c| !same_item(c, name));
+                        if op == "+" {
+                            current.push(name.to_string());
+                        }
+                    }
+                    current
+                }
+                Edit::Set => items,
             };
             parsed.values.insert(spec.name, OptValue::List(list));
         }
         Kind::Switch => {}
     }
+}
+
+/// Two list items are the same when their text is, or when both are numbers of the same value
+/// (decimal, or hexadecimal, octal or binary with `0x`, `0o` or `0b`).
+fn same_item(a: &str, b: &str) -> bool {
+    a == b || matches!((int_item(a), int_item(b)), (Some(x), Some(y)) if x == y)
+}
+
+fn int_item(text: &str) -> Option<u64> {
+    let lower = text.to_ascii_lowercase();
+    let (digits, radix) = match lower.get(..2) {
+        Some("0x") => (lower.get(2..)?, 16),
+        Some("0o") => (lower.get(2..)?, 8),
+        Some("0b") => (lower.get(2..)?, 2),
+        _ => (lower.as_str(), 10),
+    };
+    if digits.is_empty() || !digits.starts_with(|c: char| c.is_ascii_hexdigit()) {
+        return None;
+    }
+    u64::from_str_radix(digits, radix).ok()
 }
 
 fn split_list(text: &str) -> Vec<String> {
@@ -217,6 +268,9 @@ fn resolve<'a>(specs: &'a [OptSpec], name: &str) -> Result<(&'a OptSpec, bool), 
         })
     };
     if let Some((_, s, on)) = forms().find(|(n, _, _)| n == name) {
+        return Ok((s, on));
+    }
+    if let Some((_, s, on)) = forms().find(|(n, _, _)| n.eq_ignore_ascii_case(name)) {
         return Ok((s, on));
     }
     let matches: Vec<(String, &OptSpec, bool)> = forms().filter(|(n, _, _)| n.starts_with(name)).collect();
@@ -338,6 +392,7 @@ mod tests {
         OptSpec::switch("hinting", true, "keep hints"),
         OptSpec::switch("retain-gids", false, "keep glyph ids"),
         OptSpec::list("layout-features", "LIST", "kern,liga", "features to keep"),
+        OptSpec::list("name-ids", "LIST", "0,1,2", "name IDs to keep"),
         OptSpec::value("output", "FILE", "", "output file").short('o'),
         OptSpec::value("output-dir", "DIR", "", "output folder"),
     ];
@@ -361,6 +416,20 @@ mod tests {
         assert!(parse(SPECS, &args(&["--bogus"])).is_err());
         let p = parse(SPECS, &args(&["--", "--hinting", "-"])).unwrap();
         assert_eq!(p.positional, vec!["--hinting", "-"]);
+    }
+
+    #[test]
+    fn list_options_take_set_add_and_remove_forms() {
+        let p = parse(SPECS, &args(&["--layout-features+=smcp,liga", "--layout-features-=kern"])).unwrap();
+        assert_eq!(p.list("layout-features"), ["liga", "smcp"], "+= adds what is missing, -= removes");
+        let p = parse(SPECS, &args(&["--layout-features="])).unwrap();
+        assert!(p.list("layout-features").is_empty(), "an empty value empties the list");
+        let p = parse(SPECS, &args(&["--layout-features=", "--layout-features+=ss01"])).unwrap();
+        assert_eq!(p.list("layout-features"), ["ss01"]);
+        let p = parse(SPECS, &args(&["--name-IDs-=0x1,2", "--name-ids+=0x10"])).unwrap();
+        assert_eq!(p.list("name-ids"), ["0", "0x10"], "numbers compare by value; the name ignores letter case");
+        assert!(parse(SPECS, &args(&["--output+=x"])).is_err(), "+= edits lists only");
+        assert!(parse(SPECS, &args(&["--hinting-=x"])).is_err());
     }
 
     #[test]
