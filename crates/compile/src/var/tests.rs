@@ -674,6 +674,32 @@ fn cff2_stems(v: &VariableFont, name: &str, wght: f32) -> (Stems, Stems, usize) 
 }
 
 #[test]
+fn cff2_private_dict_has_the_family_blues_of_each_master() {
+    let mut f = two_masters();
+    let zones = |top: f64, low: f64| {
+        fontcraft_model::plist::openstep::parse_value(&format!(
+            "({{pos = {top}; size = 12;}}, {{pos = 0; size = -12;}}, {{pos = {low}; size = -12;}})"
+        ))
+        .unwrap()
+    };
+    let masters = Arc::make_mut(&mut f.masters);
+    masters[0].params.0.push(Param::new("Family Alignment Zones", zones(700.0, -200.0)));
+    masters[1].params.0.push(Param::new("Family Alignment Zones", zones(720.0, -210.0)));
+    let v = build_cff2(&f, None);
+    let font = FontRef::new(&v.compiled.bytes).unwrap();
+    let table = font.table_data(skrifa::raw::types::Tag::new(b"CFF2")).unwrap();
+    let cff = skrifa::raw::ps::cff::CffFontRef::new_cff2(table.as_bytes(), None).unwrap();
+    let pairs = |b: &skrifa::raw::ps::hinting::Blues| -> Vec<(i32, i32)> { b.values().iter().map(|(a, b)| (a.to_i32(), b.to_i32())).collect() };
+    let at = |wght: f32| {
+        let location = font.axes().location([("wght", wght)]);
+        let (_, params) = cff.subfont_hinted(0, location.coords()).unwrap();
+        (pairs(&params.family_blues), pairs(&params.family_other_blues), params.blue_fuzz.to_i32())
+    };
+    assert_eq!(at(100.0), (vec![(-12, 0), (700, 712)], vec![(-212, -200)], 1));
+    assert_eq!(at(900.0), (vec![(-12, 0), (720, 732)], vec![(-222, -210)], 1));
+}
+
+#[test]
 fn cff2_blends_manual_hints_that_follow_their_nodes() {
     use fontcraft_hinting::{Edge, NodeRef, PsHint, set_ps_hints};
     let node = |p, n| Edge::Node(NodeRef::new(p, n));
