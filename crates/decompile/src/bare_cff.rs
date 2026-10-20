@@ -9,6 +9,9 @@
 //!
 //! Input is untrusted: every offset and count is checked against the data, and charstrings run
 //! under the limits of [`crate::type1`].
+//!
+//! The first counter mask's reading follows `c/shared/t2cstr.cpp` of AFDKO (Apache License 2.0,
+//! Copyright Adobe).
 
 use skrifa::raw::ps::string::STANDARD_STRINGS;
 
