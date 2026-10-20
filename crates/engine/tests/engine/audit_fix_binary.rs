@@ -342,10 +342,51 @@ fn tables_recalculate_rewrites_the_cff_font_bbox_and_is_fixed_pitch() {
     assert_eq!(cff_top_ints(&out, CFF_FONT_BBOX).unwrap(), compiled_box, "the compiler's box again");
     assert_eq!(cff_top_ints(&out, CFF_IS_FIXED_PITCH).unwrap().map(|v| v[0]).unwrap_or(0), fixed);
     for (tag, bytes) in &original.tables {
-        if tag != b"CFF " {
+        // head differs in its checksum adjustment only.
+        if tag != b"CFF " && tag != b"head" {
             assert_eq!(out.get(*tag), Some(bytes.as_slice()), "{} is left as it was", String::from_utf8_lossy(tag));
         }
     }
     let after = run(&mut s, "audit.run", json!({"target": otf, "checks": checks}));
     assert!(codes(&after).is_empty(), "{after}");
+}
+
+#[test]
+fn audit_fix_on_the_files_of_a_family_makes_their_family_values_equal() {
+    use fontcraft_tables::patch::read_field;
+    let dir = scratch("family-sync");
+    let (mut s, regular_path) = exported(&dir);
+    let number = |f: &SfntFont, table: &[u8; 4], name: &str| match read_field(f, *table, name).unwrap() {
+        PatchValue::Number(n) => n,
+        other => panic!("{name}: {other:?}"),
+    };
+    let regular = read(&regular_path);
+    let ascender = number(&regular, b"hhea", "ascender");
+    let underline = number(&regular, b"post", "underlinePosition");
+    // A bold with a higher ascender and a lower underline.
+    let bold = patch(&regular, b"hhea", &[("ascender", ascender + 50.0)]);
+    let bold = patch(&bold, b"post", &[("underlinePosition", underline - 40.0)]);
+    let bold_path = dir.join("Bold.ttf");
+    save(&bold_path, &bold);
+    let checks = json!(["check.family.verticalMetrics", "check.family.underlineConsistency"]);
+    let target = json!([regular_path, bold_path]);
+    let before = run(&mut s, "audit.run", json!({"target": target, "checks": checks}));
+    assert_eq!(before["results"].as_array().unwrap().len(), 2, "{before}");
+    assert!(s.execute("audit.fix", &json!({"target": target, "checks": checks, "safeOnly": false, "output": dir.join("x.ttf")})).is_err());
+
+    let r = run(&mut s, "audit.fix", json!({"target": target, "checks": checks, "safeOnly": false, "inPlace": true}));
+    assert_eq!(r["outputs"].as_array().unwrap().len(), 2, "both files change: {r}");
+    assert!(r["applied"].as_array().unwrap().iter().all(|a| a["fix"] == "syncFamilyValues" && a["command"] == "tables.recalculate"), "{r}");
+    assert!(r["remaining"]["results"].as_array().unwrap().is_empty(), "{r}");
+    let (a, b) = (read(&regular_path), read(&bold_path));
+    assert_eq!(number(&a, b"hhea", "ascender"), ascender + 50.0, "the higher ascender wins");
+    assert_eq!(number(&b, b"hhea", "ascender"), ascender + 50.0);
+    assert_eq!(number(&a, b"post", "underlinePosition"), number(&b, b"post", "underlinePosition"));
+    for (font, was) in [(&a, &regular), (&b, &bold)] {
+        for (tag, bytes) in &was.tables {
+            if !matches!(tag, b"hhea" | b"post" | b"head") {
+                assert_eq!(font.get(*tag), Some(bytes.as_slice()), "{} is left as it was", String::from_utf8_lossy(tag));
+            }
+        }
+    }
 }
