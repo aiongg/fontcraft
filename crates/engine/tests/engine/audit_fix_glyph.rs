@@ -232,3 +232,52 @@ fn audit_fix_puts_the_shapes_of_a_master_in_the_proposed_contour_order() {
     assert_eq!(bold.shapes, vec![small(), big(20.0)], "the bold master follows the regular one");
     assert_eq!(g.layers[0], before, "the reference master is left as it was");
 }
+
+#[test]
+fn audit_fix_first_stage_resets_a_code_point_from_the_glyph_name() {
+    let mut s = Session::with_document();
+    run(&mut s, "glyph.setUnicodes", json!({"glyphs": ["A"], "unicodes": ["E000"]}));
+    fix_one(&mut s, "check.glyphset.nameCodepointMismatch", Some("A"), "glyph.updateGlyphInfo");
+    assert_eq!(s.font().unwrap().glyph("A").unwrap().unicodes, vec![0x41]);
+}
+
+#[test]
+fn audit_fix_first_stage_unmaps_a_code_point_the_compiled_font_reports() {
+    let mut s = Session::with_document();
+    run(&mut s, "glyph.newGlyph", json!({"name": "softhyphen", "unicodes": [0xAD, 0xE001], "width": 300}));
+    let r = fix_one(&mut s, "check.glyphset.softHyphen", None, "glyph.setUnicodes");
+    assert_eq!(r["applied"][0]["params"], json!({"glyphs": ["softhyphen"], "unicodes": [0xE001]}), "{r}");
+    let font = s.font().unwrap();
+    assert_eq!(font.glyph("softhyphen").unwrap().unicodes, vec![0xE001], "the other code point stays");
+}
+
+#[test]
+fn audit_fix_last_stage_deletes_obsolete_and_redundant_kerning() {
+    use std::sync::Arc;
+    let mut s = Session::with_document();
+    let master = s.font().unwrap().masters[0].id.clone();
+    s.edit("kerning", |font| {
+        let k = Arc::make_mut(&mut font.kerning);
+        k.ltr.set(&master, "A", "V", 0.0);
+        k.ltr.set(&master, "A", "missing", -20.0);
+        k.ltr.set(&master, "T", "O", -30.0);
+        Ok(())
+    })
+    .unwrap();
+    let checks = ["check.kerning.redundantPairs", "check.kerning.missingGlyphReference"];
+    let select = json!({"profile": "strict", "checks": checks});
+    let doc = run(&mut s, "audit.run", select.clone());
+    assert!(checks.iter().all(|c| count(&doc, c) == 1), "{doc}");
+    let steps = undo_steps(&s);
+    let mut p = select.clone();
+    p["safeOnly"] = json!(false);
+    let r = run(&mut s, "audit.fix", p);
+    let commands: Vec<&str> = r["applied"].as_array().unwrap().iter().map(|a| a["command"].as_str().unwrap()).collect();
+    assert_eq!(commands, ["kerning.cleanUp", "kerning.removePair"], "{r}");
+    assert!(checks.iter().all(|c| count(&r["remaining"], c) == 0), "{r}");
+    assert_eq!(undo_steps(&s), steps + 1, "one undo step");
+    let font = s.font().unwrap();
+    assert_eq!(font.kerning.ltr.get(&master, "A", "V"), None);
+    assert_eq!(font.kerning.ltr.get(&master, "A", "missing"), None);
+    assert_eq!(font.kerning.ltr.get(&master, "T", "O"), Some(-30.0), "a pair no check reports stays");
+}

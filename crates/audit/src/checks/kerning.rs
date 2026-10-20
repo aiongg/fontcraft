@@ -64,6 +64,16 @@ impl Dir {
             Dir::Vertical => "vertical",
         }
     }
+
+    /// The direction as a finding's `direction` data: 0 left-to-right, 1 right-to-left,
+    /// 2 vertical, so a fix can name the table the pair is stored in.
+    fn code(self) -> f64 {
+        match self {
+            Dir::Ltr => 0.0,
+            Dir::Rtl => 1.0,
+            Dir::Vertical => 2.0,
+        }
+    }
 }
 
 fn tables(font: &Font) -> [(Dir, &KernTable); 3] {
@@ -172,6 +182,7 @@ pub(crate) fn missing_glyph_reference(ctx: &SourceCtx<'_>, _: &Params<'_>, sink:
                                         mk.master
                                     ),
                                 )
+                                .data("direction", dir.code())
                                 .place(place()),
                             ),
                             Key::Group(group) if members.of(facing(dir, first), group).is_empty() => sink.push(
@@ -184,6 +195,7 @@ pub(crate) fn missing_glyph_reference(ctx: &SourceCtx<'_>, _: &Params<'_>, sink:
                                         mk.master
                                     ),
                                 )
+                                .data("direction", dir.code())
                                 .place(place()),
                             ),
                             _ => {}
@@ -391,7 +403,7 @@ pub(crate) fn redundant_pairs(ctx: &SourceCtx<'_>, _: &Params<'_>, sink: &mut Si
                         ),
                         _ => continue,
                     };
-                    sink.push(hit.data("value", *value).place(place));
+                    sink.push(hit.data("value", *value).data("direction", dir.code()).place(place));
                 }
             }
         }
