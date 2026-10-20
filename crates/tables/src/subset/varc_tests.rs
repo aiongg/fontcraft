@@ -462,3 +462,38 @@ fn corpus_varc_fonts_subset_as_pyftsubset_does() {
     assert_eq!(v.store.iter().map(|(r, items)| (r.clone(), items.len())).collect::<Vec<_>>(), [(vec![0, 1, 7, 2, 8, 3, 9, 4, 5, 6], 5)]);
     assert_eq!(v.regions.len(), 10);
 }
+
+#[test]
+fn a_glyph_record_shared_through_the_coverage_is_parsed_once() {
+    // A format 2 coverage maps glyphs 1, 2 and 3 to record 0, which has 64 components.
+    let record: Vec<u8> = (0..64).flat_map(|_| component(4, None, None, None, None, None)).collect();
+    let mut coverage = vec![0, 2, 0, 3];
+    for g in 1u16..=3 {
+        [g, g, 0].iter().for_each(|v| coverage.extend(v.to_be_bytes()));
+    }
+    let mut bytes = 0x0001_0000u32.to_be_bytes().to_vec();
+    for at in [24, 0, 0, 0, 24 + coverage.len() as u32] {
+        bytes.extend(at.to_be_bytes());
+    }
+    bytes.extend(&coverage);
+    bytes.extend(index2(&[record]));
+    let mut varc = super::Varc::parse(&bytes).unwrap();
+    for g in 1..=3 {
+        assert_eq!(varc.component_glyphs(g).unwrap(), [4; 64]);
+    }
+    assert_eq!(super::MAX_COMPONENTS - varc.budget, 64);
+}
+
+#[test]
+fn an_unused_variation_store_is_kept_empty() {
+    // pyftsubset keeps the store object of a table whose kept components use no delta set.
+    let font = font();
+    let (a, b) = (gid(&font, "A"), gid(&font, "B"));
+    let mut plain = font.clone();
+    plain.insert(*b"VARC", table(&[a], Some(store()), None, None, index2(&[component(b, None, None, None, None, None)])));
+    let r = run(&plain, text("A"));
+    let varc = r.font.get(*b"VARC").unwrap();
+    let at = u32::from_be_bytes(varc[8..12].try_into().unwrap()) as usize;
+    assert_ne!(at, 0);
+    assert_eq!(&varc[at..at + 12], [0, 1, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0]);
+}

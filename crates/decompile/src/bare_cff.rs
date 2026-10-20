@@ -563,6 +563,8 @@ impl<'a> T2Run<'a> {
     }
 
     fn finish(&mut self) -> Result<(), String> {
+        // A first counter mask with no later mask or moveto is decided at the end.
+        self.settle_counter(false)?;
         if !self.hints.emitted {
             self.hints.flush(&mut self.ops)?;
         }
@@ -1056,6 +1058,16 @@ mod tests {
         let ps = read_cff(&font(&[lines(1), cs], &[], &[]), &mut warnings).unwrap();
         assert!(ps.glyphs[1].ops.len() <= MAX_GLYPH_OPS, "{}", ps.glyphs[1].ops.len());
         assert_eq!(warnings.len(), 1, "{warnings:?}");
+    }
+
+    #[test]
+    fn a_first_counter_mask_without_a_later_moveto_is_still_decided() {
+        // `0 20 100 20 100 20 hstem`, `cntrmask 0xE0` (all three stems), `endchar`: no path.
+        let cs = vec![139, 159, 239, 159, 239, 159, 1, 20, 0xE0, 14];
+        let ps = read_cff(&font(&[lines(1), cs], &[], &[]), &mut Vec::new()).unwrap();
+        let stems = &ps.glyphs[1].stems;
+        assert_eq!(stems.len(), 3);
+        assert!(stems.iter().all(|s| matches!(s, PsOp::HStem { kind: StemKind::Stem3, .. })), "{stems:?}");
     }
 
     #[test]

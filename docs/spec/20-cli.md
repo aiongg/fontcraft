@@ -1048,6 +1048,12 @@ needs: `--layout-features '*' --glyph-names --symbol-cmap --legacy-cmap --notdef
 character that is not mapped is ignored by default. The asymmetry is inherited and kept for
 compatibility.
 
+**Variable components.** The closure follows `glyf` components and `VARC` components in one work list.
+pyftsubset closes over `VARC` first and `glyf` second, so when only a `glyf` composite reaches a `VARC`
+glyph, it keeps that glyph without the glyphs its variable components name, and then fails to write the
+table. FontCraft keeps those glyphs too, so the subset can be written. A subset that never mixes the two
+tables this way keeps the same glyphs as pyftsubset.
+
 **Sources.** `subset` also works on UFO, designspace and `.glyphs` input: glyphs are removed from every
 master and layer, and from groups, kerning and class definitions; feature code is left alone and a warning
 lists rules that now refer to missing glyphs.

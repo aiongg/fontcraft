@@ -1506,7 +1506,6 @@ pub(super) fn cff2_to_cff(cff2: &[u8], advances: &[u16], names: Option<&[String]
     Ok((table, keyed_by_name.is_some()))
 }
 
-/// Latin-1 bytes of `s`; other characters become `?`.
 /// An accented glyph as `seac` writes it: the advance, the accent's offset from the base, and
 /// the standard codes of the base and the accent.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -1586,6 +1585,7 @@ pub(super) fn with_seac(table: &[u8], seac: &[(usize, SeacCall)], default_width:
     .write()
 }
 
+/// Latin-1 bytes of `s`; other characters become `?`.
 fn latin1(s: &str) -> Vec<u8> {
     s.chars().map(|c| u8::try_from(u32::from(c)).unwrap_or(b'?')).collect()
 }

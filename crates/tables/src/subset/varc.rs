@@ -11,14 +11,16 @@
 //! - `ConditionList` and `AxisIndicesList` keep the entries the kept components use, in their
 //!   order; a list nothing uses is dropped.
 //! - The `MultiItemVariationStore` keeps the delta sets the kept components and conditions use,
-//!   each delta set list in its order, and the regions those lists use; a store left without
-//!   delta sets is dropped.
+//!   each delta set list in its order, and the regions those lists use. A store left without
+//!   delta sets stays, with no delta set lists and no regions: fontTools' `if not store` test
+//!   never drops it, because its table objects are always true.
 //!
 //! The layout read and written is the current one: a 32-bit region count, offsets to each
 //! region's axis records, and the delta sets of a list behind an offset (read-fonts and fontTools
 //! read the same layout).
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::rc::Rc;
 
 use super::Plan;
 use crate::reorder::be::{Data, put_u16, put_u32, to_u16, to_u32};
@@ -213,6 +215,9 @@ pub(crate) struct Varc<'a> {
     conditions_at: usize,
     /// Axis indices index → number of axes, as parsed so far.
     axis_counts: HashMap<u32, usize>,
+    /// Glyph record index → its components, as parsed so far. Many glyphs can share one record,
+    /// which is parsed (and charged to the budget) once.
+    parsed: HashMap<usize, Rc<Vec<Component<'a>>>>,
     /// Components left to read under [`MAX_COMPONENTS`].
     budget: usize,
 }
@@ -243,14 +248,35 @@ impl<'a> Varc<'a> {
         }
         let glyphs = Index2::read(d, glyphs_at)?;
         let axis_indices = if axis_at == 0 { None } else { Some(Index2::read(d, axis_at)?) };
-        Ok(Varc { d, version, records, glyphs, axis_indices, store_at, conditions_at, axis_counts: HashMap::new(), budget: MAX_COMPONENTS })
+        Ok(Varc {
+            d,
+            version,
+            records,
+            glyphs,
+            axis_indices,
+            store_at,
+            conditions_at,
+            axis_counts: HashMap::new(),
+            parsed: HashMap::new(),
+            budget: MAX_COMPONENTS,
+        })
     }
 
     /// The glyphs the variable components of glyph `g` name (none when `g` has no record).
     pub(crate) fn component_glyphs(&mut self, g: u32) -> Result<Vec<u32>> {
         let Some(i) = self.records.get(&g).copied() else { return Ok(Vec::new()) };
+        Ok(self.record(i)?.iter().map(|c| c.gid).collect())
+    }
+
+    /// The components of glyph record `i`.
+    fn record(&mut self, i: usize) -> Result<Rc<Vec<Component<'a>>>> {
+        if let Some(cs) = self.parsed.get(&i) {
+            return Ok(Rc::clone(cs));
+        }
         let record = self.glyphs.get(i)?;
-        Ok(self.components(record)?.iter().map(|c| c.gid).collect())
+        let cs = Rc::new(self.components(record)?);
+        self.parsed.insert(i, Rc::clone(&cs));
+        Ok(cs)
     }
 
     fn axis_count(&mut self, index: u32) -> Result<usize> {
@@ -443,7 +469,7 @@ struct VarData<'a> {
     items: Vec<&'a [u8]>,
 }
 
-/// A written variation store (`None` when no delta set is used) and the old → new variation
+/// A written variation store (`None` when the input has none) and the old → new variation
 /// index map.
 type SubsetStore = (Option<Vec<u8>>, BTreeMap<u32, u32>);
 
@@ -454,10 +480,10 @@ fn subset_store(d: &Data<'_>, at: usize, used: &BTreeSet<u32>) -> Result<SubsetS
         by_major.entry((v >> 16) as u16).or_default().insert(*v as u16);
     }
     let mut map = BTreeMap::new();
-    if by_major.is_empty() {
-        return Ok((None, map));
-    }
     if at == 0 {
+        if by_major.is_empty() {
+            return Ok((None, map));
+        }
         return Err(d.bad("refers to delta sets but has no variation store"));
     }
     if d.u16(at)? != 1 {
@@ -671,11 +697,10 @@ fn subset_varc(plan: &Plan, bytes: &[u8]) -> Result<Option<Vec<u8>>> {
     let d = varc.d;
     // pyftsubset's `glyphs_retained`: emptied glyphs lose their records.
     let wanted: Vec<(u32, usize)> = varc.records.iter().filter(|(g, _)| plan.glyphs.contains(g)).map(|(g, i)| (*g, *i)).collect();
-    let mut kept: Vec<(u16, Vec<Component<'_>>)> = Vec::with_capacity(wanted.len());
+    let mut kept: Vec<(u16, Rc<Vec<Component<'_>>>)> = Vec::with_capacity(wanted.len());
     for (old, i) in wanted {
         let Some(new) = plan.glyph_map.get(&old).copied() else { continue };
-        let record = varc.glyphs.get(i)?;
-        kept.push((to_u16(new as usize, "a glyph id in the coverage table")?, varc.components(record)?));
+        kept.push((to_u16(new as usize, "a glyph id in the coverage table")?, varc.record(i)?));
     }
     if kept.is_empty() {
         return Ok(None);
@@ -718,7 +743,7 @@ fn subset_varc(plan: &Plan, bytes: &[u8]) -> Result<Option<Vec<u8>>> {
     let mut records: Vec<Vec<u8>> = Vec::with_capacity(kept.len());
     for (_, cs) in &kept {
         let mut record = Vec::new();
-        for c in cs {
+        for c in cs.iter() {
             write_component(&mut record, c, &maps)?;
         }
         records.push(record);

@@ -110,8 +110,9 @@ pub fn plan(font: &SfntFont, options: &SubsetOptions) -> Result<Plan> {
     super::other::colr::close_glyphs(font, &mut glyphs, n)?;
     plan.colr_glyphs = glyphs.clone();
 
-    // pyftsubset closes over VARC before glyf; one work list over both reaches the same glyphs,
-    // and also the variable components of a VARC glyph that only a glyf composite names.
+    // pyftsubset closes over VARC before glyf, so it misses the variable components of a VARC
+    // glyph that only a glyf composite names, and then cannot write that glyph's record. One work
+    // list over both tables also keeps those components (docs/spec/20-cli.md, `subset`).
     let glyf = Glyf::read(font, n)?;
     let mut varc = Varc::read(font)?;
     if glyf.is_some() || varc.is_some() {
