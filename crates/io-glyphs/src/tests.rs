@@ -168,6 +168,122 @@ fn node_flags_and_attributes_survive() {
     assert_eq!(write(&font).unwrap(), text);
 }
 
+/// A version 4 font whose nodes carry higher-order interpolation data of each kind.
+const V4_HOI: &str = "{
+.appVersion = \"4004\";
+.formatVersion = 4;
+axes = (
+{
+name = Weight;
+tag = wght;
+},
+);
+fontMaster = (
+{
+axesValues = (
+400,
+);
+id = m01;
+},
+{
+axesValues = (
+700,
+);
+id = m02;
+},
+);
+glyphs = (
+{
+glyphname = A;
+layers = (
+{
+layerId = m01;
+shapes = (
+{
+closed = 1;
+nodes = (
+(500,0,l,{
+hoi = {
+wght = {
+ip = (520,40.5);
+};
+};
+}),
+(300,700,l,{
+hoi = {
+wdth = {
+rc = auto;
+rd = ccw;
+};
+wght = {
+rc = (300,350);
+};
+};
+name = apex;
+}),
+(100,0,l,{
+hoi = {
+wght = {
+al = 10;
+tu = 0.25;
+};
+};
+}),
+);
+},
+);
+width = 600;
+},
+{
+layerId = m02;
+shapes = (
+{
+closed = 1;
+nodes = (
+(540,0,l),
+(300,720,l),
+(60,0,l),
+);
+},
+);
+width = 640;
+},
+);
+},
+);
+unitsPerEm = 1000;
+versionMajor = 1;
+versionMinor = 0;
+}
+";
+
+#[test]
+fn version_4_interpolation_curves_are_typed_and_written_back_byte_for_byte() {
+    use fontcraft_model::{HoiCenter, HoiCurve, HoiDirection};
+    let mut font = read(V4_HOI).unwrap();
+    let Shape::Path(p) = &font.glyph("A").unwrap().layers[0].shapes[0] else { panic!() };
+    assert_eq!(p.nodes[0].info.hoi.get("wght"), Some(&HoiCurve::Point { x: 520.0, y: 40.5 }));
+    let apex = &p.nodes[1].info;
+    assert_eq!(apex.name.as_deref(), Some("apex"));
+    assert_eq!(apex.hoi.get("wdth"), Some(&HoiCurve::Rotation { center: Some(HoiCenter::Auto), direction: Some(HoiDirection::CounterClockwise) }));
+    assert_eq!(apex.hoi.get("wght"), Some(&HoiCurve::Rotation { center: Some(HoiCenter::At { x: 300.0, y: 350.0 }), direction: None }));
+    assert!(matches!(p.nodes[2].info.hoi.get("wght"), Some(HoiCurve::Timing(_))));
+    assert!(p.nodes.iter().all(|n| n.info.extra.get(Family::Glyphs, "attr").is_none()), "typed, not carried");
+    assert_eq!(write(&font).unwrap(), V4_HOI);
+    assert!(info_losses(&font).is_empty());
+    // Version 3 has no place for the data: it is left out and reported.
+    font.source.glyphs_version = Some(3);
+    assert!(info_losses(&font).iter().any(|l| l == "the nodes' higher-order interpolation curves (3)"), "{:?}", info_losses(&font));
+    let v3 = write(&font).unwrap();
+    assert!(!v3.contains("hoi") && v3.contains("name = apex;"), "{v3}");
+    // Data not of the documented shape stays as written.
+    let odd = V4_HOI.replace("ip = (520,40.5);", "ip = (520,40.5);\nxx = 1;");
+    let font = read(&odd).unwrap();
+    let Shape::Path(p) = &font.glyph("A").unwrap().layers[0].shapes[0] else { panic!() };
+    assert!(p.nodes[0].info.hoi.is_empty());
+    assert_eq!(write(&font).unwrap(), odd);
+}
+
 #[test]
 fn matrices_without_shear_decompose() {
     assert_eq!(decompose([2.0, 0.0, 0.0, 3.0, 5.0, 6.0]), Some(((5.0, 6.0), (2.0, 3.0), 0.0, (0.0, 0.0))));

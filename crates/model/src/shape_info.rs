@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::paint::{Color, Gradient, MAX_GRADIENT_STOPS, Shadow};
 use crate::rare::{Rare, RareDefault};
-use crate::{ColorLabel, Extra, UserData};
+use crate::{ColorLabel, Extra, Hoi, UserData};
 
 /// Which edge of the layer an element's horizontal position is measured from.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -41,6 +41,10 @@ pub struct NodeInfo {
     pub identifier: Option<String>,
     #[serde(default, skip_serializing_if = "UserData::is_empty")]
     pub user_data: UserData,
+    /// Higher-order interpolation curves, per axis ([`crate::hoi`]). Edits treat them as they
+    /// treat the name and user data: they stay with the node.
+    #[serde(default, skip_serializing_if = "Hoi::is_empty")]
+    pub hoi: Hoi,
     #[serde(default, skip_serializing_if = "Extra::is_empty")]
     pub extra: Extra,
 }
