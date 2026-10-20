@@ -23,18 +23,21 @@ const USAGE: &str = "\
       one static font (.ttf, .otf with CFF outlines, .woff, .woff2) of its first exportable
       instance. --smart-components: a UFO or designspace keeps smart components as components
       with their values (default) or holds them drawn as outlines.
-  fontcraft-cli convert FONT OUT | convert FONT... --to ttf|otf|otf-cff2|cff|cff2 [options]
+  fontcraft-cli convert FONT OUT | convert FONT... --to ttf|otf|otf-cff2|cff|cff2|ufo [options]
       Rewrite compiled fonts, TTX text, Type 1 fonts (.pfa, .pfb) and bare CFF tables with other
       outlines: CFF or CFF2 to TrueType (cubic curves become quadratic within one font unit or
       --max-error em, contours reversed), TrueType to CFF or
       CFF2 (components decomposed, instructions dropped), CFF to CFF2 and back with hints kept,
-      or only the CFF or CFF2 table (cff, cff2). With IN OUT the extension of OUT says what to
-      write; .woff and .woff2 keep the input's outlines. Each output is INPUT.EXT unless -o, --output-dir or
-      --in-place says otherwise.
+      only the CFF or CFF2 table (cff, cff2), or a UFO of the font as the editor opens it. With
+      IN OUT the extension of OUT says what to write; .woff and .woff2 keep the input's outlines.
+      Each output is INPUT.EXT unless -o, --output-dir or --in-place says otherwise.
+      Before converting: --location snapshots a variable font, --glyphs and --exclude-glyphs
+      keep part of the glyph set, --goadb renames, subsets or orders the glyphs, and
+      --remove-overlaps merges overlapping TrueType contours.
 ";
 
 const OPTIONS: &[OptSpec] = &[
-    OptSpec::value("to", "FORMAT", "", "ttf, otf, otf-cff2, cff or cff2"),
+    OptSpec::value("to", "FORMAT", "", "ttf, otf, otf-cff2, cff, cff2 or ufo"),
     OptSpec::value("container", "plain|woff|woff2", "plain", "wrap the result"),
     OptSpec::value("max-error", "EM", "", "largest curve conversion error, as a fraction of the em (default: one font unit)"),
     OptSpec::value(
@@ -49,6 +52,16 @@ const OPTIONS: &[OptSpec] = &[
     OptSpec::value("max-subrs", "N", "", "most subroutines per INDEX"),
     OptSpec::switch("no-hints", false, "drop stem hints when CFF outlines stay CFF"),
     OptSpec::value("timestamp", "keep|now|SECONDS", "", "head.modified: keep it, the current time, or seconds since 1970"),
+    OptSpec::value("glyphs", "SELECTOR", "", "keep only these glyphs and .notdef: names, glyph ids, ranges (3-9), U+0041"),
+    OptSpec::value("exclude-glyphs", "SELECTOR", "", "leave these glyphs out"),
+    OptSpec::value("goadb", "FILE", "", "rename glyphs from the GOADB's second column to its first"),
+    OptSpec::switch("no-rename", false, "use the GOADB without renaming"),
+    OptSpec::switch("subset-to-goadb", false, "keep only the glyphs the GOADB lists"),
+    OptSpec::switch("goadb-order", false, "order the glyphs as the GOADB lists them"),
+    OptSpec::list("location", "AXIS=VALUE", "", "snapshot a variable font at this location first (axis tags; others at their default)"),
+    OptSpec::switch("no-clamp", false, "refuse a location outside the axis ranges instead of clamping it"),
+    OptSpec::switch("remove-overlaps", false, "merge overlapping contours (TrueType outlines)"),
+    OptSpec::switch("ignore-overlap-errors", false, "keep a glyph whose overlaps cannot be merged as it is"),
     OptSpec::value("smart-components", "components|outlines", "", "sources: how a UFO or designspace holds smart components"),
     OptSpec::value("output", "OUT", "", "the output file (one input only)").short('o'),
     OptSpec::value("output-dir", "DIR", "", "the folder outputs go into"),
@@ -70,6 +83,16 @@ fn convert(raw: &[String]) -> Outcome {
         return convert_fonts(&parsed, raw);
     }
     let [input, output] = parsed.positional.as_slice() else { return Err(usage("convert needs IN and OUT")) };
+    let given = ["glyphs", "exclude-glyphs", "goadb"].into_iter().find(|name| parsed.value(name).is_some_and(|v| !v.is_empty()));
+    let given = given.or_else(|| (!parsed.list("location").is_empty()).then_some("location"));
+    let given = given.or_else(|| {
+        ["no-rename", "subset-to-goadb", "goadb-order", "no-clamp", "remove-overlaps", "ignore-overlap-errors"]
+            .into_iter()
+            .find(|name| parsed.switch(name))
+    });
+    if let Some(name) = given {
+        return Err(usage(format!("--{name} applies to compiled fonts; a source is converted as it is (see instance and subset)")));
+    }
     let smart = parsed.value("smart-components").filter(|v| !v.is_empty());
     if let Some(v) = smart
         && !matches!(v, "components" | "outlines")
@@ -191,12 +214,15 @@ fn convert_fonts(parsed: &args::Parsed, raw: &[String]) -> Outcome {
                 "otf" => "otf",
                 "cff" => "cff",
                 "cff2" => "cff2",
+                "ufo" => "ufo",
                 "woff" | "woff2" => {
                     container = extension.clone();
                     flavour_of(input)?
                 }
                 other => {
-                    return Err(usage(format!("cannot write `.{other}` from a compiled font (writable: .ttf, .otf, .cff, .cff2, .woff, .woff2)")));
+                    return Err(usage(format!(
+                        "cannot write `.{other}` from a compiled font (writable: .ttf, .otf, .cff, .cff2, .woff, .woff2, .ufo)"
+                    )));
                 }
             };
             params.insert("output".into(), json!(output));
@@ -232,6 +258,38 @@ fn convert_fonts(parsed: &args::Parsed, raw: &[String]) -> Outcome {
     params.insert("hints".into(), json!(!parsed.switch("no-hints")));
     if let Some(t) = parsed.value("timestamp").filter(|v| !v.is_empty()) {
         params.insert("timestamp".into(), t.parse::<i64>().map(Value::from).unwrap_or_else(|_| json!(t)));
+    }
+    for (key, name) in [("glyphs", "glyphs"), ("excludeGlyphs", "exclude-glyphs"), ("goadb", "goadb")] {
+        if let Some(v) = parsed.value(name).filter(|v| !v.is_empty()) {
+            params.insert(key.into(), json!(v));
+        }
+    }
+    if params.contains_key("goadb") {
+        params.insert("goadbRename".into(), json!(!parsed.switch("no-rename")));
+        params.insert("goadbSubset".into(), json!(parsed.switch("subset-to-goadb")));
+        params.insert("goadbOrder".into(), json!(parsed.switch("goadb-order")));
+    } else if ["no-rename", "subset-to-goadb", "goadb-order"].iter().any(|name| parsed.switch(name)) {
+        return Err(usage("--no-rename, --subset-to-goadb and --goadb-order need --goadb FILE"));
+    }
+    let location = parsed.list("location");
+    if !location.is_empty() {
+        let mut axes = Map::new();
+        for item in location.iter().flat_map(|l| l.split([' ', ','])).filter(|w| !w.is_empty()) {
+            let (axis, value) = item.split_once('=').ok_or_else(|| usage(format!("--location takes AXIS=VALUE, not {item}")))?;
+            let value: f64 =
+                value.parse().ok().filter(|v: &f64| v.is_finite()).ok_or_else(|| usage(format!("--location: {value} is not a number")))?;
+            axes.insert(axis.to_string(), json!(value));
+        }
+        params.insert("location".into(), Value::Object(axes));
+        params.insert("clamp".into(), json!(!parsed.switch("no-clamp")));
+    } else if parsed.switch("no-clamp") {
+        return Err(usage("--no-clamp needs --location"));
+    }
+    if parsed.switch("remove-overlaps") {
+        params.insert("removeOverlaps".into(), json!(true));
+        params.insert("ignoreOverlapErrors".into(), json!(parsed.switch("ignore-overlap-errors")));
+    } else if parsed.switch("ignore-overlap-errors") {
+        return Err(usage("--ignore-overlap-errors needs --remove-overlaps"));
     }
     for (key, name) in [("output", "output"), ("outputDir", "output-dir")] {
         if let Some(v) = parsed.value(name).filter(|v| !v.is_empty()) {

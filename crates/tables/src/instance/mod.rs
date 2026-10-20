@@ -34,7 +34,7 @@ pub mod partial;
 pub mod solver;
 mod static_tables;
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 mod varc;
 
 use read_fonts::tables::fvar::Fvar;
