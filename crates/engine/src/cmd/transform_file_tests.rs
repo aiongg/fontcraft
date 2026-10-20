@@ -83,3 +83,40 @@ fn font_transform_scales_a_source_and_refuses_its_glyph_transforms() {
     assert!(!refused.exists());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn font_transform_converts_with_to_and_scales_cff_outlines() {
+    let dir = scratch("to");
+    let s = drawn();
+    let ttf = fontcraft_compile::compile_ttf(s.font().unwrap(), &fontcraft_compile::Options::default()).unwrap();
+    let binary = dir.join("in.ttf");
+    std::fs::write(&binary, &ttf.bytes).unwrap();
+    let mut session = Session::new();
+
+    let r = session.execute("font.transform", &json!({"font": binary, "unitsPerEm": 2048, "to": "otf"})).unwrap();
+    let otf = std::path::PathBuf::from(r["output"].as_str().unwrap());
+    assert!(otf.to_string_lossy().ends_with("in.transformed.otf"), "{otf:?}");
+    let font = fontcraft_tables::read(&std::fs::read(&otf).unwrap(), 0).unwrap();
+    assert!(font.get(*b"CFF ").is_some() && font.get(*b"glyf").is_none(), "the outlines are converted to CFF");
+    assert_eq!(upem_of(&otf), 2048);
+
+    // The CFF font scales back: every coordinate, 205 for the square's 100, returns to its value.
+    let back = dir.join("back.otf");
+    let r = session.execute("font.transform", &json!({"font": otf, "unitsPerEm": 1000, "output": back})).unwrap();
+    assert_eq!(r["unitsPerEm"], json!({"from": 2048, "to": 1000}));
+    assert_eq!(upem_of(&back), 1000);
+    let font = fontcraft_tables::read(&std::fs::read(&back).unwrap(), 0).unwrap();
+    let head = font.get(*b"head").unwrap();
+    let original = fontcraft_tables::read(&ttf.bytes, 0).unwrap();
+    let original_head = original.get(*b"head").unwrap();
+    assert_eq!(head[36..44], original_head[36..44], "the font box comes back");
+
+    let refused = dir.join("refused.ttf");
+    assert!(session.execute("font.transform", &json!({"font": binary, "unitsPerEm": 2048, "to": "pfa", "output": refused})).is_err());
+    assert!(
+        session.execute("font.transform", &json!({"font": otf, "rotate": 90, "output": refused})).is_err(),
+        "a matrix on CFF outlines is refused for now"
+    );
+    assert!(!refused.exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}

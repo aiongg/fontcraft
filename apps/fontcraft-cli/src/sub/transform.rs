@@ -12,7 +12,7 @@ pub const SUBCOMMAND: Subcommand =
     Subcommand { name: "transform", summary: "Transform every glyph or change units per em", usage: USAGE, options: OPTIONS, actions: &[], run };
 
 const USAGE: &str = "\
-  fontcraft-cli transform FONT [--rotate DEG] [--translate X,Y] [--scale SX[,SY]] [--slant DEG] [--matrix A,B,C,D,E,F] [--upem N] [--glyph-table FILE] [--widths auto|keep|transform|em] [-o OUT]
+  fontcraft-cli transform FONT [--rotate DEG] [--translate X,Y] [--scale SX[,SY]] [--slant DEG] [--matrix A,B,C,D,E,F] [--upem N] [--glyph-table FILE] [--widths auto|keep|transform|em] [--to ttf|otf|otf-cff2] [-o OUT]
       Apply one transformation to the glyphs of a compiled font (scale, slant, rotate
       clockwise and translate, in that order, or a matrix), or set a new units per em and
       scale the whole font to it. A source takes --upem only. The output is
@@ -32,6 +32,7 @@ const OPTIONS: &[OptSpec] = &[
     OptSpec::value("widths", "auto|keep|transform|em", "auto", "advance widths of transformed glyphs"),
     OptSpec::list("glyphs", "NAMES", "", "transform only these glyphs"),
     OptSpec::list("exclude-glyphs", "NAMES", "", "leave these glyphs alone"),
+    OptSpec::value("to", "ttf|otf|otf-cff2", "", "convert the outlines of the result to this format"),
     OptSpec::value("output", "OUT", "", "the output file").short('o'),
     OptSpec::value("output-dir", "DIR", "", "the folder the output goes into"),
     OptSpec::switch("in-place", false, "replace the input"),
@@ -83,6 +84,9 @@ fn params(parsed: &Parsed) -> Result<Map<String, Value>, Failure> {
     }
     if let Some(v) = parsed.value("glyph-table") {
         p.insert("glyphTable".into(), json!(v));
+    }
+    if let Some(v) = parsed.value("to") {
+        p.insert("to".into(), json!(v));
     }
     if let Some(v) = parsed.value("widths") {
         p.insert("widths".into(), json!(v));
