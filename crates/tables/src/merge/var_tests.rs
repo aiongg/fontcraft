@@ -253,4 +253,67 @@ fn fonts_with_different_axes_or_a_static_font_are_refused() {
     let report = merge_with_report(&[one(), narrow], &options).unwrap();
     assert!(report.font.get(*b"fvar").is_none() && report.font.get(*b"gvar").is_none());
     assert!(report.warnings.iter().any(|w| w.contains("is variable")), "{:?}", report.warnings);
+    // The static result keeps the default kerning, without the variation store or the devices
+    // that would use it.
+    if let Some(gdef) = report.font.get(*b"GDEF") {
+        assert!(read_fonts::tables::gdef::Gdef::read(FontData::new(gdef)).unwrap().item_var_store().is_none());
+    }
+    assert_eq!(pair(&kerning(&report.font), "a", "o"), pair(&kerning(&one()), "a", "o"));
+    let gpos: Gpos = read_fonts::tables::gpos::Gpos::read(FontData::new(report.font.get(*b"GPOS").unwrap())).unwrap().to_owned_table();
+    for lookup in &gpos.lookup_list.lookups {
+        let PositionLookup::Pair(l) = &**lookup else { continue };
+        for st in &l.subtables {
+            let records: Vec<_> = match &**st {
+                PairPos::Format1(t) => t.pair_sets.iter().flat_map(|s| s.pair_value_records.iter().map(|r| &r.value_record1)).collect(),
+                PairPos::Format2(t) => t.class1_records.iter().flat_map(|c| c.class2_records.iter().map(|r| &r.value_record1)).collect(),
+            };
+            assert!(records.iter().all(|r| r.x_advance_device.as_ref().is_none()), "a kerning value keeps its device");
+        }
+    }
+}
+
+/// `font` with `count` named instances, each with its own subfamily name ID (from 1000) and name
+/// "I<n>", at weights 100 + n / 100 for n from `first`.
+fn with_instances(font: &SfntFont, first: u32, count: u16) -> SfntFont {
+    use write_fonts::tables::fvar::{Fvar, InstanceRecord};
+    use write_fonts::tables::name::{Name, NameRecord};
+    use write_fonts::types::{Fixed, NameId};
+    let mut fvar: Fvar = read_fonts::tables::fvar::Fvar::read(FontData::new(font.get(*b"fvar").unwrap())).unwrap().to_owned_table();
+    let mut name: Name = read_fonts::tables::name::Name::read(FontData::new(font.get(*b"name").unwrap())).unwrap().to_owned_table();
+    fvar.axis_instance_arrays.instances = (0..count)
+        .map(|k| InstanceRecord {
+            subfamily_name_id: NameId::new(1000 + k),
+            flags: 0,
+            coordinates: vec![Fixed::from_f64(100.0 + f64::from(first + u32::from(k)) / 100.0)],
+            post_script_name_id: None,
+        })
+        .collect();
+    for k in 0..count {
+        name.name_record.push(NameRecord::new(3, 1, 0x409, NameId::new(1000 + k), format!("I{}", first + u32::from(k)).into()));
+    }
+    name.name_record.sort();
+    let mut out = font.clone();
+    out.insert(*b"fvar", write_fonts::dump_table(&fvar).unwrap());
+    out.insert(*b"name", write_fonts::dump_table(&name).unwrap());
+    out
+}
+
+#[test]
+fn many_named_instances_merge_without_rescanning_the_names() {
+    // 12,000 instances in each font, every name of the second copied: rebuilding the name
+    // index for each copy would compare hundreds of millions of records.
+    let count = 12_000u16;
+    let merged = merge(&[with_instances(&one(), 0, count), with_instances(&two(), 20_000, count)], &MergeOptions::default()).unwrap();
+    let fvar = read_fonts::tables::fvar::Fvar::read(FontData::new(merged.get(*b"fvar").unwrap())).unwrap();
+    let instances = fvar.instances().unwrap();
+    assert_eq!(instances.len(), 2 * usize::from(count));
+    let last = instances.get(instances.len() - 1).unwrap().subfamily_name_id;
+    let name = read_fonts::tables::name::Name::read(FontData::new(merged.get(*b"name").unwrap())).unwrap();
+    let strings: Vec<String> =
+        name.name_record().iter().filter(|r| r.name_id() == last).map(|r| r.string(name.string_data()).unwrap().to_string()).collect();
+    assert_eq!(strings, [format!("I{}", 20_000 + u32::from(count) - 1)]);
+
+    // An instance at coordinates the first font already names is left out.
+    let merged = merge(&[with_instances(&one(), 0, 3), with_instances(&two(), 1, 3)], &MergeOptions::default()).unwrap();
+    assert_eq!(named_instances(&merged).unwrap().len(), 4);
 }

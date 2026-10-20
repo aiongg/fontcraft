@@ -1292,7 +1292,9 @@ are FontCraft's own:
 
 The test of these rules: instancing the merged font at a location gives the same glyphs, advances and
 kerning as merging the inputs instanced at that location. With `--drop-tables fvar` the fonts merge as
-their default outlines, as fontTools merges them. Not yet merged: feature variations in `GSUB` or
+their default outlines, as fontTools merges them. A static result has no `GDEF` variation store and no
+variation-index devices: `GPOS` values, anchors and ligature carets keep their default values (fontTools
+refuses fonts with `GDEF` stores). Not yet merged: feature variations in `GSUB` or
 `GPOS` (refused), variable `COLR` and `VARC` (left out with a warning).
 
 Engine command: `font.merge`.

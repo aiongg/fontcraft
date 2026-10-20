@@ -13,6 +13,11 @@
 //! Before that, a font that maps a code point an earlier font already maps gets a single
 //! substitution in its `locl` feature, first in the feature's lookups, under every script but
 //! `DFLT`.
+//!
+//! When the result is static (no font is variable, or `fvar` is left out), the `GDEF` variation
+//! stores are dropped and every variation-index device goes, so the layout keeps its default
+//! values: a ligature caret becomes format 1, and `GPOS` values and anchors lose the device as a
+//! full instance at the default location does. fontTools refuses such fonts instead.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -29,6 +34,8 @@ use write_fonts::tables::layout::{
 use write_fonts::types::{GlyphId16, Tag as OtTag};
 
 use super::plan::Plan;
+use crate::instance::ivs::StoreDeltas;
+use crate::instance::otl::{Fold, apply_gpos};
 use crate::limits::MAX_LAYOUT_ITEMS;
 use crate::reorder::layout as remap;
 use crate::reorder::tables::Order;
@@ -83,12 +90,14 @@ pub(super) fn base(fonts: &[SfntFont], plan: &Plan, out: &mut SfntFont) -> Resul
     Ok(())
 }
 
-/// The layout tables of every font, merged.
+/// The layout tables of every font, merged. `variable` says whether the result is variable;
+/// when it is not, the variation stores and the devices that use them are left out.
 pub(super) fn merge(
     fonts: &[SfntFont],
     plan: &Plan,
     duplicates: &[BTreeMap<u16, u16>],
     skip: &BTreeSet<Tag>,
+    variable: bool,
     out: &mut SfntFont,
     warnings: &mut Vec<String>,
 ) -> Result<()> {
@@ -104,7 +113,7 @@ pub(super) fn merge(
 
     // The GDEF variation stores are concatenated, each font's variation indices moved.
     let gdef_bytes: Vec<Option<&[u8]>> =
-        fonts.iter().enumerate().map(|(i, f)| table(f, GDEF, skip).filter(|_| orders.get(i).is_some_and(Option::is_some))).collect();
+        fonts.iter().enumerate().map(|(i, f)| table(f, GDEF, skip).filter(|_| variable && orders.get(i).is_some_and(Option::is_some))).collect();
     let mut stores = super::var::LayoutStores::read(&gdef_bytes)?;
 
     // GDEF first: its mark glyph sets number the lookups' mark filtering sets.
@@ -118,7 +127,11 @@ pub(super) fn merge(
         let (Some(bytes), Some(order)) = (table(font, GDEF, skip), orders.get(i).and_then(Option::as_ref)) else { continue };
         let moved = remap::gdef(bytes, order)?;
         let mut gdef: Gdef = read_fonts::tables::gdef::Gdef::read(FontData::new(&moved)).map_err(|e| read_err(GDEF, e))?.to_owned_table();
-        move_caret_devices(&mut gdef, &mut |d| stores.move_index(i, d));
+        if variable {
+            move_caret_devices(&mut gdef, &mut |d| stores.move_index(i, d));
+        } else {
+            default_carets(&mut gdef);
+        }
         mark_sets += gdef.mark_glyph_sets_def.as_ref().map_or(0, |m| m.coverages.len());
         gdefs.push(gdef);
     }
@@ -162,6 +175,9 @@ pub(super) fn merge(
             let moved = remap::gpos(bytes, order)?;
             let mut table: Gpos = read_fonts::tables::gpos::Gpos::read(FontData::new(&moved)).map_err(|e| read_err(GPOS, e))?.to_owned_table();
             crate::layout_budget::restore_empty_pair_records(&mut table)?;
+            if !variable {
+                apply_gpos(&mut table, Fold { deltas: &StoreDeltas::default(), keep_devices: false });
+            }
             let mut lookups: Vec<PositionLookup> = table.lookup_list.into_inner().lookups.into_iter().map(|l| l.into_inner()).collect();
             for lookup in &mut lookups {
                 lookup.devices(&mut |d| stores.move_index(i, d));
@@ -708,6 +724,19 @@ fn move_caret_devices(gdef: &mut Gdef, f: &mut dyn FnMut(&mut DeviceOrVariationI
                     f(&mut c.device);
                 }
             }
+        }
+    }
+}
+
+/// Turns every ligature caret that a variation-index device varies into a plain coordinate.
+fn default_carets(gdef: &mut Gdef) {
+    let Some(list) = gdef.lig_caret_list.as_mut() else { return };
+    for caret in list.lig_glyphs.iter_mut().flat_map(|lig| lig.caret_values.iter_mut()) {
+        if let CaretValue::Format3(c) = &**caret
+            && matches!(&*c.device, DeviceOrVariationIndex::VariationIndex(_))
+        {
+            let coordinate = c.coordinate;
+            **caret = CaretValue::format_1(coordinate);
         }
     }
 }

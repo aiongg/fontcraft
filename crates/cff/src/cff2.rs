@@ -17,8 +17,9 @@
 //!   operators, counter masks, the outline specialised in runs between hint masks), with each
 //!   varying stem number blended. One hint structure serves every master, as in fontTools'
 //!   merge of hinted masters; [`shared_hints`] merges the masters' static hints into it.
-//! - **Top DICT**: FontMatrix when given, CharStrings, FDArray and `vstore`. One Font DICT, so no
-//!   FDSelect.
+//! - **Top DICT**: FontMatrix when given, CharStrings, FDArray and `vstore`, then `maxstack`
+//!   ([`MAX_STACK`]) only when a charstring needs more than the specification's default of
+//!   [`SPEC_DEFAULT_STACK`] operands. One Font DICT, so no FDSelect.
 //! - **Private DICT**: blue zones and stems, each varying value written with `blend`.
 //! - **Variation store**: the item variation store with no items, one variation data per region
 //!   list.
@@ -51,9 +52,12 @@ pub const MAX_REGIONS: usize = 65_535;
 pub const MAX_REGION_LISTS: usize = 65_535;
 /// Most axes a region may have (`fvar` holds at most this many in practice).
 pub const MAX_AXES: usize = 64;
-/// Most operands the charstring interpreter's stack holds (CFF2's `maxstack` default): a `blend`
-/// of `n` values with `k` regions needs `n * (k + 1) + 1`.
+/// Most operands the charstring interpreter's stack holds (the ceiling of CFF2's `maxstack`): a
+/// `blend` of `n` values with `k` regions needs `n * (k + 1) + 1`.
 pub const MAX_STACK: usize = 513;
+/// The operand stack a reader that follows the CFF2 specification assumes when the Top DICT has
+/// no `maxstack`. fontTools never writes `maxstack`, so it is left out whenever this is enough.
+pub const SPEC_DEFAULT_STACK: usize = 193;
 /// Most regions a region list may have: one varying value blended over them fills the stack.
 pub const MAX_BLEND_REGIONS: usize = MAX_STACK - 2;
 /// Most values one Private DICT list (BlueValues and the like) may have.
@@ -66,6 +70,7 @@ const OP_HINTMASK: u8 = 19;
 const OP_CNTRMASK: u8 = 20;
 /// DICT operators.
 const DICT_BLEND: u8 = 23;
+const DICT_MAXSTACK: u8 = 25;
 
 /// One axis of a variation region, in normalized coordinates (`start <= peak <= end`).
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -644,6 +649,52 @@ fn encode(commands: &[Cmd<Arg>], vsindex: u16, regions: usize, name: &str) -> Re
     Ok(out)
 }
 
+/// The most operands `charstring` (with `regions` deltas per blended value) has on the stack at
+/// once, counting one more for a subroutine call the subroutiniser may add at the deepest point.
+/// Reads only what this writer emits: no subroutine calls yet, stems before the first mask.
+fn stack_need(charstring: &[u8], regions: usize) -> usize {
+    let (mut depth, mut peak, mut stems) = (0usize, 0usize, 0usize);
+    let mut last = 0i64;
+    let mut i = 0usize;
+    let byte = |at: usize| charstring.get(at).copied().map_or(0, i64::from);
+    while let Some(&b0) = charstring.get(i) {
+        let number = match b0 {
+            28 => Some((3, ((byte(i + 1) << 8) | byte(i + 2)) as i16 as i64)),
+            32..=246 => Some((1, i64::from(b0) - 139)),
+            247..=250 => Some((2, (i64::from(b0) - 247) * 256 + byte(i + 1) + 108)),
+            251..=254 => Some((2, -(i64::from(b0) - 251) * 256 - byte(i + 1) - 108)),
+            255 => Some((5, ((byte(i + 1) << 8) | byte(i + 2)) as i16 as i64)),
+            _ => None,
+        };
+        if let Some((len, value)) = number {
+            depth += 1;
+            peak = peak.max(depth);
+            last = value;
+            i += len;
+            continue;
+        }
+        i += if b0 == 12 { 2 } else { 1 };
+        match b0 {
+            OP_BLEND => {
+                let n = usize::try_from(last).unwrap_or(0);
+                depth = depth.saturating_sub(n.saturating_mul(regions).saturating_add(1));
+            }
+            OP_VSINDEX => depth = depth.saturating_sub(1),
+            1 | 3 | 18 | 23 => {
+                stems += depth / 2;
+                depth = 0;
+            }
+            OP_HINTMASK | OP_CNTRMASK => {
+                stems += depth / 2;
+                depth = 0;
+                i += stems.div_ceil(8);
+            }
+            _ => depth = 0,
+        }
+    }
+    peak.saturating_add(1)
+}
+
 /// Appends a CFF2 INDEX (32-bit count) of `items`.
 fn write_index2<T: AsRef<[u8]>>(items: &[T], out: &mut Vec<u8>) -> Result<(), Cff2Error> {
     let count = u32::try_from(items.len()).map_err(|_| Error::TooManyGlyphs(items.len()))?;
@@ -857,11 +908,13 @@ pub fn write_cff2(font: &Cff2Font) -> Result<Cff2Built, Cff2Error> {
     let mut charstrings = Vec::with_capacity(font.glyphs.len());
     let mut glyph_bounds = Vec::with_capacity(font.glyphs.len());
     let mut unhinted = Vec::new();
+    let mut stack = 0usize;
     for g in &font.glyphs {
         let Some(list) = font.region_lists.get(usize::from(g.vsindex)) else {
             return Err(Cff2Error::BadBlend { glyph: g.name.clone(), reason: format!("region list {} does not exist", g.vsindex) });
         };
         let (bytes, b, dropped) = charstring(g, list.len(), font.round_tolerance, font.generic)?;
+        stack = stack.max(stack_need(&bytes, list.len()));
         charstrings.push(bytes);
         glyph_bounds.push(b);
         if dropped {
@@ -883,7 +936,12 @@ pub fn write_cff2(font: &Cff2Font) -> Result<Cff2Built, Cff2Error> {
         write_args(&args, 0, Context::Dict, "the FontMatrix", &mut matrix)?;
         matrix.extend_from_slice(&[12, 7]);
     }
-    let top_len = matrix.len() + 3 * 5 + 1 + 2 + 1;
+    let mut maxstack = Vec::new();
+    if stack > SPEC_DEFAULT_STACK {
+        encode_dict_int(MAX_STACK as i64, "maxstack", &mut maxstack)?;
+        maxstack.push(DICT_MAXSTACK);
+    }
+    let top_len = matrix.len() + 3 * 5 + 1 + 2 + 1 + maxstack.len();
     let header_len = 5usize;
     let global_subrs_len = 4usize;
     let vstore_at = header_len + top_len + global_subrs_len;
@@ -906,6 +964,7 @@ pub fn write_cff2(font: &Cff2Font) -> Result<Cff2Built, Cff2Error> {
     top.extend_from_slice(&[12, 36]);
     offset_operand(vstore_at, &mut top)?;
     top.push(24);
+    top.extend_from_slice(&maxstack);
 
     let mut out = Vec::with_capacity(private_at + private.len());
     out.extend_from_slice(&[2, 0, header_len as u8]);

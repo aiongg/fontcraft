@@ -15,13 +15,13 @@
 //! Static and variable fonts are not merged together, and fonts whose axes differ are refused:
 //! leaving `fvar` out (`dropTables`) merges their default outlines instead.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use read_fonts::{FontData, FontRead};
 use write_fonts::from_obj::ToOwnedTable;
-use write_fonts::tables::fvar::Fvar;
+use write_fonts::tables::fvar::{Fvar, InstanceRecord};
 use write_fonts::tables::layout::DeviceOrVariationIndex;
-use write_fonts::tables::name::Name;
+use write_fonts::tables::name::{Name, NameRecord};
 use write_fonts::types::NameId;
 
 use super::plan::Plan;
@@ -320,34 +320,43 @@ fn name_err(i: usize, e: impl std::fmt::Display) -> TablesError {
 /// The first font's `fvar` with the named instances of the later fonts added.
 fn fvar(fonts: &[SfntFont], out: &mut SfntFont) -> Result<()> {
     let mut merged: Option<Fvar> = None;
-    // The result's name table, read when a later font's instance needs a name in it.
+    let mut seen: HashSet<Vec<i32>> = HashSet::new();
+    let coordinates = |x: &InstanceRecord| -> Vec<i32> { x.coordinates.iter().map(|c| c.to_bits()).collect() };
+    // The result's name table and its index, read when a later font's instance needs a name in it.
     let mut name: Option<Name> = None;
+    let mut index: Option<NameIndex> = None;
     for (i, font) in fonts.iter().enumerate() {
         let Some(bytes) = font.get(FVAR) else { continue };
         let table: Fvar = read_fonts::tables::fvar::Fvar::read(FontData::new(bytes)).map_err(|e| fvar_err(i, e))?.to_owned_table();
         if merged.is_none() {
+            seen.extend(table.axis_instance_arrays.instances.iter().map(coordinates));
             merged = Some(table);
             continue;
         }
         let Some(m) = merged.as_mut() else { continue };
         let mut source: Option<Name> = None;
+        let mut source_ids: Option<HashMap<u16, Vec<usize>>> = None;
         for mut instance in table.axis_instance_arrays.into_inner().instances {
-            if m.axis_instance_arrays.instances.iter().any(|x| x.coordinates == instance.coordinates) {
+            let at = coordinates(&instance);
+            if seen.contains(&at) {
                 continue;
             }
             if m.axis_instance_arrays.instances.len() >= MAX_INSTANCES {
                 return Err(TablesError::TooLarge { what: "the merged named instance count", limit: MAX_INSTANCES });
             }
+            seen.insert(at);
             if let Some(result) = name_table(&mut name, out, 0)? {
                 let Some(from) = name_table(&mut source, font, i)? else {
                     m.axis_instance_arrays.instances.push(instance);
                     continue;
                 };
-                instance.subfamily_name_id = copy_name(result, from, instance.subfamily_name_id)?;
+                let index = index.get_or_insert_with(|| NameIndex::new(result));
+                let from_ids = source_ids.get_or_insert_with(|| records_by_id(from));
+                instance.subfamily_name_id = copy_name(result, index, from, from_ids, instance.subfamily_name_id)?;
                 if let Some(id) = instance.post_script_name_id
                     && id.to_u16() != 0xFFFF
                 {
-                    instance.post_script_name_id = Some(copy_name(result, from, id)?);
+                    instance.post_script_name_id = Some(copy_name(result, index, from, from_ids, id)?);
                 }
             }
             m.axis_instance_arrays.instances.push(instance);
@@ -383,40 +392,71 @@ fn name_table<'n>(slot: &'n mut Option<Name>, font: &SfntFont, i: usize) -> Resu
     Ok(slot.as_mut())
 }
 
+/// A name record without its name ID: what two IDs must share to hold the same names.
+type NameKey = (u16, u16, u16, String);
+
+fn name_key(r: &NameRecord) -> NameKey {
+    (r.platform_id, r.encoding_id, r.language_id, r.string.as_str().to_string())
+}
+
+/// The positions of a name table's records, by name ID.
+fn records_by_id(name: &Name) -> HashMap<u16, Vec<usize>> {
+    let mut out: HashMap<u16, Vec<usize>> = HashMap::new();
+    for (at, r) in name.name_record.iter().enumerate() {
+        out.entry(r.name_id.to_u16()).or_default().push(at);
+    }
+    out
+}
+
+/// The result's name IDs by the sorted records each holds (the lowest ID for a set several
+/// hold), and its highest name ID. Built once per merge and kept up to date as names are copied.
+struct NameIndex {
+    by_records: HashMap<Vec<NameKey>, u16>,
+    last: u16,
+}
+
+impl NameIndex {
+    fn new(name: &Name) -> Self {
+        let mut by_id: BTreeMap<u16, Vec<NameKey>> = BTreeMap::new();
+        for r in &name.name_record {
+            by_id.entry(r.name_id.to_u16()).or_default().push(name_key(r));
+        }
+        let last = by_id.keys().next_back().copied().unwrap_or(0);
+        let mut by_records = HashMap::with_capacity(by_id.len());
+        for (id, mut records) in by_id {
+            records.sort();
+            by_records.entry(records).or_insert(id);
+        }
+        NameIndex { by_records, last }
+    }
+}
+
 /// The name ID in `result` holding the records `from` has under `id`: an ID with exactly those
 /// records, else a new one above 255 they are copied to. `id` itself when `from` has none.
-fn copy_name(result: &mut Name, from: &Name, id: NameId) -> Result<NameId> {
-    type Key = (u16, u16, u16, String);
-    let key = |r: &write_fonts::tables::name::NameRecord| -> Key { (r.platform_id, r.encoding_id, r.language_id, r.string.as_str().to_string()) };
-    let mut wanted: Vec<Key> = from.name_record.iter().filter(|r| r.name_id == id).map(key).collect();
+fn copy_name(result: &mut Name, index: &mut NameIndex, from: &Name, from_ids: &HashMap<u16, Vec<usize>>, id: NameId) -> Result<NameId> {
+    let Some(positions) = from_ids.get(&id.to_u16()) else { return Ok(id) };
+    let records: Vec<&NameRecord> = positions.iter().filter_map(|at| from.name_record.get(*at)).collect();
+    let mut wanted: Vec<NameKey> = records.iter().copied().map(name_key).collect();
     if wanted.is_empty() {
         return Ok(id);
     }
     wanted.sort();
-    let mut by_id: BTreeMap<u16, Vec<Key>> = BTreeMap::new();
-    for r in &result.name_record {
-        by_id.entry(r.name_id.to_u16()).or_default().push(key(r));
+    if let Some(existing) = index.by_records.get(&wanted) {
+        return Ok(NameId::new(*existing));
     }
-    for (existing, records) in &mut by_id {
-        records.sort();
-        if *records == wanted {
-            return Ok(NameId::new(*existing));
-        }
-    }
-    let next = by_id
-        .keys()
-        .next_back()
-        .copied()
-        .unwrap_or(0)
+    let next = index
+        .last
         .max(255)
         .checked_add(1)
         .filter(|n| *n <= MAX_NAME_ID)
         .ok_or(TablesError::TooLarge { what: "the name ID of a copied instance name", limit: usize::from(MAX_NAME_ID) })?;
-    for r in from.name_record.iter().filter(|r| r.name_id == id) {
+    for r in records {
         let mut copy = r.clone();
         copy.name_id = NameId::new(next);
         result.name_record.push(copy);
     }
+    index.by_records.insert(wanted, next);
+    index.last = next;
     Ok(NameId::new(next))
 }
 
