@@ -366,3 +366,53 @@ fn a_woff_claiming_a_huge_font_is_refused_before_it_is_unwrapped() {
     assert!(e.contains("bytes; audit fewer fonts at a time"), "{e}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// The kept run's layer reports are reused for glyphs that did not change, and the results are
+/// those of a full run (`audit.glyphHashCache`).
+#[test]
+fn a_second_run_reuses_the_layer_reports_of_unchanged_glyphs() {
+    let mut s = Session::with_document();
+    for (glyph, x) in [("A", 0.0), ("B", 100.0), ("C", 200.0)] {
+        add(&mut s, glyph, rect(x, 0.0, x + 300.0, 500.0), true);
+        add(&mut s, glyph, rect(x + 100.0, 100.0, x + 400.0, 600.0), true);
+    }
+    let select = json!({"checks": ["check.outlines.*", "check.components.*"], "glyphs": ["A", "B", "C"], "includePassed": true});
+    let without_ids = |doc: &Value| -> (Value, Value) {
+        let mut results = doc["results"].clone();
+        for r in results.as_array_mut().unwrap() {
+            r.as_object_mut().unwrap().remove("id");
+        }
+        (results, doc["summary"].clone())
+    };
+    let examined = || fontcraft_audit::layers_examined();
+
+    let at = examined();
+    let first = run(&mut s, "audit.run", select.clone());
+    let full = examined() - at;
+    assert!(full >= 3, "every layer of A, B and C is examined: {full}");
+    assert!(!first["results"].as_array().unwrap().is_empty(), "the overlaps are reported");
+
+    let at = examined();
+    let second = run(&mut s, "audit.run", select.clone());
+    assert_eq!(examined() - at, 0, "nothing changed, nothing is examined again");
+    assert_eq!(without_ids(&second), without_ids(&first));
+
+    // One more contour on B: only B's layers are examined again.
+    add(&mut s, "B", rect(500.0, 0.0, 550.0, 50.0), true);
+    let at = examined();
+    let third = run(&mut s, "audit.run", select.clone());
+    let edited = examined() - at;
+    assert_eq!(edited * 3, full, "B's layers only");
+    let mut all = select.clone();
+    all["all"] = json!(true);
+    let at = examined();
+    let fresh = run(&mut s, "audit.run", all);
+    assert_eq!(examined() - at, full, "`all` examines every glyph");
+    assert_eq!(without_ids(&third), without_ids(&fresh), "the cache gives what a full run gives");
+
+    // audit.clearCache drops the kept reports.
+    run(&mut s, "audit.clearCache", json!({}));
+    let at = examined();
+    run(&mut s, "audit.run", select);
+    assert_eq!(examined() - at, full, "a cleared cache examines every glyph");
+}

@@ -215,7 +215,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Check Outlines",
             [],
             None,
-            "{target?: \"document\" | path | [paths] (default the open document), glyphs?: [names, indexes, first-last ranges, /CID], glyphFile?: path, fix?: bool = false, minArea?: number = 25, tolerance?: number = 0, decimal?: bool, overlapChecks?: bool = true, basicChecks?: bool = true, keepContourOrder?: bool = true, keepOriginal?: \"backupLayer\" | \"none\" = \"backupLayer\", all?: bool, quiet?: bool} the classic outline audit: overlapping contours, coincident points, flat curves, collinear lines, tiny contours and glyphs without contours. With `fix` the open document's reported layers are repaired as one undo step (every repair, not only the safe ones) → the result document of audit.run, with `fix`: the audit.fix result when fixing",
+            "{target?: \"document\" | path | [paths] (default the open document), glyphs?: [names, indexes, first-last ranges, /CID], glyphFile?: path, fix?: bool = false, minArea?: number = 25, tolerance?: number = 0, decimal?: bool, overlapChecks?: bool = true, basicChecks?: bool = true, keepContourOrder?: bool = true, keepOriginal?: \"backupLayer\" | \"none\" = \"backupLayer\", all?: bool = false, quiet?: bool = false} the classic outline audit: overlapping contours, coincident points, flat curves, collinear lines, tiny contours and glyphs without contours. With `fix` the open document's reported layers are repaired as one undo step (every repair, not only the safe ones). A run on the open document reuses the results of glyphs unchanged since the last run; `all` examines every glyph again. `quiet` leaves out the list of results and keeps the counts → the result document of audit.run (without `results` when quiet), with `fix`: the audit.fix result when fixing",
             always,
             check_outlines
         )
@@ -235,7 +235,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Check Family",
             [],
             None,
-            "{fonts?: [paths], directory?: path, singleTests?: [1-34], familyTests?: [1-21], tolerance?: number = 0, noHints?: bool} the family audit of compiled fonts: the single-face and family checks behind the reference tool's numbered tests (all of them, or the numbers given; a number whose checks are not built is listed in `warnings`), on fonts grouped by name ID 1 and by name ID 16. `tolerance` sets the `tolerance` threshold of the checks that have one; `noHints` leaves out the stem-hint checks → the result document of audit.run",
+            "{fonts?: [paths], directory?: path, singleTests?: [1-34], familyTests?: [1-21], tolerance?: number = 0, noHints?: bool, reports?: [\"menuNames\" | \"metrics\" | \"panose\" | \"featureLanguages\"]} the family audit of compiled fonts: the single-face and family checks behind the reference tool's numbered tests (all of them, or the numbers given; a number whose checks are not built is listed in `warnings`), on fonts grouped by name ID 1 and by name ID 16. `tolerance` sets the `tolerance` threshold of the checks that have one; `noHints` leaves out the stem-hint checks; `reports` adds the named audit.report.* tables of the same fonts → the result document of audit.run, with `reports: {name: table}` when asked",
             always,
             compare_family
         )
@@ -279,9 +279,11 @@ fn check_outlines(s: &mut Session, v: &Value) -> Result<Value> {
     let fix = p.bool_or("fix", false)?;
     let basic = p.bool_or("basicChecks", true)?;
     let overlap = p.bool_or("overlapChecks", true)?;
-    for key in ["decimal", "keepContourOrder", "all", "quiet"] {
+    for key in ["decimal", "keepContourOrder"] {
         p.bool_or(key, false)?;
     }
+    let all = p.bool_or("all", false)?;
+    let quiet = p.bool_or("quiet", false)?;
     let min_area = number(&p, "minArea", 0.0, 1_000_000.0)?.unwrap_or(25.0);
     let tolerance = number(&p, "tolerance", 0.0, 100.0)?.unwrap_or(0.0);
     let keep = p.opt_str("keepOriginal")?.unwrap_or("backupLayer");
@@ -311,6 +313,9 @@ fn check_outlines(s: &mut Session, v: &Value) -> Result<Value> {
     q.insert("profile".into(), json!("strict"));
     q.insert("checks".into(), json!(checks));
     q.insert("config".into(), config.clone());
+    if all {
+        q.insert("all".into(), json!(true));
+    }
     let mut report = s.execute("audit.run", &Value::Object(q))?;
     if fix {
         let mut f = Map::new();
@@ -327,6 +332,10 @@ fn check_outlines(s: &mut Session, v: &Value) -> Result<Value> {
         if let Some(o) = report.as_object_mut() {
             o.insert("fix".into(), fixed);
         }
+    }
+    // Quiet: the counts without a line per glyph, as the reference prints only its summary.
+    if quiet && let Some(o) = report.as_object_mut() {
+        o.remove("results");
     }
     Ok(report)
 }
@@ -542,6 +551,15 @@ fn tests<'t>(p: &Params, key: &str, table: &'t [(u8, &'t [&'t str])]) -> Result<
     Ok(out)
 }
 
+/// The reports `audit.compareFamily` can add (the reference's -rm, -rn, -rp and -rf), with the
+/// command that makes each.
+const REPORTS: [(&str, &str); 4] = [
+    ("menuNames", "audit.report.menuNames"),
+    ("metrics", "audit.report.metrics"),
+    ("panose", "audit.report.panose"),
+    ("featureLanguages", "audit.report.featureLanguages"),
+];
+
 fn compare_family(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("audit.compareFamily", v)?;
     let mut target: Vec<Value> = Vec::new();
@@ -584,8 +602,30 @@ fn compare_family(s: &mut Session, v: &Value) -> Result<Value> {
             }
         }
     }
+    let reports = match p.opt_strings("reports")? {
+        None => Vec::new(),
+        Some(list) => {
+            if let Some(bad) = list.iter().find(|r| !REPORTS.iter().any(|(name, _)| *name == **r)) {
+                let names: Vec<&str> = REPORTS.iter().map(|(n, _)| *n).collect();
+                return Err(p.bad(format!("`reports`: `{bad}` is not one of {}", names.join(", "))));
+            }
+            list
+        }
+    };
     let q = json!({"target": target, "profile": "strict", "checks": wanted, "config": config});
     let mut report = s.execute("audit.run", &q)?;
+    // The reference's -rm, -rn, -rp and -rf print their tables beside the test results.
+    let mut tables = Map::new();
+    for (name, command) in REPORTS.iter().filter(|(n, _)| reports.contains(n)) {
+        let mut r = Map::new();
+        pass(&p, &mut r, &["fonts", "directory"]);
+        tables.insert((*name).to_string(), s.execute(command, &Value::Object(r))?);
+    }
+    if !tables.is_empty()
+        && let Some(o) = report.as_object_mut()
+    {
+        o.insert("reports".into(), Value::Object(tables));
+    }
     if !missing.is_empty()
         && let Some(o) = report.as_object_mut()
     {
