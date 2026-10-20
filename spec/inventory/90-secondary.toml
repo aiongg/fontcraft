@@ -1568,9 +1568,9 @@ summary = "Shows a draggable horizontal line and reports sidebearings where it c
 ref = "FontLab 8 What's new › Metrics & kerning › Metrics (Metrics line); RoboFont reference › Space Center › Display options"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2). Edit View (M13.31) draws the line across the canvas and the sidebearings where it meets the outline, set with the `y` parameter. Dragging the line up or down beside the edited glyph runs view.showMetricsBeam with the height under the pointer (X.ui3, crates/ui-egui/src/canvas/edit_aids.rs). Documented, not yet observed in the reference app."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2). Edit View (M13.31) draws the line across the canvas and the sidebearings where it meets the outline, set with the `y` parameter. Dragging the line up or down beside the glyphs runs view.showMetricsBeam with the height under the pointer (X.ui3, crates/ui-egui/src/canvas/edit_aids.rs). Documented, not yet observed in the reference app."
 guesses = [
-  "The beam is dragged only left of the glyph's origin and right of its advance width, in whole units, so nodes lying on it stay clickable; the reference apps' pages do not say where the line can be grabbed.",
+  "The beam is dragged in whole units, only on the line itself (within half the node hit tolerance) and only outside the advance boxes of the edited glyph and the other glyphs on its line, so nodes and marquees near it stay with the tools; the reference apps' pages do not say where the line can be grabbed.",
   "The beam is one height per font, shared by Edit View and Space Center, and sidebearing commands take it as an optional `beam` parameter; FontLab's and RoboFont's pages do not say whether it is per font or per window.",
   "The beam starts at half the x-height of the tab's master, like the measurement line, and giving only a height also shows it. The reference app's first use of the metrics line would settle the start height.",
 ]

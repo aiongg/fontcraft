@@ -423,19 +423,22 @@ pub fn draw(ui: &egui::Ui, c: &Painting, scene: &Scene, pending: &mut Pending) {
             c.painter.line_segment([b.target, to], Stroke::new(c.tokens.tt.line_width, colour));
             c.painter.circle(at, c.tokens.tt.badge_radius, colour, Stroke::new(1.0, c.tokens.selection));
         }
+        // A badge dropped on its own point stays: there is nothing to move.
         if response.drag_stopped()
             && let Some(at) = pointer
             && let Some((node, _)) = node_at(scene.layer, c.view, at, c.tokens.hit_tolerance)
+            && list.get(b.index).is_none_or(|(_, ins)| ins.target != TtPoint::Node(node))
         {
-            pending.push(("hint.tt.moveInstruction", json!({"glyph": glyph, "layer": scene.layer.id, "instruction": b.index, "point": node})));
+            let point = json!([node.path, node.node]);
+            pending.push(("hint.tt.moveInstruction", json!({"glyph": glyph, "layer": scene.layer.id, "instruction": b.index, "point": point})));
         }
     }
 }
 
 /// The node or handle of `layer` nearest to the screen point `at`, within `tolerance` screen
-/// points: as `[path, node]` with `path` counting paths only, and where it is on screen.
-fn node_at(layer: &Layer, view: View, at: Pos2, tolerance: f32) -> Option<(Value, Pos2)> {
-    let mut best: Option<(f32, Value, Pos2)> = None;
+/// points, with `path` counting paths only, and where it is on screen.
+fn node_at(layer: &Layer, view: View, at: Pos2, tolerance: f32) -> Option<(NodeRef, Pos2)> {
+    let mut best: Option<(f32, NodeRef, Pos2)> = None;
     let paths = layer.shapes.iter().filter_map(|s| if let ModelShape::Path(p) = s { Some(p) } else { None });
     for (p, path) in paths.enumerate() {
         for (n, node) in path.nodes.iter().enumerate() {
@@ -443,7 +446,7 @@ fn node_at(layer: &Layer, view: View, at: Pos2, tolerance: f32) -> Option<(Value
             let screen = Pos2::new(s.x as f32, s.y as f32);
             let d = screen.distance(at);
             if d.is_finite() && d <= tolerance && best.as_ref().is_none_or(|(b, _, _)| d < *b) {
-                best = Some((d, json!([p, n]), screen));
+                best = Some((d, NodeRef::new(p, n), screen));
             }
         }
     }
@@ -855,6 +858,29 @@ mod tests {
         headless.run("hint.tt.deleteInstructions", &json!({"glyph": "A", "instructions": [1]})).unwrap();
         assert_eq!(layer(&app), layer(&headless));
         assert!(app.state.tt_instructor.selected_in("A", &layer(&app).id).is_empty());
+    }
+
+    #[test]
+    fn a_badge_dropped_on_its_own_point_changes_nothing_and_reports_no_error() {
+        let mut app = squares();
+        add(&mut app, "hint.tt.snapPoint", json!([[0, 0]]), "vertical");
+        edit(&mut app);
+        let w = Window::new();
+        w.frame(&mut app, Vec::new());
+        let before = layer(&app);
+        let view = tools_glue::current_view(&app).unwrap();
+        let badge = badges(&before, &tt_instructions(&before).unwrap(), view, &app.tokens.tt, TtDirection::Vertical)[0].clone();
+        let (from, to) = (badge.at, badge.target);
+        let button = |pos, pressed| Event::PointerButton { pos, button: PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
+        app.state.status.clear();
+        w.frame(&mut app, vec![Event::PointerMoved(from)]);
+        w.frame(&mut app, vec![button(from, true)]);
+        w.frame(&mut app, vec![Event::PointerMoved(from.lerp(to, 0.5))]);
+        w.frame(&mut app, vec![Event::PointerMoved(to)]);
+        w.frame(&mut app, vec![button(to, false)]);
+        w.frame(&mut app, Vec::new());
+        assert_eq!(layer(&app), before);
+        assert!(!app.state.status.contains("already"), "{}", app.state.status);
     }
 
     #[test]

@@ -18,11 +18,9 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 
-use fontcraft_audit::{AuditContext, CheckSpec, CurveType, LayerReport};
-use fontcraft_model::{Font, Glyph, GlyphTable, Shape};
-use serde_json::Value;
-
 use super::Run;
+use fontcraft_audit::{AuditContext, CheckSpec, Config, CurveType, LayerReport};
+use fontcraft_model::{Font, Glyph, GlyphTable, Shape};
 
 /// Most glyphs one glyph's components may reach for its reports to be kept; a deeper or wider
 /// tree is examined on every run.
@@ -36,7 +34,8 @@ struct Key {
     main_curve: Option<CurveType>,
     variable: bool,
     checks: Vec<&'static str>,
-    config: Value,
+    /// The thresholds as the run resolved them: profile, document overrides, then the call.
+    config: Config,
     layers: Option<Vec<String>>,
     masters: Option<Vec<String>>,
 }
@@ -61,7 +60,7 @@ impl Key {
             main_curve: ctx.main_curve,
             variable: ctx.variable,
             checks: layer_checks.iter().map(|c| c.id).collect(),
-            config: run.config_json.clone(),
+            config: run.config.clone(),
             layers: sorted(&run.layers),
             masters: sorted(&run.masters),
         }

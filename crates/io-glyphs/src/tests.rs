@@ -1,5 +1,5 @@
 use super::*;
-use fontcraft_model::Transform;
+use fontcraft_model::{Orientation, Transform};
 
 const V3: &str = "{
 .appVersion = \"3343\";
@@ -1078,7 +1078,28 @@ fn a_kept_single_value_spelling_is_left_out_once_the_property_is_localized() {
 
 #[test]
 fn node_flags_kept_as_written_give_way_to_an_edited_lock() {
+    // `X` before `R`: locked and right, in an order the writer does not use.
     let text = V3.replace("(300,700,l),", "(300,700,lXR),");
+    let mut font = read(&text).unwrap();
+    assert_eq!(write(&font).unwrap(), text, "kept while untouched");
+    let mut g = font.glyph_mut("A").unwrap();
+    let Shape::Path(p) = &mut g.layers[0].shapes[0] else { panic!() };
+    let n = p.nodes.iter_mut().find(|n| (n.x, n.y) == (300.0, 700.0)).unwrap();
+    assert!(n.locked && n.orientation == Orientation::Right, "read in any order");
+    n.locked = false;
+    drop(g);
+    let out = write(&font).unwrap();
+    assert!(out.contains("(300,700,lR),"), "the orientation survives the edit: {out}");
+    let back = read(&out).unwrap();
+    let Shape::Path(p) = &back.glyph("A").unwrap().layers[0].shapes[0] else { panic!() };
+    let n = p.nodes.iter().find(|n| (n.x, n.y) == (300.0, 700.0)).unwrap();
+    assert!(!n.locked && n.orientation == Orientation::Right && n.info.extra.is_empty());
+    assert_eq!(glyph_block(&out, "B"), glyph_block(&text, "B"));
+}
+
+#[test]
+fn unknown_node_flag_letters_survive_an_edited_lock() {
+    let text = V3.replace("(300,700,l),", "(300,700,lZ),");
     let mut font = read(&text).unwrap();
     assert_eq!(write(&font).unwrap(), text, "kept while untouched");
     let mut g = font.glyph_mut("A").unwrap();
@@ -1087,12 +1108,11 @@ fn node_flags_kept_as_written_give_way_to_an_edited_lock() {
     n.locked = true;
     drop(g);
     let out = write(&font).unwrap();
-    assert!(out.contains("(300,700,lX),"), "{out}");
+    assert!(out.contains("(300,700,lXZ),"), "the unknown letter follows the lock: {out}");
     let back = read(&out).unwrap();
+    assert_eq!(write(&back).unwrap(), out, "the edited flags read back the same");
     let Shape::Path(p) = &back.glyph("A").unwrap().layers[0].shapes[0] else { panic!() };
-    let n = p.nodes.iter().find(|n| (n.x, n.y) == (300.0, 700.0)).unwrap();
-    assert!(n.locked && n.info.extra.is_empty());
-    assert_eq!(glyph_block(&out, "B"), glyph_block(&text, "B"));
+    assert!(p.nodes.iter().find(|n| (n.x, n.y) == (300.0, 700.0)).unwrap().locked);
 }
 
 /// Whether any extra data the font's objects hold (the font, glyph `A`'s layers) keeps a layout.
