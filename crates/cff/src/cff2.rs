@@ -257,6 +257,9 @@ pub struct Cff2Built {
     pub table: Vec<u8>,
     /// Per glyph, the bounds of its outline at the origin; `None` for an empty glyph.
     pub glyph_bounds: Vec<Option<Bounds>>,
+    /// The glyphs written without their hints because a stem's blend does not fit the operand
+    /// stack, in glyph order.
+    pub unhinted: Vec<String>,
 }
 
 /// Why a `CFF2` table could not be built.
@@ -415,9 +418,9 @@ fn check_blend(b: &Blend, regions: usize, glyph: &str) -> Result<(), Cff2Error> 
     Ok(())
 }
 
-/// The charstring of `glyph` (with `regions` regions in its list) and its bounds at the origin,
-/// specialised unless `generic`.
-fn charstring(glyph: &Cff2Glyph, regions: usize, tolerance: f64, generic: bool) -> Result<(Vec<u8>, Option<Bounds>), Cff2Error> {
+/// The charstring of `glyph` (with `regions` regions in its list), its bounds at the origin, and
+/// whether its hints were left out; specialised unless `generic`.
+fn charstring(glyph: &Cff2Glyph, regions: usize, tolerance: f64, generic: bool) -> Result<(Vec<u8>, Option<Bounds>, bool), Cff2Error> {
     let name = glyph.name.as_str();
     if glyph.path.len() > MAX_SEGMENTS {
         return Err(Error::TooManySegments { glyph: name.to_string(), count: glyph.path.len() }.into());
@@ -463,10 +466,12 @@ fn charstring(glyph: &Cff2Glyph, regions: usize, tolerance: f64, generic: bool) 
         default_path.push(step);
         commands.push(Cmd { op: code, args });
     }
-    let hinted = match glyph.hints.as_ref().filter(|h| !h.is_empty() && !commands.is_empty()) {
+    let hints = glyph.hints.as_ref().filter(|h| !h.is_empty() && !commands.is_empty());
+    let hinted = match hints {
         Some(h) => hinted_charstring(&commands, h, glyph.vsindex, regions, tolerance, generic, name)?,
         None => None,
     };
+    let unhinted = hints.is_some() && hinted.is_none();
     let out = if let Some(bytes) = hinted {
         bytes
     } else if generic {
@@ -481,7 +486,7 @@ fn charstring(glyph: &Cff2Glyph, regions: usize, tolerance: f64, generic: bool) 
     };
     // The defaults are rounded already; the bounds pen sees the points the charstring draws.
     let drawn = bounds(&pen_commands(&default_path, 0.0));
-    Ok((out, drawn))
+    Ok((out, drawn, unhinted))
 }
 
 /// Checks `hints` against a path of `ops` operations whose blends have `regions` deltas: the
@@ -851,13 +856,17 @@ pub fn write_cff2(font: &Cff2Font) -> Result<Cff2Built, Cff2Error> {
     validate(font)?;
     let mut charstrings = Vec::with_capacity(font.glyphs.len());
     let mut glyph_bounds = Vec::with_capacity(font.glyphs.len());
+    let mut unhinted = Vec::new();
     for g in &font.glyphs {
         let Some(list) = font.region_lists.get(usize::from(g.vsindex)) else {
             return Err(Cff2Error::BadBlend { glyph: g.name.clone(), reason: format!("region list {} does not exist", g.vsindex) });
         };
-        let (bytes, b) = charstring(g, list.len(), font.round_tolerance, font.generic)?;
+        let (bytes, b, dropped) = charstring(g, list.len(), font.round_tolerance, font.generic)?;
         charstrings.push(bytes);
         glyph_bounds.push(b);
+        if dropped {
+            unhinted.push(g.name.clone());
+        }
     }
     let base_regions = font.region_lists.first().map_or(0, Vec::len);
     let private = private_dict(&font.private, base_regions)?;
@@ -916,7 +925,7 @@ pub fn write_cff2(font: &Cff2Font) -> Result<Cff2Built, Cff2Error> {
     if out.len() > MAX_TABLE_SIZE {
         return Err(Error::TableTooLarge(out.len()).into());
     }
-    Ok(Cff2Built { table: out, glyph_bounds })
+    Ok(Cff2Built { table: out, glyph_bounds, unhinted })
 }
 
 #[cfg(test)]

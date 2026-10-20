@@ -40,7 +40,7 @@ pub mod svg_import;
 pub use assets::{AssetError, AssetStore, MemoryAssets};
 pub use error::{
     ColorError, MAX_ASSET_BYTES, MAX_COLOR_LAYERS, MAX_LAYER_GLYPHS, MAX_PAINT_DEPTH, MAX_PALETTE_ROWS, MAX_PALETTES, MAX_STOPS, MAX_STRIKES,
-    MAX_SVG_DEPTH, MAX_SVG_DOCUMENT_BYTES, MAX_SVG_FILE_BYTES, MAX_SVG_TABLE_BYTES,
+    MAX_SVG_DEPTH, MAX_SVG_DOCUMENT_BYTES, MAX_SVG_FILE_BYTES, MAX_SVG_PAINT_VISITS, MAX_SVG_TABLE_BYTES,
 };
 pub use export::{ExportPlan, Problem, Switches};
 pub use layers::{ColorLayerKind, GlyphColor};

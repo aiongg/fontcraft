@@ -33,6 +33,10 @@ pub const MAX_SVG_DEPTH: usize = 256;
 pub const MAX_SVG_DOCUMENT_BYTES: usize = 16 << 20;
 /// Largest `SVG ` table written.
 pub const MAX_SVG_TABLE_BYTES: usize = 512 << 20;
+/// Most paint nodes one glyph's SVG document visits, references to other colour glyphs followed
+/// included (Edit View's drawing has the same limit), so that references fanning out to other
+/// references cannot multiply the work without bound.
+pub const MAX_SVG_PAINT_VISITS: usize = 65_536;
 
 #[derive(Debug, PartialEq, thiserror::Error)]
 pub enum ColorError {
