@@ -29,7 +29,7 @@ const OPTIONS: &[OptSpec] = &[
     OptSpec::value("glyphs-file", "FILE", "", "a file of glyph names to keep"),
     OptSpec::list("gids", "LIST", "", "glyph indices and ranges to keep (10-12,14)"),
     OptSpec::value("gids-file", "FILE", "", "a file of glyph indices and ranges to keep"),
-    OptSpec::list("unicodes", "LIST", "", "code points and ranges in hex, with or without U+; '*' keeps every mapped character"),
+    OptSpec::list("unicodes", "LIST", "", "code points and ranges in hex, with or without U+; '*' keeps every mapped character").hex(),
     OptSpec::value("unicodes-file", "FILE", "", "a file of code points and ranges to keep"),
     OptSpec::value("text", "STRING", "", "keep the characters of this text"),
     OptSpec::value("text-file", "FILE", "", "keep the characters of this UTF-8 file; line breaks are not added"),
