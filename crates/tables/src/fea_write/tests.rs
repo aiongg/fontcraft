@@ -256,17 +256,3 @@ fn class_contexts_charge_their_first_glyphs_per_rule() {
     let f = font(&names, vec![(*b"GSUB", dump_table(&gsub).unwrap())]);
     assert!(matches!(decompile(&f, &DecompileOptions::default()), Err(TablesError::TooLarge { .. })));
 }
-
-#[test]
-fn taken_names_get_the_next_free_number() {
-    let mut taken = Taken::new(["a_3".to_string()].into_iter().collect());
-    let got: Vec<String> = (0..4).map(|_| taken.claim("a".into())).collect();
-    assert_eq!(got, ["a", "a_2", "a_4", "a_5"]);
-    assert_eq!(taken.claim("b".into()), "b");
-    // Many names on one base cost one step each.
-    let mut many = Taken::new(Default::default());
-    for _ in 0..100_000 {
-        many.claim("class".into());
-    }
-    assert_eq!(many.claim("class".into()), "class_100001");
-}

@@ -1,16 +1,18 @@
-//! Layout tables read into lines of feature code (the reader behind [`super`]).
+//! Layout tables read into lines of feature code: the one feature-code writer. [`super`] lays
+//! the lines out as a document's entries when a compiled font is opened (M8.23), and
+//! `fontcraft_tables::fea_write` lays them out as one feature file (M12.12, `features
+//! decompile`).
 //!
-//! Ported from `fontcraft_tables::fea_write` (M12.12), which `tables` builds on top of this
-//! crate and so cannot share: the same rules and statements, read through `skrifa`'s tables,
-//! with the document's glyph names. The lines are kept apart per lookup, per feature and per
-//! block, so [`super`] can lay them out as entries; [`Writer::render`] turns them into text and
-//! names the glyph sets that repeat.
+//! [`Writer::read`] reads `GSUB`, `GPOS`, `GDEF` and `BASE` through any [`TableProvider`] into a
+//! [`Layout`]: lines kept apart per lookup, per feature and per block. [`Writer::render`] turns
+//! chunks of lines into text and names the glyph sets that repeat.
 //!
 //! Input is untrusted: every record, glyph and rule read is charged to [`MAX_LAYOUT_WORK`],
-//! the text is capped at [`super::MAX_TEXT`] bytes, and lookup nesting is followed at most
-//! [`super::MAX_NESTING`] deep.
+//! the text is capped by the caller ([`super::MAX_TEXT`] on open), and lookup nesting is
+//! followed at most [`super::MAX_NESTING`] deep.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::fmt;
 
 use skrifa::raw::tables::base::{Base, MinMax};
 use skrifa::raw::tables::gdef::{CaretValue, Gdef};
@@ -23,30 +25,51 @@ use skrifa::raw::tables::layout::{
 use skrifa::raw::types::{BigEndian, GlyphId16, Tag};
 use skrifa::raw::{FontRef, ReadError, TableProvider};
 
-use super::{MAX_NESTING, MAX_TEXT};
+use super::MAX_NESTING;
 
 /// Most units of work (records, glyphs, rules) spent reading one font's layout tables.
 pub const MAX_LAYOUT_WORK: usize = 50_000_000;
 
 /// A table or feature tag as bytes.
-pub(crate) type T4 = [u8; 4];
+pub type T4 = [u8; 4];
 
-pub(crate) const GSUB: T4 = *b"GSUB";
-pub(crate) const GPOS: T4 = *b"GPOS";
-pub(crate) const DFLT_LANG: T4 = *b"dflt";
+pub const GSUB: T4 = *b"GSUB";
+pub const GPOS: T4 = *b"GPOS";
+pub const GDEF: T4 = *b"GDEF";
+pub const BASE: T4 = *b"BASE";
+pub const DFLT_LANG: T4 = *b"dflt";
+/// Every layout table the writer reads.
+pub const LAYOUT_TABLES: [T4; 4] = [GSUB, GPOS, GDEF, BASE];
 
-/// Why the layout could not be read.
+/// Why the layout could not be written as feature code.
 #[derive(Debug)]
-pub(crate) struct FeaError(pub String);
+pub enum FeaError {
+    /// A table cannot be read.
+    Invalid(String),
+    /// Reading needs more than [`MAX_LAYOUT_WORK`] units of work.
+    TooMuchWork,
+    /// The text would be longer than this many bytes.
+    TooLong(usize),
+}
 
-pub(crate) type R<T> = Result<T, FeaError>;
+impl fmt::Display for FeaError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            FeaError::Invalid(m) => f.write_str(m),
+            FeaError::TooMuchWork => write!(f, "the layout tables need more than {MAX_LAYOUT_WORK} units of work to read"),
+            FeaError::TooLong(n) => write!(f, "the feature code would be larger than {n} bytes"),
+        }
+    }
+}
+
+pub type R<T> = Result<T, FeaError>;
 
 fn read_err(what: &str, e: ReadError) -> FeaError {
-    FeaError(format!("the {what} cannot be read: {e}"))
+    FeaError::Invalid(format!("the {what} cannot be read: {e}"))
 }
 
 /// A tag as feature code writes it: trailing spaces dropped (`TRK ` is `TRK`).
-pub(crate) fn fea_tag(tag: T4) -> String {
+pub fn fea_tag(tag: T4) -> String {
     String::from_utf8_lossy(&tag).trim_end().to_string()
 }
 
@@ -60,7 +83,7 @@ fn sanitize(s: &str) -> String {
 }
 
 /// The work left for one run; every record, glyph and rule read is charged before it is used.
-pub(crate) struct Budget {
+struct Budget {
     left: usize,
 }
 
@@ -77,7 +100,7 @@ impl Budget {
             }
             None => {
                 self.left = 0;
-                Err(FeaError(format!("the layout tables need more than {MAX_LAYOUT_WORK} units of work to read")))
+                Err(FeaError::TooMuchWork)
             }
         }
     }
@@ -150,14 +173,14 @@ fn fea_glyph_name(name: &str) -> (String, bool) {
 
 // ── the text being built ─────────────────────────────────────────────────────────────────────
 
-pub(crate) enum Piece {
+pub enum Piece {
     Text(String),
     Glyph(u16),
     /// A glyph set by id; `true` writes a single glyph in brackets (a class).
     Set(usize, bool),
 }
 
-pub(crate) struct Line {
+pub struct Line {
     pub indent: usize,
     pub pieces: Vec<Piece>,
     /// Lookups (of the lookup's own table) this rule calls.
@@ -206,12 +229,14 @@ fn drop_empty_calls(lookups: &mut HashMap<u16, LookupOut>, empty: &BTreeSet<u16>
 }
 
 /// One lookup read into lines.
-pub(crate) struct LookupOut {
+pub struct LookupOut {
     pub table: T4,
     pub index: u16,
     pub name: String,
     /// The lookup type (extension lookups read through).
     pub kind: u16,
+    /// The font stores the lookup through extension lookups.
+    pub extension: bool,
     pub flag: Option<Line>,
     /// `markClass` statements the lookup's rules need.
     pub pre: Vec<Line>,
@@ -221,18 +246,18 @@ pub(crate) struct LookupOut {
 }
 
 /// (not DFLT, script, not dflt, language): sorts `DFLT` and `dflt` first.
-pub(crate) type SysKey = (bool, T4, bool, T4);
+pub type SysKey = (bool, T4, bool, T4);
 
 fn sys_key(script: T4, language: T4) -> SysKey {
     (&script != b"DFLT", script, language != DFLT_LANG, language)
 }
 
 /// A feature's lookups per language system: (required, lookups by table).
-pub(crate) type Systems = BTreeMap<SysKey, (bool, Vec<(T4, u16)>)>;
+pub type Systems = BTreeMap<SysKey, (bool, Vec<(T4, u16)>)>;
 
 /// Everything read from the layout tables, before it is laid out.
 #[derive(Default)]
-pub(crate) struct Layout {
+pub struct Layout {
     /// The language systems the features use, `DFLT dflt` first.
     pub systems: BTreeSet<SysKey>,
     /// Notes on what the tables hold that has no feature syntax.
@@ -271,7 +296,7 @@ struct CtxRule {
 }
 
 /// What [`Writer::render`] gives.
-pub(crate) struct Rendered {
+pub struct Rendered {
     /// Named glyph classes: name without `@`, members separated by spaces.
     pub classes: Vec<(String, String)>,
     /// The text of each chunk, in the order given.
@@ -284,7 +309,27 @@ pub(crate) struct Rendered {
     pub beyond: Vec<u16>,
 }
 
-pub(crate) struct Writer<'a> {
+/// What [`Writer::read`] reads.
+#[derive(Clone, Copy, Debug)]
+pub struct ReadOptions<'o> {
+    /// The layout tables to read, of [`LAYOUT_TABLES`]. `GDEF` is used for lookup flags
+    /// whether or not it is read as a block.
+    pub tables: &'o [T4],
+    /// Features left out, with the lookups only they reach.
+    pub exclude: &'o [T4],
+    /// When not empty, only these features and the lookups they reach.
+    pub only: &'o [T4],
+    /// A stylistic set's name is kept as its name ID ([`Layout::set_names`]) instead of a note.
+    pub set_names: bool,
+}
+
+impl ReadOptions<'static> {
+    /// Every layout table, every feature.
+    pub const ALL: ReadOptions<'static> = ReadOptions { tables: &LAYOUT_TABLES, exclude: &[], only: &[], set_names: false };
+}
+
+/// Reads layout tables into lines and renders them; see the module notes.
+pub struct Writer<'a> {
     raw: &'a [String],
     names: Vec<String>,
     budget: Budget,
@@ -326,12 +371,14 @@ impl<'a> Writer<'a> {
         self.lookup_names.get(&table).and_then(|v| v.get(usize::from(li))).cloned().unwrap_or_else(|| format!("{}_{li}", fea_tag(table)))
     }
 
-    /// Reads `GSUB`, `GPOS`, `GDEF` and `BASE`. With `exclude`, those features and the lookups
-    /// only they reach are left out.
-    pub fn read(&mut self, font: &FontRef<'a>, exclude: &[T4]) -> R<Layout> {
+    /// Reads the layout tables `options` names from `font`.
+    pub fn read<P: TableProvider<'a>>(&mut self, font: &P, options: &ReadOptions) -> R<Layout> {
         let mut out = Layout::default();
         self.gdef = font.gdef().ok();
         for table in [GSUB, GPOS] {
+            if !options.tables.contains(&table) {
+                continue;
+            }
             let Some((scripts, features)) = layout_lists(font, table)? else { continue };
             if has_feature_variations(font, table) {
                 let line = self.note(&format!("the {} feature variations (alternate lookups chosen by axis location)", fea_tag(table)));
@@ -345,7 +392,7 @@ impl<'a> Writer<'a> {
                 let indices: Vec<(u16, bool)> = required.map(|r| (r, true)).into_iter().chain(indices.iter().map(|f| (*f, false))).collect();
                 for (index, required) in indices {
                     let (tag, ids) = feature_at(&features, index, &mut self.budget)?;
-                    if exclude.contains(&tag) {
+                    if options.exclude.contains(&tag) || !(options.only.is_empty() || options.only.contains(&tag)) {
                         continue;
                     }
                     let params = features
@@ -359,7 +406,7 @@ impl<'a> Writer<'a> {
                         && !out.set_names.contains_key(&tag)
                     {
                         match &p {
-                            FeatureParams::StylisticSet(s) if tag.starts_with(b"ss") => {
+                            FeatureParams::StylisticSet(s) if options.set_names && tag.starts_with(b"ss") => {
                                 out.set_names.insert(tag, s.ui_name_id().to_u16());
                             }
                             _ => {
@@ -396,7 +443,8 @@ impl<'a> Writer<'a> {
                 .map(|n| self.used_lookup_names.claim(n))
                 .collect();
             self.lookup_names.insert(table, names);
-            let candidates: Vec<u16> = if exclude.is_empty() { (0..count).filter_map(|i| u16::try_from(i).ok()).collect() } else { roots };
+            let every = options.exclude.is_empty() && options.only.is_empty();
+            let candidates: Vec<u16> = if every { (0..count).filter_map(|i| u16::try_from(i).ok()).collect() } else { roots };
             let mut outs: HashMap<u16, LookupOut> = HashMap::new();
             let mut queue = candidates;
             while let Some(li) = queue.pop() {
@@ -425,10 +473,14 @@ impl<'a> Writer<'a> {
                 }
             }
         }
-        if let Some(g) = self.gdef.clone() {
+        if options.tables.contains(&GDEF)
+            && let Some(g) = self.gdef.clone()
+        {
             out.gdef = self.gdef_block(&g)?;
         }
-        if let Ok(base) = font.base() {
+        if options.tables.contains(&BASE)
+            && let Ok(base) = font.base()
+        {
             out.base = self.base_block(&base)?;
         }
         Ok(out)
@@ -486,9 +538,10 @@ impl<'a> Writer<'a> {
 
     // ── lookups ──────────────────────────────────────────────────────────────────────────────
 
-    fn lookup(&mut self, font: &FontRef<'a>, table: T4, li: u16) -> R<LookupOut> {
+    fn lookup<P: TableProvider<'a>>(&mut self, font: &P, table: T4, li: u16) -> R<LookupOut> {
         let name = self.lookup_name(table, li);
-        let mut out = LookupOut { table, index: li, name, kind: 0, flag: None, pre: Vec::new(), body: Vec::new(), refs: BTreeSet::new() };
+        let mut out =
+            LookupOut { table, index: li, name, kind: 0, extension: false, flag: None, pre: Vec::new(), body: Vec::new(), refs: BTreeSet::new() };
         let what = format!("{} lookup {li}", fea_tag(table));
         if table == GSUB {
             let list = font.gsub().and_then(|t| t.lookup_list()).map_err(|e| read_err("GSUB lookup list", e))?;
@@ -496,6 +549,7 @@ impl<'a> Writer<'a> {
             out.flag = self.flag_line(lookup.lookup_flag().to_bits(), lookup.mark_filtering_set());
             let subtables = lookup.subtables().map_err(|e| read_err(&what, e))?;
             out.kind = gsub_kind(&subtables);
+            out.extension = lookup.lookup_type() == 7;
             self.gsub_body(&subtables, &mut out)?;
         } else {
             let list = font.gpos().and_then(|t| t.lookup_list()).map_err(|e| read_err("GPOS lookup list", e))?;
@@ -503,6 +557,7 @@ impl<'a> Writer<'a> {
             out.flag = self.flag_line(lookup.lookup_flag().to_bits(), lookup.mark_filtering_set());
             let subtables = lookup.subtables().map_err(|e| read_err(&what, e))?;
             out.kind = gpos_kind(&subtables);
+            out.extension = lookup.lookup_type() == 9;
             self.gpos_body(&subtables, &mut out)?;
         }
         for line in &out.body {
@@ -1432,8 +1487,9 @@ impl<'a> Writer<'a> {
     }
 
     /// Turns each chunk of lines into text. With `named`, glyph sets of two or more glyphs used
-    /// more than once become named classes, listed in [`Rendered::classes`].
-    pub fn render(mut self, chunks: &[Vec<Line>], named: bool) -> R<Rendered> {
+    /// more than once become named classes, listed in [`Rendered::classes`]. Fails when the
+    /// classes and texts together would hold more than `max_text` bytes.
+    pub fn render(mut self, chunks: &[Vec<Line>], named: bool, max_text: usize) -> R<Rendered> {
         let mut uses = vec![0usize; self.sets.len()];
         for line in chunks.iter().flatten() {
             for piece in &line.pieces {
@@ -1496,7 +1552,7 @@ impl<'a> Writer<'a> {
             }
             text.push('\n');
         };
-        let too_large = || FeaError(format!("the feature code would be larger than {MAX_TEXT} bytes"));
+        let too_large = || FeaError::TooLong(max_text);
         let mut sorted: Vec<(&usize, &String)> = class_names.iter().collect();
         sorted.sort_by_key(|(id, _)| **id);
         let mut classes = Vec::new();
@@ -1506,7 +1562,7 @@ impl<'a> Writer<'a> {
             let members: Vec<String> = glyphs.iter().map(|g| self.glyph_text(*g)).collect();
             let members = members.join(" ");
             size = size.saturating_add(members.len()).saturating_add(name.len());
-            if size > MAX_TEXT {
+            if size > max_text {
                 return Err(too_large());
             }
             classes.push((name.clone(), members));
@@ -1518,7 +1574,7 @@ impl<'a> Writer<'a> {
                 let before = text.len();
                 push_line(&mut self, line, &mut text, &mut used_glyphs);
                 size = size.saturating_add(text.len().saturating_sub(before));
-                if size > MAX_TEXT {
+                if size > max_text {
                     return Err(too_large());
                 }
             }
@@ -1566,7 +1622,7 @@ fn visit(li: u16, outs: &HashMap<u16, LookupOut>, state: &mut HashMap<u16, bool>
     }
 }
 
-fn has_feature_variations(font: &FontRef, table: T4) -> bool {
+fn has_feature_variations<'a>(font: &impl TableProvider<'a>, table: T4) -> bool {
     if table == GSUB {
         font.gsub().ok().and_then(|t| t.feature_variations()).is_some()
     } else {
@@ -1574,7 +1630,7 @@ fn has_feature_variations(font: &FontRef, table: T4) -> bool {
     }
 }
 
-fn lookup_count(font: &FontRef, table: T4) -> R<usize> {
+fn lookup_count<'a>(font: &impl TableProvider<'a>, table: T4) -> R<usize> {
     let n = if table == GSUB {
         font.gsub().and_then(|t| t.lookup_list()).map(|l| l.lookup_count())
     } else {
@@ -1584,9 +1640,9 @@ fn lookup_count(font: &FontRef, table: T4) -> R<usize> {
 }
 
 /// The script and feature lists of `GSUB` or `GPOS`; `None` when the font lacks the table.
-fn layout_lists<'a>(font: &FontRef<'a>, table: T4) -> R<Option<(ScriptList<'a>, FeatureList<'a>)>> {
+fn layout_lists<'a>(font: &impl TableProvider<'a>, table: T4) -> R<Option<(ScriptList<'a>, FeatureList<'a>)>> {
     let name = fea_tag(table);
-    if font.table_data(Tag::new(&table)).is_none() {
+    if font.data_for_tag(Tag::new(&table)).is_none() {
         return Ok(None);
     }
     let lists = if table == GSUB {
@@ -1640,7 +1696,7 @@ fn feature_at(features: &FeatureList, index: u16, budget: &mut Budget) -> R<(T4,
     let record = features
         .feature_records()
         .get(usize::from(index))
-        .ok_or_else(|| FeaError(format!("a language system names feature {index}, which the feature list does not have")))?;
+        .ok_or_else(|| FeaError::Invalid(format!("a language system names feature {index}, which the feature list does not have")))?;
     let tag = record.feature_tag().into_bytes();
     let feature = record.feature(features.offset_data()).map_err(|e| read_err(&format!("feature '{}'", fea_tag(tag)), e))?;
     let lookups = feature.lookup_list_indices();
@@ -1760,4 +1816,23 @@ fn class_name(glyphs: &[u16], raw: &[String], taken: &mut Taken) -> String {
 fn is_zero(vr: &ValueRecord) -> bool {
     let devices = [vr.x_placement_device(), vr.y_placement_device(), vr.x_advance_device(), vr.y_advance_device()];
     [vr.x_placement(), vr.y_placement(), vr.x_advance(), vr.y_advance()].iter().all(|v| v.unwrap_or(0) == 0) && devices.iter().all(Option::is_none)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn taken_names_get_the_next_free_number() {
+        let mut taken = Taken::new(["a_3".to_string()].into_iter().collect());
+        let got: Vec<String> = (0..4).map(|_| taken.claim("a".into())).collect();
+        assert_eq!(got, ["a", "a_2", "a_4", "a_5"]);
+        assert_eq!(taken.claim("b".into()), "b");
+        // Many names on one base cost one step each.
+        let mut many = Taken::new(Default::default());
+        for _ in 0..100_000 {
+            many.claim("class".into());
+        }
+        assert_eq!(many.claim("class".into()), "class_100001");
+    }
 }
