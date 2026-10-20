@@ -38,12 +38,17 @@ const OPS: [(&str, &[u8]); 26] = [
     ("add", &[12, 10]),
 ];
 
-/// A charstring from text: integers, operator names and `<hex>` mask bytes.
+/// A charstring from text: integers, decimals (written as 16.16 fixed), operator names and
+/// `<hex>` mask bytes.
 pub(crate) fn cs(program: &str) -> Vec<u8> {
     let mut out = Vec::new();
     for word in program.split_whitespace() {
         if let Ok(n) = word.parse::<i32>() {
             put_cs_number(&mut out, f64::from(n)).unwrap();
+        } else if word.contains('.')
+            && let Ok(v) = word.parse::<f64>()
+        {
+            put_cs_number(&mut out, v).unwrap();
         } else if let Some(hex) = word.strip_prefix('<').and_then(|w| w.strip_suffix('>')) {
             for k in (0..hex.len()).step_by(2) {
                 out.push(u8::from_str_radix(hex.get(k..k + 2).unwrap(), 16).unwrap());

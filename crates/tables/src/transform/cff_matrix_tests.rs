@@ -2,7 +2,7 @@
 //! values follow rotatefont's formulas (`rotateFont.cpp`): each absolute point `RND(a·x + c·y + e)`
 //! and `RND(b·x + d·y + f)`, each kept edge `offset + RND(scale · edge)`, rounded halves up.
 
-use super::{CharstringMemory, Item, MatrixJob, Parser, Pt, apply_matrix, apply_matrix_within};
+use super::{CharstringMemory, Item, MatrixJob, Parser, Pt, Reading, apply_matrix, apply_matrix_within};
 use crate::TablesError;
 use crate::dehint::cff::Table;
 use crate::transform::cff::numbers;
@@ -31,7 +31,7 @@ fn read_back(table: &[u8], cff2: bool) -> Vec<String> {
         let p = &t.privates[fd];
         let get = |op: u16| p.entries.iter().find(|e| e.op == op).map_or(0.0, |e| numbers(&e.raw).unwrap().unwrap()[0]);
         let mut memory = CharstringMemory::new(1 << 24);
-        let mut parser = Parser::new(cff2, &t.regions, p.vsindex, get(21), &mut memory);
+        let mut parser = Parser::new(cff2, Reading::Exact, &t.regions, p.vsindex, get(21), &mut memory);
         parser.run(code).unwrap();
         let g = parser.out;
         let mut words = Vec::new();
@@ -72,8 +72,8 @@ fn a_scale_keeps_every_hint_and_moves_the_edges() {
         read_back(table, false),
         vec![
             "w516",
-            "w966 h20:170 v87:208 M(27,52) Hc0 L(178,52) L(178,203) L(27,203)",
-            "w762 h20:97 v57:118 Hc0 M(12,19) F(28,19)(45,35)(61,35)(78,35)(94,19)(111,19)d50 L(111,170)",
+            "w966 h20:170 v87:208 M(27,52) L(178,52) L(178,203) L(27,203)",
+            "w762 h20:97 v57:118 M(12,19) F(28,19)(45,35)(61,35)(78,35)(94,19)(111,19)d50 L(111,170)",
             "w1117 M(87,20) F(118,20)(165,37)(196,37)(243,37)(274,20)(321,20)d50 L(321,4)",
         ]
     );
@@ -93,8 +93,8 @@ fn a_quarter_turn_swaps_the_stem_directions() {
         transform_with_report(&cff_font(None, 1000), &TransformOptions { rotate: Some(90.0), ..TransformOptions::default() }).unwrap();
     let table = out.get(*b"CFF ").unwrap();
     let glyphs = read_back(table, false);
-    assert_eq!(glyphs[1], "w1000 h-132:-51 v0:100 M(21,-11) Hc0 L(21,-112) L(122,-112) L(122,-11)");
-    assert_eq!(glyphs[2], "w1000 h-72:-31 v0:51 Hc0 M(-1,-1) F(-1,-12)(10,-23)(10,-34)(10,-45)(-1,-56)(-1,-67)d50 L(100,-67)");
+    assert_eq!(glyphs[1], "w1000 h-132:-51 v0:100 M(21,-11) L(21,-112) L(122,-112) L(122,-11)");
+    assert_eq!(glyphs[2], "w1000 h-72:-31 v0:51 M(-1,-1) F(-1,-12)(10,-23)(10,-34)(10,-45)(-1,-56)(-1,-67)d50 L(100,-67)");
     assert_eq!(private_value(table, false, 6), Some(vec![-250.0, 0.0, 1350.0, 0.0]), "rotatefont's fixed zones");
     assert_eq!(private_value(table, false, 10), Some(vec![81.0]), "StdHW from StdVW");
     assert_eq!(private_value(table, false, 11), Some(vec![81.0]), "StdVW stays when StdHW is unset");
@@ -108,7 +108,7 @@ fn a_quarter_turn_swaps_the_stem_directions() {
 fn a_half_turn_reverses_the_blue_zones() {
     let out = transform(&cff_font(None, 1000), &TransformOptions { rotate: Some(180.0), ..TransformOptions::default() }).unwrap();
     let table = out.get(*b"CFF ").unwrap();
-    assert_eq!(read_back(table, false)[1], "w0 h-100:0 v-132:-51 M(-11,-21) Hc0 L(-112,-21) L(-112,-122) L(-11,-122)");
+    assert_eq!(read_back(table, false)[1], "w0 h-100:0 v-132:-51 M(-11,-21) L(-112,-21) L(-112,-122) L(-11,-122)");
     assert_eq!(private_value(table, false, 6), Some(vec![-501.0, 10.0, 491.0, 11.0]));
     assert_eq!(private_value(table, false, 11), Some(vec![81.0]));
     assert_eq!(hmtx(&out)[1].0, 0, "a negative width is set to 0, in hmtx and in the charstring");
@@ -137,7 +137,7 @@ fn a_cff2_turn_transforms_the_deltas() {
     let t = Table::read(table, true).unwrap();
     assert_eq!(t.charstrings[1], cs("0 101 50 51 2 blend vstem 21 -11 rmoveto -101 -3 1 blend vlineto 101 hlineto 101 vlineto").as_slice());
     let glyphs = read_back(table, true);
-    assert!(glyphs[2].starts_with("h-72/5/-7:-31 v0:51 Hc0 M(-7,-5)"), "{}", glyphs[2]);
+    assert!(glyphs[2].starts_with("h-72/5/-7:-31 v0:51 M(-7,-5)"), "{}", glyphs[2]);
     assert_eq!(hmtx(&out), vec![(1000, 0), (1000, 21), (1000, -7)]);
 }
 
@@ -146,7 +146,7 @@ fn only_the_selected_glyphs_change() {
     let options = TransformOptions { glyphs: Some([1u16].into()), ..matrix([1.0, 0.0, 0.0, 1.0, 100.0, 0.0]) };
     let (out, report) = transform_with_report(&cff_font(None, 1000), &options).unwrap();
     let glyphs = read_back(out.get(*b"CFF ").unwrap(), false);
-    assert_eq!(glyphs[1], "w737 h0:100 v151:232 M(111,21) Hc0 L(212,21) L(212,122) L(111,122)");
+    assert_eq!(glyphs[1], "w737 h0:100 v151:232 M(111,21) L(212,21) L(212,122) L(111,122)");
     assert_eq!(glyphs[3], "w738 M(51,0) F(72,0)(103,11)(124,11)(155,11)(176,0)(207,0)d50 L(207,-11)", "another glyph keeps its outline and width");
     assert_eq!(report.glyphs_changed, 1);
     assert_eq!(hmtx(&out)[1], (737, 111));
@@ -290,4 +290,61 @@ fn hvar_follows_a_cff2_matrix() {
     let (out, report) = transform_with_report(&input, &TransformOptions { rotate: Some(90.0), ..TransformOptions::default() }).unwrap();
     assert_eq!(advance_deltas(&out), None);
     assert!(report.warnings.iter().any(|w| w.contains("HVAR is dropped")));
+}
+
+/// Each glyph read back without its width.
+fn outlines(out: &crate::sfnt::SfntFont) -> Vec<String> {
+    read_back(out.get(*b"CFF ").unwrap(), false).iter().map(|g| g.split_once(' ').map_or(String::new(), |(_, rest)| rest.to_string())).collect()
+}
+
+#[test]
+fn a_transformed_glyph_is_read_in_single_precision_with_end_points_in_hundredths() {
+    // 295.8755645751953 settles at 295.88 (y 464); the line ends at 295.88 - 50.885009765625,
+    // 244.995 in single precision, which settles at 245 and scales to 387.5, so 388. Read
+    // exactly, the line would end at 244.9906 and scale to 387.
+    let program = "0 295.8755645751953 rmoveto 10 -50.885009765625 rlineto endchar";
+    let f = font(*b"CFF ", cff_table(&["endchar", program, program, "endchar"], None), 1000, &[(500, 0); 4]);
+    let options = TransformOptions { glyphs: Some([1u16].into()), ..matrix([1.5, 0.0, 0.0, 1.5, 10.0, 20.0]) };
+    let out = transform(&f, &options).unwrap();
+    let glyphs = outlines(&out);
+    assert_eq!(glyphs[1], "M(10,464) L(25,388)");
+    assert_eq!(glyphs[2], "M(0,295.8755645751953) L(10,244.9905548095703)", "a glyph that is copied is read exactly");
+}
+
+#[test]
+fn a_negative_stem_width_turns_around_unless_it_marks_a_ghost_stem() {
+    let program = "0 100 500 -20 hstem 11 21 rmoveto 101 0 rlineto endchar";
+    let f = font(*b"CFF ", cff_table(&["endchar", program, "endchar", "endchar"], None), 1000, &[(500, 0); 4]);
+    let scaled = transform(&f, &matrix([1.5, 0.0, 0.0, 1.5, 10.0, 20.0])).unwrap();
+    assert_eq!(outlines(&scaled)[1], "h20:170 h890:920 M(27,52) L(178,52)", "-20 scaled is -30, written as 30");
+    let shifted = transform(&f, &matrix([1.0, 0.0, 0.0, 1.0, 0.0, 10.0])).unwrap();
+    assert_eq!(outlines(&shifted)[1], "h10:110 h610:590 M(11,31) L(112,31)", "a ghost stem keeps its -20");
+}
+
+#[test]
+fn hint_groups_follow_the_reference_writer() {
+    let glyphs = [
+        "endchar",
+        // Two groups that differ in their vertical stems.
+        "0 100 hstemhm 0 50 200 50 vstemhm hintmask <c0> 11 21 rmoveto 101 0 rlineto hintmask <a0> 0 101 rlineto endchar",
+        // One group, which leaves the vertical stem out.
+        "0 100 hstemhm 0 50 vstemhm hintmask <80> 11 21 rmoveto 101 0 rlineto endchar",
+        "endchar",
+    ];
+    let f = font(*b"CFF ", cff_table(&glyphs, None), 1000, &[(500, 0); 4]);
+    let scaled = transform(&f, &matrix([1.5, 0.0, 0.0, 1.5, 10.0, 20.0])).unwrap();
+    let out = outlines(&scaled);
+    assert_eq!(out[1], "h20:170 v10:85 v385:460 Hc0 M(27,52) L(178,52) Ha0 L(178,203)");
+    assert_eq!(out[2], "h20:170 M(27,52) L(178,52)", "an unused stem goes, and one group needs no mask");
+    let t = Table::read(scaled.get(*b"CFF ").unwrap(), false).unwrap();
+    assert!(
+        t.charstrings[1].ends_with(&cs("20 150 hstemhm 10 75 300 75 hintmask <c0> 27 52 rmoveto 151 hlineto hintmask <a0> 151 vlineto endchar")),
+        "the hint mask implies the vertical stem operator"
+    );
+    assert!(t.charstrings[2].ends_with(&cs("20 150 hstem 27 52 rmoveto 151 hlineto endchar")));
+
+    // A shear drops the vertical stems; both masks then hold the same stem, the second goes, and
+    // with one group left no mask is written.
+    let sheared = transform(&f, &matrix([1.0, 0.0, 0.2, 1.0, 0.0, 0.0])).unwrap();
+    assert_eq!(outlines(&sheared)[1], "h0:100 M(15,21) L(116,21) L(136,122)");
 }
