@@ -135,6 +135,9 @@ pub struct SubsetOptions {
     pub recalc_average_width: bool,
     /// Recompute `OS/2.usMaxContext` from the kept layout lookups.
     pub recalc_max_context: bool,
+    /// Write subset SVG documents again from their parse tree, indented two spaces per level,
+    /// instead of keeping their source text.
+    pub pretty_svg: bool,
 }
 
 impl Default for SubsetOptions {
@@ -178,6 +181,7 @@ impl Default for SubsetOptions {
             recalc_timestamp: None,
             recalc_average_width: false,
             recalc_max_context: false,
+            pretty_svg: false,
         }
     }
 }

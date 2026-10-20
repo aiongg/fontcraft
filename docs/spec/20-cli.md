@@ -579,7 +579,7 @@ Engine command: `font.dumpTables`.
 | otl-normalizer | font_path, -o, -t, -i | features normalize (also dump -t GPOS=normalized) |  |
 | varLib.avar.unbuild | font | dump -t avar=designspace |  |
 | ttLib | `-t` | dump -t (decompiling named tables is what dump does) |  |
-| pyftsubset | `--xml` | pipe the subset into dump: subset … -o - \| fontcraft-cli dump - |  |
+| pyftsubset | `--xml` | subset --xml (writes the subset and prints it as TTX) |  |
 
 ### `info`
 
@@ -1105,7 +1105,7 @@ Engine command: `font.subset`.
 | pyftsubset | `--pretty-svg` | --pretty-svg |  |
 | pyftsubset | `--verbose` | -v |  |
 | pyftsubset | `--timing` | --timing |  |
-| pyftsubset | --option=? (query current value) | --show-defaults |  |
+| pyftsubset | --option=? (query current value) | --option? (same output line); --show-defaults prints every option |  |
 | tx | `-g` | --glyphs |  |
 | tx | `-gx` | --exclude-glyphs |  |
 | tx | `-fd / -fdx` | --fd / --exclude-fd |  |

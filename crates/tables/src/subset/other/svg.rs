@@ -8,6 +8,9 @@
 //! retained, `glyph<N>` ids follow the output numbering (ids of glyphs not in the subset get a
 //! leading dot) and `xlink:href="#glyph…"` links follow them. The document is written from its
 //! root element; what is kept keeps its source text, except text that is only whitespace.
+//! With `pretty_svg` (`--pretty-svg`) the document is written again from its tree, as the
+//! reference's XML library prints a tree with indentation: the parser's blank-text rule
+//! ([`parser_blanks`]), then [`write_pretty`].
 //! One record is written per run of consecutive output glyphs.
 //!
 //! The XML reader is a small one of our own: elements, attributes, text, CDATA, comments,
@@ -320,6 +323,15 @@ fn start_tag(src: &[u8], at: usize) -> Result<(Elem, usize, bool)> {
     }
 }
 
+impl Doc<'_> {
+    /// The tag name of element `e`.
+    fn name(&self, e: &Elem) -> &[u8] {
+        let tag = self.text(e.start);
+        let end = tag.iter().skip(1).position(|b| b.is_ascii_whitespace() || matches!(b, b'>' | b'/')).map_or(tag.len(), |p| p + 1);
+        tag.get(1..end).unwrap_or_default()
+    }
+}
+
 /// The glyph number of an id `glyph<N>`.
 fn glyph_number(id: &[u8]) -> Option<u32> {
     let digits = id.strip_prefix(b"glyph")?;
@@ -587,7 +599,15 @@ fn subset_doc(plan: &Plan, parsed: &Parsed<'_>, gids: &[u32], work: &mut usize) 
     }
 
     let mut out = Vec::with_capacity(doc.src.len());
-    write(doc, doc.root, &removed, &edits, &mut out);
+    if plan.options.pretty_svg {
+        for (r, b) in removed.iter_mut().zip(parser_blanks(doc)) {
+            *r |= b;
+        }
+        write_pretty(doc, doc.root, &removed, &edits, 0, true, &mut out)?;
+        out.push(b'\n');
+    } else {
+        write(doc, doc.root, &removed, &edits, &mut out);
+    }
     Ok(Some(out))
 }
 
@@ -672,5 +692,201 @@ fn write(doc: &Doc<'_>, i: usize, removed: &[bool], edits: &HashMap<(usize, usiz
             }
             None => out.extend_from_slice(doc.text(e.close)),
         }
+    }
+}
+
+// ── --pretty-svg ──
+
+/// Deepest indentation written, in levels of two spaces: the reference's XML library indents
+/// no further than 60 spaces.
+const MAX_INDENT_LEVEL: usize = 30;
+
+/// The text nodes the reference's XML parser drops as blank text: text of spaces, tabs and
+/// line breaks, unless an `xml:space="preserve"` is in scope, the text is all its element holds,
+/// or the element's first child or the node just before it is text. CDATA is never blank.
+fn parser_blanks(doc: &Doc<'_>) -> Vec<bool> {
+    let mut blank = vec![false; doc.nodes.len()];
+    let mut stack = vec![(doc.root, false)];
+    while let Some((i, inherited)) = stack.pop() {
+        let Some(e) = doc.elem(i) else { continue };
+        let preserve = match doc.attr(e, b"xml:space") {
+            Some(b"preserve") => true,
+            Some(b"default") => false,
+            _ => inherited,
+        };
+        let mut first_is_text = None;
+        let mut last_is_text = false;
+        for (k, c) in e.children.iter().enumerate() {
+            match doc.nodes.get(*c) {
+                Some((XNode::Text, range)) => {
+                    let text = doc.text(*range);
+                    let white = !text.starts_with(b"<![CDATA[") && text.iter().all(|b| matches!(b, b' ' | b'\t' | b'\n' | b'\r'));
+                    let alone = first_is_text.is_none() && k + 1 == e.children.len();
+                    if white && !preserve && !alone && !last_is_text && first_is_text != Some(true) {
+                        if let Some(b) = blank.get_mut(*c) {
+                            *b = true;
+                        }
+                        continue;
+                    }
+                    first_is_text.get_or_insert(true);
+                    last_is_text = true;
+                }
+                Some((XNode::Elem(_), _)) => {
+                    first_is_text.get_or_insert(false);
+                    last_is_text = false;
+                    stack.push((*c, preserve));
+                }
+                _ => {
+                    first_is_text.get_or_insert(false);
+                    last_is_text = false;
+                }
+            }
+        }
+    }
+    blank
+}
+
+/// Writes node `i` as the reference's XML library prints a tree with indentation: namespace
+/// declarations before the other attributes, values in double quotes, an element without
+/// content closed as `<x/>`, and each child of an element that holds no text on a line of its
+/// own, indented two spaces per level. An element that holds text is written without line
+/// breaks, and so is everything inside it. Text and attribute values are written again from
+/// what they decode to ([`escape`]); comments and processing instructions keep their source.
+fn write_pretty(
+    doc: &Doc<'_>,
+    i: usize,
+    removed: &[bool],
+    edits: &HashMap<(usize, usize), Vec<u8>>,
+    level: usize,
+    format: bool,
+    out: &mut Vec<u8>,
+) -> Result<()> {
+    if out.len() > MAX_SVG_OUTPUT {
+        return Err(TablesError::TooLarge { what: "the subset SVG documents", limit: MAX_SVG_OUTPUT });
+    }
+    let Some((node, range)) = doc.nodes.get(i) else { return Ok(()) };
+    let e = match node {
+        XNode::Text => {
+            escape(doc.text(*range), false, out);
+            return Ok(());
+        }
+        XNode::Other => {
+            out.extend_from_slice(doc.text(*range));
+            return Ok(());
+        }
+        XNode::Elem(e) => e,
+    };
+    let name = doc.name(e);
+    out.push(b'<');
+    out.extend_from_slice(name);
+    let is_namespace = |n: &[u8]| n == b"xmlns" || n.starts_with(b"xmlns:");
+    for namespaces in [true, false] {
+        for (n, v) in &e.attrs {
+            if is_namespace(doc.text(*n)) != namespaces {
+                continue;
+            }
+            out.push(b' ');
+            out.extend_from_slice(doc.text(*n));
+            out.extend_from_slice(b"=\"");
+            escape(edits.get(v).map_or_else(|| doc.text(*v), Vec::as_slice), true, out);
+            out.push(b'"');
+        }
+    }
+    let kids: Vec<usize> = e.children.iter().copied().filter(|c| !removed.get(*c).copied().unwrap_or(true)).collect();
+    if kids.is_empty() {
+        out.extend_from_slice(b"/>");
+        return Ok(());
+    }
+    out.push(b'>');
+    let inner = format && !kids.iter().any(|c| matches!(doc.nodes.get(*c), Some((XNode::Text, _))));
+    let indent = |level: usize, out: &mut Vec<u8>| {
+        out.push(b'\n');
+        out.resize(out.len() + 2 * level.min(MAX_INDENT_LEVEL), b' ');
+    };
+    for c in kids {
+        if inner {
+            indent(level + 1, out);
+        }
+        // The parser caps element nesting at MAX_SVG_DEPTH, which bounds this recursion.
+        if level < MAX_SVG_DEPTH {
+            write_pretty(doc, c, removed, edits, level + 1, inner, out)?;
+        }
+    }
+    if inner {
+        indent(level, out);
+    }
+    out.extend_from_slice(b"</");
+    out.extend_from_slice(name);
+    out.push(b'>');
+    Ok(())
+}
+
+/// Writes text (or an attribute value, `attr`) as the reference's XML library writes it again
+/// after parsing: the five predefined entities and character references decoded (in an
+/// attribute, literal tabs and line breaks read as spaces), then `&`, `<` and `>` escaped, in an
+/// attribute also `"`, tab and line breaks, and every character past ASCII as a decimal
+/// character reference. CDATA is written as escaped text; references to other entities are
+/// copied as they are.
+fn escape(raw: &[u8], attr: bool, out: &mut Vec<u8>) {
+    let (raw, cdata) = match raw.strip_prefix(b"<![CDATA[").and_then(|r| r.strip_suffix(b"]]>")) {
+        Some(inner) => (inner, true),
+        None => (raw, false),
+    };
+    let text = String::from_utf8_lossy(raw);
+    let mut chars = text.char_indices().peekable();
+    while let Some((at, c)) = chars.next() {
+        let c = match c {
+            '&' if !cdata => {
+                let rest = text.get(at + 1..).unwrap_or_default();
+                let reference = rest.find(';').filter(|end| *end <= 10).and_then(|end| Some((rest.get(..end)?, end)));
+                let decoded = reference.and_then(|(name, _)| match name {
+                    "lt" => Some('<'),
+                    "gt" => Some('>'),
+                    "amp" => Some('&'),
+                    "quot" => Some('"'),
+                    "apos" => Some('\''),
+                    _ => {
+                        let n = match name.strip_prefix("#x") {
+                            Some(hex) => u32::from_str_radix(hex, 16).ok()?,
+                            None => name.strip_prefix('#')?.parse().ok()?,
+                        };
+                        char::from_u32(n)
+                    }
+                });
+                match (decoded, reference) {
+                    (Some(d), Some((_, end))) => {
+                        while chars.peek().is_some_and(|(k, _)| *k <= at + 1 + end) {
+                            chars.next();
+                        }
+                        push_escaped(d, attr, out);
+                    }
+                    _ => out.push(b'&'),
+                }
+                continue;
+            }
+            '\r' => {
+                if chars.peek().is_some_and(|(_, n)| *n == '\n') {
+                    chars.next();
+                }
+                if attr { ' ' } else { '\n' }
+            }
+            '\t' | '\n' if attr => ' ',
+            c => c,
+        };
+        push_escaped(c, attr, out);
+    }
+}
+
+fn push_escaped(c: char, attr: bool, out: &mut Vec<u8>) {
+    match c {
+        '&' => out.extend_from_slice(b"&amp;"),
+        '<' => out.extend_from_slice(b"&lt;"),
+        '>' => out.extend_from_slice(b"&gt;"),
+        '"' if attr => out.extend_from_slice(b"&quot;"),
+        '\n' if attr => out.extend_from_slice(b"&#10;"),
+        '\t' if attr => out.extend_from_slice(b"&#9;"),
+        '\r' => out.extend_from_slice(b"&#13;"),
+        c if c.is_ascii() => out.push(c as u8),
+        c => out.extend_from_slice(format!("&#{};", u32::from(c)).as_bytes()),
     }
 }
