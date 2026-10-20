@@ -195,3 +195,44 @@ fn hostile_matrices_and_tables_are_refused() {
         assert!(transform(&f, &matrix(m)).is_err(), "{program} is refused");
     }
 }
+
+#[test]
+fn a_glyph_table_gives_each_listed_glyph_its_shift_and_advance() {
+    use crate::transform::{GlyphSettings, IDENTITY};
+    let per_glyph = [(0u16, GlyphSettings::default()), (3, GlyphSettings { offset: (5.0, 6.0), advance: Some(900.0) })].into();
+    let options = TransformOptions { per_glyph: Some(per_glyph), ..TransformOptions::default() };
+    let (out, report) = transform_with_report(&cff_font(None, 1000), &options).unwrap();
+    assert_eq!(report.matrix, Some(IDENTITY), "a glyph table alone takes the identity");
+    let glyphs = read_back(out.get(*b"CFF ").unwrap(), false);
+    assert_eq!(glyphs[3], "w900 M(56,6) F(77,6)(108,17)(129,17)(160,17)(181,6)(212,6)d50 L(212,-5)");
+    assert_eq!(glyphs[1], "w637 h0:100 v51:132 M(11,21) Hc0 L(112,21) L(112,122) L(11,122)", "an unlisted glyph stays");
+    assert_eq!(hmtx(&out)[3], (900, 56));
+    assert_eq!(report.glyphs_changed, 2);
+}
+
+#[test]
+fn glyph_tables_are_read_with_limits() {
+    use crate::transform::{GlyphKey, MAX_GLYPH_TABLE_LINES, parse_glyph_table};
+    let entries = parse_glyph_table("# comment\n\n  .notdef .notdef None 0 0\nA A.vert 1000 120.5 -880\n").unwrap();
+    assert_eq!(entries.len(), 2);
+    assert_eq!(entries[1].output, GlyphKey::Name("A.vert".into()));
+    assert_eq!((entries[1].advance, entries[1].offset), (Some(1000.0), (120.5, -880.0)));
+    let cids = parse_glyph_table("0 0 None 0 0\n1200 1200 1000 0 0\n").unwrap();
+    assert_eq!(cids[1].source, GlyphKey::Cid(1200));
+    for bad in [
+        "A A 500 0",
+        "A A 500 0 0 extra",
+        "A A NaN 0 0",
+        "A A 500 inf 0",
+        "A A -1 0 0",
+        "A A 70000 0 0",
+        "A A 500 2e6 0",
+        "A A None 0 0\n12 12 None 0 0",
+        "A A None 0 0\nA B None 0 0",
+        "70000 70000 None 0 0",
+    ] {
+        assert!(matches!(parse_glyph_table(bad), Err(TablesError::BadOptions(_))), "{bad:?} is refused");
+    }
+    let long = "# x\n".repeat(MAX_GLYPH_TABLE_LINES + 1);
+    assert!(matches!(parse_glyph_table(&long), Err(TablesError::TooLarge { .. })));
+}

@@ -48,6 +48,7 @@ mod cff;
 mod cff_matrix;
 mod fixed;
 mod glyf;
+mod glyph_table;
 mod layout;
 pub(crate) mod post;
 mod tuples;
@@ -55,13 +56,16 @@ mod tuples;
 #[cfg(test)]
 mod tests;
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::limits::{MAX_COORDINATE, MAX_UNITS_PER_EM, MIN_UNITS_PER_EM};
 use crate::sfnt::{SfntFont, Tag};
 use crate::{Result, TablesError};
 use fixed::{i16_at, put_i16, put_u16, u16_at};
 use glyf::{Args, Glyph, SCALED_COMPONENT_OFFSET, Shape, UNSCALED_COMPONENT_OFFSET, coord, ot_round};
+pub use glyph_table::{
+    GlyphKey, GlyphSettings, GlyphTableEntry, MAX_GLYPH_TABLE_BYTES, MAX_GLYPH_TABLE_LINES, glyph_cids, parse_glyph_table, settings_by_glyph,
+};
 use layout::Scaler;
 
 /// What happens to the advance widths of transformed glyphs (rotatefont's `-row`, `-rtw`,
@@ -108,6 +112,10 @@ pub struct TransformOptions {
     /// The glyphs the matrix applies to; `None` for every glyph. Units per em always scale the
     /// whole font.
     pub glyphs: Option<BTreeSet<u16>>,
+    /// A glyph table by glyph id (rotatefont `-rtf`): the matrix applies to the listed glyphs
+    /// only, each with its own shift in place of the matrix's and optionally its own advance.
+    /// Without a matrix the linear part is the identity.
+    pub per_glyph: Option<BTreeMap<u16, GlyphSettings>>,
     /// New units per em, from [`crate::limits::MIN_UNITS_PER_EM`] to
     /// [`crate::limits::MAX_UNITS_PER_EM`]; every metric scales with it.
     pub units_per_em: Option<u16>,
@@ -136,7 +144,7 @@ pub fn transform(font: &SfntFont, options: &TransformOptions) -> Result<SfntFont
 
 /// [`transform`], with what it did.
 pub fn transform_with_report(font: &SfntFont, options: &TransformOptions) -> Result<(SfntFont, TransformReport)> {
-    let matrix = options_matrix(options)?;
+    let matrix = options_matrix(options)?.or_else(|| options.per_glyph.as_ref().map(|_| IDENTITY));
     if let Some(u) = options.units_per_em {
         check_upem(u)?;
     }
@@ -267,7 +275,7 @@ fn inverse(p: Linear) -> Option<Linear> {
     (det.abs() > 1e-12).then(|| [yy / det, -yx / det, -xy / det, xx / det])
 }
 
-const IDENTITY: [f64; 6] = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
+pub(crate) const IDENTITY: [f64; 6] = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
 
 /// The tables every transform rewrites, decoded.
 struct Work {
@@ -323,8 +331,8 @@ impl Work {
         if self.cff.is_some() {
             return self.apply_matrix_cff(m, o, report);
         }
-        let selected = |g: usize| o.glyphs.as_ref().is_none_or(|set| u16::try_from(g).is_ok_and(|g| set.contains(&g)));
-        let matrix_of = |g: usize| if selected(g) { m } else { IDENTITY };
+        let selected = |g: usize| glyph_matrix(o, m, g).is_some();
+        let matrix_of = |g: usize| glyph_matrix(o, m, g).unwrap_or(IDENTITY);
         let mut negative_widths = 0usize;
         for gid in 0..self.glyphs.len() {
             let own = matrix_of(gid);
@@ -374,7 +382,7 @@ impl Work {
         for (gid, glyph) in self.glyphs.iter().enumerate() {
             if selected(gid) {
                 let Some(w) = self.hmtx.advances.get_mut(gid) else { continue };
-                let new = ot_round(new_advance(o.widths, m, *w, self.upem));
+                let new = ot_round(glyph_advance(o, gid).unwrap_or_else(|| new_advance(o.widths, matrix_of(gid), *w, self.upem)));
                 if new < 0.0 {
                     negative_widths += 1;
                 }
@@ -421,14 +429,13 @@ impl Work {
         let Some((cff2, _)) = self.cff else { return Ok(()) };
         let tag = if cff2 { *b"CFF2" } else { *b"CFF " };
         let data = self.font.get(tag).ok_or_else(|| TablesError::MissingTable(crate::sfnt::tag_str(tag).trim_end().to_string()))?.to_vec();
-        let selected = |g: usize| o.glyphs.as_ref().is_none_or(|set| u16::try_from(g).is_ok_and(|g| set.contains(&g)));
-        let matrices: Vec<Option<[f64; 6]>> = (0..self.count).map(|g| selected(g).then_some(m)).collect();
+        let matrices: Vec<Option<[f64; 6]>> = (0..self.count).map(|g| glyph_matrix(o, m, g)).collect();
         let mut negative_widths = 0usize;
         let mut widths = Vec::with_capacity(self.count);
         for (gid, own) in matrices.iter().enumerate() {
             let width = match (own, self.hmtx.advances.get(gid)) {
                 (Some(own), Some(old)) => {
-                    let new = ot_round(new_advance(o.widths, *own, *old, self.upem));
+                    let new = ot_round(glyph_advance(o, gid).unwrap_or_else(|| new_advance(o.widths, *own, *old, self.upem)));
                     if new < 0.0 {
                         negative_widths += 1;
                     }
@@ -681,6 +688,25 @@ impl Work {
         }
         Ok(self.font)
     }
+}
+
+/// The matrix glyph `gid` takes: `m`, with the glyph table's shift when there is one; `None` when
+/// the options leave the glyph as it is.
+fn glyph_matrix(o: &TransformOptions, m: [f64; 6], gid: usize) -> Option<[f64; 6]> {
+    let g = u16::try_from(gid).ok()?;
+    if o.glyphs.as_ref().is_some_and(|set| !set.contains(&g)) {
+        return None;
+    }
+    match &o.per_glyph {
+        None => Some(m),
+        Some(table) => table.get(&g).map(|s| [m[0], m[1], m[2], m[3], s.offset.0, s.offset.1]),
+    }
+}
+
+/// The advance width the glyph table gives glyph `gid`.
+fn glyph_advance(o: &TransformOptions, gid: usize) -> Option<f64> {
+    let table = o.per_glyph.as_ref()?;
+    table.get(&u16::try_from(gid).ok()?)?.advance
 }
 
 /// A transformed glyph's advance width before rounding, from its old advance `old`.
