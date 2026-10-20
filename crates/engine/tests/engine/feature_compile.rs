@@ -629,8 +629,9 @@ fn a_compile_whose_includes_are_not_keyed_reads_them_again() {
     let (mut s, dir) = including_session("unkeyed");
     // Names in a comment count towards the key's limit; the file that changes comes after them.
     let names: String = (0..300).map(|i| format!("# include(missing{i}.fea)\n")).collect();
-    std::fs::write(dir.join("rules.fea"), format!("{names}include(last.fea);\n")).unwrap();
+    // In the feature code itself: fea-rs reads an include inside an included file at top level.
     std::fs::write(dir.join("last.fea"), "sub a by b;\n").unwrap();
+    set_code(&mut s, "feature", "liga", &format!("{names}include(last.fea);\n"));
     let r = run(&mut s, "font.features.compile", json!({}));
     assert_eq!(r["ok"], json!(true), "{r}");
     std::fs::write(dir.join("last.fea"), "sub a by nosuchglyph;\n").unwrap();

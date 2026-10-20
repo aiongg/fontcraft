@@ -1458,7 +1458,9 @@ mod tests {
         for r in cmap.encoding_records() {
             let subtable = r.subtable(cmap.offset_data()).unwrap();
             if matches!(subtable, CmapSubtable::Format4(_)) {
-                assert_eq!(subtable.iter().collect::<Vec<_>>(), [(0x20, GlyphId::new(1))]);
+                // The closing 0xFFFF segment maps to glyph 0, which is no mapping.
+                let mapped: Vec<_> = subtable.iter().filter(|(_, g)| g.to_u32() != 0).collect();
+                assert_eq!(mapped, [(0x20, GlyphId::new(1))]);
             }
         }
         assert_eq!(subtable_bytes(&stub, cmap_records(&stub).unwrap()[1].2).unwrap(), &format14[..]);

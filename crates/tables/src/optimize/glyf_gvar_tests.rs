@@ -210,11 +210,12 @@ fn implied_points_are_tested_at_every_peak_of_the_font() {
     // Each tuple lists A and E only; IUP gives B, C and D 0.25, 1.25 and 2 (clamped). Alone,
     // a tuple leaves C halfway after rounding (10 + 92 = 2 × 51). At (1, 1) all three apply:
     // B 10.75, C 53.75 and D 96 round to 11 + 96 ≠ 2 × 54.
+    // The unlisted points get large values only so that write-fonts picks the sparse encoding.
     let tuple = |a: f32, b: f32| {
         let deltas = (0..9).map(|i| match i {
             0 => GlyphDelta::new(0, 0, true),
             4 => GlyphDelta::new(2, 0, true),
-            _ => GlyphDelta::new(0, 0, false),
+            _ => GlyphDelta::new(1000 + 100 * i, -1000, false),
         });
         GlyphDeltas::new(vec![Tent::new(F2Dot14::from_f32(a), None), Tent::new(F2Dot14::from_f32(b), None)], deltas.collect())
     };
