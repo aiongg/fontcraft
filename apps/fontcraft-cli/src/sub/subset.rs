@@ -1,10 +1,10 @@
-//! `fontcraft-cli subset` (M12.17–M12.19b, M12.18b): one `font.subset` run per input, with the option
+//! `fontcraft-cli subset` (M12.17–M12.19b, M12.18b, M12.18c): one `font.subset` run per input, with the option
 //! names of the reference subsetter.
 
 use fontcraft_engine::Session;
 use serde_json::{Map, Value, json};
 
-use crate::args::{self, OptSpec, Parsed};
+use crate::args::{self, OptSpec, OptValue, Parsed};
 use crate::io::{self, Failure, Outcome, execute, out, out_json_line, usage};
 
 use super::Subcommand;
@@ -21,6 +21,8 @@ const USAGE: &str = "\
       subroutines are removed; --json lists every dropped table and why.
       A list option replaces its list with --opt=a,b (--opt= empties it), adds to it with
       --opt+=a,b and removes from it with --opt-=a,b; each list starts as its default.
+      --opt? prints the value an option has at that point of the line; with no FONT nothing
+      else is done.
 ";
 
 /// The options, as data.
@@ -83,6 +85,9 @@ const OPTIONS: &[OptSpec] = &[
     OptSpec::switch("json", false, "print the result as JSON"),
     OptSpec::switch("verbose", false, "also print the dropped tables and the warnings on stderr").short('v'),
     OptSpec::switch("timing", false, "accepted for compatibility; has no effect"),
+    OptSpec::switch("pretty-svg", false, "write subset SVG documents again with two-space indentation"),
+    OptSpec::switch("xml", false, "print the subset font as TTX instead of the one-line summary"),
+    OptSpec::switch("show-defaults", false, "print the value of every option after reading the command line, and exit"),
 ];
 
 /// The default of `--drop-tables`.
@@ -115,12 +120,89 @@ fn file_words(path: &str) -> Result<Vec<String>, Failure> {
         .collect())
 }
 
+/// One option's value, as the reference subsetter prints it for `--opt?`: Python's text of the
+/// value, list items that start with a digit read as numbers.
+fn python_value(name: &str, value: Option<&OptValue>) -> String {
+    match value {
+        None if name == "font-number" => "-1".into(),
+        None => "None".into(),
+        // The reference's `--no-canonical-order` and its default are both None.
+        Some(OptValue::Switch(false)) if name == "canonical-order" => "None".into(),
+        Some(OptValue::Switch(on)) => (if *on { "True" } else { "False" }).into(),
+        Some(OptValue::Value(v)) => v.clone(),
+        Some(OptValue::List(items)) => {
+            let items: Vec<String> = items.iter().map(String::as_str).map(python_item).collect();
+            format!("[{}]", items.join(", "))
+        }
+    }
+}
+
+/// A list item as Python prints it inside a list: a number in decimal, other text quoted.
+fn python_item(item: &str) -> String {
+    if item.starts_with(|c: char| c.is_ascii_digit()) {
+        let lower = item.to_ascii_lowercase();
+        let number = match lower.get(..2) {
+            Some("0x") => lower.get(2..).and_then(|d| u64::from_str_radix(d, 16).ok()),
+            Some("0o") => lower.get(2..).and_then(|d| u64::from_str_radix(d, 8).ok()),
+            Some("0b") => lower.get(2..).and_then(|d| u64::from_str_radix(d, 2).ok()),
+            _ => lower.parse().ok(),
+        };
+        if let Some(n) = number {
+            return n.to_string();
+        }
+    }
+    if item.contains('\'') && !item.contains('"') {
+        return format!("\"{}\"", item.replace('\\', "\\\\"));
+    }
+    format!("'{}'", item.replace('\\', "\\\\").replace('\'', "\\'"))
+}
+
+/// The line the reference subsetter prints for `--opt?`.
+fn query_line(given: &str, value: &str) -> String {
+    format!("Current setting for '{given}' is: {value}")
+}
+
+/// `--show-defaults`: every option's value after the whole line, one query line each, or one
+/// JSON object.
+fn show_defaults(parsed: &Parsed) -> Outcome {
+    let shown = OPTIONS.iter().filter(|o| o.name != "show-defaults");
+    if parsed.switch("json") {
+        let mut map = Map::new();
+        for o in shown {
+            let v = match parsed.values.get(o.name) {
+                None => Value::Null,
+                Some(OptValue::Switch(on)) => json!(on),
+                Some(OptValue::Value(v)) => json!(v),
+                Some(OptValue::List(items)) => json!(items),
+            };
+            map.insert(o.name.into(), v);
+        }
+        return out_json_line(&Value::Object(map));
+    }
+    let lines: Vec<String> = shown.map(|o| query_line(o.name, &python_value(o.name, parsed.values.get(o.name)))).collect();
+    out(&lines.join("\n"))
+}
+
 fn run(args: &[String]) -> Outcome {
-    let parsed = args::parse(OPTIONS, args)?;
+    let parsed = args::parse_with_queries(OPTIONS, args)?;
     if parsed.help {
         return out(&super::help(&SUBCOMMAND));
     }
-    let Some(font) = parsed.positional.first() else { return Err(usage(super::help(&SUBCOMMAND))) };
+    for q in &parsed.queries {
+        out(&query_line(&q.given, &python_value(q.name, q.value.as_ref())))?;
+    }
+    if parsed.switch("show-defaults") {
+        return show_defaults(&parsed);
+    }
+    let Some(font) = parsed.positional.first() else {
+        if !parsed.queries.is_empty() {
+            return Ok(());
+        }
+        return Err(usage(super::help(&SUBCOMMAND)));
+    };
+    if parsed.switch("xml") && parsed.switch("json") {
+        return Err(usage("give --xml or --json, not both"));
+    }
     let params = params(&parsed)?;
     let result = execute(&mut Session::new(), "font.subset", &params).map_err(|f| match f {
         Failure::Failed(m) if m.contains("cannot open") || m.contains("cannot read") => Failure::Input(m),
@@ -138,6 +220,12 @@ fn run(args: &[String]) -> Outcome {
     }
     if parsed.switch("json") {
         return out_json_line(&result);
+    }
+    if parsed.switch("xml") {
+        let output = result.get("output").and_then(Value::as_str).unwrap_or_default();
+        let dump = execute(&mut Session::new(), "font.dumpTables", &json!({ "font": output, "format": "ttx" }))?;
+        let text = dump.get("text").and_then(Value::as_str).unwrap_or_default();
+        return out(text.strip_suffix('\n').unwrap_or(text));
     }
     let dropped: Vec<&str> = result
         .get("dropped")
@@ -217,6 +305,7 @@ fn params(parsed: &Parsed) -> Result<Value, Failure> {
         ("recalcAverageWidth", "recalc-average-width"),
         ("recalcMaxContext", "recalc-max-context"),
         ("canonicalOrder", "canonical-order"),
+        ("prettySvg", "pretty-svg"),
         ("inPlace", "in-place"),
         ("noClobber", "no-clobber"),
     ] {
@@ -340,5 +429,15 @@ mod tests {
         assert!(params_of(&["f.ttf", "A"]).get("container").is_none(), "the input's container by default");
         let bad: Vec<String> = ["f.ttf", "A", "--flavor=zip"].iter().map(|s| s.to_string()).collect();
         assert!(params(&args::parse(OPTIONS, &bad).unwrap()).is_err());
+    }
+
+    #[test]
+    fn query_values_print_as_the_reference_prints_them() {
+        let list = |items: &[&str]| OptValue::List(items.iter().map(|s| s.to_string()).collect());
+        assert_eq!(python_value("name-languages", Some(&list(&["0x409", "0"]))), "[1033, 0]");
+        assert_eq!(python_value("layout-scripts", Some(&list(&["*", "it's", "a\\b"]))), r#"['*', "it's", 'a\\b']"#);
+        assert_eq!(python_value("flavor", Some(&OptValue::Value("woff2".into()))), "woff2");
+        assert_eq!(python_value("canonical-order", Some(&OptValue::Switch(true))), "True");
+        assert_eq!(params_of(&["f.ttf", "A", "--pretty-svg"])["prettySvg"], json!(true));
     }
 }

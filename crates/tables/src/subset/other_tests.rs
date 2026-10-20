@@ -430,6 +430,31 @@ fn gzip_with_fields(data: &[u8]) -> Vec<u8> {
 }
 
 #[test]
+fn subset_svg_pretty_prints_documents_as_the_reference() {
+    // Expected: pyftsubset --pretty-svg --text=AC on the same document and glyph order.
+    let mut font = outlines(&[("A", 0x41), ("B", 0x42), ("C", 0x43)]);
+    let doc = r##"<?xml version="1.0" encoding="UTF-8"?>
+<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <defs>
+    <linearGradient id="g1"><stop offset="0" stop-color='#"f00'/></linearGradient>
+    <linearGradient id="unused"/>
+  </defs>
+  <g id="glyph1"><path d="M0 0"></path><!-- kept --></g>
+  <g id="glyph2"><use xlink:href="#glyph1"/></g>
+  <g id="glyph3" fill="url(#g1)">
+    <text x="1">é &amp; <tspan>t</tspan></text>
+    <g><g><use   xlink:href = "#glyph1" /></g></g>
+    <style>  </style>
+  </g>
+</svg>
+"##;
+    font.insert(*b"SVG ", svg(doc, 1, 3));
+    let result = subset(&font, &SubsetOptions { text: "AC".into(), pretty_svg: true, ..SubsetOptions::default() }).unwrap();
+    let expected = "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" version=\"1.1\">\n  <defs>\n    <linearGradient id=\"g1\">\n      <stop offset=\"0\" stop-color=\"#&quot;f00\"/>\n    </linearGradient>\n  </defs>\n  <g id=\"glyph1\">\n    <path d=\"M0 0\"/>\n    <!-- kept -->\n  </g>\n  <g id=\"glyph2\" fill=\"url(#g1)\">\n    <text x=\"1\">&#233; &amp; <tspan>t</tspan></text>\n    <g>\n      <g>\n        <use xlink:href=\"#glyph1\"/>\n      </g>\n    </g>\n    <style>  </style>\n  </g>\n</svg>\n";
+    assert_eq!(svg_docs(result.font.get(*b"SVG ").unwrap()), [(1, 2, expected.to_string())]);
+}
+
+#[test]
 fn subset_svg_inflates_gzip_documents_and_compresses_the_subset_again() {
     let mut font = outlines(&[("A", 0x41), ("X", 0x58)]);
     let path = "M0 0 L10 10 ".repeat(40);
