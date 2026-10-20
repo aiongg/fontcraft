@@ -415,6 +415,7 @@ pub(crate) fn read_font(mut root: Dict) -> Result<Font> {
         display_strings: Arc::new(display_strings),
         note,
         files: Arc::default(),
+        bitmap_strikes: Arc::default(),
         extra: Arc::new(into_extra(root)),
     })
 }

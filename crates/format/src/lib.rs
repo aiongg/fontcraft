@@ -461,4 +461,41 @@ mod tests {
             let _ = load(&bad);
         }
     }
+
+    #[test]
+    fn a_bitmap_strike_round_trips_and_a_damaged_one_is_rejected() {
+        use fontcraft_model::{BitmapStrike, StrikeGlyph, StrikeProperty, StrikeValue};
+        let mut font = Font::new("Strikes");
+        let mut strike = BitmapStrike::new(12, 1);
+        strike.name = "-Test-Strikes-Medium-R-Normal--12-120-75-75-C-80-ISO10646-1".into();
+        strike.point_size = 12.0;
+        strike.resolution = [75, 75];
+        strike.ascent = 10;
+        strike.descent = 2;
+        strike.properties.push(StrikeProperty { name: "CHARSET_REGISTRY".into(), value: StrikeValue::Text("ISO10646".into()) });
+        strike.properties.push(StrikeProperty { name: "WEIGHT".into(), value: StrikeValue::Integer(10) });
+        // 9 pixels wide: two bytes a row, the second holding one pixel.
+        let data = vec![0xFF, 0x80, 0x81, 0x00, 0x00, 0x80];
+        strike.glyphs.push(StrikeGlyph {
+            glyph: "A".into(),
+            code: Some(65),
+            advance: 10,
+            scalable_width: Some(833),
+            width: 9,
+            height: 3,
+            left: 0,
+            bottom: -1,
+            data,
+        });
+        std::sync::Arc::make_mut(&mut font.bitmap_strikes).push(strike);
+        let bytes = save(&font).unwrap();
+        assert_eq!(load(&bytes).unwrap(), font);
+        assert_eq!(save(&load(&bytes).unwrap()).unwrap(), bytes);
+
+        // Five bytes for a bitmap whose size needs six.
+        let text = String::from_utf8(bytes).unwrap();
+        let damaged = text.replacen("\"/4CBAACA\"", "\"/4CBAAA=\"", 1);
+        assert_ne!(damaged, text, "the test edits the stored pixels");
+        assert!(matches!(load(damaged.as_bytes()), Err(FormatError::Invalid(fontcraft_model::ModelError::BadStrike { .. }))));
+    }
 }

@@ -28,6 +28,7 @@ mod autospace;
 mod autotrace;
 mod axes;
 mod background_layers;
+mod bitmap_strikes;
 mod cid;
 mod clipboard;
 mod clipboard_scale;

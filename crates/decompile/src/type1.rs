@@ -1596,6 +1596,7 @@ pub fn to_font(ps: &PsFont, mut warnings: Vec<String>) -> Result<Decompiled, Dec
         display_strings: Arc::default(),
         note: String::new(),
         files: Arc::default(),
+        bitmap_strikes: Arc::default(),
         extra: Arc::new(extra),
     };
     font.check()?;

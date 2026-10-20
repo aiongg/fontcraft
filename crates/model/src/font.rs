@@ -16,6 +16,7 @@ use crate::glyph_info::check_glyph_info;
 use crate::info::{Params, Properties, UserData};
 use crate::kerning::Kerning;
 use crate::layer_info::check_layer_info;
+use crate::strike::BitmapStrike;
 use crate::{
     Extra, MAX_COMPONENT_DEPTH, MAX_COORDINATE, MAX_GLYPHS, MAX_OUTLINE_ELEMENTS, MAX_UNICODES, ModelError, UPM_RANGE, check_name, in_range,
 };
@@ -538,6 +539,10 @@ pub struct Font {
     /// UI state, a UFO's `data/` and `images/`), by relative path, written back unchanged.
     #[serde(default, skip_serializing_if = "FileStore::is_empty")]
     pub files: Arc<FileStore>,
+    /// Bitmap images of the glyphs at fixed pixel sizes (`crate::strike`), sorted by size and
+    /// depth.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub bitmap_strikes: Arc<Vec<BitmapStrike>>,
     #[serde(default, skip_serializing_if = "Extra::is_empty")]
     pub extra: Arc<Extra>,
 }
@@ -776,6 +781,7 @@ impl Font {
             display_strings: Arc::default(),
             note: String::new(),
             files: Arc::default(),
+            bitmap_strikes: Arc::default(),
             extra: Arc::default(),
         }
     }
@@ -1058,6 +1064,7 @@ impl Font {
     /// command must leave true. `Err` names the first problem.
     pub fn check(&self) -> Result<(), ModelError> {
         self.check_font_level()?;
+        crate::strike::check_strikes(&self.bitmap_strikes)?;
         self.glyphs.iter().try_for_each(|g| self.check_glyph(g))
     }
 
@@ -1066,6 +1073,10 @@ impl Font {
     /// to one glyph from costing a pass over the whole font.
     pub fn check_changed(&self, before: &Font) -> Result<(), ModelError> {
         self.check_font_level()?;
+        // Strikes can hold many megabytes of pixels: they are checked only when an edit changed them.
+        if !Arc::ptr_eq(&self.bitmap_strikes, &before.bitmap_strikes) {
+            crate::strike::check_strikes(&self.bitmap_strikes)?;
+        }
         // A master was added, removed or renamed: layers everywhere may be affected.
         if !Arc::ptr_eq(&self.masters, &before.masters) && self.masters != before.masters {
             return self.glyphs.iter().try_for_each(|g| self.check_glyph(g));
@@ -1095,6 +1106,7 @@ impl Font {
             && arc_eq(&self.masters, &before.masters)
             && arc_eq(&self.extra, &before.extra)
             && arc_eq(&self.files, &before.files)
+            && arc_eq(&self.bitmap_strikes, &before.bitmap_strikes)
             && arc_eq(&self.kerning, &before.kerning)
             && arc_eq(&self.features, &before.features)
             && arc_eq(&self.groups, &before.groups)

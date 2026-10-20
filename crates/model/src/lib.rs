@@ -37,6 +37,7 @@ mod rename;
 mod resolve;
 mod shape_info;
 pub mod smart;
+pub mod strike;
 pub mod ufo_classes;
 
 pub use address::{LayerParts, LayerPartsMut, LayerSide};
@@ -70,6 +71,7 @@ pub use shape_info::{
     Alignment, AnchorInfo, AnchorInfoBox, ComponentInfo, ComponentInfoBox, Dimension, NodeInfo, NodeInfoBox, Orientation, PathInfo, PathInfoBox,
     ShapeAttrs, SmartValue,
 };
+pub use strike::{BitmapStrike, StrikeGlyph, StrikeProperty, StrikeValue};
 
 /// Smallest and largest units-per-em the OpenType `head` table allows.
 pub const UPM_RANGE: std::ops::RangeInclusive<u16> = 16..=16384;
@@ -144,6 +146,8 @@ pub enum ModelError {
     NotStatic(String),
     #[error("instance `{0}` lies between masters; it is interpolated before it is resolved")]
     BetweenMasters(String),
+    #[error("bitmap strike {strike}: {message}")]
+    BadStrike { strike: String, message: String },
 }
 
 /// A name is usable when it is not empty, not longer than [`MAX_NAME_LEN`] bytes and has no

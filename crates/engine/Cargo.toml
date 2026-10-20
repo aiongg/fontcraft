@@ -27,6 +27,7 @@ fontcraft-io-glyphs.workspace = true
 fontcraft-io-ufo.workspace = true
 fontcraft-io-svg.workspace = true
 fontcraft-io-sfd.workspace = true
+fontcraft-io-bitmap.workspace = true
 fontcraft-decompile.workspace = true
 fontcraft-container.workspace = true
 fontcraft-glyphquery.workspace = true

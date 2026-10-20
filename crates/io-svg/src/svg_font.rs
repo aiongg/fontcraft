@@ -278,6 +278,7 @@ pub fn read_svg_font(data: &[u8]) -> Result<SvgFont, SvgError> {
         display_strings: Arc::default(),
         note: String::new(),
         files: Arc::default(),
+        bitmap_strikes: Arc::default(),
         extra: Arc::default(),
     };
     font.check().map_err(|e| SvgError::Parse(e.to_string()))?;

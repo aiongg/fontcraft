@@ -189,6 +189,7 @@ impl Font {
             display_strings: Arc::default(),
             note: String::new(),
             files: Arc::default(),
+            bitmap_strikes: Arc::default(),
             extra: Arc::new(extra_of(self.extra)),
         }
     }

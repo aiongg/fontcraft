@@ -3243,8 +3243,12 @@ milestone = "M13"
 summary = "Declares which embedded bitmap sizes (strikes) the font carries, in pixels per em, each either black-and-white or grey with 2, 4 or 8 bits per pixel. A new strike is filled by rasterising the outlines unless rasterize is false; removing a strike deletes its glyph bitmaps."
 ref = "FontForge Element menu › Bitmap Strikes Available"
 status = "docs"
-notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
+notes = "Built in M13.55b (`crates/engine/src/cmd/bitmap_strikes.rs`) on the model's strikes (`crates/model/src/strike.rs`): removing works, and adding works with `rasterize: false`, which gives an empty strike. Filling a strike from the outlines is not built, so `rasterize` left on is refused with a message. Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one (owner decision M3 § 7, question 3; M5 § 7, question 5). The primary reference has no strikes; its handbook knows pixel fonts only as outlines drawn with the pixel tool."
 origin = "fontforge"
+guesses = [
+  "A strike to remove given without a depth removes every depth of that size, and one to add without a depth is black and white; the secondary reference's dialog lists sizes with their depth, so its behaviour for a bare size would settle it.",
+  "Adding a strike the font already has is refused rather than ignored.",
+]
 
 [[command]]
 id = "bitmap.regenerateGlyphs"
@@ -3403,14 +3407,21 @@ label = "Import Bitmap Strikes…"
 menu = ["File", "Import"]
 shortcut = ""
 kind = "engine"
-params = "{paths: [path], into?: fontRef, asBackground?: bool}"
+params = "{paths: [path], asBackground?: bool}"
 area = "import-export"
 milestone = "M13"
 summary = "Adds the strikes found in bitmap font files to the current font, matching glyphs by encoding or name. The reference reads BDF, X11 PCF, TeX PK and GF, the strikes embedded in TrueType and OpenType files, and Mac bitmap resources. A bitmap font can also be opened on its own as a bitmap-only font."
 ref = "FontForge File menu › Import (font view); Open"
 status = "docs"
-notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
+notes = "Built in M13.55b (`crates/engine/src/cmd/bitmap_strikes.rs`) for BDF and PCF files, read by `crates/io-bitmap`, into the open font; `asBackground` is refused as not built, and so are the other file kinds the summary names. The primary reference has no strikes and its handbook says nothing about bitmap fonts, so the model addition (`crates/model/src/strike.rs`: size, depth, name, point size, resolution, ascent, descent, the file's X properties, and per glyph its code, advance, scalable width, offsets and pixels) is ours. Moved from M11 to M13 by the M11 planning pass (owner decision M3 § 7, question 3; M5 § 7, question 5). Documented, not yet checked in the secondary reference."
 origin = "fontforge"
+guesses = [
+  "A bitmap goes to the glyph whose code point is its code when the file's codes are Unicode, else to the glyph of its name; the summary names both keys but not their order. Importing a BDF whose names and codes disagree into the secondary reference would settle it.",
+  "Bitmaps that match no glyph are left out and listed; no glyph is created for them. Importing a BDF with an extra glyph into a font without it, in the secondary reference, would settle it.",
+  "A file none of whose bitmaps matches a glyph is refused, changing nothing.",
+  "Importing a strike whose size and depth the font has replaces the strike's name, metrics and properties and the bitmaps of the glyphs the file holds, and keeps the strike's other bitmaps.",
+  "A strike keeps each bitmap's code from the file and writes it back on export, so a strike in a non-Unicode encoding survives a round trip.",
+]
 
 [[command]]
 id = "bitmap.exportStrikes"
@@ -3418,14 +3429,19 @@ label = "Export Bitmap Strikes…"
 menu = ["File", "Export"]
 shortcut = ""
 kind = "engine"
-params = "{strikes?: [{ppem: number, depth?: number}], format: 'bdf' | 'embedded' | 'otb', path: path}"
+params = "{strikes?: [{ppem: number, depth?: number}], format?: 'bdf' | 'pcf' | 'embedded' | 'otb', path?: path, destination?: path}"
 area = "import-export"
 milestone = "M13"
 summary = "Writes the chosen strikes as BDF files, embeds them in the exported TrueType or OpenType font, or writes a bitmap-only font in an sfnt wrapper. The reference also writes Windows FON and FNT, Mac NFNT and Palm formats, which we do not plan."
 ref = "FontForge dialogs › Generate Font › Bitmap Formats"
 status = "docs"
-notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
+notes = "Built in M13.55b (`crates/engine/src/cmd/bitmap_strikes.rs`) for BDF and PCF, written by `crates/io-bitmap`: `path` names the file of one strike, `destination` a folder that gets one file per strike. `embedded` and `otb` are refused as not built: the compiler has no EBDT/EBLC writer that takes the model's strikes. The secondary reference does not list PCF among its export formats; we write it because the reader and writer exist. Moved from M11 to M13 by the M11 planning pass (owner decision M3 § 7, question 3; M5 § 7, question 5). Documented, not yet checked in the secondary reference."
 origin = "fontforge"
+guesses = [
+  "Files written to a folder are named after the family and the strike, `Family-12.bdf`, or `Family-12@4.bdf` for a grey strike; the secondary reference's file names for several strikes would settle it.",
+  "A strike with no stated point size or resolution is written at 72 dpi, so its point size equals its pixel size, and one with no name takes the family name.",
+  "A bitmap without a stored code takes the first code point of its glyph when the strike's codes are Unicode.",
+]
 
 [[panel]]
 id = "dialog.strikeProperties"
