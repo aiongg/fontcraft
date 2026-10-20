@@ -608,3 +608,31 @@ fn cff2_notes_dropped_postscript_hints_only() {
     let ps = with_hint("{horizontal = 1; origin = (0, 0); target = (0, 1); type = Stem;}");
     assert!(dropped(&ps), "{ps:?}");
 }
+
+#[test]
+fn cff2_exports_are_subroutinised_and_draw_as_without_subroutines() {
+    // Thirty glyphs in three shapes: whole charstrings and the rectangle's segments repeat.
+    let mut f = two_masters();
+    let mut glyphs: Vec<Glyph> = f.glyphs.iter().map(|g| (**g).clone()).collect();
+    for i in 0..30u32 {
+        let w = 200.0 + f64::from(i % 3) * 10.0;
+        let layers = vec![layer("thin", 300.0, vec![bowl(w), rect(50.0)]), layer("black", 700.0, vec![bowl(w * 3.0), rect(80.0)])];
+        glyphs.push(glyph(&format!("o{i}"), 0xE000 + i, layers));
+    }
+    f.glyphs = GlyphTable::from_glyphs(glyphs.into_iter().map(Arc::new).collect());
+    let var = VariableOptions { flavour: VarFlavour::Cff2, ..VariableOptions::default() };
+    let plain = compile_variable(&f, None, &Options { subroutinize: Some(false), ..Options::default() }, &var).unwrap();
+    let subroutinised = build_cff2(&f, None);
+    let table =
+        |v: &VariableFont| FontRef::new(&v.compiled.bytes).unwrap().table_data(skrifa::raw::types::Tag::new(b"CFF2")).unwrap().as_bytes().to_vec();
+    let (without, with) = (table(&plain), table(&subroutinised));
+    assert!(with.len() < without.len(), "{} bytes with subroutines, {} without", with.len(), without.len());
+    let set = fontcraft_cff::subr::charstrings_of_table(&with, true).unwrap();
+    assert!(!set.global_subrs.is_empty() || set.local_subrs.iter().any(|s| !s.is_empty()));
+    assert!(fontcraft_cff::subr::charstrings_of_table(&without, true).unwrap().global_subrs.is_empty());
+    for name in &subroutinised.compiled.glyph_order {
+        for w in [100.0, 300.0, 500.0, 900.0] {
+            assert_eq!(drawn_at(&plain, name, w), drawn_at(&subroutinised, name, w), "`{name}` at {w}");
+        }
+    }
+}

@@ -212,7 +212,7 @@ pub struct Options {
     /// feature syntax (`(wght:700) 14`, `condition`) reads. The interpolated font has one
     /// master, so it no longer holds them. `None` reads them from the compiled font.
     pub feature_axes: Option<(fontcraft_features::fea_variable::FeatureAxes, Vec<f64>)>,
-    /// Move repeated charstring fragments of a `CFF ` table into subroutines
+    /// Move repeated charstring fragments of a `CFF ` or variable `CFF2` table into subroutines
     /// (`compile.cffSubroutinisation`), as fontmake does by default. `None`: on, unless the
     /// source's Disable Subroutines parameter is set. A table the subroutiniser refuses (one
     /// beyond its limits) is written without subroutines, with a warning.

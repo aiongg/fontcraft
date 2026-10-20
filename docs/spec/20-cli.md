@@ -257,8 +257,8 @@ naming it. Contours are reversed for TrueType unless
 `--cbdt` also writes CBDT and CBLC bitmap tables from the iColor layers; variable fonts never get
 them. Static CFF
 output is subroutinised unless `--no-subroutinize` is given or the source sets Disable Subroutines; a table
-beyond the subroutiniser's limits is written without subroutines, with a warning. CFF2 output is not
-subroutinised. Glyphs are written under their production names, made valid as fontc makes
+beyond the subroutiniser's limits is written without subroutines, with a warning. Variable CFF2 output
+follows the same rule. Glyphs are written under their production names, made valid as fontc makes
 them, with a warning listing the names changed. Later: `--no-production-names`; glyphs flagged as not
 exported left out unless `--no-subset` (until then they are always left out); with `--output-layout
 by-format`, outputs and intermediate sources in per-format folders as fontmake arranges them

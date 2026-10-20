@@ -6,10 +6,14 @@
 //! blends use, and per glyph an outline whose numbers are a default plus one delta per region of
 //! its list) into the bytes of a `CFF2` table:
 //!
-//! - **Charstrings**: one generic operator per segment (`rmoveto`, `rlineto`, `rrcurveto`), each
+//! - **Charstrings**: the segments specialised as fontTools' `specializeCommands` does for a
+//!   `CFF2` merge (`hlineto`, `vvcurveto`, `rcurveline` …, combined while fewer than
+//!   [`MAX_STACK`] operands are on the stack, blended operands counted with their deltas), each
 //!   varying argument written with `blend`, and `vsindex` first where a glyph uses a region list
 //!   other than the first. Consecutive varying arguments share one `blend` while the operand stack
-//!   ([`MAX_STACK`]) has room; otherwise the run is split. No hints, no subroutines, no widths.
+//!   has room; otherwise the run is split. [`Cff2Font::generic`] keeps one generic operator per
+//!   segment instead. No hints, no subroutines (`crate::subr::subroutinize_table` adds them), no
+//!   widths.
 //! - **Top DICT**: FontMatrix when given, CharStrings, FDArray and `vstore`. One Font DICT, so no
 //!   FDSelect.
 //! - **Private DICT**: blue zones and stems, each varying value written with `blend`.
@@ -29,8 +33,9 @@
 use std::fmt;
 
 use crate::bounds::Bounds;
-use crate::charstring::{bounds, pen_commands};
+use crate::charstring::{bounds, opcode, pen_commands};
 use crate::number::{encode_dict_int, encode_dict_number, encode_t2_number, round_with_tolerance};
+use crate::specialize::{Cmd, RLINETO, RMOVETO, RRCURVETO, SpecArg, specialize};
 use crate::{Error, MAX_COORDINATE, MAX_GLYPHS, MAX_SEGMENTS, MAX_TABLE_SIZE, Number, PathOp};
 
 /// Most regions the variation store may hold (a 16-bit count).
@@ -48,11 +53,8 @@ pub const MAX_BLEND_REGIONS: usize = MAX_STACK - 2;
 pub const MAX_PRIVATE_LIST: usize = 14;
 
 /// Charstring operators.
-const OP_RLINETO: u8 = 5;
-const OP_RRCURVETO: u8 = 8;
 const OP_VSINDEX: u8 = 15;
 const OP_BLEND: u8 = 16;
-const OP_RMOVETO: u8 = 21;
 /// DICT operators.
 const DICT_BLEND: u8 = 23;
 
@@ -140,6 +142,9 @@ pub struct Cff2Font {
     pub font_matrix: Option<[f64; 6]>,
     /// As [`crate::Font::round_tolerance`], for relative coordinates and deltas.
     pub round_tolerance: f64,
+    /// Write one generic operator per segment (`rmoveto`, `rlineto`, `rrcurveto`) instead of
+    /// specialising the charstrings.
+    pub generic: bool,
 }
 
 /// A written `CFF2` table and what the other tables need from it.
@@ -195,6 +200,34 @@ enum Arg {
     Blend(f64, Vec<f64>),
 }
 
+/// The reference's blend lists: a blended operand is never zero, adding a plain number moves its
+/// default, two blended operands add delta by delta, and while pushed it takes its default, its
+/// deltas and the count of one blend.
+impl SpecArg for Arg {
+    fn zero() -> Self {
+        Arg::Plain(0.0)
+    }
+    fn is_zero(&self) -> bool {
+        matches!(self, Arg::Plain(v) if *v == 0.0)
+    }
+    fn add(&self, other: &Self) -> Option<Self> {
+        match (self, other) {
+            (Arg::Plain(a), Arg::Plain(b)) => Some(Arg::Plain(a + b)),
+            (Arg::Plain(p), Arg::Blend(d, deltas)) | (Arg::Blend(d, deltas), Arg::Plain(p)) => Some(Arg::Blend(d + p, deltas.clone())),
+            (Arg::Blend(a, da), Arg::Blend(b, db)) if da.len() == db.len() => {
+                Some(Arg::Blend(a + b, da.iter().zip(db).map(|(x, y)| x + y).collect()))
+            }
+            (Arg::Blend(..), Arg::Blend(..)) => None,
+        }
+    }
+    fn peak(&self) -> usize {
+        match self {
+            Arg::Plain(_) => 1,
+            Arg::Blend(_, deltas) => deltas.len().saturating_add(2),
+        }
+    }
+}
+
 /// How numbers are encoded: in a charstring or in a DICT.
 #[derive(Clone, Copy, PartialEq)]
 enum Context {
@@ -203,7 +236,10 @@ enum Context {
 }
 
 /// Appends `args` with `blend` operators, keeping the stack within [`MAX_STACK`]. `regions` is
-/// the number of deltas each blended argument has.
+/// the number of deltas each blended argument has. In a charstring a run of blended arguments
+/// grows only while it stays below the limit, as fontTools' `_convertToBlendCmds` grows it, so a
+/// subroutine call still fits; a DICT list fills the stack if it must, since readers take its
+/// operands as one blend.
 fn write_args(args: &[Arg], regions: usize, ctx: Context, what: &str, out: &mut Vec<u8>) -> Result<(), Cff2Error> {
     let number = |v: f64, out: &mut Vec<u8>| -> Result<(), Cff2Error> {
         match ctx {
@@ -230,7 +266,8 @@ fn write_args(args: &[Arg], regions: usize, ctx: Context, what: &str, out: &mut 
                 while let Some(Arg::Blend(d, deltas)) = args.get(i + run.len()) {
                     let n = run.len() + 1;
                     let need = depth.saturating_add(n.saturating_mul(per_value)).saturating_add(1);
-                    if need > MAX_STACK {
+                    let fits = if run.is_empty() || ctx == Context::Dict { need <= MAX_STACK } else { need < MAX_STACK };
+                    if !fits {
                         break;
                     }
                     run.push((d, deltas));
@@ -274,17 +311,17 @@ fn check_blend(b: &Blend, regions: usize, glyph: &str) -> Result<(), Cff2Error> 
     Ok(())
 }
 
-/// The charstring of `glyph` (with `regions` regions in its list) and its bounds at the origin.
-fn charstring(glyph: &Cff2Glyph, regions: usize, tolerance: f64) -> Result<(Vec<u8>, Option<Bounds>), Cff2Error> {
+/// The charstring of `glyph` (with `regions` regions in its list) and its bounds at the origin,
+/// specialised unless `generic`.
+fn charstring(glyph: &Cff2Glyph, regions: usize, tolerance: f64, generic: bool) -> Result<(Vec<u8>, Option<Bounds>), Cff2Error> {
     let name = glyph.name.as_str();
     if glyph.path.len() > MAX_SEGMENTS {
         return Err(Error::TooManySegments { glyph: name.to_string(), count: glyph.path.len() }.into());
     }
     let mut default_path: Vec<PathOp> = Vec::with_capacity(glyph.path.len());
     let mut last = (0.0f64, vec![0.0f64; regions], 0.0f64, vec![0.0f64; regions]);
-    let mut commands: Vec<(u8, Vec<Arg>)> = Vec::with_capacity(glyph.path.len());
-    let mut any_blend = false;
-    let rel = |b: &Blend, last_default: &mut f64, last_deltas: &mut Vec<f64>, args: &mut Vec<Arg>, any: &mut bool| {
+    let mut commands: Vec<Cmd<Arg>> = Vec::with_capacity(glyph.path.len());
+    let rel = |b: &Blend, last_default: &mut f64, last_deltas: &mut Vec<f64>, args: &mut Vec<Arg>| {
         let d = round_with_tolerance(b.default, tolerance);
         let rd = d - *last_default;
         *last_default = d;
@@ -293,7 +330,6 @@ fn charstring(glyph: &Cff2Glyph, regions: usize, tolerance: f64) -> Result<(Vec<
         let rel_deltas: Vec<f64> = deltas.iter().zip(last_deltas.iter()).map(|(v, p)| round_with_tolerance(v - p, tolerance)).collect();
         *last_deltas = deltas;
         if rel_deltas.iter().any(|v| *v != 0.0) {
-            *any = true;
             args.push(Arg::Blend(rd, rel_deltas));
         } else {
             args.push(Arg::Plain(rd));
@@ -310,31 +346,49 @@ fn charstring(glyph: &Cff2Glyph, regions: usize, tolerance: f64) -> Result<(Vec<
         for (x, y) in points {
             check_blend(x, regions, name)?;
             check_blend(y, regions, name)?;
-            let dx = rel(x, &mut last.0, &mut last.1, &mut args, &mut any_blend);
-            let dy = rel(y, &mut last.2, &mut last.3, &mut args, &mut any_blend);
+            let dx = rel(x, &mut last.0, &mut last.1, &mut args);
+            let dy = rel(y, &mut last.2, &mut last.3, &mut args);
             defaults.push((dx, dy));
         }
         let (code, step) = match (op, defaults.as_slice()) {
-            (BlendOp::MoveTo(_), [p]) => (OP_RMOVETO, PathOp::MoveTo(*p)),
-            (BlendOp::LineTo(_), [p]) => (OP_RLINETO, PathOp::LineTo(*p)),
-            (BlendOp::CurveTo(..), [a, b, c]) => (OP_RRCURVETO, PathOp::CurveTo(*a, *b, *c)),
+            (BlendOp::MoveTo(_), [p]) => (RMOVETO, PathOp::MoveTo(*p)),
+            (BlendOp::LineTo(_), [p]) => (RLINETO, PathOp::LineTo(*p)),
+            (BlendOp::CurveTo(..), [a, b, c]) => (RRCURVETO, PathOp::CurveTo(*a, *b, *c)),
             _ => return Err(Cff2Error::BadBlend { glyph: name.to_string(), reason: "a drawing step has the wrong number of points".into() }),
         };
         default_path.push(step);
-        commands.push((code, args));
+        commands.push(Cmd { op: code, args });
     }
-    let mut out = Vec::new();
-    if any_blend && glyph.vsindex != 0 {
-        write_args(&[Arg::Plain(f64::from(glyph.vsindex))], 0, Context::Charstring, name, &mut out)?;
-        out.push(OP_VSINDEX);
-    }
-    for (code, args) in &commands {
-        write_args(args, regions, Context::Charstring, name, &mut out)?;
-        out.push(*code);
-    }
+    let out = if generic {
+        encode(&commands, glyph.vsindex, regions, name)?
+    } else {
+        // The specialiser keeps every blend within the stack; were an argument swap to push one
+        // past it, the generic form is written instead.
+        match encode(&specialize(commands.clone(), MAX_STACK, false), glyph.vsindex, regions, name) {
+            Err(Cff2Error::StackOverflow { .. }) => encode(&commands, glyph.vsindex, regions, name)?,
+            other => other?,
+        }
+    };
     // The defaults are rounded already; the bounds pen sees the points the charstring draws.
     let drawn = bounds(&pen_commands(&default_path, 0.0));
     Ok((out, drawn))
+}
+
+/// The bytes of `commands`, with `vsindex` first when it is not 0 and something is blended.
+fn encode(commands: &[Cmd<Arg>], vsindex: u16, regions: usize, name: &str) -> Result<Vec<u8>, Cff2Error> {
+    let mut out = Vec::new();
+    let blended = commands.iter().any(|c| c.args.iter().any(|a| matches!(a, Arg::Blend(..))));
+    if blended && vsindex != 0 {
+        write_args(&[Arg::Plain(f64::from(vsindex))], 0, Context::Charstring, name, &mut out)?;
+        out.push(OP_VSINDEX);
+    }
+    for c in commands {
+        write_args(&c.args, regions, Context::Charstring, name, &mut out)?;
+        let code = opcode(c.op)
+            .ok_or_else(|| Cff2Error::BadBlend { glyph: name.to_string(), reason: "the specialiser left an operator unresolved".into() })?;
+        out.push(code);
+    }
+    Ok(out)
 }
 
 /// Appends a CFF2 INDEX (32-bit count) of `items`.
@@ -553,7 +607,7 @@ pub fn write_cff2(font: &Cff2Font) -> Result<Cff2Built, Cff2Error> {
         let Some(list) = font.region_lists.get(usize::from(g.vsindex)) else {
             return Err(Cff2Error::BadBlend { glyph: g.name.clone(), reason: format!("region list {} does not exist", g.vsindex) });
         };
-        let (bytes, b) = charstring(g, list.len(), font.round_tolerance)?;
+        let (bytes, b) = charstring(g, list.len(), font.round_tolerance, font.generic)?;
         charstrings.push(bytes);
         glyph_bounds.push(b);
     }
@@ -616,6 +670,10 @@ pub fn write_cff2(font: &Cff2Font) -> Result<Cff2Built, Cff2Error> {
     }
     Ok(Cff2Built { table: out, glyph_bounds })
 }
+
+#[cfg(test)]
+#[path = "cff2_tests.rs"]
+mod cff2_tests;
 
 #[cfg(test)]
 mod tests {

@@ -368,7 +368,7 @@ fn postscript(input: &CffInput, builder: &mut FontBuilder, warnings: &mut Vec<St
     };
     let maxp =
         Maxp { num_glyphs: u16::try_from(input.order.len()).map_err(|_| CompileError::TooManyGlyphs(input.order.len()))?, ..Default::default() };
-    let table = if input.subroutinize { subroutinized(built.table, warnings) } else { built.table };
+    let table = if input.subroutinize { subroutinized(built.table, false, warnings) } else { built.table };
     builder.add_raw(Tag::new(b"CFF "), table);
     Ok((boxes, maxp))
 }
@@ -381,25 +381,33 @@ fn subroutines_disabled(font: &Resolved) -> bool {
 /// The custom parameter that writes `CFF ` charstrings without subroutines.
 const DISABLE_SUBROUTINES: &str = "Disable Subroutines";
 
-/// `table` with its charstrings subroutinised ([`fontcraft_cff::subr::subroutinize_table`]),
-/// or `table` itself when that is not smaller. A table the subroutiniser refuses (too many
-/// tokens, a self-check that failed) is kept as it is, with a warning: the export never fails
-/// for want of subroutines.
-fn subroutinized(table: Vec<u8>, warnings: &mut Vec<String>) -> Vec<u8> {
+/// `table` (a `CFF ` table, or `CFF2` when `cff2`) with its charstrings subroutinised
+/// ([`fontcraft_cff::subr::subroutinize_table`]), or `table` itself when that is not smaller. A
+/// table the subroutiniser refuses (too many tokens, a self-check that failed) is kept as it is,
+/// with a warning: the export never fails for want of subroutines.
+fn subroutinized(table: Vec<u8>, cff2: bool, warnings: &mut Vec<String>) -> Vec<u8> {
     use fontcraft_cff::subr::{SubrOptions, subroutinize_table};
-    match subroutinize_table(&table, false, &SubrOptions::default()) {
+    match subroutinize_table(&table, cff2, &SubrOptions::default()) {
         Ok(out) if out.len() < table.len() => out,
         Ok(_) => table,
         Err(e) => {
-            warnings.push(format!("the CFF table was written without subroutines: {e}"));
+            let name = if cff2 { "CFF2" } else { "CFF" };
+            warnings.push(format!("the {name} table was written without subroutines: {e}"));
             table
         }
     }
 }
 
-/// The `CFF2` table of a variable font, with the boxes and `maxp` (version 0.5) of its outlines
-/// at the origin, rounded as [`postscript`] rounds them.
-fn cff2_table(built: &fontcraft_cff::cff2::Cff2Built, glyphs: usize, builder: &mut FontBuilder) -> Result<(Boxes, Maxp), CompileError> {
+/// The `CFF2` table of a variable font, subroutinised as [`subroutinized`] does when
+/// `subroutinize`, with the boxes and `maxp` (version 0.5) of its outlines at the origin, rounded
+/// as [`postscript`] rounds them.
+fn cff2_table(
+    built: &fontcraft_cff::cff2::Cff2Built,
+    glyphs: usize,
+    subroutinize: bool,
+    builder: &mut FontBuilder,
+    warnings: &mut Vec<String>,
+) -> Result<(Boxes, Maxp), CompileError> {
     let clamp = |v: i64| i16::try_from(v.clamp(i64::from(i16::MIN), i64::from(i16::MAX))).unwrap_or(0);
     let bbox = |[x_min, y_min, x_max, y_max]: [i64; 4]| Bbox { x_min: clamp(x_min), y_min: clamp(y_min), x_max: clamp(x_max), y_max: clamp(y_max) };
     let union = built.glyph_bounds.iter().flatten().fold(None, |acc: Option<fontcraft_cff::Bounds>, b| {
@@ -430,7 +438,8 @@ fn cff2_table(built: &fontcraft_cff::cff2::Cff2Built, glyphs: usize, builder: &m
         loc_format: 0,
     };
     let maxp = Maxp { num_glyphs: u16::try_from(glyphs).map_err(|_| CompileError::TooManyGlyphs(glyphs))?, ..Default::default() };
-    builder.add_raw(Tag::new(b"CFF2"), built.table.clone());
+    let table = if subroutinize { subroutinized(built.table.clone(), true, warnings) } else { built.table.clone() };
+    builder.add_raw(Tag::new(b"CFF2"), table);
     Ok((boxes, maxp))
 }
 
@@ -538,7 +547,10 @@ pub fn assemble(
     let (boxes, mut maxp) = match flavour {
         Flavour::TrueType => truetype(order, outlines, tt_hinting.as_ref().map_or(&[][..], |h| h.composites.as_slice()), &mut builder)?,
         Flavour::Cff => match &extra.cff2 {
-            Some(built) => cff2_table(built, order.len(), &mut builder)?,
+            Some(built) => {
+                let subroutinize = options.subroutinize.unwrap_or_else(|| !subroutines_disabled(font));
+                cff2_table(built, order.len(), subroutinize, &mut builder, warnings)?
+            }
             None => {
                 let subroutinize = options.subroutinize.unwrap_or_else(|| !subroutines_disabled(font));
                 let input = CffInput {

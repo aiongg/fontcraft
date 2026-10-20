@@ -71,8 +71,10 @@ pub const MAX_FONT_DICTS: usize = 256;
 pub const MAX_STACK_LIMIT: usize = 513;
 /// Operand stack of a `CFF ` charstring.
 pub const CFF_STACK: usize = 48;
-/// `maxstack` of a `CFF2` table that does not set it.
-pub const CFF2_DEFAULT_STACK: usize = 193;
+/// Operand stack of a `CFF2` table that does not set `maxstack`: 513, as fontTools takes it (it
+/// treats `maxstack` as deprecated and the stack as always 513; the operator's old default was
+/// 193). Charstrings specialised as fontTools specialises them fill the stack up to 512.
+pub const CFF2_DEFAULT_STACK: usize = 513;
 /// Most operators one glyph may run while its calls are followed.
 pub const MAX_OPS_PER_GLYPH: usize = 1 << 20;
 /// Most operators all glyphs of one set may run together while their calls are followed.

@@ -152,7 +152,7 @@ pub(crate) fn pen_commands(path: &[PathOp], tolerance: f64) -> Vec<Cmd> {
         .collect()
 }
 
-fn opcode(op: Op) -> Option<u8> {
+pub(crate) fn opcode(op: Op) -> Option<u8> {
     Some(match op {
         Op::Move(Cat::R) => 21,
         Op::Move(Cat::H) => 22,
