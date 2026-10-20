@@ -77,6 +77,7 @@ pub(super) fn instantiate(p: &Params<'_>, input: &Path, req: &OutputRequest) -> 
         return Err(p.bad("an instance never replaces its source: give `output` or `outputDir`"));
     }
     let mut font = read_source(input)?;
+    super::source::refuse_without_axes(p, &font)?;
     let ds = Designspace::new(&font).map_err(|e| p.bad(e.to_string()))?;
     let jobs = jobs(p, &mut font, &ds, p.bool_or("clamp", true)?)?;
     if jobs.len() > 1 && req.output.is_some() {
