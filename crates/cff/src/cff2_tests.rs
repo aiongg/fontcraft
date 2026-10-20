@@ -30,7 +30,7 @@ fn c(x1: Blend, y1: Blend, x2: Blend, y2: Blend, x3: Blend, y3: Blend) -> BlendO
 }
 
 fn glyph(name: &str, vsindex: u16, path: Vec<BlendOp>) -> Cff2Glyph {
-    Cff2Glyph { name: name.into(), vsindex, path }
+    Cff2Glyph { name: name.into(), vsindex, path, hints: None }
 }
 
 /// The glyphs of the fontTools run, in its order. Region list 0 has one region, list 1 two.
@@ -185,7 +185,7 @@ fn shifted(g: &Cff2Glyph, dx: f64, name: String) -> Cff2Glyph {
             BlendOp::CurveTo(a, b, c) => BlendOp::CurveTo(mv(a), mv(b), mv(c)),
         })
         .collect();
-    Cff2Glyph { name, vsindex: g.vsindex, path }
+    Cff2Glyph { name, vsindex: g.vsindex, path, hints: g.hints.clone() }
 }
 
 #[test]
@@ -239,4 +239,165 @@ fn a_blend_run_in_a_charstring_leaves_room_for_a_call() {
     for at in [0.0, 0.5, 1.0] {
         assert_eq!(draw(&built.table, at), draw(&sub, at));
     }
+}
+
+// --- Hints -----------------------------------------------------------------------------------
+
+fn stem(edge: f64, width: f64) -> StemHint {
+    StemHint { edge, width }
+}
+
+fn mask(h: &[bool], v: &[bool]) -> Mask {
+    Mask { h: h.to_vec(), v: v.to_vec() }
+}
+
+/// Two rectangles whose vertical stems overlap, so the hints need two masks; the second master
+/// widens both. `widths` are the stems' widths, `x2` the second rectangle's left edge, `h` its
+/// height (first master, second master).
+fn two_boxes() -> Cff2Glyph {
+    let (w, x2, h) = (b(80.0, &[20.0]), b(150.0, &[10.0]), b(400.0, &[20.0]));
+    let right = |x: &Blend| b(x.default + w.default, &[x.deltas[0] + w.deltas[0]]);
+    glyph(
+        "a",
+        0,
+        vec![
+            m(p(100.0), p(0.0)),
+            l(right(&p(100.0)), p(0.0)),
+            l(right(&p(100.0)), p(700.0)),
+            l(p(100.0), p(700.0)),
+            m(x2.clone(), p(300.0)),
+            l(right(&x2), p(300.0)),
+            l(right(&x2), h.clone()),
+            l(x2.clone(), h),
+        ],
+    )
+}
+
+/// The static hints of [`two_boxes`] in each master: one horizontal stem, two vertical ones,
+/// a mask per rectangle.
+fn two_boxes_masters() -> Vec<CharstringHints> {
+    let masks = vec![(0, mask(&[true], &[true, false])), (4, mask(&[true], &[false, true]))];
+    vec![
+        CharstringHints {
+            h_stems: vec![stem(300.0, 100.0)],
+            v_stems: vec![stem(100.0, 80.0), stem(150.0, 80.0)],
+            masks: masks.clone(),
+            ..Default::default()
+        },
+        CharstringHints { h_stems: vec![stem(300.0, 120.0)], v_stems: vec![stem(100.0, 100.0), stem(160.0, 100.0)], masks, ..Default::default() },
+    ]
+}
+
+/// Blends over one region from the two masters' values.
+fn blended(shared: &SharedHints) -> Cff2Hints {
+    let blend = |a: f64, b: f64| if a == b { Blend::fixed(a) } else { Blend { default: a, deltas: vec![b - a] } };
+    let stems = |list: &[Vec<StemHint>]| -> Vec<BlendStem> {
+        list.iter().map(|s| BlendStem { edge: blend(s[0].edge, s[1].edge), width: blend(s[0].width, s[1].width) }).collect()
+    };
+    Cff2Hints { h_stems: stems(&shared.h_stems), v_stems: stems(&shared.v_stems), masks: shared.masks.clone(), counters: shared.counters.clone() }
+}
+
+#[derive(Debug, Default, PartialEq)]
+struct Stems {
+    h: Vec<(i32, i32)>,
+    v: Vec<(i32, i32)>,
+    masks: Vec<Vec<u8>>,
+}
+
+impl CommandSink for Stems {
+    fn move_to(&mut self, _: Fixed, _: Fixed) {}
+    fn line_to(&mut self, _: Fixed, _: Fixed) {}
+    fn curve_to(&mut self, _: Fixed, _: Fixed, _: Fixed, _: Fixed, _: Fixed, _: Fixed) {}
+    fn close(&mut self) {}
+    fn hstem(&mut self, y: Fixed, dy: Fixed) {
+        self.h.push((y.to_i32(), dy.to_i32()));
+    }
+    fn vstem(&mut self, x: Fixed, dx: Fixed) {
+        self.v.push((x.to_i32(), dx.to_i32()));
+    }
+    fn hint_mask(&mut self, mask: &[u8]) {
+        self.masks.push(mask.to_vec());
+    }
+}
+
+fn stems_of(table: &[u8], gid: u32, at: f32) -> Stems {
+    let cff = CffFontRef::new_cff2(table, None).unwrap();
+    let coords = [F2Dot14::from_f32(at)];
+    let subfont = cff.subfont(0, &coords).unwrap();
+    let mut sink = Stems::default();
+    cff.evaluate_charstring(&subfont, GlyphId::new(gid), &coords, &mut sink).unwrap();
+    sink
+}
+
+/// fontTools 4.x `varLib.build` on two static CFF masters holding these hints and outlines
+/// (`CFF2CharStringMergePen` with `MergeOutlineExtractor`, then `specializeCommands` for CFF2):
+/// `a` is `300 100 20 1 blend hstemhm 100 80 -30 80 20 -10 20 3 blend vstemhm hintmask 0xC0
+/// 100 hmoveto … hintmask 0xA0 50 10 1 blend -400 rmoveto …`.
+const HINTED_A: &str = "f7c0ef9f8c1012efdb6ddb9f819f8e101713c0ef16db9f8c10f9503b778c100613a0bd958c10fc2415dbef3b9f9f778e1006";
+/// `b`: `0 50 20 1 blend hstem 100 hmoveto 80 50 20 1 blend -80 hlineto`, no masks.
+const HINTED_B: &str = "8bbd9f8c1001ef16dbbd9f8c103b06";
+
+#[test]
+fn hinted_masters_merge_into_blended_stems_and_masks_as_the_reference_merges_them() {
+    let shared = shared_hints(&two_boxes_masters(), 0.5).unwrap();
+    let mut a = two_boxes();
+    a.hints = Some(blended(&shared));
+    let tall = b(50.0, &[20.0]);
+    let mut bar = glyph("b", 0, vec![m(p(100.0), p(0.0)), l(p(180.0), p(0.0)), l(p(180.0), tall.clone()), l(p(100.0), tall.clone())]);
+    bar.hints = Some(Cff2Hints { h_stems: vec![BlendStem { edge: p(0.0), width: tall }], ..Default::default() });
+    let f = font(vec![a, bar]);
+    let built = write_cff2(&f).unwrap();
+    let set = charstrings_of_table(&built.table, true).unwrap();
+    assert_eq!(hex(&set.charstrings[1]), HINTED_A);
+    assert_eq!(hex(&set.charstrings[2]), HINTED_B);
+    // Read back at both masters, also once subroutinised: the stems move, the masks stay.
+    let sub = subroutinize_table(&built.table, true, &SubrOptions::default()).unwrap();
+    for table in [&built.table, &sub] {
+        let at0 = stems_of(table, 1, 0.0);
+        assert_eq!((at0.h, at0.v), (vec![(300, 400)], vec![(100, 180), (150, 230)]));
+        assert_eq!(at0.masks, vec![vec![0xC0], vec![0xA0]]);
+        let at1 = stems_of(table, 1, 1.0);
+        assert_eq!((at1.h, at1.v), (vec![(300, 420)], vec![(100, 200), (160, 260)]));
+    }
+    // A glyph without hints is written as before.
+    let unhinted = write_cff2(&font(sample_glyphs())).unwrap();
+    let mut with_empty = sample_glyphs();
+    with_empty[0].hints = Some(Cff2Hints::default());
+    assert_eq!(write_cff2(&font(with_empty)).unwrap().table, unhinted.table);
+}
+
+#[test]
+fn masters_with_different_hint_structures_share_none() {
+    // fontTools refuses the merge (`VarLibCFFHintTypeMergeError`); the caller writes the glyph
+    // unhinted instead.
+    let base = two_boxes_masters();
+    let mut extra = base.clone();
+    extra[1].v_stems.push(stem(400.0, 20.0));
+    for m in &mut extra[1].masks {
+        m.1.v.push(false);
+    }
+    assert!(shared_hints(&extra, 0.5).is_err());
+    let mut masks = base.clone();
+    masks[1].masks[1].0 = 5;
+    assert!(shared_hints(&masks, 0.5).is_err());
+    // Stems that sort into another order in one master would blend two different stems.
+    let mut swapped = base.clone();
+    swapped[1].v_stems = vec![stem(260.0, 100.0), stem(160.0, 100.0)];
+    assert!(shared_hints(&swapped, 0.5).is_err());
+    // A ghost in one master and a stem in the other.
+    let mut ghost = base;
+    ghost[1].h_stems = vec![StemHint::top_ghost(420.0)];
+    assert!(shared_hints(&ghost, 0.5).is_err());
+}
+
+#[test]
+fn a_private_dict_blends_what_the_masters_change_as_the_reference_merges_it() {
+    // fontTools `merge_PrivateDicts` of BlueValues [-15 0 500 515] / [-15 0 520 535] and StdHW
+    // 50 / 70: `-15 15 500 15 0 0 20 0 4 blend BlueValues 50 20 1 blend StdHW`.
+    let private = Cff2Private {
+        blue_values: vec![p(-15.0), p(0.0), b(500.0, &[20.0]), b(515.0, &[20.0])],
+        std_hw: Some(b(50.0, &[20.0])),
+        ..Cff2Private::default()
+    };
+    assert_eq!(hex(&private_dict(&private, 1).unwrap()), "7c9af8889a8b8b9f8b8f1706bd9f8c170a");
 }

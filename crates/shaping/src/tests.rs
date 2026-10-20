@@ -377,6 +377,19 @@ fn vertical_text_takes_vertical_forms_and_advances_down() {
 }
 
 #[test]
+fn live_vertical_metrics_replace_the_font_defaults() {
+    let font = test_font();
+    let live = |gid: u16| (gid == PAREN_VERT).then_some(VerticalMetrics { advance: 800, origin_y: 700 });
+    let req = ShapeRequest { direction: Direction::TopToBottom, vertical: Some(&live), ..ShapeRequest::new("((") };
+    let out = shape(&font, &req).expect("shapes");
+    for glyph in &out {
+        assert_eq!(glyph.y_advance, -800, "{glyph:?}");
+        // The glyph's origin lies below and left of the vertical origin the pen stands on.
+        assert_eq!((glyph.x_offset, glyph.y_offset), (-width(PAREN_VERT) / 2, -700), "{glyph:?}");
+    }
+}
+
+#[test]
 fn a_glyph_typed_by_name_is_substituted_by_a_feature() {
     let font = test_font();
     let text = "\u{F0000}";

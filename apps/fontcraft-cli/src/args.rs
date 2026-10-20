@@ -19,6 +19,8 @@
 //! - A long option may be shortened to any prefix that names one option only; a name that
 //!   differs from an option only in letter case names that option (`--name-IDs`).
 //! - `--` ends the options; `-h` and `--help` ask for help; a lone `-` is a positional (stdin).
+//! - Where a subcommand reads queries ([`parse_with_queries`]), `--opt?` records the value
+//!   `opt` has at that point of the line; elsewhere it is an unknown option.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -94,6 +96,20 @@ pub struct Parsed {
     pub values: BTreeMap<&'static str, OptValue>,
     /// `-h` or `--help` was given.
     pub help: bool,
+    /// The `--opt?` queries, in order, read by [`parse_with_queries`].
+    pub queries: Vec<Query>,
+}
+
+/// One `--opt?` on a command line: the option's value at that point of the line.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Query {
+    /// The name as given, without dashes, `no-` or `?` (`name-IDs`).
+    pub given: String,
+    /// The option's long name.
+    pub name: &'static str,
+    /// The value set by the defaults and the options to the left; `None` for a value option
+    /// with no default that was not given.
+    pub value: Option<OptValue>,
 }
 
 impl Parsed {
@@ -121,6 +137,16 @@ impl Parsed {
 
 /// Reads `args` against `specs`.
 pub fn parse(specs: &[OptSpec], args: &[String]) -> Result<Parsed, Failure> {
+    parse_inner(specs, args, false)
+}
+
+/// Reads `args` against `specs`, also accepting `--opt?` (and `--no-opt?`), which records the
+/// option's value at that point of the line in [`Parsed::queries`].
+pub fn parse_with_queries(specs: &[OptSpec], args: &[String]) -> Result<Parsed, Failure> {
+    parse_inner(specs, args, true)
+}
+
+fn parse_inner(specs: &[OptSpec], args: &[String], queries: bool) -> Result<Parsed, Failure> {
     let args = expand(args, 0, &mut Vec::new())?;
     let mut parsed = Parsed::default();
     for spec in specs {
@@ -143,6 +169,15 @@ pub fn parse(specs: &[OptSpec], args: &[String]) -> Result<Parsed, Failure> {
             continue;
         }
         if let Some(body) = arg.strip_prefix("--") {
+            if queries
+                && !body.contains('=')
+                && let Some(name) = body.strip_suffix('?')
+            {
+                let (spec, on) = resolve(specs, name)?;
+                let given = if on { name } else { name.get(3..).unwrap_or(name) };
+                parsed.queries.push(Query { given: given.to_string(), name: spec.name, value: parsed.values.get(spec.name).cloned() });
+                continue;
+            }
             let (name, edit, inline) = match body.split_once('=') {
                 Some((n, v)) => match (n.strip_suffix('+'), n.strip_suffix('-')) {
                     (Some(n), _) => (n, Edit::Add, Some(v.to_string())),

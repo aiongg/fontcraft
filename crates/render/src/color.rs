@@ -6,7 +6,7 @@
 //! | Table | Drawn |
 //! |---|---|
 //! | `COLR` (versions 0 and 1) with `CPAL` | through skrifa's colour painter: clips, solid fills, linear, radial and sweep gradients, transforms, and composite layers, with the palette [`ColorOptions::palette`] |
-//! | `SVG ` | the glyph's document, inflated first when it is gzip-compressed, through the SVG drawing of `fontcraft_color` ([`svg_draw::items`]): filled outlines with solid or gradient paint, and embedded PNG and JPEG images |
+//! | `SVG ` | the glyph's document, inflated first when it is gzip-compressed, through the SVG drawing of `fontcraft_color` ([`svg_draw::items`]): filled outlines with solid, gradient or pattern paint, embedded PNG and JPEG images, clip paths and masks |
 //! | `sbix` | the PNG or JPEG image of the strike nearest the pixel size: the smallest strike at least that large, else the largest |
 //! | `CBDT` with `CBLC` | the image of the strike nearest the pixel size, by the same rule: PNG data, 32-bit colour, and masks of 1 to 8 bits drawn in the text colour |
 //!
@@ -37,9 +37,14 @@
 //! - A compressed document inflates to at most `fontcraft_color::MAX_SVG_FILE_BYTES`; the images
 //!   of one document decode to at most [`MAX_BITMAP_PIXELS`] pixels together, and an image that
 //!   cannot be decoded or would pass that budget is left out. An image used twice is decoded once.
-//! - Not drawn: patterns, clip paths, masks and filters inside SVG documents (as Edit View),
-//!   embedded images other than PNG and JPEG, `sbix` graphic types other than `png `, `jpg `
-//!   and `dupe`, and `EBDT` strikes.
+//! - In an `SVG ` document, a group with a clip path or a mask is drawn on a layer of its own,
+//!   which each clip path's coverage and each mask's luminance (or alpha) multiplies before it
+//!   is laid over what is below; a group whose clips are plain outlines and that has no mask is
+//!   drawn under those clips directly, as are pattern tiles. Each layer, and each clip or mask
+//!   drawn, counts the sprite's pixels against the glyph's work, so masks nested past
+//!   [`MAX_LAYER_DEPTH`] layers, or clips past [`MAX_CLIP_DEPTH`], refuse the glyph.
+//! - Not drawn: filters inside SVG documents, embedded images other than PNG and JPEG, `sbix`
+//!   graphic types other than `png `, `jpg ` and `dupe`, and `EBDT` strikes.
 //! - The `sbix` image's bottom left sits at the record's origin offsets from the glyph origin, a
 //!   strike pixel being `units_per_em ÷ ppem` units, which is how the compiler places it. A
 //!   `CBDT` image's top left sits at its bearings, in strike pixels right of and above the
@@ -50,7 +55,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use fontcraft_color::paint::{ColorLine, ColorRef, Paint as ColorPaint};
-use fontcraft_color::svg_draw::{self, SvgImage, SvgItem, SvgShape};
+use fontcraft_color::svg_draw::{self, SvgGroup, SvgImage, SvgItem, SvgShape};
 use fontcraft_container::gzip::{GunzipError, MAGIC as GZIP_MAGIC, gunzip};
 use fontcraft_geom::{Affine, BezPath, Point, Rect, Shape as _};
 use fontcraft_model::Extend as ModelExtend;
@@ -975,34 +980,187 @@ impl<'a, 'f> Raster<'a, 'f> {
     }
 
     fn push_clip_path(&mut self, path: &BezPath) {
+        self.push_clip_union(&[path]);
+    }
+
+    /// Pushes the clip covering the union of `paths`, within the current clip.
+    fn push_clip_union(&mut self, paths: &[&BezPath]) {
         if self.clips.len() >= MAX_CLIP_DEPTH {
             self.refuse(format!("the colour glyph nests clips more than {MAX_CLIP_DEPTH} deep"));
         }
-        if self.refused.is_some() || path.elements().is_empty() {
+        let paths: Vec<&BezPath> = paths.iter().copied().filter(|p| !p.elements().is_empty()).collect();
+        if self.refused.is_some() || paths.is_empty() {
             self.clips.push(Clip::empty());
             return;
         }
         let ctm = self.ctm();
+        let (width, height) = (self.width, self.height);
         let parent = self.clips.last().map_or(self.full(), |c| c.bbox);
-        let bbox = PixBox::of(path.bounding_box(), ctm, self.width, self.height).intersect(parent);
-        if bbox.is_empty() || !self.spend(bbox.area().saturating_mul(2)) {
+        let boxes: Vec<PixBox> = paths.iter().map(|p| PixBox::of(p.bounding_box(), ctm, width, height).intersect(parent)).collect();
+        let bbox = boxes.iter().filter(|b| !b.is_empty()).fold(PixBox::EMPTY, |a, b| {
+            if a.is_empty() { *b } else { PixBox { x0: a.x0.min(b.x0), y0: a.y0.min(b.y0), x1: a.x1.max(b.x1), y1: a.y1.max(b.y1) } }
+        });
+        let merge = if paths.len() > 1 { bbox.area() } else { 0 };
+        let cost = boxes.iter().fold(merge, |n, b| n.saturating_add(b.area().saturating_mul(2)));
+        if bbox.is_empty() || !self.spend(cost) {
             self.clips.push(Clip::empty());
             return;
         }
-        let (bw, bh) = (bbox.width(), bbox.y1 - bbox.y0);
-        let shift = Affine::translate((-f64::from(bbox.x0), -f64::from(bbox.y0))) * ctm;
-        let Ok(image) = render_path(path, shift, bw, bh, &MASK) else {
-            self.clips.push(Clip::empty());
-            return;
-        };
-        let mut mask: Vec<u8> = image.pixels.as_chunks::<4>().0.iter().map(|p| p[3]).collect();
+        let bw = bbox.width() as usize;
+        let mut mask = vec![0u8; bbox.area() as usize];
+        for (path, pb) in paths.iter().zip(&boxes) {
+            if pb.is_empty() {
+                continue;
+            }
+            let (pw, ph) = (pb.width(), pb.y1 - pb.y0);
+            let shift = Affine::translate((-f64::from(pb.x0), -f64::from(pb.y0))) * ctm;
+            let Ok(image) = render_path(path, shift, pw, ph, &MASK) else { continue };
+            for (i, p) in image.pixels.as_chunks::<4>().0.iter().enumerate() {
+                let (x, y) = ((pb.x0 - bbox.x0) as usize + i % pw as usize, (pb.y0 - bbox.y0) as usize + i / pw as usize);
+                if let Some(m) = mask.get_mut(y * bw + x) {
+                    // The union of coverages, as paths laid over each other.
+                    let (a, b) = (u16::from(*m), u16::from(p[3]));
+                    *m = (a + b - (a * b + 127) / 255) as u8;
+                }
+            }
+        }
         if let Some(outer) = self.clips.last() {
             for (i, m) in mask.iter_mut().enumerate() {
-                let (x, y) = (bbox.x0 + (i % bw as usize) as u32, bbox.y0 + (i / bw as usize) as u32);
+                let (x, y) = (bbox.x0 + (i % bw) as u32, bbox.y0 + (i / bw) as u32);
                 *m = ((u16::from(*m) * u16::from(outer.coverage(x, y)) + 127) / 255) as u8;
             }
         }
         self.clips.push(Clip { bbox, mask });
+    }
+
+    /// Draws SVG items in paint order over the current layer, within the current clip.
+    fn draw_items(&mut self, items: &[Drawable]) {
+        for item in items {
+            if self.refused.is_some() {
+                return;
+            }
+            match item {
+                Drawable::Shape(shape) => {
+                    let Some(leaf) = svg_leaf(&shape.paint) else { continue };
+                    self.push_clip_path(&shape.outline);
+                    self.fill_leaf(&leaf);
+                    self.clips.pop();
+                }
+                Drawable::Image { bitmap, place, opacity } => self.draw_bitmap(bitmap, *place, *opacity),
+                Drawable::Group(group) => self.draw_group(group),
+            }
+        }
+    }
+
+    /// A group whose clips are plain outlines and that has no mask is drawn under those clips
+    /// directly; any other is drawn into a layer of its own, multiplied by the coverage of each
+    /// clip and mask, and laid over the layer below.
+    fn draw_group(&mut self, group: &DrawGroup) {
+        let plain = group.masks.is_empty() && group.clips.iter().all(|c| c.iter().all(|d| matches!(d, Drawable::Shape(_))));
+        if plain {
+            for clip in &group.clips {
+                let paths: Vec<&BezPath> = clip.iter().filter_map(|d| if let Drawable::Shape(s) = d { Some(&s.outline) } else { None }).collect();
+                self.push_clip_union(&paths);
+            }
+            self.draw_items(&group.items);
+            for _ in &group.clips {
+                self.clips.pop();
+            }
+            return;
+        }
+        if !self.open_layer() {
+            return;
+        }
+        self.draw_items(&group.items);
+        for clip in &group.clips {
+            if let Some(coverage) = self.coverage(clip, None, false) {
+                self.mask_top(&coverage);
+            }
+        }
+        for mask in &group.masks {
+            if let Some(coverage) = self.coverage(&mask.items, Some(&mask.region), mask.luminance) {
+                self.mask_top(&coverage);
+            }
+        }
+        self.close_layer();
+    }
+
+    /// Pushes a clear layer the size of the sprite; false (nothing pushed) when the glyph is
+    /// refused, nests layers too deep or runs out of work.
+    fn open_layer(&mut self) -> bool {
+        if self.layers.len() > MAX_LAYER_DEPTH {
+            self.refuse(format!("the colour glyph nests layers more than {MAX_LAYER_DEPTH} deep"));
+        }
+        let area = self.area();
+        if self.refused.is_some() || !self.spend(area) {
+            return false;
+        }
+        self.layers.push(vec![0; self.width as usize * self.height as usize * 4]);
+        true
+    }
+
+    /// Lays the top layer over the one below it.
+    fn close_layer(&mut self) {
+        if self.layers.len() <= 1 {
+            return;
+        }
+        let Some(top) = self.layers.pop() else { return };
+        let area = self.area();
+        if self.refused.is_some() || !self.spend(area) {
+            return;
+        }
+        if let Some(below) = self.layers.last_mut() {
+            composite_layer(&top, below, CompositeMode::SrcOver);
+        }
+    }
+
+    /// The coverage of each sprite pixel by `items` drawn on a clear layer, outside the current
+    /// clips and inside `region`: their luminance (from premultiplied colour, as resvg takes it)
+    /// or their alpha.
+    fn coverage(&mut self, items: &[Drawable], region: Option<&BezPath>, luminance: bool) -> Option<Vec<u8>> {
+        let saved = std::mem::take(&mut self.clips);
+        if let Some(region) = region {
+            self.push_clip_path(region);
+        }
+        let opened = self.open_layer();
+        if opened {
+            self.draw_items(items);
+        }
+        let layer = if opened { self.layers.pop() } else { None };
+        self.clips = saved;
+        let area = self.area();
+        if self.refused.is_some() || !self.spend(area) {
+            return None;
+        }
+        let pixels = layer?;
+        Some(
+            pixels
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|&[r, g, b, a]| {
+                    if luminance {
+                        (0.2125 * f32::from(r) + 0.7154 * f32::from(g) + 0.0721 * f32::from(b)).round().clamp(0.0, 255.0) as u8
+                    } else {
+                        a
+                    }
+                })
+                .collect(),
+        )
+    }
+
+    /// Multiplies the top layer by `coverage`, one value per pixel.
+    fn mask_top(&mut self, coverage: &[u8]) {
+        let area = self.area();
+        if self.refused.is_some() || !self.spend(area) {
+            return;
+        }
+        let Some(top) = self.layers.last_mut() else { return };
+        for (px, c) in top.as_chunks_mut::<4>().0.iter_mut().zip(coverage) {
+            for v in px.iter_mut() {
+                *v = ((u16::from(*v) * u16::from(*c) + 127) / 255) as u8;
+            }
+        }
     }
 
     fn fill_leaf(&mut self, leaf: &Leaf) {
@@ -1310,6 +1468,57 @@ enum Drawable {
         place: Affine,
         opacity: f32,
     },
+    Group(Box<DrawGroup>),
+}
+
+/// An [`svg_draw::SvgGroup`] with its images decoded.
+struct DrawGroup {
+    items: Vec<Drawable>,
+    clips: Vec<Vec<Drawable>>,
+    masks: Vec<DrawMask>,
+}
+
+struct DrawMask {
+    luminance: bool,
+    region: BezPath,
+    items: Vec<Drawable>,
+}
+
+/// The bytes `items` keep.
+fn drawable_bytes(items: &[Drawable]) -> usize {
+    items
+        .iter()
+        .map(|d| match d {
+            Drawable::Shape(s) => 64 + 32 * s.outline.elements().len(),
+            Drawable::Image { bitmap, .. } => 64 + bitmap.pixels.len(),
+            Drawable::Group(g) => {
+                let masks: usize = g.masks.iter().map(|m| 64 + 32 * m.region.elements().len() + drawable_bytes(&m.items)).sum();
+                64 + drawable_bytes(&g.items) + g.clips.iter().map(|c| drawable_bytes(c)).sum::<usize>() + masks
+            }
+        })
+        .sum()
+}
+
+/// The area `items` may paint, font units: a group's within its clips and mask regions.
+fn extent(items: &[Drawable]) -> Option<Rect> {
+    items
+        .iter()
+        .filter_map(|d| match d {
+            Drawable::Shape(s) => Some(s.outline.bounding_box()),
+            Drawable::Image { place, .. } => Some(place.transform_rect_bbox(unit())),
+            Drawable::Group(g) => {
+                let mut r = extent(&g.items)?;
+                for clip in &g.clips {
+                    r = r.intersect(extent(clip)?);
+                }
+                for mask in &g.masks {
+                    r = r.intersect(mask.region.bounding_box());
+                }
+                Some(r)
+            }
+        })
+        .filter(|r| has_area(*r))
+        .reduce(|a, b| a.union(b))
 }
 
 /// A glyph's colour source read once: its inflated and parsed `SVG ` document, or the decoded
@@ -1320,13 +1529,7 @@ struct Source {
 
 impl Source {
     fn bytes(&self) -> usize {
-        self.items
-            .iter()
-            .map(|d| match d {
-                Drawable::Shape(s) => 64 + 32 * s.outline.elements().len(),
-                Drawable::Image { bitmap, .. } => 64 + bitmap.pixels.len(),
-            })
-            .sum()
+        drawable_bytes(&self.items)
     }
 }
 
@@ -1548,33 +1751,54 @@ fn prepare_svg(font: &FontRef, gid: u16) -> (Result<Source, String>, u64) {
     if unplaced {
         return (Err("the SVG document's width, height or viewBox is empty".into()), work);
     }
-    let mut decoded: HashMap<*const Vec<u8>, Option<Arc<Bitmap>>> = HashMap::new();
-    let mut pixels_left = MAX_BITMAP_PIXELS;
-    let mut out = Vec::with_capacity(items.len());
-    for item in items {
-        match item {
-            SvgItem::Shape(s) => out.push(Drawable::Shape(s)),
-            SvgItem::Image(SvgImage { data, place, opacity }) => {
-                // An image used more than once is decoded once; one that cannot be read, or
-                // that would pass the glyph's pixel budget, is left out.
-                let bitmap = decoded
-                    .entry(Arc::as_ptr(&data))
-                    .or_insert_with(|| {
-                        let b = Bitmap::decode(&data, pixels_left).ok()?;
-                        pixels_left = pixels_left.saturating_sub(b.pixel_count());
-                        work = work.saturating_add(b.pixel_count());
-                        Some(Arc::new(b))
-                    })
-                    .clone();
-                if let Some(bitmap) = bitmap
-                    && finite_affine(place)
-                {
-                    out.push(Drawable::Image { bitmap, place, opacity: opacity as f32 });
+    let mut images = Images { decoded: HashMap::new(), pixels_left: MAX_BITMAP_PIXELS, work };
+    let items = images.drawables(items);
+    (Ok(Source { items }), images.work)
+}
+
+/// The embedded images of one document, decoded once each within [`MAX_BITMAP_PIXELS`].
+struct Images {
+    decoded: HashMap<*const Vec<u8>, Option<Arc<Bitmap>>>,
+    pixels_left: u64,
+    work: u64,
+}
+
+impl Images {
+    fn drawables(&mut self, items: Vec<SvgItem>) -> Vec<Drawable> {
+        let mut out = Vec::with_capacity(items.len());
+        for item in items {
+            match item {
+                SvgItem::Shape(s) => out.push(Drawable::Shape(s)),
+                SvgItem::Image(SvgImage { data, place, opacity }) => {
+                    // An image used more than once is decoded once; one that cannot be read, or
+                    // that would pass the glyph's pixel budget, is left out.
+                    let bitmap = self
+                        .decoded
+                        .entry(Arc::as_ptr(&data))
+                        .or_insert_with(|| {
+                            let b = Bitmap::decode(&data, self.pixels_left).ok()?;
+                            self.pixels_left = self.pixels_left.saturating_sub(b.pixel_count());
+                            self.work = self.work.saturating_add(b.pixel_count());
+                            Some(Arc::new(b))
+                        })
+                        .clone();
+                    if let Some(bitmap) = bitmap
+                        && finite_affine(place)
+                    {
+                        out.push(Drawable::Image { bitmap, place, opacity: opacity as f32 });
+                    }
+                }
+                SvgItem::Group(SvgGroup { items, clips, masks }) => {
+                    let items = self.drawables(items);
+                    let clips = clips.into_iter().map(|c| self.drawables(c)).collect();
+                    let masks =
+                        masks.into_iter().map(|m| DrawMask { luminance: m.luminance, region: m.region, items: self.drawables(m.items) }).collect();
+                    out.push(Drawable::Group(Box::new(DrawGroup { items, clips, masks })));
                 }
             }
         }
+        out
     }
-    (Ok(Source { items: out }), work)
 }
 
 fn svg_leaf(paint: &ColorPaint) -> Option<Leaf> {
@@ -1617,33 +1841,11 @@ fn svg_leaf(paint: &ColorPaint) -> Option<Leaf> {
 }
 
 fn draw_svg(font: &FontRef, source: &Source, options: &ColorOptions) -> Result<Done, Refusal> {
-    let rect = source
-        .items
-        .iter()
-        .map(|d| match d {
-            Drawable::Shape(s) => s.outline.bounding_box(),
-            Drawable::Image { place, .. } => place.transform_rect_bbox(unit()),
-        })
-        .filter(|r| has_area(*r) && finite_rect(*r))
-        .reduce(|a, b| a.union(b));
-    let Some(rect) = rect else { return blank(ColorKind::Svg) };
+    let Some(rect) = extent(&source.items) else { return blank(ColorKind::Svg) };
     let sprite = sprite(rect, options.scale)?;
     let mut outlines = Outlines::new(font);
     let mut raster = Raster::new(&sprite, &mut outlines, &[], options.text_color);
-    for item in &source.items {
-        match item {
-            Drawable::Shape(shape) => {
-                let Some(leaf) = svg_leaf(&shape.paint) else { continue };
-                raster.push_clip_path(&shape.outline);
-                raster.fill_leaf(&leaf);
-                raster.clips.pop();
-            }
-            Drawable::Image { bitmap, place, opacity } => raster.draw_bitmap(bitmap, *place, *opacity),
-        }
-        if raster.refused.is_some() {
-            break;
-        }
-    }
+    raster.draw_items(&source.items);
     raster.finish(sprite.left, sprite.top, ColorKind::Svg)
 }
 
@@ -1788,7 +1990,7 @@ fn draw_bitmaps(font: &FontRef, source: &Source, kind: ColorKind, options: &Colo
         .iter()
         .filter_map(|d| match d {
             Drawable::Image { place, .. } => Some(place.transform_rect_bbox(unit())),
-            Drawable::Shape(_) => None,
+            Drawable::Shape(_) | Drawable::Group(_) => None,
         })
         .filter(|r| has_area(*r) && finite_rect(*r))
         .reduce(|a, b| a.union(b));
@@ -1977,6 +2179,120 @@ mod tests {
         let raster = glyph1(sfnt(2, vec![svg_table(doc.as_bytes())]), 0.1);
         assert_eq!(ink(&raster), (10, 30, 0, 20), "x 100 to 300 units, y 0 to 200");
         assert_eq!(colour_at(&raster, 20, 10), [0, 255, 0, 255]);
+    }
+
+    /// Glyph 1 of a font whose `SVG ` table holds `body` in a 1000-unit viewBox, whose top left
+    /// is the glyph origin: user y −500 lies 500 units above the baseline.
+    fn svg_glyph(body: &str) -> Arc<GlyphRaster> {
+        let doc = format!(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" viewBox="0 0 1000 1000">{body}</svg>"#
+        );
+        glyph1(sfnt(2, vec![svg_table(doc.as_bytes())]), 0.1)
+    }
+
+    fn near(a: [u8; 4], b: [u8; 4]) -> bool {
+        a.iter().zip(b).all(|(x, y)| x.abs_diff(y) <= 2)
+    }
+
+    #[test]
+    fn svg_clip_paths_keep_what_lies_inside_them() {
+        let raster = svg_glyph(
+            r##"<defs><clipPath id="c"><rect x="0" y="-500" width="250" height="500"/></clipPath></defs>
+            <rect x="0" y="-500" width="500" height="500" fill="#FF0000" clip-path="url(#c)"/>"##,
+        );
+        assert_eq!(ink(&raster), (0, 25, 0, 50), "the left half of the square");
+        assert_eq!(colour_at(&raster, 10, 25), [255, 0, 0, 255]);
+
+        // A clip path with a clip path of its own: both apply.
+        let raster = svg_glyph(
+            r##"<defs><clipPath id="d"><rect x="0" y="-500" width="500" height="250"/></clipPath>
+            <clipPath id="c" clip-path="url(#d)"><rect x="0" y="-500" width="250" height="500"/></clipPath></defs>
+            <rect x="0" y="-500" width="500" height="500" fill="#FF0000" clip-path="url(#c)"/>"##,
+        );
+        assert_eq!(ink(&raster), (0, 25, 25, 50), "the top left quarter");
+    }
+
+    #[test]
+    fn svg_masks_multiply_by_their_luminance_or_alpha() {
+        // Left half white, right half 50 % grey: the blue square is whole on the left, half
+        // transparent on the right.
+        let raster = svg_glyph(
+            r##"<defs><mask id="m" maskUnits="userSpaceOnUse" x="0" y="-500" width="500" height="500">
+              <rect x="0" y="-500" width="250" height="500" fill="#FFFFFF"/>
+              <rect x="250" y="-500" width="250" height="500" fill="#808080"/></mask></defs>
+            <rect x="0" y="-500" width="500" height="500" fill="#0000FF" mask="url(#m)"/>"##,
+        );
+        assert_eq!(colour_at(&raster, 10, 25), [0, 0, 255, 255]);
+        assert!(near(colour_at(&raster, 40, 25), [0, 0, 128, 128]), "{:?}", colour_at(&raster, 40, 25));
+
+        // An alpha mask of black: luminance would hide everything.
+        let raster = svg_glyph(
+            r##"<defs><mask id="m" mask-type="alpha" maskUnits="userSpaceOnUse" x="0" y="-500" width="500" height="500">
+              <rect x="0" y="-500" width="250" height="500" fill="#000000"/>
+              <rect x="250" y="-500" width="250" height="500" fill="#000000" fill-opacity="0.5"/></mask></defs>
+            <rect x="0" y="-500" width="500" height="500" fill="#0000FF" mask="url(#m)"/>"##,
+        );
+        assert_eq!(colour_at(&raster, 10, 25), [0, 0, 255, 255]);
+        assert!(near(colour_at(&raster, 40, 25), [0, 0, 128, 128]), "{:?}", colour_at(&raster, 40, 25));
+
+        // The mask's region cuts it: nothing shows below user y −250.
+        let raster = svg_glyph(
+            r##"<defs><mask id="m" maskUnits="userSpaceOnUse" x="0" y="-500" width="500" height="250">
+              <rect x="0" y="-500" width="500" height="500" fill="#FFFFFF"/></mask></defs>
+            <rect x="0" y="-500" width="500" height="500" fill="#0000FF" mask="url(#m)"/>"##,
+        );
+        assert_eq!(ink(&raster), (0, 50, 25, 50));
+    }
+
+    #[test]
+    fn svg_patterns_tile_their_content_over_the_shape() {
+        // 200-unit tiles, each red in its top left quarter, over a 400-unit square.
+        let raster = svg_glyph(
+            r##"<defs><pattern id="p" patternUnits="userSpaceOnUse" x="0" y="0" width="200" height="200">
+              <rect x="0" y="0" width="100" height="100" fill="#FF0000"/></pattern></defs>
+            <rect x="0" y="-400" width="400" height="400" fill="url(#p)"/>"##,
+        );
+        for (x, y) in [(5, 35), (25, 35), (5, 15), (25, 15)] {
+            assert_eq!(colour_at(&raster, x, y), [255, 0, 0, 255], "red at ({x}, {y})");
+        }
+        for (x, y) in [(15, 35), (5, 25), (15, 15), (25, 25)] {
+            assert_eq!(colour_at(&raster, x, y)[3], 0, "clear at ({x}, {y})");
+        }
+    }
+
+    #[test]
+    fn a_sliced_svg_image_is_clipped_to_its_box() {
+        // A square image in a 200 × 100 box, scaled to cover it: 200 × 200 centred, of which
+        // the box's middle 100 units show.
+        let data = base64(&png(2, 2, [0, 255, 0, 255]));
+        let raster = svg_glyph(&format!(
+            r#"<image x="100" y="-300" width="200" height="100" preserveAspectRatio="xMidYMid slice" xlink:href="data:image/png;base64,{data}"/>"#
+        ));
+        assert_eq!(ink(&raster), (10, 30, 20, 30));
+        assert_eq!(colour_at(&raster, 20, 25), [0, 255, 0, 255]);
+    }
+
+    #[test]
+    fn svg_masks_nested_past_the_layer_limit_draw_the_outline() {
+        let mut defs = String::from(r##"<mask id="m9"><rect x="0" y="-500" width="500" height="500" fill="#FFFFFF"/></mask>"##);
+        for k in (0..9).rev() {
+            let next = k + 1;
+            defs.push_str(&format!(
+                r##"<mask id="m{k}"><rect x="0" y="-500" width="500" height="500" fill="#FFFFFF" mask="url(#m{next})"/></mask>"##
+            ));
+        }
+        let doc = format!(
+            r##"<svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 1000 1000"><defs>{defs}</defs><rect x="0" y="-500" width="500" height="500" fill="#0000FF" mask="url(#m0)"/></svg>"##
+        );
+        let mut r = ColorRenderer::new(sfnt(2, vec![svg_table(doc.as_bytes())]), &[]).unwrap();
+        let options = ColorOptions { scale: 0.1, palette: 0, text_color: [0, 0, 0, 255] };
+        let Painted::Refused(reason) = r.glyph(1, &options, &mut FrameBudget::frame()) else { panic!("drawn past the layer limit") };
+        assert!(reason.contains("layers"), "{reason}");
+
+        // Two masks deep is drawn.
+        let doc = doc.replace(r#"mask="url(#m2)""#, "");
+        let mut r = ColorRenderer::new(sfnt(2, vec![svg_table(doc.as_bytes())]), &[]).unwrap();
+        assert!(matches!(r.glyph(1, &options, &mut FrameBudget::frame()), Painted::Color(_)));
     }
 
     /// `CBLC` and `CBDT` with one strike of `ppem` holding glyph 1 as `png` (format 17), its top

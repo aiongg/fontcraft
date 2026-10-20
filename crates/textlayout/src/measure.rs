@@ -9,6 +9,10 @@
 //! comes back is shaped once. A cluster's advance goes to its first item; the other items of the
 //! cluster are marked as joined to it, and a line never breaks before them.
 //!
+//! Vertical text is measured top to bottom with the features [`crate::shape_line`] shapes its
+//! columns with, on the vertical advances; the model's vertical kerning, which the compiled font
+//! does not hold, is added by the layout.
+//!
 //! Context across a break opportunity is not seen: a kerning pair or a contextual substitution
 //! between a space and the next word does not change the widths lines break on. The line itself
 //! is then shaped whole ([`crate::shape_line`]).
@@ -21,10 +25,12 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 
 use fontcraft_model::Font;
-use fontcraft_shaping::{Direction as ShapeDirection, ShapeRequest};
-use fontcraft_spacing::metrics_source;
+use fontcraft_shaping::{Direction as ShapeDirection, FeatureSetting, ShapeRequest, VerticalMetrics};
+use fontcraft_spacing::kerning::Direction;
 
+use crate::line_shape::vertical_features;
 use crate::linebreak::Break;
+use crate::live::Live;
 use crate::shape::PreviewShaper;
 use crate::text::Item;
 
@@ -49,14 +55,14 @@ struct Width {
     joined: bool,
 }
 
-/// Widths by text, left to right, then right to left.
-type WidthMaps = [HashMap<Box<str>, Box<[Width]>>; 2];
+/// Widths by text: left to right, right to left, top to bottom.
+type WidthMaps = [HashMap<Box<str>, Box<[Width]>>; 3];
 
 /// Shaped segment widths by direction and text. It holds for one preview font and one state of
 /// the model's advances: the caller starts a new one when either changes.
 #[derive(Debug, Default)]
 pub struct WidthCache {
-    /// Left to right, then right to left.
+    /// Left to right, right to left, top to bottom.
     maps: Mutex<WidthMaps>,
 }
 
@@ -89,72 +95,93 @@ struct Segment {
     text: String,
     first: usize,
     count: usize,
-    rtl: bool,
+    direction: ShapeDirection,
 }
 
-/// Measures `items` in `master`. `levels` holds the bidirectional level of every item (`None`:
-/// all at `paragraph`); `breaks` the opportunity after every item.
+/// What every segment is shaped with.
+struct With<'a> {
+    shaper: &'a PreviewShaper,
+    live: &'a Live<'a>,
+    /// The features beyond the shaper's defaults: none in horizontal text.
+    features: &'a [FeatureSetting],
+}
+
+/// Measures `items` in `master`, laid out in `direction`. `levels` holds the bidirectional level
+/// of every item of horizontal text (`None`: all at the paragraph's); `breaks` the opportunity
+/// after every item.
 pub(crate) fn measure(
     font: &Font,
     master: &str,
     items: &[Item],
     levels: Option<&[u8]>,
-    paragraph: u8,
+    direction: Direction,
     breaks: &[Break],
     m: &Measure<'_>,
 ) -> Measured {
     let n = items.len();
     let mut out = Measured { advances: vec![None; n], joined: vec![false; n], error: None };
-    let source = metrics_source(font, master).map_or(master, |m| m.id.as_str());
-    let live = |gid: u16| -> Option<i32> {
-        let glyph = font.glyph(m.shaper.glyph_name(gid)?)?;
-        let layer = glyph.layer(source).or_else(|| glyph.layer(master))?;
-        layer.width.is_finite().then(|| layer.width.round() as i32)
+    let live = Live::new(font, master, m.shaper);
+    let features = if direction == Direction::Vertical { vertical_features(m.shaper) } else { Vec::new() };
+    let with = With { shaper: m.shaper, live: &live, features: &features };
+    let paragraph = u8::from(direction == Direction::Rtl);
+    let direction_of = |i: usize| match direction {
+        Direction::Vertical => ShapeDirection::TopToBottom,
+        _ if levels.and_then(|l| l.get(i)).map_or(paragraph, |l| *l) % 2 == 1 => ShapeDirection::RightToLeft,
+        _ => ShapeDirection::LeftToRight,
     };
     // A poisoned lock only costs the cache.
     let mut guard = m.cache.maps.lock().ok();
     let mut maps = guard.as_deref_mut();
-    let mut seg = Segment { text: String::new(), first: 0, count: 0, rtl: paragraph % 2 == 1 };
+    let mut seg = Segment { text: String::new(), first: 0, count: 0, direction: direction_of(0) };
     for i in 0..n {
         let c = match items.get(i) {
             Some(Item::Glyph { name, typed }) => m.shaper.char_of(font, name, *typed),
             _ => None,
         };
         let Some(c) = c else {
-            flush(&mut seg, m.shaper, &live, maps.as_deref_mut(), &mut out);
+            flush(&mut seg, &with, maps.as_deref_mut(), &mut out);
             continue;
         };
-        let rtl = levels.and_then(|l| l.get(i)).map_or(paragraph, |l| *l) % 2 == 1;
+        let here = direction_of(i);
         let inside_cluster = i.checked_sub(1).and_then(|p| breaks.get(p)) == Some(&Break::Never);
         let full = seg.count >= MAX_SEGMENT_CHARS && (!inside_cluster || seg.count >= 2 * MAX_SEGMENT_CHARS);
-        if seg.count > 0 && (rtl != seg.rtl || full) {
-            flush(&mut seg, m.shaper, &live, maps.as_deref_mut(), &mut out);
+        if seg.count > 0 && (here != seg.direction || full) {
+            flush(&mut seg, &with, maps.as_deref_mut(), &mut out);
         }
         if seg.count == 0 {
             seg.first = i;
-            seg.rtl = rtl;
+            seg.direction = here;
         }
         seg.text.push(c);
         seg.count += 1;
         if matches!(breaks.get(i), Some(Break::Allowed | Break::Mandatory)) {
-            flush(&mut seg, m.shaper, &live, maps.as_deref_mut(), &mut out);
+            flush(&mut seg, &with, maps.as_deref_mut(), &mut out);
         }
     }
-    flush(&mut seg, m.shaper, &live, maps, &mut out);
+    flush(&mut seg, &with, maps, &mut out);
     out
 }
 
+/// The cache map of a direction.
+fn slot(direction: ShapeDirection) -> usize {
+    match direction {
+        ShapeDirection::LeftToRight => 0,
+        ShapeDirection::RightToLeft => 1,
+        ShapeDirection::TopToBottom | ShapeDirection::BottomToTop => 2,
+    }
+}
+
 /// Measures the segment, from the cache when it holds it, into `out`, and empties it.
-fn flush(seg: &mut Segment, shaper: &PreviewShaper, live: &dyn Fn(u16) -> Option<i32>, maps: Option<&mut WidthMaps>, out: &mut Measured) {
+fn flush(seg: &mut Segment, with: &With<'_>, maps: Option<&mut WidthMaps>, out: &mut Measured) {
     if seg.count == 0 {
         return;
     }
-    let map = maps.and_then(|maps| maps.get_mut(usize::from(seg.rtl)));
+    let map = maps.and_then(|maps| maps.get_mut(slot(seg.direction)));
     let shaped;
     let widths: &[Width] = match map {
         Some(map) => {
             if !map.contains_key(seg.text.as_str()) {
-                match shape_segment(shaper, live, &seg.text, seg.rtl) {
+                match shape_segment(with, &seg.text, seg.direction) {
                     Ok(w) => {
                         if map.len() >= MAX_CACHED_SEGMENTS {
                             map.clear();
@@ -168,7 +195,7 @@ fn flush(seg: &mut Segment, shaper: &PreviewShaper, live: &dyn Fn(u16) -> Option
             }
             map.get(seg.text.as_str()).map_or(&[], |w| &**w)
         }
-        None => match shape_segment(shaper, live, &seg.text, seg.rtl) {
+        None => match shape_segment(with, &seg.text, seg.direction) {
             Ok(w) => {
                 shaped = w;
                 &shaped
@@ -190,20 +217,31 @@ fn flush(seg: &mut Segment, shaper: &PreviewShaper, live: &dyn Fn(u16) -> Option
 }
 
 /// The width of every character of `text` shaped in one direction: each cluster's advance on its
-/// first character.
-fn shape_segment(shaper: &PreviewShaper, live: &dyn Fn(u16) -> Option<i32>, text: &str, rtl: bool) -> Result<Box<[Width]>, String> {
+/// first character (its vertical advance, in vertical text).
+fn shape_segment(with: &With<'_>, text: &str, direction: ShapeDirection) -> Result<Box<[Width]>, String> {
     let starts: Vec<usize> = text.char_indices().map(|(b, _)| b).collect();
     let mut widths = vec![Width { advance: 0.0, joined: true }; starts.len()];
-    let direction = if rtl { ShapeDirection::RightToLeft } else { ShapeDirection::LeftToRight };
+    let vertical = !direction.is_horizontal();
+    let live_advance = |gid: u16| with.live.advance(gid);
+    let live_vertical = |gid: u16| with.live.vertical(gid);
     for script in fontcraft_shaping::script::itemize(text) {
         let Some(slice) = text.get(script.range.clone()) else { continue };
-        let request = ShapeRequest { text: slice, direction, script: Some(script.script), language: None, features: &[], advances: Some(live) };
-        let glyphs = fontcraft_shaping::shape(shaper.shaping_font(), &request).map_err(|e| e.to_string())?;
+        let request = ShapeRequest {
+            text: slice,
+            direction,
+            script: Some(script.script),
+            language: None,
+            features: with.features,
+            advances: Some(&live_advance),
+            vertical: vertical.then_some(&live_vertical as &dyn Fn(u16) -> Option<VerticalMetrics>),
+        };
+        let glyphs = fontcraft_shaping::shape(with.shaper.shaping_font(), &request).map_err(|e| e.to_string())?;
         for g in glyphs {
             let at = script.range.start + g.cluster as usize;
             let k = starts.partition_point(|b| *b <= at).saturating_sub(1);
             if let Some(w) = widths.get_mut(k) {
-                w.advance += g.x_advance as f32;
+                // A vertical run's advances point down.
+                w.advance += if vertical { -(g.y_advance as f32) } else { g.x_advance as f32 };
                 w.joined = false;
             }
         }

@@ -230,18 +230,33 @@ pub struct ShapeRequest<'a> {
     /// `hmtx` value; `None` from the function keeps the font's. `None` here reads the font.
     /// Values are clamped to ±2^20.
     pub advances: Option<&'a dyn Fn(u16) -> Option<i32>>,
+    /// The vertical metrics of a glyph id from the live model, replacing the font's `vmtx`,
+    /// `VORG` and their defaults in vertical runs; `None` from the function keeps the font's.
+    /// `None` here reads the font.
+    pub vertical: Option<&'a dyn Fn(u16) -> Option<VerticalMetrics>>,
+}
+
+/// A glyph's vertical metrics, font units.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct VerticalMetrics {
+    /// The vertical advance, positive downwards (the `vmtx` value).
+    pub advance: i32,
+    /// The height of the vertical origin above the glyph's origin (the `VORG` value). The origin
+    /// stands at half the glyph's advance width across.
+    pub origin_y: i32,
 }
 
 impl<'a> ShapeRequest<'a> {
     /// Left-to-right text with the default features and the font's advances.
     pub fn new(text: &'a str) -> Self {
-        Self { text, direction: Direction::LeftToRight, script: None, language: None, features: &[], advances: None }
+        Self { text, direction: Direction::LeftToRight, script: None, language: None, features: &[], advances: None, vertical: None }
     }
 }
 
 /// One output glyph. Horizontal runs come out in visual order (a right-to-left run reversed),
 /// vertical runs top to bottom. Units are font units with y up, as HarfBuzz gives them: a
-/// vertical run's `y_advance` is negative.
+/// vertical run's `y_advance` is negative, and its pen moves from vertical origin to vertical
+/// origin, so the offsets of a glyph in it lead from the pen to the glyph's own origin.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ShapedGlyph {
     pub glyph: u16,
@@ -253,11 +268,18 @@ pub struct ShapedGlyph {
     pub y_offset: i32,
 }
 
-/// The character-to-glyph and advance callbacks: the font's `cmap` first, then the private-use
-/// map; the live advance first, then `hmtx`.
+/// The character-to-glyph and metrics callbacks: the font's `cmap` first, then the private-use
+/// map; the live metrics first, then the font's tables.
 struct LiveFuncs<'a> {
     private_use: &'a [(u32, u16)],
     advances: Option<&'a dyn Fn(u16) -> Option<i32>>,
+    vertical: Option<&'a dyn Fn(u16) -> Option<VerticalMetrics>>,
+}
+
+impl LiveFuncs<'_> {
+    fn live_vertical(&self, glyph: GlyphId) -> Option<VerticalMetrics> {
+        self.vertical.and_then(|f| u16::try_from(glyph.to_u32()).ok().and_then(f))
+    }
 }
 
 impl FontFuncs for LiveFuncs<'_> {
@@ -270,6 +292,21 @@ impl FontFuncs for LiveFuncs<'_> {
         match live {
             Some(advance) => advance.clamp(-MAX_LIVE_ADVANCE, MAX_LIVE_ADVANCE),
             None => font.default_glyph_h_advance(glyph),
+        }
+    }
+
+    fn glyph_v_advance(&self, font: &ShaperFont, glyph: GlyphId) -> i32 {
+        match self.live_vertical(glyph) {
+            // Negative: y grows upwards and vertical text runs down.
+            Some(m) => m.advance.clamp(-MAX_LIVE_ADVANCE, MAX_LIVE_ADVANCE).saturating_neg(),
+            None => font.default_glyph_v_advance(glyph),
+        }
+    }
+
+    fn glyph_v_origin(&self, font: &ShaperFont, glyph: GlyphId) -> (i32, i32) {
+        match self.live_vertical(glyph) {
+            Some(m) => (font.glyph_h_advance(glyph) / 2, m.origin_y.clamp(-MAX_LIVE_ADVANCE, MAX_LIVE_ADVANCE)),
+            None => font.default_glyph_v_origin(glyph),
         }
     }
 }
@@ -325,8 +362,8 @@ pub fn shape(font: &ShapingFont, req: &ShapeRequest) -> Result<Vec<ShapedGlyph>,
         return Err(ShapeError::Failed("the shape plan's direction differs from the text's".into()));
     }
 
-    let funcs = LiveFuncs { private_use: &font.private_use, advances: req.advances };
-    let needs_funcs = !font.private_use.is_empty() || req.advances.is_some();
+    let funcs = LiveFuncs { private_use: &font.private_use, advances: req.advances, vertical: req.vertical };
+    let needs_funcs = !font.private_use.is_empty() || req.advances.is_some() || req.vertical.is_some();
     let shaper = ShaperFont::new(&font.font).with_font_funcs(needs_funcs.then_some(&funcs as &dyn FontFuncs));
     harfrust::shape(&shaper, &mut buffer, ShapeOptions::new().plan(Some(&plan)).features(&features))
         .map_err(|e| ShapeError::Failed(e.to_string()))?;

@@ -329,9 +329,6 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
         return Err(CompileError::Table { table: "fvar", message: "a variable font needs two masters and an axis with a range".into() });
     }
     designspace.check_variable_origin()?;
-    if flavour == Flavour::Cff && font.glyphs.iter().any(|g| g.export && g.layers.iter().any(fontcraft_hinting::ps::has_ps_hints)) {
-        notes.push(cff2::HINTS_DROPPED.to_string());
-    }
     let origin = designspace.origin().cloned().ok_or(CompileError::NotYetImplemented("a designspace without an origin"))?;
     let axis_count = u16::try_from(designspace.axes().len()).map_err(|_| CompileError::Table { table: "fvar", message: "too many axes".into() })?;
 
@@ -460,7 +457,9 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
         let mut extra = crate::Extra::default();
         if flavour == Flavour::Cff {
             let masters = cff2::master_privates(prepared, origin_resolved, &sources, warnings)?;
-            let cff2_font = cff2::cff2_font(axis_count, &cubic, &masters, origin_resolved.units_per_em, warnings)?;
+            let ids: Vec<String> = designspace.masters().iter().map(|m| m.id.clone()).collect();
+            let hints = cff2::HintContext::new(prepared, &ids, &options.hinting, warnings)?;
+            let cff2_font = cff2::cff2_font(axis_count, &cubic, &masters, origin_resolved.units_per_em, hints.as_ref(), warnings)?;
             let built = fontcraft_cff::cff2::write_cff2(&cff2_font).map_err(|e| CompileError::Table { table: "CFF2", message: e.to_string() })?;
             extra.cff2 = Some(built);
         } else {
@@ -748,7 +747,14 @@ impl Outlines<'_> {
                     _ => Prepared::Empty,
                 });
                 per_glyph.push(gvar::SourceOutlines { glyph: g.name.clone(), locations: locations.clone(), points, contour_ends: Vec::new() });
-                cubic.push(cff2::CubicSources { glyph: g.name.clone(), locations, paths: contours });
+                let masters = slots
+                    .iter()
+                    .map(|&slot| match slot.checked_sub(1) {
+                        None => Some(self.origin.to_string()),
+                        Some(k) => self.sources.get(k).and_then(|s| s.master.clone()),
+                    })
+                    .collect();
+                cubic.push(cff2::CubicSources { glyph: g.name.clone(), locations, paths: contours, masters });
                 continue;
             }
             if contours.iter().all(|c| c.iter().all(|p| p.elements().is_empty())) {

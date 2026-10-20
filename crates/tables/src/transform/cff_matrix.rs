@@ -1,11 +1,17 @@
 //! A matrix on `CFF ` and `CFF2` outlines, following AFDKO rotatefont (`c/rotatefont/rotateFont.cpp`
 //! in AFDKO 5.0.1, Apache License 2.0, Copyright 2014-2018 Adobe; see NOTICE). Written anew here.
 //!
+//! - A transformed glyph is read as rotatefont's charstring reader (`c/shared/source/t2cstr`)
+//!   reads it: coordinates and stem edges add up in single precision, and the end point of each
+//!   segment is rounded to 0.01. A glyph that is copied is read exactly.
 //! - Every absolute point is transformed and rounded halves up, in single precision as rotatefont
 //!   computes it. A `CFF2` delta is transformed by the linear part only, as the absolute delta
 //!   of its point, and rounded on its own; rotatefont reads the default master only.
 //! - Hints follow the linear part ([`Hints`]). Kept stems are transformed as absolute edges and
 //!   sorted again; hint and counter masks follow their stems. Dropped stems leave the masks.
+//!   As rotatefont's charstring writer does, a stem whose width comes out negative, other than a
+//!   ghost stem (-20 or -21), has its edges swapped; a hint mask that repeats the hints in force
+//!   goes; stems no hint group uses go; a glyph left with one hint group has no hint masks.
 //! - Flex stays flex unless every hint goes; then it becomes two curves.
 //! - In each Private DICT a transformed glyph uses, the blue zones, `StdHW`, `StdVW` and the stem
 //!   snaps change as rotatefont changes them; `defaultWidthX` and `nominalWidthX` are chosen
@@ -145,7 +151,11 @@ pub(super) fn apply_matrix_within(data: &[u8], cff2: bool, job: &MatrixJob<'_>, 
         let nominal = if cff2 { 0.0 } else { width_value(fd, OP_NOMINAL_WIDTH)? };
         let default = if cff2 { 0.0 } else { width_value(fd, OP_DEFAULT_WIDTH)? };
         let mut glyph_memory = CharstringMemory::new(max_bytes);
-        let mut parser = Parser::new(cff2, &table.regions, private.vsindex, nominal, &mut glyph_memory);
+        let reading = match job.glyphs.get(gid) {
+            Some(Some(_)) => Reading::Reference { flex_curves: case == Hints::Dropped },
+            _ => Reading::Exact,
+        };
+        let mut parser = Parser::new(cff2, reading, &table.regions, private.vsindex, nominal, &mut glyph_memory);
         parser.run(code).map_err(|e| in_glyph(e, gid))?;
         let mut glyph = parser.out;
         let mut width = glyph.width.unwrap_or(default);
@@ -321,6 +331,23 @@ fn rnd(v: f32) -> f64 {
 
 // ---------- reading ----------
 
+/// How [`Parser`] adds coordinates up.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Reading {
+    /// Exactly, for a glyph that is copied as it is.
+    Exact,
+    /// As rotatefont's charstring reader does: in single precision, the end point of each segment
+    /// rounded to 0.01. `flex_curves` reads a flex as two curves, as rotatefont does when every
+    /// hint goes; the middle point is then an end point too.
+    Reference { flex_curves: bool },
+}
+
+/// `roundf(v · 100) / 100` in single precision, as rotatefont's reader settles each end point.
+fn hundredths(v: f64) -> f64 {
+    let w = v as f32 * 100.0;
+    f64::from(w.round() / 100.0)
+}
+
 #[derive(Clone)]
 struct Stem {
     vertical: bool,
@@ -350,6 +377,7 @@ struct Glyph {
 
 struct Parser<'t, 'm> {
     cff2: bool,
+    reading: Reading,
     regions: &'t [usize],
     vsindex: usize,
     nominal: f64,
@@ -363,10 +391,11 @@ struct Parser<'t, 'm> {
 }
 
 impl<'t, 'm> Parser<'t, 'm> {
-    fn new(cff2: bool, regions: &'t [usize], vsindex: usize, nominal: f64, memory: &'m mut CharstringMemory) -> Self {
+    fn new(cff2: bool, reading: Reading, regions: &'t [usize], vsindex: usize, nominal: f64, memory: &'m mut CharstringMemory) -> Self {
         let max_stack = if cff2 { MAX_CFF2_STACK } else { MAX_CFF_STACK };
         Parser {
             cff2,
+            reading,
             regions,
             vsindex,
             nominal,
@@ -617,8 +646,8 @@ impl<'t, 'm> Parser<'t, 'm> {
         }
         let mut edge = vec![0.0];
         for [a, b] in args.as_chunks::<2>().0 {
-            let e0 = add(&edge, a);
-            let e1 = add(&e0, b);
+            let e0 = self.add(&edge, a);
+            let e1 = self.add(&e0, b);
             self.charge(e0.len() + e1.len())?;
             self.out.stems.push(Stem { vertical, edges: [e0, e1.clone()] });
             edge = e1;
@@ -626,25 +655,52 @@ impl<'t, 'm> Parser<'t, 'm> {
         Ok(())
     }
 
+    /// `a + b`, the default value in single precision when reading as the reference does.
+    fn add(&self, a: &[f64], b: &[f64]) -> V {
+        let mut v = add(a, b);
+        if self.reading != Reading::Exact
+            && let Some(x) = v.first_mut()
+        {
+            *x = f64::from(at(a, 0) as f32 + at(b, 0) as f32);
+        }
+        v
+    }
+
+    /// The end point of a segment, rounded to 0.01 when reading as the reference does.
+    fn settle(&self, mut p: Pt) -> Pt {
+        if self.reading != Reading::Exact {
+            for c in &mut p {
+                if let Some(x) = c.first_mut() {
+                    *x = hundredths(*x);
+                }
+            }
+        }
+        p
+    }
+
+    fn step(&self, from: &Pt, dx: &[f64], dy: &[f64]) -> Pt {
+        [self.add(&from[0], dx), self.add(&from[1], dy)]
+    }
+
     fn moved(&self, dx: &[f64], dy: &[f64]) -> Pt {
-        [add(&self.point[0], dx), add(&self.point[1], dy)]
+        self.step(&self.point, dx, dy)
     }
 
     fn move_by(&mut self, dx: &[f64], dy: &[f64]) -> Result<()> {
-        self.point = self.moved(dx, dy);
+        self.point = self.settle(self.moved(dx, dy));
         self.push(Item::Move(self.point.clone()))
     }
 
     fn line_by(&mut self, dx: &[f64], dy: &[f64]) -> Result<()> {
-        self.point = self.moved(dx, dy);
+        self.point = self.settle(self.moved(dx, dy));
         self.push(Item::Line(self.point.clone()))
     }
 
     fn curve_by(&mut self, d: &[V]) -> Result<()> {
         let [dxa, dya, dxb, dyb, dxc, dyc] = d else { return Err(invalid("a curve takes six operands")) };
         let p1 = self.moved(dxa, dya);
-        let p2 = [add(&p1[0], dxb), add(&p1[1], dyb)];
-        let p3 = [add(&p2[0], dxc), add(&p2[1], dyc)];
+        let p2 = self.step(&p1, dxb, dyb);
+        let p3 = self.settle(self.step(&p2, dxc, dyc));
         self.point = p3.clone();
         self.push(Item::Curve([p1, p2, p3]))
     }
@@ -667,15 +723,15 @@ impl<'t, 'm> Parser<'t, 'm> {
             34 => vec![[g(0), zero.clone()], [g(1), g(2)], [g(3), zero.clone()], [g(4), zero.clone()], [g(5), neg(&g(2))], [g(6), zero]],
             35 => (0..6).map(|k| [g(2 * k), g(2 * k + 1)]).collect(),
             36 => {
-                let back = neg(&add(&add(&g(1), &g(3)), &g(7)));
+                let back = neg(&self.add(&self.add(&g(1), &g(3)), &g(7)));
                 vec![[g(0), g(1)], [g(2), g(3)], [g(4), zero.clone()], [g(5), zero], [g(6), g(7)], [g(8), back]]
             }
             _ => {
                 let mut dx = vec![0.0];
                 let mut dy = vec![0.0];
                 for k in 0..5 {
-                    dx = add(&dx, &g(2 * k));
-                    dy = add(&dy, &g(2 * k + 1));
+                    dx = self.add(&dx, &g(2 * k));
+                    dy = self.add(&dy, &g(2 * k + 1));
                 }
                 let mut d: Vec<[V; 2]> = (0..5).map(|k| [g(2 * k), g(2 * k + 1)]).collect();
                 d.push(if at(&dx, 0).abs() > at(&dy, 0).abs() { [g(10), neg(&dy)] } else { [neg(&dx), g(10)] });
@@ -683,12 +739,23 @@ impl<'t, 'm> Parser<'t, 'm> {
             }
         };
         let depth = if op == 35 { g(12) } else { vec![50.0] };
+        let curves = matches!(self.reading, Reading::Reference { flex_curves: true });
         let mut points: Vec<Pt> = Vec::with_capacity(6);
-        for [dx, dy] in &steps {
-            self.point = self.moved(dx, dy);
-            points.push(self.point.clone());
+        let mut point = self.point.clone();
+        for (k, [dx, dy]) in steps.iter().enumerate() {
+            point = self.step(&point, dx, dy);
+            if k == 5 || (curves && k == 2) {
+                point = self.settle(point);
+            }
+            points.push(point.clone());
         }
+        self.point = point;
         let points: [Pt; 6] = points.try_into().map_err(|_| invalid("a flex has six points"))?;
+        if curves {
+            let [p1, p2, p3, p4, p5, p6] = points;
+            self.push(Item::Curve([p1, p2, p3]))?;
+            return self.push(Item::Curve([p4, p5, p6]));
+        }
         self.push(Item::Flex(points, depth))
     }
 
@@ -767,7 +834,13 @@ fn transform_glyph(g: &Glyph, m: [f64; 6], case: Hints) -> Result<Glyph> {
             Some((vertical, offset, scale, swap)) => {
                 let [e0, e1] = &s.edges;
                 let (x0, x1) = if swap { (e1, e0) } else { (e0, e1) };
-                stems.push(Stem { vertical, edges: [edge(x0, offset, scale), edge(x1, offset, scale)] });
+                let (mut y0, mut y1) = (edge(x0, offset, scale), edge(x1, offset, scale));
+                let width = at(&y1, 0) - at(&y0, 0);
+                // rotatefont's writer keeps a ghost stem and turns any other negative width around.
+                if width < 0.0 && width != -20.0 && width != -21.0 {
+                    std::mem::swap(&mut y0, &mut y1);
+                }
+                stems.push(Stem { vertical, edges: [y0, y1] });
                 kept.push(true);
             }
             None => kept.push(false),
@@ -813,7 +886,84 @@ fn transform_glyph(g: &Glyph, m: [f64; 6], case: Hints) -> Result<Glyph> {
         let (x, y) = (adx as f32, ady as f32);
         [rnd(a * x + c * y), rnd(b * x + d * y), bchar, achar]
     });
+    let (stems, items) = regroup(stems, items);
     Ok(Glyph { width: g.width, vsindex: g.vsindex, stems, items, seac })
+}
+
+fn mask_bit(bytes: &[u8], i: usize) -> bool {
+    bytes.get(i / 8).is_some_and(|b| b & (0x80 >> (i % 8)) != 0)
+}
+
+/// The hint groups as rotatefont's reader passes them on and its writer writes them. Before the
+/// first hint mask, or at the first move when no mask comes before it, every stem is in force. A
+/// hint mask that repeats the stems in force goes, and with one hint group left no hint mask is
+/// needed. Stems that no group or counter mask uses go, and the masks are renumbered.
+fn regroup(stems: Vec<Stem>, items: Vec<Item>) -> (Vec<Stem>, Vec<Item>) {
+    let n = stems.len();
+    if n == 0 {
+        return (stems, items);
+    }
+    let all: Vec<u8> = (0..n.div_ceil(8)).map(|k| if (k + 1) * 8 <= n { 0xff } else { !(0xffu8 >> (n % 8)) }).collect();
+    let mut used = vec![false; n];
+    let mut in_force: Option<Vec<u8>> = None;
+    let mut groups = 0usize;
+    let mut kept = Vec::with_capacity(items.len());
+    for item in items {
+        match &item {
+            Item::Move(_) if in_force.is_none() => {
+                in_force = Some(all.clone());
+                used.fill(true);
+                groups += 1;
+            }
+            Item::Mask(19, bytes) if in_force.as_ref() == Some(bytes) => continue,
+            Item::Mask(op, bytes) => {
+                if *op == 19 {
+                    in_force = Some(bytes.clone());
+                    groups += 1;
+                }
+                for (i, u) in used.iter_mut().enumerate() {
+                    *u |= mask_bit(bytes, i);
+                }
+            }
+            _ => {}
+        }
+        kept.push(item);
+    }
+    if groups == 0 {
+        used.fill(true);
+    }
+    if groups <= 1 {
+        kept.retain(|i| !matches!(i, Item::Mask(19, _)));
+    }
+    if used.iter().all(|u| *u) {
+        return (stems, kept);
+    }
+    let mut left = 0usize;
+    let new_index: Vec<Option<usize>> = used
+        .iter()
+        .map(|u| {
+            u.then(|| {
+                left += 1;
+                left - 1
+            })
+        })
+        .collect();
+    let stems = stems.into_iter().zip(&used).filter(|(_, u)| **u).map(|(s, _)| s).collect();
+    for item in &mut kept {
+        if let Item::Mask(_, bytes) = item {
+            let mut out = vec![0u8; left.div_ceil(8)];
+            for (old, new) in new_index.iter().enumerate() {
+                if let Some(new) = new
+                    && mask_bit(bytes, old)
+                    && let Some(o) = out.get_mut(new / 8)
+                {
+                    *o |= 0x80 >> (new % 8);
+                }
+            }
+            *bytes = out;
+        }
+    }
+    (stems, kept)
 }
 
 /// Changes one Private DICT as rotatefont changes it for `case`; 1 when a value varies across the
@@ -1010,7 +1160,10 @@ fn encode(g: &Glyph, cff2: bool, regions: usize) -> Result<Vec<u8>> {
             *slot = new;
         }
     }
-    let masked = !g.stems.is_empty() && g.items.iter().any(|i| matches!(i, Item::Mask(..)));
+    let masked = !g.stems.is_empty() && g.items.iter().any(|i| matches!(i, Item::Mask(19, _)));
+    // A mask right after the stems implies the last vertical stem operator, which rotatefont's
+    // writer leaves out.
+    let implied = matches!(g.items.first(), Some(Item::Mask(..)));
     for vertical in [false, true] {
         let op = match (vertical, masked) {
             (false, false) => 1,
@@ -1032,7 +1185,8 @@ fn encode(g: &Glyph, cff2: bool, regions: usize) -> Result<Vec<u8>> {
             previous = s.edges[1].clone();
         }
         if !args.is_empty() {
-            w.op(&args, &[op])?;
+            let op = [op];
+            w.op(&args, if vertical && implied { &[] } else { &op })?;
         }
     }
 

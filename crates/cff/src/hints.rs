@@ -222,7 +222,7 @@ fn overlapping(stems: &[StemHint], on: &[bool]) -> bool {
 }
 
 /// `stems` normalised and sorted by lower edge, then width; with each new position's old index.
-fn sorted(stems: &[StemHint], tolerance: f64) -> (Vec<StemHint>, Vec<usize>) {
+pub(crate) fn sorted(stems: &[StemHint], tolerance: f64) -> (Vec<StemHint>, Vec<usize>) {
     let mut v: Vec<(usize, StemHint)> = stems.iter().map(|s| s.normalised(tolerance)).enumerate().collect();
     v.sort_by(|(_, a), (_, b)| a.edge.total_cmp(&b.edge).then(a.width.total_cmp(&b.width)));
     let order = v.iter().map(|(i, _)| *i).collect();

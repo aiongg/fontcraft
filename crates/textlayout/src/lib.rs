@@ -41,7 +41,8 @@
 //! # Text Preview shaping ([`line_shape`])
 //! [`shape_line`] shapes one line of such a layout through the full preview font: each run of
 //! one level in its own direction, with the script's default features and the compiled
-//! positioning, advances live from the model.
+//! positioning, advances live from the model (`live.rs`). A vertical layout's columns are shaped
+//! top to bottom with [`vertical_features`], vertical advances and origins live from the model.
 //!
 //! # Line breaking ([`linebreak`], [`measure`])
 //! With [`Options::break_opportunities`] (Text Preview), lines break at the opportunities of the
@@ -84,6 +85,7 @@
 //! linebreak::opportunities(chars: impl IntoIterator<Item = char>) -> Vec<Break>
 //! Break::{Never, Prohibited, Allowed, Mandatory}  (entry k: after character k)
 //! shape_line(font: &Font, master: &str, text: &Text, layout: &Layout, line: usize, shaper: &PreviewShaper) -> Option<ShapedLine>
+//! vertical_features(shaper: &PreviewShaper) -> Vec<FeatureSetting>
 //! ShapedLine { placed: Vec<Placed>, length: f64, error: Option<String> }
 //! layout(font: &Font, master: &str, text: &Text, options: &Options) -> Result<Layout, LayoutError>
 //! line_height(font: &Font, master: &Master) -> f64
@@ -101,6 +103,7 @@ pub mod cursive;
 pub mod layout;
 pub mod line_shape;
 pub mod linebreak;
+mod live;
 pub mod measure;
 pub mod shape;
 pub mod text;
@@ -115,7 +118,7 @@ pub use layout::{
     DEFAULT_LINE_WIDTH, KerningMode, LENGTH_RANGE, LINE_HEIGHT_PARAM, Layout, LayoutError, Line, MISSING_ADVANCE_RANGE, Options, Placed, layout,
     line_height,
 };
-pub use line_shape::{ShapedLine, shape_line};
+pub use line_shape::{ShapedLine, shape_line, vertical_features};
 pub use linebreak::Break;
 pub use measure::{Measure, WidthCache};
 pub use shape::{PreviewShaper, Shaping};
