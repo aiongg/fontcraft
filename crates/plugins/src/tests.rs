@@ -364,6 +364,11 @@ fn filter_output_values_are_counted_and_long_logs_skipped() {
     // The same values spread over anchors count against the same budget.
     let anchors = format!(r#"{{"shapes":[],"anchors":[{{"name":"a","x":0,"y":0,"userData":{{"k":[{zeros}]}}}}]}}"#);
     assert!(matches!(FilterOutput::parse(anchors.as_bytes()), Err(Error::Output(m)) if m.contains("JSON values")));
+    // A shape nested deeper than the JSON reader allows is reported as too deep, not as too many
+    // values.
+    let deep = format!(r#"{{"shapes":[{}{}]}}"#, "[".repeat(200), "]".repeat(200));
+    let e = FilterOutput::parse(deep.as_bytes()).unwrap_err();
+    assert!(matches!(&e, Error::Output(m) if m.contains("nest too deeply") && !m.contains("JSON values")), "{e}");
     // Log entries past the limit are skipped unread; one that is not a string shows as JSON text.
     let log = format!(r#"{{"shapes":[],"log":[{{"a":1}},{}]}}"#, vec!["[0,0,0,0]"; 1_000_000].join(","));
     let out = FilterOutput::parse(log.as_bytes()).unwrap();

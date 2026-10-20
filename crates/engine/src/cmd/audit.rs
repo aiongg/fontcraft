@@ -796,16 +796,27 @@ fn load_paths(paths: &[String]) -> Result<Target> {
             }
             entries.sort();
             let before = files.len();
+            let mut skipped = 0usize;
             for e in entries {
                 // The entry itself, links followed, must lie in the read root: the check on the
-                // folder does not cover a link inside it.
-                crate::file_access::check_read(&e).map_err(|err| EngineError::Io(format!("cannot read {}: {err}", e.display())))?;
+                // folder does not cover a link inside it. One that does not is skipped with a note,
+                // so the rest of the folder is still audited.
+                if let Err(err) = crate::file_access::check_read(&e) {
+                    skipped += 1;
+                    if skipped <= MAX_SKIP_NOTES {
+                        t.notes.push(format!("skipped {}: {err}", e.display()));
+                    }
+                    continue;
+                }
                 if std::fs::metadata(&e).is_ok_and(|m| m.is_file()) && starts_as_font(&e) {
                     files.push(e);
                 }
                 if files.len() > audit::run::MAX_TARGET_FONTS {
                     return Err(EngineError::Io(format!("{raw} holds more than {} fonts", audit::run::MAX_TARGET_FONTS)));
                 }
+            }
+            if skipped > MAX_SKIP_NOTES {
+                t.notes.push(format!("skipped {} more entries of {raw} outside the read root", skipped - MAX_SKIP_NOTES));
             }
             if files.len() == before {
                 t.notes.push(format!("the folder {raw} holds no compiled fonts"));
@@ -861,16 +872,21 @@ fn load_one(path: &std::path::Path, t: &mut Target) -> Result<()> {
         let input = super::file_io::read_input(path)?;
         if input.kind.is_font() {
             let size = input.bytes.len() as u64;
+            // A WOFF or WOFF2 states the size of the font it wraps; one that would take the run
+            // past its byte limit is refused before any table is inflated.
+            if let Some(declared) = declared_sfnt_size(&input.bytes) {
+                over_limit(t.bytes_read.saturating_add(declared), &text)?;
+            }
             let unwrapped = match fontcraft_container::to_sfnt(&input.bytes).map_err(|e| EngineError::Io(format!("cannot read {text}: {e}")))? {
                 std::borrow::Cow::Borrowed(_) => None,
                 std::borrow::Cow::Owned(sfnt) => Some(sfnt),
             };
-            let (sfnt, original): (Arc<[u8]>, Option<Vec<u8>>) = match unwrapped {
+            let sfnt: Arc<[u8]> = match unwrapped {
                 Some(sfnt) => {
                     charge_bytes(t, sfnt.len() as u64, &text)?;
-                    (sfnt.into(), Some(input.bytes))
+                    sfnt.into()
                 }
-                None => (input.bytes.into(), None),
+                None => input.bytes.into(),
             };
             let faces = audit::export::face_count(&sfnt).map_err(|e| EngineError::Io(format!("cannot read {text}: {e}")))?;
             let faces = faces.min(u32::try_from(audit::run::MAX_TARGET_FONTS).unwrap_or(u32::MAX));
@@ -882,7 +898,7 @@ fn load_one(path: &std::path::Path, t: &mut Target) -> Result<()> {
                         "{text}: the target's compiled fonts hold more than {MAX_RUN_GLYPHS} glyphs; audit fewer fonts at a time"
                     )));
                 }
-                let decoded = fontcraft_decompile::decompile(original.as_deref().unwrap_or(&sfnt), Some(face));
+                let decoded = fontcraft_decompile::decompile(&sfnt, Some(face));
                 let (model, warnings) = match decoded {
                     Ok(d) => (Some(d.font), d.warnings),
                     Err(e) => (None, vec![format!("its outlines cannot be decoded, so the outline checks skip it: {e}")]),
@@ -907,6 +923,9 @@ fn load_one(path: &std::path::Path, t: &mut Target) -> Result<()> {
 /// Most decoding warnings kept per font.
 #[cfg(not(target_arch = "wasm32"))]
 const MAX_NOTES_PER_FONT: usize = 5;
+/// Most notes on folder entries skipped because they lie outside the read root.
+#[cfg(not(target_arch = "wasm32"))]
+const MAX_SKIP_NOTES: usize = 64;
 /// Most entries of a folder target looked at.
 #[cfg(not(target_arch = "wasm32"))]
 const MAX_FOLDER_ENTRIES: usize = 4096;
@@ -922,10 +941,28 @@ const MAX_RUN_GLYPHS: usize = 1 << 19;
 #[cfg(not(target_arch = "wasm32"))]
 fn charge_bytes(t: &mut Target, len: u64, text: &str) -> Result<()> {
     t.bytes_read = t.bytes_read.saturating_add(len);
-    if t.bytes_read > MAX_RUN_BYTES {
+    over_limit(t.bytes_read, text)
+}
+
+/// Refuses a run that would hold `total` bytes, past [`MAX_RUN_BYTES`].
+#[cfg(not(target_arch = "wasm32"))]
+fn over_limit(total: u64, text: &str) -> Result<()> {
+    if total > MAX_RUN_BYTES {
         return Err(EngineError::Io(format!("{text}: the target's files hold more than {MAX_RUN_BYTES} bytes; audit fewer fonts at a time")));
     }
     Ok(())
+}
+
+/// The size of the font a WOFF or WOFF2 file says it wraps (`totalSfntSize`, at the same offset
+/// in both headers); `None` for other files.
+#[cfg(not(target_arch = "wasm32"))]
+fn declared_sfnt_size(bytes: &[u8]) -> Option<u64> {
+    use fontcraft_container::Kind;
+    if !matches!(fontcraft_container::sniff(bytes), Some(Kind::Woff | Kind::Woff2)) {
+        return None;
+    }
+    let field: [u8; 4] = bytes.get(16..20)?.try_into().ok()?;
+    Some(u64::from(u32::from_be_bytes(field)))
 }
 
 /// The glyph count of face `face` of `sfnt` (0 when it cannot be read).
