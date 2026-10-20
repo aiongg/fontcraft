@@ -36,8 +36,12 @@
 //! bounds and flags are recalculated as fontTools' `maxp.recalc` recalculates them on saving;
 //! `maxp.maxSizeOfInstructions` keeps its stored value unless glyphs lost their instructions.
 //!
-//! CFF and CFF2 outlines are refused for now, and so is a matrix on a variable font.
+//! `CFF ` and `CFF2` outlines take new units per em as scaleUpem gives them ([`cff`]): charstrings
+//! and hint values scaled, the table written without subroutines, the `head` box and the `hhea`
+//! and `vhea` extremes worked out again from the scaled outlines. A matrix on CFF outlines, and a
+//! matrix on a variable font, are refused for now.
 
+mod cff;
 mod fixed;
 mod glyf;
 mod layout;
@@ -141,8 +145,8 @@ pub fn transform_with_report(font: &SfntFont, options: &TransformOptions) -> Res
     if matrix.is_none() && options.units_per_em.is_none() {
         return Err(TablesError::BadOptions("nothing to do: give a matrix, a rotation, a shift, a scale, a slant or new units per em".into()));
     }
-    if font.is_cff() {
-        return Err(TablesError::Unsupported("transforming CFF and CFF2 outlines".into()));
+    if font.is_cff() && matrix.is_some() {
+        return Err(TablesError::Unsupported("a matrix on CFF and CFF2 outlines".into()));
     }
     let mut work = Work::read(font)?;
     let mut report = TransformReport { matrix, hints_kept: true, ..TransformReport::default() };
@@ -267,7 +271,12 @@ const IDENTITY: [f64; 6] = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
 struct Work {
     font: SfntFont,
     upem: u16,
+    /// The glyph count `maxp` gives.
+    count: usize,
+    /// The `glyf` glyphs; empty for CFF outlines.
     glyphs: Vec<Glyph>,
+    /// CFF outlines: whether they are in `CFF2`, and each glyph's exact bounds once scaled.
+    cff: Option<(bool, Option<Vec<Option<[f64; 4]>>>)>,
     hmtx: fixed::Metrics,
     vmtx: Option<fixed::Metrics>,
     metrics_changed: bool,
@@ -279,8 +288,6 @@ impl Work {
         let head = need(b"head")?;
         let maxp = need(b"maxp")?;
         let hhea = need(b"hhea")?;
-        let glyf = need(b"glyf")?;
-        let loca = need(b"loca")?;
         let hmtx = need(b"hmtx")?;
         let upem = u16_at(head, 18).ok_or_else(|| TablesError::invalid("the head table is cut short"))?;
         if upem == 0 {
@@ -288,8 +295,14 @@ impl Work {
         }
         let long = i16_at(head, 50).ok_or_else(|| TablesError::invalid("the head table is cut short"))? != 0;
         let count = usize::from(u16_at(maxp, 4).ok_or_else(|| TablesError::invalid("the maxp table is cut short"))?);
-        let offsets = glyf::read_loca(loca, long, count, glyf.len())?;
-        let glyphs = glyf::read_glyphs(glyf, &offsets)?;
+        let cff = font.is_cff().then(|| (font.get(*b"CFF2").is_some(), None));
+        let glyphs = if cff.is_some() {
+            Vec::new()
+        } else {
+            let glyf = need(b"glyf")?;
+            let offsets = glyf::read_loca(need(b"loca")?, long, count, glyf.len())?;
+            glyf::read_glyphs(glyf, &offsets)?
+        };
         let long_h = usize::from(u16_at(hhea, 34).ok_or_else(|| TablesError::invalid("the hhea table is cut short"))?);
         let hmtx = fixed::read_metrics(hmtx, long_h, count)?;
         let vmtx = match (font.get(*b"vhea"), font.get(*b"vmtx")) {
@@ -299,7 +312,7 @@ impl Work {
             }
             _ => None,
         };
-        Ok(Work { font: font.clone(), upem, glyphs, hmtx, vmtx, metrics_changed: false })
+        Ok(Work { font: font.clone(), upem, count, glyphs, cff, hmtx, vmtx, metrics_changed: false })
     }
 
     fn apply_matrix(&mut self, m: [f64; 6], o: &TransformOptions, report: &mut TransformReport) -> Result<()> {
@@ -446,7 +459,7 @@ impl Work {
             fixed::OS2_SIGNED.iter().try_for_each(|&(at, what)| fixed::scale_i16(t, at, s, what))?;
             fixed::OS2_UNSIGNED.iter().try_for_each(|&(at, what)| fixed::scale_u16(t, at, s, what))
         })?;
-        let glyph_count = self.glyphs.len();
+        let glyph_count = self.count;
         patch(font, *b"post", &mut |t| {
             fixed::scale_i16(t, 8, s, "the underline position")?;
             fixed::scale_i16(t, 10, s, "the underline thickness")?;
@@ -513,6 +526,14 @@ impl Work {
         if !unscaled.is_empty() {
             report.warnings.push(format!("these tables hold values in font units and are left unscaled: {}", unscaled.join(", ")));
         }
+        if let Some((cff2, bounds)) = &mut self.cff {
+            let tag = if *cff2 { *b"CFF2" } else { *b"CFF " };
+            let data = font.get(tag).ok_or_else(|| TablesError::MissingTable(crate::sfnt::tag_str(tag).trim_end().to_string()))?;
+            let scaled = cff::scale_upem(data, *cff2, s.factor)?;
+            font.insert(tag, scaled.table);
+            *bounds = Some(scaled.bounds);
+            report.warnings.extend(scaled.warnings);
+        }
         let hinted = font.get(*b"fpgm").is_some() || font.get(*b"prep").is_some() || self.glyphs.iter().any(|g| !g.instructions().is_empty());
         if hinted {
             report.warnings.push("the TrueType instructions are kept but rarely stay correct at a new units per em: hint the font again".into());
@@ -522,9 +543,20 @@ impl Work {
 
     /// Writes `glyf`, `loca`, the metrics tables and the values worked out from them.
     fn finish(mut self, report: &mut TransformReport) -> Result<SfntFont> {
-        report.glyphs_changed = self.glyphs.iter().filter(|g| g.changed).count();
-        let any_changed = report.glyphs_changed > 0;
-        let bounds = glyf::all_bounds(&self.glyphs)?;
+        let cff_bounds = self.cff.as_ref().and_then(|(_, b)| b.as_ref());
+        let (bounds, outlines_changed) = match cff_bounds {
+            Some(b) => {
+                report.glyphs_changed = b.len();
+                let whole: Vec<Option<[i32; 4]>> =
+                    b.iter().map(|b| b.map(|[x0, y0, x1, y1]| [x0.floor() as i32, y0.floor() as i32, x1.ceil() as i32, y1.ceil() as i32])).collect();
+                (whole, true)
+            }
+            None => {
+                report.glyphs_changed = self.glyphs.iter().filter(|g| g.changed).count();
+                (glyf::all_bounds(&self.glyphs)?, report.glyphs_changed > 0)
+            }
+        };
+        let any_changed = report.glyphs_changed > 0 && cff_bounds.is_none();
         let font = &mut self.font;
         if any_changed {
             let (glyf, loca, long) = glyf::build(&self.glyphs, &bounds)?;
@@ -551,7 +583,7 @@ impl Work {
         }
         if let Some(mut head) = font.get(*b"head").map(<[u8]>::to_vec) {
             put_u16(&mut head, 18, self.upem);
-            if any_changed {
+            if outlines_changed {
                 let mut all: Option<[i32; 4]> = None;
                 for b in bounds.iter().flatten() {
                     all = Some(match all {
@@ -567,7 +599,7 @@ impl Work {
             }
             font.insert(*b"head", head);
         }
-        if any_changed || self.metrics_changed {
+        if outlines_changed || self.metrics_changed {
             let (hmtx, long) = fixed::write_metrics(&self.hmtx);
             font.insert(*b"hmtx", hmtx);
             if let Some(mut hhea) = font.get(*b"hhea").map(<[u8]>::to_vec) {

@@ -3,7 +3,8 @@
 //! Whole-file commands follow [`super::file_io`]: paths in, the input never changed, the output
 //! written atomically, a refusal on the web.
 //!
-//! A compiled TrueType font takes every option. A source takes `unitsPerEm` only, through the
+//! A compiled TrueType font takes every option; a CFF or CFF2 font takes `unitsPerEm`. A source
+//! takes `unitsPerEm` only, through the
 //! document-level scaling of `font.info.scaleToUnitsPerEm` (one implementation per action);
 //! its glyph transforms belong to `path.transformations` in the editor. The per-glyph table,
 //! the FD selectors and a change of format are refused for now.
@@ -31,7 +32,7 @@ pub fn specs() -> Vec<CommandSpec> {
         "Transform Font",
         [],
         None,
-        "{font: path, face?: int|name, matrix?: [a, b, c, d, e, f] (x' = a·x + c·y + e, y' = b·x + d·y + f), rotate?: degrees clockwise, translate?: {x, y} | [x, y], scale?: number | {x, y?} | [x, y], slant?: degrees, scaleEm?: bool, unitsPerEm?: 16–16384, widths?: \"auto\"|\"keep\"|\"transform\"|\"em\" (auto: transformed when the matrix's b is 0, else the em), glyphs?: [names], excludeGlyphs?: [names], output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool}. The named parts apply in the order scale, slant, rotate, translate; matrix excludes them. A compiled TrueType font: the matrix transforms the selected glyphs (transformed glyphs lose their instructions; composites keep their components), then unitsPerEm scales outlines, metrics, kerning, positioning, variation deltas and cvt and keeps instructions. A source takes unitsPerEm only. The input is never changed → {output, matrix, unitsPerEm: {from, to} | null, hintsKept, glyphsChanged, tablesChanged, tablesRemoved, warnings}",
+        "{font: path, face?: int|name, matrix?: [a, b, c, d, e, f] (x' = a·x + c·y + e, y' = b·x + d·y + f), rotate?: degrees clockwise, translate?: {x, y} | [x, y], scale?: number | {x, y?} | [x, y], slant?: degrees, scaleEm?: bool, unitsPerEm?: 16–16384, widths?: \"auto\"|\"keep\"|\"transform\"|\"em\" (auto: transformed when the matrix's b is 0, else the em), glyphs?: [names], excludeGlyphs?: [names], output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool}. The named parts apply in the order scale, slant, rotate, translate; matrix excludes them. A compiled TrueType font: the matrix transforms the selected glyphs (transformed glyphs lose their instructions; composites keep their components), then unitsPerEm scales outlines, metrics, kerning, positioning, variation deltas and cvt and keeps instructions. A CFF or CFF2 font takes unitsPerEm: charstrings, hint values and metrics scale, and the table is written without subroutines. A source takes unitsPerEm only. The input is never changed → {output, matrix, unitsPerEm: {from, to} | null, hintsKept, glyphsChanged, tablesChanged, tablesRemoved, warnings}",
         always,
         transform_font
     )

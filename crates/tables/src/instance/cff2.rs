@@ -1113,7 +1113,7 @@ fn write_segments(out: &mut Vec<u8>, segs: &[RelSeg]) -> Result<()> {
 
 // ---------- numbers and DICTs ----------
 
-fn put_cs_number(out: &mut Vec<u8>, v: f64) -> Result<()> {
+pub(crate) fn put_cs_number(out: &mut Vec<u8>, v: f64) -> Result<()> {
     if !v.is_finite() {
         return Err(invalid("a charstring number is not finite"));
     }
@@ -1170,7 +1170,7 @@ fn dict_int(v: i64) -> Vec<u8> {
 }
 
 /// A DICT number: an integer in the shortest form, anything else as a real.
-fn dict_number(v: f64) -> Result<Vec<u8>> {
+pub(crate) fn dict_number(v: f64) -> Result<Vec<u8>> {
     if !v.is_finite() {
         return Err(invalid("a DICT number is not finite"));
     }
@@ -1262,7 +1262,7 @@ fn parse_dict_skipping_blends(bytes: &[u8]) -> Result<Vec<Entry>> {
 }
 
 /// A DICT number at `i`, and where the next token starts.
-fn read_dict_number(bytes: &[u8], i: usize) -> Result<(f64, usize)> {
+pub(crate) fn read_dict_number(bytes: &[u8], i: usize) -> Result<(f64, usize)> {
     let cut = || invalid("a DICT is cut short");
     let b0 = *bytes.get(i).ok_or_else(cut)?;
     Ok(match b0 {
@@ -1735,7 +1735,7 @@ impl read_fonts::ps::cs::CommandSink for BoundsSink {
 
 /// Each glyph's exact bounds (curve extremes, not control points) at the default, as
 /// fontTools' `BoundsPen` gives them; `None` for a glyph that draws nothing.
-pub(super) fn glyph_bounds(table: &[u8]) -> Result<Vec<Option<[f64; 4]>>> {
+pub(crate) fn glyph_bounds(table: &[u8]) -> Result<Vec<Option<[f64; 4]>>> {
     use read_fonts::ps::cff::CffFontRef;
     use read_fonts::ps::cs::CommandSink;
     use read_fonts::types::GlyphId;
@@ -1755,7 +1755,7 @@ pub(super) fn glyph_bounds(table: &[u8]) -> Result<Vec<Option<[f64; 4]>>> {
 }
 
 /// fontTools' `intRect`: minima floored, maxima ceiled; zeros when nothing is drawn.
-pub(super) fn font_bbox(bounds: &[Option<[f64; 4]>]) -> [i64; 4] {
+pub(crate) fn font_bbox(bounds: &[Option<[f64; 4]>]) -> [i64; 4] {
     let mut u: Option<[f64; 4]> = None;
     for &[bx0, by0, bx1, by1] in bounds.iter().flatten() {
         u = Some(match u {
@@ -1840,7 +1840,7 @@ pub(super) fn finish(font: &mut SfntFont, table: &Table, store: Option<&[u8]>, d
 /// `head`'s box and the `hhea` and `vhea` extremes from each glyph's bounds and the metrics, as
 /// fontTools recalculates them for CFF outlines when it saves (the side bearings in `hmtx` and
 /// `vmtx` stay as they are).
-pub(super) fn recalc_font_bounds(font: &mut SfntFont, bounds: &[Option<[f64; 4]>]) -> Result<()> {
+pub(crate) fn recalc_font_bounds(font: &mut SfntFont, bounds: &[Option<[f64; 4]>]) -> Result<()> {
     let [x0, y0, x1, y1] = font_bbox(bounds);
     if let Some(head) = font.get(*b"head")
         && head.len() >= 44

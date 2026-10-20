@@ -315,9 +315,15 @@ fn bad_options_and_inputs_are_refused() {
     assert!(matches!(transform(&input, &huge), Err(TablesError::Invalid(_))), "coordinates past ±32,767 refuse the run");
     assert!(transform(&input, &upem(16384)).is_ok());
 
+    for m in [[f64::NAN, 0.0, 0.0, 1.0, 0.0, 0.0], [1.0, 0.0, 0.0, 1.0, f64::INFINITY, 0.0], [2.0e6, 0.0, 0.0, 1.0, 0.0, 0.0]] {
+        let bad = TransformOptions { matrix: Some(m), ..TransformOptions::default() };
+        assert!(matches!(transform(&input, &bad), Err(TablesError::BadOptions(_))), "{m:?} is refused");
+    }
+
     let mut cff = input.clone();
     cff.insert(*b"CFF ", vec![1, 0, 4, 1]);
-    assert!(matches!(transform(&cff, &upem(2048)), Err(TablesError::Unsupported(_))));
+    assert!(transform(&cff, &upem(2048)).is_err(), "a damaged CFF table is refused");
+    assert!(matches!(transform(&cff, &TransformOptions { rotate: Some(5.0), ..TransformOptions::default() }), Err(TablesError::Unsupported(_))));
     let mut variable = input.clone();
     variable.insert(*b"gvar", gvar());
     assert!(matches!(transform(&variable, &TransformOptions { rotate: Some(5.0), ..TransformOptions::default() }), Err(TablesError::Unsupported(_))));

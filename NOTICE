@@ -293,7 +293,7 @@ bundled, the file says so in its header and the project is listed here with its 
   Its CFF2 and subroutine steps (crates/tables/src/subset/cff2.rs, crates/cff/src/subr/table/subset.rs and crates/cff/src/subr/prune.rs, M12.19b) port the same module's CFF table methods (subset/cff.py: subset_glyphs, _empty_charstring, prune_post_subset) and cffLib's remove_unused_subroutines (cffLib/transforms.py), MIT License.
   Its VARC part (crates/tables/src/subset/varc.rs, M12.19c) ports the same module's VARC closure_glyphs, subset_glyphs and prune_post_subset and varLib's multi-item variation store subsetting (varLib/multiVarStore.py, varLib/varStore.py, Copyright 2017 Google, Inc.), MIT License.
 
-  Units-per-em scaling (crates/tables/src/transform.rs, M12.24) ports fontTools' ttLib.scaleUpem (MIT License): the scaled fields of each table, the rounding, and the item variation store layout after scaling.
+  Units-per-em scaling (crates/tables/src/transform.rs, M12.24; crates/tables/src/transform/cff.rs, M12.24b) ports fontTools' ttLib.scaleUpem (MIT License): the scaled fields of each table, the rounding, the item variation store layout after scaling, and the CFF and CFF2 charstring, Private DICT and Top DICT values it scales.
 
   crates/tables/src/transform/post.rs ports the post table's decode_format_2_0, unpackPStrings, encode_format_2_0, decode_format_4_0 and encode_format_4_0 as they act together on a loaded table, crates/tables/src/merge/fixed.rs encode_format_2_0 and encode_format_4_0, crates/tables/src/merge/glyphs.rs glyf's Glyph.recalcBounds and tryRecalcBoundsComposite, and crates/tables/src/ttx/read_core/glyf.rs maxp.recalc for compiled fonts (fontTools 4.66.1, MIT License).
 
