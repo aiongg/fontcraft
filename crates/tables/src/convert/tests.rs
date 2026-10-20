@@ -344,9 +344,13 @@ fn cff_to_cff2_writes_the_seac_base_and_accent_into_the_charstring() {
 }
 
 /// Many accented glyphs, each with a contour of its own, naming one accent of 20,000 stem
-/// hints: the accent is parsed and drawn once, not once for each glyph that names it.
+/// hints: the accent is parsed and drawn once, not once for each glyph that names it. Drawing it
+/// for each glyph would run 3000 x 20,000 operators.
 #[test]
-fn many_seac_glyphs_naming_one_heavily_hinted_accent_convert_quickly() {
+fn many_seac_glyphs_naming_one_heavily_hinted_accent_draw_it_once() {
+    use cff_table::OPS_RUN;
+    use std::cell::Cell;
+    const MOST_OPS: usize = 1_000_000;
     const ACCENTED: usize = 3000;
     let mut font = SfntFont::new(Flavour::Cff);
     common(&mut font, &vec![600; ACCENTED + 3], 0x5000);
@@ -364,10 +368,16 @@ fn many_seac_glyphs_naming_one_heavily_hinted_accent_convert_quickly() {
 
     let mut to2 = ConvertOptions::new(ConvertTarget::Cff2);
     to2.subroutinize = Some(false);
+    OPS_RUN.with(|n| n.set(0));
     let cff2 = convert_with(&font, &to2).unwrap().font.unwrap();
+    let ops = OPS_RUN.with(Cell::get);
+    assert!(ops < MOST_OPS, "to CFF2: {ops} operators drawn");
     let drawn = PsOutlines::new(cff2.get(CFF2).unwrap(), 1000).unwrap().draw(ACCENTED + 2).unwrap();
     assert_eq!(drawn.contours.len(), 3, "its own square, A and acute");
+    OPS_RUN.with(|n| n.set(0));
     let ttf = convert_with(&font, &ConvertOptions::new(ConvertTarget::TrueType { max_error: 1.0 })).unwrap().font.unwrap();
+    let ops = OPS_RUN.with(Cell::get);
+    assert!(ops < MOST_OPS, "to TrueType: {ops} operators drawn");
     assert_eq!(glyf_points(&ttf, ACCENTED + 2).len(), 3);
 }
 
