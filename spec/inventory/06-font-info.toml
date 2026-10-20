@@ -2951,9 +2951,9 @@ milestone = "M7"
 summary = "The Exports tab shows a short preview of the selected instance drawn in its own outlines: the glyphs of Aang126 by default, or the glyphs an Instance Preview parameter lists."
 ref = "Appendix › Custom Parameters (Instance Preview)"
 status = "handbook"
-notes = "Documented in the description of the Instance Preview parameter, which calls the tab Instances; not yet observed. M7 plan § 4: M7.18."
+notes = "Documented in the description of the Instance Preview parameter, which calls the tab Instances; not yet observed. M7 plan § 4: M7.18. An instance between masters is drawn from the session's interpolated instance view (X.ui3, crates/ui-egui/src/shell/font_info/exports_tab.rs)."
 guesses = [
-  "The preview sits above the instance's fields, one line high, and draws the first selected instance; an instance between masters shows a message until M9 interpolates, and a variable font setting shows none; the Exports tab of the reference app settles placement.",
+  "The preview sits above the instance's fields, one line high, and draws the first selected instance; an instance between masters is drawn interpolated, and a variable font setting shows none; the Exports tab of the reference app settles placement.",
   "The default `Aang126` is read as characters and drawn with the glyphs mapped to them, skipping characters the font lacks; the reference app settles whether it names glyphs instead.",
 ]
 observe = [
