@@ -1,11 +1,12 @@
 //! The tables of fixed fields, merged field by field with the rules of fontTools'
 //! `merge/tables.py` (MIT License): `head`, `hhea`, `vhea`, `maxp`, `OS/2` and the `post` header.
 //! Glyph-derived fields (bounding box, `hhea` extents, `xAvgCharWidth`) are recomputed from
-//! the merged glyphs, as fontTools recomputes them when it saves.
+//! the merged glyphs, as fontTools recomputes them when it saves. The `post` names follow
+//! `encode_format_2_0` and `encode_format_4_0` of fontTools' `ttLib/tables/_p_o_s_t.py`
+//! (fontTools 4.66.1, MIT License).
 
 use super::glyphs::{Built, average_advance, long_metric_count};
 use crate::reorder::be::{Data, set_u16};
-use crate::reorder::names::write_post_v2;
 use crate::{Result, TablesError};
 
 fn first<'a>(tables: &[&'a [u8]], tag: [u8; 4]) -> Result<&'a [u8]> {
@@ -252,10 +253,14 @@ pub(super) fn os2(tables: &[&[u8]], h_metrics: &[(u16, i16)]) -> Result<Vec<u8>>
     Ok(out)
 }
 
-/// `post`: version 3 (no names) when that is the highest version among the fonts, else version
-/// 2 with the merged glyph names. Fixed pitch only when every font is; the memory hints the
-/// largest (the maxima zero).
-pub(super) fn post(tables: &[&[u8]], names: &[String]) -> Result<Vec<u8>> {
+/// The merged `post`: the header field by field (fixed pitch only when every font is; the memory
+/// hints the largest, the maxima zero), the highest version of the inputs, and what fontTools'
+/// `post` compiler writes for that version. Version 1 and 3 tables are the header
+/// alone. Version 4 stores a code per glyph of `glyph_order`, the name's Adobe Glyph List for
+/// New Fonts code point or the value of a `uniXXXX` name, else 0xFFFF (`encode_format_4_0`).
+/// Version 2 stores `stored_names` (`encode_format_2_0` with the stored extra names emptied, as
+/// the merge empties them), in Latin-1 as fontTools packs them.
+pub(super) fn post(tables: &[&[u8]], glyph_order: &[String], stored_names: &[String]) -> Result<Vec<u8>> {
     let tag = *b"post";
     let mut header = first(tables, tag)?.get(..32).ok_or_else(|| TablesError::invalid("the 'post' table is cut short"))?.to_vec();
     let version = values_u32(tables, tag, 0).into_iter().max().unwrap_or(0x0003_0000);
@@ -264,11 +269,82 @@ pub(super) fn post(tables: &[&[u8]], names: &[String]) -> Result<Vec<u8>> {
     field(&mut header, tables, tag, 24, Rule::MaxU32)?;
     put_u32_at(&mut header, 20, 0)?;
     put_u32_at(&mut header, 28, 0)?;
-    if version == 0x0003_0000 {
-        put_u32_at(&mut header, 0, version)?;
-        return Ok(header);
+    match version {
+        0x0001_0000 | 0x0003_0000 => {
+            put_u32_at(&mut header, 0, version)?;
+            Ok(header)
+        }
+        0x0004_0000 => {
+            put_u32_at(&mut header, 0, version)?;
+            header.extend(post4_codes(glyph_order)?.iter().flat_map(|c| c.to_be_bytes()));
+            Ok(header)
+        }
+        _ => post_v2(&header, stored_names),
     }
-    write_post_v2(&header, names)
+}
+
+/// `encode_format_4_0`: the code of each name, its part before any `#` looked up.
+fn post4_codes(names: &[String]) -> Result<Vec<u16>> {
+    let data = fontcraft_model::glyphdata::GlyphData::new().map_err(|e| TablesError::invalid(format!("the glyph list cannot be read: {e}")))?;
+    Ok(names
+        .iter()
+        .map(|name| {
+            let base = name.split('#').next().unwrap_or_default();
+            if data.is_aglfn_name(base) {
+                let text = data.name_to_text(base);
+                let mut chars = text.chars();
+                if let (Some(c), None) = (chars.next(), chars.next())
+                    && let Ok(code) = u16::try_from(u32::from(c))
+                {
+                    return code;
+                }
+            }
+            match base.strip_prefix("uni") {
+                Some(hex) if base.chars().count() == 7 && hex.bytes().all(|b| b.is_ascii_hexdigit()) => {
+                    u16::from_str_radix(hex, 16).unwrap_or(0xFFFF)
+                }
+                _ => 0xFFFF,
+            }
+        })
+        .collect())
+}
+
+/// A version 2 `post` with `header` (its version set to 2) and `names`, each name stored once
+/// and the standard Macintosh names by their index. A name with a character past U+00FF, which
+/// only a glyph map can give, is stored as UTF-8.
+fn post_v2(header: &[u8], names: &[String]) -> Result<Vec<u8>> {
+    use read_fonts::tables::post::DEFAULT_GLYPH_NAMES;
+    let latin1 = |name: &str| -> Vec<u8> {
+        name.chars().map(|c| u8::try_from(u32::from(c)).ok()).collect::<Option<Vec<u8>>>().unwrap_or_else(|| name.as_bytes().to_vec())
+    };
+    let standard: std::collections::HashMap<&str, usize> = DEFAULT_GLYPH_NAMES.iter().enumerate().map(|(i, s)| (*s, i)).collect();
+    let mut extra: Vec<Vec<u8>> = Vec::new();
+    let mut extra_at: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+    let count = u16::try_from(names.len()).map_err(|_| TablesError::invalid("the merged font has more than 65,535 glyphs"))?;
+    let mut out = Vec::with_capacity(header.len().saturating_add(2).saturating_add(names.len().saturating_mul(12)));
+    out.extend_from_slice(header);
+    put_u32_at(&mut out, 0, 0x0002_0000)?;
+    out.extend_from_slice(&count.to_be_bytes());
+    for name in names {
+        let index = if let Some(i) = extra_at.get(name.as_str()) {
+            DEFAULT_GLYPH_NAMES.len() + i
+        } else if let Some(i) = standard.get(name.as_str()) {
+            *i
+        } else {
+            extra_at.insert(name.as_str(), extra.len());
+            extra.push(latin1(name));
+            DEFAULT_GLYPH_NAMES.len() + extra.len() - 1
+        };
+        let index = u16::try_from(index).map_err(|_| TablesError::invalid("the merged 'post' table would store more than 65,277 names"))?;
+        out.extend_from_slice(&index.to_be_bytes());
+    }
+    for name in extra {
+        let len = u8::try_from(name.len())
+            .map_err(|_| TablesError::BadOptions(format!("the glyph name `{}` is longer than 255 bytes", String::from_utf8_lossy(&name))))?;
+        out.push(len);
+        out.extend_from_slice(&name);
+    }
+    Ok(out)
 }
 
 #[cfg(test)]

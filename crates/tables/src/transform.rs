@@ -12,7 +12,7 @@
 //! | `maxp` | the point, contour and component maxima worked out again (`maxp.recalc`) |
 //! | `hhea`, `vhea` | line metrics and caret offset; the largest advance and the extremes worked out again |
 //! | `OS/2` | the average width, sub- and superscript sizes and offsets, strikeout, typographic and Windows metrics, x-height, cap height |
-//! | `post` | underline position and thickness; names of version 2 stored again as fontTools stores them, standard names by their standard index |
+//! | `post` | underline position and thickness; the rest written again as fontTools writes a loaded `post` (`post::recompile`) |
 //! | `VORG` | the vertical origins |
 //! | `kern` | format 0 pair values |
 //! | `gvar` | every delta |

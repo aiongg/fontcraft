@@ -15,9 +15,12 @@
 //! | Decompose | As ttfdecomponentizer: each composite becomes a simple glyph whose contours start at their first on-curve point; or only flattened one level (`nested_only`), or decomposed only when a direct component has a 2×2 transform (`transformed_only`) |
 //!
 //! A glyph whose geometry changed loses its instructions and gets its left side bearing set to
-//! its `xMin`. Afterwards the composite bounding boxes, `head` (bounds, `indexToLocFormat`),
-//! `maxp` and `hhea` are recalculated the way fontTools recalculates them on saving; a table whose
-//! values come out the same keeps its bytes. With nothing changed the font comes back as it was.
+//! its `xMin`. Afterwards the composite bounding boxes, `head` (bounds, `indexToLocFormat`,
+//! `flags` bit 1), `maxp` and `hhea` are recalculated the way fontTools recalculates them on
+//! saving (`maxp.recalc` for `maxp` and `head`); a table whose values come out the same keeps its
+//! bytes. With nothing changed the font comes back as it was. Where fontTools cannot follow the
+//! composites (a cycle, nesting past 64 levels, a component past the glyph order) and fails, the
+//! `maxp` maxima come from the composites as drawn.
 //!
 //! CFF-flavoured fonts are refused for now, and so are variable TrueType fonts for every action
 //! but rounding: `gvar` would need its deltas rewritten.
@@ -1331,6 +1334,13 @@ impl Work {
             }
             out.insert(*b"hhea", hhea);
         }
+        // fontTools' `maxp.recalc` on saving: the maxima, the font bounds and `head.flags` bit 1.
+        let mut recalculated = out.clone();
+        if crate::ttx::read_core::recalc_compiled_maxp(&mut recalculated).is_ok() {
+            return Ok(recalculated);
+        }
+        // Composites nested past 64 levels, in a cycle or naming a glyph past the glyph order make
+        // fontTools fail; the maxima then come from the glyphs as drawn.
         if let Some(maxp) = font.get(*b"maxp").filter(|m| u32_at(m, 0) == Some(0x0001_0000) && m.len() >= 32) {
             out.insert(*b"maxp", self.maxp(maxp)?);
         }

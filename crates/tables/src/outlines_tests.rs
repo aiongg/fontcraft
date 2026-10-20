@@ -277,9 +277,9 @@ fn encoded_glyphs_read_back() {
 }
 
 #[test]
-fn deeply_shared_components_stop_at_the_font_wide_budget() {
+fn deeply_shared_components_count_once_for_maxp_and_stop_at_the_font_wide_budget() {
     // Each composite uses the one before it four times, 30 levels deep, over an empty glyph:
-    // the deepest would visit 4^29 components.
+    // the deepest would visit 4^29 components when drawn.
     let names: Vec<String> = (0..32).map(|i| format!("g{i}")).collect();
     let mut glyphs: Vec<(&str, Vec<u8>)> = vec![(".notdef", Vec::new()), ("g1", Vec::new())];
     for k in 2..32u16 {
@@ -291,10 +291,22 @@ fn deeply_shared_components_stop_at_the_font_wide_budget() {
     }
     // An overlapping glyph for the repair to change, so that maxp is recomputed.
     glyphs.push(("A", encode_simple(&[square(0.0, 0.0, 100.0), square(50.0, 50.0, 100.0)], &[]).unwrap()));
-    let font = font_with(glyphs);
-    let started = std::time::Instant::now();
     let options = OutlineOptions { glyphs: vec!["A".into()], ..OutlineOptions::new(OutlineAction::RemoveOverlaps) };
-    let result = repair_report(&font, &options);
+    let started = std::time::Instant::now();
+    let report = repair_report(&font_with(glyphs.clone()), &options).unwrap();
+    assert!(started.elapsed().as_secs() < 60);
+    // As `maxp.recalc` counts them, each composite once: no points below the empty glyph, four
+    // components, 30 levels.
+    let maxp = report.result.font.get(*b"maxp").unwrap();
+    let at = |o: usize| u16_at(maxp, o).unwrap();
+    assert_eq!([at(6), at(8), at(10), at(12), at(28), at(30)], [8, 1, 0, 0, 4, 30]);
+
+    // Two composites that use each other make the recalculation fail, as it makes fontTools
+    // fail; drawing the composites instead stops at the font-wide budget.
+    glyphs.push(("P", composite(&[offset(34, 0.0, 0.0)], [0; 4])));
+    glyphs.push(("Q", composite(&[offset(33, 0.0, 0.0)], [0; 4])));
+    let started = std::time::Instant::now();
+    let result = repair_report(&font_with(glyphs), &options);
     assert!(started.elapsed().as_secs() < 60);
     let Err(e) = result else { panic!("maxp cannot be recomputed within the budget") };
     assert!(e.to_string().contains("20,000,000"), "{e}");

@@ -571,3 +571,91 @@ mod math_base {
         assert!(e.to_string().contains("different baselines"), "{e}");
     }
 }
+
+/// `font` with its `post` table replaced by its header at `version` followed by `rest`.
+fn with_post(mut font: SfntFont, version: u32, rest: &[u8]) -> SfntFont {
+    let mut post = font.get(*b"post").unwrap()[..32].to_vec();
+    post[..4].copy_from_slice(&version.to_be_bytes());
+    post.extend_from_slice(rest);
+    font.insert(*b"post", post);
+    font
+}
+
+fn codes(c: &[u16]) -> Vec<u8> {
+    c.iter().flat_map(|v| v.to_be_bytes()).collect()
+}
+
+#[test]
+fn post_versions_1_and_3_name_glyphs_as_fonttools_and_merge_to_their_header() {
+    // fontTools 4.66.1 merge of fonts like these: a version 3 font takes its names from `cmap`
+    // (U+0122 has no AGLFN name, so `uni0122`), and the result's `post` is the header alone.
+    let one = built(&source("First Sans", &[("A", 0x41, 600.0), ("Gced", 0x122, 650.0)], false), CompileFlavour::TrueType);
+    let names_one = glyph_names(&one).unwrap();
+    let one = with_post(one, 0x0003_0000, b"");
+    let two = second();
+    let names_two = glyph_names(&two).unwrap();
+    let result = merge_with_report(&[one, two], &MergeOptions::default()).unwrap();
+    let mut expected: Vec<String> = names_one
+        .iter()
+        .map(|n| match n.as_str() {
+            ".notdef" | "space" | "A" => n.clone(),
+            _ => "uni0122".to_string(),
+        })
+        .collect();
+    let taken = expected.clone();
+    expected.extend(names_two.iter().map(|n| if taken.contains(n) { format!("{n}.1") } else { n.clone() }));
+    let names: Vec<&str> = result.glyphs.iter().map(|g| g.name.as_str()).collect();
+    assert_eq!(names, expected);
+    let post = result.font.get(*b"post").unwrap();
+    assert_eq!((post.len(), &post[..4]), (32, &[0, 3, 0, 0][..]));
+
+    // Two version 1 fonts: standard Macintosh names, and a version 1 header.
+    let (one, two) = (with_post(first(), 0x0001_0000, b""), with_post(second(), 0x0001_0000, b""));
+    let result = merge_with_report(&[one, two], &MergeOptions::default()).unwrap();
+    let names: Vec<&str> = result.glyphs.iter().map(|g| g.name.as_str()).collect();
+    assert_eq!(names, [".notdef", ".null", "nonmarkingreturn", "space", ".notdef.1", ".null.1", "nonmarkingreturn.1", "space.1"]);
+    let post = result.font.get(*b"post").unwrap();
+    assert_eq!((post.len(), &post[..4]), (32, &[0, 1, 0, 0][..]));
+}
+
+#[test]
+fn a_version_4_font_merges_to_version_4_with_a_code_per_merged_name() {
+    // fontTools 4.66.1: font 1's codes name its glyphs `glyph00000`, `space`, `A` and `A.1`
+    // (the repeated code); the result stores 0xFFFF for every name that is neither an Adobe
+    // name nor `uniXXXX`, suffixed names included.
+    let one = first();
+    assert_eq!(glyph_names(&one).unwrap().len(), 4);
+    let one = with_post(one, 0x0004_0000, &codes(&[0xFFFF, 0x20, 0x41, 0x41]));
+    let two = second();
+    let names_two = glyph_names(&two).unwrap();
+    let result = merge_with_report(&[one, two], &MergeOptions::default()).unwrap();
+    let mut expected = vec!["glyph00000".to_string(), "space".into(), "A".into(), "A.1".into()];
+    let renamed = |n: &str| match n {
+        "space" => "space.1".to_string(),
+        "A" => "A.2".to_string(),
+        n => n.to_string(),
+    };
+    expected.extend(names_two.iter().map(|n| renamed(n)));
+    let names: Vec<&str> = result.glyphs.iter().map(|g| g.name.as_str()).collect();
+    assert_eq!(names, expected);
+    let mut expected_codes = vec![0xFFFF, 0x20, 0x41, 0xFFFF];
+    expected_codes.extend(names_two.iter().map(|n| if n == "B" { 0x42 } else { 0xFFFF }));
+    let post = result.font.get(*b"post").unwrap();
+    assert_eq!(&post[..4], &[0, 4, 0, 0]);
+    assert_eq!(post[32..], codes(&expected_codes));
+}
+
+#[test]
+fn merged_post_names_keep_their_latin1_bytes() {
+    // Font 1 stores glyph 3 under the one-byte name 0xE9, which fontTools reads and writes as
+    // Latin-1.
+    let mut rest = codes(&[4, 0, 3, 36, 258]);
+    rest.extend_from_slice(&[1, 0xE9]);
+    let one = with_post(first(), 0x0002_0000, &rest);
+    let merged = merge(&[one, second()], &MergeOptions::default()).unwrap();
+    let post = merged.get(*b"post").unwrap();
+    let count = usize::from(u16::from_be_bytes([post[32], post[33]]));
+    assert_eq!(u16::from_be_bytes([post[40], post[41]]), 258, "glyph 3 stores the first extra name");
+    let strings = 34 + 2 * count;
+    assert_eq!(post[strings..strings + 2], [1, 0xE9]);
+}

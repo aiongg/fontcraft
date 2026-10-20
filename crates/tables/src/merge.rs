@@ -6,7 +6,7 @@
 //!
 //! | Table | Rule |
 //! |---|---|
-//! | glyph order | every glyph of every font, in font order; a name already used gets `.1`, `.2`…, and so does a name repeated inside one font, which `post` keeps storing under the repeated name |
+//! | glyph order | every glyph of every font, in font order, named as fontTools names them (the `CFF ` charset, `post` versions 1, 2 and 4, else the Unicode `cmap`); a name already used gets `.1`, `.2`…, and so does a name repeated inside one font, which `post` keeps storing under the repeated name |
 //! | `glyf`, `loca` | glyphs concatenated, components renumbered; glyphs of every font but the first lose their instructions |
 //! | `CFF ` | charstrings concatenated with their subroutines expanded and their widths moved to the first font's Private DICT, which is kept with its Top DICT; `FontBBox` recalculated; then subroutinised again ([`cff`]) |
 //! | `hmtx`, `vmtx` | concatenated; `hhea` and `vhea` extents recomputed from the glyphs |
@@ -15,6 +15,7 @@
 //! | `GDEF` | classes, attachment points, carets and mark sets united |
 //! | `MATH`, `BASE` | glyph-keyed data united, constants and baselines shared ([`base_math`]) |
 //! | `head`, `hhea`, `vhea`, `maxp`, `OS/2`, `post` | field by field: extents take the largest value, bits are OR-ed, the rest comes from the first font |
+//! | `post` names | the highest version of the fonts: 1 and 3 store none, 2 the merged names, 4 a code point for each merged name |
 //! | `maxp`, `head` | then the point, contour and component maxima, the font bounds and `head.flags` bit 1 recalculated from the merged glyphs (`maxp.recalc`), in both forms of merge |
 //! | `name`, `cvt `, `fpgm`, `prep`, `gasp` | the first font's |
 //! | anything else | dropped, with a warning; for a variable font this leaves its default outlines |
@@ -300,8 +301,9 @@ pub fn merge_with_report(fonts: &[SfntFont], options: &MergeOptions) -> Result<M
                 }
             }
         }
-        let names: Vec<String> = plan.slots.iter().map(|s| stored.get(s.name.as_str()).map_or_else(|| s.name.clone(), |n| n.to_string())).collect();
-        out.insert(*b"post", fixed::post(&post_headers, &names)?);
+        let order: Vec<String> = plan.slots.iter().map(|s| s.name.clone()).collect();
+        let names: Vec<String> = order.iter().map(|name| stored.get(name.as_str()).map_or_else(|| name.clone(), |n| n.to_string())).collect();
+        out.insert(*b"post", fixed::post(&post_headers, &order, &names)?);
     }
     for tag in [*b"name", *b"cvt ", *b"fpgm", *b"prep", *b"gasp"] {
         if let Some(bytes) = first.get(tag) {

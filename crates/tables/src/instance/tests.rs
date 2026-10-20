@@ -440,3 +440,28 @@ fn base_coordinates_take_their_deltas() {
     let below = partial::partial_instance(&font, &[(WGHT, AxisLimit::Range { min: 100.0, default: None, max: 400.0 })]).unwrap();
     assert_eq!(base_coord(&below), (10, false, false));
 }
+
+#[test]
+fn post_versions_3_and_4_are_written_again_as_the_instancer_writes_them() {
+    // The instancer loads `post` to read the glyph order and writes it again: version 3 loses
+    // what follows its header, a repeated version 4 code becomes 0xFFFF and so does every glyph
+    // past the stored codes (fontTools 4.66.1, full and partial instances of such fonts).
+    let codes = |c: &[u16]| c.iter().flat_map(|v| v.to_be_bytes()).collect::<Vec<u8>>();
+    for limit in [AxisLimit::Pin(650.0), AxisLimit::Range { min: f64::NEG_INFINITY, default: None, max: 700.0 }] {
+        let options = InstanceOptions { limits: vec![(WGHT, limit)], ..InstanceOptions::default() };
+        let mut font = variable_font();
+        let header = font.get(*b"post").unwrap()[..32].to_vec();
+        let mut v3 = header.clone();
+        v3.extend_from_slice(b"TRAIL");
+        font.insert(*b"post", v3);
+        assert_eq!(instantiate(&font, &options).unwrap().get(*b"post").unwrap(), &header[..], "{limit:?}");
+
+        let mut v4 = header.clone();
+        v4[..4].copy_from_slice(&0x0004_0000u32.to_be_bytes());
+        let mut expected = v4.clone();
+        v4.extend(codes(&[0x41, 0x41]));
+        expected.extend(codes(&[0x41, 0xFFFF, 0xFFFF]));
+        font.insert(*b"post", v4);
+        assert_eq!(instantiate(&font, &options).unwrap().get(*b"post").unwrap(), &expected[..], "{limit:?}");
+    }
+}
