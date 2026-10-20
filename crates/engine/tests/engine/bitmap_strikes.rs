@@ -5,7 +5,7 @@
 //! are rasterised from the outlines, and strikes go into compiled fonts as `EBDT`/`EBLC`, embedded
 //! or as a bitmap-only font, which the TTX reader and writer read back unchanged.
 // Integration tests may unwrap and panic, unlike shipped code (AGENTS.md › Never crash).
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing, clippy::string_slice)]
 
 use std::path::PathBuf;
 use std::sync::Arc;

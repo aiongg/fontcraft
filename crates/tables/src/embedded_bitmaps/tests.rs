@@ -1,3 +1,5 @@
+#![allow(clippy::string_slice)]
+
 use fontcraft_model::strike::{BitmapStrike, StrikeGlyph};
 
 use super::*;

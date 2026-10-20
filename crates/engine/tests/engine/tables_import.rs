@@ -157,6 +157,7 @@ fn bitmap_font(dir: &Path) -> PathBuf {
 
 /// The dump of `ttf`'s bitmap tables in `form`, written to `dir/Bitmap.ttx`.
 fn dump_bitmaps(s: &mut Session, ttf: &Path, dir: &Path, form: &str) -> (PathBuf, Value) {
+    std::fs::create_dir_all(dir).unwrap();
     let out = dir.join("Bitmap.ttx");
     let r = run(s, "font.dumpTables", json!({ "font": ttf, "tables": ["EBDT", "EBLC"], "bitmapFormat": form, "output": out }));
     (out, r)

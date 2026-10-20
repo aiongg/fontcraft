@@ -267,7 +267,8 @@ fn without_the_ros_parameter_cid_names_export_name_keyed() {
     let (bytes, ttx) = compile_glyphs_source("no-ros", &source, json!({}));
     assert!(!ttx.contains("<ROS "), "{ttx}");
     let font = FontRef::new(&bytes).unwrap();
-    assert_eq!(font.post().unwrap().version(), skrifa::raw::types::Version16Dot16::VERSION_2_0);
+    // A CFF font keeps its names in the charset, so post is format 3 either way.
+    assert_eq!(font.post().unwrap().version(), skrifa::raw::types::Version16Dot16::VERSION_3_0);
     let names: Vec<String> = (0..5).filter_map(|g| font.glyph_names().get(skrifa::GlyphId::new(g)).map(|n| n.to_string())).collect();
     assert_eq!(names, [".notdef", "cid00005", "cid00100", "uni4E00", "A"]);
 }

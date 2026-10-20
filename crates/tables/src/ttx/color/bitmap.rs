@@ -303,7 +303,7 @@ pub(super) fn write_data(tag: Tag, data: &[u8], locator_data: &[u8], font: &Sfnt
         let bit_depth = u8_at(&strike.size, 46)?;
         // Glyph name to image, in the order names first appear; a later entry for the same name
         // replaces the image, and the metrics its index subtable gives, and keeps the place.
-        let mut glyphs: Vec<(String, u16, (u64, u64), Option<[u8; 8]>)> = Vec::new();
+        let mut glyphs: Vec<StrikeEntry> = Vec::new();
         let mut place: HashMap<String, usize> = HashMap::new();
         for sub in &strike.subtables {
             for (gid, range) in &sub.glyphs {
@@ -337,6 +337,10 @@ pub(super) fn write_data(tag: Tag, data: &[u8], locator_data: &[u8], font: &Sfnt
 }
 
 /// A metrics record's element name and its fields (name, signed).
+/// A glyph name, its image format, its byte range in the data table and the metrics its index
+/// subtable shares, if any.
+type StrikeEntry = (String, u16, (u64, u64), Option<[u8; 8]>);
+
 type MetricsLayout = (&'static str, &'static [(&'static str, bool)]);
 
 /// Where a glyph's image sits: its strike, the strike's bit depth, and the metrics its index

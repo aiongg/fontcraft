@@ -151,7 +151,9 @@ fn ros_param(params: &Params, warnings: &mut Vec<String>) -> Option<Ros> {
     let value = params.get(ROS_PARAM)?;
     let ros = value.as_str().and_then(Ros::parse);
     if ros.is_none() {
-        warnings.push(format!("`{ROS_PARAM}` is not Registry-Ordering-Supplement (such as Adobe-Identity-0), so it was left out"));
+        warnings.push(format!(
+            "`{ROS_PARAM}` is not Registry-Ordering-Supplement (three parts joined by hyphens, the last a number), so it was left out"
+        ));
     }
     ros
 }

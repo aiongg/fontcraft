@@ -32,12 +32,12 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1367 rows to check: 2201 guesses and 498 observe steps.**
+**1371 rows to check: 2216 guesses and 501 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
-| **Built milestones (M0 to M6)** | all | **489** |
-| Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 100 |
+| **Built milestones (M0 to M6)** | all | **491** |
+| Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 101 |
 | Built milestones (M0 to M6) | Edit View: text mode and preview | 32 |
 | Built milestones (M0 to M6) | Components and anchors | 83 |
 | Built milestones (M0 to M6) | Filters | 36 |
@@ -45,18 +45,18 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Kerning and the Kerning window | 42 |
 | Built milestones (M0 to M6) | Font View | 108 |
 | Built milestones (M0 to M6) | Font Info and features | 9 |
-| Built milestones (M0 to M6) | Files: open, import, export | 43 |
+| Built milestones (M0 to M6) | Files: open, import, export | 44 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 5 |
-| **Later milestones (after M6)** | all | **878** |
+| **Later milestones (after M6)** | all | **880** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 86 |
 | Later milestones (after M6) | Edit View: text mode and preview | 26 |
 | Later milestones (after M6) | Components and anchors | 39 |
 | Later milestones (after M6) | Filters | 5 |
 | Later milestones (after M6) | Spacing and metrics keys | 12 |
 | Later milestones (after M6) | Kerning and the Kerning window | 12 |
-| Later milestones (after M6) | Font View | 18 |
-| Later milestones (after M6) | Font Info and features | 278 |
+| Later milestones (after M6) | Font View | 19 |
+| Later milestones (after M6) | Font Info and features | 279 |
 | Later milestones (after M6) | Interpolation | 72 |
 | Later milestones (after M6) | Hinting | 106 |
 | Later milestones (after M6) | Colour fonts | 60 |
@@ -65,9 +65,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 62 |
 | Later milestones (after M6) | Elsewhere | 26 |
 
-## Built milestones (M0 to M6) (489)
+## Built milestones (M0 to M6) (491)
 
-### Edit View: drawing, guides, layers and the Palette (100)
+### Edit View: drawing, guides, layers and the Palette (101)
 
 - [ ] `dialog.fieldKeys` (behavior, M3, inferred): In a dialog's number field, Return takes the typed value, Escape drops…
   - Guess: Dialog number fields follow the Info box's editing and arrow-key rules (infoBox.fieldEditing, infoBox.arrowKeyStepping); the handbook documents them for the Info box only.
@@ -77,6 +77,12 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The clipboard text is our JSON format with an SVG flavour; what the reference puts on the clipboard is not documented.
 - [ ] `edit.paste` (M3, inferred, live): Paste
   - Guess: Paste reads our JSON clipboard format or SVG; which other clipboard data the reference accepts is not documented.
+- [ ] `menus.switchCheckMarks` (behavior, M3, handbook): A menu item that switches something on and off shows a check…
+  - Guess: Every on/off switch shows a check mark, including Lock Outline, Power Nudge, Edit Background, Palette, Preview Panel and Font Audit; opening the reference app's View, Path and Window menus with each switch on and off settles which ones do.
+  - Guess: View › Show Indexes shows a check mark while any kind of index is shown. Settled by turning on a single kind in the reference app and opening the View menu.
+  - Observe: Open the View menu with Show Nodes, Show Metrics and Tunni Lines on: note which items carry a check mark.
+  - Observe: Turn Power Nudge and Edit Background on, open the Path menu: note whether either item carries a check mark.
+  - Observe: Hide the Palette, open the Window menu: note whether Palette carries a check mark while it is shown and none while hidden.
 - [ ] `tools.sharedButtonCycling` (behavior, M3, handbook): Tools that share one toolbar button (Select/Lasso, the two Primitives modes, Erase/Knife)…
   - Guess: Holding a shared toolbar button for 0.4 s opens its menu; the reference's hold time is not documented.
 - [ ] `nodes.smoothAndCornerTypes` (behavior, M3, handbook): Every node is either smooth or corner
@@ -1230,7 +1236,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `Decompose Glyphs` (parameter, M6, handbook): List of glyph names whose components are turned into outlines at export
   - Guess: A text value is read as glyph names separated by commas or spaces, besides the documented list; the reference app with a text value would settle it.
 
-### Files: open, import, export (43)
+### Files: open, import, export (44)
 
 - [ ] `file.save` (M1, handbook, live): Save
   - Guess: The save chooser offers one filter with every source extension, and the chosen extension picks the format (no extension: the native format); the reference's format pop-up in its save sheet is documented but its layout is not observed.
@@ -1258,6 +1264,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The reference's settings for Export All are not documented; using each document's last-used export settings is our assumption, and until FontCraft remembers settings the command takes them as parameters.
 - [ ] `compile.removeOverlapsStatic` (behavior, M2, docs): fontmake removes overlaps by default when building static fonts and skips it…
   - Guess: A composite glyph keeps its components at export, so components that overlap each other keep their overlaps, following fontmake; how the reference app exports such a glyph is not documented.
+- [ ] `compile.cffSubroutinisation` (behavior, M2, docs): Repeated charstring sequences are moved into subroutines
+  - Guess: A CFF2 subroutine may hold some of the operands of a blend while its caller holds the rest; whether cffsubr ever does the same is not checked, and a dump of a CFF2 font it subroutinised would settle it.
 - [ ] `import.outlinesSingleInEditView` (behavior, M3, handbook): In Edit View the same command takes a single file and places…
   - Guess: A single file imported in Edit View is appended to the active layer; the handbook does not say whether existing shapes are kept or which layer receives them.
 - [ ] `paste.strokeAndFillMayDouble` (behavior, M3, inferred): The handbook advises Sketch users to copy shapes with a 1 pt…
@@ -1393,7 +1401,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (878)
+## Later milestones (after M6) (880)
 
 ### Edit View: drawing, guides, layers and the Palette (86)
 
@@ -2066,7 +2074,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The stacked view aligns the members on their origin for a left group and on their advance width for a right group, where the kerning applies.
   - Guess: Propose (kerning.buildGroups without applying) and Apply are our additions, so built groups are reviewed before they are stored; a proposal made before the font changed is refused.
 
-### Font View (18)
+### Font View (19)
 
 - [ ] `smartFilter.rule.custom` (behavior, M8, handbook): Rule Custom holds a free-form glyph predicate written in the same expression…
   - Guess: The language adds matches (a regular expression over the whole value), which fea-rs refuses, because the Glyph Name rule offers matches and compiles to this language; && and || stand for AND and OR, and a yes-or-no attribute alone means == true. A comparison on tags holds when it holds for one tag. Settled by trying these forms in the reference's Custom rule.
@@ -2092,6 +2100,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: Image font: in Font View, Add Image with H.png, I.png, J.png and a.png; note whether a.png goes to a only or also to A.
 - [ ] `fontView.image.showImageOption` (behavior, M11, handbook): View → Show Image controls whether placed images are drawn in Font…
   - Observe: Image font: in Font View turn Show Image off; note whether H (which has paths) is drawn without its image and I (empty) with its image.
+- [ ] `export.cidMapping` (behavior, M12, handbook): For CJK fonts glyphs are addressed by character identifier instead of name
+  - Guess: A glyph named cid followed by a decimal number takes that CID, as CID-keyed fonts and AFDKO's tools name CID glyphs; exporting such a glyph from the reference app with the ROS parameter would settle it.
+  - Guess: Without bundled collection data a nice-named glyph gets its CID from the Unicode CMap file the user gives, through its first code point the file maps; the reference app maps nice names from its own data, which exporting a nice-named glyph would show.
 - [ ] `fontView.batch.pluginsAndScripts` (behavior, M13, handbook): Plug-ins and scripts may operate on the Font View glyph selection, so…
   - Guess: A filter module run from Font View acts on the selected glyphs' layers of Font View's master only, not on every master; observing a filter plug-in run on a Font View selection in a font with two masters would settle it.
 - [ ] `view.filterByEncodingFile` (M13, docs, live): Filter by Encoding File
@@ -2128,7 +2139,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The decomposition sections use Unicode's canonical decompositions, one level and full together, so U+1EA4 lists both U+00C2 and U+0041, and characters the font has no glyph for are listed dimmed.
   - Guess: Clicking an entry opens the glyph in a new tab; the reference's documentation does not say whether it replaces the current glyph instead.
 
-### Font Info and features (278)
+### Font Info and features (279)
 
 - [ ] `fontInfo.rows.selection` (behavior, M7, handbook): Clicking a row selects it and Cmd+click builds a selection of several…
   - Guess: Shift-click adds every row between the last row clicked and the clicked one; Shift-clicking in the reference app settles it.
@@ -2952,6 +2963,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: Palette font: edit a colour in the Color Palettes editor, press OK and save; note how the stored value is written in the file (version 3 integer lists or the version 4 dictionary).
 - [ ] `fontInfo.styleLinking.recommendedScheme` (behavior, M12, handbook): Recommended scheme, usable as a lint: Bold, Italic and Bold Italic link…
   - Observe: Style font (instances Light, Regular, Semibold and Bold, each with an Italic): in the Exports tab link Semibold as the bold of Light; note whether the app warns, then export and read name IDs 1, 2, 16 and 17 and fsSelection of both.
+- [ ] `ROS` (parameter, M12, handbook): One of Adobe-CNS1-6, Adobe-GB1-5, Adobe-Japan1-3, Adobe-Japan1-6, Adobe-Korea1-2 or Adobe-Identity-0
+  - Guess: Any well-formed Registry-Ordering-Supplement is accepted, not only the six the handbook lists; entering another value in the reference app would settle whether it is refused.
+  - Guess: On a source that already holds CID-keyed data, the parameter's collection replaces the stored one and the stored CID map and sub-fonts are kept, with a warning when they differ; no source settles it, as the reference app has no stored CID-keyed data.
 - [ ] `layout.decompileFeatures` (M12, docs, live): Decompile Layout to Feature Code
   - Guess: A lookup a feature uses is named feature_script_language_index after the first language system that uses it, and any other lookup GSUB_index or GPOS_index; the round-trip measure on the corpus would show whether stabler names are needed.
   - Guess: Glyph sets of two or more glyphs used at least twice become named classes (@first_last); sets used once stay inline. Reading the decompiled text of a few corpus fonts would settle the threshold.
@@ -3762,6 +3776,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `bitmap.setStrikes` (M13, docs, live): Bitmap Strikes…
   - Guess: A strike to remove given without a depth removes every depth of that size, and one to add without a depth is black and white; the secondary reference's dialog lists sizes with their depth, so its behaviour for a bare size would settle it.
   - Guess: Adding a strike the font already has is refused rather than ignored.
+  - Guess: Rasterising draws the first master's exported glyphs only; glyphs that are not exported get no bitmap. Rasterising a font with an unexported glyph in the secondary reference would settle it.
+  - Guess: At 1 bit a pixel is on when the outline covers at least half of it, with no grid-fitting or hinting; the secondary reference's rasteriser may differ at the edges. Rasterising a glyph with a half-covered row in the secondary reference would settle it.
+  - Guess: Each bitmap spans the outline's box rounded out to whole pixels, so an empty glyph has a 0 × 0 bitmap that keeps its advance.
 
 ### Files: open, import, export (63)
 
@@ -3872,6 +3889,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Shapes keep their order on the layer: glyphsLib puts a layer's paths below its components, FontCraft keeps the order of the shapes, as fontc does for master layers. Settled by exporting a full-colour layer with a component below a path from the reference.
   - Guess: A component whose transform differs between masters is written with the default master's transform; fontmake would write a variable transform. Settled by a variable full-colour font with a moved colour component in the reference.
   - Guess: A component of a colour glyph that Remove Glyphs or Keep Glyphs leaves out is drawn as its outline in its own layer glyph, with a warning, rather than stopping the export. Settled by exporting such a font from the reference with the referenced glyph removed.
+  - Guess: Color Layers to SVG writes a component of a colour glyph as a copy of that glyph's drawing moved by the component's transform, as the COLR reference draws it. Settled by exporting the same font with Color Layers to SVG from the reference and reading the SVG document of the referring glyph.
   - Observe: Full-colour font: glyph A with a red square, glyph B whose Color layer holds a component of A moved by (100, 50); export and read COLR; note whether B's paint is a PaintTranslate around a PaintColrGlyph of A.
 - [ ] `color.export.colrVersionChoice` (behavior, M11, docs): The compiler writes COLR version 0 when every colour glyph is a…
   - Guess: Solid-only full-colour layers export as COLR version 0, as fontc does, not version 1 as fontmake does. Settled by exporting the full-colour test font with only solid fills from the reference.
@@ -3984,6 +4002,10 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Files written to a folder are named after the family and the strike, `Family-12.bdf`, or `Family-12@4.bdf` for a grey strike; the secondary reference's file names for several strikes would settle it.
   - Guess: A strike with no stated point size or resolution is written at 72 dpi, so its point size equals its pixel size, and one with no name takes the family name.
   - Guess: A bitmap without a stored code takes the first code point of its glyph when the strike's codes are Unicode.
+  - Guess: An `.otb` keeps every glyph of the compiled font, and its `loca` has one zero entry per glyph plus one; the secondary reference's page says `maxp` counts the bitmap glyphs and `loca` holds one entry. We keep a `loca` that validators and every reader accept. Opening an `.otb` the secondary reference writes in ttx would settle it.
+  - Guess: The line metrics give the strike's ascent and descent (from the bitmaps when both are 0), the widest advance as `widthMax`, an upright caret (1/0), and the extremes of the bitmaps with pixels; the vertical line metrics are zero. An embedded strike the secondary reference writes would settle it.
+  - Guess: A bitmap that does not fit the embedded formats (over 255 pixels, offsets beyond -128..127) refuses the export instead of being left out.
+  - Guess: `embedded` without `font` compiles the open font as TrueType with the default export settings; the secondary reference embeds strikes as part of its Generate Fonts dialog.
 - [ ] `file.importMetricsFile` (M13, docs, live): Import Kerning from Metrics File…
   - Guess: `replace` gives a pair the master already has the file's value and keeps every other pair; `addMissing` adds only pairs the master lacks; the reference documentation does not say what happens to existing pairs. Merging a file into a font that already kerns one of its pairs in the reference app would settle it.
   - Guess: Without `masters`, the pairs go into the first master only, as other import commands do; the reference has one master per font.
