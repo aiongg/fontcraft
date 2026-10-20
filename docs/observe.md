@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1371 rows to check: 2226 guesses and 501 observe steps.**
+**1371 rows to check: 2227 guesses and 501 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -3897,6 +3897,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A component whose transform differs between masters is written with the default master's transform; fontmake would write a variable transform. Settled by a variable full-colour font with a moved colour component in the reference.
   - Guess: A component of a colour glyph that Remove Glyphs or Keep Glyphs leaves out is drawn as its outline in its own layer glyph, with a warning, rather than stopping the export. Settled by exporting such a font from the reference with the referenced glyph removed.
   - Guess: Color Layers to SVG writes a component of a colour glyph as a copy of that glyph's drawing moved by the component's transform, as the COLR reference draws it. Settled by exporting the same font with Color Layers to SVG from the reference and reading the SVG document of the referring glyph.
+  - Guess: Copying referenced drawings into one SVG document stops after 65 536 paints, the limit Edit View draws with; the references met after that are drawn as their component's outline in grey, with a warning, rather than leaving the glyph without a document. Settled by exporting from the reference a glyph whose colour components nest and fan out to many thousands of copies with Color Layers to SVG.
   - Observe: Full-colour font: glyph A with a red square, glyph B whose Color layer holds a component of A moved by (100, 50); export and read COLR; note whether B's paint is a PaintTranslate around a PaintColrGlyph of A.
 - [ ] `color.export.colrVersionChoice` (behavior, M11, docs): The compiler writes COLR version 0 when every colour glyph is a…
   - Guess: Solid-only full-colour layers export as COLR version 0, as fontc does, not version 1 as fontmake does. Settled by exporting the full-colour test font with only solid fills from the reference.
