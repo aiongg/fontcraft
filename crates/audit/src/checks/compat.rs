@@ -1535,8 +1535,8 @@ fn heuristic(ctx: &GlyphCtx<'_>, sink: &mut Sink, test: Test, tolerance: f64, ki
                         hit = hit.points(vec![[s, n]]).data("node", n as f64);
                     }
                 }
-                // Making a node first does not reverse the path: a reversal is left to the user.
-                if f.reverse || f.node.is_none() { hit.without_fix() } else { hit }
+                // The node is counted before any reversal; the fix reverses the path first.
+                if f.node.is_none() { hit.without_fix() } else { hit }
             }
             Test::Kink => {
                 let message = match f.node {

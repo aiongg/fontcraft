@@ -39,7 +39,7 @@ const FIX_START: Option<FixSpec> = Some(FixSpec {
     id: "fixCompatibility",
     command: Some("path.makeNodeFirst"),
     safe: false,
-    description: "Make the proposed node the first node of the path; a path that must also be reversed is left to the user.",
+    description: "Reverse the path when the result says so, then make the proposed node its first node.",
 });
 
 /// The source-scope variation checks, in the order of the inventory.

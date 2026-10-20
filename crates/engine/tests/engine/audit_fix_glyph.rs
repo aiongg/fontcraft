@@ -281,3 +281,125 @@ fn audit_fix_last_stage_deletes_obsolete_and_redundant_kerning() {
     assert_eq!(font.kerning.ltr.get(&master, "A", "missing"), None);
     assert_eq!(font.kerning.ltr.get(&master, "T", "O"), Some(-30.0), "a pair no check reports stays");
 }
+
+#[test]
+fn audit_fix_reverses_a_path_that_runs_the_other_way_in_a_master() {
+    use fontcraft_engine::model::{Axis, Glyph, Layer, Master, Node, NodeKind, Path};
+    use std::sync::Arc;
+    let mut s = Session::with_document();
+    let poly = |points: &[(f64, f64)]| Shape::Path(Path::new(true, points.iter().map(|&(x, y)| Node::new(x, y, NodeKind::Line)).collect()));
+    let regular = [(0.0, 0.0), (300.0, 0.0), (400.0, 200.0), (150.0, 350.0), (-50.0, 150.0)];
+    // The same outline 10% larger, drawn the other way round from another node.
+    let bold = [(440.0, 220.0), (330.0, 0.0), (0.0, 0.0), (-55.0, 165.0), (165.0, 385.0)];
+    s.edit("setup", |font| {
+        font.axes = Arc::new(vec![Axis { name: "Weight".into(), tag: "wght".into(), ..Default::default() }]);
+        let masters = Arc::make_mut(&mut font.masters);
+        masters.truncate(1);
+        masters[0].location = vec![400.0];
+        masters.push(Master { id: "m02".into(), name: "Bold".into(), location: vec![700.0], ..Default::default() });
+        let first = masters[0].id.clone();
+        let mut g = Glyph::new("p");
+        let mut a = Layer::new(&first, 600.0);
+        a.shapes = vec![poly(&regular)];
+        let mut b = Layer::new("m02", 600.0);
+        b.shapes = vec![poly(&bold)];
+        g.layers = vec![a, b];
+        font.glyphs.push(g);
+        Ok(())
+    })
+    .unwrap();
+    let before = s.font().unwrap().glyph("p").unwrap().layers[0].clone();
+    let r = fix_one(&mut s, "check.variations.wrongStartPoint", Some("p"), "path.reverseContours");
+    assert_eq!(r["applied"][1]["command"], "path.makeNodeFirst", "{r}");
+    let font = s.font().unwrap();
+    let g = font.glyph("p").unwrap();
+    let b = g.layers.iter().find(|l| l.id == "m02").unwrap();
+    let Shape::Path(path) = &b.shapes[0] else { panic!("a path") };
+    let at: Vec<(f64, f64)> = path.nodes.iter().map(|n| (n.x, n.y)).collect();
+    assert_eq!(at, [(0.0, 0.0), (330.0, 0.0), (440.0, 220.0), (165.0, 385.0), (-55.0, 165.0)], "the bold path follows the regular one");
+    assert_eq!(g.layers[0], before, "the reference master is left as it was");
+}
+
+#[test]
+fn audit_fix_last_stage_renames_a_mistyped_language_tag_in_the_feature_code() {
+    let mut s = Session::with_document();
+    let prefix = "languagesystem DFLT dflt;\nlanguagesystem latn dflt;\nlanguagesystem latn TUR;\n";
+    run(&mut s, "font.features.addPrefix", json!({"name": "languagesystems", "code": prefix}));
+    run(&mut s, "font.features.addFeature", json!({"tag": "locl", "code": "script latn;\nlanguage TUR; # Turkish\nsub i by j;\n"}));
+    fix_one(&mut s, "check.layout.validLanguageTags", None, "font.features.setCode");
+    let f = &s.font().unwrap().features;
+    assert_eq!(f.prefixes[0].code, "languagesystem DFLT dflt;\nlanguagesystem latn dflt;\nlanguagesystem latn TRK;\n");
+    assert_eq!(f.features[0].code, "script latn;\nlanguage TRK; # Turkish\nsub i by j;\n");
+}
+
+#[test]
+fn audit_fix_last_stage_puts_the_default_languagesystem_first() {
+    let mut s = Session::with_document();
+    run(&mut s, "font.features.addPrefix", json!({"name": "languagesystems", "code": "languagesystem latn dflt;\nlanguagesystem DFLT dflt;\n"}));
+    run(&mut s, "font.features.addFeature", json!({"tag": "liga", "code": "sub f i by a;\n"}));
+    fix_one(&mut s, "check.layout.defaultLanguagesystemStatement", None, "font.features.setCode");
+    let f = &s.font().unwrap().features;
+    assert_eq!(f.prefixes[0].code, "languagesystem DFLT dflt;\nlanguagesystem latn dflt;\n");
+    assert_eq!(f.features[0].code, "sub f i by a;\n", "the features are left as they were");
+}
+
+#[test]
+fn audit_fix_last_stage_moves_small_caps_before_ligatures() {
+    let mut s = Session::with_document();
+    run(&mut s, "font.features.addFeature", json!({"tag": "liga", "code": "sub f i by a;\n"}));
+    run(&mut s, "font.features.addFeature", json!({"tag": "smcp", "code": "sub a by b;\n"}));
+    fix_one(&mut s, "check.layout.smallCapsBeforeLigatures", None, "font.features.reorder");
+    let f = &s.font().unwrap().features;
+    let names: Vec<&str> = f.features.iter().map(|e| e.name.as_str()).collect();
+    assert_eq!(names, ["smcp", "liga"]);
+    assert_eq!(f.features[1].code, "sub f i by a;\n", "the code is left as it was");
+}
+
+#[test]
+fn audit_fix_last_stage_removes_the_stored_pairs_behind_tabular_kerning() {
+    use fontcraft_engine::model::{Glyph, Layer};
+    use std::sync::Arc;
+    let mut s = Session::with_document();
+    let master = s.font().unwrap().masters[0].id.clone();
+    let figures = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
+    s.edit("setup", |font| {
+        for (i, name) in figures.iter().enumerate() {
+            let mut g = Glyph::new(*name);
+            g.unicodes.push(0x30 + i as u32);
+            g.layers.push(Layer::new(&master, 500.0));
+            match *name {
+                "two" | "three" => g.kern_groups.right = Some("figs".into()),
+                "four" => g.kern_groups.left = Some("fourX".into()),
+                _ => {}
+            }
+            font.glyphs.push(g);
+        }
+        for (name, group) in [("O", "O"), ("X", "fourX")] {
+            font.glyphs.get_mut(name).unwrap().kern_groups.left = Some(group.into());
+        }
+        let k = Arc::make_mut(&mut font.kerning);
+        k.ltr.set(&master, "one", "A", -50.0);
+        k.ltr.set(&master, "@MMK_L_figs", "@MMK_R_O", -20.0);
+        k.ltr.set(&master, "V", "@MMK_R_fourX", -30.0);
+        k.ltr.set(&master, "T", "O", -40.0);
+        Ok(())
+    })
+    .unwrap();
+    let check = "check.kerning.tabularKerning";
+    let select = json!({"profile": "strict", "checks": [check]});
+    let doc = run(&mut s, "audit.run", select.clone());
+    assert_eq!(count(&doc, check), 4, "{doc}");
+    let steps = undo_steps(&s);
+    let mut p = select.clone();
+    p["safeOnly"] = json!(false);
+    let r = run(&mut s, "audit.fix", p);
+    let removed: Vec<(&str, &str)> =
+        r["applied"].as_array().unwrap().iter().map(|a| (a["params"]["left"].as_str().unwrap(), a["params"]["right"].as_str().unwrap())).collect();
+    assert_eq!(removed, [("@figs", "@O"), ("one", "A")], "{r}");
+    assert!(r["skipped"].as_array().unwrap().iter().any(|x| x["reason"].as_str().unwrap().starts_with("V @fourX")), "{r}");
+    assert_eq!(count(&r["remaining"], check), 1, "only V four is left: {r}");
+    assert_eq!(undo_steps(&s), steps + 1, "one undo step");
+    let font = s.font().unwrap();
+    assert_eq!(font.kerning.ltr.get(&master, "V", "@MMK_R_fourX"), Some(-30.0), "the pair also kerns X");
+    assert_eq!(font.kerning.ltr.get(&master, "T", "O"), Some(-40.0), "a pair without figures stays");
+}
