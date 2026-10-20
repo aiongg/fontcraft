@@ -254,6 +254,8 @@ struct BuildKey<'a> {
     hash: u64,
     /// The code includes files.
     includes: bool,
+    /// Every included file is in `hash`; otherwise a kept build may have read other contents.
+    keyed: bool,
     /// Compile even when a build of this revision is kept.
     force: bool,
 }
@@ -267,7 +269,8 @@ fn shared_build(
     builds: &PreviewBuilds,
     key: &BuildKey,
 ) -> std::result::Result<Arc<PreviewBuild>, Arc<CompileError>> {
-    let kept = builds.get(key.doc, key.revision, key.master).filter(|b| !key.force && b.source_hash.map_or(!key.includes, |h| h == key.hash));
+    let kept =
+        builds.get(key.doc, key.revision, key.master).filter(|b| !key.force && key.keyed && b.source_hash.map_or(!key.includes, |h| h == key.hash));
     if let Some(kept) = kept {
         return kept.result.clone();
     }
@@ -471,6 +474,7 @@ fn compile(s: &mut Session, raw: &Value) -> Result<Value> {
                 master: &master,
                 hash,
                 includes: files.iter().any(|(_, text)| include_names(text).next().is_some()),
+                keyed: includes_keyed,
                 force,
             };
             let builds = s.preview_builds();
