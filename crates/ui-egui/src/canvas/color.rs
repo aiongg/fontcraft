@@ -23,6 +23,12 @@
 //! light canvas and white on a dark one, and a preview's text colour in the previews. A colour with no opacity paints nothing, which is how a
 //! removed fill shows.
 //!
+//! A component of a colour glyph on a full-colour layer (`color.export.colrGlyphComponent`) is
+//! drawn as that glyph's colour layers, moved by the component's transform, as the compiled font
+//! draws it; references inside them are followed too. Where the compile falls back to the
+//! component's outline (a cycle, references nested more than the paint depth limit, a glyph
+//! that does not export), the outline is filled in the default grey.
+//!
 //! The previews ([`preview_layer`]) draw a glyph in colour while one of its colour layers is the
 //! layer the tab shows for it; the colour is drawn over the strip before Flip and Blur, and Invert
 //! leaves it as it is.
@@ -33,7 +39,9 @@
 //! textures only. A glyph's texture is clipped to the canvas with a margin when it is larger.
 //! iColor images use the placed-image cache ([`super::images`]); svg files are read once per file
 //! revision ([`SvgCache`]). One glyph's drawing has a work budget ([`MAX_PAINT_WORK`]); a glyph
-//! that needs more is drawn as one plain fill of its outlines in the text colour.
+//! that needs more is drawn as one plain fill of its outlines in the text colour. The fills of a
+//! referenced glyph count towards the budget of the glyph that refers to it, and following
+//! references visits at most [`MAX_PAINT_VISITS`] paint nodes per glyph.
 
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
@@ -214,6 +222,12 @@ enum Leaf {
         end: f64,
         stops: Stops,
     },
+    /// `leaf` of a referenced colour glyph, read in that glyph's font units: `to_leaf` maps the
+    /// drawn glyph's font units to them. Never nested: references compose their transforms.
+    Moved {
+        to_leaf: Affine,
+        leaf: Box<Leaf>,
+    },
 }
 
 /// One fill: `leaf` within every outline of `clips`.
@@ -367,52 +381,112 @@ fn shape_outline(font: &Font, glyph: &Glyph, shape: &ShapeRef) -> Option<BezPath
     shapes_outline(font, &shapes, &layer.master).ok().map(concat)
 }
 
-/// The fills of `paint`, bottom first, each within the outlines of the glyph nodes above it.
-#[allow(clippy::too_many_arguments)]
-fn collect(
-    font: &Font,
-    glyph: &Glyph,
-    paint: &Paint,
-    clips: &mut Vec<BezPath>,
-    palette: &[Rgba],
+/// Most paint nodes one glyph's drawing visits, references followed included, so that
+/// references fanning out to other references cannot multiply the work without bound.
+pub const MAX_PAINT_VISITS: usize = 65_536;
+
+/// Turns a glyph's paint graph into fills, following references to other colour glyphs
+/// ([`Paint::ColrGlyph`]) as the compiled font draws them.
+struct Collect<'f> {
+    font: &'f Font,
+    paints: paint::MasterPaints<'f>,
+    /// The paint graphs of the glyphs referenced so far; `None` for a glyph without one.
+    graphs: HashMap<String, Option<Arc<Paint>>>,
+    palette: &'f [Rgba],
     text: [f32; 4],
-    out: &mut Vec<Drawable>,
-    depth: usize,
-) {
-    if depth > MAX_PAINT_DEPTH || out.len() >= MAX_DRAWABLES {
-        return;
+    out: Vec<Drawable>,
+    /// The glyphs being drawn: the drawn glyph, then each glyph a reference is following.
+    glyphs: Vec<String>,
+    visits: usize,
+}
+
+impl Collect<'_> {
+    /// The fills of `paint` of `glyph`, bottom first, each within the outlines of the glyph
+    /// nodes above it. `place` maps `glyph`'s font units to the drawn glyph's.
+    fn collect(&mut self, glyph: &Glyph, paint: &Paint, clips: &mut Vec<BezPath>, place: Affine, depth: usize) {
+        if depth > MAX_PAINT_DEPTH || self.out.len() >= MAX_DRAWABLES || self.visits >= MAX_PAINT_VISITS {
+            return;
+        }
+        self.visits += 1;
+        match paint {
+            Paint::Layers(list) => {
+                for p in list {
+                    self.collect(glyph, p, clips, place, depth + 1);
+                }
+            }
+            Paint::Glyph { shape, paint } => {
+                let Some(outline) = shape_outline(self.font, glyph, shape) else { return };
+                clips.push(placed(outline, place));
+                match leaf(paint, self.palette, self.text) {
+                    Some(l) => self.push(clips, l, place),
+                    None => self.collect(glyph, paint, clips, place, depth + 1),
+                }
+                clips.pop();
+            }
+            Paint::ColrGlyph { glyph: name, transform, shape } => {
+                let font = self.font;
+                let to = place * *transform;
+                let target = self.graph(name, depth).filter(|_| invertible(to)).zip(font.glyph(name));
+                if let Some((graph, target)) = target {
+                    self.glyphs.push(name.clone());
+                    self.collect(target, &graph, clips, to, depth + 1);
+                    self.glyphs.pop();
+                    return;
+                }
+                let Some(outline) = shape_outline(self.font, glyph, shape) else { return };
+                clips.push(placed(outline, place));
+                if let Some(l) = leaf(&paint::outline_fill(), self.palette, self.text) {
+                    self.push(clips, l, place);
+                }
+                clips.pop();
+            }
+            other => {
+                if !clips.is_empty()
+                    && let Some(l) = leaf(other, self.palette, self.text)
+                {
+                    self.push(clips, l, place);
+                }
+            }
+        }
     }
-    match paint {
-        Paint::Layers(list) => {
-            for p in list {
-                collect(font, glyph, p, clips, palette, text, out, depth + 1);
-            }
-        }
-        Paint::Glyph { shape, paint } => {
-            let Some(outline) = shape_outline(font, glyph, shape) else { return };
-            clips.push(outline);
-            match leaf(paint, palette, text) {
-                Some(l) => out.push(Drawable { clips: clips.clone(), leaf: l }),
-                None => collect(font, glyph, paint, clips, palette, text, out, depth + 1),
-            }
-            clips.pop();
-        }
-        Paint::ColrGlyph { shape, .. } => {
-            let Some(outline) = shape_outline(font, glyph, shape) else { return };
-            clips.push(outline);
-            if let Some(l) = leaf(&paint::outline_fill(), palette, text) {
-                out.push(Drawable { clips: clips.clone(), leaf: l });
-            }
-            clips.pop();
-        }
-        other => {
-            if !clips.is_empty()
-                && let Some(l) = leaf(other, palette, text)
-            {
-                out.push(Drawable { clips: clips.clone(), leaf: l });
-            }
-        }
+
+    fn push(&mut self, clips: &[BezPath], leaf: Leaf, place: Affine) {
+        let leaf = if place == Affine::IDENTITY { leaf } else { Leaf::Moved { to_leaf: place.inverse(), leaf: Box::new(leaf) } };
+        self.out.push(Drawable { clips: clips.to_vec(), leaf });
     }
+
+    /// The paint graph a reference to `name` at `depth` draws, or `None` when it is drawn as
+    /// its component's outline, as the compile falls back: the glyph has no graph, is already
+    /// being drawn (a cycle), references nest more than [`MAX_PAINT_DEPTH`] deep, or its graph
+    /// would nest past [`MAX_PAINT_DEPTH`].
+    fn graph(&mut self, name: &str, depth: usize) -> Option<Arc<Paint>> {
+        if self.glyphs.len() > MAX_PAINT_DEPTH || self.glyphs.iter().any(|g| g == name) {
+            return None;
+        }
+        let graph = match self.graphs.get(name) {
+            Some(known) => known.clone(),
+            None => {
+                let font = self.font;
+                let made = font.glyph(name).and_then(|g| self.paints.paint(g, &mut Vec::new()).ok().flatten()).map(Arc::new);
+                self.graphs.insert(name.to_string(), made.clone());
+                made
+            }
+        }?;
+        ((depth + 1).saturating_add(paint::nesting(&graph)) <= MAX_PAINT_DEPTH).then_some(graph)
+    }
+}
+
+/// `outline` moved by `place`.
+fn placed(mut outline: BezPath, place: Affine) -> BezPath {
+    if place != Affine::IDENTITY {
+        outline.apply_affine(place);
+    }
+    outline
+}
+
+/// Whether `a` maps the plane onto itself with finite numbers, so its inverse exists.
+fn invertible(a: Affine) -> bool {
+    a.as_coeffs().iter().all(|v| v.is_finite()) && a.determinant().abs() > 1e-12
 }
 
 /// Palette 0 of `master`'s palettes (the font's when the master has none).
@@ -423,10 +497,12 @@ fn palette0(font: &Font, master: &str) -> Vec<Rgba> {
 fn vector(font: &Font, glyph: &Glyph, master: &str, text: [f32; 4]) -> Option<Content> {
     let palettes = palette::read(font, Some(master)).unwrap_or_default();
     let palette = palettes.palette(0).map(<[Rgba]>::to_vec).unwrap_or_default();
-    let graph = paint::glyph_paint(font, glyph, master, &palettes).ok()??;
-    let mut out = Vec::new();
-    collect(font, glyph, &graph, &mut Vec::new(), &palette, text, &mut out, 0);
-    Some(Content::Vector(out))
+    let mut paints = paint::MasterPaints::new(font, master);
+    let graph = paints.paint(glyph, &mut Vec::new()).ok()??;
+    let mut c =
+        Collect { font, paints, graphs: HashMap::new(), palette: &palette, text, out: Vec::new(), glyphs: vec![glyph.name.clone()], visits: 0 };
+    c.collect(glyph, &graph, &mut Vec::new(), Affine::IDENTITY, 0);
+    Some(Content::Vector(c.out))
 }
 
 fn svg(layer: &Layer, src: &mut Sources) -> Option<Content> {
@@ -599,6 +675,10 @@ fn eval(leaf: &Leaf, p: Point) -> Option<[f32; 4]> {
             let angle = (p.y - center.y).atan2(p.x - center.x).to_degrees().rem_euclid(360.0);
             Some(sample(stops, (angle - start) / span))
         }
+        Leaf::Moved { to_leaf, leaf } => match leaf.as_ref() {
+            Leaf::Moved { .. } => None,
+            inner => eval(inner, *to_leaf * p),
+        },
     }
 }
 

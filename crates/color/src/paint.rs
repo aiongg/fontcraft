@@ -713,6 +713,24 @@ pub fn colr_glyph_refs(paint: &Paint) -> Vec<&str> {
     out
 }
 
+/// How many levels `paint` nests below itself, not following [`Paint::ColrGlyph`] references:
+/// 0 for a leaf, one more than its deepest child for [`Paint::Layers`] and [`Paint::Glyph`].
+/// Capped at one past [`crate::MAX_PAINT_DEPTH`]. Drawing code that inlines a reference uses it
+/// to fall back to the outline before the inlined paint would pass its depth limit.
+pub fn nesting(paint: &Paint) -> usize {
+    fn walk(paint: &Paint, depth: usize) -> usize {
+        if depth > crate::MAX_PAINT_DEPTH {
+            return depth;
+        }
+        match paint {
+            Paint::Layers(list) => list.iter().map(|p| walk(p, depth + 1)).max().unwrap_or(depth + 1),
+            Paint::Glyph { paint, .. } => walk(paint, depth + 1),
+            Paint::ColrGlyph { .. } | Paint::Solid(_) | Paint::Linear { .. } | Paint::Radial { .. } | Paint::Sweep { .. } => depth,
+        }
+    }
+    walk(paint, 0)
+}
+
 /// The paints of a variable font's colour glyphs at the font's sources other than the default
 /// master (`color.export.variableColr`).
 ///

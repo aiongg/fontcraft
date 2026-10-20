@@ -366,6 +366,54 @@ fn color_preview_preview_area_draws_a_glyph_in_colour_only_while_its_colour_laye
     assert_eq!(pixel(b_x + 200.0, 200.0), Color32::BLACK, "B shows its master layer: black");
 }
 
+#[test]
+fn color_export_colr_glyph_component_draws_the_referenced_glyph_in_colour() {
+    let mut app = colour_app(&["B", "A", "E", "F"], "layer.convertToColor");
+    let a = colour_layer(&app, "A");
+    app.run("attributes.setFillColor", &json!({"glyph": "A", "layer": a, "color": "#FF0000"})).unwrap();
+    // B's full-colour layer holds only a component of A moved right by 50; E's and F's each a
+    // component of the other, which would be a cycle.
+    let component = |glyph: &str, dx: f64| {
+        let mut c = fontcraft_model::Component::new(glyph, 0.0, 0.0);
+        c.transform = fontcraft_model::Transform::Matrix([1.0, 0.0, 0.0, 1.0, dx, 0.0]);
+        fontcraft_model::Shape::Component(c)
+    };
+    let edits: Vec<(&str, String, fontcraft_model::Shape)> =
+        [("B", "A", 50.0), ("E", "F", 0.0), ("F", "E", 0.0)].into_iter().map(|(g, t, dx)| (g, colour_layer(&app, g), component(t, dx))).collect();
+    app.session
+        .edit("components", |font| {
+            for (g, layer, shape) in edits {
+                let mut glyph = font.glyph_mut(g).unwrap();
+                glyph.layers.iter_mut().find(|l| l.id == layer).unwrap().shapes = vec![shape];
+            }
+            Ok(())
+        })
+        .unwrap();
+    app.run("editView.setText", &json!({"glyphs": ["B", "A"]})).unwrap();
+    app.run("editView.setCursor", &json!({"index": 0})).unwrap();
+    select_colour_layer(&mut app, "B");
+    let w = Window::new();
+    let shapes = w.settle(&mut app);
+    assert_eq!(app.color_ui.sprites(), 2);
+    assert_eq!(textured(&app, &shapes), 2);
+
+    // A's square (100–300) is drawn red where B's component puts it, not as a grey outline.
+    let b = picture(&app, "B", None);
+    assert_eq!(at(&b, 320, 200), Color32::from_rgb(255, 0, 0), "A's red, moved by the component");
+    assert_eq!(at(&b, 200, 200), Color32::from_rgb(255, 0, 0));
+    assert_eq!(at(&b, 120, 200).a(), 0, "nothing where the square was before the move");
+
+    // The cycle falls back to the component's outline in grey, as the compile does, with a warning.
+    let e = picture(&app, "E", None);
+    let grey = at(&e, 200, 200);
+    assert!(grey.a() == 255 && grey.r() == grey.g() && grey.g() == grey.b() && (120..=136).contains(&grey.r()), "{grey:?}");
+    let font = app.session.font().unwrap();
+    let m = master(&app);
+    let mut warnings = Vec::new();
+    let graph = fontcraft_engine::color::paint::MasterPaints::new(font, &m).paint(font.glyph("E").unwrap(), &mut warnings).unwrap();
+    assert!(graph.is_some() && warnings.iter().any(|w| w.contains("lead back")), "{warnings:?}");
+}
+
 /// § 5 of the M11 plan: an Edit View frame with 50 full-colour glyphs under 16 ms. Run with
 /// `cargo test --profile measure -p fontcraft-ui-egui color_full_color_frame_speed -- --ignored --nocapture`.
 #[test]
