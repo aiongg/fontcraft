@@ -95,7 +95,7 @@ pub const COMMANDS: &[UiCommand] = &[
 ];
 
 /// The display toggle a command flips.
-fn flag<'a>(display: &'a mut DisplayOptions, id: &str) -> Option<&'a mut bool> {
+pub(crate) fn flag<'a>(display: &'a mut DisplayOptions, id: &str) -> Option<&'a mut bool> {
     Some(match id {
         "view.showNodes" | "view.showNodesInForeground" => &mut display.nodes,
         "view.showNodesInBackground" => &mut display.nodes_in_background,

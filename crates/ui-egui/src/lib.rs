@@ -102,6 +102,8 @@ mod math_base_dialog_tests;
 #[cfg(test)]
 mod measurement_tests;
 #[cfg(test)]
+mod menu_checks_tests;
+#[cfg(test)]
 mod metrics_dialogs_tests;
 #[cfg(test)]
 mod palette_anchor_context_tests;

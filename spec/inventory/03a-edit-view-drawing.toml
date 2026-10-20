@@ -357,6 +357,24 @@ ref = "Edit View › Editing Paths"
 status = "handbook"
 
 [[behavior]]
+id = "menus.switchCheckMarks"
+area = "ui-chrome"
+milestone = "M3"
+summary = "A menu item that switches something on and off shows a check mark while it is on: the View › Show items, the other display aids, and the menu switches of the Edit, Path and Window menus."
+ref = "Edit View › Glyph Display › View Options"
+status = "handbook"
+notes = "Documented for View › Show Info and View › Show Metrics, not yet observed for the other items. FontCraft: every command in `SWITCHES` (crates/ui-egui/src/shell/menus.rs) carries `checked` in the menu tree and in `ui.menu.list`; a menu item that only opens a window (Space Center, Kerning, Macro Panel) has none. The menu cache hashes the state of every switch, so the tree is rebuilt only on a frame where one changed."
+guesses = [
+  "Every on/off switch shows a check mark, including Lock Outline, Power Nudge, Edit Background, Palette, Preview Panel and Font Audit; opening the reference app's View, Path and Window menus with each switch on and off settles which ones do.",
+  "View › Show Indexes shows a check mark while any kind of index is shown. Settled by turning on a single kind in the reference app and opening the View menu.",
+]
+observe = [
+  "Open the View menu with Show Nodes, Show Metrics and Tunni Lines on: note which items carry a check mark.",
+  "Turn Power Nudge and Edit Background on, open the Path menu: note whether either item carries a check mark.",
+  "Hide the Palette, open the Window menu: note whether Palette carries a check mark while it is shown and none while hidden.",
+]
+
+[[behavior]]
 id = "editView.textModeAndEditMode"
 area = "edit-text"
 milestone = "M3"
