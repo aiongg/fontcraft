@@ -82,3 +82,26 @@ fn gdef_and_gpos_follow_the_new_indices() {
     assert!(run(&font, 1).is_err(), "an index the store lacks fails the step");
     assert!(matches!(run(&font, 0), Err(TablesError::BadOptions(_))));
 }
+
+#[test]
+fn subtables_sharing_one_offset_are_charged_for_their_columns() {
+    // One region; 65,535 offsets to one subtable of one row that lists region 0 65,535 times.
+    // Read naively, that is 65,535 copies of 65,535 deltas.
+    let count = 0xFFFFusize;
+    let regions_at = 8 + 4 * count;
+    let sub_at = regions_at + 4;
+    let mut b = vec![0, 1];
+    b.extend((regions_at as u32).to_be_bytes());
+    b.extend((count as u16).to_be_bytes());
+    for _ in 0..count {
+        b.extend((sub_at as u32).to_be_bytes());
+    }
+    b.extend([0, 0, 0, 1]); // no axes, one region
+    b.extend([0, 1, 0, 0, 0xFF, 0xFF]); // one item, no word columns, 65,535 region indices
+    b.extend(vec![0u8; 2 * count]); // every index is region 0
+    b.extend(vec![0u8; count]); // the row's deltas
+    let started = std::time::Instant::now();
+    let err = read_store(&b).err().expect("refused");
+    assert!(err.contains("deltas"), "{err}");
+    assert!(started.elapsed().as_secs() < 5);
+}
