@@ -20,6 +20,9 @@ const USAGE: &str = "\
       Text views: -t GPOS=fea, -t GSUB=fea, -t GDEF=fea (feature code), -t GPOS=normalized,
       -t GDEF=normalized (flat rules), -t @font (the font program's dictionaries), -t @glyphs (one
       record per glyph; --glyph-detail medium or long adds the path with its hints).
+      Table listings: -t cmap=hex-gid|dec-gid|hex-name|dec-name|summary, -t hmtx=advances|advances-lsb,
+      -t name=raw|lines|described, -t GSUB=features, -t GPOS=features, -t glyf=points,
+      -t VORG=names, -t kern=pairs; -t CFF=literal lists the CFF structures as stored.
       --normalize writes the normalised dump for comparing two versions of a font.
 ";
 
@@ -48,7 +51,13 @@ const OPTIONS: &[OptSpec] = &[
     OptSpec::switch("hints", true, "write stem hints in outline dumps (--no-hints leaves them out)"),
     OptSpec::switch("show-extensions", false, "with --normalize, mark lookups stored as extension lookups"),
     OptSpec::value("glyphs", "LIST", "", "the glyphs @glyphs lists, comma-separated; default every glyph"),
+    OptSpec::value("exclude-glyphs", "LIST", "", "the glyphs @glyphs leaves out, comma-separated"),
     OptSpec::value("glyph-detail", "short|medium|long", "short", "what @glyphs writes per glyph"),
+    OptSpec::value("cmap-subtable", "N", "", "the cmap encoding record the cmap listings write; default all"),
+    OptSpec::value("units", "font|1000", "font", "the units of the hmtx listings: the font's own or 1000 per em"),
+    OptSpec::value("cff-parts", "LETTERS", "all", "the structures of -t CFF=literal: h n t s g e C f F c p l, or all"),
+    OptSpec::value("cff-level", "offsets|bytes|values", "values", "the detail of -t CFF=literal"),
+    OptSpec::switch("wrap", true, "break the flowed data of -t CFF=literal into lines (--no-wrap: one line)"),
 ];
 
 /// Takes every `-t X`, `--table X` and `--table=X` (or the forms of `long`) out of `args`, so the
@@ -123,6 +132,17 @@ fn run(args: &[String]) -> Outcome {
     base.insert("hints".into(), json!(parsed.switch("hints")));
     base.insert("showExtensions".into(), json!(parsed.switch("show-extensions")));
     base.insert("glyphDetail".into(), json!(parsed.value("glyph-detail").unwrap_or("short")));
+    if let Some(n) = parsed.value("cmap-subtable").filter(|n| !n.is_empty()) {
+        let n: u64 = n.parse().map_err(|_| usage("--cmap-subtable takes a number"))?;
+        base.insert("cmapSubtable".into(), json!(n));
+    }
+    base.insert("units".into(), json!(parsed.value("units").unwrap_or("font")));
+    base.insert("cffParts".into(), json!(parsed.value("cff-parts").unwrap_or("all")));
+    base.insert("cffLevel".into(), json!(parsed.value("cff-level").unwrap_or("values")));
+    base.insert("wrap".into(), json!(parsed.switch("wrap")));
+    if let Some(glyphs) = parsed.value("exclude-glyphs").filter(|g| !g.is_empty()) {
+        base.insert("excludeGlyphs".into(), json!(glyphs));
+    }
     if let Some(glyphs) = parsed.value("glyphs").filter(|g| !g.is_empty()) {
         base.insert("glyphs".into(), json!(glyphs));
     }

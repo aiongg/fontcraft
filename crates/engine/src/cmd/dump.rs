@@ -19,7 +19,7 @@ fn ttx_specs() -> Vec<CommandSpec> {
         "Dump Tables",
         [],
         None,
-        "{font: path, face?: number, tables?: [tag | {tag, view?}], excludeTables?: [tag], format?: \"ttx\"|\"json\"|\"hex\"|\"text\", split?: \"tables\"|\"glyphs\", output?: path, outputDir?: path, noClobber?: bool, disassemble?: bool, bitmapFormat?: \"raw\"|\"row\"|\"bitwise\"|\"extfile\", strict?: bool, newline?: \"lf\"|\"cr\"|\"crlf\", normalize?: bool, version?: bool, hints?: bool, showExtensions?: bool, glyphs?: [name] | string, glyphDetail?: \"short\"|\"medium\"|\"long\"} the tables of a compiled font, collection face, WOFF or WOFF2 file as TTX (the XML of the reference dump tool), the same tree as JSON, or hex; tables that cannot be read are written as hex unless strict; tables leaves the glyph order out; split writes one file per table beside the main file (glyphs also one file per glyph outline); bitmapFormat writes bitmap images as hex (raw, the default), hex per pixel row (row), a character per pixel (bitwise) or one file each under bitmaps/strikeN/ beside the dump (extfile, TTX with an output only; the dump and its images are written to temporary files first and moved into place once all are written: a failure while writing them changes nothing, and a failure while moving them leaves the files moved before it in place and removes the rest). Text views: a table with a view ({tag: \"GPOS\", view: \"fea\"|\"normalized\"}), the pseudo-tables @font (the font program's DICTs) and @glyphs (index, name, encoding and, with glyphDetail medium or long, the path with hints unless hints is false), written as text. normalize writes the normalised dump: tables sorted, values that always differ zeroed, outlines as text paths, GSUB and GPOS as rules (version false also blanks the version fields, showExtensions marks extension lookups) → {format, text} or {format, json} without an output, {format, paths, images} with one (images: how many bitmap images extfile wrote to files)",
+        "{font: path, face?: number, tables?: [tag | {tag, view?}], excludeTables?: [tag], format?: \"ttx\"|\"json\"|\"hex\"|\"text\", split?: \"tables\"|\"glyphs\", output?: path, outputDir?: path, noClobber?: bool, disassemble?: bool, bitmapFormat?: \"raw\"|\"row\"|\"bitwise\"|\"extfile\", strict?: bool, newline?: \"lf\"|\"cr\"|\"crlf\", normalize?: bool, version?: bool, hints?: bool, showExtensions?: bool, glyphs?: [name] | string, excludeGlyphs?: [name] | string, glyphDetail?: \"short\"|\"medium\"|\"long\", cmapSubtable?: number, units?: \"font\"|\"1000\", cffParts?: string, cffLevel?: \"offsets\"|\"bytes\"|\"values\", wrap?: bool} the tables of a compiled font, collection face, WOFF or WOFF2 file as TTX (the XML of the reference dump tool), the same tree as JSON, or hex; tables that cannot be read are written as hex unless strict; tables leaves the glyph order out; split writes one file per table beside the main file (glyphs also one file per glyph outline); bitmapFormat writes bitmap images as hex (raw, the default), hex per pixel row (row), a character per pixel (bitwise) or one file each under bitmaps/strikeN/ beside the dump (extfile, TTX with an output only; the dump and its images are written to temporary files first and moved into place once all are written: a failure while writing them changes nothing, and a failure while moving them leaves the files moved before it in place and removes the rest). Text views: a table with a view ({tag: \"GPOS\", view: \"fea\"|\"normalized\"|\"features\"}; the listings cmap hex-gid, dec-gid, hex-name, dec-name and summary (cmapSubtable picks one encoding record), hmtx advances and advances-lsb (units \"1000\" rescales), name raw, lines and described, GSUB and GPOS features, glyf points, VORG names, kern pairs; CFF literal: the CFF structures, cffParts letters h n t s g e C f F c p l or \"all\", cffLevel, wrap false keeps flowed data on one line), the pseudo-tables @font (the font program's DICTs) and @glyphs (the glyphs given, every glyph by default, less excludeGlyphs: index, name, encoding and, with glyphDetail medium or long, the path with hints unless hints is false), written as text. normalize writes the normalised dump: tables sorted, values that always differ zeroed, outlines as text paths, GSUB and GPOS as rules (version false also blanks the version fields, showExtensions marks extension lookups) → {format, text} or {format, json} without an output, {format, paths, images} with one (images: how many bitmap images extfile wrote to files)",
         super::always,
         ttx::run
     ).files(const { &[FileParam::read("font"), FileParam::write("output"), FileParam::write("outputDir")] }).writes_files()]
@@ -244,7 +244,7 @@ mod views {
     use std::path::Path;
 
     use fontcraft_tables::sfnt::parse_tag;
-    use fontcraft_tables::text::{FONT_VIEW, GLYPHS_VIEW, GlyphDetail, ViewOptions, view};
+    use fontcraft_tables::text::{CffLevel, FONT_VIEW, GLYPHS_VIEW, GlyphDetail, ViewOptions, table_offsets, view};
     use serde_json::{Value, json};
 
     use super::super::file_io::{OutputRequest, output_path, read_input, write_output};
@@ -291,23 +291,49 @@ mod views {
         if p.opt_array("excludeTables")?.is_some_and(|v| !v.is_empty()) && !items.is_empty() {
             return Err(p.bad("give the tables to write or the tables to leave out, not both"));
         }
-        let glyphs: Vec<String> = match p.get("glyphs") {
-            None | Some(Value::Null) => Vec::new(),
-            Some(Value::String(s)) => s.split(',').map(str::trim).filter(|s| !s.is_empty()).map(str::to_string).collect(),
-            Some(Value::Array(a)) => {
-                a.iter().map(|v| v.as_str().map(str::to_string).ok_or_else(|| p.bad("`glyphs` holds glyph names"))).collect::<Result<_>>()?
-            }
-            Some(_) => return Err(p.bad("`glyphs` is a list of glyph names or a comma-separated string")),
+        let names = |key: &str| -> Result<Vec<String>> {
+            Ok(match p.get(key) {
+                None | Some(Value::Null) => Vec::new(),
+                Some(Value::String(s)) => s.split(',').map(str::trim).filter(|s| !s.is_empty()).map(str::to_string).collect(),
+                Some(Value::Array(a)) => a
+                    .iter()
+                    .map(|v| v.as_str().map(str::to_string).ok_or_else(|| p.bad(format!("`{key}` holds glyph names"))))
+                    .collect::<Result<_>>()?,
+                Some(_) => return Err(p.bad(format!("`{key}` is a list of glyph names or a comma-separated string"))),
+            })
         };
+        let glyphs = names("glyphs")?;
+        let exclude_glyphs = names("excludeGlyphs")?;
         let glyph_detail = match p.opt_str("glyphDetail")?.unwrap_or("short") {
             "short" => GlyphDetail::Short,
             "medium" => GlyphDetail::Medium,
             "long" => GlyphDetail::Long,
             other => return Err(p.bad(format!("`glyphDetail` must be \"short\", \"medium\" or \"long\", got \"{other}\""))),
         };
+        let cff_level = match p.opt_str("cffLevel")?.unwrap_or("values") {
+            "offsets" => CffLevel::Offsets,
+            "bytes" => CffLevel::Bytes,
+            "values" => CffLevel::Values,
+            other => return Err(p.bad(format!("`cffLevel` must be \"offsets\", \"bytes\" or \"values\", got \"{other}\""))),
+        };
+        let units_1000 = match p.opt_str("units")?.unwrap_or("font") {
+            "font" => false,
+            "1000" => true,
+            other => return Err(p.bad(format!("`units` must be \"font\" or \"1000\", got \"{other}\""))),
+        };
+        let cff_parts = match p.opt_str("cffParts")?.unwrap_or("") {
+            "all" => String::new(),
+            parts => parts.to_string(),
+        };
         let base = ViewOptions {
             glyphs,
+            exclude_glyphs,
             glyph_detail,
+            cmap_subtable: p.opt_int("cmapSubtable", 0, 65_535)?.map(|n| n as usize),
+            units_1000,
+            cff_parts,
+            cff_level,
+            no_wrap: !p.bool_or("wrap", true)?,
             no_version: !p.bool_or("version", true)?,
             no_hints: !p.bool_or("hints", true)?,
             show_extensions: p.bool_or("showExtensions", false)?,
@@ -331,6 +357,7 @@ mod views {
             return Err(p.bad(format!("{} is not a compiled font ({})", path.display(), input.kind.name())));
         }
         let font = fontcraft_tables::read(&input.bytes, face)?;
+        let base = ViewOptions { table_offsets: table_offsets(&input.bytes, face), ..base };
 
         let mut text = String::new();
         if normalize {
@@ -431,7 +458,13 @@ mod views {
             assert_eq!(written["paths"][0], out.display().to_string());
             assert!(std::fs::read_to_string(&out).unwrap().starts_with("## Top Dict"));
 
+            let points = s.execute("font.dumpTables", &json!({"font": f, "tables": [{"tag": "glyf", "view": "points"}]})).unwrap();
+            assert_eq!(points["text"], "", "{points}");
+
             for bad in [
+                json!({"font": f, "tables": [{"tag": "CFF", "view": "literal"}], "cffLevel": "huge"}),
+                json!({"font": f, "tables": [{"tag": "hmtx", "view": "advances"}], "units": "2048"}),
+                json!({"font": f, "tables": [{"tag": "CFF", "view": "literal"}]}),
                 json!({"font": f, "normalize": true, "format": "json"}),
                 json!({"font": f, "tables": ["@nothing"], "format": "text"}),
                 json!({"font": f, "format": "text"}),
