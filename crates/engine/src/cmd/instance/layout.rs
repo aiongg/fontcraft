@@ -1,31 +1,51 @@
-//! `font.instantiate` with `layoutOnly`: an instance's `GPOS` interpolated from the compiled
-//! masters of a designspace, as fontTools' `varLib.interpolate_layout` makes it (M12.22c;
-//! [`fontcraft_tables::interpolate_layout`]).
+//! `font.instantiate` with `layoutOnly` or `interpolateBinaryLayout`: `GPOS` interpolated from
+//! the compiled masters of a source, as fontTools' `varLib.interpolate_layout` makes it (M12.22c,
+//! M12.22d; [`fontcraft_tables::interpolate_layout`]).
 //!
-//! Only the designspace is read, not its UFOs: each source names its compiled master directly
-//! (a font or TTX file), or the `masterFinder` pattern turns its file name into the master's
-//! (fontTools' `MasterFinder`: `{fullname}`, `{dirname}`, `{basename}`, `{stem}`, `{ext}`; default
-//! `master_ttf_interpolatable/{stem}.ttf`, relative to the designspace's folder). The result is
-//! the base master (the source at the default location) with that `GPOS`, one file per instance.
+//! The compiled masters are found from the file names of the source's master UFOs. A designspace
+//! names them; for a `.glyphs` or `.glyphspackage` source they are the names glyphsLib gives them
+//! when fontmake builds its designspace, in `master_ufo/` beside the source ([`glyphs_ufo_names`]).
+//! A source that names a font or TTX file is that master; otherwise the `masterFinder` pattern
+//! turns the file name into the master's (fontTools' `MasterFinder`: `{fullname}`, `{dirname}`,
+//! `{basename}`, `{stem}`, `{ext}`). A relative result is relative to the source's folder.
+//!
+//! - `layoutOnly` reads only the designspace (not its UFOs), or the `.glyphs` source. Each
+//!   instance is the base master (the source at the default location) with the interpolated
+//!   `GPOS`. Default pattern `master_ttf_interpolatable/{stem}.ttf`.
+//! - `interpolateBinaryLayout` is fontmake's `--interpolate-binary-layout [DIR]` (fontmake
+//!   `font_project.py`, `save_otfs` and `_varLib_finder`, Apache License 2.0): each instance is
+//!   compiled as usual, then its `GPOS` is replaced by the interpolated one, and its `GDEF` and
+//!   `GSUB` by the base master's when the base master has them ([`BinaryLayout`]). Default
+//!   pattern `{DIR}/{stem}.{ext}`, `DIR` defaulting to `master_ttf` or `master_otf` as the
+//!   instances' format.
 
 use std::collections::BTreeMap;
 use std::path::{Component, Path, PathBuf};
 
 use fontcraft_geom::variation::VariationModel;
 use fontcraft_interp::Designspace;
-use fontcraft_model::Family;
-use fontcraft_tables::sfnt::SfntFont;
+use fontcraft_model::plist::Value as PValue;
+use fontcraft_model::{Family, Font, SourceFormat};
+use fontcraft_tables::interpolate_layout::MAX_LAYOUT_MASTERS;
+use fontcraft_tables::sfnt::{SfntFont, Tag};
 use fontcraft_tables::{TableOrder, WriteOptions};
 use serde_json::{Value, json};
 
 use super::super::file_io::{self, InputKind, OutputRequest};
-use super::source::jobs;
+use super::source::{Job, jobs};
 use super::{Staged, commit, discard, stage};
 use crate::params::Params;
 use crate::{EngineError, Result};
 
 /// fontTools' default pattern.
 const DEFAULT_FINDER: &str = "master_ttf_interpolatable/{stem}.ttf";
+
+/// The folder fontmake writes the master UFOs of a `.glyphs` source into.
+const GLYPHS_MASTER_DIR: &str = "master_ufo";
+
+const GDEF: Tag = *b"GDEF";
+const GSUB: Tag = *b"GSUB";
+const GPOS: Tag = *b"GPOS";
 
 /// A UFO with nothing in it, standing in for each source so the designspace can be read without
 /// its UFOs.
@@ -43,46 +63,27 @@ fn stub_ufo() -> BTreeMap<String, Vec<u8>> {
 }
 
 pub(super) fn instantiate(p: &Params<'_>, input: &Path, req: &OutputRequest) -> Result<Value> {
-    for key in ["instanceDir", "ufoVersion"] {
+    for key in ["instanceDir", "ufoVersion", "interpolateBinaryLayout"] {
         if p.get(key).is_some() {
-            return Err(p.bad(format!("`{key}` applies to UFO instances, and `layoutOnly` writes compiled fonts")));
+            return Err(p.bad(format!("`{key}` applies to instances built from the source, and `layoutOnly` writes the base compiled master")));
         }
     }
     if p.bool_or("removeOverlaps", false)? || p.bool_or("autohint", false)? {
         return Err(p.bad("`layoutOnly` changes only the GPOS table of the base master: overlaps and hints stay as they are"));
     }
-    let text = read_designspace(input)?;
-    let mut stubs = BTreeMap::new();
-    for rel in fontcraft_io_ufo::designspace::ufo_paths(&text)? {
-        stubs.insert(rel, stub_ufo());
+    if req.in_place {
+        return Err(p.bad("an instance never replaces its source: give `output` or `outputDir`"));
     }
-    let mut font = fontcraft_io_ufo::designspace::read(&text, &stubs)?;
+    let mut font = read_source(input)?;
     let ds = Designspace::new(&font).map_err(|e| p.bad(e.to_string()))?;
     let jobs = jobs(p, &mut font, &ds, p.bool_or("clamp", true)?)?;
     if jobs.len() > 1 && req.output.is_some() {
         return Err(p.bad("`output` names one file, and this run builds several instances: give `outputDir`"));
     }
 
-    // The masters in the designspace's order, each with its normalised location.
-    let mut infos: Vec<_> = ds.masters().iter().collect();
-    infos.sort_by_key(|m| m.index);
-    let origin = ds.origin().ok_or_else(|| p.bad("no source is at the default location of every axis"))?;
-    let base = infos.iter().position(|m| m.id == origin.id).ok_or_else(|| p.bad("the default source is not a master"))?;
     let finder = p.opt_str("masterFinder")?.unwrap_or(DEFAULT_FINDER);
-    let dir = input.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(Path::new("."));
-    let mut masters = Vec::with_capacity(infos.len());
-    let mut locations = Vec::with_capacity(infos.len());
-    for info in &infos {
-        let master = font.masters.get(info.index).ok_or_else(|| p.bad(format!("source `{}` is missing", info.name)))?;
-        if master.extra.get(Family::Designspace, "layer").is_some() {
-            return Err(p.bad(format!("source `{}` is a layer of another source's UFO, which has no compiled master of its own", info.name)));
-        }
-        let filename = master.extra.get(Family::Designspace, "filename").and_then(|v| v.as_str()).unwrap_or_default();
-        masters.push(open_master(p, &dir.join(filename), finder, dir)?);
-        locations.push(ds.to_normalized(&info.location).map_err(|e| p.bad(e.to_string()))?.0);
-    }
-    let model = VariationModel::new(&locations, false).map_err(|e| p.bad(format!("the masters' locations: {e}")))?;
-    let base_font = masters.get(base).ok_or_else(|| p.bad("the default source is not a master"))?;
+    let set = CompiledMasters::load(p, input, &font, &ds, finder)?;
+    let base_font = set.base_font(p)?;
     let ext = if base_font.is_cff() || base_font.flavour == fontcraft_tables::sfnt::Flavour::Cff { "otf" } else { "ttf" };
     match p.opt_str("to")? {
         None | Some("same") => {}
@@ -91,7 +92,7 @@ pub(super) fn instantiate(p: &Params<'_>, input: &Path, req: &OutputRequest) -> 
     }
     let stamp = super::timestamp(p)?;
 
-    let plan = Plan { font: &font, ds: &ds, masters: &masters, base, model: &model, ext, stamp, dir };
+    let plan = Plan { font: &font, ds: &ds, set: &set, ext, stamp, dir: source_dir(input) };
     let created = file_io::create_output_dir(req)?;
     let mut staged: Vec<Staged> = Vec::new();
     let built = write_all(p, input, req, &plan, &jobs, &mut staged);
@@ -106,36 +107,220 @@ pub(super) fn instantiate(p: &Params<'_>, input: &Path, req: &OutputRequest) -> 
     Ok(json!({ "results": results, "warnings": [] }))
 }
 
+/// The folder relative paths of a source are resolved against.
+fn source_dir(input: &Path) -> &Path {
+    input.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(Path::new("."))
+}
+
+/// The compiled masters of a source, in its masters' order, with the model that weighs them.
+pub(super) struct CompiledMasters {
+    masters: Vec<SfntFont>,
+    /// The master at the default location.
+    base: usize,
+    model: VariationModel,
+}
+
+impl CompiledMasters {
+    /// Finds and reads the compiled master of every master of `font` (see the module notes).
+    fn load(p: &Params<'_>, input: &Path, font: &Font, ds: &Designspace, finder: &str) -> Result<Self> {
+        if font.masters.len() > MAX_LAYOUT_MASTERS {
+            return Err(EngineError::Unsupported(format!("interpolating layout from more than {MAX_LAYOUT_MASTERS} masters")));
+        }
+        let mut infos: Vec<_> = ds.masters().iter().collect();
+        infos.sort_by_key(|m| m.index);
+        let origin = ds.origin().ok_or_else(|| p.bad("no source is at the default location of every axis"))?;
+        let base = infos.iter().position(|m| m.id == origin.id).ok_or_else(|| p.bad("the default source is not a master"))?;
+        let dir = source_dir(input);
+        let files = source_files(p, input, font)?;
+        let mut masters = Vec::with_capacity(infos.len());
+        let mut locations = Vec::with_capacity(infos.len());
+        for info in &infos {
+            let file = files.get(info.index).ok_or_else(|| p.bad(format!("source `{}` is missing", info.name)))?;
+            masters.push(open_master(p, &dir.join(file), finder, dir)?);
+            locations.push(ds.to_normalized(&info.location).map_err(|e| p.bad(e.to_string()))?.0);
+        }
+        let model = VariationModel::new(&locations, false).map_err(|e| p.bad(format!("the masters' locations: {e}")))?;
+        Ok(Self { masters, base, model })
+    }
+
+    fn base_font(&self, p: &Params<'_>) -> Result<&SfntFont> {
+        self.masters.get(self.base).ok_or_else(|| p.bad("the default source is not a master"))
+    }
+
+    /// The base master with the `GPOS` interpolated at the location of instance `index` of `font`.
+    fn interpolate(&self, p: &Params<'_>, font: &Font, ds: &Designspace, index: usize) -> Result<SfntFont> {
+        let scalars = self.scalars(p, font, ds, index)?;
+        Ok(fontcraft_tables::interpolate_layout::interpolate_layout(&self.masters, self.base, &scalars)?)
+    }
+
+    /// Each master's weight at the location of instance `index` of `font`.
+    fn scalars(&self, p: &Params<'_>, font: &Font, ds: &Designspace, index: usize) -> Result<Vec<f64>> {
+        let location = ds.instance_location(font, index).map_err(|e| p.bad(e.to_string()))?;
+        let normalized = ds.to_normalized(&location).map_err(|e| p.bad(e.to_string()))?;
+        Ok(self.model.master_scalars(&normalized.0))
+    }
+}
+
+/// The file name of each master's UFO, by master index, relative to the source's folder.
+fn source_files(p: &Params<'_>, input: &Path, font: &Font) -> Result<Vec<PathBuf>> {
+    match font.source.format {
+        SourceFormat::Designspace => font
+            .masters
+            .iter()
+            .map(|m| {
+                if m.extra.get(Family::Designspace, "layer").is_some() {
+                    return Err(p.bad(format!("source `{}` is a layer of another source's UFO, which has no compiled master of its own", m.name)));
+                }
+                Ok(PathBuf::from(m.extra.get(Family::Designspace, "filename").and_then(|v| v.as_str()).unwrap_or_default()))
+            })
+            .collect(),
+        SourceFormat::Glyphs | SourceFormat::GlyphsPackage => {
+            Ok(glyphs_ufo_names(font).into_iter().map(|name| Path::new(GLYPHS_MASTER_DIR).join(name)).collect())
+        }
+        _ => Err(EngineError::Unsupported(format!(
+            "finding the compiled masters of {}: they are found from a designspace or a .glyphs source",
+            input.display()
+        ))),
+    }
+}
+
+/// The file names glyphsLib gives the master UFOs of a Glyphs source (glyphsLib
+/// `builder/sources.py`, Apache License 2.0): the master's `UFO Filename` parameter, else its
+/// `ufoFilename` user data, else `Family-Master.ufo` with the spaces taken out; a name an earlier
+/// master has gets `#1`, then `#2`…, before its extension.
+fn glyphs_ufo_names(font: &Font) -> Vec<String> {
+    let text = |v: Option<&PValue>| v.and_then(PValue::as_str).map(str::to_string);
+    let mut names: Vec<String> = Vec::with_capacity(font.masters.len());
+    for m in font.masters.iter() {
+        let mut name = text(m.params.get("UFO Filename"))
+            .or_else(|| text(m.user_data.get("com.schriftgestaltung.Glyphs.ufoFilename")))
+            .unwrap_or_else(|| format!("{}-{}.ufo", font.family_name.replace(' ', ""), m.name.replace(' ', "")));
+        let mut n = 1;
+        while names.contains(&name) {
+            let (stem, ext) = split_ext(&name);
+            name = format!("{stem}#{n}{ext}");
+            n += 1;
+        }
+        names.push(name);
+    }
+    names
+}
+
+/// `os.path.splitext`: the extension is the last `.` and what follows it in the last path
+/// part, unless that part starts with it.
+fn split_ext(name: &str) -> (&str, &str) {
+    let part = name.rfind(['/', '\\']).map_or(0, |i| i + 1);
+    let last = name.get(part..).unwrap_or_default();
+    match last.rfind('.') {
+        Some(i) if last.get(..i).is_some_and(|s| !s.chars().all(|c| c == '.')) => {
+            let at = part + i;
+            (name.get(..at).unwrap_or(name), name.get(at..).unwrap_or_default())
+        }
+        _ => (name, ""),
+    }
+}
+
+/// `interpolateBinaryLayout`: what each compiled instance's layout is replaced with.
+pub(super) struct BinaryLayout {
+    /// The base master with the interpolated `GPOS`, by instance index.
+    layouts: Vec<(usize, SfntFont)>,
+}
+
+impl BinaryLayout {
+    /// Reads the compiled masters and interpolates the layout of every job, before anything is
+    /// compiled. `dir` is fontmake's `DIR` (default `master_<ext>`); `masterFinder`, when given,
+    /// is used instead.
+    pub(super) fn load(p: &Params<'_>, input: &Path, font: &Font, ds: &Designspace, jobs: &[Job], ext: &str, dir: Option<&str>) -> Result<Self> {
+        let finder = match (p.opt_str("masterFinder")?, dir) {
+            (Some(_), Some(_)) => {
+                return Err(p.bad("`interpolateBinaryLayout` names the masters' folder and `masterFinder` their files: give one"));
+            }
+            (Some(f), None) => f.to_string(),
+            (None, dir) => {
+                let dir = dir.map_or_else(|| format!("master_{ext}"), str::to_string);
+                format!("{}/{{stem}}.{ext}", dir.replace('{', "{{").replace('}', "}}"))
+            }
+        };
+        let set = CompiledMasters::load(p, input, font, ds, &finder)?;
+        let mut layouts = Vec::with_capacity(jobs.len());
+        for job in jobs {
+            layouts.push((job.index, set.interpolate(p, font, ds, job.index)?));
+        }
+        Ok(Self { layouts })
+    }
+
+    /// Replaces the layout of each compiled instance, given by instance index and file; every
+    /// file is rewritten only once all of them are built.
+    pub(super) fn apply(&self, p: &Params<'_>, outputs: &[(usize, PathBuf)]) -> Result<()> {
+        let mut staged: Vec<Staged> = Vec::with_capacity(outputs.len());
+        match self.stage_all(p, outputs, &mut staged).and_then(|()| commit(&staged)) {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                discard(&staged);
+                Err(e)
+            }
+        }
+    }
+
+    fn stage_all(&self, p: &Params<'_>, outputs: &[(usize, PathBuf)], staged: &mut Vec<Staged>) -> Result<()> {
+        for (index, path) in outputs {
+            let from = self
+                .layouts
+                .iter()
+                .find(|(i, _)| i == index)
+                .map(|(_, f)| f)
+                .ok_or_else(|| p.bad(format!("no layout was interpolated for {}", path.display())))?;
+            let read = file_io::read_input(path)?;
+            let made = transfer_layout(from, fontcraft_tables::read(&read.bytes, 0)?)?;
+            let bytes = fontcraft_tables::write(&made, &WriteOptions { order: TableOrder::Recommended })?;
+            staged.push(stage(path, &bytes, staged.len())?);
+        }
+        Ok(())
+    }
+}
+
+/// `into` with the `GPOS` of `from`, or none when `from` has none, and the `GDEF` and `GSUB` of
+/// `from` when it has them (fontmake takes those from the full source nearest the instance;
+/// layer sources are refused, so that is the default source). The tables are copied as they are
+/// when both fonts have one glyph order, and through TTX, by glyph name, otherwise.
+fn transfer_layout(from: &SfntFont, mut into: SfntFont) -> Result<SfntFont> {
+    if from.get(GPOS).is_none() {
+        into.remove(GPOS);
+    }
+    let tags: Vec<Tag> = [GDEF, GSUB, GPOS].into_iter().filter(|t| from.get(*t).is_some()).collect();
+    if tags.is_empty() {
+        return Ok(into);
+    }
+    if fontcraft_tables::ttx::glyph_order(from)? == fontcraft_tables::ttx::glyph_order(&into)? {
+        for tag in tags {
+            if let Some(bytes) = from.get(tag) {
+                into.insert(tag, bytes.to_vec());
+            }
+        }
+        return Ok(into);
+    }
+    let text = fontcraft_tables::ttx::dump(from, &fontcraft_tables::ttx::DumpOptions { tables: tags.clone(), ..Default::default() })?;
+    Ok(fontcraft_tables::ttx::import(into, &text, &fontcraft_tables::ttx::ImportOptions { tables: tags, ..Default::default() })?)
+}
+
 /// What every instance of a run is built from.
 struct Plan<'a> {
-    font: &'a fontcraft_model::Font,
+    font: &'a Font,
     ds: &'a Designspace,
-    masters: &'a [SfntFont],
-    base: usize,
-    model: &'a VariationModel,
+    set: &'a CompiledMasters,
     ext: &'static str,
     stamp: Option<i64>,
     dir: &'a Path,
 }
 
 /// Builds each job's font and stages it beside its output; answers the result entries.
-fn write_all(
-    p: &Params<'_>,
-    input: &Path,
-    req: &OutputRequest,
-    plan: &Plan<'_>,
-    jobs: &[super::source::Job],
-    staged: &mut Vec<Staged>,
-) -> Result<Vec<Value>> {
-    let Plan { font, ds, masters, base, model, ext, stamp, dir } = *plan;
+fn write_all(p: &Params<'_>, input: &Path, req: &OutputRequest, plan: &Plan<'_>, jobs: &[Job], staged: &mut Vec<Staged>) -> Result<Vec<Value>> {
+    let Plan { font, ds, set, ext, stamp, dir } = *plan;
     let mut outs: Vec<PathBuf> = Vec::new();
     let mut results = Vec::with_capacity(jobs.len());
     for job in jobs {
         let inst = font.instances.get(job.index).ok_or_else(|| p.bad("an instance is missing"))?;
-        let location = ds.instance_location(font, job.index).map_err(|e| p.bad(e.to_string()))?;
-        let normalized = ds.to_normalized(&location).map_err(|e| p.bad(e.to_string()))?;
-        let scalars = model.master_scalars(&normalized.0);
-        let mut made = fontcraft_tables::interpolate_layout::interpolate_layout(masters, base, &scalars)?;
+        let mut made = set.interpolate(p, font, ds, job.index)?;
         if let Some(t) = stamp {
             super::set_modified(&mut made, t);
         }
@@ -176,13 +361,32 @@ fn write_all(
     Ok(results)
 }
 
-fn read_designspace(input: &Path) -> Result<String> {
-    let is_designspace = input.extension().is_some_and(|e| e.eq_ignore_ascii_case("designspace"));
-    if !is_designspace {
-        return Err(EngineError::Unsupported(format!("`layoutOnly` reads the sources of a designspace, and {} is not one", input.display())));
+/// The source as `layoutOnly` reads it: a designspace without its UFOs, or a `.glyphs` or
+/// `.glyphspackage` source.
+fn read_source(input: &Path) -> Result<Font> {
+    let ext = input.extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
+    match ext.as_str() {
+        "designspace" => {
+            let read = file_io::read_input(input)?;
+            let text = String::from_utf8(read.bytes).map_err(|_| EngineError::Io(format!("{} is not UTF-8 text", input.display())))?;
+            let mut stubs = BTreeMap::new();
+            for rel in fontcraft_io_ufo::designspace::ufo_paths(&text)? {
+                stubs.insert(rel, stub_ufo());
+            }
+            Ok(fontcraft_io_ufo::designspace::read(&text, &stubs)?)
+        }
+        "glyphs" | "glyphspackage" => {
+            let (font, _) = crate::io::open(input, None)?;
+            if !matches!(font.source.format, SourceFormat::Glyphs | SourceFormat::GlyphsPackage) {
+                return Err(EngineError::Unsupported(format!("`layoutOnly`: {} does not open as a .glyphs source", input.display())));
+            }
+            Ok(font)
+        }
+        _ => Err(EngineError::Unsupported(format!(
+            "`layoutOnly` reads the sources of a designspace or a .glyphs source, and {} is neither",
+            input.display()
+        ))),
     }
-    let read = file_io::read_input(input)?;
-    String::from_utf8(read.bytes).map_err(|_| EngineError::Io(format!("{} is not UTF-8 text", input.display())))
 }
 
 /// The compiled master of the source at `source`: the file itself when it is a font or TTX
@@ -320,6 +524,118 @@ mod tests {
         assert!(present.contains("outside the read root"), "{present}");
         assert_eq!(present, refusal("missing.ttf"));
         let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn glyphs_master_ufos_are_named_as_glyphs_lib_names_them() {
+        let mut font = Font::new("Test Sans");
+        font.masters = std::sync::Arc::new(
+            ["Light Two", "Bold", "Bold"].map(|name| fontcraft_model::Master { id: name.into(), name: name.into(), ..Default::default() }).to_vec(),
+        );
+        assert_eq!(glyphs_ufo_names(&font), ["TestSans-LightTwo.ufo", "TestSans-Bold.ufo", "TestSans-Bold#1.ufo"]);
+        assert_eq!(split_ext("a.b/c"), ("a.b/c", ""));
+        assert_eq!(split_ext(".ufo"), (".ufo", ""));
+        assert_eq!(split_ext("x/A.ufo"), ("x/A", ".ufo"));
+    }
+
+    /// A two-master Glyphs source whose only kerning pair, A V, is `light` in the light master
+    /// and `bold` in the bold one.
+    fn glyphs_source(light: i32, bold: i32) -> String {
+        let glyph = |name: &str, unicode: u32, light: i32, bold: i32| {
+            let layer = |id: &str, w: i32| {
+                format!(
+                    "{{\nlayerId = {id};\nshapes = (\n{{\nclosed = 1;\nnodes = (\n(0,0,l),\n({w},0,l),\n({},700,l)\n);\n}}\n);\nwidth = {w};\n}}",
+                    w / 2
+                )
+            };
+            format!("{{\nglyphname = {name};\nlayers = (\n{},\n{}\n);\nunicode = {unicode};\n}}", layer("m01", light), layer("m02", bold))
+        };
+        format!(
+            "{{\n.appVersion = \"3260\";\n.formatVersion = 3;\naxes = (\n{{\nname = Weight;\ntag = wght;\n}}\n);\nfamilyName = \"Test Sans\";\n\
+             fontMaster = (\n{{\naxesValues = (\n300\n);\nid = m01;\nname = \"Light Two\";\n}},\n{{\naxesValues = (\n700\n);\nid = m02;\nname = Bold;\n}}\n);\n\
+             glyphs = (\n{},\n{}\n);\ninstances = (\n{{\naxesValues = (\n400\n);\nname = Regular;\n}}\n);\n\
+             kerningLTR = {{\nm01 = {{\nA = {{\nV = {light};\n}};\n}};\nm02 = {{\nA = {{\nV = {bold};\n}};\n}};\n}};\n\
+             unitsPerEm = 1000;\nversionMajor = 1;\nversionMinor = 0;\n}}\n",
+            glyph("A", 65, 500, 600),
+            glyph("V", 86, 520, 640)
+        )
+    }
+
+    /// A Glyphs source whose compiled masters (kerned -60 and -140) sit where fontmake writes
+    /// them, `master_ttf/TestSans-LightTwo.ttf` and `master_ttf/TestSans-Bold.ttf`, while the
+    /// source itself kerns -50 and -110. At wght 400 the masters weigh 0.75 and 0.25: the
+    /// interpolated pair is -80 where the source's own would be -65.
+    #[test]
+    fn a_glyphs_source_finds_its_compiled_masters_by_their_ufo_names() {
+        let dir = std::env::temp_dir().join(format!("fontcraft-layout-glyphs-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("masters")).unwrap();
+        std::fs::create_dir_all(dir.join("master_ttf")).unwrap();
+        let masters_source = dir.join("masters/Test.glyphs");
+        std::fs::write(&masters_source, glyphs_source(-60, -140)).unwrap();
+        let input = dir.join("Test.glyphs");
+        std::fs::write(&input, glyphs_source(-50, -110)).unwrap();
+
+        let (font, _) = crate::io::open(&masters_source, None).unwrap();
+        let mut s = crate::Session::new();
+        s.push_document(font, Some(masters_source.clone()));
+        let built = s
+            .execute(
+                "font.compile",
+                &json!({ "formats": ["ttf"], "instances": false, "mastersAsInstances": true, "destination": dir.join("masters/ttf").display().to_string() }),
+            )
+            .unwrap();
+        let mut masters = Vec::new();
+        for (label, stem) in [("Light Two", "TestSans-LightTwo"), ("Bold", "TestSans-Bold")] {
+            let f = built["fonts"].as_array().unwrap().iter().find(|f| f["instance"] == json!(label)).unwrap();
+            let to = dir.join("master_ttf").join(format!("{stem}.ttf"));
+            std::fs::rename(f["files"][0]["path"].as_str().unwrap(), &to).unwrap();
+            masters.push(fontcraft_tables::read(&std::fs::read(&to).unwrap(), 0).unwrap());
+        }
+        let expected = fontcraft_tables::interpolate_layout::interpolate_gpos(&masters, 0, &[0.75, 0.25]).unwrap().unwrap();
+
+        let mut s = crate::Session::new();
+        let r = s
+            .execute(
+                "font.instantiate",
+                &json!({ "input": input, "location": { "wght": 400 }, "layoutOnly": true, "masterFinder": "master_ttf/{stem}.ttf" }),
+            )
+            .unwrap();
+        let out = dir.join("Test.instance.ttf");
+        assert_eq!(r["results"][0]["output"], json!(out.display().to_string()));
+        let made = fontcraft_tables::read(&std::fs::read(&out).unwrap(), 0).unwrap();
+        assert_eq!(made.get(GPOS), Some(expected.as_slice()), "layoutOnly: the interpolated GPOS");
+        assert_eq!(made.get(*b"glyf"), masters[0].get(*b"glyf"), "layoutOnly: the base master's outlines");
+
+        let out = dir.join("bin.ttf");
+        s.execute(
+            "font.instantiate",
+            &json!({ "input": input, "location": { "wght": 400 }, "to": "ttf", "interpolateBinaryLayout": true, "output": out }),
+        )
+        .unwrap();
+        let made = fontcraft_tables::read(&std::fs::read(&out).unwrap(), 0).unwrap();
+        assert_eq!(made.get(GPOS), Some(expected.as_slice()), "the compiled instance's GPOS is replaced");
+        assert_eq!(made.get(GDEF), masters[0].get(GDEF), "GDEF follows the default master");
+        assert_ne!(made.get(*b"hmtx"), masters[0].get(*b"hmtx"), "the outlines and metrics are the instance's own");
+
+        let without = dir.join("own.ttf");
+        s.execute("font.instantiate", &json!({ "input": input, "location": { "wght": 400 }, "to": "ttf", "output": without })).unwrap();
+        let own = fontcraft_tables::read(&std::fs::read(&without).unwrap(), 0).unwrap();
+        assert_ne!(own.get(GPOS), Some(expected.as_slice()), "without the option the source's own kerning");
+
+        let mut refused = |params: Value| s.execute("font.instantiate", &params).is_err();
+        assert!(
+            refused(json!({ "input": input, "location": { "wght": 400 }, "interpolateBinaryLayout": true, "outputDir": dir.join("u") })),
+            "UFO instances"
+        );
+        assert!(
+            refused(
+                json!({ "input": input, "location": { "wght": 400 }, "to": "ttf", "interpolateBinaryLayout": "elsewhere", "output": dir.join("x.ttf") })
+            ),
+            "no masters in that folder"
+        );
+        assert!(!dir.join("x.ttf").exists(), "a refused run writes nothing");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// fontTools' vpal test: a designspace whose sources exist only as TTX masters.
