@@ -6,7 +6,7 @@
 //! | Table | Drawn |
 //! |---|---|
 //! | `COLR` (versions 0 and 1) with `CPAL` | through skrifa's colour painter: clips, solid fills, linear, radial and sweep gradients, transforms, and composite layers, with the palette [`ColorOptions::palette`] |
-//! | `SVG ` | the glyph's document, inflated first when it is gzip-compressed, through the SVG drawing of `fontcraft_color` ([`svg_draw::items`]): filled outlines with solid, gradient or pattern paint, embedded PNG and JPEG images, clip paths and masks |
+//! | `SVG ` | the glyph's document, inflated first when it is gzip-compressed, through the SVG drawing of `fontcraft_color` ([`svg_draw::drawing`]): filled outlines with solid, gradient or pattern paint, embedded PNG and JPEG images, clip paths, masks and filters |
 //! | `sbix` | the PNG or JPEG image of the strike nearest the pixel size: the smallest strike at least that large, else the largest |
 //! | `CBDT` with `CBLC` | the image of the strike nearest the pixel size, by the same rule: PNG data, 32-bit colour, and masks of 1 to 8 bits drawn in the text colour |
 //!
@@ -43,7 +43,14 @@
 //!   drawn under those clips directly, as are pattern tiles. Each layer, and each clip or mask
 //!   drawn, counts the sprite's pixels against the glyph's work, so masks nested past
 //!   [`MAX_LAYER_DEPTH`] layers, or clips past [`MAX_CLIP_DEPTH`], refuse the glyph.
-//! - Not drawn: filters inside SVG documents, embedded images other than PNG and JPEG, `sbix`
+//! - A group with filters is drawn on a layer of its own too; its filters run on that layer
+//!   (module `filter`) before its clips and masks, and its opacity applies last. The sprite
+//!   covers the last filter's region, where a blur or an offset can reach. A filter that cannot
+//!   be drawn leaves the group unfiltered, with a line in [`GlyphRaster::warnings`].
+//! - A document whose root slices its viewport (`preserveAspectRatio` with `slice`) is clipped
+//!   to the em square, the viewport it is fitted to, unless the root's `overflow` is `visible`
+//!   or `auto`.
+//! - Not drawn: embedded images other than PNG and JPEG, `sbix`
 //!   graphic types other than `png `, `jpg ` and `dupe`, and `EBDT` strikes.
 //! - The `sbix` image's bottom left sits at the record's origin offsets from the glyph origin, a
 //!   strike pixel being `units_per_em ÷ ppem` units, which is how the compiler places it. A
@@ -56,6 +63,7 @@ use std::sync::Arc;
 
 use fontcraft_color::paint::{ColorLine, ColorRef, Paint as ColorPaint};
 use fontcraft_color::svg_draw::{self, SvgGroup, SvgImage, SvgItem, SvgShape};
+use fontcraft_color::svg_filter::SvgFilter;
 use fontcraft_container::gzip::{GunzipError, MAGIC as GZIP_MAGIC, gunzip};
 use fontcraft_geom::{Affine, BezPath, Point, Rect, Shape as _};
 use fontcraft_model::Extend as ModelExtend;
@@ -97,6 +105,12 @@ pub const MAX_SOURCE_BYTES: usize = 64 << 20;
 const MAX_ROOT_ATTRIBUTES: usize = 64;
 /// Samples per side for one sprite pixel when an image is drawn smaller than its pixels.
 const MAX_BITMAP_SAMPLES: u32 = 4;
+/// Most sprite pixels of one SVG filter region; a group with a larger region is drawn unfiltered.
+pub const MAX_FILTER_PIXELS: u64 = 1 << 20;
+/// Largest blur standard deviation in sprite pixels; a larger one blurs by this much.
+pub const MAX_BLUR_SIGMA: f64 = 256.0;
+
+mod filter;
 
 /// The tables a colour glyph is drawn from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -127,6 +141,9 @@ pub struct GlyphRaster {
     pub left: i32,
     pub top: i32,
     pub kind: ColorKind,
+    /// What of the glyph's colour drawing is left out or drawn plainer, one line for each
+    /// reason.
+    pub warnings: Vec<String>,
 }
 
 /// What [`ColorRenderer::glyph`] gives.
@@ -892,6 +909,7 @@ struct Raster<'a, 'f> {
     work: u64,
     budget: u64,
     refused: Option<String>,
+    warnings: Vec<String>,
 }
 
 impl<'a, 'f> Raster<'a, 'f> {
@@ -910,6 +928,13 @@ impl<'a, 'f> Raster<'a, 'f> {
             work: 0,
             budget: budget_for(sprite),
             refused: None,
+            warnings: Vec::new(),
+        }
+    }
+
+    fn warn(&mut self, warning: String) {
+        if !self.warnings.contains(&warning) {
+            self.warnings.push(warning);
         }
     }
 
@@ -1056,7 +1081,10 @@ impl<'a, 'f> Raster<'a, 'f> {
     /// directly; any other is drawn into a layer of its own, multiplied by the coverage of each
     /// clip and mask, and laid over the layer below.
     fn draw_group(&mut self, group: &DrawGroup) {
-        let plain = group.masks.is_empty() && group.clips.iter().all(|c| c.iter().all(|d| matches!(d, Drawable::Shape(_))));
+        let plain = group.filters.is_empty()
+            && group.opacity >= 1.0
+            && group.masks.is_empty()
+            && group.clips.iter().all(|c| c.iter().all(|d| matches!(d, Drawable::Shape(_))));
         if plain {
             for clip in &group.clips {
                 let paths: Vec<&BezPath> = clip.iter().filter_map(|d| if let Drawable::Shape(s) = d { Some(&s.outline) } else { None }).collect();
@@ -1072,6 +1100,9 @@ impl<'a, 'f> Raster<'a, 'f> {
             return;
         }
         self.draw_items(&group.items);
+        for f in &group.filters {
+            self.apply_filter(f);
+        }
         for clip in &group.clips {
             if let Some(coverage) = self.coverage(clip, None, false) {
                 self.mask_top(&coverage);
@@ -1082,7 +1113,46 @@ impl<'a, 'f> Raster<'a, 'f> {
                 self.mask_top(&coverage);
             }
         }
+        if group.opacity < 1.0 {
+            self.fade_top(group.opacity);
+        }
         self.close_layer();
+    }
+
+    /// Runs `f` on the top layer, or leaves the layer as it is with a warning when the filter's
+    /// region is too large.
+    fn apply_filter(&mut self, f: &SvgFilter) {
+        if self.refused.is_some() {
+            return;
+        }
+        let to_pixels = self.ctm() * f.to_font;
+        if !finite_affine(to_pixels) {
+            return;
+        }
+        let plan = match filter::plan(f, to_pixels, self.width, self.height) {
+            Ok(plan) => plan,
+            Err(warning) => return self.warn(warning),
+        };
+        if !self.spend(plan.cost) {
+            return;
+        }
+        let width = self.width;
+        if let Some(layer) = self.layers.last_mut() {
+            filter::run(f, &plan, layer, width);
+        }
+    }
+
+    /// Multiplies the top layer by `opacity`.
+    fn fade_top(&mut self, opacity: f32) {
+        let area = self.area();
+        if self.refused.is_some() || !self.spend(area) {
+            return;
+        }
+        let k = if opacity.is_finite() { opacity.clamp(0.0, 1.0) } else { 0.0 };
+        let Some(top) = self.layers.last_mut() else { return };
+        for v in top.iter_mut() {
+            *v = (f32::from(*v) * k).round() as u8;
+        }
     }
 
     /// Pushes a clear layer the size of the sprite; false (nothing pushed) when the glyph is
@@ -1263,7 +1333,7 @@ impl<'a, 'f> Raster<'a, 'f> {
         }
         let pixels = self.layers.into_iter().next().unwrap_or_default();
         let image = Image::from_rgba_premultiplied(self.width, self.height, pixels).map_err(|e| Refusal::new(e.to_string(), self.work))?;
-        Ok((GlyphRaster { image, left, top, kind }, self.work))
+        Ok((GlyphRaster { image, left, top, kind, warnings: self.warnings }, self.work))
     }
 }
 
@@ -1433,7 +1503,7 @@ fn draw_colr(font: &FontRef, gid: u16, options: &ColorOptions) -> Result<Done, R
 /// A colour glyph that paints nothing.
 fn blank(kind: ColorKind) -> Result<Done, Refusal> {
     let image = Image::from_rgba_premultiplied(1, 1, vec![0; 4]).map_err(|e| Refusal::new(e.to_string(), 0))?;
-    Ok((GlyphRaster { image, left: 0, top: 0, kind }, 1))
+    Ok((GlyphRaster { image, left: 0, top: 0, kind, warnings: Vec::new() }, 1))
 }
 
 // ── colour sources ─────────────────────────────────────────────────────────────────────────────
@@ -1474,6 +1544,8 @@ enum Drawable {
 /// An [`svg_draw::SvgGroup`] with its images decoded.
 struct DrawGroup {
     items: Vec<Drawable>,
+    filters: Vec<SvgFilter>,
+    opacity: f32,
     clips: Vec<Vec<Drawable>>,
     masks: Vec<DrawMask>,
 }
@@ -1493,13 +1565,15 @@ fn drawable_bytes(items: &[Drawable]) -> usize {
             Drawable::Image { bitmap, .. } => 64 + bitmap.pixels.len(),
             Drawable::Group(g) => {
                 let masks: usize = g.masks.iter().map(|m| 64 + 32 * m.region.elements().len() + drawable_bytes(&m.items)).sum();
-                64 + drawable_bytes(&g.items) + g.clips.iter().map(|c| drawable_bytes(c)).sum::<usize>() + masks
+                let filters: usize = g.filters.iter().map(|f| 128 + 160 * f.primitives.len()).sum();
+                64 + drawable_bytes(&g.items) + g.clips.iter().map(|c| drawable_bytes(c)).sum::<usize>() + masks + filters
             }
         })
         .sum()
 }
 
-/// The area `items` may paint, font units: a group's within its clips and mask regions.
+/// The area `items` may paint, font units: a group's within its clips and mask regions, a
+/// filtered group's its last filter's region, where its result lies.
 fn extent(items: &[Drawable]) -> Option<Rect> {
     items
         .iter()
@@ -1507,7 +1581,10 @@ fn extent(items: &[Drawable]) -> Option<Rect> {
             Drawable::Shape(s) => Some(s.outline.bounding_box()),
             Drawable::Image { place, .. } => Some(place.transform_rect_bbox(unit())),
             Drawable::Group(g) => {
-                let mut r = extent(&g.items)?;
+                let mut r = match g.filters.last() {
+                    Some(f) => Some(f.to_font.transform_rect_bbox(f.region)).filter(|r| finite_rect(*r))?,
+                    None => extent(&g.items)?,
+                };
                 for clip in &g.clips {
                     r = r.intersect(extent(clip)?);
                 }
@@ -1525,6 +1602,8 @@ fn extent(items: &[Drawable]) -> Option<Rect> {
 /// image of one `sbix` or `CBDT` strike.
 struct Source {
     items: Vec<Drawable>,
+    /// What of the source is not drawn as it should be.
+    warnings: Vec<String>,
 }
 
 impl Source {
@@ -1717,6 +1796,12 @@ fn svg_place(fit: Option<Fit>, upem: f64, w: f64, h: f64) -> Option<Affine> {
     finite_affine(place).then_some(place)
 }
 
+/// Whether the document's root clips to its viewport: its `overflow` is not `visible` or
+/// `auto`.
+fn root_clips(doc: &[u8]) -> bool {
+    !root_attributes(doc).iter().any(|(n, v)| *n == b"overflow" && matches!(v.trim_ascii(), b"visible" | b"auto"))
+}
+
 fn prepare_svg(font: &FontRef, gid: u16) -> (Result<Source, String>, u64) {
     let Some(stored) = font.svg().ok().and_then(|s| s.glyph_data(GlyphId::new(u32::from(gid)))) else {
         return (Err("the glyph has no SVG document".into()), 0);
@@ -1744,16 +1829,28 @@ fn prepare_svg(font: &FontRef, gid: u16) -> (Result<Source, String>, u64) {
             Affine::IDENTITY
         })
     };
-    let items = match svg_draw::items(&doc, place) {
-        Ok(items) => items,
+    let drawing = match svg_draw::drawing(&doc, place) {
+        Ok(drawing) => drawing,
         Err(e) => return (Err(format!("the SVG document cannot be drawn: {e}")), work),
     };
     if unplaced {
         return (Err("the SVG document's width, height or viewBox is empty".into()), work);
     }
     let mut images = Images { decoded: HashMap::new(), pixels_left: MAX_BITMAP_PIXELS, work };
-    let items = images.drawables(items);
-    (Ok(Source { items }), images.work)
+    let mut items = images.drawables(drawing.items);
+    if fit.is_some_and(|f| f.slice) && root_clips(&doc) {
+        // The em square, font units: the viewport the sliced document overflows.
+        let em = Rect::new(0.0, -upem, upem, 0.0);
+        let mut outline = BezPath::new();
+        outline.move_to((em.x0, em.y0));
+        outline.line_to((em.x1, em.y0));
+        outline.line_to((em.x1, em.y1));
+        outline.line_to((em.x0, em.y1));
+        outline.close_path();
+        let clip = Drawable::Shape(SvgShape { outline, paint: ColorPaint::Solid(ColorRef::Rgba([0.0, 0.0, 0.0, 1.0])) });
+        items = vec![Drawable::Group(Box::new(DrawGroup { items, filters: Vec::new(), opacity: 1.0, clips: vec![vec![clip]], masks: Vec::new() }))];
+    }
+    (Ok(Source { items, warnings: drawing.warnings }), images.work)
 }
 
 /// The embedded images of one document, decoded once each within [`MAX_BITMAP_PIXELS`].
@@ -1788,12 +1885,13 @@ impl Images {
                         out.push(Drawable::Image { bitmap, place, opacity: opacity as f32 });
                     }
                 }
-                SvgItem::Group(SvgGroup { items, clips, masks }) => {
+                SvgItem::Group(SvgGroup { items, filters, opacity, clips, masks }) => {
                     let items = self.drawables(items);
                     let clips = clips.into_iter().map(|c| self.drawables(c)).collect();
                     let masks =
                         masks.into_iter().map(|m| DrawMask { luminance: m.luminance, region: m.region, items: self.drawables(m.items) }).collect();
-                    out.push(Drawable::Group(Box::new(DrawGroup { items, clips, masks })));
+                    let opacity = if opacity.is_finite() { opacity.clamp(0.0, 1.0) as f32 } else { 0.0 };
+                    out.push(Drawable::Group(Box::new(DrawGroup { items, filters, opacity, clips, masks })));
                 }
             }
         }
@@ -1845,6 +1943,7 @@ fn draw_svg(font: &FontRef, source: &Source, options: &ColorOptions) -> Result<D
     let sprite = sprite(rect, options.scale)?;
     let mut outlines = Outlines::new(font);
     let mut raster = Raster::new(&sprite, &mut outlines, &[], options.text_color);
+    raster.warnings.clone_from(&source.warnings);
     raster.draw_items(&source.items);
     raster.finish(sprite.left, sprite.top, ColorKind::Svg)
 }
@@ -1903,7 +2002,7 @@ fn prepare_sbix(font: &FontRef, gid: u16, ppem: f64) -> (Result<Source, String>,
     let (w, h) = (f64::from(bitmap.width), f64::from(bitmap.height));
     let place = Affine::new([w * unit, 0.0, 0.0, -h * unit, f64::from(ox) * unit, (f64::from(oy) + h) * unit]);
     let work = bitmap.pixel_count().saturating_add(data.len() as u64);
-    (Ok(Source { items: vec![Drawable::Image { bitmap: Arc::new(bitmap), place, opacity: 1.0 }] }), work)
+    (Ok(Source { items: vec![Drawable::Image { bitmap: Arc::new(bitmap), place, opacity: 1.0 }], warnings: Vec::new() }), work)
 }
 
 // ── CBDT ───────────────────────────────────────────────────────────────────────────────────────
@@ -1967,7 +2066,7 @@ fn prepare_cbdt(font: &FontRef, gid: u16, ppem: f64) -> (Result<Source, String>,
         Err(e) => return (Err(e), declared),
     };
     if bitmap.width == 0 || bitmap.height == 0 {
-        return (Ok(Source { items: Vec::new() }), 0);
+        return (Ok(Source { items: Vec::new(), warnings: Vec::new() }), 0);
     }
     // The bearings put the image's top left that many strike pixels right of and above the
     // glyph origin; a strike pixel is `units_per_em ÷ ppem` units.
@@ -1980,7 +2079,7 @@ fn prepare_cbdt(font: &FontRef, gid: u16, ppem: f64) -> (Result<Source, String>,
         Origin::BottomLeft => Affine::new([w * ux, 0.0, 0.0, -h * uy, bx * ux, (by + h) * uy]),
     };
     let work = bitmap.pixel_count();
-    (Ok(Source { items: vec![Drawable::Image { bitmap: Arc::new(bitmap), place, opacity: 1.0 }] }), work)
+    (Ok(Source { items: vec![Drawable::Image { bitmap: Arc::new(bitmap), place, opacity: 1.0 }], warnings: Vec::new() }), work)
 }
 
 /// A glyph drawn from a bitmap source (`sbix` or `CBDT`).
@@ -2011,7 +2110,13 @@ mod tests {
     use super::*;
 
     fn raster(w: u32, h: u32, rgba: [u8; 4]) -> GlyphRaster {
-        GlyphRaster { image: Image::from_rgba_premultiplied(w, h, rgba.repeat((w * h) as usize)).unwrap(), left: -1, top: -2, kind: ColorKind::Colr }
+        GlyphRaster {
+            image: Image::from_rgba_premultiplied(w, h, rgba.repeat((w * h) as usize)).unwrap(),
+            left: -1,
+            top: -2,
+            kind: ColorKind::Colr,
+            warnings: Vec::new(),
+        }
     }
 
     #[test]
@@ -2270,6 +2375,83 @@ mod tests {
         ));
         assert_eq!(ink(&raster), (10, 30, 20, 30));
         assert_eq!(colour_at(&raster, 20, 25), [0, 255, 0, 255]);
+    }
+
+    /// `body` filtered by `filter` (the primitives of a filter whose region is the document's
+    /// top left 500-unit square, above the baseline).
+    fn filtered(filter: &str, body: &str) -> Arc<GlyphRaster> {
+        svg_glyph(&format!(
+            r#"<defs><filter id="f" filterUnits="userSpaceOnUse" x="0" y="-500" width="500" height="500">{filter}</filter></defs><g filter="url(#f)">{body}</g>"#
+        ))
+    }
+
+    #[test]
+    fn svg_filters_blur_move_and_recolour_what_they_filter() {
+        // A 10-pixel red square blurred by 3 pixels: its middle stays nearly opaque, and ink
+        // reaches past its edges.
+        let square = r##"<rect x="200" y="-300" width="100" height="100" fill="#FF0000"/>"##;
+        let raster = filtered(r#"<feGaussianBlur stdDeviation="30"/>"#, square);
+        let mid = colour_at(&raster, 25, 25);
+        assert!(mid[3] > 160 && mid[0] == mid[3] && mid[1] == 0 && mid[2] == 0, "{mid:?}");
+        assert!(colour_at(&raster, 32, 25)[3] > 0, "the blur spreads 2 pixels beyond the edge");
+        assert!(colour_at(&raster, 25, 18)[3] > 0);
+        assert_eq!(colour_at(&raster, 45, 25)[3], 0, "but not 15");
+
+        // A shadow of the square's alpha moved 10 pixels right and 10 down, under the square.
+        let square = r##"<rect x="100" y="-400" width="100" height="100" fill="#FF0000"/>"##;
+        for filter in [
+            r#"<feOffset in="SourceAlpha" dx="100" dy="100" result="s"/><feMerge><feMergeNode in="s"/><feMergeNode in="SourceGraphic"/></feMerge>"#,
+            r##"<feDropShadow dx="100" dy="100" stdDeviation="0" flood-color="#000000"/>"##,
+        ] {
+            let raster = filtered(filter, square);
+            assert_eq!(colour_at(&raster, 15, 35), [255, 0, 0, 255], "{filter}");
+            assert_eq!(colour_at(&raster, 25, 25), [0, 0, 0, 255], "the shadow, {filter}");
+            assert_eq!((colour_at(&raster, 15, 25)[3], colour_at(&raster, 25, 35)[3]), (0, 0), "{filter}");
+        }
+
+        // A colour matrix swapping red and blue, and one taking the saturation away.
+        let raster = filtered(r#"<feColorMatrix type="matrix" values="0 0 1 0 0  0 1 0 0 0  1 0 0 0 0  0 0 0 1 0"/>"#, square);
+        assert_eq!(colour_at(&raster, 15, 35), [0, 0, 255, 255]);
+        let raster = filtered(r#"<feColorMatrix type="saturate" values="0"/>"#, square);
+        assert!(near(colour_at(&raster, 15, 35), [127, 127, 127, 255]), "{:?}", colour_at(&raster, 15, 35));
+        assert!(raster.warnings.is_empty(), "{:?}", raster.warnings);
+    }
+
+    #[test]
+    fn svg_filters_that_cannot_be_drawn_leave_the_element_unfiltered() {
+        let square = r##"<rect x="200" y="-300" width="100" height="100" fill="#FF0000"/>"##;
+        let raster = filtered(r#"<feTurbulence baseFrequency="0.05"/>"#, square);
+        assert_eq!(colour_at(&raster, 25, 25), [255, 0, 0, 255]);
+        assert_eq!(raster.warnings.len(), 1, "{:?}", raster.warnings);
+        assert!(raster.warnings[0].contains("feTurbulence"), "{:?}", raster.warnings);
+
+        // A region of 1,200 × 1,200 sprite pixels is past the filter limit: drawn unfiltered.
+        let doc = r##"<svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 1000 1000"><defs><filter id="f" filterUnits="userSpaceOnUse" x="0" y="-1000" width="1000" height="1000"><feGaussianBlur stdDeviation="50"/></filter></defs><rect x="200" y="-300" width="100" height="100" fill="#FF0000" filter="url(#f)"/></svg>"##;
+        let raster = glyph1(sfnt(2, vec![svg_table(doc.as_bytes())]), 1.2);
+        assert_eq!(colour_at(&raster, 300, 300), [255, 0, 0, 255]);
+        assert_eq!(colour_at(&raster, 362, 300)[3], 0, "not blurred");
+        assert!(raster.warnings.iter().any(|w| w.contains("unfiltered")), "{:?}", raster.warnings);
+
+        // A region far larger than any sprite refuses the glyph before any pixel is drawn.
+        let doc = doc.replace(r#"width="1000" height="1000""#, r#"width="100000000" height="100000000""#);
+        let mut r = ColorRenderer::new(sfnt(2, vec![svg_table(doc.as_bytes())]), &[]).unwrap();
+        let options = ColorOptions { scale: 0.1, palette: 0, text_color: [0, 0, 0, 255] };
+        let Painted::Refused(reason) = r.glyph(1, &options, &mut FrameBudget::frame()) else { panic!("an enormous filter region is drawn") };
+        assert!(reason.contains("pixels"), "{reason}");
+    }
+
+    #[test]
+    fn a_sliced_svg_document_is_clipped_to_the_em_square() {
+        // A 1000 × 500 viewBox sliced into the em: scaled 2×, its middle 1000 units wide show.
+        let doc = |overflow: &str| {
+            format!(
+                r##"<svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 1000 500" preserveAspectRatio="xMidYMid slice"{overflow}><rect width="1000" height="500" fill="#00FF00"/></svg>"##
+            )
+        };
+        let clipped = glyph1(sfnt(2, vec![svg_table(doc("").as_bytes())]), 0.1);
+        assert_eq!(ink(&clipped), (0, 100, -100, 0));
+        let visible = glyph1(sfnt(2, vec![svg_table(doc(r#" overflow="visible""#).as_bytes())]), 0.1);
+        assert_eq!(ink(&visible), (-50, 150, -100, 0));
     }
 
     #[test]
