@@ -5,8 +5,8 @@
 use std::fmt::Write as _;
 
 use crate::{
-    Bitmap, BitmapError, BitmapFont, BitmapGlyph, Import, MAX_BITMAP_SIDE, MAX_COORDINATE, MAX_GLYPHS, MAX_PROPERTIES, MAX_STRING_BYTES, PixelBudget,
-    Property, PropertyValue, Result, Warnings, valid_depth,
+    Bitmap, BitmapError, BitmapFont, BitmapGlyph, Import, MAX_BITMAP_SIDE, MAX_CODE, MAX_COORDINATE, MAX_GLYPHS, MAX_PROPERTIES, MAX_STRING_BYTES,
+    PixelBudget, Property, PropertyValue, Result, Warnings, valid_depth,
 };
 
 /// Longest line the reader accepts, in bytes. A row of the widest grey bitmap takes 2,048 hex
@@ -207,7 +207,7 @@ impl Reader {
                 "ENCODING" => {
                     let code = rest.split_ascii_whitespace().next().and_then(|v| v.parse::<i64>().ok());
                     let code = code.ok_or_else(|| error(line, format!("ENCODING needs a number, not {rest:?}")))?;
-                    encoding = u32::try_from(code).ok();
+                    encoding = u32::try_from(code).ok().filter(|c| *c <= MAX_CODE);
                 }
                 "SWIDTH" => scalable_width = Some(first_integer(line, rest)?),
                 "DWIDTH" => advance = Some(first_integer(line, rest)?),

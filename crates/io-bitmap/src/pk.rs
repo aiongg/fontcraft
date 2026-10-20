@@ -13,7 +13,8 @@
 use crate::bdf::{check_for_writing, glyph_extent};
 use crate::binary::{Cursor, Scale, code_name, set_bits};
 use crate::{
-    Bitmap, BitmapError, BitmapFont, BitmapGlyph, Import, MAX_BITMAP_SIDE, MAX_COORDINATE, MAX_FILE_BYTES, MAX_GLYPHS, PixelBudget, Result, Warnings,
+    Bitmap, BitmapError, BitmapFont, BitmapGlyph, Import, MAX_BITMAP_SIDE, MAX_CODE, MAX_COORDINATE, MAX_FILE_BYTES, MAX_GLYPHS, PixelBudget,
+    Property, PropertyValue, Result, Warnings,
 };
 
 pub(crate) const PRE: u8 = 247;
@@ -47,6 +48,7 @@ pub fn read_pk(bytes: &[u8]) -> Result<Import> {
     let mut glyphs = Vec::new();
     let mut warnings = Warnings::default();
     let mut budget = PixelBudget::default();
+    let mut beyond_code = 0usize;
     loop {
         if c.at_end() {
             warnings.push("the file ends without a postamble".into());
@@ -58,7 +60,12 @@ pub fn read_pk(bytes: &[u8]) -> Result<Import> {
                 if glyphs.len() >= MAX_GLYPHS {
                     return Err(BitmapError::Limit { what: "glyphs", limit: MAX_GLYPHS });
                 }
-                glyphs.push(read_char(&mut c, flag, &mut budget)?);
+                let glyph = read_char(&mut c, flag, &mut budget)?;
+                if glyph.encoding.is_some_and(|code| code > MAX_CODE) {
+                    beyond_code += 1;
+                    continue;
+                }
+                glyphs.push(glyph);
             }
             XXX1..=XXX4 => {
                 let len = c.uint(usize::from(flag - XXX1) + 1)?;
@@ -70,13 +77,19 @@ pub fn read_pk(bytes: &[u8]) -> Result<Import> {
             _ => return Err(c.error(format!("{flag} is not a PK command"))),
         }
     }
+    if beyond_code > 0 {
+        warnings.push(format!("{beyond_code} characters have a code above {MAX_CODE} and were left out"));
+    }
     Ok(Import { font: tex_font(glyphs, &scale), warnings: warnings.finish() })
 }
 
-/// The font a PK or GF file describes: no name or properties (the file has none), its size from
-/// the design size and resolution, and its ascent and descent from the glyphs.
+/// The font a PK or GF file describes: no name (the file has none), its size from the design
+/// size and resolution, and its ascent and descent from the glyphs. Its codes are in whichever
+/// encoding the TeX font uses (OT1, T1 and others), not Unicode, so the font is marked
+/// `CHARSET_REGISTRY` `TeX`, `CHARSET_ENCODING` `FontSpecific`, and its glyphs match by name.
 pub(crate) fn tex_font(glyphs: Vec<BitmapGlyph>, scale: &Scale) -> BitmapFont {
     let (ascent, descent) = glyph_extent(&glyphs);
+    let text = |name: &str, value: &str| Property { name: name.into(), value: PropertyValue::Text(value.into()) };
     BitmapFont {
         name: String::new(),
         pixel_size: scale.pixel_size(),
@@ -85,7 +98,7 @@ pub(crate) fn tex_font(glyphs: Vec<BitmapGlyph>, scale: &Scale) -> BitmapFont {
         depth: 1,
         ascent,
         descent,
-        properties: Vec::new(),
+        properties: vec![text("CHARSET_REGISTRY", "TeX"), text("CHARSET_ENCODING", "FontSpecific")],
         glyphs,
     }
 }
@@ -637,5 +650,24 @@ mod tests {
             }
         }
         assert_eq!(back.glyphs[0].scalable_width, Some(500));
+        // TeX codes are not Unicode: code 123 is an en dash in cmr10, not a brace.
+        assert!(!back.codes_are_unicode());
+    }
+
+    /// A long-form character whose code is beyond what a strike holds is left out, and the rest
+    /// of the file is read.
+    #[test]
+    fn pk_leaves_out_codes_beyond_the_limit() {
+        let mut bytes = preamble();
+        bytes.push(0xe7);
+        bytes.extend_from_slice(&28u32.to_be_bytes());
+        bytes.extend_from_slice(&0x8000_0000u32.to_be_bytes());
+        for v in [0i32, 0, 0, 0, 0, 0, 0] {
+            bytes.extend_from_slice(&v.to_be_bytes());
+        }
+        bytes.extend([0xe8, 10, 65, 0x00, 0xa3, 0xd6, 4, 3, 4, 0, 1, 0xfd, 0x20, POST]);
+        let import = read_pk(&bytes).unwrap();
+        assert_eq!(import.font.glyphs.iter().map(|g| g.encoding).collect::<Vec<_>>(), [Some(65)]);
+        assert!(import.warnings.iter().any(|w| w.contains("above 2147483647")), "{:?}", import.warnings);
     }
 }

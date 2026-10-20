@@ -164,6 +164,12 @@ pub(crate) fn parse(bytes: &[u8], warnings: &mut Warnings, budget: &mut PixelBud
     if height > MAX_BITMAP_SIDE {
         return Err(BitmapError::Limit { what: "FNT cell height in pixels", limit: MAX_BITMAP_SIDE.into() });
     }
+    let points = if i32::from(points) > MAX_COORDINATE {
+        warnings.push(format!("the point size {points} is above {MAX_COORDINATE}; {MAX_COORDINATE} is used"));
+        MAX_COORDINATE as u16
+    } else {
+        points
+    };
     let ascent = if ascent > height {
         warnings.push(format!("the ascent {ascent} is more than the cell height {height}; the cell height is used"));
         height

@@ -521,3 +521,79 @@ fn a_fon_opens_with_a_strike_per_size_and_a_pcf_gz_opens() {
     assert_eq!((font.family_name.as_str(), font.glyphs.len()), ("pixel", 4));
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// Two fonts of one size in one FON file import as one strike, the first, with a warning; they
+/// are not merged.
+#[test]
+fn a_fon_with_two_fonts_of_one_size_imports_the_first() {
+    use fontcraft_io_bitmap as io;
+    let dir = temp("fon-one-size");
+    let regular = io::read_bdf(BDF.as_bytes()).unwrap().font;
+    let mut bold = regular.clone();
+    bold.name = "Pixel Bold".into();
+    bold.glyphs[0].bitmap.data = vec![0xF8; 4];
+    let both = dir.join("both.fon");
+    std::fs::write(&both, io::write_fon(&[regular.clone(), bold]).unwrap().bytes).unwrap();
+    let first = dir.join("first.fon");
+    std::fs::write(&first, io::write_fon(&[regular]).unwrap().bytes).unwrap();
+
+    let mut s = session();
+    let out = run(&mut s, "bitmap.importStrikes", json!({ "paths": [both] }));
+    assert_eq!(out["strikes"].as_array().unwrap().len(), 1, "{out}");
+    assert_eq!(out["strikes"][0]["replaced"], false);
+    let warnings = out["warnings"].as_array().unwrap();
+    assert!(warnings.iter().any(|w| w.as_str().unwrap().contains("a further strike of 8 was left out")), "{out}");
+    let mut alone = session();
+    run(&mut alone, "bitmap.importStrikes", json!({ "paths": [first] }));
+    assert_eq!(strikes(&s), strikes(&alone), "the first font's strike, untouched by the second");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// A FON whose symbol font matches no glyph imports its other font, with a warning.
+#[test]
+fn a_fon_whose_symbol_font_matches_nothing_imports_the_other() {
+    use fontcraft_io_bitmap as io;
+    let dir = temp("fon-symbol");
+    let ansi = io::read_bdf(BDF.as_bytes()).unwrap().font;
+    let mut symbol = ansi.clone();
+    (symbol.pixel_size, symbol.ascent) = (10, 9);
+    for p in &mut symbol.properties {
+        match p.name.as_str() {
+            "CHARSET_REGISTRY" => p.value = io::PropertyValue::Text("MICROSOFT".into()),
+            "CHARSET_ENCODING" => p.value = io::PropertyValue::Text("CHARSET2".into()),
+            "PIXEL_SIZE" => p.value = io::PropertyValue::Integer(10),
+            _ => {}
+        }
+    }
+    let fon = dir.join("pair.fon");
+    std::fs::write(&fon, io::write_fon(&[ansi, symbol]).unwrap().bytes).unwrap();
+    let mut s = session();
+    let out = run(&mut s, "bitmap.importStrikes", json!({ "paths": [fon] }));
+    assert_eq!(out["strikes"].as_array().unwrap().len(), 1, "{out}");
+    assert_eq!(out["strikes"][0]["ppem"], 8);
+    let warnings = out["warnings"].as_array().unwrap();
+    assert!(warnings.iter().any(|w| w.as_str().unwrap().contains("strike was left out: none of its")), "{out}");
+    assert_eq!(strikes(&s).len(), 1);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// TeX codes are not Unicode: a PK character of code 123 (an en dash in cmr10) does not go to
+/// the font's `braceleft` (U+007B); letters still match by name.
+#[test]
+fn pk_codes_match_glyphs_by_name_only() {
+    use fontcraft_io_bitmap as io;
+    let dir = temp("pk-codes");
+    let mut tex = io::read_bdf(BDF.as_bytes()).unwrap().font;
+    tex.glyphs[1].encoding = Some(123);
+    let pk = dir.join("tex.72pk");
+    std::fs::write(&pk, io::write_pk(&tex).unwrap()).unwrap();
+    let mut s = session();
+    run(&mut s, "glyph.newGlyph", json!({ "name": "braceleft", "unicodes": [0x7B] }));
+    let out = run(&mut s, "bitmap.importStrikes", json!({ "paths": [pk] }));
+    let left_out = out["strikes"][0]["leftOut"].as_array().unwrap();
+    assert!(left_out.contains(&json!("char123")), "{out}");
+    let strike = strikes(&s).remove(0);
+    assert!(strike.glyph("braceleft").is_none());
+    assert_eq!(strike.glyph("A").unwrap().code, Some(65));
+    std::fs::remove_dir_all(&dir).unwrap();
+}

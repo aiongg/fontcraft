@@ -12,21 +12,25 @@
 //!
 //! Each strike of one style is a resource. The first font family record (`FOND`) names the
 //! family and lists its strikes by point size, style and resource id; the plain-style strikes are
-//! read, the styled ones (bold, italic and the others) are left out with a warning. Without a
-//! family record every bitmap font resource is read; an old `FONT` resource's id holds its point
-//! size in its low seven bits. Mac bitmap fonts are drawn at 72 dots per inch, so a strike's
+//! read, the styled ones (bold, italic and the others) are left out with a warning. Picks that
+//! repeat a resource or a size are dropped before their records are read, and every record read
+//! counts toward [`MAX_MAC_STRIKES`]. Without a usable family record every bitmap font resource
+//! is read; an old `FONT` resource's id holds its point size in its low seven bits. Mac bitmap fonts are drawn at 72 dots per inch, so a strike's
 //! pixel size is its point size. Codes are Mac OS Roman and become Unicode code points.
+
+use std::collections::{HashMap, HashSet};
 
 use crate::binary::{Cursor, bit, code_name, malformed};
 use crate::{
-    Bitmap, BitmapError, BitmapFont, BitmapGlyph, Import, MAX_BITMAP_SIDE, MAX_FILE_BYTES, PixelBudget, Property, PropertyValue, Result, Warnings,
+    Bitmap, BitmapError, BitmapFont, BitmapGlyph, Import, MAX_BITMAP_SIDE, MAX_COORDINATE, MAX_FILE_BYTES, PixelBudget, Property, PropertyValue,
+    Result, Warnings,
 };
 
 /// Most resource types read from a resource map.
 pub const MAX_RESOURCE_TYPES: usize = 1_024;
 /// Most bitmap font and font family resources read from one file.
 pub const MAX_RESOURCES: usize = 4_096;
-/// Most strikes read from one file; the rest are left out with a warning.
+/// Most strike records read from one file, kept or not; the rest are left out with a warning.
 pub const MAX_MAC_STRIKES: usize = 64;
 
 const APPLE_SINGLE: u32 = 0x0005_1600;
@@ -51,7 +55,9 @@ pub fn is_mac_font(bytes: &[u8]) -> bool {
 }
 
 /// Reads every plain-style strike of the first font family a Mac file holds, smallest first. The
-/// first import carries the warnings about the file as a whole.
+/// first import carries the warnings about the file as a whole. A family record that lists
+/// bitmap strikes, but no plain-style one the file holds, is refused. A record that lists none,
+/// or that cannot be read (with a warning), is passed over as if the file had none.
 pub fn read_mac(bytes: &[u8]) -> Result<Vec<Import>> {
     if bytes.len() > MAX_FILE_BYTES {
         return Err(BitmapError::TooLarge(bytes.len()));
@@ -61,38 +67,73 @@ pub fn read_mac(bytes: &[u8]) -> Result<Vec<Import>> {
     if fonts.is_empty() {
         return Err(malformed("Mac font", "the file holds no NFNT or FONT bitmap font resource".into()));
     }
+    // The first resource of each type and id, so a long association table costs one lookup per
+    // entry.
+    let mut by_key: HashMap<([u8; 4], i16), &Resource<'_>> = HashMap::with_capacity(fonts.len());
+    for r in &fonts {
+        by_key.entry((r.kind, r.id)).or_insert(*r);
+    }
     let mut warnings = Warnings::default();
     let mut family = String::new();
     let mut picks: Vec<(Option<u16>, &Resource<'_>)> = Vec::new();
+    // Picks repeating a resource, or a size the family lists earlier, are dropped before reading.
+    let mut chosen: HashSet<([u8; 4], i16)> = HashSet::new();
+    let mut repeated = 0usize;
+    let mut listed = false;
     let families: Vec<&Resource<'_>> = all.iter().filter(|r| r.kind == FOND).collect();
     if let Some(fond) = families.first() {
         family = fond.name.clone().unwrap_or_default();
-        let (mut styled, mut missing) = (0usize, 0usize);
-        for (size, style, id) in fond_entries(fond.data)? {
-            if size == 0 {
-                continue;
-            }
-            if style != 0 {
-                styled += 1;
-                continue;
-            }
-            let found = fonts.iter().find(|r| r.id == id && r.kind == NFNT).or_else(|| fonts.iter().find(|r| r.id == id));
-            match found {
-                Some(r) => picks.push((Some(size), *r)),
-                None => missing += 1,
-            }
-        }
         if families.len() > 1 {
             warnings.push(format!("the file holds {} font families; only the first, {family:?}, is read", families.len()));
         }
-        if styled > 0 {
-            warnings.push(format!("{styled} styled strikes (bold, italic and others) are left out; only the plain style is read"));
-        }
-        if missing > 0 {
-            warnings.push(format!("the font family lists {missing} strikes the file does not hold"));
+        match fond_entries(fond.data) {
+            Ok(entries) => {
+                let (mut styled, mut missing, mut too_large) = (0usize, 0usize, 0usize);
+                let mut sizes: HashSet<u16> = HashSet::new();
+                for (size, style, id) in entries {
+                    if size == 0 {
+                        continue;
+                    }
+                    if style != 0 {
+                        styled += 1;
+                        continue;
+                    }
+                    if i32::from(size) > MAX_COORDINATE {
+                        too_large += 1;
+                        continue;
+                    }
+                    let Some(r) = by_key.get(&(NFNT, id)).or_else(|| by_key.get(&(FONT, id))) else {
+                        missing += 1;
+                        continue;
+                    };
+                    if !sizes.insert(size) || !chosen.insert((r.kind, r.id)) {
+                        repeated += 1;
+                        continue;
+                    }
+                    picks.push((Some(size), *r));
+                }
+                if styled > 0 {
+                    warnings.push(format!("{styled} styled strikes (bold, italic and others) are left out; only the plain style is read"));
+                }
+                if missing > 0 {
+                    warnings.push(format!("the font family lists {missing} strikes the file does not hold"));
+                }
+                if too_large > 0 {
+                    warnings.push(format!("{too_large} strikes above {MAX_COORDINATE} points are left out"));
+                }
+                // A record that lists no bitmap strike at all is read as if there were none.
+                listed = !picks.is_empty() || styled + missing + too_large > 0;
+                if listed && picks.is_empty() {
+                    return Err(malformed(
+                        "Mac font",
+                        format!("its font family {family:?} lists no plain-style strike the file holds ({styled} styled, {missing} missing)"),
+                    ));
+                }
+            }
+            Err(e) => warnings.push(format!("the font family record cannot be read ({e}); every bitmap font resource is read instead")),
         }
     }
-    if picks.is_empty() {
+    if !listed {
         for r in &fonts {
             let size = (r.kind == FONT).then_some((r.id as u16) & 0x7f);
             if size == Some(0) {
@@ -100,6 +141,10 @@ pub fn read_mac(bytes: &[u8]) -> Result<Vec<Import>> {
                 if family.is_empty() {
                     family = r.name.clone().unwrap_or_default();
                 }
+                continue;
+            }
+            if !chosen.insert((r.kind, r.id)) {
+                repeated += 1;
                 continue;
             }
             picks.push((size, *r));
@@ -110,12 +155,14 @@ pub fn read_mac(bytes: &[u8]) -> Result<Vec<Import>> {
     }
     let mut budget = PixelBudget::default();
     let mut out: Vec<Import> = Vec::new();
-    let (mut repeated, mut beyond) = (0usize, 0usize);
+    let (mut reads, mut beyond) = (0usize, 0usize);
     for (size, r) in picks {
-        if out.len() >= MAX_MAC_STRIKES {
+        // Every record read counts, kept or not, so repeats cannot multiply the work.
+        if reads >= MAX_MAC_STRIKES {
             beyond += 1;
             continue;
         }
+        reads += 1;
         let font = read_nfnt(r.data, size, &family, &mut budget, &mut warnings).map_err(|e| match e {
             BitmapError::Malformed { format, message } => BitmapError::Malformed { format, message: format!("resource {}: {message}", r.id) },
             other => other,
@@ -127,7 +174,7 @@ pub fn read_mac(bytes: &[u8]) -> Result<Vec<Import>> {
         out.push(Import { font, warnings: Vec::new() });
     }
     if repeated > 0 {
-        warnings.push(format!("{repeated} strikes have a size an earlier strike has; the first was kept"));
+        warnings.push(format!("{repeated} strikes repeat a size or a resource an earlier strike has; the first was kept"));
     }
     if beyond > 0 {
         warnings.push(format!("{beyond} strikes beyond the limit of {MAX_MAC_STRIKES} are left out"));
@@ -302,7 +349,8 @@ fn read_nfnt(data: &[u8], size: Option<u16>, family: &str, budget: &mut PixelBud
             return Err(c.error(format!("character {i} past the first: its image location is out of range")));
         }
         let width = (end - start) as u16;
-        budget.spend(crate::stride(width, 1).saturating_mul(usize::from(height)))?;
+        // At least one byte a row, so blank glyphs pay for the rows trimming scans.
+        budget.spend(crate::stride(width, 1).max(1).saturating_mul(usize::from(height)))?;
         let left = i32::from(kern_max) + i32::from(entry >> 8);
         let bottom = i32::from(ascent) - i32::from(height);
         let mut bitmap = Bitmap::blank(width, height, left, bottom, 1).ok_or_else(|| c.error("a character's box is too large"))?;
@@ -324,7 +372,7 @@ fn read_nfnt(data: &[u8], size: Option<u16>, family: &str, budget: &mut PixelBud
     let pixel_size = match size {
         Some(size) => size,
         None => {
-            let lines = (i32::from(ascent) + i32::from(descent)).clamp(1, i32::from(u16::MAX)) as u16;
+            let lines = (i32::from(ascent) + i32::from(descent)).clamp(1, MAX_COORDINATE) as u16;
             warnings.push(format!("a strike without a font family record is taken to be {lines} pixels per em, its ascent plus descent"));
             lines
         }
@@ -557,6 +605,10 @@ mod tests {
         let twelve = &strikes[1].font;
         assert_eq!(twelve.glyphs[0].encoding, Some(0xC4));
         assert_eq!(twelve.glyphs[0].name, "uni00C4");
+        // Reading one strike says the others were left out.
+        let one = crate::read(&bytes).unwrap();
+        assert_eq!(one.font.pixel_size, 9);
+        assert!(one.warnings.iter().any(|w| w.contains("1 more strikes")), "{:?}", one.warnings);
     }
 
     #[test]
@@ -591,6 +643,58 @@ mod tests {
             assert_eq!(strikes.len(), 2);
             assert_eq!(strikes[0].font.glyphs.len(), 3);
         }
+    }
+
+    /// A record 1,024 rows tall whose 256 characters and missing-character glyph are all 0 pixels
+    /// wide: no image bytes, so a few hundred bytes cost the most rows to scan.
+    fn tall_blank_nfnt() -> Vec<u8> {
+        let entries = 258usize;
+        let ow_location = (26 + 2 * entries - 16) / 2;
+        let mut out = Vec::new();
+        for v in [0x9000u16, 0, 255, 0, 0, 0, 0, 1024, ow_location as u16, 1024, 0, 0, 0] {
+            out.extend_from_slice(&v.to_be_bytes());
+        }
+        // Every location is 0 and every offset/width entry is offset 0, width 0.
+        out.resize(26 + 4 * entries, 0);
+        out
+    }
+
+    /// A family record listing one tall record 65,535 times reads it once. Before repeats were
+    /// dropped ahead of reading, this file of under half a megabyte took tens of seconds.
+    #[test]
+    fn mac_reads_a_record_listed_many_times_once() {
+        let listing = vec![(12u16, 0u16, 1000i16); 65_535];
+        let bytes = fork_of(&[(FOND, 128, Some("Tall"), fond(&listing)), (NFNT, 1000, None, tall_blank_nfnt())]);
+        assert!(bytes.len() < 512 * 1024);
+        let strikes = read_mac(&bytes).unwrap();
+        assert_eq!(strikes.len(), 1);
+        assert_eq!(strikes[0].font.pixel_size, 12);
+        assert!(strikes[0].warnings.iter().any(|w| w.starts_with("65534 strikes repeat")), "{:?}", strikes[0].warnings);
+        // Distinct sizes naming one record read it once too.
+        let listing: Vec<(u16, u16, i16)> = (1..=20_000u16).map(|size| (size, 0, 1000)).collect();
+        let bytes = fork_of(&[(FOND, 128, Some("Tall"), fond(&listing)), (NFNT, 1000, None, tall_blank_nfnt())]);
+        let strikes = read_mac(&bytes).unwrap();
+        assert_eq!(strikes.len(), 1);
+    }
+
+    #[test]
+    fn mac_family_records_that_list_no_plain_strike_or_are_cut_short() {
+        let bold = nfnt(0x41, &[(Some(BOX), 0, 4), (Some(BOX), 0, 3)]);
+        // Only a bold strike: nothing styled is read.
+        let bytes = fork_of(&[(FOND, 128, Some("Tiny"), fond(&[(9, 1, 1001)])), (NFNT, 1001, None, bold.clone())]);
+        let err = read_mac(&bytes).unwrap_err().to_string();
+        assert!(err.contains("no plain-style strike"), "{err}");
+        // A family record cut short after its header: the record is passed over.
+        let bytes = fork_of(&[(FOND, 128, Some("Tiny"), vec![0; FOND_HEADER]), (NFNT, 1001, None, bold.clone())]);
+        let strikes = read_mac(&bytes).unwrap();
+        assert_eq!(strikes.len(), 1);
+        assert_eq!(strikes[0].font.text_property("FAMILY_NAME"), Some("Tiny"));
+        assert!(strikes[0].warnings.iter().any(|w| w.contains("cannot be read")), "{:?}", strikes[0].warnings);
+        // A size above the coordinate limit is left out with a warning, not refused later.
+        let bytes = fork_of(&[(FOND, 128, Some("Tiny"), fond(&[(40_000, 0, 1001), (9, 0, 1001)])), (NFNT, 1001, None, bold)]);
+        let strikes = read_mac(&bytes).unwrap();
+        assert_eq!(strikes.iter().map(|s| s.font.pixel_size).collect::<Vec<_>>(), [9]);
+        assert!(strikes[0].warnings.iter().any(|w| w.contains("above 32767 points")), "{:?}", strikes[0].warnings);
     }
 
     #[test]
