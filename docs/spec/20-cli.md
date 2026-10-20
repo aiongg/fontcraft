@@ -288,7 +288,22 @@ and the file's extension must match its format and container (`.woff` or `.woff2
 container when `--container` is not given). Otherwise each
 file is named by the instance's `fileName` parameter, else by its PostScript name, inside
 `--output-dir` (default: the current folder); with both formats, each goes into a `ttf` or `otf`
-subfolder.
+subfolder. A source without a family name: a `.glyphs` or `.glyphspackage` source takes
+glyphsLib's default family, `Unnamed font`, as fontmake does (`Unnamedfont-Regular.ttf`); any
+other source takes its file name, as fontmake names a master after its UFO's file name.
+
+**Binary layout.** `--interpolate-binary-layout [DIR]` is fontmake's `-i
+--interpolate-binary-layout`. Each instance is compiled as usual; its `GPOS` is then replaced by the
+one interpolated from the compiled masters at the instance's location, and its `GDEF` and `GSUB` by
+the default master's when that master has them (the same step as `instance
+--interpolate-binary-layout`). The masters are `DIR/<master UFO stem>.ttf` (`.otf` for `--format
+otf`); `DIR` defaults to `master_ttf` or `master_otf` beside the source. Fonts built from masters
+(`--masters-as-instances`, or a font without instances) keep their own layout. The source is a
+designspace or a `.glyphs` file or package. The option is refused with `--variable` (as fontmake
+refuses it with variable output), `--collection` and a project compile. Every layout is
+interpolated before the first font is compiled, so a missing master stops the build and nothing
+is written. The argument after the option is its folder only when it is not an option and does
+not end in a source extension.
 
 **Looking inside a build.** `--plan` answers questions such as "what will the glyph order be" or "what
 feature code is actually compiled" without building (`font.compilePlan`). `--tables GSUB,GPOS` builds
@@ -395,7 +410,7 @@ Engine commands: `font.compile`, `font.compilePlan`. Autohinting delegates to `a
 | fontmake | `--filter` | --filter (names a registered filter command, not a Python class) |  |
 | fontmake | `--auto-use-my-metrics / --no-auto-use-my-metrics` | same |  |
 | fontmake | `--drop-implied-oncurves` | --drop-implied-oncurves |  |
-| fontmake | `--interpolate-binary-layout` | --interpolate-binary-layout |  |
+| fontmake | `--interpolate-binary-layout` | --interpolate-binary-layout [DIR] | instances only; DIR relative to the source |
 | fontmake | `--feature-writer` | --feature-writer (names a built-in generator, not a Python class) |  |
 | fontmake | `--debug-feature-file` | --debug-feature-file |  |
 | fontmake | `--no-variable-features` | --no-variable-features |  |

@@ -308,7 +308,7 @@ options = [
   "--feature-writer NAME[,k=v…]: choose the automatic feature generators (kern, mark, mkmk, curs, gdef, …) and their settings; repeatable, 'none' disables all, '...' keeps the source's list at that position",
   "--generate-gdef / --no-generate-gdef: build GDEF automatically, or keep the one written in the feature code untouched",
   "--variable-features / --no-variable-features: compile one variable feature set for a variable font (default), or compile layout per master and merge the tables",
-  "--interpolate-binary-layout[=DIR]: for instances, interpolate GDEF/GPOS from compiled master fonts found in DIR instead of compiling features per instance",
+  "--interpolate-binary-layout [DIR]: give each compiled instance the GPOS interpolated from the compiled masters in DIR (default master_ttf, or master_otf for otf, beside the source; each named as its master UFO, with the font extension) and the GDEF and GSUB of the default master; masters built as instances keep their own layout; a designspace or .glyphs source only",
   "--expand-features-to-instances: resolve include() statements and store the full feature text in every generated instance source",
   "--debug-feature-file FILE: write the generated feature code (kerning, marks and other automatic features included) to FILE",
   "--debug-lookups: add a Debg table that maps lookups back to feature-source locations",
@@ -395,6 +395,14 @@ milestone = "M2"
 summary = "Compiles sources into binary fonts: static TTF or OTF per master or instance, variable TTF (gvar) or CFF2, and interpolatable masters. Sources are a native project, a .glyphs file or package, a designspace, one or more UFOs, or a bare outline font (CFF, CFF2, TrueType, Type 1) that receives the remaining OpenType tables from a feature file and name data. Without --format a source with one master yields a static TTF and a source with several masters yields a variable TTF; until variable fonts are built (M9) every source yields static TTFs. Without -o or --output-dir the files go into the current folder. Each source prints one JSON result line."
 ref = "AFDKO MakeOTFUserGuide.md, makeotf.py help, addfeatures help, buildmasterotfs.py, buildcff2vf.py; fontmake __main__.py; fontc args.rs; fontTools varLib (build)"
 status = "docs"
+notes = "--interpolate-binary-layout (M12.22e) is fontmake's -i --interpolate-binary-layout (font_project.py, run_from_designspace and save_otfs): only fonts built from an instance get the interpolated layout. It is refused with --variable, as fontmake refuses it with variable and interpolatable outputs, and with --collection and a project compile, which fontmake has no counterpart for. A missing family name: a .glyphs or .glyphspackage source names its files after glyphsLib's default family, Unnamed font (GSFont in glyphsLib classes.py; fontmake then writes instance_ttf/Unnamedfont-Regular.ttf), and any other source after its file name, as fontmake names a master by its UFO's file name. A source with a family name is named by the fileName parameter, else the PostScript name."
+guesses = [
+  "--interpolate-binary-layout resolves its folder (default master_ttf or master_otf) against the source's folder; fontmake resolves it against the working folder, which is the same folder when fontmake runs beside the source.",
+  "With --interpolate-binary-layout the instances are compiled with the automatic features as usual, and fontmake compiles them without (it turns its feature writers off); the difference shows only in a GDEF or GSUB the default master lacks, which a fontmake run on masters without GSUB and with feature code would show.",
+  "An instance compiled with --interpolate-binary-layout from masters without GPOS has no GPOS; fontmake stops with an error there, so nothing settles a better choice.",
+  "--interpolate-binary-layout takes the next argument as its folder only when it is not an option and does not end in a source extension (.glyphs, .designspace, .ufo, a font…); fontmake's parser takes any next argument that is not an option. Nothing in fontmake's documentation says which callers rely on that.",
+  "The file exports (file.exportStatic, file.exportAll) share the compile's naming, so a .glyphs source without a family name exports to Unnamedfont-Regular too; the reference app's export of such a file has not been observed.",
+]
 
 [[cli]]
 id = "oracle"
@@ -2280,6 +2288,7 @@ milestone = "M2"
 summary = "Builds binary fonts from the active document and returns the fonts built, the files written and per-font warnings; the CLI opens each source as a document first. destination is a folder, or one file when exactly one file results; without it the fonts are built in memory and only described. Static fonts are built per exportable instance (or the named ones, plus each master with mastersAsInstances); an instance between masters is skipped until interpolation (M9). It shares its building and file naming with file.exportStatic and file.exportAll. All grouped parameters are optional and default as described for 'fontcraft-cli compile'; until variable fonts are built (M9) the default format is ttf for every source."
 ref = "docs/spec/20-cli.md › compile"
 status = "docs"
+notes = "interpolateBinaryLayout (M12.22e) is read at the top level of the parameters, as font.instantiate reads it, not inside the features group: true or the folder of the compiled masters. Each instance's compiled font gets the GPOS interpolated from those masters and the default master's GDEF and GSUB (shared with font.instantiate); every layout is interpolated before the first font is compiled, and the files are staged with the rest of the build, so a failing run writes nothing. A .glyphs source without a family name names its files after Unnamed font, as glyphsLib does."
 
 [[command]]
 id = "font.compilePlan"
