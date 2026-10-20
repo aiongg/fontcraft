@@ -93,6 +93,9 @@ const FIELDS: &[(&Tag, &str, usize, Kind)] = &[
     (b"vhea", "vertTypoDescender", 6, Kind::I16),
     (b"vhea", "vertTypoLineGap", 8, Kind::I16),
     (b"vhea", "advanceHeightMax", 10, Kind::U16),
+    (b"vhea", "minTopSideBearing", 12, Kind::I16),
+    (b"vhea", "minBottomSideBearing", 14, Kind::I16),
+    (b"vhea", "yMaxExtent", 16, Kind::I16),
     (b"vhea", "caretSlopeRise", 18, Kind::I16),
     (b"vhea", "caretSlopeRun", 20, Kind::I16),
     (b"vhea", "caretOffset", 22, Kind::I16),
@@ -138,7 +141,13 @@ const FIELDS: &[(&Tag, &str, usize, Kind)] = &[
     (b"post", "underlinePosition", 8, Kind::I16),
     (b"post", "underlineThickness", 10, Kind::I16),
     (b"post", "isFixedPitch", 12, Kind::U32),
+    (b"maxp", "maxPoints", 6, Kind::U16),
+    (b"maxp", "maxContours", 8, Kind::U16),
+    (b"maxp", "maxCompositePoints", 10, Kind::U16),
+    (b"maxp", "maxCompositeContours", 12, Kind::U16),
     (b"maxp", "maxStackElements", 24, Kind::U16),
+    (b"maxp", "maxComponentElements", 28, Kind::U16),
+    (b"maxp", "maxComponentDepth", 30, Kind::U16),
 ];
 
 fn find_field(table: Tag, name: &str) -> Result<(usize, Kind)> {

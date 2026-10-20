@@ -590,7 +590,7 @@ pub(crate) fn apply_maxp_recalc(font: &mut SfntFont, r: &MaxpRecalc) -> Result<b
 /// font whose `glyf` table was loaded is saved with `recalcBBoxes`: see [`apply_maxp_recalc`].
 /// The glyph statistics come from the `glyf` and `loca` bytes, the side bearings from `hmtx`.
 /// `maxp.numGlyphs` is the glyph count read; a font without `glyf` is left as it is.
-pub(crate) fn recalc_compiled_maxp(font: &mut SfntFont) -> Result<()> {
+pub fn recalc_compiled_maxp(font: &mut SfntFont) -> Result<()> {
     let Some(glyf) = font.get(*b"glyf") else { return Ok(()) };
     let count = usize::from(get_u16(font, *b"maxp", 4).ok_or_else(|| bad("the 'maxp' table is missing or cut short"))?);
     let long = get_u16(font, *b"head", 50).ok_or_else(|| bad("the 'head' table is missing or cut short"))? != 0;
