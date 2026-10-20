@@ -1,7 +1,8 @@
 //! Placed images in Edit View (M11.13), in headless frames: a placed, a rotated, a cropped, a
 //! locked and a missing image drawn; View › Show Image and empty glyphs; every gesture equal to
 //! the command it runs; the context menu's image section; the image Info box; Reveal Image File;
-//! a file dropped on the canvas. Image files are PNGs written by the test.
+//! a file dropped on the canvas; the arrow keys, Delete and the Palette acting on the selected
+//! image (M11.13b). Image files are PNGs written by the test.
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -378,4 +379,61 @@ fn a_file_dropped_on_the_canvas_is_added_to_the_edited_glyph() {
     let placed = image(&app, "A").expect("the image is placed on A");
     assert!(placed.path.is_some());
     assert_eq!(meshes(&w.settle(&mut app)).len(), 1, "and drawn");
+}
+
+fn press(app: &mut FontcraftApp, params: Value) -> Value {
+    let r = control::handle(app, &json!({"id": 1, "method": "ui.key", "params": params}));
+    assert_eq!(r["ok"], true, "{r}");
+    assert_eq!(r["result"]["handled"], true, "{params} is handled: {r}");
+    r["result"].clone()
+}
+
+#[test]
+fn arrow_keys_move_and_delete_removes_the_selected_image() {
+    let (mut app, _) = image_app("keys");
+    Window::new().settle(&mut app);
+    let shapes = |app: &FontcraftApp| {
+        let font = app.session.font().unwrap();
+        font.glyph("A").unwrap().layer(&font.masters[0].id).unwrap().shapes.clone()
+    };
+    let paths = shapes(&app);
+    click(&mut app, (50.0, 25.0));
+    assert!(images::is_selected(&app), "the click selects the image");
+
+    // Plain arrows move by the small increment, Shift by the big one; the path stays put.
+    press(&mut app, json!({"key": "ArrowRight"}));
+    press(&mut app, json!({"key": "ArrowUp", "shift": true}));
+    let (id, params) = app.session.journal().last().cloned().unwrap();
+    assert_eq!((id.as_str(), &params["image"], &params["dx"], &params["dy"]), ("selection.move", &json!(true), &json!(0.0), &json!(10.0)));
+    assert_eq!(image(&app, "A"), by_command("keys", &[("image.setTransform", json!({"glyph": "A", "x": 1, "y": 10}))]));
+    assert_eq!(shapes(&app), paths, "only the image moved");
+    assert!(images::is_selected(&app), "the image stays selected");
+
+    // The Palette's commands get the image as their target while it is selected.
+    let targets = tools_glue::with_targets(&app, "transform.mirrorHorizontal", Value::Null);
+    assert_eq!((&targets["glyph"], &targets["image"]), (&json!("A"), &json!(true)), "{targets}");
+    assert!(tools_glue::with_targets(&app, "transform.alignLeft", Value::Null).get("image").is_none(), "align takes no image");
+
+    // Delete removes the image, and nothing else; undo brings it back.
+    let before = undo_steps(&app);
+    press(&mut app, json!({"key": "Delete"}));
+    let (id, params) = app.session.journal().last().cloned().unwrap();
+    assert_eq!((id.as_str(), &params["image"]), ("edit.delete", &json!(true)));
+    assert_eq!((image(&app, "A"), undo_steps(&app)), (None, before + 1));
+    assert_eq!(shapes(&app), paths);
+    app.run("edit.undo", &json!({})).unwrap();
+    assert!(image(&app, "A").is_some(), "undo restores the image");
+}
+
+#[test]
+fn keys_go_to_the_outline_when_no_image_is_selected() {
+    let (mut app, _) = image_app("keys-none");
+    Window::new().settle(&mut app);
+    let placed = image(&app, "A");
+    assert!(!images::is_selected(&app));
+    // Nothing is selected: an arrow changes nothing, and the image stays where it is.
+    let r = control::handle(&mut app, &json!({"id": 1, "method": "ui.key", "params": {"key": "ArrowRight"}}));
+    assert_eq!(r["ok"], true, "{r}");
+    assert_eq!(image(&app, "A"), placed);
+    assert!(tools_glue::with_targets(&app, "edit.delete", Value::Null).get("image").is_none());
 }

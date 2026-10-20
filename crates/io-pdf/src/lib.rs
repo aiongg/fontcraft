@@ -253,5 +253,16 @@ pub fn render_pdf(data: &[u8], pixels_per_point: f64, max_pixels: u64) -> Result
     Ok(PdfRaster { image, pixels_per_point, page_box: page.page_box, dropped })
 }
 
+/// The size of a PDF's first page in points, `(width, height)`, as [`render_pdf`] frames it: the
+/// crop box, else the media box, turned by the page's rotation; for a page with neither, the
+/// bounds of its drawing. A PDF placed as an image maps one point to one unit of its own space,
+/// so this is the size such an image has where other formats have a pixel size.
+pub fn page_size(data: &[u8]) -> Result<(f64, f64), PdfError> {
+    let page = load::first_page_drawing(data)?;
+    let [x0, y0, x1, y1] = page.frame.or_else(|| outline::bounds(&page.painted)).ok_or(PdfError::NoPage)?;
+    let (w, h) = (x1 - x0, y1 - y0);
+    if w.is_finite() && h.is_finite() && w > 0.0 && h > 0.0 { Ok((w, h)) } else { Err(PdfError::NoPage) }
+}
+
 #[cfg(test)]
 mod tests;

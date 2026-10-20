@@ -294,6 +294,9 @@ fn key_typing(app: &mut FontcraftApp, ev: KeyEvent, types: bool) -> Option<Vec<S
     if let Some(errors) = crate::shell::text::key(app, &ev, types) {
         return Some(errors);
     }
+    if let Some(errors) = crate::canvas::images::key(app, &ev) {
+        return Some(errors);
+    }
     let out = with_tool(app, |toolbox, cx| toolbox.key(cx, &ev)).ok();
     match out {
         Some(out) if out.handled => Some(apply(app, out)),
@@ -601,7 +604,10 @@ pub fn with_targets(app: &FontcraftApp, id: &str, params: Value) -> Value {
         return crate::shell::font_view::batch_targets(app, spec).map_or(params, Value::Object);
     }
     match selection_targets(&app.session, &app.state, spec) {
-        Some(m) => Value::Object(m),
+        Some(mut m) => {
+            crate::canvas::images::add_image_target(app, spec, &mut m);
+            Value::Object(m)
+        }
         None => params,
     }
 }

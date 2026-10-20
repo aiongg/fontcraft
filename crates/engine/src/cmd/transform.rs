@@ -5,6 +5,10 @@
 //! buttons, the Transformations dialog, the bounding-box knobs and the Rotate and Scale tools all
 //! call these commands; a tool passes its reference point as `origin` and runs the command inside
 //! an interaction, so a drag is one undo step.
+//!
+//! The Palette's mirror, scale, rotate and slant commands also take `image: true`, which adds the
+//! layer's placed image to what they change (without target lists, the image alone); a box
+//! origin then includes the image's shown part.
 
 use std::collections::{BTreeSet, HashSet};
 use std::fmt::Write as _;
@@ -44,7 +48,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Mirror Horizontally",
             [],
             None,
-            "{glyph?: name, glyphs?: [names], layer?: id, side?: \"foreground\" | \"background\", points?: [[shape, node]], segments?: [[shape, node]], shapes?: [index], anchors?: [name], guides?: [{scope: \"local\" | \"global\", index}], annotations?: [index], origin?: origin} flips left to right across the vertical line through the origin. Target lists go with `glyph`; without them, or with `glyphs`, the whole layer (shapes and anchors) is changed. An on-curve node carries its handles. origin: {mode: \"box\" (default) | \"reference\" | \"metrics\" | \"layer\", boxPoint?: \"topLeft\" | \"top\" | \"topRight\" | \"left\" | \"center\" (default) | \"right\" | \"bottomLeft\" | \"bottom\" | \"bottomRight\", metric?: \"baseline\" | \"halfXHeight\" | \"xHeight\" | \"halfCapHeight\" | \"capHeight\", point?: [x, y]}, a metric name, or [x, y]. A metrics origin sits at half the advance width; the layer origin at half the width, midway between ascender and descender. Points and anchors are rounded to the grid. With `corners: [hint indices]` (and `glyph`, `layer?`; no other target or origin) it flips those corner components in place instead, as cornerComponent.setScale with `flip` does, and returns what that returns → {glyphs: [names], layers: count, origin?: [x, y] (with one layer)}",
+            "{glyph?: name, glyphs?: [names], layer?: id, side?: \"foreground\" | \"background\", points?: [[shape, node]], segments?: [[shape, node]], shapes?: [index], anchors?: [name], guides?: [{scope: \"local\" | \"global\", index}], annotations?: [index], image?: bool, origin?: origin} flips left to right across the vertical line through the origin. Target lists go with `glyph`; without them, or with `glyphs`, the whole layer (shapes and anchors) is changed. `image: true` (with `glyph`) changes the layer's placed image on that side too, and alone without target lists; a locked image, or none, refuses it. An on-curve node carries its handles. origin: {mode: \"box\" (default) | \"reference\" | \"metrics\" | \"layer\", boxPoint?: \"topLeft\" | \"top\" | \"topRight\" | \"left\" | \"center\" (default) | \"right\" | \"bottomLeft\" | \"bottom\" | \"bottomRight\", metric?: \"baseline\" | \"halfXHeight\" | \"xHeight\" | \"halfCapHeight\" | \"capHeight\", point?: [x, y]}, a metric name, or [x, y]. A metrics origin sits at half the advance width; the layer origin at half the width, midway between ascender and descender. Points and anchors are rounded to the grid. With `corners: [hint indices]` (and `glyph`, `layer?`; no other target or origin) it flips those corner components in place instead, as cornerComponent.setScale with `flip` does, and returns what that returns → {glyphs: [names], layers: count, origin?: [x, y] (with one layer)}",
             has_doc,
             mirror_horizontal
         )
@@ -54,7 +58,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Mirror Vertically",
             [],
             None,
-            "{glyph?: name, glyphs?: [names], layer?: id, side?, points?: [[shape, node]], segments?, shapes?: [index], anchors?: [name], guides?: [{scope, index}], annotations?, origin?: origin} flips top to bottom across the horizontal line through the origin; targets, origin and `corners` as for transform.mirrorHorizontal → {glyphs: [names], layers: count, origin?: [x, y]}",
+            "{glyph?: name, glyphs?: [names], layer?: id, side?, points?: [[shape, node]], segments?, shapes?: [index], anchors?: [name], guides?: [{scope, index}], annotations?, image?: bool, origin?: origin} flips top to bottom across the horizontal line through the origin; targets, `image`, origin and `corners` as for transform.mirrorHorizontal → {glyphs: [names], layers: count, origin?: [x, y]}",
             has_doc,
             mirror_vertical
         )
@@ -64,7 +68,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Scale",
             [],
             None,
-            "{glyph?: name, glyphs?: [names], layer?: id, side?, points?, segments?, shapes?, anchors?, guides?, annotations?, x: percent, y?: percent (default x), origin?: origin} scales about the origin; 100 changes nothing, a negative value also mirrors; at most ±1,000,000. Targets and origin as for transform.mirrorHorizontal → {glyphs: [names], layers: count, origin?: [x, y]}",
+            "{glyph?: name, glyphs?: [names], layer?: id, side?, points?, segments?, shapes?, anchors?, guides?, annotations?, image?: bool, x: percent, y?: percent (default x), origin?: origin} scales about the origin; 100 changes nothing, a negative value also mirrors; at most ±1,000,000. Targets, `image` and origin as for transform.mirrorHorizontal → {glyphs: [names], layers: count, origin?: [x, y]}",
             has_doc,
             scale
         )
@@ -74,7 +78,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Reverse Scale",
             [],
             None,
-            "{glyph?: name, glyphs?: [names], layer?: id, side?, points?, segments?, shapes?, anchors?, guides?, annotations?, x: percent, y?: percent (default x), origin?: origin} scales by 100 / percent, undoing transform.scale with the same values; 0 is refused → {glyphs: [names], layers: count, origin?: [x, y]}",
+            "{glyph?: name, glyphs?: [names], layer?: id, side?, points?, segments?, shapes?, anchors?, guides?, annotations?, image?: bool, x: percent, y?: percent (default x), origin?: origin} scales by 100 / percent, undoing transform.scale with the same values; 0 is refused → {glyphs: [names], layers: count, origin?: [x, y]}",
             has_doc,
             reverse_scale
         )
@@ -84,7 +88,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Rotate Clockwise",
             [],
             None,
-            "{glyph?: name, glyphs?: [names], layer?: id, side?, points?, segments?, shapes?, anchors?, guides?, annotations?, angle: degrees, origin?: origin} rotates clockwise about the origin; multiples of 90° are exact → {glyphs: [names], layers: count, origin?: [x, y]}",
+            "{glyph?: name, glyphs?: [names], layer?: id, side?, points?, segments?, shapes?, anchors?, guides?, annotations?, image?: bool, angle: degrees, origin?: origin} rotates clockwise about the origin; multiples of 90° are exact → {glyphs: [names], layers: count, origin?: [x, y]}",
             has_doc,
             rotate_clockwise
         )
@@ -94,7 +98,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Rotate Counterclockwise",
             [],
             None,
-            "{glyph?: name, glyphs?: [names], layer?: id, side?, points?, segments?, shapes?, anchors?, guides?, annotations?, angle: degrees, origin?: origin} rotates counterclockwise about the origin; multiples of 90° are exact → {glyphs: [names], layers: count, origin?: [x, y]}",
+            "{glyph?: name, glyphs?: [names], layer?: id, side?, points?, segments?, shapes?, anchors?, guides?, annotations?, image?: bool, angle: degrees, origin?: origin} rotates counterclockwise about the origin; multiples of 90° are exact → {glyphs: [names], layers: count, origin?: [x, y]}",
             has_doc,
             rotate_counterclockwise
         )
@@ -104,7 +108,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Slant Left",
             [],
             None,
-            "{glyph?: name, glyphs?: [names], layer?: id, side?, points?, segments?, shapes?, anchors?, guides?, annotations?, angle: degrees (between -90 and 90), origin?: origin} shears horizontally by the tangent of the angle, leaning left; the origin's height stays fixed → {glyphs: [names], layers: count, origin?: [x, y]}",
+            "{glyph?: name, glyphs?: [names], layer?: id, side?, points?, segments?, shapes?, anchors?, guides?, annotations?, image?: bool, angle: degrees (between -90 and 90), origin?: origin} shears horizontally by the tangent of the angle, leaning left; the origin's height stays fixed → {glyphs: [names], layers: count, origin?: [x, y]}",
             has_doc,
             slant_left
         )
@@ -114,7 +118,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Slant Right",
             [],
             None,
-            "{glyph?: name, glyphs?: [names], layer?: id, side?, points?, segments?, shapes?, anchors?, guides?, annotations?, angle: degrees (between -90 and 90), origin?: origin} shears horizontally by the tangent of the angle, leaning right; the origin's height stays fixed → {glyphs: [names], layers: count, origin?: [x, y]}",
+            "{glyph?: name, glyphs?: [names], layer?: id, side?, points?, segments?, shapes?, anchors?, guides?, annotations?, image?: bool, angle: degrees (between -90 and 90), origin?: origin} shears horizontally by the tangent of the angle, leaning right; the origin's height stays fixed → {glyphs: [names], layers: count, origin?: [x, y]}",
             has_doc,
             slant_right
         )
@@ -124,7 +128,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Slant Down",
             [],
             None,
-            "{glyph?: name, glyphs?: [names], layer?: id, side?, points?, segments?, shapes?, anchors?, guides?, annotations?, angle: degrees (between -90 and 90), origin?: origin} shears vertically by the tangent of the angle: what lies right of the origin moves down, what lies left moves up → {glyphs: [names], layers: count, origin?: [x, y]}",
+            "{glyph?: name, glyphs?: [names], layer?: id, side?, points?, segments?, shapes?, anchors?, guides?, annotations?, image?: bool, angle: degrees (between -90 and 90), origin?: origin} shears vertically by the tangent of the angle: what lies right of the origin moves down, what lies left moves up → {glyphs: [names], layers: count, origin?: [x, y]}",
             has_doc,
             slant_down
         )
@@ -134,7 +138,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Slant Up",
             [],
             None,
-            "{glyph?: name, glyphs?: [names], layer?: id, side?, points?, segments?, shapes?, anchors?, guides?, annotations?, angle: degrees (between -90 and 90), origin?: origin} shears vertically by the tangent of the angle: what lies right of the origin moves up, what lies left moves down → {glyphs: [names], layers: count, origin?: [x, y]}",
+            "{glyph?: name, glyphs?: [names], layer?: id, side?, points?, segments?, shapes?, anchors?, guides?, annotations?, image?: bool, angle: degrees (between -90 and 90), origin?: origin} shears vertically by the tangent of the angle: what lies right of the origin moves up, what lies left moves down → {glyphs: [names], layers: count, origin?: [x, y]}",
             has_doc,
             slant_up
         )
@@ -725,7 +729,20 @@ fn jobs(p: &Params, font: &Font, many_layers: bool, all_glyphs: bool) -> Result<
 
 /// Runs `lin` about `origin`, then `shift`, on every job, as one undo step. Returns the origin
 /// used in each layer.
-fn run_jobs(s: &mut Session, p: &Params, label: &str, jobs: &[Targets], origin: Origin, lin: Affine, shift: Vec2) -> Result<Vec<Point>> {
+///
+/// `image` is the box of the layer's placed image when the image is transformed too (one job):
+/// see [`image_bounds`].
+#[allow(clippy::too_many_arguments)]
+fn run_jobs(
+    s: &mut Session,
+    p: &Params,
+    label: &str,
+    jobs: &[Targets],
+    origin: Origin,
+    lin: Affine,
+    shift: Vec2,
+    image: Option<Rect>,
+) -> Result<Vec<Point>> {
     let step = grid(s.font()?);
     s.edit(label, |font| {
         let mut origins = Vec::with_capacity(jobs.len());
@@ -733,12 +750,20 @@ fn run_jobs(s: &mut Session, p: &Params, label: &str, jobs: &[Targets], origin: 
             let (sel, o, master) = {
                 let r = t.resolve(font)?;
                 crate::check_unlocked(r.glyph)?;
-                let sel = selection(t, r.parts);
-                let bounds = if matches!(origin, Origin::Box(_)) { selection_box(font, r.master, r.parts, &sel) } else { None };
+                // The image alone, when it is given without target lists.
+                let sel = if image.is_some() && !t.has_lists() { Selection::default() } else { selection(t, r.parts) };
+                let bounds = if matches!(origin, Origin::Box(_)) { union(selection_box(font, r.master, r.parts, &sel), image) } else { None };
                 (sel, origin_point(origin, bounds, font, r.master, r.layer.width), r.master.id.clone())
             };
             let m = Affine::translate(shift) * about(o, lin);
-            t.edit_layer(font, |l| apply(p, l, t.side, &sel, m, step))?;
+            t.edit_layer(font, |l| {
+                apply(p, l, t.side, &sel, m, step)?;
+                if image.is_some() {
+                    let placed = super::image::target_mut(p, t, l)?;
+                    placed.transform = compose(p, &placed.transform, m)?;
+                }
+                Ok(())
+            })?;
             if !sel.global_guides.is_empty() {
                 let masters = Arc::make_mut(&mut font.masters);
                 let master = masters.iter_mut().find(|x| x.id == master).ok_or_else(|| p.bad(format!("there is no master `{master}`")))?;
@@ -767,13 +792,26 @@ fn result(jobs: &[Targets], origins: &[Point]) -> Value {
     out
 }
 
+/// With `image: true`, the box of the layer's placed image: the image of one glyph's layer
+/// only, refused when it is missing or locked. `None` without the flag.
+fn image_bounds(s: &Session, p: &Params, jobs: &[Targets]) -> Result<Option<Rect>> {
+    if !super::image::targeted(p)? {
+        return Ok(None);
+    }
+    let ([t], true) = (jobs, p.get("glyph").is_some()) else {
+        return Err(p.bad("`image` names the placed image of one layer: give `glyph`, not `glyphs`"));
+    };
+    super::image::shown_box(s, p, t).map(Some)
+}
+
 /// One Palette transformation.
 fn palette(s: &mut Session, v: &Value, id: &'static str, label: &str, lin: impl FnOnce(&Params) -> Result<Affine>) -> Result<Value> {
     let p = Params::new(id, v)?;
     let lin = lin(&p)?;
     let origin = parse_origin(&p, Origin::Box(BoxPoint::Center))?;
     let jobs = jobs(&p, s.font()?, false, false)?;
-    let origins = run_jobs(s, &p, label, &jobs, origin, lin, Vec2::ZERO)?;
+    let image = image_bounds(s, &p, &jobs)?;
+    let origins = run_jobs(s, &p, label, &jobs, origin, lin, Vec2::ZERO, image)?;
     Ok(result(&jobs, &origins))
 }
 
@@ -815,7 +853,7 @@ fn mirror_vertical(s: &mut Session, v: &Value) -> Result<Value> {
 
 /// The keys mirroring with `corners` does not take: the corners flip in place, on the foreground
 /// of one glyph's layer.
-const NOT_WITH_CORNERS: [&str; 9] = ["glyphs", "side", "points", "segments", "shapes", "anchors", "guides", "annotations", "origin"];
+const NOT_WITH_CORNERS: [&str; 10] = ["glyphs", "side", "points", "segments", "shapes", "anchors", "guides", "annotations", "image", "origin"];
 
 /// Mirroring with `corners` flips those corner components in place, as their scale does
 /// (cornerComponent.setScale with `flip`), as one undo step named after the mirror; `None`
@@ -1349,7 +1387,7 @@ fn transformations(s: &mut Session, v: &Value) -> Result<Value> {
         }
         return Err(EngineError::Unsupported("Cursivy (a slant with optical correction of the curves)".into()));
     }
-    let origins = run_jobs(s, &p, "Transformations", &jobs, args.origin, args.linear(), Vec2::new(args.translate.0, args.translate.1))?;
+    let origins = run_jobs(s, &p, "Transformations", &jobs, args.origin, args.linear(), Vec2::new(args.translate.0, args.translate.1), None)?;
     Ok(result(&jobs, &origins))
 }
 

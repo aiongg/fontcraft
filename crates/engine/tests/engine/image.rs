@@ -1,8 +1,10 @@
 //! Placed images (M11.12): `glyph.addImage` with one file and with several matched by name,
 //! `image.setTransform`, `image.lock`, `image.unlock`, `image.setCrop`,
 //! `image.setCropToLayerBounds`, `image.resetCrop` and `image.getInfo`; a locked image refused by
-//! every edit; paths rewritten when an unsaved document is first saved. Image files are built in
-//! code: headers only, which is all placing an image reads.
+//! every edit; paths rewritten when an unsaved document is first saved; the `image` flag of the
+//! Palette transformations, `selection.move` and `edit.delete`; a PDF placed at its page size
+//! (M11.13b). Image files are built in code: headers only, which is all placing an image reads,
+//! and whole one-page PDFs.
 // Integration tests may unwrap and panic, unlike shipped code (AGENTS.md › Never crash).
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
 
@@ -349,4 +351,161 @@ fn the_most_files_one_call_takes_are_placed_without_slowing_down() {
     assert_eq!(r["placed"].as_array().unwrap().len(), MAX_ADD_IMAGE_FILES);
     assert_eq!(r["unmatched"], json!([]));
     assert_eq!(info(&mut s, "g09999")["pixelWidth"].as_u64(), Some(8));
+}
+
+/// The shapes of glyph A's first master layer, to check that an image-only edit leaves them alone.
+fn outline(s: &Session) -> Vec<fontcraft_model::Shape> {
+    let font = s.font().unwrap();
+    font.glyph("A").unwrap().layers[0].shapes.clone()
+}
+
+/// A one-page PDF put together by hand: `page` holds the page's box and rotation entries.
+fn pdf(page: &str) -> Vec<u8> {
+    let objects = [
+        "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_string(),
+        format!("<< /Type /Page /Parent 2 0 R {page} /Contents 4 0 R >>"),
+        "<< /Length 14 >>\nstream\n0 0 10 10 re f\nendstream".to_string(),
+    ];
+    let mut out = b"%PDF-1.5\n".to_vec();
+    let mut offsets = Vec::new();
+    for (i, body) in objects.iter().enumerate() {
+        offsets.push(out.len());
+        out.extend_from_slice(format!("{} 0 obj\n{body}\nendobj\n", i + 1).as_bytes());
+    }
+    let xref = out.len();
+    out.extend_from_slice(format!("xref\n0 {}\n0000000000 65535 f \n", objects.len() + 1).as_bytes());
+    for o in offsets {
+        out.extend_from_slice(format!("{o:010} 00000 n \n").as_bytes());
+    }
+    out.extend_from_slice(format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n", objects.len() + 1).as_bytes());
+    out
+}
+
+#[test]
+fn palette_transformations_take_the_placed_image_as_a_target() {
+    let dir = folder("palette");
+    let file = write(&dir, "A.png", &png(100, 50, None));
+    let mut s = Session::with_document();
+    run(&mut s, "path.addRectangle", json!({"glyph": "A", "x": 300, "y": 300, "width": 100, "height": 100}));
+    run(&mut s, "glyph.addImage", json!({"files": [file]}));
+    let paths = outline(&s);
+
+    // Without target lists only the image changes, about the centre of its box (50, 25).
+    let steps = undo_steps(&s);
+    run(&mut s, "transform.scale", json!({"glyph": "A", "image": true, "x": 200}));
+    let i = info(&mut s, "A");
+    assert_eq!((i["x"].as_f64(), i["y"].as_f64(), i["width"].as_f64(), i["height"].as_f64()), (Some(-50.0), Some(-25.0), Some(200.0), Some(100.0)));
+    assert_eq!(outline(&s), paths, "the outline stays");
+    assert_eq!(undo_steps(&s), steps + 1, "one undo step");
+
+    // A quarter turn about the origin: the image's corner at (-50, -25) goes to (25, -50).
+    run(&mut s, "transform.rotateCounterclockwise", json!({"glyph": "A", "image": true, "angle": 90, "origin": [0, 0]}));
+    let i = info(&mut s, "A");
+    assert_eq!((i["x"].as_f64(), i["y"].as_f64(), i["rotation"].as_f64(), i["width"].as_f64()), (Some(25.0), Some(-50.0), Some(90.0), Some(200.0)));
+
+    // With target lists, the image goes along with them.
+    run(&mut s, "transform.mirrorVertical", json!({"glyph": "A", "image": true, "shapes": [0], "origin": [0, 0]}));
+    let i = info(&mut s, "A");
+    assert_eq!((i["x"].as_f64(), i["y"].as_f64()), (Some(25.0), Some(50.0)));
+    assert_ne!(outline(&s), paths, "the named path flips too");
+
+    // Several glyphs, a locked image and a layer without one are refused.
+    run_err(&mut s, "transform.scale", json!({"glyphs": ["A"], "image": true, "x": 50}));
+    run_err(&mut s, "transform.scale", json!({"glyph": "B", "image": true, "x": 50}));
+    run(&mut s, "image.lock", json!({"glyph": "A"}));
+    let e = run_err(&mut s, "transform.slantRight", json!({"glyph": "A", "image": true, "angle": 10}));
+    assert!(e.contains("locked"), "{e}");
+}
+
+#[test]
+fn selection_move_nudges_the_placed_image_by_the_steps_given() {
+    let dir = folder("nudge");
+    let file = write(&dir, "A.png", &png(100, 50, None));
+    let mut s = Session::with_document();
+    run(&mut s, "path.addRectangle", json!({"glyph": "A", "x": 300, "y": 300, "width": 100, "height": 100}));
+    run(&mut s, "glyph.addImage", json!({"files": [file]}));
+    let paths = outline(&s);
+
+    // The steps the arrow keys send: 1 unit, then 10 (Shift) and 100 (Cmd).
+    for (dx, dy) in [(1.0, 0.0), (0.0, -10.0), (-100.0, 0.0)] {
+        run(&mut s, "selection.move", json!({"glyph": "A", "image": true, "dx": dx, "dy": dy}));
+    }
+    let i = info(&mut s, "A");
+    assert_eq!((i["x"].as_f64(), i["y"].as_f64(), i["width"].as_f64()), (Some(-99.0), Some(-10.0), Some(100.0)));
+    assert_eq!(outline(&s), paths, "only the image moved");
+
+    // A rotated image keeps its turn; named points move with it.
+    run(&mut s, "image.setTransform", json!({"glyph": "A", "x": 0, "y": 0, "rotation": 30}));
+    run(&mut s, "selection.move", json!({"glyph": "A", "image": true, "points": [[0, 0]], "dx": 5, "dy": 5}));
+    let i = info(&mut s, "A");
+    assert_eq!((i["x"].as_f64(), i["y"].as_f64(), i["rotation"].as_f64()), (Some(5.0), Some(5.0), Some(30.0)));
+    assert_ne!(outline(&s), paths, "the named node moved too");
+
+    run_err(&mut s, "selection.move", json!({"glyph": "A", "image": true, "dx": 1, "dy": 0, "duplicate": true}));
+    run_err(&mut s, "selection.move", json!({"glyph": "A", "image": true, "dx": 3e6, "dy": 0}));
+    run_err(&mut s, "selection.move", json!({"glyph": "B", "image": true, "dx": 1, "dy": 0}));
+    run(&mut s, "image.lock", json!({"glyph": "A"}));
+    run_err(&mut s, "selection.move", json!({"glyph": "A", "image": true, "dx": 1, "dy": 0}));
+}
+
+#[test]
+fn edit_delete_removes_the_placed_image_and_undo_restores_it() {
+    let dir = folder("delete");
+    let front = write(&dir, "A.png", &png(100, 50, None));
+    let back = write(&dir, "back.png", &png(20, 20, None));
+    let mut s = Session::with_document();
+    run(&mut s, "path.addRectangle", json!({"glyph": "A", "x": 300, "y": 300, "width": 100, "height": 100}));
+    run(&mut s, "glyph.addImage", json!({"files": [front], "glyphs": ["A"]}));
+    run(&mut s, "glyph.addImage", json!({"files": [back], "glyphs": ["A"], "side": "background"}));
+    let paths = outline(&s);
+    let placed = info(&mut s, "A");
+
+    let steps = undo_steps(&s);
+    run(&mut s, "edit.delete", json!({"glyph": "A", "image": true}));
+    assert_eq!(info(&mut s, "A"), Value::Null);
+    assert_eq!(outline(&s), paths, "the outline stays");
+    assert_eq!(undo_steps(&s), steps + 1);
+    let background = run(&mut s, "image.getInfo", json!({"glyph": "A", "side": "background"}))["image"].clone();
+    assert!(background.is_object(), "the background's image is a separate one");
+    run(&mut s, "edit.undo", json!({}));
+    assert_eq!(info(&mut s, "A"), placed, "undo brings the image back");
+
+    run(&mut s, "edit.delete", json!({"glyph": "A", "image": true, "side": "background"}));
+    assert_eq!(run(&mut s, "image.getInfo", json!({"glyph": "A", "side": "background"}))["image"], Value::Null);
+    assert_eq!(info(&mut s, "A"), placed, "the foreground's image stays");
+
+    run_err(&mut s, "edit.delete", json!({"glyph": "B", "image": true}));
+    run(&mut s, "image.lock", json!({"glyph": "A"}));
+    let e = run_err(&mut s, "edit.delete", json!({"glyph": "A", "image": true}));
+    assert!(e.contains("locked"), "{e}");
+}
+
+#[test]
+fn a_pdf_is_placed_at_the_size_of_its_page_in_points() {
+    let dir = folder("pdf");
+    let plain = write(&dir, "A.pdf", &pdf("/MediaBox [0 0 300 200]"));
+    // Turned a quarter, the page shows 200 wide and 400 high; a crop box wins over the media box.
+    let turned = write(&dir, "B.pdf", &pdf("/MediaBox [0 0 400 200] /Rotate 90"));
+    let cropped = write(&dir, "C.pdf", &pdf("/MediaBox [0 0 400 400] /CropBox [50 50 150 100]"));
+    let mut s = Session::with_document();
+    let r = run(&mut s, "glyph.addImage", json!({"files": [plain, turned, cropped]}));
+    let size = |i: usize| (r["placed"][i]["pixelWidth"].as_u64(), r["placed"][i]["pixelHeight"].as_u64());
+    assert_eq!(r["placed"][0]["format"], json!("pdf"));
+    assert_eq!(r["placed"][0]["scale"], json!([1.0, 1.0]), "one point of the page to one unit");
+    assert_eq!((size(0), size(1), size(2)), ((Some(300), Some(200)), (Some(200), Some(400)), (Some(100), Some(50))));
+
+    let i = info(&mut s, "A");
+    assert_eq!((i["width"].as_f64(), i["height"].as_f64(), i.get("problem")), (Some(300.0), Some(200.0), None));
+    // The page size stands for a pixel size wherever one is needed.
+    let r = run(&mut s, "image.setTransform", json!({"glyph": "A", "width": 150}));
+    assert_eq!((r["image"]["width"].as_f64(), r["image"]["scale"][0].as_f64()), (Some(150.0), Some(0.5)));
+    run(&mut s, "image.setCrop", json!({"glyph": "A", "rect": [0, 0, 300, 100]}));
+    run_err(&mut s, "image.setCrop", json!({"glyph": "A", "rect": [0, 0, 301, 100]}));
+
+    // A PDF whose page cannot be read is kept as a reference without a size.
+    let broken = write(&dir, "D.pdf", b"%PDF-1.5\nnot a page\n");
+    let r = run(&mut s, "glyph.addImage", json!({"files": [broken], "glyphs": ["D"]}));
+    assert_eq!((r["placed"][0]["format"].as_str(), r["placed"][0]["pixelWidth"].as_u64()), (Some("pdf"), None));
+    assert!(info(&mut s, "D")["problem"].is_string());
 }

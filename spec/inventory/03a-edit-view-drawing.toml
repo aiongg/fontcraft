@@ -906,13 +906,13 @@ label = "Move"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph: name, layer?: id, side?: foreground|background, points?: [[shape, node]], segments?: [[shape, node]], shapes?: [index], anchors?: [name], guides?: [{scope: local|global, index}], annotations?: [index], dx: number, dy: number, mode?: normal|pointsOnly|nudge, duplicate?: bool} → {selection}"
+params = "{glyph: name, layer?: id, side?: foreground|background, points?: [[shape, node]], segments?: [[shape, node]], shapes?: [index], anchors?: [name], guides?: [{scope: local|global, index}], annotations?: [index], image?: bool, dx: number, dy: number, mode?: normal|pointsOnly|nudge, duplicate?: bool} → {selection}"
 area = "drawing"
 milestone = "M3"
 summary = "Moves the selected nodes, handles, anchors or guides by an offset in font units. It is what the arrow keys run: one unit per press, 10 with Shift, 100 with Cmd; the mode mirrors the Option (points only) and Ctrl+Option (nudge) modifiers."
 ref = "Edit View › Moving Selected Nodes and Paths"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 13:42–13:45: dragging the two selected top nodes of a rectangle moves only them, which slants the stem. Arrow-key steps: see move.arrowKeyIncrements."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 13:42–13:45: dragging the two selected top nodes of a rectangle moves only them, which slants the stem. Arrow-key steps: see move.arrowKeyIncrements. `image: true` moves the layer's placed image too (M11.13b); the arrow keys send it while an image is selected, with the same steps (image.directManipulation)."
 
 [[behavior]]
 id = "move.arrowKeyIncrements"
@@ -1331,7 +1331,7 @@ menu = []
 shortcut = "Delete"
 when = "editView"
 kind = "engine"
-params = "{glyph: name, layer?: id, side?, points?: [[shape, node]], shapes?: [index], anchors?: [name], guides?: [{scope: local|global, index}], annotations?: [index]} → {selection}"
+params = "{glyph: name, layer?: id, side?, points?: [[shape, node]], shapes?: [index], anchors?: [name], guides?: [{scope: local|global, index}], annotations?: [index], image?: bool} → {selection}"
 area = "drawing"
 milestone = "M3"
 summary = "Removes the selection. A deleted node is taken out without opening the path, and the neighbouring handles are refitted so the remaining segment follows the old shape as closely as possible. The same key removes selected anchors and pen points."
@@ -1341,6 +1341,7 @@ guesses = [
   "The refitted segment keeps its end nodes and the directions it leaves and enters them in, and fits the two handle lengths by least squares over the removed segments (03a question 10).",
   "With only handles selected the segment becomes a line; with every node of a path selected the path is removed.",
   "In text mode, Delete run from a menu or the control channel removes the selected text, else the item after the cursor, as the Delete key does; the Edit menu of the running reference app in text mode settles it.",
+  "With a placed image selected, Delete removes the image (`image: true`), as it removes other selected objects; the handbook does not say. Pressing Delete with an image selected in the reference settles it.",
 ]
 
 [[command]]

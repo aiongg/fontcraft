@@ -2182,9 +2182,9 @@ milestone = "M11"
 summary = "The reference accepts every image type its operating system can decode and names JPEG, PNG, PDF, TIFF and PSD. FontCraft must decide which of these it decodes itself on every platform."
 ref = "Edit View › Images › Adding Images"
 status = "handbook"
-notes = "FontCraft decodes PNG, JPEG and TIFF itself on every platform, the web build included; PDF and PSD references are kept and drawn as an unsupported-image marker (M11 § 7, question 3)."
+notes = "FontCraft decodes PNG, JPEG and TIFF itself on every platform, the web build included, and draws the first page of a PDF (`fontcraft-io-pdf`, row `image-pdf`). PSD and SVG references are kept and drawn as an unsupported-image marker (M11 § 7, question 3). A PDF has no pixel size: its page size in points stands in for one, so it is placed at one point to one unit and its width, height and crop work as for other images."
 guesses = [
-  "PDF and PSD images are kept as references and drawn as an unsupported-image marker with a message, not decoded. Settled by the owner's answer to M11 § 7 question 3.",
+  "PSD images are kept as references and drawn as an unsupported-image marker with a message, not decoded. Settled by the owner's answer to M11 § 7 question 3.",
 ]
 observe = ["Image font: add a PDF and a PSD image to a glyph; note how each is drawn."]
 
@@ -2246,7 +2246,7 @@ milestone = "M11"
 summary = "A newly placed image sits at the layer origin, scaled so that one DTP point of the image maps to one font unit."
 ref = "Edit View › Images › Manipulating Images"
 status = "handbook"
-notes = "Documented, not yet observed. The resolution is read from PNG `pHYs`, JPEG JFIF density (else its Exif resolution) and the TIFF resolution tags; an image without one is placed at 72 pixels per inch."
+notes = "Documented, not yet observed. The resolution is read from PNG `pHYs`, JPEG JFIF density (else its Exif resolution) and the TIFF resolution tags; an image without one is placed at 72 pixels per inch. A PDF is placed at one point of its first page to one unit: its size is the page's crop box, else its media box, turned by the page's rotation."
 guesses = [
   "The image's size in points comes from the resolution stored in the file (PNG pHYs, JPEG JFIF or Exif, TIFF resolution tags); a file without one counts as 72 pixels per inch, one pixel per unit. Settled by adding a 144 dpi PNG in the reference.",
 ]
@@ -2259,14 +2259,18 @@ milestone = "M11"
 summary = "A selected image can be dragged to move it, resized with the bounding box or the Scale tool, rotated with the Rotate tool and transformed with the Transformations palette. Ctrl+Alt+dragging a handle crops instead of resizing."
 ref = "Edit View › Images › Manipulating Images"
 status = "handbook"
-notes = "Documented, not yet observed. A click on the image with the Select tool selects it alone, where no other object lies. Dragging it runs `image.setTransform` with `x` and `y`; its knobs (shown while Show Bounding Box is on, as for other selections) run it with `x`, `y`, `width` and `height` about the opposite knob (Shift: proportional; Alt: about the centre); Ctrl+Alt on a knob runs `image.setCrop`, in whole pixels within the image. With the image selected and nothing else, the Rotate tool turns it about the centre of its shown part (Shift: steps of 90°) and the Scale tool scales it about that centre (Shift: proportional). Each drag is one undo step. Scaling along the image's own axes keeps a rotated image rectangular. Not yet: the Transformations palette, nudging with the arrow keys, and the Scale and Rotate tools' reference point."
+notes = "Documented, not yet observed. A click on the image with the Select tool selects it alone, where no other object lies. Dragging it runs `image.setTransform` with `x` and `y`; its knobs (shown while Show Bounding Box is on, as for other selections) run it with `x`, `y`, `width` and `height` about the opposite knob (Shift: proportional; Alt: about the centre); Ctrl+Alt on a knob runs `image.setCrop`, in whole pixels within the image. With the image selected and nothing else, the Rotate tool turns it about the centre of its shown part (Shift: steps of 90°) and the Scale tool scales it about that centre (Shift: proportional). Each drag is one undo step. Scaling along the image's own axes keeps a rotated image rectangular. While the image is selected, the arrow keys run `selection.move` with `image: true` by the font's increments (plain, Shift, Cmd), Delete or Backspace runs `edit.delete` with `image: true`, and the Palette's mirror, scale, rotate and slant buttons run their commands with `image: true`, about the box of the image's shown part when the origin is a box point. Not yet: the Scale and Rotate tools' reference point."
 guesses = [
   "The image's knobs are the bounding box's, so they show only while Show Bounding Box is on, and cropping needs them too. Settled by selecting an image in the reference with Show Bounding Box off and Ctrl+Alt-dragging its corner.",
   "Shift while moving the image keeps the larger of the horizontal and vertical moves. Settled by Shift-dragging an image in the reference.",
   "A crop drag snaps the crop to whole image pixels. Settled by cropping an image in the reference and reading the saved crop.",
   "The Rotate and Scale tools turn and scale a selected image about the centre of its shown part, ignoring a placed reference point. Settled by placing a reference point and rotating an image with the Rotate tool in the reference.",
+  "The arrow keys move a selected image by the steps they move nodes by (1, Shift 10, Cmd 100); Option and Ctrl+Option change nothing for an image. Settled by pressing the arrow keys with an image selected in the reference.",
+  "A box origin of the Transformations palette is measured on the image's shown part (its crop), not on the whole image. Settled by cropping an image and scaling it from the palette in the reference.",
 ]
 observe = [
+  "Image font: select H's image and press the arrow keys, with and without Shift and Cmd; note the steps. Press Delete; note whether the image goes.",
+  "Image font: crop H's image, select it and click Scale in the Transformations palette with the centre origin; note the point that stays fixed.",
   "Image font: select H's image and drag it; drag a corner knob with and without Shift; note what stays fixed.",
   "Image font: Ctrl+Alt-drag a corner of H's image; note the crop and whether it snaps to pixels.",
   "Image font: rotate H's image with the Rotate tool; note the pivot.",
