@@ -116,7 +116,7 @@ fn view_suggest_menu_items_carry_a_check_mark_while_on() {
     app.run("view.suggestStems", &json!({"on": true})).unwrap();
     assert_eq!(checked(&mut app, "view.suggestStems"), Some(true), "the cached menu follows the switch");
     assert_eq!(checked(&mut app, "view.suggestLines"), Some(false));
-    assert_eq!(checked(&mut app, "view.showTunniLines"), None, "not one of the switches with a check mark");
+    assert_eq!(checked(&mut app, "view.zoomIn"), None, "not a switch");
     let tree = call(&mut app, "ui.menu.list", json!({}));
     let items: Vec<&Value> = tree["result"].as_array().unwrap().iter().flat_map(|m| m["items"].as_array().unwrap()).collect();
     let stems = items.iter().find(|i| i["command"] == "view.suggestStems").unwrap();
