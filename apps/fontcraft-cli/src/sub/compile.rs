@@ -22,6 +22,7 @@ const USAGE: &str = "\
                         [--fontinfo FILE] [--feature-file FILE] [--license-code CODE]
                         [--fs-selection-on N]... [--fs-selection-off N]... [--os2-version N] [project options]
                         [--cid-cmap FILE] [--mac-cmap FILE] [--mac-script N] [--mac-language N] [--uvs FILE]
+                        [--interpolate-binary-layout [DIR]]
   fontcraft-cli compile --project-file FILE [options]
   fontcraft-cli compile SOURCE... --variable [--format ttf|otf] [--settings NAME,...] [--container plain|woff|woff2]...
                         [-o FILE | --output-dir DIR] [--timestamp SECS|now]
@@ -46,6 +47,11 @@ const USAGE: &str = "\
       --collection packs the fonts of each format into one collection that stores identical
       tables once (SOURCE.ttc, or .otc for CFF); -o FILE.ttc or FILE.otc does the same.
       --plan prints what would be built, without building.
+      --interpolate-binary-layout [DIR] gives each instance the GPOS interpolated from the
+      compiled masters in DIR (default master_ttf, or master_otf for otf, beside the source),
+      named as the source's master UFOs are, and the GDEF and GSUB of the default master; masters
+      built with --masters-as-instances keep their own layout. The source is a designspace or a
+      .glyphs file or package. A master that cannot be found stops the build, and nothing is written.
       A project compile builds a font as the reference compiler's project workflow does (default
       format otf): composites and overlaps stay as the source has them, coordinates keep two
       decimals, and the metrics come from the glyphs and the full name. --project-file FILE reads a current.fpr project file first; the project
@@ -95,7 +101,7 @@ fn compile(args: &[String]) -> Outcome {
     let mut project_words: Vec<String> = Vec::new();
     let mut project = serde_json::Map::new();
     let mut project_file: Option<&String> = None;
-    let mut it = args.iter();
+    let mut it = args.iter().peekable();
     let list = |v: &str| -> Vec<String> { v.split(',').map(str::trim).filter(|s| !s.is_empty()).map(str::to_string).collect() };
     while let Some(arg) = it.next() {
         match arg.as_str() {
@@ -244,15 +250,22 @@ fn compile(args: &[String]) -> Outcome {
             "--cbdt" => {
                 params.insert("cbdt".into(), json!(true));
             }
+            "--interpolate-binary-layout" => {
+                let dir = it.next_if(|next| is_layout_folder(next));
+                params.insert("interpolateBinaryLayout".into(), dir.map_or(json!(true), |d| json!(d)));
+            }
             "--plan" => plan = true,
             "--variable" => variable = true,
             "--settings" => settings = Some(list(it.next().ok_or_else(|| usage("--settings needs setting names"))?)),
-            other => match other.strip_prefix("--instances=") {
-                Some(names) => {
+            other => match (other.strip_prefix("--instances="), other.strip_prefix("--interpolate-binary-layout=")) {
+                (Some(names), _) => {
                     params.insert("instances".into(), json!(list(names)));
                 }
-                None if other.starts_with('-') => return Err(usage(format!("unknown compile option `{other}`"))),
-                None => sources.push(arg),
+                (None, Some(dir)) => {
+                    params.insert("interpolateBinaryLayout".into(), if dir.is_empty() { json!(true) } else { json!(dir) });
+                }
+                (None, None) if other.starts_with('-') => return Err(usage(format!("unknown compile option `{other}`"))),
+                (None, None) => sources.push(arg),
             },
         }
     }
@@ -334,7 +347,7 @@ fn compile(args: &[String]) -> Outcome {
             || params.contains_key("mastersAsInstances")
             || params.contains_key("subroutinize")
             || params.contains_key("cbdt")
-            || ["subset", "stubDsig", "passThroughTables", "collection", "uvsFile"].iter().any(|k| params.contains_key(*k))
+            || ["subset", "stubDsig", "passThroughTables", "collection", "uvsFile", "interpolateBinaryLayout"].iter().any(|k| params.contains_key(*k))
         {
             return Err(usage("--variable takes only --format, --settings, --container, -o, --output-dir and --timestamp"));
         }
@@ -391,6 +404,17 @@ fn compile(args: &[String]) -> Outcome {
     if failed > 0 { Err(Failure::Failed(format!("{failed} of {} sources did not build", sources.len()))) } else { Ok(()) }
 }
 
+/// The extensions of the files and folders `compile` reads as a SOURCE.
+const SOURCE_EXTENSIONS: &[&str] =
+    &["fontcraft", "glyphs", "glyphspackage", "designspace", "ufo", "ufoz", "ttf", "otf", "ttc", "otc", "woff", "woff2", "cff", "pfa", "pfb", "ttx"];
+
+/// Whether the argument after `--interpolate-binary-layout` is its folder: not an option and not
+/// a SOURCE, so `--interpolate-binary-layout F.glyphs` still compiles F.glyphs.
+fn is_layout_folder(arg: &str) -> bool {
+    let ext = std::path::Path::new(arg).extension().map(|e| e.to_string_lossy().to_ascii_lowercase());
+    !arg.starts_with('-') && !ext.is_some_and(|e| SOURCE_EXTENSIONS.contains(&e.as_str()))
+}
+
 /// The `InputFontPath` and `OutputFontPath` a project file names, relative to its folder: one
 /// `Key value` per line, `#` lines skipped. The compile reads the rest of the file.
 fn project_paths(file: &str) -> Result<(Option<std::path::PathBuf>, Option<std::path::PathBuf>), Failure> {
@@ -407,4 +431,18 @@ fn project_paths(file: &str) -> Result<(Option<std::path::PathBuf>, Option<std::
         *slot = Some(folder.join(value.trim()));
     }
     Ok((input, output))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_layout_folder;
+
+    #[test]
+    fn the_argument_after_interpolate_binary_layout_is_its_folder_unless_it_is_a_source() {
+        assert!(is_layout_folder("master_ttf"));
+        assert!(is_layout_folder("build/masters"));
+        assert!(!is_layout_folder("F.glyphs"));
+        assert!(!is_layout_folder("Family.DESIGNSPACE"));
+        assert!(!is_layout_folder("--format"));
+    }
 }

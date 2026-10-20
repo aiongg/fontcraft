@@ -132,6 +132,11 @@ mod tests {
         ("path.replaceOutlinePattern", &["replacement"], "outline paths given inline"),
         ("font.setCrossAxisMappings", &["input", "output"], "axis locations by tag"),
         (
+            "font.compile",
+            &["interpolateBinaryLayout"],
+            "true or a folder relative to the source's folder; each master file read from it is checked against the automation roots when opened",
+        ),
+        (
             "font.instantiate",
             &["interpolateBinaryLayout"],
             "true or a folder relative to the source's folder; each master file read from it is checked against the automation roots when opened",

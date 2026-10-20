@@ -494,7 +494,7 @@ pub(super) fn commit(_: &[Staged]) -> Result<()> {
 pub(super) fn discard(_: &[Staged]) {}
 
 #[cfg(not(target_arch = "wasm32"))]
-mod layout;
+pub(super) mod layout;
 mod source;
 
 #[cfg(test)]

@@ -224,8 +224,9 @@ fn split_ext(name: &str) -> (&str, &str) {
     }
 }
 
-/// `interpolateBinaryLayout`: what each compiled instance's layout is replaced with.
-pub(super) struct BinaryLayout {
+/// `interpolateBinaryLayout`: what each compiled instance's layout is replaced with. `font.compile`
+/// uses it too.
+pub(in crate::cmd) struct BinaryLayout {
     /// The base master with the interpolated `GPOS`, by instance index.
     layouts: Vec<(usize, SfntFont)>,
 }
@@ -235,6 +236,20 @@ impl BinaryLayout {
     /// compiled. `dir` is fontmake's `DIR` (default `master_<ext>`); `masterFinder`, when given,
     /// is used instead.
     pub(super) fn load(p: &Params<'_>, input: &Path, font: &Font, ds: &Designspace, jobs: &[Job], ext: &str, dir: Option<&str>) -> Result<Self> {
+        let indices: Vec<usize> = jobs.iter().map(|j| j.index).collect();
+        Self::load_for(p, input, font, ds, &indices, ext, dir)
+    }
+
+    /// [`Self::load`] for the instances of `font` at `indices`.
+    pub(in crate::cmd) fn load_for(
+        p: &Params<'_>,
+        input: &Path,
+        font: &Font,
+        ds: &Designspace,
+        indices: &[usize],
+        ext: &str,
+        dir: Option<&str>,
+    ) -> Result<Self> {
         let finder = match (p.opt_str("masterFinder")?, dir) {
             (Some(_), Some(_)) => {
                 return Err(p.bad("`interpolateBinaryLayout` names the masters' folder and `masterFinder` their files: give one"));
@@ -246,11 +261,25 @@ impl BinaryLayout {
             }
         };
         let set = CompiledMasters::load(p, input, font, ds, &finder)?;
-        let mut layouts = Vec::with_capacity(jobs.len());
-        for job in jobs {
-            layouts.push((job.index, set.interpolate(p, font, ds, job.index)?));
+        let mut layouts = Vec::with_capacity(indices.len());
+        for &index in indices {
+            if !layouts.iter().any(|(i, _)| *i == index) {
+                layouts.push((index, set.interpolate(p, font, ds, index)?));
+            }
         }
         Ok(Self { layouts })
+    }
+
+    /// The compiled font `bytes` of instance `index`, with its layout replaced.
+    pub(in crate::cmd) fn replace(&self, p: &Params<'_>, index: usize, bytes: &[u8]) -> Result<Vec<u8>> {
+        let from = self
+            .layouts
+            .iter()
+            .find(|(i, _)| *i == index)
+            .map(|(_, f)| f)
+            .ok_or_else(|| p.bad(format!("no layout was interpolated for instance {index}")))?;
+        let made = transfer_layout(from, fontcraft_tables::read(bytes, 0)?)?;
+        Ok(fontcraft_tables::write(&made, &WriteOptions { order: TableOrder::Recommended })?)
     }
 
     /// Replaces the layout of each compiled instance, given by instance index, the file it was
@@ -268,15 +297,8 @@ impl BinaryLayout {
 
     fn stage_all(&self, p: &Params<'_>, outputs: &[(usize, PathBuf, PathBuf)], staged: &mut Vec<Staged>) -> Result<()> {
         for (index, compiled, path) in outputs {
-            let from = self
-                .layouts
-                .iter()
-                .find(|(i, _)| i == index)
-                .map(|(_, f)| f)
-                .ok_or_else(|| p.bad(format!("no layout was interpolated for {}", path.display())))?;
             let read = file_io::read_input(compiled)?;
-            let made = transfer_layout(from, fontcraft_tables::read(&read.bytes, 0)?)?;
-            let bytes = fontcraft_tables::write(&made, &WriteOptions { order: TableOrder::Recommended })?;
+            let bytes = self.replace(p, *index, &read.bytes)?;
             staged.push(stage(path, &bytes, staged.len())?);
         }
         Ok(())
@@ -490,7 +512,7 @@ fn lexical(path: &Path) -> PathBuf {
 }
 
 #[cfg(test)]
-mod tests {
+pub(in crate::cmd) mod tests {
     use super::*;
 
     #[test]
@@ -551,7 +573,7 @@ mod tests {
     }
 
     /// [`glyphs_source`], with a glyph W kerned against A when `with_w`.
-    fn glyphs_source_with(light: i32, bold: i32, with_w: bool) -> String {
+    pub(in crate::cmd) fn glyphs_source_with(light: i32, bold: i32, with_w: bool) -> String {
         let glyph = |name: &str, unicode: u32, light: i32, bold: i32| {
             let layer = |id: &str, w: i32| {
                 format!(
