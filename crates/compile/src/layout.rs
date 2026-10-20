@@ -75,6 +75,9 @@ pub struct LayoutTables {
     pub compiled: FeaCompiled,
     /// The compiler's warnings, mapped to the entries.
     pub diagnostics: Vec<EntryDiagnostic>,
+    /// The features the code declares in top-level blocks, each once in code order; the other
+    /// features of `compiled` were generated.
+    pub declared: Vec<fontcraft_fea::Tag>,
 }
 
 impl LayoutTables {
@@ -371,5 +374,6 @@ pub fn build(input: &LayoutInput, opts: &LayoutOptions, warnings: &mut Vec<Strin
     let compiled = fontcraft_fea::compile(&request).map_err(mapped)?;
     let diagnostics: Vec<EntryDiagnostic> = compiled.warnings.iter().map(|d| map.map(d.clone())).collect();
     warnings.extend(diagnostics.iter().map(|d| describe(&entries, d)));
-    Ok(LayoutTables { compiled, diagnostics })
+    let declared = first.features.iter().map(|(tag, _)| *tag).collect();
+    Ok(LayoutTables { compiled, diagnostics, declared })
 }

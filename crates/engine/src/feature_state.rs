@@ -2,19 +2,28 @@
 //! font): the preview font, its feature list and the diagnostics, for the Features menu, Edit
 //! View shaping, inline errors and `font.features.listErrors`.
 //!
-//! Rows: `features.menuNeedsCompile` (the state), `fontInfo.features.inlineErrors`.
+//! Rows: `features.menuNeedsCompile` (the state), `fontInfo.features.inlineErrors`,
+//! `textPreview.shaping` (the shared build).
 //!
 //! Session state only: not undoable, never saved, dropped when the document closes. A compile
 //! records the document revision it read, so readers can tell whether the font changed since
 //! ([`FeatureState::is_current`]), and a hash of what it compiled (the assembled code, the
 //! glyph order, the master), so `font.features.compile` asked again for the same code reuses
 //! the result instead of compiling it again. One compile is kept per open document.
+//!
+//! The code is compiled once per document revision and master: `font.features.compile` and
+//! Text Preview both build through [`build_previews`], which gives Edit View's font, Text
+//! Preview's font and the diagnostics from one compile, and each leaves its build in
+//! [`PreviewBuilds`] for the other to take.
 
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
-use fontcraft_compile::preview::PreviewFont;
+use fontcraft_compile::preview::{PreviewBuild, PreviewFont};
+use fontcraft_compile::{CompileError, Options};
 use fontcraft_fea::FeatureSummary;
 use fontcraft_features::EntryDiagnostic;
+use fontcraft_model::Font;
 
 use crate::{DocState, Session};
 
@@ -48,7 +57,61 @@ impl FeatureState {
     }
 }
 
+/// One preview build of a document revision and master, or why it failed.
+#[derive(Clone, Debug)]
+pub struct SharedBuild {
+    pub doc: u64,
+    /// The document revision ([`DocState::revision`]) the build read.
+    pub revision: u64,
+    pub master: String,
+    /// The hash `font.features.compile` keys its compiles with (see [`FeatureState::source_hash`]);
+    /// `None` for a build Text Preview made, which reads included files without hashing them.
+    pub source_hash: Option<u64>,
+    pub result: Result<Arc<PreviewBuild>, Arc<CompileError>>,
+}
+
+/// The last preview build of each document, shared by `font.features.compile` and Text Preview,
+/// which builds on a thread of its own: a handle to one store that every clone sees.
+#[derive(Clone, Debug, Default)]
+pub struct PreviewBuilds(Arc<Mutex<HashMap<u64, Arc<SharedBuild>>>>);
+
+impl PreviewBuilds {
+    /// The build of `doc` at `revision` for `master`, if one was kept.
+    pub fn get(&self, doc: u64, revision: u64, master: &str) -> Option<Arc<SharedBuild>> {
+        let builds = self.0.lock().ok()?;
+        builds.get(&doc).filter(|b| b.revision == revision && b.master == master).cloned()
+    }
+
+    /// Keeps `build` as its document's last build, unless a build of a later revision is kept.
+    pub fn put(&self, build: SharedBuild) {
+        // A poisoned store is only a cache: the build is not kept.
+        let Ok(mut builds) = self.0.lock() else { return };
+        if builds.get(&build.doc).is_some_and(|b| b.revision > build.revision) {
+            return;
+        }
+        builds.insert(build.doc, Arc::new(build));
+    }
+
+    /// Drops the builds of documents not in `open`.
+    fn retain(&self, open: &[u64]) {
+        if let Ok(mut builds) = self.0.lock() {
+            builds.retain(|id, _| open.contains(id));
+        }
+    }
+}
+
+/// Both preview fonts of `master` and the code's diagnostics, from one compile of the feature
+/// code (`fontcraft_compile::preview::layout_fonts_with`).
+pub fn build_previews(font: &Font, master: &str, options: &Options) -> Result<PreviewBuild, CompileError> {
+    fontcraft_compile::preview::layout_fonts_with(font, master, options)
+}
+
 impl Session {
+    /// The store of preview builds that `font.features.compile` and Text Preview share.
+    pub fn preview_builds(&self) -> PreviewBuilds {
+        self.preview_builds.clone()
+    }
+
     /// The active document's last feature compile, if it has one.
     pub fn feature_state(&self) -> Option<Arc<FeatureState>> {
         self.active().and_then(|doc| self.feature_state_of(doc.id))
@@ -64,6 +127,7 @@ impl Session {
     pub fn set_feature_state(&mut self, doc_id: u64, state: FeatureState) {
         let open: Vec<u64> = self.docs.iter().map(|d| d.id).collect();
         self.feature_state.retain(|id, _| open.contains(id));
+        self.preview_builds.retain(&open);
         if open.contains(&doc_id) {
             self.feature_state.insert(doc_id, Arc::new(state));
         }

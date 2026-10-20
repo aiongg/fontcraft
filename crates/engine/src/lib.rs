@@ -310,6 +310,8 @@ pub struct Session {
     kern_index: HashMap<u64, Arc<fontcraft_spacing::kerning::KernIndex>>,
     /// Each open document's last feature compile, by document id ([`feature_state`]).
     feature_state: HashMap<u64, Arc<feature_state::FeatureState>>,
+    /// Each open document's last preview build, shared with Text Preview ([`feature_state`]).
+    preview_builds: feature_state::PreviewBuilds,
     /// The file cache and in-memory files behind [`Session::assets`].
     assets: assets::SessionAssets,
     /// Installed modules, macros, recording, the command log (`extensions`).

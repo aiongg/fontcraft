@@ -2409,7 +2409,7 @@ milestone = "M8"
 summary = "Compiles the feature code so that Edit View can preview it and returns the errors found. Edit View previews hand-written substitution rules but not hand-written positioning rules."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed. The compile checks the whole code, positioning included, for one master and keeps the result as the document's feature state (session only, no undo step); the preview font Edit View shapes with holds substitutions only. Compiling unchanged code again reuses the last result."
+notes = "Documented, not yet observed. The compile checks the whole code, positioning included, for one master and keeps the result as the document's feature state (session only, no undo step); the preview font Edit View shapes with holds substitutions only. One compile of the code gives the diagnostics, Edit View's font and Text Preview's font (generated kerning and marks included); a Text Preview build of the same document revision and master is taken without compiling. When that build fails outside the code's entries, the code is compiled on its own for its diagnostics. Compiling unchanged code again reuses the last result."
 observe = [
   "In any font, look for a shortcut or menu item for Compile in Font Info › Features: note both.",
 ]

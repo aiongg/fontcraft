@@ -10,6 +10,7 @@
 //! font, not in its `cmap`; `fontcraft_shaping` reads them from there.
 
 use std::collections::BTreeSet;
+use std::sync::Arc;
 
 use fontcraft_fea::FeatureSummary;
 use fontcraft_features::EntryDiagnostic;
@@ -89,47 +90,101 @@ pub fn layout_font(font: &Font, master: &str, kind: PreviewKind) -> Result<Previ
 /// the generated kerning and marks for [`PreviewKind::Full`] and their `GDEF` classes for both
 /// kinds (the classes decide which glyphs a lookup skips).
 pub fn layout_font_with(font: &Font, master: &str, kind: PreviewKind, options: &Options) -> Result<PreviewFont, CompileError> {
-    font.check()?;
-    font.master(master)?;
-    let target = Target::Master(master.to_string());
-    let mut warnings = Vec::new();
-    let (source, prepared) = crate::sources_at(font, &target, &mut warnings)?;
-    let mut resolved = crate::drawing::resolve(&prepared, &target)?;
-    let options = crate::with_instance_feature_axes(options, font, &target);
-    crate::fill_glyph_data(&mut resolved, &options, &mut warnings);
-    crate::info::expand_tokens(Some(&*source), &mut resolved, &mut warnings);
-    let edits = crate::export_params::apply(Some(&*source), &mut resolved, &mut warnings)?;
-    let glyphs = crate::preflight::run(std::mem::take(&mut resolved.glyphs), &mut warnings)?;
-    let glyphs = crate::order::final_order(glyphs, &resolved, &mut warnings)?;
-    crate::preflight::check_cmap(&glyphs)?;
-    let data = crate::compile_glyph_data(&options);
-    let input = LayoutInput {
-        font: Some(&*source),
-        data: data.as_deref(),
-        resolved: &resolved,
-        order: &glyphs,
-        edits: &edits,
-        first_name_id: if source.features.is_empty() { 256 } else { crate::info::first_free_name_id(&resolved, &options.style_name) },
-        include_dir: options.feature_dir.as_deref(),
-        include_check: options.include_check.as_ref(),
-        variable: None,
-        feature_axes: options.feature_axes.as_ref(),
-    };
-    let layout_options = LayoutOptions { regenerate_automatic: false, gpos: kind == PreviewKind::Full, implicit: true };
-    let layout = crate::layout::build(&input, &layout_options, &mut warnings)?;
+    let stages = Stages::run(font, master, options, kind == PreviewKind::Full)?;
+    stages.font(master, kind)
+}
 
-    let sources = edits.source_names();
-    let glyph_order: Vec<String> = glyphs.iter().map(|g| sources.get(g.name.as_str()).map_or_else(|| g.name.clone(), |s| (*s).to_string())).collect();
-    let (bytes, private_use) = tables(&resolved, &glyphs, kind, &layout)?;
-    Ok(PreviewFont {
-        bytes,
-        master: master.to_string(),
-        kind,
-        glyph_order,
-        private_use,
-        features: layout.compiled.features.clone(),
-        diagnostics: layout.diagnostics,
-    })
+/// Both preview fonts of one master from one compile of its feature code, with what the code
+/// itself declares: what `font.features.compile` keeps and Text Preview shapes with.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PreviewBuild {
+    /// `GSUB` and `GPOS`, generated kerning and marks included: Text Preview's font.
+    pub full: Arc<PreviewFont>,
+    /// The same font without `GPOS`: Edit View's font. Its `GSUB` and `GDEF` are those of
+    /// [`PreviewBuild::full`].
+    pub gsub_only: Arc<PreviewFont>,
+    /// The features of the code: every `GSUB` feature, and the `GPOS` features the code declares
+    /// (not the generated kerning, marks and optical bounds alone).
+    pub code_features: Vec<FeatureSummary>,
+    /// The compiler's warnings, mapped to the entries.
+    pub diagnostics: Vec<EntryDiagnostic>,
+}
+
+/// Builds both preview fonts of `master` with one compile of the feature code, `GPOS` included,
+/// so its diagnostics cover the whole code. Options as for [`layout_font_with`].
+pub fn layout_fonts_with(font: &Font, master: &str, options: &Options) -> Result<PreviewBuild, CompileError> {
+    let stages = Stages::run(font, master, options, true)?;
+    let full = stages.font(master, PreviewKind::Full)?;
+    let gsub_only = stages.font(master, PreviewKind::GsubOnly)?;
+    let declared = &stages.layout.declared;
+    let code_features = full.features.iter().filter(|f| f.table == fontcraft_fea::LayoutTable::Gsub || declared.contains(&f.tag)).cloned().collect();
+    Ok(PreviewBuild { diagnostics: full.diagnostics.clone(), code_features, full: Arc::new(full), gsub_only: Arc::new(gsub_only) })
+}
+
+/// The glyphs of one master after the export's glyph stages, and its compiled layout tables.
+struct Stages {
+    resolved: Resolved,
+    glyphs: Vec<ResolvedGlyph>,
+    glyph_order: Vec<String>,
+    layout: LayoutTables,
+}
+
+impl Stages {
+    fn run(font: &Font, master: &str, options: &Options, gpos: bool) -> Result<Self, CompileError> {
+        font.check()?;
+        font.master(master)?;
+        let target = Target::Master(master.to_string());
+        let mut warnings = Vec::new();
+        let (source, prepared) = crate::sources_at(font, &target, &mut warnings)?;
+        let mut resolved = crate::drawing::resolve(&prepared, &target)?;
+        let options = crate::with_instance_feature_axes(options, font, &target);
+        crate::fill_glyph_data(&mut resolved, &options, &mut warnings);
+        crate::info::expand_tokens(Some(&*source), &mut resolved, &mut warnings);
+        let edits = crate::export_params::apply(Some(&*source), &mut resolved, &mut warnings)?;
+        let glyphs = crate::preflight::run(std::mem::take(&mut resolved.glyphs), &mut warnings)?;
+        let glyphs = crate::order::final_order(glyphs, &resolved, &mut warnings)?;
+        crate::preflight::check_cmap(&glyphs)?;
+        let data = crate::compile_glyph_data(&options);
+        let input = LayoutInput {
+            font: Some(&*source),
+            data: data.as_deref(),
+            resolved: &resolved,
+            order: &glyphs,
+            edits: &edits,
+            first_name_id: if source.features.is_empty() { 256 } else { crate::info::first_free_name_id(&resolved, &options.style_name) },
+            include_dir: options.feature_dir.as_deref(),
+            include_check: options.include_check.as_ref(),
+            variable: None,
+            feature_axes: options.feature_axes.as_ref(),
+        };
+        let layout_options = LayoutOptions { regenerate_automatic: false, gpos, implicit: true };
+        let layout = crate::layout::build(&input, &layout_options, &mut warnings)?;
+        let sources = edits.source_names();
+        let glyph_order = glyphs.iter().map(|g| sources.get(g.name.as_str()).map_or_else(|| g.name.clone(), |s| (*s).to_string())).collect();
+        Ok(Self { resolved, glyphs, glyph_order, layout })
+    }
+
+    /// The preview font of `kind`. A `GsubOnly` font lists its `GSUB` features only.
+    fn font(&self, master: &str, kind: PreviewKind) -> Result<PreviewFont, CompileError> {
+        let (bytes, private_use) = tables(&self.resolved, &self.glyphs, kind, &self.layout)?;
+        let features = self
+            .layout
+            .compiled
+            .features
+            .iter()
+            .filter(|f| kind == PreviewKind::Full || f.table == fontcraft_fea::LayoutTable::Gsub)
+            .cloned()
+            .collect();
+        Ok(PreviewFont {
+            bytes,
+            master: master.to_string(),
+            kind,
+            glyph_order: self.glyph_order.clone(),
+            private_use,
+            features,
+            diagnostics: self.layout.diagnostics.clone(),
+        })
+    }
 }
 
 fn table_error<E: std::fmt::Display>(table: &'static str) -> impl Fn(E) -> CompileError {

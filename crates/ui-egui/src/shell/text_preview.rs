@@ -42,7 +42,9 @@ use std::sync::{Arc, Mutex};
 
 use egui::{Align2, Color32, ColorImage, FontId, Key, Modifiers, Order, Pos2, Rect, Sense, TextureHandle, TextureOptions, pos2, vec2};
 use fontcraft_engine::Session;
-use fontcraft_engine::compile::preview::{self, PreviewKind};
+use fontcraft_engine::compile::CompileError;
+use fontcraft_engine::compile::preview::PreviewBuild;
+use fontcraft_engine::feature_state::{PreviewBuilds, SharedBuild};
 use fontcraft_geom::{Affine, BezPath};
 use fontcraft_model::Font;
 use fontcraft_render::{Style, render_path};
@@ -434,14 +436,19 @@ impl FontSlot {
 
     /// Starts a build when `key` has no font yet: at once for a document or master without one,
     /// else once `key` has been asked for since [`REBUILD_PAUSE`] seconds (each edit makes a new
-    /// key). Returns
+    /// key). A build of `key` that `font.features.compile` or an earlier build left in the
+    /// session's [`PreviewBuilds`] is taken at once instead of compiling again. Returns
     /// the shaper to draw with: the last font built for the same document and master, even when
     /// edits have made it older than the document; `None` while there is none.
     fn step(&mut self, key: &FontKey, now: f64, session: &Session, ctx: &egui::Context) -> Option<Arc<PreviewShaper>> {
         self.collect();
         let fresh = self.built.as_ref().is_some_and(|(k, _)| k == key);
         let under_way = self.running.as_ref().is_some_and(|(k, _)| k == key);
-        if !fresh && !under_way {
+        let kept = (!fresh && !under_way && self.running.is_none()).then(|| session.preview_builds().get(key.0, key.1, &key.2)).flatten();
+        if let Some(kept) = kept {
+            self.running = Some((key.clone(), start_build(key.clone(), Source::Kept(kept))));
+            self.collect();
+        } else if !fresh && !under_way {
             if self.wanted.as_ref().is_none_or(|(k, _)| k != key) {
                 self.wanted = Some((key.clone(), now));
             }
@@ -450,7 +457,8 @@ impl FontSlot {
             let wait = if editing { REBUILD_PAUSE - since } else { 0.0 };
             if self.running.is_none() && wait <= 0.0 {
                 if let Some(doc) = session.active() {
-                    self.running = Some((key.clone(), start_build(doc.font.clone(), key.2.clone(), build_options(session))));
+                    let source = Source::Build { font: doc.font.clone(), options: build_options(session), builds: session.preview_builds() };
+                    self.running = Some((key.clone(), start_build(key.clone(), source)));
                     self.collect();
                 }
             } else if wait > 0.0 {
@@ -496,22 +504,46 @@ fn feature_dir(_path: Option<&std::path::Path>) -> Option<std::path::PathBuf> {
     None
 }
 
-/// The full preview font of `master` and its shaper.
-fn build_font(font: &Font, master: &str, options: &fontcraft_engine::compile::Options) -> FontResult {
-    let built = preview::layout_font_with(font, master, PreviewKind::Full, options).map_err(|e| format!("The text is not shaped: {e}"))?;
-    let tags: Vec<fontcraft_textlayout::shaping::Tag> = built.features.iter().map(|f| f.tag).collect();
-    PreviewShaper::new(Arc::<[u8]>::from(built.bytes), &built.glyph_order, &built.private_use, &tags)
+/// What a build on a thread of its own starts from.
+enum Source {
+    /// A build of the key that is already kept: only its shaper is made.
+    Kept(Arc<SharedBuild>),
+    /// The font to build the preview fonts of, and the store the build is left in for
+    /// `font.features.compile`.
+    Build { font: Arc<Font>, options: fontcraft_engine::compile::Options, builds: PreviewBuilds },
+}
+
+/// The shaper of a build's full preview font, or why there is none.
+fn shaper_of(result: &Result<Arc<PreviewBuild>, Arc<CompileError>>) -> FontResult {
+    let built = result.as_ref().map_err(|e| format!("The text is not shaped: {e}"))?;
+    let full = &built.full;
+    let tags: Vec<fontcraft_textlayout::shaping::Tag> = full.features.iter().map(|f| f.tag).collect();
+    PreviewShaper::new(Arc::<[u8]>::from(full.bytes.as_slice()), &full.glyph_order, &full.private_use, &tags)
         .map(Arc::new)
         .map_err(|e| format!("The text is not shaped: {e}"))
 }
 
+/// The full preview font of `key` and its shaper: from the kept build, or from a new build
+/// (one compile of the feature code, `fontcraft_engine::feature_state::build_previews`) that is
+/// kept in turn.
+fn build_font(key: &FontKey, source: &Source) -> FontResult {
+    match source {
+        Source::Kept(kept) => shaper_of(&kept.result),
+        Source::Build { font, options, builds } => {
+            let result = fontcraft_engine::feature_state::build_previews(font, &key.2, options).map(Arc::new).map_err(Arc::new);
+            builds.put(SharedBuild { doc: key.0, revision: key.1, master: key.2.clone(), source_hash: None, result: result.clone() });
+            shaper_of(&result)
+        }
+    }
+}
+
 /// Builds the preview font on a thread of its own (here, on the web or when no thread can be
 /// started); the result lands in the returned slot.
-fn start_build(font: Arc<Font>, master: String, options: fontcraft_engine::compile::Options) -> Landing {
+fn start_build(key: FontKey, source: Source) -> Landing {
     let landing: Landing = Arc::default();
     let out = landing.clone();
     let work = move || {
-        let result = fontcraft_engine::guard::catch_panic(|| build_font(&font, &master, &options))
+        let result = fontcraft_engine::guard::catch_panic(|| build_font(&key, &source))
             .unwrap_or_else(|e| Err(format!("The text is not shaped: the preview font could not be built ({e})")));
         if let Ok(mut slot) = out.lock() {
             *slot = Some(result);

@@ -6,6 +6,7 @@
 
 use std::sync::Arc;
 
+use fontcraft_engine::feature_state::{SharedBuild, build_previews};
 use fontcraft_engine::{EngineError, Session};
 use serde_json::{Value, json};
 
@@ -445,4 +446,168 @@ fn an_included_named_pipe_is_not_opened() {
     let r = run(&mut s, "font.features.compile", json!({}));
     assert_eq!(r["ok"], json!(false), "{r}");
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// How many times the feature compiler has run on this thread.
+fn compiles() -> u64 {
+    fontcraft_engine::fea::compiles_on_this_thread()
+}
+
+/// The preview build kept for the active document's revision and `master`.
+fn kept(s: &Session, master: &str) -> Option<Arc<SharedBuild>> {
+    let doc = s.doc().unwrap();
+    s.preview_builds().get(doc.id, doc.revision, master)
+}
+
+/// One edit, one run of the feature compiler: `font.features.compile` takes its diagnostics,
+/// Edit View's font and Text Preview's font from one build and keeps the build; it takes a
+/// build Text Preview already made of the same revision without compiling.
+#[test]
+fn one_edit_runs_the_feature_compiler_once() {
+    let mut s = Session::with_document();
+    run(&mut s, "font.features.addFeature", json!({"tag": "liga", "code": "sub a by b;"}));
+    let before = compiles();
+    let r = run(&mut s, "font.features.compile", json!({}));
+    assert_eq!((r["ok"].clone(), r["preview"].clone(), r["cached"].clone()), (json!(true), json!(true), json!(false)), "{r}");
+    assert_eq!(compiles() - before, 1, "one compile for the state and both preview fonts");
+    let state = s.feature_state().unwrap();
+    let master = state.master.clone();
+    let build = kept(&s, &master).unwrap();
+    assert!(build.source_hash.is_some());
+    let fonts = build.result.as_ref().unwrap();
+    assert!(Arc::ptr_eq(state.preview.as_ref().unwrap(), &fonts.gsub_only), "Edit View shapes with the kept build");
+
+    let before = compiles();
+    assert_eq!(run(&mut s, "font.features.compile", json!({}))["cached"], true);
+    assert_eq!(compiles() - before, 0, "the same code is not compiled again");
+
+    // An edit, then a build of the new revision such as Text Preview makes.
+    set_code(&mut s, "feature", "liga", "sub a by c;");
+    let doc = s.doc().unwrap();
+    let options =
+        fontcraft_engine::compile::Options { glyph_data: fontcraft_engine::compile::DataRef(Some(s.glyph_data().unwrap())), ..Default::default() };
+    let made = build_previews(&doc.font, &master, &options).map(Arc::new).map_err(Arc::new);
+    let made_preview = made.as_ref().unwrap().gsub_only.clone();
+    s.preview_builds().put(SharedBuild { doc: doc.id, revision: doc.revision, master: master.clone(), source_hash: None, result: made });
+    let before = compiles();
+    let r = run(&mut s, "font.features.compile", json!({}));
+    assert_eq!((r["ok"].clone(), r["cached"].clone()), (json!(true), json!(false)), "{r}");
+    assert_eq!(compiles() - before, 0, "the build of this revision is taken");
+    assert!(Arc::ptr_eq(s.feature_state().unwrap().preview.as_ref().unwrap(), &made_preview));
+
+    let before = compiles();
+    run(&mut s, "font.features.compile", json!({"force": true}));
+    assert_eq!(compiles() - before, 1, "force compiles again");
+}
+
+/// The build holds the compiled code: Edit View's font has the substitutions only, Text
+/// Preview's font adds the generated kerning, and the state lists the code's features, not the
+/// generated ones.
+#[test]
+fn the_preview_fonts_hold_the_compiled_code() {
+    let mut s = Session::with_document();
+    run(&mut s, "font.features.addFeature", json!({"tag": "liga", "code": "sub a by b;"}));
+    run(&mut s, "kerning.setPair", json!({"left": "A", "right": "B", "value": -50}));
+    let r = run(&mut s, "font.features.compile", json!({}));
+    assert_eq!(r["ok"], true, "{r}");
+    let tags = |r: &Value| {
+        r["features"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|f| format!("{}:{}", f["tag"].as_str().unwrap(), f["table"].as_str().unwrap()))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(tags(&r), ["liga:GSUB"], "the code's features only");
+    let state = s.feature_state().unwrap();
+    let build = kept(&s, &state.master).unwrap();
+    let fonts = build.result.as_ref().unwrap();
+    let listed = |f: &fontcraft_engine::compile::preview::PreviewFont| f.features.iter().map(|f| (f.tag.to_string(), f.table)).collect::<Vec<_>>();
+    use fontcraft_engine::fea::LayoutTable::{Gpos, Gsub};
+    assert_eq!(listed(&fonts.gsub_only), [("liga".to_string(), Gsub)]);
+    assert!(listed(&fonts.full).contains(&("liga".to_string(), Gsub)));
+    assert!(listed(&fonts.full).contains(&("kern".to_string(), Gpos)), "{:?}", listed(&fonts.full));
+    assert_eq!(fonts.full.glyph_order, fonts.gsub_only.glyph_order);
+    assert!(fonts.gsub_only.bytes.len() < fonts.full.bytes.len(), "no GPOS in Edit View's font");
+}
+
+/// A compile that fails keeps the fallbacks: code with errors gives the errors at their entry,
+/// no preview font and a failed build Text Preview shows the reason of; a build that fails
+/// outside the code (two glyphs with one code point) still gives the code's own diagnostics and
+/// the reason Edit View has no font.
+#[test]
+fn a_failed_compile_keeps_the_fallbacks_of_the_preview() {
+    let mut s = Session::with_document();
+    run(&mut s, "font.features.addFeature", json!({"tag": "liga", "code": "sub a by zzz;"}));
+    let before = compiles();
+    let r = run(&mut s, "font.features.compile", json!({}));
+    assert!(compiles() - before <= 1);
+    assert_eq!((r["ok"].clone(), r["preview"].clone()), (json!(false), json!(false)), "{r}");
+    let e = first_error(&r);
+    assert_eq!((e["message"].clone(), e["entry"]["name"].clone()), (json!("glyph not in font"), json!("liga")));
+    assert_eq!(e["range"], json!([9, 12]));
+    let master = s.feature_state().unwrap().master.clone();
+    assert!(kept(&s, &master).unwrap().result.is_err());
+
+    let mut font = Session::with_document().font().unwrap().clone();
+    font.glyph_mut("B").unwrap().unicodes = vec![0x41];
+    let mut s = Session::new();
+    s.add_document(font, None).unwrap();
+    run(&mut s, "font.features.addFeature", json!({"tag": "liga", "code": "sub a by b;"}));
+    let r = run(&mut s, "font.features.compile", json!({}));
+    assert_eq!((r["ok"].clone(), r["preview"].clone()), (json!(true), json!(false)), "{r}");
+    assert!(r["previewMessage"].as_str().is_some_and(|m| !m.is_empty()), "{r}");
+    assert!(r["features"].as_array().unwrap().iter().any(|f| f["tag"] == "liga"), "{r}");
+}
+
+fn corpus() -> std::path::PathBuf {
+    std::env::var_os("FONTCRAFT_CORPUS")
+        .map_or_else(|| std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus"), std::path::PathBuf::from)
+}
+
+/// Measure: from a feature edit to the compile state and both preview fonts ready, on Inter
+/// Roman. "Before" runs the steps as separate compiles (the code on its own, Edit View's font,
+/// Text Preview's font); "after" runs `font.features.compile`, whose build Text Preview takes.
+/// `cargo test --release -p fontcraft-engine --test engine feature_compile::measure_ -- --ignored --nocapture`
+#[test]
+#[ignore = "corpus measure"]
+fn measure_edit_to_preview_on_inter() {
+    use fontcraft_engine::compile::preview::{PreviewKind, layout_font_with};
+    use fontcraft_engine::features::{MasterValues, Target, assemble};
+    use std::time::{Duration, Instant};
+    let path = corpus().join("inter/src/Inter-Roman.glyphspackage");
+    if !path.is_dir() {
+        eprintln!("corpus not fetched: skipped");
+        return;
+    }
+    let mut s = Session::new();
+    run(&mut s, "file.open", json!({"path": path}));
+    run(&mut s, "font.features.addFeature", json!({"tag": "zfcm", "code": "sub a by b;"}));
+    let master = s.font().unwrap().masters.first().unwrap().id.clone();
+    let data = s.glyph_data().unwrap();
+    let options = fontcraft_engine::compile::Options { glyph_data: fontcraft_engine::compile::DataRef(Some(data.clone())), ..Default::default() };
+    const ROUNDS: u32 = 3;
+    let (mut before, mut after) = (Duration::ZERO, Duration::ZERO);
+    for round in 0..ROUNDS {
+        set_code(&mut s, "feature", "zfcm", if round % 2 == 0 { "sub b by a;" } else { "sub a by b;" });
+        let font = s.font().unwrap().clone();
+        let t = Instant::now();
+        let values = MasterValues::new(&font, &data, &master).unwrap();
+        let assembly = assemble(&font, &font.features, &Target::Master(master.clone()), &values).unwrap();
+        let mut names = vec![".notdef".to_string()];
+        names.extend(font.glyphs.iter().filter(|g| g.export && g.name != ".notdef").map(|g| g.name.clone()));
+        let order = fontcraft_engine::fea::GlyphOrder::new(names).unwrap();
+        let code = fontcraft_engine::fea::compile(&fontcraft_engine::fea::CompileRequest::new(&assembly.files, &order));
+        assert!(code.is_ok());
+        layout_font_with(&font, &master, PreviewKind::GsubOnly, &options).unwrap();
+        layout_font_with(&font, &master, PreviewKind::Full, &options).unwrap();
+        before += t.elapsed();
+
+        let t = Instant::now();
+        let r = run(&mut s, "font.features.compile", json!({"master": master}));
+        assert!(kept(&s, &master).unwrap().result.is_ok());
+        after += t.elapsed();
+        assert_eq!((r["ok"].clone(), r["cached"].clone()), (json!(true), json!(false)), "{r}");
+    }
+    println!("edit to compile state and preview fonts on Inter Roman, mean of {ROUNDS}: before {:?}, after {:?}", before / ROUNDS, after / ROUNDS);
 }

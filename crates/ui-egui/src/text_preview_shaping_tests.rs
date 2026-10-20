@@ -1,8 +1,9 @@
 //! Text Preview shaping and bidi (`textPreview.shaping`, `textPreview.unicodeBidi`): Arabic takes
 //! its joining forms and its marks sit on their anchors, a Latin word in right-to-left text is
 //! shaped left to right with the compiled kerning, numbers in right-to-left text are ordered as
-//! UAX #9 orders them, the preview font is built again once editing pauses, and lines break on
-//! shaped widths at UAX #14 opportunities (`textPreview.lineBreaking`).
+//! UAX #9 orders them, the preview font is built again once editing pauses or taken from the
+//! compile of the same revision, and lines break on shaped widths at UAX #14 opportunities
+//! (`textPreview.lineBreaking`).
 
 use std::cell::Cell;
 
@@ -173,6 +174,42 @@ fn text_preview_builds_its_font_again_once_editing_pauses() {
     assert!(d.message.as_deref().is_some_and(|m| m.contains("not shaped")), "{:?}", d.message);
     assert_eq!(names(&d), ["f", "i"]);
     assert_eq!(d.shaped, 0);
+}
+
+/// Text Preview takes the build `font.features.compile` made of the same revision instead of
+/// compiling the code again: it shows the compiled code, and, when the code does not compile,
+/// the compiler's reason, as a build of its own would.
+#[test]
+fn text_preview_takes_the_build_of_the_compile() {
+    let mut app = FontcraftApp::default();
+    exec(&mut app, "glyph.newGlyph", json!({"name": "f_i", "width": 450}));
+    exec(&mut app, "font.features.addFeature", json!({"tag": "liga", "code": "sub f i by f_i;"}));
+    exec(&mut app, "window.textPreview", json!({}));
+    exec(&mut app, "textPreview.setText", json!({"text": "fi"}));
+    let master = exec(&mut app, "font.features.compile", json!({}))["master"].as_str().unwrap().to_string();
+    let kept_by_compile = |app: &FontcraftApp| {
+        let doc = app.session.doc().unwrap();
+        app.session.preview_builds().get(doc.id, doc.revision, &master).is_some_and(|b| b.source_hash.is_some())
+    };
+    let w = Window::new();
+    let d = w.settle(&mut app);
+    assert_eq!(names(&d), ["f_i"]);
+    assert_eq!(d.master.as_deref(), Some(master.as_str()));
+    assert!(kept_by_compile(&app), "Text Preview built no font of its own");
+
+    exec(&mut app, "font.features.setCode", json!({"kind": "feature", "name": "liga", "code": "sub i by nosuchglyph;"}));
+    exec(&mut app, "font.features.compile", json!({}));
+    let mut d = w.frame(&mut app, 0.1);
+    for _ in 0..1_000 {
+        if d.message.is_some() && !d.building {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        d = w.frame(&mut app, 0.1);
+    }
+    assert!(d.message.as_deref().is_some_and(|m| m.contains("not shaped")), "{:?}", d.message);
+    assert_eq!(names(&d), ["f", "i"]);
+    assert!(kept_by_compile(&app), "the failed build of the compile was shown");
 }
 
 /// `docs/plans/M8.md` § 5: with 100,000 characters, the page in view shaped under 8 ms and the
