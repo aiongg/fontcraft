@@ -189,10 +189,12 @@ fn read_designspace(input: &Path) -> Result<String> {
 /// file, else the file `finder` names for it (fontTools' `_open_font`).
 fn open_master(p: &Params<'_>, source: &Path, finder: &str, dir: &Path) -> Result<SfntFont> {
     let as_font = |path: &Path| -> Result<Option<SfntFont>> {
+        // Checked before the file is looked at, so that the answer does not tell whether a file
+        // outside the read root exists.
+        crate::file_access::check_read(path).map_err(|e| EngineError::Io(format!("{}: {e}", path.display())))?;
         if !path.is_file() {
             return Ok(None);
         }
-        crate::file_access::check_read(path).map_err(|e| EngineError::Io(format!("{}: {e}", path.display())))?;
         let read = file_io::read_input(path)?;
         match read.kind {
             InputKind::Ttx => {
@@ -204,7 +206,10 @@ fn open_master(p: &Params<'_>, source: &Path, finder: &str, dir: &Path) -> Resul
             _ => Ok(None),
         }
     };
-    if let Some(font) = as_font(source)? {
+    // A source outside the read root is not looked at; the pattern may still find its master.
+    if crate::file_access::check_read(source).is_ok()
+        && let Some(font) = as_font(source)?
+    {
         return Ok(font);
     }
     let found = find(finder, source).map_err(|e| p.bad(e))?;
@@ -288,6 +293,33 @@ mod tests {
         assert_eq!(find("{basename}{ext}{{x}}", src).unwrap(), PathBuf::from("Test-Bold.ufo.ufo{x}"));
         assert!(find("{name}.ttf", src).is_err());
         assert!(find("{stem.ttf", src).is_err());
+    }
+
+    /// Under a read root, a compiled master outside it is refused with the same message whether
+    /// or not the file exists.
+    #[test]
+    fn a_master_outside_the_read_root_is_refused_before_it_is_looked_at() {
+        let base = std::env::temp_dir().join(format!("fontcraft-layout-roots-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(base.join("in")).unwrap();
+        std::fs::create_dir_all(base.join("outside")).unwrap();
+        std::fs::write(base.join("outside/there.ttf"), b"not a font").unwrap();
+        let roots = crate::file_access::AutomationRoots::new(Some(&base.join("in")), None).unwrap().unwrap();
+        let params = json!({});
+        let p = Params::new("font.instantiate", &params).unwrap();
+        let source = base.join("outside/A.ufo");
+        let refusal = |name: &str| {
+            let finder = format!("{}/{name}", base.join("outside").display());
+            crate::file_access::confine(Some(&roots), || open_master(&p, &source, &finder, &base.join("in")))
+                .err()
+                .unwrap()
+                .to_string()
+                .replace(name, "X")
+        };
+        let present = refusal("there.ttf");
+        assert!(present.contains("outside the read root"), "{present}");
+        assert_eq!(present, refusal("missing.ttf"));
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     /// fontTools' vpal test: a designspace whose sources exist only as TTX masters.

@@ -539,7 +539,7 @@ pub(crate) fn compile_stages_with(
     };
     preflight::check_cmap(&glyphs)?;
     let glyph_data = font.and_then(|_| compile_glyph_data(options));
-    let color_plan = if var.is_some() {
+    let mut color_plan = if var.is_some() {
         color::variable_plan(
             font,
             &resolved.master,
@@ -549,7 +549,7 @@ pub(crate) fn compile_stages_with(
     } else {
         color::plan(font, &resolved, options)
     };
-    let (glyphs, made) = color::append_layer_glyphs(font, &color_plan, &resolved, glyphs, &mut warnings)?;
+    let (glyphs, made) = color::append_layer_glyphs(font, &mut color_plan, &resolved, glyphs, &mut warnings)?;
     let layout = layout_tables(font, glyph_data.as_deref(), &resolved, &glyphs, &edits, options, var_layout, &mut warnings)?;
     let upm = f64::from(resolved.units_per_em);
     let error =

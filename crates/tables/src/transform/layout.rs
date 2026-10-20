@@ -366,3 +366,47 @@ fn scaled_var_data(d: &ItemVariationData, s: Scaler) -> Result<ItemVariationData
     let word_count = u16::try_from(words).map_err(|_| TablesError::invalid("an item variation data table has too many regions"))?;
     Ok(ItemVariationData::new(d.item_count, word_count | if long { LONG_WORDS } else { 0 }, region_indexes, delta_sets))
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
+    use super::*;
+
+    /// A `GPOS` with one class pair adjustment whose counts (3 first classes, 4 second
+    /// classes) run past its class definitions: no first classes, and glyph 5 in second class
+    /// 2. The record of first class r and second class c moves the advance by 10·r + c.
+    fn loose_class_counts() -> Vec<u8> {
+        let mut t: Vec<u8> = Vec::new();
+        let words = |t: &mut Vec<u8>, ws: &[u16]| ws.iter().for_each(|w| t.extend_from_slice(&w.to_be_bytes()));
+        words(&mut t, &[1, 0, 10, 12, 14]); // header
+        words(&mut t, &[0]); // 10: no scripts
+        words(&mut t, &[0]); // 12: no features
+        words(&mut t, &[1, 4]); // 14: one lookup at 18
+        words(&mut t, &[2, 0, 1, 8]); // 18: pair adjustment, one subtable at 26
+        words(&mut t, &[2, 40, 4, 0, 46, 52, 3, 4]); // 26: format 2
+        for r in 0..3u16 {
+            for c in 0..4u16 {
+                words(&mut t, &[10 * r + c]);
+            }
+        }
+        words(&mut t, &[1, 1, 3]); // 66: coverage of glyph 3
+        words(&mut t, &[1, 0, 0]); // 72: no first classes
+        words(&mut t, &[1, 5, 1, 2]); // 78: glyph 5 in class 2
+        t
+    }
+
+    #[test]
+    fn class_counts_past_the_class_definitions_are_fitted() {
+        use read_fonts::tables::gpos::{Gpos as ReadGpos, PairPos as ReadPair, PositionLookup as ReadLookup};
+        let out = scale_gpos(&loose_class_counts(), Scaler { factor: 2.0 }).unwrap();
+        let gpos = ReadGpos::read(FontData::new(&out)).unwrap();
+        let lookup = gpos.lookup_list().unwrap().lookups().get(0).unwrap();
+        let ReadLookup::Pair(l) = lookup else { panic!("not a pair adjustment") };
+        let ReadPair::Format2(t) = l.subtables().get(0).unwrap() else { panic!("not format 2") };
+        assert_eq!((t.class1_count(), t.class2_count()), (1, 2));
+        assert_eq!(t.class_def2().unwrap().get(read_fonts::types::GlyphId16::new(5)), 1);
+        let row = t.class1_records().get(0).unwrap();
+        let advances: Vec<Option<i16>> = row.class2_records().iter().map(|r| r.unwrap().value_record1().x_advance()).collect();
+        assert_eq!(advances, vec![Some(0), Some(4)], "class 2 kept its record, scaled");
+    }
+}

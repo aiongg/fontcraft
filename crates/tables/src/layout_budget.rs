@@ -35,13 +35,14 @@ const DEVICE_BITS: u16 = 0x00F0;
 
 struct Walk {
     tag: &'static str,
+    limit: usize,
     left: usize,
     depth: usize,
 }
 
 impl Walk {
     fn new(tag: &'static str, limit: usize) -> Self {
-        Walk { tag, left: limit, depth: 0 }
+        Walk { tag, limit, left: limit, depth: 0 }
     }
 
     fn charge(&mut self, n: usize) -> Result<()> {
@@ -50,10 +51,9 @@ impl Walk {
                 self.left = left;
                 Ok(())
             }
-            None => Err(TablesError::invalid(format!(
-                "the '{}' table is too large to rewrite: it expands to more than {MAX_LAYOUT_ITEMS} records",
-                self.tag
-            ))),
+            None => {
+                Err(TablesError::invalid(format!("the '{}' table is too large to rewrite: it expands to more than {} records", self.tag, self.limit)))
+            }
         }
     }
 }
@@ -113,23 +113,35 @@ pub(crate) fn check_gdef(data: &[u8]) -> Result<()> {
     Ok(())
 }
 
-fn check_gpos_within(data: &[u8], limit: usize) -> Result<()> {
+/// Refuses `GPOS` tables whose owned forms would hold more than `limit` records together.
+pub(crate) fn check_gpos_together<'a>(tables: impl IntoIterator<Item = &'a [u8]>, limit: usize) -> Result<()> {
     let mut w = Walk::new("GPOS", limit);
+    for data in tables {
+        gpos_walk(&mut w, data)?;
+    }
+    Ok(())
+}
+
+fn check_gpos_within(data: &[u8], limit: usize) -> Result<()> {
+    gpos_walk(&mut Walk::new("GPOS", limit), data)
+}
+
+fn gpos_walk(w: &mut Walk, data: &[u8]) -> Result<()> {
     let Ok(t) = Gpos::read(FontData::new(data)) else { return Ok(()) };
     if let Ok(list) = t.script_list() {
-        script_list(&mut w, &list)?;
+        script_list(w, &list)?;
     }
     if let Ok(list) = t.feature_list() {
-        feature_list(&mut w, &list)?;
+        feature_list(w, &list)?;
     }
     if let Some(Ok(fv)) = t.feature_variations() {
-        feature_variations(&mut w, &fv)?;
+        feature_variations(w, &fv)?;
     }
     if let Ok(list) = t.lookup_list() {
         let lookups = list.lookups();
         w.charge(lookups.len())?;
         for lookup in lookups.iter().flatten() {
-            position_lookup(&mut w, &lookup)?;
+            position_lookup(w, &lookup)?;
         }
     }
     Ok(())
@@ -723,14 +735,25 @@ pub(crate) fn restore_empty_pair_records(gpos: &mut write_fonts::tables::gpos::G
 
 /// The classes of `cd`, with class 0, counted as write-fonts counts them for the header.
 fn owned_class_count(cd: &write_fonts::tables::layout::ClassDef) -> usize {
-    cd.iter().map(|(_, c)| c).chain(std::iter::once(0)).collect::<std::collections::BTreeSet<u16>>().len()
+    owned_classes(cd).len()
+}
+
+/// The distinct classes of `cd`, with class 0, in order.
+fn owned_classes(cd: &write_fonts::tables::layout::ClassDef) -> std::collections::BTreeSet<u16> {
+    use write_fonts::tables::layout::ClassDef;
+    let mut classes = std::collections::BTreeSet::from([0u16]);
+    match cd {
+        ClassDef::Format1(t) => classes.extend(t.class_value_array.iter().copied()),
+        ClassDef::Format2(t) => classes.extend(t.class_range_records.iter().map(|r| r.class)),
+    }
+    classes
 }
 
 fn restore_pair(w: &mut Walk, p: &mut write_fonts::tables::gpos::PairPos) -> Result<()> {
     use write_fonts::tables::gpos::{Class1Record, Class2Record, PairPos as Owned, ValueRecord as Value};
     let Owned::Format2(f) = p else { return Ok(()) };
     if !f.class1_records.is_empty() {
-        return Ok(());
+        return fit_pair_classes(w, f);
     }
     let n1 = owned_class_count(&f.class_def1);
     let n2 = owned_class_count(&f.class_def2);
@@ -738,6 +761,54 @@ fn restore_pair(w: &mut Walk, p: &mut write_fonts::tables::gpos::PairPos) -> Res
     let row = Class1Record::new(vec![Class2Record::new(Value::default(), Value::default()); n2]);
     f.class1_records = vec![row; n1];
     Ok(())
+}
+
+/// write-fonts writes a `PairPosFormat2` with one class record per distinct class of each class
+/// definition (class 0 included) and refuses any other number of records. A subtable whose
+/// class counts run past its highest class, or whose classes skip numbers, keeps the records
+/// of the classes its definitions use, and those classes are numbered 0, 1, 2… in order.
+/// Lookups give the same results. A class with no record is refused.
+fn fit_pair_classes(w: &mut Walk, f: &mut write_fonts::tables::gpos::PairPosFormat2) -> Result<()> {
+    use write_fonts::tables::gpos::Class1Record;
+    let classes1 = owned_classes(&f.class_def1);
+    let classes2 = owned_classes(&f.class_def2);
+    if f.class1_records.len() == classes1.len() && f.class1_records.iter().all(|r| r.class2_records.len() == classes2.len()) {
+        return Ok(());
+    }
+    w.charge(classes1.len().saturating_mul(1 + classes2.len()))?;
+    let missing = |which: u8, class: u16| {
+        TablesError::invalid(format!(
+            "a class pair adjustment names class {class} of its {}, which has no record",
+            if which == 1 { "first glyphs" } else { "second glyphs" }
+        ))
+    };
+    let mut rows = Vec::with_capacity(classes1.len());
+    for c1 in &classes1 {
+        let row = f.class1_records.get(usize::from(*c1)).ok_or_else(|| missing(1, *c1))?;
+        let mut cells = Vec::with_capacity(classes2.len());
+        for c2 in &classes2 {
+            cells.push(row.class2_records.get(usize::from(*c2)).cloned().ok_or_else(|| missing(2, *c2))?);
+        }
+        rows.push(Class1Record::new(cells));
+    }
+    f.class1_records = rows;
+    renumber_classes(&mut f.class_def1, &classes1);
+    renumber_classes(&mut f.class_def2, &classes2);
+    Ok(())
+}
+
+/// Numbers the `classes` of `cd` 0, 1, 2… in order.
+fn renumber_classes(cd: &mut write_fonts::tables::layout::ClassDef, classes: &std::collections::BTreeSet<u16>) {
+    use write_fonts::tables::layout::ClassDef;
+    if classes.iter().enumerate().all(|(i, c)| usize::from(*c) == i) {
+        return;
+    }
+    let new: std::collections::HashMap<u16, u16> = classes.iter().zip(0u16..).map(|(c, i)| (*c, i)).collect();
+    let map = |c: &mut u16| *c = new.get(c).copied().unwrap_or(0);
+    match cd {
+        ClassDef::Format1(t) => t.class_value_array.iter_mut().for_each(map),
+        ClassDef::Format2(t) => t.class_range_records.iter_mut().for_each(|r| map(&mut r.class)),
+    }
 }
 
 #[cfg(test)]

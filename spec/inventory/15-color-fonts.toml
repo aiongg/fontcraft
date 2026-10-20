@@ -1186,6 +1186,7 @@ guesses = [
   "The reference app writes a component of a colour glyph as a PaintColrGlyph of that glyph, as glyphsLib does, rather than as its outline. Settled by exporting a full-colour glyph holding a moved component of another full-colour glyph from the reference and reading its COLR.",
   "Shapes keep their order on the layer: glyphsLib puts a layer's paths below its components, FontCraft keeps the order of the shapes, as fontc does for master layers. Settled by exporting a full-colour layer with a component below a path from the reference.",
   "A component whose transform differs between masters is written with the default master's transform; fontmake would write a variable transform. Settled by a variable full-colour font with a moved colour component in the reference.",
+  "A component of a colour glyph that Remove Glyphs or Keep Glyphs leaves out is drawn as its outline in its own layer glyph, with a warning, rather than stopping the export. Settled by exporting such a font from the reference with the referenced glyph removed.",
 ]
 observe = ["Full-colour font: glyph A with a red square, glyph B whose Color layer holds a component of A moved by (100, 50); export and read COLR; note whether B's paint is a PaintTranslate around a PaintColrGlyph of A."]
 

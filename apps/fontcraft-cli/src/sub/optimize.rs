@@ -15,12 +15,13 @@ const USAGE: &str = "\
   fontcraft-cli optimize FONT... [--for size|speed] [--subroutinize | --desubroutinize] [--cff-widths] [--charstrings specialize|generalize] [--gpos-compaction N] [--varstore] [--gvar-iup] [options] [-o OUT]
       Re-encode compiled fonts more compactly without changing how they draw or shape. Without
       an optimisation named, the CFF default and nominal widths are chosen again, CFF and CFF2
-      charstrings are subroutinised, implied on-curve points are dropped, gvar deltas are
-      optimised, the GDEF variation store is merged and COLR layers are shared; naming
-      optimisations runs only those. A step that would not make a table smaller is not
-      applied. Each output is INPUT.optimized.EXT unless -o, --output-dir or --in-place says
-      otherwise; --report only measures. --gpos-compaction 1 to 9 splits class-kerning
-      subtables (default 0: left alone).
+      charstrings are subroutinised, gvar deltas are optimised, the GDEF variation store is
+      merged and COLR layers are shared; naming optimisations runs only those. A step that
+      would not make a table smaller is not applied. Each output is INPUT.optimized.EXT unless
+      -o, --output-dir or --in-place says otherwise; --report only measures.
+      --gpos-compaction 1 to 9 splits class-kerning subtables (default 0: left alone).
+      --drop-implied-oncurves runs only when named: it renumbers points, so glyphs whose
+      points instructions, composites, anchors or carets number keep them.
       Not built yet: --for speed and --charstrings.
 ";
 

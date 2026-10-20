@@ -51,6 +51,9 @@ pub const MAX_LOOKUP_NESTING: usize = 64;
 /// Most records, offsets and glyphs a `GSUB`, `GPOS` or `GDEF` table may expand to when a tool
 /// rewrites it, counting a shared subtable once per offset to it.
 pub const MAX_LAYOUT_ITEMS: usize = 10_000_000;
+/// Most records the `GPOS` tables of all the masters of one layout interpolation may expand to
+/// together, counted as for [`MAX_LAYOUT_ITEMS`]: every master's table is held at once.
+pub const MAX_INTERPOLATED_LAYOUT_ITEMS: usize = 2 * MAX_LAYOUT_ITEMS;
 /// Most index subtables a bitmap location table (`EBLC`, `CBLC`, `bloc`) may list over all its
 /// strikes, counting a subtable array once per strike that points at it.
 pub const MAX_BITMAP_SUBTABLES: usize = 1 << 20;

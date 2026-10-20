@@ -153,3 +153,35 @@ fn a_ligature_action_chain_without_an_end_is_an_error() {
     let font = crafted_font();
     assert!(morph::write(&data, &font, &mut XmlWriter::new(), true).is_err());
 }
+
+#[test]
+fn a_mort_ligature_entry_named_by_every_cell_is_charged_per_cell() {
+    // 16,000 state-array cells all name one entry with 12,000 ligature actions: 64 KB of data
+    // that would expand to gigabytes of transitions if the cells' copies were not counted.
+    // Every 16-bit word of the body is even, because the component table starts at offset 0
+    // and the ligature table at the end, so the whole body is read as components.
+    let (classes, states, actions) = (16u16, 1000u16, 12_000usize);
+    let entry_off = 20 + classes * states;
+    let actions_at = entry_off + 4;
+    let len = usize::from(actions_at) + 4 * actions;
+    let mut e = Be::default();
+    e.u16s(&[classes, 14, 20, entry_off, 0, 0, len as u16, 0, 2]);
+    e.u8s(&[4, 4]);
+    e.bytes(&vec![0; usize::from(classes * states)]);
+    e.u16s(&[20, actions_at]);
+    e.bytes(&vec![0; 4 * (actions - 1)]);
+    e.u32s(&[0x8000_0000]);
+    assert_eq!(e.0.len(), len);
+    let mut chain = Be::default();
+    chain.u16s(&[(8 + len) as u16]);
+    chain.u8s(&[0, 2]);
+    chain.u32s(&[1]);
+    chain.bytes(&e.0);
+    let mut t = Be::default();
+    t.u32s(&[0x0001_0000, 1, 1, (12 + chain.0.len()) as u32]);
+    t.u16s(&[0, 1]);
+    t.bytes(&chain.0);
+    let font = crafted_font();
+    let err = morph::write(&t.0, &font, &mut XmlWriter::new(), true).unwrap_err();
+    assert!(matches!(err, TablesError::TooLarge { .. }), "{err}");
+}

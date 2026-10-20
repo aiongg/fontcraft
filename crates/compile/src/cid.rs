@@ -405,7 +405,14 @@ pub(crate) fn finish(compiled: &mut Compiled, plan: &CidPlan) -> Result<(), Comp
     let two_bytes = !mac.lead_bytes.is_empty() || mac.codes.keys().any(|c| *c > 0xFF);
     let subtable = if two_bytes { format2(mac, &gid_of) } else { format6(mac, &gid_of) };
     let Some(subtable) = subtable else {
-        compiled.warnings.push("no code of the Macintosh CMap reaches a glyph of the font, so the font has no Macintosh cmap subtable".into());
+        // The subtables leave out only codes past two bytes; with a code that reaches a glyph,
+        // the subtable did not fit its 16-bit length.
+        let reached = mac.codes.iter().any(|(code, cid)| *code <= 0xFFFF && gid_of.get(cid).is_some_and(|g| *g != 0));
+        compiled.warnings.push(if reached {
+            "the Macintosh cmap subtable would be larger than the 65,535 bytes its format allows, so the font has none".into()
+        } else {
+            "no code of the Macintosh CMap reaches a glyph of the font, so the font has no Macintosh cmap subtable".into()
+        });
         return Ok(());
     };
     let cmap = with_subtable(&old, 1, mac.script, &subtable).map_err(table_error)?;

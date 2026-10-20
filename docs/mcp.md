@@ -109,6 +109,9 @@ fontcraft-cli mcp --automation-read-root /work/fonts --automation-write-root /wo
     changes), images, glyph data files beside the document and feature includes. A link that
     points outside the read root is treated as a missing file, with a warning. This also covers
     links an agent sets during the session.
+  - `audit.run` with a folder target skips each entry of the folder that lies outside the read
+    root (a link that leads out of it, for example) and names it in the warnings; the other
+    entries are audited.
   - Feature code may include files that climb out of the source's folder (`../shared.fea`).
     Without roots they are read, as the reference compilers read them. With roots in force,
     each included file on disk must lie inside the read root; one outside it fails the feature

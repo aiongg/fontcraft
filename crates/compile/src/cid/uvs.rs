@@ -23,6 +23,13 @@ use crate::{CompileError, Compiled};
 pub const MAX_SEQUENCES: usize = 1 << 20;
 /// Longest line read, in bytes; the reference reads 255.
 const MAX_LINE: usize = 255;
+/// The last Unicode code point.
+const MAX_CODE_POINT: u32 = 0x10_FFFF;
+
+/// Is `c` a variation selector: VS1 to VS256, or one of the Mongolian free variation selectors.
+fn is_selector(c: u32) -> bool {
+    matches!(c, 0x180B..=0x180D | 0x180F | 0xFE00..=0xFE0F | 0xE0100..=0xE01EF)
+}
 
 /// The glyph a sequence selects.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -80,6 +87,15 @@ fn parse(bytes: &[u8], cid_keyed: bool, warnings: &mut Vec<String>) -> Result<Ve
             skipped.push(format!("line {line_no} does not start with a character and a variation selector"));
             continue;
         };
+        // The subtable stores both in 24 bits, and readers search the selectors in order.
+        if base > MAX_CODE_POINT {
+            skipped.push(format!("line {line_no}: {base:X} is not a Unicode character"));
+            continue;
+        }
+        if !is_selector(selector) {
+            skipped.push(format!("line {line_no}: {selector:X} is not a variation selector"));
+            continue;
+        }
         let glyph = match (fields.get(2), fields.get(3)) {
             (_, Some(g)) if scans(g) => *g,
             (Some(g), _) if !cid_keyed && scans(g) => *g,
@@ -113,12 +129,12 @@ fn parse(bytes: &[u8], cid_keyed: bool, warnings: &mut Vec<String>) -> Result<Ve
     Ok(out)
 }
 
-/// A format 14 subtable: for each selector in ascending order its default sequences (ranges of
-/// base characters, at most 256 in one range) and its other sequences (base character and
-/// glyph). `None` when there is no sequence.
 /// One selector's default ranges (start, additional count) and non-default mappings.
 type Selector = (Vec<(u32, u8)>, Vec<(u32, u16)>);
 
+/// A format 14 subtable: for each selector in ascending order its default sequences (ranges of
+/// base characters, at most 256 in one range) and its other sequences (base character and
+/// glyph). `None` when there is no sequence.
 fn format14(entries: &BTreeMap<(u32, u32), Option<u16>>) -> Option<Vec<u8>> {
     let mut selectors: BTreeMap<u32, Selector> = BTreeMap::new();
     for ((selector, base), glyph) in entries {
@@ -280,5 +296,15 @@ mod tests {
         let s = parse(b"8FBB E0100; Adobe-Japan1; CID+1234\n8FBB E0101; CID+5\n", true, &mut warnings).unwrap();
         assert_eq!(s, vec![Sequence { base: 0x8FBB, selector: 0xE0100, target: Target::Cid(1234) }]);
         assert_eq!(warnings.len(), 1, "{warnings:?}");
+    }
+
+    #[test]
+    fn values_past_the_subtable_s_24_bits_or_outside_the_selectors_are_skipped() {
+        let mut warnings = Vec::new();
+        let s = parse(b"1000041 FE00; A\n0041 10E0100; A\n0041 0300; A\n0041 FE00; A\n", false, &mut warnings).unwrap();
+        assert_eq!(s, vec![Sequence { base: 0x41, selector: 0xFE00, target: Target::Name("A".into()) }]);
+        let w = warnings.join("\n");
+        assert!(w.contains("1000041 is not a Unicode character") && w.contains("10E0100 is not a variation selector"), "{w}");
+        assert!(w.contains("300 is not a variation selector"), "{w}");
     }
 }

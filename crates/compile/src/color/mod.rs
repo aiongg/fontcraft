@@ -28,10 +28,11 @@ pub mod variable;
 
 use std::collections::{HashMap, HashSet};
 
+use fontcraft_color::Paint;
 use fontcraft_color::export::{
     ColrVersion, ExportPlan, Problem, ProblemKind, Switches, has_color_layers, plan_between_masters, plan_master, read_switches,
 };
-use fontcraft_color::paint::{ShapeRef, numbered_shape_refs};
+use fontcraft_color::paint::{ShapeRef, numbered_shape_refs, outline_fill};
 use fontcraft_color::{AssetStore, MemoryAssets};
 use fontcraft_model::{Font, Glyph, Layer, Resolved, ResolvedComponent, ResolvedGlyph, Shape, Target};
 use write_fonts::types::Tag;
@@ -146,16 +147,60 @@ pub fn variable_plan(font: Option<&Font>, master: &str, switches: &Switches, mas
     plan
 }
 
-/// `glyphs` with the layer glyphs `plan` needs appended, and their descriptions.
+/// `glyphs` with the layer glyphs `plan` needs appended, and their descriptions. `glyphs` are
+/// the final source glyphs; `plan` first loses its references to glyphs not among them
+/// ([`outline_missing_targets`]).
 pub fn append_layer_glyphs(
     font: Option<&Font>,
-    plan: &ExportPlan,
+    plan: &mut ExportPlan,
     resolved: &Resolved,
     glyphs: Vec<ResolvedGlyph>,
     warnings: &mut Vec<String>,
 ) -> Result<(Vec<ResolvedGlyph>, Vec<MadeGlyph>), CompileError> {
+    outline_missing_targets(plan, &glyphs, warnings);
     let made = layer_glyphs(font, plan, resolved, &glyphs, warnings)?;
     append_made(glyphs, made)
+}
+
+/// Paints as its outline, with a warning, each [`Paint::ColrGlyph`] of `plan` whose glyph is
+/// not among the final `glyphs`: the plan reads the source font, where a glyph that Remove
+/// Glyphs or Keep Glyphs leaves out still exports, and a `PaintColrGlyph` needs its glyph in
+/// the font. The component keeps its number, so it gets the layer glyph `<base>.color<i>`.
+/// The paints at a variable font's other sources change alike, so the structures still match.
+pub fn outline_missing_targets(plan: &mut ExportPlan, glyphs: &[ResolvedGlyph], warnings: &mut Vec<String>) {
+    let Some(colr) = plan.colr.as_mut() else { return };
+    let names: HashSet<&str> = glyphs.iter().map(|g| g.name.as_str()).collect();
+    for g in &mut colr.glyphs {
+        let mut missing = Vec::new();
+        outline_missing(&mut g.paint, &names, &mut missing, 0);
+        if names.contains(g.glyph.as_str()) {
+            for m in missing {
+                warnings
+                    .push(format!("glyph `{}`: the component of `{m}` on a colour layer is drawn as its outline: `{m}` is not in the font", g.glyph));
+            }
+        }
+    }
+    if let Some(variation) = plan.variation.as_mut() {
+        for paint in variation.glyphs.values_mut().flatten().flatten() {
+            outline_missing(paint, &names, &mut Vec::new(), 0);
+        }
+    }
+}
+
+fn outline_missing(paint: &mut Paint, names: &HashSet<&str>, missing: &mut Vec<String>, depth: usize) {
+    if depth > fontcraft_color::MAX_PAINT_DEPTH {
+        return;
+    }
+    match paint {
+        Paint::Layers(list) => list.iter_mut().for_each(|p| outline_missing(p, names, missing, depth + 1)),
+        Paint::Glyph { paint, .. } => outline_missing(paint, names, missing, depth + 1),
+        Paint::ColrGlyph { glyph, shape, .. } if !names.contains(glyph.as_str()) => {
+            missing.push(glyph.clone());
+            let shape = shape.clone();
+            *paint = Paint::Glyph { shape, paint: Box::new(outline_fill()) };
+        }
+        Paint::ColrGlyph { .. } | Paint::Solid(_) | Paint::Linear { .. } | Paint::Radial { .. } | Paint::Sweep { .. } => {}
+    }
 }
 
 /// The layer glyphs of `plan`'s COLR paints: one per [`fontcraft_color::ShapeRef`], named
@@ -170,7 +215,8 @@ pub fn append_layer_glyphs(
 /// colour layers at their master layer's width, but a mark's master layer loses its advance at
 /// export and its colour layers keep theirs), and no anchors, category or Unicode value. The
 /// shapes of the resolved master keep their components; shapes of another master (a layered
-/// font's) and shapes with strokes or masks become contours, drawn as Edit View draws them.
+/// font's), shapes with strokes or masks, and shapes beside a component of a glyph the compile
+/// leaves out become contours, drawn as Edit View draws them.
 pub fn layer_glyphs(
     font: Option<&Font>,
     plan: &ExportPlan,
@@ -208,7 +254,7 @@ pub fn layer_glyphs(
             match source.layers.iter().find(|l| l.id == shape.layer) {
                 Some(layer) => {
                     g.width = layer.width;
-                    if let Err(message) = draw_shapes(font, layer, shape, &resolved.master, &mut g) {
+                    if let Err(message) = draw_shapes(font, layer, shape, &resolved.master, &by_name, &mut g) {
                         warnings.push(format!("glyph `{}`: its colour layer glyph `{name}` was written empty: {message}", cg.glyph));
                     }
                 }
@@ -258,8 +304,16 @@ fn unique_name(wanted: String, taken: &mut HashSet<String>, warnings: &mut Vec<S
 /// On a full-colour layer a path's fill and its stroke are separate layer glyphs
 /// (`color.export.strokeInColr`): the fill is the path's own outline, and the stroke is the
 /// stroke alone, expanded with the path's width, position, caps and joins by the stroke code
-/// every other layer uses.
-fn draw_shapes(font: &Font, layer: &Layer, shape: &ShapeRef, master: &str, out: &mut ResolvedGlyph) -> Result<(), String> {
+/// every other layer uses. Shapes are drawn as contours when one of them is a component of a
+/// glyph not among `kept`, the final source glyphs.
+fn draw_shapes(
+    font: &Font,
+    layer: &Layer,
+    shape: &ShapeRef,
+    master: &str,
+    kept: &HashMap<&str, &ResolvedGlyph>,
+    out: &mut ResolvedGlyph,
+) -> Result<(), String> {
     let mut shapes: Vec<Shape> = shape.shapes.iter().filter_map(|&i| layer.shapes.get(i).cloned()).collect();
     if layer.info.attrs.full_color {
         if shape.stroke.is_some() {
@@ -280,7 +334,8 @@ fn draw_shapes(font: &Font, layer: &Layer, shape: &ShapeRef, master: &str, out: 
     } else if shape.stroke.is_some() {
         return Err("only full-colour layers have stroke layers".to_string());
     }
-    if layer.master != master || has_strokes_or_masks(&shapes, format_version(font)) {
+    let left_out = |s: &Shape| matches!(s, Shape::Component(c) if !kept.contains_key(c.glyph.as_str()));
+    if layer.master != master || has_strokes_or_masks(&shapes, format_version(font)) || shapes.iter().any(left_out) {
         out.contours = shapes_outline(font, &shapes, &layer.master)?.into_iter().filter(|c| !c.elements().is_empty()).collect();
         return Ok(());
     }
@@ -901,6 +956,28 @@ mod tests {
         // E and F refer to each other: each draws the other's outline in grey, with a warning.
         assert!(paints.iter().all(|(b, p)| !(b == "E" || b == "F") || !p.contains("colr")), "{paints:?}");
         assert!(out.warnings.iter().filter(|w| w.contains("lead back")).count() >= 2, "{:?}", out.warnings);
+    }
+
+    #[test]
+    fn a_reference_to_a_removed_glyph_is_drawn_as_its_outline() {
+        let mut f = colr_glyph_font();
+        let remove = Value::Array(fontcraft_model::plist::Array { items: vec![Value::String(Str::new("A"))], ..Default::default() });
+        Arc::make_mut(&mut f.masters)[0].params.0.push(Param::new("Remove Glyphs", remove));
+        let out = compile(&f, &f.default_target().unwrap(), Flavour::TrueType, &Options::default()).unwrap();
+        assert!(!out.glyph_order.iter().any(|n| n == "A"), "{:?}", out.glyph_order);
+        let font = FontRef::new(&out.bytes).unwrap();
+        let colr = font.colr().unwrap();
+        let paints: Vec<String> = match colr.base_glyph_list() {
+            Some(Ok(list)) => {
+                list.base_glyph_paint_records().iter().map(|r| describe(&colr, &r.paint(list.offset_data()).unwrap(), &out.glyph_order)).collect()
+            }
+            _ => Vec::new(),
+        };
+        assert!(paints.iter().all(|p| !p.contains("colr")), "{paints:?}");
+        // C's component of A becomes a layer glyph of its own, drawn with A's outline.
+        assert!(out.glyph_order.iter().any(|n| n == "C.color0"), "{:?}", out.glyph_order);
+        assert!(font.color_glyphs().get(GlyphId::new(u32::from(gid(&out, "C")))).is_some());
+        assert!(out.warnings.iter().any(|w| w.contains("`A` is not in the font")), "{:?}", out.warnings);
     }
 
     /// `A`'s master layers, marked full colour, paint a rectangle with a linear gradient from 10 %

@@ -229,7 +229,11 @@ fn composite_glyph() -> Vec<u8> {
 }
 
 fn tt_font() -> SfntFont {
-    let glyphs = [Vec::new(), simple_glyph(), composite_glyph()];
+    tt_font_of([Vec::new(), simple_glyph(), composite_glyph()])
+}
+
+/// A short-loca TrueType font of three glyphs, each padded to an even length.
+fn tt_font_of(glyphs: [Vec<u8>; 3]) -> SfntFont {
     let mut glyf = Vec::new();
     let mut loca = Vec::new();
     for g in &glyphs {
@@ -342,4 +346,45 @@ fn hostile_glyf_is_refused() {
     let mut font = tt_font();
     font.insert(*b"loca", vec![0, 0, 0, 40]);
     assert!(dehint(&font, &DehintOptions::default()).is_err(), "loca shorter than numGlyphs");
+}
+
+#[test]
+fn input_padding_after_a_glyph_is_not_copied() {
+    // Long-loca inputs pad each glyph to four bytes; the merge left 4 to 6 such bytes.
+    let mut simple = simple_glyph();
+    simple.extend([0; 5]);
+    let mut composite = composite_glyph();
+    composite.extend([0; 6]);
+    let font = tt_font_of([Vec::new(), simple, composite]);
+    let out = dehint(&font, &DehintOptions::default()).unwrap();
+
+    // Data ends: the simple glyph at 29 bytes (31 less its two-byte program), the composite
+    // after its one component (16 bytes). Only the table's own two-byte alignment follows.
+    let simple = glyph(&out, 1);
+    assert_eq!(simple.len(), 30);
+    assert_eq!(&simple[14..29], &simple_glyph()[16..31]);
+    assert_eq!(simple[29], 0);
+    let composite = glyph(&out, 2);
+    assert_eq!(composite.len(), 16);
+    assert_eq!(composite, glyph(&dehint(&tt_font(), &DehintOptions::default()).unwrap(), 2));
+    assert_eq!(out.get(*b"glyf").unwrap().len(), 46);
+}
+
+#[test]
+fn truncated_glyph_data_is_refused() {
+    let mut simple = simple_glyph();
+    simple.truncate(simple.len() - 4);
+    let font = tt_font_of([Vec::new(), simple, composite_glyph()]);
+    assert!(dehint(&font, &DehintOptions::default()).is_err(), "coordinates cut short");
+
+    let mut simple = simple_glyph();
+    // The last end point claims 201 points; the flags run out first.
+    simple[10..12].copy_from_slice(&be16(200));
+    let font = tt_font_of([Vec::new(), simple, composite_glyph()]);
+    assert!(dehint(&font, &DehintOptions::default()).is_err(), "flags cut short");
+
+    let mut composite = composite_glyph();
+    composite.truncate(composite.len() - 2);
+    let font = tt_font_of([Vec::new(), simple_glyph(), composite]);
+    assert!(dehint(&font, &DehintOptions::default()).is_err(), "program cut short");
 }

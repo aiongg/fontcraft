@@ -27,6 +27,7 @@ use crate::Result;
 use crate::instance::solver::{AxisRange, Tent};
 use crate::instance::{ot_round, quantize};
 use crate::sfnt::SfntFont;
+use std::collections::HashMap;
 
 /// The variation index that means "no variation".
 const NO_VARIATION: u32 = 0xFFFF_FFFF;
@@ -283,16 +284,22 @@ fn push_delta(sub: &mut Sub, inner: usize, axes: Vec<(usize, Tent)>, value: f64)
 
 /// Variations with the same region summed, so a subtable names each region once.
 fn merge_regions(vars: Vec<TupleVar>) -> Vec<TupleVar> {
+    let mut index: HashMap<Vec<(usize, [u64; 3])>, usize> = HashMap::with_capacity(vars.len());
     let mut out: Vec<TupleVar> = Vec::with_capacity(vars.len());
     for mut v in vars {
         v.axes.sort_by_key(|(i, _)| *i);
-        match out.iter_mut().find(|o| o.axes == v.axes) {
+        // Adding 0.0 turns −0 into +0, so the key treats them as equal, as `==` does.
+        let key: Vec<(usize, [u64; 3])> = v.axes.iter().map(|(i, t)| (*i, [t.start, t.peak, t.end].map(|x| (x + 0.0).to_bits()))).collect();
+        match index.get(&key).and_then(|k| out.get_mut(*k)) {
             Some(o) => {
                 for (a, b) in o.deltas.iter_mut().zip(&v.deltas) {
                     *a += *b;
                 }
             }
-            None => out.push(v),
+            None => {
+                index.insert(key, out.len());
+                out.push(v);
+            }
         }
     }
     out
@@ -498,6 +505,21 @@ mod tests {
         let supports: Vec<Option<Tent>> = model.iter().map(|(s, _)| *s).collect();
         assert!(supports.contains(&Some(Tent { start: 0.0, peak: 0.25, end: 1.0 })));
         assert!(supports.contains(&Some(Tent { start: 0.25, peak: 1.0, end: 1.0 })));
+    }
+
+    #[test]
+    fn merging_regions_sums_equal_regions_and_scales_to_many() {
+        let tent = |peak: f64| Tent { start: 0.0, peak, end: 1.0 };
+        let var = |axes: Vec<(usize, Tent)>, d: f64| TupleVar { axes, deltas: vec![d] };
+        // Axis order and the sign of zero do not make two regions different.
+        let a = vec![(1, tent(0.5)), (0, Tent { start: -0.0, peak: 1.0, end: 1.0 })];
+        let b = vec![(0, tent(1.0)), (1, tent(0.5))];
+        let merged = merge_regions(vec![var(a, 2.0), var(vec![(0, tent(0.25))], 5.0), var(b, 3.0)]);
+        assert_eq!(merged.len(), 2);
+        assert_eq!(merged.first().map(|v| v.deltas.clone()), Some(vec![5.0]));
+        // 60,000 distinct regions: a pairwise search would take billions of comparisons.
+        let many: Vec<TupleVar> = (0..60_000).map(|k| var(vec![(0, tent(k as f64 / 65_536.0))], 1.0)).collect();
+        assert_eq!(merge_regions(many).len(), 60_000);
     }
 
     #[test]

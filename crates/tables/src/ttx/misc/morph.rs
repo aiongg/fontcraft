@@ -576,7 +576,11 @@ fn read_legacy(d: &[u8], kind: Kind, order: &[String], budget: &mut Budget) -> R
         let mut state = BTreeMap::new();
         for (class, index) in row.into_iter().enumerate() {
             if let Some(e) = entries.get(&index) {
-                state.insert(class as i64, e.transition.clone());
+                // Each cell holds, and is written with, its own copy of the entry, so the entry's
+                // actions and insertions count once per cell.
+                let t = &e.transition;
+                budget.charge(t.actions.len().saturating_add(t.current_insertion.len()).saturating_add(t.marked_insertion.len()))?;
+                state.insert(class as i64, t.clone());
             }
         }
         table.states.push(state);

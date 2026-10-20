@@ -128,3 +128,84 @@ fn a_damaged_gvar_is_refused_under_a_matrix() {
     far[last] = 200; // point 201, past the glyph's eight
     assert!(transform(&variable(far), &options).is_err());
 }
+
+/// A `gvar` where glyph 1 has one tuple at the axis maximum with `points` as its private point
+/// numbers, x deltas 1, 2, 3, 4 and four zeros, and y deltas all zero.
+fn one_tuple_gvar(points: &[u8]) -> Vec<u8> {
+    let mut data: Vec<u8> = points.to_vec();
+    data.extend_from_slice(&[0x07, 1, 2, 3, 4, 0, 0, 0, 0, 0x87]);
+    let mut glyph: Vec<u8> = vec![0x00, 0x01, 0x00, 0x0A];
+    glyph.extend_from_slice(&(data.len() as u16).to_be_bytes());
+    glyph.extend_from_slice(&[0xA0, 0x00, 0x40, 0x00]);
+    glyph.extend_from_slice(&data);
+    if glyph.len() % 2 == 1 {
+        glyph.push(0);
+    }
+    let mut out = Vec::new();
+    for v in [1u16, 0, 1, 0] {
+        out.extend_from_slice(&v.to_be_bytes());
+    }
+    out.extend_from_slice(&28u32.to_be_bytes());
+    out.extend_from_slice(&3u16.to_be_bytes());
+    out.extend_from_slice(&0u16.to_be_bytes());
+    out.extend_from_slice(&28u32.to_be_bytes());
+    let half = (glyph.len() / 2) as u16;
+    for o in [0u16, 0, half, half] {
+        out.extend_from_slice(&o.to_be_bytes());
+    }
+    out.extend_from_slice(&glyph);
+    out
+}
+
+#[test]
+fn a_zero_point_count_in_two_bytes_means_every_point() {
+    let words = variable(one_tuple_gvar(&[0x80, 0x00]));
+    let byte = variable(one_tuple_gvar(&[0x00]));
+    for options in [
+        TransformOptions { rotate: Some(30.0), ..TransformOptions::default() },
+        TransformOptions { units_per_em: Some(2000), ..TransformOptions::default() },
+    ] {
+        let (a, b) = (transform(&words, &options).unwrap(), transform(&byte, &options).unwrap());
+        assert_eq!(points(&at(&a, 900.0), 1), points(&at(&b, 900.0), 1), "{options:?}");
+    }
+}
+
+#[test]
+fn filling_in_too_many_points_is_refused_before_the_work() {
+    // One glyph of 65,535 points with 4,095 tuples that each name one point.
+    let tuples = 4095usize;
+    let headers = 4 + 6 * tuples;
+    let mut glyph: Vec<u8> = Vec::new();
+    glyph.extend_from_slice(&(tuples as u16).to_be_bytes());
+    glyph.extend_from_slice(&(headers as u16).to_be_bytes());
+    for _ in 0..tuples {
+        glyph.extend_from_slice(&[0x00, 0x05, 0xA0, 0x00, 0x40, 0x00]);
+    }
+    for _ in 0..tuples {
+        glyph.extend_from_slice(&[0x01, 0x00, 0x00, 0x80, 0x80]);
+    }
+    if glyph.len() % 2 == 1 {
+        glyph.push(0);
+    }
+    let mut table = Vec::new();
+    for v in [1u16, 0, 1, 0] {
+        table.extend_from_slice(&v.to_be_bytes());
+    }
+    table.extend_from_slice(&24u32.to_be_bytes());
+    table.extend_from_slice(&1u16.to_be_bytes());
+    table.extend_from_slice(&0u16.to_be_bytes());
+    table.extend_from_slice(&24u32.to_be_bytes());
+    table.extend_from_slice(&0u16.to_be_bytes());
+    table.extend_from_slice(&((glyph.len() / 2) as u16).to_be_bytes());
+    table.extend_from_slice(&glyph);
+    let all = 65_535 + 4;
+    let deltas = super::gvar_matrix::GlyphDeltas {
+        coords: vec![(0.0, 0.0); all],
+        ends: vec![65_534],
+        linear: Some(vec![[0.0, 1.0, -1.0, 0.0]; all - 4]),
+        densify: true,
+        advance_factor: None,
+    };
+    let result = super::gvar_matrix::transform_gvar(&table, &[deltas]);
+    assert!(matches!(result, Err(crate::TablesError::TooLarge { .. })), "{result:?}");
+}

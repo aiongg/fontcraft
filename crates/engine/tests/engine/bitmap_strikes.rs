@@ -253,3 +253,21 @@ fn a_strike_holds_whatever_the_bitmap_readers_accept() {
     const { assert!(strike::MAX_STRIKE_STRING >= io::MAX_STRING_BYTES) };
     const { assert!(strike::MAX_STRIKE_COORDINATE >= io::MAX_COORDINATE) };
 }
+
+#[test]
+fn removing_a_glyph_removes_its_bitmaps_and_undo_brings_them_back() {
+    let dir = temp("remove-glyph");
+    let path = bdf_file(&dir, "pixel.bdf", BDF);
+    let mut s = session();
+    run(&mut s, "bitmap.importStrikes", json!({ "paths": [path] }));
+    let names = |s: &Session| strikes(s)[0].glyphs.iter().map(|g| g.glyph.clone()).collect::<Vec<_>>();
+    run(&mut s, "glyph.removeGlyph", json!({ "glyphs": ["A"] }));
+    assert_eq!(names(&s), ["B", "c"]);
+    // A new glyph with the removed glyph's name starts without a bitmap.
+    run(&mut s, "glyph.newGlyph", json!({ "name": "A" }));
+    assert!(strikes(&s)[0].glyph("A").is_none());
+    run(&mut s, "edit.undo", json!({}));
+    run(&mut s, "edit.undo", json!({}));
+    assert_eq!(names(&s), ["A", "B", "c"], "undo brings the bitmap back");
+    std::fs::remove_dir_all(&dir).unwrap();
+}

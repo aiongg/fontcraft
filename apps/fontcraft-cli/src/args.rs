@@ -10,7 +10,8 @@
 //!   replaces the current list, unless every item starts with `+` or `-`, which adds or removes
 //!   items from it (`--opt=+c,-a`). `--opt+=a,b` adds items and `--opt-=a,b` removes them, and
 //!   `--opt=` empties the list. The current list starts as the default. Items that are numbers
-//!   compare by value when removed (`0x409` removes `1033`).
+//!   compare by value when removed (`0x409` removes `1033`); in a list of hexadecimal code
+//!   points ([`OptSpec::hex`]) they are read as hexadecimal (`E9` removes `U+00E9`).
 //! - `@FILE` and `--options FILE` are replaced by the arguments the file holds (whitespace
 //!   separated, quotes group, `#` starts a comment line), at most [`MAX_RESPONSE_FILE`] bytes,
 //!   nested at most [`MAX_RESPONSE_DEPTH`] deep, a file that includes itself refused.
@@ -53,20 +54,26 @@ pub struct OptSpec {
     /// none.
     pub default: &'static str,
     pub help: &'static str,
+    /// The list's items are hexadecimal code points or ranges (`41`, `U+0041`, `41-5A`).
+    pub hex: bool,
 }
 
 impl OptSpec {
     pub const fn switch(name: &'static str, default: bool, help: &'static str) -> Self {
-        OptSpec { name, short: None, kind: Kind::Switch, value_name: "", default: if default { "true" } else { "false" }, help }
+        OptSpec { name, short: None, kind: Kind::Switch, value_name: "", default: if default { "true" } else { "false" }, help, hex: false }
     }
     pub const fn value(name: &'static str, value_name: &'static str, default: &'static str, help: &'static str) -> Self {
-        OptSpec { name, short: None, kind: Kind::Value, value_name, default, help }
+        OptSpec { name, short: None, kind: Kind::Value, value_name, default, help, hex: false }
     }
     pub const fn list(name: &'static str, value_name: &'static str, default: &'static str, help: &'static str) -> Self {
-        OptSpec { name, short: None, kind: Kind::List, value_name, default, help }
+        OptSpec { name, short: None, kind: Kind::List, value_name, default, help, hex: false }
     }
     pub const fn short(mut self, c: char) -> Self {
         self.short = Some(c);
+        self
+    }
+    pub const fn hex(mut self) -> Self {
+        self.hex = true;
         self
     }
 }
@@ -207,20 +214,20 @@ fn set_value(parsed: &mut Parsed, spec: &OptSpec, value: String, edit: Edit) {
             let list = match edit {
                 Edit::Add => {
                     for item in items {
-                        if !current.iter().any(|c| same_item(c, &item)) {
+                        if !current.iter().any(|c| same_item(spec, c, &item)) {
                             current.push(item);
                         }
                     }
                     current
                 }
                 Edit::Remove => {
-                    current.retain(|c| !items.iter().any(|i| same_item(c, i)));
+                    current.retain(|c| !items.iter().any(|i| same_item(spec, c, i)));
                     current
                 }
                 Edit::Set if edits => {
                     for item in items {
                         let (op, name) = item.split_at(1);
-                        current.retain(|c| !same_item(c, name));
+                        current.retain(|c| !same_item(spec, c, name));
                         if op == "+" {
                             current.push(name.to_string());
                         }
@@ -235,10 +242,33 @@ fn set_value(parsed: &mut Parsed, spec: &OptSpec, value: String, edit: Edit) {
     }
 }
 
-/// Two list items are the same when their text is, or when both are numbers of the same value
-/// (decimal, or hexadecimal, octal or binary with `0x`, `0o` or `0b`).
-fn same_item(a: &str, b: &str) -> bool {
-    a == b || matches!((int_item(a), int_item(b)), (Some(x), Some(y)) if x == y)
+/// Two items of the list `spec` are the same when their text is, or when both are numbers of
+/// the same value: decimal, or hexadecimal, octal or binary with `0x`, `0o` or `0b`; for a
+/// [`OptSpec::hex`] list, hexadecimal code points or ranges.
+fn same_item(spec: &OptSpec, a: &str, b: &str) -> bool {
+    if a == b {
+        return true;
+    }
+    if spec.hex {
+        return matches!((hex_item(a), hex_item(b)), (Some(x), Some(y)) if x == y);
+    }
+    matches!((int_item(a), int_item(b)), (Some(x), Some(y)) if x == y)
+}
+
+/// A code point (`E9`, `U+00E9`, `0xE9`) or range (`41-5A`) as its first and last value.
+fn hex_item(text: &str) -> Option<(u32, u32)> {
+    let point = |t: &str| {
+        let lower = t.trim().to_ascii_lowercase();
+        let digits = lower.strip_prefix("u+").or_else(|| lower.strip_prefix("0x")).unwrap_or(&lower);
+        if digits.is_empty() || !digits.chars().all(|c| c.is_ascii_hexdigit()) {
+            return None;
+        }
+        u32::from_str_radix(digits, 16).ok()
+    };
+    match text.split_once('-') {
+        Some((first, last)) => Some((point(first)?, point(last)?)),
+        None => point(text).map(|p| (p, p)),
+    }
 }
 
 fn int_item(text: &str) -> Option<u64> {
@@ -393,6 +423,7 @@ mod tests {
         OptSpec::switch("retain-gids", false, "keep glyph ids"),
         OptSpec::list("layout-features", "LIST", "kern,liga", "features to keep"),
         OptSpec::list("name-ids", "LIST", "0,1,2", "name IDs to keep"),
+        OptSpec::list("unicodes", "LIST", "", "code points to keep").hex(),
         OptSpec::value("output", "FILE", "", "output file").short('o'),
         OptSpec::value("output-dir", "DIR", "", "output folder"),
     ];
@@ -428,6 +459,8 @@ mod tests {
         assert_eq!(p.list("layout-features"), ["ss01"]);
         let p = parse(SPECS, &args(&["--name-IDs-=0x1,2", "--name-ids+=0x10"])).unwrap();
         assert_eq!(p.list("name-ids"), ["0", "0x10"], "numbers compare by value; the name ignores letter case");
+        let p = parse(SPECS, &args(&["--unicodes=00E9,0x10,41-5a", "--unicodes-=E9,16,U+0041-005A"])).unwrap();
+        assert_eq!(p.list("unicodes"), ["0x10"], "code points compare as hexadecimal: 16 is U+0016");
         assert!(parse(SPECS, &args(&["--output+=x"])).is_err(), "+= edits lists only");
         assert!(parse(SPECS, &args(&["--hinting-=x"])).is_err());
     }

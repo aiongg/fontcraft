@@ -621,3 +621,20 @@ fn measure_edit_to_preview_on_inter() {
     }
     println!("edit to compile state and preview fonts on Inter Roman, mean of {ROUNDS}: before {:?}, after {:?}", before / ROUNDS, after / ROUNDS);
 }
+
+/// When the code includes more files than the cache key can follow, a compile at the same
+/// revision reads the included files again rather than taking the build kept for Text Preview.
+#[test]
+fn a_compile_whose_includes_are_not_keyed_reads_them_again() {
+    let (mut s, dir) = including_session("unkeyed");
+    // Names in a comment count towards the key's limit; the file that changes comes after them.
+    let names: String = (0..300).map(|i| format!("# include(missing{i}.fea)\n")).collect();
+    std::fs::write(dir.join("rules.fea"), format!("{names}include(last.fea);\n")).unwrap();
+    std::fs::write(dir.join("last.fea"), "sub a by b;\n").unwrap();
+    let r = run(&mut s, "font.features.compile", json!({}));
+    assert_eq!(r["ok"], json!(true), "{r}");
+    std::fs::write(dir.join("last.fea"), "sub a by nosuchglyph;\n").unwrap();
+    let r = run(&mut s, "font.features.compile", json!({}));
+    assert_eq!(r["ok"], json!(false), "the changed file is read again: {r}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

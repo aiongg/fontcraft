@@ -257,3 +257,37 @@ fn font_dict_selectors_narrow_the_transformed_glyphs() {
     truetype.remove(*b"CFF ");
     assert!(matches!(transform(&truetype, &TransformOptions { fds: Some([0u16].into()), ..shift }), Err(TablesError::BadOptions(_))));
 }
+
+/// An `HVAR` table with one region on axis 0 and the advance deltas 10, 20 and 30 for the three
+/// glyphs, indexed directly by glyph.
+fn hvar() -> Vec<u8> {
+    use write_fonts::tables::hvar::Hvar;
+    use write_fonts::tables::variations::{ItemVariationData, ItemVariationStore, RegionAxisCoordinates, VariationRegion, VariationRegionList};
+    use write_fonts::types::F2Dot14;
+    let axis = RegionAxisCoordinates::new(F2Dot14::from_f32(0.0), F2Dot14::from_f32(1.0), F2Dot14::from_f32(1.0));
+    let regions = VariationRegionList::new(1, vec![VariationRegion::new(vec![axis])]);
+    let data = ItemVariationData::new(3, 0, vec![0], vec![10, 20, 30]);
+    let store = ItemVariationStore::new(regions, vec![Some(data)]);
+    write_fonts::dump_table(&Hvar::new(store, None, None, None)).unwrap()
+}
+
+fn advance_deltas(f: &crate::sfnt::SfntFont) -> Option<Vec<i32>> {
+    use read_fonts::{FontData, FontRead};
+    let table = read_fonts::tables::hvar::Hvar::read(FontData::new(f.get(*b"HVAR")?)).unwrap();
+    let store = table.item_variation_store().unwrap();
+    let data = store.item_variation_data().get(0).unwrap().unwrap();
+    Some((0..3).map(|i| data.delta_set(i).next().unwrap()).collect())
+}
+
+#[test]
+fn hvar_follows_a_cff2_matrix() {
+    let mut input = cff2_font();
+    input.insert(*b"HVAR", hvar());
+    let (out, report) = transform_with_report(&input, &matrix([2.0, 0.0, 0.0, 1.0, 0.0, 0.0])).unwrap();
+    assert_eq!(advance_deltas(&out), Some(vec![20, 40, 60]), "{:?}", report.warnings);
+    let keep = TransformOptions { widths: crate::transform::Widths::Keep, ..matrix([2.0, 0.0, 0.0, 1.0, 0.0, 0.0]) };
+    assert_eq!(advance_deltas(&transform(&input, &keep).unwrap()), Some(vec![10, 20, 30]));
+    let (out, report) = transform_with_report(&input, &TransformOptions { rotate: Some(90.0), ..TransformOptions::default() }).unwrap();
+    assert_eq!(advance_deltas(&out), None);
+    assert!(report.warnings.iter().any(|w| w.contains("HVAR is dropped")));
+}
