@@ -95,30 +95,30 @@ fn stem_widths_label_the_stems_of_h_and_counters_label_the_space_between() {
     let w = Window::new();
     let t = app.tokens.clone();
     w.idle(&mut app);
-    assert!(texts(&w.idle(&mut app), t.measure_ruler).is_empty(), "nothing while the switches are off");
+    assert!(texts(&w.idle(&mut app), t.aids.stem_other).is_empty(), "nothing while the switches are off");
 
     app.run("view.showStemWidths", &json!({"on": true})).unwrap();
     w.idle(&mut app);
     // No stem values are defined, so no stem is a common one.
-    assert_eq!(texts(&w.idle(&mut app), t.measure_ruler), vec!["60", "80", "80"]);
+    assert_eq!(texts(&w.idle(&mut app), t.aids.stem_other), vec!["60", "80", "80"]);
 
     app.run("font.stems.add", &json!({"name": "lc", "orientation": "vertical", "values": {"m01": 80}})).unwrap();
     w.idle(&mut app);
     let shapes = w.idle(&mut app);
-    assert_eq!(texts(&shapes, t.measure_delta), vec!["80", "80"], "the bars match the stem value");
-    assert_eq!(texts(&shapes, t.measure_ruler), vec!["60"]);
+    assert_eq!(texts(&shapes, t.aids.stem_common), vec!["80", "80"], "the bars match the stem value");
+    assert_eq!(texts(&shapes, t.aids.stem_other), vec!["60"]);
 
     app.run("view.showCounterWidths", &json!({"on": true})).unwrap();
     w.idle(&mut app);
-    assert_eq!(texts(&w.idle(&mut app), t.text_dim).iter().filter(|s| *s == "440").count(), 1);
+    assert_eq!(texts(&w.idle(&mut app), t.aids.counter).iter().filter(|s| *s == "440").count(), 1);
 
     // Corner angles wait for a closer zoom.
     app.run("view.showCornerAngles", &json!({"on": true})).unwrap();
     w.idle(&mut app);
-    assert!(!texts(&w.idle(&mut app), t.measure_off_curve).contains(&"90°".to_string()));
+    assert!(!texts(&w.idle(&mut app), t.aids.corner_angle).contains(&"90°".to_string()));
     app.run("view.setZoom", &json!({"size": 2000, "center": [80, 300]})).unwrap();
     w.idle(&mut app);
-    assert!(texts(&w.idle(&mut app), t.measure_off_curve).contains(&"90°".to_string()));
+    assert!(texts(&w.idle(&mut app), t.aids.corner_angle).contains(&"90°".to_string()));
 }
 
 #[test]

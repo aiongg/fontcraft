@@ -35,7 +35,11 @@ fn letters_choose_tools_and_shift_steps_through_a_shared_button() {
     let mut t = Toolbox::new();
     assert_eq!(letter(&mut t, 'p', false).as_deref(), Some("draw"));
     assert_eq!(letter(&mut t, 'b', false).as_deref(), Some("pencil"));
-    assert_eq!(letter(&mut t, 'b', true), None, "one tool has B: Shift+B is not a tool key");
+    assert_eq!(letter(&mut t, 'b', true).as_deref(), Some("pixel"), "Pixel shares the Pencil's button");
+    assert_eq!(letter(&mut t, 'b', true).as_deref(), Some("pencil"), "Shift+B wraps around the button");
+    assert_eq!(letter(&mut t, 'x', false).as_deref(), Some("pixel"));
+    assert_eq!(letter(&mut t, 'b', false).as_deref(), Some("pencil"), "B alone is the Pencil's letter");
+    assert_eq!(letter(&mut t, 't', true), None, "the Text tool has a button of its own");
     assert_eq!(letter(&mut t, 'f', false).as_deref(), Some("rectangle"), "the first mode before any was used");
     assert_eq!(letter(&mut t, 'f', true).as_deref(), Some("ellipse"));
     assert_eq!(letter(&mut t, 'f', false).as_deref(), Some("ellipse"), "the letter keeps the active mode");

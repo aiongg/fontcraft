@@ -25,17 +25,8 @@ use crate::shell::{Args, UiCommand};
 
 /// Most stem, counter and corner labels drawn per frame.
 const MAX_LABELS: usize = 2_000;
-/// A stem or counter narrower than this on screen, in points, gets no label.
-const MIN_LABEL_GAP: f32 = 4.0;
 /// Corner angles show from this many screen points per font unit.
 pub const CORNER_ZOOM: f64 = 1.5;
-/// How far a corner label sits from its node, in points.
-const CORNER_OFFSET: f32 = 6.0;
-/// The snap dot's radius and its distance from the label, in points.
-const SNAP_RADIUS: f32 = 3.5;
-const SNAP_GAP: f32 = 4.0;
-/// The width of the field that edits a stem's width, in points.
-const FIELD_WIDTH: f32 = 48.0;
 
 /// The switches, kept in `PanelState::autometer`.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -161,7 +152,7 @@ pub fn stem_label(c: &Painting, stem: &Value) -> Option<(Pos2, f32)> {
 
 /// The screen rectangle a label of `text` covers, centred at `at`.
 fn label_rect(c: &Painting, at: Pos2, text: &str) -> Rect {
-    let size = c.tokens.measure_label_size;
+    let size = c.tokens.aids.label_size;
     let w = text.chars().count() as f32 * size * 0.6 + 4.0;
     Rect::from_center_size(at, egui::vec2(w, size + 4.0))
 }
@@ -181,7 +172,8 @@ fn meter(ui: &egui::Ui, c: &Painting, scene: &Scene, pending: &mut Pending, st: 
     let corners = st.corner_angles && c.view.scale() >= CORNER_ZOOM;
     let Some(found) = measurement(scene, [st.stem_widths, st.counter_widths, corners]) else { return };
     let t = c.tokens;
-    let font = FontId::proportional(t.measure_label_size);
+    let aid = &t.aids;
+    let font = FontId::proportional(aid.label_size);
     let empty = Vec::new();
     let list = |key: &str| found.get(key).and_then(Value::as_array).unwrap_or(&empty).iter().take(MAX_LABELS);
     if st.counter_widths {
@@ -192,11 +184,11 @@ fn meter(ui: &egui::Ui, c: &Painting, scene: &Scene, pending: &mut Pending, st: 
                 continue;
             };
             let (sa, sb) = (pos(c.view.to_screen(a)), pos(c.view.to_screen(b)));
-            if !(finite(sa) && finite(sb)) || sa.distance(sb) < MIN_LABEL_GAP {
+            if !(finite(sa) && finite(sb)) || sa.distance(sb) < aid.meter_min_gap {
                 continue;
             }
-            c.painter.line_segment([sa, sb], Stroke::new(t.measure_ruler_width, t.text_dim));
-            c.painter.text(sa.lerp(sb, 0.5), Align2::CENTER_BOTTOM, widgets::format_number(w), font.clone(), t.text_dim);
+            c.painter.line_segment([sa, sb], Stroke::new(aid.meter_line_width, aid.counter));
+            c.painter.text(sa.lerp(sb, 0.5), Align2::CENTER_BOTTOM, widgets::format_number(w), font.clone(), aid.counter);
         }
     }
     if corners {
@@ -209,7 +201,7 @@ fn meter(ui: &egui::Ui, c: &Painting, scene: &Scene, pending: &mut Pending, st: 
             let at = pos(c.view.to_screen(Point::new(x, y)));
             if finite(at) && c.rect.contains(at) {
                 let text = format!("{}°", widgets::format_number(angle));
-                c.painter.text(at + egui::vec2(CORNER_OFFSET, -CORNER_OFFSET), Align2::LEFT_BOTTOM, text, font.clone(), t.measure_off_curve);
+                c.painter.text(at + egui::vec2(aid.corner_offset, -aid.corner_offset), Align2::LEFT_BOTTOM, text, font.clone(), aid.corner_angle);
             }
         }
     }
@@ -228,13 +220,13 @@ fn meter(ui: &egui::Ui, c: &Painting, scene: &Scene, pending: &mut Pending, st: 
         else {
             continue;
         };
-        if gap < MIN_LABEL_GAP || !c.rect.contains(at) {
+        if gap < aid.meter_min_gap || !c.rect.contains(at) {
             continue;
         }
         let color = match stem.get("class").and_then(Value::as_str) {
-            Some("common") => t.measure_delta,
-            Some("uncommon") => t.audit_warn,
-            _ => t.measure_ruler,
+            Some("common") => aid.stem_common,
+            Some("uncommon") => aid.stem_uncommon,
+            _ => aid.stem_other,
         };
         let text = widgets::format_number(width);
         let rect = label_rect(c, at, &text);
@@ -248,9 +240,9 @@ fn meter(ui: &egui::Ui, c: &Painting, scene: &Scene, pending: &mut Pending, st: 
             ui.ctx().data_mut(|d| d.insert_temp(editing_id(), e));
         }
         if editable && stem.get("class").and_then(Value::as_str) == Some("uncommon") {
-            let dot = Pos2::new(rect.right() + SNAP_GAP + SNAP_RADIUS, at.y);
-            c.painter.circle_filled(dot, SNAP_RADIUS, color);
-            let hit = Rect::from_center_size(dot, egui::Vec2::splat(SNAP_RADIUS * 3.0));
+            let dot = Pos2::new(rect.right() + aid.snap_dot_gap + aid.snap_dot_radius, at.y);
+            c.painter.circle_filled(dot, aid.snap_dot_radius, color);
+            let hit = Rect::from_center_size(dot, egui::Vec2::splat(aid.snap_dot_radius * 3.0));
             let hint = match stem.get("nearest").and_then(Value::as_f64) {
                 Some(n) => format!("Snap to {}", widgets::format_number(n)),
                 None => "Snap to the nearest stem value".to_string(),
@@ -275,7 +267,7 @@ fn meter(ui: &egui::Ui, c: &Painting, scene: &Scene, pending: &mut Pending, st: 
     egui::Area::new(widgets::id("autometer.stemArea")).order(egui::Order::Foreground).fixed_pos(at).pivot(Align2::CENTER_CENTER).show(
         ui.ctx(),
         |ui| {
-            let (commit, response) = widgets::line(ui, field, &shown, FIELD_WIDTH, widgets::Look::default(), &step);
+            let (commit, response) = widgets::line(ui, field, &shown, aid.stem_field_width, widgets::Look::default(), &step);
             if e.fresh {
                 response.request_focus();
                 let mut next = e.clone();
@@ -319,9 +311,10 @@ fn quick(ui: &egui::Ui, c: &Painting, scene: &Scene) {
         return;
     }
     let t = c.tokens;
-    c.painter.line_segment([sa, sb], Stroke::new(t.measure_ruler_width, t.measure_ruler));
+    let aid = &t.aids;
+    c.painter.line_segment([sa, sb], Stroke::new(aid.meter_line_width, aid.quick_measurement));
     for end in [sa, sb] {
-        c.painter.circle_filled(end, t.measure_crossing_radius, t.measure_ruler);
+        c.painter.circle_filled(end, aid.quick_dot_radius, aid.quick_measurement);
     }
-    c.painter.text(sa.lerp(sb, 0.5), Align2::LEFT_BOTTOM, widgets::format_number(d), FontId::proportional(t.measure_label_size), t.measure_ruler);
+    c.painter.text(sa.lerp(sb, 0.5), Align2::LEFT_BOTTOM, widgets::format_number(d), FontId::proportional(aid.label_size), aid.quick_measurement);
 }

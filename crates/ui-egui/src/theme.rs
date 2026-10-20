@@ -346,6 +346,8 @@ pub struct Tokens {
     pub console_completion_height: f32,
     /// The TrueType Instructor's badges, node discs and point numbers.
     pub tt: TtTokens,
+    /// The Edit View display aids and the auto-meter labels.
+    pub aids: AidTokens,
 }
 
 impl Tokens {
@@ -576,6 +578,7 @@ impl Tokens {
             console_row_height: 18.0,
             console_completion_height: 140.0,
             tt: TtTokens::dark(),
+            aids: AidTokens::dark(),
         }
     }
 
@@ -595,6 +598,7 @@ impl Tokens {
             kerning_group_text: Color32::from_rgb(0x1f, 0x62, 0xc4),
             kerning_glyph_text: Color32::from_rgb(0x9a, 0x6e, 0x00),
             color: crate::canvas::color::ColorTokens::light(),
+            aids: AidTokens::light(),
             ..Self::dark()
         }
     }
@@ -732,5 +736,80 @@ impl TtTokens {
             preview_outline_width: 1.25,
             pixel: Color32::from_rgba_unmultiplied(0x9a, 0x9a, 0x9a, 0x70),
         }
+    }
+}
+
+/// The display aids in front of the outline (`crate::canvas::edit_aids`) and the auto-meter
+/// labels (`crate::canvas::autometer`). Sizes are screen points.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AidTokens {
+    /// Tunni lines and points.
+    pub tunni: Color32,
+    /// Curve tension percentages.
+    pub tension: Color32,
+    /// Curve lengths.
+    pub curve_length: Color32,
+    /// The metrics beam and the sidebearings printed on it.
+    pub beam: Color32,
+    pub beam_width: f32,
+    pub beam_label: Color32,
+    pub beam_label_size: f32,
+    /// The Lock Outline badge's text and frame.
+    pub lock_badge: Color32,
+    /// The text of the aids' labels and the auto-meter's numbers.
+    pub label_size: f32,
+    /// Stem widths: a common width, an uncommon one (near a master stem value), any other.
+    pub stem_common: Color32,
+    pub stem_uncommon: Color32,
+    pub stem_other: Color32,
+    /// Counter widths, with their measuring line.
+    pub counter: Color32,
+    /// Corner angles, and how far their label sits from the node.
+    pub corner_angle: Color32,
+    pub corner_offset: f32,
+    /// The quick measurement: its line, end dots and number.
+    pub quick_measurement: Color32,
+    pub quick_dot_radius: f32,
+    /// The width of the auto-meter's lines.
+    pub meter_line_width: f32,
+    /// A stem or counter narrower than this on screen gets no label.
+    pub meter_min_gap: f32,
+    /// The dot that snaps an uncommon stem, and its distance from the label.
+    pub snap_dot_radius: f32,
+    pub snap_dot_gap: f32,
+    /// The field that edits a stem's width.
+    pub stem_field_width: f32,
+}
+
+impl AidTokens {
+    pub fn dark() -> Self {
+        Self {
+            tunni: Color32::from_rgb(0x2a, 0x9a, 0x3a),
+            tension: Color32::from_rgb(0x2a, 0x9a, 0x3a),
+            curve_length: Color32::from_rgb(0xd0, 0x2c, 0x2c),
+            beam: Color32::from_rgb(0x1e, 0x9e, 0x8a),
+            beam_width: 1.0,
+            beam_label: Color32::from_rgb(0x14, 0x6e, 0x62),
+            beam_label_size: 10.0,
+            lock_badge: Color32::from_rgb(0xe0, 0x28, 0x28),
+            label_size: 10.0,
+            stem_common: Color32::from_rgb(0xd0, 0x2c, 0x2c),
+            stem_uncommon: Color32::from_rgb(0xf2, 0xa1, 0x1d),
+            stem_other: Color32::from_rgb(0x00, 0x8c, 0x9c),
+            counter: Color32::from_rgb(0x9a, 0x9a, 0x9a),
+            corner_angle: Color32::from_rgb(0x2a, 0x9a, 0x3a),
+            corner_offset: 6.0,
+            quick_measurement: Color32::from_rgb(0x00, 0x8c, 0x9c),
+            quick_dot_radius: 3.0,
+            meter_line_width: 1.0,
+            meter_min_gap: 4.0,
+            snap_dot_radius: 3.5,
+            snap_dot_gap: 4.0,
+            stem_field_width: 48.0,
+        }
+    }
+
+    pub fn light() -> Self {
+        Self { counter: Color32::from_rgb(0x6a, 0x6a, 0x6a), ..Self::dark() }
     }
 }

@@ -66,7 +66,7 @@ fn aids_app() -> FontcraftApp {
 fn view_show_tunni_lines_draws_the_dotted_line_and_the_meeting_point() {
     let mut app = aids_app();
     let ctx = egui::Context::default();
-    let color = app.tokens.measure_off_curve;
+    let color = app.tokens.aids.tunni;
     let dots = |shapes: &[Shape]| -> Vec<Pos2> {
         shapes
             .iter()
@@ -96,7 +96,7 @@ fn view_show_tunni_lines_draws_the_dotted_line_and_the_meeting_point() {
 fn view_show_curve_tension_prints_each_handles_percentage() {
     let mut app = aids_app();
     let ctx = egui::Context::default();
-    let color = app.tokens.measure_off_curve;
+    let color = app.tokens.aids.tension;
     assert!(texts(&settled(&ctx, &mut app), color).is_empty());
     app.run("view.showCurveTension", &json!({"on": true})).unwrap();
     assert_eq!(texts(&settled(&ctx, &mut app), color), ["60%", "75%"]);
@@ -115,7 +115,7 @@ fn view_show_curve_tension_prints_each_handles_percentage() {
 fn view_show_curve_length_prints_the_arc_length_of_curves_only() {
     let mut app = aids_app();
     let ctx = egui::Context::default();
-    let color = app.tokens.measure_delta;
+    let color = app.tokens.aids.curve_length;
     // A cubic drawn straight, 300 units long, then a line.
     app.run("path.addPath", &json!({"glyph": "A", "closed": false, "nodes": [
         {"x": 0, "y": 200}, {"x": 100, "y": 200, "type": "offcurve"}, {"x": 200, "y": 200, "type": "offcurve"}, {"x": 300, "y": 200, "type": "curve"},
@@ -206,7 +206,7 @@ fn view_lock_outline_refuses_drags_but_not_commands() {
     let mut app = aids_app();
     let ctx = egui::Context::default();
     settled(&ctx, &mut app);
-    let locked = app.tokens.locked_point;
+    let locked = app.tokens.aids.lock_badge;
     assert!(texts(&settled(&ctx, &mut app), locked).is_empty());
     assert_eq!(app.run("view.lockOutline", &json!({})).unwrap(), json!({"on": true}));
     assert_eq!(texts(&settled(&ctx, &mut app), locked), ["Outline locked"], "the badge");
@@ -257,7 +257,7 @@ fn view_show_metrics_beam_prints_the_sidebearings_where_the_line_meets_the_outli
     app.run("view.editSelectedGlyphs", &json!({"glyphs": ["A"]})).unwrap();
     app.run("view.setZoom", &json!({"size": 300, "center": [300, 300]})).unwrap();
     let ctx = egui::Context::default();
-    let color = app.tokens.measurement_line_label;
+    let color = app.tokens.aids.beam_label;
     assert!(texts(&settled(&ctx, &mut app), color).is_empty());
     let r = app.run("view.showMetricsBeam", &json!({"y": 300})).unwrap();
     assert_eq!(r, json!({"on": true, "y": 300.0}), "a height alone shows the beam");
@@ -270,4 +270,25 @@ fn view_show_metrics_beam_prints_the_sidebearings_where_the_line_meets_the_outli
     }
     assert_eq!(app.run("view.showMetricsBeam", &json!({})).unwrap(), json!({"on": false, "y": 450.0}));
     assert!(texts(&settled(&ctx, &mut app), color).is_empty());
+}
+
+#[test]
+fn the_aids_draw_in_their_own_theme_tokens() {
+    let mut app = aids_app();
+    let ctx = egui::Context::default();
+    let (tunni, tension, length, badge) =
+        (Color32::from_rgb(1, 2, 3), Color32::from_rgb(4, 5, 6), Color32::from_rgb(7, 8, 9), Color32::from_rgb(10, 11, 12));
+    app.tokens.aids.tunni = tunni;
+    app.tokens.aids.tension = tension;
+    app.tokens.aids.curve_length = length;
+    app.tokens.aids.lock_badge = badge;
+    for id in ["view.showTunniLines", "view.showCurveTension", "view.showCurveLength", "view.lockOutline"] {
+        app.run(id, &json!({"on": true})).unwrap();
+    }
+    let shapes = settled(&ctx, &mut app);
+    assert!(shapes.iter().any(|s| matches!(s, Shape::Circle(c) if c.fill == tunni)), "the Tunni point");
+    assert_eq!(texts(&shapes, tension), ["60%", "75%"]);
+    assert_eq!(texts(&shapes, length).len(), 1, "the curve's length");
+    assert_eq!(texts(&shapes, badge), ["Outline locked"]);
+    assert!(texts(&shapes, app.tokens.measure_off_curve).is_empty(), "nothing borrows the measurement colours");
 }

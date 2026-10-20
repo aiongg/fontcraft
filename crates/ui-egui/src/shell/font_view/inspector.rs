@@ -64,7 +64,7 @@ pub const COMMANDS: &[UiCommand] = &[
         "Info for Selection",
         &["Edit"],
         "Cmd+Alt+I",
-        "{open?: bool (default true)} open the Selection Info window on the selected glyphs (in Edit View: the edited glyph); false closes it. In Edit View with smart components selected it opens their Smart Component Settings instead, and in a smart glyph its Smart Glyph Settings, replying as those commands do → {open}",
+        "{open?: bool (default true)} open the Selection Info window on the selected glyphs (in Edit View: the edited glyph); false closes it. In Edit View with smart components selected it opens their Smart Component Settings instead, and in a smart glyph (one with properties, or named `_smart.…` or `_part.…`) its Smart Glyph Settings, replying as those commands do → {open}",
     ),
 ];
 
@@ -94,7 +94,8 @@ pub fn run(app: &mut FontcraftApp, id: &str, args: &Args) -> Result<Value, Strin
 }
 
 /// In Edit View, Info for Selection opens the settings of the selected smart components, or in a
-/// smart glyph with no smart component selected, its Smart Glyph Settings. `None` elsewhere.
+/// smart glyph ([`is_smart_glyph`]) with no smart component selected, its Smart Glyph Settings.
+/// `None` elsewhere.
 fn smart_window(app: &mut FontcraftApp) -> Result<Option<Value>, String> {
     use crate::dialogs::{smart_component_settings, smart_glyph_settings};
     let Some(glyph) = app.state.tab().and_then(|t| t.edited_glyph()).map(str::to_string) else { return Ok(None) };
@@ -103,12 +104,18 @@ fn smart_window(app: &mut FontcraftApp) -> Result<Option<Value>, String> {
         let args = Args::new(smart_component_settings::ID, &none)?;
         return smart_component_settings::run(app, smart_component_settings::ID, &args).map(Some);
     }
-    if app.session.font().ok().and_then(|f| f.glyph(&glyph)).is_some_and(|g| !g.info.parts.is_empty()) {
+    if app.session.font().ok().and_then(|f| f.glyph(&glyph)).is_some_and(|g| is_smart_glyph(&g.name, !g.info.parts.is_empty())) {
         let params = json!({ "glyph": glyph });
         let args = Args::new(smart_glyph_settings::ID, &params)?;
         return smart_glyph_settings::run(app, smart_glyph_settings::ID, &args).map(Some);
     }
     Ok(None)
+}
+
+/// A glyph with smart properties, or one whose name marks it as a smart glyph (`_smart.`,
+/// `_part.`): such a glyph opens its settings before it has a property, so the first can be added.
+fn is_smart_glyph(name: &str, has_properties: bool) -> bool {
+    has_properties || name.starts_with("_smart.") || name.starts_with("_part.")
 }
 
 /// What a field shows for the glyphs it describes.
