@@ -11,7 +11,10 @@
 //! they carry from the default source: the font info that is not specific to one style, the
 //! instance's PostScript and style-map names from the designspace, and the OS/2 weight and width
 //! classes from the `wght` and `wdth` locations by the rule static export of a UFO-family source
-//! uses ([`fontcraft_model::strip_instance_info`], [`fontcraft_model::location_class`]).
+//! uses ([`fontcraft_model::strip_instance_info`], [`fontcraft_model::location_class`]), and
+//! the instance's custom parameters and properties as glyphsLib applies them to a UFO instance
+//! ([`custom_params`]). Of two instances with one output file, the later is kept, as fontmake
+//! writes each in turn.
 //!
 //! UFOs are staged in temporary folders beside their targets and swapped in once every instance
 //! is built ([`super::stage_folder`], [`super::commit`]), so a failure leaves existing files as
@@ -331,12 +334,12 @@ fn build_ufos(
     created: &mut Vec<Vec<PathBuf>>,
 ) -> Result<Vec<Value>> {
     let sources = source_paths(input)?;
-    let mut outs: Vec<PathBuf> = Vec::with_capacity(jobs.len());
-    let mut results = Vec::with_capacity(jobs.len());
+    // Every target is worked out and checked before anything is built.
+    let mut plans: Vec<(&Job, &Instance, fontcraft_io_ufo::designspace::InstanceNames, PathBuf, String)> = Vec::with_capacity(jobs.len());
     for job in jobs {
         let inst = font.instances.get(job.index).ok_or_else(|| p.bad(format!("there is no instance #{}", job.index)))?;
         let names = fontcraft_io_ufo::designspace::instance_names(font, inst);
-        let label = inst.name.clone();
+        let label = &inst.name;
         if names.filename_from_names && !job.from_location && (label.contains('/') || names.family.contains('/')) {
             return Err(EngineError::Io(format!(
                 "instance `{label}`: a family or instance name with `/` gives no file name; give the instance a UFO file name"
@@ -351,37 +354,57 @@ fn build_ufos(
                 source.display()
             )));
         }
-        if outs.contains(&at) {
-            return Err(p.bad(format!("two instances would both be written to {}", out.display())));
-        }
         file_io::check_write(&out)?;
+        plans.push((job, inst, names, out, same_file_key(&at)));
+    }
+    let mut results = Vec::with_capacity(jobs.len());
+    for (k, (job, inst, names, out, key)) in plans.iter().enumerate() {
+        let label = inst.name.clone();
+        // As fontmake writes each instance in turn, of two instances with one file the later is
+        // the one left on disk; the earlier is not built.
+        if let Some((_, later, ..)) = plans.iter().skip(k.saturating_add(1)).find(|plan| plan.4 == *key) {
+            warnings.push(format!(
+                "instance `{label}` is not written: instance `{}`, later in the list, is written to the same file {}; give the instances different file names to keep both",
+                later.name,
+                out.display()
+            ));
+            continue;
+        }
         let (made, notes) = generated_font(p, font, job.index).map_err(|e| match e {
             EngineError::BadParams { message, .. } => p.bad(format!("instance `{label}`: {message}")),
             other => other,
         })?;
         warnings.extend(notes.into_iter().map(|n| format!("instance `{label}`: {n}")));
-        let made = finish(p, font, made, inst, &names, steps, skipped, &label, warnings)?;
+        let made = finish(p, font, made, inst, names, steps, skipped, &label, warnings)?;
         if req.no_clobber && out.exists() {
             return Err(EngineError::Io(format!("{} exists and noClobber is set", out.display())));
         }
-        let master = made.masters.first().map(|m| m.id.clone()).ok_or_else(|| p.bad(format!("instance `{label}` has no master")))?;
+        let master = made.masters.first().ok_or_else(|| p.bad(format!("instance `{label}` has no master")))?;
+        // A postscriptFontName parameter of the instance wins over its stated name.
+        let postscript = master.params.get("postscriptFontName").and_then(PValue::as_str).map(str::to_string).or_else(|| names.postscript.clone());
+        let master = master.id.clone();
         let files = fontcraft_io_ufo::ufo::write_one(&made, &master)?;
-        created.push(make_parent(&out)?);
+        created.push(make_parent(out)?);
         let is_ufo = |dir: &Path| dir.join("metainfo.plist").is_file() || std::fs::read_dir(dir).is_ok_and(|mut d| d.next().is_none());
-        staged.push(stage_folder(&out, &files, staged.len(), is_ufo)?);
+        staged.push(stage_folder(out, &files, staged.len(), is_ufo)?);
         let mut entry = json!({ "output": out.display().to_string(), "location": job.location.clone(), "static": true });
         if let Some(obj) = entry.as_object_mut() {
             if !job.from_location {
                 obj.insert("name".into(), json!(label));
             }
-            if let Some(ps) = &names.postscript {
+            if let Some(ps) = &postscript {
                 obj.insert("postscriptName".into(), json!(ps));
             }
         }
-        outs.push(at);
         results.push(entry);
     }
     Ok(results)
+}
+
+/// The key under which two output paths that can name the same file meet: some file systems
+/// ignore case (as font.compile compares its outputs).
+fn same_file_key(path: &Path) -> String {
+    path.to_string_lossy().to_lowercase()
 }
 
 /// Where a UFO instance goes: `output`; else a location's `<stem>.instance.ufo` beside the
@@ -524,7 +547,142 @@ fn finish(
     if let Some(w) = width {
         master.params.set("widthClass", w);
     }
+    custom_params(&mut made, inst, label, warnings);
     Ok(made)
+}
+
+/// Instance parameters a UFO instance does not take: the ones interpolation and the names and
+/// classes above have used, and the family name, which the designspace's `familyname` states.
+const NOT_CARRIED: [&str; 10] = [
+    "InterpolationWeightY",
+    "Local Interpolation",
+    "weightClass",
+    "widthClass",
+    "familyName",
+    "UFO Filename",
+    "Rename Glyphs",
+    "Reencode Glyphs",
+    "Replace Feature",
+    "Replace Prefix",
+];
+
+/// The properties glyphsLib copies from an instance into its UFO's font information
+/// (`PROPERTIES_FIELDS`).
+const CARRIED_PROPERTIES: [&str; 10] = [
+    "copyrights",
+    "familyNames",
+    "trademarks",
+    "manufacturers",
+    "manufacturerURL",
+    "designers",
+    "designerURL",
+    "descriptions",
+    "licenses",
+    "sampleTexts",
+];
+
+/// The instance's custom parameters and properties, as glyphsLib's `apply_instance_data_to_ufo`
+/// gives them to a UFO instance (`builder/instances.py`, `builder/custom_params.py`; Apache-2.0):
+/// each parameter on the instance's master, where the UFO writer puts it in the font information
+/// or the lib; Rename Glyphs and Reencode Glyphs applied to the glyphs, and Replace Feature and
+/// Replace Prefix to the features. Values that cannot be used are skipped with a warning.
+fn custom_params(made: &mut Font, inst: &Instance, label: &str, warnings: &mut Vec<String>) {
+    let params: Vec<&fontcraft_model::Param> = inst.params.0.iter().filter(|p| !p.disabled).collect();
+    if let Some(master) = std::sync::Arc::make_mut(&mut made.masters).first_mut() {
+        for p in params.iter().filter(|p| !NOT_CARRIED.contains(&p.name.as_str())) {
+            master.params.set(&p.name, p.value.clone());
+        }
+        for prop in inst.properties.0.iter().filter(|p| CARRIED_PROPERTIES.contains(&p.key.as_str())) {
+            match master.properties.0.iter_mut().find(|q| q.key == prop.key) {
+                Some(q) => *q = prop.clone(),
+                None => master.properties.0.push(prop.clone()),
+            }
+        }
+    }
+    for p in params.iter().filter(|p| p.name == "Rename Glyphs") {
+        for entry in entries(&p.value) {
+            let Some((old, new)) = entry.split_once('=').filter(|(_, new)| !new.contains('=')) else {
+                warnings.push(format!("instance `{label}`: Rename Glyphs entry `{entry}` is not `old=new`; it was skipped"));
+                continue;
+            };
+            let (old, new) = (old.trim(), new.trim());
+            let (Some(a), Some(b)) = (made.glyph(old).map(|g| g.layers.clone()), made.glyph(new).map(|g| g.layers.clone())) else {
+                warnings.push(format!("instance `{label}`: Rename Glyphs cannot swap `{old}` and `{new}`: the instance lacks one of them"));
+                continue;
+            };
+            // The drawings swap; the code points stay with the names.
+            if let Some(mut g) = made.glyphs.get_mut(old) {
+                g.layers = b;
+            }
+            if let Some(mut g) = made.glyphs.get_mut(new) {
+                g.layers = a;
+            }
+        }
+    }
+    for p in params.iter().filter(|p| p.name == "Reencode Glyphs") {
+        reencode(made, &entries(&p.value), label, warnings);
+    }
+    let feature_params = fontcraft_model::Params(
+        params.iter().filter(|p| matches!(p.name.as_str(), "Replace Feature" | "Replace Prefix")).map(|p| (*p).clone()).collect(),
+    );
+    if !feature_params.0.is_empty() {
+        match fontcraft_features::params::apply_instance_params(&made.features, &feature_params) {
+            Ok(features) => made.features = std::sync::Arc::new(features),
+            Err(e) => warnings.push(format!("instance `{label}`: the feature parameters were not applied: {e}")),
+        }
+    }
+}
+
+/// The text entries of a list parameter, or of one text value.
+fn entries(v: &PValue) -> Vec<String> {
+    match v {
+        PValue::String(s) => vec![s.as_str().to_string()],
+        PValue::Array(a) => a.items.iter().filter_map(PValue::as_str).map(str::to_string).collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// Reencode Glyphs (`name=hex`, or `name=` to clear), as glyphsLib applies it: a code point
+/// another glyph has as its first is taken from that glyph with all of its code points, and
+/// becomes the first of the named glyph's.
+fn reencode(made: &mut Font, list: &[String], label: &str, warnings: &mut Vec<String>) {
+    let mut cmap: std::collections::HashMap<u32, String> = std::collections::HashMap::new();
+    for g in made.glyphs.as_arcs().iter() {
+        if let Some(&u) = g.unicodes.first() {
+            cmap.insert(u, g.name.clone());
+        }
+    }
+    for entry in list {
+        let Some((name, hex)) = entry.split_once('=').filter(|(_, hex)| !hex.contains('=')) else {
+            warnings.push(format!("instance `{label}`: Reencode Glyphs entry `{entry}` is not `name=code`; it was skipped"));
+            continue;
+        };
+        if made.glyph(name).is_none() {
+            continue;
+        }
+        let hex = hex.trim();
+        if hex.is_empty() {
+            if let Some(mut g) = made.glyphs.get_mut(name) {
+                g.unicodes.clear();
+            }
+            continue;
+        }
+        let Some(code) = u32::from_str_radix(hex, 16).ok().filter(|c| char::from_u32(*c).is_some()) else {
+            warnings.push(format!("instance `{label}`: Reencode Glyphs entry `{entry}` has no code point; it was skipped"));
+            continue;
+        };
+        if let Some(previous) = cmap.get(&code)
+            && let Some(mut g) = made.glyphs.get_mut(previous)
+        {
+            g.unicodes.clear();
+        }
+        if let Some(mut g) = made.glyphs.get_mut(name)
+            && g.unicodes.first() != Some(&code)
+        {
+            g.unicodes.retain(|u| *u != code);
+            g.unicodes.insert(0, code);
+        }
+    }
 }
 
 /// Remove Overlap, Round Coordinates (and the widths and kerning, as the instantiator rounds
@@ -552,6 +710,11 @@ fn run_steps(font: Font, steps: &Steps, label: &str, warnings: &mut Vec<String>)
         return Ok(font);
     }
     let glyphs: Vec<String> = font.glyphs.as_arcs().iter().map(|g| g.name.clone()).collect();
+    // The steps run as editor commands, and a session aligns the composites a command touches.
+    // An instance keeps its components where interpolation put them, as fontmake's do, so
+    // alignment is off while the steps run and the source's setting is put back after.
+    let alignment = font.info.settings.disables_automatic_alignment;
+    std::sync::Arc::make_mut(&mut font.info).settings.disables_automatic_alignment = Some(true);
     let mut s = Session::new();
     s.push_document(font, None);
     let mut report = |what: &str, r: &Value| {
@@ -575,7 +738,9 @@ fn run_steps(font: Font, steps: &Steps, label: &str, warnings: &mut Vec<String>)
         let r = s.execute("autohint.ps.run", &json!({}))?;
         report("autohinting", &r);
     }
-    Ok(Font::clone(&s.doc()?.font))
+    let mut font = Font::clone(&s.doc()?.font);
+    std::sync::Arc::make_mut(&mut font.info).settings.disables_automatic_alignment = alignment;
+    Ok(font)
 }
 
 // ---------- compiled instances ----------
@@ -668,7 +833,7 @@ fn compile_fonts(
     let mut by_index: Vec<(&Job, &String)> = jobs.iter().zip(&labels).collect();
     by_index.sort_by_key(|(j, _)| j.index);
     let mut taken = vec![false; by_index.len()];
-    let mut built: Vec<(usize, Value)> = Vec::new();
+    let mut built: Vec<(usize, Value, String)> = Vec::new();
     for f in r.get("fonts").and_then(Value::as_array).into_iter().flatten() {
         let label = f.get("instance").and_then(Value::as_str).unwrap_or_default();
         let found = by_index.iter().zip(taken.iter_mut()).find(|((_, l), taken)| !**taken && l.as_str() == label);
@@ -677,16 +842,25 @@ fn compile_fonts(
         let order = jobs.iter().position(|j| j.index == job.index).unwrap_or(usize::MAX);
         let entry_warnings = f.get("warnings").cloned().unwrap_or_else(|| json!([]));
         for file in f.get("files").and_then(Value::as_array).into_iter().flatten() {
+            let path = file.get("path").and_then(Value::as_str).unwrap_or_default();
+            // font.compile writes the fonts in order and keeps the later of two with one file,
+            // as fontmake does; the earlier one's entry goes.
+            let key = same_file_key(Path::new(path));
+            if let Some(k) = built.iter().position(|(_, _, other)| !path.is_empty() && *other == key) {
+                let (_, earlier, _) = built.remove(k);
+                let name = earlier.get("name").and_then(Value::as_str).unwrap_or("?");
+                warnings.push(format!("instance `{name}` is not kept: instance `{label}`, later in the source, is written to the same file {path}"));
+            }
             let mut entry = json!({ "output": file.get("path").cloned().unwrap_or(Value::Null), "location": job.location.clone(), "static": true, "warnings": entry_warnings.clone() });
             if let (false, Some(obj)) = (job.from_location, entry.as_object_mut()) {
                 obj.insert("name".into(), json!(label));
             }
-            built.push((order, entry));
+            built.push((order, entry, key));
         }
     }
     // In the order the jobs were asked for.
-    built.sort_by_key(|(order, _)| *order);
-    Ok(built.into_iter().map(|(_, entry)| entry).collect())
+    built.sort_by_key(|(order, ..)| *order);
+    Ok(built.into_iter().map(|(_, entry, _)| entry).collect())
 }
 
 #[cfg(test)]
@@ -1001,6 +1175,191 @@ mod tests {
         assert_eq!(results[0]["location"]["wght"], json!(600.0));
         let font = fontcraft_tables::read(&std::fs::read(results[0]["output"].as_str().unwrap()).unwrap(), 0).unwrap();
         assert_eq!(font.get(*b"OS/2").unwrap()[4..6], 600u16.to_be_bytes(), "the second instance, not the first of that name");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Replaces the designspace's instances with `instances`, the XML of each.
+    fn set_instances(ds: &Path, instances: &[String]) {
+        let text = std::fs::read_to_string(ds).unwrap();
+        let start = text.find("<instances>").unwrap();
+        let end = text.find("</instances>").unwrap();
+        std::fs::write(ds, format!("{}<instances>{}{}", text.get(..start).unwrap(), instances.concat(), text.get(end..).unwrap())).unwrap();
+    }
+
+    /// An instance element: family Test, style Regular, PostScript name Test-Regular, at `wght`.
+    fn regular_at(wght: u32, filename: &str) -> String {
+        format!(
+            "<instance familyname=\"Test\" stylename=\"Regular\" postscriptfontname=\"Test-Regular\"{filename}><location><dimension name=\"Weight\" xvalue=\"{wght}\"/></location></instance>"
+        )
+    }
+
+    #[test]
+    fn instantiate_source_keeps_the_later_of_two_instances_with_one_file() {
+        // fontmake writes each instance in turn, so of two with one file the later is left.
+        let (dir, ds) = source("one-file");
+        let file = " filename=\"instances/Test-Regular.ufo\"";
+        set_instances(&ds, &[regular_at(400, file), regular_at(600, file)]);
+        let mut s = Session::new();
+        let r = s.execute("font.instantiate", &json!({ "input": ds, "autohint": false })).unwrap();
+        let results = r["results"].as_array().unwrap();
+        assert_eq!(results.len(), 1, "{r}");
+        assert_eq!(results[0]["location"]["wght"], json!(600.0));
+        assert_eq!(glyph_a(&dir.join("instances/Test-Regular.ufo")).0, 575.0, "fontmake's width of A at 600");
+        let warned = r["warnings"].as_array().unwrap().iter().filter_map(Value::as_str).any(|w| w.contains("not written") && w.contains("same file"));
+        assert!(warned, "{r}");
+
+        // Compiled: no recorded file name, so both are named Test-Regular.
+        set_instances(&ds, &[regular_at(400, ""), regular_at(600, "")]);
+        let r = s.execute("font.instantiate", &json!({ "input": ds, "to": "ttf", "outputDir": dir.join("ttf"), "timestamp": 0 })).unwrap();
+        let results = r["results"].as_array().unwrap();
+        assert_eq!(results.len(), 1, "{r}");
+        assert_eq!(results[0]["location"]["wght"], json!(600.0));
+        let font = fontcraft_tables::read(&std::fs::read(results[0]["output"].as_str().unwrap()).unwrap(), 0).unwrap();
+        assert_eq!(font.get(*b"OS/2").unwrap()[4..6], 600u16.to_be_bytes(), "the later instance");
+        let warned = r["warnings"].as_array().unwrap().iter().filter_map(Value::as_str).any(|w| w.contains("not kept"));
+        assert!(warned, "{r}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Adds `idotless`, `acutecomb` (whose contour starts at `acute_x`) and the composite
+    /// `iacute` (the acute placed at 184, -26) to the UFO at `dir`.
+    fn add_iacute(dir: &Path, acute_x: i32) {
+        let write = |rel: &str, text: String| std::fs::write(dir.join(rel), text).unwrap();
+        write(
+            "glyphs/contents.plist",
+            format!(
+                "{PLIST}<dict><key>A</key><string>A_.glif</string><key>B</key><string>B_.glif</string><key>acutecomb</key><string>acutecomb.glif</string><key>iacute</key><string>iacute.glif</string><key>idotless</key><string>idotless.glif</string></dict></plist>\n"
+            ),
+        );
+        write("glyphs/idotless.glif", glif("idotless", "0131", 600, &rect(200, 400)));
+        let acute = format!(
+            "<contour><point x=\"{acute_x}\" y=\"700\" type=\"line\"/><point x=\"300\" y=\"700\" type=\"line\"/><point x=\"300\" y=\"800\" type=\"line\"/></contour>"
+        );
+        write("glyphs/acutecomb.glif", glif("acutecomb", "0301", 0, &acute));
+        write(
+            "glyphs/iacute.glif",
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<glyph name=\"iacute\" format=\"2\"><advance width=\"600\"/><unicode hex=\"00ED\"/><outline><component base=\"idotless\"/><component base=\"acutecomb\" xOffset=\"184\" yOffset=\"-26\"/></outline></glyph>\n".into(),
+        );
+    }
+
+    #[test]
+    fn instantiate_source_leaves_components_where_the_file_puts_them() {
+        // Rounding the bases (100.5 to 100) must not move the composite's components by the
+        // editor's automatic alignment: fontmake keeps them at (184, -26), and the width at 600.
+        let (dir, ds) = source("components");
+        add_iacute(&dir.join("Light.ufo"), 101);
+        add_iacute(&dir.join("Bold.ufo"), 100);
+        let mut s = Session::new();
+        s.execute("font.instantiate", &json!({ "input": ds, "autohint": false })).unwrap();
+        let (font, _) = crate::io::open(&dir.join("instances/Test-Regular.ufo"), None).unwrap();
+        let layer = font.glyph("iacute").unwrap().layers.first().unwrap().clone();
+        assert_eq!(layer.width, 600.0);
+        let offsets: Vec<(f64, f64)> = layer
+            .shapes
+            .iter()
+            .filter_map(|s| match s {
+                fontcraft_model::Shape::Component(c) => {
+                    let m = c.transform.affine().as_coeffs();
+                    Some((m[4], m[5]))
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(offsets, [(0.0, 0.0), (184.0, -26.0)]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn instantiate_source_interpolates_a_number_only_one_source_sets() {
+        // Only Bold states a width class (8): fontMath counts the missing one as 0, so fontmake's
+        // instance halfway has 4.
+        let (dir, ds) = source("width-class");
+        let info = dir.join("Bold.ufo/fontinfo.plist");
+        let text = std::fs::read_to_string(&info).unwrap();
+        std::fs::write(&info, text.replace("<key>unitsPerEm</key>", "<key>openTypeOS2WidthClass</key><integer>8</integer><key>unitsPerEm</key>"))
+            .unwrap();
+        let mut s = Session::new();
+        s.execute("font.instantiate", &json!({ "input": ds, "autohint": false })).unwrap();
+        let out = std::fs::read_to_string(dir.join("instances/Test-Regular.ufo/fontinfo.plist")).unwrap();
+        let at = out.find("<key>openTypeOS2WidthClass</key>").unwrap_or_else(|| panic!("{out}"));
+        assert!(
+            out.get(at..).unwrap().trim_start_matches("<key>openTypeOS2WidthClass</key>").trim_start().starts_with("<integer>4</integer>"),
+            "{out}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn instantiate_source_maps_user_locations_through_the_axis_map() {
+        // User 500 is design 600: fontmake's instances at user 600 (design 650) and at design 500
+        // (user 433) have A 588 and 550 wide.
+        let (dir, ds) = source("axis-map");
+        let text = std::fs::read_to_string(&ds).unwrap().replace(
+            "<axis tag=\"wght\" name=\"Weight\" minimum=\"300\" default=\"300\" maximum=\"700\"/>",
+            "<axis tag=\"wght\" name=\"Weight\" minimum=\"300\" default=\"300\" maximum=\"700\"><map input=\"300\" output=\"300\"/><map input=\"500\" output=\"600\"/><map input=\"700\" output=\"700\"/></axis>",
+        );
+        std::fs::write(&ds, text).unwrap();
+        set_instances(
+            &ds,
+            &[
+                "<instance familyname=\"Test\" stylename=\"Medium\" filename=\"instances/Test-Medium.ufo\"><location><dimension name=\"Weight\" uservalue=\"600\"/></location></instance>".into(),
+                "<instance familyname=\"Test\" stylename=\"Regular\" filename=\"instances/Test-Regular.ufo\"><location><dimension name=\"Weight\" xvalue=\"500\"/></location></instance>".into(),
+            ],
+        );
+        let mut s = Session::new();
+        let r = s.execute("font.instantiate", &json!({ "input": ds, "autohint": false })).unwrap();
+        assert_eq!(r["results"][0]["location"]["wght"], json!(600.0), "{r}");
+        assert_eq!(glyph_a(&dir.join("instances/Test-Medium.ufo")).0, 588.0);
+        assert_eq!(glyph_a(&dir.join("instances/Test-Regular.ufo")).0, 550.0);
+        let info = std::fs::read_to_string(dir.join("instances/Test-Regular.ufo/fontinfo.plist")).unwrap();
+        assert!(info.contains("<integer>433</integer>"), "the weight class from the user location: {info}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn instantiate_source_applies_the_instance_custom_parameters() {
+        // What fontmake's instance UFO takes from the instance's custom parameters and properties
+        // (glyphsLib's apply_instance_data_to_ufo).
+        let (dir, ds) = source("custom-params");
+        add_iacute(&dir.join("Light.ufo"), 100);
+        add_iacute(&dir.join("Bold.ufo"), 100);
+        let lib = "<lib><dict><key>com.schriftgestaltung.customParameters</key><array>\
+            <array><string>typoAscender</string><integer>900</integer></array>\
+            <array><string>underlinePosition</string><integer>-150</integer></array>\
+            <array><string>vendorID</string><string>ABCD</string></array>\
+            <array><string>postscriptFontName</string><string>Test-Custom</string></array>\
+            <array><string>weightClass</string><integer>650</integer></array>\
+            <array><string>Rename Glyphs</string><array><string>A=acutecomb</string></array></array>\
+            <array><string>Reencode Glyphs</string><array><string>idotless=0041</string></array></array>\
+            <array><string>Some Unknown Thing</string><string>v</string></array>\
+            </array><key>com.schriftgestaltung.properties</key><array><array><string>designers</string><string>Someone</string></array></array></dict></lib>";
+        set_instances(&ds, &[regular_at(500, " filename=\"instances/Test-Regular.ufo\"").replace("</location>", &format!("</location>{lib}"))]);
+        let mut s = Session::new();
+        let r = s.execute("font.instantiate", &json!({ "input": ds, "autohint": false })).unwrap();
+        assert_eq!(r["results"][0]["postscriptName"], json!("Test-Custom"), "{r}");
+        let out = dir.join("instances/Test-Regular.ufo");
+        let info = std::fs::read_to_string(out.join("fontinfo.plist")).unwrap();
+        let value = |key: &str| {
+            let at = info.find(&format!("<key>{key}</key>")).unwrap_or_else(|| panic!("no {key}: {info}"));
+            let rest = info.get(at..).unwrap().split_once("</key>").unwrap().1.trim_start();
+            rest.get(..rest.find("</").unwrap()).unwrap().rsplit('>').next().unwrap().to_string()
+        };
+        assert_eq!(value("openTypeOS2TypoAscender"), "900");
+        assert_eq!(value("postscriptUnderlinePosition"), "-150");
+        assert_eq!(value("openTypeOS2VendorID"), "ABCD");
+        assert_eq!(value("postscriptFontName"), "Test-Custom");
+        assert_eq!(value("openTypeOS2WeightClass"), "650", "the parameter wins over the location");
+        assert_eq!(value("openTypeNameDesigner"), "Someone");
+        let lib = std::fs::read_to_string(out.join("lib.plist")).unwrap();
+        assert!(lib.contains("Some Unknown Thing"), "{lib}");
+        let (font, _) = crate::io::open(&out, None).unwrap();
+        let glyph = |name: &str| font.glyph(name).unwrap().clone();
+        // Rename Glyphs swaps the drawings; the code points stay with the names.
+        assert_eq!(glyph("acutecomb").layers.first().unwrap().width, 550.0);
+        assert_eq!(glyph("A").layers.first().unwrap().width, 0.0);
+        // Reencode Glyphs takes U+0041 from A and puts it first on idotless.
+        assert!(glyph("A").unicodes.is_empty());
+        assert_eq!(glyph("idotless").unicodes, [0x41, 0x131]);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

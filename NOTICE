@@ -77,7 +77,10 @@ bundled, the file says so in its header and the project is listed here with its 
   rules that turn alignment zones into PostScript blue values and back, master stems into stem
   snaps, and master guides into UFO guidelines (with the name suffixes for colour, identifier and
   lock) are ported from its builder too (crates/io-ufo/src/design.rs, and the guide names in
-  crates/io-glyphs/src/design.rs). The user locations of masters and instances, the axis maps,
+  crates/io-glyphs/src/design.rs). What a UFO instance takes from its instance's custom parameters
+  and properties, with the Rename Glyphs and Reencode Glyphs rules, follows apply_instance_data_to_ufo
+  and its custom parameter handlers (crates/engine/src/cmd/instance/source.rs, custom_params). The
+  user locations of masters and instances, the axis maps,
   ranges and origin master it derives for a designspace, and its weight and width tables are
   ported from its axis builder (crates/model/src/axes.rs); the rules for designspace axis maps,
   instance attributes and instance lib keys, style-map names and instance file names from its
