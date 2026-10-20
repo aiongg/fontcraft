@@ -1173,6 +1173,21 @@ guesses = [
 observe = ["Full-colour font: export with no colour parameters and read it with fontTools; note whether COLR version 1, an SVG table or neither is written."]
 
 [[behavior]]
+id = "color.export.colrGlyphComponent"
+area = "compile"
+milestone = "M11"
+summary = "A component on a full-colour layer whose glyph has full-colour layers of its own, and which has no fill colour or gradient, paints that glyph's colours: a PaintColrGlyph of the glyph, inside a PaintTranslate when the component is only moved and a PaintTransform for any other transform. It takes its own place in the layer list, is never merged with the shapes next to it and has no layer glyph; the layer glyphs after it are numbered as if it had one."
+ref = "glyphsLib builder/color_layers.py and builder/glyph.py; fontTools otTables Paint.computeClipBox"
+status = "inferred"
+notes = "Follows fontmake (glyphsLib and ufo2ft) on a Glyphs source with such components: the referenced glyph gets a paint of its own in the BaseGlyphList even when it is one solid layer, so that the reference reaches it; the referencing glyph's clip box covers the referenced glyph's layer glyphs moved by the transform. fontc 1.0.0 writes no COLR for a Glyphs source whose colours are on Color layers rather than master layers, and follows a UFO's colour layer list, where glyphsLib's PaintColrGlyph is written as it is. A component of a glyph with only palette layers stays an outline, as glyphsLib keeps it. A reference that would lead back to its own glyph through such components, or nest more than 64 deep, or that names a glyph that does not export or paints nothing, is drawn as the component's outline in 50 % gray, with a warning. Edit View and the SVG table draw a reference that way too; Text Preview and Font View draw the compiled font, which follows it."
+guesses = [
+  "The reference app writes a component of a colour glyph as a PaintColrGlyph of that glyph, as glyphsLib does, rather than as its outline. Settled by exporting a full-colour glyph holding a moved component of another full-colour glyph from the reference and reading its COLR.",
+  "Shapes keep their order on the layer: glyphsLib puts a layer's paths below its components, FontCraft keeps the order of the shapes, as fontc does for master layers. Settled by exporting a full-colour layer with a component below a path from the reference.",
+  "A component whose transform differs between masters is written with the default master's transform; fontmake would write a variable transform. Settled by a variable full-colour font with a moved colour component in the reference.",
+]
+observe = ["Full-colour font: glyph A with a red square, glyph B whose Color layer holds a component of A moved by (100, 50); export and read COLR; note whether B's paint is a PaintTranslate around a PaintColrGlyph of A."]
+
+[[behavior]]
 id = "color.export.colrVersionChoice"
 area = "compile"
 milestone = "M11"

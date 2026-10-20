@@ -4,7 +4,7 @@
 //!
 //! Rows: `color.export.colrFromPaletteLayers`, `color.export.fullColorToColrV1`,
 //! `color.export.strokeInColr`, `compile.colrGradientGeometry`, `color.layered.stackingOrder`,
-//! `color.export.variableColr`.
+//! `color.export.variableColr`, `color.export.colrGlyphComponent`.
 //!
 //! Contract (`docs/plans/M11.md` § 3):
 //! - [`glyph_paint`] gives `None` for a glyph without vector colour layers (palette or
@@ -18,6 +18,12 @@
 //!   The fill [`ShapeRef`] of a stroked path is the path's own outline, not its stroke.
 //! - A master layer marked as full colour (fontc's test sources keep their paints there) paints
 //!   like a full-colour layer, below the master's colour layers.
+//! - A component of a glyph with full-colour layers, on a full-colour layer and without paint
+//!   attributes of its own, is a [`Paint::ColrGlyph`] of that glyph moved by the component's
+//!   transform, as glyphsLib writes it (`builder/color_layers.py`, Apache-2.0; see `NOTICE`).
+//!   It is never merged with its neighbours, has no layer glyph, and takes a number among the
+//!   layer glyphs ([`numbered_shape_refs`]). A reference that would lead back to its own glyph,
+//!   or nest more than [`crate::MAX_PAINT_DEPTH`] deep, is drawn as an outline with a warning.
 //! - Gradient geometry is in font units (the model's fractions of the shape's bounds resolved
 //!   against the merged shapes' bounds). Alpha is kept as given; colours that are not palette
 //!   references are added to the palettes by the CPAL writer, not here.
@@ -28,8 +34,10 @@
 //!   the same structure ([`same_structure`], [`PaintVariation`]); an interpolated instance mixes
 //!   its colour layers' paint attributes with the master weights ([`interpolate_paint_attrs`]).
 
-use fontcraft_geom::{BezPath, Point, Rect, Shape as _};
-use fontcraft_model::{Color, Dimension, Extend, Font, Glyph, Gradient, GradientKind, Layer, PaletteEntry, Shape, ShapeAttrs};
+use std::collections::{HashMap, HashSet};
+
+use fontcraft_geom::{Affine, BezPath, Point, Rect, Shape as _};
+use fontcraft_model::{Color, Component, Dimension, Extend, Font, Glyph, Gradient, GradientKind, Layer, PaletteEntry, Shape, ShapeAttrs};
 
 use crate::layers::{ColorLayerKind, export_kind};
 use crate::palette::FOREGROUND_INDEX;
@@ -44,6 +52,15 @@ pub enum Paint {
     Glyph {
         shape: ShapeRef,
         paint: Box<Paint>,
+    },
+    /// The paint graph of colour glyph `glyph`, moved by `transform`: a component of a glyph
+    /// with full-colour layers, on a full-colour layer (`color.export.colrGlyphComponent`). It
+    /// has no layer glyph. `shape` is that component; code that draws one glyph's layers
+    /// without following other glyphs fills it with [`outline_fill`].
+    ColrGlyph {
+        glyph: String,
+        transform: Affine,
+        shape: ShapeRef,
     },
     Solid(ColorRef),
     /// A linear gradient from `p0` to `p1`, `p2` setting the rotation as in COLR version 1 (at
@@ -135,37 +152,219 @@ pub const DEFAULT_STROKE: Color = Color::Rgba([0.0, 0.0, 0.0, 1.0]);
 /// A palette layer is one layer glyph of all its paths and components in its palette entry; a
 /// layer without them is left out, as fontc leaves it out. A full-colour layer gives one layer
 /// glyph per run of consecutive shapes with equal paint attributes, and for stroked paths a
-/// stroke layer glyph above the run's fill. A master layer marked as full colour paints that way
-/// too, below the master's colour layers, as both oracles read it. Intermediate colour layers are
-/// sources of their layer glyph's variation (M11.19), not layers of their own.
+/// stroke layer glyph above the run's fill. A component of a colour glyph on it paints that
+/// glyph by reference ([`Paint::ColrGlyph`]) when [`colr_glyph_target`] allows it. A master layer
+/// marked as full colour paints that way too, below the master's colour layers, as both oracles
+/// read it. Intermediate colour layers are sources of their layer glyph's variation (M11.19),
+/// not layers of their own.
 pub fn glyph_paint(font: &Font, glyph: &Glyph, master_id: &str, palettes: &Palettes) -> Result<Option<Paint>, ColorError> {
+    glyph_paint_warn(font, glyph, master_id, palettes, &mut Vec::new())
+}
+
+/// [`glyph_paint`], adding to `warnings` a message for each component of a colour glyph that is
+/// painted as its outline because [`colr_glyph_target`] refuses it.
+pub fn glyph_paint_warn(
+    font: &Font,
+    glyph: &Glyph,
+    master_id: &str,
+    palettes: &Palettes,
+    warnings: &mut Vec<String>,
+) -> Result<Option<Paint>, ColorError> {
     let _ = palettes;
-    let mut layers = Vec::new();
-    let painted = glyph.layers.iter().filter(|l| l.master == master_id).filter_map(|l| export_kind(l).map(|k| (l, k))).take(crate::MAX_COLOR_LAYERS);
-    for (layer, kind) in painted {
-        if !layer.info.attrs.coordinates.is_empty() {
-            continue;
+    Refs { font, master: master_id, painted: HashMap::new() }.paint(glyph, warnings, 0)
+}
+
+/// Paint graphs of one master, with what is known of the glyphs components refer to.
+struct Refs<'a> {
+    font: &'a Font,
+    master: &'a str,
+    /// Whether a glyph has a paint graph, for each glyph a component referred to.
+    painted: HashMap<String, bool>,
+}
+
+impl Refs<'_> {
+    fn paint(&mut self, glyph: &Glyph, warnings: &mut Vec<String>, depth: usize) -> Result<Option<Paint>, ColorError> {
+        let master_id = self.master;
+        let mut layers = Vec::new();
+        let painted =
+            glyph.layers.iter().filter(|l| l.master == master_id).filter_map(|l| export_kind(l).map(|k| (l, k))).take(crate::MAX_COLOR_LAYERS);
+        for (layer, kind) in painted {
+            if !layer.info.attrs.coordinates.is_empty() {
+                continue;
+            }
+            match kind {
+                ColorLayerKind::Palette(entry) => {
+                    let shapes = drawn_shapes(&layer.shapes);
+                    if shapes.is_empty() {
+                        continue;
+                    }
+                    let color = match entry {
+                        PaletteEntry::Index(index) if index != FOREGROUND_INDEX => ColorRef::Palette { index, alpha: 1.0 },
+                        PaletteEntry::Index(_) | PaletteEntry::Foreground => ColorRef::Foreground { alpha: 1.0 },
+                    };
+                    layers.push(Paint::Glyph {
+                        shape: ShapeRef { layer: layer.id.clone(), shapes, stroke: None },
+                        paint: Box::new(Paint::Solid(color)),
+                    });
+                }
+                ColorLayerKind::FullColor => self.full_color_paints(glyph, layer, &mut layers, warnings, depth)?,
+                ColorLayerKind::IColor(_) | ColorLayerKind::Svg => {}
+            }
+            if layers.len() > MAX_LAYER_GLYPHS {
+                return Err(ColorError::LimitExceeded { what: "layer glyphs in one colour glyph", limit: MAX_LAYER_GLYPHS });
+            }
         }
-        match kind {
-            ColorLayerKind::Palette(entry) => {
-                let shapes = drawn_shapes(&layer.shapes);
-                if shapes.is_empty() {
+        Ok((!layers.is_empty()).then_some(Paint::Layers(layers)))
+    }
+
+    /// The paints of the full-colour `layer`, appended to `out` bottom first.
+    fn full_color_paints(
+        &mut self,
+        glyph: &Glyph,
+        layer: &Layer,
+        out: &mut Vec<Paint>,
+        warnings: &mut Vec<String>,
+        depth: usize,
+    ) -> Result<(), ColorError> {
+        let bad = |message: String| ColorError::BadPaint { glyph: glyph.name.clone(), message };
+        let mut runs: Vec<Run> = Vec::new();
+        for i in drawn_shapes(&layer.shapes) {
+            let Some(shape) = layer.shapes.get(i) else { continue };
+            if let Shape::Component(c) = shape
+                && self.target(glyph, c, warnings, depth)
+            {
+                runs.push(Run::Colr { glyph: c.glyph.clone(), transform: c.affine(), shape: i });
+                continue;
+            }
+            let look = look(shape).map_err(bad)?;
+            match runs.last_mut() {
+                Some(Run::Shapes(last, shapes)) if *last == look => shapes.push(i),
+                _ => runs.push(Run::Shapes(look, vec![i])),
+            }
+        }
+        for run in runs {
+            let (look, shapes) = match run {
+                Run::Shapes(look, shapes) => (look, shapes),
+                Run::Colr { glyph, transform, shape } => {
+                    out.push(Paint::ColrGlyph { glyph, transform, shape: ShapeRef { layer: layer.id.clone(), shapes: vec![shape], stroke: None } });
                     continue;
                 }
-                let color = match entry {
-                    PaletteEntry::Index(index) if index != FOREGROUND_INDEX => ColorRef::Palette { index, alpha: 1.0 },
-                    PaletteEntry::Index(_) | PaletteEntry::Foreground => ColorRef::Foreground { alpha: 1.0 },
+            };
+            if let Some(fill) = &look.fill {
+                let paint = match fill {
+                    Fill::Color(c) => Paint::Solid(*c),
+                    Fill::Gradient(g) => gradient_paint(g, run_bounds(self.font, layer, &shapes).map_err(bad)?).map_err(bad)?,
                 };
-                layers.push(Paint::Glyph { shape: ShapeRef { layer: layer.id.clone(), shapes, stroke: None }, paint: Box::new(Paint::Solid(color)) });
+                out.push(Paint::Glyph { shape: ShapeRef { layer: layer.id.clone(), shapes: shapes.clone(), stroke: None }, paint: Box::new(paint) });
             }
-            ColorLayerKind::FullColor => full_color_paints(font, glyph, layer, &mut layers)?,
-            ColorLayerKind::IColor(_) | ColorLayerKind::Svg => {}
+            if let Some((spec, color)) = look.stroke {
+                out.push(Paint::Glyph {
+                    shape: ShapeRef { layer: layer.id.clone(), shapes, stroke: Some(spec) },
+                    paint: Box::new(Paint::Solid(color)),
+                });
+            }
+            if out.len() > MAX_LAYER_GLYPHS {
+                return Err(ColorError::LimitExceeded { what: "layer glyphs in one colour glyph", limit: MAX_LAYER_GLYPHS });
+            }
         }
-        if layers.len() > MAX_LAYER_GLYPHS {
-            return Err(ColorError::LimitExceeded { what: "layer glyphs in one colour glyph", limit: MAX_LAYER_GLYPHS });
+        Ok(())
+    }
+
+    /// Whether component `c` of a full-colour layer of `base` paints its glyph by reference
+    /// ([`colr_glyph_target`]). A component that qualifies but whose glyph does not export, leads
+    /// back to `base`, lies deeper than [`crate::MAX_PAINT_DEPTH`] or paints nothing is drawn
+    /// as its outline, with a warning.
+    fn target(&mut self, base: &Glyph, c: &Component, warnings: &mut Vec<String>, depth: usize) -> bool {
+        let font = self.font;
+        let Some(target) = font.glyph(&c.glyph) else { return false };
+        if !colr_glyph_target(font, c, self.master) {
+            return false;
+        }
+        let why = if !target.export {
+            Some(format!("`{}` does not export", c.glyph))
+        } else if depth >= crate::MAX_PAINT_DEPTH || colr_reaches(font, self.master, &c.glyph, &base.name) {
+            Some(format!("its colour layers lead back to `{}` or nest more than {} deep", base.name, crate::MAX_PAINT_DEPTH))
+        } else if !self.paints(&target, depth + 1) {
+            Some(format!("`{}` has no colour layers that paint", c.glyph))
+        } else {
+            None
+        };
+        match why {
+            None => true,
+            Some(why) => {
+                warnings.push(format!("the component of `{}` on a colour layer is drawn as its outline: {why}", c.glyph));
+                false
+            }
         }
     }
-    Ok((!layers.is_empty()).then_some(Paint::Layers(layers)))
+
+    /// Whether `glyph` has a paint graph for the master.
+    fn paints(&mut self, glyph: &Glyph, depth: usize) -> bool {
+        if let Some(&known) = self.painted.get(&glyph.name) {
+            return known;
+        }
+        // Warnings are given when the glyph itself is painted.
+        let known = matches!(self.paint(glyph, &mut Vec::new(), depth), Ok(Some(_)));
+        self.painted.insert(glyph.name.clone(), known);
+        known
+    }
+}
+
+/// Consecutive shapes of a full-colour layer that paint alike, or one component that paints its
+/// glyph by reference.
+enum Run {
+    Shapes(Look, Vec<usize>),
+    Colr { glyph: String, transform: Affine, shape: usize },
+}
+
+/// Whether component `c` on a full-colour layer of `master` is one glyphsLib writes as a
+/// `PaintColrGlyph`: it has neither a fill colour nor a gradient of its own, and its glyph has a
+/// full-colour layer in `master` (an intermediate layer does not count). The component's
+/// transform moves the referenced paint.
+pub fn colr_glyph_target(font: &Font, c: &Component, master: &str) -> bool {
+    let a = &c.info.attrs;
+    a.fill_color.is_none() && a.gradient.is_none() && font.glyph(&c.glyph).is_some_and(|g| has_full_color(&g, master))
+}
+
+fn has_full_color(g: &Glyph, master: &str) -> bool {
+    g.layers.iter().any(|l| l.master == master && l.info.attrs.coordinates.is_empty() && export_kind(l) == Some(ColorLayerKind::FullColor))
+}
+
+/// Whether the components that [`colr_glyph_target`] allows lead from glyph `from` to glyph
+/// `target` in `master`, or nest deeper than [`crate::MAX_PAINT_DEPTH`]. Each glyph is looked at
+/// once.
+fn colr_reaches(font: &Font, master: &str, from: &str, target: &str) -> bool {
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut todo = vec![(from.to_string(), 0usize)];
+    while let Some((name, depth)) = todo.pop() {
+        if name == target || depth > crate::MAX_PAINT_DEPTH {
+            return true;
+        }
+        if !seen.insert(name.clone()) {
+            continue;
+        }
+        let Some(g) = font.glyph(&name) else { continue };
+        let layers = g
+            .layers
+            .iter()
+            .filter(|l| l.master == master && l.info.attrs.coordinates.is_empty() && export_kind(l) == Some(ColorLayerKind::FullColor));
+        for l in layers {
+            for s in &l.shapes {
+                if let Shape::Component(c) = s
+                    && colr_glyph_target(font, c, master)
+                {
+                    todo.push((c.glyph.clone(), depth + 1));
+                }
+            }
+        }
+    }
+    false
+}
+
+/// What drawing code that follows no other glyph fills the `shape` of a [`Paint::ColrGlyph`]
+/// with: [`DEFAULT_FILL`], as a shape without paint attributes is filled.
+pub fn outline_fill() -> Paint {
+    Paint::Solid(color_ref(DEFAULT_FILL))
 }
 
 /// What one shape of a full-colour layer paints; consecutive shapes that paint the same are one
@@ -180,36 +379,6 @@ struct Look {
 enum Fill {
     Color(ColorRef),
     Gradient(Gradient),
-}
-
-/// The paints of the full-colour `layer`, appended to `out` bottom first.
-fn full_color_paints(font: &Font, glyph: &Glyph, layer: &Layer, out: &mut Vec<Paint>) -> Result<(), ColorError> {
-    let bad = |message: String| ColorError::BadPaint { glyph: glyph.name.clone(), message };
-    let mut runs: Vec<(Look, Vec<usize>)> = Vec::new();
-    for i in drawn_shapes(&layer.shapes) {
-        let Some(shape) = layer.shapes.get(i) else { continue };
-        let look = look(shape).map_err(bad)?;
-        match runs.last_mut() {
-            Some((last, shapes)) if *last == look => shapes.push(i),
-            _ => runs.push((look, vec![i])),
-        }
-    }
-    for (look, shapes) in runs {
-        if let Some(fill) = &look.fill {
-            let paint = match fill {
-                Fill::Color(c) => Paint::Solid(*c),
-                Fill::Gradient(g) => gradient_paint(g, run_bounds(font, layer, &shapes).map_err(bad)?).map_err(bad)?,
-            };
-            out.push(Paint::Glyph { shape: ShapeRef { layer: layer.id.clone(), shapes: shapes.clone(), stroke: None }, paint: Box::new(paint) });
-        }
-        if let Some((spec, color)) = look.stroke {
-            out.push(Paint::Glyph { shape: ShapeRef { layer: layer.id.clone(), shapes, stroke: Some(spec) }, paint: Box::new(Paint::Solid(color)) });
-        }
-        if out.len() > MAX_LAYER_GLYPHS {
-            return Err(ColorError::LimitExceeded { what: "layer glyphs in one colour glyph", limit: MAX_LAYER_GLYPHS });
-        }
-    }
-    Ok(())
 }
 
 /// The paint of one shape. A gradient wins over the fill colour; a shape with neither is filled
@@ -370,16 +539,43 @@ pub fn is_solid_stack(paint: &Paint) -> bool {
 /// The layer glyphs `paint` needs, in order: the [`ShapeRef`] of every [`Paint::Glyph`].
 /// Nothing below [`crate::MAX_PAINT_DEPTH`] is visited.
 pub fn shape_refs(paint: &Paint) -> Vec<&ShapeRef> {
-    fn collect<'a>(paint: &'a Paint, depth: usize, out: &mut Vec<&'a ShapeRef>) {
+    numbered_shape_refs(paint).into_iter().map(|(_, s)| s).collect()
+}
+
+/// [`shape_refs`], each with the number its layer glyph `<base>.color<i>` takes: its place among
+/// the glyph's layer paints, where a [`Paint::ColrGlyph`] takes a place too, as glyphsLib
+/// numbers them. Without such references the numbers count from 0.
+pub fn numbered_shape_refs(paint: &Paint) -> Vec<(usize, &ShapeRef)> {
+    fn collect<'a>(paint: &'a Paint, depth: usize, next: &mut usize, out: &mut Vec<(usize, &'a ShapeRef)>) {
+        if depth > crate::MAX_PAINT_DEPTH {
+            return;
+        }
+        match paint {
+            Paint::Layers(list) => list.iter().for_each(|p| collect(p, depth + 1, next, out)),
+            Paint::Glyph { shape, paint } => {
+                out.push((*next, shape));
+                *next += 1;
+                collect(paint, depth + 1, next, out);
+            }
+            Paint::ColrGlyph { .. } => *next += 1,
+            Paint::Solid(_) | Paint::Linear { .. } | Paint::Radial { .. } | Paint::Sweep { .. } => {}
+        }
+    }
+    let mut out = Vec::new();
+    collect(paint, 0, &mut 0, &mut out);
+    out
+}
+
+/// The glyphs `paint` paints by reference ([`Paint::ColrGlyph`]), in order.
+pub fn colr_glyph_refs(paint: &Paint) -> Vec<&str> {
+    fn collect<'a>(paint: &'a Paint, depth: usize, out: &mut Vec<&'a str>) {
         if depth > crate::MAX_PAINT_DEPTH {
             return;
         }
         match paint {
             Paint::Layers(list) => list.iter().for_each(|p| collect(p, depth + 1, out)),
-            Paint::Glyph { shape, paint } => {
-                out.push(shape);
-                collect(paint, depth + 1, out);
-            }
+            Paint::Glyph { paint, .. } => collect(paint, depth + 1, out),
+            Paint::ColrGlyph { glyph, .. } => out.push(glyph),
             Paint::Solid(_) | Paint::Linear { .. } | Paint::Radial { .. } | Paint::Sweep { .. } => {}
         }
     }
@@ -444,6 +640,7 @@ pub fn same_structure(a: &Paint, b: &Paint) -> bool {
             (Paint::Glyph { shape: s, paint: p }, Paint::Glyph { shape: t, paint: q }) => {
                 s.stroke.is_some() == t.stroke.is_some() && go(p, q, depth + 1)
             }
+            (Paint::ColrGlyph { glyph: g, .. }, Paint::ColrGlyph { glyph: h, .. }) => g == h,
             (Paint::Solid(c), Paint::Solid(d)) => same_color(c, d),
             (Paint::Linear { line: l, .. }, Paint::Linear { line: m, .. })
             | (Paint::Radial { line: l, .. }, Paint::Radial { line: m, .. })
@@ -477,6 +674,8 @@ pub fn numbers(paint: &Paint) -> Vec<f64> {
         match paint {
             Paint::Layers(list) => list.iter().for_each(|p| go(p, depth + 1, out)),
             Paint::Glyph { paint, .. } => go(paint, depth + 1, out),
+            // The default master's transform is written; it does not vary.
+            Paint::ColrGlyph { .. } => {}
             Paint::Solid(c) => alpha(c, out),
             Paint::Linear { p0, p1, p2, line: l } => {
                 out.extend([p0.x, p0.y, p1.x, p1.y, p2.x, p2.y]);
@@ -820,5 +1019,79 @@ mod tests {
         assert_eq!(p.info.attrs.gradient, Some(gradient(0.25, 0.75)));
         let Shape::Path(p) = &out[1] else { panic!("a path") };
         assert_eq!(p.info.attrs.fill_color, Some(Color::Palette { index: 0, alpha: 1.0 }), "kinds differ: the heaviest master's");
+    }
+
+    #[test]
+    fn components_of_colour_glyphs_paint_them_by_reference_without_cycles() {
+        const RED: [f64; 4] = [1.0, 0.0, 0.0, 1.0];
+        let mut font = Font::new("References");
+        let master = font.masters[0].id.clone();
+        let red = || path([0.0, 0.0, 400.0, 400.0], |a| a.fill_color = Some(Color::Rgba(RED)));
+        let component = |glyph: &str, affine: [f64; 6]| {
+            let mut c = Component::new(glyph, 0.0, 0.0);
+            c.transform = fontcraft_model::Transform::Matrix(affine);
+            Shape::Component(c)
+        };
+        let moved = [1.0, 0.0, 0.0, 1.0, 100.0, 50.0];
+        let mut tinted = Component::new("A", 0.0, 0.0);
+        tinted.info.attrs.fill_color = Some(Color::Rgba(RED));
+        let layers: [(&str, Vec<Shape>); 7] = [
+            ("A", vec![red()]),
+            // A path, a reference, then a component that is no reference: its glyph has no
+            // colour layers, so it merges with the path after it.
+            ("B", vec![red(), component("A", moved), component("Z", [1.0, 0.0, 0.0, 1.0, 0.0, 0.0]), path([0.0, 0.0, 9.0, 9.0], |_| {})]),
+            ("C", vec![Shape::Component(tinted)]),
+            ("D", vec![component("D", moved)]),
+            ("E", vec![component("F", moved)]),
+            ("F", vec![red(), component("E", moved)]),
+            ("G", vec![component("H", moved)]),
+        ];
+        for (name, shapes) in layers {
+            let mut g = font.glyph_mut(name).unwrap();
+            g.layers.push(colour_layer(&master, &format!("{name}-c"), shapes));
+        }
+        let mut h = font.glyph_mut("H").unwrap();
+        h.layers.push(colour_layer(&master, "H-c", vec![red()]));
+        h.export = false;
+        drop(h);
+        let paint = |name: &str| {
+            let mut warnings = Vec::new();
+            let g = font.glyph(name).unwrap();
+            let p = glyph_paint_warn(&font, g, &master, &Palettes::default(), &mut warnings).unwrap().unwrap();
+            (p, warnings)
+        };
+
+        let (b, warnings) = paint("B");
+        let grey = color_ref(DEFAULT_FILL);
+        let want = Paint::Layers(vec![
+            solid("B-c", vec![0], None, ColorRef::Rgba(RED)),
+            Paint::ColrGlyph {
+                glyph: "A".into(),
+                transform: Affine::new(moved),
+                shape: ShapeRef { layer: "B-c".into(), shapes: vec![1], stroke: None },
+            },
+            solid("B-c", vec![2, 3], None, grey),
+        ]);
+        assert_eq!(b, want);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        // The reference takes number 1, so the layer glyphs are B.color0 and B.color2, as glyphsLib
+        // numbers them.
+        assert_eq!(numbered_shape_refs(&b).iter().map(|(i, _)| *i).collect::<Vec<_>>(), [0, 2]);
+        assert_eq!(colr_glyph_refs(&b), ["A"]);
+        assert!(!is_solid_stack(&b));
+
+        // A component with a fill colour of its own paints its outline.
+        let (c, _) = paint("C");
+        assert_eq!(c, Paint::Layers(vec![solid("C-c", vec![0], None, ColorRef::Rgba(RED))]));
+
+        // A glyph that refers to itself, two that refer to each other and a glyph that does not
+        // export are drawn as outlines, with a warning.
+        for (name, why) in [("D", "lead back"), ("E", "lead back"), ("F", "lead back"), ("G", "does not export")] {
+            let (p, warnings) = paint(name);
+            assert!(colr_glyph_refs(&p).is_empty(), "{name}: {p:?}");
+            assert!(warnings.iter().any(|w| w.contains(why)), "{name}: {warnings:?}");
+        }
+        let (d, _) = paint("D");
+        assert_eq!(d, Paint::Layers(vec![solid("D-c", vec![0], None, grey)]));
     }
 }

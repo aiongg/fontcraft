@@ -2,13 +2,15 @@
 //!
 //! Rows: `COLR`, `color.export.colrFromPaletteLayers`, `color.export.fullColorToColrV1`,
 //! `color.export.colrVersionChoice`, `color.export.strokeInColr`, `compile.colrClipBoxes`,
-//! `compile.colrGradientGeometry`, `color.export.variableColr`.
+//! `compile.colrGradientGeometry`, `color.export.variableColr`, `color.export.colrGlyphComponent`.
 //!
 //! Contract (`docs/plans/M11.md` § 3): base glyph and layer records for version 0; for version 1
 //! `BaseGlyphList`, `LayerList` and `ClipList`. Layer glyphs are those
 //! [`super::layer_glyphs`] appended, found by name in the [`GlyphOrder`]. `*` (the text colour)
 //! is palette index 0xFFFF. Colours that are not palette references become new rows, added once
-//! to every palette, with their alpha in CPAL only.
+//! to every palette, with their alpha in CPAL only. A [`Paint::ColrGlyph`] is a `PaintColrGlyph`,
+//! in a `PaintTranslate` or `PaintTransform` when it is moved; the glyph it names always gets a
+//! `BaseGlyphList` paint, which a version 0 record would not give it.
 //!
 //! Variable fonts ([`build_variable`]), as fontmake's variation merger writes them: a number of
 //! a paint or colour stop that differs between the masters gets a delta set in an
@@ -21,19 +23,19 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use fontcraft_color::export::{ColorGlyph, ColrPlan, ColrVersion};
-use fontcraft_color::paint::{ColorLine, ColorRef, Paint, PaintVariation, is_solid_stack, shape_refs};
+use fontcraft_color::paint::{ColorLine, ColorRef, Paint, PaintVariation, colr_glyph_refs, is_solid_stack, numbered_shape_refs};
 use fontcraft_color::palette::FOREGROUND_INDEX;
 use fontcraft_color::{MAX_PAINT_DEPTH, MAX_PALETTE_ROWS, Rgba};
 use fontcraft_geom::variation::VariationModel;
-use fontcraft_geom::{Rect, Shape as _};
+use fontcraft_geom::{Affine, Rect, Shape as _};
 use fontcraft_model::{Extend, Font, MAX_COMPONENT_DEPTH};
 use write_fonts::tables::colr::{
-    BaseGlyph, BaseGlyphList, BaseGlyphPaint, Clip, ClipBox, ClipList, ColorLine as WColorLine, ColorStop as WColorStop, Colr, Extend as WExtend,
-    Layer, Paint as WPaint, VarColorLine, VarColorStop,
+    Affine2x3, BaseGlyph, BaseGlyphList, BaseGlyphPaint, Clip, ClipBox, ClipList, ColorLine as WColorLine, ColorStop as WColorStop, Colr,
+    Extend as WExtend, Layer, Paint as WPaint, VarColorLine, VarColorStop,
 };
 use write_fonts::tables::variations::ivs_builder::VariationStoreBuilder;
 use write_fonts::tables::variations::{DeltaSetIndexMap, ItemVariationStore};
-use write_fonts::types::{F2Dot14, FWord, GlyphId16, UfWord};
+use write_fonts::types::{F2Dot14, FWord, Fixed, GlyphId16, UfWord};
 
 use super::GlyphOrder;
 use crate::CompileError;
@@ -121,13 +123,14 @@ pub fn build_variable(
     let mut clips: Vec<Clip> = Vec::new();
     let mut bounds = Bounds { order, memo: HashMap::new() };
     let quantum = clip_quantum(units_per_em);
-    for (base, g) in glyphs {
-        let refs = shape_refs(&g.paint);
+    // Each glyph's layer glyphs, in the order of its shape references.
+    let mut layer_gids: HashMap<&str, Vec<u16>> = HashMap::new();
+    for (_, g) in &glyphs {
+        let refs = numbered_shape_refs(&g.paint);
         // A shape reference without a made glyph is drawn by a source glyph of the name a made
         // one would have had (`super::existing_layer_glyph`).
         let gids: Vec<u16> = refs
             .iter()
-            .enumerate()
             .filter_map(|(i, s)| {
                 let name = format!("{}.color{i}", g.glyph);
                 if split.contains(name.as_str()) {
@@ -139,8 +142,17 @@ pub fn build_variable(
         if refs.len() != gids.len() {
             return Err(table_error(format!("glyph `{}` has {} colour layers but {} layer glyphs", g.glyph, refs.len(), gids.len())));
         }
+        layer_gids.insert(g.glyph.as_str(), gids);
+    }
+    // A glyph another paints by reference needs a paint of its own, which version 0 records are not.
+    let targets: HashSet<&str> = plan.glyphs.iter().flat_map(|g| colr_glyph_refs(&g.paint)).collect();
+    let by_glyph: HashMap<&str, &Paint> = glyphs.iter().map(|(_, g)| (g.glyph.as_str(), &g.paint)).collect();
+    let mut covered = Covered { paints: &by_glyph, layer_gids: &layer_gids, bounds: &mut bounds, memo: HashMap::new() };
+    for (base, g) in glyphs {
+        let no_gids = Vec::new();
+        let gids = layer_gids.get(g.glyph.as_str()).unwrap_or(&no_gids);
         let varies = variation.is_some_and(|v| v.varies(&g.glyph, &g.paint));
-        if !varies && (plan.version == ColrVersion::V0 || is_solid_stack(&g.paint)) {
+        if !varies && !targets.contains(g.glyph.as_str()) && (plan.version == ColrVersion::V0 || is_solid_stack(&g.paint)) {
             let solids = solid_layers(&g.paint).ok_or_else(|| table_error(format!("glyph `{}` needs COLR version 1", g.glyph)))?;
             let layers = gids
                 .iter()
@@ -159,13 +171,13 @@ pub fn build_variable(
             _ => None,
         };
         let others = if var.is_some() { others } else { Vec::new() };
-        let mut writer = PaintWriter { glyph: &g.glyph, gids: gids.iter(), colors: &mut colors, layers: &mut layer_list, var };
+        let mut writer = PaintWriter { glyph: &g.glyph, gids: gids.iter(), order, colors: &mut colors, layers: &mut layer_list, var };
         let paint = writer.paint(&g.paint, &others, 0)?;
         paints.push(BaseGlyphPaint::new(GlyphId16::new(base), paint));
         if store.is_some() {
             continue;
         }
-        if let Some(b) = gids.iter().filter_map(|&gid| bounds.of(gid, 0)).reduce(|a, b| a.union(b)) {
+        if let Some(b) = covered.of(&g.glyph, 0) {
             add_clip(&mut clips, base, quantize(b, quantum));
         }
     }
@@ -206,7 +218,7 @@ pub fn build_variable(
 }
 
 /// Turns one glyph's paint graph into version 1 paints, taking its layer glyphs in the order
-/// [`shape_refs`] lists them and appending the layers of every `PaintColrLayers` to the layer
+/// [`numbered_shape_refs`] lists them and appending the layers of every `PaintColrLayers` to the layer
 /// list.
 ///
 /// With a variation context, `others` are the same paint at the glyph's other sources, in the
@@ -214,6 +226,7 @@ pub fn build_variable(
 struct PaintWriter<'a, 'b> {
     glyph: &'a str,
     gids: std::slice::Iter<'a, u16>,
+    order: &'b GlyphOrder<'b>,
     colors: &'b mut AddedColors,
     layers: &'b mut Vec<WPaint>,
     var: Option<VarCtx<'b>>,
@@ -242,6 +255,7 @@ impl PaintWriter<'_, '_> {
                 let gid = self.gids.next().copied().ok_or_else(|| table_error(format!("glyph `{}` has too few layer glyphs", self.glyph)))?;
                 WPaint::glyph(self.paint(paint, &[], depth + 1)?, GlyphId16::new(gid))
             }
+            Paint::ColrGlyph { glyph, transform, .. } => self.colr_glyph(glyph, *transform)?,
             Paint::Solid(c) => {
                 let (index, alpha) = self.colors.paint_color(*c)?;
                 WPaint::solid(index, alpha)
@@ -274,6 +288,8 @@ impl PaintWriter<'_, '_> {
                 let gid = self.gids.next().copied().ok_or_else(|| table_error(format!("glyph `{}` has too few layer glyphs", self.glyph)))?;
                 WPaint::glyph(self.paint(inner, &children(others, None), depth + 1)?, GlyphId16::new(gid))
             }
+            // A transform that differs between the masters is written as the default master's.
+            Paint::ColrGlyph { glyph, transform, .. } => self.colr_glyph(glyph, *transform)?,
             Paint::Solid(c) => {
                 let (index, alpha) = self.colors.paint_color(*c)?;
                 let mut alphas = vec![i32::from(alpha.to_bits())];
@@ -356,7 +372,7 @@ impl PaintWriter<'_, '_> {
             .iter()
             .filter_map(|p| match p {
                 Paint::Linear { line, .. } | Paint::Radial { line, .. } | Paint::Sweep { line, .. } => Some(line),
-                Paint::Layers(_) | Paint::Glyph { .. } | Paint::Solid(_) => None,
+                Paint::Layers(_) | Paint::Glyph { .. } | Paint::ColrGlyph { .. } | Paint::Solid(_) => None,
             })
             .collect()
     }
@@ -400,6 +416,23 @@ impl PaintWriter<'_, '_> {
 
     /// One paint for `paints`: the paint itself when there is one, else a `PaintColrLayers`
     /// whose layers go to the end of the layer list, nested in groups of at most 255.
+    /// A `PaintColrGlyph` of `glyph` moved by `transform`, as glyphsLib writes a component of a
+    /// colour glyph: bare when the transform is the identity, in a `PaintTranslate` when it only
+    /// moves, else in a `PaintTransform`.
+    fn colr_glyph(&self, glyph: &str, transform: Affine) -> Result<WPaint, CompileError> {
+        let gid =
+            self.order.gid(glyph).ok_or_else(|| table_error(format!("glyph `{}` paints glyph `{glyph}`, which is not in the font", self.glyph)))?;
+        let inner = WPaint::colr_glyph(GlyphId16::new(gid));
+        let [xx, yx, xy, yy, dx, dy] = transform.as_coeffs();
+        Ok(if [xx, yx, xy, yy] != [1.0, 0.0, 0.0, 1.0] {
+            WPaint::transform(inner, Affine2x3::new(fixed(xx), fixed(yx), fixed(xy), fixed(yy), fixed(dx), fixed(dy)))
+        } else if [dx, dy] != [0.0, 0.0] {
+            WPaint::translate(inner, fword(dx), fword(dy))
+        } else {
+            inner
+        })
+    }
+
     fn colr_layers(&mut self, mut paints: Vec<WPaint>, depth: usize) -> Result<WPaint, CompileError> {
         if paints.len() == 1
             && let Some(one) = paints.pop()
@@ -453,6 +486,11 @@ fn fword(v: f64) -> FWord {
     #[allow(clippy::cast_possible_truncation)]
     let n = if v.is_finite() { v.round().clamp(f64::from(i16::MIN), f64::from(i16::MAX)) as i16 } else { 0 };
     FWord::new(n)
+}
+
+/// A 16.16 value; 0 when it is not a number.
+fn fixed(v: f64) -> Fixed {
+    Fixed::from_f64(if v.is_finite() { v.clamp(-32_768.0, 32_767.999_984_741_2) } else { 0.0 })
 }
 
 /// A radius in font units, rounded and kept within 16 bits.
@@ -548,6 +586,63 @@ impl Bounds<'_> {
         self.memo.insert(gid, out);
         out
     }
+}
+
+/// The area the paint of a colour glyph covers, for its clip box: the bounds of its layer glyphs
+/// and of the glyphs it paints by reference moved by their transforms, as fontTools draws a
+/// `PaintColrGlyph`'s glyph when it measures a clip box. Each glyph is measured once; a
+/// reference back to a glyph being measured, or deeper than [`MAX_PAINT_DEPTH`], adds nothing.
+struct Covered<'a, 'b, 'o> {
+    paints: &'a HashMap<&'a str, &'a Paint>,
+    layer_gids: &'a HashMap<&'a str, Vec<u16>>,
+    bounds: &'b mut Bounds<'o>,
+    memo: HashMap<String, Option<Rect>>,
+}
+
+impl Covered<'_, '_, '_> {
+    fn of(&mut self, glyph: &str, depth: usize) -> Option<Rect> {
+        if let Some(b) = self.memo.get(glyph) {
+            return *b;
+        }
+        if depth > MAX_PAINT_DEPTH {
+            return None;
+        }
+        // Being measured: a reference back here adds nothing.
+        self.memo.insert(glyph.to_string(), None);
+        let mut out: Option<Rect> = None;
+        let mut add = |b: Rect| out = Some(out.map_or(b, |o| o.union(b)));
+        for &gid in self.layer_gids.get(glyph).map(Vec::as_slice).unwrap_or_default() {
+            if let Some(b) = self.bounds.of(gid, 0) {
+                add(b);
+            }
+        }
+        let refs = self.paints.get(glyph).map(|p| moved_refs(p)).unwrap_or_default();
+        for (target, transform) in refs {
+            if let Some(b) = self.of(target, depth + 1) {
+                add(transform.transform_rect_bbox(b));
+            }
+        }
+        self.memo.insert(glyph.to_string(), out);
+        out
+    }
+}
+
+/// The glyphs `paint` paints by reference, each with its transform.
+fn moved_refs(paint: &Paint) -> Vec<(&str, Affine)> {
+    fn go<'p>(paint: &'p Paint, depth: usize, out: &mut Vec<(&'p str, Affine)>) {
+        if depth > MAX_PAINT_DEPTH {
+            return;
+        }
+        match paint {
+            Paint::Layers(list) => list.iter().for_each(|p| go(p, depth + 1, out)),
+            Paint::Glyph { paint, .. } => go(paint, depth + 1, out),
+            Paint::ColrGlyph { glyph, transform, .. } => out.push((glyph, *transform)),
+            Paint::Solid(_) | Paint::Linear { .. } | Paint::Radial { .. } | Paint::Sweep { .. } => {}
+        }
+    }
+    let mut out = Vec::new();
+    go(paint, 0, &mut out);
+    out
 }
 
 /// The children of `paints` at the other sources: layer `k` of each [`Paint::Layers`], or with
@@ -765,6 +860,8 @@ impl AddedColors {
         match paint {
             Paint::Layers(list) => list.iter().try_for_each(|p| self.register(p, depth + 1)),
             Paint::Glyph { paint, .. } => self.register(paint, depth + 1),
+            // The referenced glyph registers its own colours.
+            Paint::ColrGlyph { .. } => Ok(()),
             Paint::Solid(c) => self.index(*c).map(|_| ()),
             Paint::Linear { line, .. } | Paint::Radial { line, .. } | Paint::Sweep { line, .. } => {
                 line.stops.iter().try_for_each(|s| self.index(s.color).map(|_| ()))

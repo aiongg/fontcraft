@@ -25,7 +25,7 @@ use std::fmt::Write as _;
 use fontcraft_geom::{Affine, BezPath, PathEl, Point};
 use fontcraft_model::{Extend, MAX_COORDINATE};
 
-use crate::paint::{ColorLine, ColorRef, Paint, ShapeRef, StrokeSpec};
+use crate::paint::{ColorLine, ColorRef, Paint, ShapeRef, StrokeSpec, outline_fill};
 use crate::{ColorError, MAX_PAINT_DEPTH, MAX_STOPS, MAX_SVG_DOCUMENT_BYTES, MAX_SVG_TABLE_BYTES, Rgba};
 
 /// Where a bitmap is drawn in a glyph's document, in font units (y up, as the layer has it).
@@ -63,7 +63,7 @@ pub fn has_sweep(paint: &Paint) -> bool {
             Paint::Sweep { .. } => true,
             Paint::Layers(list) => list.iter().any(|p| walk(p, depth + 1)),
             Paint::Glyph { paint, .. } => walk(paint, depth + 1),
-            Paint::Solid(_) | Paint::Linear { .. } | Paint::Radial { .. } => false,
+            Paint::ColrGlyph { .. } | Paint::Solid(_) | Paint::Linear { .. } | Paint::Radial { .. } => false,
         }
     }
     walk(paint, 0)
@@ -315,6 +315,7 @@ impl Writer<'_> {
                 }
             }
             Paint::Glyph { shape, paint: inner } => self.glyph(shape, inner, depth)?,
+            Paint::ColrGlyph { shape, .. } => self.glyph(shape, &outline_fill(), depth)?,
             // A paint outside any glyph fills everything; the renderer clips it to the glyph's
             // drawing area.
             simple => {
@@ -399,7 +400,9 @@ impl Writer<'_> {
                     let _ = write!(out, r#" {opacity_attr}="{}""#, fmt(opacity));
                 }
             }
-            Paint::Layers(_) | Paint::Glyph { .. } => return Err(self.bad("a layered paint cannot fill a single shape")),
+            Paint::Layers(_) | Paint::Glyph { .. } | Paint::ColrGlyph { .. } => {
+                return Err(self.bad("a layered paint cannot fill a single shape"));
+            }
         }
         if let Mode::Stroke(spec) = mode {
             out.push_str(&stroke_style(spec));

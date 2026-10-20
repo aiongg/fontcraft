@@ -31,7 +31,7 @@ use std::collections::{HashMap, HashSet};
 use fontcraft_color::export::{
     ColrVersion, ExportPlan, Problem, ProblemKind, Switches, has_color_layers, plan_between_masters, plan_master, read_switches,
 };
-use fontcraft_color::paint::{ShapeRef, shape_refs};
+use fontcraft_color::paint::{ShapeRef, numbered_shape_refs};
 use fontcraft_color::{AssetStore, MemoryAssets};
 use fontcraft_model::{Font, Glyph, Layer, Resolved, ResolvedComponent, ResolvedGlyph, Shape, Target};
 use write_fonts::types::Tag;
@@ -159,7 +159,7 @@ pub fn append_layer_glyphs(
 }
 
 /// The layer glyphs of `plan`'s COLR paints: one per [`fontcraft_color::ShapeRef`], named
-/// `<base>.color<i>` by its position among the base glyph's layer glyphs, with the base glyph's
+/// `<base>.color<i>` by its number ([`numbered_shape_refs`]), with the base glyph's
 /// production name in place of its name where it has one, outlines resolved at the resolved
 /// master, never shared between base glyphs. `glyphs` are the final source glyphs: a base glyph
 /// that is not among them gets no layer glyphs. A layer glyph the source already has
@@ -190,7 +190,7 @@ pub fn layer_glyphs(
     let mut out = Vec::new();
     for cg in &colr.glyphs {
         let (Some(base), Some(source)) = (by_name.get(cg.glyph.as_str()), font.glyph(&cg.glyph)) else { continue };
-        for (i, shape) in shape_refs(&cg.paint).into_iter().enumerate() {
+        for (i, shape) in numbered_shape_refs(&cg.paint) {
             if existing_layer_glyph(source, &cg.glyph, i, shape, &resolved.master).is_some_and(|name| by_name.contains_key(name.as_str())) {
                 continue;
             }
@@ -794,6 +794,113 @@ mod tests {
         }
         let out = compile(&reordered, &reordered.default_target().unwrap(), Flavour::TrueType, &Options::default()).unwrap();
         assert_eq!(cpal_palettes(&out), [vec![(255, 0, 0, 255), (0, 0, 255, 255), (0, 255, 0, 128), (255, 255, 0, 255)]]);
+    }
+
+    /// `A`'s full-colour layer is a red square; `B`'s a blue square under a component of `A`;
+    /// `C`'s a component of `A` moved by (100, 50), `D`'s one scaled by half and moved by
+    /// (10, 20). `E` and `F` each hold a component of the other, which would be a cycle.
+    fn colr_glyph_font() -> Font {
+        let mut f = Font::new("Colour Components");
+        let full = |id: &str, shapes: Vec<Shape>| {
+            let mut l = Layer::new("m01", 600.0);
+            l.id = id.to_string();
+            l.info.attrs = with_kind(&LayerAttrs::default(), Some(ColorLayerKind::FullColor));
+            l.shapes = shapes;
+            l
+        };
+        let square = |rgba: [f64; 4]| {
+            let mut p = Path::rect(0.0, 0.0, 400.0, 400.0);
+            p.info.attrs.fill_color = Some(Color::Rgba(rgba));
+            Shape::Path(p)
+        };
+        let component = |glyph: &str, affine: [f64; 6]| {
+            let mut c = Component::new(glyph, 0.0, 0.0);
+            c.transform = fontcraft_model::Transform::Matrix(affine);
+            Shape::Component(c)
+        };
+        let (red, blue) = ([1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]);
+        let layers: [(&str, Vec<Shape>); 6] = [
+            ("A", vec![square(red)]),
+            ("B", vec![square(blue), component("A", [1.0, 0.0, 0.0, 1.0, 0.0, 0.0])]),
+            ("C", vec![component("A", [1.0, 0.0, 0.0, 1.0, 100.0, 50.0])]),
+            ("D", vec![component("A", [0.5, 0.0, 0.0, 0.5, 10.0, 20.0])]),
+            ("E", vec![component("F", [1.0, 0.0, 0.0, 1.0, 0.0, 0.0])]),
+            ("F", vec![square(blue), component("E", [1.0, 0.0, 0.0, 1.0, 0.0, 0.0])]),
+        ];
+        for (name, shapes) in layers {
+            let mut g = f.glyph_mut(name).unwrap();
+            g.layers[0].shapes.push(Shape::Path(Path::rect(0.0, 0.0, 400.0, 400.0)));
+            g.layers.push(full(&format!("{name}-full"), shapes));
+        }
+        f
+    }
+
+    /// A version 1 paint as text: `glyph`, `solid`, `colr`, `translate`, `transform`, `layers`.
+    fn describe(colr: &skrifa::raw::tables::colr::Colr<'_>, paint: &skrifa::raw::tables::colr::Paint<'_>, names: &[String]) -> String {
+        use skrifa::raw::tables::colr::Paint as P;
+        let name = |g: skrifa::raw::types::GlyphId16| names[usize::from(g.to_u16())].clone();
+        match paint {
+            P::ColrLayers(l) => {
+                let list = colr.layer_list().unwrap().unwrap();
+                let first = l.first_layer_index() as usize;
+                let layers: Vec<String> =
+                    (first..first + usize::from(l.num_layers())).map(|i| describe(colr, &list.paints().get(i).unwrap(), names)).collect();
+                format!("layers [{}]", layers.join(", "))
+            }
+            P::Glyph(g) => format!("glyph {} ({})", name(g.glyph_id()), describe(colr, &g.paint().unwrap(), names)),
+            P::Solid(s) => format!("solid {} {}", s.palette_index(), s.alpha().to_f32()),
+            P::ColrGlyph(c) => format!("colr {}", name(c.glyph_id())),
+            P::Translate(t) => format!("translate {} {} ({})", t.dx().to_i16(), t.dy().to_i16(), describe(colr, &t.paint().unwrap(), names)),
+            P::Transform(t) => {
+                let m = t.transform().unwrap();
+                let v = [m.xx(), m.yx(), m.xy(), m.yy(), m.dx(), m.dy()].map(|x| x.to_f64().to_string());
+                format!("transform [{}] ({})", v.join(" "), describe(colr, &t.paint().unwrap(), names))
+            }
+            _ => "other".to_string(),
+        }
+    }
+
+    #[test]
+    fn a_component_of_a_colour_glyph_paints_that_glyph_by_reference() {
+        let f = colr_glyph_font();
+        let out = compile(&f, &f.default_target().unwrap(), Flavour::TrueType, &Options::default()).unwrap();
+        let font = FontRef::new(&out.bytes).unwrap();
+        let colr = font.colr().unwrap();
+        let list = colr.base_glyph_list().unwrap().unwrap();
+        let paints: Vec<(String, String)> = list
+            .base_glyph_paint_records()
+            .iter()
+            .map(|r| {
+                (
+                    out.glyph_order[usize::from(r.glyph_id().to_u16())].clone(),
+                    describe(&colr, &r.paint(list.offset_data()).unwrap(), &out.glyph_order),
+                )
+            })
+            .collect();
+        let paint = |base: &str| paints.iter().find(|(b, _)| b == base).map(|(_, p)| p.as_str());
+        // As fontmake builds the same source through glyphsLib: a referenced glyph has a paint of
+        // its own even when it is one solid layer; the reference takes the component's place and
+        // a translation is a PaintTranslate, any other transform a PaintTransform.
+        assert_eq!(paint("A"), Some("glyph A.color0 (solid 0 1)"));
+        assert_eq!(paint("B"), Some("layers [glyph B.color0 (solid 1 1), colr A]"));
+        assert_eq!(paint("C"), Some("translate 100 50 (colr A)"));
+        assert_eq!(paint("D"), Some("transform [0.5 0 0 0.5 10 20] (colr A)"));
+        assert_eq!(cpal_palettes(&out)[0][..2], [(255, 0, 0, 255), (0, 0, 255, 255)]);
+        assert!(!out.glyph_order.iter().any(|n| n.starts_with("C.color") || n.starts_with("D.color")), "a reference has no layer glyph");
+
+        // Clip boxes cover the referenced glyph where the transform puts it.
+        let clip = |name: &str| {
+            let g = font.color_glyphs().get_with_format(GlyphId::new(u32::from(gid(&out, name))), ColorGlyphFormat::ColrV1).unwrap();
+            let b = g.bounding_box(LocationRef::default(), Size::unscaled()).unwrap();
+            (b.x_min, b.y_min, b.x_max, b.y_max)
+        };
+        assert_eq!(clip("B"), (0.0, 0.0, 400.0, 400.0));
+        assert_eq!(clip("C"), (100.0, 0.0, 500.0, 500.0));
+        assert_eq!(clip("D"), (0.0, 0.0, 300.0, 300.0));
+
+        // E and F refer to each other: each draws the other's outline in grey, with a warning.
+        assert!(paints.iter().all(|(b, p)| !(b == "E" || b == "F") || !p.contains("colr")), "{paints:?}");
+        assert!(out.warnings.iter().filter(|w| w.contains("lead back")).count() >= 2, "{:?}", out.warnings);
     }
 
     /// `A`'s master layers, marked full colour, paint a rectangle with a linear gradient from 10 %

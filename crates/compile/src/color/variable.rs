@@ -21,7 +21,9 @@ use std::collections::HashMap;
 
 use fontcraft_color::export::{ColrPlan, Problem, ProblemKind, Switches, has_color_layers, plan_master};
 use fontcraft_color::layers::{ColorLayerKind, kind, with_kind};
-use fontcraft_color::paint::{Paint, PaintVariation, ShapeRef, glyph_paint, interpolate_paint_attrs, same_structure, shape_refs};
+use fontcraft_color::paint::{
+    Paint, PaintVariation, ShapeRef, glyph_paint, interpolate_paint_attrs, numbered_shape_refs, same_structure, shape_refs,
+};
 use fontcraft_color::{MAX_COLOR_LAYERS, Palettes};
 use fontcraft_interp::instance::{InterpOptions, interpolate_layer, master_weights};
 use fontcraft_interp::{Designspace, GlyphSources, MasterPairs};
@@ -202,6 +204,11 @@ pub fn interpolate_color_layers(
     Ok(())
 }
 
+/// The layer glyphs of `paint` by their number ([`numbered_shape_refs`]).
+fn numbered_refs(paint: &Paint) -> std::collections::HashMap<usize, &ShapeRef> {
+    numbered_shape_refs(paint).into_iter().collect()
+}
+
 /// Whether `paint` of `glyph` draws only layers of `origin` (a layered conversion draws other
 /// masters' layers, which do not vary).
 fn own_layers(glyph: &Glyph, paint: &Paint, origin: &str) -> bool {
@@ -219,9 +226,8 @@ pub fn split_names(font: &Font, colr: &ColrPlan, origin: &str) -> Vec<(usize, Ve
         if !own_layers(source, &cg.paint, origin) {
             continue;
         }
-        let names: Vec<(usize, String)> = shape_refs(&cg.paint)
+        let names: Vec<(usize, String)> = numbered_shape_refs(&cg.paint)
             .into_iter()
-            .enumerate()
             .filter(|(i, s)| existing_layer_glyph(source, &cg.glyph, *i, s, origin).is_none())
             .map(|(i, _)| (i, format!("{}.color{i}", cg.glyph)))
             .filter(|(_, name)| font.glyph(name).is_none())
@@ -294,24 +300,24 @@ pub fn split_layer_glyphs(
     let mut out = font.clone();
     for (gi, split) in names {
         let (Some(cg), Some(source)) = (colr.glyphs.get(gi), colr.glyphs.get(gi).and_then(|cg| font.glyph(&cg.glyph))) else { continue };
-        let refs = shape_refs(&cg.paint);
+        let refs = numbered_refs(&cg.paint);
         let paints: Vec<Option<Paint>> = others
             .iter()
             .map(|m| glyph_paint(font, source, m, &Palettes::default()).ok().flatten().filter(|p| same_structure(&cg.paint, p)))
             .collect();
         let slots = slots(source, &all, warnings);
         for (i, name) in split {
-            let Some(default) = refs.get(i).and_then(|s| layer_glyph_layer(source, s, &origin)) else { continue };
+            let Some(default) = refs.get(&i).and_then(|s| layer_glyph_layer(source, s, &origin)) else { continue };
             let mut glyph = Glyph::new(name.clone());
             glyph.export = true;
             glyph.info.production = source.info.production.as_ref().map(|p| format!("{p}.color{i}"));
             let copy = |m: &str| plain_copy(&default, m, m);
             let mut layers = vec![default.clone()];
             for (m, paint) in others.iter().zip(&paints) {
-                let own = paint.as_ref().and_then(|p| shape_refs(p).get(i).and_then(|s| layer_glyph_layer(source, s, m)));
+                let own = paint.as_ref().and_then(|p| numbered_refs(p).get(&i).and_then(|s| layer_glyph_layer(source, s, m)));
                 layers.push(own.unwrap_or_else(|| copy(m)));
             }
-            let whole_palette_layer = refs.get(i).and_then(|s| slots.iter().find(|slot| slot.origin.id == s.layer));
+            let whole_palette_layer = refs.get(&i).and_then(|s| slots.iter().find(|slot| slot.origin.id == s.layer));
             let braces: Vec<Layer> =
                 whole_palette_layer.map(|slot| slot.braces.iter().map(|b| plain_copy(b, &b.id, &b.master)).collect()).unwrap_or_default();
             glyph.layers = layers.iter().cloned().chain(braces).collect();
