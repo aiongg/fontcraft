@@ -16,7 +16,8 @@
 //! ([`custom_params`]). Between masters, the PostScript weight name follows the interpolated
 //! weight class and PANOSE keeps only the digits every source shares ([`shared_panose`]); every
 //! instance takes glyphsLib's embedding type and underline where no source states them
-//! ([`glyphs_defaults`]). A designspace without axes is refused, as fontTools' reader refuses it.
+//! ([`glyphs_defaults`]). A designspace without axes whose sources or instances state a location
+//! is refused, as fontTools' reader refuses it ([`refuse_without_axes`]).
 //! Of two instances with one output file, the later is kept, as fontmake writes each in turn.
 //!
 //! UFOs are staged in temporary folders beside their targets and swapped in once every instance
@@ -29,8 +30,9 @@ use std::path::{Component, Path, PathBuf};
 
 use fontcraft_interp::compat::{self, MasterPairs};
 use fontcraft_interp::{Designspace, GlyphSources, UserLocation};
+use fontcraft_model::plist::xml;
 use fontcraft_model::plist::{Number, Value as PValue};
-use fontcraft_model::{Font, Instance, SourceFormat};
+use fontcraft_model::{Family, Font, Instance, SourceFormat};
 use serde_json::{Map, Value, json};
 
 use super::super::file_io::{self, OutputRequest};
@@ -148,13 +150,40 @@ pub(super) fn instantiate(p: &Params<'_>, input: &Path, req: &OutputRequest) -> 
     Ok(json!({ "results": results, "warnings": warnings }))
 }
 
-/// Refuses a designspace without `<axes>`, as fontTools' reader does ("No axes defined"): its
-/// sources all sit at the one empty location, so there is nothing to interpolate between.
+/// Refuses a designspace without `<axes>` that states a location, as fontTools' reader does ("No
+/// axes defined"). That reader fails on the first `<location>` it reads: one in a location label,
+/// a source, an instance, or an instance's glyph or glyph master. Without axes those locations
+/// cannot be read, so the sources would all sit at one location. A document without axes and
+/// without any location loads in fontTools, and is not refused here. When the read document is
+/// not kept, any designspace without axes is refused.
 pub(super) fn refuse_without_axes(p: &Params<'_>, font: &Font) -> Result<()> {
-    if font.source.format == SourceFormat::Designspace && font.axes.is_empty() {
+    if font.source.format != SourceFormat::Designspace || !font.axes.is_empty() {
+        return Ok(());
+    }
+    let document = font.extra.get(Family::Designspace, "document").and_then(PValue::as_str);
+    let states_location = match document.map(xml::parse) {
+        Some(Ok(doc)) => states_a_location(&doc.root),
+        _ => true,
+    };
+    if states_location {
         return Err(p.bad("the designspace defines no axes, so its sources have no locations to interpolate between"));
     }
     Ok(())
+}
+
+/// Does the designspace `root` have a `<location>` where fontTools' reader reads one?
+fn states_a_location(root: &xml::Element) -> bool {
+    fn children<'a>(e: &'a xml::Element, list: &str, item: &'a str) -> impl Iterator<Item = &'a xml::Element> {
+        e.child(list).into_iter().flat_map(move |l| l.elements().filter(move |c| c.name() == item))
+    }
+    let instances = || children(root, "instances", "instance");
+    let glyphs = || instances().flat_map(|i| children(i, "glyphs", "glyph"));
+    let mut places = children(root, "labels", "label")
+        .chain(children(root, "sources", "source"))
+        .chain(instances())
+        .chain(glyphs())
+        .chain(glyphs().flat_map(|g| children(g, "masters", "master")));
+    places.any(|e| e.child("location").is_some())
 }
 
 /// `interpolateBinaryLayout`: `None` when off, else the folder of the compiled masters it names
@@ -1363,6 +1392,32 @@ mod tests {
         let err = s.execute("font.instantiate", &json!({ "input": ds, "layoutOnly": true, "output": out })).unwrap_err().to_string();
         assert!(err.contains("defines no axes"), "{err}");
         assert!(!dir.join("instances").exists() && !out.exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// fontTools reads a designspace without axes when nothing in it states a location: such a
+    /// document is not refused for its missing axes.
+    #[test]
+    fn instantiate_source_reads_a_designspace_without_axes_or_locations() {
+        let (dir, ds) = source("no-axes-no-locations");
+        std::fs::write(
+            &ds,
+            r#"<?xml version='1.0' encoding='UTF-8'?>
+<designspace format="4.1">
+  <sources>
+    <source filename="Light.ufo" name="Light"/>
+  </sources>
+  <instances>
+    <instance familyname="Test" stylename="Regular" filename="instances/Test-Regular.ufo" postscriptfontname="Test-Regular"/>
+  </instances>
+</designspace>
+"#,
+        )
+        .unwrap();
+        let mut s = Session::new();
+        if let Err(e) = s.execute("font.instantiate", &json!({ "input": ds, "autohint": false })) {
+            assert!(!e.to_string().contains("defines no axes"), "{e}");
+        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 

@@ -216,7 +216,10 @@ Only when at least one axis has a range (`compile.variableOnlyTables`).
 - cvar when the masters' TrueType control values differ (M10.19, `var/cvar.rs`): each other
   master's values are worked out as the default master's `cvt ` is, and their deltas are written
   per master region, rounded half to even one region at a time, all-zero regions left out, as
-  fontTools' varLib does. When the masters' values do not line up (count, zone and stem names, or
+  fontTools' varLib does. A master with Dehint on has no `cvt `; as in fontTools, it is left out
+  (a sparse master) and the other masters still give their regions. A master at a location
+  another master already has adds no region and, when its values differ, gives a warning;
+  fontTools refuses two masters at one location. When the masters' values do not line up (count, zone and stem names, or
   where they come from), fontTools drops the font's hinting; FontCraft writes no cvar, keeps the
   default master's hinting and warns, since those programs still fit the default outlines.
 

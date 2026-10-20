@@ -72,7 +72,7 @@ fn cases() -> Vec<(&'static str, Case, Vec<(Vec<f32>, Vec<i32>)>)> {
 #[test]
 fn cvar_deltas_match_fonttools() {
     for (name, (axes, default, masters), expected) in cases() {
-        let bytes = build_cvar(axes, &default, &masters).unwrap().unwrap();
+        let bytes = build_cvar(axes, &default, &masters, &mut Vec::new()).unwrap().unwrap();
         assert_eq!(tuples(&bytes, axes, default.len()), expected, "{name}");
         if name != "half-unit deltas round to even" {
             for (location, values) in &masters {
@@ -86,13 +86,26 @@ fn cvar_deltas_match_fonttools() {
 
 #[test]
 fn identical_control_values_write_no_cvar() {
-    assert_eq!(build_cvar(1, &[100, 50], &[(vec![1.0], vec![100, 50]), (vec![-1.0], vec![100, 50])]), Ok(None));
-    assert_eq!(build_cvar(1, &[100, 50], &[]), Ok(None));
-    // A master at the default's location adds no region, whatever its values.
-    assert_eq!(build_cvar(1, &[100, 50], &[(vec![0.0], vec![130, 50])]), Ok(None));
-    assert!(build_cvar(1, &[100, 50], &[(vec![1.0], vec![100])]).is_err(), "lengths that differ are refused");
-    assert!(build_cvar(1, &[100], &[(vec![1.0], vec![i16::MAX])]).is_ok());
-    assert!(build_cvar(1, &[i16::MIN], &[(vec![1.0], vec![i16::MAX])]).is_err(), "a delta past 16 bits is refused");
+    let mut w = Vec::new();
+    assert_eq!(build_cvar(1, &[100, 50], &[(vec![1.0], vec![100, 50]), (vec![-1.0], vec![100, 50])], &mut w), Ok(None));
+    assert_eq!(build_cvar(1, &[100, 50], &[], &mut w), Ok(None));
+    assert!(build_cvar(1, &[100, 50], &[(vec![1.0], vec![100])], &mut w).is_err(), "lengths that differ are refused");
+    assert!(build_cvar(1, &[100], &[(vec![1.0], vec![i16::MAX])], &mut w).is_ok());
+    assert!(build_cvar(1, &[i16::MIN], &[(vec![1.0], vec![i16::MAX])], &mut w).is_err(), "a delta past 16 bits is refused");
+    assert!(w.is_empty(), "{w:?}");
+}
+
+#[test]
+fn a_master_at_a_location_already_taken_adds_no_region_and_says_so_when_it_differs() {
+    let mut w = Vec::new();
+    assert_eq!(build_cvar(1, &[100, 50], &[(vec![0.0], vec![100, 50])], &mut w), Ok(None));
+    assert!(w.is_empty(), "the same values as the default's: {w:?}");
+    assert_eq!(build_cvar(1, &[100, 50], &[(vec![0.0], vec![130, 50])], &mut w), Ok(None));
+    assert!(w.len() == 1 && w[0].contains("default master"), "{w:?}");
+    let mut w = Vec::new();
+    let bytes = build_cvar(1, &[100], &[(vec![1.0], vec![120]), (vec![1.0], vec![140])], &mut w).unwrap().unwrap();
+    assert_eq!(tuples(&bytes, 1, 1), vec![(vec![1.0], vec![20])], "the first master at a location gives its region");
+    assert!(w.len() == 1 && w[0].contains("earlier master"), "{w:?}");
 }
 
 /// A Snap of the top right node of a rectangle to its zone.
@@ -137,6 +150,46 @@ fn two_masters(bold_cap_height: f64) -> Font {
         g.layers.push(layer);
     }
     f
+}
+
+/// [`two_masters`] with Bold's cap height at 720 and a third master, Medium, halfway between,
+/// drawn like Regular; `medium_options` are its TTFAutohint options.
+fn three_masters(medium_options: Option<&str>) -> Font {
+    use fontcraft_model::Param;
+    use fontcraft_model::plist::{Str, Value};
+    let mut f = two_masters(720.0);
+    let masters = std::sync::Arc::make_mut(&mut f.masters);
+    let mut medium = masters[0].clone();
+    medium.id = "m03".into();
+    medium.name = "Medium".into();
+    medium.location = vec![150.0];
+    if let Some(text) = medium_options {
+        medium.params.0.push(Param::new(fontcraft_hinting::settings::TTF_AUTOHINT_OPTIONS, Value::String(Str::new(text))));
+    }
+    masters.push(medium);
+    for i in 0..f.glyphs.len() {
+        let mut g = f.glyphs.get_mut_at(i).unwrap();
+        let mut layer = g.layers[0].clone();
+        layer.id = "m03".into();
+        layer.master = "m03".into();
+        layer.info.hints.clear();
+        g.layers.push(layer);
+    }
+    f
+}
+
+#[test]
+fn a_master_with_dehint_on_is_left_out_of_cvar() {
+    let autohint = Options { hinting: crate::HintingOptions { autohint: true, ..Default::default() }, ..Options::default() };
+    let peaks = |f: &Font| {
+        let var = compile_variable(f, None, &autohint, &VariableOptions::default()).unwrap();
+        let font = FontRef::new(&var.compiled.bytes).unwrap();
+        let entries = font.cvt().unwrap().len();
+        let cvar = font.table_data(skrifa::Tag::new(b"cvar")).unwrap_or_else(|| panic!("a cvar table: {:?}", var.compiled.warnings));
+        tuples(cvar.as_bytes(), 1, entries).into_iter().map(|(peak, _)| peak).collect::<Vec<_>>()
+    };
+    assert_eq!(peaks(&three_masters(None)), vec![vec![0.5], vec![1.0]], "Medium's zones differ from the interpolated ones");
+    assert_eq!(peaks(&three_masters(Some("--dehint"))), vec![vec![1.0]], "Medium has no control values; Bold still varies them");
 }
 
 #[test]
