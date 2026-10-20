@@ -245,6 +245,7 @@ fn take_font_info(root: &mut Dict) -> FontInfo {
         settings,
         date: crate::take_plain_string(root, "date"),
         user_data: crate::info::take_user_data(root),
+        style_map_stated: None,
     }
 }
 

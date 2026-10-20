@@ -31,6 +31,7 @@
 //! | [`metrics`] | metrics report | M12.16 |
 //! | [`subset`] | subsetter | M12.17–M12.19 |
 //! | [`instance`] | instancer | M12.20, M12.21 |
+//! | [`interpolate_layout`] | layout of an instance from compiled masters | M12.22c |
 //! | [`merge`] | merge | M12.23 |
 //! | [`transform`] | transform, units per em | M12.24 |
 //! | [`optimize`] | optimize | M12.26 |
@@ -54,6 +55,7 @@ pub mod features;
 pub mod fontdame;
 pub mod goadb;
 pub mod instance;
+pub mod interpolate_layout;
 mod layout_budget;
 pub mod layout_install;
 pub mod limits;

@@ -1225,6 +1225,16 @@ pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
         }
         patch(&mut info, key, value);
     }
+    // Style-map names the font's instance left to be computed are not written, as in fontmake's
+    // instance UFOs.
+    if let Some(stated) = font.info.style_map_stated {
+        if !stated.family {
+            patch(&mut info, "styleMapFamilyName", None);
+        }
+        if !stated.style {
+            patch(&mut info, "styleMapStyleName", None);
+        }
+    }
     if had_info || !info.is_empty() {
         out.insert(FONTINFO.into(), plist(FONTINFO, &Value::Dict(info)));
     }

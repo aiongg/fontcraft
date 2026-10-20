@@ -1159,6 +1159,8 @@ normalised; overlap removal is opt-in. `--to ttf|otf` compiles them in the same 
 --instances`. Glyphs whose masters are not compatible are skipped with a warning, or stop the run with
 `--strict`.
 
+**Layout only.** `--layout-only` reads only the designspace and its compiled masters: each source names its master font or TTX file, or `--master-finder` turns the source's file name into the master's (`{fullname}`, `{dirname}`, `{basename}`, `{stem}`, `{ext}`; default `master_ttf_interpolatable/{stem}.ttf`, relative to the designspace's folder). The result is the base master with its `GPOS` interpolated at the location, as fontTools' `varLib.interpolate_layout` makes it; `GDEF`, `GSUB` and every other table stay the base master's. Masters whose `GPOS` tables differ in structure are refused.
+
 **Extrapolation.** Locations are clamped to the axis range unless `--no-clamp`. Extrapolation needs the
 masters themselves and is only possible from a source or for CFF2 and multiple-master input.
 

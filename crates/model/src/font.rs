@@ -353,8 +353,22 @@ pub struct Instance {
     pub interpolation: Vec<(String, f64)>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub manual_interpolation: bool,
+    /// Which style-map names the source states for this instance (a designspace may leave them
+    /// out); `None`: both. A font made from the instance takes it into [`FontInfo`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub style_map_stated: Option<StyleMapStated>,
     #[serde(default, skip_serializing_if = "Extra::is_empty")]
     pub extra: Extra,
+}
+
+/// Which of the two style-map names (family, style) a source states. The others are computed:
+/// compilers derive them from the style name, and a UFO leaves them out.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StyleMapStated {
+    #[serde(default)]
+    pub family: bool,
+    #[serde(default)]
+    pub style: bool,
 }
 
 impl Default for Instance {
@@ -376,6 +390,7 @@ impl Default for Instance {
             link_style: None,
             interpolation: Vec::new(),
             manual_interpolation: false,
+            style_map_stated: None,
             extra: Extra::new(),
         }
     }
@@ -446,6 +461,10 @@ pub struct FontInfo {
     pub date: Option<String>,
     #[serde(default, skip_serializing_if = "UserData::is_empty")]
     pub user_data: UserData,
+    /// Which style-map names are stated, when the font was made from an instance that leaves some
+    /// to be computed; `None`: both. The UFO writer leaves the others out of `fontinfo.plist`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub style_map_stated: Option<StyleMapStated>,
 }
 
 impl FontInfo {

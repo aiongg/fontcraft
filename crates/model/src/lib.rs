@@ -46,7 +46,7 @@ pub use extra::{Extra, ExtraEntry, Family};
 pub use features::{Features, Group, Snippet};
 pub use font::{
     AlignmentZone, Axis, AxisLabel, AxisRange, FileStore, Font, FontInfo, GlyphMut, GlyphTable, Guide, Instance, LangName, Master, MetricDef,
-    MetricValue, NameParts, NumberDef, Settings, Source, SourceFormat, StemDef, StyleClass, metric,
+    MetricValue, NameParts, NumberDef, Settings, Source, SourceFormat, StemDef, StyleClass, StyleMapStated, metric,
 };
 pub use fontcraft_glyphdata as glyphdata;
 pub use fontcraft_plist as plist;
