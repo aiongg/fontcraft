@@ -2,8 +2,9 @@
 //! horizontal [`Layout`] shaped through the full preview font (`GSUB` and `GPOS`, the generated
 //! kerning and marks included), as an application shapes text.
 //!
-//! The layout gives the lines (broken on the glyphs' own widths and the document's kerning) and
-//! the UAX #9 level of every item. [`shape_line`] then shapes each run of one level with the
+//! The layout gives the lines (broken at UAX #14 opportunities on the widths
+//! [`crate::measure`] shaped, or on the glyphs' own widths and the document's kerning until a
+//! preview font is ready) and the UAX #9 level of every item. [`shape_line`] then shapes each run of one level with the
 //! script's default features and nothing else, in the run's own direction, so a Latin word in
 //! right-to-left text is shaped left to right; each run is split into script runs first. Advances
 //! come live from the model, kerning and mark positions from the compiled font, so width edits

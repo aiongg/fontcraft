@@ -4,13 +4,17 @@
 //! The text is laid out with `textlayout`, as Edit View text is: characters map to glyphs by
 //! Unicode value, the document's kerning applies, the Unicode Bidirectional Algorithm orders
 //! mixed directions within the writing direction (`textlayout::bidi`), and lines wrap at the
-//! width of the window (the height, in vertical text). Characters the font lacks are drawn in
-//! the interface font. Only the lines in view are drawn.
+//! width of the window (the height, in vertical text) at the break opportunities of the Unicode
+//! Line Breaking Algorithm (`textlayout::linebreak`). Characters the font lacks are drawn in the
+//! interface font. Only the lines in view are drawn.
 //!
 //! Horizontal text is then shaped (`textPreview.shaping`): the lines in view, and up to two
 //! screens around them, go through a full preview font of the shown master (`GSUB` and `GPOS`
 //! with the generated kerning and marks) with the script's default features, each run of one
-//! direction on its own (`textlayout::shape_line`). The font is built on a thread of its own:
+//! direction on its own (`textlayout::shape_line`). Lines break on widths shaped through the same
+//! font (`textlayout::measure`), kept by word in a cache that lasts while the font and the
+//! document stay the same, so kerning and substitutions decide where lines end. The font is built
+//! on a thread of its own:
 //! at once when the window first needs it, then each time the document changes and editing has
 //! paused for [`REBUILD_PAUSE`] seconds. Until a font is ready, and when it cannot be built, the
 //! text shows as laid out by code point, with the reason under the text.
@@ -40,7 +44,8 @@ use fontcraft_model::Font;
 use fontcraft_render::{Style, render_path};
 use fontcraft_spacing::kerning::KernIndex;
 use fontcraft_textlayout::{
-    Charmap, Direction, Embedding, Item, KerningMode, LENGTH_RANGE, Layout, MAX_PREVIEW_ITEMS, Options, Placed, PreviewShaper, ShapedLine, Text, bidi,
+    Charmap, Direction, Embedding, Item, KerningMode, LENGTH_RANGE, Layout, MAX_PREVIEW_ITEMS, Measure, Options, Placed, PreviewShaper, ShapedLine,
+    Text, WidthCache, bidi,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
@@ -335,6 +340,9 @@ pub struct Cache {
     texture: Option<TextureHandle>,
     outlines: CompositeCache,
     font: FontSlot,
+    /// The widths shaped through the preview font that lines break on, for one document revision,
+    /// master and font.
+    widths: Option<(WidthsKey, Arc<WidthCache>)>,
     /// The shaped lines of the current layout and preview font, by line index.
     shaped_key: Option<u64>,
     shaped: HashMap<usize, Arc<ShapedLine>>,
@@ -391,6 +399,8 @@ pub struct Drawn {
 
 /// What a preview font is built for: the document's id and revision, and the master.
 type FontKey = (u64, u64, String);
+/// What shaped widths hold for: the document's id and revision, the master and the font.
+type WidthsKey = (u64, u64, String, usize);
 /// A built preview font's shaper, or why it could not be built.
 type FontResult = Result<Arc<PreviewShaper>, String>;
 /// Where a build on another thread leaves its result.
@@ -655,10 +665,18 @@ pub fn base_is_rtl(text: &str, direction: BaseDirection) -> bool {
     }
 }
 
-/// Lays the preview text out in `master`, lines wrapping at `line_width` font units: one item
-/// per character, kerning on, runs of the other direction and the ranges with their own direction
-/// ordered by `textlayout::bidi` within each line.
-pub fn lay_out(font: &Font, master: &str, state: &TextPreviewState, line_width: f64, index: Option<&KernIndex>) -> Result<(Text, Layout), String> {
+/// Lays the preview text out in `master`, lines wrapping at `line_width` font units at UAX #14
+/// break opportunities: one item per character, kerning on, measured through the preview font
+/// with `measure`, runs of the other direction and the ranges with their own direction ordered by
+/// `textlayout::bidi` within each line.
+pub fn lay_out(
+    font: &Font,
+    master: &str,
+    state: &TextPreviewState,
+    line_width: f64,
+    index: Option<&KernIndex>,
+    measure: Option<Measure<'_>>,
+) -> Result<(Text, Layout), String> {
     let map = Charmap::new(font);
     let items: Vec<Item> = state.text.chars().map(|c| map.item(c)).collect();
     let mut text = Text::with_limit(MAX_CHARS).map_err(|e| e.to_string())?;
@@ -671,7 +689,17 @@ pub fn lay_out(font: &Font, master: &str, state: &TextPreviewState, line_width: 
     };
     let line_width = line_width.clamp(*LENGTH_RANGE.start(), *LENGTH_RANGE.end());
     let embeddings: Vec<Embedding> = state.runs.iter().map(|r| Embedding { items: r.start..r.end, rtl: r.direction == BaseDirection::Rtl }).collect();
-    let options = Options { direction, kerning: KerningMode::Kerning, line_width, index, bidi: true, embeddings: &embeddings, ..Options::default() };
+    let options = Options {
+        direction,
+        kerning: KerningMode::Kerning,
+        line_width,
+        index,
+        bidi: true,
+        embeddings: &embeddings,
+        break_opportunities: true,
+        measure,
+        ..Options::default()
+    };
     let layout = fontcraft_textlayout::layout(font, master, &text, &options).map_err(|e| e.to_string())?;
     Ok((text, layout))
 }
@@ -1151,12 +1179,29 @@ fn area(
     let span = ((span / 8.0).floor() * 8.0).max(8.0);
     let line_width = f64::from(span) / f64::from(scale);
 
+    // The preview font, and the widths shaped through it that lines break on.
+    let now = ui.input(|i| i.time);
+    let font_key: FontKey = (doc.0, doc.1, master.to_string());
+    let shaper = if vertical { None } else { tp.cache.font.step(&font_key, now, session, ui.ctx()) };
+    let shaper_id = shaper.as_ref().map(|s| Arc::as_ptr(s) as usize);
+    match shaper_id {
+        None => tp.cache.widths = None,
+        Some(id) => {
+            let widths_key: WidthsKey = (doc.0, doc.1, master.to_string(), id);
+            if tp.cache.widths.as_ref().is_none_or(|(k, _)| *k != widths_key) {
+                tp.cache.widths = Some((widths_key, Arc::new(WidthCache::new())));
+            }
+        }
+    }
+
     let mut h = std::collections::hash_map::DefaultHasher::new();
-    (doc, tp.revision, master, tp.orientation, tp.direction, &tp.runs, line_width.to_bits()).hash(&mut h);
+    (doc, tp.revision, master, tp.orientation, tp.direction, &tp.runs, line_width.to_bits(), shaper_id).hash(&mut h);
     let key = h.finish();
     if tp.cache.layout_key != Some(key) {
         tp.cache.layout_key = Some(key);
-        match lay_out(font, master, tp, line_width, index) {
+        let widths = tp.cache.widths.as_ref().map(|(_, c)| c.clone());
+        let measure = shaper.as_deref().zip(widths.as_deref()).map(|(shaper, cache)| Measure { shaper, cache });
+        match lay_out(font, master, tp, line_width, index, measure) {
             Ok((text, layout)) => {
                 tp.cache.text = Some(Arc::new(text));
                 tp.cache.layout = Some(Arc::new(layout));
@@ -1177,12 +1222,9 @@ fn area(
         tp.cache.matches = Arc::new(find_matches(&tp.text, &tp.find.query, tp.find.ignore_case, tp.find.matching));
     }
 
-    // The preview font, and the shaped lines kept for this layout and font.
-    let now = ui.input(|i| i.time);
-    let font_key: FontKey = (doc.0, doc.1, master.to_string());
-    let shaper = if vertical { None } else { tp.cache.font.step(&font_key, now, session, ui.ctx()) };
+    // The shaped lines kept for this layout and font.
     let mut sh = std::collections::hash_map::DefaultHasher::new();
-    (key, shaper.as_ref().map(|s| Arc::as_ptr(s) as usize)).hash(&mut sh);
+    (key, shaper_id).hash(&mut sh);
     let shaped_key = sh.finish();
     if tp.cache.shaped_key != Some(shaped_key) {
         tp.cache.shaped_key = Some(shaped_key);

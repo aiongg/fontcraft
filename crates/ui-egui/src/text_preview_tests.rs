@@ -314,7 +314,7 @@ fn text_preview_holds_a_long_text_draws_only_the_lines_in_view_and_refuses_more_
 }
 
 /// `docs/plans/M5.md` § 5: Text Preview lays out 1,000,000 characters in under 500 ms (on Inter
-/// Roman when the corpus is fetched). Run it in release:
+/// Roman when the corpus is fetched), also when its lines break on shaped widths. Run it in release:
 /// `cargo test --release -p fontcraft-ui-egui text_preview_lays_out -- --ignored --nocapture`.
 #[test]
 #[ignore = "speed measure"]
@@ -343,14 +343,32 @@ fn text_preview_lays_out_a_million_characters_within_the_target() {
     let mut best = std::time::Duration::MAX;
     for _ in 0..3 {
         let start = std::time::Instant::now();
-        let (_, layout) = text_preview::lay_out(&font, &master, state, 20_000.0, Some(&index)).unwrap();
+        let (_, layout) = text_preview::lay_out(&font, &master, state, 20_000.0, Some(&index), None).unwrap();
         let took = start.elapsed();
         best = best.min(took);
         assert_eq!(layout.placed.len(), MAX_CHARS);
         println!("{} glyphs in the font, {} lines: {took:?}", font.glyphs.len(), layout.lines.len());
     }
+    // Lines broken on widths shaped through the preview font, each time with an empty cache.
+    use fontcraft_engine::compile::preview::{PreviewKind, layout_font_with};
+    use fontcraft_textlayout::{Measure, PreviewShaper, WidthCache};
+    let built = layout_font_with(&font, &master, PreviewKind::Full, &text_preview::build_options(&app.session)).unwrap();
+    let tags: Vec<_> = built.features.iter().map(|f| f.tag).collect();
+    let shaper = PreviewShaper::new(Arc::from(built.bytes.as_slice()), &built.glyph_order, &built.private_use, &tags).unwrap();
+    let mut shaped = std::time::Duration::MAX;
+    for _ in 0..3 {
+        let cache = WidthCache::new();
+        let start = std::time::Instant::now();
+        let (_, layout) =
+            text_preview::lay_out(&font, &master, state, 20_000.0, Some(&index), Some(Measure { shaper: &shaper, cache: &cache })).unwrap();
+        let took = start.elapsed();
+        shaped = shaped.min(took);
+        assert_eq!(layout.placed.len(), MAX_CHARS);
+        println!("on shaped widths, {} lines, {} segments shaped: {took:?}", layout.lines.len(), cache.len());
+    }
     if !cfg!(debug_assertions) {
         assert!(best.as_millis() < 500, "1,000,000 characters took {best:?}");
+        assert!(shaped.as_millis() < 500, "1,000,000 characters on shaped widths took {shaped:?}");
     }
 }
 

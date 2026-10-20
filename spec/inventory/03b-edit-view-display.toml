@@ -2480,11 +2480,10 @@ milestone = "M8"
 summary = "Text Preview shapes its text as an application would: every feature that a shaper turns on by default for the script applies, positioning features included, with the generated kerning and mark attachment of the master or instance shown."
 ref = "Edit View › Entering Text › Text Preview"
 status = "handbook"
-notes = "Documented, not yet observed. The reference uses the operating system's shaper; FontCraft uses its own (M8 planning pass, `docs/plans/M8.md` § 3): a full preview font of the shown master (`GSUB` and `GPOS`, generated kerning and marks included) built on a thread of its own, harfrust with the script's default features and no others, each run of one bidirectional level shaped in its own direction (`crates/textlayout/src/line_shape.rs`). Advances come live from the model. Lines are broken on the layout by code point, then the lines in view and up to two screens around them are shaped. Until the font is built, and when it cannot be built, the text is laid out by code point and the reason shows under it."
+notes = "Documented, not yet observed. The reference uses the operating system's shaper; FontCraft uses its own (M8 planning pass, `docs/plans/M8.md` § 3): a full preview font of the shown master (`GSUB` and `GPOS`, generated kerning and marks included) built on a thread of its own, harfrust with the script's default features and no others, each run of one bidirectional level shaped in its own direction (`crates/textlayout/src/line_shape.rs`). Advances come live from the model. Lines break on widths shaped through the same font (row `textPreview.lineBreaking`), then the lines in view and up to two screens around them are shaped. Until the font is built, and when it cannot be built, the text is laid out by code point and the reason shows under it."
 guesses = [
   "The preview's font is rebuilt from the current feature code, kerning and anchors after edits, once editing pauses for half a second, without pressing Compile; editing a feature without compiling while the reference app's Text Preview is open would settle it.",
   "Text is split into script runs by Script_Extensions, and characters without a script (Common, Inherited, unassigned and private-use) stay in the run around them, so a glyph typed by name is shaped with its neighbours; typing a glyph name between two letters that form a contextual substitution in the reference app would settle it.",
-  "Lines are broken on the glyphs' own widths and the document's kerning before shaping, so a shaped line can end slightly short of or past the window's edge; a long Arabic paragraph in the reference app's Text Preview, compared at its line ends, would settle how the reference breaks shaped text.",
   "Vertical text is not shaped: it is laid out by code point with the vertical widths and origins; vertical text with a `vert` feature in the reference app would settle it.",
   "While a new font is built, the text stays shaped with the last font built for the same master; when the feature code does not compile, the text is laid out by code point with the compiler's message under it. Breaking a feature in the reference app while Text Preview is open would settle what it shows.",
 ]
@@ -2507,6 +2506,25 @@ guesses = [
 ]
 observe = [
   "In F2 (Arabic), type \"12 34\" inside right-to-left text in Text Preview: note the order of the digits.",
+]
+
+[[behavior]]
+id = "textPreview.lineBreaking"
+area = "proofing"
+milestone = "M8"
+summary = "Text Preview wraps its lines at the width of the window where the Unicode Line Breaking Algorithm (UAX #14) allows a break, measuring the text as shaped, as the operating system's text system does."
+ref = "Edit View › Entering Text › Text Preview"
+status = "handbook"
+notes = "Documented, not yet observed: the handbook says the field draws through the operating system's text engine, whose text views wrap words at the view's width. UAX #14 in `crates/textlayout/src/linebreak.rs`, with the Line_Break classes of icu_properties: a line may end after spaces and hyphens and between ideographs, never before closing punctuation, an exclamation mark or small kana. Hard line breaks (a line break, U+2028) always end a line, and spaces at the end of a line hang past the width. The paragraph's bidirectional levels are resolved first, the lines are broken, then each line is reordered (UAX #9). Widths come from the full preview font (`crates/textlayout/src/measure.rs`), so kerning and substitutions decide where a line ends; until the font is built, and when it cannot be built, the glyphs' own widths and the document's kerning do."
+guesses = [
+  "A word wider than the line breaks before the cluster that overflows, never inside a cluster (a base and its marks, a ligature); a word wider than the reference app's Text Preview window would settle where it breaks.",
+  "The text is measured in segments between break opportunities, so a kerning pair or a contextual substitution between a space and the next word does not move a break (the line is then shaped whole); a font with a space-to-letter kerning pair at a line end in the reference app would settle it.",
+  "Korean breaks between syllables as UAX #14 gives it, not only at spaces; Korean text in the reference app's Text Preview would settle it.",
+  "Thai, Lao, Khmer and Myanmar text break only at spaces and punctuation, without a dictionary; a long Thai sentence in the reference app would settle it.",
+  "A soft hyphen allows a break, and no hyphen is drawn at the end of the line; text with soft hyphens in the reference app would settle it.",
+]
+observe = [
+  "Type a long paragraph into Text Preview and narrow the window: note where lines end around a closing parenthesis after a space, a hyphenated word and a word wider than the window.",
 ]
 
 [[command]]

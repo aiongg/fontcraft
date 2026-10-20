@@ -403,3 +403,54 @@ fn cursive_attachment_joins_entry_to_exit_in_right_to_left_text() {
     let ltr = layout(&f, "m01", &t, &Options { cursive: true, ..Options::default() }).unwrap();
     assert!(ltr.placed.iter().all(|p| !p.cursive && p.y == 0.0), "left-to-right text is not attached");
 }
+
+#[test]
+fn break_opportunities_keep_closing_punctuation_and_clusters_on_their_line() {
+    let mut f = bidi_font();
+    f.add_glyph("macroncomb", vec![0x304], 300.0).unwrap();
+    let opts = Options { line_height: Some(1000.0), break_opportunities: true, ..Options::default() };
+    let ranges = |l: &Layout| l.lines.iter().map(|line| line.items.clone()).collect::<Vec<_>>();
+
+    // a b ␣ c d ␣ ) at 600, 600, 250, 600, 600, 250, 500 (missing): the parenthesis overflows
+    // 3,000, and no line may start with it, so the line breaks after the first space.
+    let t = text(&f, "ab cd )");
+    let l = layout(&f, "m01", &t, &Options { line_width: 3000.0, ..opts }).unwrap();
+    assert_eq!(ranges(&l), [0..3, 3..7]);
+    let after_space = layout(&f, "m01", &t, &Options { line_width: 3000.0, break_opportunities: false, ..opts }).unwrap();
+    assert_eq!(ranges(&after_space), [0..6, 6..7], "without opportunities the line breaks after the last space");
+
+    // A word wider than the line breaks before the cluster that overflows: d with its macron.
+    let t = text(&f, "abcd\u{304}e");
+    let l = layout(&f, "m01", &t, &Options { line_width: 2500.0, ..opts }).unwrap();
+    assert_eq!(ranges(&l), [0..3, 3..6]);
+    assert_eq!((l.placed[3].x, l.placed[3].y), (0.0, -1000.0));
+
+    // A hard break other than a line break ends its line too.
+    let t = text(&f, "ab\u{2028}cd");
+    let l = layout(&f, "m01", &t, &opts).unwrap();
+    assert_eq!(ranges(&l), [0..3, 3..5]);
+}
+
+#[test]
+fn a_mixed_direction_paragraph_breaks_first_and_each_line_is_reordered_on_its_own() {
+    let f = bidi_font();
+    // a b ␣ alef bet ␣ gimel alef ␣ c d in left-to-right text.
+    let t = text(&f, "ab \u{5d0}\u{5d1} \u{5d2}\u{5d0} cd");
+    let opts = Options { bidi: true, break_opportunities: true, line_height: Some(1000.0), ..Options::default() };
+    let x = |l: &Layout, i: usize| l.placed[i].x;
+
+    // On one line the Hebrew words form one run, reversed whole: the second word stands left of
+    // the first.
+    let one = layout(&f, "m01", &t, &opts).unwrap();
+    assert_eq!(one.lines.len(), 1);
+    assert!(x(&one, 6) < x(&one, 3), "{:?}", one.placed.iter().map(|p| p.x).collect::<Vec<_>>());
+
+    // Broken after the first Hebrew word, each line reverses only its own part of the run.
+    let l = layout(&f, "m01", &t, &Options { line_width: 3000.0, ..opts }).unwrap();
+    let ranges: Vec<_> = l.lines.iter().map(|line| line.items.clone()).collect();
+    assert_eq!(ranges, [0..6, 6..11]);
+    let xs: Vec<f64> = l.placed.iter().map(|p| p.x).collect();
+    assert_eq!(xs, [0.0, 600.0, 1200.0, 1900.0, 1450.0, 2400.0, 500.0, 0.0, 900.0, 1150.0, 1750.0]);
+    assert_eq!(l.levels.as_deref(), Some(&[0, 0, 0, 1, 1, 0, 1, 1, 0, 0, 0][..]));
+    assert_eq!(l.placed[6].y, -1000.0);
+}

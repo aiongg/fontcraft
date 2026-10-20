@@ -1487,6 +1487,7 @@ dependencies = [
  "fontcraft-model",
  "fontcraft-shaping",
  "fontcraft-spacing",
+ "icu_properties",
  "thiserror 2.0.21",
 ]
 

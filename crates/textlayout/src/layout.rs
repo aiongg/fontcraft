@@ -12,6 +12,8 @@ use fontcraft_spacing::metrics_source;
 
 use crate::bidi::{self, Embedding};
 use crate::cursive;
+use crate::linebreak::{self, Break};
+use crate::measure::{self, Measure};
 use crate::shape::{Shaping, shape_items};
 use crate::text::{Item, Text};
 
@@ -85,6 +87,14 @@ pub struct Options<'a> {
     /// Edit View: in right-to-left text, attach each glyph's `entry` anchor to the `exit` anchor
     /// of the glyph before it ([`crate::cursive`]).
     pub cursive: bool,
+    /// Text Preview: lines break at the opportunities of the Unicode Line Breaking Algorithm
+    /// ([`crate::linebreak`]), and a word wider than the line breaks between two clusters. Off,
+    /// they break after the last space of the line, else before the glyph that overflows.
+    pub break_opportunities: bool,
+    /// Text Preview, horizontal text: the items are measured through the full preview font
+    /// ([`crate::measure`]) before lines break, so kerning and substitutions decide where a line
+    /// ends. Measured items do not kern from the document's kerning.
+    pub measure: Option<Measure<'a>>,
 }
 
 impl Default for Options<'_> {
@@ -102,6 +112,8 @@ impl Default for Options<'_> {
             embeddings: &[],
             shaping: None,
             cursive: false,
+            break_opportunities: false,
+            measure: None,
         }
     }
 }
@@ -377,6 +389,27 @@ pub fn layout(font: &Font, master: &str, text: &Text, options: &Options<'_>) -> 
             *m = first;
         }
     }
+    // Text Preview: break opportunities, and the items measured by shaping.
+    let opportunities: Option<Vec<Break>> =
+        (options.break_opportunities || options.measure.is_some()).then(|| linebreak::item_opportunities(text.items()));
+    let mut measured: Vec<bool> = Vec::new();
+    let mut joined: Vec<bool> = Vec::new();
+    if let (Some(m), Some(breaks)) = (options.measure.as_ref(), opportunities.as_deref())
+        && direction != Direction::Vertical
+    {
+        let shaped = measure::measure(font, master, text.items(), levels.as_deref(), u8::from(direction == Direction::Rtl), breaks, m);
+        if shaping_error.is_none() {
+            shaping_error = shaped.error;
+        }
+        for (item, advance) in items.iter_mut().zip(&shaped.advances) {
+            if let Some(a) = advance {
+                item.advance = finite_or_zero(f64::from(*a));
+                item.width = item.advance;
+            }
+        }
+        measured = shaped.advances.iter().map(Option::is_some).collect();
+        joined = shaped.joined;
+    }
     // The nearest item before each one that is not merged into another: kerning and cursive
     // attachment reach across a ligature's merged components.
     let mut before: Vec<Option<usize>> = Vec::with_capacity(items.len());
@@ -408,6 +441,10 @@ pub fn layout(font: &Font, master: &str, text: &Text, options: &Options<'_>) -> 
             return shift;
         }
         let Some(p) = (if options.shaping.is_some() { before.get(i).copied().flatten() } else { i.checked_sub(1) }) else { return 0.0 };
+        // The shaped widths hold the compiled kerning already.
+        if measured.get(i).copied().unwrap_or(false) && measured.get(p).copied().unwrap_or(false) {
+            return 0.0;
+        }
         let table = match levels {
             None => table,
             Some(levels) => {
@@ -428,15 +465,23 @@ pub fn layout(font: &Font, master: &str, text: &Text, options: &Options<'_>) -> 
     };
     let kerns: Vec<f64> = (0..items.len()).map(|i| kern(i, levels.as_deref())).collect();
 
-    // Lines: greedy, breaking after the last space of a line that overflows, else before the
-    // glyph that overflows. A line keeps at least one item, and a space may hang past the width.
+    // Lines: greedy. A line breaks after the last space of a line that overflows, else before the
+    // glyph that overflows; with break opportunities, at the last opportunity, else before the
+    // cluster that overflows. A line keeps at least one item (one cluster), and a space may hang
+    // past the width.
     let n = items.len();
     let wrap = !options.single_line;
+    let breaks = opportunities.as_deref();
+    // Whether item `i` belongs to the cluster of the item before it.
+    let continues = |i: usize| i.checked_sub(1).and_then(|p| breaks?.get(p)) == Some(&Break::Never) || joined.get(i).copied().unwrap_or(false);
     let mut offsets = vec![0.0; n];
     let mut used = vec![0.0; n];
     let mut line_of = vec![0usize; n];
     let mut lines: Vec<(Range<usize>, f64)> = Vec::new();
     let (mut i, mut start, mut pen, mut last_space) = (0usize, 0usize, 0.0f64, None::<usize>);
+    // With break opportunities: where the line may last end, and where the cluster of the last
+    // item placed begins.
+    let (mut last_opportunity, mut cluster) = (None::<usize>, 0usize);
     while let Some(m) = items.get(i) {
         if m.is_break && wrap {
             if let (Some(o), Some(l)) = (offsets.get_mut(i), line_of.get_mut(i)) {
@@ -444,19 +489,24 @@ pub fn layout(font: &Font, master: &str, text: &Text, options: &Options<'_>) -> 
                 *l = lines.len();
             }
             lines.push((start..i + 1, pen));
-            (start, pen, last_space) = (i + 1, 0.0, None);
+            (start, pen, last_space, last_opportunity) = (i + 1, 0.0, None, None);
             i += 1;
             continue;
         }
         let k = if i == start { 0.0 } else { kerns.get(i).copied().unwrap_or(0.0) };
         let end = pen + k + m.advance;
         if wrap && end > width_limit && i > start && !m.is_space {
-            let b = last_space.map_or(i, |s| s + 1);
-            let length = b.checked_sub(1).and_then(|p| Some(offsets.get(p)? + items.get(p)?.advance)).unwrap_or(pen);
-            lines.push((start..b, length));
-            (start, pen, last_space) = (b, 0.0, None);
-            i = b;
-            continue;
+            let b = match breaks {
+                None => last_space.map_or(i, |s| s + 1),
+                Some(_) => last_opportunity.unwrap_or(if continues(i) { cluster } else { i }),
+            };
+            if b > start {
+                let length = b.checked_sub(1).and_then(|p| Some(offsets.get(p)? + items.get(p)?.advance)).unwrap_or(pen);
+                lines.push((start..b, length));
+                (start, pen, last_space, last_opportunity) = (b, 0.0, None, None);
+                i = b;
+                continue;
+            }
         }
         if let (Some(o), Some(u), Some(l)) = (offsets.get_mut(i), used.get_mut(i), line_of.get_mut(i)) {
             *o = pen + k;
@@ -466,6 +516,18 @@ pub fn layout(font: &Font, master: &str, text: &Text, options: &Options<'_>) -> 
         pen = end;
         if m.is_space {
             last_space = Some(i);
+        }
+        if i == start || !continues(i) {
+            cluster = i;
+        }
+        match breaks.and_then(|b| b.get(i)) {
+            Some(Break::Allowed) => last_opportunity = Some(i + 1),
+            // A hard break other than a line break item (U+2028, a vertical tab).
+            Some(Break::Mandatory) if wrap => {
+                lines.push((start..i + 1, pen));
+                (start, pen, last_space, last_opportunity) = (i + 1, 0.0, None, None);
+            }
+            _ => {}
         }
         i += 1;
     }

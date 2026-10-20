@@ -1,7 +1,8 @@
 //! Text Preview shaping and bidi (`textPreview.shaping`, `textPreview.unicodeBidi`): Arabic takes
 //! its joining forms and its marks sit on their anchors, a Latin word in right-to-left text is
 //! shaped left to right with the compiled kerning, numbers in right-to-left text are ordered as
-//! UAX #9 orders them, and the preview font is built again once editing pauses.
+//! UAX #9 orders them, the preview font is built again once editing pauses, and lines break on
+//! shaped widths at UAX #14 opportunities (`textPreview.lineBreaking`).
 
 use std::cell::Cell;
 
@@ -182,7 +183,7 @@ fn text_preview_builds_its_font_again_once_editing_pauses() {
 #[ignore = "speed measure"]
 fn text_preview_shapes_a_page_of_a_long_text_within_the_target() {
     use fontcraft_engine::compile::preview::{PreviewKind, layout_font_with};
-    use fontcraft_textlayout::{PreviewShaper, shape_line};
+    use fontcraft_textlayout::{Measure, PreviewShaper, WidthCache, shape_line};
 
     let mut app = FontcraftApp::default();
     let inter = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus/inter/src/Inter-Roman.glyphspackage");
@@ -213,13 +214,18 @@ fn text_preview_shapes_a_page_of_a_long_text_within_the_target() {
     let mut plain = state.clone();
     plain.text = std::sync::Arc::from(text.replace(|c: char| ('\u{5d0}'..='\u{5ea}').contains(&c), "x"));
     let (mut bidi, mut ltr, mut page) = (std::time::Duration::MAX, std::time::Duration::MAX, std::time::Duration::MAX);
+    let mut measured = std::time::Duration::MAX;
     for _ in 0..3 {
         let t = std::time::Instant::now();
-        let (laid, layout) = text_preview::lay_out(&font, &master, state, 20_000.0, Some(&index)).unwrap();
+        let (laid, layout) = text_preview::lay_out(&font, &master, state, 20_000.0, Some(&index), None).unwrap();
         bidi = bidi.min(t.elapsed());
         let t = std::time::Instant::now();
-        text_preview::lay_out(&font, &master, &plain, 20_000.0, Some(&index)).unwrap();
+        text_preview::lay_out(&font, &master, &plain, 20_000.0, Some(&index), None).unwrap();
         ltr = ltr.min(t.elapsed());
+        let cache = WidthCache::new();
+        let t = std::time::Instant::now();
+        text_preview::lay_out(&font, &master, state, 20_000.0, Some(&index), Some(Measure { shaper: &shaper, cache: &cache })).unwrap();
+        measured = measured.min(t.elapsed());
         let t = std::time::Instant::now();
         for line in 0..30.min(layout.lines.len()) {
             shape_line(&font, &master, &laid, &layout, line, &shaper).unwrap();
@@ -228,8 +234,70 @@ fn text_preview_shapes_a_page_of_a_long_text_within_the_target() {
     }
     let analysis = bidi.saturating_sub(ltr);
     println!("layout with bidi {bidi:?}, without {ltr:?}: the analysis {analysis:?}; a page of 30 lines shaped in {page:?}");
+    println!("layout on shaped widths, the cache empty: {measured:?}");
     if !cfg!(debug_assertions) {
         assert!(page.as_millis() < 8, "a page took {page:?}");
         assert!(analysis.as_millis() < 30, "the analysis took {analysis:?}");
     }
+}
+
+/// A, V and a space; `dist` (on by default for horizontal text) moves A and V 100 units closer
+/// in feature code, which the document's kerning does not know.
+fn dist_app() -> FontcraftApp {
+    let mut app = FontcraftApp::default();
+    exec(&mut app, "font.features.addFeature", json!({"tag": "dist", "code": "pos A V -100;\npos V A -100;"}));
+    exec(&mut app, "window.textPreview", json!({}));
+    exec(&mut app, "textPreview.setText", json!({"text": "AVA AVA AVA"}));
+    app
+}
+
+#[test]
+fn text_preview_breaks_lines_on_shaped_widths_so_kerning_moves_the_break() {
+    use fontcraft_engine::compile::preview::{PreviewKind, layout_font_with};
+    use fontcraft_textlayout::{Measure, PreviewShaper, WidthCache};
+
+    let mut app = dist_app();
+    let font = app.session.font().unwrap().clone();
+    let master = font.masters[0].id.clone();
+    let index = app.session.kern_index().unwrap();
+    let state = &app.state.panels.text_preview;
+    let built = layout_font_with(&font, &master, PreviewKind::Full, &text_preview::build_options(&app.session)).unwrap();
+    let tags: Vec<_> = built.features.iter().map(|f| f.tag).collect();
+    let shaper = PreviewShaper::new(std::sync::Arc::from(built.bytes.as_slice()), &built.glyph_order, &built.private_use, &tags).unwrap();
+    let cache = WidthCache::new();
+    let measure = Some(Measure { shaper: &shaper, cache: &cache });
+
+    // By code point the text is `length` long; shaped, its six pairs are 600 units shorter. A
+    // line 300 units shorter than `length` holds the shaped text only.
+    let (_, wide) = text_preview::lay_out(&font, &master, state, 100_000.0, Some(&index), None).unwrap();
+    let length = wide.lines[0].length;
+    let (_, plain) = text_preview::lay_out(&font, &master, state, length - 300.0, Some(&index), None).unwrap();
+    let ranges: Vec<_> = plain.lines.iter().map(|l| l.items.clone()).collect();
+    assert_eq!(ranges, [0..8, 8..11], "by code point the line breaks after the second space");
+    let (_, shaped) = text_preview::lay_out(&font, &master, state, length - 300.0, Some(&index), measure).unwrap();
+    assert_eq!(shaped.lines.len(), 1, "shaped, the kerning makes the text fit");
+    assert!((shaped.lines[0].length - (length - 600.0)).abs() < 0.5, "{} {length}", shaped.lines[0].length);
+    assert!(cache.len() <= 2, "the second word comes from the cache: {} segments", cache.len());
+}
+
+#[test]
+fn text_preview_wraps_a_long_line_at_word_boundaries_within_the_window() {
+    let mut app = dist_app();
+    let words = "AVA ".repeat(200);
+    exec(&mut app, "textPreview.setText", json!({"text": words}));
+    let w = Window::new();
+    let d = w.settle(&mut app);
+    assert!(d.lines > 1, "{} lines", d.lines);
+    let mut rows: Vec<(f32, f32, &str)> = d.glyphs.iter().map(|(n, p)| (p.y, p.x, &**n)).collect();
+    rows.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.total_cmp(&b.1)));
+    let mut starts = Vec::new();
+    for (k, row) in rows.iter().enumerate() {
+        if k == 0 || !near(rows[k - 1].0, row.0) {
+            starts.push(row.2);
+        }
+    }
+    assert!(starts.len() > 1, "glyphs on {} baselines", starts.len());
+    assert!(starts.iter().all(|n| *n == "A"), "every line starts a word: {starts:?}");
+    let right = d.glyphs.iter().map(|(_, p)| p.x).fold(f32::MIN, f32::max);
+    assert!(right < 1280.0, "{right}");
 }
