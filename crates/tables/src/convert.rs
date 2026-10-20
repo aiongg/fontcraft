@@ -14,6 +14,9 @@
 //! The CFF writers lay the table out without subroutines; [`ConvertOptions::subroutinize`]
 //! runs the subroutiniser over the result. Variable fonts (`gvar`, a blending `CFF2`) are
 //! refused: instantiate them first. A conversion that fails returns an error and no bytes.
+//! [`convert_prepared`] adds `tx`'s input steps around a conversion: a snapshot at a design
+//! location, a glyph subset, GOADB renaming, subsetting and ordering, and overlap removal
+//! ([`prepare`], M12.30c).
 //!
 //! AFDKO's otf2ttf (Apache-2.0, Copyright 2014 Adobe) and fontTools' `cffLib` converters (MIT)
 //! were read and their rules written anew here.
@@ -21,6 +24,9 @@
 mod cff_table;
 mod outline;
 mod postscript;
+mod prepare;
+#[cfg(test)]
+mod prepare_tests;
 #[cfg(test)]
 mod tests;
 
@@ -36,6 +42,7 @@ use crate::{Result, TablesError};
 pub use outline::QuadToCubic;
 use outline::{Contour, GlyfOutlines, PsOutlines};
 pub use postscript::{PsInput, PsSource, convert_postscript, read_postscript};
+pub use prepare::{GoadbUse, PrepareOptions, convert_prepared, prepare};
 
 /// Largest error bound accepted, in font units.
 pub const MAX_ERROR_UNITS: f64 = 1_000.0;

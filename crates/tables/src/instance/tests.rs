@@ -113,7 +113,7 @@ fn tent(peak: f32) -> Tent {
 /// side moves −20, its top +50 and its advance +40 (two points left to inference); at −1 it
 /// narrows by 10 on each side and loses 30 in height and 20 in advance. B's component moves
 /// (30, 10) and its advance +60 at +1.
-pub(super) fn variable_font() -> SfntFont {
+pub(crate) fn variable_font() -> SfntFont {
     let square = Glyph::Simple(Simple {
         bbox: [100, 0, 500, 700],
         end_pts: vec![3],

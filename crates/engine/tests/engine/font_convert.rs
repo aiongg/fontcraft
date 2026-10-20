@@ -60,8 +60,8 @@ fn font_convert_changes_the_outline_flavour_and_writes_nothing_on_failure() {
     let before = listing();
     assert!(s.execute("font.convert", &json!({ "inputs": [ttf, junk], "to": "cff" })).is_err());
     assert_eq!(listing(), before, "no output and no temporary file is left");
-    assert!(s.execute("font.convert", &json!({ "input": ttf, "to": "ufo" })).is_err(), "sources are written by file.saveAs");
-    assert!(s.execute("font.convert", &json!({ "input": ttf, "to": "otf", "glyphs": ["A"] })).is_err(), "options not built yet are refused");
+    assert!(s.execute("font.convert", &json!({ "input": ttf, "to": "designspace" })).is_err(), "sources are written by file.saveAs");
+    assert!(s.execute("font.convert", &json!({ "input": ttf, "to": "otf", "fdSelect": [0] })).is_err(), "options not built yet are refused");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -100,5 +100,62 @@ fn font_convert_reads_ttx_text_and_bare_cff_tables() {
     run(&mut s, "font.convert", json!({ "input": bare, "to": "cff", "output": dir.join("again.cff") }));
     assert_eq!(std::fs::read(&back).unwrap(), std::fs::read(dir.join("again.cff")).unwrap());
     assert!(s.execute("font.convert", &json!({ "input": bare, "to": "otf", "face": 1, "output": dir.join("x.otf") })).is_err(), "one font: no face");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn font_convert_writes_ufos_glyph_subsets_and_goadb_names() {
+    let dir = std::env::temp_dir().join(format!("fontcraft-convert-steps-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut s = Session::with_document();
+    let square = json!([{"x": 60, "y": 0}, {"x": 560, "y": 0}, {"x": 560, "y": 700}, {"x": 60, "y": 700}]);
+    run(&mut s, "path.addPath", json!({"glyph": "A", "nodes": square}));
+    run(&mut s, "path.addPath", json!({"glyph": "B", "nodes": square}));
+    let ttf = dir.join("Font.ttf");
+    run(&mut s, "file.exportStatic", json!({ "destination": ttf, "timestamp": 0 }));
+    let names_of = |path: &str| fontcraft_tables::reorder::glyph_names(&fontcraft_tables::read(&std::fs::read(path).unwrap(), 0).unwrap()).unwrap();
+
+    // To UFO: a folder beside the input, replaced on a second run; a file of that name is not.
+    let r = run(&mut s, "font.convert", json!({ "input": ttf, "to": "ufo" }));
+    let ufo = PathBuf::from(r["results"][0]["output"].as_str().unwrap());
+    assert_eq!(ufo, dir.join("Font.ufo"));
+    assert!(ufo.join("metainfo.plist").is_file() && ufo.join("fontinfo.plist").is_file());
+    let glifs: Vec<String> = std::fs::read_dir(ufo.join("glyphs")).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+    assert!(glifs.iter().any(|g| g.starts_with("A")) && glifs.iter().any(|g| g.starts_with("B")), "{glifs:?}");
+    run(&mut s, "font.convert", json!({ "input": ttf, "to": "ufo", "excludeGlyphs": "B" }));
+    let glifs: Vec<String> = std::fs::read_dir(ufo.join("glyphs")).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+    assert!(!glifs.iter().any(|g| g.starts_with("B")), "the second run replaced the UFO: {glifs:?}");
+    std::fs::write(dir.join("Taken.ufo"), "a file").unwrap();
+    assert!(s.execute("font.convert", &json!({ "input": ttf, "to": "ufo", "output": dir.join("Taken.ufo") })).is_err());
+
+    // A glyph subset keeps .notdef and the glyphs named; an unknown name is refused.
+    let r = run(&mut s, "font.convert", json!({ "input": ttf, "to": "otf", "glyphs": ["A"] }));
+    let names = names_of(r["results"][0]["output"].as_str().unwrap());
+    assert!(names.contains(&"A".to_string()) && !names.contains(&"B".to_string()), "{names:?}");
+    let err = s.execute("font.convert", &json!({ "input": ttf, "to": "otf", "glyphs": ["A", "nope"] })).unwrap_err();
+    assert!(err.to_string().contains("nope"), "{err}");
+
+    // A GOADB renames by default; --no-rename with --subset-to-goadb only subsets.
+    let goadb = dir.join("GlyphOrderAndAliasDB");
+    std::fs::write(&goadb, "Ay A\n").unwrap();
+    let r = run(&mut s, "font.convert", json!({ "input": ttf, "to": "ttf", "output": dir.join("Renamed.ttf"), "goadb": goadb }));
+    let names = names_of(r["results"][0]["output"].as_str().unwrap());
+    assert!(names.contains(&"Ay".to_string()) && names.contains(&"B".to_string()) && !names.contains(&"A".to_string()), "{names:?}");
+    let r = run(
+        &mut s,
+        "font.convert",
+        json!({ "input": ttf, "to": "ttf", "output": dir.join("Kept.ttf"), "goadb": goadb, "goadbRename": false, "goadbSubset": true }),
+    );
+    let names = names_of(r["results"][0]["output"].as_str().unwrap());
+    assert!(names.contains(&"A".to_string()) && !names.contains(&"B".to_string()), "{names:?}");
+    assert!(s.execute("font.convert", &json!({ "input": ttf, "to": "otf", "goadbOrder": true })).is_err(), "GOADB keys need a GOADB");
+
+    // A location needs a variable font; overlap removal needs TrueType outlines on one side.
+    assert!(s.execute("font.convert", &json!({ "input": ttf, "to": "otf", "location": {"wght": 400} })).is_err());
+    let otf = dir.join("Font.otf");
+    run(&mut s, "font.convert", json!({ "input": ttf, "to": "otf", "output": otf }));
+    assert!(s.execute("font.convert", &json!({ "input": otf, "to": "otf-cff2", "removeOverlaps": true })).is_err());
+    run(&mut s, "font.convert", json!({ "input": otf, "to": "ttf", "output": dir.join("Merged.ttf"), "removeOverlaps": true }));
     let _ = std::fs::remove_dir_all(&dir);
 }

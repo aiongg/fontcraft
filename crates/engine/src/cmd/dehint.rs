@@ -106,7 +106,7 @@ pub(super) fn face_index(p: &Params<'_>, bytes: &[u8]) -> Result<u32> {
 }
 
 /// The glyph ids `glyphs` and `excludeGlyphs` select; `None` when neither is given.
-fn selection(p: &Params<'_>, font: &SfntFont) -> Result<Option<BTreeSet<u16>>> {
+pub(super) fn selection(p: &Params<'_>, font: &SfntFont) -> Result<Option<BTreeSet<u16>>> {
     let include = selector_items(p, "glyphs")?;
     let exclude = selector_items(p, "excludeGlyphs")?;
     if include.is_none() && exclude.is_none() {
