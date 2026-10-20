@@ -42,17 +42,27 @@
 //! rotatefont ([`cff_matrix`]): points rounded on their own, hints kept, turned or dropped by the
 //! matrix's linear part, the Private DICT hint values changed to match. The advance widths follow
 //! [`Widths`] from the `hmtx` advances, and each changed glyph's left side bearing becomes its
-//! `xMin`. A matrix on a variable TrueType font is refused for now.
+//! `xMin`.
+//!
+//! On a variable TrueType font a matrix transforms the `gvar` deltas by each glyph's linear part
+//! ([`gvar_matrix`]); the advance deltas of the phantom points follow [`Widths`]. `HVAR` is
+//! scaled when every glyph takes the same horizontal scale and its widths are transformed, kept
+//! when the widths are kept, and dropped otherwise, which leaves the advance variations to the
+//! phantom points.
 
 mod cff;
 mod cff_matrix;
 mod fixed;
 mod glyf;
 mod glyph_table;
+mod gvar_matrix;
 mod layout;
 pub(crate) mod post;
 mod tuples;
 
+#[cfg(test)]
+#[path = "transform/gvar_matrix_tests.rs"]
+mod gvar_matrix_tests;
 #[cfg(test)]
 mod tests;
 
@@ -176,9 +186,6 @@ pub fn transform_with_report(font: &SfntFont, options: &TransformOptions) -> Res
     let mut work = Work::read(font)?;
     let mut report = TransformReport { matrix, hints_kept: true, ..TransformReport::default() };
     if let Some(m) = matrix {
-        if !font.is_cff() && (font.get(*b"fvar").is_some() || font.get(*b"gvar").is_some()) {
-            return Err(TablesError::Unsupported("a matrix on a variable font: its deltas would need transforming too".into()));
-        }
         work.apply_matrix(m, options, &mut report)?;
         if options.scale_em {
             let target = ot_round(f64::from(work.upem) * m[0].abs());
@@ -376,6 +383,7 @@ impl Work {
         if self.cff.is_some() {
             return self.apply_matrix_cff(m, o, report);
         }
+        let deltas = self.font.get(*b"gvar").is_some().then(|| self.glyph_deltas(m, o));
         let selected = |g: usize| glyph_matrix(o, m, g).is_some();
         let matrix_of = |g: usize| glyph_matrix(o, m, g).unwrap_or(IDENTITY);
         let mut negative_widths = 0usize;
@@ -465,7 +473,98 @@ impl Work {
                 self.font.remove(tag);
             }
         }
+        if let Some(deltas) = deltas {
+            patch(&mut self.font, *b"gvar", &mut |t| {
+                *t = gvar_matrix::transform_gvar(t, &deltas)?;
+                Ok(())
+            })?;
+            self.follow_hvar(m, &deltas, report)?;
+        }
         Ok(())
+    }
+
+    /// Each glyph's points, contours and the maps its deltas take, read before the matrix.
+    fn glyph_deltas(&self, m: [f64; 6], o: &TransformOptions) -> Vec<gvar_matrix::GlyphDeltas> {
+        let mut out = Vec::with_capacity(self.glyphs.len());
+        for (gid, glyph) in self.glyphs.iter().enumerate() {
+            let own = glyph_matrix(o, m, gid);
+            let lin = own.map(linear);
+            let (mut coords, ends, maps, simple) = match &glyph.shape {
+                Shape::Empty => (Vec::new(), Vec::new(), Vec::new(), false),
+                Shape::Simple(s) => {
+                    let coords: Vec<(f64, f64)> = s.points.iter().map(|p| (f64::from(p.x), f64::from(p.y))).collect();
+                    let maps = vec![lin.unwrap_or([1.0, 0.0, 0.0, 1.0]); coords.len()];
+                    (coords, s.ends.iter().map(|e| usize::from(*e)).collect(), maps, true)
+                }
+                Shape::Composite(c) => {
+                    let coords = c
+                        .components
+                        .iter()
+                        .map(|comp| match comp.args {
+                            Args::Offset(x, y) => (f64::from(x), f64::from(y)),
+                            _ => (0.0, 0.0),
+                        })
+                        .collect();
+                    let maps = c
+                        .components
+                        .iter()
+                        .map(|comp| {
+                            let l = lin.unwrap_or([1.0, 0.0, 0.0, 1.0]);
+                            if comp.flags & SCALED_COMPONENT_OFFSET != 0 { mul(l, comp.matrix) } else { l }
+                        })
+                        .collect();
+                    (coords, (0..c.components.len()).collect(), maps, false)
+                }
+            };
+            let x_min = coords.iter().map(|p| p.0).fold(f64::INFINITY, f64::min);
+            let x_min = if x_min.is_finite() { x_min } else { 0.0 };
+            let lsb = self.hmtx.bearings.get(gid).map_or(0.0, |b| f64::from(*b));
+            let advance = self.hmtx.advances.get(gid).map_or(0.0, |a| f64::from(*a));
+            coords.extend([(x_min - lsb, 0.0), (x_min - lsb + advance, 0.0), (0.0, 0.0), (0.0, 0.0)]);
+            let advance_factor = own.and_then(|own| {
+                if glyph_advance(o, gid).is_some() {
+                    return Some(0.0);
+                }
+                match o.widths {
+                    Widths::Keep => None,
+                    Widths::Em => Some(0.0),
+                    Widths::Transform => Some(own[0]),
+                    Widths::Auto if own[1] == 0.0 => Some(own[0]),
+                    Widths::Auto => Some(0.0),
+                }
+            });
+            out.push(gvar_matrix::GlyphDeltas {
+                coords,
+                ends,
+                densify: simple && own.is_some_and(|own| own[1] != 0.0 || own[2] != 0.0),
+                linear: own.map(|_| maps),
+                advance_factor,
+            });
+        }
+        out
+    }
+
+    /// `HVAR` after a matrix: kept when no advance delta changed, scaled when every glyph takes
+    /// one positive horizontal scale with no turn or shear, otherwise dropped.
+    fn follow_hvar(&mut self, m: [f64; 6], deltas: &[gvar_matrix::GlyphDeltas], report: &mut TransformReport) -> Result<()> {
+        if self.font.get(*b"HVAR").is_none() {
+            return Ok(());
+        }
+        let changed: Vec<Option<f64>> = deltas.iter().filter(|d| d.linear.is_some()).map(|d| d.advance_factor).collect();
+        if changed.iter().all(Option::is_none) {
+            return Ok(());
+        }
+        let uniform = changed.len() == deltas.len() && m[1] == 0.0 && m[2] == 0.0 && m[0] > 0.0 && changed.iter().all(|f| *f == Some(m[0]));
+        if uniform {
+            patch(&mut self.font, *b"HVAR", &mut |t| {
+                *t = layout::scale_hvar(t, Scaler { factor: m[0] })?;
+                Ok(())
+            })
+        } else {
+            self.font.remove(*b"HVAR");
+            report.warnings.push("HVAR is dropped: the advance width variations follow the gvar phantom points".into());
+            Ok(())
+        }
     }
 
     /// A matrix on `CFF ` or `CFF2` outlines ([`cff_matrix`]), with the advance widths and left
