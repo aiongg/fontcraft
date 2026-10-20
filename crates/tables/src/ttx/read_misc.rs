@@ -1,11 +1,15 @@
 //! TTX reader: the tables of the miscellaneous writer ([`super::misc`]) that have compilers of
-//! their own: the Apple `trak` and `ltag`, and `DSIG`, `FFTM`, `LTSH` and `VDMX` (M12.7c).
+//! their own: the Apple `trak` and `ltag`, and `DSIG`, `FFTM`, `LTSH` and `VDMX` (M12.7c), and the
+//! glyph metamorphosis tables `mort` and `morx` (M12.7d, in `morph`).
 //!
 //! `ankr`, `bsln`, `cidg`, `feat`, `gcid`, `lcar`, `opbd` and `prop` go through the generic
 //! compile of [`super::read_otdata`], whose layouts include them, as in fontTools; `kern` is read
 //! there too. Ported from fontTools' `ttLib.tables` `_t_r_a_k`, `_l_t_a_g`, `D_S_I_G_`,
 //! `F_F_T_M_`, `L_T_S_H_` and `V_D_M_X_` (MIT).
 
+mod morph;
+#[cfg(test)]
+mod morph_tests;
 #[cfg(test)]
 mod tests;
 
@@ -34,6 +38,8 @@ pub(crate) fn read_table_with(element: &Element, ctx: &ReadContext) -> Result<Op
         "DSIG" => (*b"DSIG", dsig(element)?),
         "FFTM" => (*b"FFTM", fftm(element)?),
         "VDMX" => (*b"VDMX", vdmx(element)?),
+        "mort" => (*b"mort", morph::compile(element, ctx, true)?),
+        "morx" => (*b"morx", morph::compile(element, ctx, false)?),
         _ => return Ok(None),
     }))
 }
