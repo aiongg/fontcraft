@@ -124,9 +124,7 @@ pub fn partial_instance_with(font: &SfntFont, options: &InstanceOptions) -> Resu
 
     let gvar_result = if out.get(*b"gvar").is_some() { Some(partial_gvar(&mut out, &limits, options.recalc_bounds, &mut budget)?) } else { None };
     partial_cvar(&mut out, &limits, &mut budget)?;
-    let post_before = out.get(*b"post").map(<[u8]>::to_vec);
     partial_mvar(&mut out, &limits, &mut budget)?;
-    let post_loaded = limits.limited_tag(*b"slnt") || out.get(*b"post").map(<[u8]>::to_vec) != post_before;
     partial_metrics_store(&mut out, *b"HVAR", &limits, &mut budget)?;
     partial_metrics_store(&mut out, *b"VVAR", &limits, &mut budget)?;
     partial_cff2(&mut out, &limits, options, &mut budget)?;
@@ -155,7 +153,9 @@ pub fn partial_instance_with(font: &SfntFont, options: &InstanceOptions) -> Resu
     }
     let defaults: Vec<(Tag, f64)> = limits.axes.iter().zip(&limits.user).filter_map(|(a, u)| u.map(|u| (a.tag, u.default))).collect();
     st::set_weight_width_slant(&mut out, &defaults);
-    if post_loaded && let (Some(post), Some(n)) = (out.get(*b"post"), glyph_count) {
+    // The instancer reads the glyph order of every font, which loads `post`; saving writes it
+    // again (`transform::post::recompile`).
+    if let (Some(post), Some(n)) = (out.get(*b"post"), glyph_count) {
         let post = crate::transform::post::recompile(post, n)?;
         out.insert(*b"post", post);
     }
@@ -217,10 +217,6 @@ struct Limits {
 impl Limits {
     fn new_count(&self) -> usize {
         self.new_index.iter().filter(|i| i.is_some()).count()
-    }
-
-    fn limited_tag(&self, tag: Tag) -> bool {
-        self.axes.iter().zip(&self.user).any(|(a, u)| a.tag == tag && u.is_some())
     }
 
     fn is_pinned(&self, axis: usize) -> bool {

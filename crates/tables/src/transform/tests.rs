@@ -393,3 +393,25 @@ fn units_per_em_recalculates_maxp_and_head_flags_and_stores_standard_post_names_
     expected.extend_from_slice(b"Bcomp");
     assert_eq!(post, &expected[..], "`.null` takes its standard index and leaves the stored strings");
 }
+
+#[test]
+fn units_per_em_writes_post_versions_3_and_4_as_scale_upem() {
+    // scaleUpem (fontTools 4.66.1) on fonts with these tables: version 3 loses what follows its
+    // header; a repeated version 4 code becomes 0xFFFF, and the codes past the 3 glyphs go.
+    let codes = |c: &[u16]| c.iter().flat_map(|v| v.to_be_bytes()).collect::<Vec<u8>>();
+    let mut input = font();
+    let mut v3 = input.get(*b"post").unwrap()[..32].to_vec();
+    v3.extend_from_slice(b"TRAIL");
+    input.insert(*b"post", v3);
+    let post = transform(&input, &upem(2048)).unwrap().get(*b"post").unwrap().to_vec();
+    assert_eq!(post.len(), 32);
+    assert_eq!((u16_at(&post, 0), i16_at(&post, 8), i16_at(&post, 10)), (3, -205, 102));
+
+    let mut v4 = input.get(*b"post").unwrap()[..32].to_vec();
+    v4[..4].copy_from_slice(&0x0004_0000u32.to_be_bytes());
+    v4.extend(codes(&[0x41, 0x20, 0x41, 0x42]));
+    input.insert(*b"post", v4);
+    let post = transform(&input, &upem(2048)).unwrap().get(*b"post").unwrap().to_vec();
+    assert_eq!((u16_at(&post, 0), i16_at(&post, 8)), (4, -205));
+    assert_eq!(post[32..], codes(&[0x41, 0x20, 0xFFFF]));
+}

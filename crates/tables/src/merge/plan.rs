@@ -1,12 +1,12 @@
 //! The glyph order of the result: which glyph of which font fills each place, and where each
 //! input glyph went. The renaming follows fontTools' `computeMegaGlyphOrder`, and the names of
-//! each font its `post` table's `build_psNameMapping` (fontTools 4.66.1, MIT License).
+//! each font `TTFont.getGlyphOrder` (fontTools 4.66.1, MIT License).
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use super::Duplicates;
 use crate::limits::MAX_GLYPHS;
-use crate::reorder::names::{num_glyphs, post_names};
+use crate::reorder::names::num_glyphs;
 use crate::sfnt::SfntFont;
 use crate::{Result, TablesError};
 
@@ -40,45 +40,27 @@ impl Plan {
     }
 }
 
-/// A font's glyph names: a CFF font's from its charset; a TrueType font's as fontTools' `post`
-/// reader gives them, with the stored name of each it had to change (`build_psNameMapping`): a
-/// name repeated in the font gets `.1`, `.2`…, skipping suffixed names the font already has.
-/// Without stored names, glyphs are `glyphNNNNN` (glyph 0 `.notdef`).
+/// A font's glyph names as fontTools' `TTFont.getGlyphOrder` gives them: a CFF font's from its
+/// charset; a TrueType font's from `post` versions 1, 2 and 4 when they name every glyph, with
+/// the stored name of each glyph `build_psNameMapping` renamed (an empty name becomes
+/// `glyphNNNNN`; a repeated one gets `.1`, `.2`…, skipping names the font already has; version
+/// 4 names come from the codes); else from the Unicode `cmap` subtables (`.notdef`, the Adobe
+/// name of each glyph's lowest code point, `glyphNNNNN` for the rest).
 pub(super) fn font_glyph_names(font: &SfntFont) -> Result<(Vec<String>, HashMap<String, String>)> {
     let n = num_glyphs(font)?;
     // fontTools takes a CFF font's glyph order from its charset, whatever `post` holds.
     if let Some(cff) = font.get(*b"CFF ") {
         return Ok((crate::reorder::cff::parse(cff, n)?.glyph_names(), HashMap::new()));
     }
-    let stored = match font.get(*b"post") {
-        Some(post) => post_names(post, n)?,
-        None => None,
-    };
-    let Some(stored) = stored else {
-        return Ok(((0..n).map(|g| if g == 0 { ".notdef".to_string() } else { format!("glyph{g:05}") }).collect(), HashMap::new()));
-    };
-    let in_font: HashSet<&str> = stored.iter().map(String::as_str).collect();
-    let mut next: HashMap<String, usize> = HashMap::with_capacity(stored.len());
-    let mut mapping = HashMap::new();
-    let mut names = Vec::with_capacity(stored.len());
-    for ps in &stored {
-        let mut name = ps.clone();
-        if let Some(&first) = next.get(&name) {
-            // The search ends: each step skips a distinct name of the font.
-            let mut k = first;
-            while in_font.contains(format!("{name}.{k}").as_str()) {
-                k += 1;
-            }
-            next.insert(name.clone(), k + 1);
-            name = format!("{name}.{k}");
-        }
-        next.insert(name.clone(), 1);
-        if name != *ps {
-            mapping.insert(name.clone(), ps.clone());
-        }
-        names.push(name);
+    // A `post` table fontTools cannot read makes its merge fail; the names then come from `cmap`.
+    if let Some(post) = font.get(*b"post")
+        && let Ok(stored) = crate::ttx::core::post_names(post, n)
+        && let Some(order) = stored.glyph_order
+        && order.len() >= n
+    {
+        return Ok((order, stored.mapping.unwrap_or_default().into_iter().collect()));
     }
-    Ok((names, mapping))
+    Ok((crate::ttx::core::names_from_cmap(font, n), HashMap::new()))
 }
 
 /// The plan for fonts whose glyph names are `names`. `same(a, b)` says whether two input glyphs

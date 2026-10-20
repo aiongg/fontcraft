@@ -1141,6 +1141,13 @@ outlines varies. Two differences from varLib.instancer change no outline: the ch
 as they were (the instancer respecialises them), and a downgraded font has its `head` and `hhea` bounds and
 the CFF FontBBox recomputed (the instancer keeps the input's `head` and `hhea` values when it downgrades).
 
+**Tables recalculated on saving.** The instancer reads every font's glyph order, which loads `post`,
+so `post` is written again as fontTools writes it: version 2 names stored again (standard names by
+their index, unused strings past the last used one dropped), versions 1 and 3 as their header alone,
+and version 4 with a code that an earlier glyph has, or a glyph past the stored codes, set to 0xFFFF.
+When `glyf` was rewritten and bounds are recalculated, `maxp` and `head.flags` bit 1 are recalculated
+too, as fontTools' `maxp.recalc` does.
+
 **Overlaps.** Variable TrueType fonts normally contain overlapping contours. A static instance keeps
 them and sets the overlap flags so that rasterisers use non-zero winding; `--remove-overlaps` merges them
 instead and drops hinting of changed glyphs.
@@ -1224,6 +1231,13 @@ with indices renumbered; GDEF classes are united; vertical extents such as `hhea
 largest value; `OS/2` range bits are OR-ed; names and other metadata come from the first font. All fonts must share units per em (rescale with `transform --upem`
 first) and outline flavour (use `convert`).
 
+Glyph names are the ones fontTools gives each font: the `CFF ` charset; `post` version 1, 2 or 4
+names (version 4 names come from its code points); else names made from the Unicode `cmap` (the
+AGLFN name of a glyph's lowest code point, `uniXXXX`, `glyphNNNNN` for glyphs without one). The
+result's `post` takes the highest version of the fonts: version 1 or 3 is the header alone, version 4
+stores a code point for each merged name (0xFFFF for renamed duplicates and names without one), and
+version 2 stores the merged names.
+
 CFF fonts merge as fontTools merges them: subroutines are expanded, the first font's Top and Private
 DICTs are kept, and each later glyph's width operand is rewritten for the first font's `defaultWidthX`
 and `nominalWidthX`; `merge` then subroutinises the result again. `MATH` and `BASE` are merged too: the
@@ -1276,7 +1290,8 @@ anything else and is the PostScript matrix convention, not the font's FontMatrix
 constants; `gvar`, `cvar`, `HVAR`, `VVAR`, `MVAR` deltas; CFF private-dictionary zones and stems,
 `cvt` values; COLR paint coordinates. Values are rounded to integers except in CFF2 and where the format
 stores fractions. TrueType instructions are kept but rarely remain correct, so a warning recommends
-re-hinting.
+re-hinting. `maxp` and `head.flags` bit 1 are recalculated as fontTools' `maxp.recalc` does, and
+`post` is written again as scaleUpem writes it (see `instance` for the rule by version).
 
 The single-glyph and selection forms of these operations are the editor command `path.transformations`;
 `font.info.scaleToUnitsPerEm` is the document-level equivalent of `--upem`.

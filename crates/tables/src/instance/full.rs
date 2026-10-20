@@ -16,9 +16,8 @@
 //!    `post.italicAngle` from the `wght`, `wdth` and `slnt` values.
 //! 5. The overlap flags on every glyph, when asked; `head`, `hhea` and `vhea` bounds and
 //!    extents recomputed, when asked, and with them, when `glyf` was rewritten, the `maxp`
-//!    maxima and `head.flags` bit 1 (`maxp.recalc`). A `post` table fontTools loads on the way
-//!    (a `slnt` axis, `MVAR` deltas for it) has its version 2 names stored again as fontTools
-//!    stores them.
+//!    maxima and `head.flags` bit 1 (`maxp.recalc`). `post` is written again as fontTools
+//!    writes the table it loads to read the glyph order (`transform::post::recompile`).
 //! 6. `CFF2` outlines (see `cff2.rs`): every blend resolved after `HVAR` and `VVAR` moved the
 //!    advances, the variation store dropped, and with `downgrade_cff2` a `CFF ` table written
 //!    instead; `BASE` coordinates take their deltas (see `base.rs`).
@@ -108,11 +107,7 @@ pub fn full_instance_with(font: &SfntFont, location: &[(Tag, f64)], options: &In
     }
 
     st::apply_cvar(&mut out, axis_count, coords)?;
-    let post_before = out.get(*b"post").map(<[u8]>::to_vec);
     st::apply_mvar(&mut out, coords)?;
-    // fontTools loads `post` to read its italic angle when the font has a `slnt` axis, or to
-    // apply `MVAR` deltas to it, and then writes it again.
-    let post_loaded = pinned.user.iter().any(|(t, _)| t == b"slnt") || out.get(*b"post").map(<[u8]>::to_vec) != post_before;
     if out.get(*b"glyf").is_none() {
         // A font without glyf (CFF2) takes its advances from HVAR and VVAR.
         for tag in [*b"HVAR", *b"VVAR"] {
@@ -148,7 +143,9 @@ pub fn full_instance_with(font: &SfntFont, location: &[(Tag, f64)], options: &In
         }
     }
     st::set_weight_width_slant(&mut out, &pinned.user);
-    if post_loaded && let (Some(post), Some(n)) = (out.get(*b"post"), glyph_count) {
+    // The instancer reads the glyph order of every font, which loads `post`; saving writes it
+    // again.
+    if let (Some(post), Some(n)) = (out.get(*b"post"), glyph_count) {
         let post = crate::transform::post::recompile(post, n)?;
         out.insert(*b"post", post);
     }
