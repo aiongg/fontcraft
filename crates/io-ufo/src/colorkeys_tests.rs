@@ -258,9 +258,10 @@ fn malformed_entries_stay_user_data() {
         dict(vec![("Format", int(format::TRANSLATE)), ("Paint", p), ("dx", int(1)), ("dy", int(0))])
     });
     let layers = |n: usize| dict(vec![("Format", int(format::LAYERS)), ("Layers", array(vec![glyph_paint("a.color0", solid_paint(0, 1.0)); n]))]);
-    let rotated_gradient = dict(vec![
-        ("Format", int(format::ROTATE)),
-        ("angle", int(30)),
+    let skewed_gradient = dict(vec![
+        ("Format", int(format::SKEW)),
+        ("xSkewAngle", int(30)),
+        ("ySkewAngle", int(0)),
         (
             "Paint",
             glyph_paint(
@@ -296,18 +297,17 @@ fn malformed_entries_stay_user_data() {
         ("a number", int(3)),
         ("a format as text", dict(vec![("Format", string("PaintColrLayers")), ("Layers", array(Vec::new()))])),
         ("a missing glyph", glyph_paint("missing", solid_paint(0, 1.0))),
-        ("the base glyph itself", glyph_paint("a", solid_paint(0, 1.0))),
-        ("a composite", dict(vec![("Format", int(32))])),
         (
-            "a variable solid",
-            glyph_paint("a.color0", dict(vec![("Alpha", int(1)), ("Format", int(3)), ("PaletteIndex", int(0)), ("VarIndexBase", int(0))])),
+            "the base glyph itself, moved",
+            dict(vec![("Format", int(format::TRANSLATE)), ("Paint", glyph_paint("a", solid_paint(0, 1.0))), ("dx", int(1)), ("dy", int(0))]),
         ),
+        ("a composite", dict(vec![("Format", int(32))])),
         ("an index beyond 65535", glyph_paint("a.color0", solid_paint(70_000, 1.0))),
         ("an alpha beyond 1", glyph_paint("a.color0", solid_paint(0, 2.0))),
         ("too many transforms", nested),
         ("too many layers", layers(MAX_LIST_LAYERS + 1)),
         ("no layers", layers(0)),
-        ("a gradient that is turned", rotated_gradient),
+        ("a skewed gradient whose third point the writer puts elsewhere", skewed_gradient),
         ("a radial gradient the writer gives other radii", zero_radii),
         ("an empty pair list", array(Vec::new())),
     ];

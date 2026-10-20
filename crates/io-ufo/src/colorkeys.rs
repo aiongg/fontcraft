@@ -13,7 +13,10 @@
 //! | a paint: `PaintColrLayers` (format 1) of `PaintGlyph` (10) paints, or a list of them, or one alone | per `PaintGlyph`, a full-colour layer holding its glyph as one component, whose fill colour or gradient is the glyph paint's paint |
 //! | `PaintSolid` (2): `PaletteIndex`, `Alpha` | the fill colour as a palette entry with that alpha |
 //! | `PaintLinearGradient` (4), `PaintRadialGradient` (6), `PaintSweepGradient` (8) with a `ColorLine` (`Extend` as `pad`, `repeat` or `reflect`; `ColorStop`: `StopOffset`, `PaletteIndex`, `Alpha`) | the gradient, its points as fractions of the component's box (curve extremes included), radii as fractions of its width, the sweep as a start angle and the angle it turns |
-//! | `PaintTransform` (12, a matrix as a list of six numbers or as `xx`…`dy`), `PaintTranslate` (14), and the scale, rotate and skew paints (16 to 30), around a `PaintGlyph` | the component's transform; the writer gives a translation `PaintTranslate`, any other transform `PaintTransform` with a list, and keeps the paints a file had while they still make the component's transform |
+//! | `PaintTransform` (12, a matrix as a list of six numbers or as `xx`…`dy`), `PaintTranslate` (14), and the scale, rotate and skew paints (16 to 30), around a `PaintGlyph` or `PaintColrGlyph` | the component's transform; the writer gives a translation `PaintTranslate`, any other transform `PaintTransform` with a list, and keeps the paints a file had while they still make the component's transform |
+//! | `PaintColrGlyph` (11) | a full-colour layer holding one component without a fill colour or gradient, of a glyph that has full-colour layers in that master (glyphsLib's form for a component of a colour glyph) |
+//! | the variable paints: `PaintVarSolid` (3), the variable gradients (5, 7, 9) with `VarIndexBase` on the paint and its stops, and the variable transform paints (13 to 31, odd) | the static paint they stand for; the `VarIndexBase` values are kept on the component and written back while the fill keeps its kind. A UFO has no variation store: a designspace's masters each hold static paints, and the compiler makes them variable |
+//! | a `PaintGlyph` of the base glyph itself, first in its entry and unmoved | the base glyph's master layer marked as full colour, its shapes filled with the paint ([`crate::colorglyphs`]) |
 //!
 //! The writer writes a glyph's colour layers as pairs when all are palette layers, else as a
 //! `PaintColrLayers` (the form the file had: a list, or one paint alone, is kept). A palette layer
@@ -21,8 +24,11 @@
 //! geometry is written as the compiler paints it (`fontcraft-color`'s `paint::glyph_paint`): a
 //! linear gradient's third point is the start-to-end vector turned −90° about the start, a radial
 //! gradient with both radii 0 runs from its start point to the box's farthest corner, stops are
-//! sorted and their offsets clamped to 0..1. A gradient under a transform needs one that only
-//! moves and scales evenly. A colour that is not a palette entry (the 50 % grey of a shape
+//! sorted and their offsets clamped to 0..1. Under any other transform than an even scale, the
+//! gradient is measured on the box of the moved outline and its points are moved back into the
+//! paint's own space: a linear gradient under any transform that can be undone, a radial one
+//! under one that turns, mirrors and scales evenly (radii scale with it), a sweep one under one
+//! that turns and scales evenly (its angles turn with it). A colour that is not a palette entry (the 50 % grey of a shape
 //! without a fill included) is added to the end of every colour palette, as glyphsLib adds it,
 //! with alpha 1 in the paint and its own alpha in the palette.
 //!
@@ -56,27 +62,37 @@ use crate::glyphkeys::{array, coordinate, dict, int, number, string, synthetic_i
 pub(crate) const COLOR_LAYERS: &str = "com.github.googlei18n.ufo2ft.colorLayers";
 pub(crate) const COLOR_PALETTES: &str = "com.github.googlei18n.ufo2ft.colorPalettes";
 /// The mark in a layer's UFO data. Its value is the form of the glyph's entry: `true` for pairs
-/// or a `PaintColrLayers`, `"list"` for a list of paints, `"single"` for one paint alone.
-const MARK: &str = "colorLayers";
+/// or a `PaintColrLayers`, `"list"` for a list of paints, `"single"` for one paint alone. A master
+/// layer painted by its own glyph's entry keeps the form there ([`crate::colorglyphs`]).
+pub(crate) const MARK: &str = "colorLayers";
 /// A component's transform paints as the file had them, outermost first, without their `Paint`.
 const PAINT_TRANSFORM: &str = "paintTransform";
+/// What a component's fill paint had of a variable paint (`PaintVarSolid` and the variable
+/// gradients): the static format it stands for, its `VarIndexBase` and each colour stop's.
+const PAINT_VAR: &str = "paintVar";
+/// Most passes over one master's list: an entry whose `PaintColrGlyph` names a glyph typed in a
+/// later pass waits for it.
+const MAX_PASSES: usize = 16;
+/// Deepest chain of `PaintColrGlyph` paints followed when reading, as the compiler caps a paint
+/// graph (`fontcraft-color`'s `MAX_PAINT_DEPTH`).
+const MAX_COLR_DEPTH: usize = 64;
 /// Most colour layers read for one base glyph.
 const MAX_LIST_LAYERS: usize = 1024;
 /// Most transform paints read around one glyph paint.
 const MAX_WRAPPERS: usize = 16;
 /// The name of a full-colour layer read from the list, as the reference names such layers.
-const FULL_COLOR_NAME: &str = "Color";
+pub(crate) const FULL_COLOR_NAME: &str = "Color";
 /// The fill of a shape on a full-colour layer with neither a fill colour nor a gradient, as the
 /// compiler paints it (`color.fullColor.defaultGrayFill`).
-const DEFAULT_FILL: [f64; 4] = [0.5, 0.5, 0.5, 1.0];
+pub(crate) const DEFAULT_FILL: [f64; 4] = [0.5, 0.5, 0.5, 1.0];
 const IDENTITY: [f64; 6] = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
 /// Numbers the check by writing takes as equal: nine significant digits.
 const TOLERANCE: f64 = 1e-9;
 /// Most outline segments the boxes measured while one [`Scope`] is open may hold together.
 pub(crate) const MAX_BOX_SEGMENTS: usize = 1 << 24;
 
-/// (font address, glyph, master): a layer glyph whose box is measured.
-type BoxKey = (usize, String, String);
+/// (font address, glyph, master, transform bits): a layer glyph whose box is measured.
+type BoxKey = (usize, String, String, [u64; 6]);
 
 /// The boxes of layer glyphs measured while a [`Scope`] is open.
 struct Boxes {
@@ -136,6 +152,7 @@ mod format {
     pub const RADIAL: i64 = 6;
     pub const SWEEP: i64 = 8;
     pub const GLYPH: i64 = 10;
+    pub const COLR_GLYPH: i64 = 11;
     pub const TRANSFORM: i64 = 12;
     pub const TRANSLATE: i64 = 14;
     pub const SCALE: i64 = 16;
@@ -146,6 +163,8 @@ mod format {
     pub const ROTATE_CENTER: i64 = 26;
     pub const SKEW: i64 = 28;
     pub const SKEW_CENTER: i64 = 30;
+    /// The variable fill paints; each stands for the static format one below it.
+    pub const VAR_FILLS: [i64; 4] = [3, 5, 7, 9];
 }
 
 /// A layer the list holds, as the writer writes it.
@@ -156,10 +175,12 @@ pub(crate) enum Item<'a> {
     Paint(&'a Component),
 }
 
-/// What the list holds of `l`: a colour layer read from it that is still one component of a
-/// glyph of the font (unmoved for a palette layer) and that the writer can write.
+/// What the list holds of `l`: a full-colour layer that is one component of a glyph of the font
+/// and that the writer can write, or a palette layer read from the list that is still one unmoved
+/// component. Full-colour layers with other shapes are first made into such layers
+/// ([`crate::colorglyphs::expand`]).
 pub(crate) fn listed<'a>(font: &Font, l: &'a Layer) -> Option<Item<'a>> {
-    if l.is_master_layer() || l.extra.get(Family::Ufo, MARK).is_none() || !l.info.attrs.coordinates.is_empty() || !l.anchors.is_empty() {
+    if l.is_master_layer() || !l.info.attrs.coordinates.is_empty() || !l.anchors.is_empty() {
         return None;
     }
     let [Shape::Component(c)] = l.shapes.as_slice() else { return None };
@@ -171,6 +192,7 @@ pub(crate) fn listed<'a>(font: &Font, l: &'a Layer) -> Option<Item<'a>> {
         leaf(font, &l.master, c, 0, &mut Vec::new())?;
         return Some(Item::Paint(c));
     }
+    l.extra.get(Family::Ufo, MARK)?;
     let entry = l.info.attrs.color_palette?;
     c.transform.is_identity().then_some(Item::Pair(c.glyph.as_str(), entry))
 }
@@ -318,13 +340,25 @@ pub(crate) fn read(font: &mut Font) -> Option<String> {
     for (master, list) in lists {
         let mut left = Dict { layout: list.layout, ..Default::default() };
         let mut typed = 0usize;
-        for (base, entry) in &list.entries {
-            if typed < font.glyphs.as_arcs().len() && add_glyph(font, &master, base.as_str(), entry) {
-                typed += 1;
-            } else {
-                left.entries.push((base.clone(), entry.clone()));
+        // An entry whose `PaintColrGlyph` names a glyph whose entry comes later is typed in a
+        // later pass, once that glyph has its colour layers.
+        let mut pending = list.entries;
+        for _ in 0..MAX_PASSES {
+            let before = typed;
+            let mut rest = Vec::new();
+            for (base, entry) in pending {
+                if typed < font.glyphs.as_arcs().len() && add_glyph(font, &master, base.as_str(), &entry) {
+                    typed += 1;
+                } else {
+                    rest.push((base, entry));
+                }
+            }
+            pending = rest;
+            if typed == before || pending.is_empty() {
+                break;
             }
         }
+        left.entries = pending;
         if typed == 0 {
             continue;
         }
@@ -337,6 +371,7 @@ pub(crate) fn read(font: &mut Font) -> Option<String> {
         }
     }
     let refused = Scope::refused().saturating_sub(before);
+    crate::colorglyphs::fold(font);
     (refused > 0).then(|| {
         format!(
             "some entries of the colour layer list stay user data, not colour layers: measuring their outlines' boxes went past {MAX_BOX_SEGMENTS} outline segments"
@@ -362,6 +397,23 @@ fn add_glyph(font: &mut Font, master: &str, base: &str, entry: &Value) -> bool {
         g.layers.retain(|l| !ids.contains(&l.id));
     }
     false
+}
+
+/// Puts the colour layers of `base` in `master` that came from the list back into the list as
+/// user data: the entry the writer gives them, which is the entry they were read from. For layers
+/// that cannot stay in the model as read.
+pub(crate) fn unread(font: &mut Font, master: &str, base: &str) {
+    let mut added = Vec::new();
+    let Some(entry) = font.glyph(base).and_then(|g| glyph_value(font, g, master, 0, &mut added)) else { return };
+    if let Ok(mut g) = font.glyph_mut(base) {
+        g.layers.retain(|l| l.master != master || l.is_master_layer() || l.extra.get(Family::Ufo, MARK).is_none());
+    }
+    if let Some(m) = Arc::make_mut(&mut font.masters).iter_mut().find(|m| m.id == master) {
+        match m.user_data.0.get_mut(COLOR_LAYERS) {
+            Some(Value::Dict(d)) => d.insert(base, entry),
+            _ => m.user_data.0.insert(COLOR_LAYERS, dict(vec![(base, entry)])),
+        }
+    }
 }
 
 /// The colour layers `entry` describes for `base` in `master`; `None` when it names a glyph the
@@ -410,7 +462,7 @@ fn layers_of(font: &Font, master: &str, base: &str, entry: &Value) -> Option<Vec
         return None;
     }
     for (k, v) in leaves.into_iter().enumerate() {
-        let c = read_leaf(font, master, base, v)?;
+        let c = read_leaf(font, master, base, v, k == 0)?;
         let mut l = new_layer(k, &out, form.clone());
         l.shapes = vec![Shape::Component(c)];
         l.info.name = Some(FULL_COLOR_NAME.to_string());
@@ -470,8 +522,13 @@ fn leaf(font: &Font, master: &str, c: &Component, base: usize, added: &mut Vec<[
     if !m.iter().all(|v| v.is_finite()) {
         return None;
     }
-    let fill = fill_value(font, master, c, &m, base, added)?;
-    let mut paint = dict(vec![("Format", int(format::GLYPH)), ("Glyph", string(&c.glyph)), ("Paint", fill)]);
+    let mut paint = if colr_glyph(font, master, c) {
+        dict(vec![("Format", int(format::COLR_GLYPH)), ("Glyph", string(&c.glyph))])
+    } else {
+        let fill = fill_value(font, master, c, &m, base, added)?;
+        let fill = with_var(fill, c.extra.get(Family::Ufo, PAINT_VAR));
+        dict(vec![("Format", int(format::GLYPH)), ("Glyph", string(&c.glyph)), ("Paint", fill)])
+    };
     let recorded = c.extra.get(Family::Ufo, PAINT_TRANSFORM).and_then(Value::as_array).map(|a| a.items.clone());
     let wrappers = match recorded {
         Some(r) if wrappers_transform(&r).is_some_and(|t| t.iter().zip(&m).all(|(a, b)| near(*a, *b))) => r,
@@ -483,6 +540,68 @@ fn leaf(font: &Font, master: &str, c: &Component, base: usize, added: &mut Vec<[
         paint = crate::libkeys::sorted_keys(Value::Dict(d));
     }
     Some(paint)
+}
+
+/// Whether component `c` of a full-colour layer paints its glyph's own colour layers (a
+/// `PaintColrGlyph`): it has neither a fill colour nor a gradient, and its glyph has a full-colour
+/// layer in `master`, as glyphsLib writes a component of a colour glyph.
+fn colr_glyph(font: &Font, master: &str, c: &Component) -> bool {
+    let a = &c.info.attrs;
+    a.fill_color.is_none() && a.gradient.is_none() && font.glyph(&c.glyph).is_some_and(|g| has_full_color(g, master))
+}
+
+fn has_full_color(g: &Glyph, master: &str) -> bool {
+    g.layers.iter().any(|l| l.master == master && l.info.attrs.full_color && l.info.attrs.coordinates.is_empty())
+}
+
+/// Whether the `PaintColrGlyph` chain from `from` in `master` reaches `target` or goes deeper than
+/// [`MAX_COLR_DEPTH`]: a cycle, or a graph too deep to compile.
+fn colr_reaches(font: &Font, master: &str, from: &str, target: &str) -> bool {
+    let mut seen = std::collections::HashSet::new();
+    let mut todo = vec![(from.to_string(), 0usize)];
+    while let Some((name, depth)) = todo.pop() {
+        if name == target || depth > MAX_COLR_DEPTH {
+            return true;
+        }
+        if !seen.insert(name.clone()) {
+            continue;
+        }
+        let Some(g) = font.glyph(&name) else { continue };
+        for l in g.layers.iter().filter(|l| l.master == master && l.info.attrs.full_color) {
+            if let [Shape::Component(c)] = l.shapes.as_slice()
+                && colr_glyph(font, master, c)
+            {
+                todo.push((c.glyph.clone(), depth + 1));
+            }
+        }
+    }
+    false
+}
+
+/// `paint` as the variable paint `record` ([`PAINT_VAR`]) says it was, while it is still of the
+/// static format the record names.
+fn with_var(paint: Value, record: Option<&Value>) -> Value {
+    let Some(r) = record.and_then(Value::as_dict) else { return paint };
+    let Value::Dict(mut d) = paint else { return paint };
+    let (Some(f), Some(want)) = (paint_format(&d), r.get("Format").and_then(Value::as_num)) else { return Value::Dict(d) };
+    if !matches!(want, Num::Int(w) if w == f) {
+        return Value::Dict(d);
+    }
+    d.insert("Format", int(f.saturating_add(1)));
+    if let Some(v) = r.get("VarIndexBase") {
+        d.insert("VarIndexBase", v.clone());
+    }
+    let stops = r.get("ColorStop").and_then(Value::as_array).map(|a| a.items.clone()).unwrap_or_default();
+    if let Some(Value::Dict(line)) = d.get_mut("ColorLine")
+        && let Some(Value::Array(items)) = line.get_mut("ColorStop")
+    {
+        for (stop, v) in items.items.iter_mut().zip(&stops) {
+            if let (Value::Dict(stop), Value::Number(_)) = (stop, v) {
+                stop.insert("VarIndexBase", v.clone());
+            }
+        }
+    }
+    crate::libkeys::sorted_keys(Value::Dict(d))
 }
 
 /// The transform paints the writer puts around a glyph paint moved by `m`, outermost first,
@@ -560,7 +679,7 @@ fn extend_name(e: Extend) -> &'static str {
 
 /// The gradient `g` of a component of `glyph` moved by `m`, in the glyph paint's own space.
 fn gradient_value(font: &Font, master: &str, glyph: &str, g: &Gradient, m: &[f64; 6], base: usize, added: &mut Vec<[f64; 4]>) -> Option<Value> {
-    let (s, dx, dy) = even_scale(m)?;
+    let space = Space::of(m)?;
     if g.stops.len() > MAX_GRADIENT_STOPS || !g.numbers().all(f64::is_finite) {
         return None;
     }
@@ -576,7 +695,7 @@ fn gradient_value(font: &Font, master: &str, glyph: &str, g: &Gradient, m: &[f64
     let line = dict(vec![("ColorStop", array(stop_values)), ("Extend", string(extend_name(g.extend)))]);
     // Points in the font's space, as the compiler paints them, then in the glyph paint's own.
     let at = |x: f64, y: f64| (x0 + w * x, y0 + h * y);
-    let own = |(x, y): (f64, f64)| ((x - dx) / s, (y - dy) / s);
+    let own = |p: (f64, f64)| space.own(p);
     Some(match g.kind {
         GradientKind::Linear { start, end } => {
             let (p0, p1) = (at(start.x, start.y), at(end.x, end.y));
@@ -602,6 +721,7 @@ fn gradient_value(font: &Font, master: &str, glyph: &str, g: &Gradient, m: &[f64
                 (at(end.x, end.y), (start_radius * w).abs(), (end_radius * w).abs())
             };
             let ((ax, ay), (bx, by)) = (own(c0), own(c1));
+            let s = space.radius_scale()?;
             dict(vec![
                 ("ColorLine", line),
                 ("Format", int(format::RADIAL)),
@@ -615,13 +735,14 @@ fn gradient_value(font: &Font, master: &str, glyph: &str, g: &Gradient, m: &[f64
         }
         GradientKind::Conic { center, start_angle, angle, .. } => {
             let (cx, cy) = own(at(center.x, center.y));
+            let turn = space.turn()?;
             dict(vec![
                 ("ColorLine", line),
                 ("Format", int(format::SWEEP)),
                 ("centerX", number(cx)),
                 ("centerY", number(cy)),
-                ("endAngle", number(start_angle + angle)),
-                ("startAngle", number(start_angle)),
+                ("endAngle", number(start_angle + angle - turn)),
+                ("startAngle", number(start_angle - turn)),
             ])
         }
     })
@@ -633,17 +754,97 @@ fn even_scale(m: &[f64; 6]) -> Option<(f64, f64, f64)> {
     (yx == 0.0 && xy == 0.0 && xx == yy && xx > 0.0).then_some((xx, dx, dy))
 }
 
-/// The component `v` describes: a `PaintGlyph` of a glyph of the font other than `base`, in at
-/// most [`MAX_WRAPPERS`] transform paints.
-fn read_leaf(font: &Font, master: &str, base: &str, v: &Value) -> Option<Component> {
+/// How a component's transform maps the glyph paint's own space, where its gradient's geometry
+/// is written, to the font's, where the model's gradient is measured.
+enum Space {
+    /// Moves and scales evenly by a positive factor: the factor and the offset.
+    Even(f64, f64, f64),
+    /// Any other transform that can be undone, and its inverse.
+    General([f64; 6], [f64; 6]),
+}
+
+impl Space {
+    fn of(m: &[f64; 6]) -> Option<Space> {
+        if let Some((s, dx, dy)) = even_scale(m) {
+            return Some(Space::Even(s, dx, dy));
+        }
+        Some(Space::General(*m, invert(m)?))
+    }
+
+    /// A point of the font's space in the paint's own.
+    fn own(&self, (x, y): (f64, f64)) -> (f64, f64) {
+        match self {
+            Space::Even(s, dx, dy) => ((x - dx) / s, (y - dy) / s),
+            Space::General(_, inv) => apply(inv, x, y),
+        }
+    }
+
+    /// A point of the paint's own space in the font's.
+    fn font(&self, x: f64, y: f64) -> (f64, f64) {
+        match self {
+            Space::Even(s, dx, dy) => (s * x + dx, s * y + dy),
+            Space::General(m, _) => apply(m, x, y),
+        }
+    }
+
+    /// The factor radii scale by, when circles stay circles: the transform turns, mirrors and
+    /// scales evenly. A radial gradient under any other transform is an ellipse the model cannot
+    /// hold.
+    fn radius_scale(&self) -> Option<f64> {
+        match self {
+            Space::Even(s, ..) => Some(*s),
+            Space::General(m, _) => {
+                let [xx, yx, xy, yy, ..] = *m;
+                let turned = near(xx, yy) && near(yx, -xy);
+                let mirrored = near(xx, -yy) && near(yx, xy);
+                (turned || mirrored).then(|| (xx * yy - yx * xy).abs().sqrt())
+            }
+        }
+    }
+
+    /// The angle in degrees, counter-clockwise, the transform turns by when it turns and scales
+    /// evenly without mirroring; a sweep gradient's angles turn with it.
+    fn turn(&self) -> Option<f64> {
+        match self {
+            Space::Even(..) => Some(0.0),
+            Space::General(m, _) => {
+                let [xx, yx, xy, yy, ..] = *m;
+                (near(xx, yy) && near(yx, -xy) && xx * yy - yx * xy > 0.0).then(|| yx.atan2(xx).to_degrees())
+            }
+        }
+    }
+}
+
+/// The inverse of `m`; `None` when it flattens the plane or is not finite.
+fn invert(m: &[f64; 6]) -> Option<[f64; 6]> {
+    let [xx, yx, xy, yy, dx, dy] = *m;
+    let det = xx * yy - yx * xy;
+    if det == 0.0 || !det.is_finite() {
+        return None;
+    }
+    let inv = [yy / det, -yx / det, -xy / det, xx / det, (xy * dy - yy * dx) / det, (yx * dx - xx * dy) / det];
+    inv.iter().all(|v| v.is_finite()).then_some(inv)
+}
+
+fn apply(m: &[f64; 6], x: f64, y: f64) -> (f64, f64) {
+    let [xx, yx, xy, yy, dx, dy] = *m;
+    (xx * x + xy * y + dx, yx * x + yy * y + dy)
+}
+
+/// The component `v` describes: a `PaintGlyph` or a `PaintColrGlyph` of a glyph of the font, in
+/// at most [`MAX_WRAPPERS`] transform paints. A `PaintColrGlyph` may not lead back to `base`. A
+/// `PaintGlyph` of `base` itself only where `first` (the first paint of the entry), unmoved
+/// and static, over a master layer that has shapes and no paint of its own: the reader then paints
+/// that master layer ([`crate::colorglyphs::fold`]).
+fn read_leaf(font: &Font, master: &str, base: &str, v: &Value, first: bool) -> Option<Component> {
     let mut m = IDENTITY;
     let mut wrappers = Vec::new();
     let mut v = v;
-    let d = loop {
+    let (d, f) = loop {
         let d = v.as_dict()?;
         let f = paint_format(d)?;
-        if f == format::GLYPH {
-            break d;
+        if f == format::GLYPH || f == format::COLR_GLYPH {
+            break (d, f);
         }
         if wrappers.len() >= MAX_WRAPPERS {
             return None;
@@ -658,18 +859,32 @@ fn read_leaf(font: &Font, master: &str, base: &str, v: &Value) -> Option<Compone
         return None;
     }
     let name = d.get("Glyph")?.as_str()?;
-    if name == base || font.glyph(name).is_none() {
-        return None;
-    }
-    let attrs = read_fill(font, master, name, &m, d.get("Paint")?)?;
-    let [xx, yx, xy, yy, dx, dy] = m;
+    font.glyph(name)?;
     let mut c = Component::new(name, 0.0, 0.0);
+    if f == format::COLR_GLYPH {
+        if name == base || colr_reaches(font, master, name, base) {
+            return None;
+        }
+    } else {
+        let own = name == base;
+        if own && !(first && wrappers.is_empty() && crate::colorglyphs::can_paint_own(font, master, base)) {
+            return None;
+        }
+        let (attrs, var) = read_fill(font, master, name, &m, d.get("Paint")?)?;
+        if own && var.is_some() {
+            return None;
+        }
+        c.info.attrs = attrs;
+        if let Some(var) = var {
+            c.extra.insert(Family::Ufo, PAINT_VAR, var);
+        }
+    }
+    let [xx, yx, xy, yy, dx, dy] = m;
     if [xx, yx, xy, yy] == [1.0, 0.0, 0.0, 1.0] {
         c.transform = Transform::translate(dx, dy);
     } else {
         c.transform = Transform::Matrix(m);
     }
-    c.info.attrs = attrs;
     let recorded = array(wrappers);
     if !close(&recorded, &array(default_wrappers(&m))) {
         c.extra.insert(Family::Ufo, PAINT_TRANSFORM, recorded);
@@ -677,30 +892,50 @@ fn read_leaf(font: &Font, master: &str, base: &str, v: &Value) -> Option<Compone
     Some(c)
 }
 
-/// The fill colour or gradient the paint `v` gives a component of `glyph` moved by `m`.
-fn read_fill(font: &Font, master: &str, glyph: &str, m: &[f64; 6], v: &Value) -> Option<ShapeAttrs> {
+/// The fill colour or gradient the paint `v` gives a component of `glyph` moved by `m`, and for a
+/// variable paint its record ([`PAINT_VAR`]).
+fn read_fill(font: &Font, master: &str, glyph: &str, m: &[f64; 6], v: &Value) -> Option<(ShapeAttrs, Option<Value>)> {
     let d = v.as_dict()?;
     let mut attrs = ShapeAttrs::default();
-    let f = paint_format(d)?;
+    let read_format = paint_format(d)?;
+    let var = format::VAR_FILLS.contains(&read_format);
+    let f = if var { read_format.saturating_sub(1) } else { read_format };
+    let record = |stops: Vec<Value>| {
+        var.then(|| {
+            let mut r = Dict::new();
+            r.insert("Format", int(f));
+            if let Some(b) = d.get("VarIndexBase") {
+                r.insert("VarIndexBase", b.clone());
+            }
+            if stops.iter().any(|s| matches!(s, Value::Number(_))) {
+                r.insert("ColorStop", array(stops));
+            }
+            Value::Dict(r)
+        })
+    };
     if f == format::SOLID {
         attrs.fill_color = Some(read_color(d)?);
-        return Some(attrs);
+        return Some((attrs, record(Vec::new())));
     }
     if ![format::LINEAR, format::RADIAL, format::SWEEP].contains(&f) {
         return None;
     }
-    let (s, dx, dy) = even_scale(m)?;
+    let space = Space::of(m)?;
     let [x0, y0, x1, y1] = bounds(font, master, glyph, m)?;
     let (w, h) = (x1 - x0, y1 - y0);
     if !(w > 0.0 && h > 0.0) {
         return None;
     }
     let n = |k: &str| d.get(k).and_then(coordinate);
-    let frac = |x: f64, y: f64| ((s * x + dx - x0) / w, (s * y + dy - y0) / h);
-    let (stops, extend) = read_line(d.get("ColorLine")?)?;
+    let frac = |x: f64, y: f64| {
+        let (x, y) = space.font(x, y);
+        ((x - x0) / w, (y - y0) / h)
+    };
+    let (stops, extend, stop_vars) = read_line(d.get("ColorLine")?)?;
     let kind = if f == format::LINEAR {
         GradientKind::Linear { start: frac(n("x0")?, n("y0")?).into(), end: frac(n("x1")?, n("y1")?).into() }
     } else if f == format::RADIAL {
+        let s = space.radius_scale()?;
         GradientKind::Radial {
             start: frac(n("x0")?, n("y0")?).into(),
             end: frac(n("x1")?, n("y1")?).into(),
@@ -712,7 +947,7 @@ fn read_fill(font: &Font, master: &str, glyph: &str, m: &[f64; 6], v: &Value) ->
         let start = n("startAngle")?;
         GradientKind::Conic {
             center: frac(n("centerX")?, n("centerY")?).into(),
-            start_angle: start,
+            start_angle: start + space.turn()?,
             angle: n("endAngle")? - start,
             control_radius: 0.0,
         }
@@ -722,7 +957,7 @@ fn read_fill(font: &Font, master: &str, glyph: &str, m: &[f64; 6], v: &Value) ->
         return None;
     }
     attrs.gradient = Some(gradient);
-    Some(attrs)
+    Some((attrs, record(stop_vars)))
 }
 
 /// A palette entry with an alpha from 0 to 1: `PaletteIndex` (65535 the text colour) and `Alpha`.
@@ -735,7 +970,8 @@ fn read_color(d: &Dict) -> Option<Color> {
     Some(Color::Palette { index, alpha })
 }
 
-fn read_line(v: &Value) -> Option<(Vec<ColorStop>, Extend)> {
+/// A colour line's stops and extend mode, and each stop's `VarIndexBase` (`false` without one).
+fn read_line(v: &Value) -> Option<(Vec<ColorStop>, Extend, Vec<Value>)> {
     let d = v.as_dict()?;
     let extend = match d.get("Extend")?.as_str()? {
         "pad" => Extend::Pad,
@@ -747,14 +983,14 @@ fn read_line(v: &Value) -> Option<(Vec<ColorStop>, Extend)> {
     if items.len() > MAX_GRADIENT_STOPS {
         return None;
     }
-    let stops = items
-        .iter()
-        .map(|s| {
-            let s = s.as_dict()?;
-            Some(ColorStop { offset: s.get("StopOffset").and_then(coordinate)?, color: read_color(s)? })
-        })
-        .collect::<Option<Vec<_>>>()?;
-    Some((stops, extend))
+    let mut stops = Vec::with_capacity(items.len());
+    let mut vars = Vec::with_capacity(items.len());
+    for s in items {
+        let s = s.as_dict()?;
+        stops.push(ColorStop { offset: s.get("StopOffset").and_then(coordinate)?, color: read_color(s)? });
+        vars.push(s.get("VarIndexBase").cloned().unwrap_or(Value::Bool(false)));
+    }
+    Some((stops, extend, vars))
 }
 
 /// A paint's `Format`, an integer.
@@ -766,8 +1002,10 @@ fn paint_format(d: &Dict) -> Option<i64> {
 }
 
 /// The transform of the transform paint `d` of format `f`, as fontTools'
-/// `otTables.Paint.getTransform` gives it; `None` for any other format.
+/// `otTables.Paint.getTransform` gives it; `None` for any other format. A variable transform paint
+/// (an odd format from 13 to 31) is its static form: the model holds no variation of its own.
 fn wrapper_transform(f: i64, d: &Dict) -> Option<[f64; 6]> {
+    let f = if (format::TRANSFORM + 1..=format::SKEW_CENTER + 1).contains(&f) && f % 2 == 1 { f - 1 } else { f };
     let n = |k: &str| d.get(k).and_then(coordinate);
     let around = |t: [f64; 6]| -> Option<[f64; 6]> {
         let (cx, cy) = (n("centerX")?, n("centerY")?);
@@ -841,23 +1079,28 @@ fn near(a: f64, b: f64) -> bool {
     (a - b).abs() <= TOLERANCE * a.abs().max(b.abs()).max(1.0)
 }
 
-/// The box of `glyph`'s outline in `master` moved by `m`, which only moves and scales evenly,
-/// curve extremes included (as the compiler measures a layer glyph): `[x0, y0, x1, y1]`, all 0
-/// without an outline.
+/// The box of `glyph`'s outline in `master` moved by `m`, curve extremes included (as the
+/// compiler measures a layer glyph): `[x0, y0, x1, y1]`, all 0 without an outline. A transform that
+/// only moves and scales evenly moves the glyph's own box; any other is measured on the moved
+/// outline.
 fn bounds(font: &Font, master: &str, glyph: &str, m: &[f64; 6]) -> Option<[f64; 4]> {
-    let (s, dx, dy) = even_scale(m)?;
-    let Some([x0, y0, x1, y1]) = glyph_box(font, master, glyph)? else { return Some([0.0; 4]) };
-    let out = [s * x0 + dx, s * y0 + dy, s * x1 + dx, s * y1 + dy];
+    let out = match even_scale(m) {
+        Some((s, dx, dy)) => {
+            let Some([x0, y0, x1, y1]) = glyph_box(font, master, glyph, &IDENTITY)? else { return Some([0.0; 4]) };
+            [s * x0 + dx, s * y0 + dy, s * x1 + dx, s * y1 + dy]
+        }
+        None => glyph_box(font, master, glyph, m)?.unwrap_or([0.0; 4]),
+    };
     out.iter().all(|v| v.is_finite()).then_some(out)
 }
 
-/// The untransformed box of `glyph`'s outline in `master`, from the open [`Scope`]'s boxes when
+/// The box of `glyph`'s outline in `master` moved by `m`, from the open [`Scope`]'s boxes when
 /// there is one; `None` when the outline cannot be made or the scope's budget is spent.
-fn glyph_box(font: &Font, master: &str, glyph: &str) -> Option<Option<[f64; 4]>> {
-    let key = (std::ptr::from_ref(font) as usize, glyph.to_string(), master.to_string());
+fn glyph_box(font: &Font, master: &str, glyph: &str, m: &[f64; 6]) -> Option<Option<[f64; 4]>> {
+    let key = (std::ptr::from_ref(font) as usize, glyph.to_string(), master.to_string(), m.map(f64::to_bits));
     let open = BOXES.with(|b| b.try_borrow().ok().and_then(|b| b.as_ref().map(|b| (b.cache.get(&key).copied(), b.left))));
     match open {
-        None => measure(font, master, glyph).0,
+        None => measure(font, master, glyph, m).0,
         Some((Some(hit), _)) => hit,
         Some((None, 0)) => {
             BOXES.with(|b| {
@@ -870,7 +1113,7 @@ fn glyph_box(font: &Font, master: &str, glyph: &str) -> Option<Option<[f64; 4]>>
             None
         }
         Some((None, _)) => {
-            let (value, cost) = measure(font, master, glyph);
+            let (value, cost) = measure(font, master, glyph, m);
             BOXES.with(|b| {
                 if let Ok(mut b) = b.try_borrow_mut()
                     && let Some(b) = b.as_mut()
@@ -884,17 +1127,20 @@ fn glyph_box(font: &Font, master: &str, glyph: &str) -> Option<Option<[f64; 4]>>
     }
 }
 
-/// The untransformed box of `glyph`'s outline in `master` and the segments it took.
-fn measure(font: &Font, master: &str, glyph: &str) -> (Option<Option<[f64; 4]>>, usize) {
+/// The box of `glyph`'s outline in `master` moved by `m`, and the segments it took.
+fn measure(font: &Font, master: &str, glyph: &str, m: &[f64; 6]) -> (Option<Option<[f64; 4]>>, usize) {
     let Ok(path) = font.outline(glyph, master) else { return (None, 1) };
     let mut out: Option<[f64; 4]> = None;
     let mut segments = 1usize;
     for seg in path.segments() {
         segments += 1;
         let cubic = seg.to_cubic();
-        let p = [cubic.p0, cubic.p1, cubic.p2, cubic.p3];
-        let (lx, hx) = extremes(p.map(|p| p.x));
-        let (ly, hy) = extremes(p.map(|p| p.y));
+        let mut p = [cubic.p0, cubic.p1, cubic.p2, cubic.p3].map(|p| (p.x, p.y));
+        if *m != IDENTITY {
+            p = p.map(|(x, y)| apply(m, x, y));
+        }
+        let (lx, hx) = extremes(p.map(|p| p.0));
+        let (ly, hy) = extremes(p.map(|p| p.1));
         out = Some(match out {
             None => [lx, ly, hx, hy],
             Some([a, b, c, d]) => [a.min(lx), b.min(ly), c.max(hx), d.max(hy)],
