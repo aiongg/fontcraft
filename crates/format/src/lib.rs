@@ -483,7 +483,7 @@ mod tests {
         });
         let mut layer = Layer::new(master, 600.0);
         layer.shapes.push(Shape::Path(Path::new(true, nodes.collect())));
-        let mut glyph = Glyph::new("A");
+        let mut glyph = Glyph::new("curved");
         glyph.layers.push(layer);
         font.glyphs.push(glyph);
         let bytes = save(&font).unwrap();
@@ -492,7 +492,7 @@ mod tests {
         assert!(String::from_utf8(bytes).unwrap().contains("\"hoi\""));
         // A value beyond the coordinate range is refused on load, not kept.
         {
-            let mut g = font.glyphs.get_mut("A").unwrap();
+            let mut g = font.glyphs.get_mut("curved").unwrap();
             let Some(Shape::Path(p)) = g.layers.first_mut().and_then(|l| l.shapes.first_mut()) else { panic!() };
             let mut info = (*p.nodes[0].info).clone();
             info.hoi.0[0].curve = HoiCurve::Point { x: 1e300, y: 0.0 };

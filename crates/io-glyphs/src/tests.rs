@@ -262,12 +262,13 @@ fn version_4_interpolation_curves_are_typed_and_written_back_byte_for_byte() {
     use fontcraft_model::{HoiCenter, HoiCurve, HoiDirection};
     let mut font = read(V4_HOI).unwrap();
     let Shape::Path(p) = &font.glyph("A").unwrap().layers[0].shapes[0] else { panic!() };
-    assert_eq!(p.nodes[0].info.hoi.get("wght"), Some(&HoiCurve::Point { x: 520.0, y: 40.5 }));
-    let apex = &p.nodes[1].info;
+    // A closed path's last node in the file is its first node in the model.
+    assert_eq!(p.nodes[1].info.hoi.get("wght"), Some(&HoiCurve::Point { x: 520.0, y: 40.5 }));
+    let apex = &p.nodes[2].info;
     assert_eq!(apex.name.as_deref(), Some("apex"));
     assert_eq!(apex.hoi.get("wdth"), Some(&HoiCurve::Rotation { center: Some(HoiCenter::Auto), direction: Some(HoiDirection::CounterClockwise) }));
     assert_eq!(apex.hoi.get("wght"), Some(&HoiCurve::Rotation { center: Some(HoiCenter::At { x: 300.0, y: 350.0 }), direction: None }));
-    assert!(matches!(p.nodes[2].info.hoi.get("wght"), Some(HoiCurve::Timing(_))));
+    assert!(matches!(p.nodes[0].info.hoi.get("wght"), Some(HoiCurve::Timing(_))));
     assert!(p.nodes.iter().all(|n| n.info.extra.get(Family::Glyphs, "attr").is_none()), "typed, not carried");
     assert_eq!(write(&font).unwrap(), V4_HOI);
     assert!(info_losses(&font).is_empty());
@@ -280,7 +281,7 @@ fn version_4_interpolation_curves_are_typed_and_written_back_byte_for_byte() {
     let odd = V4_HOI.replace("ip = (520,40.5);", "ip = (520,40.5);\nxx = 1;");
     let font = read(&odd).unwrap();
     let Shape::Path(p) = &font.glyph("A").unwrap().layers[0].shapes[0] else { panic!() };
-    assert!(p.nodes[0].info.hoi.is_empty());
+    assert!(p.nodes[1].info.hoi.is_empty());
     assert_eq!(write(&font).unwrap(), odd);
 }
 
