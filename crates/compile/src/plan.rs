@@ -64,8 +64,8 @@ fn plan_stages(font: Option<&Font>, mut resolved: Resolved, flavour: Flavour, op
     };
     preflight::check_cmap(&glyphs)?;
     let glyph_data = font.and_then(|_| crate::compile_glyph_data(options));
-    let color_plan = crate::color::plan(font, &resolved, options);
-    let (glyphs, _) = crate::color::append_layer_glyphs(font, &color_plan, &resolved, glyphs, &mut warnings)?;
+    let mut color_plan = crate::color::plan(font, &resolved, options);
+    let (glyphs, _) = crate::color::append_layer_glyphs(font, &mut color_plan, &resolved, glyphs, &mut warnings)?;
     let layout = crate::layout_tables(font, glyph_data.as_deref(), &resolved, &glyphs, &edits, options, None, &mut warnings)?;
     let mut layout_tags: Vec<String> = layout.tables().iter().map(|(tag, _)| tag.to_string()).collect();
     if crate::math::plan(font, &resolved, &edits).is_some() {
