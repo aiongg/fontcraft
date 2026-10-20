@@ -15,7 +15,9 @@
 //!   drawing in a group with the reference's transform ([`glyph_document`]); documents are
 //!   separate per glyph, so one cannot `<use>` another's elements.
 //! - A document is at most [`crate::MAX_SVG_DOCUMENT_BYTES`]; the table at most
-//!   [`crate::MAX_SVG_TABLE_BYTES`].
+//!   [`crate::MAX_SVG_TABLE_BYTES`]. Writing one document visits at most
+//!   [`crate::MAX_SVG_PAINT_VISITS`] paint nodes; references met past that are drawn as their
+//!   component's outline, as the COLR fallback draws them.
 //!
 //! The document draws in font units: the glyph group's transform turns the font's y-up space
 //! into SVG's y-down space, so outlines, gradient points and stroke widths are written as the
@@ -29,7 +31,7 @@ use fontcraft_geom::{Affine, BezPath, PathEl, Point};
 use fontcraft_model::{Extend, MAX_COORDINATE};
 
 use crate::paint::{ColorLine, ColorRef, Paint, ShapeRef, StrokeSpec, nesting, outline_fill};
-use crate::{ColorError, MAX_PAINT_DEPTH, MAX_STOPS, MAX_SVG_DOCUMENT_BYTES, MAX_SVG_TABLE_BYTES, Rgba};
+use crate::{ColorError, MAX_PAINT_DEPTH, MAX_STOPS, MAX_SVG_DOCUMENT_BYTES, MAX_SVG_PAINT_VISITS, MAX_SVG_TABLE_BYTES, Rgba};
 
 /// Where a bitmap is drawn in a glyph's document, in font units (y up, as the layer has it).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -77,7 +79,16 @@ pub fn has_sweep(paint: &Paint) -> bool {
 /// in [`outline_fill`]; [`glyph_document`] follows it instead.
 pub fn document(paint: &Paint, outlines: &dyn Fn(&ShapeRef) -> BezPath, gid: u16, palette: &[Rgba]) -> Result<String, ColorError> {
     let outlines = |_: &str, shape: &ShapeRef| outlines(shape);
-    glyph_document("", paint, &outlines, &|_: &str| None, gid, palette)
+    glyph_document("", paint, &outlines, &|_: &str| None, gid, palette).map(|d| d.text)
+}
+
+/// A glyph's SVG document and what the writer left out of it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct GlyphDocument {
+    pub text: String,
+    /// References drawn as their component's outline because the document had visited
+    /// [`MAX_SVG_PAINT_VISITS`] paint nodes when they were met.
+    pub outlined_over_budget: usize,
 }
 
 /// The document of glyph `name` (glyph id `gid`) drawing `paint`, with each
@@ -89,8 +100,10 @@ pub fn document(paint: &Paint, outlines: &dyn Fn(&ShapeRef) -> BezPath, gid: u16
 /// A reference is drawn as its component's outline in [`outline_fill`], as the COLR fallback
 /// draws it, when `paints` has no graph for its glyph, when the glyph is already being drawn
 /// (a cycle), when references nest more than [`MAX_PAINT_DEPTH`] deep, when the inlined paint
-/// would nest past [`MAX_PAINT_DEPTH`], or when its transform cannot be written. Each inlined
-/// copy counts towards [`MAX_SVG_DOCUMENT_BYTES`], which bounds the work.
+/// would nest past [`MAX_PAINT_DEPTH`], when its transform cannot be written, or when the
+/// document has visited [`MAX_SVG_PAINT_VISITS`] paint nodes (counted in
+/// [`GlyphDocument::outlined_over_budget`]). Each inlined copy also counts towards
+/// [`MAX_SVG_DOCUMENT_BYTES`].
 pub fn glyph_document<'a>(
     name: &str,
     paint: &Paint,
@@ -98,8 +111,8 @@ pub fn glyph_document<'a>(
     paints: &'a dyn Fn(&str) -> Option<&'a Paint>,
     gid: u16,
     palette: &'a [Rgba],
-) -> Result<String, ColorError> {
-    let mut w = Writer { gid, palette, outlines, paints, glyphs: vec![name.to_string()], defs: String::new(), body: String::new(), next_id: 0 };
+) -> Result<GlyphDocument, ColorError> {
+    let mut w = Writer::new(name, outlines, paints, gid, palette);
     w.paint(paint, 0)?;
     let mut out = String::with_capacity(w.defs.len() + w.body.len() + 160);
     out.push_str(r#"<svg xmlns="http://www.w3.org/2000/svg" version="1.1">"#);
@@ -114,7 +127,7 @@ pub fn glyph_document<'a>(
     if out.len() > MAX_SVG_DOCUMENT_BYTES {
         return Err(ColorError::LimitExceeded { what: "bytes in one SVG document", limit: MAX_SVG_DOCUMENT_BYTES });
     }
-    Ok(out)
+    Ok(GlyphDocument { text: out, outlined_over_budget: w.over_budget })
 }
 
 /// The document of glyph `gid` showing a PNG image, embedded as a data URL in an `<image>`
@@ -304,9 +317,19 @@ struct Writer<'a> {
     paints: &'a dyn Fn(&str) -> Option<&'a Paint>,
     /// The glyphs being drawn: the document's glyph, then each glyph a reference inlined.
     glyphs: Vec<String>,
+    /// [`nesting`] of each referenced glyph's paint, so that many references to one large graph
+    /// walk it once.
+    nesting: HashMap<String, usize>,
     defs: String,
     body: String,
     next_id: usize,
+    /// Paint nodes visited, bounded by [`MAX_SVG_PAINT_VISITS`] through the references.
+    visits: usize,
+    /// References drawn as their outline because `visits` had reached its limit.
+    over_budget: usize,
+    /// How often [`nesting`] walked a graph.
+    #[cfg(test)]
+    nesting_walks: usize,
 }
 
 /// How a shape is painted: as a fill, or as an SVG stroke.
@@ -316,7 +339,45 @@ enum Mode<'s> {
     Stroke(&'s StrokeSpec),
 }
 
-impl Writer<'_> {
+impl<'a> Writer<'a> {
+    fn new(
+        name: &str,
+        outlines: &'a dyn Fn(&str, &ShapeRef) -> BezPath,
+        paints: &'a dyn Fn(&str) -> Option<&'a Paint>,
+        gid: u16,
+        palette: &'a [Rgba],
+    ) -> Self {
+        Writer {
+            gid,
+            palette,
+            outlines,
+            paints,
+            glyphs: vec![name.to_string()],
+            nesting: HashMap::new(),
+            defs: String::new(),
+            body: String::new(),
+            next_id: 0,
+            visits: 0,
+            over_budget: 0,
+            #[cfg(test)]
+            nesting_walks: 0,
+        }
+    }
+
+    /// [`nesting`] of `inner`, the paint of `glyph`.
+    fn nesting(&mut self, glyph: &str, inner: &Paint) -> usize {
+        if let Some(&n) = self.nesting.get(glyph) {
+            return n;
+        }
+        #[cfg(test)]
+        {
+            self.nesting_walks += 1;
+        }
+        let n = nesting(inner);
+        self.nesting.insert(glyph.to_string(), n);
+        n
+    }
+
     fn check_size(&self) -> Result<(), ColorError> {
         if self.defs.len() + self.body.len() > MAX_SVG_DOCUMENT_BYTES {
             return Err(ColorError::LimitExceeded { what: "bytes in one SVG document", limit: MAX_SVG_DOCUMENT_BYTES });
@@ -338,6 +399,7 @@ impl Writer<'_> {
         if depth > MAX_PAINT_DEPTH {
             return Err(ColorError::LimitExceeded { what: "nested paints", limit: MAX_PAINT_DEPTH });
         }
+        self.visits = self.visits.saturating_add(1);
         match paint {
             Paint::Layers(list) => {
                 for p in list {
@@ -361,11 +423,16 @@ impl Writer<'_> {
     /// A [`Paint::ColrGlyph`] of `glyph` moved by `transform`, `shape` being its component.
     fn reference(&mut self, glyph: &str, transform: Affine, shape: &ShapeRef, depth: usize) -> Result<(), ColorError> {
         let paints = self.paints;
-        let inner = paints(glyph).filter(|inner| {
-            self.glyphs.len() <= MAX_PAINT_DEPTH
-                && !self.glyphs.iter().any(|g| g == glyph)
-                && (depth + 1).saturating_add(nesting(inner)) <= MAX_PAINT_DEPTH
-        });
+        let mut inner = paints(glyph).filter(|_| self.glyphs.len() <= MAX_PAINT_DEPTH && !self.glyphs.iter().any(|g| g == glyph));
+        if let Some(p) = inner
+            && (depth + 1).saturating_add(self.nesting(glyph, p)) > MAX_PAINT_DEPTH
+        {
+            inner = None;
+        }
+        if inner.is_some() && self.visits >= MAX_SVG_PAINT_VISITS {
+            self.over_budget += 1;
+            inner = None;
+        }
         let (Some(inner), Ok(m)) = (inner, matrix(transform)) else {
             return self.glyph(shape, &outline_fill(), depth);
         };
@@ -626,9 +693,9 @@ mod tests {
     use fontcraft_geom::{Affine, BezPath, Point};
     use fontcraft_model::Extend;
 
-    use super::{BitmapPlacement, bitmap_document, bitmap_size, document, glyph_document, table};
+    use super::{BitmapPlacement, Writer, bitmap_document, bitmap_size, document, glyph_document, table};
     use crate::paint::{ColorLine, ColorRef, ColorStop, Paint, ShapeRef, StrokeSpec};
-    use crate::{ColorError, Rgba};
+    use crate::{ColorError, MAX_SVG_DOCUMENT_BYTES, MAX_SVG_PAINT_VISITS, Rgba};
 
     fn square(x: f64) -> BezPath {
         let mut p = BezPath::new();
@@ -735,7 +802,7 @@ mod tests {
         // Each glyph's shape i is a square at x = 200 × i, plus 1000 for `A` so the test sees whose
         // outline is drawn.
         let draw = |name: &str, s: &ShapeRef| square(if name == "A" { 1000.0 } else { 0.0 } + 200.0 * s.shapes[0] as f64);
-        let doc = glyph_document("B", &b, &draw, &paints, 5, &PALETTE).unwrap();
+        let doc = glyph_document("B", &b, &draw, &paints, 5, &PALETTE).unwrap().text;
         assert!(doc.contains(r##"<g transform="matrix(1 0 0 1 100 50)"><path d="M1000 0L1100 0L1100 100L1000 100Z" fill="#FF0000"/></g>"##), "{doc}");
         // `L` inlined once; its reference back to itself is its component's outline in grey, as is
         // the reference to `S`.
@@ -746,6 +813,47 @@ mod tests {
         // Without paints to follow, the reference is the component's outline.
         let plain = document(&b, &outlines, 5, &PALETTE).unwrap();
         assert!(!plain.contains("<g transform=") && plain.contains(r##"fill="#808080""##), "{plain}");
+    }
+
+    #[test]
+    fn svg_document_of_references_fanning_out_stops_at_the_visit_limit() {
+        // `g0` holds two references to `g1`, `g1` two to `g2`, and so on down to `g18`, a red
+        // square: copied in full, each reference to `g0` would draw 2^18 squares, more than one
+        // document may hold. The document refers to `g0` 64 times.
+        const LEVELS: usize = 18;
+        let reference = |k: usize| Paint::ColrGlyph { glyph: format!("g{k}"), transform: Affine::translate((1.0, 0.0)), shape: shape(1, None) };
+        let mut chain: Vec<Paint> = (0..LEVELS).map(|k| Paint::Layers(vec![reference(k + 1), reference(k + 1)])).collect();
+        chain.push(glyph(shape(0, None), Paint::Solid(ColorRef::Rgba([1.0, 0.0, 0.0, 1.0]))));
+        let paints = |name: &str| name.strip_prefix('g').and_then(|k| k.parse::<usize>().ok()).and_then(|k| chain.get(k));
+        let draw = |_: &str, s: &ShapeRef| outlines(s);
+        let top = Paint::Layers((0..64).map(|_| reference(0)).collect());
+        let doc = glyph_document("top", &top, &draw, &paints, 1, &PALETTE).unwrap();
+        let squares = doc.text.matches(r##"fill="#FF0000""##).count();
+        assert!(squares > 0 && squares < MAX_SVG_PAINT_VISITS, "{squares} squares");
+        // Past the limit each reference met is its component's outline in grey: the second
+        // reference of each level being drawn, and the rest of the 64.
+        assert!(doc.outlined_over_budget > 0 && doc.outlined_over_budget <= LEVELS + 64, "{}", doc.outlined_over_budget);
+        assert_eq!(doc.text.matches(r##"fill="#808080""##).count(), doc.outlined_over_budget);
+        assert!(doc.text.len() < MAX_SVG_DOCUMENT_BYTES / 2, "{} bytes", doc.text.len());
+    }
+
+    #[test]
+    fn many_references_to_one_deep_graph_walk_it_once() {
+        // `D` nests 80 paints deep, too deep to copy, so each of the 5000 references to it is its
+        // component's outline; finding that walks `D`'s graph once, not once per reference.
+        let mut deep = glyph(shape(0, None), Paint::Solid(ColorRef::Rgba([1.0, 0.0, 0.0, 1.0])));
+        for _ in 0..80 {
+            deep = Paint::Layers(vec![deep]);
+        }
+        let paints = |name: &str| (name == "D").then_some(&deep);
+        let draw = |_: &str, s: &ShapeRef| outlines(s);
+        let reference = || Paint::ColrGlyph { glyph: "D".into(), transform: Affine::IDENTITY, shape: shape(1, None) };
+        let top = Paint::Layers((0..5000).map(|_| reference()).collect());
+        let mut w = Writer::new("top", &draw, &paints, 1, &PALETTE);
+        w.paint(&top, 0).unwrap();
+        assert_eq!(w.nesting_walks, 1);
+        assert_eq!(w.visits, 5001);
+        assert_eq!(w.body.matches(r##"fill="#808080""##).count(), 5000);
     }
 
     #[test]

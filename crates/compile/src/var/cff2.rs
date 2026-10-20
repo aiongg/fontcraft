@@ -19,11 +19,12 @@
 //! the stem edges and widths blended over the glyph's model. Flex is dropped, as the merge draws
 //! it as two curves. A glyph whose masters' hints differ in structure, or that varies with an
 //! intermediate layer, is written without hints, with a warning; fontTools refuses such a merge.
+//! So is a glyph whose stem blends do not fit the charstring's operand stack ([`write`]).
 
 use std::collections::HashMap;
 
 use fontcraft_autohint::FdDict;
-use fontcraft_cff::cff2::{Blend, BlendOp, BlendStem, Cff2Font, Cff2Glyph, Cff2Hints, Cff2Private, RegionAxis};
+use fontcraft_cff::cff2::{Blend, BlendOp, BlendStem, Cff2Built, Cff2Font, Cff2Glyph, Cff2Hints, Cff2Private, RegionAxis};
 use fontcraft_cff::{CharstringHints, Number, PathOp, PrivateDict, StemHint};
 use fontcraft_geom::BezPath;
 use fontcraft_geom::variation::{Region, VariationModel};
@@ -112,16 +113,7 @@ fn master_hints(font: &Font, master: &MasterHinting, name: &str, path: &[PathOp]
     if master.settings.disable_autohint_glyphs.iter().any(|n| n == name) {
         return None;
     }
-    // The autohinter sees the path as the static charstring draws it; each of its masks goes
-    // before the first step of `path` the step it names was made from.
-    let (drawn, starts) = crate::cff_hints::charstring_path_mapped(path);
-    let mut hints = crate::cff_hints::autohinted(name, &drawn, dict, &fontcraft_autohint::Options::default(), warnings)?;
-    hints.flex.clear();
-    for (op, _) in &mut hints.masks {
-        *op = if *op == 0 { 0 } else { starts.get(*op).copied().unwrap_or(path.len()) };
-    }
-    hints.masks.retain(|(op, _)| *op < path.len().max(1));
-    Some(hints)
+    crate::cff_hints::autohinted_on_steps(name, path, dict, &fontcraft_autohint::Options::default(), warnings)
 }
 
 /// The blended hints of glyph `g`, whose sources draw `ops`, over `model` (`None` for a glyph
@@ -442,4 +434,16 @@ pub fn cff2_font(
         round_tolerance: CFF2_ROUND_TOLERANCE,
         generic: false,
     })
+}
+
+/// The `CFF2` table of `font`, with a warning for each glyph written without its hints because a
+/// stem's blend does not fit the operand stack.
+pub fn write(font: &Cff2Font, warnings: &mut Vec<String>) -> Result<Cff2Built, CompileError> {
+    let built = fontcraft_cff::cff2::write_cff2(font).map_err(|e| CompileError::Table { table: "CFF2", message: e.to_string() })?;
+    for name in &built.unhinted {
+        warnings.push(format!(
+            "glyph `{name}`: its PostScript hints vary over more regions than a CFF2 charstring can hold at once, so it was exported without hints"
+        ));
+    }
+    Ok(built)
 }

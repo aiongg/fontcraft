@@ -563,6 +563,32 @@ fn cff2_blends_past_the_stack_limit_are_split() {
 }
 
 #[test]
+fn cff2_stem_blends_past_the_stack_limit_leave_the_glyph_unhinted_with_a_warning() {
+    use fontcraft_cff::cff2::{Blend, BlendStem, Cff2Hints};
+    // With 500 regions a blended stem edge takes 501 operands: after the 12 plain operands of
+    // the six fixed stems before it in its operator, it does not fit the 513-operand stack.
+    let mut font = many_regions(500);
+    let fixed = |edge: f64| BlendStem { edge: Blend::fixed(edge), width: Blend::fixed(20.0) };
+    let mut h_stems: Vec<BlendStem> = (0..6).map(|k| fixed(100.0 * f64::from(k))).collect();
+    h_stems.push(BlendStem { edge: Blend { default: 700.0, deltas: vec![1.0; 500] }, width: Blend::fixed(20.0) });
+    font.glyphs[1].hints = Some(Cff2Hints { h_stems, ..Cff2Hints::default() });
+    let mut warnings = Vec::new();
+    let built = cff2::write(&font, &mut warnings).unwrap();
+    assert_eq!(built.unhinted, vec!["c".to_string()]);
+    assert!(warnings.iter().any(|w| w.starts_with("glyph `c`") && w.contains("without hints")), "{warnings:?}");
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+
+    // The same stems over 4 regions fit: the glyph keeps its hints, without a warning.
+    let mut font = many_regions(4);
+    let mut h_stems: Vec<BlendStem> = (0..6).map(|k| fixed(100.0 * f64::from(k))).collect();
+    h_stems.push(BlendStem { edge: Blend { default: 700.0, deltas: vec![1.0; 4] }, width: Blend::fixed(20.0) });
+    font.glyphs[1].hints = Some(Cff2Hints { h_stems, ..Cff2Hints::default() });
+    let mut warnings = Vec::new();
+    assert!(cff2::write(&font, &mut warnings).unwrap().unhinted.is_empty());
+    assert!(warnings.is_empty(), "{warnings:?}");
+}
+
+#[test]
 fn cff2_sources_without_an_outline_each_are_refused() {
     let master = |l: f64| (vec![l], fontcraft_cff::PrivateDict::default());
     let glyph = cff2::CubicSources {

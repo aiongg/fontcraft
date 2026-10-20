@@ -390,14 +390,18 @@ pub const MAX_PAINT_VISITS: usize = 65_536;
 struct Collect<'f> {
     font: &'f Font,
     paints: paint::MasterPaints<'f>,
-    /// The paint graphs of the glyphs referenced so far; `None` for a glyph without one.
-    graphs: HashMap<String, Option<Arc<Paint>>>,
+    /// The paint graphs of the glyphs referenced so far with their [`paint::nesting`], walked
+    /// once per glyph however often it is referenced; `None` for a glyph without one.
+    graphs: HashMap<String, Option<(Arc<Paint>, usize)>>,
     palette: &'f [Rgba],
     text: [f32; 4],
     out: Vec<Drawable>,
     /// The glyphs being drawn: the drawn glyph, then each glyph a reference is following.
     glyphs: Vec<String>,
     visits: usize,
+    /// How often [`paint::nesting`] walked a graph.
+    #[cfg(test)]
+    nesting_walks: usize,
 }
 
 impl Collect<'_> {
@@ -463,16 +467,23 @@ impl Collect<'_> {
         if self.glyphs.len() > MAX_PAINT_DEPTH || self.glyphs.iter().any(|g| g == name) {
             return None;
         }
-        let graph = match self.graphs.get(name) {
+        let (graph, nesting) = match self.graphs.get(name) {
             Some(known) => known.clone(),
             None => {
                 let font = self.font;
-                let made = font.glyph(name).and_then(|g| self.paints.paint(g, &mut Vec::new()).ok().flatten()).map(Arc::new);
+                let made = font.glyph(name).and_then(|g| self.paints.paint(g, &mut Vec::new()).ok().flatten()).map(|graph| {
+                    #[cfg(test)]
+                    {
+                        self.nesting_walks += 1;
+                    }
+                    let nesting = paint::nesting(&graph);
+                    (Arc::new(graph), nesting)
+                });
                 self.graphs.insert(name.to_string(), made.clone());
                 made
             }
         }?;
-        ((depth + 1).saturating_add(paint::nesting(&graph)) <= MAX_PAINT_DEPTH).then_some(graph)
+        ((depth + 1).saturating_add(nesting) <= MAX_PAINT_DEPTH).then_some(graph)
     }
 }
 
@@ -499,8 +510,18 @@ fn vector(font: &Font, glyph: &Glyph, master: &str, text: [f32; 4]) -> Option<Co
     let palette = palettes.palette(0).map(<[Rgba]>::to_vec).unwrap_or_default();
     let mut paints = paint::MasterPaints::new(font, master);
     let graph = paints.paint(glyph, &mut Vec::new()).ok()??;
-    let mut c =
-        Collect { font, paints, graphs: HashMap::new(), palette: &palette, text, out: Vec::new(), glyphs: vec![glyph.name.clone()], visits: 0 };
+    let mut c = Collect {
+        font,
+        paints,
+        graphs: HashMap::new(),
+        palette: &palette,
+        text,
+        out: Vec::new(),
+        glyphs: vec![glyph.name.clone()],
+        visits: 0,
+        #[cfg(test)]
+        nesting_walks: 0,
+    };
     c.collect(glyph, &graph, &mut Vec::new(), Affine::IDENTITY, 0);
     Some(Content::Vector(c.out))
 }
@@ -1321,5 +1342,77 @@ mod tests {
         let mut data = vec![0u8; 4];
         blend(&mut data, 0, [1.0, 0.0, 0.0, 0.0], 1.0);
         assert_eq!(data, [0, 0, 0, 0], "a colour with no opacity paints nothing");
+    }
+
+    fn collector<'f>(font: &'f Font, master: &'f str) -> Collect<'f> {
+        Collect {
+            font,
+            paints: paint::MasterPaints::new(font, master),
+            graphs: HashMap::new(),
+            palette: &[],
+            text: [0.0, 0.0, 0.0, 1.0],
+            out: Vec::new(),
+            glyphs: vec!["top".to_string()],
+            visits: 0,
+            nesting_walks: 0,
+        }
+    }
+
+    #[test]
+    fn references_fanning_out_stop_at_the_visit_limit() {
+        // `g0` holds two references to `g1`, `g1` two to `g2`, and so on down to `g20`, a paint
+        // outside any glyph, which draws nothing: followed in full, one reference to `g0` visits
+        // 2^20 of them.
+        const LEVELS: usize = 20;
+        let mut font = Font::new("Fan Out");
+        let master = font.masters[0].id.clone();
+        for name in std::iter::once("top".to_string()).chain((0..=LEVELS).map(|k| format!("g{k}"))) {
+            font.add_glyph(&name, Vec::new(), 600.0).unwrap();
+        }
+        let shape = ShapeRef { layer: master.clone(), shapes: vec![0], stroke: None };
+        let reference = |k: usize| Paint::ColrGlyph { glyph: format!("g{k}"), transform: Affine::IDENTITY, shape: shape.clone() };
+        let mut c = collector(&font, &master);
+        for k in 0..=LEVELS {
+            let graph = if k == LEVELS {
+                Paint::Solid(ColorRef::Rgba([1.0, 0.0, 0.0, 1.0]))
+            } else {
+                Paint::Layers(vec![reference(k + 1), reference(k + 1)])
+            };
+            let nesting = paint::nesting(&graph);
+            c.graphs.insert(format!("g{k}"), Some((Arc::new(graph), nesting)));
+        }
+        let top = font.glyph("top").unwrap();
+        c.collect(top, &reference(0), &mut Vec::new(), Affine::IDENTITY, 0);
+        assert_eq!(c.visits, MAX_PAINT_VISITS);
+        assert!(c.out.is_empty());
+    }
+
+    #[test]
+    fn many_references_to_one_colour_glyph_walk_its_graph_once() {
+        use fontcraft_model::{Color, LayerAttrs, Path};
+
+        // `D`'s full-colour layer is a red square; the drawn paint refers to `D` 5000 times.
+        let mut font = Font::new("References");
+        let master = font.masters[0].id.clone();
+        font.add_glyph("top", Vec::new(), 600.0).unwrap();
+        font.add_glyph("D", Vec::new(), 600.0).unwrap();
+        {
+            let mut g = font.glyph_mut("D").unwrap();
+            let mut red = Path::rect(0.0, 0.0, 100.0, 100.0);
+            red.info.attrs.fill_color = Some(Color::Rgba([1.0, 0.0, 0.0, 1.0]));
+            let mut l = Layer::new(master.as_str(), 600.0);
+            l.id = "D-full".into();
+            l.info.attrs = kinds::with_kind(&LayerAttrs::default(), Some(ColorLayerKind::FullColor));
+            l.shapes = vec![Shape::Path(red)];
+            g.layers.push(l);
+        }
+        let shape = ShapeRef { layer: master.clone(), shapes: vec![0], stroke: None };
+        let references =
+            Paint::Layers((0..5000).map(|_| Paint::ColrGlyph { glyph: "D".into(), transform: Affine::IDENTITY, shape: shape.clone() }).collect());
+        let mut c = collector(&font, &master);
+        let top = font.glyph("top").unwrap();
+        c.collect(top, &references, &mut Vec::new(), Affine::IDENTITY, 0);
+        assert_eq!(c.nesting_walks, 1);
+        assert_eq!(c.out.len(), 5000);
     }
 }
