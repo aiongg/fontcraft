@@ -1509,7 +1509,15 @@ fn heuristic(ctx: &GlyphCtx<'_>, sink: &mut Sink, test: Test, tolerance: f64, ki
                 let moved: Vec<usize> = order.iter().zip(items).filter(|(s, x)| **s != x.shape).map(|(s, _)| *s).collect();
                 let list = order.iter().map(|s| Nth(*s).to_string()).collect::<Vec<_>>().join(", ");
                 let message = format!("The shapes of {lb} match those of {la} better in the order {list} (score {score}).");
-                Hit::new("contour-order", message).shapes(moved)
+                let full = layer_order(pb.layer.shapes.len(), items, &order);
+                let hit = Hit::new("contour-order", message).shapes(moved);
+                match full {
+                    Some(full) => {
+                        sink.push(hit.data("score", f.score).place(Location { order: full, ..place }));
+                        continue;
+                    }
+                    None => hit.without_fix(),
+                }
             }
             Test::StartPoint => {
                 let mut message = match f.node {
@@ -1554,6 +1562,29 @@ fn heuristic(ctx: &GlyphCtx<'_>, sink: &mut Sink, test: Test, tolerance: f64, ki
         };
         sink.push(hit.data("score", f.score).place(place));
     }
+}
+
+/// The shape order of a whole layer of `len` shapes that puts `order[k]` (the shape matched with
+/// item `k` of the reference master) where item `k` stands now: every slot that holds an item
+/// takes its partner, and the other shapes keep their place. `None` when the result is not a
+/// permutation of the layer's shapes.
+fn layer_order(len: usize, items: &[Item], order: &[usize]) -> Option<Vec<usize>> {
+    if items.len() != order.len() {
+        return None;
+    }
+    let mut full: Vec<usize> = (0..len).collect();
+    for (item, &shape) in items.iter().zip(order) {
+        *full.get_mut(item.shape)? = shape;
+    }
+    let mut seen = vec![false; len];
+    for &s in &full {
+        let slot = seen.get_mut(s)?;
+        if *slot {
+            return None;
+        }
+        *slot = true;
+    }
+    Some(full)
 }
 
 pub(crate) fn contour_order_check(ctx: &GlyphCtx<'_>, params: &Params<'_>, sink: &mut Sink) {

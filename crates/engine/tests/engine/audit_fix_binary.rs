@@ -196,6 +196,46 @@ fn tables_recalculate_recomputes_the_named_fields_only() {
 }
 
 #[test]
+fn tables_recalculate_recomputes_maxp_counts_and_vhea_extents() {
+    let dir = scratch("recalc-maxp-vhea");
+    let (mut s, ttf) = exported(&dir);
+    let field = |f: &SfntFont, table: &[u8; 4], name: &str| fontcraft_tables::patch::read_field(f, *table, name).unwrap();
+    let original = read(&ttf);
+    let points = field(&original, b"maxp", "maxPoints");
+    let contours = field(&original, b"maxp", "maxContours");
+    assert!(s.execute("tables.recalculate", &json!({"font": ttf, "fields": ["vhea.extents"]})).is_err(), "the font has no vhea");
+
+    // Wrong maxp maxima, and vertical metrics with every advance 1000 and every top side
+    // bearing 100 under a vhea whose derived fields are all 0.
+    let mut font = patch(&original, b"maxp", &[("maxPoints", 1.0), ("maxContours", 0.0)]);
+    let maxp = font.get(*b"maxp").unwrap();
+    let count = u16::from_be_bytes([maxp[4], maxp[5]]);
+    let mut vhea = Vec::new();
+    for v in [0x0001u16, 0x1000, 880, (-120i16) as u16, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, count] {
+        vhea.extend(v.to_be_bytes());
+    }
+    let vmtx: Vec<u8> = (0..count).flat_map(|_| [1000u16.to_be_bytes(), 100i16.to_be_bytes()].concat()).collect();
+    font.insert(*b"vhea", vhea);
+    font.insert(*b"vmtx", vmtx);
+    save(&ttf, &font);
+
+    let r = run(&mut s, "tables.recalculate", json!({"font": ttf, "fields": ["maxp.maxPoints", "vhea.yMaxExtent"], "inPlace": true}));
+    let fields: Vec<&str> = r["changed"].as_array().unwrap().iter().map(|c| c["field"].as_str().unwrap()).collect();
+    assert!(fields.contains(&"maxp.maxPoints") && fields.contains(&"maxp.maxContours"), "{r}");
+    assert!(fields.contains(&"vhea.advanceHeightMax") && fields.contains(&"vhea.yMaxExtent"), "{r}");
+    let out = read(&ttf);
+    assert_eq!(field(&out, b"maxp", "maxPoints"), points, "the compiler's value again");
+    assert_eq!(field(&out, b"maxp", "maxContours"), contours);
+    assert_eq!(field(&out, b"vhea", "advanceHeightMax"), PatchValue::Number(1000.0));
+    assert_eq!(field(&out, b"vhea", "minTopSideBearing"), PatchValue::Number(100.0));
+    // A and B are 700 units tall: 1000 - 100 - 700 below, 100 + 700 above at least.
+    let PatchValue::Number(below) = field(&out, b"vhea", "minBottomSideBearing") else { panic!() };
+    let PatchValue::Number(extent) = field(&out, b"vhea", "yMaxExtent") else { panic!() };
+    assert!(below <= 200.0 && extent >= 800.0, "{below} {extent}");
+    assert_eq!(field(&out, b"vhea", "vertTypoAscender"), PatchValue::Number(880.0), "fields not derived stay");
+}
+
+#[test]
 fn tables_clean_name_records_and_rebuild_cmap_work_on_files() {
     let dir = scratch("names");
     let (mut s, ttf) = exported(&dir);

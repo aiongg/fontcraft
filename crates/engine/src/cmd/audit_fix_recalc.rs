@@ -41,6 +41,8 @@ const ORDER: &[&str] = &[
     "hhea.advanceWidthMax",
     "hhea.extents",
     "hhea.caretSlope",
+    "vhea.extents",
+    "maxp.counts",
     "post.underlineThickness",
     "post.isFixedPitch",
     "OS/2.version",
@@ -85,6 +87,15 @@ pub(super) fn canonical(name: &str) -> Option<&'static str> {
         }
         "OS/2.ulCodePageRange1" | "OS/2.ulCodePageRange2" | "OS/2.ulCodePageRange" => "OS/2.ulCodePageRange",
         "OS/2.usFirstCharIndex" | "OS/2.usLastCharIndex" | "OS/2.charIndex" => "OS/2.charIndex",
+        "vhea.advanceHeightMax" | "vhea.minTopSideBearing" | "vhea.minBottomSideBearing" | "vhea.yMaxExtent" | "vhea.extents" => "vhea.extents",
+        "maxp"
+        | "maxp.maxPoints"
+        | "maxp.maxContours"
+        | "maxp.maxCompositePoints"
+        | "maxp.maxCompositeContours"
+        | "maxp.maxComponentElements"
+        | "maxp.maxComponentDepth"
+        | "maxp.counts" => "maxp.counts",
         "glyf" | "glyf.bounds" => "glyf.bounds",
         "sfntVersion" | "sfnt.version" => "sfntVersion",
         other => return ORDER.iter().copied().find(|f| *f == other),
@@ -127,6 +138,18 @@ fn advances(f: &FontRef<'_>) -> Option<Vec<u16>> {
     let long = hmtx.h_metrics();
     let last = long.last()?.advance();
     Some((0..usize::from(count)).map(|i| long.get(i).map_or(last, |m| m.advance())).collect())
+}
+
+/// Every glyph's advance height and top side bearing, as `vmtx` gives them.
+fn vertical(f: &FontRef<'_>) -> Option<Vec<(u16, i16)>> {
+    let count = f.maxp().ok()?.num_glyphs();
+    let vmtx = f.vmtx().ok()?;
+    (0..u32::from(count))
+        .map(|g| {
+            let gid = GlyphId::new(g);
+            Some((vmtx.advance(gid)?, vmtx.side_bearing(gid).unwrap_or(0)))
+        })
+        .collect()
 }
 
 fn lsb(f: &FontRef<'_>, gid: usize) -> i16 {
@@ -477,6 +500,61 @@ fn step(field: &str, font: &SfntFont, changes: &mut Changes) -> Result<Step> {
                 ("xMaxExtent", num(f64::from(max_extent))),
             ];
             Ok(set(font, *b"hhea", &fields, changes)?)
+        }
+        "vhea.extents" => {
+            if !has(font, b"vhea") {
+                return Ok(na("the font has no vhea table"));
+            }
+            let Some(metrics) = vertical(&f) else { return Ok(na("the vmtx table cannot be read")) };
+            let boxes = if has(font, b"glyf") { stored_boxes(&f).unwrap_or_default() } else { glyph_boxes(&f)? };
+            // fontTools' vhea.recalc: the side-bearing fields read only glyphs that draw.
+            let (mut min_tsb, mut min_bsb, mut max_extent) = (i32::MAX, i32::MAX, i32::MIN);
+            for (b, (advance, tsb)) in boxes.iter().zip(&metrics) {
+                let Some([_, y0, _, y1]) = *b else { continue };
+                let height = i32::from(y1) - i32::from(y0);
+                let tsb = i32::from(*tsb);
+                min_tsb = min_tsb.min(tsb);
+                min_bsb = min_bsb.min(i32::from(*advance) - tsb - height);
+                max_extent = max_extent.max(tsb + height);
+            }
+            if max_extent == i32::MIN {
+                (min_tsb, min_bsb, max_extent) = (0, 0, 0);
+            }
+            let max_advance = metrics.iter().map(|(a, _)| *a).max().unwrap_or(0);
+            let fields = [
+                ("advanceHeightMax", num(f64::from(max_advance))),
+                ("minTopSideBearing", num(f64::from(min_tsb))),
+                ("minBottomSideBearing", num(f64::from(min_bsb))),
+                ("yMaxExtent", num(f64::from(max_extent))),
+            ];
+            Ok(set(font, *b"vhea", &fields, changes)?)
+        }
+        "maxp.counts" => {
+            if !has(font, b"glyf") {
+                return Ok(na("the font has no TrueType outlines, so maxp holds only the glyph count"));
+            }
+            if font.get(*b"maxp").is_none_or(|d| d.len() < 32) {
+                return Ok(na("the maxp table is not version 1.0"));
+            }
+            let mut out = font.clone();
+            fontcraft_tables::ttx::read_core::recalc_compiled_maxp(&mut out).map_err(tables_err)?;
+            // maxp.recalc also writes the head box and flags bit 1, as the reference does.
+            for (table, names) in [
+                (
+                    *b"maxp",
+                    &["maxPoints", "maxContours", "maxCompositePoints", "maxCompositeContours", "maxComponentElements", "maxComponentDepth"][..],
+                ),
+                (*b"head", &["xMin", "yMin", "xMax", "yMax", "flags"][..]),
+            ] {
+                for name in names {
+                    let (old, new) = (patch::read_field(font, table, name)?, patch::read_field(&out, table, name)?);
+                    if old != new {
+                        let label = format!("{}.{name}", fontcraft_tables::sfnt::tag_str(table).trim_end());
+                        changes.push(&label, value_json(&old), value_json(&new));
+                    }
+                }
+            }
+            Ok(out)
         }
         "hhea.caretSlope" => {
             let angle = f.post().map_err(|e| EngineError::Io(format!("the post table cannot be read: {e}")))?.italic_angle().to_f64();

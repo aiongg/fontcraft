@@ -122,6 +122,7 @@ const STRAIGHTEN_MARGIN: f64 = 1e-6;
 const FIX_LABEL: &str = "Fix Audit Results";
 const NO_RUN: &str = "no audit has run on this document since it was opened: run audit.run first";
 
+mod font_steps;
 mod staged;
 
 pub(crate) use staged::Slot;
@@ -1467,8 +1468,7 @@ fn is_info_fix(fix: &str) -> bool {
 fn fix_via(fx: &FixSpec) -> Option<&'static str> {
     let command = match super::audit_fix_info::source_command(fx.id) {
         Some(command) => command,
-        // A contour-order result names the shapes that move, not the order they take.
-        None if fx.id == "fixCompatibility" && fx.command == Some("glyph.setShapeOrder") => return None,
+        None if font_steps::is_font_step(fx.id) => return font_steps::command(fx.id),
         None if FIX_ORDER.contains(&fx.id) => fx.command?,
         None => return None,
     };
@@ -1519,6 +1519,7 @@ fn fix(s: &mut Session, v: &Value) -> Result<Value> {
     };
     let mut report = FixReport::default();
     let mut info = InfoFixes::new();
+    let mut steps = font_steps::Selected::default();
     let (mut run, groups) = match p.opt_array("results")? {
         Some(ids) => {
             if let Some(key) = FILTER_KEYS.iter().find(|k| p.get(k).is_some()) {
@@ -1531,7 +1532,7 @@ fn fix(s: &mut Session, v: &Value) -> Result<Value> {
             let font = s.font()?;
             let settings = DocumentSettings::read(font).0;
             let mut run = read_run(&p, s, font, &settings)?;
-            let groups = groups_from_ids(s, &p, &ids, &mut run, &mut info, &mut report)?;
+            let groups = groups_from_ids(s, &p, &ids, &mut run, &mut info, &mut steps, &mut report)?;
             (run, groups)
         }
         None => {
@@ -1547,16 +1548,23 @@ fn fix(s: &mut Session, v: &Value) -> Result<Value> {
             }
             // The Font Info fixes answer findings of every scope, so those checks run in full,
             // compiling the source when they read compiled fonts.
-            let info_checks: Vec<&'static CheckSpec> = run.checks.iter().copied().filter(|c| c.fix.is_some_and(|f| is_info_fix(f.id))).collect();
-            if !info_checks.is_empty() {
-                let info_run = Run { checks: info_checks, modules: crate::extensions::ModuleChecks::default(), ..run.clone() };
-                let ex = examine_target(&mut document_target_of(doc), &info_run);
+            // So do the font-wide steps; each of them runs its checks again before it acts.
+            let whole: Vec<&'static CheckSpec> =
+                run.checks.iter().copied().filter(|c| c.fix.is_some_and(|f| is_info_fix(f.id) || font_steps::is_font_step(f.id))).collect();
+            if !whole.is_empty() {
+                let whole_run = Run { checks: whole, modules: crate::extensions::ModuleChecks::default(), ..run.clone() };
+                let ex = examine_target(&mut document_target_of(doc), &whole_run);
                 for h in ex.hits.iter().filter(|h| !h.ignored) {
                     if let (Some(fx), Some(spec)) = (h.finding.fix, audit::find(h.finding.check)) {
-                        add_info(&mut info, fx.id, spec);
+                        if is_info_fix(fx.id) {
+                            add_info(&mut info, fx.id, spec);
+                        } else {
+                            add_info(&mut steps.fixes, fx.id, spec);
+                        }
                     }
                 }
             }
+            steps.glyphs = run.glyphs.clone();
             (run, groups.into_values().collect::<Vec<Group>>())
         }
     };
@@ -1568,23 +1576,30 @@ fn fix(s: &mut Session, v: &Value) -> Result<Value> {
     let how = How { safe_only, dry, backup, facts };
     one_step(s, |s| {
         fix_info(s, &info, &how, &mut report);
+        font_steps::run_steps(s, &run, &steps.fixes, steps.glyphs.as_ref(), &font_steps::DATA_STEPS, &how, &mut report)?;
         for group in &groups {
             fix_layer(s, &run, group, &how, &mut report)?;
         }
+        font_steps::run_steps(s, &run, &steps.fixes, steps.glyphs.as_ref(), &font_steps::LATE_STEPS, &how, &mut report)?;
         Ok(())
     })?;
     // `remaining`: the same checks on the glyphs involved, as they are now, and the checks of
-    // the Font Info fixes on the whole font.
-    run.glyphs = Some(touched);
+    // the Font Info fixes on the whole font; the font-wide steps' checks on the glyphs they
+    // were given.
+    run.glyphs = match (steps.fixes.is_empty(), steps.glyphs.take()) {
+        (true, _) => Some(touched),
+        (false, None) => None,
+        (false, Some(named)) => Some(named.into_iter().chain(touched).collect()),
+    };
     let doc = s.doc()?;
     let mut target = document_target_of(doc);
     let used_outside: Vec<&'static CheckSpec> =
         run.checks.iter().copied().filter(|c| c.scope != CheckScope::Layer && groups.iter().any(|g| g.checks.contains(c.id))).collect();
-    let ex = if info.is_empty() && used_outside.is_empty() {
+    let ex = if info.is_empty() && used_outside.is_empty() && steps.fixes.is_empty() {
         examine(&doc.font, &run, true)
     } else {
         let mut checks: Vec<&'static CheckSpec> = run.checks.iter().copied().filter(|c| c.scope == CheckScope::Layer).collect();
-        for &spec in info.values().flatten().chain(&used_outside) {
+        for &spec in info.values().flatten().chain(&used_outside).chain(steps.fixes.values().flatten()) {
             if !checks.iter().any(|c| c.id == spec.id) {
                 checks.push(spec);
             }
@@ -1607,7 +1622,15 @@ fn fix(s: &mut Session, v: &Value) -> Result<Value> {
 }
 
 /// The layers and checks named by result ids of the kept run.
-fn groups_from_ids(s: &Session, p: &Params, ids: &[&str], run: &mut Run, info: &mut InfoFixes, report: &mut FixReport) -> Result<Vec<Group>> {
+fn groups_from_ids(
+    s: &Session,
+    p: &Params,
+    ids: &[&str],
+    run: &mut Run,
+    info: &mut InfoFixes,
+    steps: &mut font_steps::Selected,
+    report: &mut FixReport,
+) -> Result<Vec<Group>> {
     let doc = s.doc()?;
     let last = kept_run(doc).ok_or_else(|| p.bad(NO_RUN))?;
     let (then, refs) = (last.font.clone(), last.refs.clone());
@@ -1621,6 +1644,14 @@ fn groups_from_ids(s: &Session, p: &Params, ids: &[&str], run: &mut Run, info: &
             && is_info_fix(fx.id)
         {
             add_info(info, fx.id, spec);
+            continue;
+        }
+        if let Some(spec) = audit::find(r.check)
+            && let Some(fx) = spec.fix
+            && font_steps::is_font_step(fx.id)
+        {
+            add_info(&mut steps.fixes, fx.id, spec);
+            steps.name(&r.glyph);
             continue;
         }
         if r.glyph.is_empty() {
@@ -1670,7 +1701,10 @@ fn groups_from_ids(s: &Session, p: &Params, ids: &[&str], run: &mut Run, info: &
 /// it. Findings without a fix stay in `remaining` and are not listed as skipped.
 fn groups_from_hits(font: &Font, hits: &[Hit]) -> Groups {
     let mut groups = Groups::new();
-    for h in hits.iter().filter(|h| !h.finding.location.glyph.is_empty() && h.finding.fix.is_some_and(|f| !is_info_fix(f.id))) {
+    for h in hits
+        .iter()
+        .filter(|h| !h.finding.location.glyph.is_empty() && h.finding.fix.is_some_and(|f| !is_info_fix(f.id) && !font_steps::is_font_step(f.id)))
+    {
         if font.glyph(&h.finding.location.glyph).is_none() {
             continue;
         }
