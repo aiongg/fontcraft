@@ -10,7 +10,8 @@
 //!
 //! 1. Every charstring is run with its calls followed ([`desubroutinize`]) and cut into tokens: a
 //!    number, an operator, or `hintmask`/`cntrmask` with its mask bytes. A token keeps its exact
-//!    bytes, so expanding the result gives back the input byte for byte.
+//!    bytes, so expanding the result gives back the input byte for byte (a `CFF2` `dotsection`,
+//!    which draws nothing, is left out).
 //! 2. A suffix array and its LCP array over all tokens give every repeated token sequence that
 //!    is followed by different tokens in different places, with its number of occurrences. The
 //!    tree of these sequences is walked twice and never stored: the first walk prices every
@@ -170,6 +171,11 @@ impl CharstringSet {
     }
 
     fn validate(&self) -> Result<(), SubrError> {
+        self.validate_within(MAX_CHARSTRING)
+    }
+
+    /// [`CharstringSet::validate`] with each charstring and subroutine held to `max_bytes`.
+    fn validate_within(&self, max_bytes: usize) -> Result<(), SubrError> {
         let glyphs = self.charstrings.len();
         if glyphs > MAX_GLYPHS {
             return Err(SubrError::TooLarge { what: "glyphs in a CFF table", limit: MAX_GLYPHS });
@@ -191,9 +197,9 @@ impl CharstringSet {
         if subr_lists.clone().any(|l| l.len() > MAX_SUBRS_PER_INDEX) {
             return Err(SubrError::TooLarge { what: "subroutines in one INDEX", limit: MAX_SUBRS_PER_INDEX });
         }
-        let too_long = self.charstrings.iter().chain(subr_lists.flatten()).any(|c| c.len() > MAX_CHARSTRING);
+        let too_long = self.charstrings.iter().chain(subr_lists.flatten()).any(|c| c.len() > max_bytes);
         if too_long {
-            return Err(SubrError::TooLarge { what: "bytes in one charstring", limit: MAX_CHARSTRING });
+            return Err(SubrError::TooLarge { what: "bytes in one charstring", limit: max_bytes });
         }
         Ok(())
     }
@@ -270,20 +276,30 @@ pub fn desubroutinize_within(set: &CharstringSet, max_bytes: usize) -> Result<Ch
 pub struct Expander<'a> {
     set: &'a CharstringSet,
     ops_left: usize,
+    max_bytes: usize,
 }
 
 impl<'a> Expander<'a> {
     /// Checks `set` once. `max_ops` is the most operators the glyphs may run together, calls
-    /// included; each glyph is also held to [`MAX_OPS_PER_GLYPH`].
+    /// included; each glyph is also held to [`MAX_OPS_PER_GLYPH`], and each charstring, as stored
+    /// and expanded, to [`MAX_CHARSTRING`] bytes.
     pub fn new(set: &'a CharstringSet, max_ops: usize) -> Result<Self, SubrError> {
-        set.validate()?;
-        Ok(Expander { set, ops_left: max_ops })
+        Self::with_limits(set, max_ops, MAX_CHARSTRING)
+    }
+
+    /// [`Expander::new`] with each charstring and subroutine, as stored and expanded, held to
+    /// `max_bytes` instead. A caller that turns the expanded glyphs into something smaller (an
+    /// instance resolves every `blend`) can accept more than a charstring may hold.
+    pub fn with_limits(set: &'a CharstringSet, max_ops: usize, max_bytes: usize) -> Result<Self, SubrError> {
+        set.validate_within(max_bytes)?;
+        Ok(Expander { set, ops_left: max_ops, max_bytes })
     }
 
     /// Glyph `gid` with every subroutine call expanded: the same bytes without the calls and
-    /// their subroutine numbers (a `CFF ` `endchar` inside a subroutine ends the glyph).
+    /// their subroutine numbers (a `CFF ` `endchar` inside a subroutine ends the glyph). A
+    /// `CFF2` `dotsection`, which draws nothing, is left out.
     pub fn glyph(&mut self, gid: usize) -> Result<Vec<u8>, SubrError> {
-        flat::flatten(self.set, gid, &mut self.ops_left).map(|f| f.bytes).map_err(|e| in_glyph(e, gid))
+        flat::flatten_within(self.set, gid, &mut self.ops_left, self.max_bytes).map(|f| f.bytes).map_err(|e| in_glyph(e, gid))
     }
 }
 

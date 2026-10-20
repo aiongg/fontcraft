@@ -868,6 +868,7 @@ Differences kept:
 | A Type 1 glyph whose replacement hint set holds two overlapping stems | `tx` writes the hint masks and warns | the glyph's hints dropped, with a note | the CFF writer refuses overlapping stems in one hint mask, which the format forbids |
 | Charstring operators of a Type 1 glyph | `tx` chooses its own operators | the CFF writer's specialised operators, `hstemhm` when a counter mask is present | the drawn paths are the same; the operators are not compared |
 | CFF2 → CFF oracle | fontTools 4.66 `CFF2ToCFF` fails on a table with local subroutines, and on recalculating `hhea` after it renames the glyphs | — | the measure expands the subroutines first and keeps the stated bounds |
+| A `dotsection` in a `CFF2` charstring: instancing, expanding or subroutinising it | fontTools' instancer keeps it | left out | `CFF2` has no `dotsection`, and it draws nothing; CFF → CFF2 drops it the same way |
 
 ---
 

@@ -345,3 +345,144 @@ fn nested_subroutines_past_the_memory_limit_are_refused() {
     let bare = crate::tests::nested_subr_cff2(1, 3, 4, &[5]);
     assert!(matches!(Table::read(&bare, 0), Err(TablesError::Invalid(m)) if m.contains("operator 5")));
 }
+
+/// A CFF2 table with the item variation store `store`, the global subroutines `gsubrs`, the
+/// charstrings `glyphs`, `top_extra` at the start of the Top DICT and one Font DICT with
+/// `private`.
+fn cff2_with(store: &[u8], gsubrs: &[Vec<u8>], glyphs: &[Vec<u8>], top_extra: &[u8], private: &[u8]) -> Vec<u8> {
+    let mut vstore = (store.len() as u16).to_be_bytes().to_vec();
+    vstore.extend_from_slice(store);
+    let gsubrs = index2(gsubrs);
+    let cs = index2(glyphs);
+    let top_len = top_extra.len() + 5 * 3 + 1 + 2 + 1;
+    let at_vstore = 5 + top_len + gsubrs.len();
+    let at_cs = at_vstore + vstore.len();
+    let fd = |off: usize| {
+        let mut d = i5(private.len());
+        d.extend(i5(off));
+        d.push(18);
+        d
+    };
+    let at_fd = at_cs + cs.len();
+    let at_priv = at_fd + index2(&[fd(0)]).len();
+    let fdarray = index2(&[fd(at_priv)]);
+    let mut top = top_extra.to_vec();
+    top.extend(i5(at_cs));
+    top.push(17);
+    top.extend(i5(at_fd));
+    top.extend([12, 36]);
+    top.extend(i5(at_vstore));
+    top.push(24);
+    assert_eq!(top.len(), top_len);
+    let mut out = vec![2, 0, 5];
+    out.extend((top.len() as u16).to_be_bytes());
+    for part in [top, gsubrs, vstore, cs, fdarray, private.to_vec()] {
+        out.extend(part);
+    }
+    out
+}
+
+/// A Private DICT with StdHW 50.
+fn std_hw() -> Vec<u8> {
+    [ns(&[50]), vec![10]].concat()
+}
+
+/// `cff2_font` with glyph 1 drawn by `glyph` in a table made by [`cff2_with`].
+fn font_with(store: &[u8], gsubrs: &[Vec<u8>], glyph: Vec<u8>, top_extra: &[u8], private: &[u8]) -> SfntFont {
+    let mut font = cff2_font();
+    font.insert(*b"CFF2", cff2_with(store, gsubrs, &[Vec::new(), glyph, Vec::new()], top_extra, private));
+    font
+}
+
+#[test]
+fn a_glyph_that_expands_past_a_charstring_is_instanced() {
+    // 40 regions; a subroutine of six lines blended over all of them (495 bytes), called 140
+    // times: about 69 KB expanded, 1.8 KB once the blends are resolved.
+    let regions: Vec<(f64, f64, f64)> = (1..=40).map(|i| (0.0, f64::from(i) / 40.0, 1.0)).collect();
+    let store = ivs(&regions, &[((0..40).collect(), vec![])]);
+    let mut subr = ns(&[10; 12]);
+    subr.extend(ns(&[1; 480]));
+    subr.extend(ns(&[12]));
+    subr.extend([16, 5]);
+    assert_eq!(subr.len(), 495);
+    let mut glyph = ns(&[0, 0]);
+    glyph.push(21);
+    for _ in 0..140 {
+        glyph.extend(ns(&[-107]));
+        glyph.push(29);
+    }
+    assert!(3 + 140 * subr.len() > 65_535);
+    let font = font_with(&store, &[subr], glyph, &[], &std_hw());
+    let out = instantiate(&font, &pin(400.0)).unwrap();
+    let cff2 = out.get(*b"CFF2").unwrap();
+    assert!(cff2.len() < 65_535, "{}", cff2.len());
+    let t = Table::read(cff2, 0).unwrap();
+    let cmds = program(&t, 1);
+    assert_eq!(cmds.len(), 141);
+    assert_eq!(cmds[1], (5, vec![10.0; 12]));
+}
+
+#[test]
+fn blend_runs_stay_within_513_values_whatever_maxstack_says() {
+    // maxstack 1000; 172 coordinates blended over the two regions, stored as four blends of 43.
+    // One run of all 172 would take 517 values.
+    let store = ivs(&REGIONS, &[(vec![0, 1], vec![])]);
+    let mut glyph = ns(&[0, 0]);
+    glyph.push(21);
+    for _ in 0..4 {
+        glyph.extend(ns(&[10; 43]));
+        for _ in 0..43 {
+            glyph.extend(ns(&[10, 40]));
+        }
+        glyph.extend(ns(&[43]));
+        glyph.push(16);
+    }
+    glyph.push(5);
+    let maxstack = [ns(&[1000]), vec![25]].concat();
+    let font = font_with(&store, &[], glyph, &maxstack, &std_hw());
+    let out = instantiate(&font, &range(100.0, 650.0)).unwrap();
+    let t = Table::read(out.get(*b"CFF2").unwrap(), 1).unwrap();
+    assert_eq!(t.regions.len(), 2);
+    let cmds = program(&t, 1);
+    assert_eq!((cmds[1].0, cmds[1].1.len()), (5, 172));
+    assert!(deltas(&t, 1, 1).iter().all(|d| d == &vec![10.0, 10.0]), "{:?}", deltas(&t, 1, 1));
+}
+
+#[test]
+fn a_private_vsindex_spelled_as_a_real_reads_as_the_integer() {
+    // The Private DICT selects subtable 1 (the +1 region only) for the glyph's blend.
+    let store = ivs(&REGIONS, &[(vec![0, 1], vec![]), (vec![1], vec![])]);
+    let mut glyph = ns(&[0, 0]);
+    glyph.push(21);
+    glyph.extend(ns(&[100, 0, 20, 30, 2]));
+    glyph.extend([16, 5]);
+    let int = [ns(&[1]), vec![22]].concat();
+    let real = vec![30, 0x1F, 22];
+    for options in [pin(650.0), range(400.0, 900.0)] {
+        let a = instantiate(&font_with(&store, &[], glyph.clone(), &[], &int), &options).unwrap();
+        let b = instantiate(&font_with(&store, &[], glyph.clone(), &[], &real), &options).unwrap();
+        assert_eq!(a.get(*b"CFF2"), b.get(*b"CFF2"));
+    }
+    let up = instantiate(&font_with(&store, &[], glyph, &[], &real), &range(400.0, 900.0)).unwrap();
+    let t = Table::read(up.get(*b"CFF2").unwrap(), 1).unwrap();
+    assert_eq!(deltas(&t, 1, 1), vec![vec![20.0], vec![30.0]]);
+}
+
+#[test]
+fn a_dotsection_is_left_out_of_the_instance() {
+    let store = ivs(&REGIONS, &[(vec![0, 1], vec![])]);
+    let mut glyph = ns(&[0, 0]);
+    glyph.push(21);
+    glyph.extend([12, 0]);
+    glyph.extend(ns(&[100, 10, 20, 1]));
+    glyph.push(16);
+    glyph.extend(ns(&[0]));
+    glyph.push(5);
+    let font = font_with(&store, &[], glyph, &[], &std_hw());
+    let out = instantiate(&font, &pin(400.0)).unwrap();
+    let t = Table::read(out.get(*b"CFF2").unwrap(), 0).unwrap();
+    assert_eq!(program(&t, 1), vec![(21, vec![0.0, 0.0]), (5, vec![100.0, 0.0])]);
+    let partial = instantiate(&font, &range(100.0, 650.0)).unwrap();
+    let t = Table::read(partial.get(*b"CFF2").unwrap(), 1).unwrap();
+    assert_eq!(program(&t, 1).iter().map(|c| c.0).collect::<Vec<_>>(), vec![21, 5]);
+}
