@@ -534,6 +534,18 @@ struct Outlines<'a> {
 }
 
 impl Outlines<'_> {
+    /// The layer source `slot` of glyph `name` is drawn from (0 the origin, k + 1 source k), for
+    /// its hints.
+    fn source_layer(&self, name: &str, slot: usize) -> Option<cff2::SourceLayer> {
+        let Some(k) = slot.checked_sub(1) else { return Some(cff2::SourceLayer { master: self.origin.to_string(), intermediate: None }) };
+        let s = self.sources.get(k)?;
+        if let Some(m) = &s.master {
+            return Some(cff2::SourceLayer { master: m.clone(), intermediate: None });
+        }
+        let found = self.glyph_sources.get(name)?.main.iter().find(|x| !x.is_master && x.location == s.location)?;
+        Some(cff2::SourceLayer { master: found.master.clone(), intermediate: Some(found.layer_id.clone()) })
+    }
+
     /// The sources besides the origin that `name` has a layer for (indices into `sources`).
     fn own_sources(&self, name: &str, warnings: &mut Vec<String>) -> Vec<usize> {
         let Some(gs) = self.glyph_sources.get(name) else {
@@ -746,14 +758,8 @@ impl Outlines<'_> {
                     _ => Prepared::Empty,
                 });
                 per_glyph.push(gvar::SourceOutlines { glyph: g.name.clone(), locations: locations.clone(), points, contour_ends: Vec::new() });
-                let masters = slots
-                    .iter()
-                    .map(|&slot| match slot.checked_sub(1) {
-                        None => Some(self.origin.to_string()),
-                        Some(k) => self.sources.get(k).and_then(|s| s.master.clone()),
-                    })
-                    .collect();
-                cubic.push(cff2::CubicSources { glyph: g.name.clone(), locations, paths: contours, masters });
+                let layers = slots.iter().map(|&slot| self.source_layer(&g.name, slot)).collect();
+                cubic.push(cff2::CubicSources { glyph: g.name.clone(), locations, paths: contours, layers });
                 continue;
             }
             if contours.iter().all(|c| c.iter().all(|p| p.elements().is_empty())) {

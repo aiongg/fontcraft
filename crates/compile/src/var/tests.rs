@@ -595,7 +595,7 @@ fn cff2_sources_without_an_outline_each_are_refused() {
         glyph: "a".into(),
         locations: vec![vec![0.0], vec![1.0]],
         paths: vec![vec![fontcraft_geom::BezPath::new()]],
-        masters: Vec::new(),
+        layers: Vec::new(),
     };
     let err = cff2::cff2_font(1, &[glyph], &[master(0.0), master(1.0)], 1000, None, &mut Vec::new()).unwrap_err();
     assert!(matches!(&err, CompileError::Glyph { glyph, .. } if glyph == "a"), "{err}");
@@ -736,14 +736,92 @@ fn cff2_blends_manual_hints_that_follow_their_nodes() {
     let v = hinted("a", &[PsHint::stem(false, node(0, 0), node(0, 1)), fixed]);
     assert_eq!(cff2_stems(&v, "a", 100.0), (Vec::new(), Vec::new(), 0));
     assert!(v.compiled.warnings.iter().any(|w| w.starts_with("glyph `a`: its PostScript hints differ in structure")), "{:?}", v.compiled.warnings);
-    // `b` varies with an intermediate layer, which has no hints of its own.
-    let v = hinted("b", &main);
-    assert_eq!(cff2_stems(&v, "b", 100.0), (Vec::new(), Vec::new(), 0));
-    assert!(
-        v.compiled.warnings.iter().any(|w| w.starts_with("glyph `b`: some of its sources have no PostScript hints")),
-        "{:?}",
-        v.compiled.warnings
-    );
+}
+
+#[test]
+fn cff2_blends_the_hints_of_intermediate_layers() {
+    use fontcraft_hinting::{Edge, NodeRef, PsHint, set_ps_hints};
+    let node = |p, n| Edge::Node(NodeRef::new(p, n));
+    let hints = |top: f64| [PsHint::stem(true, node(0, 0), Edge::Value(top)), PsHint::stem(false, node(0, 0), node(0, 1))];
+    let build = |brace: Option<f64>| {
+        let mut f = two_masters();
+        let mut g = f.glyph_mut("b").unwrap();
+        set_ps_hints(&mut g.layers[0], &hints(80.0)).unwrap();
+        if let Some(top) = brace {
+            set_ps_hints(&mut g.layers[2], &hints(top)).unwrap();
+        }
+        drop(g);
+        let options = Options { subroutinize: Some(false), ..Options::default() };
+        compile_variable(&f, None, &options, &VariableOptions { flavour: VarFlavour::Cff2, ..VariableOptions::default() }).unwrap()
+    };
+    let dropped = |v: &VariableFont| v.compiled.warnings.iter().any(|w| w.starts_with("glyph `b`"));
+    // `b` is 100 wide in Thin, 250 in its intermediate layer at 500 and 300 in Black. Without
+    // hints of its own, the intermediate layer takes Thin's through their nodes.
+    let v = build(None);
+    assert!(!dropped(&v), "{:?}", v.compiled.warnings);
+    for (wght, width) in [(100.0, 100), (300.0, 175), (500.0, 250), (900.0, 300)] {
+        assert_eq!(cff2_stems(&v, "b", wght), (vec![(0, 80)], vec![(0, width)], 0), "at {wght}");
+    }
+    // Its own hints in the same structure blend with the masters'.
+    let v = build(Some(120.0));
+    assert!(!dropped(&v), "{:?}", v.compiled.warnings);
+    for (wght, top) in [(100.0, 80), (300.0, 100), (500.0, 120), (700.0, 100), (900.0, 80)] {
+        assert_eq!(cff2_stems(&v, "b", wght).0, vec![(0, top)], "at {wght}");
+    }
+}
+
+#[test]
+fn cff2_blends_the_hints_of_a_sparse_alternate_layer() {
+    use fontcraft_hinting::{Edge, NodeRef, PsHint, set_ps_hints};
+    // `a`'s alternate layers (150 wide in Thin, 350 in Black) plus an intermediate alternate
+    // layer at wght 750, 400 wide: a source of the alternate glyph only. Thin's alternate layer
+    // carries the hints; the other layers take them through their nodes.
+    let mut f = with_alternates();
+    let mut a = f.glyph_mut("a").unwrap();
+    let stem = PsHint::stem(false, Edge::Node(NodeRef::new(0, 0)), Edge::Node(NodeRef::new(0, 1)));
+    let thin_alt = a.layers.iter_mut().find(|l| l.id == "thin-alt").unwrap();
+    set_ps_hints(thin_alt, &[stem]).unwrap();
+    let mut brace = layer("thin", 450.0, vec![rect(400.0)]);
+    brace.id = "brace-alt".into();
+    brace.info.attrs.coordinates = vec![Some(750.0)];
+    brace.info.attrs.axis_rules = vec![fontcraft_model::AxisRule { min: Some(600.0), max: None }];
+    a.layers.push(brace);
+    drop(a);
+    let options = Options { subroutinize: Some(false), ..Options::default() };
+    let v = compile_variable(&f, None, &options, &VariableOptions { flavour: VarFlavour::Cff2, ..VariableOptions::default() }).unwrap();
+    assert!(!v.compiled.warnings.iter().any(|w| w.contains("without hints")), "{:?}", v.compiled.warnings);
+    for (wght, width) in [(100.0, 150), (750.0, 400), (900.0, 350)] {
+        assert_eq!(cff2_stems(&v, "a.BRACKET.varAlt01", wght).1, vec![(0, width)], "at {wght}");
+    }
+}
+
+#[test]
+fn cff2_autohints_the_sources_of_a_glyph_together() {
+    // `s`: two bars whose vertical stems overlap in Thin, so its hints need masks, and lie apart
+    // in Black, which hinted alone would need none: hinted one by one the masters' hints would
+    // differ in structure.
+    let mut f = two_masters();
+    let list = |text: &str| fontcraft_model::plist::openstep::parse_value(text).unwrap();
+    for m in Arc::make_mut(&mut f.masters).iter_mut() {
+        m.zones = vec![fontcraft_model::AlignmentZone { pos: 0.0, size: -10.0 }, fontcraft_model::AlignmentZone { pos: 700.0, size: 10.0 }];
+        m.params.0.push(Param::new("postscriptStemSnapH", list("(80)")));
+        m.params.0.push(Param::new("postscriptStemSnapV", list("(80)")));
+    }
+    let bars = |x: f64| vec![Shape::Path(Path::rect(100.0, 0.0, 180.0, 300.0)), Shape::Path(Path::rect(x, 400.0, x + 80.0, 700.0))];
+    let mut glyphs: Vec<Glyph> = f.glyphs.iter().map(|g| (**g).clone()).collect();
+    glyphs.push(glyph("s", 0x73, vec![layer("thin", 400.0, bars(140.0)), layer("black", 500.0, bars(300.0))]));
+    f.glyphs = GlyphTable::from_glyphs(glyphs.into_iter().map(Arc::new).collect());
+    let options = Options { subroutinize: Some(false), hinting: crate::HintingOptions { autohint: true, strip: false }, ..Options::default() };
+    let v = compile_variable(&f, None, &options, &VariableOptions { flavour: VarFlavour::Cff2, ..VariableOptions::default() }).unwrap();
+    assert!(!v.compiled.warnings.iter().any(|w| w.contains("without hints") || w.contains("autohinted together")), "{:?}", v.compiled.warnings);
+    let (thin_h, thin_v, thin_masks) = cff2_stems(&v, "s", 100.0);
+    let (black_h, black_v, black_masks) = cff2_stems(&v, "s", 900.0);
+    assert_eq!(thin_v, vec![(100, 180), (140, 220)]);
+    assert_eq!(black_v, vec![(100, 180), (300, 380)]);
+    assert_eq!(thin_h.len(), black_h.len());
+    assert!(thin_masks > 0 && thin_masks == black_masks, "{thin_masks} and {black_masks} masks");
+    // The middle of the design space has Thin's structure with the stems in between.
+    assert_eq!(cff2_stems(&v, "s", 500.0).1, vec![(100, 180), (220, 300)]);
 }
 
 #[test]
