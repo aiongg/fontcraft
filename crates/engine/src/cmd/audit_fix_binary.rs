@@ -61,6 +61,17 @@ pub fn specs() -> Vec<CommandSpec> {
         .files(const { &[FileParam::read("font"), FileParam::write("output"), FileParam::write("outputDir")] })
         .writes_files(),
         cmd!(
+            query "tables.recompileCff",
+            "Recompile CFF",
+            [],
+            None,
+            "{font: path, face?: number|name, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool} rewrites the CFF table without what the CFF specification marks obsolete: an accented glyph drawn with endchar's seac form gets its base and accent charstrings drawn in (the accent moved by its offset, without its hints), dotsection goes, and so do the UniqueID and XUID keys (and UIDBase in a name-keyed font) and ForceBold; every charstring is then subroutinised again. Outlines, hints and widths stay as they were, checked by expanding every output charstring (default output: FONT.fixed.EXT) → {output, glyphs: count of charstrings changed, seacGlyphs: count, removedKeys: [key], bytesBefore, bytesAfter}",
+            always,
+            tables_recompile_cff
+        )
+        .files(const { &[FileParam::read("font"), FileParam::write("output"), FileParam::write("outputDir")] })
+        .writes_files(),
+        cmd!(
             query "tables.recompileLayout",
             "Recompile Contextual Positioning",
             [],
@@ -150,6 +161,21 @@ fn tables_rebuild_cmap(_: &mut Session, v: &Value) -> Result<Value> {
     let output = write_font(&p, &loaded, &r.font, TableOrder::Keep, SUFFIX)?;
     let conflicts: Vec<Value> = r.conflicts.iter().map(|c| json!({"codepoint": c.codepoint, "kept": c.kept, "dropped": c.dropped})).collect();
     Ok(json!({"output": output, "mappings": r.mappings, "conflicts": conflicts}))
+}
+
+fn tables_recompile_cff(_: &mut Session, v: &Value) -> Result<Value> {
+    let p = Params::new("tables.recompileCff", v)?;
+    let loaded = load(&p, "font", "face")?;
+    let r = patch::recompile_cff(&loaded.font).map_err(tables_err)?;
+    let output = write_font(&p, &loaded, &r.font, TableOrder::Keep, SUFFIX)?;
+    Ok(json!({
+        "output": output,
+        "glyphs": r.glyphs,
+        "seacGlyphs": r.seac_glyphs,
+        "removedKeys": r.removed_keys,
+        "bytesBefore": r.bytes_before,
+        "bytesAfter": r.bytes_after,
+    }))
 }
 
 fn tables_recompile_layout(_: &mut Session, v: &Value) -> Result<Value> {

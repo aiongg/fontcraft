@@ -7,8 +7,10 @@
 
 use super::{CFF_STACK, CFF2_DEFAULT_STACK, CharstringSet, MAX_FONT_DICTS, MAX_GLYPHS, MAX_STACK_LIMIT, SubrError, SubrOptions};
 
+mod rewrite;
 mod subset;
 mod widths;
+pub use rewrite::{TableRewrite, rewrite_table};
 pub use subset::{SubrMode, TableSubset, subset_table, subset_table_noted};
 pub use widths::{WidthsReport, optimize_widths_table};
 
