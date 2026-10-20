@@ -9,11 +9,11 @@
 //! beyond its size limit fails the compile.
 
 use std::cell::RefCell;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use fontcraft_color::export::{SvgPlan, SvgSource};
-use fontcraft_color::paint::{Paint, ShapeRef, StrokeSpec};
-use fontcraft_color::svg::{BitmapPlacement, bitmap_document, bitmap_size, document, has_sweep, is_native_stroke, table};
+use fontcraft_color::paint::{Paint, ShapeRef, StrokeSpec, colr_glyph_refs};
+use fontcraft_color::svg::{BitmapPlacement, bitmap_document, bitmap_size, glyph_document, has_sweep, is_native_stroke, table};
 use fontcraft_color::svg_import::import;
 use fontcraft_color::{AssetStore, MAX_SVG_FILE_BYTES, Rgba};
 use fontcraft_geom::{Affine, BezPath};
@@ -36,6 +36,14 @@ pub fn build(
 ) -> Result<Option<Vec<u8>>, CompileError> {
     let mut docs: Vec<(u16, u16, Vec<u8>)> = Vec::with_capacity(plan.documents.len());
     let mut done = HashSet::new();
+    // What a reference to a colour glyph draws: that glyph's own paint graph, also when the
+    // compile leaves the glyph out, since the drawing is copied into the document.
+    let mut paints: HashMap<&str, &Paint> = HashMap::new();
+    for doc in &plan.documents {
+        if let SvgSource::Paint(paint) = &doc.source {
+            paints.entry(doc.glyph.as_str()).or_insert(paint);
+        }
+    }
     for doc in &plan.documents {
         // A glyph that is not exported has no glyph id and so no document.
         let Some(gid) = order.gid(&doc.glyph) else { continue };
@@ -44,7 +52,7 @@ pub fn build(
             continue;
         }
         let made = match &doc.source {
-            SvgSource::Paint(paint) => paint_document(font, &doc.glyph, paint, gid, &plan.palette, warnings),
+            SvgSource::Paint(paint) => paint_document(font, &doc.glyph, paint, &paints, gid, &plan.palette, warnings),
             SvgSource::SvgLayer { layer, path } => svg_layer_document(font, &doc.glyph, layer, path, gid, assets),
             SvgSource::Bitmap { layer, ppem } => bitmap_layer_document(font, &doc.glyph, layer, *ppem, gid, assets),
         };
@@ -62,18 +70,40 @@ pub fn build(
     table(&docs).map(Some).map_err(|e| CompileError::Table { table: "SVG ", message: e.to_string() })
 }
 
-/// The document of `name` drawing `paint`, or why it cannot be made.
-fn paint_document(font: &Font, name: &str, paint: &Paint, gid: u16, palette: &[Rgba], warnings: &mut Vec<String>) -> Result<String, String> {
-    let glyph = font.glyph(name).ok_or_else(|| format!("there is no glyph called `{name}`"))?;
+/// The document of `name` drawing `paint`, or why it cannot be made. A reference to a colour
+/// glyph draws that glyph's paint from `paints`, moved by the reference's transform; one whose
+/// glyph has none there (its document is an svg layer) is drawn as its outline, with a warning.
+fn paint_document(
+    font: &Font,
+    name: &str,
+    paint: &Paint,
+    paints: &HashMap<&str, &Paint>,
+    gid: u16,
+    palette: &[Rgba],
+    warnings: &mut Vec<String>,
+) -> Result<String, String> {
+    font.glyph(name).ok_or_else(|| format!("there is no glyph called `{name}`"))?;
     let failure: RefCell<Option<String>> = RefCell::new(None);
-    let draw = |shape: &ShapeRef| match shape_outline(font, glyph, shape) {
-        Ok(path) => path,
-        Err(e) => {
-            failure.borrow_mut().get_or_insert(e);
-            BezPath::new()
+    let draw = |glyph: &str, shape: &ShapeRef| {
+        let outline = font.glyph(glyph).ok_or_else(|| format!("there is no glyph called `{glyph}`")).and_then(|g| shape_outline(font, g, shape));
+        match outline {
+            Ok(path) => path,
+            Err(e) => {
+                failure.borrow_mut().get_or_insert(e);
+                BezPath::new()
+            }
         }
     };
-    let text = document(paint, &draw, gid, palette).map_err(|e| e.to_string())?;
+    let lookup = |glyph: &str| paints.get(glyph).copied();
+    let text = glyph_document(name, paint, &draw, &lookup, gid, palette).map_err(|e| e.to_string())?;
+    let mut missing: Vec<&str> = colr_glyph_refs(paint).into_iter().filter(|g| !paints.contains_key(g)).collect();
+    missing.sort_unstable();
+    missing.dedup();
+    for m in missing {
+        warnings.push(format!(
+            "glyph `{name}`: the component of `{m}` on a colour layer is drawn as its outline in SVG: `{m}` has no colour layers that convert to SVG"
+        ));
+    }
     if let Some(e) = failure.into_inner() {
         return Err(e);
     }
@@ -229,6 +259,61 @@ mod tests {
         let mut warnings = Vec::new();
         assert_eq!(build(&font, &failing, &order, &MemoryAssets::new(), &mut warnings).unwrap(), None);
         assert!(warnings.iter().any(|w| w.contains("no SVG table")), "{warnings:?}");
+    }
+
+    #[test]
+    fn svg_table_draws_a_colour_glyph_reference_as_the_referenced_glyphs_paint() {
+        use fontcraft_color::ColorLayerKind;
+        use fontcraft_color::export::{Switches, plan_master};
+        use fontcraft_color::layers::with_kind;
+        use fontcraft_model::{Color, Component, Layer, LayerAttrs, Transform};
+
+        // `A`'s full-colour layer is a red square; `C`'s a component of `A` moved by (100, 50);
+        // `E` and `F` each hold a component of the other, which would be a cycle.
+        let mut font = Font::new("Svg Components");
+        let master = font.masters[0].id.clone();
+        let mut red = Path::rect(0.0, 0.0, 400.0, 400.0);
+        red.info.attrs.fill_color = Some(Color::Rgba([1.0, 0.0, 0.0, 1.0]));
+        let component = |glyph: &str, dx: f64, dy: f64| {
+            let mut c = Component::new(glyph, 0.0, 0.0);
+            c.transform = Transform::Matrix([1.0, 0.0, 0.0, 1.0, dx, dy]);
+            Shape::Component(c)
+        };
+        let layers = [
+            ("A", vec![Shape::Path(red)]),
+            ("C", vec![component("A", 100.0, 50.0)]),
+            ("E", vec![component("F", 0.0, 0.0)]),
+            ("F", vec![component("E", 0.0, 0.0)]),
+        ];
+        for (name, shapes) in layers {
+            if font.glyph(name).is_none() {
+                font.add_glyph(name, Vec::new(), 600.0).unwrap();
+            }
+            let mut g = font.glyph_mut(name).unwrap();
+            g.layers[0].shapes.push(Shape::Path(Path::rect(0.0, 0.0, 400.0, 400.0)));
+            let mut l = Layer::new(master.as_str(), 600.0);
+            l.id = format!("{name}-full");
+            l.info.attrs = with_kind(&LayerAttrs::default(), Some(ColorLayerKind::FullColor));
+            l.shapes = shapes;
+            g.layers.push(l);
+        }
+        let plan = plan_master(&font, &master, &Switches { color_layers_to_svg: true, ..Switches::default() });
+        let glyphs: Vec<ResolvedGlyph> = [".notdef", "A", "C", "E", "F"].into_iter().map(|n| ResolvedGlyph::new(n, 600.0)).collect();
+        let order = GlyphOrder::new(&glyphs, &[]).unwrap();
+        let mut warnings = Vec::new();
+        let bytes = build(&font, plan.svg.as_ref().unwrap(), &order, &MemoryAssets::new(), &mut warnings).unwrap().unwrap();
+        let svg = Svg::read(FontData::new(&bytes)).unwrap();
+        let doc = |gid: u32| std::str::from_utf8(svg.glyph_data(GlyphId::new(gid)).unwrap()).unwrap().to_string();
+
+        // C's document holds A's red square, moved where the component sits.
+        let c = doc(2);
+        assert!(c.contains(r##"<g transform="matrix(1 0 0 1 100 50)"><path d="M0 0L400 0L400 400L0 400Z" fill="#FF0000"/></g>"##), "{c}");
+        assert!(!c.contains("#808080"), "no grey outline in place of the reference: {c}");
+        // E and F refer to each other: each draws the other's outline in grey, with a warning.
+        let e = doc(3);
+        assert!(!e.contains("<g transform=") && e.contains(r##"fill="#808080""##), "{e}");
+        assert!(plan.problems.iter().filter(|p| p.message.contains("lead back")).count() >= 2, "{:?}", plan.problems);
+        assert!(warnings.is_empty(), "{warnings:?}");
     }
 
     #[test]

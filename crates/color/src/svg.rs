@@ -11,6 +11,9 @@
 //!   is written as `currentColor`.
 //! - Centred strokes are written as SVG strokes; strokes on one side are expanded by the caller
 //!   and arrive as outlines. [`is_native_stroke`] is the rule both sides follow.
+//! - A reference to another colour glyph ([`Paint::ColrGlyph`]) is a copy of that glyph's
+//!   drawing in a group with the reference's transform ([`glyph_document`]); documents are
+//!   separate per glyph, so one cannot `<use>` another's elements.
 //! - A document is at most [`crate::MAX_SVG_DOCUMENT_BYTES`]; the table at most
 //!   [`crate::MAX_SVG_TABLE_BYTES`].
 //!
@@ -25,7 +28,7 @@ use std::fmt::Write as _;
 use fontcraft_geom::{Affine, BezPath, PathEl, Point};
 use fontcraft_model::{Extend, MAX_COORDINATE};
 
-use crate::paint::{ColorLine, ColorRef, Paint, ShapeRef, StrokeSpec, outline_fill};
+use crate::paint::{ColorLine, ColorRef, Paint, ShapeRef, StrokeSpec, nesting, outline_fill};
 use crate::{ColorError, MAX_PAINT_DEPTH, MAX_STOPS, MAX_SVG_DOCUMENT_BYTES, MAX_SVG_TABLE_BYTES, Rgba};
 
 /// Where a bitmap is drawn in a glyph's document, in font units (y up, as the layer has it).
@@ -70,9 +73,33 @@ pub fn has_sweep(paint: &Paint) -> bool {
 }
 
 /// The document of glyph `gid` drawing `paint`. `outlines` draws a [`ShapeRef`] in font units;
-/// `palette` is the palette baked in.
+/// `palette` is the palette baked in. A [`Paint::ColrGlyph`] is drawn as its component's outline
+/// in [`outline_fill`]; [`glyph_document`] follows it instead.
 pub fn document(paint: &Paint, outlines: &dyn Fn(&ShapeRef) -> BezPath, gid: u16, palette: &[Rgba]) -> Result<String, ColorError> {
-    let mut w = Writer { gid, palette, outlines, defs: String::new(), body: String::new(), next_id: 0 };
+    let outlines = |_: &str, shape: &ShapeRef| outlines(shape);
+    glyph_document("", paint, &outlines, &|_: &str| None, gid, palette)
+}
+
+/// The document of glyph `name` (glyph id `gid`) drawing `paint`, with each
+/// [`Paint::ColrGlyph`] drawn as the paint graph `paints` gives for its glyph, inside a group
+/// that moves it by the reference's transform (`color.export.colrGlyphComponent`). References
+/// inside that graph are followed the same way. `outlines` draws a [`ShapeRef`] of the named
+/// glyph in font units; `palette` is the palette baked in.
+///
+/// A reference is drawn as its component's outline in [`outline_fill`], as the COLR fallback
+/// draws it, when `paints` has no graph for its glyph, when the glyph is already being drawn
+/// (a cycle), when references nest more than [`MAX_PAINT_DEPTH`] deep, when the inlined paint
+/// would nest past [`MAX_PAINT_DEPTH`], or when its transform cannot be written. Each inlined
+/// copy counts towards [`MAX_SVG_DOCUMENT_BYTES`], which bounds the work.
+pub fn glyph_document<'a>(
+    name: &str,
+    paint: &Paint,
+    outlines: &'a dyn Fn(&str, &ShapeRef) -> BezPath,
+    paints: &'a dyn Fn(&str) -> Option<&'a Paint>,
+    gid: u16,
+    palette: &'a [Rgba],
+) -> Result<String, ColorError> {
+    let mut w = Writer { gid, palette, outlines, paints, glyphs: vec![name.to_string()], defs: String::new(), body: String::new(), next_id: 0 };
     w.paint(paint, 0)?;
     let mut out = String::with_capacity(w.defs.len() + w.body.len() + 160);
     out.push_str(r#"<svg xmlns="http://www.w3.org/2000/svg" version="1.1">"#);
@@ -273,7 +300,10 @@ pub fn table(docs: &[(u16, u16, Vec<u8>)]) -> Result<Vec<u8>, ColorError> {
 struct Writer<'a> {
     gid: u16,
     palette: &'a [Rgba],
-    outlines: &'a dyn Fn(&ShapeRef) -> BezPath,
+    outlines: &'a dyn Fn(&str, &ShapeRef) -> BezPath,
+    paints: &'a dyn Fn(&str) -> Option<&'a Paint>,
+    /// The glyphs being drawn: the document's glyph, then each glyph a reference inlined.
+    glyphs: Vec<String>,
     defs: String,
     body: String,
     next_id: usize,
@@ -315,7 +345,7 @@ impl Writer<'_> {
                 }
             }
             Paint::Glyph { shape, paint: inner } => self.glyph(shape, inner, depth)?,
-            Paint::ColrGlyph { shape, .. } => self.glyph(shape, &outline_fill(), depth)?,
+            Paint::ColrGlyph { glyph, transform, shape } => self.reference(glyph, *transform, shape, depth)?,
             // A paint outside any glyph fills everything; the renderer clips it to the glyph's
             // drawing area.
             simple => {
@@ -328,8 +358,29 @@ impl Writer<'_> {
         self.check_size()
     }
 
+    /// A [`Paint::ColrGlyph`] of `glyph` moved by `transform`, `shape` being its component.
+    fn reference(&mut self, glyph: &str, transform: Affine, shape: &ShapeRef, depth: usize) -> Result<(), ColorError> {
+        let paints = self.paints;
+        let inner = paints(glyph).filter(|inner| {
+            self.glyphs.len() <= MAX_PAINT_DEPTH
+                && !self.glyphs.iter().any(|g| g == glyph)
+                && (depth + 1).saturating_add(nesting(inner)) <= MAX_PAINT_DEPTH
+        });
+        let (Some(inner), Ok(m)) = (inner, matrix(transform)) else {
+            return self.glyph(shape, &outline_fill(), depth);
+        };
+        let _ = write!(self.body, r#"<g transform="{m}">"#);
+        self.glyphs.push(glyph.to_string());
+        let drawn = self.paint(inner, depth + 1);
+        self.glyphs.pop();
+        drawn?;
+        self.body.push_str("</g>");
+        self.check_size()
+    }
+
     fn glyph(&mut self, shape: &ShapeRef, inner: &Paint, depth: usize) -> Result<(), ColorError> {
-        let d = path_data(&(self.outlines)(shape)).map_err(|m| self.bad(m))?;
+        let name = self.glyphs.last().map_or("", String::as_str);
+        let d = path_data(&(self.outlines)(name, shape)).map_err(|m| self.bad(m))?;
         if d.is_empty() {
             return Ok(());
         }
@@ -575,7 +626,7 @@ mod tests {
     use fontcraft_geom::{Affine, BezPath, Point};
     use fontcraft_model::Extend;
 
-    use super::{BitmapPlacement, bitmap_document, bitmap_size, document, table};
+    use super::{BitmapPlacement, bitmap_document, bitmap_size, document, glyph_document, table};
     use crate::paint::{ColorLine, ColorRef, ColorStop, Paint, ShapeRef, StrokeSpec};
     use crate::{ColorError, Rgba};
 
@@ -664,6 +715,37 @@ mod tests {
             deep = Paint::Layers(vec![deep]);
         }
         assert!(matches!(document(&deep, &outlines, 3, &PALETTE), Err(ColorError::LimitExceeded { .. })));
+    }
+
+    #[test]
+    fn svg_document_draws_a_colour_glyph_reference_as_that_glyphs_paint_moved() {
+        let red = glyph(shape(0, None), Paint::Solid(ColorRef::Rgba([1.0, 0.0, 0.0, 1.0])));
+        let reference = |glyph: &str, transform: Affine| Paint::ColrGlyph { glyph: glyph.into(), transform, shape: shape(1, None) };
+        // `A` is a red square; `L` refers to itself; `B` refers to `A` moved, to `L`, and to `S`,
+        // which has no paint.
+        let a = Paint::Layers(vec![red]);
+        let l = Paint::Layers(vec![reference("L", Affine::IDENTITY)]);
+        let b =
+            Paint::Layers(vec![reference("A", Affine::translate((100.0, 50.0))), reference("L", Affine::IDENTITY), reference("S", Affine::IDENTITY)]);
+        let paints = |name: &str| match name {
+            "A" => Some(&a),
+            "L" => Some(&l),
+            _ => None,
+        };
+        // Each glyph's shape i is a square at x = 200 × i, plus 1000 for `A` so the test sees whose
+        // outline is drawn.
+        let draw = |name: &str, s: &ShapeRef| square(if name == "A" { 1000.0 } else { 0.0 } + 200.0 * s.shapes[0] as f64);
+        let doc = glyph_document("B", &b, &draw, &paints, 5, &PALETTE).unwrap();
+        assert!(doc.contains(r##"<g transform="matrix(1 0 0 1 100 50)"><path d="M1000 0L1100 0L1100 100L1000 100Z" fill="#FF0000"/></g>"##), "{doc}");
+        // `L` inlined once; its reference back to itself is its component's outline in grey, as is
+        // the reference to `S`.
+        assert_eq!(doc.matches(r##"<path d="M200 0L300 0L300 100L200 100Z" fill="#808080"/>"##).count(), 2, "{doc}");
+        assert_eq!(doc.matches("<g transform=").count(), 2, "{doc}");
+        assert!(usvg::Tree::from_str(&doc, &usvg::Options::default()).is_ok(), "{doc}");
+
+        // Without paints to follow, the reference is the component's outline.
+        let plain = document(&b, &outlines, 5, &PALETTE).unwrap();
+        assert!(!plain.contains("<g transform=") && plain.contains(r##"fill="#808080""##), "{plain}");
     }
 
     #[test]
