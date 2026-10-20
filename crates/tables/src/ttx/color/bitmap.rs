@@ -4,8 +4,10 @@
 //! A location table (`EBLC CBLC bloc`) lists strikes and, in each, index subtables that give
 //! where every glyph's bitmap lies in the data table (`EBDT CBDT bdat`). The data table cannot be
 //! read without its location table. Images are written as hex (`rawimagedata`), the form `ttx`
-//! writes by default. Ported from fontTools' `ttLib.tables` (MIT): `E_B_L_C_`, `E_B_D_T_`,
+//! writes by default, or in the other forms of `ttx -z` (module `forms`). Ported from fontTools' `ttLib.tables` (MIT): `E_B_L_C_`, `E_B_D_T_`,
 //! `C_B_L_C_`, `C_B_D_T_`, `_b_l_o_c`, `_b_d_a_t` and `BitmapGlyphMetrics`.
+
+mod forms;
 
 use std::collections::HashMap;
 
@@ -298,31 +300,35 @@ pub(super) fn write_data(tag: Tag, data: &[u8], locator_data: &[u8], font: &Sfnt
     let mut formats: HashMap<(u64, u64), u16> = HashMap::new();
     w.simple("header", &[("version", &py_float(header))]);
     for (index, strike) in location.strikes.iter().enumerate() {
+        let bit_depth = u8_at(&strike.size, 46)?;
         // Glyph name to image, in the order names first appear; a later entry for the same name
-        // replaces the image and keeps the place.
-        let mut glyphs: Vec<(String, u16, (u64, u64))> = Vec::new();
+        // replaces the image, and the metrics its index subtable gives, and keeps the place.
+        let mut glyphs: Vec<(String, u16, (u64, u64), Option<[u8; 8]>)> = Vec::new();
         let mut place: HashMap<String, usize> = HashMap::new();
         for sub in &strike.subtables {
             for (gid, range) in &sub.glyphs {
                 let format = *formats.entry(*range).or_insert(sub.image_format);
                 let name = glyph_name(&order, *gid);
+                let shared = sub.fixed.map(|(_, metrics)| metrics);
                 match place.get(&name).and_then(|i| glyphs.get_mut(*i)) {
                     Some(entry) => {
                         entry.1 = format;
                         entry.2 = *range;
+                        entry.3 = shared;
                     }
                     None => {
                         place.insert(name.clone(), glyphs.len());
-                        glyphs.push((name, format, *range));
+                        glyphs.push((name, format, *range, shared));
                     }
                 }
             }
         }
         w.open("strikedata", &[("index", &index.to_string())]);
-        for (name, format, (start, end)) in &glyphs {
+        for (name, format, (start, end), shared) in &glyphs {
             let start = usize::try_from(*start).unwrap_or(usize::MAX);
             let end = usize::try_from(*end).unwrap_or(usize::MAX);
-            write_glyph(slice(data, start, end), *format, color, name, &order, w)?;
+            let place = Place { strike: index, bit_depth, shared: *shared };
+            write_glyph(slice(data, start, end), *format, color, name, &order, &place, w)?;
             w.check()?;
         }
         w.close("strikedata");
@@ -333,7 +339,15 @@ pub(super) fn write_data(tag: Tag, data: &[u8], locator_data: &[u8], font: &Sfnt
 /// A metrics record's element name and its fields (name, signed).
 type MetricsLayout = (&'static str, &'static [(&'static str, bool)]);
 
-fn write_glyph(data: &[u8], format: u16, color: bool, name: &str, order: &[String], w: &mut XmlWriter) -> Result<()> {
+/// Where a glyph's image sits: its strike, the strike's bit depth, and the metrics its index
+/// subtable gives every image in it (formats 2 and 5).
+struct Place {
+    strike: usize,
+    bit_depth: u8,
+    shared: Option<[u8; 8]>,
+}
+
+fn write_glyph(data: &[u8], format: u16, color: bool, name: &str, order: &[String], place: &Place, w: &mut XmlWriter) -> Result<()> {
     let (prefix, metrics, rest): (&str, Option<MetricsLayout>, usize) = match format {
         1 | 2 | 8 => ("ebdt", Some(("SmallGlyphMetrics", SMALL_METRICS.as_slice())), 5),
         5 => ("ebdt", None, 0),
@@ -385,9 +399,11 @@ fn write_glyph(data: &[u8], format: u16, color: bool, name: &str, order: &[Strin
             if let Some((metrics_name, fields)) = metrics {
                 metrics_element(w, metrics_name, fields, metric_bytes);
             }
-            w.open("rawimagedata", &[]);
-            w.hex(image);
-            w.close("rawimagedata");
+            // Height and width lead both kinds of metrics record.
+            let size_of = |m: &[u8]| Some((*m.first()?, *m.get(1)?));
+            let size = if metrics.is_some() { size_of(metric_bytes) } else { place.shared.as_ref().and_then(|m| size_of(m)) };
+            let image = forms::Image { bytes: image, format, strike: place.strike, bit_depth: place.bit_depth, size, glyph: name };
+            forms::write_image(w, &image)?;
             w.close(&element);
         }
     }

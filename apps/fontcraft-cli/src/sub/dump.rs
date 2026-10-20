@@ -32,6 +32,13 @@ const OPTIONS: &[OptSpec] = &[
     OptSpec::value("output", "PATH", "", "the file to write; - or none for standard output").short('o'),
     OptSpec::value("output-dir", "DIR", "", "the folder to write FONT.ttx (or .json, .txt) into"),
     OptSpec::value("face", "N", "0", "the font of a collection"),
+    OptSpec::value(
+        "bitmap-format",
+        "raw|row|bitwise|extfile",
+        "raw",
+        "how bitmap images are written: hex, hex per pixel row, a character per pixel, or files in bitmaps/ beside the dump (needs -o or --output-dir)",
+    )
+    .short('z'),
     OptSpec::switch("disassemble", true, "write TrueType programs as assembly (--no-disassemble: as hex)"),
     OptSpec::switch("strict", false, "stop at the first table that cannot be read"),
     OptSpec::switch("no-clobber", false, "refuse to replace an existing output file"),
@@ -107,6 +114,7 @@ fn run(args: &[String]) -> Outcome {
     base.insert("format".into(), json!(parsed.value("format").unwrap_or("ttx")));
     base.insert("face".into(), json!(face));
     base.insert("disassemble".into(), json!(parsed.switch("disassemble")));
+    base.insert("bitmapFormat".into(), json!(parsed.value("bitmap-format").unwrap_or("raw")));
     base.insert("strict".into(), json!(parsed.switch("strict")));
     base.insert("noClobber".into(), json!(parsed.switch("no-clobber")));
     base.insert("newline".into(), json!(parsed.value("newline").unwrap_or("lf")));
@@ -143,6 +151,9 @@ fn run(args: &[String]) -> Outcome {
         } else if let Some(paths) = result.get("paths").and_then(Value::as_array) {
             for p in paths.iter().filter_map(Value::as_str) {
                 note(&format!("wrote {p}"));
+            }
+            if let Some(images) = result.get("images").and_then(Value::as_u64).filter(|n| *n > 0) {
+                note(&format!("wrote {images} bitmap image files"));
             }
         }
     }

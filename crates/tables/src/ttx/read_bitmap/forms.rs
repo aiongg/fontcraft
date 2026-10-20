@@ -32,8 +32,9 @@ pub(crate) fn image_data(data: &Element, format: i64) -> Result<Vec<u8>> {
         }
         "rowimagedata" => rows(data, format, false),
         "bitwiseimagedata" => rows(data, format, true),
+        // The file is read in, as `rawimagedata`, by whoever reads the dump from its folder.
         "extfileimagedata" => Err(TablesError::Unsupported(
-            "a bitmap image kept in an external file ('extfileimagedata') is not read; dump the font with raw, row or bitwise images".into(),
+            "a bitmap image kept in an external file ('extfileimagedata') is read only with the dump file, from the dump's folder".into(),
         )),
         other => Err(TablesError::Unsupported(format!("bitmap images given as '{other}'"))),
     }

@@ -8,10 +8,18 @@
 //! beside it, and a part may name one file per glyph (`ttx -g`). A part path must be relative and
 //! stay in the folder of the file that names it, and every part passes the same file-access
 //! check as the main file; the main file and its parts share the limits of one dump.
+//!
+//! A bitmap image kept in a file of its own (`ttx -z extfile`) is read in here, so the tables
+//! crate reads no files: `ttx` names the file from the folder it ran in, and the path is taken
+//! from the folder of the file that names it, else by its last three parts
+//! (`bitmaps/strike<N>/<file>`, as `ttx` lays the files out) below that folder. The file must
+//! resolve, links followed, inside the dump's folder, pass the file-access check and stay
+//! within [`MAX_IMAGE_FILE_BYTES`]; the dump's images share [`MAX_IMAGE_FILES`] and
+//! [`MAX_IMAGE_BYTES`].
 
 use std::path::{Component, Path, PathBuf};
 
-use fontcraft_tables::limits::{MAX_TTX_GLYPH_PARTS, MAX_TTX_PARTS};
+use fontcraft_tables::limits::{MAX_TTX_BYTES, MAX_TTX_GLYPH_PARTS, MAX_TTX_PARTS};
 use fontcraft_tables::sfnt::tag_str;
 use fontcraft_tables::ttx::{Element, ImportOptions, ParseBudget, import_tree, parse_within};
 use fontcraft_tables::{TableOrder, TablesError};
@@ -69,15 +77,33 @@ fn inside_folder(folder: &Path, file: &Path, by: &Path, src: &str) -> Result<Pat
     Ok(resolved)
 }
 
-/// The dump at `path` parsed, with the parts of a split dump read in where `src` names them.
+/// The most image files one dump may name.
+const MAX_IMAGE_FILES: usize = 1 << 20;
+/// The largest image file, in bytes.
+const MAX_IMAGE_FILE_BYTES: usize = 16 << 20;
+/// The most bytes the image files of one dump may hold: read in as hex, twice that, they stay
+/// within the text one dump may hold.
+const MAX_IMAGE_BYTES: usize = MAX_TTX_BYTES / 2;
+
+/// What the image files of one dump have used so far.
+#[derive(Default)]
+struct ImageBudget {
+    files: usize,
+    bytes: usize,
+}
+
+/// The dump at `path` parsed, with the parts of a split dump read in where `src` names them and
+/// bitmap images read in from the files that hold them.
 pub(super) fn read_dump(path: &Path) -> Result<Element> {
     let mut budget = ParseBudget::default();
     let mut root = parse_within(&read_text(path)?, &mut budget).map_err(|e| EngineError::Io(format!("{}: {e}", path.display())))?;
     let parts = root.children.iter().filter(|c| c.attribute("src").is_some()).count();
     let mut glyph_parts = 0usize;
+    let mut images = ImageBudget::default();
     if parts == 0 {
         for table in &mut root.children {
             read_glyph_parts(table, path, path, &mut budget, &mut glyph_parts)?;
+            read_image_files(table, path, path, &mut images)?;
         }
         return Ok(root);
     }
@@ -91,6 +117,7 @@ pub(super) fn read_dump(path: &Path) -> Result<Element> {
         let Some(src) = child.attribute("src") else {
             let mut child = child;
             read_glyph_parts(&mut child, path, path, &mut budget, &mut glyph_parts)?;
+            read_image_files(&mut child, path, path, &mut images)?;
             children.push(child);
             continue;
         };
@@ -106,6 +133,7 @@ pub(super) fn read_dump(path: &Path) -> Result<Element> {
         }
         for table in &mut part.children {
             read_glyph_parts(table, &part_path, path, &mut budget, &mut glyph_parts)?;
+            read_image_files(table, &part_path, path, &mut images)?;
         }
         children.extend(part.children);
     }
@@ -146,6 +174,87 @@ fn read_glyph_parts(table: &mut Element, part_path: &Path, main: &Path, budget: 
         *child = inner;
     }
     Ok(())
+}
+
+/// The `extfileimagedata` elements of `table`, when it is a bitmap data table, replaced by
+/// `rawimagedata` holding the bytes of the file each names. `holder` is the file the table is
+/// in and `main` the dump's main file, whose folder every image must lie in.
+fn read_image_files(table: &mut Element, holder: &Path, main: &Path, budget: &mut ImageBudget) -> Result<()> {
+    if !matches!(table.name.as_str(), "EBDT" | "CBDT" | "bdat") {
+        return Ok(());
+    }
+    let dir = holder.parent().map(Path::to_path_buf).unwrap_or_default();
+    let mut folder = None;
+    for glyph in table.children.iter_mut().flat_map(|strike| strike.children.iter_mut()) {
+        for data in glyph.children.iter_mut().filter(|d| d.name == "extfileimagedata") {
+            let Some(value) = data.attribute("value").map(str::to_string) else {
+                return Err(EngineError::Io(format!("{} has an external bitmap image without its file", holder.display())));
+            };
+            budget.files += 1;
+            if budget.files > MAX_IMAGE_FILES {
+                return Err(EngineError::Io(format!("{} names more than {MAX_IMAGE_FILES} image files", main.display())));
+            }
+            if folder.is_none() {
+                folder = Some(dump_folder(main)?);
+            }
+            let Some(root) = &folder else { continue };
+            let file = image_path(&dir, &value, holder)?;
+            let resolved = inside_folder(root, &file, holder, &value)?;
+            crate::file_access::check_read(&resolved).map_err(|e| EngineError::Io(format!("refusing to read {}: {e}", file.display())))?;
+            let bytes = file_io::read_input_up_to(&resolved, MAX_IMAGE_FILE_BYTES)?.bytes;
+            if bytes.len() > MAX_IMAGE_FILE_BYTES {
+                return Err(EngineError::Io(format!(
+                    "{} is larger than {MAX_IMAGE_FILE_BYTES} bytes, the most an image file may hold",
+                    file.display()
+                )));
+            }
+            budget.bytes = budget.bytes.saturating_add(bytes.len());
+            if budget.bytes > MAX_IMAGE_BYTES {
+                return Err(EngineError::Io(format!("the image files of {} hold more than {MAX_IMAGE_BYTES} bytes", main.display())));
+            }
+            *data = Element { name: "rawimagedata".into(), attributes: Vec::new(), children: Vec::new(), text: hex(&bytes) };
+        }
+    }
+    Ok(())
+}
+
+/// Where the image file `value`, named in `holder`, which lies in `dir`, is looked for: `value`
+/// taken from `dir` when that is a plain path below it and something is there, else its last
+/// three parts, when they are `bitmaps/strike<N>/<file>` as `ttx` writes them, below `dir`. An
+/// absolute path or one that climbs out with `..` is used only through its last three parts.
+fn image_path(dir: &Path, value: &str, holder: &Path) -> Result<PathBuf> {
+    let given = Path::new(value);
+    let plain = !value.is_empty() && given.components().all(|c| matches!(c, Component::Normal(_) | Component::CurDir));
+    if plain {
+        let file = dir.join(given);
+        if std::fs::symlink_metadata(&file).is_ok() {
+            return Ok(file);
+        }
+    }
+    let tail: Vec<Component<'_>> = given.components().rev().take(3).collect();
+    if let [Component::Normal(file), Component::Normal(strike), Component::Normal(bitmaps)] = tail.as_slice()
+        && *bitmaps == "bitmaps"
+        && strike.to_str().and_then(|s| s.strip_prefix("strike")).is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+    {
+        let file = dir.join("bitmaps").join(strike).join(file);
+        if !plain || std::fs::symlink_metadata(&file).is_ok() {
+            return Ok(file);
+        }
+    }
+    if plain {
+        return Ok(dir.join(given));
+    }
+    Err(EngineError::Io(format!("{} names the image file `{value}`, which leads outside the dump's folder", holder.display())))
+}
+
+/// `bytes` as lowercase hex.
+fn hex(bytes: &[u8]) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for b in bytes {
+        let _ = write!(out, "{b:02x}");
+    }
+    out
 }
 
 fn tables_import_ttx(_: &mut Session, p: &Value) -> Result<Value> {
