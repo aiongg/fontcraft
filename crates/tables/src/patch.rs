@@ -11,6 +11,7 @@
 //! What to write is decided by the caller (the engine's `tables.recalculate` computes derived
 //! values from the font); this module only knows where each field lives.
 
+mod cff;
 mod cmap;
 mod fvar;
 mod layout;
@@ -18,6 +19,7 @@ mod names;
 #[cfg(test)]
 mod tests;
 
+pub use cff::{CFF_FONT_BBOX, CFF_IS_FIXED_PITCH, cff_font_bbox, cff_top_ints, set_cff_top_ints};
 pub use cmap::{CmapConflict, CmapRebuild, rebuild_cmap};
 pub use fvar::{InstanceCleanup, clean_instances, drop_axis};
 pub use layout::recompile_layout;

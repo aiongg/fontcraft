@@ -483,6 +483,12 @@ impl<'a> Cff<'a> {
         Ok(())
     }
 
+    /// The integer operands of Top DICT operator `op`, when the entry is there and every operand
+    /// is an integer.
+    pub(crate) fn top_ints(&self, op: u16) -> Option<Vec<i64>> {
+        self.top.iter().find(|e| e.op == op)?.ints.iter().copied().collect()
+    }
+
     /// The SID (or CID) of every glyph.
     pub(crate) fn charset(&self) -> &[u16] {
         &self.charset

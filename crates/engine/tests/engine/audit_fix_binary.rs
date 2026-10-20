@@ -300,3 +300,52 @@ fn audit_fix_in_place_through_a_symlink_writes_the_linked_file_and_keeps_the_lin
     assert!(std::fs::symlink_metadata(&link).unwrap().file_type().is_symlink(), "the link stays a link");
     assert!(fixable(&mut s, &real, &checks).is_empty(), "the linked file is fixed");
 }
+
+#[test]
+fn tables_recalculate_rewrites_the_cff_font_bbox_and_is_fixed_pitch() {
+    use fontcraft_tables::patch::{CFF_FONT_BBOX, CFF_IS_FIXED_PITCH, cff_top_ints, set_cff_top_ints};
+    let dir = scratch("recalc-cff-top");
+    let mut s = Session::with_document();
+    run(&mut s, "path.addPath", json!({"glyph": "A", "nodes": rect(60.0, 0.0, 560.0, 700.0)}));
+    run(&mut s, "path.addPath", json!({"glyph": "B", "nodes": rect(80.0, -10.0, 500.0, 720.0)}));
+    let otf = dir.join("Font.otf");
+    run(&mut s, "file.exportStatic", json!({"outlines": "cff", "destination": otf, "timestamp": 0}));
+    // post.isFixedPitch as the advances give it, so that only the CFF entry disagrees.
+    run(&mut s, "tables.recalculate", json!({"font": otf, "fields": ["post.isFixedPitch"], "inPlace": true}));
+    let original = read(&otf);
+    let PatchValue::Number(post_fixed) = fontcraft_tables::patch::read_field(&original, *b"post", "isFixedPitch").unwrap() else { panic!() };
+    let fixed = i64::from(post_fixed != 0.0);
+    let compiled_box = cff_top_ints(&original, CFF_FONT_BBOX).unwrap();
+    assert!(compiled_box.is_some());
+
+    let broken = set_cff_top_ints(&original, CFF_FONT_BBOX, &[0, 0, 1, 1]).unwrap();
+    let broken = set_cff_top_ints(&broken, CFF_IS_FIXED_PITCH, &[1 - fixed]).unwrap();
+    save(&otf, &broken);
+    let checks = json!(["check.metrics.fontBBox", "check.metrics.monospaceFlags"]);
+    let codes = |doc: &Value| -> Vec<String> {
+        let mut list: Vec<String> = doc["results"].as_array().unwrap().iter().map(|r| r["code"].as_str().unwrap().to_string()).collect();
+        list.retain(|c| c.starts_with("head-cff") || c.starts_with("cff-"));
+        list.sort();
+        list
+    };
+    let before = run(&mut s, "audit.run", json!({"target": otf, "checks": checks}));
+    assert_eq!(codes(&before), ["cff-is-fixed-pitch", "head-cff-differ"], "{before}");
+    let plan = run(&mut s, "audit.fix", json!({"target": otf, "checks": checks, "safeOnly": false, "dryRun": true}));
+    let fields = plan["planned"].as_array().unwrap().iter().find(|c| c["command"] == "tables.recalculate").map(|c| c["params"]["fields"].clone());
+    let fields = fields.unwrap_or_else(|| panic!("{plan}"));
+    assert!(fields.as_array().unwrap().contains(&json!("CFF.FontBBox")) && fields.as_array().unwrap().contains(&json!("CFF.isFixedPitch")), "{plan}");
+
+    let r = run(&mut s, "tables.recalculate", json!({"font": otf, "fields": ["CFF.FontBBox", "CFF.isFixedPitch"], "inPlace": true}));
+    let changed: Vec<&str> = r["changed"].as_array().unwrap().iter().map(|c| c["field"].as_str().unwrap()).collect();
+    assert_eq!(changed, ["CFF.FontBBox", "CFF.isFixedPitch"], "{r}");
+    let out = read(&otf);
+    assert_eq!(cff_top_ints(&out, CFF_FONT_BBOX).unwrap(), compiled_box, "the compiler's box again");
+    assert_eq!(cff_top_ints(&out, CFF_IS_FIXED_PITCH).unwrap().map(|v| v[0]).unwrap_or(0), fixed);
+    for (tag, bytes) in &original.tables {
+        if tag != b"CFF " {
+            assert_eq!(out.get(*tag), Some(bytes.as_slice()), "{} is left as it was", String::from_utf8_lossy(tag));
+        }
+    }
+    let after = run(&mut s, "audit.run", json!({"target": otf, "checks": checks}));
+    assert!(codes(&after).is_empty(), "{after}");
+}
