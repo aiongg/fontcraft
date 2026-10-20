@@ -334,7 +334,7 @@ fn compile(args: &[String]) -> Outcome {
             || params.contains_key("mastersAsInstances")
             || params.contains_key("subroutinize")
             || params.contains_key("cbdt")
-            || ["subset", "stubDsig", "passThroughTables", "collection"].iter().any(|k| params.contains_key(*k))
+            || ["subset", "stubDsig", "passThroughTables", "collection", "uvsFile"].iter().any(|k| params.contains_key(*k))
         {
             return Err(usage("--variable takes only --format, --settings, --container, -o, --output-dir and --timestamp"));
         }
