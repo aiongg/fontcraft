@@ -22,7 +22,12 @@
 //! - Clip paths, masks and pattern tiles are placed as resvg places them: in the coordinates of
 //!   the element that uses them, the content of a pattern tile from the tile's top left.
 //!   Nested clip paths (a `clip-path` on a `clipPath`) and nested masks all apply.
-//! - Not drawn: text (usvg reads files without text) and filters (drawing them needs resvg).
+//! - [`items`] gives an element with filters as an [`SvgGroup`] holding them
+//!   ([`crate::svg_filter`]): its items drawn at full opacity, the group's opacity applied after
+//!   the filters. A filter that cannot be drawn leaves the element unfiltered, and
+//!   [`drawing`] gives one warning for each such reason.
+//! - Not drawn: text (usvg reads files without text). [`shapes`] draws a filtered element
+//!   unfiltered.
 //!   Even-odd fills and clip rules are filled with the non-zero rule, which differs only for
 //!   overlapping contours. A radial gradient under a non-uniform transform keeps circles, with
 //!   radii scaled by the transform's mean scale.
@@ -36,6 +41,7 @@ use fontcraft_model::Extend;
 use usvg::tiny_skia_path::{self, PathSegment};
 
 use crate::paint::{ColorLine, ColorRef, ColorStop, Paint};
+use crate::svg_filter::{self, MAX_FILTER_DEPTH, SvgFilter};
 use crate::{ColorError, MAX_STOPS, MAX_SVG_DEPTH};
 
 /// Most outlines one SVG file gives (a fill and a stroke count as two), with its images and
@@ -80,11 +86,17 @@ pub enum SvgItem {
     Group(SvgGroup),
 }
 
-/// Items drawn together and then cut by clip paths and masks: a group of the file with a
-/// `clip-path` or a `mask`, a shape filled with a pattern, or one tile of a pattern.
+/// Items drawn together, then filtered, then cut by clip paths and masks: a group of the file
+/// with a `filter`, a `clip-path` or a `mask`, a shape filled with a pattern, or one tile of a
+/// pattern.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SvgGroup {
     pub items: Vec<SvgItem>,
+    /// Applied in order to the items drawn together, before the clips and masks.
+    pub filters: Vec<SvgFilter>,
+    /// From 0 to 1, applied last. Below 1 only for a filtered group: elsewhere opacity is in the
+    /// paints.
+    pub opacity: f64,
     /// Each clip keeps only what lies inside the union of its items, which are opaque
     /// [`SvgShape`]s or groups of them. All clips apply.
     pub clips: Vec<Vec<SvgItem>>,
@@ -102,10 +114,18 @@ pub struct SvgMask {
     pub items: Vec<SvgItem>,
 }
 
+/// What [`drawing`] gives.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct SvgDrawing {
+    pub items: Vec<SvgItem>,
+    /// What of the file is not drawn as it should be, one line for each reason.
+    pub warnings: Vec<String>,
+}
+
 /// The outlines of the SVG file `svg` placed by `transform` (the layer's image transform), in
 /// paint order, the first at the bottom.
 pub fn shapes(svg: &[u8], transform: Affine) -> Result<Vec<SvgShape>, ColorError> {
-    let items = read(svg, |_, _| transform, false)?;
+    let items = read(svg, |_, _| transform, false)?.items;
     Ok(items.into_iter().filter_map(|i| if let SvgItem::Shape(s) = i { Some(s) } else { None }).collect())
 }
 
@@ -114,10 +134,15 @@ pub fn shapes(svg: &[u8], transform: Affine) -> Result<Vec<SvgShape>, ColorError
 /// `width` and `height`, else its `viewBox`'s, else 100). The transform maps the viewport, y up
 /// with its bottom left at the origin, to font units.
 pub fn items(svg: &[u8], place: impl FnOnce(f64, f64) -> Affine) -> Result<Vec<SvgItem>, ColorError> {
+    read(svg, place, true).map(|d| d.items)
+}
+
+/// [`items`] with the warnings of what is not drawn as it should be.
+pub fn drawing(svg: &[u8], place: impl FnOnce(f64, f64) -> Affine) -> Result<SvgDrawing, ColorError> {
     read(svg, place, true)
 }
 
-fn read(svg: &[u8], place: impl FnOnce(f64, f64) -> Affine, full: bool) -> Result<Vec<SvgItem>, ColorError> {
+fn read(svg: &[u8], place: impl FnOnce(f64, f64) -> Affine, full: bool) -> Result<SvgDrawing, ColorError> {
     let document = crate::svg_import::import_placed(svg, place, 0)?;
     let resolve_data: usvg::ImageHrefDataResolverFn<'static> = if full { Box::new(bitmap_data) } else { Box::new(|_, _, _| None) };
     let options = usvg::Options {
@@ -127,11 +152,11 @@ fn read(svg: &[u8], place: impl FnOnce(f64, f64) -> Affine, full: bool) -> Resul
     };
     let tree = usvg::Tree::from_str(&document, &options).map_err(|e| ColorError::BadSvg(e.to_string()))?;
     let root = tree.root();
-    let mut walker = Walker { full, made: 0, visited: 0, tiles: 0 };
-    let cx = Context { opacity: f64::from(root.opacity().get()), clip: false, depth: 0 };
-    let mut out = Vec::new();
-    walker.children(root, affine(root.transform()), cx, &mut out)?;
-    Ok(out)
+    let mut walker = Walker { full, made: 0, visited: 0, tiles: 0, warnings: Vec::new() };
+    let cx = Context { opacity: f64::from(root.opacity().get()), clip: false, depth: 0, filters: 0 };
+    let mut items = Vec::new();
+    walker.children(root, affine(root.transform()), cx, &mut items)?;
+    Ok(SvgDrawing { items, warnings: walker.warnings })
 }
 
 /// PNG and JPEG data, by their signatures; nothing else is drawn.
@@ -190,6 +215,8 @@ struct Context {
     /// Inside a clip path: fills are opaque, strokes, images, masks and opacity ignored.
     clip: bool,
     depth: usize,
+    /// Filtered groups around the node.
+    filters: usize,
 }
 
 /// Walks a usvg tree into items, counting what it makes and visits.
@@ -199,9 +226,35 @@ struct Walker {
     made: usize,
     visited: usize,
     tiles: usize,
+    warnings: Vec<String>,
 }
 
 impl Walker {
+    fn warn(&mut self, warning: String) {
+        if !self.warnings.contains(&warning) {
+            self.warnings.push(warning);
+        }
+    }
+
+    /// The filters of `g` drawn in the coordinates `ctm` maps to font units, or none (with a
+    /// warning) when they cannot be drawn.
+    fn filters(&mut self, g: &usvg::Group, ctm: Affine, cx: Context) -> Vec<SvgFilter> {
+        if !self.full || cx.clip || g.filters().is_empty() {
+            return Vec::new();
+        }
+        if cx.filters >= MAX_FILTER_DEPTH {
+            self.warn(format!("SVG filters nested more than {MAX_FILTER_DEPTH} deep are not drawn"));
+            return Vec::new();
+        }
+        match svg_filter::filters(g, flip() * ctm) {
+            Ok(filters) => filters,
+            Err(svg_filter::Unsupported(why)) => {
+                self.warn(format!("{why}; the element is drawn unfiltered"));
+                Vec::new()
+            }
+        }
+    }
+
     fn make(&mut self, n: usize) -> Result<(), ColorError> {
         self.made = self.made.saturating_add(n);
         if self.made > MAX_SVG_SHAPES {
@@ -230,15 +283,24 @@ impl Walker {
         Ok(())
     }
 
-    /// A group; one with a clip path or a mask becomes an [`SvgGroup`] when items are wanted.
-    /// Clip paths and masks are drawn in the group's own coordinates (its transform applied),
-    /// their contents' root transforms not applied, as resvg draws them.
+    /// A group; one with a clip path, a mask or a filter that can be drawn becomes an
+    /// [`SvgGroup`] when items are wanted. Clip paths, masks and filters are drawn in the
+    /// group's own coordinates (its transform applied), their contents' root transforms not
+    /// applied, as resvg draws them.
     fn group(&mut self, g: &usvg::Group, parent: Affine, cx: Context, out: &mut Vec<SvgItem>) -> Result<(), ColorError> {
         let ctm = parent * affine(g.transform());
         let opacity = if cx.clip { 1.0 } else { cx.opacity * f64::from(g.opacity().get()) };
-        let inner = Context { opacity, clip: cx.clip, depth: cx.depth + 1 };
+        let filters = self.filters(g, ctm, cx);
+        let filtered = !filters.is_empty();
+        // A filter sees its content at full opacity; the group's opacity applies to its result.
+        let inner = Context {
+            opacity: if filtered { 1.0 } else { opacity },
+            clip: cx.clip,
+            depth: cx.depth + 1,
+            filters: cx.filters + usize::from(filtered),
+        };
         let masked = g.mask().is_some() && !cx.clip;
-        if !(self.full && (g.clip_path().is_some() || masked)) {
+        if !(self.full && (g.clip_path().is_some() || masked || filtered)) {
             return self.children(g, ctm, inner, out);
         }
         let mut clips = Vec::new();
@@ -248,7 +310,7 @@ impl Walker {
                 return Err(limit("clip paths applied to one group", MAX_SVG_DEPTH));
             }
             let mut items = Vec::new();
-            let in_clip = Context { opacity: 1.0, clip: true, depth: inner.depth };
+            let in_clip = Context { opacity: 1.0, clip: true, depth: inner.depth, filters: inner.filters };
             self.children(clip.root(), ctm * affine(clip.transform()), in_clip, &mut items)?;
             clips.push(items);
             next = clip.clip_path();
@@ -260,7 +322,7 @@ impl Walker {
                 return Err(limit("masks applied to one group", MAX_SVG_DEPTH));
             }
             let mut items = Vec::new();
-            self.children(mask.root(), ctm, Context { opacity: 1.0, clip: false, depth: inner.depth }, &mut items)?;
+            self.children(mask.root(), ctm, Context { opacity: 1.0, clip: false, depth: inner.depth, filters: inner.filters }, &mut items)?;
             let luminance = mask.kind() == usvg::MaskType::Luminance;
             masks.push(SvgMask { luminance, region: rect_outline(rect_of(mask.rect()), flip() * ctm), items });
             next = mask.mask();
@@ -268,7 +330,8 @@ impl Walker {
         let mut items = Vec::new();
         self.children(g, ctm, inner, &mut items)?;
         self.make(1)?;
-        out.push(SvgItem::Group(SvgGroup { items, clips, masks }));
+        let opacity = if filtered { opacity.clamp(0.0, 1.0) } else { 1.0 };
+        out.push(SvgItem::Group(SvgGroup { items, filters, opacity, clips, masks }));
         Ok(())
     }
 
@@ -306,7 +369,7 @@ impl Walker {
             }
             let opacity = cx.opacity * opacity;
             match paint {
-                usvg::Paint::Pattern(pattern) if self.full => self.pattern(pattern, outline, ctm, opacity, cx.depth, out)?,
+                usvg::Paint::Pattern(pattern) if self.full => self.pattern(pattern, outline, ctm, Context { opacity, ..cx }, out)?,
                 _ => {
                     if let Some(paint) = paint_of(paint, opacity, place) {
                         self.make(1)?;
@@ -321,15 +384,7 @@ impl Walker {
     /// `outline` (font units) filled with `pattern` used in the coordinates `ctm` maps: the
     /// tiles over the outline, each its content clipped to its rectangle, clipped together to
     /// the outline. Tile content is drawn from the tile's top left, as resvg draws it.
-    fn pattern(
-        &mut self,
-        pattern: &usvg::Pattern,
-        outline: BezPath,
-        ctm: Affine,
-        opacity: f64,
-        depth: usize,
-        out: &mut Vec<SvgItem>,
-    ) -> Result<(), ColorError> {
+    fn pattern(&mut self, pattern: &usvg::Pattern, outline: BezPath, ctm: Affine, cx: Context, out: &mut Vec<SvgItem>) -> Result<(), ColorError> {
         let space = ctm * affine(pattern.transform());
         let to_font = flip() * space;
         let inverse = to_font.inverse();
@@ -356,18 +411,24 @@ impl Walker {
                 let at = (tile.x0 + (i0 + i as f64) * w, tile.y0 + (j0 + j as f64) * h);
                 let place = space * Affine::translate(at);
                 let mut items = Vec::new();
-                self.children(pattern.root(), place, Context { opacity, clip: false, depth: depth + 1 }, &mut items)?;
+                self.children(pattern.root(), place, Context { depth: cx.depth + 1, ..cx }, &mut items)?;
                 if items.is_empty() {
                     continue;
                 }
                 self.make(2)?;
                 let clip = rect_outline(Rect::new(0.0, 0.0, w, h), flip() * place);
-                tiles.push(SvgItem::Group(SvgGroup { items, clips: vec![vec![solid(clip)]], masks: Vec::new() }));
+                tiles.push(SvgItem::Group(SvgGroup { items, filters: Vec::new(), opacity: 1.0, clips: vec![vec![solid(clip)]], masks: Vec::new() }));
             }
         }
         if !tiles.is_empty() {
             self.make(2)?;
-            out.push(SvgItem::Group(SvgGroup { items: tiles, clips: vec![vec![solid(outline)]], masks: Vec::new() }));
+            out.push(SvgItem::Group(SvgGroup {
+                items: tiles,
+                filters: Vec::new(),
+                opacity: 1.0,
+                clips: vec![vec![solid(outline)]],
+                masks: Vec::new(),
+            }));
         }
         Ok(())
     }
@@ -484,6 +545,27 @@ mod tests {
             <defs><pattern id="p" patternUnits="userSpaceOnUse" width="1" height="1"><rect width="1" height="1" fill="#ff0000"/></pattern></defs>
             <rect width="1000" height="1000" fill="url(#p)"/></svg>"##;
         assert!(matches!(items(fine_grained, |_, _| Affine::IDENTITY), Err(ColorError::LimitExceeded { .. })));
+    }
+
+    #[test]
+    fn filtered_elements_become_groups_and_unsupported_filters_warn() {
+        let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+            <filter id="b" x="0" y="0" width="100" height="100" filterUnits="userSpaceOnUse"><feGaussianBlur stdDeviation="2"/></filter>
+            <filter id="t"><feTurbulence baseFrequency="0.1"/></filter>
+            <rect width="50" height="50" fill="#ff0000" opacity="0.5" filter="url(#b)"/>
+            <rect x="50" width="50" height="50" fill="#0000ff" filter="url(#t)"/>
+        </svg>"##;
+        let d = drawing(svg, |_, _| Affine::IDENTITY).unwrap();
+        let [SvgItem::Group(blurred), SvgItem::Shape(plain)] = d.items.as_slice() else { panic!("{:?}", d.items) };
+        assert_eq!((blurred.filters.len(), blurred.opacity), (1, 0.5), "the opacity applies after the filter");
+        let [SvgItem::Shape(inside)] = blurred.items.as_slice() else { panic!("{:?}", blurred.items) };
+        assert_eq!(inside.paint, Paint::Solid(ColorRef::Rgba([1.0, 0.0, 0.0, 1.0])));
+        assert_eq!(plain.paint, Paint::Solid(ColorRef::Rgba([0.0, 0.0, 1.0, 1.0])), "drawn unfiltered");
+        assert_eq!(d.warnings.len(), 1, "{:?}", d.warnings);
+        assert!(d.warnings[0].contains("feTurbulence"), "{:?}", d.warnings);
+        // The filter region maps to font units, y up, with the file's bottom left at the origin.
+        let region = blurred.filters[0].to_font.transform_rect_bbox(blurred.filters[0].region);
+        assert!(region.y0.abs() < 1e-6 && (region.y1 - 100.0).abs() < 1e-6, "{region:?}");
     }
 
     #[test]
