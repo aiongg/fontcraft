@@ -122,3 +122,48 @@ fn hostile_strikes_are_left_out_and_the_font_still_opens() {
     let d = crate::decompile(&with_tables(&base, &[(b"EBDT", vec![0, 2, 0, 0])]), None).unwrap();
     assert!(d.warnings.iter().any(|w| w.contains("no `EBLC`")), "{:?}", d.warnings);
 }
+
+#[test]
+fn strikes_sharing_one_large_image_stop_at_the_decode_budget() {
+    use skrifa::raw::FontData;
+
+    // One 255 × 255 bit-aligned image (format 2), which every other glyph of an index subtable
+    // (format 1) points at, and 200 strikes that all use that subtable. Each strike decodes past
+    // the model's size for one strike and is left out; before the font-wide budget, every one of
+    // them decoded the image thousands of times.
+    let glyphs: u16 = 16_600;
+    let image_len = 5 + (255usize * 255).div_ceil(8);
+    let mut ebdt = vec![0, 2, 0, 0, 255, 255, 0, 127, 255];
+    ebdt.resize(4 + image_len, 0xAA);
+
+    let sizes = 200u32;
+    let array = 8 + 48 * sizes;
+    let mut eblc = vec![0, 2, 0, 0];
+    eblc.extend(sizes.to_be_bytes());
+    let subtable_len = 8 + 4 * (u32::from(glyphs) + 1);
+    for ppem in 1..=sizes as u8 {
+        eblc.extend(array.to_be_bytes());
+        eblc.extend((8 + subtable_len).to_be_bytes());
+        eblc.extend(1u32.to_be_bytes());
+        eblc.extend(0u32.to_be_bytes());
+        eblc.extend([127, 0x81, 255, 0, 0, 0, 0, 0, 127, 0x81, 0, 0]);
+        eblc.extend([0; 12]);
+        eblc.extend(0u16.to_be_bytes());
+        eblc.extend((glyphs - 1).to_be_bytes());
+        eblc.extend([ppem, ppem, 1, 1]);
+    }
+    eblc.extend(0u16.to_be_bytes());
+    eblc.extend((glyphs - 1).to_be_bytes());
+    eblc.extend(8u32.to_be_bytes());
+    eblc.extend([0, 1, 0, 2]);
+    eblc.extend(4u32.to_be_bytes());
+    for i in 0..=u32::from(glyphs) {
+        eblc.extend(if i % 2 == 0 { 0u32 } else { image_len as u32 }.to_be_bytes());
+    }
+
+    let names: Vec<String> = (0..glyphs).map(|i| format!("g{i}")).collect();
+    let mut warnings = Vec::new();
+    let read = super::read(FontData::new(&eblc), FontData::new(&ebdt), &names, &mut warnings);
+    let Err(message) = read else { panic!("the strikes were read: {warnings:?}") };
+    assert!(message.contains("decode to more than"), "{message}");
+}

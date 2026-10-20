@@ -241,6 +241,36 @@ fn a_blend_run_in_a_charstring_leaves_room_for_a_call() {
     }
 }
 
+/// The Top DICT of a written `CFF2` table.
+fn top_dict(table: &[u8]) -> &[u8] {
+    let len = usize::from(u16::from_be_bytes([table[3], table[4]]));
+    &table[5..5 + len]
+}
+
+#[test]
+fn maxstack_is_written_only_when_a_charstring_needs_more_than_the_default() {
+    // The sample glyphs fit the default stack: the Top DICT ends with `vstore`, as fontTools
+    // writes it.
+    let built = write_cff2(&font(sample_glyphs())).unwrap();
+    assert_eq!(top_dict(&built.table).last(), Some(&24));
+
+    // One blended value over 200 regions takes 202 operands.
+    let regions = 200;
+    let v = |d: f64| Blend { default: d, deltas: vec![d / 10.0; regions] };
+    let mut f = font(vec![glyph("l", 0, vec![m(p(0.0), p(0.0)), l(v(100.0), p(0.0))])]);
+    f.regions = (0..regions).map(|i| vec![RegionAxis { start: 0.0, peak: (i + 1) as f64 / regions as f64, end: 1.0 }]).collect();
+    f.region_lists = vec![(0..regions as u16).collect()];
+    let built = write_cff2(&f).unwrap();
+    // 513 maxstack.
+    assert!(top_dict(&built.table).ends_with(&[248, 149, 25]), "{}", hex(top_dict(&built.table)));
+    // The subroutiniser keeps it.
+    let sub = subroutinize_table(&built.table, true, &SubrOptions::default()).unwrap();
+    assert!(hex(top_dict(&sub)).contains("f89519"), "{}", hex(top_dict(&sub)));
+    for at in [0.0, 1.0] {
+        assert_eq!(draw(&built.table, at), draw(&sub, at));
+    }
+}
+
 // --- Hints -----------------------------------------------------------------------------------
 
 fn stem(edge: f64, width: f64) -> StemHint {

@@ -333,7 +333,7 @@ pub fn merge_with_report(fonts: &[SfntFont], options: &MergeOptions) -> Result<M
             base_math::merge(fonts, &[0], &plan, &drop, &mut out)?;
         }
         LayoutMode::Merge => {
-            layout::merge(fonts, &plan, &united.duplicates, &drop, &mut out, &mut warnings)?;
+            layout::merge(fonts, &plan, &united.duplicates, &drop, axes.is_some(), &mut out, &mut warnings)?;
             let all: Vec<usize> = (0..fonts.len()).collect();
             base_math::merge(fonts, &all, &plan, &drop, &mut out)?;
         }

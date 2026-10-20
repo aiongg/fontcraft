@@ -6,7 +6,8 @@
 //!
 //! A glyph whose document cannot be made is left out of the table with a warning; its master
 //! layer outline stays the fallback that renderers without SVG support draw. Only a table
-//! beyond its size limit fails the compile.
+//! beyond its size limit fails the compile; the documents' bytes are counted as they are made,
+//! so the compile stops as soon as the table cannot fit.
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -15,7 +16,7 @@ use fontcraft_color::export::{SvgPlan, SvgSource};
 use fontcraft_color::paint::{Paint, ShapeRef, StrokeSpec, colr_glyph_refs};
 use fontcraft_color::svg::{BitmapPlacement, bitmap_document, bitmap_size, glyph_document, has_sweep, is_native_stroke, table};
 use fontcraft_color::svg_import::import;
-use fontcraft_color::{AssetStore, MAX_SVG_FILE_BYTES, Rgba};
+use fontcraft_color::{AssetStore, ColorError, MAX_SVG_FILE_BYTES, MAX_SVG_PAINT_VISITS, MAX_SVG_TABLE_BYTES, Rgba};
 use fontcraft_geom::{Affine, BezPath};
 use fontcraft_imagery::{ImageFormat, MAX_PIXELS, decode_rgba, sniff, to_png};
 use fontcraft_model::{Font, Glyph, Image, MAX_OUTLINE_ELEMENTS, Shape};
@@ -35,6 +36,8 @@ pub fn build(
     warnings: &mut Vec<String>,
 ) -> Result<Option<Vec<u8>>, CompileError> {
     let mut docs: Vec<(u16, u16, Vec<u8>)> = Vec::with_capacity(plan.documents.len());
+    // Every document names its glyph id, so none is shared and the table holds them all.
+    let mut total = 0usize;
     let mut done = HashSet::new();
     // What a reference to a colour glyph draws: that glyph's own paint graph, also when the
     // compile leaves the glyph out, since the drawing is copied into the document.
@@ -57,7 +60,14 @@ pub fn build(
             SvgSource::Bitmap { layer, ppem } => bitmap_layer_document(font, &doc.glyph, layer, *ppem, gid, assets),
         };
         match made {
-            Ok(text) => docs.push((gid, gid, text.into_bytes())),
+            Ok(text) => {
+                total = total.saturating_add(text.len());
+                if total > MAX_SVG_TABLE_BYTES {
+                    let e = ColorError::LimitExceeded { what: "bytes in the SVG table", limit: MAX_SVG_TABLE_BYTES };
+                    return Err(CompileError::Table { table: "SVG ", message: e.to_string() });
+                }
+                docs.push((gid, gid, text.into_bytes()));
+            }
             Err(message) => warnings.push(format!("glyph `{}`: {message}; it has no SVG document", doc.glyph)),
         }
     }
@@ -95,7 +105,13 @@ fn paint_document(
         }
     };
     let lookup = |glyph: &str| paints.get(glyph).copied();
-    let text = glyph_document(name, paint, &draw, &lookup, gid, palette).map_err(|e| e.to_string())?;
+    let doc = glyph_document(name, paint, &draw, &lookup, gid, palette).map_err(|e| e.to_string())?;
+    if doc.outlined_over_budget > 0 {
+        warnings.push(format!(
+            "glyph `{name}`: its references to other colour glyphs draw more than {MAX_SVG_PAINT_VISITS} paints in SVG, so {} of them are drawn as their outlines",
+            doc.outlined_over_budget
+        ));
+    }
     let mut missing: Vec<&str> = colr_glyph_refs(paint).into_iter().filter(|g| !paints.contains_key(g)).collect();
     missing.sort_unstable();
     missing.dedup();
@@ -110,7 +126,7 @@ fn paint_document(
     if has_sweep(paint) {
         warnings.push(format!("glyph `{name}`: SVG has no conic gradient, so its conic gradient is drawn in its first colour"));
     }
-    Ok(text)
+    Ok(doc.text)
 }
 
 /// The document of `name` drawing the SVG file of its svg layer `layer`, placed as the layer
@@ -374,5 +390,49 @@ mod tests {
         assert!(svg.glyph_data(GlyphId::new(3)).is_none());
         assert!(warnings.iter().any(|w| w.starts_with("glyph `frown`") && w.contains("frown.png")), "{warnings:?}");
         assert_eq!(warnings.len(), 1, "{warnings:?}");
+    }
+
+    #[test]
+    fn svg_table_of_glyphs_referring_to_a_fanning_out_chain_stays_within_its_limits() {
+        use fontcraft_color::{MAX_SVG_DOCUMENT_BYTES, MAX_SVG_PAINT_VISITS};
+        use fontcraft_geom::Affine;
+
+        // `g0` holds two references to `g1`, `g1` two to `g2`, and so on down to `g18`, a red
+        // square: copied in full, a reference to `g0` draws 2^18 squares. Eight exported glyphs
+        // each refer to `g0`; the chain itself is not exported.
+        const LEVELS: usize = 18;
+        const REFERRERS: usize = 8;
+        let mut font = Font::new("Svg Fan Out");
+        let master = font.masters[0].id.clone();
+        let names: Vec<String> = (0..=LEVELS).map(|k| format!("g{k}")).chain((0..REFERRERS).map(|i| format!("r{i}"))).collect();
+        for name in &names {
+            font.add_glyph(name, Vec::new(), 600.0).unwrap();
+            let mut g = font.glyph_mut(name).unwrap();
+            let layer = g.layers.iter_mut().find(|l| l.id == master).unwrap();
+            layer.shapes.push(Shape::Path(Path::rect(0.0, 0.0, 10.0, 10.0)));
+        }
+        let shape = ShapeRef { layer: master.clone(), shapes: vec![0], stroke: None };
+        let reference = |k: usize| Paint::ColrGlyph { glyph: format!("g{k}"), transform: Affine::translate((1.0, 0.0)), shape: shape.clone() };
+        let mut documents: Vec<SvgDocument> = (0..LEVELS)
+            .map(|k| SvgDocument { glyph: format!("g{k}"), source: SvgSource::Paint(Paint::Layers(vec![reference(k + 1), reference(k + 1)])) })
+            .collect();
+        let red = Paint::Glyph { shape: shape.clone(), paint: Box::new(Paint::Solid(ColorRef::Rgba([1.0, 0.0, 0.0, 1.0]))) };
+        documents.push(SvgDocument { glyph: format!("g{LEVELS}"), source: SvgSource::Paint(red) });
+        documents.extend((0..REFERRERS).map(|i| SvgDocument { glyph: format!("r{i}"), source: SvgSource::Paint(reference(0)) }));
+        let plan = SvgPlan { palette: Vec::new(), documents };
+        let glyphs: Vec<ResolvedGlyph> =
+            std::iter::once(".notdef".to_string()).chain((0..REFERRERS).map(|i| format!("r{i}"))).map(|n| ResolvedGlyph::new(n, 600.0)).collect();
+        let order = GlyphOrder::new(&glyphs, &[]).unwrap();
+        let mut warnings = Vec::new();
+        let bytes = build(&font, &plan, &order, &MemoryAssets::new(), &mut warnings).unwrap().unwrap();
+
+        let svg = Svg::read(FontData::new(&bytes)).unwrap();
+        assert_eq!(usize::from(svg.svg_document_list().unwrap().num_entries()), REFERRERS);
+        let doc = std::str::from_utf8(svg.glyph_data(GlyphId::new(1)).unwrap()).unwrap();
+        let squares = doc.matches(r##"fill="#FF0000""##).count();
+        assert!(squares > 0 && squares < MAX_SVG_PAINT_VISITS, "{squares} squares");
+        assert!(doc.len() < MAX_SVG_DOCUMENT_BYTES / 2, "{} bytes", doc.len());
+        let limited = warnings.iter().filter(|w| w.contains(&format!("more than {MAX_SVG_PAINT_VISITS} paints"))).count();
+        assert_eq!(limited, REFERRERS, "{warnings:?}");
     }
 }

@@ -844,8 +844,24 @@ fn compile_fonts(
         }
         None => {}
     }
+    // When the layout is replaced afterwards, the fonts are compiled into a scratch folder first,
+    // so that nothing reaches the destination before every font is final.
+    let mut scratch = match layout {
+        Some(_) => {
+            let (scratch, to) = Scratch::new(&destination, single)?;
+            if let Some(obj) = params.as_object_mut() {
+                obj.insert("destination".into(), json!(to.display().to_string()));
+            }
+            Some(scratch)
+        }
+        None => None,
+    };
     let r = s.execute("font.compile", &params)?;
-    warnings.extend(r.get("warnings").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str).map(str::to_string));
+    let shown = |text: &str| match &scratch {
+        Some(sc) => text.replace(&sc.folder.display().to_string(), &sc.base.display().to_string()),
+        None => text.to_string(),
+    };
+    warnings.extend(r.get("warnings").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str).map(shown));
     for skip in r.get("skipped").and_then(Value::as_array).into_iter().flatten() {
         let name = skip.get("instance").and_then(Value::as_str).unwrap_or("?");
         let reason = skip.get("reason").and_then(Value::as_str).unwrap_or("skipped");
@@ -856,7 +872,8 @@ fn compile_fonts(
     let mut by_index: Vec<(&Job, &String)> = jobs.iter().zip(&labels).collect();
     by_index.sort_by_key(|(j, _)| j.index);
     let mut taken = vec![false; by_index.len()];
-    let mut built: Vec<(usize, Value, String)> = Vec::new();
+    // Each entry: the job's place, the result entry, the file's key, and where font.compile wrote it.
+    let mut built: Vec<(usize, Value, String, PathBuf)> = Vec::new();
     for f in r.get("fonts").and_then(Value::as_array).into_iter().flatten() {
         let label = f.get("instance").and_then(Value::as_str).unwrap_or_default();
         let found = by_index.iter().zip(taken.iter_mut()).find(|((_, l), taken)| !**taken && l.as_str() == label);
@@ -865,30 +882,116 @@ fn compile_fonts(
         let order = jobs.iter().position(|j| j.index == job.index).unwrap_or(usize::MAX);
         let entry_warnings = f.get("warnings").cloned().unwrap_or_else(|| json!([]));
         for file in f.get("files").and_then(Value::as_array).into_iter().flatten() {
-            let path = file.get("path").and_then(Value::as_str).unwrap_or_default();
+            let written = PathBuf::from(file.get("path").and_then(Value::as_str).unwrap_or_default());
+            let out = scratch.as_ref().map_or_else(|| Some(written.clone()), |sc| sc.final_path(&written));
+            let Some(out) = out.filter(|o| !o.as_os_str().is_empty()) else { continue };
+            let path = out.display().to_string();
             // font.compile writes the fonts in order and keeps the later of two with one file,
             // as fontmake does; the earlier one's entry goes.
-            let key = same_file_key(Path::new(path));
-            if let Some(k) = built.iter().position(|(_, _, other)| !path.is_empty() && *other == key) {
-                let (_, earlier, _) = built.remove(k);
+            let key = same_file_key(&out);
+            if let Some(k) = built.iter().position(|(_, _, other, _)| *other == key) {
+                let (_, earlier, ..) = built.remove(k);
                 let name = earlier.get("name").and_then(Value::as_str).unwrap_or("?");
                 warnings.push(format!("instance `{name}` is not kept: instance `{label}`, later in the source, is written to the same file {path}"));
             }
-            let mut entry = json!({ "output": file.get("path").cloned().unwrap_or(Value::Null), "location": job.location.clone(), "static": true, "warnings": entry_warnings.clone() });
+            let mut entry = json!({ "output": path, "location": job.location.clone(), "static": true, "warnings": entry_warnings.clone() });
             if let (false, Some(obj)) = (job.from_location, entry.as_object_mut()) {
                 obj.insert("name".into(), json!(label));
             }
-            built.push((order, entry, key));
+            built.push((order, entry, key, written));
         }
     }
     // In the order the jobs were asked for.
     built.sort_by_key(|(order, ..)| *order);
-    if let Some(layout) = layout {
-        let outputs: Vec<(usize, PathBuf)> =
-            built.iter().filter_map(|(order, entry, _)| Some((jobs.get(*order)?.index, PathBuf::from(entry.get("output")?.as_str()?)))).collect();
+    if let (Some(layout), Some(sc)) = (layout, scratch.as_mut()) {
+        let mut outputs: Vec<(usize, PathBuf, PathBuf)> = Vec::with_capacity(built.len());
+        for (order, entry, _, written) in &built {
+            let (Some(job), Some(out)) = (jobs.get(*order), entry.get("output").and_then(Value::as_str)) else { continue };
+            let out = PathBuf::from(out);
+            sc.make_parent(&out)?;
+            outputs.push((job.index, written.clone(), out));
+        }
         layout.apply(p, &outputs)?;
+        sc.keep_made = true;
     }
-    Ok(built.into_iter().map(|(_, entry, _)| entry).collect())
+    Ok(built.into_iter().map(|(_, entry, ..)| entry).collect())
+}
+
+/// A folder inside the destination that instances are compiled into when their layout is
+/// replaced afterwards. Dropping it removes it, and, unless `keep_made` is set, the folders made
+/// for it and for the outputs.
+#[cfg(not(target_arch = "wasm32"))]
+struct Scratch {
+    folder: PathBuf,
+    /// The folder `folder` stands in for.
+    base: PathBuf,
+    made: Vec<PathBuf>,
+    keep_made: bool,
+}
+
+/// Names tried for a scratch folder before giving up.
+#[cfg(not(target_arch = "wasm32"))]
+const MAX_SCRATCH_NAMES: usize = 16;
+
+#[cfg(not(target_arch = "wasm32"))]
+impl Scratch {
+    /// A new scratch folder for `destination` (one file when `single`, else a folder); answers
+    /// it with the destination to compile to inside it.
+    fn new(destination: &Path, single: bool) -> Result<(Self, PathBuf)> {
+        let destination = super::super::compile::absolute(destination);
+        let (base, name) = if single {
+            match (destination.parent(), destination.file_name()) {
+                (Some(parent), Some(name)) => (parent.to_path_buf(), Some(name.to_os_string())),
+                _ => return Err(EngineError::Io(format!("cannot write {}: it is not a file path", destination.display()))),
+            }
+        } else {
+            (destination.clone(), None)
+        };
+        let made = make_parent(&base.join("scratch"))?;
+        let mut scratch = Self { folder: PathBuf::new(), base, made, keep_made: false };
+        for n in 0..MAX_SCRATCH_NAMES {
+            let folder = scratch.base.join(format!(".fontcraft-instances.{}-{n}.tmp", std::process::id()));
+            file_io::check_write(&folder)?;
+            match std::fs::create_dir(&folder) {
+                Ok(()) => {
+                    let to = name.map_or_else(|| folder.clone(), |name| folder.join(name));
+                    scratch.folder = folder;
+                    return Ok((scratch, to));
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+                Err(e) => return Err(EngineError::Io(format!("cannot create {}: {e}", folder.display()))),
+            }
+        }
+        Err(EngineError::Io(format!("cannot create a scratch folder in {}: every name tried is taken", scratch.base.display())))
+    }
+
+    /// Where a file font.compile wrote at `written` goes.
+    fn final_path(&self, written: &Path) -> Option<PathBuf> {
+        written.strip_prefix(&self.folder).ok().map(|rel| self.base.join(rel))
+    }
+
+    /// Creates the missing folders above `out`, to be removed again if the run fails.
+    fn make_parent(&mut self, out: &Path) -> Result<()> {
+        let made = make_parent(out)?;
+        self.made.extend(made);
+        Ok(())
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        if !self.folder.as_os_str().is_empty() {
+            let _ = std::fs::remove_dir_all(&self.folder);
+        }
+        if !self.keep_made {
+            // Deepest first; a folder that is not empty stays.
+            self.made.sort_by_key(|d| std::cmp::Reverse(d.components().count()));
+            for dir in &self.made {
+                let _ = std::fs::remove_dir(dir);
+            }
+        }
+    }
 }
 
 #[cfg(test)]

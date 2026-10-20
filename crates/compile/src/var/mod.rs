@@ -460,8 +460,7 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
             let ids: Vec<String> = designspace.masters().iter().map(|m| m.id.clone()).collect();
             let hints = cff2::HintContext::new(prepared, &ids, &options.hinting, warnings)?;
             let cff2_font = cff2::cff2_font(axis_count, &cubic, &masters, origin_resolved.units_per_em, hints.as_ref(), warnings)?;
-            let built = fontcraft_cff::cff2::write_cff2(&cff2_font).map_err(|e| CompileError::Table { table: "CFF2", message: e.to_string() })?;
-            extra.cff2 = Some(built);
+            extra.cff2 = Some(cff2::write(&cff2_font, warnings)?);
         } else {
             let gvar = gvar::build_gvar(axis_count, &per_glyph, &gvar_options)?;
             extra.tables.push((

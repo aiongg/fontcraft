@@ -62,38 +62,15 @@ const OPTIONS: &[OptSpec] = &[
         "how to find the compiled master of each source, with --layout-only or --interpolate-binary-layout",
     ),
     // M12.22d
-    OptSpec::value(
+    OptSpec::optional_value(
         "interpolate-binary-layout",
         "[DIR]",
-        "",
         "compile instances with GPOS interpolated from the compiled masters in DIR (default master_ttf or master_otf), and GDEF and GSUB from the default one",
     ),
 ];
 
-/// The option whose value is optional, as in the reference tool.
-const BINARY_LAYOUT: &str = "--interpolate-binary-layout";
-
-/// `args` with an empty value after a bare `--interpolate-binary-layout`, which stands for the
-/// default folder. A following argument is its folder unless it is an option, a location
-/// (`AXIS=LOC`) or a response file.
-fn optional_values(args: &[String]) -> Vec<String> {
-    let mut out = Vec::with_capacity(args.len() + 1);
-    let mut it = args.iter().peekable();
-    while let Some(arg) = it.next() {
-        out.push(arg.clone());
-        if arg == "--" {
-            out.extend(it.by_ref().cloned());
-            break;
-        }
-        if arg == BINARY_LAYOUT && !it.peek().is_some_and(|next| !next.starts_with(['-', '@']) && !next.contains('=')) {
-            out.push(String::new());
-        }
-    }
-    out
-}
-
 fn run(args: &[String]) -> Outcome {
-    let parsed = args::parse(OPTIONS, &optional_values(args))?;
+    let parsed = args::parse(OPTIONS, args)?;
     if parsed.help {
         return out(&super::help(&SUBCOMMAND));
     }
@@ -269,9 +246,7 @@ mod tests {
 
     #[test]
     fn interpolate_binary_layout_takes_an_optional_folder() {
-        let with = |args: &[&str]| {
-            params(&args::parse(OPTIONS, &optional_values(&args.iter().map(|s| s.to_string()).collect::<Vec<_>>())).unwrap()).unwrap()
-        };
+        let with = |args: &[&str]| params(&parsed(args)).unwrap();
         assert!(with(&["F.glyphs", "--to", "ttf"]).get("interpolateBinaryLayout").is_none());
         assert_eq!(with(&["F.glyphs", "--interpolate-binary-layout"])["interpolateBinaryLayout"], json!(true));
         assert_eq!(with(&["F.glyphs", "--interpolate-binary-layout", "--to", "ttf"])["interpolateBinaryLayout"], json!(true));
@@ -280,5 +255,29 @@ mod tests {
         assert_eq!(p["location"]["wght"], json!(400.0));
         assert_eq!(with(&["F.glyphs", "--interpolate-binary-layout", "build/ttf"])["interpolateBinaryLayout"], json!("build/ttf"));
         assert_eq!(with(&["F.glyphs", "--interpolate-binary-layout=build"])["interpolateBinaryLayout"], json!("build"));
+
+        // Shortened, in another case, or last on the line, the option still takes no option as
+        // its folder.
+        for line in [
+            &["F.glyphs", "--interp", "--to", "ttf"][..],
+            &["F.glyphs", "--interpolate-binary", "--to", "ttf"],
+            &["F.glyphs", "--Interpolate-Binary-Layout", "--to", "ttf"],
+            &["F.glyphs", "--to", "ttf", "--interp"],
+        ] {
+            let p = with(line);
+            assert_eq!(p["interpolateBinaryLayout"], json!(true), "{line:?}");
+            assert_eq!(p["to"], json!("ttf"), "{line:?}");
+            assert_eq!(p["input"], json!("F.glyphs"), "{line:?}");
+        }
+
+        // From a response file, bare at the end of a line.
+        let dir = std::env::temp_dir().join(format!("fontcraft-cli-instance-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("args.txt");
+        std::fs::write(&file, "--interpolate-binary-layout\n--to ttf\n").unwrap();
+        let p = with(&["F.glyphs", &format!("@{}", file.display())]);
+        assert_eq!(p["interpolateBinaryLayout"], json!(true));
+        assert_eq!(p["to"], json!("ttf"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

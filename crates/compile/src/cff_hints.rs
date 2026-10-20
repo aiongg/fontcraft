@@ -220,6 +220,20 @@ fn end(op: &PathOp) -> (f64, f64) {
     }
 }
 
+/// [`autohinted`] on `path` as the static charstring draws it ([`charstring_path_mapped`]), with
+/// each mask moved before the first step of `path` that the drawn step it names was made from, so
+/// that it names a step of `path`. Flex is left out: it names curves of the drawn path.
+pub fn autohinted_on_steps(name: &str, path: &[PathOp], dict: &FdDict, options: &Options, warnings: &mut Vec<String>) -> Option<CharstringHints> {
+    let (drawn, starts) = charstring_path_mapped(path);
+    let mut hints = autohinted(name, &drawn, dict, options, warnings)?;
+    hints.flex.clear();
+    for (op, _) in &mut hints.masks {
+        *op = if *op == 0 { 0 } else { starts.get(*op).copied().unwrap_or(path.len()) };
+    }
+    hints.masks.retain(|(op, _)| *op < path.len().max(1));
+    Some(hints)
+}
+
 /// The autohinter's hints for the outline `path` of glyph `name`, as charstring hints, or `None`
 /// (with a warning when the autohinter failed or its result cannot be written).
 pub fn autohinted(name: &str, path: &[PathOp], dict: &FdDict, options: &Options, warnings: &mut Vec<String>) -> Option<CharstringHints> {
@@ -501,5 +515,36 @@ mod tests {
         assert_eq!(masks(&ghosts, &[], &path), vec![(0, Mask { h: vec![true, false], v: vec![] })]);
         // Without an overlap: no masks.
         assert!(masks(&h[..1], &v, &path).is_empty());
+    }
+
+    #[test]
+    fn autohinted_masks_move_to_the_steps_they_were_made_from() {
+        use PathOp::{LineTo, MoveTo};
+        // Two boxes whose horizontal stems overlap (0..80 and 40..120), so the hints need
+        // replacing along the outline. `split` draws the first box's bottom in two lines and adds
+        // a zero-length line, which the charstring joins and drops.
+        let clean = [rect(0.0, 0.0, 200.0, 80.0), rect(400.0, 40.0, 600.0, 120.0)].concat();
+        let mut split = vec![MoveTo((0.0, 0.0)), LineTo((100.0, 0.0)), LineTo((200.0, 0.0)), LineTo((200.0, 0.0)), LineTo((200.0, 80.0))];
+        split.push(LineTo((0.0, 80.0)));
+        split.extend(rect(400.0, 40.0, 600.0, 120.0));
+        let (drawn, starts) = charstring_path_mapped(&split);
+        assert_eq!(drawn, clean);
+        // The joined line starts at step 1; the dropped step goes with the line after it.
+        assert_eq!(starts, vec![0, 1, 3, 5, 6, 7, 8, 9]);
+
+        let zones = ZoneSet {
+            blue_values: vec![Zone { bottom: -10.0, top: 0.0, ..Default::default() }, Zone { bottom: 700.0, top: 710.0, ..Default::default() }],
+            blue_fuzz: 1.0,
+            ..Default::default()
+        };
+        let dict = FdDict::new("t", &zones, &StemSet { h: vec![80.0], v: vec![80.0] }, false).unwrap();
+        let mut warnings = Vec::new();
+        let direct = autohinted("boxes", &clean, &dict, &Options::default(), &mut warnings).unwrap();
+        assert!(direct.masks.len() >= 2, "the overlap needs hint replacement: {direct:?}");
+        let moved = autohinted_on_steps("boxes", &split, &dict, &Options::default(), &mut warnings).unwrap();
+        assert_eq!((&moved.h_stems, &moved.v_stems), (&direct.h_stems, &direct.v_stems));
+        let expected: Vec<(usize, Mask)> = direct.masks.iter().map(|(op, m)| (starts[*op], m.clone())).collect();
+        assert_eq!(moved.masks, expected);
+        assert!(moved.masks.iter().all(|(op, _)| *op < split.len()));
     }
 }

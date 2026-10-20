@@ -6,7 +6,7 @@
 //! The store is read lazily: a row of deltas is decoded only when the subset keeps it, and the
 //! rows decoded in one subset are capped by [`MAX_STORE_DELTAS`].
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use crate::reorder::be::{Data, put_u16, put_u32, to_u16, to_u32};
 use crate::sfnt::Tag;
@@ -261,22 +261,39 @@ impl Subset {
     }
 
     /// One store holding the subtables of every part in order, equal regions shared. Answers
-    /// the store and, per part, the number its outer indices are moved up by.
+    /// the store and, per part, the number its outer indices are moved up by. Refuses parts
+    /// whose regions span different numbers of axes.
     pub fn concat(parts: Vec<Subset>) -> Result<(Subset, Vec<u16>)> {
         let mut regions: Vec<Vec<u8>> = Vec::new();
+        let mut index: HashMap<Vec<u8>, usize> = HashMap::new();
         let mut data = Vec::new();
         let mut bases = Vec::with_capacity(parts.len());
-        let mut axis_count = 0u16;
+        // A part without regions has no axes to agree on.
+        let mut region_axes: Option<u16> = None;
+        let mut most_axes = 0u16;
         for part in parts {
             bases.push(to_u16(data.len(), "the merged item variation data count")?);
-            axis_count = axis_count.max(part.axis_count);
+            most_axes = most_axes.max(part.axis_count);
+            if !part.regions.is_empty() {
+                match region_axes {
+                    Some(axes) if axes != part.axis_count => {
+                        return Err(TablesError::invalid(format!(
+                            "the variation stores to merge have regions over {axes} and over {} axes",
+                            part.axis_count
+                        )));
+                    }
+                    _ => region_axes = Some(part.axis_count),
+                }
+            }
             let mut moved = Vec::with_capacity(part.regions.len());
             for region in part.regions {
-                let at = match regions.iter().position(|r| *r == region) {
-                    Some(at) => at,
+                let at = match index.get(&region) {
+                    Some(at) => *at,
                     None => {
+                        let at = regions.len();
+                        index.insert(region.clone(), at);
                         regions.push(region);
-                        regions.len() - 1
+                        at
                     }
                 };
                 moved.push(to_u16(at, "the merged variation region count")?);
@@ -289,7 +306,7 @@ impl Subset {
             }
         }
         to_u16(data.len(), "the merged item variation data count")?;
-        Ok((Subset { format: 1, axis_count, regions, data }, bases))
+        Ok((Subset { format: 1, axis_count: region_axes.unwrap_or(most_axes), regions, data }, bases))
     }
 
     /// The store in the binary format.
@@ -400,4 +417,44 @@ pub(crate) fn write_glyph_map(mapping: &[u32]) -> Result<Vec<u8>> {
         out.extend_from_slice(entry.to_be_bytes().get(4 - size..).unwrap_or_default());
     }
     Ok(out)
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
+mod tests {
+    use super::*;
+
+    /// A part with `count` regions over `axes` axes, each region peaking at its own value, and
+    /// one subtable that uses them all.
+    fn part(axes: u16, count: u16) -> Subset {
+        let regions = (0..count)
+            .map(|i| {
+                let mut r = Vec::new();
+                for _ in 0..axes {
+                    put_u16(&mut r, 0);
+                    put_u16(&mut r, i);
+                    put_u16(&mut r, 0x4000);
+                }
+                r
+            })
+            .collect();
+        Subset { format: 1, axis_count: axes, regions, data: vec![NewData { regions: (0..count).collect(), items: Vec::new() }] }
+    }
+
+    #[test]
+    fn concat_shares_many_equal_regions_and_refuses_different_axis_counts() {
+        // 40,000 regions in each part: comparing every region with every earlier one would
+        // take over a billion comparisons.
+        let (merged, bases) = Subset::concat(vec![part(2, 40_000), part(2, 40_000)]).unwrap();
+        assert_eq!(merged.regions.len(), 40_000);
+        assert_eq!(bases, [0, 1]);
+        assert_eq!(merged.data[1].regions, merged.data[0].regions);
+
+        let Err(err) = Subset::concat(vec![part(1, 3), part(2, 3)]) else { panic!("parts over different axes were merged") };
+        let err = err.to_string();
+        assert!(err.contains("over 1 and over 2 axes"), "{err}");
+        // A part without regions takes the others' axes.
+        let (merged, _) = Subset::concat(vec![part(3, 0), part(2, 3)]).unwrap();
+        assert_eq!(merged.axis_count, 2);
+    }
 }
