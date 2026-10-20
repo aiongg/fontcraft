@@ -7,8 +7,10 @@
 //! fontmake rounds its CFF masters, and the deltas come from the glyph's variation model with
 //! fontTools' tolerance of 0.01 unit, so intermediate sources can give fractional deltas. Glyphs
 //! with the same sources share a region list; list 0 is the masters' model, which the Private
-//! DICT's blended blue zones and stems use. Sources must draw the same segments; the closing
-//! line of a contour is left out only where every source can leave it out.
+//! DICT's blended blue zones and stems use. Each master's Private DICT values are those its
+//! static CFF export writes, family blues from Family Alignment Zones included. Sources must
+//! draw the same segments; the closing line of a contour is left out only where every source
+//! can leave it out.
 //!
 //! Companion tables: `hmtx` with `HVAR`, `post` 2.0 with the glyph names, `maxp` 0.5; no `glyf`,
 //! `loca` or `gvar`.
@@ -197,15 +199,21 @@ pub(super) fn master_privates(
     sources: &[Source],
     warnings: &mut Vec<String>,
 ) -> Result<Vec<MasterPrivate>, CompileError> {
+    // As the static export reads it: the hint settings give the family zones. Their warnings
+    // are the hint context's to report.
+    let private = |resolved: &Resolved, warnings: &mut Vec<String>| {
+        let settings = crate::cff::hint_settings(prepared, resolved, &mut Vec::new());
+        crate::cff::private_dict(resolved, settings.as_ref(), warnings)
+    };
     let zero = vec![0.0; sources.first().map_or(0, |s| s.normalized.len())];
-    let mut out: Vec<MasterPrivate> = vec![(zero.clone(), crate::cff::private_dict(origin, None, warnings))];
+    let mut out: Vec<MasterPrivate> = vec![(zero.clone(), private(origin, warnings))];
     for s in sources {
         let Some(id) = s.master.as_ref() else { continue };
         if s.normalized == zero || out.iter().any(|(l, _)| *l == s.normalized) {
             continue;
         }
         let resolved = crate::drawing::resolve(prepared, &Target::Master(id.clone()))?;
-        out.push((s.normalized.clone(), crate::cff::private_dict(&resolved, None, &mut Vec::new())));
+        out.push((s.normalized.clone(), private(&resolved, &mut Vec::new())));
     }
     Ok(out)
 }
@@ -353,7 +361,7 @@ fn private(model: &VariationModel, masters: &[MasterPrivate], warnings: &mut Vec
             None => Ok(get(origin).map(|n| Blend::fixed(number(&n)))),
         }
     };
-    let has_blues = !(origin.blue_values.is_empty() && origin.other_blues.is_empty());
+    let has_blues = [&origin.blue_values, &origin.other_blues, &origin.family_blues, &origin.family_other_blues].iter().any(|l| !l.is_empty());
     let all = |get: fn(&PrivateDict) -> Number| -> Result<Option<Blend>, CompileError> {
         if !has_blues {
             return Ok(None);
