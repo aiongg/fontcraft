@@ -15,10 +15,20 @@
 //! is read once however many records point to it, and its parse tree is dropped after the last
 //! record that needs it. The bytes of all documents read are capped by [`MAX_SVG_PARSE_RATIO`]
 //! times the table's length, and the work of all records together by [`MAX_SVG_WORK`].
-//! Documents compressed with gzip are refused. A record whose first glyph comes after its last
-//! covers no glyph, as in fontTools.
+//! A record whose first glyph comes after its last covers no glyph, as in fontTools.
+//!
+//! A document compressed with gzip (its bytes start with `1F 8B`) is inflated, subset as a plain
+//! one, and compressed again with gzip (no file name, time 0) when that makes it smaller, as
+//! fontTools' `SVG ` table writes documents it read compressed. Every member of the stream is
+//! read, with its CRC and length checked. The inflated bytes of all documents together are capped
+//! by [`MAX_SVG_INFLATE_RATIO`] times the table's length, at least [`MIN_SVG_INFLATE`]; a member
+//! whose declared length is past what is left is refused before it is inflated.
 
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
+
+use miniz_oxide::inflate::TINFLStatus;
+use miniz_oxide::inflate::core::{DecompressorOxide, decompress, inflate_flags};
 
 use super::super::Plan;
 use crate::reorder::be::{Data, put_u16, put_u32, to_u16, to_u32};
@@ -35,6 +45,14 @@ pub const MAX_SVG_WORK: usize = 1 << 26;
 pub const MAX_SVG_PARSE_RATIO: usize = 4;
 /// Most bytes of subset documents the output may hold.
 pub const MAX_SVG_OUTPUT: usize = 1 << 27;
+/// Most bytes the gzip-compressed documents of one table may inflate to together, as a multiple of
+/// the table's length. Each document read is still charged to the parse budget
+/// ([`MAX_SVG_PARSE_RATIO`]) by its compressed length, so records over overlapping documents
+/// cannot inflate the same bytes over and over.
+pub const MAX_SVG_INFLATE_RATIO: usize = 64;
+/// The inflate budget of a table is at least this many bytes, so a small table of well
+/// compressed documents is read.
+pub const MIN_SVG_INFLATE: usize = 1 << 20;
 
 fn bad(what: &str) -> TablesError {
     TablesError::invalid(format!("an SVG document cannot be read: {what}"))
@@ -62,13 +80,15 @@ struct Elem {
 }
 
 struct Doc<'a> {
-    src: &'a [u8],
+    /// The document's bytes: borrowed from the table, or inflated from it.
+    src: Cow<'a, [u8]>,
     nodes: Vec<(XNode, (usize, usize))>,
     root: usize,
 }
 
 impl<'a> Doc<'a> {
-    fn parse(src: &'a [u8]) -> Result<Self> {
+    fn parse(source: Cow<'a, [u8]>) -> Result<Self> {
+        let src: &[u8] = &source;
         let mut nodes: Vec<(XNode, (usize, usize))> = Vec::new();
         let mut stack: Vec<usize> = Vec::new();
         let mut root = None;
@@ -145,7 +165,7 @@ impl<'a> Doc<'a> {
             return Err(bad("an element is not closed"));
         }
         let root = root.ok_or_else(|| bad("there is no root element"))?;
-        Ok(Doc { src, nodes, root })
+        Ok(Doc { src: source, nodes, root })
     }
 
     fn elem(&self, i: usize) -> Option<&Elem> {
@@ -155,15 +175,15 @@ impl<'a> Doc<'a> {
         }
     }
 
-    fn text(&self, r: (usize, usize)) -> &'a [u8] {
+    fn text(&self, r: (usize, usize)) -> &[u8] {
         self.src.get(r.0..r.1).unwrap_or_default()
     }
 
-    fn attr(&self, e: &Elem, name: &[u8]) -> Option<&'a [u8]> {
+    fn attr(&self, e: &Elem, name: &[u8]) -> Option<&[u8]> {
         e.attrs.iter().find(|(n, _)| self.text(*n) == name).map(|(_, v)| self.text(*v))
     }
 
-    fn id(&self, i: usize) -> Option<&'a [u8]> {
+    fn id(&self, i: usize) -> Option<&[u8]> {
         self.elem(i).and_then(|e| self.attr(e, b"id"))
     }
 
@@ -343,37 +363,67 @@ pub(crate) fn subset(plan: &Plan, bytes: &[u8]) -> Result<Option<Vec<u8>>> {
     let mut work = MAX_SVG_WORK;
     let parse_limit = bytes.len().saturating_mul(MAX_SVG_PARSE_RATIO);
     let mut parse_left = parse_limit;
+    let inflate_limit = bytes.len().saturating_mul(MAX_SVG_INFLATE_RATIO).max(MIN_SVG_INFLATE).min(crate::limits::MAX_UNPACKED);
+    let mut inflate_left = inflate_limit;
     let mut written = 0usize;
+    // The subset texts of compressed documents, by text, to their documents.
+    let mut gz_index: HashMap<Vec<u8>, usize> = HashMap::new();
+    let mut push = |bytes: Vec<u8>, docs: &mut Vec<Vec<u8>>| -> Result<usize> {
+        written = written.saturating_add(bytes.len());
+        if written > MAX_SVG_OUTPUT {
+            return Err(TablesError::TooLarge { what: "the subset SVG documents", limit: MAX_SVG_OUTPUT });
+        }
+        docs.push(bytes);
+        Ok(docs.len() - 1)
+    };
     for (u, (start, end, place)) in uses.into_iter().enumerate() {
         let doc = d.slice(place.0, place.1)?;
         let gids: Vec<u32> = plan.glyphs.range(u32::from(start)..=u32::from(end)).copied().collect();
-        if doc.starts_with(&[0x1F, 0x8B]) {
-            return Err(TablesError::Unsupported("subsetting gzip-compressed SVG documents".into()));
-        }
         let parsed_doc = match parsed.entry(place) {
             std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),
             std::collections::hash_map::Entry::Vacant(e) => {
                 parse_left = parse_left
                     .checked_sub(doc.len())
                     .ok_or(TablesError::TooLarge { what: "the bytes of the SVG documents read", limit: parse_limit })?;
-                e.insert(Parsed::new(doc)?)
+                let compressed = doc.starts_with(&GZIP_MAGIC);
+                let src = if compressed {
+                    let plain = gunzip(doc, inflate_left, inflate_limit)?;
+                    inflate_left = inflate_left.saturating_sub(plain.len());
+                    Cow::Owned(plain)
+                } else {
+                    Cow::Borrowed(doc)
+                };
+                e.insert(Parsed::new(src, compressed)?)
             }
         };
+        let compressed = parsed_doc.compressed;
         let text = subset_doc(plan, parsed_doc, &gids, &mut work)?;
         if last_use.get(&place) == Some(&u) {
             parsed.remove(&place);
         }
         let Some(text) = text else { continue };
-        let index = match doc_index.get(&text) {
+        // Documents are shared by their stored bytes; a compressed one is stored as gzip when
+        // that is smaller than its text, and as its text otherwise.
+        let found = if compressed { gz_index.get(&text) } else { doc_index.get(&text) };
+        let index = match found {
             Some(i) => *i,
             None => {
-                written = written.saturating_add(text.len());
-                if written > MAX_SVG_OUTPUT {
-                    return Err(TablesError::TooLarge { what: "the subset SVG documents", limit: MAX_SVG_OUTPUT });
+                let packed = if compressed { Some(gzip(&text)).filter(|g| g.len() < text.len()) } else { None };
+                let i = match packed {
+                    Some(gz) => push(gz, &mut docs)?,
+                    None => match doc_index.get(&text) {
+                        Some(i) => *i,
+                        None => {
+                            let i = push(text.clone(), &mut docs)?;
+                            doc_index.insert(text.clone(), i);
+                            i
+                        }
+                    },
+                };
+                if compressed {
+                    gz_index.insert(text, i);
                 }
-                doc_index.insert(text.clone(), docs.len());
-                docs.push(text);
-                docs.len() - 1
+                i
             }
         };
         let mut new: Vec<u16> = Vec::with_capacity(gids.len());
@@ -418,24 +468,170 @@ pub(crate) fn subset(plan: &Plan, bytes: &[u8]) -> Result<Option<Vec<u8>>> {
     Ok(Some(out))
 }
 
-/// A document read once, with its elements by id.
+// ── gzip (RFC 1952) ──
+
+const GZIP_MAGIC: [u8; 2] = [0x1F, 0x8B];
+
+pub(super) fn crc_table() -> [u32; 256] {
+    let mut table = [0u32; 256];
+    for (i, slot) in table.iter_mut().enumerate() {
+        let mut c = i as u32;
+        for _ in 0..8 {
+            c = if c & 1 == 1 { 0xEDB8_8320 ^ (c >> 1) } else { c >> 1 };
+        }
+        *slot = c;
+    }
+    table
+}
+
+pub(super) fn crc32(table: &[u32; 256], data: &[u8]) -> u32 {
+    let mut crc = !0u32;
+    for b in data {
+        crc = table.get(usize::from((crc as u8) ^ b)).copied().unwrap_or(0) ^ (crc >> 8);
+    }
+    !crc
+}
+
+/// `data` as one gzip member with the header fontTools writes (no name, time 0, best
+/// compression, unknown system).
+pub(super) fn gzip(data: &[u8]) -> Vec<u8> {
+    let mut out = vec![GZIP_MAGIC[0], GZIP_MAGIC[1], 8, 0, 0, 0, 0, 0, 2, 255];
+    out.extend(miniz_oxide::deflate::compress_to_vec(data, 9));
+    out.extend_from_slice(&crc32(&crc_table(), data).to_le_bytes());
+    // The length field holds the length modulo 2^32.
+    out.extend_from_slice(&(data.len() as u32).to_le_bytes());
+    out
+}
+
+fn bad_gzip(what: &str) -> TablesError {
+    TablesError::invalid(format!("a gzip-compressed SVG document cannot be read: {what}"))
+}
+
+fn le32(src: &[u8], at: usize) -> Option<u32> {
+    src.get(at..at.checked_add(4)?).and_then(|b| <[u8; 4]>::try_from(b).ok()).map(u32::from_le_bytes)
+}
+
+/// The data of the gzip stream `src`, at most `left` bytes (`limit` is the table's whole
+/// budget, for the message). Every member is read, and zero bytes after the last one are
+/// skipped, as Python's gzip module reads a stream.
+fn gunzip(src: &[u8], left: usize, limit: usize) -> Result<Vec<u8>> {
+    let too_large = || TablesError::TooLarge { what: "the inflated SVG documents", limit };
+    // The last four bytes are the length of the last member (or zero padding), and no member
+    // is longer than the whole stream: a declared length past the budget is refused at once.
+    if let Some(declared) = src.len().checked_sub(4).and_then(|at| le32(src, at))
+        && declared as usize > left
+    {
+        return Err(too_large());
+    }
+    let table = crc_table();
+    let mut state = Box::<DecompressorOxide>::default();
+    let mut buf = Vec::new();
+    let mut out = Vec::new();
+    let mut at = 0usize;
+    loop {
+        let rest = src.get(at..).unwrap_or_default();
+        if rest.get(..2) != Some(&GZIP_MAGIC[..]) {
+            return Err(bad_gzip("a member does not start with the gzip signature"));
+        }
+        if rest.get(2) != Some(&8) {
+            return Err(bad_gzip("a member is not deflate-compressed"));
+        }
+        let flags = *rest.get(3).ok_or_else(|| bad_gzip("a header is cut short"))?;
+        let mut h = 10usize;
+        if flags & 0x04 != 0 {
+            let len = rest.get(h..h + 2).ok_or_else(|| bad_gzip("an extra field is cut short"))?;
+            h += 2 + usize::from(u16::from_le_bytes([len.first().copied().unwrap_or(0), len.get(1).copied().unwrap_or(0)]));
+        }
+        for flag in [0x08u8, 0x10] {
+            if flags & flag != 0 {
+                let field = rest.get(h..).ok_or_else(|| bad_gzip("a header is cut short"))?;
+                h += field.iter().position(|b| *b == 0).ok_or_else(|| bad_gzip("a header string is not terminated"))? + 1;
+            }
+        }
+        if flags & 0x02 != 0 {
+            h += 2;
+        }
+        let body = rest.get(h..).ok_or_else(|| bad_gzip("a header is cut short"))?;
+        let start = out.len();
+        let used = inflate_member(body, &mut state, &mut buf, &mut out, left)
+            .map_err(|e| if e { too_large() } else { bad_gzip("the data does not inflate") })?;
+        let trailer = h + used;
+        let crc = le32(rest, trailer).ok_or_else(|| bad_gzip("a member's trailer is cut short"))?;
+        let size = le32(rest, trailer + 4).ok_or_else(|| bad_gzip("a member's trailer is cut short"))?;
+        let member = out.get(start..).unwrap_or_default();
+        if crc != crc32(&table, member) {
+            return Err(bad_gzip("the checksum does not match"));
+        }
+        if size != member.len() as u32 {
+            return Err(bad_gzip("the length does not match"));
+        }
+        at += trailer + 8;
+        // Zero padding after a member, then either the end or another member.
+        while src.get(at) == Some(&0) {
+            at += 1;
+        }
+        if at >= src.len() {
+            return Ok(out);
+        }
+    }
+}
+
+/// Inflates the raw deflate stream at the start of `input` through `buf`, appending to `out`,
+/// which may hold at most `cap` bytes. Returns the input bytes the stream took; the error says
+/// whether the cap was reached (`true`) or the stream is broken (`false`).
+fn inflate_member(input: &[u8], state: &mut DecompressorOxide, buf: &mut Vec<u8>, out: &mut Vec<u8>, cap: usize) -> std::result::Result<usize, bool> {
+    let flags = inflate_flags::TINFL_FLAG_USING_NON_WRAPPING_OUTPUT_BUF;
+    state.init();
+    let base = out.len();
+    // The buffer grows by doubling up to one byte past the cap, so filling it means too much.
+    let room = cap.saturating_sub(base).saturating_add(1);
+    let first = input.len().saturating_mul(4).max(64);
+    buf.resize(buf.len().max(first).min(room), 0);
+    let (mut pos, mut taken) = (0usize, 0usize);
+    loop {
+        let rest = input.get(taken..).unwrap_or_default();
+        let (status, used, written) = decompress(state, rest, buf, pos, flags);
+        taken = taken.saturating_add(used);
+        pos = pos.saturating_add(written);
+        if base.saturating_add(pos) > cap {
+            return Err(true);
+        }
+        match status {
+            TINFLStatus::Done => {
+                out.extend_from_slice(buf.get(..pos).unwrap_or_default());
+                return Ok(taken);
+            }
+            TINFLStatus::HasMoreOutput => {
+                if buf.len() >= room {
+                    return Err(true);
+                }
+                let size = buf.len().saturating_mul(2).min(room);
+                buf.resize(size, 0);
+            }
+            _ => return Err(false),
+        }
+    }
+}
+
+/// A document read once, with its elements by id, and whether it was compressed.
 struct Parsed<'a> {
     doc: Doc<'a>,
-    elements: HashMap<&'a [u8], usize>,
+    elements: HashMap<Vec<u8>, usize>,
+    compressed: bool,
 }
 
 impl<'a> Parsed<'a> {
-    fn new(src: &'a [u8]) -> Result<Self> {
+    fn new(src: Cow<'a, [u8]>, compressed: bool) -> Result<Self> {
         let doc = Doc::parse(src)?;
-        let mut elements: HashMap<&'a [u8], usize> = HashMap::new();
+        let mut elements: HashMap<Vec<u8>, usize> = HashMap::new();
         let mut all = vec![doc.root];
         doc.descendants(doc.root, &mut all);
         for e in &all {
             if let Some(id) = doc.id(*e) {
-                elements.insert(id, *e);
+                elements.insert(id.to_vec(), *e);
             }
         }
-        Ok(Parsed { doc, elements })
+        Ok(Parsed { doc, elements, compressed })
     }
 }
 
@@ -446,8 +642,7 @@ fn charge(work: &mut usize, visits: usize) -> Result<()> {
 
 /// The document of `parsed` keeping glyphs `gids` (input ids); `None` when nothing is left.
 fn subset_doc(plan: &Plan, parsed: &Parsed<'_>, gids: &[u32], work: &mut usize) -> Result<Option<Vec<u8>>> {
-    let Parsed { doc, elements } = parsed;
-    let src = doc.src;
+    let Parsed { doc, elements, .. } = parsed;
     // The pruning, renaming and writing passes each visit the nodes once.
     charge(work, doc.nodes.len())?;
 
@@ -521,7 +716,7 @@ fn subset_doc(plan: &Plan, parsed: &Parsed<'_>, gids: &[u32], work: &mut usize) 
         }
     }
 
-    let mut out = Vec::with_capacity(src.len());
+    let mut out = Vec::with_capacity(doc.src.len());
     write(doc, doc.root, &removed, &edits, &mut out);
     Ok(Some(out))
 }

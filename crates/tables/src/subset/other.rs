@@ -7,7 +7,9 @@
 //! - `MATH` ([`math`]): the MATH closure adds the size variants and assembly parts.
 //! - `SVG ` ([`svg`]): documents keep the elements of the kept glyphs and what they reference.
 //! - `sbix`, `CBDT`/`CBLC` (and `EBDT`/`EBLC` when they are not dropped): the bitmaps of the
-//!   output glyphs; strikes left without bitmaps go from `CBLC`.
+//!   output glyphs; strikes left without bitmaps go from `CBLC`. A composite bitmap (image
+//!   formats 8 and 9) does not pull its components into the subset, as in fontTools; its
+//!   component ids follow the output numbering, and components not in the output are removed.
 //! - `VORG`, `hdmx` and `kern` keep the entries of the output glyphs (`kern` those of the
 //!   glyphs the GSUB closure reached, and only its format 0 subtables).
 //! - `BASE` is copied, as pyftsubset leaves it.
@@ -16,6 +18,7 @@ pub(crate) mod colr;
 pub(crate) mod math;
 mod svg;
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::Plan;
@@ -316,12 +319,43 @@ fn subset_sbix(plan: &Plan, bytes: &[u8]) -> Result<Vec<u8>> {
 // ── CBLC and CBDT ──
 
 /// One index subtable: its formats, the constant image size and metrics of formats 2 and 5,
-/// and its glyphs (output id, image data).
+/// its glyphs (output id, image data), and whether an image changed length.
 struct IndexSubtable<'a> {
     index_format: u16,
     image_format: u16,
     fixed: Option<(u32, &'a [u8])>,
-    glyphs: Vec<(u16, &'a [u8])>,
+    glyphs: Vec<(u16, Cow<'a, [u8]>)>,
+    resized: bool,
+}
+
+/// Composite bitmap `image` (image format 8 or 9) with its component glyph ids in the output
+/// numbering; components whose glyph is not in the output are removed. Bytes after the
+/// components are kept.
+fn renumber_components<'a>(plan: &Plan, image_format: u16, image: &'a [u8]) -> Result<Cow<'a, [u8]>> {
+    let cut = || TablesError::invalid("a composite bitmap is cut short");
+    // Small metrics and a pad byte (format 8), or big metrics (format 9), then the count.
+    let head = if image_format == 8 { 6 } else { 8 };
+    let count = image.get(head..head + 2).ok_or_else(cut)?;
+    let count = usize::from(u16::from_be_bytes([count.first().copied().unwrap_or(0), count.get(1).copied().unwrap_or(0)]));
+    let end = head + 2 + 4 * count;
+    let components = image.get(head + 2..end).ok_or_else(cut)?;
+    let mut kept: Vec<[u8; 4]> = Vec::with_capacity(count);
+    for c in components.chunks_exact(4) {
+        let [g0, g1, dx, dy] = <[u8; 4]>::try_from(c).map_err(|_| cut())?;
+        let Some(new) = plan.glyph_map.get(&u32::from(u16::from_be_bytes([g0, g1]))) else { continue };
+        let [n0, n1] = to_u16(*new as usize, "a glyph id")?.to_be_bytes();
+        kept.push([n0, n1, dx, dy]);
+    }
+    if kept.len() == count && kept.iter().zip(components.chunks_exact(4)).all(|(k, c)| k.as_slice() == c) {
+        return Ok(Cow::Borrowed(image));
+    }
+    let mut out = image.get(..head).ok_or_else(cut)?.to_vec();
+    put_u16(&mut out, to_u16(kept.len(), "the bitmap components")?);
+    for k in kept {
+        out.extend_from_slice(&k);
+    }
+    out.extend_from_slice(image.get(end..).unwrap_or_default());
+    Ok(Cow::Owned(out))
 }
 
 /// The location and data tables keeping the bitmaps of the output glyphs, as pyftsubset's
@@ -354,9 +388,6 @@ fn subset_bitmaps(plan: &Plan, loc_tag: Tag, loc: &[u8], data_tag: Tag, data: &[
             }
             let index_format = l.u16(at)?;
             let image_format = l.u16(at + 2)?;
-            if matches!(image_format, 8 | 9) {
-                return Err(TablesError::Unsupported("subsetting composite bitmap glyphs".into()));
-            }
             let image_at = l.u32_usize(at + 4)?;
             let listed = match index_format {
                 4 => l.u32_usize(at + 8)?,
@@ -403,18 +434,22 @@ fn subset_bitmaps(plan: &Plan, loc_tag: Tag, loc: &[u8], data_tag: Tag, data: &[
                 _ => return Err(l.bad(format!("has an index subtable of format {index_format}"))),
             }
             let mut glyphs = Vec::new();
+            let mut resized = false;
             for (g, start, end) in entries {
                 // Glyphs without data are not listed, as fontTools reads them.
                 if end <= start || !retained(plan, g) {
                     continue;
                 }
                 charge_bitmap_bytes(&mut bytes_left, end - start)?;
-                glyphs.push((new_id(plan, g)?, bd.slice(image_at.saturating_add(start), end - start)?));
+                let source = bd.slice(image_at.saturating_add(start), end - start)?;
+                let image = if matches!(image_format, 8 | 9) { renumber_components(plan, image_format, source)? } else { Cow::Borrowed(source) };
+                resized |= image.len() != source.len();
+                glyphs.push((new_id(plan, g)?, image));
             }
             glyphs.sort_by_key(|(g, _)| *g);
             glyphs.dedup_by_key(|(g, _)| *g);
             if !glyphs.is_empty() {
-                kept.push(IndexSubtable { index_format, image_format, fixed, glyphs });
+                kept.push(IndexSubtable { index_format, image_format, fixed, glyphs, resized });
             }
         }
         if !kept.is_empty() {
@@ -475,8 +510,13 @@ fn subset_bitmaps(plan: &Plan, loc_tag: Tag, loc: &[u8], data_tag: Tag, data: &[
 fn index_body(st: &IndexSubtable<'_>, first: u16, last: u16, image_at: usize, data: &mut Vec<u8>) -> Result<Vec<u8>> {
     let mut body = Vec::new();
     let consecutive = st.glyphs.windows(2).all(|w| matches!(w, [a, b] if b.0 == a.0 + 1));
-    // Format 2 needs consecutive glyphs; a subset with gaps is written as format 5.
-    let index_format = if st.index_format == 2 && !consecutive { 5 } else { st.index_format };
+    // Format 2 needs consecutive glyphs; a subset with gaps is written as format 5. Formats 2
+    // and 5 need images of one size; composites that lost components are written as format 1.
+    let index_format = match st.index_format {
+        2 | 5 if st.resized => 1,
+        2 if !consecutive => 5,
+        f => f,
+    };
     put_u16(&mut body, index_format);
     put_u16(&mut body, st.image_format);
     put_u32(&mut body, to_u32(image_at, "the bitmap data table")?);

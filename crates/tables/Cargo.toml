@@ -21,6 +21,7 @@ fontcraft-decompile.workspace = true
 read-fonts.workspace = true
 write-fonts.workspace = true
 thiserror.workspace = true
+miniz_oxide = "0.8"
 
 [dev-dependencies]
 fontcraft-plugins.workspace = true

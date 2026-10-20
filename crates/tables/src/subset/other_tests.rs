@@ -281,7 +281,8 @@ fn subset_math_adds_variants_and_parts_and_keeps_the_constructions_of_kept_glyph
 
 // ── SVG, kern, VORG, hdmx and sbix ──
 
-fn svg(doc: &str, start: u16, end: u16) -> Vec<u8> {
+fn svg(doc: impl AsRef<[u8]>, start: u16, end: u16) -> Vec<u8> {
+    let doc = doc.as_ref();
     let mut out = Vec::new();
     be16(&mut out, 0);
     be32(&mut out, 10);
@@ -291,21 +292,26 @@ fn svg(doc: &str, start: u16, end: u16) -> Vec<u8> {
     be16(&mut out, end);
     be32(&mut out, 14);
     be32(&mut out, doc.len() as u32);
-    out.extend_from_slice(doc.as_bytes());
+    out.extend_from_slice(doc);
     out
 }
 
-/// The documents of an SVG table: (first glyph, last glyph, text).
-fn svg_docs(table: &[u8]) -> Vec<(u16, u16, String)> {
+/// The documents of an SVG table as stored: (first glyph, last glyph, bytes).
+fn svg_stored(table: &[u8]) -> Vec<(u16, u16, Vec<u8>)> {
     let d = Data::new(*b"SVG ", table);
     let list = d.u32_usize(2).unwrap();
     (0..usize::from(d.u16(list).unwrap()))
         .map(|i| {
             let r = list + 2 + 12 * i;
             let doc = d.slice(list + d.u32_usize(r + 4).unwrap(), d.u32_usize(r + 8).unwrap()).unwrap();
-            (d.u16(r).unwrap(), d.u16(r + 2).unwrap(), String::from_utf8(doc.to_vec()).unwrap())
+            (d.u16(r).unwrap(), d.u16(r + 2).unwrap(), doc.to_vec())
         })
         .collect()
+}
+
+/// The documents of an SVG table: (first glyph, last glyph, text).
+fn svg_docs(table: &[u8]) -> Vec<(u16, u16, String)> {
+    svg_stored(table).into_iter().map(|(s, e, doc)| (s, e, String::from_utf8(doc).unwrap())).collect()
 }
 
 const SVG_HEAD: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">"#;
@@ -408,6 +414,71 @@ fn subset_svg_keeps_referenced_elements_and_renumbers_glyph_ids() {
     );
     font.insert(*b"SVG ", b"\0\0\0\0\0\x0a\0\0\0\0\0\x01\0\x01\0\x01\0\0\0\x0e\0\0\0\x05<svg ".to_vec());
     assert!(subset(&font, &SubsetOptions { text: "A".into(), ..SubsetOptions::default() }).is_err(), "a broken document is an error");
+}
+
+/// `data` as a gzip member with every optional header field: extra field, name, comment and
+/// header CRC.
+fn gzip_with_fields(data: &[u8]) -> Vec<u8> {
+    let mut m = vec![0x1F, 0x8B, 8, 0x04 | 0x08 | 0x10 | 0x02, 0, 0, 0, 0, 0, 3];
+    m.extend_from_slice(&[3, 0, b'a', b'b', b'c']);
+    m.extend_from_slice(b"doc.svg\0a comment\0");
+    m.extend_from_slice(&[0x12, 0x34]);
+    m.extend(miniz_oxide::deflate::compress_to_vec(data, 6));
+    m.extend_from_slice(&super::svg::crc32(&super::svg::crc_table(), data).to_le_bytes());
+    m.extend_from_slice(&(data.len() as u32).to_le_bytes());
+    m
+}
+
+#[test]
+fn subset_svg_inflates_gzip_documents_and_compresses_the_subset_again() {
+    let mut font = outlines(&[("A", 0x41), ("X", 0x58)]);
+    let path = "M0 0 L10 10 ".repeat(40);
+    let doc = format!(r#"{SVG_HEAD}<g id="glyph1"><path d="{path}"/></g><g id="glyph2"><path d="{path}"/></g></svg>"#);
+    // Two members, the first with every optional header field, then zero padding.
+    let (head, tail) = doc.as_bytes().split_at(doc.len() / 2);
+    let mut packed = gzip_with_fields(head);
+    packed.extend(super::svg::gzip(tail));
+    packed.extend_from_slice(&[0, 0, 0]);
+    font.insert(*b"SVG ", svg(&packed, 1, 2));
+
+    let docs = svg_stored(run(&font, "A").font.get(*b"SVG ").unwrap());
+    assert_eq!(docs.len(), 1);
+    let (start, end, stored) = &docs[0];
+    assert_eq!((*start, *end), (1, 1));
+    assert_eq!(stored[..10], [0x1F, 0x8B, 8, 0, 0, 0, 0, 0, 2, 255], "one member, no name, time 0");
+    let text = miniz_oxide::inflate::decompress_to_vec(&stored[10..stored.len() - 8]).unwrap();
+    assert_eq!(String::from_utf8(text).unwrap(), format!(r#"{SVG_HEAD}<g id="glyph1"><path d="{path}"/></g></svg>"#));
+
+    // A subset document that gzip does not make smaller is stored as text.
+    let small = r#"<svg><g id="glyph1"/><g id="glyph2"/></svg>"#;
+    font.insert(*b"SVG ", svg(super::svg::gzip(small.as_bytes()), 1, 2));
+    assert_eq!(svg_docs(run(&font, "A").font.get(*b"SVG ").unwrap()), [(1, 1, r#"<svg><g id="glyph1"/></svg>"#.to_string())]);
+
+    // A damaged checksum is an error.
+    let at = packed.len() - 3 - 8;
+    packed[at] ^= 0xFF;
+    font.insert(*b"SVG ", svg(&packed, 1, 2));
+    let err = subset(&font, &SubsetOptions { text: "A".into(), ..SubsetOptions::default() }).expect_err("refused");
+    assert!(err.to_string().contains("checksum"), "{err}");
+}
+
+#[test]
+fn subset_svg_refuses_a_gzip_bomb_quickly() {
+    let mut font = outlines(&[("A", 0x41)]);
+    // 32 MiB of spaces packs into a few tens of kilobytes, far past the inflate budget.
+    let mut bomb = super::svg::gzip(&vec![b' '; 32 << 20]);
+    let started = std::time::Instant::now();
+    font.insert(*b"SVG ", svg(&bomb, 1, 1));
+    let err = subset(&font, &SubsetOptions { text: "A".into(), ..SubsetOptions::default() }).expect_err("the declared length is refused");
+    assert!(err.to_string().contains("inflated SVG documents"), "{err}");
+
+    // A stream that understates its length is stopped when the inflated bytes reach the budget.
+    let n = bomb.len();
+    bomb[n - 4..].copy_from_slice(&100u32.to_le_bytes());
+    font.insert(*b"SVG ", svg(&bomb, 1, 1));
+    let err = subset(&font, &SubsetOptions { text: "A".into(), ..SubsetOptions::default() }).expect_err("the inflated bytes are refused");
+    assert!(err.to_string().contains("inflated SVG documents"), "{err}");
+    assert!(started.elapsed().as_secs() < 10, "took {:?}", started.elapsed());
 }
 
 fn glyph_tables(font: &mut SfntFont) {
@@ -611,4 +682,99 @@ fn subset_cblc_keeps_the_bitmaps_of_the_output_glyphs() {
     let none = run(&font, "B");
     let l = Data::new(*b"CBLC", none.font.get(*b"CBLC").unwrap());
     assert_eq!(l.u32(4).unwrap(), 1, "B and A keep their bitmaps");
+}
+
+/// A CBLC and CBDT of one strike over glyphs 1 to 4: `images` (glyph, image format, bytes), one
+/// index subtable of format 1 per run of glyphs with the same image format.
+fn bitmap_strike(images: &[(u16, u16, &[u8])]) -> (Vec<u8>, Vec<u8>) {
+    let mut cbdt = vec![0, 3, 0, 0];
+    let mut runs: Vec<Vec<(u16, u16, &[u8])>> = Vec::new();
+    for img in images {
+        match runs.last_mut() {
+            Some(run) if run.last().unwrap().1 == img.1 && run.last().unwrap().0 + 1 == img.0 => run.push(*img),
+            _ => runs.push(vec![*img]),
+        }
+    }
+    let mut array = Vec::new();
+    let mut bodies = Vec::new();
+    for run in &runs {
+        be16(&mut array, run[0].0);
+        be16(&mut array, run.last().unwrap().0);
+        be32(&mut array, (8 * runs.len() + bodies.len()) as u32);
+        be16(&mut bodies, 1);
+        be16(&mut bodies, run[0].1);
+        be32(&mut bodies, cbdt.len() as u32);
+        let mut rel = 0u32;
+        for (_, _, bytes) in run {
+            be32(&mut bodies, rel);
+            cbdt.extend_from_slice(bytes);
+            rel += bytes.len() as u32;
+        }
+        be32(&mut bodies, rel);
+    }
+    array.extend(bodies);
+    let mut cblc = vec![0, 3, 0, 0];
+    be32(&mut cblc, 1);
+    be32(&mut cblc, 8 + 48);
+    be32(&mut cblc, array.len() as u32);
+    be32(&mut cblc, runs.len() as u32);
+    be32(&mut cblc, 0);
+    cblc.extend_from_slice(&[0; 24]);
+    be16(&mut cblc, 1);
+    be16(&mut cblc, 4);
+    cblc.extend_from_slice(&[20, 20, 32, 1]);
+    cblc.extend(array);
+    (cblc, cbdt)
+}
+
+/// The images of a CBLC and CBDT of one strike whose index subtables are all of format 1.
+fn bitmap_images(font: &SfntFont) -> BTreeMap<u16, Vec<u8>> {
+    let l = Data::new(*b"CBLC", font.get(*b"CBLC").unwrap());
+    let d = Data::new(*b"CBDT", font.get(*b"CBDT").unwrap());
+    let array = l.u32_usize(8).unwrap();
+    let mut out = BTreeMap::new();
+    for i in 0..l.u32_usize(8 + 8).unwrap() {
+        let a = array + 8 * i;
+        let (first, last) = (l.u16(a).unwrap(), l.u16(a + 2).unwrap());
+        let sub = array + l.u32_usize(a + 4).unwrap();
+        assert_eq!(l.u16(sub).unwrap(), 1, "index format");
+        let image_at = l.u32_usize(sub + 4).unwrap();
+        for (k, g) in (first..=last).enumerate() {
+            let (s, e) = (l.u32_usize(sub + 8 + 4 * k).unwrap(), l.u32_usize(sub + 12 + 4 * k).unwrap());
+            if e > s {
+                out.insert(g, d.slice(image_at + s, e - s).unwrap().to_vec());
+            }
+        }
+    }
+    out
+}
+
+#[test]
+fn subset_cblc_renumbers_composite_bitmaps_without_adding_their_components() {
+    let mut font = outlines(&[("A", 0x41), ("X", 0x58), ("Y", 0x59), ("Z", 0x5A)]);
+    let g = gids(&font);
+    assert_eq!((g["A"], g["X"], g["Y"], g["Z"]), (1, 2, 3, 4));
+    // Y (image format 8, small metrics and a pad byte) is A and X; Z (format 9, big metrics) is
+    // Y and X. Components: glyph id, x offset, y offset.
+    let y: &[u8] = &[2, 8, 0, 2, 8, 0, 0, 2, 0, 1, 0, 0, 0, 2, 1, 0];
+    let z: &[u8] = &[2, 8, 0, 2, 8, 0, 0, 8, 0, 2, 0, 3, 1, 1, 0, 2, 0, 0];
+    let (cblc, cbdt) = bitmap_strike(&[(1, 17, b"imgA"), (2, 17, b"imgX"), (3, 8, y), (4, 9, z)]);
+    font.insert(*b"CBLC", cblc);
+    font.insert(*b"CBDT", cbdt);
+
+    // pyftsubset does not close over bitmap components: A stays out. Y loses it, and X, Y and Z
+    // become glyphs 1, 2 and 3.
+    let out = run(&font, "XYZ");
+    assert_eq!(out.retained, [".notdef", "X", "Y", "Z"]);
+    let images = bitmap_images(&out.font);
+    assert_eq!(images[&1], b"imgX");
+    assert_eq!(images[&2], [2, 8, 0, 2, 8, 0, 0, 1, 0, 1, 1, 0]);
+    assert_eq!(images[&3], [2, 8, 0, 2, 8, 0, 0, 8, 0, 2, 0, 2, 1, 1, 0, 1, 0, 0]);
+    assert_eq!(images.len(), 3);
+
+    // With glyph ids retained, A stays in place without a bitmap and the composites keep their
+    // bytes, as pyftsubset writes them.
+    let kept = subset(&font, &SubsetOptions { text: "XYZ".into(), retain_gids: true, ..SubsetOptions::default() }).unwrap();
+    let images = bitmap_images(&kept.font);
+    assert_eq!((images.get(&1), &images[&3], &images[&4]), (None, &y.to_vec(), &z.to_vec()));
 }
