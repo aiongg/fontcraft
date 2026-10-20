@@ -2,8 +2,9 @@
 //! its joining forms and its marks sit on their anchors, a Latin word in right-to-left text is
 //! shaped left to right with the compiled kerning, numbers in right-to-left text are ordered as
 //! UAX #9 orders them, the preview font is built again once editing pauses or taken from the
-//! compile of the same revision, and lines break on shaped widths at UAX #14 opportunities
-//! (`textPreview.lineBreaking`).
+//! compile of the same revision, lines break on shaped widths at UAX #14 opportunities
+//! (`textPreview.lineBreaking`), and vertical text is shaped top to bottom with `vert`, `vkrn`
+//! and its marks on their anchors.
 
 use std::cell::Cell;
 
@@ -357,4 +358,47 @@ fn text_preview_shapes_vertical_text_with_vert_and_breaks_it_into_columns() {
     let d = w.settle(&mut app);
     assert!(d.lines > 1, "the text breaks into columns: {}", d.lines);
     assert!(names(&d).iter().all(|n| *n != "A"), "every A is substituted");
+}
+
+#[test]
+fn text_preview_kerns_vertical_text_with_vkrn_between_vertical_forms() {
+    let mut app = FontcraftApp::default();
+    exec(&mut app, "glyph.newGlyph", json!({"name": "A.vert", "unicodes": [], "width": 600}));
+    exec(&mut app, "font.features.addFeature", json!({"tag": "vert", "code": "sub A by A.vert;"}));
+    exec(&mut app, "font.features.addFeature", json!({"tag": "vkrn", "code": "pos A.vert B -200;"}));
+    exec(&mut app, "window.textPreview", json!({}));
+    exec(&mut app, "textPreview.setLayoutOrientation", json!({"orientation": "vertical"}));
+    exec(&mut app, "textPreview.setText", json!({"text": "ABC"}));
+    let w = Window::new();
+    let d = w.settle(&mut app);
+    assert_eq!(names(&d), ["A.vert", "B", "C"], "{:?}", d.message);
+    assert_eq!(d.message, None);
+    let (a, b, c) = (at(&d, "A.vert"), at(&d, "B"), at(&d, "C"));
+    // None of them has a vertical width of its own, so each advances by the same default; the
+    // pair kerns A.vert's advance by 200 units.
+    let s = scale(&app);
+    assert!(a.y < b.y && b.y < c.y, "top to bottom: {a:?} {b:?} {c:?}");
+    assert!(near(b.y - a.y + 200.0 * s, c.y - b.y), "vkrn tightens A.vert B: {a:?} {b:?} {c:?}");
+}
+
+#[test]
+fn text_preview_puts_a_mark_on_its_anchor_in_vertical_text() {
+    let mut app = FontcraftApp::default();
+    exec(&mut app, "glyph.newGlyph", json!({"name": "uni4E00", "unicodes": ["4E00"], "width": 1000}));
+    exec(&mut app, "glyph.newGlyph", json!({"name": "acutecomb", "unicodes": ["0301"], "width": 0}));
+    exec(&mut app, "glyph.setCategory", json!({"glyphs": ["acutecomb"], "category": "Mark", "subCategory": "Nonspacing"}));
+    exec(&mut app, "anchor.add", json!({"glyph": "uni4E00", "name": "top", "x": 300, "y": 700}));
+    exec(&mut app, "anchor.add", json!({"glyph": "acutecomb", "name": "_top", "x": 100, "y": 500}));
+    exec(&mut app, "window.textPreview", json!({}));
+    exec(&mut app, "textPreview.setLayoutOrientation", json!({"orientation": "vertical"}));
+    let w = Window::new();
+    exec(&mut app, "textPreview.setText", json!({"text": "\u{4E00}B"}));
+    let plain = at(&w.settle(&mut app), "B");
+    exec(&mut app, "textPreview.setText", json!({"text": "\u{4E00}\u{301}B"}));
+    let d = w.settle(&mut app);
+    assert_eq!(names(&d), ["uni4E00", "acutecomb", "B"], "{:?}", d.message);
+    let (base, mark) = (at(&d, "uni4E00"), at(&d, "acutecomb"));
+    let s = scale(&app);
+    assert!(near(mark.x - base.x, 200.0 * s) && near(base.y - mark.y, 200.0 * s), "_top on top: {mark:?} {base:?}");
+    assert!(near(at(&d, "B").y, plain.y), "the mark takes no room in the column");
 }

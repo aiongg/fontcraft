@@ -13,8 +13,9 @@
 //!   keeps beside `cmap`, not in it: [`ShapingFont::new`] takes that map, and the shaper's
 //!   character-to-glyph step reads it, so a glyph typed by name in Edit View is shaped like any
 //!   other.
-//! - Advances can come live from the model ([`ShapeRequest::advances`]), so width edits show
-//!   without compiling the layout again.
+//! - Advances can come live from the model ([`ShapeRequest::advances`], and
+//!   [`ShapeRequest::vertical`] for vertical runs), so width edits show without compiling the
+//!   layout again.
 //! - Shape plans are cached per font, direction, script, language and feature list, at most
 //!   [`MAX_PLANS`] per font.
 //! - Everything is checked before harfrust runs: the text length, the feature count, the
@@ -38,7 +39,7 @@ pub mod bidi;
 mod font;
 pub mod script;
 
-pub use font::{Direction, FeatureSetting, MAX_LANGUAGE_BYTES, MAX_LOCATION_AXES, ShapeRequest, ShapedGlyph, ShapingFont, shape};
+pub use font::{Direction, FeatureSetting, MAX_LANGUAGE_BYTES, MAX_LOCATION_AXES, ShapeRequest, ShapedGlyph, ShapingFont, VerticalMetrics, shape};
 pub use read_fonts::types::Tag;
 
 /// Most bytes of text one [`shape`] call takes: Text Preview's item cap of a million characters
