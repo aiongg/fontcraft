@@ -1,7 +1,9 @@
 //! Bitmap strikes (`bitmap.importStrikes`, `bitmap.exportStrikes`, `bitmap.setStrikes`): a BDF
 //! file goes into a strike by code then name, exports back to the same strike as BDF and PCF,
 //! strikes are added and removed with undo, renames carry strike glyphs along, formats without a
-//! place for strikes report them, and hostile files fail without changing the font.
+//! place for strikes report them, and hostile files fail without changing the font. New strikes
+//! are rasterised from the outlines, and strikes go into compiled fonts as `EBDT`/`EBLC`, embedded
+//! or as a bitmap-only font, which the TTX reader and writer read back unchanged.
 // Integration tests may unwrap and panic, unlike shipped code (AGENTS.md › Never crash).
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
 
@@ -192,7 +194,7 @@ fn strikes_are_added_and_removed_with_undo_and_follow_renamed_glyphs() {
 
     let out = run(&mut s, "bitmap.setStrikes", json!({ "add": [{"ppem": 16, "depth": 4}, {"ppem": 12}], "rasterize": false }));
     assert_eq!(out["strikes"], json!(["8", "12", "16@4"]));
-    assert!(refused(&mut s, "bitmap.setStrikes", json!({ "add": [{"ppem": 20}] })).contains("rasterize"));
+    assert!(refused(&mut s, "bitmap.setStrikes", json!({ "add": [{"ppem": 20, "depth": 3}] })).contains("depth"));
     assert!(refused(&mut s, "bitmap.setStrikes", json!({ "add": [{"ppem": 12}], "rasterize": false })).contains("already"));
     assert!(refused(&mut s, "bitmap.setStrikes", json!({ "remove": [{"ppem": 9}] })).contains("no strike 9"));
     assert!(refused(&mut s, "bitmap.setStrikes", json!({})).contains("add"));
@@ -269,5 +271,101 @@ fn removing_a_glyph_removes_its_bitmaps_and_undo_brings_them_back() {
     run(&mut s, "edit.undo", json!({}));
     run(&mut s, "edit.undo", json!({}));
     assert_eq!(names(&s), ["A", "B", "c"], "undo brings the bitmap back");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// A document whose `A` is a 500-unit square, `B` the same with its top a quarter pixel above
+/// row 8 at 16 ppem, and `C` three quarters.
+fn squares() -> Session {
+    let mut s = Session::with_document();
+    for (glyph, top) in [("A", 500.0), ("B", 515.625), ("C", 546.875)] {
+        run(&mut s, "path.addPath", json!({"glyph": glyph, "nodes": fontcraft_testkit::rect(0.0, 0.0, 500.0, top), "closed": true}));
+    }
+    s
+}
+
+#[test]
+fn a_new_strike_is_rasterised_from_the_outlines() {
+    let mut s = squares();
+    let out = run(&mut s, "bitmap.setStrikes", json!({ "add": [{"ppem": 16}, {"ppem": 16, "depth": 8}] }));
+    assert_eq!(out["added"], json!(["16", "16@8"]));
+    let all = strikes(&s);
+    let (mono, grey) = (&all[0], &all[1]);
+    assert_eq!((mono.ascent, mono.descent), (13, 3), "800 and -200 units at 16 ppem");
+
+    let a = mono.glyph("A").unwrap();
+    assert_eq!((a.width, a.height, a.left, a.bottom, a.advance), (8, 8, 0, 0, 10));
+    assert_eq!(a.data, vec![0xff; 8]);
+    let b = mono.glyph("B").unwrap();
+    assert_eq!((b.width, b.height), (8, 9));
+    assert_eq!(b.data[0], 0, "a quarter-covered row is off at 1 bit");
+    assert!(b.data[1..].iter().all(|r| *r == 0xff));
+    assert_eq!(mono.glyph("C").unwrap().data[0], 0xff, "a row covered three quarters is on");
+    let space = mono.glyph("space").unwrap();
+    assert_eq!((space.width, space.height, space.advance, space.data.len()), (0, 0, 4, 0));
+
+    assert_eq!(grey.glyph("A").unwrap().data, vec![0xff; 64]);
+    let b = grey.glyph("B").unwrap();
+    assert_eq!(b.data.len(), 72);
+    assert!(b.data[..8].iter().all(|v| (48..=80).contains(v)), "a quarter-covered row is a quarter grey: {:?}", &b.data[..8]);
+
+    run(&mut s, "edit.undo", json!({}));
+    assert!(strikes(&s).is_empty());
+}
+
+#[test]
+fn strikes_go_into_compiled_fonts_and_read_back_through_ttx() {
+    use fontcraft_tables::ttx::{DumpOptions, ImportOptions, dump, import};
+    let dir = temp("sfnt");
+    let mut s = squares();
+    run(&mut s, "bitmap.setStrikes", json!({ "add": [{"ppem": 16}, {"ppem": 300}], "remove": [], "rasterize": true }));
+
+    let otb = dir.join("Squares.otb");
+    let out = run(&mut s, "bitmap.exportStrikes", json!({ "strikes": [{"ppem": 16}], "path": otb }));
+    assert_eq!(out["format"], "otb");
+    assert_eq!(out["files"][0]["strike"], "16");
+    let font = fontcraft_tables::read(&std::fs::read(&otb).unwrap(), 0).unwrap();
+    for tag in [b"head", b"hhea", b"hmtx", b"maxp", b"cmap", b"name", b"OS/2", b"post", b"glyf", b"loca", b"EBDT", b"EBLC"] {
+        assert!(font.get(*tag).is_some(), "{}", String::from_utf8_lossy(tag));
+    }
+    assert_eq!(font.tables.len(), 12);
+    assert_eq!(font.get(*b"glyf"), Some(&[][..]));
+
+    let options = DumpOptions { tables: vec![*b"EBLC", *b"EBDT"], strict: true, ..DumpOptions::default() };
+    let text = dump(&font, &options).unwrap();
+    let a = text.find("<ebdt_bitmap_format_1 name=\"A\">").expect("A has a bitmap");
+    assert!(text[a..].contains("ffffffff ffffffff"), "{}", &text[a..a + 400]);
+    let again = import(font.clone(), &text, &ImportOptions::default()).unwrap();
+    assert_eq!(again.get(*b"EBDT"), font.get(*b"EBDT"));
+    assert_eq!(again.get(*b"EBLC"), font.get(*b"EBLC"));
+
+    // Embedded in the open font compiled, then into that file again: the same tables each time.
+    let ttf = dir.join("Squares.ttf");
+    let out = run(&mut s, "bitmap.exportStrikes", json!({ "format": "embedded", "strikes": [{"ppem": 16}], "path": ttf }));
+    assert_eq!(out["replaced"], false);
+    let embedded = fontcraft_tables::read(&std::fs::read(&ttf).unwrap(), 0).unwrap();
+    assert!(!embedded.get(*b"glyf").unwrap().is_empty());
+    assert_eq!(embedded.get(*b"EBLC"), font.get(*b"EBLC"));
+    let again = dir.join("Again.ttf");
+    let out = run(&mut s, "bitmap.exportStrikes", json!({ "format": "embedded", "strikes": [{"ppem": 16}], "font": ttf, "path": again }));
+    assert_eq!(out["replaced"], true);
+    let again = fontcraft_tables::read(&std::fs::read(&again).unwrap(), 0).unwrap();
+    assert_eq!(again.get(*b"EBDT"), font.get(*b"EBDT"));
+    assert_eq!(again.get(*b"EBLC"), font.get(*b"EBLC"));
+
+    let cases = [
+        (json!({ "format": "embedded", "strikes": [{"ppem": 300}], "path": dir.join("big.ttf") }), "255"),
+        (json!({ "format": "otb", "font": ttf, "path": dir.join("x.otb") }), "embedded"),
+        (json!({ "format": "embedded", "destination": dir }), "path"),
+        (json!({ "format": "bdf", "font": ttf, "path": dir.join("x.bdf") }), "embedded"),
+    ];
+    for (params, words) in cases {
+        let message = refused(&mut s, "bitmap.exportStrikes", params.clone());
+        assert!(message.contains(words), "{params}: {message}");
+    }
+    std::fs::write(dir.join("text.ttf"), b"hello").unwrap();
+    let message = refused(&mut s, "bitmap.exportStrikes", json!({ "format": "embedded", "font": dir.join("text.ttf"), "path": dir.join("y.ttf") }));
+    assert!(message.contains("not a TrueType"), "{message}");
+    assert!(!dir.join("big.ttf").exists() && !dir.join("y.ttf").exists());
     std::fs::remove_dir_all(&dir).unwrap();
 }

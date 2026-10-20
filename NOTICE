@@ -290,6 +290,8 @@ bundled, the file says so in its header and the project is listed here with its 
 
   The CBDT and CBLC writer (crates/compile/src/color/cbdt.rs, M11.11) lays the tables out in the order fontTools' E_B_L_C_ and E_B_D_T_ compilers write them (MIT License), with the strike settings of nanoemoji's bitmap_tables.py (Apache License 2.0, Copyright 2022 Google LLC): version 3, index subtable format 1, glyph bitmap format 17, bit depth 32, horizontal metrics flag.
 
+  The EBDT and EBLC writer for the model's bitmap strikes (crates/tables/src/embedded_bitmaps.rs, M13.55c) lays the tables out in the order fontTools' E_B_L_C_ and E_B_D_T_ compilers write them (MIT License): each image once in index subtable order, then the header, the size tables and each strike's subtable array and subtables, with empty images for the glyphs an offset-array subtable spans without a bitmap.
+
   The CFF subroutiniser (crates/cff/src/subr, M12.25) ports the method of compreffor's pyCompressor.py 0.6.0 (https://github.com/googlefonts/compreffor), Apache License 2.0, Copyright 2015 Google Inc.: the candidate savings estimate, the iterative price market and its constants, the cut-down heuristic, the placement into global and local subroutine INDEXes, the nesting cut and the ordering of subroutines by use for each bias.
 
   Hint removal (crates/tables/src/dehint, M12.27) follows the --no-hinting rules of fontTools' subset module (MIT License): the hinting-table list, the maxp limits, the GPOS device-table and anchor pruning, and the Private DICT keys.

@@ -1,6 +1,7 @@
-//! Bitmap strikes of the open font (M13.55b): `bitmap.importStrikes` reads BDF and PCF files into
-//! strikes, `bitmap.exportStrikes` writes strikes as BDF or PCF files, and `bitmap.setStrikes`
-//! adds empty strikes and removes strikes.
+//! Bitmap strikes of the open font (M13.55b, M13.55c): `bitmap.importStrikes` reads BDF and PCF
+//! files into strikes, `bitmap.exportStrikes` writes strikes as BDF or PCF files, embeds them in a
+//! compiled font or writes a bitmap-only font, and `bitmap.setStrikes` adds strikes, empty or
+//! rasterised from the outlines, and removes strikes.
 //!
 //! The files are read and checked by `fontcraft_io_bitmap`, whose limits bound every count and
 //! size; the model's own check ([`fontcraft_model::strike`]) then runs on the edited font, so a
@@ -17,14 +18,18 @@ use super::file_io::read_input_up_to;
 use super::{CommandSpec, FileParam, cmd, has_doc};
 use crate::params::Params;
 use crate::{EngineError, Result, Session};
+use fontcraft_geom::{Affine, Shape as _};
 use fontcraft_io_bitmap::{Bitmap, BitmapFont, BitmapGlyph, PcfLayout, Property, PropertyValue};
 use fontcraft_model::strike::{self, BitmapStrike, StrikeGlyph, StrikeProperty, StrikeValue};
-use fontcraft_model::{Font, MAX_NAME_LEN};
+use fontcraft_model::{Font, MAX_NAME_LEN, metric};
+use fontcraft_tables::embedded_bitmaps::{self as embedded, GlyphIds};
 
 /// Most glyph names a result lists as left out, per file.
 const MAX_LISTED: usize = 100;
 /// Resolution assumed for a strike that states none, in dots per inch: a point is then a pixel.
 const DEFAULT_DPI: u32 = 72;
+/// Most pixels rasterised for one new strike.
+const MAX_RASTER_PIXELS: u64 = 64 << 20;
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
@@ -43,18 +48,18 @@ pub fn specs() -> Vec<CommandSpec> {
             "Export Bitmap Strikes…",
             ["File", "Export"],
             None,
-            "{strikes?: [{ppem: number, depth?: number}] (default: all; without depth, every depth of the size), format?: \"bdf\" | \"pcf\" (default: pcf for a path ending in .pcf, else bdf), path?: file (exactly one strike), destination?: folder (one file per strike, named Family-12.bdf, or Family-12@4.bdf for a grey strike)} writes strikes as bitmap font files, atomically each. A bitmap's code is the one its file had, else the first code point of its glyph; a strike without a stated point size or resolution is written at 72 dpi, and one without a name takes the family name. PCF holds black-and-white strikes only. The formats embedded and otb are not built → {format, files: [{strike, path, glyphs, bytes}]}",
+            "{strikes?: [{ppem: number, depth?: number}] (default: all; without depth, every depth of the size), format?: \"bdf\" | \"pcf\" | \"embedded\" | \"otb\" (default: pcf for a path ending in .pcf, otb for .otb, else bdf), path?: file, destination?: folder (bdf and pcf: one file per strike, named Family-12.bdf, or Family-12@4.bdf for a grey strike), font?: path of a compiled TrueType or OpenType font (embedded only; default: the open font compiled as TrueType)} writes strikes, atomically each file. bdf and pcf: one bitmap font file per strike; `path` takes exactly one strike. A bitmap's code is the one its file had, else the first code point of its glyph; a strike without a stated point size or resolution is written at 72 dpi, and one without a name takes the family name. PCF holds black-and-white strikes only. embedded: the chosen strikes as EBDT and EBLC tables in `font`, written to `path`, replacing the font's own bitmap tables. otb: a bitmap-only font at `path`: the open font compiled as TrueType, with its outlines emptied and the strikes added. A bitmap goes to the glyph of its name, else of its glyph's code point; bitmaps of glyphs the font lacks are left out and listed. Refused, writing nothing: a strike above 255 pixels per em, a bitmap larger than 255 pixels or offset beyond -128..127, strikes none of whose bitmaps has a glyph in the font, a collection or web font as `font` → {format, files: [{strike, path, glyphs, bytes}], replaced?, empty?: [label], leftOut?: [name], leftOutCount?}",
             has_doc,
             export_strikes
         )
-        .files(const { &[FileParam::write("path"), FileParam::write("destination")] })
+        .files(const { &[FileParam::write("path"), FileParam::write("destination"), FileParam::read("font")] })
         .writes_files(),
         cmd!(
             "bitmap.setStrikes",
             "Bitmap Strikes…",
             ["Font"],
             None,
-            "{add?: [{ppem: number, depth?: 1 | 2 | 4 | 8 (default 1)}], remove?: [{ppem: number, depth?: number (default: every depth of the size)}], rasterize?: bool (default true)} adds and removes the font's bitmap strikes as one undo step; removing a strike deletes its bitmaps. Filling a new strike from the outlines is not built yet, so adding needs rasterize: false and gives an empty strike. Refused, changing nothing: neither list, a strike to add that the font has, a strike to remove that it lacks → {added: [label], removed: [label], strikes: [label]}",
+            "{add?: [{ppem: number, depth?: 1 | 2 | 4 | 8 (default 1)}], remove?: [{ppem: number, depth?: number (default: every depth of the size)}], rasterize?: bool (default true)} adds and removes the font's bitmap strikes as one undo step; removing a strike deletes its bitmaps. A new strike is filled from the outlines of the first master's exported glyphs, anti-aliased: at 1 bit a pixel is on when the outline covers at least half of it, at 2, 4 or 8 bits its grey level is the covered fraction; each bitmap spans the outline's pixel box, advances are the glyph widths scaled and rounded, and the strike's ascent and descent are the master's, scaled. rasterize: false gives an empty strike. Refused, changing nothing: neither list, a strike to add that the font has, a strike to remove that it lacks, a bitmap wider or taller than 1,024 pixels, more than 67,108,864 pixels for one strike → {added: [label], removed: [label], strikes: [label]}",
             has_doc,
             set_strikes
         ),
@@ -272,6 +277,8 @@ fn to_value(v: &PropertyValue) -> StrikeValue {
 enum Format {
     Bdf,
     Pcf,
+    Embedded,
+    Otb,
 }
 
 impl Format {
@@ -279,6 +286,8 @@ impl Format {
         match self {
             Format::Bdf => "bdf",
             Format::Pcf => "pcf",
+            Format::Embedded => "embedded",
+            Format::Otb => "otb",
         }
     }
 }
@@ -291,11 +300,13 @@ fn export_strikes(s: &mut Session, v: &Value) -> Result<Value> {
     let format = match p.opt_str("format")? {
         Some("bdf") => Format::Bdf,
         Some("pcf") => Format::Pcf,
-        Some("embedded" | "otb") => {
-            return Err(EngineError::Unsupported("embedding strikes in a compiled font or writing a bitmap-only sfnt".into()));
+        Some("embedded") => Format::Embedded,
+        Some("otb") => Format::Otb,
+        Some(other) => {
+            return Err(p.bad(format!("`format` must be bdf, pcf, embedded or otb, got `{}`", other.chars().take(32).collect::<String>())));
         }
-        Some(other) => return Err(p.bad(format!("`format` must be bdf or pcf, got `{}`", other.chars().take(32).collect::<String>()))),
         None if path.is_some_and(|x| x.to_ascii_lowercase().ends_with(".pcf")) => Format::Pcf,
+        None if path.is_some_and(|x| x.to_ascii_lowercase().ends_with(".otb")) => Format::Otb,
         None => Format::Bdf,
     };
     if font.bitmap_strikes.is_empty() {
@@ -319,6 +330,12 @@ fn export_strikes(s: &mut Session, v: &Value) -> Result<Value> {
             out
         }
     };
+    if matches!(format, Format::Embedded | Format::Otb) {
+        return export_sfnt(font, &p, format, &chosen, path, destination);
+    }
+    if p.opt_str("font")?.is_some() {
+        return Err(p.bad("`font` goes with format embedded"));
+    }
     let targets: Vec<PathBuf> = match (path, destination) {
         (Some(_), Some(_)) => return Err(p.bad("give `path` or `destination`, not both")),
         (None, None) => return Err(p.bad("give `path` (one strike) or `destination` (a folder)")),
@@ -339,6 +356,8 @@ fn export_strikes(s: &mut Session, v: &Value) -> Result<Value> {
         let bytes = match format {
             Format::Bdf => fontcraft_io_bitmap::write_bdf(&file).map(String::into_bytes),
             Format::Pcf => fontcraft_io_bitmap::write_pcf(&file, PcfLayout::default()),
+            // Written by `export_sfnt` above, as one font file.
+            Format::Embedded | Format::Otb => return Err(p.bad("embedded and otb strikes go into one font file")),
         }
         .map_err(|e| p.bad(format!("strike {}: {e}", strike.label())))?;
         out.push((strike.label(), strike.glyphs.len(), bytes));
@@ -349,6 +368,69 @@ fn export_strikes(s: &mut Session, v: &Value) -> Result<Value> {
         files.push(json!({"strike": label, "path": target.to_string_lossy(), "glyphs": glyphs, "bytes": bytes.len()}));
     }
     Ok(json!({ "format": format.extension(), "files": files }))
+}
+
+/// The `embedded` and `otb` exports: the chosen strikes as `EBDT` and `EBLC` in a compiled font,
+/// written to `path`.
+fn export_sfnt(
+    font: &Font,
+    p: &Params<'_>,
+    format: Format,
+    chosen: &[&BitmapStrike],
+    path: Option<&str>,
+    destination: Option<&str>,
+) -> Result<Value> {
+    if destination.is_some() {
+        return Err(p.bad("`destination` goes with bdf and pcf; give `path`, the font file to write"));
+    }
+    let Some(path) = path else { return Err(p.bad("give `path`, the font file to write")) };
+    let source = p.opt_str("font")?.map(str::trim).filter(|x| !x.is_empty());
+    if source.is_some() && format == Format::Otb {
+        return Err(p.bad("`font` goes with format embedded; otb is made from the open font"));
+    }
+    let (mut sfnt, ids) = match source {
+        Some(file) => {
+            let limit = fontcraft_tables::limits::MAX_SFNT;
+            let input = read_input_up_to(Path::new(file), limit)?;
+            if input.bytes.len() > limit {
+                return Err(p.bad(format!("{file} is larger than {limit} bytes")));
+            }
+            // Only a bare sfnt is written back as it was read: a collection or a web font would
+            // lose its other faces or its wrapper.
+            if !matches!(input.bytes.get(..4), Some([0, 1, 0, 0] | [b'O', b'T', b'T', b'O'] | [b't', b'r', b'u', b'e'])) {
+                return Err(p.bad(format!("{file} is not a TrueType or OpenType font file; collections and web fonts are refused")));
+            }
+            let sfnt = fontcraft_tables::read(&input.bytes, 0).map_err(|e| p.bad(format!("{file}: {e}")))?;
+            let ids = GlyphIds::from_font(&sfnt).map_err(|e| p.bad(format!("{file}: {e}")))?;
+            (sfnt, ids)
+        }
+        None => {
+            let compiled = fontcraft_compile::compile_ttf(font, &fontcraft_compile::Options::default())?;
+            let sfnt = fontcraft_tables::read(&compiled.bytes, 0)?;
+            (sfnt, GlyphIds::from_order(&compiled.glyph_order))
+        }
+    };
+    let glyph_id = |g: &StrikeGlyph| ids.get(&g.glyph, font.glyph(&g.glyph).map(|f| f.unicodes.as_slice()).unwrap_or_default());
+    let tables = embedded::build(chosen, &glyph_id).map_err(|e| p.bad(e.to_string()))?;
+    let (out, replaced) = match format {
+        Format::Otb => (embedded::bitmap_only(&sfnt, &tables)?, false),
+        _ => {
+            let replaced = embedded::embed(&mut sfnt, &tables);
+            (sfnt, replaced)
+        }
+    };
+    let bytes = fontcraft_tables::write(&out, &fontcraft_tables::WriteOptions::default())?;
+    write_file(Path::new(path), &bytes)?;
+    let labels: Vec<&str> = tables.strikes.iter().map(|s| s.label.as_str()).collect();
+    let glyphs: usize = tables.strikes.iter().map(|s| s.glyphs).sum();
+    Ok(json!({
+        "format": format.extension(),
+        "files": [{"strike": labels.join(" "), "path": path, "glyphs": glyphs, "bytes": bytes.len()}],
+        "replaced": replaced,
+        "empty": tables.empty,
+        "leftOut": tables.left_out,
+        "leftOutCount": tables.left_out_count,
+    }))
 }
 
 /// The family name with the characters file systems refuse replaced by `-`; `Strikes` when
@@ -430,9 +512,7 @@ fn set_strikes(s: &mut Session, v: &Value) -> Result<Value> {
     if add.is_empty() && remove.is_empty() {
         return Err(p.bad("give `add` or `remove`"));
     }
-    if !add.is_empty() && p.bool_or("rasterize", true)? {
-        return Err(EngineError::Unsupported("filling a new strike from the outlines; pass rasterize: false to add an empty strike".into()));
-    }
+    let rasterize = p.bool_or("rasterize", true)?;
     let font = s.font()?;
     for spec in &remove {
         if !font.bitmap_strikes.iter().any(|s| spec.matches(s)) {
@@ -450,13 +530,117 @@ fn set_strikes(s: &mut Session, v: &Value) -> Result<Value> {
         added.push((spec.ppem, depth));
     }
     let removed: Vec<String> = font.bitmap_strikes.iter().filter(|s| remove.iter().any(|r| r.matches(s))).map(BitmapStrike::label).collect();
+    let mut new = Vec::with_capacity(added.len());
+    for (ppem, depth) in &added {
+        new.push(if rasterize { rasterize_strike(font, &p, *ppem, *depth)? } else { BitmapStrike::new(*ppem, *depth) });
+    }
     let strikes = s.edit("Bitmap Strikes", |font| {
         let strikes = std::sync::Arc::make_mut(&mut font.bitmap_strikes);
         strikes.retain(|s| !remove.iter().any(|r| r.matches(s)));
-        strikes.extend(added.iter().map(|(ppem, depth)| BitmapStrike::new(*ppem, *depth)));
+        strikes.extend(new);
         sort_strikes(strikes);
         Ok(labels(strikes))
     })?;
     let added: Vec<String> = added.iter().map(|(ppem, depth)| strike::label(*ppem, *depth)).collect();
     Ok(json!({ "added": added, "removed": removed, "strikes": strikes }))
+}
+
+/// A strike of `ppem` pixels per em at `depth` bits per pixel, drawn from the outlines of the
+/// first master's exported glyphs (see `bitmap.setStrikes`).
+fn rasterize_strike(font: &Font, p: &Params<'_>, ppem: u16, depth: u8) -> Result<BitmapStrike> {
+    let master = font.default_master()?;
+    let upm = f64::from(font.units_per_em.max(1));
+    let em = f64::from(ppem);
+    // Font units to pixels as `v * ppem / upm`, so that units on the pixel grid give whole
+    // numbers exactly.
+    let px = |v: f64| v * em / upm;
+    let whole = |v: f64| {
+        let v = px(v).round();
+        if v.is_finite() { (v as i64).clamp(-i64::from(strike::MAX_STRIKE_COORDINATE), i64::from(strike::MAX_STRIKE_COORDINATE)) as i32 } else { 0 }
+    };
+    let mut out = BitmapStrike::new(ppem, depth);
+    out.ascent = whole(font.metric_pos(master, metric::ASCENDER, upm * 0.8));
+    out.descent = whole(-font.metric_pos(master, metric::DESCENDER, -upm * 0.2));
+    let style = fontcraft_render::Style { ink: [0, 0, 0, 255], background: [0, 0, 0, 0], anti_alias: true };
+    let mut pixels = 0u64;
+    for glyph in font.glyphs.iter().filter(|g| g.export) {
+        let Some(layer) = glyph.layer(&master.id) else { continue };
+        let outline = fontcraft_render::closed_contours(&font.outline_of(glyph, &master.id)?);
+        let mut bitmap = StrikeGlyph {
+            glyph: glyph.name.clone(),
+            code: None,
+            advance: whole(layer.width),
+            scalable_width: None,
+            width: 0,
+            height: 0,
+            left: 0,
+            bottom: 0,
+            data: Vec::new(),
+        };
+        if let Some((x0, y0, x1, y1)) = pixel_box(&outline, &px) {
+            let side = i64::from(strike::MAX_STRIKE_BITMAP_SIDE);
+            let (w, h) = (x1 - x0, y1 - y0);
+            if w > side || h > side || [x0, y0].iter().any(|v| v.abs() > i64::from(strike::MAX_STRIKE_COORDINATE)) {
+                return Err(p.bad(format!(
+                    "strike {}: glyph `{}` would be {w} × {h} pixels; a bitmap is at most {side} on a side",
+                    strike::label(ppem, depth),
+                    glyph.name
+                )));
+            }
+            pixels = pixels.saturating_add((w * h).unsigned_abs());
+            if pixels > MAX_RASTER_PIXELS {
+                return Err(p.bad(format!("strike {}: more than {MAX_RASTER_PIXELS} pixels to draw", strike::label(ppem, depth))));
+            }
+            // `w` and `h` are 1..=1024 and the corners within the coordinate limit.
+            let (w, h) = (w as u32, h as u32);
+            let scale = em / upm;
+            let at = Affine::new([scale, 0.0, 0.0, -scale, -(x0 as f64), y1 as f64]);
+            let image = fontcraft_render::render_path(&outline, at, w, h, &style).map_err(|e| p.bad(format!("glyph `{}`: {e}", glyph.name)))?;
+            bitmap.width = w as u16;
+            bitmap.height = h as u16;
+            bitmap.left = x0 as i32;
+            bitmap.bottom = y0 as i32;
+            bitmap.data = pack(&image, depth);
+        }
+        out.glyphs.push(bitmap);
+    }
+    Ok(out)
+}
+
+/// The pixel box of an outline, `(left, bottom, right, top)` in pixels up from the baseline;
+/// `None` when it has no area.
+fn pixel_box(outline: &fontcraft_geom::BezPath, px: &dyn Fn(f64) -> f64) -> Option<(i64, i64, i64, i64)> {
+    if outline.elements().is_empty() {
+        return None;
+    }
+    let b = outline.bounding_box();
+    // Snap values a rounding error away from a whole pixel, so a box on the grid gains no row.
+    let snap = |v: f64| if (v - v.round()).abs() < 1e-6 { v.round() } else { v };
+    let (x0, y0, x1, y1) = (snap(px(b.x0)).floor(), snap(px(b.y0)).floor(), snap(px(b.x1)).ceil(), snap(px(b.y1)).ceil());
+    let limit = 1e9;
+    if ![x0, y0, x1, y1].iter().all(|v| v.is_finite() && v.abs() < limit) || x1 <= x0 || y1 <= y0 {
+        return None;
+    }
+    Some((x0 as i64, y0 as i64, x1 as i64, y1 as i64))
+}
+
+/// The coverage of a render as rows of `depth`-bit levels, packed from the most significant
+/// bit. At 1 bit a pixel is on from half coverage; deeper levels round the coverage.
+fn pack(image: &fontcraft_render::Image, depth: u8) -> Vec<u8> {
+    let d = u32::from(depth);
+    let top = (1u32 << d) - 1;
+    let stride = (image.width as usize * d as usize).div_ceil(8);
+    let mut out = vec![0u8; stride * image.height as usize];
+    for y in 0..image.height {
+        for x in 0..image.width {
+            let alpha = image.pixel(x, y).map_or(0, |[_, _, _, a]| u32::from(a));
+            let level = if d == 1 { u32::from(alpha >= 128) } else { (alpha * top + 127) / 255 };
+            let bit = x as usize * d as usize;
+            let shift = 8 - d as usize - bit % 8;
+            if let Some(byte) = out.get_mut(y as usize * stride + bit / 8) {
+                *byte |= ((level & top) << shift) as u8;
+            }
+        }
+    }
+    out
 }
