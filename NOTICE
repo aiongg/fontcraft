@@ -271,6 +271,10 @@ bundled, the file says so in its header and the project is listed here with its 
   fontbe/src/stat.rs), with designspace axis labels read as fontTools' varLib/stat.py reads them
   (MIT License).
 
+  The cvar table of variable fonts (crates/compile/src/var/cvar.rs, M10.19) follows fontTools'
+  varLib _merge_TTHinting (MIT License): deltas from the masters' cvt values, rounded half to even
+  one region at a time, all-zero regions left out.
+
   The glyph statistics of crates/tables/src/metrics.rs follow fontTools' pens.statisticsPen and pens.momentsPen (MIT License): the same moments, derived values, thresholds and font-wide estimates.
 
   The instancer of crates/tables/src/instance/ ports the full-instance path of fontTools' varLib.instancer (MIT License): instantiateGvar, instantiateCvar, instantiateMVAR, instantiateOTL, instantiateFeatureVariations, instantiateSTAT, pruningUnusedNames, set_default_weight_width_slant, iup_delta, and the glyf table's phantom points, setCoordinates and recalcBounds.

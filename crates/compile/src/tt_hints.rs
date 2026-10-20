@@ -21,8 +21,9 @@
 //! column of the build. Composites get none. A glyph whose instructions cannot be compiled is
 //! exported without them, with a warning naming the glyph and the reason. `maxp` takes the
 //! largest needs [`fontcraft_ttasm::analyse`] finds in `fpgm`, `prep` and every glyph program.
-//! A variable font gets the default master's programs without Delta instructions, and no
-//! `cvar` (a warning says so).
+//! A variable font gets the default master's programs without Delta instructions (the handbook
+//! leaves them out of variable fonts); its `cvt ` follows the other masters through `cvar`
+//! ([`crate::var::cvar`]).
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -94,13 +95,13 @@ fn names(list: &[String]) -> String {
     out
 }
 
-fn autohinted(settings: &HintSettings, options: &Options) -> bool {
+pub(crate) fn autohinted(settings: &HintSettings, options: &Options) -> bool {
     settings.autohint.unwrap_or(options.hinting.autohint)
 }
 
 /// The TTFAutohint options and control instructions of an autohinted build.
-struct AutoSetup {
-    options: TtAutohintOptions,
+pub(crate) struct AutoSetup {
+    pub(crate) options: TtAutohintOptions,
     control: ControlInstructions,
     /// The control instructions as given, for the TTFA table.
     control_text: String,
@@ -110,7 +111,7 @@ impl AutoSetup {
     /// The options and control instructions of `settings`, or `None` when Dehint is on (the
     /// font then gets no TrueType hinting). Options or control instructions that cannot be read
     /// are left out, with a warning.
-    fn new(settings: &HintSettings, warnings: &mut Vec<String>) -> Option<Self> {
+    pub(crate) fn new(settings: &HintSettings, warnings: &mut Vec<String>) -> Option<Self> {
         let options = match settings.tt_autohint_options.as_deref().map(TtAutohintOptions::parse) {
             None => TtAutohintOptions::default(),
             Some(Ok((o, ignored))) => {
@@ -156,7 +157,7 @@ impl AutoSetup {
 
 /// Does the master carry imported tables (cvt Table, prep or fpgm Table Assembly)? They are
 /// written instead of glyph programs.
-fn imported(settings: &HintSettings) -> bool {
+pub(crate) fn imported(settings: &HintSettings) -> bool {
     settings.cvt.is_some() || settings.prep_assembly.is_some() || settings.fpgm_assembly.is_some()
 }
 
@@ -404,12 +405,6 @@ pub fn tt_hinting(
             Err(err) => warnings
                 .push(format!("glyph `{}`: there was a problem compiling its TrueType instructions ({err}); it was exported without them", g.name)),
         }
-    }
-    if variable {
-        warnings.push(
-            "the variable font's TrueType programs use the default master's zones and stems: no `cvar` table is written, so zones and stems do not follow the other masters"
-                .to_string(),
-        );
     }
     if deltas_dropped {
         warnings.push("Delta instructions are not written into a variable font".to_string());

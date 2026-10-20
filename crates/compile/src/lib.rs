@@ -483,6 +483,8 @@ pub(crate) struct Extra {
     pub math: Option<math::MathPlan>,
     /// A CID-keyed CFF build ([`cid::plan`]).
     pub cid: Option<cid::CidPlan>,
+    /// The masters a variable TrueType font's `cvar` varies with, once its `cvt ` is known.
+    pub cvar: Option<var::cvar::CvarMasters>,
 }
 
 /// The outline stage of a variable compile: given the origin's final glyphs, the outlines to

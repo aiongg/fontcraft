@@ -391,9 +391,10 @@ read = "read-fonts"
 write = "write-fonts"
 area = "compile"
 milestone = "M10"
-summary = "Tuple variations for cvt values: one scalar delta per control value per region. write-fonts has a builder taking tents and delta lists (CvarVariationData). No reference compiler here generates it from source hinting data, so the input model is ours."
-ref = "write-fonts src/tables/cvar.rs"
+summary = "Tuple variations for cvt values: one scalar delta per control value per region. write-fonts has a builder taking tents and delta lists (Cvar::new) and picks all entries or a sparse point list per tuple. fontTools' varLib (as fontmake runs it) builds cvar from the masters' own cvt tables: deltas rounded half to even one region at a time, all-zero regions left out, and the font's hinting dropped when the masters' cvt lengths, fpgm or prep differ. No reference compiler makes cvt from zones and stems, so the per-master values are ours."
+ref = "write-fonts src/tables/cvar.rs; fontTools varLib/__init__.py (_merge_TTHinting)"
 status = "docs"
+notes = "M10.19b, crates/compile/src/var/cvar.rs: a variable TrueType export with a cvt works out each other master's control values as the default's (our zones and stems, the autohinter's extra entries, or the master's cvt Table) and writes their deltas per master region, rounded and dropped as fontTools does; the tests hold fontTools' deltas for four master layouts. Masters sharing a location add one region; intermediate layers add none. When the masters' values do not line up (count, zone and stem names, or source), no cvar is written and a warning says so; the font keeps the default master's hinting, where fontTools drops it (docs/spec/40-compile.md). Limit: 30,000 entries, 4,095 regions."
 
 # ---------------------------------------------------------------------------------------------------
 # Tables: colour and images (M11)

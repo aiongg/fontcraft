@@ -213,7 +213,12 @@ Only when at least one axis has a range (`compile.variableOnlyTables`).
 - STAT (`compile.statDefaults`), also allowed in static fonts.
 - CFF2 instead of gvar for the cubic flavour, with its companion tables
   (`compile.cff2VariableBuild`, `compile.cff2CompanionTables`).
-- cvar when hinted control values vary (M10).
+- cvar when the masters' TrueType control values differ (M10.19, `var/cvar.rs`): each other
+  master's values are worked out as the default master's `cvt ` is, and their deltas are written
+  per master region, rounded half to even one region at a time, all-zero regions left out, as
+  fontTools' varLib does. When the masters' values do not line up (count, zone and stem names, or
+  where they come from), fontTools drops the font's hinting; FontCraft writes no cvar, keeps the
+  default master's hinting and warns, since those programs still fit the default outlines.
 
 ### 1.8 Assemble and checksum
 
