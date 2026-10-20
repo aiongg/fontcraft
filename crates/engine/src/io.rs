@@ -5,8 +5,8 @@
 //! is a UFO and one with `fontinfo.plist` a `.glyphspackage`, a file that starts with an sfnt,
 //! collection, WOFF or WOFF2 signature is a compiled font, a JSON file whose `format` is
 //! `fontcraft` is a native file, XML whose root is `<designspace>` a designspace (opened with the
-//! UFOs it names, relative to its folder), a ZIP archive a UFOZ, and other text that starts with
-//! `{` is a `.glyphs` file. Every read is bounded ([`MAX_PACKAGE_FILES`],
+//! UFOs it names, relative to its folder), a ZIP archive a UFOZ, a BDF or PCF file a bitmap-only
+//! font (module `bitmap_font`), and other text that starts with `{` is a `.glyphs` file. Every read is bounded ([`MAX_PACKAGE_FILES`],
 //! [`fontcraft_format::MAX_BYTES`] in all) and follows no symlinked folders, so a hostile folder
 //! can neither exhaust memory nor loop.
 
@@ -20,6 +20,9 @@ use fontcraft_model::{Family, Font, Shape, SourceFormat};
 use serde_json::{Value, json};
 
 use crate::{EngineError, Result};
+
+mod bitmap_font;
+pub use bitmap_font::UNITS_PER_EM as BITMAP_FONT_UNITS_PER_EM;
 
 /// Most files read from one package.
 pub const MAX_PACKAGE_FILES: usize = 200_000;
@@ -256,6 +259,9 @@ pub fn open(path: &Path, face: Option<u32>) -> Result<(Font, Vec<String>)> {
             keep_stored_tables(&mut d.font, sfnt, face);
         }
         return Ok((d.font, d.warnings));
+    }
+    if bitmap_font::is_bitmap_font(&bytes) {
+        return bitmap_font::open(path, &bytes);
     }
     if fontcraft_io_sfd::is_sfd(&bytes) {
         return sfd_source(path, fontcraft_io_sfd::read_sfd(&bytes));

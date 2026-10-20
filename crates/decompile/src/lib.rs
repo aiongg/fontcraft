@@ -9,7 +9,8 @@
 //! back cubic. Pair kerning and kerning groups come back from the GPOS `kern` feature
 //! (`gpos_kern`), and the rest of the layout comes back as feature code ([`fea`]). Hinting comes back too: CFF stems, zones and stems ([`cff_hints`]), and
 //! TrueType `cvt `, `fpgm`, `prep`, `gasp` and glyph programs ([`tt_hints`]). Colour palettes and
-//! `COLR` glyphs come back as the `Color Palettes` parameter and colour layers ([`color`]). Every other table is
+//! `COLR` glyphs come back as the `Color Palettes` parameter and colour layers ([`color`]), and
+//! `EBLC`/`EBDT` (or `bloc`/`bdat`) bitmaps as the font's bitmap strikes ([`strikes`]). Every other table is
 //! not read, and [`Decompiled::warnings`] lists them. The glyph order is recorded in a `glyphOrder` custom parameter, so a later export keeps
 //! the glyph ids (`open.recordsGlyphOrder`).
 //!
@@ -30,6 +31,7 @@ pub mod cff_hints;
 pub mod color;
 pub mod fea;
 mod gpos_kern;
+pub mod strikes;
 pub mod tt_hints;
 pub mod type1;
 pub mod variable;
@@ -137,6 +139,7 @@ pub fn decompile(bytes: &[u8], face: Option<u32>) -> Result<Decompiled, Decompil
     };
     let mut d = variable::read_any(&font)?;
     color::import(&font, &mut d);
+    strikes::import(&font, &mut d);
     fea::import(&font, &mut d);
     Ok(d)
 }
@@ -340,6 +343,7 @@ fn read(font: &FontRef) -> Result<Decompiled, DecompileError> {
         .into_iter()
         .chain(tt_hints::TABLES.iter().copied())
         .chain(color::TABLES.iter().copied())
+        .chain(strikes::TABLES.iter().copied())
         .collect();
     let mut left_out: Vec<String> = font
         .table_directory

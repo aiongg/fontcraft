@@ -573,13 +573,17 @@ notes = "Copied unchanged into a build by font.compile's passThroughTables (CLI 
 tag = "EBDT"
 flavour = ["ttf"]
 read = "read-fonts"
-write = "none-yet"
+write = "own"
 area = "compile"
 milestone = "M12"
-summary = "Embedded monochrome or grey bitmaps with their location table EBLC (and EBSC scaling). read-fonts reads EBDT and EBLC through the shared bitmap code; there is no writer."
+summary = "Embedded monochrome or grey bitmaps with their location table EBLC (and EBSC scaling). read-fonts reads EBDT and EBLC through the shared bitmap code; FontCraft writes them itself from the bitmap strikes (crates/tables/src/embedded_bitmaps.rs)."
 ref = "read-fonts src/tables/ebdt.rs, eblc.rs, bitmap.rs; write-fonts src/tables.rs"
 status = "docs"
-notes = "Copied unchanged into a build by font.compile's passThroughTables (CLI --pass-through-tables) from the bytes a compiled font kept when it was opened, only while the glyph order has the checksum they were stored with (crates/compile/src/extras.rs; roundtrip.binaryPassThroughTables). Opening a compiled font stores them (crates/engine/src/io.rs), indexed by the opened font's glyph order. The binary tools copy the table byte for byte when they do not touch it."
+notes = "Copied unchanged into a build by font.compile's passThroughTables (CLI --pass-through-tables) from the bytes a compiled font kept when it was opened, only while the glyph order has the checksum they were stored with (crates/compile/src/extras.rs; roundtrip.binaryPassThroughTables). Opening a compiled font stores them (crates/engine/src/io.rs), indexed by the opened font's glyph order. The binary tools copy the table byte for byte when they do not touch it. Opening a compiled font also reads EBLC and EBDT, or the Apple bloc and bdat with the same layout, into the font's bitmap strikes (M13.55d, crates/decompile/src/strikes.rs): every image format 1 to 9, bit-aligned images cut into byte-padded rows, composite images (8 and 9) flattened, the strike size from ppemY and the ascent and descent from the horizontal line metrics. Left out with a warning: a strike at a depth other than 1, 2, 4 or 8, a strike repeating an earlier size and depth, a strike past the model's limits, and images that cannot be read. Bounds: 64 strikes, 4,194,304 index entries, composites 8 deep and 64 Mi pixels drawn. A strike written by bitmap.exportStrikes (embedded or otb) opens back with the same sizes, line metrics and images (crates/engine/tests/engine/bitmap_open.rs)."
+guesses = [
+  "A composite image's component is drawn with its offset measured from the composite's top-left corner, rows counting down, clipped to the composite's box, the darker pixel winning where components overlap; the OpenType text says only that the offsets give the component's left and top. A font with composite bitmaps opened in the secondary reference would settle it.",
+  "A glyph listed twice in one strike keeps its first image; fontTools keeps the last. A font with a glyph in two index subtables opened in the secondary reference would settle it.",
+]
 
 [[table]]
 tag = "morx"
