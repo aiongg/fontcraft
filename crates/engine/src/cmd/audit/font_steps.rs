@@ -6,9 +6,16 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
+use fontcraft_audit::data::tags;
 use fontcraft_model::glyphdata::{Category, GlyphData};
+use fontcraft_spacing::kerning::{Direction, KernIndex, Position, Side, Step, facing};
 
 use super::*;
+
+mod fea;
+
+/// Most glyph pairs one stored kerning pair may kern for `cleanKerning` to weigh removing it.
+const MAX_PAIR_SPAN: usize = 100_000;
 
 /// Steps 1 to 6, before the layer steps.
 pub(super) const DATA_STEPS: [&str; 6] =
@@ -52,6 +59,8 @@ pub(super) fn command(fix: &str) -> Option<&'static str> {
         "useProductionNames" => "glyph.setProductionName",
         "setGdefClasses" => "glyph.setCategory",
         "cleanKerning" => "kerning.cleanUp",
+        "renameLanguageTag" | "addDefaultLanguagesystem" => "font.features.setCode",
+        "reorderFeatures" => "font.features.reorder",
         "autohint" => "hint.ps.autohintGlyph",
         _ => return None,
     };
@@ -104,7 +113,8 @@ pub(super) fn run_steps(
             continue;
         }
         let data = s.glyph_data()?;
-        let calls = calls_for(fix, s.font()?, &data, &found, report);
+        let index = if fix == "cleanKerning" { Some(s.kern_index()?) } else { None };
+        let calls = calls_for(fix, s.font()?, &data, index.as_deref(), &found, report);
         if how.dry {
             for (command, params) in calls {
                 report.planned.push(json!({"fix": fix, "command": command, "params": params, "checks": ids, "results": found.len()}));
@@ -154,7 +164,14 @@ fn direction(f: &Finding) -> &'static str {
 }
 
 /// The calls of one font-wide step for its findings.
-fn calls_for(fix: &'static str, font: &Font, data: &GlyphData, findings: &[Finding], report: &mut FixReport) -> Vec<(&'static str, Value)> {
+fn calls_for(
+    fix: &'static str,
+    font: &Font,
+    data: &GlyphData,
+    index: Option<&KernIndex>,
+    findings: &[Finding],
+    report: &mut FixReport,
+) -> Vec<(&'static str, Value)> {
     let findings: Vec<&Finding> = findings.iter().collect();
     let mut calls = Vec::new();
     let mut left: Vec<(Option<String>, &'static str, &'static str)> = Vec::new();
@@ -252,6 +269,7 @@ fn calls_for(fix: &'static str, font: &Font, data: &GlyphData, findings: &[Findi
         "cleanKerning" => {
             let mut clean = BTreeSet::new();
             let mut pairs = BTreeSet::new();
+            let mut tabular = Vec::new();
             for f in &findings {
                 let master = f.location.master.clone().unwrap_or_default();
                 match (f.code, &f.location.pair) {
@@ -261,6 +279,7 @@ fn calls_for(fix: &'static str, font: &Font, data: &GlyphData, findings: &[Findi
                     ("zero-pair" | "repeats-group-value", Some([left, right])) if !master.is_empty() => {
                         pairs.insert((master, direction(f), left.clone(), right.clone()));
                     }
+                    ("has-tabular-kerning", Some(_)) => tabular.push(*f),
                     _ => unbuilt(f, "the result names a compiled pair, not a stored one: remove the pair in the source"),
                 }
             }
@@ -270,7 +289,47 @@ fn calls_for(fix: &'static str, font: &Font, data: &GlyphData, findings: &[Findi
             for (master, dir, left, right) in pairs {
                 calls.push(("kerning.removePair", json!({"left": left, "right": right, "master": master, "direction": dir})));
             }
+            if let Some(index) = index.filter(|_| !tabular.is_empty()) {
+                for (master, left, right) in tabular_pairs(font, index, &tabular, report) {
+                    let call = json!({"left": left, "right": right, "master": master, "direction": "ltr"});
+                    if !calls.iter().any(|(c, p)| *c == "kerning.removePair" && *p == call) {
+                        calls.push(("kerning.removePair", call));
+                    }
+                }
+            }
         }
+        "renameLanguageTag" => {
+            let mut slips: Vec<(String, String)> = Vec::new();
+            for f in &findings {
+                let wrong = f.location.language.as_deref().map(str::trim_end).unwrap_or_default();
+                match (f.code, language_slip(wrong)) {
+                    ("language-slip", Some(meant)) => {
+                        if !slips.iter().any(|(w, _)| w == wrong) {
+                            slips.push((wrong.to_string(), meant));
+                        }
+                    }
+                    _ => unbuilt(f, "the result does not name a mistyped language tag"),
+                }
+            }
+            if !slips.is_empty() {
+                let (built, left) = fea::rename_language_tag(&font.features, &slips);
+                if built.is_empty() && left.is_empty() {
+                    report.skip(None, None, None, Some(fix), "the feature code does not name the mistyped tag in a language statement");
+                }
+                for reason in left {
+                    report.skip(None, None, None, Some(fix), reason);
+                }
+                calls.extend(built.into_iter().map(|p| ("font.features.setCode", p)));
+            }
+        }
+        "addDefaultLanguagesystem" => match fea::add_default_languagesystem(&font.features) {
+            Ok(built) => calls.extend(built.into_iter().map(|p| ("font.features.setCode", p))),
+            Err(reason) => report.skip(None, None, None, Some(fix), reason),
+        },
+        "reorderFeatures" => match fea::reorder_features(&font.features) {
+            Ok(params) => calls.push(("font.features.reorder", params)),
+            Err(reason) => report.skip(None, None, None, Some(fix), reason),
+        },
         "autohint" => {
             let glyphs = source_glyphs(font, &findings, fix, report);
             if !glyphs.is_empty() {
@@ -285,6 +344,86 @@ fn calls_for(fix: &'static str, font: &Font, data: &GlyphData, findings: &[Findi
         report.skip(glyph.as_deref(), None, Some(check), Some(fix), reason);
     }
     calls
+}
+
+/// The registered tag a mistyped language tag stands for.
+fn language_slip(tag: &str) -> Option<String> {
+    let bytes = tag.as_bytes();
+    if bytes.is_empty() || bytes.len() > 4 {
+        return None;
+    }
+    let mut padded = [b' '; 4];
+    for (to, from) in padded.iter_mut().zip(bytes) {
+        *to = *from;
+    }
+    tags::language_slip(padded).map(|meant| String::from_utf8_lossy(&meant).trim_end().to_string())
+}
+
+/// The stored left-to-right pairs (master, left, right, as commands spell them) behind the
+/// tabular pairs the results name: in every master, the pair each lookup step finds, so that
+/// none is left to apply once they are removed. A stored pair that also kerns glyphs no result
+/// names is left out with the reason, since removing it would change their kerning.
+fn tabular_pairs(font: &Font, index: &KernIndex, findings: &[&Finding], report: &mut FixReport) -> Vec<(String, String, String)> {
+    let mut reported: BTreeSet<(&str, &str)> = BTreeSet::new();
+    for f in findings {
+        let Some([left, right]) = &f.location.pair else { continue };
+        if font.glyph(left).is_some() && font.glyph(right).is_some() {
+            reported.insert((left.as_str(), right.as_str()));
+        } else {
+            report.skip(None, None, Some(f.check), Some("cleanKerning"), format!("{left} {right}: the compiled glyph has no source glyph"));
+        }
+    }
+    let steps = [Step::GlyphGlyph, Step::GlyphGroup, Step::GroupGlyph, Step::GroupGroup];
+    let mut stored: BTreeSet<(String, String, String)> = BTreeSet::new();
+    for &(left, right) in &reported {
+        let (Some(first), Some(second)) = (index.glyph_id(left), index.glyph_id(right)) else { continue };
+        let mut found = false;
+        for m in font.masters.iter() {
+            let Ok(table) = index.table(Direction::Ltr, &m.id) else { continue };
+            for step in steps {
+                if let Some(a) = table.at_step(first, second, step) {
+                    stored.insert((a.master.to_string(), a.first.to_string(), a.second.to_string()));
+                    found = true;
+                }
+            }
+        }
+        if !found {
+            report.skip(
+                Some(left),
+                None,
+                None,
+                Some("cleanKerning"),
+                format!("{left} {right}: no stored left-to-right pair kerns them; the kerning comes from the feature code"),
+            );
+        }
+    }
+    let mut out = Vec::new();
+    for (master, first, second) in stored {
+        let (a, b) = (Side::from_stored(&first), Side::from_stored(&second));
+        let (la, lb) = (side_members(index, &a, Position::First), side_members(index, &b, Position::Second));
+        let only_reported =
+            la.len().saturating_mul(lb.len()) <= MAX_PAIR_SPAN && la.iter().all(|x| lb.iter().all(|y| reported.contains(&(x.as_str(), y.as_str()))));
+        if only_reported {
+            out.push((master, a.command(), b.command()));
+        } else {
+            report.skip(
+                None,
+                None,
+                None,
+                Some("cleanKerning"),
+                format!("{} {}: the pair kerns glyphs no result names, which removing it would change", a.command(), b.command()),
+            );
+        }
+    }
+    out
+}
+
+/// The glyphs a stored side stands for at `position` in a left-to-right pair.
+fn side_members(index: &KernIndex, side: &Side, position: Position) -> Vec<String> {
+    match side {
+        Side::Glyph(g) => vec![g.clone()],
+        Side::Group(name) => index.members(facing(Direction::Ltr, position), name).map(str::to_string).collect(),
+    }
 }
 
 fn non_empty(s: &str) -> Option<&str> {

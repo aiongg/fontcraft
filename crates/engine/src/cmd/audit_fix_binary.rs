@@ -32,7 +32,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Recalculate Table Fields",
             [],
             None,
-            "{font: path, face?: number|name, fields?: [\"table.field\"], values?: {\"table.field\": number|text}, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool} recomputes fields derived from the font's other data and writes the font (default output: FONT.fixed.EXT). Without fields: glyf.bounds, head.bbox, hhea.advanceWidthMax, hhea.extents, OS/2.xAvgCharWidth, OS/2.charIndex, OS/2.ulUnicodeRange and OS/2.ulCodePageRange. By name also: sfntVersion, head.flags (force integer sizes when the font has instructions), hhea.caretSlope (from post.italicAngle), post.underlineThickness (5% of the em when 0), post.isFixedPitch and OS/2.panose (from the advances), OS/2.version (raised to 4), OS/2.fsSelection (USE_TYPO_METRICS, version 4), the ten OS/2 strikeout and script fields (their defaults), OS/2.usWeightClass (the wght default), gasp (one range for all sizes), prep (smart dropout control), maxp.counts (the maxp maxima of TrueType outlines, with the head box and flags bit 1) and vhea.extents (advanceHeightMax and the vertical side-bearing extents from vmtx); one field of a group (head.xMin) stands for the group. values writes fields as given, after the recomputed ones. Every other byte stays as it was → {output, changed: [{field, old, new}]}",
+            "{font: path, face?: number|name, fields?: [\"table.field\"], values?: {\"table.field\": number|text}, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool} recomputes fields derived from the font's other data and writes the font (default output: FONT.fixed.EXT). Without fields: glyf.bounds, head.bbox, CFF.FontBBox, hhea.advanceWidthMax, hhea.extents, OS/2.xAvgCharWidth, OS/2.charIndex, OS/2.ulUnicodeRange and OS/2.ulCodePageRange. By name also: sfntVersion, head.flags (force integer sizes when the font has instructions), hhea.caretSlope (from post.italicAngle), post.underlineThickness (5% of the em when 0), post.isFixedPitch, CFF.isFixedPitch and OS/2.panose (from the advances), OS/2.version (raised to 4), OS/2.fsSelection (USE_TYPO_METRICS, version 4), the ten OS/2 strikeout and script fields (their defaults), OS/2.usWeightClass (the wght default), gasp (one range for all sizes), prep (smart dropout control), maxp.counts (the maxp maxima of TrueType outlines, with the head box and flags bit 1) and vhea.extents (advanceHeightMax and the vertical side-bearing extents from vmtx); one field of a group (head.xMin) stands for the group. values writes fields as given, after the recomputed ones. Every other byte stays as it was → {output, changed: [{field, old, new}]}",
             always,
             tables_recalculate
         )
@@ -387,7 +387,8 @@ pub(super) fn fix_file(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("audit.fix", v)?;
     let target = match p.get("target") {
         Some(Value::String(t)) => t.clone(),
-        _ => return Err(p.bad("`target` names one compiled font file; fix the fonts of a family one file at a time")),
+        Some(Value::Array(_)) => return fix_family(s, &p),
+        _ => return Err(p.bad("`target` names a compiled font file, or the files of a family")),
     };
     if let Some(key) = DOCUMENT_KEYS.iter().find(|k| p.get(k).is_some()) {
         return Err(p.bad(format!("`{key}` applies to the open document; on a file, select results with `checks` and the other filters")));
@@ -458,6 +459,258 @@ pub(super) fn fix_file(s: &mut Session, v: &Value) -> Result<Value> {
         Err(e) => (Value::Null, Some(json!([format!("the fixed file was written, but checking it again failed: {e}")]))),
     };
     let mut result = json!({"output": output, "applied": report.applied, "skipped": report.skipped, "remaining": remaining, "dryRun": false});
+    if let (Some(warnings), Some(obj)) = (warnings, result.as_object_mut()) {
+        obj.insert("warnings".into(), warnings);
+    }
+    Ok(result)
+}
+
+// ── audit.fix on the files of a family ──────────────────────────────────────────────────────────
+
+/// The vertical metrics `syncFamilyValues` makes equal across a family, as `table.field`, and
+/// whether the family value is the lowest (descenders) rather than the highest.
+const FAMILY_METRICS: [(&str, bool); 8] = [
+    ("OS/2.sTypoAscender", false),
+    ("OS/2.sTypoDescender", true),
+    ("OS/2.sTypoLineGap", false),
+    ("OS/2.usWinAscent", false),
+    ("OS/2.usWinDescent", false),
+    ("hhea.ascender", false),
+    ("hhea.descender", true),
+    ("hhea.lineGap", false),
+];
+
+/// One file of a family fix: where it is read and written, and the calls made on it.
+struct FamilyFile {
+    input: PathBuf,
+    bytes: Vec<u8>,
+    truetype: bool,
+    output: PathBuf,
+    calls: Vec<Call>,
+}
+
+/// The value of `name` (`table.field`) in face `face` of `bytes`.
+fn field_value(bytes: &[u8], face: u64, name: &str) -> Option<f64> {
+    let (table, field) = name.split_once('.')?;
+    let font = fontcraft_tables::read(bytes, u32::try_from(face).ok()?).ok()?;
+    match patch::read_field(&font, parse_tag(table).ok()?, field).ok()? {
+        PatchValue::Number(n) => Some(n),
+        PatchValue::Text(_) => None,
+    }
+}
+
+/// `audit.fix` on the compiled fonts of a family (`target` lists the files): the checks run on
+/// all of them, each file gets the table repairs it would get on its own, and `syncFamilyValues`
+/// writes the family's values with `tables.recalculate`: the widest vertical metrics of the
+/// fonts a result compares, and the underline values of the font the others are compared with.
+/// Every output is written to a temporary file first; they replace their files only when every
+/// call on every file succeeded.
+fn fix_family(s: &mut Session, p: &Params) -> Result<Value> {
+    let targets = p.strings("target")?;
+    if targets.is_empty() || targets.len() > fontcraft_audit::run::MAX_TARGET_FONTS {
+        return Err(p.bad(format!("`target` lists 1 to {} files", fontcraft_audit::run::MAX_TARGET_FONTS)));
+    }
+    if let Some(key) = DOCUMENT_KEYS.iter().find(|k| p.get(k).is_some()) {
+        return Err(p.bad(format!("`{key}` applies to the open document; on files, select results with `checks` and the other filters")));
+    }
+    if p.get("output").is_some() {
+        return Err(p.bad("a family is written one output per file: give outputDir or inPlace, not output"));
+    }
+    let safe_only = p.bool_or("safeOnly", true)?;
+    let dry = p.bool_or("dryRun", false)?;
+    let req = OutputRequest::from_params(p)?;
+    let mut files: Vec<FamilyFile> = Vec::with_capacity(targets.len());
+    for t in &targets {
+        let input = PathBuf::from(t);
+        if files.iter().any(|f| f.input == input) {
+            return Err(p.bad(format!("`target` lists {t} twice")));
+        }
+        let source = file_io::read_input(&input)?;
+        if !source.kind.is_font() {
+            return Err(p.bad(format!("{t} is not a compiled font; open a source and fix the document")));
+        }
+        let output = file_io::output_path(&input, &req, SUFFIX, None)?;
+        if files.iter().any(|f| f.output == output) {
+            return Err(p.bad(format!("two files would be written to {}: give inPlace or fix them apart", output.display())));
+        }
+        let truetype = matches!(source.kind, file_io::InputKind::TrueType);
+        files.push(FamilyFile { input, bytes: source.bytes, truetype, output, calls: Vec::new() });
+    }
+
+    let mut run = Map::new();
+    for key in RUN_KEYS {
+        if let Some(value) = p.get(key) {
+            run.insert(key.into(), value.clone());
+        }
+    }
+    run.insert("target".into(), json!(targets));
+    run.insert("maxResults".into(), json!(ALL_RESULTS));
+    let before = s.execute("audit.run", &Value::Object(run.clone()))?;
+    let results = before.get("results").and_then(Value::as_array).cloned().unwrap_or_default();
+
+    // Font id → (file, face): a collection's faces follow each other under one path.
+    let mut place: BTreeMap<String, (usize, u64)> = BTreeMap::new();
+    for font in before.pointer("/target/fonts").and_then(Value::as_array).into_iter().flatten() {
+        let (Some(id), Some(path)) = (text(font, "id"), text(font, "path")) else { continue };
+        let Some(file) = files.iter().position(|f| f.input == Path::new(path)) else { continue };
+        let face = place.values().filter(|(f, _)| *f == file).count() as u64;
+        place.insert(id.to_string(), (file, face));
+    }
+
+    let mut report = FileReport::default();
+    let mut per_file: Vec<Vec<Value>> = vec![Vec::new(); files.len()];
+    // (file, face) → the family values to write, and the checks that asked for them.
+    let mut family: BTreeMap<(usize, u64), (Map<String, Value>, Vec<String>)> = BTreeMap::new();
+    for r in &results {
+        let check = text(r, "check").unwrap_or_default();
+        let location = r.get("location").cloned().unwrap_or(Value::Null);
+        let fix_id = r.pointer("/fix/id").and_then(Value::as_str);
+        if fix_id == Some("syncFamilyValues") {
+            if safe_only && r.pointer("/fix/safe").and_then(Value::as_bool) != Some(true) {
+                report.skip(check, fix_id, "the fix changes the design: give safeOnly: false");
+                continue;
+            }
+            let field = match (text(&location, "table"), text(&location, "field")) {
+                (Some(t), Some(f)) => format!("{}.{f}", t.trim_end()),
+                _ => {
+                    report.skip(check, fix_id, "the result names no table field");
+                    continue;
+                }
+            };
+            let fonts: Vec<(usize, u64)> = location
+                .get("fonts")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .filter_map(|id| place.get(id).copied())
+                .collect();
+            let mut want = |at: (usize, u64), value: f64| {
+                let entry = family.entry(at).or_default();
+                entry.0.insert(field.clone(), json!(value));
+                if !entry.1.iter().any(|c| c == check) {
+                    entry.1.push(check.to_string());
+                }
+            };
+            match (text(r, "code"), fonts.as_slice()) {
+                (Some("position-differs" | "thickness-differs"), [_, other]) => match r.pointer("/data/expected").and_then(Value::as_f64) {
+                    Some(expected) => want(*other, expected),
+                    None => report.skip(check, fix_id, "the result does not give the family's value"),
+                },
+                (Some("mismatch"), list) if list.len() > 1 => {
+                    let lowest = FAMILY_METRICS.iter().find(|(f, _)| *f == field).map(|(_, l)| *l);
+                    let values: Vec<((usize, u64), f64)> = list
+                        .iter()
+                        .filter_map(|&(file, face)| files.get(file).and_then(|f| field_value(&f.bytes, face, &field)).map(|v| ((file, face), v)))
+                        .collect();
+                    let widest = match lowest {
+                        Some(true) => values.iter().map(|(_, v)| *v).reduce(f64::min),
+                        Some(false) => values.iter().map(|(_, v)| *v).reduce(f64::max),
+                        None => None,
+                    };
+                    match widest {
+                        Some(w) if values.len() == list.len() => {
+                            for (at, v) in values {
+                                if v != w {
+                                    want(at, w);
+                                }
+                            }
+                        }
+                        _ => report.skip(check, fix_id, format!("{field} cannot be read in every font of the result")),
+                    }
+                }
+                _ => report.skip(check, fix_id, "the result does not name the fonts to make equal"),
+            }
+            continue;
+        }
+        match text(&location, "font").and_then(|id| place.get(id)) {
+            Some(&(file, face)) => {
+                let mut r = r.clone();
+                if let Some(l) = r.get_mut("location").and_then(Value::as_object_mut) {
+                    l.insert("font".into(), json!(format!("f{face}")));
+                }
+                if let Some(list) = per_file.get_mut(file) {
+                    list.push(r);
+                }
+            }
+            None if fix_id.is_some() => report.skip(check, fix_id, "the result names no single font of the family"),
+            None => {}
+        }
+    }
+    for (i, f) in files.iter_mut().enumerate() {
+        f.calls = plan(per_file.get(i).map(Vec::as_slice).unwrap_or_default(), safe_only, f.truetype, &mut report);
+    }
+    for ((file, face), (values, checks)) in family {
+        let Some(f) = files.get_mut(file) else { continue };
+        let mut params = Map::new();
+        params.insert("face".into(), json!(face));
+        params.insert("fields".into(), json!([]));
+        params.insert("values".into(), Value::Object(values));
+        f.calls.push(Call { fix: "syncFamilyValues", command: "tables.recalculate", params, checks });
+    }
+
+    let outputs: Vec<&PathBuf> = files.iter().filter(|f| !f.calls.is_empty()).map(|f| &f.output).collect();
+    if dry {
+        let planned: Vec<Value> = files
+            .iter()
+            .flat_map(|f| {
+                f.calls
+                    .iter()
+                    .map(move |c| json!({"fix": c.fix, "command": c.command, "params": call_params(c, &f.input, false), "checks": c.checks}))
+            })
+            .collect();
+        return Ok(json!({"outputs": outputs, "applied": [], "skipped": report.skipped, "planned": planned, "remaining": before, "dryRun": true}));
+    }
+    if outputs.is_empty() {
+        return Ok(json!({"outputs": [], "applied": [], "skipped": report.skipped, "remaining": before, "dryRun": false}));
+    }
+
+    let mut staged = Vec::new();
+    let mut applied = Vec::new();
+    for (n, f) in files.iter().enumerate().filter(|(_, f)| !f.calls.is_empty()) {
+        let next = file_io::check_write(&f.output).and_then(|()| super::instance::stage(&f.output, &f.bytes, n));
+        let one = match next {
+            Ok(one) => one,
+            Err(e) => {
+                super::instance::discard(&staged);
+                return Err(e);
+            }
+        };
+        let tmp = one.temp().to_path_buf();
+        staged.push(one);
+        for call in &f.calls {
+            match s.execute(call.command, &call_params(call, &tmp, true)) {
+                Ok(result) => applied.push(json!({
+                    "fix": call.fix,
+                    "command": call.command,
+                    "params": call_params(call, &f.output, false),
+                    "checks": call.checks,
+                    "result": result,
+                })),
+                Err(e) => {
+                    super::instance::discard(&staged);
+                    let file = f.input.display();
+                    return Err(EngineError::Io(format!("the fix {} ({}) failed on {file}, so nothing was written: {e}", call.fix, call.command)));
+                }
+            }
+        }
+    }
+    if req.no_clobber
+        && !req.in_place
+        && let Some(taken) = outputs.iter().find(|o| o.exists())
+    {
+        super::instance::discard(&staged);
+        return Err(EngineError::Io(format!("{} exists and noClobber is set", taken.display())));
+    }
+    super::instance::commit(&staged)?;
+    // The family as written: the outputs, and the files that needed nothing.
+    let written: Vec<&PathBuf> = files.iter().map(|f| if f.calls.is_empty() { &f.input } else { &f.output }).collect();
+    run.insert("target".into(), json!(written));
+    let (remaining, warnings) = match s.execute("audit.run", &Value::Object(run)) {
+        Ok(remaining) => (remaining, None),
+        Err(e) => (Value::Null, Some(json!([format!("the fixed files were written, but checking them again failed: {e}")]))),
+    };
+    let mut result = json!({"outputs": outputs, "applied": applied, "skipped": report.skipped, "remaining": remaining, "dryRun": false});
     if let (Some(warnings), Some(obj)) = (warnings, result.as_object_mut()) {
         obj.insert("warnings".into(), warnings);
     }

@@ -24,6 +24,7 @@ use crate::{EngineError, Result};
 pub(super) const DEFAULT_FIELDS: &[&str] = &[
     "glyf.bounds",
     "head.bbox",
+    "CFF.FontBBox",
     "hhea.advanceWidthMax",
     "hhea.extents",
     "OS/2.xAvgCharWidth",
@@ -37,6 +38,7 @@ const ORDER: &[&str] = &[
     "sfntVersion",
     "glyf.bounds",
     "head.bbox",
+    "CFF.FontBBox",
     "head.flags",
     "hhea.advanceWidthMax",
     "hhea.extents",
@@ -45,6 +47,7 @@ const ORDER: &[&str] = &[
     "maxp.counts",
     "post.underlineThickness",
     "post.isFixedPitch",
+    "CFF.isFixedPitch",
     "OS/2.version",
     "OS/2.fsSelection",
     "OS/2.xAvgCharWidth",
@@ -574,6 +577,31 @@ fn step(field: &str, font: &SfntFont, changes: &mut Changes) -> Result<Step> {
             let Some(adv) = advances(&f) else { return Ok(na("the hmtx table cannot be read")) };
             let fixed = if monospaced(&f, &adv) { 1.0 } else { 0.0 };
             Ok(set(font, *b"post", &[("isFixedPitch", num(fixed))], changes)?)
+        }
+        "CFF.FontBBox" => {
+            if !has(font, b"CFF ") {
+                return Ok(na("the font has no CFF table"));
+            }
+            let fresh = patch::cff_font_bbox(font).map_err(tables_err)?;
+            let old = patch::cff_top_ints(font, patch::CFF_FONT_BBOX).map_err(tables_err)?.unwrap_or_else(|| vec![0; 4]);
+            if old == fresh {
+                return Ok(Ok(font.clone()));
+            }
+            changes.push("CFF.FontBBox", json!(old), json!(fresh));
+            Ok(patch::set_cff_top_ints(font, patch::CFF_FONT_BBOX, &fresh).map_err(tables_err)?)
+        }
+        "CFF.isFixedPitch" => {
+            if !has(font, b"CFF ") {
+                return Ok(na("the font has no CFF table"));
+            }
+            let Some(adv) = advances(&f) else { return Ok(na("the hmtx table cannot be read")) };
+            let fixed = i64::from(monospaced(&f, &adv));
+            let old = patch::cff_top_ints(font, patch::CFF_IS_FIXED_PITCH).map_err(tables_err)?.and_then(|v| v.first().copied()).unwrap_or(0);
+            if (old != 0) == (fixed != 0) {
+                return Ok(Ok(font.clone()));
+            }
+            changes.push("CFF.isFixedPitch", json!(old), json!(fixed));
+            Ok(patch::set_cff_top_ints(font, patch::CFF_IS_FIXED_PITCH, &[fixed]).map_err(tables_err)?)
         }
         "OS/2.version" | "OS/2.fsSelection" => {
             let Some(old) = os2_version(font) else { return Ok(na("the font has no OS/2 table")) };

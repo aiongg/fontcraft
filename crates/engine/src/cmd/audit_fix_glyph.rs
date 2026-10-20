@@ -567,14 +567,35 @@ pub(super) fn step_calls(fix: &str, font: &Font, glyph: &Glyph, layer: &Layer, f
                 out.calls.push(("glyph.setShapeOrder", json!({"glyph": g, "layer": l, "order": order})));
                 moved_to = Some(inverse);
             }
+            // Then the paths to reverse, and the start nodes counted after the reversal.
+            let mut reverse = BTreeSet::new();
+            let mut starts = Vec::new();
             for f in findings.iter().filter(|f| f.code != "contour-order") {
-                match (f.code, f.location.points.first(), f.data.get("reverse").copied().unwrap_or(0.0)) {
-                    ("wrong-start-point", Some(&[shape, node]), 0.0) => {
-                        let shape = moved_to.as_ref().and_then(|m| m.get(shape).copied()).unwrap_or(shape);
-                        out.calls.push(("path.makeNodeFirst", json!({"glyph": g, "layer": l, "point": [shape, node]})));
-                    }
-                    _ => out.skipped.push((f.check, "the result does not say how to make the masters compatible".to_string())),
+                let reversed = f.data.get("reverse").is_some_and(|r| *r != 0.0);
+                let start = match (f.code, f.location.points.first()) {
+                    ("wrong-start-point", Some(&[shape, node])) if !reversed => Some((shape, node)),
+                    ("wrong-start-point", Some(&[shape, node])) => match layer.shapes.get(shape) {
+                        Some(Shape::Path(path)) => reversed_index(path, node).map(|n| (shape, n)),
+                        _ => None,
+                    },
+                    _ => None,
+                };
+                let Some((shape, node)) = start else {
+                    out.skipped.push((f.check, "the result does not say how to make the masters compatible".to_string()));
+                    continue;
+                };
+                let shape = moved_to.as_ref().and_then(|m| m.get(shape).copied()).unwrap_or(shape);
+                if reversed {
+                    reverse.insert(shape);
                 }
+                starts.push((shape, node));
+            }
+            if !reverse.is_empty() {
+                let shapes: Vec<usize> = reverse.into_iter().collect();
+                out.calls.push(("path.reverseContours", json!({"glyph": g, "layer": l, "shapes": shapes})));
+            }
+            for (shape, node) in starts {
+                out.calls.push(("path.makeNodeFirst", json!({"glyph": g, "layer": l, "point": [shape, node]})));
             }
         }
         "removeDuplicateAnchors" => {
@@ -610,6 +631,28 @@ pub(super) fn step_calls(fix: &str, font: &Font, glyph: &Glyph, layer: &Layer, f
         _ => return None,
     }
     Some(out)
+}
+
+/// Where node `k` of `path` stands once `path.reverseContours` has reversed it: the same order
+/// that command builds (a closed path keeps its start node).
+fn reversed_index(path: &Path, k: usize) -> Option<usize> {
+    let segs = path.segments();
+    let last = segs.last()?;
+    let mut order = Vec::with_capacity(path.nodes.len());
+    if !path.closed {
+        order.push(last.end);
+    }
+    for seg in segs.iter().rev() {
+        order.extend(seg.handles.iter().rev());
+        order.push(seg.start);
+    }
+    if path.closed {
+        order.rotate_right(1);
+    }
+    if order.len() != path.nodes.len() {
+        return None;
+    }
+    order.iter().position(|&i| i == k)
 }
 
 /// The node before and after `i` on its path, wrapping on a closed path.
