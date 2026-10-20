@@ -236,3 +236,23 @@ fn glyph_tables_are_read_with_limits() {
     let long = "# x\n".repeat(MAX_GLYPH_TABLE_LINES + 1);
     assert!(matches!(parse_glyph_table(&long), Err(TablesError::TooLarge { .. })));
 }
+
+#[test]
+fn font_dict_selectors_narrow_the_transformed_glyphs() {
+    let shift = matrix([1.0, 0.0, 0.0, 1.0, 100.0, 0.0]);
+    let (_, report) = transform_with_report(&cff2_font(), &TransformOptions { fds: Some([0u16].into()), ..shift.clone() }).unwrap();
+    assert_eq!(report.glyphs_changed, 3, "every glyph of Font DICT 0");
+    let options = TransformOptions { exclude_fds: Some([0u16].into()), ..shift.clone() };
+    let (out, report) = transform_with_report(&cff_font(None, 1000), &options).unwrap();
+    assert_eq!(report.glyphs_changed, 0, "the only Font DICT is excluded");
+    assert_eq!(hmtx(&out), hmtx(&cff_font(None, 1000)));
+    let narrowed = TransformOptions { fds: Some([0u16].into()), glyphs: Some([2u16].into()), ..shift.clone() };
+    assert_eq!(transform_with_report(&cff_font(None, 1000), &narrowed).unwrap().1.glyphs_changed, 1, "with a glyph list, both apply");
+    assert!(matches!(
+        transform(&cff_font(None, 1000), &TransformOptions { fds: Some([1u16].into()), ..shift.clone() }),
+        Err(TablesError::BadOptions(_))
+    ));
+    let mut truetype = cff_font(None, 1000);
+    truetype.remove(*b"CFF ");
+    assert!(matches!(transform(&truetype, &TransformOptions { fds: Some([0u16].into()), ..shift }), Err(TablesError::BadOptions(_))));
+}

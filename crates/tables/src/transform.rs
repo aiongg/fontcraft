@@ -116,6 +116,10 @@ pub struct TransformOptions {
     /// only, each with its own shift in place of the matrix's and optionally its own advance.
     /// Without a matrix the linear part is the identity.
     pub per_glyph: Option<BTreeMap<u16, GlyphSettings>>,
+    /// CFF and CFF2: the Font DICTs whose glyphs the matrix applies to; `None` for all.
+    pub fds: Option<BTreeSet<u16>>,
+    /// CFF and CFF2: the Font DICTs whose glyphs the matrix leaves.
+    pub exclude_fds: Option<BTreeSet<u16>>,
     /// New units per em, from [`crate::limits::MIN_UNITS_PER_EM`] to
     /// [`crate::limits::MAX_UNITS_PER_EM`]; every metric scales with it.
     pub units_per_em: Option<u16>,
@@ -144,6 +148,18 @@ pub fn transform(font: &SfntFont, options: &TransformOptions) -> Result<SfntFont
 
 /// [`transform`], with what it did.
 pub fn transform_with_report(font: &SfntFont, options: &TransformOptions) -> Result<(SfntFont, TransformReport)> {
+    let narrowed;
+    let options = match fd_glyphs(font, options)? {
+        None => options,
+        Some(in_fds) => {
+            let glyphs = match &options.glyphs {
+                Some(set) => set.intersection(&in_fds).copied().collect(),
+                None => in_fds,
+            };
+            narrowed = TransformOptions { glyphs: Some(glyphs), fds: None, exclude_fds: None, ..options.clone() };
+            &narrowed
+        }
+    };
     let matrix = options_matrix(options)?.or_else(|| options.per_glyph.as_ref().map(|_| IDENTITY));
     if let Some(u) = options.units_per_em {
         check_upem(u)?;
@@ -190,6 +206,35 @@ pub fn transform_with_report(font: &SfntFont, options: &TransformOptions) -> Res
         report.hints_kept = false;
     }
     Ok((out, report))
+}
+
+/// The glyphs in the Font DICTs `fds` names and `exclude_fds` does not; `None` when neither is
+/// given. Refuses a font without CFF outlines and a Font DICT the font does not have.
+fn fd_glyphs(font: &SfntFont, o: &TransformOptions) -> Result<Option<BTreeSet<u16>>> {
+    if o.fds.is_none() && o.exclude_fds.is_none() {
+        return Ok(None);
+    }
+    let (data, cff2) = match (font.get(*b"CFF2"), font.get(*b"CFF ")) {
+        (Some(d), _) => (d, true),
+        (None, Some(d)) => (d, false),
+        (None, None) => return Err(TablesError::BadOptions("selecting Font DICTs needs CFF or CFF2 outlines".into())),
+    };
+    let table = crate::dehint::cff::Table::read(data, cff2)?;
+    let count = table.privates.len();
+    for fd in o.fds.iter().chain(&o.exclude_fds).flatten() {
+        if usize::from(*fd) >= count {
+            return Err(TablesError::BadOptions(format!("the font has {count} Font DICTs: there is no Font DICT {fd}")));
+        }
+    }
+    let mut out = BTreeSet::new();
+    for gid in 0..table.charstrings.len() {
+        let fd = table.fd_select.as_ref().and_then(|s| s.get(gid).copied()).unwrap_or(0);
+        let wanted = o.fds.as_ref().is_none_or(|s| s.contains(&fd)) && !o.exclude_fds.as_ref().is_some_and(|s| s.contains(&fd));
+        if wanted && let Ok(g) = u16::try_from(gid) {
+            out.insert(g);
+        }
+    }
+    Ok(Some(out))
 }
 
 fn check_upem(u: u16) -> Result<()> {

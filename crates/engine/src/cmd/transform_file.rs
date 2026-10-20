@@ -9,7 +9,8 @@
 //! transformed font's outlines as `font.convert` does with its defaults. `glyphTable` reads a
 //! per-glyph table: the listed glyphs take their own shifts and advances, then the font keeps
 //! only them (a subset with the subsetter's defaults, glyph names kept) and the glyphs whose
-//! output name differs are renamed. The FD selectors are refused for now.
+//! output name differs are renamed. `fd` and `excludeFd` narrow the transformed glyphs of a CFF or
+//! CFF2 font to some Font DICTs.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
@@ -40,7 +41,7 @@ pub fn specs() -> Vec<CommandSpec> {
         "Transform Font",
         [],
         None,
-        "{font: path, face?: int|name, matrix?: [a, b, c, d, e, f] (x' = a·x + c·y + e, y' = b·x + d·y + f), rotate?: degrees clockwise, translate?: {x, y} | [x, y], scale?: number | {x, y?} | [x, y], slant?: degrees, scaleEm?: bool, unitsPerEm?: 16–16384, widths?: \"auto\"|\"keep\"|\"transform\"|\"em\" (auto: transformed when the matrix's b is 0, else the em), glyphs?: [names], excludeGlyphs?: [names], glyphTable?: path (lines of 'source output advance|None x y'; '#' comments; CIDs for a CID-keyed font; .notdef listed; only listed glyphs are transformed and kept, each with its own shift and advance, renamed to its output name), to?: \"ttf\"|\"otf\"|\"otf-cff2\" (convert the outlines afterwards, as font.convert does), output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool}. The named parts apply in the order scale, slant, rotate, translate; matrix excludes them. A compiled TrueType font: the matrix transforms the selected glyphs (transformed glyphs lose their instructions; composites keep their components), then unitsPerEm scales outlines, metrics, kerning, positioning, variation deltas and cvt and keeps instructions. A CFF or CFF2 font: the matrix transforms the selected glyphs and their stem hints (kept and turned for quarter turns, vertical ones dropped under a horizontal shear, all dropped at other angles), and unitsPerEm scales charstrings, hint values and metrics; the table is written without subroutines. A source takes unitsPerEm only. The input is never changed → {output, matrix, unitsPerEm: {from, to} | null, hintsKept, glyphsChanged, tablesChanged, tablesRemoved, warnings}",
+        "{font: path, face?: int|name, matrix?: [a, b, c, d, e, f] (x' = a·x + c·y + e, y' = b·x + d·y + f), rotate?: degrees clockwise, translate?: {x, y} | [x, y], scale?: number | {x, y?} | [x, y], slant?: degrees, scaleEm?: bool, unitsPerEm?: 16–16384, widths?: \"auto\"|\"keep\"|\"transform\"|\"em\" (auto: transformed when the matrix's b is 0, else the em), glyphs?: [names], excludeGlyphs?: [names], fd?: [int], excludeFd?: [int] (CFF: only the glyphs of these Font DICTs, or not of these, are transformed), glyphTable?: path (lines of 'source output advance|None x y'; '#' comments; CIDs for a CID-keyed font; .notdef listed; only listed glyphs are transformed and kept, each with its own shift and advance, renamed to its output name), to?: \"ttf\"|\"otf\"|\"otf-cff2\" (convert the outlines afterwards, as font.convert does), output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool}. The named parts apply in the order scale, slant, rotate, translate; matrix excludes them. A compiled TrueType font: the matrix transforms the selected glyphs (transformed glyphs lose their instructions; composites keep their components), then unitsPerEm scales outlines, metrics, kerning, positioning, variation deltas and cvt and keeps instructions. A CFF or CFF2 font: the matrix transforms the selected glyphs and their stem hints (kept and turned for quarter turns, vertical ones dropped under a horizontal shear, all dropped at other angles), and unitsPerEm scales charstrings, hint values and metrics; the table is written without subroutines. A source takes unitsPerEm only. The input is never changed → {output, matrix, unitsPerEm: {from, to} | null, hintsKept, glyphsChanged, tablesChanged, tablesRemoved, warnings}",
         always,
         transform_font
     )
@@ -52,11 +53,6 @@ fn transform_font(_: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("font.transform", v)?;
     let input = PathBuf::from(p.str("font")?);
     let request = OutputRequest::from_params(&p)?;
-    for (key, why) in [("fd", "selecting font dictionaries"), ("excludeFd", "selecting font dictionaries")] {
-        if p.get(key).is_some() {
-            return Err(EngineError::Unsupported(format!("{why} in font.transform")));
-        }
-    }
     let mut options = options(&p)?;
     let to = target(&p)?;
     let source_to = || p.bad("`to` converts compiled fonts; convert a source with font.convert");
@@ -196,8 +192,22 @@ fn options(p: &Params<'_>) -> Result<TransformOptions> {
         widths,
         glyphs: None,
         per_glyph: None,
+        fds: fd_list(p, "fd")?,
+        exclude_fds: fd_list(p, "excludeFd")?,
         units_per_em,
     })
+}
+
+/// A list of Font DICT indexes.
+fn fd_list(p: &Params<'_>, key: &str) -> Result<Option<BTreeSet<u16>>> {
+    let Some(list) = p.opt_array(key)? else { return Ok(None) };
+    if list.len() > MAX_GLYPH_NAMES {
+        return Err(p.bad(format!("`{key}` lists more than {MAX_GLYPH_NAMES} Font DICTs")));
+    }
+    list.iter()
+        .map(|v| v.as_u64().and_then(|n| u16::try_from(n).ok()).ok_or_else(|| p.bad(format!("`{key}` must list Font DICT indexes from 0 to 65,535"))))
+        .collect::<Result<BTreeSet<u16>>>()
+        .map(Some)
 }
 
 fn names(p: &Params<'_>, key: &str) -> Result<Option<Vec<String>>> {
@@ -339,7 +349,8 @@ fn keep_listed(
 fn transform_source(p: &Params<'_>, input: &Path, o: &TransformOptions, request: &OutputRequest) -> Result<Value> {
     use crate::io::SaveFormat;
     let named = o.matrix.is_some() || o.scale.is_some() || o.slant.is_some() || o.rotate.is_some() || o.translate.is_some() || o.scale_em;
-    if named || p.get("glyphs").is_some() || p.get("excludeGlyphs").is_some() || p.get("glyphTable").is_some() {
+    let narrowed = ["glyphs", "excludeGlyphs", "glyphTable", "fd", "excludeFd"].iter().any(|k| p.get(k).is_some());
+    if named || narrowed {
         return Err(EngineError::Unsupported("transforming the glyphs of a source in font.transform: use path.transformations on its glyphs".into()));
     }
     let upm = o.units_per_em.ok_or_else(|| p.bad("a source takes `unitsPerEm`"))?;
