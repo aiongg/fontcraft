@@ -857,6 +857,20 @@ Differences kept:
 
 ---
 
+## 4d. Units per em against scaleUpem
+
+`font.transform` with `unitsPerEm` (`crates/tables/src/transform.rs`, `transform/cff.rs`) follows
+fontTools' `ttLib.scaleUpem` table by table. On CFF and CFF2 fonts the charstrings, Private DICT
+and Top DICT values, the metrics and the bounds match it on the test fonts. Differences kept:
+
+| What | Reference | FontCraft | Why |
+|---|---|---|---|
+| The character codes of a `seac` `endchar` | scaled with the other operands | kept | scaled codes name other glyphs, so the accented glyph shows the wrong parts |
+| A CFF2 Private DICT value with a `blend` | not checked | the whole value left unscaled, with a warning | no test font with a varying Private DICT value has been run through the reference yet |
+| DICT entries equal to their default | left out when the table is compiled | kept as the input wrote them | the values read the same |
+| Charstring arithmetic and storage operators | scaled as numbers | refused | their operands are indices and flags as well as coordinates |
+| `FontMatrix` written as a real | eight significant digits | the shortest decimal that reads back exactly | the values read the same to eight digits |
+
 ## 5. Commands and data touched
 
 This chapter defines no commands of its own. The stages are driven by the export commands in the

@@ -21,7 +21,7 @@
 //! - [`named_instances`] lists the `fvar` named instances with their names.
 
 mod base;
-mod cff2;
+pub(crate) mod cff2;
 pub mod full;
 mod glyf;
 pub mod iup;

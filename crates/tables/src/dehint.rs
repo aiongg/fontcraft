@@ -19,7 +19,7 @@
 //!
 //! The pruning rules follow fontTools' subset module (`--no-hinting`; MIT License, see NOTICE).
 
-mod cff;
+pub(crate) mod cff;
 mod gpos;
 #[cfg(test)]
 mod tests;

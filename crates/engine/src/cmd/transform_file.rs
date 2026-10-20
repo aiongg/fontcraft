@@ -3,14 +3,17 @@
 //! Whole-file commands follow [`super::file_io`]: paths in, the input never changed, the output
 //! written atomically, a refusal on the web.
 //!
-//! A compiled TrueType font takes every option. A source takes `unitsPerEm` only, through the
+//! A compiled TrueType font takes every option; a CFF or CFF2 font takes `unitsPerEm`. A source
+//! takes `unitsPerEm` only, through the
 //! document-level scaling of `font.info.scaleToUnitsPerEm` (one implementation per action);
-//! its glyph transforms belong to `path.transformations` in the editor. The per-glyph table,
-//! the FD selectors and a change of format are refused for now.
+//! its glyph transforms belong to `path.transformations` in the editor. `to` converts the
+//! transformed font's outlines as `font.convert` does with its defaults. The per-glyph table and
+//! the FD selectors are refused for now.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
+use fontcraft_tables::convert::{ConvertOptions, ConvertTarget, convert_with};
 use fontcraft_tables::sfnt::tag_str;
 use fontcraft_tables::transform::{TransformOptions, TransformReport, Widths, transform_with_report};
 use fontcraft_tables::{TableOrder, WriteOptions};
@@ -31,7 +34,7 @@ pub fn specs() -> Vec<CommandSpec> {
         "Transform Font",
         [],
         None,
-        "{font: path, face?: int|name, matrix?: [a, b, c, d, e, f] (x' = a·x + c·y + e, y' = b·x + d·y + f), rotate?: degrees clockwise, translate?: {x, y} | [x, y], scale?: number | {x, y?} | [x, y], slant?: degrees, scaleEm?: bool, unitsPerEm?: 16–16384, widths?: \"auto\"|\"keep\"|\"transform\"|\"em\" (auto: transformed when the matrix's b is 0, else the em), glyphs?: [names], excludeGlyphs?: [names], output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool}. The named parts apply in the order scale, slant, rotate, translate; matrix excludes them. A compiled TrueType font: the matrix transforms the selected glyphs (transformed glyphs lose their instructions; composites keep their components), then unitsPerEm scales outlines, metrics, kerning, positioning, variation deltas and cvt and keeps instructions. A source takes unitsPerEm only. The input is never changed → {output, matrix, unitsPerEm: {from, to} | null, hintsKept, glyphsChanged, tablesChanged, tablesRemoved, warnings}",
+        "{font: path, face?: int|name, matrix?: [a, b, c, d, e, f] (x' = a·x + c·y + e, y' = b·x + d·y + f), rotate?: degrees clockwise, translate?: {x, y} | [x, y], scale?: number | {x, y?} | [x, y], slant?: degrees, scaleEm?: bool, unitsPerEm?: 16–16384, widths?: \"auto\"|\"keep\"|\"transform\"|\"em\" (auto: transformed when the matrix's b is 0, else the em), glyphs?: [names], excludeGlyphs?: [names], to?: \"ttf\"|\"otf\"|\"otf-cff2\" (convert the outlines afterwards, as font.convert does), output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool}. The named parts apply in the order scale, slant, rotate, translate; matrix excludes them. A compiled TrueType font: the matrix transforms the selected glyphs (transformed glyphs lose their instructions; composites keep their components), then unitsPerEm scales outlines, metrics, kerning, positioning, variation deltas and cvt and keeps instructions. A CFF or CFF2 font takes unitsPerEm: charstrings, hint values and metrics scale, and the table is written without subroutines. A source takes unitsPerEm only. The input is never changed → {output, matrix, unitsPerEm: {from, to} | null, hintsKept, glyphsChanged, tablesChanged, tablesRemoved, warnings}",
         always,
         transform_font
     )
@@ -43,22 +46,23 @@ fn transform_font(_: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("font.transform", v)?;
     let input = PathBuf::from(p.str("font")?);
     let request = OutputRequest::from_params(&p)?;
-    for (key, why) in [
-        ("glyphTable", "the per-glyph table"),
-        ("fd", "selecting font dictionaries"),
-        ("excludeFd", "selecting font dictionaries"),
-        ("to", "a change of format (convert the result with font.convert)"),
-    ] {
+    for (key, why) in [("glyphTable", "the per-glyph table"), ("fd", "selecting font dictionaries"), ("excludeFd", "selecting font dictionaries")] {
         if p.get(key).is_some() {
             return Err(EngineError::Unsupported(format!("{why} in font.transform")));
         }
     }
     let mut options = options(&p)?;
+    let to = target(&p)?;
+    let source_to = || p.bad("`to` converts compiled fonts; convert a source with font.convert");
     if input.is_dir() {
+        if to.is_some() {
+            return Err(source_to());
+        }
         return transform_source(&p, &input, &options, &request);
     }
     let file = file_io::read_input(&input)?;
     match file.kind {
+        InputKind::Other if to.is_some() => return Err(source_to()),
         InputKind::Other => return transform_source(&p, &input, &options, &request),
         InputKind::Ttx => return Err(EngineError::Unsupported("transforming TTX files: compile the TTX first".into())),
         _ => {}
@@ -66,16 +70,48 @@ fn transform_font(_: &mut Session, v: &Value) -> Result<Value> {
     let face = super::dehint::face_index(&p, &file.bytes)?;
     let font = fontcraft_tables::read(&file.bytes, face)?;
     options.glyphs = selection(&p, &font)?;
-    let (out, report) = transform_with_report(&font, &options)?;
+    let (mut out, mut report) = transform_with_report(&font, &options)?;
+    let mut converted = false;
+    if let Some((target, outlines)) = to
+        && outline_tag(&out) != outlines
+    {
+        let c = convert_with(&out, &ConvertOptions::new(target))?;
+        out = c.font.ok_or_else(|| EngineError::Internal("the conversion gave no font".into()))?;
+        report.warnings.extend(c.left_behind.into_iter().map(|l| format!("left behind by the conversion: {l}")));
+        converted = true;
+    }
     let bytes = fontcraft_tables::write(&out, &WriteOptions { order: TableOrder::Keep })?;
     let extension = match file.kind {
-        InputKind::TrueType | InputKind::Cff => None,
+        InputKind::TrueType | InputKind::Cff if !converted => None,
         _ if out.is_cff() => Some("otf"),
         _ => Some("ttf"),
     };
     let path = file_io::output_path(&input, &request, ".transformed", extension)?;
     file_io::write_output(&path, &bytes, &request)?;
     Ok(result(&path, &report))
+}
+
+/// The table holding a font's outlines.
+fn outline_tag(font: &fontcraft_tables::SfntFont) -> [u8; 4] {
+    if font.get(*b"CFF2").is_some() {
+        *b"CFF2"
+    } else if font.get(*b"CFF ").is_some() {
+        *b"CFF "
+    } else {
+        *b"glyf"
+    }
+}
+
+/// The conversion `to` asks for, with the table that will hold the outlines. TrueType curves
+/// keep within one font unit, `font.convert`'s default.
+fn target(p: &Params<'_>) -> Result<Option<(ConvertTarget, [u8; 4])>> {
+    Ok(match p.opt_str("to")? {
+        None => None,
+        Some("ttf") => Some((ConvertTarget::TrueType { max_error: 1.0 }, *b"glyf")),
+        Some("otf") => Some((ConvertTarget::Cff, *b"CFF ")),
+        Some("otf-cff2") => Some((ConvertTarget::Cff2, *b"CFF2")),
+        Some(other) => return Err(p.bad(format!("`to` must be ttf, otf or otf-cff2, not `{other}`"))),
+    })
 }
 
 fn result(path: &Path, r: &TransformReport) -> Value {

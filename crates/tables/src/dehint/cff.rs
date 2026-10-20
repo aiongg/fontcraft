@@ -108,10 +108,10 @@ fn in_glyph(e: TablesError, gid: usize) -> TablesError {
 /// One DICT entry: its operator, its operand bytes as found, and the operands as integers
 /// (`None` for reals and CFF2 blends).
 #[derive(Clone, Debug)]
-struct Entry {
-    op: u16,
-    raw: Vec<u8>,
-    ints: Vec<Option<i64>>,
+pub(crate) struct Entry {
+    pub(crate) op: u16,
+    pub(crate) raw: Vec<u8>,
+    pub(crate) ints: Vec<Option<i64>>,
 }
 
 impl Entry {
@@ -120,37 +120,37 @@ impl Entry {
     }
 }
 
-struct Private<'a> {
-    entries: Vec<Entry>,
+pub(crate) struct Private<'a> {
+    pub(crate) entries: Vec<Entry>,
     subrs: Vec<&'a [u8]>,
-    vsindex: usize,
+    pub(crate) vsindex: usize,
 }
 
-struct Table<'a> {
-    cff2: bool,
+pub(crate) struct Table<'a> {
+    pub(crate) cff2: bool,
     /// The header bytes (`hdrSize` of them).
     header: &'a [u8],
     /// CFF: the Name INDEX and the String INDEX, as found.
     names: &'a [u8],
     strings: &'a [u8],
-    top: Vec<Entry>,
+    pub(crate) top: Vec<Entry>,
     charset: Option<&'a [u8]>,
     encoding: Option<&'a [u8]>,
     fd_select_raw: Option<&'a [u8]>,
     vstore: Option<&'a [u8]>,
     /// Region counts of the variation store's item variation data, by `vsindex`.
-    regions: Vec<usize>,
+    pub(crate) regions: Vec<usize>,
     global_subrs: Vec<&'a [u8]>,
-    charstrings: Vec<&'a [u8]>,
+    pub(crate) charstrings: Vec<&'a [u8]>,
     /// The Font DICTs of a CID-keyed or CFF2 font; `None` for a name-keyed CFF font, whose one
     /// Private DICT hangs off the Top DICT.
-    font_dicts: Option<Vec<Vec<Entry>>>,
-    fd_select: Option<Vec<u16>>,
-    privates: Vec<Private<'a>>,
+    pub(crate) font_dicts: Option<Vec<Vec<Entry>>>,
+    pub(crate) fd_select: Option<Vec<u16>>,
+    pub(crate) privates: Vec<Private<'a>>,
 }
 
 impl<'a> Table<'a> {
-    fn read(data: &'a [u8], cff2: bool) -> Result<Self> {
+    pub(crate) fn read(data: &'a [u8], cff2: bool) -> Result<Self> {
         let major = *data.first().ok_or_else(|| invalid("the CFF table is empty"))?;
         let hdr_size = usize::from(*data.get(2).ok_or_else(|| invalid("the CFF header is cut short"))?);
         let expected = if cff2 { 2 } else { 1 };
@@ -282,7 +282,7 @@ impl<'a> Table<'a> {
     /// Top DICT, an empty Global Subr INDEX, charset, encoding, variation store, FDSelect,
     /// CharStrings, FDArray, Private DICTs. Every offset is a five-byte integer, so the DICT
     /// sizes are known before the offsets are.
-    fn write(&self, charstrings: &[Vec<u8>], privates: &[Vec<u8>]) -> Result<Vec<u8>> {
+    pub(crate) fn write(&self, charstrings: &[Vec<u8>], privates: &[Vec<u8>]) -> Result<Vec<u8>> {
         let empty_index_len = if self.cff2 { 4 } else { 2 };
         let cs_len = index_len(charstrings.iter().map(Vec::len), self.cff2)?;
         let fd_lens: Option<Vec<usize>> = match &self.font_dicts {
@@ -521,7 +521,7 @@ fn write_index<'b>(out: &mut Vec<u8>, items: impl Iterator<Item = &'b [u8]> + Cl
 
 /// The DICT entries of `bytes`. In CFF2, `blend` (23) belongs to the operands of the entry it
 /// appears in.
-fn parse_dict(bytes: &[u8], cff2: bool) -> Result<Vec<Entry>> {
+pub(crate) fn parse_dict(bytes: &[u8], cff2: bool) -> Result<Vec<Entry>> {
     let cut = || invalid("a DICT is cut short");
     let mut entries = Vec::new();
     let mut raw = Vec::new();
@@ -596,7 +596,7 @@ fn parse_dict(bytes: &[u8], cff2: bool) -> Result<Vec<Entry>> {
 
 /// The entries as DICT bytes; an operator in `overrides` gets those operands, each a five-byte
 /// integer, in place of its own.
-fn encode_dict<'e>(entries: impl Iterator<Item = &'e Entry>, overrides: &[(u16, Vec<i64>)]) -> Result<Vec<u8>> {
+pub(crate) fn encode_dict<'e>(entries: impl Iterator<Item = &'e Entry>, overrides: &[(u16, Vec<i64>)]) -> Result<Vec<u8>> {
     let mut out = Vec::new();
     for e in entries {
         match overrides.iter().find(|(op, _)| *op == e.op) {
