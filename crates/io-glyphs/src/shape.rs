@@ -78,7 +78,13 @@ pub(crate) fn write_flags(out: &mut String, n: &Node, version: u32) {
     if n.smooth {
         out.push(if n.tangent && version >= 4 { 't' } else { 's' });
     }
-    if let Some(rest) = n.info.extra.get(Family::Glyphs, "flags").and_then(Value::as_str) {
+    // Flags kept as written stand for the orientation and lock while the model has neither (the
+    // reader sets neither when it keeps them). Once an edit sets one they are stale, and the
+    // fields are written instead: the reader could not take the fields from them anyway.
+    let edited = n.orientation != Orientation::Left || n.locked;
+    if let Some(rest) = n.info.extra.get(Family::Glyphs, "flags").and_then(Value::as_str)
+        && !edited
+    {
         out.push_str(rest);
         return;
     }

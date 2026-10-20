@@ -155,7 +155,10 @@ fn write_property(p: &Property) -> Value {
         PropertyValue::Single(s) => e.push(("value".into(), spelled(s, &p.extra, "value"))),
         PropertyValue::Localized(values) => e.push(("values".into(), list(values.iter().map(write_localized).collect()))),
     }
-    Value::Dict(finish(e, &p.extra))
+    // A single value's kept spelling is stale once the value is localized: the reader takes a
+    // property with both keys for neither.
+    let localized = matches!(p.value, PropertyValue::Localized(_));
+    Value::Dict(finish(e, &crate::without_key(&p.extra, "value", localized)))
 }
 
 pub(crate) fn push_properties(e: &mut Vec<(Str, Value)>, p: &Properties) {
