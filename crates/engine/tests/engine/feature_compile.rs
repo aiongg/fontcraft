@@ -585,7 +585,13 @@ fn measure_edit_to_preview_on_inter() {
     run(&mut s, "font.features.addFeature", json!({"tag": "zfcm", "code": "sub a by b;"}));
     let master = s.font().unwrap().masters.first().unwrap().id.clone();
     let data = s.glyph_data().unwrap();
-    let options = fontcraft_engine::compile::Options { glyph_data: fontcraft_engine::compile::DataRef(Some(data.clone())), ..Default::default() };
+    // Inter's feature code includes files from beside the source, as the command reads them.
+    let include_dir = fontcraft_engine::io::feature_dir(&path);
+    let options = fontcraft_engine::compile::Options {
+        glyph_data: fontcraft_engine::compile::DataRef(Some(data.clone())),
+        feature_dir: include_dir.clone(),
+        ..Default::default()
+    };
     const ROUNDS: u32 = 3;
     let (mut before, mut after) = (Duration::ZERO, Duration::ZERO);
     for round in 0..ROUNDS {
@@ -597,8 +603,12 @@ fn measure_edit_to_preview_on_inter() {
         let mut names = vec![".notdef".to_string()];
         names.extend(font.glyphs.iter().filter(|g| g.export && g.name != ".notdef").map(|g| g.name.clone()));
         let order = fontcraft_engine::fea::GlyphOrder::new(names).unwrap();
-        let code = fontcraft_engine::fea::compile(&fontcraft_engine::fea::CompileRequest::new(&assembly.files, &order));
-        assert!(code.is_ok());
+        let files = match &include_dir {
+            Some(dir) => assembly.files.clone().with_include_dir(dir.clone()),
+            None => assembly.files.clone(),
+        };
+        let code = fontcraft_engine::fea::compile(&fontcraft_engine::fea::CompileRequest::new(&files, &order));
+        assert!(code.is_ok(), "{:?}", code.err());
         layout_font_with(&font, &master, PreviewKind::GsubOnly, &options).unwrap();
         layout_font_with(&font, &master, PreviewKind::Full, &options).unwrap();
         before += t.elapsed();
