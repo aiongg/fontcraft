@@ -27,6 +27,12 @@ fn bad(what: impl Into<String>) -> TablesError {
     TablesError::invalid(what)
 }
 
+/// `base + rel` for an offset read from the table; a hostile offset can reach past `usize` on
+/// 32-bit targets.
+fn add(base: usize, rel: usize) -> Result<usize> {
+    base.checked_add(rel).ok_or_else(|| bad("an offset in the COLR table points past its end"))
+}
+
 fn u8_at(d: &[u8], at: usize) -> Result<usize> {
     d.get(at).map(|b| usize::from(*b)).ok_or_else(|| bad("the COLR table is truncated"))
 }
@@ -76,14 +82,14 @@ fn var_records(data: &[u8]) -> Result<Vec<Record>> {
         let count = u32_at(data, base_list)? as usize;
         for k in 0..count.min(MAX_NODES) {
             let at = base_list + 4 + 6 * k;
-            paints.push(base_list + u32_at(data, at + 2)? as usize);
+            paints.push(add(base_list, u32_at(data, at + 2)? as usize)?);
         }
     }
     let layer_list = u32_at(data, 18)? as usize;
     if layer_list != 0 {
         let count = u32_at(data, layer_list)? as usize;
         for k in 0..count.min(MAX_NODES) {
-            paints.push(layer_list + u32_at(data, layer_list + 4 + 4 * k)? as usize);
+            paints.push(add(layer_list, u32_at(data, layer_list + 4 + 4 * k)? as usize)?);
         }
     }
     let mut records: Vec<Record> = Vec::new();
@@ -102,7 +108,7 @@ fn var_records(data: &[u8]) -> Result<Vec<Record>> {
             continue;
         }
         let format = u8_at(data, at)?;
-        let child = |rel: usize| -> Result<usize> { Ok(at + u24_at(data, at + rel)?) };
+        let child = |rel: usize| -> Result<usize> { add(at, u24_at(data, at + rel)?) };
         let fields = |list: &[(usize, Kind)], base: usize| Record { fields: list.iter().map(|(o, k)| (at + o, *k)).collect(), base: at + base };
         match format {
             3 => records.push(fields(&[(3, S)], 5)),
@@ -162,10 +168,10 @@ fn var_records(data: &[u8]) -> Result<Vec<Record>> {
     }
     let clip_list = u32_at(data, 22)? as usize;
     if clip_list != 0 {
-        let count = u32_at(data, clip_list + 1)? as usize;
+        let count = u32_at(data, add(clip_list, 1)?)? as usize;
         for k in 0..count.min(MAX_NODES) {
             let clip = clip_list + 5 + 7 * k;
-            let bx = clip_list + u24_at(data, clip + 4)?;
+            let bx = add(clip_list, u24_at(data, clip + 4)?)?;
             if visit(&mut seen, bx)? && u8_at(data, bx)? == 2 {
                 records.push(Record { fields: vec![(bx + 1, S), (bx + 3, S), (bx + 5, S), (bx + 7, S)], base: bx + 9 });
             }
@@ -177,7 +183,7 @@ fn var_records(data: &[u8]) -> Result<Vec<Record>> {
 fn patch(table: &mut [u8], at: usize, kind: Kind, delta: f64) -> Result<()> {
     let delta = ot_round(delta);
     let width = if matches!(kind, Kind::Fixed) { 4 } else { 2 };
-    let slot = table.get_mut(at..at + width).ok_or_else(|| bad("the COLR table is truncated"))?;
+    let slot = table.get_mut(at..at.saturating_add(width)).ok_or_else(|| bad("the COLR table is truncated"))?;
     match kind {
         Kind::Signed16 => {
             let v = f64::from(i16::from_be_bytes([slot.first().copied().unwrap_or(0), slot.get(1).copied().unwrap_or(0)]));
@@ -239,7 +245,7 @@ pub(crate) fn apply(out: &mut SfntFont, deltas: &StoreDeltas, store: Option<Writ
             };
             patch(&mut table, *at, *kind, deltas.get(outer, inner))?;
         }
-        if !keep && let Some(slot) = table.get_mut(record.base..record.base + 4) {
+        if !keep && let Some(slot) = table.get_mut(record.base..record.base.saturating_add(4)) {
             slot.copy_from_slice(&NO_VARIATION.to_be_bytes());
         }
     }

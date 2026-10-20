@@ -560,6 +560,7 @@ fn fs_selection_bits_and_the_os2_version_follow_the_reference() {
         (json!({"os2BitsOn": [16]}), "bit 16 cannot be turned on"),
     ] {
         let mut p = params.clone();
+        p["formats"] = json!(["otf"]);
         p["destination"] = json!(dir.join("no.otf"));
         let e = s.execute("font.compile", &p).unwrap_err().to_string();
         assert!(e.contains(says), "{params}: {e}");

@@ -154,7 +154,7 @@ fn font_transform_follows_a_glyph_table() {
     let refused = dir.join("refused.ttf");
     std::fs::write(&table, "A A None 0 0\n").unwrap();
     assert!(session.execute("font.transform", &json!({"font": binary, "glyphTable": table, "output": refused})).is_err(), ".notdef must be listed");
-    std::fs::write(&table, ".notdef .notdef None 0 0\nZ Z None 0 0\n").unwrap();
+    std::fs::write(&table, ".notdef .notdef None 0 0\nmissing missing None 0 0\n").unwrap();
     assert!(session.execute("font.transform", &json!({"font": binary, "glyphTable": table, "output": refused})).is_err(), "a glyph the font lacks");
     std::fs::write(&table, ".notdef .notdef None 0 0\n12 12 None 0 0\n").unwrap();
     assert!(session.execute("font.transform", &json!({"font": binary, "glyphTable": table, "output": refused})).is_err());

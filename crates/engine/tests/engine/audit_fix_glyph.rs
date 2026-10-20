@@ -298,7 +298,7 @@ fn audit_fix_reverses_a_path_that_runs_the_other_way_in_a_master() {
         masters[0].location = vec![400.0];
         masters.push(Master { id: "m02".into(), name: "Bold".into(), location: vec![700.0], ..Default::default() });
         let first = masters[0].id.clone();
-        let mut g = Glyph::new("p");
+        let mut g = Glyph::new("pentagon");
         let mut a = Layer::new(&first, 600.0);
         a.shapes = vec![poly(&regular)];
         let mut b = Layer::new("m02", 600.0);
@@ -308,11 +308,11 @@ fn audit_fix_reverses_a_path_that_runs_the_other_way_in_a_master() {
         Ok(())
     })
     .unwrap();
-    let before = s.font().unwrap().glyph("p").unwrap().layers[0].clone();
-    let r = fix_one(&mut s, "check.variations.wrongStartPoint", Some("p"), "path.reverseContours");
+    let before = s.font().unwrap().glyph("pentagon").unwrap().layers[0].clone();
+    let r = fix_one(&mut s, "check.variations.wrongStartPoint", Some("pentagon"), "path.reverseContours");
     assert_eq!(r["applied"][1]["command"], "path.makeNodeFirst", "{r}");
     let font = s.font().unwrap();
-    let g = font.glyph("p").unwrap();
+    let g = font.glyph("pentagon").unwrap();
     let b = g.layers.iter().find(|l| l.id == "m02").unwrap();
     let Shape::Path(path) = &b.shapes[0] else { panic!("a path") };
     let at: Vec<(f64, f64)> = path.nodes.iter().map(|n| (n.x, n.y)).collect();

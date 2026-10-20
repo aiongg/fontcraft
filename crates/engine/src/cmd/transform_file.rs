@@ -45,7 +45,7 @@ pub fn specs() -> Vec<CommandSpec> {
         always,
         transform_font
     )
-    .files(const { &[FileParam::read("font"), FileParam::write("output"), FileParam::write("outputDir")] })
+    .files(const { &[FileParam::read("font"), FileParam::read("glyphTable"), FileParam::write("output"), FileParam::write("outputDir")] })
     .writes_files()]
 }
 
@@ -305,7 +305,8 @@ fn keep_listed(
     report: &mut TransformReport,
 ) -> Result<fontcraft_tables::SfntFont> {
     let listed: Vec<u32> = options.per_glyph.iter().flat_map(|t| t.keys()).map(|g| u32::from(*g)).collect();
-    let count = font.get(*b"maxp").and_then(|m| m.get(4..6)).map_or(0, |b| usize::from(u16::from_be_bytes([b[0], b[1]])));
+    let count =
+        font.get(*b"maxp").and_then(|m| m.get(4..6)).and_then(|b| <[u8; 2]>::try_from(b).ok()).map_or(0, |b| usize::from(u16::from_be_bytes(b)));
     let mut font = font;
     if listed.len() < count {
         let options = SubsetOptions {

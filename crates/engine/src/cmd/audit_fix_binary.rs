@@ -499,6 +499,9 @@ fn field_value(bytes: &[u8], face: u64, name: &str) -> Option<f64> {
     }
 }
 
+/// The family values to write into one face, and the checks that asked for them.
+type FamilyValues = (Map<String, Value>, Vec<String>);
+
 /// `audit.fix` on the compiled fonts of a family (`target` lists the files): the checks run on
 /// all of them, each file gets the table repairs it would get on its own, and `syncFamilyValues`
 /// writes the family's values with `tables.recalculate`: the widest vertical metrics of the
@@ -560,7 +563,7 @@ fn fix_family(s: &mut Session, p: &Params) -> Result<Value> {
     let mut report = FileReport::default();
     let mut per_file: Vec<Vec<Value>> = vec![Vec::new(); files.len()];
     // (file, face) → the family values to write, and the checks that asked for them.
-    let mut family: BTreeMap<(usize, u64), (Map<String, Value>, Vec<String>)> = BTreeMap::new();
+    let mut family: BTreeMap<(usize, u64), FamilyValues> = BTreeMap::new();
     for r in &results {
         let check = text(r, "check").unwrap_or_default();
         let location = r.get("location").cloned().unwrap_or(Value::Null);

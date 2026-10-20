@@ -31,7 +31,7 @@ fn group2(k: usize) -> Vec<u16> {
 
 /// Blocks along the diagonal and a few pairs off it.
 fn value(i: usize, j: usize) -> i16 {
-    if i / 8 == j / 7 || (i * 7 + j * 13) % 97 == 0 { -((10 + (i * 3 + j) % 40) as i16) } else { 0 }
+    if i / 8 == j / 7 || (i * 7 + j * 13).is_multiple_of(97) { -((10 + (i * 3 + j) % 40) as i16) } else { 0 }
 }
 
 fn original() -> PairPos {
@@ -107,7 +107,8 @@ fn layout(subs: &[PairPosFormat2]) -> Vec<(Vec<usize>, Vec<usize>)> {
                 ones.entry(f.class_def1.get(g)).or_default().insert(group_of(&group1, FIRST, g));
             }
             let mut twos: BTreeMap<u16, BTreeSet<usize>> = BTreeMap::new();
-            for (g, c) in f.class_def2.iter() {
+            // A format 1 class definition lists the class-0 glyphs inside its range too.
+            for (g, c) in f.class_def2.iter().filter(|(_, c)| *c != 0) {
                 twos.entry(c).or_default().insert(group_of(&group2, SECOND, g));
             }
             let one = |m: BTreeMap<u16, BTreeSet<usize>>| -> Vec<usize> {

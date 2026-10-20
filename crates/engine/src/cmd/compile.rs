@@ -543,7 +543,10 @@ pub(super) fn build(
     let font: &Font = &linked;
     let ctx = crate::export_steps::StepContext { data: &data };
     let mut options = Options { glyph_data: DataRef(Some(data.clone())), ..req.options.clone() };
-    source_includes(&mut options, path);
+    // A project compile has set its include folder already: its feature file's folder.
+    if options.project.is_none() {
+        source_includes(&mut options, path);
+    }
     let prepared = fontcraft_compile::prepare_source(font, &mut report.warnings);
     for job in jobs {
         if req.first_only && !report.fonts.is_empty() {

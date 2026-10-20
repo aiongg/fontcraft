@@ -52,8 +52,11 @@ fn text<'c>(code: &'c str, toks: &[(usize, usize)], i: usize) -> Option<&'c str>
     toks.get(i).and_then(|&(a, b)| code.get(a..b))
 }
 
+/// A byte range of a snippet and the text that replaces it.
+type Replacement = (usize, usize, String);
+
 /// `code` with each range of `edits` (sorted, not overlapping) replaced by its text.
-fn edited(code: &str, edits: &[(usize, usize, String)]) -> String {
+fn edited(code: &str, edits: &[Replacement]) -> String {
     let mut out = String::with_capacity(code.len() + 32);
     let mut at = 0;
     for (start, end, with) in edits {
@@ -166,7 +169,7 @@ pub(super) fn add_default_languagesystem(f: &Features) -> Result<Vec<Value>, Str
     if first.default {
         return Ok(Vec::new());
     }
-    let mut edits: BTreeMap<(usize, usize), Vec<(usize, usize, String)>> = BTreeMap::new();
+    let mut edits: BTreeMap<(usize, usize), Vec<Replacement>> = BTreeMap::new();
     let snippet = |kind: usize, index: usize| [&f.prefixes, &f.classes, &f.features].get(kind).and_then(|l| l.get(index));
     let Some(code) = snippet(first.kind, first.index).map(|e| e.code.as_str()) else { return Ok(Vec::new()) };
     let insert = match indent(code, first.start) {

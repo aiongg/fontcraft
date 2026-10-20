@@ -450,10 +450,8 @@ impl<'t, 'm> Parser<'t, 'm> {
                 }
                 5 => {
                     let args = self.args_in_groups(2)?;
-                    for pair in args.chunks_exact(2) {
-                        if let [dx, dy] = pair {
-                            self.line_by(dx, dy)?;
-                        }
+                    for [dx, dy] in args.as_chunks::<2>().0 {
+                        self.line_by(dx, dy)?;
                     }
                 }
                 6 | 7 => {
@@ -468,17 +466,17 @@ impl<'t, 'm> Parser<'t, 'm> {
                 }
                 8 => {
                     let args = self.args_in_groups(6)?;
-                    for c in args.chunks_exact(6) {
+                    for c in args.as_chunks::<6>().0 {
                         self.curve_by(c)?;
                     }
                 }
                 24 => {
                     let args = self.take_all();
-                    if args.len() < 8 || (args.len() - 2) % 6 != 0 {
+                    if args.len() < 8 || !(args.len() - 2).is_multiple_of(6) {
                         return Err(invalid("rcurveline takes 6n + 2 operands"));
                     }
                     let (curves, line) = args.split_at(args.len() - 2);
-                    for c in curves.chunks_exact(6) {
+                    for c in curves.as_chunks::<6>().0 {
                         self.curve_by(c)?;
                     }
                     if let [dx, dy] = line {
@@ -487,14 +485,12 @@ impl<'t, 'm> Parser<'t, 'm> {
                 }
                 25 => {
                     let args = self.take_all();
-                    if args.len() < 8 || (args.len() - 6) % 2 != 0 {
+                    if args.len() < 8 || !(args.len() - 6).is_multiple_of(2) {
                         return Err(invalid("rlinecurve takes 2n + 6 operands"));
                     }
                     let (lines, curve) = args.split_at(args.len() - 6);
-                    for pair in lines.chunks_exact(2) {
-                        if let [dx, dy] = pair {
-                            self.line_by(dx, dy)?;
-                        }
+                    for [dx, dy] in lines.as_chunks::<2>().0 {
+                        self.line_by(dx, dy)?;
                     }
                     self.curve_by(curve)?;
                 }
@@ -505,15 +501,13 @@ impl<'t, 'm> Parser<'t, 'm> {
                         return Err(invalid("vvcurveto and hhcurveto take 4n or 4n + 1 operands"));
                     }
                     let mut lead = first.first().cloned().unwrap_or_else(|| zero.clone());
-                    for g in rest.chunks_exact(4) {
-                        if let [p, q, r, s] = g {
-                            let c6 = if b0 == 26 {
-                                [lead.clone(), p.clone(), q.clone(), r.clone(), zero.clone(), s.clone()]
-                            } else {
-                                [p.clone(), lead.clone(), q.clone(), r.clone(), s.clone(), zero.clone()]
-                            };
-                            self.curve_by(&c6)?;
-                        }
+                    for [p, q, r, s] in rest.as_chunks::<4>().0 {
+                        let c6 = if b0 == 26 {
+                            [lead.clone(), p.clone(), q.clone(), r.clone(), zero.clone(), s.clone()]
+                        } else {
+                            [p.clone(), lead.clone(), q.clone(), r.clone(), s.clone(), zero.clone()]
+                        };
+                        self.curve_by(&c6)?;
                         lead = zero.clone();
                     }
                 }
@@ -610,7 +604,7 @@ impl<'t, 'm> Parser<'t, 'm> {
 
     fn args_in_groups(&mut self, group: usize) -> Result<Vec<V>> {
         let args = self.take_all();
-        if args.is_empty() || args.len() % group != 0 {
+        if args.is_empty() || !args.len().is_multiple_of(group) {
             return Err(invalid(format!("an operator takes a multiple of {group} operands, not {}", args.len())));
         }
         Ok(args)
@@ -618,18 +612,16 @@ impl<'t, 'm> Parser<'t, 'm> {
 
     fn stems(&mut self, vertical: bool) -> Result<()> {
         let args = self.take_all();
-        if args.len() % 2 != 0 {
+        if !args.len().is_multiple_of(2) {
             return Err(invalid("stem hints take pairs of operands"));
         }
         let mut edge = vec![0.0];
-        for pair in args.chunks_exact(2) {
-            if let [a, b] = pair {
-                let e0 = add(&edge, a);
-                let e1 = add(&e0, b);
-                self.charge(e0.len() + e1.len())?;
-                self.out.stems.push(Stem { vertical, edges: [e0, e1.clone()] });
-                edge = e1;
-            }
+        for [a, b] in args.as_chunks::<2>().0 {
+            let e0 = add(&edge, a);
+            let e1 = add(&e0, b);
+            self.charge(e0.len() + e1.len())?;
+            self.out.stems.push(Stem { vertical, edges: [e0, e1.clone()] });
+            edge = e1;
         }
         Ok(())
     }

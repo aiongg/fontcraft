@@ -284,7 +284,7 @@ impl Refs<'_> {
             Some(format!("`{}` does not export", c.glyph))
         } else if depth >= crate::MAX_PAINT_DEPTH || colr_reaches(font, self.master, &c.glyph, &base.name) {
             Some(format!("its colour layers lead back to `{}` or nest more than {} deep", base.name, crate::MAX_PAINT_DEPTH))
-        } else if !self.paints(&target, depth + 1) {
+        } else if !self.paints(target, depth + 1) {
             Some(format!("`{}` has no colour layers that paint", c.glyph))
         } else {
             None
@@ -323,7 +323,7 @@ enum Run {
 /// transform moves the referenced paint.
 pub fn colr_glyph_target(font: &Font, c: &Component, master: &str) -> bool {
     let a = &c.info.attrs;
-    a.fill_color.is_none() && a.gradient.is_none() && font.glyph(&c.glyph).is_some_and(|g| has_full_color(&g, master))
+    a.fill_color.is_none() && a.gradient.is_none() && font.glyph(&c.glyph).is_some_and(|g| has_full_color(g, master))
 }
 
 fn has_full_color(g: &Glyph, master: &str) -> bool {

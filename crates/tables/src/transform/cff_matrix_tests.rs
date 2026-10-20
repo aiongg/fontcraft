@@ -174,10 +174,11 @@ fn hostile_matrices_and_tables_are_refused() {
         assert!(apply_matrix(&table[..cut], false, &job).is_err(), "a table cut at {cut} is refused");
     }
 
-    // An accented character built with seac needs its parts to take the same matrix.
+    // An accented character built with seac needs its parts to take the same matrix. Codes 32
+    // and 33 are space and exclam, glyphs 1 and 2 of the table's ISOAdobe charset.
     let seac = font(
         *b"CFF ",
-        cff_table(&["endchar", "0 0 rmoveto 10 0 rlineto endchar", "0 0 rmoveto 0 10 rlineto endchar", "10 20 65 97 endchar"], None),
+        cff_table(&["endchar", "0 0 rmoveto 10 0 rlineto endchar", "0 0 rmoveto 0 10 rlineto endchar", "10 20 32 33 endchar"], None),
         1000,
         &[(500, 0); 4],
     );
@@ -186,7 +187,7 @@ fn hostile_matrices_and_tables_are_refused() {
     let out = transform(&seac, &matrix([0.0, -1.0, 1.0, 0.0, 0.0, 0.0])).unwrap();
     assert!(read_back(out.get(*b"CFF ").unwrap(), false)[3].starts_with("w1000"));
     let t = Table::read(out.get(*b"CFF ").unwrap(), false).unwrap();
-    assert!(t.charstrings[3].ends_with(&cs("20 -10 65 97 endchar")), "the accent offset turns with the glyphs");
+    assert!(t.charstrings[3].ends_with(&cs("20 -10 32 33 endchar")), "the accent offset turns with the glyphs");
 
     for program in
         ["1 2 3 rlineto endchar", "1 2 3 4 5 6 7 rrcurveto endchar", "1 2 3 hvcurveto endchar", "1 2 3 4 5 6 flex endchar", "1 2 3 endchar"]

@@ -116,8 +116,11 @@ fn parse(bytes: &[u8], cid_keyed: bool, warnings: &mut Vec<String>) -> Result<Ve
 /// A format 14 subtable: for each selector in ascending order its default sequences (ranges of
 /// base characters, at most 256 in one range) and its other sequences (base character and
 /// glyph). `None` when there is no sequence.
+/// One selector's default ranges (start, additional count) and non-default mappings.
+type Selector = (Vec<(u32, u8)>, Vec<(u32, u16)>);
+
 fn format14(entries: &BTreeMap<(u32, u32), Option<u16>>) -> Option<Vec<u8>> {
-    let mut selectors: BTreeMap<u32, (Vec<(u32, u8)>, Vec<(u32, u16)>)> = BTreeMap::new();
+    let mut selectors: BTreeMap<u32, Selector> = BTreeMap::new();
     for ((selector, base), glyph) in entries {
         let (ranges, glyphs) = selectors.entry(*selector).or_default();
         match glyph {

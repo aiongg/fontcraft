@@ -21,23 +21,29 @@ fn bad(what: impl Into<String>) -> TablesError {
     TablesError::invalid(what)
 }
 
+/// `base + rel` for an offset read from the table; a hostile offset can reach past `usize` on
+/// 32-bit targets.
+fn add(base: usize, rel: usize) -> Result<usize> {
+    base.checked_add(rel).ok_or_else(|| bad("an offset in the VARC table points past its end"))
+}
+
 fn u8_at(d: &[u8], at: usize) -> Result<usize> {
     d.get(at).map(|b| usize::from(*b)).ok_or_else(|| bad("the VARC table is truncated"))
 }
 
 fn u16_at(d: &[u8], at: usize) -> Result<usize> {
-    d.get(at..at + 2)
+    d.get(at..at.saturating_add(2))
         .and_then(|b| <[u8; 2]>::try_from(b).ok())
         .map(|b| usize::from(u16::from_be_bytes(b)))
         .ok_or_else(|| bad("the VARC table is truncated"))
 }
 
 fn u24_at(d: &[u8], at: usize) -> Result<usize> {
-    Ok((u8_at(d, at)? << 16) | u16_at(d, at + 1)?)
+    Ok((u8_at(d, at)? << 16) | u16_at(d, at.saturating_add(1))?)
 }
 
 fn u32_at(d: &[u8], at: usize) -> Result<usize> {
-    d.get(at..at + 4)
+    d.get(at..at.saturating_add(4))
         .and_then(|b| <[u8; 4]>::try_from(b).ok())
         .map(|b| u32::from_be_bytes(b) as usize)
         .ok_or_else(|| bad("the VARC table is truncated"))
@@ -54,10 +60,10 @@ fn axis_records(data: &[u8]) -> Result<AxisRecords> {
     let mut positions: BTreeSet<usize> = BTreeSet::new();
     let store = u32_at(data, 8)?;
     if store != 0 {
-        let regions = store + u32_at(data, store + 2)?;
+        let regions = add(store, u32_at(data, add(store, 2)?)?)?;
         let count = u16_at(data, regions)?;
         for r in 0..count {
-            let region = regions + u32_at(data, regions + 2 + 4 * r)?;
+            let region = add(regions, u32_at(data, regions + 2 + 4 * r)?)?;
             let axes = u16_at(data, region)?;
             for k in 0..axes {
                 let at = region + 2 + 8 * k;
@@ -71,7 +77,7 @@ fn axis_records(data: &[u8]) -> Result<AxisRecords> {
         let count = u32_at(data, list)?;
         let mut stack: Vec<usize> = Vec::new();
         for c in 0..count.min(MAX_CONDITIONS) {
-            stack.push(list + u32_at(data, list + 4 + 4 * c)?);
+            stack.push(add(list, u32_at(data, list + 4 + 4 * c)?)?);
         }
         let mut seen: BTreeSet<usize> = BTreeSet::new();
         while let Some(at) = stack.pop() {
@@ -89,10 +95,10 @@ fn axis_records(data: &[u8]) -> Result<AxisRecords> {
                 3 | 4 => {
                     let n = u8_at(data, at + 2)?;
                     for k in 0..n {
-                        stack.push(at + u24_at(data, at + 3 + 3 * k)?);
+                        stack.push(add(at, u24_at(data, at + 3 + 3 * k)?)?);
                     }
                 }
-                5 => stack.push(at + u24_at(data, at + 2)?),
+                5 => stack.push(add(at, u24_at(data, at + 2)?)?),
                 _ => {}
             }
         }
@@ -248,7 +254,7 @@ pub(crate) fn renumber(out: &mut SfntFont, removed: &[bool]) -> Result<()> {
     for at in &records.positions {
         let old = u16_at(&table, *at)?;
         let new = u16::try_from(new_index(old)).map_err(|_| bad("a VARC axis index is out of range"))?;
-        if let Some(slot) = table.get_mut(*at..*at + 2) {
+        if let Some(slot) = table.get_mut(*at..at.saturating_add(2)) {
             slot.copy_from_slice(&new.to_be_bytes());
         }
     }

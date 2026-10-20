@@ -328,7 +328,7 @@ fn iup_cost(ends: &[usize], n: usize) -> Option<usize> {
 }
 
 /// The glyph data of `font`, one slice per glyph.
-fn glyph_slices<'a>(font: &'a SfntFont, count: usize) -> Result<Vec<&'a [u8]>> {
+fn glyph_slices(font: &SfntFont, count: usize) -> Result<Vec<&[u8]>> {
     let head = font.get(*b"head").ok_or_else(|| TablesError::MissingTable("head".into()))?;
     let long = u16_at(head, 50).ok_or_else(|| bad("the head table is truncated"))? != 0;
     let loca = font.get(*b"loca").ok_or_else(|| TablesError::MissingTable("loca".into()))?;

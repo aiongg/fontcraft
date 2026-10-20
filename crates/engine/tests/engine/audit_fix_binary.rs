@@ -328,9 +328,9 @@ fn tables_recalculate_rewrites_the_cff_font_bbox_and_is_fixed_pitch() {
         list.sort();
         list
     };
-    let before = run(&mut s, "audit.run", json!({"target": otf, "checks": checks}));
+    let before = run(&mut s, "audit.run", json!({"target": otf, "profile": "strict", "checks": checks}));
     assert_eq!(codes(&before), ["cff-is-fixed-pitch", "head-cff-differ"], "{before}");
-    let plan = run(&mut s, "audit.fix", json!({"target": otf, "checks": checks, "safeOnly": false, "dryRun": true}));
+    let plan = run(&mut s, "audit.fix", json!({"target": otf, "profile": "strict", "checks": checks, "safeOnly": false, "dryRun": true}));
     let fields = plan["planned"].as_array().unwrap().iter().find(|c| c["command"] == "tables.recalculate").map(|c| c["params"]["fields"].clone());
     let fields = fields.unwrap_or_else(|| panic!("{plan}"));
     assert!(fields.as_array().unwrap().contains(&json!("CFF.FontBBox")) && fields.as_array().unwrap().contains(&json!("CFF.isFixedPitch")), "{plan}");
@@ -347,7 +347,7 @@ fn tables_recalculate_rewrites_the_cff_font_bbox_and_is_fixed_pitch() {
             assert_eq!(out.get(*tag), Some(bytes.as_slice()), "{} is left as it was", String::from_utf8_lossy(tag));
         }
     }
-    let after = run(&mut s, "audit.run", json!({"target": otf, "checks": checks}));
+    let after = run(&mut s, "audit.run", json!({"target": otf, "profile": "strict", "checks": checks}));
     assert!(codes(&after).is_empty(), "{after}");
 }
 

@@ -31,6 +31,9 @@ use write_fonts::tables::layout::DeviceOrVariationIndex;
 use crate::sfnt::SfntFont;
 use crate::{Result, TablesError, Tag};
 
+/// A table's tag and its new data.
+type Table = (Tag, Vec<u8>);
+
 /// Most deltas the store may hold once every row has a column per region.
 pub const MAX_STORE_CELLS: usize = 1 << 24;
 /// Most work (characteristic words compared) the merge search may do.
@@ -588,7 +591,7 @@ impl DeviceWalk<'_> {
                     self.anchor(exit)?;
                 }
             }
-            (4 | 5 | 6, 1) => {
+            (4..=6, 1) => {
                 let classes = usize::from(self.u16(s + 6)?);
                 if let Some(marks) = self.offset(s, s + 8)? {
                     let n = usize::from(self.u16(marks)?);
@@ -634,7 +637,7 @@ fn remap(map: &HashMap<u32, u32>, outer: u16, inner: u16) -> std::result::Result
 }
 
 /// The new `GDEF` and `GPOS` (when the font has it); `None` when `GDEF` has no store.
-pub fn run(font: &SfntFont, quantum: u32) -> Result<Option<Vec<(Tag, Vec<u8>)>>> {
+pub fn run(font: &SfntFont, quantum: u32) -> Result<Option<Vec<Table>>> {
     if !(1..=MAX_QUANTUM).contains(&quantum) {
         return Err(TablesError::BadOptions(format!("the quantum must be 1 to {MAX_QUANTUM}, not {quantum}")));
     }

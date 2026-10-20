@@ -9,7 +9,7 @@ use crate::instance::cff2::{dict_number, put_cs_number};
 use crate::sfnt::{Flavour, SfntFont};
 use crate::transform::{TransformOptions, transform, transform_with_report};
 
-const OPS: [(&str, &[u8]); 24] = [
+const OPS: [(&str, &[u8]); 26] = [
     ("hstem", &[1]),
     ("vmoveto", &[4]),
     ("hlineto", &[6]),
@@ -28,6 +28,8 @@ const OPS: [(&str, &[u8]); 24] = [
     ("hmoveto", &[22]),
     ("vstemhm", &[23]),
     ("rrcurveto", &[8]),
+    ("vhcurveto", &[30]),
+    ("hvcurveto", &[31]),
     ("callgsubr", &[29]),
     ("hflex", &[12, 34]),
     ("flex", &[12, 35]),
