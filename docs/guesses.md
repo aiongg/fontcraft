@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**2533 guesses on 1444 rows (598 of them live commands).**
+**2535 guesses on 1444 rows (598 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -1896,6 +1896,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `subset` (cli) | M12 | docs | – | --with-zopfli with a WOFF output is refused, since FontCraft has no zopfli compressor (pyftsubset compresses with zopfli); with WOFF2 or plain output it is ignored, as in pyftsubset. |
 | `instance` (cli) | M12 | docs | – | A UFO instance writes an instance parameter without a font-information key to the lib as a parameter of the UFO's master, which FontCraft reads back and applies when the instance UFO is compiled; glyphsLib writes it under a lib prefix of its own for instances, which nothing reads back. Compiling both instance UFOs with a Remove Glyphs parameter would show the difference. |
 | `instance` (cli) | M12 | docs | – | Two instance outputs of a source whose paths differ only in case count as one file, the later kept, also on a file system that tells case apart (font.compile compares its outputs the same way); fontmake compares nothing and lets the file system decide, which a run on a case-sensitive file system with two such names would show. |
+| `instance` (cli) | M12 | docs | – | --layout-only resolves a relative --master-finder result against the designspace's folder; fontTools resolves it against the working folder. Running fontmake --interpolate-binary-layout from another folder would show which callers depend on it. |
+| `instance` (cli) | M12 | docs | – | --layout-only names an instance's file after its PostScript name (else its file name's stem), beside the designspace or in --output-dir; the reference CLI builds only locations. Comparing with fontmake's instance_ttf names would settle it. |
 | `instance` (cli) | M12 | docs | – | --named matches its pattern anywhere in the subfamily or PostScript name of an fvar named instance; checking makeinstancesufo and fontmake on a designspace with similar instance names would settle the matching rule. |
 | `instance` (cli) | M12 | docs | – | A named instance without a PostScript name is written as <input stem>-<subfamily without spaces>.<ext>; the reference tools name such files from the family and style names, which a run on such a font would show. |
 | `instance` (cli) | M12 | docs | – | A source instance at a location is named after the location (wght380), which sets its style name and file names; makeinstancesufo and fontmake only build the instances a designspace names, so no reference settles it. |
