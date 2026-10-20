@@ -2,16 +2,18 @@
 //! details across glyphs, the ghost outline, the metrics beam, and the Lock Outline badge. The
 //! switches are in `crate::shell::edit_aids`.
 //!
-//! The aids reuse the measurement colours of [`Tokens`]:
+//! Colours and sizes come from [`Tokens`], most from its `aids` group ([`crate::theme::AidTokens`]):
 //!
-//! | Aid | Colour |
+//! | Aid | Token |
 //! |---|---|
-//! | Tunni lines and points, tension percentages | `measure_off_curve` |
-//! | curve lengths | `measure_delta` |
-//! | indexes of nodes, segments, paths, components, anchors | `measure_on_curve`, `measure_ruler`, `guide_local`, `component_manual`, `anchor` |
-//! | ghost outline | `background_outline` |
-//! | metrics beam and its sidebearings | `measurement_line`, `measurement_line_label` |
-//! | Lock Outline badge | `locked_point` |
+//! | Tunni lines and points | `aids.tunni` |
+//! | tension percentages | `aids.tension` |
+//! | curve lengths | `aids.curve_length` |
+//! | indexes of nodes, segments, paths, components, anchors | the colour of what they number: `measure_on_curve`, `measure_ruler`, `guide_local`, `component_manual`, `anchor` |
+//! | ghost outline | `background_outline`, as the background draws |
+//! | metrics beam and its sidebearings | `aids.beam`, `aids.beam_width`, `aids.beam_label`, `aids.beam_label_size` |
+//! | Lock Outline badge | `aids.lock_badge` |
+//! | label text | `aids.label_size` |
 
 use egui::{Align2, Color32, FontId, Pos2, Stroke, StrokeKind};
 use fontcraft_geom::{CubicBez, ParamCurveArclen, Piece, Point, Segment, Shape as _, segments};
@@ -133,7 +135,7 @@ fn layer_aids(c: &Painting, font: &Font, layer: &Layer, aids: &EditAidsState, bu
                     if aids.curve_length && !seg.handles.is_empty() && *budget > 0 {
                         let length: f64 = seg.pieces.iter().map(piece_length).sum();
                         if let Some(mid) = middle(seg) {
-                            label(c, mid, Offset::AboveRight, format_number((length * 10.0).round() / 10.0), t.measure_delta, budget);
+                            label(c, mid, Offset::AboveRight, format_number((length * 10.0).round() / 10.0), t.aids.curve_length, budget);
                         }
                     }
                     if ix.segments
@@ -171,18 +173,18 @@ fn tunni(c: &Painting, cb: CubicBez) {
     let t = c.tokens;
     let (a, b) = (screen(c.view, cb.p1), screen(c.view, cb.p2));
     let (Some(a), Some(b)) = (a, b) else { return };
-    let stroke = Stroke::new(t.handle_line_width, t.measure_off_curve);
+    let stroke = Stroke::new(t.handle_line_width, t.aids.tunni);
     let dash = t.handle_radius * 2.0;
     c.painter.extend(egui::Shape::dashed_line(&[a, b], stroke, dash, dash));
     if let Some(p) = fontcraft_tools::drag_aids::tunni_point(cb).and_then(|p| screen(c.view, p)) {
-        c.painter.circle_filled(p, t.handle_radius, t.measure_off_curve);
+        c.painter.circle_filled(p, t.handle_radius, t.aids.tunni);
     }
 }
 
 /// Each handle's tension, in whole percent, beside the handle's end.
 fn tension(c: &Painting, cb: CubicBez, budget: &mut usize) {
     let Some((first, second)) = fontcraft_engine::pathops::tension::tension(cb) else { return };
-    let color = c.tokens.measure_off_curve;
+    let color = c.tokens.aids.tension;
     label(c, cb.p1, Offset::AboveRight, format!("{}%", format_number(first.round())), color, budget);
     label(c, cb.p2, Offset::AboveRight, format!("{}%", format_number(second.round())), color, budget);
 }
@@ -207,7 +209,7 @@ fn middle(seg: &Segment) -> Option<Point> {
 /// The beam across the canvas at height `y`.
 fn beam_line(c: &Painting, y: f64) {
     let Some(at) = screen(c.view, Point::new(0.0, y)) else { return };
-    let stroke = Stroke::new(c.tokens.measurement_line_width, c.tokens.measurement_line);
+    let stroke = Stroke::new(c.tokens.aids.beam_width, c.tokens.aids.beam);
     c.painter.line_segment([Pos2::new(c.rect.left(), at.y), Pos2::new(c.rect.right(), at.y)], stroke);
 }
 
@@ -215,10 +217,10 @@ fn beam_line(c: &Painting, y: f64) {
 fn beam_labels(c: &Painting, font: &Font, layer: &Layer, y: f64) {
     let Ok(Some((left, right))) = fontcraft_spacing::sidebearings_at_height(font, layer, y) else { return };
     let t = c.tokens;
-    let font_id = FontId::proportional(t.measurement_line_label_size);
+    let font_id = FontId::proportional(t.aids.beam_label_size);
     for (x, value) in [(left / 2.0, left), (layer.width - right / 2.0, right)] {
         if let Some(at) = screen(c.view, Point::new(x, y)) {
-            c.painter.text(at, Align2::CENTER_BOTTOM, format_number(value), font_id.clone(), t.measurement_line_label);
+            c.painter.text(at, Align2::CENTER_BOTTOM, format_number(value), font_id.clone(), t.aids.beam_label);
         }
     }
 }
@@ -227,11 +229,11 @@ fn beam_labels(c: &Painting, font: &Font, layer: &Layer, y: f64) {
 fn badge(c: &Painting) {
     let t = c.tokens;
     let at = Pos2::new(c.rect.right() - t.palette_margin, c.rect.top() + t.palette_margin);
-    let text = c.painter.text(at, Align2::RIGHT_TOP, "Outline locked", FontId::proportional(t.measure_label_size), t.locked_point);
+    let text = c.painter.text(at, Align2::RIGHT_TOP, "Outline locked", FontId::proportional(t.aids.label_size), t.aids.lock_badge);
     c.painter.rect_stroke(
         text.expand(t.handle_radius * 2.0),
         f32::from(t.radius),
-        Stroke::new(t.handle_line_width, t.locked_point),
+        Stroke::new(t.handle_line_width, t.aids.lock_badge),
         StrokeKind::Outside,
     );
 }
@@ -252,7 +254,7 @@ fn label(c: &Painting, p: Point, offset: Offset, text: String, color: Color32, b
         return;
     }
     let Some(at) = screen(c.view, p) else { return };
-    if !c.rect.expand(c.tokens.measure_label_size * 4.0).contains(at) {
+    if !c.rect.expand(c.tokens.aids.label_size * 4.0).contains(at) {
         return;
     }
     *budget -= 1;
@@ -263,7 +265,7 @@ fn label(c: &Painting, p: Point, offset: Offset, text: String, color: Color32, b
         Offset::BelowLeft => (at + egui::vec2(-d, d), Align2::RIGHT_TOP),
         Offset::Center => (at, Align2::CENTER_CENTER),
     };
-    c.painter.text(at, align, text, FontId::proportional(c.tokens.measure_label_size), color);
+    c.painter.text(at, align, text, FontId::proportional(c.tokens.aids.label_size), color);
 }
 
 /// A font point on screen; `None` when it is not a finite position.

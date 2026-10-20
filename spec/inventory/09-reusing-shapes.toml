@@ -1066,9 +1066,10 @@ milestone = "M6"
 summary = "Opens the Smart Glyph Settings (tabs Properties and Layers) for a smart glyph. Reached from the component context menu, or with Edit › Info for Selection (Cmd+Alt+I) while in the smart glyph."
 ref = "Reusing Shapes › Smart Components › Setting up Smart Glyphs"
 status = "handbook"
-notes = "Documented, not yet observed. A window that blocks nothing; open: false closes it. In Edit View, Edit › Info for Selection in a smart glyph opens this window when no smart component is selected; the component context menu's Show Smart Glyph Settings opens it for the clicked component's glyph."
+notes = "Documented, not yet observed. A window that blocks nothing; open: false closes it. In Edit View, Edit › Info for Selection in a smart glyph opens this window when no smart component is selected; a smart glyph is one with properties, or one named `_smart.…` or `_part.…` (documented), so the first property can be added from this window; the component context menu's Show Smart Glyph Settings opens it for the clicked component's glyph."
 guesses = [
   "With no glyph given, the window shows the edited glyph, else the first glyph selected in Font View; using Info for Selection in the reference app with nothing selected in a smart glyph settles it.",
+  "CJK radical and Korean base glyphs, which the handbook also counts as smart glyphs, open the Selection Info window until they have a property; Info for Selection in such a glyph in the reference app settles it.",
 ]
 
 [[command]]
@@ -2191,8 +2192,9 @@ milestone = "M6"
 summary = "Paints glyphs out of pixel components snapped to the font grid, for pixel fonts and pixel symbols. Shortcut X; Shift+B switches to it while the Pencil tool is active, from which we take it that the two share a toolbar button (the group value is that reading, not a stated fact). Needs a grid spacing of 2 or more."
 ref = "Reusing Shapes › Pixel Tool"
 status = "handbook"
-notes = "Documented, not yet observed. Every gesture runs pixel.setPixels with the pointer positions as `stroke` and mode `paint`: previewed while the button is down, then run once on release (one undo step). X chooses the tool; Shift+B from the Pencil tool is not wired, because Shift with a tool letter steps only among tools that share that letter."
+notes = "Documented, not yet observed. Every gesture runs pixel.setPixels with the pointer positions as `stroke` and mode `paint`: previewed while the button is down, then run once on release (one undo step). X chooses the tool. Shift with either letter of the Pencil's button (B or X) steps between Pencil and Pixel, wrapping around (`tools.sharedButtonCycling`)."
 guesses = [
+  "Shift+X steps from Pixel to Pencil as Shift+B does, since the two share a button; the handbook names only Shift+B, and the reference app settles Shift+X.",
   "A drag paints every cell the straight line between successive pointer positions crosses, stepping into one neighbour where it passes exactly through a grid corner; the reference app settles whether a fast drag fills such gaps.",
   "The Pixel tool paints on the foreground only and refuses on the background with a message; the reference app settles it.",
 ]

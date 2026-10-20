@@ -4,8 +4,9 @@
 //!
 //! An item is enabled when its command's `enabled` says so and, for a command that takes
 //! targets, the Edit View selection supplies them (`tools_glue::selection_supplies`): with no
-//! node selected, a command that acts on nodes is greyed out. The tree is built when the
-//! document or the selection changes ([`MenuCache`]), not every frame.
+//! node selected, a command that acts on nodes is greyed out. A switch whose state the shell
+//! keeps shows a check mark while on ([`checked`]). The tree is built when the document, the
+//! selection or a switch changes ([`MenuCache`]), not every frame.
 
 use fontcraft_engine::{Session, command_specs};
 use serde::Serialize;
@@ -29,6 +30,9 @@ pub struct MenuItem {
     pub enabled: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub disabled_reason: Option<String>,
+    /// A switch's state, drawn as a check mark while on; `None`: not a switch.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub checked: Option<bool>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -74,11 +78,13 @@ fn build(session: &Session, state: Option<&UiState>) -> Vec<Menu> {
             _ => (info.enabled, info.disabled_reason),
         };
         let path = c.menu.get(1..).unwrap_or_default().to_vec();
-        add(c.menu, MenuItem { command: c.id, label: c.label, path, shortcut: c.shortcut.unwrap_or(""), enabled, disabled_reason });
+        let checked = state.and_then(|s| checked(s, c.id));
+        add(c.menu, MenuItem { command: c.id, label: c.label, path, shortcut: c.shortcut.unwrap_or(""), enabled, disabled_reason, checked });
     }
     for (id, label, menu, shortcut, _) in UI_COMMANDS.iter() {
         let path = menu.get(1..).unwrap_or_default().to_vec();
-        add(menu, MenuItem { command: id, label, path, shortcut, enabled: true, disabled_reason: None });
+        let checked = state.and_then(|s| checked(s, id));
+        add(menu, MenuItem { command: id, label, path, shortcut, enabled: true, disabled_reason: None, checked });
     }
     for m in &mut menus {
         m.dynamic =
@@ -86,6 +92,13 @@ fn build(session: &Session, state: Option<&UiState>) -> Vec<Menu> {
     }
     menus.retain(|m| !m.items.is_empty() || !m.dynamic.is_empty());
     menus
+}
+
+/// The state of the switch the command `id` flips, for its check mark: the View › Suggest
+/// switches. `None` for any other command.
+pub fn checked(state: &UiState, id: &str) -> Option<bool> {
+    let mut suggest = state.panels.edit_aids.suggest;
+    suggest.get_mut(id).map(|on| *on)
 }
 
 /// The menu tree of the last frame, and what it was built from.
@@ -119,6 +132,8 @@ fn cache_key(session: &Session, state: &UiState) -> u64 {
     session.extensions().revision().hash(&mut h);
     state.active_tab.hash(&mut h);
     state.selected_glyphs.hash(&mut h);
+    let suggest = state.panels.edit_aids.suggest;
+    [suggest.handles, suggest.lines, suggest.distance, suggest.stems].hash(&mut h);
     super::menus_dynamic::cache_key(state).hash(&mut h);
     if let Some(tab) = state.tab() {
         tab.text.revision().hash(&mut h);

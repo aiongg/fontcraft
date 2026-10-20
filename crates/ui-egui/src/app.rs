@@ -369,6 +369,10 @@ impl FontcraftApp {
             if self.dialog.is_some() && !is_ui_command(id) {
                 continue;
             }
+            // Edit › Copy in a project window copies its selected instances.
+            if id == "edit.copy" && shell::project_window::menu_copy(self, ui.ctx()) {
+                continue;
+            }
             // The Kerning window takes the clipboard's text when it arrives.
             if id == "edit.paste" && shell::kerning_window::takes_clipboard(self) {
                 shell::clipboard::request_text(ui.ctx(), id);
@@ -452,7 +456,10 @@ fn renames(id: &str, params: &Value, result: &Value) -> Vec<(String, String)> {
 
 fn menu_items(ui: &mut egui::Ui, items: &[&shell::menus::MenuItem], pending: &mut Vec<(&'static str, Value)>) {
     for item in items {
-        let mut button = egui::Button::new(item.label);
+        let mut button = match item.checked {
+            Some(true) => egui::Button::new(format!("✓ {}", item.label)),
+            _ => egui::Button::new(item.label),
+        };
         if !item.shortcut.is_empty() {
             button = button.shortcut_text(item.shortcut);
         }

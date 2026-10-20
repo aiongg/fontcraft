@@ -270,3 +270,39 @@ fn info_for_selection_opens_the_smart_windows_in_edit_view() {
     app.run("edit.infoForSelection", &json!({})).unwrap();
     assert!(app.state.panels.selection_info);
 }
+
+#[test]
+fn cmd_alt_i_opens_the_smart_glyph_settings_of_a_part_glyph_without_properties() {
+    let mut app = FontcraftApp::default();
+    app.session
+        .edit("setup", |font| {
+            let m = font.masters[0].id.clone();
+            for name in ["_part.dot", "_smart.ring", "plain"] {
+                let mut g = Glyph::new(name);
+                g.layers.push(Layer::new(m.clone(), 500.0));
+                font.glyphs.push(g);
+            }
+            Ok(())
+        })
+        .unwrap();
+    let w = Window::new();
+    let cmd_alt_i = || {
+        let modifiers = Modifiers::COMMAND | Modifiers::ALT;
+        vec![
+            Event::Key { key: Key::I, physical_key: None, pressed: true, repeat: false, modifiers },
+            Event::Key { key: Key::I, physical_key: None, pressed: false, repeat: false, modifiers },
+        ]
+    };
+    for name in ["_part.dot", "_smart.ring"] {
+        app.run("smartGlyph.showSettings", &json!({"open": false})).unwrap();
+        app.run("view.editSelectedGlyphs", &json!({"glyphs": [name]})).unwrap();
+        w.frame(&mut app, cmd_alt_i());
+        assert!(app.state.panels.smart_glyph.open, "{name}: the name marks a smart glyph");
+        assert_eq!(app.state.panels.smart_glyph.glyph, name);
+        assert!(!app.state.panels.selection_info);
+    }
+    app.run("smartGlyph.showSettings", &json!({"open": false})).unwrap();
+    app.run("view.editSelectedGlyphs", &json!({"glyphs": ["plain"]})).unwrap();
+    w.frame(&mut app, cmd_alt_i());
+    assert!(!app.state.panels.smart_glyph.open && app.state.panels.selection_info, "a plain glyph shows Selection Info");
+}

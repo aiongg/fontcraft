@@ -104,3 +104,21 @@ fn suggest_distance_reads_a_dictionary_an_array_or_one_number() {
     assert_eq!(distance(&n(12)), Some((12.0, 12.0)));
     assert_eq!(distance(&Plist::Dict(Dict::new())), None);
 }
+
+#[test]
+fn view_suggest_menu_items_carry_a_check_mark_while_on() {
+    let mut app = app();
+    let checked = |app: &mut FontcraftApp, id: &str| {
+        let tree = app.menu_cache.tree(&app.session, &app.state);
+        tree.iter().flat_map(|m| m.items.iter()).find(|i| i.command == id).and_then(|i| i.checked)
+    };
+    assert_eq!(checked(&mut app, "view.suggestStems"), Some(false));
+    app.run("view.suggestStems", &json!({"on": true})).unwrap();
+    assert_eq!(checked(&mut app, "view.suggestStems"), Some(true), "the cached menu follows the switch");
+    assert_eq!(checked(&mut app, "view.suggestLines"), Some(false));
+    assert_eq!(checked(&mut app, "view.showTunniLines"), None, "not one of the switches with a check mark");
+    let tree = call(&mut app, "ui.menu.list", json!({}));
+    let items: Vec<&Value> = tree["result"].as_array().unwrap().iter().flat_map(|m| m["items"].as_array().unwrap()).collect();
+    let stems = items.iter().find(|i| i["command"] == "view.suggestStems").unwrap();
+    assert_eq!(stems["checked"], json!(true), "{stems}");
+}

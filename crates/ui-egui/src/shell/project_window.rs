@@ -11,6 +11,7 @@
 //! | list entry: drag onto another | `project.moveInstances` (the selection moves when the dragged entry is in it) |
 //! | list entry: Alt-drag onto another | `project.duplicateInstances` with `to` |
 //! | list entry: context menu › Duplicate | `project.duplicateInstances` on the selection |
+//! | Edit › Copy, then Edit › Paste (or the keys) | `project.duplicateInstances` with `to`: the copied entries go after the selection |
 //! | plus menu › Add Instance | `project.addInstance`; Add Variable Font Setting is disabled until the engine takes it |
 //! | minus | `project.removeInstances` on the selection |
 //! | arrow | `project.revertInstances` |
@@ -20,6 +21,11 @@
 //! | Save | `project.save`; a project never saved asks the save chooser for its file, offering `<title>.fontcraftproject` |
 //! | Export | `project.export`; disabled until the project is saved, linked to a font and has a destination |
 //! | close box | `project.close`, which keeps a project with unsaved changes open and says why in the status bar |
+//!
+//! The window has the keyboard after a press landed in it, until one lands outside it and off
+//! the menus. Copy then takes the selected entries and puts them on the system clipboard as
+//! `fontcraft-instances` JSON; Paste duplicates them in this project when the clipboard still
+//! holds that text. A copied entry that changed or went since is left out of the paste.
 //!
 //! General fields an instance carries (localized names…) are shown read-only: the project
 //! commands edit the built-in fields and the custom parameters. Axes Coordinates come from the
@@ -77,7 +83,15 @@ pub struct ProjectView {
     pub anchor: Option<usize>,
     /// The Add Custom Parameter picker, while open.
     pub picker: Option<ParameterPicker>,
+    /// The last press landed in the window: Copy and Paste are its own.
+    pub keys: bool,
+    /// The entries Copy took, as they were, and the clipboard text it wrote for them.
+    pub copied: Vec<Instance>,
+    pub copied_text: Option<String>,
 }
+
+/// The `format` of the clipboard text Copy writes for project instances.
+pub const INSTANCES_FORMAT: &str = "fontcraft-instances";
 
 /// What a drag of a list entry carries.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -190,7 +204,7 @@ fn window(app: &mut FontcraftApp, ctx: &egui::Context, project: u64, n: usize, p
     let step = u16::try_from(n % CASCADE).map(f32::from).unwrap_or(0.0) * tokens.list_row_height;
     let mut ask = None;
     let mut open = true;
-    egui::Window::new(shown_title)
+    let shown = egui::Window::new(shown_title)
         .id(window_id(project))
         .open(&mut open)
         .collapsible(false)
@@ -199,6 +213,8 @@ fn window(app: &mut FontcraftApp, ctx: &egui::Context, project: u64, n: usize, p
         .pivot(Align2::CENTER_TOP)
         .default_pos(pos2(ctx.content_rect().center().x + step, tokens.dialog_top + step))
         .show(ctx, |ui| body(ui, &tokens, doc, &mut view, chooser, &mut ask, pending));
+    let rect = shown.map(|r| r.response.rect);
+    keyboard(app, ctx, project, rect, &mut view, pending);
     let outcome = view.picker.as_mut().and_then(|p| custom_parameter_picker::show(ctx, &tokens, p));
     match outcome {
         Some(Outcome::Add) => {
@@ -221,6 +237,105 @@ fn window(app: &mut FontcraftApp, ctx: &egui::Context, project: u64, n: usize, p
     if let Some(ask) = ask {
         choose(app, project, &title, ask, pending);
     }
+}
+
+/// Who has the keyboard, and this frame's Copy and Paste while this window has it.
+fn keyboard(app: &mut FontcraftApp, ctx: &egui::Context, project: u64, rect: Option<Rect>, view: &mut ProjectView, pending: &mut Pending) {
+    let menu_bar = app.menu_bar_rect;
+    let press = ctx.input(|i| if i.pointer.any_pressed() { i.pointer.press_origin() } else { None });
+    let on_menu = |p: Pos2| menu_bar.contains(p) || ctx.layer_id_at(p).is_some_and(|l| l.order >= egui::Order::Foreground);
+    if let Some(p) = press {
+        if rect.is_some_and(|r| r.contains(p)) {
+            view.keys = true;
+        } else if !on_menu(p) {
+            view.keys = false;
+        }
+    }
+    if !takes_clipboard(app, ctx, view) {
+        return;
+    }
+    let events: Vec<egui::Event> =
+        ctx.input(|i| i.events.iter().filter(|e| matches!(e, egui::Event::Copy | egui::Event::Paste(_))).cloned().collect());
+    for event in events {
+        match event {
+            egui::Event::Copy => copy(app, project, view),
+            egui::Event::Paste(text) => paste(app, project, view, &text, pending),
+            _ => {}
+        }
+    }
+}
+
+/// Whether Copy and Paste act on the window's entries: it has the keyboard, and no text field,
+/// dialog or parameter picker has.
+fn takes_clipboard(app: &FontcraftApp, ctx: &egui::Context, view: &ProjectView) -> bool {
+    view.keys && view.picker.is_none() && app.dialog.is_none() && !ctx.text_edit_focused()
+}
+
+/// The open project whose window takes Copy and Paste, if any.
+pub fn has_keyboard(app: &FontcraftApp, ctx: &egui::Context) -> Option<u64> {
+    app.session.projects().iter().map(|d| d.id).find(|&id| takes_clipboard(app, ctx, &view(ctx, id)))
+}
+
+/// Edit › Copy from the menu while a project window has the keyboard: copies its selected
+/// entries. `false`: the run is not a project window's.
+pub fn menu_copy(app: &mut FontcraftApp, ctx: &egui::Context) -> bool {
+    let Some(project) = has_keyboard(app, ctx) else { return false };
+    let mut v = view(ctx, project);
+    copy(app, project, &mut v);
+    store(ctx, project, v);
+    true
+}
+
+/// Takes the selected entries (the first with none selected) and puts them on the clipboard.
+fn copy(app: &mut FontcraftApp, project: u64, view: &mut ProjectView) {
+    let Some(doc) = app.session.projects().iter().find(|d| d.id == project) else { return };
+    let list = &doc.data.instances;
+    let copied: Vec<Instance> = shown_selection(view, list.len()).into_iter().filter_map(|k| list.get(k).cloned()).collect();
+    if copied.is_empty() {
+        return;
+    }
+    let text = match serde_json::to_string(&json!({"format": INSTANCES_FORMAT, "instances": copied})) {
+        Ok(text) => text,
+        Err(e) => {
+            app.state.status = format!("Copy: {e}");
+            return;
+        }
+    };
+    app.state.status = format!("Copied {} instances", copied.len());
+    app.clipboard_out = Some(text.clone());
+    view.copied = copied;
+    view.copied_text = Some(text);
+}
+
+/// Duplicates the copied entries after the selection (at the end with none selected) when the
+/// clipboard still holds the text Copy wrote.
+fn paste(app: &mut FontcraftApp, project: u64, view: &mut ProjectView, text: &str, pending: &mut Pending) {
+    if view.copied_text.as_deref() != Some(text) {
+        app.state.status = "Paste: the clipboard holds no instances copied in this project".into();
+        return;
+    }
+    let Some(doc) = app.session.projects().iter().find(|d| d.id == project) else { return };
+    let list = &doc.data.instances;
+    let mut used = vec![false; list.len()];
+    let mut originals = Vec::new();
+    for copied in &view.copied {
+        let found = list.iter().enumerate().position(|(k, inst)| !used.get(k).copied().unwrap_or(true) && inst == copied);
+        if let Some(k) = found {
+            if let Some(u) = used.get_mut(k) {
+                *u = true;
+            }
+            originals.push(k);
+        }
+    }
+    if originals.is_empty() {
+        app.state.status = "Paste: the copied instances changed or were removed".into();
+        return;
+    }
+    let to = view.selected.iter().copied().filter(|i| *i < list.len()).max().map_or(list.len(), |i| i + 1);
+    let n = originals.len();
+    pending.push(("project.duplicateInstances", json!({"project": project, "instances": originals, "to": to})));
+    view.selected = (to..to.saturating_add(n)).collect();
+    view.anchor = view.selected.first().copied();
 }
 
 /// Fills the open parameter picker's list when its search text changed.
@@ -969,6 +1084,38 @@ mod tests {
         direct.run("project.duplicateInstances", &json!({"instances": [0], "to": 1})).unwrap();
         assert_eq!(instances(&app), instances(&direct), "an Alt-drag puts a copy where it is dropped");
         assert_eq!(app.session.active_project().unwrap().data.instances.len(), 4);
+    }
+
+    #[test]
+    fn window_project_copy_and_paste_duplicate_the_selected_instances_after_the_selection() {
+        let names = ["Light", "Regular", "Bold"];
+        let (mut app, project) = project_app(&names);
+        let w = Window::open(&mut app);
+        w.click(&mut app, entry_id(project, 0), Modifiers::NONE);
+        w.click(&mut app, entry_id(project, 1), Modifiers::COMMAND);
+        w.frame(&mut app, vec![Event::Copy]);
+        let text = view(&w.ctx, project).copied_text.expect("Copy wrote the entries for the clipboard");
+        assert!(text.contains(INSTANCES_FORMAT), "{text}");
+        assert_eq!(app.session.active_project().unwrap().data.instances.len(), 3, "Copy changes nothing");
+
+        w.click(&mut app, entry_id(project, 2), Modifiers::NONE);
+        w.frame(&mut app, vec![Event::Paste(text.clone())]);
+        let (mut direct, _) = project_app(&names);
+        direct.run("project.duplicateInstances", &json!({"instances": [0, 1], "to": 3})).unwrap();
+        assert_eq!(instances(&app), instances(&direct), "Paste puts copies of the copied entries after the selection");
+        assert_eq!(view(&w.ctx, project).selected, [3, 4], "the copies are selected");
+
+        w.frame(&mut app, vec![Event::Paste("Light".into())]);
+        assert_eq!(instances(&app), instances(&direct), "other text on the clipboard pastes nothing");
+
+        // A press outside the window gives the keyboard back to the document.
+        let outside = Pos2::new(4.0, 790.0);
+        let press = |pressed| Event::PointerButton { pos: outside, button: PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
+        w.frame(&mut app, vec![Event::PointerMoved(outside), press(true)]);
+        w.frame(&mut app, vec![press(false)]);
+        assert!(!view(&w.ctx, project).keys);
+        w.frame(&mut app, vec![Event::Paste(text)]);
+        assert_eq!(instances(&app), instances(&direct), "Paste no longer reaches the project");
     }
 
     #[test]
