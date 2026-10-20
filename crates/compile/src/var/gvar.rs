@@ -97,7 +97,7 @@ pub fn region_deltas(model: &VariationModel, values: &[Vec<f64>]) -> Result<Vec<
 }
 
 /// `region` as `gvar` tents, one per axis.
-fn tents(region: &Region, axis_count: u16) -> Result<Vec<Tent>, String> {
+pub(crate) fn tents(region: &Region, axis_count: u16) -> Result<Vec<Tent>, String> {
     if region.0.len() != usize::from(axis_count) {
         return Err(format!("a region has {} axes; the font has {axis_count}", region.0.len()));
     }

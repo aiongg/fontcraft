@@ -45,8 +45,10 @@ guesses = [
   "Stem instructions flagged as triple form groups of three in list order; a file with two triple hints in one glyph would show how they are kept apart.",
   "A delta cell is stored as 8 (up) or −8 (down) under its PPM, in a column keyed by the instance's axis values in braces padded to six, as the one format sample shows; a file with deltas set for two instances would confirm both.",
   "An instruction of a TrueType type that lacks a point its type needs (the corpus has place-only Snap and Stem hints and a Stem without target) is detached: kept as stored, never listed or compiled; the reference app's export of such a glyph would settle it.",
+  "Special layers' own TrueType instructions: an intermediate (brace) layer's are never exported, and an alternate (bracket) layer's are exported for its alternate glyph in a variable font when the layer belongs to the main master, since it is then that glyph's main-master layer; exporting a glyph whose special layers carry their own instructions from the reference app would settle both.",
 ]
 observe = [
+  "T3: give a glyph an intermediate layer and an alternate layer on the main master, each with its own Snap, export a variable TTF and a static instance inside the alternate range, and note which instructions each glyph program carries.",
   "T3: give n one Stem of each rounding mode, including Round only in GDI ClearType, save as .glyphs and note each options value.",
   "T3: set a Snap of n to a named zone and make one triple hint in E; save as .glyphs and note the keys each stores.",
   "T3: set one Delta of n up at 12 PPM in one instance and down at 13 PPM in another; save as .glyphs and note the deltaV keys and values.",
@@ -1521,7 +1523,7 @@ milestone = "M10"
 summary = "Delta instructions exist only for vertical hinting, are left out of variable-font exports entirely, and should be added last and sparingly. Pressing E in horizontal direction should do nothing (or report why)."
 ref = "TrueType Hinting › Delta (E)"
 status = "handbook"
-notes = "M10.7: hint.tt.addDelta refuses the horizontal direction with a message, and both Delta commands refuse a layer outside the main master (hinting.tt.mainMasterOnly). Leaving deltas out of variable exports waits for the export packages. Documented, not yet observed. M10.18, crates/hinting/src/tt_glyph.rs: a Delta compiles to one FN_POINT_DELTA call per cell of the build's delta column, at its place in the list and so before IUP (a rasterizer in backward-compatibility mode drops moves made after IUP); a horizontal Delta, or a cell outside 1 to 255 PPM, is left out with a warning."
+notes = "M10.7: hint.tt.addDelta refuses the horizontal direction with a message, and both Delta commands refuse a layer outside the main master (hinting.tt.mainMasterOnly). Variable exports leave Delta instructions out (M10.19, hinting.tt.variable.deltasIgnored). Documented, not yet observed. M10.18, crates/hinting/src/tt_glyph.rs: a Delta compiles to one FN_POINT_DELTA call per cell of the build's delta column, at its place in the list and so before IUP (a rasterizer in backward-compatibility mode drops moves made after IUP); a horizontal Delta, or a cell outside 1 to 255 PPM, is left out with a warning."
 
 # ---------------------------------------------------------------------------------------------
 # Export behaviour and variable fonts
@@ -1565,6 +1567,7 @@ milestone = "M10"
 summary = "Delta instructions are not written into variable fonts. The handbook says this for glyph-level Delta instructions; whether zone and stem deltas are also dropped in variable exports is not stated."
 ref = "TrueType Hinting › Delta (E)"
 status = "handbook"
+notes = "M10.19 (crates/compile/src/tt_hints.rs): a variable export compiles each glyph's instructions without its Delta instructions and warns once that they were left out; `prep` applies the zone and stem deltas of the default master's column. Glyph-level deltas documented, not yet observed."
 guesses = ["Zone and stem deltas reach a variable font only for the default master's column; per-instance Delta instructions are dropped as the handbook says; a variable export from the reference app would settle the zone and stem part."]
 observe = ["T3: give a TT zone a delta and export a variable TTF; note whether the delta survives anywhere in prep or the glyph programs."]
 
@@ -1575,7 +1578,7 @@ milestone = "M10"
 summary = "In a variable TrueType export the glyph programs come once from the main master, and the control values derived from zones and stems (cvt) are those of the default master, with each other master's differences written to the cvar table so that zone positions and stem widths follow the design space. The handbook does not describe this; it follows from per-master zones and stems being the mechanism that replicates hints across masters."
 ref = "TrueType Hinting › Font-level Hints; OpenType spec › cvar"
 status = "inferred"
-notes = "M10.19: a variable TrueType export with instructions uses the default master's cvt, fpgm and prep and the main master's instructions without Delta instructions; no cvar is written yet, and the export warns that zones and stems do not follow the other masters. Its glyphs with instructions keep every on-curve point their nodes give, in all sources, so the instructions find them."
+notes = "M10.19: a variable TrueType export with instructions uses the default master's cvt, fpgm and prep and the main master's instructions without Delta instructions. Its glyphs with instructions keep every on-curve point their nodes give, in all sources, so the instructions find them. M10.19b (crates/compile/src/var/cvar.rs): each other master's zone positions and stem widths, laid out on the main master's zone and stem lists, go into cvar as deltas from the default master's; prep then fits the varied positions at each size. Identical values write no cvar; values that do not line up write none, with a warning."
 guesses = ["Per-master zones and stems reach a variable font as cvt values of the default master plus cvar deltas; a variable export from the reference app would settle it."]
 observe = ["T3: give a TT zone a delta and export a variable TTF; note whether a cvar table is written and which cvt entries it varies."]
 

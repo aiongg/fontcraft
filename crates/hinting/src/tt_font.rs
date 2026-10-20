@@ -189,7 +189,7 @@ pub struct FontPrograms {
 /// instance name for an instance's. Imported programs (cvt Table, prep and fpgm Table Assembly)
 /// are the compiler's business, not this function's.
 pub fn font_programs(settings: &HintSettings, family_zones: &[TtZone], delta_column: &str) -> Result<FontPrograms, HintingError> {
-    let layout = CvtLayout::new(settings, family_zones)?;
+    let (layout, cvt) = control_values(settings, family_zones)?;
     let mut warnings = Vec::new();
     if !family_zones.is_empty() && settings.tt_family_zones_threshold.is_some() && layout.family.is_empty() {
         warnings.push(format!(
@@ -199,6 +199,22 @@ pub fn font_programs(settings: &HintSettings, family_zones: &[TtZone], delta_col
         ));
     }
 
+    let fpgm = assemble(&fpgm_text())?;
+    let prep = assemble(&prep_text(settings, &layout, delta_column, &mut warnings)?)?;
+    let functions = FunctionTable::from_fpgm(&fpgm)?;
+    let mut limits = analyse(&fpgm, &functions)?;
+    limits.merge(&analyse(&prep, &functions)?);
+    // `maxp.maxSizeOfInstructions` counts glyph programs only.
+    limits.max_size_of_instructions = 0;
+    Ok(FontPrograms { cvt, fpgm, prep, limits, layout, warnings })
+}
+
+/// The `cvt ` layout of `settings` and its values: each zone's position, each stem's width, each
+/// family zone's position, fitted entries equal to their source. A variable font's `cvar` varies
+/// these values between masters, whose layouts match since every master's zones and stems are
+/// laid out on the main master's lists.
+pub fn control_values(settings: &HintSettings, family_zones: &[TtZone]) -> Result<(CvtLayout, Vec<i16>), HintingError> {
+    let layout = CvtLayout::new(settings, family_zones)?;
     let mut cvt = vec![0i16; usize::from(layout.len)];
     let mut set = |at: u16, v: f64, what: &str| -> Result<(), HintingError> {
         let v = finite(v, what)?.round();
@@ -222,15 +238,7 @@ pub fn font_programs(settings: &HintSettings, family_zones: &[TtZone], delta_col
     for (z, &at) in family_zones.iter().zip(&layout.family) {
         set(at, z.position, "a family TT zone position")?;
     }
-
-    let fpgm = assemble(&fpgm_text())?;
-    let prep = assemble(&prep_text(settings, &layout, delta_column, &mut warnings)?)?;
-    let functions = FunctionTable::from_fpgm(&fpgm)?;
-    let mut limits = analyse(&fpgm, &functions)?;
-    limits.merge(&analyse(&prep, &functions)?);
-    // `maxp.maxSizeOfInstructions` counts glyph programs only.
-    limits.max_size_of_instructions = 0;
-    Ok(FontPrograms { cvt, fpgm, prep, limits, layout, warnings })
+    Ok((layout, cvt))
 }
 
 fn family_applies(settings: &HintSettings, family_zones: &[TtZone]) -> bool {
