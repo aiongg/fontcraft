@@ -369,7 +369,11 @@ pub(crate) fn expand(font: &Font) -> Option<Font> {
 /// Whether glyph `name` has a full-colour layer in `master`, as [`crate::colorkeys`] decides a
 /// `PaintColrGlyph`.
 fn has_full_color(font: &Font, name: &str, master: &str) -> bool {
-    font.glyph(name).is_some_and(|g| g.layers.iter().any(|l| l.master == master && l.info.attrs.full_color && l.info.attrs.coordinates.is_empty()))
+    font.glyph(name).is_some_and(|g| full_color_in(g, master))
+}
+
+fn full_color_in(g: &Glyph, master: &str) -> bool {
+    g.layers.iter().any(|l| l.master == master && l.info.attrs.full_color && l.info.attrs.coordinates.is_empty())
 }
 
 pub(crate) fn is_generated(g: &Glyph) -> bool {
@@ -381,8 +385,15 @@ pub(crate) fn is_generated(g: &Glyph) -> bool {
 pub(crate) fn fold(font: &mut Font) {
     let read_from_list = |l: &Layer| !l.is_master_layer() && l.info.attrs.full_color && l.extra.get(Family::Ufo, MARK).is_some();
     let bases: Vec<String> = font.glyphs.iter().filter(|g| g.layers.iter().any(read_from_list)).map(|g| g.name.clone()).collect();
+    if bases.is_empty() {
+        return;
+    }
+    let mut uses = Uses::new(font);
     for base in bases {
-        fold_glyph(font, &base);
+        fold_glyph(font, &mut uses, &base);
+    }
+    if !uses.gone.is_empty() {
+        font.glyphs.retain(|g| !uses.gone.contains(&g.name));
     }
 }
 
@@ -396,25 +407,212 @@ struct Folded {
     selfs: Vec<String>,
 }
 
-fn fold_glyph(font: &mut Font, base: &str) {
-    let Some(read) = font.glyph(base).map(|g| Glyph::clone(g)) else { return };
-    let all = fold_layers(font, &read, true);
+#[cfg(test)]
+thread_local! {
+    /// Glyphs [`Uses`] has counted the components of, for the test that the fold stays linear.
+    pub(crate) static COUNTED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Who names each glyph, gathered once for the whole fold and kept up to date as glyphs fold, so
+/// that deciding whether a layer glyph can leave the font is a lookup, not a pass over the font.
+struct Uses {
+    /// How many components in layers and their backgrounds name each glyph.
+    components: HashMap<String, usize>,
+    kerned: HashSet<String>,
+    grouped: HashSet<String>,
+    /// What the masters' colour layer lists mention.
+    listed: Mentions,
+    /// What the UFOs' glyph orders mention.
+    ordered: Mentions,
+    /// Layer glyphs folded so far. They count as gone at once and leave the font when the fold
+    /// ends, so that the font is filtered once.
+    gone: HashSet<String>,
+    /// How many glyphs of the font the gone names cover.
+    gone_glyphs: usize,
+    /// The positions of the second and later glyphs that share a name.
+    repeats: HashMap<String, Vec<usize>>,
+}
+
+impl Uses {
+    fn new(font: &Font) -> Self {
+        let mut uses = Uses {
+            components: HashMap::new(),
+            kerned: HashSet::new(),
+            grouped: HashSet::new(),
+            listed: Mentions::default(),
+            ordered: Mentions::default(),
+            gone: HashSet::new(),
+            gone_glyphs: 0,
+            repeats: HashMap::new(),
+        };
+        for (i, g) in font.glyphs.iter().enumerate() {
+            uses.count(g, true);
+            if font.glyphs.position(&g.name) != Some(i) {
+                uses.repeats.entry(g.name.clone()).or_default().push(i);
+            }
+        }
+        for table in [&font.kerning.ltr, &font.kerning.rtl, &font.kerning.vertical] {
+            for f in table.0.iter().flat_map(|m| m.firsts.iter()) {
+                uses.kerned.insert(f.first.clone());
+                uses.kerned.extend(f.seconds.iter().map(|(s, _)| s.clone()));
+            }
+        }
+        uses.grouped = font.groups.iter().flat_map(|g| g.members.iter().cloned()).collect();
+        for m in font.masters.iter() {
+            if let Some(v) = m.user_data.get(COLOR_LAYERS) {
+                uses.listed.tally(v, 0, true);
+            }
+            // A glyph the UFO's glyph order names is one of the font's own: glyphsLib leaves its
+            // layer glyphs out of the order.
+            if let Some(v) = crate::ufo::kept_dict(m, "lib.plist").0.get("public.glyphOrder") {
+                uses.ordered.tally(v, 0, true);
+            }
+        }
+        uses
+    }
+
+    /// The glyph called `name` unless it has folded away.
+    fn live<'a>(&self, font: &'a Font, name: &str) -> Option<&'a Glyph> {
+        if self.gone.contains(name) { None } else { font.glyph(name).map(|g| &**g) }
+    }
+
+    fn live_glyphs(&self, font: &Font) -> usize {
+        font.glyphs.len().saturating_sub(self.gone_glyphs)
+    }
+
+    /// Adds (or takes away) the components of `g`.
+    fn count(&mut self, g: &Glyph, add: bool) {
+        #[cfg(test)]
+        COUNTED.with(|c| c.set(c.get().saturating_add(1)));
+        for l in &g.layers {
+            let background = l.info.background.as_ref().map(|b| b.shapes.as_slice()).unwrap_or_default();
+            for s in l.shapes.iter().chain(background) {
+                let Shape::Component(c) = s else { continue };
+                match self.components.get_mut(&c.glyph) {
+                    Some(n) => *n = if add { n.saturating_add(1) } else { n.saturating_sub(1) },
+                    None if add => {
+                        self.components.insert(c.glyph.clone(), 1);
+                    }
+                    None => {}
+                }
+            }
+        }
+    }
+
+    /// Marks the glyphs called `name` as gone.
+    fn go(&mut self, font: &Font, name: &str) {
+        if !self.gone.insert(name.to_string()) {
+            return;
+        }
+        let first = font.glyphs.position(name);
+        let repeats = self.repeats.get(name).cloned().unwrap_or_default();
+        for i in first.into_iter().chain(repeats) {
+            if let Some(g) = font.glyphs.as_arcs().get(i).cloned() {
+                self.count(&g, false);
+                self.gone_glyphs = self.gone_glyphs.saturating_add(1);
+            }
+        }
+    }
+
+    /// [`crate::colorkeys::unread`], keeping the counts of `base`'s components and of what the
+    /// colour layer lists mention.
+    fn unread(&mut self, font: &mut Font, master: &str, base: &str) {
+        let before = font.glyph(base).cloned();
+        let whole = !matches!(list_of(font, master), Some(Value::Dict(_)));
+        let part = |font: &Font| match list_of(font, master) {
+            Some(Value::Dict(d)) if !whole => {
+                Some(Value::Dict(Dict { entries: d.entries.iter().filter(|(k, _)| k.as_str() == base).cloned().collect(), ..Default::default() }))
+            }
+            other => other.cloned(),
+        };
+        if let Some(v) = part(font) {
+            self.listed.tally(&v, 0, false);
+        }
+        crate::colorkeys::unread(font, master, base);
+        if let Some(v) = part(font) {
+            self.listed.tally(&v, 0, true);
+        }
+        if let Some(g) = before {
+            self.count(&g, false);
+        }
+        if let Some(g) = font.glyph(base).cloned() {
+            self.count(&g, true);
+        }
+    }
+}
+
+/// The colour layer list of the first master with the id `master`, which
+/// [`crate::colorkeys::unread`] changes.
+fn list_of<'a>(font: &'a Font, master: &str) -> Option<&'a Value> {
+    font.masters.iter().find(|m| m.id == master).and_then(|m| m.user_data.get(COLOR_LAYERS))
+}
+
+/// How often each string and dictionary key of some plist values appears, searched at most
+/// [`MAX_SEARCH_DEPTH`] deep; a value nested deeper counts as mentioning every name.
+#[derive(Default)]
+struct Mentions {
+    names: HashMap<String, usize>,
+    too_deep: usize,
+}
+
+impl Mentions {
+    fn has(&self, name: &str) -> bool {
+        self.too_deep > 0 || self.names.get(name).is_some_and(|n| *n > 0)
+    }
+
+    fn tally(&mut self, v: &Value, depth: usize, add: bool) {
+        let step = |n: &mut usize| *n = if add { n.saturating_add(1) } else { n.saturating_sub(1) };
+        if depth > MAX_SEARCH_DEPTH {
+            step(&mut self.too_deep);
+            return;
+        }
+        let name = |s: &str, names: &mut HashMap<String, usize>| match names.get_mut(s) {
+            Some(n) => step(n),
+            None if add => {
+                names.insert(s.to_string(), 1);
+            }
+            None => {}
+        };
+        match v {
+            Value::String(s) => name(s.as_str(), &mut self.names),
+            Value::Array(a) => {
+                for v in &a.items {
+                    self.tally(v, depth + 1, add);
+                }
+            }
+            Value::Dict(d) => {
+                for (k, v) in &d.entries {
+                    name(k.as_str(), &mut self.names);
+                    self.tally(v, depth + 1, add);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn fold_glyph(font: &mut Font, uses: &mut Uses, base: &str) {
+    let Some(read) = uses.live(font, base).cloned() else { return };
+    let all = fold_layers(font, uses, &read, true);
     let mut exclude: HashSet<String> =
-        all.used.iter().filter(|(name, masters)| !removable(font, base, name, masters)).map(|(n, _)| n.clone()).collect();
+        all.used.iter().filter(|(name, masters)| !removable(font, uses, base, name, masters)).map(|(n, _)| n.clone()).collect();
     // Each try that fails leaves out at least one more layer glyph.
     for _ in 0..=all.used.len() {
-        let f = fold_layers_without(font, &read, &exclude);
+        let f = fold_layers_without(font, uses, &read, &exclude);
         // A layer of a component of the glyph itself stays only folded into its master layer.
         if f.own.len() != f.selfs.len() || (f.used.is_empty() && f.own.is_empty()) {
             break;
         }
-        match comes_back(font, &read, &f) {
+        match comes_back(font, uses, &read, &f) {
             Ok(()) => {
-                let used: HashSet<String> = f.used.iter().map(|(n, _)| n.clone()).collect();
                 if let Ok(mut g) = font.glyph_mut(base) {
+                    uses.count(&read, false);
+                    uses.count(&f.glyph, true);
                     *g = f.glyph;
                 }
-                font.glyphs.retain(|g| !used.contains(&g.name));
+                for (name, _) in &f.used {
+                    uses.go(font, name);
+                }
                 return;
             }
             Err(differ) => {
@@ -428,23 +626,23 @@ fn fold_glyph(font: &mut Font, base: &str) {
     }
     // A layer painting the glyph's own outline cannot stay a component of the glyph itself.
     for master in all.selfs {
-        crate::colorkeys::unread(font, &master, base);
+        uses.unread(font, &master, base);
     }
 }
 
-fn fold_layers_without(font: &Font, read: &Glyph, bad: &HashSet<String>) -> Folded {
-    let mut f = fold_layers_filtered(font, read, &|name| !bad.contains(name));
+fn fold_layers_without(font: &Font, uses: &Uses, read: &Glyph, bad: &HashSet<String>) -> Folded {
+    let mut f = fold_layers_filtered(font, uses, read, &|name| !bad.contains(name));
     f.used.retain(|(n, _)| !bad.contains(n));
     f
 }
 
-fn fold_layers(font: &Font, read: &Glyph, with_glyphs: bool) -> Folded {
-    fold_layers_filtered(font, read, &|_| with_glyphs)
+fn fold_layers(font: &Font, uses: &Uses, read: &Glyph, with_glyphs: bool) -> Folded {
+    fold_layers_filtered(font, uses, read, &|_| with_glyphs)
 }
 
 /// `read` with its list layers folded: one-component layers of `read.color<i>` glyphs that `fold`
 /// allows take the glyph's shapes, and a layer of the glyph itself paints its master layer.
-fn fold_layers_filtered(font: &Font, read: &Glyph, fold: &dyn Fn(&str) -> bool) -> Folded {
+fn fold_layers_filtered(font: &Font, uses: &Uses, read: &Glyph, fold: &dyn Fn(&str) -> bool) -> Folded {
     let mut glyph = read.clone();
     let mut used: Vec<(String, Vec<String>)> = Vec::new();
     let mut own = Vec::new();
@@ -476,7 +674,7 @@ fn fold_layers_filtered(font: &Font, read: &Glyph, fold: &dyn Fn(&str) -> bool) 
         if !plain_fill || c.glyph != format!("{}.color{i}", read.name) || !fold(&c.glyph) {
             continue;
         }
-        let Some(source) = font.glyph(&c.glyph) else { continue };
+        let Some(source) = uses.live(font, &c.glyph) else { continue };
         let Some(sl) = source.layer(&l.master) else { continue };
         let plain = |s: &Shape| match s {
             Shape::Path(p) => p.info.attrs.is_empty(),
@@ -520,67 +718,38 @@ fn fold_layers_filtered(font: &Font, read: &Glyph, fold: &dyn Fn(&str) -> bool) 
 
 /// Whether the layer glyph `name`, taken in `masters` by `base`'s layers, can leave the font: it
 /// has a master layer in exactly those masters and nothing else names it.
-fn removable(font: &Font, base: &str, name: &str, masters: &[String]) -> bool {
-    let Some(g) = font.glyph(name) else { return false };
+fn removable(font: &Font, uses: &Uses, base: &str, name: &str, masters: &[String]) -> bool {
+    let Some(g) = uses.live(font, name) else { return false };
     if g.layers.len() != masters.len() || !g.layers.iter().all(|l| l.is_master_layer() && masters.contains(&l.master)) {
         return false;
     }
     // Every component of it is one of the folded layers of `base`.
-    let mut components = 0usize;
-    for other in font.glyphs.iter() {
-        for l in &other.layers {
-            let background = l.info.background.as_ref().map(|b| b.shapes.as_slice()).unwrap_or_default();
-            components += l.shapes.iter().chain(background).filter(|s| matches!(s, Shape::Component(c) if c.glyph == name)).count();
-        }
-    }
-    if components != masters.len() || font.glyph(base).is_none() {
+    if uses.components.get(name).copied().unwrap_or(0) != masters.len() || uses.live(font, base).is_none() {
         return false;
     }
-    let kerned = [&font.kerning.ltr, &font.kerning.rtl, &font.kerning.vertical]
-        .iter()
-        .flat_map(|t| t.0.iter())
-        .flat_map(|m| m.firsts.iter())
-        .any(|f| f.first == name || f.seconds.iter().any(|(s, _)| s == name));
-    let grouped = font.groups.iter().any(|g| g.members.iter().any(|m| m == name));
-    let listed = font.masters.iter().any(|m| m.user_data.get(COLOR_LAYERS).is_some_and(|v| mentions(v, name, 0)));
-    // A glyph the UFO's glyph order names is one of the font's own: glyphsLib leaves its layer
-    // glyphs out of the order.
-    let ordered = font.masters.iter().any(|m| crate::ufo::kept_dict(m, "lib.plist").0.get("public.glyphOrder").is_some_and(|v| mentions(v, name, 0)));
-    !kerned && !grouped && !listed && !ordered
-}
-
-fn mentions(v: &Value, name: &str, depth: usize) -> bool {
-    if depth > MAX_SEARCH_DEPTH {
-        return true;
-    }
-    match v {
-        Value::String(s) => s.as_str() == name,
-        Value::Array(a) => a.items.iter().any(|v| mentions(v, name, depth + 1)),
-        Value::Dict(d) => d.entries.iter().any(|(k, v)| k.as_str() == name || mentions(v, name, depth + 1)),
-        _ => false,
-    }
+    !uses.kerned.contains(name) && !uses.grouped.contains(name) && !uses.listed.has(name) && !uses.ordered.has(name)
 }
 
 /// Whether the writer gives back `read` and the layer glyphs `f` took in from the folded glyph;
 /// otherwise the layer glyphs to leave out on the next try (all of them when the glyph itself
 /// differs).
-fn comes_back(font: &Font, read: &Glyph, f: &Folded) -> Result<(), Vec<String>> {
+fn comes_back(font: &Font, uses: &Uses, read: &Glyph, f: &Folded) -> Result<(), Vec<String>> {
     let used: HashSet<&str> = f.used.iter().map(|(n, _)| n.as_str()).collect();
     let all = || f.used.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>();
-    let taken = |n: &str| font.glyph(n).is_some() && !used.contains(n);
+    let taken = |n: &str| uses.live(font, n).is_some() && !used.contains(n);
     let coloured = |name: &str, master: &str| {
         if name == read.name {
             f.glyph.layers.iter().any(|l| l.master == master && l.info.attrs.full_color)
         } else {
-            has_full_color(font, name, master)
+            uses.live(font, name).is_some_and(|g| full_color_in(g, master))
         }
     };
-    let limit = font.glyphs.len().saturating_add(1);
+    let limit = uses.live_glyphs(font).saturating_add(1);
     let Some((glyph, made)) = expand_glyph(&f.glyph, &taken, &coloured, limit) else { return Err(all()) };
     if glyph != *read || made.len() != used.len() || !made.iter().all(|m| used.contains(m.name.as_str())) {
         return Err(all());
     }
-    let differ: Vec<String> = made.iter().filter(|m| font.glyph(&m.name).is_none_or(|o| **o != **m)).map(|m| m.name.clone()).collect();
+    let differ: Vec<String> = made.iter().filter(|m| uses.live(font, &m.name).is_none_or(|o| *o != **m)).map(|m| m.name.clone()).collect();
     if differ.is_empty() { Ok(()) } else { Err(differ) }
 }
 

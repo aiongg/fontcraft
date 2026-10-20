@@ -254,6 +254,7 @@ notes = "The answers are parameters: without a needed `components` or `metricsKe
 guesses = [
   "Decompose replaces each component of a removed glyph with that glyph's shapes from the matching layer; components inside it that point at glyphs that stay remain components. Settled by observation.",
   "A metrics key points at a glyph when its formula starts with that glyph's name (=H, =|H, =O-4); the longest leading name that is a glyph wins, since names may contain hyphens. Settled by observation.",
+  "A removed glyph's bitmaps leave every bitmap strike with it, so a new glyph with the same name starts without one. Settled by observing whether the reference app keeps a deleted glyph's bitmap for a new glyph of that name.",
 ]
 
 [[command]]

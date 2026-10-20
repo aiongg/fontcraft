@@ -305,3 +305,31 @@ fn variable_paints_turned_gradients_and_colour_glyph_paints_read_and_write_back(
     let kept = font.masters[0].user_data.get(COLOR_LAYERS).and_then(Value::as_dict).unwrap();
     assert_eq!(kept.entries.iter().map(|(k, _)| k.as_str()).collect::<Vec<_>>(), ["C"]);
 }
+
+#[test]
+fn folding_many_layer_glyphs_looks_at_each_glyph_a_bounded_number_of_times() {
+    const BASES: usize = 1000;
+    let mut font = crate::ufo::read(&ufo(PALETTES)).unwrap();
+    let m = font.masters[0].id.clone();
+    let p = |index: u16| Color::Palette { index, alpha: 1.0 };
+    for i in 0..BASES {
+        let name = format!("g{i}");
+        font.add_glyph(&name, vec![], 600.0).unwrap();
+        let layers = [
+            full_color(&m, &format!("{name}.a"), vec![rect(100.0, 0.0, 300.0, 700.0, fill(p(0)))]),
+            full_color(&m, &format!("{name}.b"), vec![rect(300.0, 0.0, 500.0, 700.0, fill(p(1)))]),
+        ];
+        font.glyph_mut(&name).unwrap().layers.extend(layers);
+    }
+    let out = crate::ufo::write(&font).unwrap();
+    let written = 3 + 3 * BASES;
+    COUNTED.with(|c| c.set(0));
+    let back = crate::ufo::read(&out).unwrap();
+    let counted = COUNTED.with(|c| c.get());
+    assert!(back.glyph("g0.color0").is_none() && back.glyph(&format!("g{}.color1", BASES - 1)).is_none());
+    assert_eq!(back.glyphs.len(), font.glyphs.len());
+    assert_eq!(painted(&back, "g7"), painted(&font, "g7"));
+    // Each glyph once when the fold starts, then each base twice and each layer glyph once as it
+    // folds: linear in the font, however many layer glyphs there are.
+    assert!(counted <= 3 * written, "{counted} glyphs looked at for {written} written");
+}
