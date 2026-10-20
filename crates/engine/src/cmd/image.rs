@@ -1,12 +1,16 @@
 //! Image commands: add images to glyphs (one file, or many matched to glyph names), move, lock,
 //! unlock and crop them, and report what they are. Files are read through the session's asset
-//! store.
+//! store. `selection.move`, `edit.delete` and the Palette transformations reach the image through
+//! their `image` flag and the helpers at the end of this file.
 //!
 //! Rows: `glyph.addImage`, `image.setTransform`, `image.lock`, `image.unlock`, `image.setCrop`,
 //! `image.setCropToLayerBounds`, `image.resetCrop`, `image.getInfo`; the behaviour rows
 //! `image.defaultPlacement`, `image.lockedNotSelectable` (commands), `image.supportedFormats`,
-//! `fontView.image.addImageSingle`, `fontView.image.batchByFileName` and
-//! `fontView.image.caseSensitivity`.
+//! `image.directManipulation` (the `image` flag), `fontView.image.addImageSingle`,
+//! `fontView.image.batchByFileName` and `fontView.image.caseSensitivity`.
+//!
+//! A PDF has no pixel size. Its first page's size in points stands in for one: Add Image places
+//! it at one point per unit, and Edit View draws it at that size.
 //!
 //! The image a command addresses is the layer's placed image (`side: "background"`: the
 //! background's). Image shapes of the version 4 format are kept as read; these commands do not
@@ -16,7 +20,7 @@
 use std::collections::HashMap;
 
 use fontcraft_color::AssetStore;
-use fontcraft_geom::{Point, Rect};
+use fontcraft_geom::{Point, Rect, Vec2};
 use fontcraft_imagery::{self as imagery, ImageFormat};
 use fontcraft_model::{Extra, Font, Image, Layer, LayerSide, MAX_COORDINATE, Transform, metric};
 use serde_json::{Map, Value, json};
@@ -43,7 +47,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Add Image…",
             ["Glyph"],
             None,
-            "{files: [path], glyphs?: [names], layer?: id (default: the first master's layer), side?: \"foreground\" | \"background\"} place image files on glyph layers. With `glyphs`, give one file: it goes on each named glyph. Without `glyphs`, each file goes on the glyph named like the file without its extension (`Dje-cy.jpeg` on Dje-cy), case included; files with no such glyph change nothing and are listed. A relative path is relative to the document's folder (to the working directory for a document never saved); the document stores the path relative to its folder, absolute until its first save. The image sits at the layer origin, one point of the image (its stated resolution, else 72 pixels per inch) to one unit, and replaces the layer's image unless that one is locked. PNG, JPEG and TIFF are drawn; PDF, PSD and SVG are kept as references. At most 10,000 files → {placed: [{glyph, layer, file, path, format, pixelWidth, pixelHeight, scale: [x, y], replaced}], unmatched: [file]}",
+            "{files: [path], glyphs?: [names], layer?: id (default: the first master's layer), side?: \"foreground\" | \"background\"} place image files on glyph layers. With `glyphs`, give one file: it goes on each named glyph. Without `glyphs`, each file goes on the glyph named like the file without its extension (`Dje-cy.jpeg` on Dje-cy), case included; files with no such glyph change nothing and are listed. A relative path is relative to the document's folder (to the working directory for a document never saved); the document stores the path relative to its folder, absolute until its first save. The image sits at the layer origin, one point of the image (its stated resolution, else 72 pixels per inch) to one unit, and replaces the layer's image unless that one is locked. PNG, JPEG, TIFF and the first page of a PDF are drawn; PSD and SVG are kept as references. A PDF is placed at one point of its page to one unit, its page size in points standing for a pixel size. At most 10,000 files → {placed: [{glyph, layer, file, path, format, pixelWidth, pixelHeight, scale: [x, y], replaced}], unmatched: [file]}",
             has_doc,
             add_image
         ).files(const { &[FileParam::read("files").from_document()] }),
@@ -200,6 +204,10 @@ fn probe(store: &dyn AssetStore, path: Option<&str>) -> Probe {
         Err(e) => Probe { resolved: false, format: guess, pixels: None, problem: Some(e.to_string()) },
         Ok(bytes) => match imagery::sniff(&bytes) {
             Err(e) => Probe { resolved: true, format: guess, pixels: None, problem: Some(e.to_string()) },
+            Ok(info) if info.format == ImageFormat::Pdf => match pdf_size(&bytes) {
+                Ok(size) => Probe { resolved: true, format: info.format, pixels: Some(size), problem: None },
+                Err(e) => Probe { resolved: true, format: info.format, pixels: None, problem: Some(e) },
+            },
             Ok(info) => {
                 let pixels = (info.width > 0 && info.height > 0).then_some((info.width, info.height));
                 let problem = (!info.format.decodable())
@@ -208,6 +216,14 @@ fn probe(store: &dyn AssetStore, path: Option<&str>) -> Probe {
             }
         },
     }
+}
+
+/// A PDF's first page size in whole points, the size Edit View draws it at: what a PDF has in
+/// place of a pixel size.
+fn pdf_size(bytes: &[u8]) -> std::result::Result<(u32, u32), String> {
+    let (w, h) = fontcraft_io_pdf::page_size(bytes).map_err(|e| format!("the PDF page cannot be read: {e}"))?;
+    let side = |v: f64| v.round().clamp(1.0, f64::from(u32::MAX)) as u32;
+    Ok((side(w), side(h)))
 }
 
 fn format_name(f: ImageFormat) -> &'static str {
@@ -466,7 +482,9 @@ fn read_image(s: &Session, store: &dyn AssetStore, p: &Params, file: &str) -> Re
     let cut = bytes.len() >= HEADER_BYTES;
     let mut info = imagery::sniff(&bytes);
     let tiff_without_resolution = matches!(&info, Ok(i) if i.format == ImageFormat::Tiff) && imagery::resolution(&bytes).is_none();
-    if cut && (info.is_err() || tiff_without_resolution) {
+    // A PDF's page size is read from the whole file.
+    let pdf = matches!(&info, Ok(i) if i.format == ImageFormat::Pdf);
+    if cut && (info.is_err() || tiff_without_resolution || pdf) {
         bytes = store.read(&stored).map_err(|e| p.bad(e.to_string()))?;
         info = imagery::sniff(&bytes);
     }
@@ -474,10 +492,18 @@ fn read_image(s: &Session, store: &dyn AssetStore, p: &Params, file: &str) -> Re
     if info.format == ImageFormat::Other {
         return Err(p.bad(format!("`{file}` is not a PNG, JPEG, TIFF, PDF, PSD or SVG file")));
     }
-    let (ppi_x, ppi_y) = imagery::resolution(&bytes).unwrap_or((DEFAULT_PPI, DEFAULT_PPI));
+    // A PDF's own space is in points already.
+    let (ppi_x, ppi_y) = match info.format {
+        ImageFormat::Pdf => (POINTS_PER_INCH, POINTS_PER_INCH),
+        _ => imagery::resolution(&bytes).unwrap_or((DEFAULT_PPI, DEFAULT_PPI)),
+    };
     let parts = Parts { pos: (0.0, 0.0), scale: (POINTS_PER_INCH / ppi_x, POINTS_PER_INCH / ppi_y), angle: 0.0, slant: (0.0, 0.0) };
     let image = Image { path: Some(stored), transform: parts.transform(), crop: None, alpha: None, locked: false, extra: Extra::new() };
-    let pixels = (info.width > 0 && info.height > 0).then_some((info.width, info.height));
+    // A PDF whose page cannot be read is still placed, as a reference without a size.
+    let pixels = match info.format {
+        ImageFormat::Pdf => pdf_size(&bytes).ok(),
+        _ => (info.width > 0 && info.height > 0).then_some((info.width, info.height)),
+    };
     Ok((image, info.format, pixels))
 }
 
@@ -652,6 +678,76 @@ fn get_info(s: &mut Session, p: &Value) -> Result<Value> {
     let r = t.resolve(s.font()?)?;
     let image = image_of(r.layer, t.side).map(|i| describe(s, i));
     Ok(json!({ "glyph": t.glyph, "layer": t.layer, "side": t.side.as_str(), "image": image }))
+}
+
+// ── the image as a target of other commands ─────────────────────────────────────────────────────
+
+/// Whether the command's `image` flag adds the layer's placed image (on the addressed side) to
+/// its targets.
+pub(crate) fn targeted(p: &Params) -> Result<bool> {
+    p.bool_or("image", false)
+}
+
+/// The addressed side's placed image, for another command to change: refused when the layer has
+/// none or it is locked.
+pub(crate) fn target_mut<'l>(p: &Params, t: &Targets, layer: &'l mut Layer) -> Result<&'l mut Image> {
+    let image = match t.side {
+        LayerSide::Foreground => layer.info.image.as_mut(),
+        LayerSide::Background => layer.info.background.as_mut().and_then(|b| b.image.as_mut()),
+    };
+    let side = if t.side == LayerSide::Background { " background" } else { "" };
+    let image = image.ok_or_else(|| p.bad(format!("layer `{}` of glyph `{}` has no{side} image", layer.id, t.glyph)))?;
+    if image.locked {
+        return Err(locked(p, t));
+    }
+    Ok(image)
+}
+
+/// Moves the addressed image by `d` font units, keeping the form its transform is stored in.
+pub(crate) fn move_by(p: &Params, t: &Targets, layer: &mut Layer, d: Vec2) -> Result<()> {
+    let image = target_mut(p, t, layer)?;
+    let moved = match image.transform {
+        Transform::Decomposed { pos, scale, angle, slant } => Transform::Decomposed { pos: (pos.0 + d.x, pos.1 + d.y), scale, angle, slant },
+        Transform::Matrix([a, b, c, dd, e, f]) => Transform::Matrix([a, b, c, dd, e + d.x, f + d.y]),
+    };
+    let [.., e, f] = moved.affine().as_coeffs();
+    if !(in_range(e) && in_range(f)) {
+        return Err(p.bad(format!("the move takes the image beyond ±{MAX_COORDINATE}")));
+    }
+    image.transform = moved;
+    Ok(())
+}
+
+/// Removes the addressed image from the layer.
+pub(crate) fn remove(p: &Params, t: &Targets, layer: &mut Layer) -> Result<()> {
+    target_mut(p, t, layer)?;
+    match t.side {
+        LayerSide::Foreground => layer.info.image = None,
+        LayerSide::Background => {
+            if let Some(b) = layer.info.background.as_mut() {
+                b.image = None;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The box, in font units, of the addressed image's shown part (its crop, else the whole image):
+/// what a box origin of a transformation is measured on. Without a pixel size, the image's
+/// position alone. Refused when the layer has no image or it is locked.
+pub(crate) fn shown_box(s: &Session, p: &Params, t: &Targets) -> Result<Rect> {
+    let image = current(s, p, t)?;
+    if image.locked {
+        return Err(locked(p, t));
+    }
+    let affine = image.transform.affine();
+    let Some((pw, ph)) = probe(s.assets().as_ref(), image.path.as_deref()).pixels else {
+        let at = affine * Point::ZERO;
+        return Ok(Rect::from_points(at, at));
+    };
+    let [x, y, w, h] = image.crop.unwrap_or([0.0, 0.0, f64::from(pw), f64::from(ph)]);
+    let [a, b, c, d] = [(x, y), (x + w, y), (x + w, y + h), (x, y + h)].map(|(u, v)| affine * Point::new(u, v));
+    Ok(Rect::from_points(a, c).union_pt(b).union_pt(d))
 }
 
 #[cfg(test)]

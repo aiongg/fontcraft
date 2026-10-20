@@ -28,6 +28,12 @@
 //!   on a knob crops it; with the image selected, the Rotate and Scale tools turn and scale it.
 //!   Every drag is an interaction whose previews and final step run `image.setTransform` or
 //!   `image.setCrop`, one undo step.
+//! - With the image selected, the arrow keys run `selection.move` with `image: true` by the
+//!   font's increments (plain, Shift, Cmd), as they move nodes, and Delete or Backspace runs
+//!   `edit.delete` with `image: true` ([`key`]). Commands run from menus, shortcuts and the
+//!   Palette that take the `image` flag get it while the image is selected
+//!   (`tools_glue::with_targets`), so the Transformations palette mirrors, scales, rotates and
+//!   slants the image.
 //!
 //! Contract of the cache (`docs/plans/M11.md` § 3 › Limits):
 //! - Bytes come from the session's asset store (`Session::assets`), never from a file opened
@@ -53,8 +59,8 @@ use fontcraft_engine::color::AssetStore;
 use fontcraft_engine::imagery::{self, ImageFormat, Rgba8};
 use fontcraft_geom::{Affine, Point};
 use fontcraft_model::{Font, Image, Layer, LayerSide, Shape as ModelShape};
-use fontcraft_tools::PointerKind;
 use fontcraft_tools::image::{DragKind, ImageDrag, ImageGeom};
+use fontcraft_tools::{Action, Invocation, Key, KeyEvent, Output, PointerKind};
 use serde_json::{Map, Value, json};
 
 use super::Painting;
@@ -722,6 +728,58 @@ fn cancel(app: &mut FontcraftApp) {
         && app.session.interaction().is_some()
     {
         let _ = app.session.cancel();
+    }
+}
+
+// ── keys ────────────────────────────────────────────────────────────────────────────────────────
+
+/// A key for the selected image, before the tools see it: an arrow moves the image by the font's
+/// increment (Shift: the big one, Cmd: the huge one) and Delete or Backspace removes it, through
+/// the same commands nodes use. `None` when no image is selected or the key is not one of
+/// these, so it goes on to the tools and the menus.
+pub fn key(app: &mut FontcraftApp, ev: &KeyEvent) -> Option<Vec<String>> {
+    if !ev.pressed || app.images.drag.is_some() || app.tools.toolbox.busy() {
+        return None;
+    }
+    let mut params = selected_targets(app)?;
+    let m = ev.mods;
+    let id = match ev.key {
+        Key::Left | Key::Right | Key::Up | Key::Down => {
+            let font = app.session.font().ok()?;
+            let [plain, big, huge] = tools_glue::settings(&app.tokens, font).increments;
+            let step = if m.cmd {
+                huge
+            } else if m.shift {
+                big
+            } else {
+                plain
+            };
+            if !step.is_finite() {
+                return None;
+            }
+            let (dx, dy) = match ev.key {
+                Key::Left => (-step, 0.0),
+                Key::Right => (step, 0.0),
+                Key::Up => (0.0, step),
+                _ => (0.0, -step),
+            };
+            params.insert("dx".into(), json!(dx));
+            params.insert("dy".into(), json!(dy));
+            "selection.move"
+        }
+        Key::Delete | Key::Backspace if !(m.ctrl || m.alt || m.shift || m.cmd) => "edit.delete",
+        _ => return None,
+    };
+    params.insert("image".into(), json!(true));
+    let run = Action::Run { invocation: Invocation::new(id, Value::Object(params)) };
+    Some(tools_glue::apply(app, Output::with(run)))
+}
+
+/// `params` with `image: true` added while the edited side's image is selected and command
+/// `spec` takes the flag, for commands run from menus, shortcuts and the Palette.
+pub fn add_image_target(app: &FontcraftApp, spec: &fontcraft_engine::CommandSpec, params: &mut Map<String, Value>) {
+    if tools_glue::takes_param(spec, "image?: bool") && is_selected(app) {
+        params.insert("image".into(), json!(true));
     }
 }
 

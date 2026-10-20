@@ -32,7 +32,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Move",
             [],
             None,
-            "{glyph: name, layer?: id, side?: \"foreground\" | \"background\", points?: [[shape, node]], segments?: [[shape, node]], shapes?: [index], anchors?: [name], guides?: [{scope: \"local\" | \"global\", index}], annotations?: [index], dx: number, dy: number, mode?: \"normal\" | \"pointsOnly\" | \"nudge\" (default normal), duplicate?: bool} moves what the targets name by (dx, dy) font units, within ±2,000,000. normal: the handles of moved nodes go with them, and the opposite handle of a smooth node turns to stay in line with a moved handle. pointsOnly: only the named points move, and a handle alone keeps its angle. nudge: the handles of each segment with one moved end are scaled between its ends. A segment moves its two end nodes. duplicate: the original stays and a copy moves (part of a path is copied as open paths of its selected segments). Moved points are rounded to the grid → {selection}",
+            "{glyph: name, layer?: id, side?: \"foreground\" | \"background\", points?: [[shape, node]], segments?: [[shape, node]], shapes?: [index], anchors?: [name], guides?: [{scope: \"local\" | \"global\", index}], annotations?: [index], image?: bool, dx: number, dy: number, mode?: \"normal\" | \"pointsOnly\" | \"nudge\" (default normal), duplicate?: bool} moves what the targets name by (dx, dy) font units, within ±2,000,000. `image: true` moves the layer's placed image on that side too, unrounded; a locked image, or none, refuses it, and it cannot be duplicated. normal: the handles of moved nodes go with them, and the opposite handle of a smooth node turns to stay in line with a moved handle. pointsOnly: only the named points move, and a handle alone keeps its angle. nudge: the handles of each segment with one moved end are scaled between its ends. A segment moves its two end nodes. duplicate: the original stays and a copy moves (part of a path is copied as open paths of its selected segments). Moved points are rounded to the grid → {selection}",
             has_doc,
             selection_move
         )
@@ -96,7 +96,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Delete",
             [],
             Some("Delete"),
-            "{glyph: name, layer?: id, side?, points?: [[shape, node]], shapes?: [index], anchors?: [name], guides?: [{scope, index}], annotations?: [index]} removes what the targets name. A deleted node leaves the path closed: the segments it joined become one, refitted to the old curve; a curve segment that loses a handle becomes a line; a path with every point named, or fewer than two nodes left, is removed → {selection}",
+            "{glyph: name, layer?: id, side?, points?: [[shape, node]], shapes?: [index], anchors?: [name], guides?: [{scope, index}], annotations?: [index], image?: bool} removes what the targets name; `image: true` removes the layer's placed image on that side (a locked image, or none, refuses it). A deleted node leaves the path closed: the segments it joined become one, refitted to the old curve; a curve segment that loses a handle becomes a line; a path with every point named, or fewer than two nodes left, is removed → {selection}",
             has_doc,
             delete
         )
@@ -382,11 +382,21 @@ fn selection_move(s: &mut Session, v: &Value) -> Result<Value> {
         other => return Err(p.bad(format!("`mode` must be normal, pointsOnly or nudge, got \"{other}\""))),
     };
     let duplicate = p.bool_or("duplicate", false)?;
-    if !t.has_lists() {
-        return Err(p.bad("give what to move: `points`, `segments`, `shapes`, `anchors`, `guides` or `annotations`"));
+    let image = super::image::targeted(&p)?;
+    if !t.has_lists() && !image {
+        return Err(p.bad("give what to move: `points`, `segments`, `shapes`, `anchors`, `guides`, `annotations` or `image`"));
+    }
+    if image && duplicate {
+        return Err(p.bad("a placed image cannot be duplicated: leave out `duplicate` or `image`"));
     }
     let step = grid(s.font()?);
-    let sel = s.edit(if duplicate { "Duplicate" } else { "Move" }, |font| moving::apply(font, &t, d, mode, duplicate, step))?;
+    let sel = s.edit(if duplicate { "Duplicate" } else { "Move" }, |font| {
+        let sel = if t.has_lists() { moving::apply(font, &t, d, mode, duplicate, step)? } else { none_selected(&t) };
+        if image {
+            t.edit_layer(font, |l| super::image::move_by(&p, &t, l, d))?;
+        }
+        Ok(sel)
+    })?;
     Ok(json!({ "selection": sel.to_json() }))
 }
 
@@ -726,13 +736,19 @@ fn delete(s: &mut Session, v: &Value) -> Result<Value> {
     if !t.segments.is_empty() {
         return Err(p.bad("takes `points`, not `segments`: name a segment's handles to straighten it"));
     }
-    if !t.has_lists() {
-        return Err(p.bad("give what to delete: `points`, `shapes`, `anchors`, `guides` or `annotations`"));
+    let image = super::image::targeted(&p)?;
+    if !t.has_lists() && !image {
+        return Err(p.bad("give what to delete: `points`, `shapes`, `anchors`, `guides`, `annotations` or `image`"));
     }
     let step = grid(s.font()?);
     s.edit("Delete", |font| {
         let master = t.resolve(font)?.master.id.clone();
-        t.edit_layer(font, |layer| delete_in(&mut layer.parts_mut(t.side), &t, step).map_err(|m| p.bad(m)))?;
+        t.edit_layer(font, |layer| {
+            if image {
+                super::image::remove(&p, &t, layer)?;
+            }
+            delete_in(&mut layer.parts_mut(t.side), &t, step).map_err(|m| p.bad(m))
+        })?;
         let global: BTreeSet<usize> = t.guides.iter().filter(|g| g.scope == GuideScope::Global).map(|g| g.index).collect();
         if !global.is_empty()
             && let Some(m) = Arc::make_mut(&mut font.masters).iter_mut().find(|m| m.id == master)
