@@ -457,7 +457,8 @@ impl FontSlot {
             let wait = if editing { REBUILD_PAUSE - since } else { 0.0 };
             if self.running.is_none() && wait <= 0.0 {
                 if let Some(doc) = session.active() {
-                    let source = Source::Build { font: doc.font.clone(), options: build_options(session), builds: session.preview_builds() };
+                    let source =
+                        Source::Build { font: doc.font.clone(), options: Box::new(build_options(session)), builds: session.preview_builds() };
                     self.running = Some((key.clone(), start_build(key.clone(), source)));
                     self.collect();
                 }
@@ -510,7 +511,7 @@ enum Source {
     Kept(Arc<SharedBuild>),
     /// The font to build the preview fonts of, and the store the build is left in for
     /// `font.features.compile`.
-    Build { font: Arc<Font>, options: fontcraft_engine::compile::Options, builds: PreviewBuilds },
+    Build { font: Arc<Font>, options: Box<fontcraft_engine::compile::Options>, builds: PreviewBuilds },
 }
 
 /// The shaper of a build's full preview font, or why there is none.

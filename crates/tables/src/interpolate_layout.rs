@@ -310,9 +310,12 @@ fn write_class_def(items: &BTreeMap<u16, u16>) -> ClassDef {
     }
 }
 
+/// For each list, the index in it of each glyph of the union (`None` where the list lacks it).
+type Positions = Vec<Vec<Option<usize>>>;
+
 /// fontTools' `_merge_GlyphOrders`: the union of `lists` in glyph order, and for each list the
 /// index of each union glyph in it. Every list must already be in glyph order.
-fn merge_orders(lists: &[&[u16]]) -> Result<(Vec<u16>, Vec<Vec<Option<usize>>>)> {
+fn merge_orders(lists: &[&[u16]]) -> Result<(Vec<u16>, Positions)> {
     if lists.iter().any(|l| l.windows(2).any(|w| matches!(w, [a, b] if a > b))) {
         return Err(bad("a master lists glyphs out of the base master's glyph order"));
     }

@@ -252,7 +252,7 @@ struct BuildKey<'a> {
     master: &'a str,
     /// The compile's cache key ([`FeatureState::source_hash`]).
     hash: u64,
-    /// The code includes files.
+    /// The code includes files from outside the assembly.
     includes: bool,
     /// Compile even when a build of this revision is kept.
     force: bool,
@@ -470,7 +470,8 @@ fn compile(s: &mut Session, raw: &Value) -> Result<Value> {
                 revision,
                 master: &master,
                 hash,
-                includes: files.iter().any(|(_, text)| include_names(text).next().is_some()),
+                // The entries are virtual files the assembly includes; only other files count.
+                includes: files.iter().any(|(_, text)| include_names(text).any(|name| files.get(name).is_none())),
                 force,
             };
             let builds = s.preview_builds();

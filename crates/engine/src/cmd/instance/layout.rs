@@ -92,12 +92,14 @@ pub(super) fn instantiate(p: &Params<'_>, input: &Path, req: &OutputRequest) -> 
     let stamp = super::timestamp(p)?;
 
     let plan = Plan { font: &font, ds: &ds, masters: &masters, base, model: &model, ext, stamp, dir };
+    let created = file_io::create_output_dir(req)?;
     let mut staged: Vec<Staged> = Vec::new();
     let built = write_all(p, input, req, &plan, &jobs, &mut staged);
     let results = match built.and_then(|r| commit(&staged).map(|()| r)) {
         Ok(r) => r,
         Err(e) => {
             discard(&staged);
+            file_io::remove_created(&created);
             return Err(e);
         }
     };

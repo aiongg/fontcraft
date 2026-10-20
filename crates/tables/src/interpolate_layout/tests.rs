@@ -39,7 +39,9 @@ fn interpolated_gpos_matches_fonttools_on_corpus_masters() {
         return;
     };
     let family3 = ["TestFamily3-Light", "TestFamily3-Regular", "TestFamily3-SemiBold", "TestFamily3-Bold"];
-    let cases: [(&str, &str, &[&str], usize, &[f64], &str); 6] = [
+    // (label, master folder, master stems, base master, scalars, expected digest)
+    type Case<'a> = (&'a str, &'a str, &'a [&'a str], usize, &'a [f64], &'a str);
+    let cases: [Case; 6] = [
         // Single adjustment (vpal), weight 500 and 250.
         (
             "vpal 500",
@@ -111,9 +113,13 @@ fn incompatible_masters_are_refused_as_fonttools_refuses_them() {
         eprintln!("skipped: corpus not fetched");
         return;
     };
-    let cases: [(&str, &[&str]); 4] = [
+    // The bold master of IncompatibleLookupTypes holds a PairPos subtable in a lookup of type 4:
+    // fontTools refuses to compile that master, and the TTX reader refuses to read it.
+    let lookup_types = root.join("master_incompatible_lookup_types/IncompatibleLookupTypes-Bold.ttx");
+    let text = std::fs::read_to_string(lookup_types).unwrap();
+    assert!(crate::ttx::import(SfntFont::new(Flavour::TrueType), &text, &ImportOptions::default()).is_err());
+    let cases: [(&str, &[&str]); 3] = [
         ("master_incompatible_arrays", &["IncompatibleArrays-Regular", "IncompatibleArrays-Bold"]),
-        ("master_incompatible_lookup_types", &["IncompatibleLookupTypes-Regular", "IncompatibleLookupTypes-Bold"]),
         ("master_incompatible_features", &["IncompatibleFeatures-Regular", "IncompatibleFeatures-Bold"]),
         // The medium master has no GPOS table.
         ("master_ttx_interpolatable_ttf", &["SparseMasters-Regular", "SparseMasters-Medium", "SparseMasters-Bold"]),
