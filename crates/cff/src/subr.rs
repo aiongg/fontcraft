@@ -12,7 +12,9 @@
 //!    number, an operator, or `hintmask`/`cntrmask` with its mask bytes. A token keeps its exact
 //!    bytes, so expanding the result gives back the input byte for byte.
 //! 2. A suffix array and its LCP array over all tokens give every repeated token sequence that
-//!    is followed by different tokens in different places, with its number of occurrences.
+//!    is followed by different tokens in different places, with its number of occurrences. The
+//!    tree of these sequences is walked twice and never stored: the first walk prices every
+//!    sequence, the second records only the candidates kept.
 //! 3. An iterative market chooses the encoding: each candidate has a price; dynamic programming
 //!    finds the cheapest way to write every glyph and every candidate from tokens and calls; the
 //!    prices follow the use each candidate gets; candidates that do not pay for themselves are
@@ -30,10 +32,16 @@
 //! the same way, and the work is single-threaded and bounded by the limits below.
 //!
 //! Every input is untrusted: counts, lengths and work are capped by the named limits, and
-//! anything beyond them returns a [`SubrError`]; nothing panics.
+//! anything beyond them returns a [`SubrError`]; nothing panics. Memory grows linearly with the
+//! tokens: a glyph is dropped as soon as its tokens are read, at most a few arrays of one entry
+//! per token are held at once (about 30 bytes per token and 100 per candidate at the peak),
+//! and the large arrays are charged to a budget of [`MAX_SUBR_MEMORY`]. A full CJK
+//! font (65,535 glyphs, about 25 million tokens) fits twice over on a 64-bit target.
 
+mod find;
 mod flat;
 mod market;
+mod memory;
 mod prune;
 mod suffix;
 mod table;
@@ -69,11 +77,22 @@ pub const CFF2_DEFAULT_STACK: usize = 193;
 pub const MAX_OPS_PER_GLYPH: usize = 1 << 20;
 /// Most operators all glyphs of one set may run together while their calls are followed.
 pub const MAX_OPS_PER_SET: usize = 1 << 28;
-/// Most tokens all expanded charstrings may hold together. The subroutiniser keeps about 60
-/// bytes per token, so this caps its memory near 500 MB.
-pub const MAX_TOKENS: usize = 1 << 23;
-/// Most tokens the candidate subroutines may hold together; candidates are kept in order of
-/// their estimated saving until this is reached.
+/// Most tokens all expanded charstrings may hold together, one separator per glyph included: on
+/// a 64-bit target over twice a full CJK font (Source Han Serif Bold: 25.5 million), on a 32-bit
+/// one (wasm) what [`MAX_SUBR_MEMORY`] holds there.
+pub const MAX_TOKENS: usize = if usize::BITS >= 64 { 1 << 26 } else { 1 << 24 };
+/// Most bytes the subroutiniser's large arrays may take together. On a 32-bit target (wasm) it
+/// is the memory a table's charstrings may take there, which leaves the rest of the 4 GiB address
+/// space to the app.
+#[cfg(target_pointer_width = "64")]
+pub const MAX_SUBR_MEMORY: usize = 4 << 30;
+/// Most bytes the subroutiniser's large arrays may take together. On a 32-bit target (wasm) it
+/// is the memory a table's charstrings may take there, which leaves the rest of the 4 GiB address
+/// space to the app.
+#[cfg(not(target_pointer_width = "64"))]
+pub const MAX_SUBR_MEMORY: usize = 512 << 20;
+/// Most tokens the candidate subroutines may hold together, or the tokens of the text when there
+/// are more; candidates are kept in order of their estimated saving until this is reached.
 pub const MAX_CANDIDATE_TOKENS: usize = 1 << 23;
 /// Most candidates the dynamic programming looks at for one token position.
 pub const MAX_CANDIDATES_PER_POSITION: usize = 64;
@@ -248,9 +267,25 @@ pub fn desubroutinize_within(set: &CharstringSet, max_bytes: usize) -> Result<Ch
 /// expanded first. The result is checked by expanding it again; a glyph that does not come back
 /// unchanged makes this return [`SubrError::Mismatch`].
 pub fn subroutinize(set: &CharstringSet, options: &SubrOptions) -> Result<CharstringSet, SubrError> {
+    subroutinize_measured(set, options, MAX_SUBR_MEMORY).map(|(result, _)| result)
+}
+
+/// What one run of the subroutiniser took.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SubrStats {
+    /// Tokens of all expanded charstrings, one separator per glyph included.
+    pub tokens: usize,
+    /// Repeated sequences kept as candidate subroutines.
+    pub candidates: usize,
+    /// The most bytes charged to the memory budget at once.
+    pub peak_memory: usize,
+}
+
+/// [`subroutinize`] within a memory budget of `max_memory` bytes, with what it took.
+pub fn subroutinize_measured(set: &CharstringSet, options: &SubrOptions, max_memory: usize) -> Result<(CharstringSet, SubrStats), SubrError> {
     set.validate()?;
-    let flats = flatten_all(set)?;
-    let fd_of: Vec<usize> = (0..flats.len()).map(|g| set.fd_of(g)).collect();
+    let glyphs = set.charstrings.len();
+    let fd_of: Vec<usize> = (0..glyphs).map(|g| set.fd_of(g)).collect();
     let params = market::Params {
         fd_count: set.fd_count(),
         cff2: set.cff2,
@@ -258,21 +293,22 @@ pub fn subroutinize(set: &CharstringSet, options: &SubrOptions) -> Result<Charst
         max_subrs: options.max_subrs.clamp(1, MAX_SUBRS_PER_INDEX),
         rounds: options.rounds.clamp(1, MAX_ROUNDS),
     };
-    let out = market::subroutinize(&flats, &fd_of, &params)?;
-    let result = CharstringSet { charstrings: out.charstrings, global_subrs: out.global, local_subrs: out.local, ..set.clone() };
+    let mut mem = memory::Memory::new(max_memory);
     let mut budget = MAX_OPS_PER_SET;
-    for (gid, original) in flats.iter().enumerate() {
-        let again = flat::flatten(&result, gid, &mut budget).map_err(|_| SubrError::Mismatch { glyph: gid })?;
+    let next = |gid: usize| flat::flatten(set, gid, &mut budget).map_err(|e| in_glyph(e, gid));
+    let out = market::subroutinize(glyphs, next, &fd_of, &params, &mut mem)?;
+    let stats = SubrStats { tokens: out.tokens, candidates: out.candidates, peak_memory: mem.peak() };
+    let result = CharstringSet { charstrings: out.charstrings, global_subrs: out.global, local_subrs: out.local, ..set.clone() };
+    // The glyphs are expanded again, one at a time, rather than kept from the first expansion.
+    let (mut before, mut after) = (MAX_OPS_PER_SET, MAX_OPS_PER_SET);
+    for gid in 0..glyphs {
+        let original = flat::flatten(set, gid, &mut before).map_err(|e| in_glyph(e, gid))?;
+        let again = flat::flatten(&result, gid, &mut after).map_err(|_| SubrError::Mismatch { glyph: gid })?;
         if again.bytes != original.bytes {
             return Err(SubrError::Mismatch { glyph: gid });
         }
     }
-    Ok(result)
-}
-
-fn flatten_all(set: &CharstringSet) -> Result<Vec<flat::Flat>, SubrError> {
-    let mut budget = MAX_OPS_PER_SET;
-    (0..set.charstrings.len()).map(|gid| flat::flatten(set, gid, &mut budget).map_err(|e| in_glyph(e, gid))).collect()
+    Ok((result, stats))
 }
 
 fn in_glyph(e: SubrError, gid: usize) -> SubrError {

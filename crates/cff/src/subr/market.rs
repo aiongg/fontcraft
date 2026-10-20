@@ -1,5 +1,6 @@
 //! Choosing the subroutines: the iterative market of compreffor's `pyCompressor` (Apache-2.0,
-//! Copyright 2015 Google Inc.), ported over the suffix tree of [`super::suffix`].
+//! Copyright 2015 Google Inc.), ported over the candidates [`super::find`] takes from the tree of
+//! repeats.
 //!
 //! Terms: a *candidate* is a repeated token sequence (a node of the tree) that could become a
 //! subroutine; its *cost* is its bytes; its *price* is what using it costs in the current round;
@@ -7,11 +8,14 @@
 //! that ends up unused, or whose calls cost more than they save, is *flattened*: written out
 //! wherever it was chosen, with its own calls kept.
 
-use std::collections::HashMap;
+use std::cmp::Reverse;
+use std::collections::BinaryHeap;
 
+use super::find::{self, Text};
 use super::flat::Flat;
-use super::suffix::{self, NONE};
-use super::{MAX_CALL_DEPTH, MAX_CANDIDATE_TOKENS, MAX_CANDIDATES_PER_POSITION, MAX_TOKENS, SubrError, bias, push_int};
+use super::memory::Memory;
+use super::suffix::NONE;
+use super::{MAX_CALL_DEPTH, MAX_CANDIDATES_PER_POSITION, SubrError, bias, push_int};
 
 /// Weight of the newest marginal cost in a price (compreffor's `ALPHA`).
 const ALPHA: f64 = 0.1;
@@ -19,9 +23,9 @@ const ALPHA: f64 = 0.1;
 const K: f64 = 0.1;
 /// Bytes a call is assumed to cost when estimating savings (compreffor's choice; a real call
 /// costs two to four).
-const CALL_COST: i64 = 5;
+pub(super) const CALL_COST: i64 = 5;
 /// Bytes a subroutine costs beyond its body: the `return` and its INDEX offset.
-const SUBR_OVERHEAD: i64 = 3;
+pub(super) const SUBR_OVERHEAD: i64 = 3;
 /// A reached candidate's state when glyphs of more than one Font DICT reach it.
 const MULTI: u32 = u32::MAX - 1;
 
@@ -37,62 +41,77 @@ pub(super) struct Output {
     pub charstrings: Vec<Vec<u8>>,
     pub global: Vec<Vec<u8>>,
     pub local: Vec<Vec<Vec<u8>>>,
+    /// Tokens of the text, separators included, and candidates found.
+    pub tokens: usize,
+    pub candidates: usize,
 }
 
 /// One call in an encoding: where in the encoded sequence it starts, and the candidate.
 type Call = (u32, u32);
 
-struct Cand {
-    len: u32,
-    start: u32,
-    cost: i64,
-    /// Largest stack depth at the start of any occurrence, up to its first stack-clearing operator.
-    entry: u16,
-    /// Tokens before its first stack-clearing operator.
-    first_clear: u32,
-    price: f64,
-    adjusted: f64,
-    usages: i64,
-    enc: Vec<Call>,
-    alive: bool,
-    flatten: bool,
-    global: bool,
+pub(super) struct Cand {
+    pub len: u32,
+    pub start: u32,
+    pub cost: i64,
+    pub price: f64,
+    pub adjusted: f64,
+    pub usages: i64,
+    /// Its encoding: `(first, count)` in [`Market::calls`].
+    pub enc: (u32, u32),
+    /// The nearest candidate above it in the tree of repeats, and the nearest live one.
+    pub parent: u32,
+    pub up: u32,
+    /// Tokens before its first stack-clearing operator (at most its length).
+    pub first_clear: u32,
     /// Index in its INDEX, once placed, and the bias of that INDEX.
-    position: usize,
-    call_bias: i64,
-    /// Its bytes once written: a subroutine body, or what replaces it when flattened.
-    program: Vec<u8>,
+    pub position: u32,
+    pub call_bias: u16,
+    /// Largest stack depth at the start of any occurrence, up to its first stack-clearing operator.
+    pub entry: u16,
+    pub alive: bool,
+    pub flatten: bool,
+    pub global: bool,
 }
 
 impl Cand {
+    pub(super) fn new(len: u32) -> Self {
+        Cand {
+            len,
+            start: 0,
+            cost: 0,
+            price: 0.0,
+            adjusted: 0.0,
+            usages: 0,
+            enc: (0, 0),
+            parent: NONE,
+            up: NONE,
+            first_clear: 0,
+            position: 0,
+            call_bias: 0,
+            entry: 0,
+            alive: true,
+            flatten: false,
+            global: false,
+        }
+    }
+
     /// Bytes saved by making this a subroutine, by compreffor's estimate.
     fn saving(&self, amount: i64, cost: i64) -> i64 {
         cost * amount - cost - CALL_COST * amount - SUBR_OVERHEAD
     }
 }
 
-struct Market<'p> {
-    p: &'p Params,
-    /// Token id of every text position; separators are ids at or above `alphabet`.
-    text: Vec<u32>,
-    alphabet: u32,
-    /// Bytes of each token id, in `arena`.
-    spans: Vec<(u32, u32)>,
-    arena: Vec<u8>,
-    cost: Vec<u32>,
-    depth: Vec<u16>,
-    glyph_start: Vec<u32>,
-    glyph_len: Vec<u32>,
-    tree: suffix::Tree,
-    cand_of: Vec<u32>,
+struct Market<'a> {
+    p: &'a Params,
+    t: Text,
+    /// Per text position, the deepest candidate starting there.
+    deep: Vec<u32>,
     cands: Vec<Cand>,
-    /// Nodes in order of length, so parents come first.
+    /// Candidates in order of length, so that the enclosing ones come first.
     order: Vec<u32>,
-    /// Nearest strict ancestor that is a live candidate.
-    up: Vec<u32>,
-    /// Per text position, the tokens before the next stack-clearing one (dropped once the
-    /// candidates are found).
-    next_clear: Vec<u32>,
+    /// The encodings of the live candidates in the latest round.
+    calls: Vec<Call>,
+    mem: &'a mut Memory,
 }
 
 /// Where calls may start within the sequence being encoded.
@@ -105,103 +124,23 @@ enum Site {
     Subr { entry: u16, first_clear: u32 },
 }
 
-pub(super) fn subroutinize(flats: &[Flat], fd_of: &[usize], p: &Params) -> Result<Output, SubrError> {
-    let mut m = Market::new(flats, p)?;
-    m.find_candidates();
-    let glyph_enc = m.run_rounds();
+/// Subroutinises glyphs `0..glyphs`, each produced by `next` as it is needed.
+pub(super) fn subroutinize(
+    glyphs: usize,
+    next: impl FnMut(usize) -> Result<Flat, SubrError>,
+    fd_of: &[usize],
+    p: &Params,
+    mem: &mut Memory,
+) -> Result<Output, SubrError> {
+    let mut t = find::read(glyphs, next, mem)?;
+    let (cands, deep) = find::find(&mut t, mem)?;
+    let mut order: Vec<u32> = (0..cands.len() as u32).collect();
+    order.sort_by_key(|&c| cands.get(c as usize).map_or(0, |x| x.len));
+    mem.charge_for::<u32>(order.len())?;
+    let mut m = Market { p, t, deep, cands, order, calls: Vec::new(), mem };
+    m.refresh_up();
+    let glyph_enc = m.run_rounds()?;
     m.finish(&glyph_enc, fd_of)
-}
-
-impl<'p> Market<'p> {
-    fn new(flats: &[Flat], p: &'p Params) -> Result<Self, SubrError> {
-        let total: usize = flats.iter().map(|f| f.tokens.len() + 1).sum();
-        if total > MAX_TOKENS {
-            return Err(SubrError::TooLarge { what: "charstring tokens to subroutinise", limit: MAX_TOKENS });
-        }
-        let mut ids: HashMap<Vec<u8>, u32> = HashMap::new();
-        let mut m = Market {
-            p,
-            text: Vec::with_capacity(total),
-            alphabet: 0,
-            spans: Vec::new(),
-            arena: Vec::new(),
-            cost: Vec::new(),
-            depth: Vec::with_capacity(total),
-            glyph_start: Vec::with_capacity(flats.len()),
-            glyph_len: Vec::with_capacity(flats.len()),
-            tree: suffix::Tree::default(),
-            cand_of: Vec::new(),
-            cands: Vec::new(),
-            order: Vec::new(),
-            up: Vec::new(),
-            next_clear: Vec::new(),
-        };
-        let mut clears = Vec::with_capacity(total);
-        for flat in flats {
-            m.glyph_start.push(m.text.len() as u32);
-            m.glyph_len.push(flat.tokens.len() as u32);
-            for t in &flat.tokens {
-                let bytes = flat.token_bytes(t);
-                let blend_key;
-                let key: &[u8] = match t.blend_vsindex {
-                    Some(v) => {
-                        blend_key = [16, (v >> 8) as u8, v as u8];
-                        &blend_key
-                    }
-                    None => bytes,
-                };
-                let id = match ids.get(key) {
-                    Some(&id) => id,
-                    None => {
-                        let id = m.spans.len() as u32;
-                        m.spans.push((m.arena.len() as u32, bytes.len() as u32));
-                        m.arena.extend_from_slice(bytes);
-                        ids.insert(key.to_vec(), id);
-                        id
-                    }
-                };
-                m.text.push(id);
-                m.depth.push(t.depth);
-                clears.push(t.clears);
-            }
-            m.text.push(NONE);
-            m.depth.push(0);
-            clears.push(true);
-        }
-        m.alphabet = m.spans.len() as u32;
-        let mut g = 0u32;
-        for t in m.text.iter_mut().filter(|t| **t == NONE) {
-            *t = m.alphabet + g;
-            g += 1;
-        }
-        m.cost = m.text.iter().map(|&t| m.spans.get(t as usize).map_or(0, |s| s.1)).collect();
-
-        // Per position: the largest depth up to and including the next stack-clearing token, and
-        // the tokens before that token.
-        let n = m.text.len();
-        let mut entry = vec![0u16; n];
-        let mut next_clear = vec![0u32; n];
-        let (mut run_max, mut run_len) = (0u16, 0u32);
-        for i in (0..n).rev() {
-            let d = m.depth.get(i).copied().unwrap_or(0);
-            if clears.get(i).copied().unwrap_or(true) {
-                (run_max, run_len) = (d, 0);
-            } else {
-                (run_max, run_len) = (run_max.max(d), run_len + 1);
-            }
-            if let (Some(e), Some(c)) = (entry.get_mut(i), next_clear.get_mut(i)) {
-                (*e, *c) = (run_max, run_len);
-            }
-        }
-        m.tree = suffix::build(&m.text, (m.alphabet + g) as usize, &entry);
-        m.cand_of = vec![NONE; m.tree.len.len()];
-        m.up = vec![NONE; m.tree.len.len()];
-        let mut order: Vec<u32> = (0..m.tree.len.len() as u32).collect();
-        order.sort_by_key(|&node| m.tree.len.get(node as usize).copied().unwrap_or(0));
-        m.order = order;
-        m.next_clear = next_clear;
-        Ok(m)
-    }
 }
 
 impl Market<'_> {
@@ -209,89 +148,40 @@ impl Market<'_> {
         self.cands.get(c as usize)
     }
 
-    fn alive(&self, node: u32) -> bool {
-        let c = self.cand_of.get(node as usize).copied().unwrap_or(NONE);
+    fn alive(&self, c: u32) -> bool {
         self.cand(c).is_some_and(|c| c.alive)
     }
 
-    /// The deepest live candidate at or above `node`.
-    fn first(&self, node: u32) -> u32 {
-        if self.alive(node) { node } else { self.up.get(node as usize).copied().unwrap_or(NONE) }
+    /// The deepest live candidate at or above `c`.
+    fn first(&self, c: u32) -> u32 {
+        if self.alive(c) { c } else { self.cand(c).map_or(NONE, |x| x.up) }
+    }
+
+    /// The encoding of candidate `c` in the latest round.
+    fn enc(&self, c: usize) -> &[Call] {
+        let (from, count) = self.cands.get(c).map_or((0, 0), |x| x.enc);
+        self.calls.get(from as usize..(from + count) as usize).unwrap_or_default()
+    }
+
+    fn callees(&self, c: usize) -> Vec<u32> {
+        self.enc(c).iter().map(|e| e.1).collect()
     }
 
     fn refresh_up(&mut self) {
         for k in 0..self.order.len() {
-            let node = self.order.get(k).copied().unwrap_or(0);
-            let parent = self.tree.parent.get(node as usize).copied().unwrap_or(NONE);
+            let c = self.order.get(k).copied().unwrap_or(NONE);
+            let parent = self.cand(c).map_or(NONE, |x| x.parent);
             let up = if parent == NONE {
                 NONE
             } else if self.alive(parent) {
                 parent
             } else {
-                self.up.get(parent as usize).copied().unwrap_or(NONE)
+                self.cand(parent).map_or(NONE, |x| x.up)
             };
-            if let Some(slot) = self.up.get_mut(node as usize) {
-                *slot = up;
+            if let Some(x) = self.cands.get_mut(c as usize) {
+                x.up = up;
             }
         }
-    }
-
-    /// Keeps the nodes whose estimated saving is positive, best first, within
-    /// [`MAX_CANDIDATE_TOKENS`].
-    fn find_candidates(&mut self) {
-        let mut pre = Vec::with_capacity(self.cost.len() + 1);
-        let mut sum = 0i64;
-        pre.push(0);
-        for &c in &self.cost {
-            sum += i64::from(c);
-            pre.push(sum);
-        }
-        let mut found: Vec<(i64, u32)> = Vec::new();
-        for node in 1..self.tree.len.len() {
-            let len = self.tree.len.get(node).copied().unwrap_or(0) as usize;
-            let start = self.tree.start.get(node).copied().unwrap_or(0) as usize;
-            let freq = i64::from(self.tree.freq.get(node).copied().unwrap_or(0));
-            let cost = pre.get(start + len).copied().unwrap_or(0) - pre.get(start).copied().unwrap_or(0);
-            let saving = cost * freq - cost - CALL_COST * freq - SUBR_OVERHEAD;
-            if len > 0 && freq >= 2 && saving > 0 {
-                found.push((saving, node as u32));
-            }
-        }
-        found.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
-        let mut tokens = 0usize;
-        for (_, node) in found {
-            let n = node as usize;
-            let len = self.tree.len.get(n).copied().unwrap_or(0);
-            if tokens + len as usize > MAX_CANDIDATE_TOKENS {
-                continue;
-            }
-            tokens += len as usize;
-            let start = self.tree.start.get(n).copied().unwrap_or(0);
-            let cost = pre.get(start as usize + len as usize).copied().unwrap_or(0) - pre.get(start as usize).copied().unwrap_or(0);
-            let freq = i64::from(self.tree.freq.get(n).copied().unwrap_or(0));
-            if let Some(slot) = self.cand_of.get_mut(n) {
-                *slot = self.cands.len() as u32;
-            }
-            self.cands.push(Cand {
-                len,
-                start,
-                cost,
-                entry: self.tree.entry.get(n).copied().unwrap_or(0),
-                first_clear: self.next_clear.get(start as usize).copied().unwrap_or(0),
-                price: cost as f64,
-                adjusted: cost as f64,
-                usages: freq,
-                enc: Vec::new(),
-                alive: true,
-                flatten: false,
-                global: false,
-                position: 0,
-                call_bias: 0,
-                program: Vec::new(),
-            });
-        }
-        self.next_clear = Vec::new();
-        self.refresh_up();
     }
 
     /// The cheapest encoding of the `len` tokens at `from` with the current prices, and its cost.
@@ -303,30 +193,28 @@ impl Market<'_> {
         for j in (0..len).rev() {
             let at = from + j;
             let tail = |k: usize| results.get(k).copied().unwrap_or(f64::INFINITY);
-            let mut best = f64::from(self.cost.get(at).copied().unwrap_or(0)) + tail(j + 1);
+            let mut best = f64::from(self.t.cost(at)) + tail(j + 1);
             let mut pick = NONE;
             let depth = match site {
                 Site::Subr { entry, first_clear } if j <= first_clear as usize => entry,
-                _ => self.depth.get(at).copied().unwrap_or(u16::MAX),
+                _ => self.t.depth.get(at).copied().unwrap_or(u16::MAX),
             };
             // The call pushes the subroutine number.
             if usize::from(depth) < max_stack {
-                let mut node = self.first(self.tree.deep.get(at).copied().unwrap_or(0));
+                let mut c = self.first(self.deep.get(at).copied().unwrap_or(NONE));
                 let mut seen = 0usize;
-                while node != NONE && seen < MAX_CANDIDATES_PER_POSITION {
+                while seen < MAX_CANDIDATES_PER_POSITION {
+                    let Some(cand) = self.cand(c) else { break };
                     seen += 1;
-                    let c = self.cand_of.get(node as usize).copied().unwrap_or(NONE);
-                    if let Some(cand) = self.cand(c) {
-                        let clen = cand.len as usize;
-                        if c != skip && clen <= len - j {
-                            let option = cand.price + tail(j + clen);
-                            if option < best {
-                                best = option;
-                                pick = c;
-                            }
+                    let clen = cand.len as usize;
+                    if c != skip && clen <= len - j {
+                        let option = cand.price + tail(j + clen);
+                        if option < best {
+                            best = option;
+                            pick = c;
                         }
                     }
-                    node = self.up.get(node as usize).copied().unwrap_or(NONE);
+                    c = cand.up;
                 }
             }
             if let (Some(r), Some(ch)) = (results.get_mut(j), choice.get_mut(j)) {
@@ -349,7 +237,8 @@ impl Market<'_> {
     }
 
     fn encode_glyphs(&self) -> Vec<Vec<Call>> {
-        self.glyph_start.iter().zip(&self.glyph_len).map(|(&start, &len)| self.encode(start as usize, len as usize, NONE, Site::Glyph).1).collect()
+        let t = &self.t;
+        t.glyph_start.iter().zip(&t.glyph_len).map(|(&start, &len)| self.encode(start as usize, len as usize, NONE, Site::Glyph).1).collect()
     }
 
     fn live(&self) -> Vec<usize> {
@@ -357,29 +246,51 @@ impl Market<'_> {
     }
 
     /// The rounds of the market; returns the glyph encodings of the last one.
-    fn run_rounds(&mut self) -> Vec<Vec<Call>> {
-        let mut glyph_enc = Vec::new();
+    fn run_rounds(&mut self) -> Result<Vec<Vec<Call>>, SubrError> {
+        let mut glyph_enc: Vec<Vec<Call>> = Vec::new();
+        let mut glyph_bytes = 0usize;
         for round in 0..self.p.rounds {
             let live = self.live();
+            self.mem.charge_for::<usize>(live.len())?;
             for &c in &live {
                 if let Some(cand) = self.cands.get_mut(c) {
                     let marginal = cand.adjusted / (cand.usages as f64 + K);
                     cand.price = marginal * ALPHA + cand.price * (1.0 - ALPHA);
                 }
             }
+            // The encodings of this round go into a new list; the old one is read by nothing
+            // until it is replaced.
+            let mut calls: Vec<Call> = Vec::new();
+            let mut charged = 0usize;
             for &c in &live {
                 let Some(cand) = self.cands.get(c) else { continue };
                 let site = Site::Subr { entry: cand.entry, first_clear: cand.first_clear };
                 let (cost, enc) = self.encode(cand.start as usize, cand.len as usize, c as u32, site);
+                let from = calls.len() as u32;
+                calls.extend_from_slice(&enc);
+                let held = calls.capacity() * size_of::<Call>();
+                if held > charged {
+                    self.mem.charge(held - charged)?;
+                    charged = held;
+                }
                 if let Some(cand) = self.cands.get_mut(c) {
                     cand.adjusted = cost;
-                    cand.enc = enc;
+                    cand.enc = (from, enc.len() as u32);
                 }
             }
-            glyph_enc = self.encode_glyphs();
+            let old = std::mem::replace(&mut self.calls, calls);
+            self.mem.release_for::<Call>(old.capacity());
+            drop(old);
 
+            let new_enc = self.encode_glyphs();
+            let new_bytes = new_enc.iter().map(|e| e.capacity() * size_of::<Call>() + size_of::<Vec<Call>>()).sum::<usize>();
+            self.mem.charge(new_bytes)?;
+            self.mem.release(glyph_bytes);
+            (glyph_enc, glyph_bytes) = (new_enc, new_bytes);
+
+            self.mem.charge_for::<i64>(self.cands.len())?;
             let mut counts = vec![0i64; self.cands.len()];
-            let calls = live.iter().filter_map(|&c| self.cands.get(c)).flat_map(|c| c.enc.iter()).chain(glyph_enc.iter().flatten());
+            let calls = live.iter().flat_map(|&c| self.enc(c).iter()).chain(glyph_enc.iter().flatten());
             for &(_, e) in calls {
                 if let Some(n) = counts.get_mut(e as usize) {
                     *n += 1;
@@ -388,14 +299,15 @@ impl Market<'_> {
             for (cand, n) in self.cands.iter_mut().zip(counts) {
                 cand.usages = n;
             }
+            self.mem.release_for::<i64>(self.cands.len());
 
             if round + 2 <= self.p.rounds {
                 let bad: Vec<usize> = live.iter().copied().filter(|&c| self.cands.get(c).is_some_and(|x| x.saving(x.usages, x.cost) <= 0)).collect();
                 // compreffor's heuristic: what a dropped candidate called stays attractive.
                 for &b in &bad {
                     let Some(cand) = self.cands.get(b) else { continue };
-                    let (u, callees): (i64, Vec<u32>) = (cand.usages, cand.enc.iter().map(|e| e.1).collect());
-                    for e in callees {
+                    let u = cand.usages;
+                    for e in self.callees(b) {
                         if let Some(callee) = self.cands.get_mut(e as usize) {
                             callee.usages += u - 1;
                         }
@@ -404,33 +316,54 @@ impl Market<'_> {
                 for &b in &bad {
                     if let Some(cand) = self.cands.get_mut(b) {
                         cand.alive = false;
+                        cand.enc = (0, 0);
                     }
                 }
                 self.refresh_up();
             }
+            self.mem.release_for::<usize>(live.len());
         }
-        glyph_enc
+        Ok(glyph_enc)
     }
 }
 
-/// What a call to a subroutine at the end of `list` would cost, by its usage rank (compreffor's
-/// `test_call_cost`).
-fn call_cost(usages: i64, list: &[usize], cands: &[Cand]) -> u8 {
-    let used = |k: usize| list.get(k).and_then(|&c| cands.get(c)).map_or(i64::MIN, |c| c.usages);
-    if list.len() >= 2263 && used(2262) >= usages {
-        3
-    } else if list.len() >= 215 && used(214) >= usages {
-        2
-    } else {
-        1
-    }
+/// A subroutine INDEX being filled: its members in the order they are placed, and the usages of
+/// its 215 and 2,263 most used members, which decide what a call to one more would cost. Sorting
+/// the members by usages, stably, gives the order compreffor's insertion gives.
+#[derive(Clone, Default)]
+struct Filling {
+    members: Vec<usize>,
+    top_215: BinaryHeap<Reverse<i64>>,
+    top_2263: BinaryHeap<Reverse<i64>>,
 }
 
-/// Inserts `c` into `list`, which is ordered by usages, most used first, after its equals.
-fn insert_by_usage(c: usize, list: &mut Vec<usize>, cands: &[Cand]) {
-    let u = cands.get(c).map_or(0, |x| x.usages);
-    let at = list.partition_point(|&x| cands.get(x).map_or(0, |x| x.usages) >= u);
-    list.insert(at, c);
+impl Filling {
+    fn len(&self) -> usize {
+        self.members.len()
+    }
+
+    /// What a call to one more subroutine, used `usages` times, would cost by its usage rank
+    /// (compreffor's `test_call_cost`).
+    fn call_cost(&self, usages: i64) -> u8 {
+        let reaches = |top: &BinaryHeap<Reverse<i64>>, rank: usize| top.len() >= rank && top.peek().is_some_and(|least| least.0 >= usages);
+        if reaches(&self.top_2263, 2263) {
+            3
+        } else if reaches(&self.top_215, 215) {
+            2
+        } else {
+            1
+        }
+    }
+
+    fn push(&mut self, c: usize, usages: i64) {
+        self.members.push(c);
+        for (top, rank) in [(&mut self.top_215, 215), (&mut self.top_2263, 2263)] {
+            top.push(Reverse(usages));
+            if top.len() > rank {
+                top.pop();
+            }
+        }
+    }
 }
 
 /// `list` reordered so that the most used subroutines get the shortest numbers for its bias.
@@ -463,6 +396,10 @@ impl Market<'_> {
         let n = self.cands.len();
         let fd_count = self.p.fd_count.max(1);
 
+        // Per candidate: the Font DICT state, the real cost, the nesting level, the program and
+        // two lists of the live ones.
+        self.mem.charge(n.saturating_mul(4 + 8 + 8 + size_of::<Vec<u8>>() + 2 * size_of::<usize>()))?;
+        let mut programs: Vec<Vec<u8>> = vec![Vec::new(); n];
         // Which Font DICTs reach each candidate.
         let mut state = vec![NONE; n];
         let mut work: Vec<(u32, u32)> = Vec::new();
@@ -480,9 +417,7 @@ impl Market<'_> {
                 MULTI
             };
             *s = new;
-            if let Some(cand) = self.cands.get(c as usize) {
-                work.extend(cand.enc.iter().map(|&(_, e)| (e, new)));
-            }
+            work.extend(self.enc(c as usize).iter().map(|&(_, e)| (e, new)));
         }
 
         // Keep what pays for itself, counting the calls inside each candidate.
@@ -493,7 +428,7 @@ impl Market<'_> {
         let callee_cost = |cands: &[Cand], e: u32| cands.get(e as usize).map_or(0, |x| x.cost);
         for &c in &live {
             let Some(cand) = self.cands.get(c) else { continue };
-            let r = cand.cost + cand.enc.iter().map(|&(_, e)| CALL_COST - callee_cost(&self.cands, e)).sum::<i64>();
+            let r = cand.cost + self.enc(c).iter().map(|&(_, e)| CALL_COST - callee_cost(&self.cands, e)).sum::<i64>();
             if let Some(slot) = real.get_mut(c) {
                 *slot = r;
             }
@@ -511,7 +446,7 @@ impl Market<'_> {
         for &c in &by_len {
             let Some(cand) = self.cands.get(c) else { continue };
             let mut r = cand.cost;
-            for &(_, e) in &cand.enc {
+            for &(_, e) in self.enc(c) {
                 let ec = callee_cost(&self.cands, e);
                 r += if self.flattened(e) { real.get(e as usize).copied().unwrap_or(ec) - ec } else { CALL_COST - ec };
             }
@@ -524,8 +459,8 @@ impl Market<'_> {
         let saving = |m: &Self, c: usize| m.cands.get(c).map_or(0, |x| x.saving(x.usages, real.get(c).copied().unwrap_or(0)));
         subrs.sort_by(|&a, &b| saving(&self, a).cmp(&saving(&self, b)).then(b.cmp(&a)));
         let limit = self.p.max_subrs;
-        let mut gsubrs: Vec<usize> = Vec::new();
-        let mut lsubrs: Vec<Vec<usize>> = vec![Vec::new(); fd_count];
+        let mut gsubrs = Filling::default();
+        let mut lsubrs = vec![Filling::default(); fd_count];
         let mut leftover = Vec::new();
         while !subrs.is_empty() && (gsubrs.len() < limit || lsubrs.iter().any(|l| l.len() < limit)) {
             let Some(c) = subrs.pop() else { break };
@@ -539,21 +474,21 @@ impl Market<'_> {
                 let room_g = gsubrs.len() < limit;
                 let room_l = local.len() < limit;
                 if room_g && room_l {
-                    let global = call_cost(u, &gsubrs, &self.cands) < call_cost(u, local, &self.cands);
-                    insert_by_usage(c, if global { &mut gsubrs } else { local }, &self.cands);
+                    let global = gsubrs.call_cost(u) < local.call_cost(u);
+                    (if global { &mut gsubrs } else { local }).push(c, u);
                     global
                 } else if room_g {
-                    insert_by_usage(c, &mut gsubrs, &self.cands);
+                    gsubrs.push(c, u);
                     true
                 } else if room_l {
-                    insert_by_usage(c, local, &self.cands);
+                    local.push(c, u);
                     false
                 } else {
                     leftover.push(c);
                     continue;
                 }
             } else if gsubrs.len() < limit {
-                insert_by_usage(c, &mut gsubrs, &self.cands);
+                gsubrs.push(c, u);
                 true
             } else {
                 leftover.push(c);
@@ -563,6 +498,8 @@ impl Market<'_> {
                 x.global = global;
             }
         }
+        let mut gsubrs = gsubrs.members;
+        let mut lsubrs: Vec<Vec<usize>> = lsubrs.into_iter().map(|l| l.members).collect();
         leftover.extend(subrs);
         for c in leftover {
             self.set_flatten(c);
@@ -573,7 +510,7 @@ impl Market<'_> {
             let mut seen = vec![false; n];
             let mut stack = gsubrs.clone();
             while let Some(s) = stack.pop() {
-                let callees: Vec<u32> = self.cands.get(s).map(|x| x.enc.iter().map(|e| e.1).collect()).unwrap_or_default();
+                let callees = self.callees(s);
                 for e in callees {
                     let global = self.cand(e).is_some_and(|x| x.global);
                     if let Some(flag) = seen.get_mut(e as usize).filter(|f| !**f && !global) {
@@ -598,7 +535,7 @@ impl Market<'_> {
             if lc < 0 {
                 continue;
             }
-            let callees: Vec<u32> = self.cands.get(c).map(|x| x.enc.iter().map(|e| e.1).collect()).unwrap_or_default();
+            let callees = self.callees(c);
             for e in callees {
                 let lv = lc + if self.flattened(e) { 0 } else { 1 };
                 if let Some(l) = level.get_mut(e as usize) {
@@ -626,8 +563,8 @@ impl Market<'_> {
             let b = bias(list.len());
             for (pos, &c) in list.iter().enumerate() {
                 if let Some(x) = self.cands.get_mut(c) {
-                    x.position = pos;
-                    x.call_bias = b;
+                    x.position = pos as u32;
+                    x.call_bias = u16::try_from(b).unwrap_or(u16::MAX);
                 }
             }
         }
@@ -636,53 +573,52 @@ impl Market<'_> {
         // the subroutines.
         for &c in &by_len {
             if self.flattened(c as u32) && state.get(c).is_some_and(|&s| s != NONE) {
-                let program = self.program(c)?;
-                if let Some(x) = self.cands.get_mut(c) {
-                    x.program = program;
+                let program = self.program(c, &programs)?;
+                self.mem.charge(program.len())?;
+                if let Some(slot) = programs.get_mut(c) {
+                    *slot = program;
                 }
             }
         }
         for &c in lists.iter().flatten() {
-            let mut program = self.program(c)?;
-            let last = self.cands.get(c).and_then(|x| self.text.get(((x.start + x.len) as usize).saturating_sub(1))).copied();
-            let ends = last.and_then(|t| self.token(t)) == Some(&[14][..]);
+            let mut program = self.program(c, &programs)?;
+            let last = self.cands.get(c).and_then(|x| self.t.text.get(((x.start + x.len) as usize).saturating_sub(1))).copied();
+            let ends = last.and_then(|t| self.t.token(t)) == Some(&[14][..]);
             if !self.p.cff2 && !ends {
                 program.push(11);
             }
             if program.len() > super::MAX_CHARSTRING {
                 return Err(SubrError::TooLarge { what: "bytes in one subroutine", limit: super::MAX_CHARSTRING });
             }
-            if let Some(x) = self.cands.get_mut(c) {
-                x.program = program;
+            self.mem.charge(program.len())?;
+            if let Some(slot) = programs.get_mut(c) {
+                *slot = program;
             }
         }
         let mut charstrings = Vec::with_capacity(glyph_enc.len());
         for (g, enc) in glyph_enc.iter().enumerate() {
-            let start = self.glyph_start.get(g).copied().unwrap_or(0) as usize;
-            let len = self.glyph_len.get(g).copied().unwrap_or(0) as usize;
-            charstrings.push(self.write(start, len, enc)?);
+            let start = self.t.glyph_start.get(g).copied().unwrap_or(0) as usize;
+            let len = self.t.glyph_len.get(g).copied().unwrap_or(0) as usize;
+            let charstring = self.write(start, len, enc, &programs)?;
+            self.mem.charge(charstring.len())?;
+            charstrings.push(charstring);
         }
-        let mut take = |c: &usize| self.cands.get_mut(*c).map(|x| std::mem::take(&mut x.program)).unwrap_or_default();
+        let mut take = |c: &usize| programs.get_mut(*c).map(std::mem::take).unwrap_or_default();
         let mut lists = lists.into_iter();
         let global = lists.next().unwrap_or_default().iter().map(&mut take).collect();
         let local = lists.map(|l| l.iter().map(&mut take).collect()).collect();
-        Ok(Output { charstrings, global, local })
-    }
-
-    fn token(&self, id: u32) -> Option<&[u8]> {
-        let &(start, len) = self.spans.get(id as usize)?;
-        self.arena.get(start as usize..(start + len) as usize)
+        Ok(Output { charstrings, global, local, tokens: self.t.text.len(), candidates: n })
     }
 
     /// The body of candidate `c` with its encoding applied.
-    fn program(&self, c: usize) -> Result<Vec<u8>, SubrError> {
+    fn program(&self, c: usize, programs: &[Vec<u8>]) -> Result<Vec<u8>, SubrError> {
         let cand = self.cands.get(c).ok_or_else(|| SubrError::Invalid("a lost candidate".into()))?;
-        self.write(cand.start as usize, cand.len as usize, &cand.enc)
+        self.write(cand.start as usize, cand.len as usize, self.enc(c), programs)
     }
 
-    /// The `len` tokens at `from` with the calls of `enc`: a flattened candidate is written out,
-    /// a subroutine is called.
-    fn write(&self, from: usize, len: usize, enc: &[Call]) -> Result<Vec<u8>, SubrError> {
+    /// The `len` tokens at `from` with the calls of `enc`: a flattened candidate is written out
+    /// (its program from `programs`), a subroutine is called.
+    fn write(&self, from: usize, len: usize, enc: &[Call], programs: &[Vec<u8>]) -> Result<Vec<u8>, SubrError> {
         let mut out = Vec::new();
         let mut calls = enc.iter().peekable();
         let mut j = 0usize;
@@ -693,16 +629,16 @@ impl Market<'_> {
                 calls.next();
                 let cand = self.cand(c).ok_or_else(|| SubrError::Invalid("a call to a lost candidate".into()))?;
                 if cand.flatten {
-                    out.extend_from_slice(&cand.program);
+                    out.extend_from_slice(programs.get(c as usize).map(Vec::as_slice).unwrap_or_default());
                 } else {
-                    push_int(cand.position as i64 - cand.call_bias, &mut out)?;
+                    push_int(i64::from(cand.position) - i64::from(cand.call_bias), &mut out)?;
                     out.push(if cand.global { 29 } else { 10 });
                 }
                 j += (cand.len as usize).max(1);
                 continue;
             }
-            let id = self.text.get(from + j).copied().unwrap_or(NONE);
-            out.extend_from_slice(self.token(id).unwrap_or_default());
+            let id = self.t.text.get(from + j).copied().unwrap_or(NONE);
+            out.extend_from_slice(self.t.token(id).unwrap_or_default());
             j += 1;
         }
         Ok(out)
