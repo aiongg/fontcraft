@@ -187,14 +187,16 @@ fn source_files(p: &Params<'_>, input: &Path, font: &Font) -> Result<Vec<PathBuf
 /// The file names glyphsLib gives the master UFOs of a Glyphs source (glyphsLib
 /// `builder/sources.py`, Apache License 2.0): the master's `UFO Filename` parameter, else its
 /// `ufoFilename` user data, else `Family-Master.ufo` with the spaces taken out; a name an earlier
-/// master has gets `#1`, then `#2`…, before its extension.
+/// master has gets `#1`, then `#2`…, before its extension. A source without a family name is
+/// glyphsLib's "Unnamed font".
 fn glyphs_ufo_names(font: &Font) -> Vec<String> {
     let text = |v: Option<&PValue>| v.and_then(PValue::as_str).map(str::to_string);
+    let family = if font.family_name.is_empty() { "Unnamed font" } else { font.family_name.as_str() };
     let mut names: Vec<String> = Vec::with_capacity(font.masters.len());
     for m in font.masters.iter() {
         let mut name = text(m.params.get("UFO Filename"))
             .or_else(|| text(m.user_data.get("com.schriftgestaltung.Glyphs.ufoFilename")))
-            .unwrap_or_else(|| format!("{}-{}.ufo", font.family_name.replace(' ', ""), m.name.replace(' ', "")));
+            .unwrap_or_else(|| format!("{}-{}.ufo", family.replace(' ', ""), m.name.replace(' ', "")));
         let mut n = 1;
         while names.contains(&name) {
             let (stem, ext) = split_ext(&name);
@@ -533,6 +535,8 @@ mod tests {
             ["Light Two", "Bold", "Bold"].map(|name| fontcraft_model::Master { id: name.into(), name: name.into(), ..Default::default() }).to_vec(),
         );
         assert_eq!(glyphs_ufo_names(&font), ["TestSans-LightTwo.ufo", "TestSans-Bold.ufo", "TestSans-Bold#1.ufo"]);
+        font.family_name = String::new();
+        assert_eq!(glyphs_ufo_names(&font)[0], "Unnamedfont-LightTwo.ufo");
         assert_eq!(split_ext("a.b/c"), ("a.b/c", ""));
         assert_eq!(split_ext(".ufo"), (".ufo", ""));
         assert_eq!(split_ext("x/A.ufo"), ("x/A", ".ufo"));
