@@ -1,6 +1,7 @@
 //! The CID-keyed parameters of `font.compile` (M12.41; `fontcraft_compile::cid`): the CMap files
 //! named by `cidCmap` and `cidMacCmap`, read here, and the Macintosh `cmap` ids. The compile
-//! crate parses the files and uses them only when the font is CID-keyed.
+//! crate parses the files and uses them only when the font is CID-keyed. The Unicode Variation
+//! Sequences file `uvsFile` is read here too and serves every font.
 
 use fontcraft_compile::Options;
 use fontcraft_compile::cid::{CidOptions, MAX_CMAP_BYTES};
@@ -24,6 +25,7 @@ pub(super) fn read(p: &Params, options: &mut Options) -> Result<()> {
         mac_cmap: file("cidMacCmap")?,
         mac_script: id("cidMacScript")?,
         mac_language: id("cidMacLanguage")?,
+        uvs: file("uvsFile")?,
     };
     Ok(())
 }

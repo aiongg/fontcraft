@@ -202,5 +202,24 @@ fn a_project_compile_keeps_composites_as_the_file_places_them() {
     let (font, _) = fontcraft_engine::io::open(&out, None).unwrap();
     // The reference keeps the advance the file gives, which is not its base's.
     assert_eq!(font.glyph("Oacute").unwrap().layers[0].width, 720.0);
+
+    // A project file names the source and the output; the reference's short options apply.
+    let project = dir.join("build");
+    std::fs::create_dir_all(&project).unwrap();
+    let fpr = project.join("current.fpr");
+    std::fs::write(&fpr, "InputFontPath ../Synth.ufo\nOutputFontPath Synth.otf\n").unwrap();
+    let (code, _, stderr) =
+        cli(&["compile", "--project-file", fpr.to_str().unwrap(), "-osbOn", "8", "-osbOff", "7", "-osbOff", "9", "-lic", "L1", "--timestamp", "0"]);
+    assert_eq!(code, 0, "{stderr}");
+    let bytes = std::fs::read(project.join("Synth.otf")).unwrap();
+    let tables = usize::from(u16::from_be_bytes([bytes[4], bytes[5]]));
+    let record = (0..tables).map(|i| &bytes[12 + 16 * i..28 + 16 * i]).find(|r| &r[..4] == b"OS/2").unwrap();
+    let at = usize::try_from(u32::from_be_bytes([record[8], record[9], record[10], record[11]])).unwrap();
+    // Version 4, Regular and bit 8.
+    assert_eq!(&bytes[at..at + 2], &[0, 4]);
+    assert_eq!(&bytes[at + 62..at + 64], &[0x01, 0x40]);
+    let (code, _, stderr) = cli(&["compile", "--project-file", dir.join("none.fpr").to_str().unwrap()]);
+    assert_ne!(code, 0);
+    assert!(stderr.contains("none.fpr"), "{stderr}");
     std::fs::remove_dir_all(&dir).unwrap();
 }

@@ -517,3 +517,107 @@ fn the_feature_code_overrides_what_the_project_compile_works_out() {
     assert_eq!(font.head().unwrap().font_revision().to_f64(), 2.5);
     assert!(win(&names(&bytes), 5).unwrap().starts_with("Version 2.500"));
 }
+
+/// The `OS/2` version, `fsSelection` and length of a built font.
+fn os2(bytes: &[u8]) -> (u16, u16, usize) {
+    let font = FontRef::new(bytes).unwrap();
+    let table = font.table_data(skrifa::Tag::new(b"OS/2")).unwrap();
+    let b = table.as_bytes();
+    (u16::from_be_bytes([b[0], b[1]]), u16::from_be_bytes([b[62], b[63]]), b.len())
+}
+
+/// Each case's version, `fsSelection` and table length are what makeotf 5.0.1's addfeatures
+/// wrote for a Regular font with the same `-osbOn`, `-osbOff` and `-osv` options; the checks of
+/// bits 7 to 9 are makeotf.py's.
+#[test]
+fn fs_selection_bits_and_the_os2_version_follow_the_reference() {
+    let cases = [
+        (json!({"projectOptions": []}), (3, 0x40, 96)),
+        (json!({"os2BitsOn": [7, 8, 9]}), (4, 0x3C0, 96)),
+        (json!({"os2BitsOff": [6]}), (3, 0, 96)),
+        (json!({"os2Version": 2}), (2, 0x40, 96)),
+        (json!({"os2Version": 1}), (1, 0x40, 96)),
+        (json!({"os2Version": 6}), (6, 0x40, 100)),
+        // A bit from 7 up forces version 4, whatever version is asked for.
+        (json!({"os2BitsOn": [7], "os2BitsOff": [8, 9], "os2Version": 2}), (4, 0xC0, 96)),
+        // Bit 15 does not take effect, and the bits after it start the mask again.
+        (json!({"os2BitsOn": [15, 7], "os2BitsOff": [8, 9]}), (4, 0xC0, 96)),
+        // Sorted as text, 0 comes first, so bit 10 needs no values for bits 7 to 9.
+        (json!({"os2BitsOn": [0, 10]}), (4, 0x441, 96)),
+    ];
+    for (i, (extra, want)) in cases.into_iter().enumerate() {
+        let dir = temp(&format!("os2-{i}"));
+        let (bytes, _) = build(&dir, extra.clone());
+        assert_eq!(os2(&bytes), want, "{extra}");
+    }
+    let dir = temp("os2-refused");
+    let ufo = write_ufo(&dir);
+    let mut s = Session::new();
+    s.execute("file.open", &json!({ "path": ufo })).unwrap();
+    for (params, says) in [
+        (json!({"os2BitsOn": [8]}), "no value was given for bit 7, 9"),
+        (json!({"os2BitsOff": [0]}), "bit 0 cannot be turned off"),
+        (json!({"os2BitsOn": [16]}), "bit 16 cannot be turned on"),
+    ] {
+        let mut p = params.clone();
+        p["destination"] = json!(dir.join("no.otf"));
+        let e = s.execute("font.compile", &p).unwrap_err().to_string();
+        assert!(e.contains(says), "{params}: {e}");
+        assert!(!dir.join("no.otf").exists());
+    }
+}
+
+/// The project file's paths are relative to its folder: the feature file (with its includes),
+/// the variation sequences and the output file; the licence code ends name ID 3.
+#[test]
+fn a_project_file_names_the_feature_file_sequences_licence_and_output() {
+    let dir = temp("project-paths");
+    let ufo = write_ufo(&dir);
+    let project = dir.join("project");
+    std::fs::create_dir_all(project.join("fea")).unwrap();
+    std::fs::create_dir_all(dir.join("fonts")).unwrap();
+    std::fs::write(project.join("fea/alt.fea"), "include(rev.fea);\n").unwrap();
+    std::fs::write(project.join("fea/rev.fea"), "table head { FontRevision 2.5; } head;\n").unwrap();
+    std::fs::write(project.join("seq.uvs"), "# sequences\n0041 FE00; B\n0042 FE00; B\n0041 FE01; nothere\n").unwrap();
+    let fpr = project.join("current.fpr");
+    std::fs::write(
+        &fpr,
+        "InputFontPath ../font.ufo\nOutputFontPath ../fonts/Out.otf\nFeaturePath fea/alt.fea\nUVSPath seq.uvs\nLicenseCode XYZ\nkSetfsSelectionBitsOn 7\n",
+    )
+    .unwrap();
+    let mut s = Session::new();
+    s.execute("file.open", &json!({ "path": ufo })).unwrap();
+    let result = s.execute("font.compile", &json!({"formats": ["otf"], "projectFile": fpr, "timestamp": 0})).unwrap();
+    let warnings = result["warnings"].to_string();
+    assert!(!warnings.contains("InputFontPath"), "the open source is the project's input: {warnings}");
+    let bytes = std::fs::read(dir.join("fonts/Out.otf")).unwrap();
+    let n = names(&bytes);
+    assert!(win(&n, 5).unwrap().starts_with("Version 2.500"), "the feature file and its include are read: {n:?}");
+    assert!(win(&n, 3).unwrap().ends_with(";XYZ"), "{n:?}");
+    // makeotf's project file bits count as giving 7, 8 and 9 a value.
+    assert_eq!(os2(&bytes), (4, 0xC0, 96));
+    let font = FontRef::new(&bytes).unwrap();
+    let charmap = font.charmap();
+    let b = charmap.map('B').unwrap();
+    assert_eq!(charmap.map_variant(0x41u32, 0xFE00u32), Some(skrifa::charmap::MapVariant::Variant(b)));
+    assert_eq!(charmap.map_variant(0x42u32, 0xFE00u32), Some(skrifa::charmap::MapVariant::UseDefault));
+    assert_eq!(charmap.map_variant(0x41u32, 0xFE01u32), None);
+    assert!(result.to_string().contains("nothere"), "the missing glyph is reported: {result}");
+
+    // A destination given wins over OutputFontPath, with a note.
+    let out = dir.join("given.otf");
+    let result = s.execute("font.compile", &json!({"formats": ["otf"], "projectFile": fpr, "destination": out, "timestamp": 0})).unwrap();
+    assert!(out.exists());
+    assert!(result["warnings"].to_string().contains("OutputFontPath is not used"), "{result}");
+}
+
+/// makeotf 5.0.1 with `-lic ABC` wrote `1.000;UKWN;Synth-Regular;ABC` where it otherwise wrote
+/// `1.000;UKWN;Synth-Regular`.
+#[test]
+fn the_licence_code_ends_the_unique_identifier() {
+    let dir = temp("licence");
+    let (plain, _) = build(&dir, json!({"projectOptions": []}));
+    let (coded, _) = build(&dir, json!({"licenseCode": "ABC"}));
+    let id3 = win(&names(&plain), 3).unwrap().to_string();
+    assert_eq!(win(&names(&coded), 3), Some(format!("{id3};ABC").as_str()));
+}

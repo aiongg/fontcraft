@@ -10,7 +10,7 @@
 //! counts every code it covers), codes of 1 to 4 bytes, CIDs up to
 //! [`fontcraft_model::cid::MAX_CID`]. A malformed file is refused with a message.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use fontcraft_model::cid::MAX_CID;
 
@@ -46,6 +46,8 @@ pub struct CMap {
     pub longest_code: usize,
     /// The CMap this one names with `usecmap`, which is not read.
     pub uses: Option<String>,
+    /// The first bytes of the two-byte codes the code space ranges allow.
+    pub lead_bytes: BTreeSet<u8>,
 }
 
 impl CMap {
@@ -231,6 +233,7 @@ enum Block {
     None,
     Range(Vec<Token>),
     Char(Vec<Token>),
+    Space(Vec<Token>),
 }
 
 struct Collect {
@@ -340,6 +343,26 @@ pub fn parse_cmap(bytes: &[u8], kind: CodeKind) -> Result<CMap, String> {
                 }
                 continue;
             }
+            Block::Space(buf) => {
+                if t == Token::Word("endcodespacerange".into()) {
+                    if !buf.is_empty() {
+                        return Err("a codespacerange block holds something other than <code> <code>".into());
+                    }
+                    block = Block::None;
+                    continue;
+                }
+                buf.push(t);
+                if let [a, b] = buf.as_slice() {
+                    let (Token::Hex(lo), Token::Hex(hi)) = (a, b) else {
+                        return Err("a codespacerange block holds something other than <code> <code>".into());
+                    };
+                    if let ([l, _], [h, _]) = (lo.as_slice(), hi.as_slice()) {
+                        c.out.lead_bytes.extend(*l..=*h);
+                    }
+                    buf.clear();
+                }
+                continue;
+            }
             Block::None => {}
         }
         match (&prev, &t) {
@@ -350,12 +373,13 @@ pub fn parse_cmap(bytes: &[u8], kind: CodeKind) -> Result<CMap, String> {
             (Some(Token::Name(u)), Token::Word(w)) if w == "usecmap" => c.out.uses = Some(u.clone()),
             (_, Token::Word(w)) if w == "begincidrange" => block = Block::Range(Vec::new()),
             (_, Token::Word(w)) if w == "begincidchar" => block = Block::Char(Vec::new()),
+            (_, Token::Word(w)) if w == "begincodespacerange" => block = Block::Space(Vec::new()),
             _ => {}
         }
         prev = Some(t);
     }
     if !matches!(block, Block::None) {
-        return Err("a cidrange or cidchar block is not closed".into());
+        return Err("a cidrange, cidchar or codespacerange block is not closed".into());
     }
     if c.out.cids.is_empty() && c.out.uses.is_none() {
         return Err("the CMap maps no codes to CIDs".into());

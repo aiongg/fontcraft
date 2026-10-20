@@ -14,7 +14,7 @@
 //! | Private DICTs | a sub-font's own hinting values under their UFO font-info names, each as given (stem snaps sorted, no StdHW or StdVW), CFF defaults for the rest; a sub-font without a `PrivateDict` takes the font's values; `defaultWidthX` and `nominalWidthX` chosen per sub-font |
 //! | hints | each glyph's manual hints, else the autohinter's with its sub-font's zones and stems |
 //! | `cmap` | with a Unicode CMap file (makeotf's `-ch`), each glyph gets the code points the file maps to its CID and nothing else; without one, the source's own code points |
-//! | Macintosh `cmap` | with a Macintosh CMap file (`-cm`) of one-byte codes, a format 6 subtable (platform 1) with the script `-cs` names, else the ordering's (Japan 1, CNS 2, GB 25, Korea 3, else Roman 0), and the language `-cl` names, else 0; without one, a stub format 6 subtable that maps code 0 to glyph 0, as makeotf writes it |
+//! | Macintosh `cmap` | with a Macintosh CMap file (`-cm`), a format 6 subtable (platform 1) for one-byte codes, or a format 2 subtable laid out as makeotf lays it out for two-byte codes, with the script `-cs` names, else the ordering's (Japan 1, CNS 2, GB 25, Korea 3, else Roman 0), and the language `-cl` names, else 0; without one, a stub format 6 subtable that maps code 0 to glyph 0, as makeotf writes it |
 //!
 //! The CMap options and the script heuristic follow AFDKO's `python/afdko/makeotf.py` 5.0.1
 //! (Apache-2.0, see `NOTICE`).
@@ -25,8 +25,9 @@
 //! instead.
 
 pub mod cmap;
+pub mod uvs;
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use fontcraft_cff::{self as cff, Number, PrivateDict, Widths};
 use fontcraft_model::cid::{CidFont, MAX_CID, Ros};
@@ -57,11 +58,14 @@ pub struct CidOptions {
     pub mac_script: Option<u16>,
     /// The Macintosh subtable's language (`-cl`); `None`: 0.
     pub mac_language: Option<u16>,
+    /// A Unicode Variation Sequences file (`-ci`), written as a format 14 subtable ([`uvs`]);
+    /// used by every font, CID-keyed or not.
+    pub uvs: Option<Vec<u8>>,
 }
 
 impl CidOptions {
     fn is_empty(&self) -> bool {
-        *self == CidOptions::default()
+        *self == CidOptions { uvs: self.uvs.clone(), ..CidOptions::default() }
     }
 }
 
@@ -83,8 +87,11 @@ pub(crate) struct CidPlan {
 struct MacPlan {
     script: u16,
     language: u16,
-    /// One-byte code → CID; empty without a Macintosh CMap, which gives the stub subtable.
+    /// Code (one or two bytes) → CID; empty without a Macintosh CMap, which gives the stub
+    /// subtable.
     codes: BTreeMap<u32, u32>,
+    /// First bytes of two-byte codes; with any, or with a two-byte code, the subtable is format 2.
+    lead_bytes: BTreeSet<u8>,
 }
 
 fn list<S: AsRef<str>>(names: &[S]) -> String {
@@ -226,19 +233,19 @@ pub(crate) fn plan(
     let mac = match &options.mac_cmap {
         Some(bytes) => {
             let cmap = read_cmap(bytes, CodeKind::Bytes, "Macintosh CMap", &state.ros, warnings)?;
-            if cmap.longest_code > 1 {
-                warnings
-                    .push("the Macintosh CMap has codes longer than one byte, which are not written; the font has no Macintosh cmap subtable".into());
+            if cmap.longest_code > 2 {
+                warnings.push("the Macintosh CMap has codes longer than two bytes, which no Macintosh cmap subtable holds; the font has none".into());
                 None
             } else {
                 let script = options.mac_script.unwrap_or_else(|| mac_script(&state.ros.ordering, warnings));
-                Some(MacPlan { script, language: options.mac_language.unwrap_or(0), codes: cmap.cids })
+                let lead_bytes = if cmap.longest_code > 1 || !cmap.lead_bytes.is_empty() { cmap.lead_bytes } else { BTreeSet::new() };
+                Some(MacPlan { script, language: options.mac_language.unwrap_or(0), codes: cmap.cids, lead_bytes })
             }
         }
         None => {
             // The heuristic's warning is for a CMap the user gave; the stub needs no warning.
             let script = options.mac_script.unwrap_or_else(|| mac_script(&state.ros.ordering, &mut Vec::new()));
-            Some(MacPlan { script, language: options.mac_language.unwrap_or(0), codes: BTreeMap::new() })
+            Some(MacPlan { script, language: options.mac_language.unwrap_or(0), codes: BTreeMap::new(), lead_bytes: BTreeSet::new() })
         }
     };
     let plan = CidPlan { ros: state.ros.clone(), font_name: state.font_name.clone(), cids, fds, subfonts, mac };
@@ -395,7 +402,9 @@ pub(crate) fn finish(compiled: &mut Compiled, plan: &CidPlan) -> Result<(), Comp
     let gid_of: HashMap<u32, u16> = cids.iter().enumerate().filter_map(|(gid, c)| u16::try_from(gid).ok().map(|g| (*c, g))).collect();
     let font = FontRef::new(&compiled.bytes).map_err(|e| table_error(e.to_string()))?;
     let old = font.table_data(Tag::new(b"cmap")).map(|d| d.as_bytes().to_vec()).ok_or_else(|| table_error("the font has no cmap".into()))?;
-    let Some(subtable) = format6(mac, &gid_of) else {
+    let two_bytes = !mac.lead_bytes.is_empty() || mac.codes.keys().any(|c| *c > 0xFF);
+    let subtable = if two_bytes { format2(mac, &gid_of) } else { format6(mac, &gid_of) };
+    let Some(subtable) = subtable else {
         compiled.warnings.push("no code of the Macintosh CMap reaches a glyph of the font, so the font has no Macintosh cmap subtable".into());
         return Ok(());
     };
@@ -434,6 +443,87 @@ fn format6(mac: &MacPlan, gid_of: &HashMap<u32, u16>) -> Option<Vec<u8>> {
     }
     for code in u32::from(first)..u32::from(first) + count {
         out.extend_from_slice(&reached.get(&code).copied().unwrap_or(0).to_be_bytes());
+    }
+    Some(out)
+}
+
+/// A format 2 subtable for a CMap with two-byte codes, laid out as makeotf 5.0.1 lays it out:
+/// sub-header 0 maps the one-byte codes (256 entries); each first byte with codes that reach a
+/// glyph has its own sub-header, in ascending order, from its lowest to its highest second byte,
+/// with `idDelta` one less than its lowest glyph; the other first bytes of the code space share
+/// an empty last sub-header. `None` when no code reaches a glyph or the subtable would be too
+/// large.
+fn format2(mac: &MacPlan, gid_of: &HashMap<u32, u16>) -> Option<Vec<u8>> {
+    let mut single = [0u16; 256];
+    let mut leads: BTreeMap<u8, BTreeMap<u8, u16>> = BTreeMap::new();
+    for (code, cid) in &mac.codes {
+        let Some(&gid) = gid_of.get(cid).filter(|g| **g != 0) else { continue };
+        let [_, _, high, low] = code.to_be_bytes();
+        if *code <= 0xFF {
+            if let Some(slot) = single.get_mut(usize::from(low)) {
+                *slot = gid;
+            }
+        } else if *code <= 0xFFFF {
+            leads.entry(high).or_default().insert(low, gid);
+        }
+    }
+    if single.iter().all(|g| *g == 0) && leads.is_empty() {
+        return None;
+    }
+    let empty = mac.lead_bytes.iter().any(|b| !leads.contains_key(b));
+    let count = 1 + leads.len() + usize::from(empty);
+    let header = 6 + 512;
+    let array_start = header + 8 * count;
+    let mut keys = [0u16; 256];
+    for b in &mac.lead_bytes {
+        if let Some(k) = keys.get_mut(usize::from(*b)) {
+            *k = u16::try_from(8 * (count - 1)).ok()?;
+        }
+        if let Some(slot) = single.get_mut(usize::from(*b)) {
+            *slot = 0;
+        }
+    }
+    let mut array: Vec<u16> = single.to_vec();
+    // (first code, entry count, idDelta, index into the glyph array) per sub-header.
+    let mut subs: Vec<(u16, u16, u16, usize)> = vec![(0, 256, 0, 0)];
+    for (j, (lead, lows)) in leads.iter().enumerate() {
+        // A first byte of two-byte codes is no one-byte code.
+        if let Some(a) = array.get_mut(usize::from(*lead)) {
+            *a = 0;
+        }
+        if let Some(k) = keys.get_mut(usize::from(*lead)) {
+            *k = u16::try_from(8 * (j + 1)).ok()?;
+        }
+        let (&first, _) = lows.iter().next()?;
+        let (&last, _) = lows.iter().next_back()?;
+        let delta = lows.values().min()?.checked_sub(1)?;
+        let at = array.len();
+        for low in first..=last {
+            array.push(lows.get(&low).map_or(0, |g| g.saturating_sub(delta)));
+        }
+        subs.push((u16::from(first), u16::from(last - first) + 1, delta, at));
+    }
+    if empty {
+        subs.push((0, 0, 0, 0));
+    }
+    let length = u16::try_from(array_start + 2 * array.len()).ok()?;
+    let mut out = Vec::with_capacity(usize::from(length));
+    for v in [2, length, mac.language] {
+        out.extend_from_slice(&v.to_be_bytes());
+    }
+    for k in keys {
+        out.extend_from_slice(&k.to_be_bytes());
+    }
+    for (j, (first, entries, delta, index)) in subs.iter().enumerate() {
+        // idRangeOffset counts from the field itself to the sub-header's first glyph entry.
+        let field = header + 8 * j + 6;
+        let offset = u16::try_from((array_start + 2 * index).checked_sub(field)?).ok()?;
+        for v in [*first, *entries, *delta, offset] {
+            out.extend_from_slice(&v.to_be_bytes());
+        }
+    }
+    for g in array {
+        out.extend_from_slice(&g.to_be_bytes());
     }
     Some(out)
 }

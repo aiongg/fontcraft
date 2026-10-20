@@ -152,7 +152,7 @@ fn a_unicode_cmap_gives_the_code_points_and_a_mac_cmap_a_format_6_subtable() {
     let f = cid_source();
     let target = f.default_target().unwrap();
     let mut o = options();
-    o.cid = CidOptions { unicode_cmap: Some(UNI_CMAP.into()), mac_cmap: Some(MAC_CMAP.into()), mac_script: None, mac_language: None };
+    o.cid = CidOptions { unicode_cmap: Some(UNI_CMAP.into()), mac_cmap: Some(MAC_CMAP.into()), mac_script: None, mac_language: None, uvs: None };
     let out = compile(&f, &target, Flavour::Cff, &o).unwrap();
     let font = FontRef::new(&out.bytes).unwrap();
     let cmap = font.cmap().unwrap();
@@ -203,11 +203,17 @@ fn cmap_files_that_cannot_be_used_stop_the_compile() {
     assert!(with("(unclosed").contains("not closed"));
     assert!(with("/CMapName /UniX-UTF32-H def").contains("no codes"));
 
-    // A two-byte Macintosh CMap leaves the Macintosh subtable out, with a warning.
+    // A two-byte Macintosh CMap gives a format 2 subtable; codes of three bytes give none.
     let mut o = options();
     o.cid.mac_cmap = Some(MAC_CMAP.replace("<41> <42> 2", "<8140> <8141> 2").into());
     let out = compile(&f, &target, Flavour::Cff, &o).unwrap();
-    assert!(out.warnings.iter().any(|w| w.contains("longer than one byte")), "{:?}", out.warnings);
+    let font = FontRef::new(&out.bytes).unwrap();
+    let cmap = font.cmap().unwrap();
+    let mac = cmap.encoding_records().iter().find(|r| r.platform_id() as u16 == 1).expect("a Macintosh subtable");
+    assert!(matches!(mac.subtable(cmap.offset_data()).unwrap(), CmapSubtable::Format2(_)));
+    o.cid.mac_cmap = Some(MAC_CMAP.replace("<41> <42> 2", "<814000> <814001> 2").into());
+    let out = compile(&f, &target, Flavour::Cff, &o).unwrap();
+    assert!(out.warnings.iter().any(|w| w.contains("longer than two bytes")), "{:?}", out.warnings);
 
     // An ordinary font ignores the files, with a warning.
     let plain = Font::new("Plain");
@@ -282,4 +288,29 @@ fn cmap_files_read_ranges_chars_and_the_collection() {
     let ranges: String = (0..17).map(|i| format!("<{i:02X}0000> <{i:02X}FFFE> 0\n")).collect();
     let huge = format!("17 begincidrange\n{ranges}endcidrange\n");
     assert!(parse_cmap(huge.as_bytes(), CodeKind::Unicode).unwrap_err().contains("more than"));
+}
+
+/// The format 2 subtable makeotf 5.0.1's addfeatures wrote for a two-byte Macintosh CMap
+/// (code space `<00> <80>` and `<8140> <9FFC>`) on a font whose CIDs 0, 1, 2, 3, 4, 20, 21 and
+/// 30 are glyphs 0 to 7.
+#[test]
+fn a_two_byte_mac_cmap_gives_the_reference_format_2_subtable() {
+    let text = "/CIDSystemInfo 3 dict dup begin /Registry (Test) def /Ordering (Latin1) def /Supplement 2 def end def\n\
+        /CMapName /TestMac3-H def\n2 begincodespacerange\n<00> <80>\n<8140> <9FFC>\nendcodespacerange\n\
+        4 begincidrange\n<41> <43> 2\n<8141> <8141> 20\n<8143> <8143> 21\n<8240> <8240> 30\nendcidrange\n\
+        2 begincidchar\n<20> 1\n<8241> 2\nendcidchar\n";
+    let cmap = parse_cmap(text.as_bytes(), CodeKind::Bytes).unwrap();
+    assert_eq!(cmap.longest_code, 2);
+    assert_eq!(cmap.lead_bytes, (0x81..=0x9F).collect());
+    let mac = MacPlan { script: 0, language: 0, codes: cmap.cids, lead_bytes: cmap.lead_bytes };
+    let gid_of: HashMap<u32, u16> = [(0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (20, 5), (21, 6), (30, 7)].into_iter().collect();
+    let t = format2(&mac, &gid_of).unwrap();
+    let u16_at = |at: usize| u16::from_be_bytes([t[at], t[at + 1]]);
+    assert_eq!((u16_at(0), u16_at(2), u16_at(4), t.len()), (2, 1072, 0, 1072));
+    let key = |byte: usize| u16_at(6 + 2 * byte);
+    assert_eq!((key(0x41), key(0x80), key(0x81), key(0x82), key(0x83), key(0x9F), key(0xA0)), (0, 0, 8, 16, 24, 24, 0));
+    let subs: Vec<[u16; 4]> = (0..4).map(|j| [0, 2, 4, 6].map(|k| u16_at(518 + 8 * j + k))).collect();
+    assert_eq!(subs, [[0, 256, 0, 26], [65, 3, 4, 530], [64, 2, 1, 528], [0, 0, 0, 2]]);
+    let array: Vec<(usize, u16)> = (0..261).map(|i| (i, u16_at(550 + 2 * i))).filter(|(_, g)| *g != 0).collect();
+    assert_eq!(array, [(32, 1), (65, 2), (66, 3), (67, 4), (256, 1), (258, 2), (259, 6), (260, 1)]);
 }
