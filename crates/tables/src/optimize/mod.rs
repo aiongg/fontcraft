@@ -1,21 +1,32 @@
 //! Size optimisation that keeps behaviour (M12.26; rows `optimize`, `font.optimize`). Oracles:
-//! fontTools `otlLib.optimize`, `cffLib.width`, `varLib.varStore`. Subroutinising uses the CFF
+//! fontTools `otlLib.optimize`, `cffLib.width`, `varLib.varStore`, `varLib.iup`,
+//! `ttLib.tables._g_l_y_f.dropImpliedOnCurvePoints` and `colorLib`. Subroutinising uses the CFF
 //! subroutiniser of `fontcraft-cff` (M12.25).
 //!
-//! The steps, in the order they run on each `CFF ` and `CFF2` table:
+//! The steps, in the order they run:
 //!
-//! | Step | What it does | Check |
-//! |---|---|---|
-//! | `desubroutinize` | expands every subroutine call; no subroutines are left | the subroutiniser's expansion |
-//! | `cffWidths` | chooses `defaultWidthX` and `nominalWidthX` again (`cffLib.width`) and rewrites every width | each glyph's advance read back |
-//! | `subroutinize` | moves repeated charstring fragments into subroutines (compreffor's method) | every glyph expanded again and compared byte for byte |
+//! | Step | Table | What it does | Check |
+//! |---|---|---|---|
+//! | `desubroutinize` | `CFF `, `CFF2` | expands every subroutine call; no subroutines are left | the subroutiniser's expansion |
+//! | `cffWidths` | `CFF ` | chooses `defaultWidthX` and `nominalWidthX` again (`cffLib.width`) and rewrites every width | each glyph's advance read back |
+//! | `subroutinize` | `CFF `, `CFF2` | moves repeated charstring fragments into subroutines (compreffor's method) | every glyph expanded again and compared byte for byte |
+//! | `dropImpliedOncurves` | `glyf` (and `gvar`) | removes on-curve points halfway between their off-curve neighbours at every location ([`glyf_gvar`]) | |
+//! | `gvarIup` | `gvar` | keeps only the deltas IUP cannot infer, or writes every delta ([`glyf_gvar`]) | |
+//! | `varstore` | `GDEF`, `GPOS` | merges and packs the shared item variation store again ([`varstore`]) | |
+//! | `colrLayerReuse` | `COLR` | builds the version 1 paint graphs again, sharing layer runs ([`colr`]) | |
 //!
 //! A step whose result is not smaller is not applied, and a table that would come out larger
-//! than it went in is kept as it was, unless subroutines were expanded or capped on request.
-//! `cffWidths` expands the subroutines on its way; a table that had them is subroutinised again.
-//! A table the subroutiniser refuses (one beyond its limits, an operator it does not handle) is
-//! left as it was, with a note. GPOS compaction and variation store merging are not built: a font
-//! that has those tables gets a note and keeps them.
+//! than it went in is kept as it was, unless the step was asked for in a form that grows it
+//! (subroutines expanded or capped, every `gvar` delta written) or another step needs it (a glyph
+//! that lost points needs its `gvar` deltas renumbered). `cffWidths` expands the subroutines on
+//! its way; a table that had them is subroutinised again. A step that fails leaves its tables as
+//! they were, with a note.
+
+pub mod colr;
+pub mod glyf_gvar;
+pub mod varstore;
+
+pub use glyf_gvar::DeltaMode;
 
 use crate::sfnt::{SfntFont, tag_str};
 use crate::{Result, TableOrder, TablesError, Tag, WriteOptions};
@@ -29,30 +40,47 @@ mod tests;
 /// The optimisations [`optimize`] runs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct OptimizeOptions {
-    /// Compact GPOS lookups into subtables of the best size. Not built: a note says so.
-    pub gpos: bool,
     /// Choose the CFF `defaultWidthX` and `nominalWidthX` that make the charstrings smallest.
     pub cff_widths: bool,
     /// Subroutinise CFF and CFF2 charstrings.
     pub subroutines: bool,
-    /// Merge and sort the rows of variation stores. Not built: a note says so.
+    /// Merge and pack the item variation store of `GDEF` and `GPOS` again.
     pub variation_store: bool,
+    /// Round store deltas to multiples of this first (1: lossless).
+    pub quantum: u32,
     /// Expand every CFF and CFF2 subroutine. Contradicts `subroutines`.
     pub desubroutinize: bool,
     /// Most subroutines in one INDEX, 1 to 65,535; `None` for the subroutiniser's default.
     pub max_subrs: Option<usize>,
+    /// What happens to `gvar` deltas; `None` leaves `gvar` alone.
+    pub gvar: Option<DeltaMode>,
+    /// Remove implied on-curve points from `glyf`.
+    pub drop_implied_oncurves: bool,
+    /// Build a version 1 `COLR` again with shared layers.
+    pub colr_layer_reuse: bool,
 }
 
 impl Default for OptimizeOptions {
     fn default() -> Self {
-        Self { gpos: true, cff_widths: true, subroutines: true, variation_store: true, desubroutinize: false, max_subrs: None }
+        Self {
+            cff_widths: true,
+            subroutines: true,
+            variation_store: true,
+            quantum: 1,
+            desubroutinize: false,
+            max_subrs: None,
+            gvar: Some(DeltaMode::Optimize),
+            drop_implied_oncurves: true,
+            colr_layer_reuse: true,
+        }
     }
 }
 
 /// One step run on one table: its size before and after, and whether the result was kept.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OptimizeStep {
-    /// `desubroutinize`, `cffWidths` or `subroutinize`.
+    /// `desubroutinize`, `cffWidths`, `subroutinize`, `dropImpliedOncurves`, `gvarIup`,
+    /// `varstore` or `colrLayerReuse`.
     pub step: &'static str,
     pub table: Tag,
     pub before: usize,
@@ -93,14 +121,82 @@ pub fn optimize(font: &SfntFont, options: &OptimizeOptions) -> Result<OptimizeRe
             out.insert(tag, table);
         }
     }
-    if options.gpos && font.get(*b"GPOS").is_some() {
-        notes.push("GPOS compaction is not built yet: GPOS was left as it was".into());
+    if out.get(*b"glyf").is_some() && (options.drop_implied_oncurves || (options.gvar.is_some() && out.get(*b"gvar").is_some())) {
+        optimize_glyf_gvar(&mut out, options, &mut steps, &mut notes);
     }
-    if options.variation_store && font.get(*b"fvar").is_some() {
-        notes.push("variation store merging is not built yet: the variation stores were left as they were".into());
+    if options.variation_store && out.get(*b"GDEF").is_some() {
+        match varstore::run(&out, options.quantum) {
+            Ok(Some(tables)) => {
+                let before = out.get(*b"GDEF").map_or(0, <[u8]>::len);
+                let after = tables.iter().find(|(t, _)| t == b"GDEF").map_or(before, |(_, b)| b.len());
+                let applied = after < before;
+                steps.push(OptimizeStep { step: "varstore", table: *b"GDEF", before, after, applied });
+                if applied {
+                    for (tag, bytes) in tables {
+                        out.insert(tag, bytes);
+                    }
+                } else {
+                    notes.push("GDEF: merging the variation store would not make it smaller, so it was kept".into());
+                }
+            }
+            Ok(None) => {}
+            Err(e) => notes.push(format!("GDEF and GPOS: variation store left as it was: {e}")),
+        }
+    }
+    if options.colr_layer_reuse && out.get(*b"COLR").is_some() {
+        match colr::run(&out) {
+            Ok(Some(table)) => {
+                let before = out.get(*b"COLR").map_or(0, <[u8]>::len);
+                let applied = table.len() < before;
+                steps.push(OptimizeStep { step: "colrLayerReuse", table: *b"COLR", before, after: table.len(), applied });
+                if applied {
+                    out.insert(*b"COLR", table);
+                }
+            }
+            Ok(None) => {}
+            Err(e) => notes.push(format!("COLR: left as it was: {e}")),
+        }
     }
     let bytes_after = crate::write(&out, &keep)?.len();
     Ok(OptimizeResult { font: out, bytes_before, bytes_after, steps, notes })
+}
+
+/// The `glyf` and `gvar` steps: implied on-curve points, then the `gvar` deltas.
+fn optimize_glyf_gvar(out: &mut SfntFont, options: &OptimizeOptions, steps: &mut Vec<OptimizeStep>, notes: &mut Vec<String>) {
+    let mode = options.gvar.unwrap_or(DeltaMode::Keep);
+    let result = match glyf_gvar::run(out, options.drop_implied_oncurves, mode) {
+        Ok(r) => r,
+        Err(e) => {
+            notes.push(format!("glyf and gvar: left as they were: {e}"));
+            return;
+        }
+    };
+    let size = |out: &SfntFont, tag: &[u8; 4]| out.get(*tag).map_or(0, <[u8]>::len);
+    let dropped = result.dropped_points > 0;
+    if options.drop_implied_oncurves {
+        let after = result.tables.iter().find(|(t, _)| t == b"glyf").map_or(size(out, b"glyf"), |(_, b)| b.len());
+        steps.push(OptimizeStep { step: "dropImpliedOncurves", table: *b"glyf", before: size(out, b"glyf"), after, applied: dropped });
+    }
+    if result.hinted_kept > 0 {
+        notes.push(format!("glyf: {} glyphs with instructions keep their implied on-curve points", result.hinted_kept));
+    }
+    if result.iup_skipped > 0 {
+        notes.push(format!("gvar: the deltas of {} glyphs were kept as they were: their contours are too long to optimise", result.iup_skipped));
+    }
+    for (tag, bytes) in result.tables {
+        if &tag == b"gvar" {
+            let before = size(out, b"gvar");
+            let applied = dropped || mode == DeltaMode::All || (mode == DeltaMode::Optimize && bytes.len() < before);
+            if options.gvar.is_some() {
+                steps.push(OptimizeStep { step: "gvarIup", table: tag, before, after: bytes.len(), applied });
+            }
+            if applied {
+                out.insert(tag, bytes);
+            }
+        } else if dropped {
+            out.insert(tag, bytes);
+        }
+    }
 }
 
 /// The steps on one `CFF ` or `CFF2` table; `None` when the table stays as it was.
