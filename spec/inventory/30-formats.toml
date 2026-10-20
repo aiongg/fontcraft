@@ -607,6 +607,62 @@ guesses = [
 ]
 
 [[format]]
+id = "pk"
+label = "TeX packed font (PK)"
+extensions = ["pk"]
+read = true
+write = true
+spec = "https://ctan.org/pkg/pktype"
+area = "import-export"
+milestone = "M13"
+summary = "TeX's packed bitmap font: one font at one resolution, each character a run-length or bitmap raster with its TeX width and escapement. Imported as a bitmap strike, like `bdf`."
+ref = "PKtype documentation (T. Rokicki), in the TeX distribution"
+status = "docs"
+origin = "fontforge"
+notes = "Reader and writer built (M13.55f) in `crates/io-bitmap/src/pk.rs`, from the format description in the PKtype documentation and the files `gftopk` writes, and `pktype` prints, for METAFONT programs of our own; no code that reads or writes PK was consulted. Read: the preamble (design size, pixels per point), every character in the short, extended short and long preamble forms, rasters as a plain bitmap (`dyn_f` 14) or as run and repeat counts; specials and no-ops are skipped. A character's box is its width and height, its left edge `-hoff` and its bottom `voff - h + 1`; its advance is the escapement rounded to whole pixels and its scalable width the TeX width in thousandths of the design size. Ascent and descent are the glyphs' extent. The file has no glyph names or properties. A run or repeat count that reaches past the last row of its box is refused with a message, as is a box above 1,024 pixels, a packet length that does not fit its preamble or the file, a run count beyond 32 bits, and two repeat counts for one row. Written: each character under its code in the smallest preamble form it fits, its raster run-coded with the `dyn_f` that packs it smallest, or as a plain bitmap when that is no larger; no repeat counts. Reachable through `bitmap.importStrikes`, `bitmap.exportStrikes` (format `pk`) and `file.open`. Documented, not yet checked against files the reference reads or writes."
+guesses = [
+  "A PK or GF strike is `design size × vertical pixels per point` pixels per em, rounded, and its resolution is the pixels per point times 72.27 (TeX points per inch), rounded; the format states no pixel size. Opening a PK file in the secondary reference would show the size it gives the strike.",
+  "A PK or GF glyph is named after its code: the character itself for an ASCII letter or digit, else `char` and the decimal code; the file has no names. The codes count as Unicode code points, so letters and digits match a font's glyphs; TeX's own encodings differ from Unicode elsewhere. Importing a PK font into the secondary reference would settle both.",
+  "Writing PK leaves out bitmaps without a code and bitmaps whose code an earlier bitmap has, and gives the file a design size that reads back at the strike's pixel size.",
+]
+
+[[format]]
+id = "gf"
+label = "METAFONT generic font (GF)"
+extensions = ["gf"]
+read = true
+write = false
+spec = "https://ctan.org/pkg/mfware"
+area = "import-export"
+milestone = "M13"
+summary = "The bitmap font METAFONT writes: each character painted row by row, with a postamble of escapements and TeX widths. Imported as a bitmap strike, like `bdf`."
+ref = "GFtype documentation (D. E. Knuth), in the TeX distribution"
+status = "docs"
+origin = "fontforge"
+notes = "Reader built (M13.55f) in `crates/io-bitmap/src/gf.rs`, from the format description in the GFtype documentation and the files METAFONT writes, and `gftype` prints, for programs of our own; no code that reads or writes GF was consulted. Every paint, skip, new-row, special and no-op command is read; `boc` and `boc1` start a character, whose columns run from `min_m` to `max_m` - 1 and rows from `max_n` down to `min_n` (pixel (m, n) is the unit square above and right of (m, n)). The postamble's design size and pixels per point give the strike's size, as for `pk`; its character locators give each character's advance (escapement rounded to pixels) and scalable width, by code modulo 256. A character without a locator advances by its bitmap's right edge, with a warning. A black paint outside the box its `boc` states is refused with a message, as is a box above 1,024 pixels or with coordinates beyond ±32,767, a negative code and a file cut short. Reachable through `bitmap.importStrikes` and `file.open`. Documented, not yet checked against files the reference reads."
+
+[[format]]
+id = "nfnt"
+label = "Mac OS bitmap font resources (NFNT, FONT)"
+extensions = ["dfont", "bin", "rsrc", "suit"]
+read = true
+write = false
+spec = "https://developer.apple.com/library/archive/documentation/mac/pdf/Text.pdf"
+area = "import-export"
+milestone = "M13"
+summary = "The bitmap fonts of classic Mac OS: one `NFNT` (or older `FONT`) resource per size and style, grouped by a font family (`FOND`) resource, kept in a file's resource fork. Imported as one bitmap strike per size."
+ref = "Inside Macintosh: Text › Font resources; More Macintosh Toolbox › Resource Manager"
+status = "docs"
+origin = "fontforge"
+notes = "Reader built (M13.55f) in `crates/io-bitmap/src/nfnt.rs`, from Inside Macintosh (Text: the font record and the font family record; More Macintosh Toolbox: the resource fork layout), Apple's AppleSingle/AppleDouble description and the MacBinary II and III header descriptions; no code that reads these formats was consulted. Containers read: a plain file holding a resource fork (a fork copied out, or a `.dfont`), an AppleSingle or AppleDouble file (entry 2), and a MacBinary II or III file whose header checksum matches or that carries the MacBinary III signature (MacBinary I is not recognised). The first `FOND` names the family (its resource name, kept as `FAMILY_NAME`) and lists the strikes by point size, style and resource id; the plain-style strikes are read, smallest first, and styled ones are left out with a warning. Without a `FOND`, every `NFNT` and `FONT` resource is read, a `FONT` id's low seven bits giving its point size. A strike's pixel size is its point size (Mac bitmap fonts are drawn at 72 dpi). Each character's bitmap is its column range of the font's bit image, cut to its rows that hold pixels; its left edge is `kernMax` plus its offset and its advance is its width entry. Codes are Mac OS Roman, mapped to Unicode; glyphs are named by their character for ASCII letters and digits, else `uniXXXX`; the missing-character glyph becomes `.notdef` without a code. Grey and colour fonts (font type depth bits) are refused, and so are character ranges outside 0..255, font rectangles above 1,024 pixels, image locations past the bit image, and tables or resources past their data. Limits: 1,024 resource types, 4,096 font resources and 64 strikes per file. Reachable through `bitmap.importStrikes` (every strike) and `file.open` (glyphs and metrics from the smallest strike; the other strikes hold the bitmaps whose names it has). Documented, not yet checked against files the reference reads."
+guesses = [
+  "Only the first font family of a Mac file, and only its plain style, is read; a family's bold or italic strikes are separate fonts, not strikes. Opening a Mac suitcase with several styles in the secondary reference would settle it.",
+  "A Mac strike without a font family record is taken to be its ascent plus descent pixels per em, with a warning; only the family record states the point size of an `NFNT`.",
+  "Mac codes below 32 map to the same code points; a font that draws symbols there (such as command-key glyphs) gets control-character code points for them.",
+  "Blank rows above and below a Mac character's bitmap are trimmed so its box is tight, as BDF and PCF boxes are; the record keeps every character as tall as the font rectangle.",
+]
+
+[[format]]
 id = "sfd"
 label = "FontForge Spline Font Database"
 extensions = ["sfd", "sfdir"]

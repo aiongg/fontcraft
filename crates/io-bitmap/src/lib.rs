@@ -1,4 +1,5 @@
-//! Bitmap fonts (L3): reading and writing BDF text files and X11 PCF binary files.
+//! Bitmap fonts (L3): reading and writing BDF text files, X11 PCF binary files and the other
+//! bitmap formats listed below.
 //!
 //! Written from public format descriptions only: Adobe's Glyph Bitmap Distribution Format
 //! specification (technical note 5005, versions 2.1 and 2.2), the PCF format page of an
@@ -26,7 +27,10 @@
 //! second, non-standard code of `ENCODING -1 n`.
 //!
 //! Further formats, each in its own module: gzip-compressed PCF and BDF (`gz`), Windows FNT
-//! fonts (`fnt`) and Windows FON files, which hold several FNT fonts (`fon`).
+//! fonts (`fnt`), Windows FON files, which hold several FNT fonts (`fon`), TeX's PK (read and
+//! written) and GF fonts (`pk`, `gf`) and classic Mac OS `NFNT`/`FONT` resources (`nfnt`, read
+//! only). All of them read into the same [`BitmapFont`]. FON and Mac files can hold several
+//! strikes: [`read_all`] gives each of them.
 //!
 //! The input is untrusted: the file size, the glyph and property counts, each bitmap's size and
 //! the decoded pixels of all glyphs together are capped by the limits below, every PCF offset is
@@ -34,10 +38,14 @@
 #![forbid(unsafe_code)]
 
 mod bdf;
+mod binary;
 mod fnt;
 mod fon;
+mod gf;
 mod gz;
+mod nfnt;
 mod pcf;
+mod pk;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
@@ -46,8 +54,11 @@ mod tests_windows;
 pub use bdf::{read_bdf, write_bdf};
 pub use fnt::{Written, is_fnt, read_fnt, write_fnt};
 pub use fon::{MAX_FON_FONTS, is_fon, read_fon, write_fon};
+pub use gf::read_gf;
 pub use gz::{MAX_GUNZIPPED_BYTES, is_gzip, read_gz, write_pcf_gz};
+pub use nfnt::{MAX_MAC_STRIKES, MAX_RESOURCE_TYPES, MAX_RESOURCES, is_mac_font, read_mac};
 pub use pcf::{PcfLayout, read_pcf, write_pcf};
+pub use pk::{read_pk, write_pk};
 
 /// Largest file either reader accepts.
 pub const MAX_FILE_BYTES: usize = 16 << 20;
@@ -71,6 +82,8 @@ pub const MAX_WARNINGS: usize = 100;
 pub enum BitmapError {
     #[error("the file is too large ({0} bytes; the limit is {MAX_FILE_BYTES})")]
     TooLarge(usize),
+    #[error("not a bitmap font file: it is none of BDF, PCF, Windows FNT or FON, TeX PK or GF, or a Mac NFNT or FONT resource")]
+    Unknown,
     #[error("not a BDF file: {0}")]
     NotBdf(String),
     #[error("not a PCF file: {0}")]
@@ -89,6 +102,8 @@ pub enum BitmapError {
     Limit { what: &'static str, limit: usize },
     #[error("cannot write the font: {0}")]
     Write(String),
+    #[error("{format} file: {message}")]
+    Malformed { format: &'static str, message: String },
 }
 
 pub type Result<T> = std::result::Result<T, BitmapError>;
@@ -261,34 +276,89 @@ pub fn is_pcf(bytes: &[u8]) -> bool {
     bytes.starts_with(pcf::MAGIC)
 }
 
-/// Reads a BDF, PCF (plain or gzip-compressed) or FNT file, whichever `bytes` hold, or the
-/// first font of a FON file.
-pub fn read(bytes: &[u8]) -> Result<Import> {
-    if is_pcf(bytes) {
-        read_pcf(bytes)
+/// Whether `bytes` start like a TeX PK file.
+pub fn is_pk(bytes: &[u8]) -> bool {
+    bytes.starts_with(&[pk::PRE, pk::ID])
+}
+
+/// Whether `bytes` start like a METAFONT GF file.
+pub fn is_gf(bytes: &[u8]) -> bool {
+    bytes.starts_with(&[gf::PRE, gf::ID])
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum Format {
+    Gzip,
+    Pcf,
+    Bdf,
+    Pk,
+    Gf,
+    Fon,
+    Mac,
+    Fnt,
+}
+
+/// The format `bytes` hold. Exact signatures come first; the Mac test parses the resource map,
+/// and the FNT test, which checks only a version number and two header bytes, comes last so a
+/// MacBinary header cannot pass for an FNT one.
+fn format(bytes: &[u8]) -> Option<Format> {
+    if is_gzip(bytes) {
+        Some(Format::Gzip)
+    } else if is_pcf(bytes) {
+        Some(Format::Pcf)
     } else if is_bdf(bytes) {
-        read_bdf(bytes)
-    } else if is_gzip(bytes) {
-        read_gz(bytes)
-    } else if is_fnt(bytes) {
-        read_fnt(bytes)
+        Some(Format::Bdf)
+    } else if is_pk(bytes) {
+        Some(Format::Pk)
+    } else if is_gf(bytes) {
+        Some(Format::Gf)
     } else if is_fon(bytes) {
-        let mut fonts = read_fon(bytes)?.into_iter();
-        let mut first = fonts.next().ok_or_else(|| BitmapError::Fon("it holds no font resources".into()))?;
-        let more = fonts.len();
-        if more > 0 && first.warnings.len() < MAX_WARNINGS {
-            first.warnings.push(format!("the file holds {more} more fonts, which were left out"));
-        }
-        Ok(first)
+        Some(Format::Fon)
+    } else if is_mac_font(bytes) {
+        Some(Format::Mac)
+    } else if is_fnt(bytes) {
+        Some(Format::Fnt)
     } else {
-        Err(BitmapError::NotBdf("neither a BDF, PCF, FNT nor FON file".into()))
+        None
     }
 }
 
-/// Reads every strike a bitmap font file holds: each font of a FON file, the one font of any
-/// other.
+/// Reads a bitmap font file, whichever format `bytes` hold: BDF, PCF (plain or
+/// gzip-compressed), Windows FNT, TeX PK, METAFONT GF, the first font of a Windows FON file, or
+/// the smallest strike of a Mac file.
+pub fn read(bytes: &[u8]) -> Result<Import> {
+    match format(bytes) {
+        Some(Format::Gzip) => read_gz(bytes),
+        Some(Format::Pcf) => read_pcf(bytes),
+        Some(Format::Bdf) => read_bdf(bytes),
+        Some(Format::Pk) => read_pk(bytes),
+        Some(Format::Gf) => read_gf(bytes),
+        Some(Format::Fnt) => read_fnt(bytes),
+        Some(Format::Fon) => {
+            let mut fonts = read_fon(bytes)?.into_iter();
+            let mut first = fonts.next().ok_or_else(|| BitmapError::Fon("it holds no font resources".into()))?;
+            let more = fonts.len();
+            if more > 0 && first.warnings.len() < MAX_WARNINGS {
+                first.warnings.push(format!("the file holds {more} more fonts, which were left out"));
+            }
+            Ok(first)
+        }
+        Some(Format::Mac) => {
+            let mut strikes = read_mac(bytes)?.into_iter();
+            strikes.next().ok_or_else(|| BitmapError::Malformed { format: "Mac font", message: "it holds no strike".into() })
+        }
+        None => Err(BitmapError::Unknown),
+    }
+}
+
+/// Every strike a bitmap font file holds: each font of a Windows FON file, each size of a Mac
+/// file (smallest first), the one font of any other format.
 pub fn read_all(bytes: &[u8]) -> Result<Vec<Import>> {
-    if is_fon(bytes) { read_fon(bytes) } else { read(bytes).map(|import| vec![import]) }
+    match format(bytes) {
+        Some(Format::Fon) => read_fon(bytes),
+        Some(Format::Mac) => read_mac(bytes),
+        _ => read(bytes).map(|import| vec![import]),
+    }
 }
 
 /// The pixel size a font states: its `PIXEL_SIZE` property, else its point size at its vertical

@@ -185,6 +185,34 @@ fn an_imported_strike_exports_back_to_the_same_strike_as_bdf_and_pcf() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
+/// A strike written as a TeX PK file reads back with the same bitmaps, by import and by open.
+#[test]
+fn a_strike_exports_as_pk_and_reads_back() {
+    let dir = temp("pk");
+    let path = bdf_file(&dir, "pixel.bdf", BDF);
+    let mut s = session();
+    run(&mut s, "bitmap.importStrikes", json!({ "paths": [path] }));
+    let mut expected = strikes(&s).remove(0);
+    expected.glyphs[2].code = Some(u32::from('c'));
+    let pk = dir.join("pixel.75pk");
+    let out = run(&mut s, "bitmap.exportStrikes", json!({ "path": pk }));
+    assert_eq!(out["format"], "pk");
+
+    let mut fresh = session();
+    run(&mut fresh, "bitmap.importStrikes", json!({ "paths": [pk] }));
+    let back = strikes(&fresh).remove(0);
+    assert_eq!((back.ppem, back.depth, back.resolution), (8, 1, [75, 75]));
+    assert_eq!(back.glyphs, expected.glyphs);
+
+    let mut opened = Session::new();
+    run(&mut opened, "file.open", json!({ "path": pk }));
+    let font = opened.font().unwrap();
+    let names: Vec<&str> = font.glyphs.iter().map(|g| g.name.as_str()).collect();
+    assert_eq!(names, ["A", "B", "c"]);
+    assert_eq!(font.bitmap_strikes.len(), 1);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
 #[test]
 fn strikes_are_added_and_removed_with_undo_and_follow_renamed_glyphs() {
     let dir = temp("set");
@@ -233,7 +261,7 @@ fn hostile_or_unmatched_files_are_refused_and_change_nothing() {
         ("many.bdf", BDF.replace("STARTPROPERTIES 5", "STARTPROPERTIES 99999").into_bytes(), "limit"),
         ("none.bdf", unmatched.into_bytes(), "none of"),
         ("packed.pcf.gz", vec![0x1f, 0x8b, 8, 0, 0, 0, 0, 0], "gzip"),
-        ("text.bdf", b"hello".to_vec(), "neither"),
+        ("text.bdf", b"hello".to_vec(), "not a bitmap font"),
     ];
     for (name, bytes, words) in &cases {
         std::fs::write(dir.join(name), bytes).unwrap();
