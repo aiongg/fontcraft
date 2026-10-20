@@ -12,8 +12,11 @@
 //!   varying argument written with `blend`, and `vsindex` first where a glyph uses a region list
 //!   other than the first. Consecutive varying arguments share one `blend` while the operand stack
 //!   has room; otherwise the run is split. [`Cff2Font::generic`] keeps one generic operator per
-//!   segment instead. No hints, no subroutines (`crate::subr::subroutinize_table` adds them), no
-//!   widths.
+//!   segment instead. No subroutines (`crate::subr::subroutinize_table` adds them), no widths.
+//! - **Hints** ([`Cff2Glyph::hints`]): laid out as the static encoder lays them out (stem
+//!   operators, counter masks, the outline specialised in runs between hint masks), with each
+//!   varying stem number blended. One hint structure serves every master, as in fontTools'
+//!   merge of hinted masters; [`shared_hints`] merges the masters' static hints into it.
 //! - **Top DICT**: FontMatrix when given, CharStrings, FDArray and `vstore`. One Font DICT, so no
 //!   FDSelect.
 //! - **Private DICT**: blue zones and stems, each varying value written with `blend`.
@@ -34,9 +37,13 @@ use std::fmt;
 
 use crate::bounds::Bounds;
 use crate::charstring::{bounds, opcode, pen_commands};
+use crate::hints::{BOTTOM_GHOST, STEMS_PER_OPERATOR, TOP_GHOST};
 use crate::number::{encode_dict_int, encode_dict_number, encode_t2_number, round_with_tolerance};
 use crate::specialize::{Cmd, RLINETO, RMOVETO, RRCURVETO, SpecArg, specialize};
-use crate::{Error, MAX_COORDINATE, MAX_GLYPHS, MAX_SEGMENTS, MAX_TABLE_SIZE, Number, PathOp};
+use crate::{
+    CharstringHints, Error, MAX_COORDINATE, MAX_COUNTER_MASKS, MAX_GLYPHS, MAX_SEGMENTS, MAX_STEM_HINTS, MAX_TABLE_SIZE, Mask, Number, PathOp,
+    StemHint,
+};
 
 /// Most regions the variation store may hold (a 16-bit count).
 pub const MAX_REGIONS: usize = 65_535;
@@ -55,6 +62,8 @@ pub const MAX_PRIVATE_LIST: usize = 14;
 /// Charstring operators.
 const OP_VSINDEX: u8 = 15;
 const OP_BLEND: u8 = 16;
+const OP_HINTMASK: u8 = 19;
+const OP_CNTRMASK: u8 = 20;
 /// DICT operators.
 const DICT_BLEND: u8 = 23;
 
@@ -105,6 +114,101 @@ pub struct Cff2Glyph {
     /// The region list its blends use (an index into [`Cff2Font::region_lists`]).
     pub vsindex: u16,
     pub path: Vec<BlendOp>,
+    /// Its stem hints and masks, blended over the same regions as the path; `None` or no stems
+    /// for an unhinted charstring.
+    pub hints: Option<Cff2Hints>,
+}
+
+/// A stem hint whose edge and width vary, as [`StemHint`] stores them (absolute values; a
+/// ghost's width is the fixed −20 or −21).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct BlendStem {
+    pub edge: Blend,
+    pub width: Blend,
+}
+
+/// The hints of a `CFF2` glyph: one structure for the whole design space, with only the stem
+/// positions varying. Stems are written in the order given; masks name operations of
+/// [`Cff2Glyph::path`] as [`CharstringHints::masks`] does. Flex is not kept: a `CFF2` merge draws
+/// it as two curves.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Cff2Hints {
+    pub h_stems: Vec<BlendStem>,
+    pub v_stems: Vec<BlendStem>,
+    pub masks: Vec<(usize, Mask)>,
+    pub counters: Vec<Mask>,
+}
+
+impl Cff2Hints {
+    pub fn is_empty(&self) -> bool {
+        self.h_stems.is_empty() && self.v_stems.is_empty()
+    }
+}
+
+/// The hints of one glyph in every master, merged into one structure: per stem (in the order
+/// the charstring writes them) its value in each master, and the masks and counter masks all
+/// masters share.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct SharedHints {
+    pub h_stems: Vec<Vec<StemHint>>,
+    pub v_stems: Vec<Vec<StemHint>>,
+    pub masks: Vec<(usize, Mask)>,
+    pub counters: Vec<Mask>,
+}
+
+/// Merges the hints a static export writes for each master of a glyph (`masters`, in the
+/// glyph's source order) into the one structure a `CFF2` charstring holds, as fontTools'
+/// `CFF2CharStringMergePen` merges hinted masters: every master must have the same stem
+/// operators with the same number of stems, and the same masks; only the stem numbers may
+/// differ. Stems are normalised and sorted as the static encoder writes them, with `tolerance`.
+/// The stems must also sort into the same order in every master and be the same kind (stem, top
+/// or bottom ghost), so that a blend never joins two different stems. Flex is dropped. The error
+/// says how the masters differ.
+pub fn shared_hints(masters: &[CharstringHints], tolerance: f64) -> Result<SharedHints, String> {
+    let kind = |s: &StemHint| {
+        if s.width == TOP_GHOST {
+            1u8
+        } else if s.width == BOTTOM_GHOST {
+            2
+        } else {
+            0
+        }
+    };
+    let normalised: Vec<CharstringHints> = masters.iter().map(|h| h.normalised(tolerance)).collect();
+    let orders: Vec<(Vec<usize>, Vec<usize>)> =
+        masters.iter().map(|h| (crate::hints::sorted(&h.h_stems, tolerance).1, crate::hints::sorted(&h.v_stems, tolerance).1)).collect();
+    let Some(base) = normalised.first() else { return Ok(SharedHints::default()) };
+    let base_order = orders.first().cloned().unwrap_or_default();
+    for (i, (n, order)) in normalised.iter().zip(&orders).enumerate().skip(1) {
+        if n.h_stems.len() != base.h_stems.len() || n.v_stems.len() != base.v_stems.len() {
+            return Err(format!(
+                "master {i} has {} horizontal and {} vertical stems, the first {} and {}",
+                n.h_stems.len(),
+                n.v_stems.len(),
+                base.h_stems.len(),
+                base.v_stems.len()
+            ));
+        }
+        if *order != base_order {
+            return Err(format!("the stems of master {i} lie in a different order"));
+        }
+        let kinds = |list: &[StemHint]| list.iter().map(kind).collect::<Vec<u8>>();
+        if kinds(&n.h_stems) != kinds(&base.h_stems) || kinds(&n.v_stems) != kinds(&base.v_stems) {
+            return Err(format!("a ghost hint of master {i} is a stem or a ghost of the other kind in the first"));
+        }
+        if n.masks != base.masks || n.counters != base.counters {
+            return Err(format!("the hint masks of master {i} differ from the first's"));
+        }
+    }
+    let per_stem = |get: fn(&CharstringHints) -> &Vec<StemHint>| -> Vec<Vec<StemHint>> {
+        (0..get(base).len()).map(|j| normalised.iter().filter_map(|n| get(n).get(j).copied()).collect()).collect()
+    };
+    Ok(SharedHints {
+        h_stems: per_stem(|h| &h.h_stems),
+        v_stems: per_stem(|h| &h.v_stems),
+        masks: base.masks.clone(),
+        counters: base.counters.clone(),
+    })
 }
 
 /// Private DICT values; the lists and stems may vary with the regions of list 0. Lists hold
@@ -359,7 +463,13 @@ fn charstring(glyph: &Cff2Glyph, regions: usize, tolerance: f64, generic: bool) 
         default_path.push(step);
         commands.push(Cmd { op: code, args });
     }
-    let out = if generic {
+    let hinted = match glyph.hints.as_ref().filter(|h| !h.is_empty() && !commands.is_empty()) {
+        Some(h) => hinted_charstring(&commands, h, glyph.vsindex, regions, tolerance, generic, name)?,
+        None => None,
+    };
+    let out = if let Some(bytes) = hinted {
+        bytes
+    } else if generic {
         encode(&commands, glyph.vsindex, regions, name)?
     } else {
         // The specialiser keeps every blend within the stack; were an argument swap to push one
@@ -374,6 +484,149 @@ fn charstring(glyph: &Cff2Glyph, regions: usize, tolerance: f64, generic: bool) 
     Ok((out, drawn))
 }
 
+/// Checks `hints` against a path of `ops` operations whose blends have `regions` deltas: the
+/// stem and mask limits, finite numbers in range, mask lengths, masks in path order from op 0.
+fn check_hints(hints: &Cff2Hints, ops: usize, regions: usize, name: &str) -> Result<(), Cff2Error> {
+    let bad = |reason: String| Cff2Error::BadBlend { glyph: name.to_string(), reason };
+    let stems = hints.h_stems.len() + hints.v_stems.len();
+    if stems > MAX_STEM_HINTS {
+        return Err(bad(format!("{stems} stem hints, more than {MAX_STEM_HINTS}")));
+    }
+    if hints.counters.len() > MAX_COUNTER_MASKS {
+        return Err(bad(format!("{} counter masks, more than {MAX_COUNTER_MASKS}", hints.counters.len())));
+    }
+    for s in hints.h_stems.iter().chain(&hints.v_stems) {
+        check_blend(&s.edge, regions, name)?;
+        check_blend(&s.width, regions, name)?;
+    }
+    for m in hints.masks.iter().map(|(_, m)| m).chain(&hints.counters) {
+        if m.h.len() != hints.h_stems.len() || m.v.len() != hints.v_stems.len() {
+            return Err(bad("a mask does not match the stems".into()));
+        }
+    }
+    if hints.masks.iter().any(|(op, _)| *op >= ops.max(1)) {
+        return Err(bad("a hint mask names a path operation the glyph does not have".into()));
+    }
+    if hints.masks.first().is_some_and(|(op, _)| *op != 0) {
+        return Err(bad("the first hint mask must apply from the start of the outline".into()));
+    }
+    if hints.masks.windows(2).any(|w| matches!(w, [(a, _), (b, _)] if a >= b)) {
+        return Err(bad("hint masks are not in path order".into()));
+    }
+    Ok(())
+}
+
+/// A blended number rounded as the outline's coordinates are: its default and its deltas.
+fn rounded(b: &Blend, regions: usize, tolerance: f64) -> (f64, Vec<f64>) {
+    let deltas = if b.deltas.is_empty() { vec![0.0; regions] } else { b.deltas.iter().map(|v| round_with_tolerance(*v, tolerance)).collect() };
+    (round_with_tolerance(b.default, tolerance), deltas)
+}
+
+fn blend_arg(default: f64, deltas: Vec<f64>) -> Arg {
+    if deltas.iter().any(|d| *d != 0.0) { Arg::Blend(default, deltas) } else { Arg::Plain(default) }
+}
+
+/// The arguments of one stem operator for `stems`, relative from 0 as the static encoder writes
+/// them: each edge after the previous stem's `edge + width`, then the width.
+fn stem_operator_args(stems: &[BlendStem], regions: usize, tolerance: f64) -> Vec<Arg> {
+    let mut last = (0.0, vec![0.0; regions]);
+    let mut args = Vec::with_capacity(stems.len() * 2);
+    for s in stems {
+        let (edge, edge_deltas) = rounded(&s.edge, regions, tolerance);
+        let (width, width_deltas) = rounded(&s.width, regions, tolerance);
+        let rel: Vec<f64> = edge_deltas.iter().zip(&last.1).map(|(e, p)| round_with_tolerance(e - p, tolerance)).collect();
+        args.push(blend_arg(edge - last.0, rel));
+        args.push(blend_arg(width, width_deltas.clone()));
+        last = (edge + width, edge_deltas.iter().zip(&width_deltas).map(|(e, w)| e + w).collect());
+    }
+    args
+}
+
+/// The charstring of `commands` (one per path operation) with `hints`, as the static encoder
+/// lays one out: the stem operators (`hstemhm`/`vstemhm` when there are masks), the counter
+/// masks, then the outline specialised in runs between hint masks, which stay where they are,
+/// as fontTools' specialiser keeps a merged charstring's masks. `None` when a stem's blend
+/// cannot fit the operand stack: the glyph is then written without hints.
+fn hinted_charstring(
+    commands: &[Cmd<Arg>],
+    hints: &Cff2Hints,
+    vsindex: u16,
+    regions: usize,
+    tolerance: f64,
+    generic: bool,
+    name: &str,
+) -> Result<Option<Vec<u8>>, Cff2Error> {
+    check_hints(hints, commands.len(), regions, name)?;
+    let is_blend = |a: &Arg| matches!(a, Arg::Blend(..));
+    let replacement = !hints.masks.is_empty() || !hints.counters.is_empty();
+    let mut blended = false;
+    let mut head = Vec::new();
+    for (stems, plain, hm) in [(&hints.h_stems, 1u8, 18u8), (&hints.v_stems, 3, 23)] {
+        for chunk in stems.chunks(STEMS_PER_OPERATOR) {
+            let args = stem_operator_args(chunk, regions, tolerance);
+            blended |= args.iter().any(is_blend);
+            match write_args(&args, regions, Context::Charstring, name, &mut head) {
+                Err(Cff2Error::StackOverflow { .. }) => return Ok(None),
+                other => other?,
+            }
+            head.push(if replacement { hm } else { plain });
+        }
+    }
+    for m in &hints.counters {
+        head.push(OP_CNTRMASK);
+        head.extend(m.bytes());
+    }
+    let mut body = Vec::new();
+    let run_out = |run: &[Cmd<Arg>], body: &mut Vec<u8>, blended: &mut bool| -> Result<(), Cff2Error> {
+        if run.is_empty() {
+            return Ok(());
+        }
+        *blended |= run.iter().any(|c| c.args.iter().any(is_blend));
+        let mut bytes = Vec::new();
+        let written = if generic {
+            write_commands(run, regions, name, &mut bytes)
+        } else {
+            write_commands(&specialize(run.to_vec(), MAX_STACK, false), regions, name, &mut bytes)
+        };
+        match written {
+            Err(Cff2Error::StackOverflow { .. }) if !generic => {
+                bytes.clear();
+                write_commands(run, regions, name, &mut bytes)?;
+            }
+            other => other?,
+        }
+        body.extend(bytes);
+        Ok(())
+    };
+    let mut start = 0usize;
+    for (op, m) in &hints.masks {
+        run_out(commands.get(start..*op).unwrap_or(&[]), &mut body, &mut blended)?;
+        body.push(OP_HINTMASK);
+        body.extend(m.bytes());
+        start = *op;
+    }
+    run_out(commands.get(start..).unwrap_or(&[]), &mut body, &mut blended)?;
+    let mut out = Vec::with_capacity(head.len() + body.len() + 4);
+    if blended && vsindex != 0 {
+        write_args(&[Arg::Plain(f64::from(vsindex))], 0, Context::Charstring, name, &mut out)?;
+        out.push(OP_VSINDEX);
+    }
+    out.extend(head);
+    out.extend(body);
+    Ok(Some(out))
+}
+
+/// Appends `commands` with their operators.
+fn write_commands(commands: &[Cmd<Arg>], regions: usize, name: &str, out: &mut Vec<u8>) -> Result<(), Cff2Error> {
+    for c in commands {
+        write_args(&c.args, regions, Context::Charstring, name, out)?;
+        let code = opcode(c.op)
+            .ok_or_else(|| Cff2Error::BadBlend { glyph: name.to_string(), reason: "the specialiser left an operator unresolved".into() })?;
+        out.push(code);
+    }
+    Ok(())
+}
+
 /// The bytes of `commands`, with `vsindex` first when it is not 0 and something is blended.
 fn encode(commands: &[Cmd<Arg>], vsindex: u16, regions: usize, name: &str) -> Result<Vec<u8>, Cff2Error> {
     let mut out = Vec::new();
@@ -382,12 +635,7 @@ fn encode(commands: &[Cmd<Arg>], vsindex: u16, regions: usize, name: &str) -> Re
         write_args(&[Arg::Plain(f64::from(vsindex))], 0, Context::Charstring, name, &mut out)?;
         out.push(OP_VSINDEX);
     }
-    for c in commands {
-        write_args(&c.args, regions, Context::Charstring, name, &mut out)?;
-        let code = opcode(c.op)
-            .ok_or_else(|| Cff2Error::BadBlend { glyph: name.to_string(), reason: "the specialiser left an operator unresolved".into() })?;
-        out.push(code);
-    }
+    write_commands(commands, regions, name, &mut out)?;
     Ok(out)
 }
 
@@ -705,6 +953,7 @@ mod tests {
             name: "a".into(),
             vsindex: 0,
             path: vec![BlendOp::MoveTo((Blend { default: 0.0, deltas: vec![1.0, 2.0] }, Blend::fixed(0.0)))],
+            hints: None,
         };
         let font = Cff2Font {
             axis_count: 1,

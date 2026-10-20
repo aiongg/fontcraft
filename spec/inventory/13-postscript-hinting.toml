@@ -717,7 +717,12 @@ milestone = "M10"
 summary = "In a variable CFF2 font a glyph has one hint list and one set of hint masks for the whole design space; only the hint coordinates vary. Hints are therefore taken from the main master's structure and their edges become blended values from the linked nodes in every master, subject to the ordering and overlap rules in autohint.ps.variable.*. The handbook does not describe CFF2 output; this follows the otfautohint notes."
 ref = "AFDKO docs/otfautohint_Notes.md › Some notes on hinting glyphs in a variable font"
 status = "inferred"
-guesses = ["In variable CFF2 output the hints come from the main master's manual hints resolved through node links in every master, or else from the multiple-master autohinter; unlinked manual hints keep one value in every master; a variable export from the reference app would settle it."]
+notes = "M12.25d (`fontcraft_cff::cff2::shared_hints`, `compile/src/var/cff2.rs`): per master, the hints the static CFF export of that master writes; they are merged as fontTools' varLib merges hinted CFF masters (same stem operators and stem counts, same masks, only the numbers differ) and written with blended stems, `hstemhm`/`vstemhm` and `hintmask` kept. Stems must also sort into the same order and keep their ghost kind in every master. Flex is dropped: the merge draws it as two curves. The Private DICT's zones and stems are blended (row hinting.ps.cff2.privateDictBlends)."
+guesses = [
+  "In variable CFF2 output the hints come from the main master's manual hints resolved through node links in every master, or else from the autohinter run on each master on its own; unlinked manual hints keep one value in every master; a variable export from the reference app would settle it.",
+  "A glyph whose masters' hints differ in structure (fontTools refuses the merge with VarLibCFFHintTypeMergeError or a hint mask error) is written without hints and with a warning, so the rest of the font still exports; autohinted masters differ often, as the autohinter does not yet hint the masters together (autohint.ps.variable.*).",
+  "A glyph that varies with an intermediate or alternate layer is written without hints, with a warning: its hints are read on master layers only; hinting the special layer through its own node links would be the next step.",
+]
 observe = ["T2: export as a variable CFF2 font and read the charstrings; note whether all masters share one hint structure and what happens to I's unlinked hint."]
 
 [[behavior]]
@@ -727,6 +732,7 @@ milestone = "M10"
 summary = "In variable CFF2 output the Private dict values (BlueValues, OtherBlues, FamilyBlues, FamilyOtherBlues, StdHW, StdVW, StemSnapH, StemSnapV, and the scalar blue parameters where masters differ) are written with blend operators built from the per-master zones and stems, so every master must supply the same number of zones and the same named stems. Not covered by the handbook."
 ref = "OpenType spec › CFF2 Private DICT; AFDKO docs/otfautohint_Notes.md"
 status = "inferred"
+notes = "Built in M9.13 (`compile/src/var/cff2.rs` `private`, written by `fontcraft_cff::cff2`): a list with any varying value is one blend of all its values, stems and the scalar parameters blended one by one; a master with a different number of values keeps the origin's, with a warning, as fontTools' merge keeps the default's. Checked byte for byte against fontTools' `merge_PrivateDicts` of two masters (M12.25d test)."
 
 # ---------------------------------------------------------------------------------------------
 # The autohinter engine, as documented by AFDKO otfautohint (ids autohint.ps.*)

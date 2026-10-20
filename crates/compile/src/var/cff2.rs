@@ -11,25 +11,31 @@
 //! line of a contour is left out only where every source can leave it out.
 //!
 //! Companion tables: `hmtx` with `HVAR`, `post` 2.0 with the glyph names, `maxp` 0.5; no `glyf`,
-//! `loca` or `gvar`. Hints are not written (see [`HINTS_DROPPED`]).
+//! `loca` or `gvar`.
+//!
+//! Hints: per master, the hints a static CFF export of that master writes (manual PostScript
+//! hints resolved through node links, else the autohinter's when Autohint is on), merged into one
+//! structure as fontTools merges hinted masters ([`fontcraft_cff::cff2::shared_hints`]), with
+//! the stem edges and widths blended over the glyph's model. Flex is dropped, as the merge draws
+//! it as two curves. A glyph whose masters' hints differ in structure, or that varies with an
+//! intermediate layer, is written without hints, with a warning; fontTools refuses such a merge.
 
 use std::collections::HashMap;
 
-use fontcraft_cff::cff2::{Blend, BlendOp, Cff2Font, Cff2Glyph, Cff2Private, RegionAxis};
-use fontcraft_cff::{Number, PathOp, PrivateDict};
+use fontcraft_autohint::FdDict;
+use fontcraft_cff::cff2::{Blend, BlendOp, BlendStem, Cff2Font, Cff2Glyph, Cff2Hints, Cff2Private, RegionAxis};
+use fontcraft_cff::{CharstringHints, Number, PathOp, PrivateDict, StemHint};
 use fontcraft_geom::BezPath;
 use fontcraft_geom::variation::{Region, VariationModel};
+use fontcraft_hinting::HintSettings;
 use fontcraft_model::{Font, Resolved, Target};
 
 use super::Source;
 use super::gvar::Models;
-use crate::{CompileError, ot_round};
+use crate::{CompileError, HintingOptions, ot_round};
 
 /// fontTools' rounding tolerance for CFF2 coordinates and deltas (`CFF2CharStringMergePen`).
 pub const CFF2_ROUND_TOLERANCE: f64 = 0.01;
-
-/// The warning for a font whose glyphs have manual hints: a CFF2 font is written without them.
-pub const HINTS_DROPPED: &str = "CFF2 fonts are written without hints; the glyphs' manual hints were left out";
 
 /// One glyph's cubic outlines at each of its sources.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -39,6 +45,141 @@ pub struct CubicSources {
     pub locations: Vec<Vec<f64>>,
     /// Per source, the glyph's contours, the same structure in each.
     pub paths: Vec<Vec<BezPath>>,
+    /// Per source, its master; `None` for an intermediate layer. Hints are written only when
+    /// every source is a master.
+    pub masters: Vec<Option<String>>,
+}
+
+/// What a static export of one master hints with.
+struct MasterHinting {
+    settings: HintSettings,
+    /// The autohinter's zones and stems, when the master exports PostScript hints.
+    dict: Option<FdDict>,
+    autohint: bool,
+}
+
+/// The source the glyphs' hints are read from and each master's hint settings.
+pub struct HintContext<'a> {
+    font: &'a Font,
+    masters: HashMap<String, MasterHinting>,
+}
+
+impl<'a> HintContext<'a> {
+    /// The hint settings of `masters` in `prepared`, read as each master's static export reads
+    /// them; `None` when the export writes no hints.
+    pub fn new(prepared: &'a Font, masters: &[String], hinting: &HintingOptions, warnings: &mut Vec<String>) -> Result<Option<Self>, CompileError> {
+        if hinting.strip {
+            return Ok(None);
+        }
+        let mut out = HashMap::new();
+        let mut notes = Vec::new();
+        for id in masters {
+            let resolved = crate::drawing::resolve(prepared, &Target::Master(id.clone()))?;
+            let Some(settings) = crate::cff::hint_settings(prepared, &resolved, &mut notes) else { continue };
+            let private = crate::cff::private_dict(&resolved, Some(&settings), &mut Vec::new());
+            let autohint = settings.autohint.unwrap_or(hinting.autohint);
+            let mut dict_notes = Vec::new();
+            let dict = if settings.export_ps_hints { crate::cff_hints::autohint_dict(&private, &resolved.master, &mut dict_notes) } else { None };
+            if autohint {
+                notes.append(&mut dict_notes);
+            }
+            out.insert(id.clone(), MasterHinting { settings, dict, autohint });
+        }
+        push_unique(warnings, notes);
+        Ok(Some(HintContext { font: prepared, masters: out }))
+    }
+}
+
+/// Appends the warnings of `notes` that `warnings` does not hold yet: each master repeats them.
+fn push_unique(warnings: &mut Vec<String>, notes: Vec<String>) {
+    for n in notes {
+        if !warnings.contains(&n) {
+            warnings.push(n);
+        }
+    }
+}
+
+/// The hints the static export of `master` writes for glyph `name` drawn as `path`, flex left
+/// out; masks name steps of `path`.
+fn master_hints(font: &Font, master: &MasterHinting, name: &str, path: &[PathOp], warnings: &mut Vec<String>) -> Option<CharstringHints> {
+    if !master.settings.export_ps_hints {
+        return None;
+    }
+    if let Some(manual) = crate::cff_hints::manual_hints(font, &master.settings, name, path, warnings) {
+        return (!manual.is_empty()).then(|| CharstringHints { flex: Vec::new(), ..manual });
+    }
+    let dict = master.dict.as_ref().filter(|_| master.autohint)?;
+    if master.settings.disable_autohint_glyphs.iter().any(|n| n == name) {
+        return None;
+    }
+    // The autohinter sees the path as the static charstring draws it; each of its masks goes
+    // before the first step of `path` the step it names was made from.
+    let (drawn, starts) = crate::cff_hints::charstring_path_mapped(path);
+    let mut hints = crate::cff_hints::autohinted(name, &drawn, dict, &fontcraft_autohint::Options::default(), warnings)?;
+    hints.flex.clear();
+    for (op, _) in &mut hints.masks {
+        *op = if *op == 0 { 0 } else { starts.get(*op).copied().unwrap_or(path.len()) };
+    }
+    hints.masks.retain(|(op, _)| *op < path.len().max(1));
+    Some(hints)
+}
+
+/// The blended hints of glyph `g`, whose sources draw `ops`, over `model` (`None` for a glyph
+/// that does not vary), or `None` for an unhinted charstring.
+fn glyph_hints(
+    ctx: &HintContext<'_>,
+    g: &CubicSources,
+    ops: &[Vec<PathOp>],
+    model: Option<&VariationModel>,
+    warnings: &mut Vec<String>,
+) -> Result<Option<Cff2Hints>, CompileError> {
+    let name = g.glyph.as_str();
+    let mut notes = Vec::new();
+    let found: Vec<Option<CharstringHints>> = ops
+        .iter()
+        .enumerate()
+        .map(|(slot, path)| {
+            let master = g.masters.get(slot).and_then(Option::as_ref).and_then(|id| ctx.masters.get(id));
+            master.and_then(|m| master_hints(ctx.font, m, name, path, &mut notes))
+        })
+        .collect();
+    push_unique(warnings, notes);
+    if found.iter().all(Option::is_none) {
+        return Ok(None);
+    }
+    let Some(list) = found.into_iter().collect::<Option<Vec<CharstringHints>>>() else {
+        warnings.push(format!(
+            "glyph `{name}`: some of its sources have no PostScript hints (an intermediate layer, or a master left unhinted), so it was \
+             exported without hints"
+        ));
+        return Ok(None);
+    };
+    let shared = match fontcraft_cff::cff2::shared_hints(&list, crate::cff::ROUND_TOLERANCE) {
+        Ok(s) => s,
+        Err(e) => {
+            warnings
+                .push(format!("glyph `{name}`: its PostScript hints differ in structure between masters ({e}), so it was exported without hints"));
+            return Ok(None);
+        }
+    };
+    let blend = |values: Vec<f64>| -> Result<Blend, CompileError> {
+        match model {
+            Some(m) => blend_with(m, &values, round_tolerant).map_err(|e| CompileError::Glyph { glyph: name.to_string(), message: e }),
+            None => Ok(Blend::fixed(values.first().copied().unwrap_or(0.0))),
+        }
+    };
+    let stems = |list: &[Vec<StemHint>]| -> Result<Vec<BlendStem>, CompileError> {
+        list.iter()
+            .map(|per_master| {
+                Ok(BlendStem {
+                    edge: blend(per_master.iter().map(|s| s.edge).collect())?,
+                    width: blend(per_master.iter().map(|s| s.width).collect())?,
+                })
+            })
+            .collect()
+    };
+    let hints = Cff2Hints { h_stems: stems(&shared.h_stems)?, v_stems: stems(&shared.v_stems)?, masks: shared.masks, counters: shared.counters };
+    Ok((!hints.is_empty()).then_some(hints))
 }
 
 /// A master's normalized location and its Private DICT values.
@@ -175,9 +316,14 @@ fn blend_ops(shape: &[PathOp], values: &[f64], deltas: &[Vec<f64>]) -> Vec<Blend
 /// rounded, as fontTools merges Private DICTs, except for floating-point noise around whole
 /// numbers.
 fn blend_values(model: &VariationModel, values: &[f64]) -> Result<Blend, CompileError> {
-    let rows: Vec<Vec<f64>> = values.iter().map(|v| vec![*v]).collect();
     let snap = |v: f64| if (v - v.round()).abs() < 1e-9 { v.round() } else { v };
-    let d = model.deltas_with(&rows, snap).map_err(|e| CompileError::Table { table: "CFF2", message: e.to_string() })?;
+    blend_with(model, values, snap).map_err(|message| CompileError::Table { table: "CFF2", message })
+}
+
+/// Blends one value per master over `model`, each delta passed through `round`.
+fn blend_with(model: &VariationModel, values: &[f64], round: fn(f64) -> f64) -> Result<Blend, String> {
+    let rows: Vec<Vec<f64>> = values.iter().map(|v| vec![*v]).collect();
+    let d = model.deltas_with(&rows, round).map_err(|e| e.to_string())?;
     let default = d.first().and_then(|r| r.first()).copied().unwrap_or(0.0);
     Ok(Blend { default, deltas: d.iter().skip(1).map(|r| r.first().copied().unwrap_or(0.0)).collect() })
 }
@@ -239,12 +385,13 @@ fn private(model: &VariationModel, masters: &[MasterPrivate], warnings: &mut Vec
 }
 
 /// The `CFF2` contents of `glyphs` (in glyph order) for a font with `axis_count` axes, whose
-/// masters (origin first) give the Private DICT.
+/// masters (origin first) give the Private DICT; with hints when `hints` is given.
 pub fn cff2_font(
     axis_count: u16,
     glyphs: &[CubicSources],
     masters: &[MasterPrivate],
     units_per_em: u16,
+    hints: Option<&HintContext<'_>>,
     warnings: &mut Vec<String>,
 ) -> Result<Cff2Font, CompileError> {
     let bad = |glyph: &str, e: String| CompileError::Glyph { glyph: glyph.to_string(), message: e };
@@ -261,7 +408,11 @@ pub fn cff2_font(
         let shape = ops.first().map_or(&[][..], Vec::as_slice);
         if g.locations.len() < 2 {
             let values = flat(shape);
-            out.push(Cff2Glyph { name: g.glyph.clone(), vsindex: 0, path: blend_ops(shape, &values, &[]) });
+            let hints = match hints {
+                Some(ctx) => glyph_hints(ctx, g, ops.get(..1).unwrap_or(&[]), None, warnings)?,
+                None => None,
+            };
+            out.push(Cff2Glyph { name: g.glyph.clone(), vsindex: 0, path: blend_ops(shape, &values, &[]), hints });
             continue;
         }
         if g.locations.len() != ops.len() {
@@ -273,7 +424,11 @@ pub fn cff2_font(
         let vsindex = store.list(model)?;
         let default = deltas.first().cloned().unwrap_or_default();
         let rest = deltas.get(1..).unwrap_or(&[]);
-        out.push(Cff2Glyph { name: g.glyph.clone(), vsindex, path: blend_ops(shape, &default, rest) });
+        let hints = match hints {
+            Some(ctx) => glyph_hints(ctx, g, &ops, Some(model), warnings)?,
+            None => None,
+        };
+        out.push(Cff2Glyph { name: g.glyph.clone(), vsindex, path: blend_ops(shape, &default, rest), hints });
     }
     let upm = f64::from(units_per_em);
     let font_matrix = (units_per_em != 1000 && units_per_em > 0).then(|| [1.0 / upm, 0.0, 0.0, 1.0 / upm, 0.0, 0.0]);

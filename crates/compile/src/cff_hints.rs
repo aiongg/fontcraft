@@ -149,12 +149,21 @@ pub fn glyph_hints(
 /// handles lie on its ends becomes a line, a zero-length line goes, and a horizontal (or
 /// vertical) step right after a line of the same direction is joined to it. Successive movetos keep the last.
 pub fn charstring_path(path: &[PathOp]) -> Vec<PathOp> {
+    charstring_path_mapped(path).0
+}
+
+/// [`charstring_path`], with, per step of the result, the index in `path` of the first step it
+/// was made from (a dropped step counts with the step after it).
+pub fn charstring_path_mapped(path: &[PathOp]) -> (Vec<PathOp>, Vec<usize>) {
     let r = |(x, y): (f64, f64)| (ot_round(x), ot_round(y));
     let mut out: Vec<PathOp> = Vec::with_capacity(path.len());
+    let mut starts: Vec<usize> = Vec::with_capacity(path.len());
+    // The first step of `path` not yet part of a step of `out`.
+    let mut pending = 0usize;
     let mut current = (0.0, 0.0);
     // The direction of the last line drawn, when the step before this one was that line.
     let mut last_line: Option<bool> = None;
-    for op in path {
+    for (i, op) in path.iter().enumerate() {
         let step = match *op {
             PathOp::MoveTo(p) => {
                 let p = r(p);
@@ -162,7 +171,9 @@ pub fn charstring_path(path: &[PathOp]) -> Vec<PathOp> {
                     *prev = p;
                 } else {
                     out.push(PathOp::MoveTo(p));
+                    starts.push(pending);
                 }
+                pending = i + 1;
                 current = p;
                 last_line = None;
                 continue;
@@ -176,6 +187,8 @@ pub fn charstring_path(path: &[PathOp]) -> Vec<PathOp> {
         let was_line = matches!(op, PathOp::LineTo(_));
         let PathOp::LineTo(p) = step else {
             out.push(step);
+            starts.push(pending);
+            pending = i + 1;
             current = end(&step);
             last_line = None;
             continue;
@@ -189,12 +202,16 @@ pub fn charstring_path(path: &[PathOp]) -> Vec<PathOp> {
         let axis = (horizontal || p.0 == current.0).then_some(horizontal);
         match (axis, last_line, out.last_mut()) {
             (Some(h), Some(prev), Some(PathOp::LineTo(prev_end))) if h == prev => *prev_end = p,
-            _ => out.push(PathOp::LineTo(p)),
+            _ => {
+                out.push(PathOp::LineTo(p));
+                starts.push(pending);
+            }
         }
+        pending = i + 1;
         current = p;
         last_line = if was_line { axis } else { None };
     }
-    out
+    (out, starts)
 }
 
 fn end(op: &PathOp) -> (f64, f64) {

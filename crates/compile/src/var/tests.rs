@@ -523,7 +523,7 @@ fn many_regions(regions: usize) -> fontcraft_cff::cff2::Cff2Font {
     // Each coordinate moves by 1 unit per region; at a peak only that region applies.
     let v = |d: f64| Blend { default: d, deltas: vec![1.0; regions] };
     let curve = BlendOp::CurveTo((v(0.0), v(100.0)), (v(50.0), v(200.0)), (v(100.0), v(100.0)));
-    let glyph = Cff2Glyph { name: "c".into(), vsindex: 0, path: vec![BlendOp::MoveTo((v(0.0), v(0.0))), curve] };
+    let glyph = Cff2Glyph { name: "c".into(), vsindex: 0, path: vec![BlendOp::MoveTo((v(0.0), v(0.0))), curve], hints: None };
     Cff2Font {
         axis_count: 1,
         regions: (0..regions).map(region).collect(),
@@ -565,8 +565,13 @@ fn cff2_blends_past_the_stack_limit_are_split() {
 #[test]
 fn cff2_sources_without_an_outline_each_are_refused() {
     let master = |l: f64| (vec![l], fontcraft_cff::PrivateDict::default());
-    let glyph = cff2::CubicSources { glyph: "a".into(), locations: vec![vec![0.0], vec![1.0]], paths: vec![vec![fontcraft_geom::BezPath::new()]] };
-    let err = cff2::cff2_font(1, &[glyph], &[master(0.0), master(1.0)], 1000, &mut Vec::new()).unwrap_err();
+    let glyph = cff2::CubicSources {
+        glyph: "a".into(),
+        locations: vec![vec![0.0], vec![1.0]],
+        paths: vec![vec![fontcraft_geom::BezPath::new()]],
+        masters: Vec::new(),
+    };
+    let err = cff2::cff2_font(1, &[glyph], &[master(0.0), master(1.0)], 1000, None, &mut Vec::new()).unwrap_err();
     assert!(matches!(&err, CompileError::Glyph { glyph, .. } if glyph == "a"), "{err}");
 }
 
@@ -592,21 +597,98 @@ fn cff2_composites_of_many_repeated_components_export_quickly() {
     assert!(v.compiled.glyph_order.iter().any(|g| g == "t399"));
 }
 
+#[derive(Default)]
+struct StemSink {
+    h: Vec<(i32, i32)>,
+    v: Vec<(i32, i32)>,
+    masks: usize,
+}
+
+impl skrifa::raw::ps::cs::CommandSink for StemSink {
+    fn move_to(&mut self, _: skrifa::raw::types::Fixed, _: skrifa::raw::types::Fixed) {}
+    fn line_to(&mut self, _: skrifa::raw::types::Fixed, _: skrifa::raw::types::Fixed) {}
+    fn curve_to(
+        &mut self,
+        _: skrifa::raw::types::Fixed,
+        _: skrifa::raw::types::Fixed,
+        _: skrifa::raw::types::Fixed,
+        _: skrifa::raw::types::Fixed,
+        _: skrifa::raw::types::Fixed,
+        _: skrifa::raw::types::Fixed,
+    ) {
+    }
+    fn close(&mut self) {}
+    fn hstem(&mut self, y: skrifa::raw::types::Fixed, dy: skrifa::raw::types::Fixed) {
+        self.h.push((y.to_i32(), dy.to_i32()));
+    }
+    fn vstem(&mut self, x: skrifa::raw::types::Fixed, dx: skrifa::raw::types::Fixed) {
+        self.v.push((x.to_i32(), dx.to_i32()));
+    }
+    fn hint_mask(&mut self, _: &[u8]) {
+        self.masks += 1;
+    }
+}
+
+/// The stems of `name` in the `CFF2` table of `v` at `wght`, as (lower, upper) edges, and its
+/// number of hint masks.
+fn cff2_stems(v: &VariableFont, name: &str, wght: f32) -> (Vec<(i32, i32)>, Vec<(i32, i32)>, usize) {
+    let font = FontRef::new(&v.compiled.bytes).unwrap();
+    let table = font.table_data(skrifa::raw::types::Tag::new(b"CFF2")).unwrap();
+    let cff = skrifa::raw::ps::cff::CffFontRef::new_cff2(table.as_bytes(), None).unwrap();
+    let location = font.axes().location([("wght", wght)]);
+    let coords = location.coords();
+    let subfont = cff.subfont(0, coords).unwrap();
+    let gid = GlyphId::new(v.compiled.glyph_order.iter().position(|g| g == name).unwrap() as u32);
+    let mut sink = StemSink::default();
+    cff.evaluate_charstring(&subfont, gid, coords, &mut sink).unwrap();
+    (sink.h, sink.v, sink.masks)
+}
+
 #[test]
-fn cff2_notes_dropped_postscript_hints_only() {
-    let with_hint = |text: &str| {
+fn cff2_blends_manual_hints_that_follow_their_nodes() {
+    use fontcraft_hinting::{Edge, NodeRef, PsHint, set_ps_hints};
+    let node = |p, n| Edge::Node(NodeRef::new(p, n));
+    let hinted = |glyph: &str, hints: &[PsHint]| {
         let mut f = two_masters();
-        let value = fontcraft_model::plist::openstep::parse_value(text).unwrap();
-        let hint = fontcraft_model::Hint { family: fontcraft_model::Family::Glyphs, value };
-        f.glyph_mut("a").unwrap().layers[0].info.hints.push(hint);
-        build_cff2(&f, None).compiled.warnings
+        let mut g = f.glyph_mut(glyph).unwrap();
+        set_ps_hints(&mut g.layers[0], hints).unwrap();
+        drop(g);
+        let options = Options { subroutinize: Some(false), ..Options::default() };
+        compile_variable(&f, None, &options, &VariableOptions { flavour: VarFlavour::Cff2, ..VariableOptions::default() }).unwrap()
     };
-    let dropped = |w: &[String]| w.iter().any(|w| w == cff2::HINTS_DROPPED);
-    // A TrueType stem stored with its numeric type code, as older files do.
-    let tt = with_hint("{horizontal = 1; origin = (0, 0); target = (0, 1); type = 4;}");
-    assert!(!dropped(&tt), "{tt:?}");
-    let ps = with_hint("{horizontal = 1; origin = (0, 0); target = (0, 1); type = Stem;}");
-    assert!(dropped(&ps), "{ps:?}");
+    // `a` is a box 100 units wide in Thin and 300 in Black: a stem from its bottom-left node to
+    // 80, a stem across its width and a top ghost on its top-left node.
+    let main = [PsHint::stem(true, node(0, 0), Edge::Value(80.0)), PsHint::stem(false, node(0, 0), node(0, 1)), PsHint::ghost(true, node(0, 3))];
+    let v = hinted("a", &main);
+    for (wght, width) in [(100.0, 100), (500.0, 200), (900.0, 300)] {
+        assert_eq!(cff2_stems(&v, "a", wght), (vec![(0, 80), (700, 680)], vec![(0, width)], 0), "at {wght}");
+    }
+    // The other glyphs' charstrings are those of the unhinted font.
+    let plain = hinted("o", &[]);
+    let charstrings = |v: &VariableFont| {
+        let font = FontRef::new(&v.compiled.bytes).unwrap();
+        let table = font.table_data(skrifa::raw::types::Tag::new(b"CFF2")).unwrap();
+        fontcraft_cff::subr::charstrings_of_table(table.as_bytes(), true).unwrap().charstrings
+    };
+    let a = v.compiled.glyph_order.iter().position(|g| g == "a").unwrap();
+    for (gid, (x, y)) in charstrings(&v).iter().zip(charstrings(&plain)).enumerate() {
+        assert_eq!(gid == a, *x != y, "glyph {gid}");
+    }
+
+    // A fixed stem from 150 to 200 overlaps the box's stem only in Black, so Black needs hint
+    // masks that Thin does not: the masters' hints differ in structure and are left out.
+    let fixed = PsHint::stem(false, Edge::Value(150.0), Edge::Value(200.0));
+    let v = hinted("a", &[PsHint::stem(false, node(0, 0), node(0, 1)), fixed]);
+    assert_eq!(cff2_stems(&v, "a", 100.0), (Vec::new(), Vec::new(), 0));
+    assert!(v.compiled.warnings.iter().any(|w| w.starts_with("glyph `a`: its PostScript hints differ in structure")), "{:?}", v.compiled.warnings);
+    // `b` varies with an intermediate layer, which has no hints of its own.
+    let v = hinted("b", &main);
+    assert_eq!(cff2_stems(&v, "b", 100.0), (Vec::new(), Vec::new(), 0));
+    assert!(
+        v.compiled.warnings.iter().any(|w| w.starts_with("glyph `b`: some of its sources have no PostScript hints")),
+        "{:?}",
+        v.compiled.warnings
+    );
 }
 
 #[test]
