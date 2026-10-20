@@ -601,7 +601,7 @@ milestone = "M1"
 summary = "Opens a source (.glyphs, .glyphspackage, .ufo) or a compiled font (.otf, .ttf, .ttc, .pfb) as a document. The item is File › Open… with the platform's Cmd+O shortcut; fontIndex picks one font of a collection, a FontCraft addition."
 ref = "Import & Export › Opening Font Files"
 status = "handbook"
-notes = "FontCraft additions (M13.55d): a BDF or PCF bitmap font opens as a bitmap-only font whose glyphs come from the file and whose strike holds the bitmaps (formats `bdf`, `pcf`), and a compiled font's EBLC/EBDT (or bloc/bdat) strikes open as the font's bitmap strikes, so a bitmap-only `.otb` opens with its glyphs and strikes (table EBDT). The handbook says nothing about bitmap fonts."
+notes = "FontCraft additions (M13.55d): a BDF or PCF bitmap font opens as a bitmap-only font whose glyphs come from the file and whose strike holds the bitmaps (formats `bdf`, `pcf`; TeX `pk` and `gf` and Mac `nfnt` added in M13.55f, a Mac family opening with one strike per size), and a compiled font's EBLC/EBDT (or bloc/bdat) strikes open as the font's bitmap strikes, so a bitmap-only `.otb` opens with its glyphs and strikes (table EBDT). The handbook says nothing about bitmap fonts."
 guesses = [
   "The menu label and place are our assumption, and the shortcut is the platform convention; the chapter states neither.",
 ]

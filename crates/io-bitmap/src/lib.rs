@@ -29,15 +29,26 @@
 //! The input is untrusted: the file size, the glyph and property counts, each bitmap's size and
 //! the decoded pixels of all glyphs together are capped by the limits below, every PCF offset is
 //! checked against its table, and both readers are flat loops without recursion.
+//!
+//! TeX's PK (read and written) and GF fonts and classic Mac OS `NFNT`/`FONT` resources (read) go
+//! into the same [`BitmapFont`]; see the modules `pk`, `gf` and `nfnt`. A Mac file can hold several
+//! strikes: [`read_all`] gives each of them.
 #![forbid(unsafe_code)]
 
 mod bdf;
+mod binary;
+mod gf;
+mod nfnt;
 mod pcf;
+mod pk;
 #[cfg(test)]
 mod tests;
 
 pub use bdf::{read_bdf, write_bdf};
+pub use gf::read_gf;
+pub use nfnt::{MAX_MAC_STRIKES, MAX_RESOURCE_TYPES, MAX_RESOURCES, is_mac_font, read_mac};
 pub use pcf::{PcfLayout, read_pcf, write_pcf};
+pub use pk::{read_pk, write_pk};
 
 /// Largest file either reader accepts.
 pub const MAX_FILE_BYTES: usize = 16 << 20;
@@ -73,6 +84,8 @@ pub enum BitmapError {
     Limit { what: &'static str, limit: usize },
     #[error("cannot write the font: {0}")]
     Write(String),
+    #[error("{format} file: {message}")]
+    Malformed { format: &'static str, message: String },
 }
 
 pub type Result<T> = std::result::Result<T, BitmapError>;
@@ -245,12 +258,37 @@ pub fn is_pcf(bytes: &[u8]) -> bool {
     bytes.starts_with(pcf::MAGIC)
 }
 
-/// Reads a BDF or PCF file, whichever `bytes` hold.
+/// Whether `bytes` start like a TeX PK file.
+pub fn is_pk(bytes: &[u8]) -> bool {
+    bytes.starts_with(&[pk::PRE, pk::ID])
+}
+
+/// Whether `bytes` start like a METAFONT GF file.
+pub fn is_gf(bytes: &[u8]) -> bool {
+    bytes.starts_with(&[gf::PRE, gf::ID])
+}
+
+/// Every strike a bitmap font file holds: one for most formats, one per size for a Mac file.
+pub fn read_all(bytes: &[u8]) -> Result<Vec<Import>> {
+    if !is_pcf(bytes) && !is_bdf(bytes) && is_mac_font(bytes) {
+        return read_mac(bytes);
+    }
+    Ok(vec![read(bytes)?])
+}
+
+/// Reads a bitmap font file, whichever format `bytes` hold; of a Mac file, its smallest strike.
 pub fn read(bytes: &[u8]) -> Result<Import> {
     if is_pcf(bytes) {
         read_pcf(bytes)
     } else if is_bdf(bytes) {
         read_bdf(bytes)
+    } else if is_pk(bytes) {
+        read_pk(bytes)
+    } else if is_gf(bytes) {
+        read_gf(bytes)
+    } else if is_mac_font(bytes) {
+        let mut strikes = read_mac(bytes)?.into_iter();
+        strikes.next().ok_or_else(|| BitmapError::Malformed { format: "Mac font", message: "it holds no strike".into() })
     } else if bytes.starts_with(&[0x1f, 0x8b]) {
         Err(BitmapError::NotPcf("the file is gzip-compressed; decompress it first".into()))
     } else {
