@@ -34,6 +34,7 @@ use write_fonts::tables::gpos::{
 use write_fonts::tables::layout::{ClassDef, ClassRangeRecord, CoverageTable, Lookup, LookupFlag};
 use write_fonts::types::GlyphId16;
 
+use crate::limits::MAX_INTERPOLATED_LAYOUT_ITEMS;
 use crate::sfnt::SfntFont;
 use crate::{Result, TablesError};
 
@@ -75,6 +76,9 @@ pub fn interpolate_gpos(masters: &[SfntFont], base: usize, scalars: &[f64]) -> R
     }
     let names = crate::ttx::glyph_order(base_font)?;
     let index: HashMap<&str, u16> = names.iter().enumerate().filter_map(|(i, n)| Some((n.as_str(), u16::try_from(i).ok()?))).collect();
+    // Every master's table is held in owned form at once, so their sizes are charged together
+    // before any is converted.
+    crate::layout_budget::check_gpos_together(masters.iter().filter_map(|m| m.get(GPOS)), MAX_INTERPOLATED_LAYOUT_ITEMS)?;
     let mut tables = Vec::with_capacity(masters.len());
     let mut remap = Vec::with_capacity(masters.len());
     for (i, m) in masters.iter().enumerate() {
@@ -753,12 +757,6 @@ mod single {
             }
         }
 
-        /// The value glyph `g` has in this subtable, if it covers it.
-        fn value_of(&self, g: u16) -> Option<Option<Vr>> {
-            let i = self.glyphs.iter().position(|x| *x == g)?;
-            Some(if self.format == 1 { self.values.first().copied().flatten() } else { self.values.get(i).copied().flatten() })
-        }
-
         fn upgraded(&self) -> Single {
             if self.format == 2 {
                 return self.clone();
@@ -777,9 +775,16 @@ mod single {
         }
     }
 
-    /// `_Lookup_SinglePos_get_effective_value`: the value the lookup's subtables give `g`.
-    fn effective(subtables: &[Single], g: u16) -> Option<Vr> {
-        subtables.iter().find_map(|s| s.value_of(g)).flatten()
+    /// `_Lookup_SinglePos_get_effective_value` for every glyph the lookup's subtables cover: the
+    /// value of the first subtable that covers it, at the glyph's first entry there.
+    fn effective_values(subtables: &[Single]) -> HashMap<u16, Option<Vr>> {
+        let mut out = HashMap::new();
+        for s in subtables {
+            for (i, g) in s.glyphs.iter().enumerate() {
+                out.entry(*g).or_insert_with(|| if s.format == 1 { s.values.first().copied().flatten() } else { s.values.get(i).copied().flatten() });
+            }
+        }
+        out
     }
 
     /// `_Lookup_SinglePos_subtables_flatten`: one format 2 subtable of value format `vf`; a glyph
@@ -802,9 +807,9 @@ mod single {
         Ok(Single { format: 2, vf, glyphs, values })
     }
 
-    /// One subtable: the base master's `own` merged with the masters' `lst`, whose lookups hold
-    /// `lookups`.
-    fn merge_one(ctx: &Ctx, own: &Single, lst: &[Single], lookups: &[Vec<Single>]) -> Result<Single> {
+    /// One subtable: the base master's `own` merged with the masters' `lst`, whose lookups give
+    /// the values `effective` (see [`effective_values`]).
+    fn merge_one(ctx: &Ctx, own: &Single, lst: &[Single], effective: &[HashMap<u16, Option<Vr>>]) -> Result<Single> {
         let vf = lst.iter().fold(0, |f, s| f | s.vf);
         if lst.len() != 1 && vf & !0x000F != 0 {
             return Err(bad("single adjustments with device tables cannot be interpolated"));
@@ -823,11 +828,11 @@ mod single {
         let lists: Vec<&[u16]> = lst.iter().map(|s| s.glyphs.as_slice()).collect();
         let (glyphs, padded) = merge_orders(&lists)?;
         let mut per_master: Vec<Vec<Vr>> = Vec::with_capacity(lst.len());
-        for ((s, at), subs) in lst.iter().zip(&padded).zip(lookups) {
+        for ((s, at), subs) in lst.iter().zip(&padded).zip(effective) {
             let mut vals = Vec::with_capacity(glyphs.len());
             for (j, g) in glyphs.iter().enumerate() {
                 let own = at.get(j).copied().flatten().and_then(|i| s.values.get(i).copied().flatten());
-                vals.push(own.or_else(|| effective(subs, *g)).unwrap_or_else(|| Vr::with_format(vf, None)));
+                vals.push(own.or_else(|| subs.get(g).copied().flatten()).unwrap_or_else(|| Vr::with_format(vf, None)));
             }
             per_master.push(vals);
         }
@@ -853,10 +858,11 @@ mod single {
         if lookups.iter().any(|l| l.len() != own.len()) {
             return Err(bad("the masters' lookups have different subtable counts"));
         }
+        let effective: Vec<HashMap<u16, Option<Vr>>> = lookups.iter().map(|l| effective_values(l)).collect();
         let mut out = Vec::with_capacity(own.len());
         for (k, o) in own.iter().enumerate() {
             let lst: Vec<Single> = lookups.iter().filter_map(|l| l.get(k).cloned()).collect();
-            out.push(merge_one(ctx, o, &lst, &lookups)?);
+            out.push(merge_one(ctx, o, &lst, &effective)?);
         }
         if counts_differ {
             let merged = out.first().cloned().ok_or_else(|| bad("no subtable"))?;

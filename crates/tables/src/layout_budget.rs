@@ -35,13 +35,14 @@ const DEVICE_BITS: u16 = 0x00F0;
 
 struct Walk {
     tag: &'static str,
+    limit: usize,
     left: usize,
     depth: usize,
 }
 
 impl Walk {
     fn new(tag: &'static str, limit: usize) -> Self {
-        Walk { tag, left: limit, depth: 0 }
+        Walk { tag, limit, left: limit, depth: 0 }
     }
 
     fn charge(&mut self, n: usize) -> Result<()> {
@@ -50,10 +51,9 @@ impl Walk {
                 self.left = left;
                 Ok(())
             }
-            None => Err(TablesError::invalid(format!(
-                "the '{}' table is too large to rewrite: it expands to more than {MAX_LAYOUT_ITEMS} records",
-                self.tag
-            ))),
+            None => {
+                Err(TablesError::invalid(format!("the '{}' table is too large to rewrite: it expands to more than {} records", self.tag, self.limit)))
+            }
         }
     }
 }
@@ -113,23 +113,35 @@ pub(crate) fn check_gdef(data: &[u8]) -> Result<()> {
     Ok(())
 }
 
-fn check_gpos_within(data: &[u8], limit: usize) -> Result<()> {
+/// Refuses `GPOS` tables whose owned forms would hold more than `limit` records together.
+pub(crate) fn check_gpos_together<'a>(tables: impl IntoIterator<Item = &'a [u8]>, limit: usize) -> Result<()> {
     let mut w = Walk::new("GPOS", limit);
+    for data in tables {
+        gpos_walk(&mut w, data)?;
+    }
+    Ok(())
+}
+
+fn check_gpos_within(data: &[u8], limit: usize) -> Result<()> {
+    gpos_walk(&mut Walk::new("GPOS", limit), data)
+}
+
+fn gpos_walk(w: &mut Walk, data: &[u8]) -> Result<()> {
     let Ok(t) = Gpos::read(FontData::new(data)) else { return Ok(()) };
     if let Ok(list) = t.script_list() {
-        script_list(&mut w, &list)?;
+        script_list(w, &list)?;
     }
     if let Ok(list) = t.feature_list() {
-        feature_list(&mut w, &list)?;
+        feature_list(w, &list)?;
     }
     if let Some(Ok(fv)) = t.feature_variations() {
-        feature_variations(&mut w, &fv)?;
+        feature_variations(w, &fv)?;
     }
     if let Ok(list) = t.lookup_list() {
         let lookups = list.lookups();
         w.charge(lookups.len())?;
         for lookup in lookups.iter().flatten() {
-            position_lookup(&mut w, &lookup)?;
+            position_lookup(w, &lookup)?;
         }
     }
     Ok(())

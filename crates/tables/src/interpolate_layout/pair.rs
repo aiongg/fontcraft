@@ -3,7 +3,7 @@
 //! subtable joining of `_Lookup_PairPos_subtables_canonicalize`, and the class realignment of
 //! `_PairPosFormat2_align_matrices` with `misc.classifyTools.Classifier`.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use write_fonts::tables::gpos::{Class1Record, Class2Record, PairPos, PairSet, PairValueRecord};
 use write_fonts::types::GlyphId16;
@@ -27,13 +27,14 @@ enum Pair {
         vf: (u16, u16),
         glyphs: Vec<u16>,
         sets: Vec<Vec<Pvr>>,
-        /// (first, second) → values, for the effective-value search.
+        /// (first, second) → values, for the effective-value search; every key's first
+        /// glyph is in `glyphs`.
         index: HashMap<(u16, u16), Values>,
     },
     F2 {
         vf: (u16, u16),
         glyphs: Vec<u16>,
-        covered: std::collections::HashSet<u16>,
+        covered: HashSet<u16>,
         cd1: HashMap<u16, u16>,
         cd2: HashMap<u16, u16>,
         class2_count: usize,
@@ -43,7 +44,18 @@ enum Pair {
 }
 
 fn f1(vf: (u16, u16), glyphs: Vec<u16>, sets: Vec<Vec<Pvr>>) -> Pair {
-    let index = glyphs.iter().zip(&sets).flat_map(|(g, set)| set.iter().map(move |r| ((*g, r.second), r.v))).collect();
+    // As fontTools looks a pair up: in the first set of a glyph listed twice, at the first
+    // record of a second glyph listed twice.
+    let mut index: HashMap<(u16, u16), Values> = HashMap::new();
+    let mut seen = HashSet::new();
+    for (g, set) in glyphs.iter().zip(&sets) {
+        if !seen.insert(*g) {
+            continue;
+        }
+        for r in set {
+            index.entry((*g, r.second)).or_insert(r.v);
+        }
+    }
     Pair::F1 { vf, glyphs, sets, index }
 }
 
@@ -155,10 +167,8 @@ impl Pair {
 fn effective(subtables: &[Pair], first: u16, second: u16) -> Result<Option<Values>> {
     for s in subtables {
         match s {
-            Pair::F1 { glyphs, index, .. } => {
-                if glyphs.contains(&first)
-                    && let Some(v) = index.get(&(first, second))
-                {
+            Pair::F1 { index, .. } => {
+                if let Some(v) = index.get(&(first, second)) {
                     return Ok(Some(*v));
                 }
             }
@@ -306,7 +316,13 @@ fn align(ctx: &Ctx, vf: (u16, u16), lst: &[&Pair], transparent: bool) -> Result<
     }
     let mut classes2 = c2.classes(ctx);
     classes2.insert(0, BTreeSet::new());
-    let cells = classes1.len().saturating_mul(classes2.len()).saturating_mul(lst.len().max(1));
+    // Each subtable's own class2 count is charged too: its columns are looked up once per
+    // aligned column, never copied whole.
+    let cells = classes1
+        .len()
+        .saturating_mul(classes2.len())
+        .saturating_mul(lst.len().max(1))
+        .saturating_add(parts.iter().fold(0usize, |n, p| n.saturating_add(p.4)));
     if cells > MAX_LAYOUT_ITEMS {
         return Err(bad(format!("the aligned pair classes need more than {MAX_LAYOUT_ITEMS} records")));
     }
@@ -321,24 +337,27 @@ fn align(ctx: &Ctx, vf: (u16, u16), lst: &[&Pair], transparent: bool) -> Result<
     let out_of_range = || bad("a pair class is out of range");
     let mut matrices = Vec::with_capacity(parts.len());
     for (_, covered, own_cd1, own_cd2, class2_count, rows) in &parts {
-        let mut first = Vec::with_capacity(classes1.len());
+        // The subtable's own class of each aligned column.
+        let columns: Vec<usize> =
+            classes2.iter().map(|set| set.iter().next().map_or(0, |ex| usize::from(own_cd2.get(ex).copied().unwrap_or(0)))).collect();
+        let filler = if transparent { None } else { Some((blank(vf.0), blank(vf.1))) };
+        let mut matrix = Vec::with_capacity(classes1.len());
         for set in &classes1 {
             let Some(ex) = set.iter().next() else { continue };
+            let mut row = Vec::with_capacity(columns.len());
             if covered.contains(ex) {
                 let k = usize::from(own_cd1.get(ex).copied().unwrap_or(0));
-                first.push(rows.get(k).cloned().ok_or_else(out_of_range)?);
-            } else if transparent {
-                first.push(vec![None; *class2_count]);
+                let old = rows.get(k).ok_or_else(out_of_range)?;
+                for k2 in &columns {
+                    row.push(*old.get(*k2).ok_or_else(out_of_range)?);
+                }
             } else {
-                first.push(vec![Some((blank(vf.0), blank(vf.1))); *class2_count]);
-            }
-        }
-        let mut matrix = Vec::with_capacity(first.len());
-        for old in &first {
-            let mut row = Vec::with_capacity(classes2.len());
-            for set in &classes2 {
-                let k = set.iter().next().map_or(0, |ex| usize::from(own_cd2.get(ex).copied().unwrap_or(0)));
-                row.push(*old.get(k).ok_or_else(out_of_range)?);
+                for k2 in &columns {
+                    if *k2 >= *class2_count {
+                        return Err(out_of_range());
+                    }
+                    row.push(filler);
+                }
             }
             matrix.push(row);
         }
