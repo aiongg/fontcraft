@@ -513,6 +513,13 @@ fn losses(font: &Font, targets: &[Family]) -> Vec<Value> {
             out.push(json!({ "family": family, "entries": items.len(), "what": "data only the UFO or designspace files held", "items": items }));
         }
     }
+    // No source format but the native one has a documented place for bitmap strikes.
+    if !font.bitmap_strikes.is_empty() {
+        let items: Vec<String> = font.bitmap_strikes.iter().map(|s| s.label()).collect();
+        out.push(
+            json!({ "family": "fontcraft", "entries": items.len(), "what": "bitmap strikes, which this format has no place for", "items": items }),
+        );
+    }
     out
 }
 

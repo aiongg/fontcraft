@@ -23,6 +23,7 @@ fontcraft-io-glyphs = { path = "crates/io-glyphs" }
 fontcraft-io-ufo = { path = "crates/io-ufo" }
 fontcraft-io-svg = { path = "crates/io-svg" }
 fontcraft-io-sfd = { path = "crates/io-sfd" }
+fontcraft-io-bitmap = { path = "crates/io-bitmap" }
 fontcraft-decompile = { path = "crates/decompile" }
 fontcraft-compile = { path = "crates/compile" }
 fontcraft-oracle = { path = "crates/oracle" }

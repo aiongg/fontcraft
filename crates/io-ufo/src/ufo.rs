@@ -986,6 +986,7 @@ pub fn read_reporting(files: &Files) -> Result<(Font, Vec<String>)> {
         display_strings: Arc::default(),
         note: r.note.unwrap_or_default(),
         files: Arc::new(FileStore(r.files)),
+        bitmap_strikes: Arc::default(),
         extra: Arc::default(),
     };
     glyphkeys::read(&mut font, &master_id);

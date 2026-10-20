@@ -452,6 +452,7 @@ fn read_font(mut root: Dict) -> Result<Font> {
         glyphs: GlyphTable::from_glyphs(glyphs),
         kerning: Arc::new(kerning),
         files: Arc::default(),
+        bitmap_strikes: Arc::default(),
         extra: Arc::new(into_extra(root)),
     })
 }

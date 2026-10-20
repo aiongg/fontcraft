@@ -487,6 +487,7 @@ fn read_as(text: &str, ufos: &BTreeMap<String, Files>, convert: bool) -> Result<
         display_strings: Arc::default(),
         note: note.unwrap_or_default(),
         files: Arc::new(FileStore(files)),
+        bitmap_strikes: Arc::default(),
         extra: Arc::new(extra),
     };
     // A default source glyphsLib would not find by the masters' names is named.

@@ -1156,6 +1156,7 @@ dependencies = [
  "fontcraft-hinting",
  "fontcraft-imagery",
  "fontcraft-interp",
+ "fontcraft-io-bitmap",
  "fontcraft-io-glyphs",
  "fontcraft-io-pdf",
  "fontcraft-io-sfd",
