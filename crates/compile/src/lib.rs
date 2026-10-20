@@ -534,7 +534,7 @@ pub(crate) fn compile_stages_with(
     let synthesised_notdef = !glyphs.iter().any(|g| g.name == ".notdef");
     let glyphs = order::final_order(glyphs, &resolved, &mut warnings)?;
     let (glyphs, cid_plan) = match font {
-        Some(font) if flavour == Flavour::Cff && var.is_none() => cid::plan(font, glyphs, &options.cid, &mut warnings)?,
+        Some(font) if flavour == Flavour::Cff && var.is_none() => cid::plan(font, &resolved.params, glyphs, &options.cid, &mut warnings)?,
         _ => (glyphs, None),
     };
     preflight::check_cmap(&glyphs)?;

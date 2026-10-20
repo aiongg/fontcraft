@@ -314,3 +314,35 @@ fn a_two_byte_mac_cmap_gives_the_reference_format_2_subtable() {
     let array: Vec<(usize, u16)> = (0..261).map(|i| (i, u16_at(550 + 2 * i))).filter(|(_, g)| *g != 0).collect();
     assert_eq!(array, [(32, 1), (65, 2), (66, 3), (67, 4), (256, 1), (258, 2), (259, 6), (260, 1)]);
 }
+
+fn with_ros(mut f: Font, ros: &str) -> Font {
+    std::sync::Arc::make_mut(&mut f.info).params.set(ROS_PARAM, Value::String(Str::new(ros)));
+    f
+}
+
+#[test]
+fn the_ros_parameter_makes_a_font_cid_keyed_and_a_bad_value_is_left_out() {
+    // Identity: every glyph follows `.notdef` in glyph order, without a warning.
+    let f = with_ros(Font::new("RosTest"), "Adobe-Identity-0");
+    let out = compile(&f, &f.default_target().unwrap(), Flavour::Cff, &options()).unwrap();
+    let table = cff_table(&out);
+    let cff = CffFontRef::new_cff(&table, 0, None).unwrap();
+    assert!(cff.is_cid());
+    let charset = cff.charset().unwrap();
+    let all: Vec<u16> = (0..out.glyph_order.len() as u32).map(|g| charset.string_id(GlyphId::new(g)).unwrap().to_u16()).collect();
+    assert_eq!(all, (0..out.glyph_order.len() as u16).collect::<Vec<_>>());
+    assert!(!out.warnings.iter().any(|w| w.contains("leaves out")), "{:?}", out.warnings);
+
+    let f = with_ros(Font::new("RosTest"), "Japan1");
+    let out = compile(&f, &f.default_target().unwrap(), Flavour::Cff, &options()).unwrap();
+    assert!(!CffFontRef::new_cff(&cff_table(&out), 0, None).unwrap().is_cid());
+    assert!(out.warnings.iter().any(|w| w.contains("`ROS` is not Registry-Ordering-Supplement")), "{:?}", out.warnings);
+
+    // On a CID-keyed source the parameter's collection replaces the stored one.
+    let f = with_ros(cid_source(), "Test-Latin1-3");
+    let out = compile(&f, &f.default_target().unwrap(), Flavour::Cff, &options()).unwrap();
+    assert!(out.warnings.iter().any(|w| w.contains("`ROS` names Test-Latin1-3")), "{:?}", out.warnings);
+    assert_eq!(&out.glyph_order[..3], [".notdef", "space", "A"], "the stored CID map is kept");
+    assert_eq!(cid_in_name("cid01234"), Some(1234));
+    assert_eq!([cid_in_name("cid"), cid_in_name("cid65535"), cid_in_name("cidx1"), cid_in_name("cid+1")], [None; 4]);
+}

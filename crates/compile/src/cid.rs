@@ -2,7 +2,10 @@
 //! `export.cidMapping`, the ROS custom parameter).
 //!
 //! A source is CID-keyed when it holds a character collection (`fontcraft_model::cid`: the ROS,
-//! the glyph-to-CID map, the sub-fonts and their `FDArraySelect` groups). Its CFF build then
+//! the glyph-to-CID map, the sub-fonts and their `FDArraySelect` groups), or when its export has
+//! the `ROS` custom parameter. The parameter names the collection; a glyph named `cid<number>`
+//! takes that CID, another glyph the CID the Unicode CMap file gives its code point, and the rest
+//! are appended, as the CID map's left-out glyphs are. Its CFF build then
 //! writes a CID-keyed table ([`fontcraft_cff::cid`]) as AFDKO's makeotf 5.0.1 builds one from a
 //! CID-keyed UFO (observed on synthetic sources):
 //!
@@ -32,7 +35,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use fontcraft_cff::{self as cff, Number, PrivateDict, Widths};
 use fontcraft_model::cid::{CidFont, MAX_CID, Ros};
 use fontcraft_model::plist::Dict;
-use fontcraft_model::{Font, Resolved, ResolvedGlyph};
+use fontcraft_model::{Font, Params, Resolved, ResolvedGlyph};
 use read_fonts::FontRef;
 use write_fonts::FontBuilder;
 use write_fonts::types::Tag;
@@ -46,6 +49,9 @@ use crate::{CompileError, Compiled, HintingOptions, cff_hints, ot_round};
 
 /// Most names one warning lists.
 const LISTED: usize = 5;
+
+/// The custom parameter that makes an export CID-keyed and names its character collection.
+pub const ROS_PARAM: &str = "ROS";
 
 /// The CMap files of a CID-keyed build, read by the caller, and the Macintosh subtable's ids.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -139,22 +145,84 @@ fn read_cmap(bytes: &[u8], kind: CodeKind, what: &str, ros: &Ros, warnings: &mut
     Ok(cmap)
 }
 
+/// The `ROS` parameter of the export, read; a value that is not `Registry-Ordering-Supplement` is
+/// reported and left out.
+fn ros_param(params: &Params, warnings: &mut Vec<String>) -> Option<Ros> {
+    let value = params.get(ROS_PARAM)?;
+    let ros = value.as_str().and_then(Ros::parse);
+    if ros.is_none() {
+        warnings.push(format!("`{ROS_PARAM}` is not Registry-Ordering-Supplement (such as Adobe-Identity-0), so it was left out"));
+    }
+    ros
+}
+
+/// The CID a glyph name states: `cid` and a decimal number, as CID-keyed fonts name their glyphs
+/// (`cid01234`).
+fn cid_in_name(name: &str) -> Option<u32> {
+    let digits = name.strip_prefix("cid")?;
+    if digits.is_empty() || digits.len() > 10 || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    digits.parse::<u32>().ok().filter(|c| *c <= MAX_CID)
+}
+
+/// The CID map of a font that the `ROS` parameter makes CID-keyed: a glyph named `cid<number>`
+/// takes that CID; another glyph takes the CID the Unicode CMap gives its first code point the
+/// CMap maps. The others are left out, so the CID stage appends them.
+fn cids_from_names(glyphs: &[ResolvedGlyph], unicode: Option<&CMap>) -> Vec<(String, u32)> {
+    glyphs
+        .iter()
+        .filter_map(|g| {
+            let cid = cid_in_name(&g.name).or_else(|| unicode.and_then(|m| g.unicodes.iter().find_map(|cp| m.cids.get(cp).copied())))?;
+            Some((g.name.clone(), cid))
+        })
+        .collect()
+}
+
 /// The CID stage: for a CID-keyed `font`, `glyphs` (in their final order, `.notdef` first) put
 /// into CID order, their code points taken from the Unicode CMap when there is one, and the plan
-/// the table build follows. An ordinary font keeps its glyphs and has no plan.
+/// the table build follows. The font is CID-keyed when it holds CID-keyed data or the export's
+/// `ROS` parameter (`params`) names a collection; the parameter's collection replaces the stored
+/// one. An ordinary font keeps its glyphs and has no plan.
 pub(crate) fn plan(
     font: &Font,
+    params: &Params,
     glyphs: Vec<ResolvedGlyph>,
     options: &CidOptions,
     warnings: &mut Vec<String>,
 ) -> Result<(Vec<ResolvedGlyph>, Option<CidPlan>), CompileError> {
-    let state = CidFont::read(font).map_err(|e| cid_error(format!("the CID-keyed data of the font cannot be read: {e}")))?;
-    let Some(state) = state else {
-        if !options.is_empty() {
-            warnings.push("the font is not CID-keyed, so the CMap files and Macintosh cmap ids are not used".into());
+    let stored = CidFont::read(font).map_err(|e| cid_error(format!("the CID-keyed data of the font cannot be read: {e}")))?;
+    let param = ros_param(params, warnings);
+    let mut from_param = false;
+    let mut state = match (stored, param) {
+        (Some(mut state), Some(ros)) => {
+            if state.ros != ros {
+                warnings.push(format!("`{ROS_PARAM}` names {}, so the font's CID-keyed data for {} is written as {0}", ros.text(), state.ros.text()));
+                state.ros = ros;
+            }
+            state
         }
-        return Ok((glyphs, None));
+        (Some(state), None) => state,
+        (None, Some(ros)) => {
+            from_param = true;
+            CidFont { ros, font_name: None, cids: Vec::new(), subfonts: Vec::new() }
+        }
+        (None, None) => {
+            if !options.is_empty() {
+                warnings.push("the font is not CID-keyed, so the CMap files and Macintosh cmap ids are not used".into());
+            }
+            return Ok((glyphs, None));
+        }
     };
+    let unicode = match &options.unicode_cmap {
+        Some(bytes) => Some(read_cmap(bytes, CodeKind::Unicode, "Unicode CMap", &state.ros, warnings)?),
+        None => None,
+    };
+    if from_param {
+        state.cids = cids_from_names(&glyphs, unicode.as_ref());
+    }
+    // The Identity ordering covers no glyph, so appending every glyph is what it asks for.
+    let quiet_append = from_param && state.ros.is_identity();
     let map = state.cid_map();
     let mut taken: HashSet<u32> = HashSet::new();
     let mut mapped: Vec<(u32, ResolvedGlyph)> = Vec::with_capacity(glyphs.len());
@@ -189,7 +257,7 @@ pub(crate) fn plan(
         warnings.push(format!("{} take a CID another glyph has, so they follow the highest CID", list(&twice)));
     }
     let left: Vec<&str> = unmapped.iter().filter(|g| !twice.contains(&g.name) && !zero.contains(&g.name)).map(|g| g.name.as_str()).collect();
-    if !left.is_empty() {
+    if !left.is_empty() && !quiet_append {
         warnings.push(format!("the CID map leaves out {}, so they follow the highest CID", list(&left)));
     }
     mapped.sort_by_key(|(c, _)| *c);
@@ -223,8 +291,7 @@ pub(crate) fn plan(
         cids.insert(g.name.clone(), c);
         glyphs.push(g);
     }
-    if let Some(bytes) = &options.unicode_cmap {
-        let cmap = read_cmap(bytes, CodeKind::Unicode, "Unicode CMap", &state.ros, warnings)?;
+    if let Some(cmap) = &unicode {
         let by_cid = cmap.codes_by_cid();
         for g in &mut glyphs {
             g.unicodes = cids.get(&g.name).and_then(|c| by_cid.get(c)).cloned().unwrap_or_default();
