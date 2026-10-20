@@ -113,10 +113,51 @@ fn font_transform_converts_with_to_and_scales_cff_outlines() {
 
     let refused = dir.join("refused.ttf");
     assert!(session.execute("font.transform", &json!({"font": binary, "unitsPerEm": 2048, "to": "pfa", "output": refused})).is_err());
-    assert!(
-        session.execute("font.transform", &json!({"font": otf, "rotate": 90, "output": refused})).is_err(),
-        "a matrix on CFF outlines is refused for now"
-    );
+    assert!(!refused.exists());
+
+    // A quarter turn on the CFF font: the outlines turn and every advance becomes the em.
+    let turned = dir.join("turned.otf");
+    let r = session.execute("font.transform", &json!({"font": otf, "rotate": 90, "output": turned})).unwrap();
+    assert!(r["glyphsChanged"].as_u64().unwrap() >= 1);
+    assert_eq!(r["hintsKept"], json!(true), "a quarter turn keeps the stem hints");
+    let font = fontcraft_tables::read(&std::fs::read(&turned).unwrap(), 0).unwrap();
+    let hmtx = font.get(*b"hmtx").unwrap();
+    let hhea = font.get(*b"hhea").unwrap();
+    assert_eq!(u16::from_be_bytes([hmtx[0], hmtx[1]]), 2048, "the auto width of a turn is the em");
+    assert_eq!(u16::from_be_bytes([hhea[10], hhea[11]]), 2048);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn font_transform_follows_a_glyph_table() {
+    let dir = scratch("table");
+    let mut s = drawn();
+    let nodes = json!([{"x": 0, "y": 0}, {"x": 50, "y": 0}, {"x": 50, "y": 50}]);
+    s.execute("path.addPath", &json!({"glyph": "B", "nodes": nodes})).unwrap();
+    let ttf = fontcraft_compile::compile_ttf(s.font().unwrap(), &fontcraft_compile::Options::default()).unwrap();
+    let binary = dir.join("in.ttf");
+    std::fs::write(&binary, &ttf.bytes).unwrap();
+    let table = dir.join("table.txt");
+    std::fs::write(&table, "# glyphs for vertical text\n.notdef .notdef None 0 0\nA A.vert 1000 0 880\n").unwrap();
+    let mut session = Session::new();
+    let out = dir.join("out.ttf");
+    let r = session.execute("font.transform", &json!({"font": binary, "rotate": 90, "glyphTable": table, "output": out})).unwrap();
+    assert!(r["glyphsChanged"].as_u64().unwrap() >= 1);
+    let font = fontcraft_tables::read(&std::fs::read(&out).unwrap(), 0).unwrap();
+    let bytes = fontcraft_tables::write(&font, &fontcraft_tables::WriteOptions::default()).unwrap();
+    let f = skrifa::FontRef::new(&bytes).unwrap();
+    let names: Vec<String> = skrifa::GlyphNames::new(&f).iter().map(|(_, n)| n.as_str().to_string()).collect();
+    assert_eq!(names, vec![".notdef", "A.vert"], "only the listed glyphs are kept, renamed");
+    use skrifa::raw::TableProvider as _;
+    assert_eq!(f.hmtx().unwrap().advance(skrifa::GlyphId::new(1)), Some(1000), "the table's advance");
+
+    let refused = dir.join("refused.ttf");
+    std::fs::write(&table, "A A None 0 0\n").unwrap();
+    assert!(session.execute("font.transform", &json!({"font": binary, "glyphTable": table, "output": refused})).is_err(), ".notdef must be listed");
+    std::fs::write(&table, ".notdef .notdef None 0 0\nZ Z None 0 0\n").unwrap();
+    assert!(session.execute("font.transform", &json!({"font": binary, "glyphTable": table, "output": refused})).is_err(), "a glyph the font lacks");
+    std::fs::write(&table, ".notdef .notdef None 0 0\n12 12 None 0 0\n").unwrap();
+    assert!(session.execute("font.transform", &json!({"font": binary, "glyphTable": table, "output": refused})).is_err());
     assert!(!refused.exists());
     let _ = std::fs::remove_dir_all(&dir);
 }

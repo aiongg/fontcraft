@@ -42,7 +42,7 @@ fn composite_of_a(dx: i32) -> Vec<u8> {
 /// `.notdef` empty, `A`, `B` = `A` at (50, 0); upem 1000, every advance 600, side bearings 0,
 /// 0 and 50; `OS/2` typo ascender 800, `post` underline -100 and 50, a `kern` pair of -37, a
 /// `fpgm` and a `TEST` table.
-fn font() -> SfntFont {
+pub(super) fn font() -> SfntFont {
     let glyphs = [Vec::new(), glyph_a(), composite_of_a(50)];
     let mut f = SfntFont::new(Flavour::TrueType);
     let mut head = vec![0u8; 54];
@@ -211,7 +211,7 @@ fn units_per_em_keeps_a_class_pair_table_whose_value_formats_are_both_zero() {
 
 /// A `gvar` with one axis where only glyph 1 (`A`) varies: one tuple over all of its eight
 /// points, x deltas 10, 0, 100, -1 and four zeros, y deltas all zero.
-fn gvar() -> Vec<u8> {
+pub(super) fn gvar() -> Vec<u8> {
     let data: Vec<u8> = vec![
         0x00, 0x01, // one tuple, no shared points
         0x00, 0x0A, // the data starts after the 10-byte header
@@ -323,10 +323,7 @@ fn bad_options_and_inputs_are_refused() {
     let mut cff = input.clone();
     cff.insert(*b"CFF ", vec![1, 0, 4, 1]);
     assert!(transform(&cff, &upem(2048)).is_err(), "a damaged CFF table is refused");
-    assert!(matches!(transform(&cff, &TransformOptions { rotate: Some(5.0), ..TransformOptions::default() }), Err(TablesError::Unsupported(_))));
-    let mut variable = input.clone();
-    variable.insert(*b"gvar", gvar());
-    assert!(matches!(transform(&variable, &TransformOptions { rotate: Some(5.0), ..TransformOptions::default() }), Err(TablesError::Unsupported(_))));
+    assert!(transform(&cff, &TransformOptions { rotate: Some(5.0), ..TransformOptions::default() }).is_err(), "a damaged CFF table is refused");
 
     let mut zero = input.clone();
     zero.tables.get_mut(b"head").unwrap()[18..20].copy_from_slice(&0u16.to_be_bytes());

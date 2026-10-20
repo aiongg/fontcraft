@@ -877,6 +877,47 @@ and Top DICT values, the metrics and the bounds match it on the test fonts. Diff
 | Charstring arithmetic and storage operators | scaled as numbers | refused | their operands are indices and flags as well as coordinates |
 | `FontMatrix` written as a real | eight significant digits | the shortest decimal that reads back exactly | the values read the same to eight digits |
 
+### A matrix against rotatefont
+
+`font.transform` with a matrix on CFF and CFF2 outlines (`transform/cff_matrix.rs`) follows
+AFDKO rotatefont 5.0.1 (`c/rotatefont/rotateFont.cpp`):
+
+- Each absolute point becomes `RND(a·x + c·y + e)`, `RND(b·x + d·y + f)`, in single precision,
+  halves up.
+- Hints follow the linear part:
+
+| Linear part | Stems | Private DICT |
+|---|---|---|
+| `b = c = 0`, `a, d > 0` | kept: `offset + RND(scale · edge)` | blue zones `RND(d·v + f)`; `StdHW`, `StemSnapH` by `d`; `StdVW`, `StemSnapV` by `a` |
+| `b = c = 0`, `a, d < 0` | kept, edges swapped | as above, blue zones reversed, widths and snaps negated back to positive |
+| `a = d = 0`, `b < 0 < c` (quarter turn clockwise) | horizontal and vertical swap | `BlueValues` -250 -250 1100 1100, the other zones dropped; `StdHW` ↔ `StdVW` and `StemSnapH` ↔ `StemSnapV` through `b` and `c` |
+| `a = d = 0`, `c < 0 < b` | as above, the other edge order | as above |
+| `b = 0` otherwise (shear, mirror) | horizontal kept, vertical dropped | as in the first row |
+| anything else | all dropped, flex written as two curves | `BlueValues` -250 -250 1100 1100; the other zones, standard widths and snaps dropped |
+
+Differences kept:
+
+| What | Reference | FontCraft | Why |
+|---|---|---|---|
+| `-rt` with an angle that is not a multiple of 90° | turns by half the angle (it converts degrees with π/360) | `rotate` turns by the full angle | the option is documented in degrees; compare with `-matrix` |
+| Output | a bare CFF or Type 1 font from the default master | the whole OpenType font: `hmtx` widths and side bearings, `head` and `hhea` extents, `CFF2` deltas | an OpenType font in, an OpenType font out |
+| `CFF2` blends | the default master only | each delta transformed by the linear part as an absolute point delta, rounded on its own | keeps the font variable |
+| Charstring operators | the writer picks its own specialised forms and hint substitution | general forms with a few single-curve and axis-line forms; stems sorted, masks remapped | the outline and hints read the same |
+| `defaultWidthX`, `nominalWidthX` | chosen by the writer | chosen again for the new widths, by the method of `font.optimize --cff-widths` | the widths read the same |
+| A negative advance (half turn, mirror) | written into the charstring | 0 in `hmtx` and the charstring, with a warning | `hmtx` holds no negative advance |
+| The accent offset of a `seac` `endchar` | kept | turned by the linear part; refused when the glyphs do not all take one matrix | the accent stays on its base |
+| `a = d = 0` with `b` and `c` of one sign (turn and mirror) | stops with a program error | every hint dropped | |
+| `b = 0`, `d < 0` | horizontal edges written in reverse order | swapped so each stem keeps a positive width | |
+| `--glyphs`, `--fd` | choose the glyphs written | choose the glyphs transformed; the others stay as they are | `--glyph-table` is the way to keep only some glyphs |
+
+On a variable TrueType font a matrix transforms the `gvar` deltas by each glyph's linear part. A
+turn or a shear on a simple glyph fills a sparse tuple in by interpolation (IUP) first, because
+interpolation works on x and y apart. The x deltas of the two horizontal phantom points follow the
+widths policy: multiplied by `a` when the widths are transformed, 0 when they are fixed, kept when
+they are kept. `HVAR` is scaled when every glyph takes one positive horizontal scale with no turn
+or shear, kept when the widths are kept, and dropped otherwise. No reference has a matrix on
+`gvar`; the tests check that transforming and instancing commute within two units.
+
 ## 5. Commands and data touched
 
 This chapter defines no commands of its own. The stages are driven by the export commands in the

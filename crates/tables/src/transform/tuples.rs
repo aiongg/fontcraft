@@ -5,25 +5,25 @@
 use crate::limits::{MAX_SFNT, MAX_TUPLE_VARIATIONS};
 use crate::{Result, TablesError};
 
-const SHARED_POINT_NUMBERS: u16 = 0x8000;
-const COUNT_MASK: u16 = 0x0FFF;
-const EMBEDDED_PEAK_TUPLE: u16 = 0x8000;
-const INTERMEDIATE_REGION: u16 = 0x4000;
-const PRIVATE_POINT_NUMBERS: u16 = 0x2000;
+pub(super) const SHARED_POINT_NUMBERS: u16 = 0x8000;
+pub(super) const COUNT_MASK: u16 = 0x0FFF;
+pub(super) const EMBEDDED_PEAK_TUPLE: u16 = 0x8000;
+pub(super) const INTERMEDIATE_REGION: u16 = 0x4000;
+pub(super) const PRIVATE_POINT_NUMBERS: u16 = 0x2000;
 
 const DELTAS_ARE_ZERO: u8 = 0x80;
 const DELTAS_ARE_WORDS: u8 = 0x40;
 const DELTA_RUN_COUNT_MASK: u8 = 0x3F;
 
-fn u16_at(b: &[u8], at: usize) -> Option<u16> {
+pub(super) fn u16_at(b: &[u8], at: usize) -> Option<u16> {
     Some(u16::from_be_bytes([*b.get(at)?, *b.get(at + 1)?]))
 }
 
-fn u32_at(b: &[u8], at: usize) -> Option<u32> {
+pub(super) fn u32_at(b: &[u8], at: usize) -> Option<u32> {
     Some(u32::from_be_bytes([*b.get(at)?, *b.get(at + 1)?, *b.get(at + 2)?, *b.get(at + 3)?]))
 }
 
-fn cut() -> TablesError {
+pub(super) fn cut() -> TablesError {
     TablesError::invalid("the variation data is cut short")
 }
 
@@ -58,7 +58,7 @@ fn point_numbers(b: &[u8], mut at: usize, all: usize) -> Result<(usize, usize)> 
 }
 
 /// Reads `count` packed deltas at `at`; gives them and where they end.
-fn read_deltas(b: &[u8], mut at: usize, count: usize) -> Result<(Vec<i32>, usize)> {
+pub(super) fn read_deltas(b: &[u8], mut at: usize, count: usize) -> Result<(Vec<i32>, usize)> {
     let mut out = Vec::with_capacity(count.min(b.len().saturating_mul(64)));
     while out.len() < count {
         let control = *b.get(at).ok_or_else(cut)?;
