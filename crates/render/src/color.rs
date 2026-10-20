@@ -1612,7 +1612,7 @@ fn svg_leaf(paint: &ColorPaint) -> Option<Leaf> {
             let ok = finite_point(*c0) && finite_point(*c1) && r0.is_finite() && r1.is_finite();
             ok.then(|| stops(line)).flatten().map(|stops| Leaf::Radial { c0: *c0, r0: r0.abs(), c1: *c1, r1: r1.abs(), stops })
         }
-        ColorPaint::Sweep { .. } | ColorPaint::Layers(_) | ColorPaint::Glyph { .. } => None,
+        ColorPaint::Sweep { .. } | ColorPaint::Layers(_) | ColorPaint::Glyph { .. } | ColorPaint::ColrGlyph { .. } => None,
     }
 }
 

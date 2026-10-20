@@ -332,7 +332,7 @@ fn leaf(paint: &Paint, palette: &[Rgba], text: [f32; 4]) -> Option<Leaf> {
             let ok = finite(*center) && start.is_finite() && end.is_finite();
             ok.then(|| stops(line, palette, text)).flatten().map(|stops| Leaf::Sweep { center: *center, start: *start, end: *end, stops })
         }
-        Paint::Layers(_) | Paint::Glyph { .. } => None,
+        Paint::Layers(_) | Paint::Glyph { .. } | Paint::ColrGlyph { .. } => None,
     }
 }
 
@@ -394,6 +394,14 @@ fn collect(
             match leaf(paint, palette, text) {
                 Some(l) => out.push(Drawable { clips: clips.clone(), leaf: l }),
                 None => collect(font, glyph, paint, clips, palette, text, out, depth + 1),
+            }
+            clips.pop();
+        }
+        Paint::ColrGlyph { shape, .. } => {
+            let Some(outline) = shape_outline(font, glyph, shape) else { return };
+            clips.push(outline);
+            if let Some(l) = leaf(&paint::outline_fill(), palette, text) {
+                out.push(Drawable { clips: clips.clone(), leaf: l });
             }
             clips.pop();
         }
