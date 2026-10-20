@@ -90,6 +90,7 @@ mod glyph_data;
 mod glyph_info;
 mod glyph_search;
 mod glyph_set;
+mod glyphs_kept_extras;
 mod guides;
 mod hint_import;
 mod hint_node_order;

@@ -630,7 +630,13 @@ pub fn save(font: &Font, path: &Path, format: SaveFormat) -> Result<Saved> {
     }
     match format {
         SaveFormat::Native | SaveFormat::Glyphs => {
-            let bytes = if format == SaveFormat::Native { fontcraft_format::save(font)? } else { fontcraft_io_glyphs::write(font)?.into_bytes() };
+            let bytes = if format == SaveFormat::Native {
+                // Layouts the .glyphs reader kept for values an edit has since changed.
+                let pruned = fontcraft_io_glyphs::without_stale_layouts(font);
+                fontcraft_format::save(pruned.as_ref().unwrap_or(font))?
+            } else {
+                fontcraft_io_glyphs::write(font)?.into_bytes()
+            };
             fontcraft_format::write_atomic(path, &bytes)?;
             Ok(Saved { bytes: bytes.len(), files_written: 1, files_removed: 0, losses })
         }

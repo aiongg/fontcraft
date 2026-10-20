@@ -814,10 +814,14 @@ fn write_master(font: &Font, m: &Master) -> Result<Value> {
     let mut e = vec![("id".into(), string(&m.id))];
     let value = |kind: &str| font.metric(m, kind).unwrap_or_default();
     let derived = derived_name(&m.params, &m.name_parts, value(metric::ITALIC_ANGLE).pos != 0.0);
-    let name_differs = match m.extra.get(Family::Glyphs, "name") {
+    let kept_name = m.extra.get(Family::Glyphs, "name");
+    let name_differs = match kept_name {
         Some(kept) => kept.as_str() != Some(m.name.as_str()),
         None => m.name != derived,
     };
+    // A kept name the reader took as the master's name is stale once the name changes: with the
+    // name cleared it would be written in place of the field.
+    let stale_name = kept_name.and_then(Value::as_str).is_some_and(|k| usable_name(k) && k != m.name);
     if !m.name.is_empty() && name_differs {
         e.push(("name".into(), string(&m.name)));
     }
@@ -871,14 +875,21 @@ fn write_master(font: &Font, m: &Master) -> Result<Value> {
         e.push(("alignmentZones".into(), list(zones.into_iter().map(|(_, z)| z).collect())));
     }
     crate::push_master_info(&mut e, m);
-    Ok(Value::Dict(finish_ordered(e, &m.extra, MASTER_ORDER)))
+    Ok(Value::Dict(finish_ordered(e, &crate::without_key(&m.extra, "name", stale_name), MASTER_ORDER)))
 }
 
 fn write_glyph(g: &Glyph) -> Result<Dict> {
+    crate::kept::in_glyph(&g.name, || write_glyph_in(g))
+}
+
+fn write_glyph_in(g: &Glyph) -> Result<Dict> {
     let at = format!("glyph `{}`", g.name);
     let mut e = vec![("glyphname".into(), string(&g.name))];
-    // A spelling kept from reading, while it still reads as the code points.
-    let kept = g.extra.get(Family::Glyphs, "unicode").filter(|v| hex_code_points(v).as_deref() == Some(g.unicodes.as_slice())).cloned();
+    // A spelling kept from reading, while it still reads as the code points. One that reads as
+    // other code points is stale: with none left it would be written in place of the field.
+    let spelling = g.extra.get(Family::Glyphs, "unicode");
+    let kept = spelling.filter(|v| hex_code_points(v).as_deref() == Some(g.unicodes.as_slice())).cloned();
+    let stale = kept.is_none() && spelling.and_then(hex_code_points).is_some_and(|u| !u.is_empty());
     if let Some(u) = kept.or_else(|| write_unicode(&g.unicodes)) {
         e.push(("unicode".into(), u));
     }
@@ -888,7 +899,7 @@ fn write_glyph(g: &Glyph) -> Result<Dict> {
     push_kern_groups(&mut e, &g.kern_groups, KERN_GROUP_KEYS);
     crate::glyph::push_glyph_info(&mut e, &g.info, 2);
     e.push(("layers".into(), list(g.layers.iter().map(|l| write_layer(l, &at)).collect::<Result<_>>()?)));
-    Ok(finish_ordered(e, &g.extra, GLYPH_ORDER))
+    Ok(finish_ordered(e, &crate::without_key(&g.extra, "unicode", stale), GLYPH_ORDER))
 }
 
 pub(crate) fn write_layer(l: &Layer, at: &str) -> Result<Value> {
@@ -920,15 +931,19 @@ fn write_path(p: &Path, at: &str) -> Result<Value> {
 
 fn write_component(c: &Component, at: &str) -> Result<Value> {
     let mut e = vec![("name".into(), string(&c.glyph))];
-    if !c.transform.is_identity() {
-        let m = c.affine().as_coeffs();
-        if m.iter().any(|f| !f.is_finite()) {
-            return Err(bad(at, "a component transform is not a finite number"));
-        }
-        e.push(("transform".into(), Value::String(Str::new(spelled(c.extra.get(Family::Glyphs, "transform"), &m)))));
+    let m = c.affine().as_coeffs();
+    if m.iter().any(|f| !f.is_finite()) {
+        return Err(bad(at, "a component transform is not a finite number"));
     }
+    let spelling = c.extra.get(Family::Glyphs, "transform");
+    if !c.transform.is_identity() {
+        e.push(("transform".into(), Value::String(Str::new(spelled(spelling, &m)))));
+    }
+    // A spelling of another transform is stale: for the identity it would be written in place of
+    // the field the writer leaves out.
+    let stale = spelling.and_then(Value::as_str).and_then(|s| braced_numbers(s, m.len())).is_some_and(|n| n != m);
     crate::shape::push_component_info(&mut e, &c.info, 2, at)?;
-    Ok(Value::Dict(finish(e, &c.extra)))
+    Ok(Value::Dict(finish(e, &crate::without_key(&c.extra, "transform", stale))))
 }
 
 fn write_anchor(a: &Anchor) -> Value {
