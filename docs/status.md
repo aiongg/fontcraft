@@ -2,50 +2,54 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-19, after the batch of 17 packages of M8 to M12 and six small tasks (X.conv2, X.small2 to X.small6, with the integration rounds X.integ10 to X.integ12 and the review fixes X.fix35 to X.fix40), integrated and gated on `master`._
+_Updated: 2026-10-20, after the batch of M9.25 and 20 follow-up packages of M8 to M13 and twelve small tasks (X.fix41 to X.fix45, X.tables2, X.ui1, X.audit2, X.audit3, X.opt1, X.opt2, X.edit1, with the integration rounds X.integ13 to X.integ16, the review fixes X.fix47 to X.fix54 and the gate X.gate15), integrated and gated on `master`._
 
 ## State of the tree
 
-- `cargo xtask ci` passes all eleven steps (4,237 tests passed, 0 failed, 46 skipped). The test step runs on cargo
+- `cargo xtask ci` passes all eleven steps (4,431 tests passed, 0 failed, 49 skipped). The test step runs on cargo
   nextest. Built and run on Linux x86-64 with Rust 1.97.
-- `master` holds 196 commits on top of `732f97b` (X.docs11, the last pushed commit), plus this documentation
-  commit. They are the two previous batches (17 packages, then 14 packages and three tasks, with their integration
-  rounds, review fixes and X.docs12 and X.docs13) and the 17 packages and six tasks of this batch, X.integ10 to
-  X.integ12 and the review fixes X.fix35 to X.fix40 (the package lists are in ROADMAP.md › Shipped so far). They
-  are **not pushed**: the push waits for the owner.
-- 914 of the 1,004 inventory commands exist (`docs/parity.md`; before this batch 905 of 997). Per
-  milestone: M3, M4, M5, M6 (47), M7 (66), M8 (41), M10 (57) and M11 (41) are all live; M9 51 of 52,
-  M12 98 of 99, M13 150 of 200. M14 has 0 of 34. Feature parity is about 35%
-  (ROADMAP.md › Parity estimate). 2,465 guesses on 1,436 rows are listed in `docs/guesses.md`;
-  `docs/observe.md` lists 1,360 rows.
+- `master` holds 111 commits on top of `330c1f7` (X.docs14, the last pushed commit), plus this documentation
+  commit: the packages and tasks of this batch, their merges, X.integ13 to X.integ16, the review fixes X.fix47 to
+  X.fix54 and X.gate15 (the package lists are in ROADMAP.md › Shipped so far). The batch is pushed with this
+  commit.
+- 917 of the 1,004 inventory commands exist (`docs/parity.md`; before this batch 914). Per milestone: M3, M4, M5,
+  M6 (47), M7 (66), M8 (41), M10 (57) and M11 (41) are all live; M9 51 of 52, M12 98 of 99, M13 153 of 200. M14
+  has 0 of 34. Feature parity is about 35% (ROADMAP.md › Parity estimate; 35.0, was 34.5). 2,539 guesses on 1,445
+  rows are listed in `docs/guesses.md`; `docs/observe.md` lists 1,367 rows.
 - Packages built (done of total, counted from commit subjects): M6 19 of 20, M7 19 of 21, M8 23 of
-  25, M9 24 of 27, M10 31 of 33, M11 19 of 21, M12 63 of 68, M13 56 of 62; 254 of 277 in all (was
-  244). The follow-ups M10.21b, M11.5b, M12.7b, M12.7c, M12.13b, M12.19b, M12.20b, M12.23b, M12.40b, M12.64b,
-  M13.15b and M13.23b are not counted.
+  25, M9 25 of 27, M10 31 of 33, M11 19 of 21, M12 63 of 68, M13 56 of 62; 255 of 277 in all (was
+  254). The follow-ups M8.20b, M8.23b, M10.21b, M11.5b, M11.5c, M11.7b, M11.13b, M11.17b, M12.7b to M12.7e,
+  M12.13b, M12.18b, M12.19b to M12.19d, M12.20b, M12.21b, M12.22b, M12.22c, M12.23b, M12.24b, M12.24c, M12.25b,
+  M12.30b, M12.40b, M12.40d, M12.64b, M13.15b, M13.23b and M13.55b are not counted.
 - **Baselines after this batch** (a later change that moves one of these numbers needs a reason):
 
   | Measure | Result |
   |---|---|
-  | Static oracle against fontmake, TrueType | 2,376 compared, 2,218 the same, 139 coverage-equal, 19 different; 39 of 354 sources differ (was 2,370, 2,212, 139, 19, 39). `GSUB` 25 of 26, `GPOS` 82 of 88, `GDEF` 47 of 55 equal. M8.8 removed 5 allow-list entries |
-  | Static oracle against fontmake, CFF | 2,377 compared, 1,854 the same, 511 coverage-equal, 12 different; 38 of 354 sources differ (was 2,371, 1,848, 511, 12, 38). Exported CFF fonts are 0.957 of the size of fontmake's unsubroutinised builds. The TrueType summary above was not measured again for this batch |
+  | Static oracle against fontmake, TrueType | 2,376 compared, 2,218 the same, 139 coverage-equal, 19 different; 39 of 354 sources differ (unchanged). `GSUB` 25 of 26, `GPOS` 82 of 88, `GDEF` 47 of 55 equal. M8.8 removed 5 allow-list entries |
+  | Static oracle against fontmake, CFF | 2,377 compared, 1,854 the same, 511 coverage-equal, 12 different; 38 of 354 sources differ (unchanged). Exported CFF fonts are 0.957 of the size of fontmake's unsubroutinised builds |
   | `COLR` against fontc | 10 identical, 7 allowed, 0 different |
   | `COLR` against fontmake | 11 identical, 7 allowed, 0 different |
   | Variable `COLR` against fontmake (M11.19) | COLRv1-var, COLRv0-var and COLRv0-2masters-brace equal (compared with ttx; one allow-listed layer-glyph naming difference); fontc fails on COLRv0-2masters-brace itself |
   | Contextual anchors against fontmake (M8.21) | identical on the probe source; `GPOS` lookup order matches (`abvm` and `blwm` mark-to-mark lookups last); fontc ignores contextual anchors |
-  | Static instances against `fontmake -i` (X.ds1) | 180 the same, 30 different, 0 not built, 24 failed in fontmake itself (was 169, 41, 0, 24) |
+  | Static instances against `fontmake -i` (X.ds1) | 180 the same, 30 different, 0 not built, 24 failed in fontmake itself (unchanged) |
   | Designspace `<rules>` against fontmake | 3 sources: 2 the same, 1 different (CustomFeatures: a rule that feeds several feature tags) |
-  | Instances from sources against fontmake's UFO instances (M12.22) | 39 instances: 6 differ in a glyph (`iacute`), 8 in font info |
-  | Round trips | `.glyphs` 122/1/118/4 (native and model); UFO 133/7; designspace 112; `.glyphspackage` 22/0/7/0 |
+  | Instances from sources against fontmake's UFO instances (M12.22, M12.22b, M12.22c) | 39 instances: 0 differ in a glyph (was 6, `iacute`), 1 in font info (was 8) |
+  | Layout-only instances against fontTools `interpolate_layout` (M12.22c) | 6 the same, 2 refused by both |
+  | Round trips (`cargo xtask roundtrip`) | `.glyphs` native 122/1/118/4; designspace native 59/0/0/53; UFO model 125/0/2/13; `.glyphspackage` 22/0/7/0 |
   | `corpus_import` (hinted import) | 27 CFF and 48 TrueType fonts pass |
   | TTX against ttx | CFF 253 equal, 0 different; layout 700/0; other tables 143/0 |
   | qu2cu | 3,192 equal, 0 different |
-  | CFF subroutiniser (M12.25) | 233 corpus fonts, 0 outline differences, 0 fontTools warnings, total size 0.785 of cffsubr's; 3 small test fonts over by more than 2% (Lobster.subset 1.020, ttLib I.otf 1.167, TestOTF 1.096). Measure: `python -I crates/cff/crosscheck/subr_check.py OUT` |
+  | CFF subroutiniser (M12.25) | 233 corpus fonts, 0 outline differences, 0 fontTools warnings, total size 0.785 of cffsubr's; 3 small test fonts over by more than 2% (Lobster.subset 1.020, ttLib I.otf 1.167, TestOTF 1.096). Measure: `python -I crates/cff/crosscheck/subr_check.py OUT`. Not run again in this batch (it needs tx) |
+  | CFF subroutiniser on a full CJK font (M12.25b) | Source Han Serif TC Bold subroutinises in 136 s with a 692 MB peak (budget 4 GiB, 512 MiB on wasm), to 0.883 of the unsubroutinised size; before, charstrings above 8.4 million tokens were refused |
+  | Convert of a full CJK font (X.fix42) | Source Han Serif TC Bold to TrueType in 7.6 s, 354 MB peak; charstring memory peak 141.5 MiB (limit 1 GiB, 512 MiB on wasm), 10.56 million points (limit 2^26, about 67.1 million) |
   | Static instances against fontTools `varLib.instancer` (M12.20) | 26 cases on 8 corpus variable TrueType fonts: all tables identical except `GPOS` in 18 (subtable layout kept from the input) and `maxp` in 2 (not recalculated) |
   | Transform against fontTools `scaleUpem` (M12.24) | `glyf` identical in 12 of 12; `cvt ` differs in 4 (expected); `maxp` and `head` flags differ (no `maxp` recalculation); `avar2` item variation store left unscaled; `.null` kept in `post` |
+  | Units per em on CFF and CFF2 against `scaleUpem` (M12.24b, X.fix52) | 21 fonts: the only differences are the `OS/2` first and last character index (fontTools recomputes them at save), CFF2 blended Private values (written down), and LinLibertine_RBI's empty-coverage `GPOS` pair subtable fitted to its used classes (fontTools keeps the stored counts; before this batch the font could not be written back) |
   | Merge against fontTools merge (M12.23) | 8 pairs: `OS/2`, `cmap`, `name`, `hhea`, `loca` identical; `glyf` and `head` differ in 5 (fontTools recalculates bounds); duplicate names `#n` against `.n` in 2 |
   | TTX reader against fontTools `importXML` and save (M12.8) | 16 fonts: `maxp`, `OS/2`, `name`, `cmap`, `post`, `hmtx`, `CFF `, `glyf`, `loca`, `cvt `, `gasp`, `prep`, `fpgm` identical; `head` and `hhea` differ on CFF fonts (fontTools recompiles the font bounding box) |
   | CFF subroutines against cffsubr (M12.26) | 14 fonts: 0.974 of cffsubr's size |
   | Partial instances against fontTools `varLib.instancer` (M12.21) | 38 cases on corpus variable TrueType fonts: 9 equal, 5 refused (`avar` 2), 3 different (each equals fontTools' own full instance), 21 failed inside fontTools |
+  | Partial instances of `avar` version 2 and `VARC` fonts (M12.21b) | Amstelvar: 5 of 5 equal; `VARC` has no oracle (fontTools 4.66.1 cannot read the corpus `VARC` fonts) |
   | `variations` tools against fontTools (M12.34) | `model` agrees in 104 of 112 cases; `build-hvar` 8 of 8; `plan-avar` on NotoSans-VF-cubic differs by 0.004; `plot` refuses varc-6868 and Amstelvar-avar2 |
   | TTX reader, layout and variation tables (M12.9) | 39 corpus fonts: all tags identical after reading the TTX back; 239 of 240 CFF fonts identical |
   | TTX writers, Apple, bitmap and `COLR` version 1 tables (M12.7b) | 31 of 34 cases equal to ttx; the other 3 are the `prop` dump (written raw) and `cmap` format 2 |
@@ -54,28 +58,37 @@ _Updated: 2026-10-19, after the batch of 17 packages of M8 to M12 and six small 
   | Autohinter against ttfautohint (M10.21b) | x-height rows 92.9% (target 95%), cap-height rows 100%, zone agreement 98.29% (target 99%), size 78.8% of ttfautohint's |
   | Detect Composites on Inter (M13.15b) | 63.0% of composites rebuilt from the same bases (target 95%) in 224 ms; the per-edit alignment pass 0.24 ms (target 2 ms) |
   | Colour drawing in Edit View (M11.14), measure profile | steady frame 0.53 ms, scrolling frame 0.53 ms; first frame 27.2 ms before the paint budget |
-  | Text Preview (M8.20), release | preview font build 186 ms; bidi over 100,000 characters 7.5 ms (target 30 ms); a shaped 30-line page 0.38 ms (target 8 ms); a million characters 264 ms (limit 500 ms) |
+  | Text Preview (M8.20, M8.20b), release | preview font build 169 ms; layout of 100,000 characters with bidi 30.9 ms, the bidi analysis within its 30 ms target; a shaped 30-line page 0.38 ms (target 8 ms); layout on shaped widths with an empty cache 29.0 ms; a million characters 286 ms, 319 ms on shaped widths at a load of 17 (limit 500 ms) |
+  | Feature compile shared with the previews (X.edit1) | an edit to compile state and preview fonts on Inter: 200 ms (was 374 ms) |
   | Auto-kerning sign agreement (X.tune1) | 85.7% to 99.2% in every master (target 80%) |
   | Auto-spacing median error (X.tune1) | Oswald 5% to 12.5%, Inter 30% to 75% (target 10%) |
   | Space Center, 200-glyph frame (M13.23b) | 1.30 ms plain, 1.44 ms with every display option, in release |
   | Subset against pyftsubset, layout (M12.18) | 909 runs: `GSUB`, `GPOS` and `GDEF` equal wherever both tools run |
   | Subset against pyftsubset, variation and colour tables (M12.19) | 33 of 33 equal |
-  | Subset against pyftsubset, CFF and CFF2 (M12.19b) | 1,608 runs: 536 of 536 equal in each of prune, desubroutinize and no-hinting |
-  | Convert against otf2ttf, tx and fontTools (X.conv2, M12.30) | CFF to TrueType 43,967 identical, 0 off by one, 26 different (was 12,449, 446, 31,098); TrueType to CFF 36,466 the same, 203 different (glyph names of `post` format 3 fonts, written down); CFF to CFF2 43,963 equal, 30 different (seac, written down); CFF2 to CFF 43,993 equal, 0 different; WOFF2 331 equal, 0 different |
+  | Subset against pyftsubset, CFF and CFF2 (M12.19b) | 1,608 runs: 536 of 536 equal in each of prune, desubroutinize and no-hinting (unchanged) |
+  | Subset of `VARC` against pyftsubset (M12.19c) | 14 of 14 runs equal; a 15th hangs inside fontTools (its `VARC` closure loops on a self-referencing component) |
+  | Subset of compressed `SVG ` and composite bitmaps against pyftsubset (M12.19d) | compressed `SVG ` 6 of 6 equal; `CBDT` 2 equal and 4 different, as expected: composite bitmaps keep their components in the output numbering (a guess) |
+  | Subset options against pyftsubset (M12.18b) | every option compared gives the same output; `--canonical-order` matches with the flag; pyftsubset fails `--recalc-max-context` on `OS/2` tables older than version 2 |
+  | Convert against otf2ttf, tx and fontTools (X.conv2, M12.30) | CFF to TrueType 43,967 identical, 0 off by one, 26 different (was 12,449, 446, 31,098); TrueType to CFF 36,466 the same, 203 different (glyph names of `post` format 3 fonts, written down); CFF to CFF2 43,963 equal, 30 different (seac, written down); CFF2 to CFF 43,993 equal, 0 different; WOFF2 331 equal, 0 different (unchanged) |
+  | TTX `mort` and `morx` against ttx (M12.7d) | 100 of 100 dumps and reads equal, on fonts built with fontTools (`crates/tables/crosscheck/morph.py --build 50`; the corpus has none) |
+  | UFO colour layers against glyphsLib (M11.5c) | 10 of 10 round trips equal (`crates/io-ufo/crosscheck/color_layers.py`) |
+  | `optimize` against fontTools (X.opt1, X.opt2) | `GPOS` compaction at level 5: 117 equal, 1 fontTools crash (LinLibertine_RBI); `gvar` IUP 9 equal, 0 different; implied on-curve points 92 and 0; variation store 3 and 0; `COLR` layer reuse 5 and 0 (`crates/tables/crosscheck/optimize.py`) |
   | Project compile against makeotf (M12.40, M12.40b) | 7 of 10 corpus UFOs give a dump equal to makeotf's (makeotf fails on 114 others); the other 3 differ in advance widths and composite outlines |
   | CID-keyed CFF against makeotf (M12.41) | 13 of 13 keys equal, with the `dev` and `noMac` options |
   | Compile extras against fontmake (M12.42) | implied on-curve modes equal in 484 of 484 glyphs each way; pass-through tables 31 of 31 after `tables add` and `optimize` |
-  | Merge against fontTools merge (M12.23b) | 10 pairs merged by both, 2 refused by both; 143 tables the same, 2 different (`hhea` on fontTools' CFF test data; `BASE` tag lists kept once, a guess). Replaces the M12.23 row above |
+  | Merge against fontTools merge (M12.23b) | 10 pairs merged by both, 2 refused by both; 143 tables the same, 2 different (`hhea` on fontTools' CFF test data; `BASE` tag lists kept once, a guess); unchanged in this batch. Replaces the M12.23 row above |
   | CFF2 instances against `varLib.instancer` (M12.20b) | every full instance and downgrade equal; partial range cases differ by fontTools' own partial-then-full rounding; `--update-name-table` 19 equal, 0 different |
   | TTX readers and split dumps (M12.7c) | every tag identical in the measure; `ttx -g` split dumps: 30 of 30 read back, 2,750 split files equal to ttx's |
   | Layout rebuilt on open (M8.23) | 302 corpus binaries export again (13 failed before the fixes); `GDEF` 282 equal and 20 different; `GSUB` 269, 3 and 30; `GPOS` 202, 51 and 49 (equal, different, not comparable); InterVariable opens in 135 ms |
   | Font View with 691 image cells (M11.16) | steady frame 1.08 ms |
   | Colour Text Preview (M11.17) | steady frame 0.39 ms |
   | Static oracle against fontc, TrueType | 63 of 354 sources differ (unchanged) |
-  | Variable fonts and feature automation | unchanged from the sections below |
+  | Variable fonts against fontc and fontmake | fontc 103 equal, 35 different, 20 failed (was 101, 37, 20); fontmake 106, 36, 16 (was 104, 38, 16) |
+  | Feature automation | unchanged from the sections below |
 
-  The times above were taken at a load of 15 to 18 on 16 cores and are upper bounds. The oracle counts above are
-  the first columns of the summary line; the TrueType and CFF totals include the 10 glyphs of colour layers. The "0 different" for CFF in older text below is stale: 12 CFF cases are allowed. The oracle summaries did not move in this batch.
+  This batch's times were taken at a load of about 7 on 16 cores (the million-character runs at 17); earlier rows at 15
+  to 18. All are upper bounds. The oracle counts above are
+  the first columns of the summary line; the TrueType and CFF totals include the 10 glyphs of colour layers. The "0 different" for CFF in older text below is stale: 12 CFF cases are allowed. The static oracle summaries did not move in this batch; the variable ones gained 2 sources each.
 - **Measures that missed their targets** (a tuning package each, ROADMAP.md › What to build next):
   - TrueType autohinter (M10.21, M10.21b): size agreement (78.8% of ttfautohint's output) and cap-height rows
     (100%) meet their targets. X-height rows agree with ttfautohint in 92.9% (target 95%) and zone extremes
@@ -97,6 +110,11 @@ _Updated: 2026-10-19, after the batch of 17 packages of M8 to M12 and six small 
   (the `fsSelection` and `mac_style` checks are merged by design). Not run: ttxn and tx for the
   normalised dump, sfntdiff for `diff`, cu2qu and ttfcomponentizer for the curve tools, otfautohint for
   the `autohint` shell. The TrueType debugger's end points are tested against the hinted preview's.
+- **Measures not run in this batch** (they need AFDKO's tools, which write temporary files the agent sessions could not
+  write; the owner runs them with a script): Type 1 and bare CFF input against tx (M12.30b), the makeotf project
+  compile and CID keys (M12.40d; before: 7 of 10 UFOs and 13 of 13 keys), rotatefont matrices (M12.24c), the
+  subroutiniser against cffsubr (M12.25b, `subr_check.py`), and the CFF2 variable compile against fontmake's
+  `variable-cff2` (before: 104, 34, 20). They are pending.
 - **Decisions:**
   - A trusted ttfautohint binary runs only when it comes from the `export.ttfAutohintBinary` setting or
     `--ttfautohint`. The document cannot name one. This departs from the reference, for safety (the
@@ -158,8 +176,10 @@ _Updated: 2026-10-19, after the batch of 17 packages of M8 to M12 and six small 
   - Merged bounds follow fontTools 4.66, which skips components that use point bounds; a test pins the values.
   - Save choosers show one filter, and the extension picks the format. The reference has a format pop-up, so this is
     a guess on the rows `file.save` and `file.saveAs`. A chosen name without an extension gets the offered one.
-  - Untrusted fonts are held to a charstring memory limit of 1 GiB (256 MiB on wasm) and a TrueType-to-CFF point
-    limit of 16 million (8 million on wasm). X.fix42 resizes both for full CJK fonts in the next batch.
+  - Untrusted fonts are held to a charstring memory limit of 1 GiB (512 MiB on wasm), a TrueType-to-CFF point limit
+    of 16 million (8 million on wasm) and a CFF-to-TrueType point limit of 67,108,864 (2^26); a full CJK font fits
+    (X.fix42). The subroutiniser charges its arrays to a 4 GiB budget (512 MiB on wasm) and takes up to 2^26
+    tokens (2^24 on wasm) (M12.25b).
   - A CFF2 subset prunes subroutines before it dehints. Where pruning cannot be done safely the subroutines stay and
     a warning says so; `--desubroutinize` is held to the charstring memory limit.
   - Review fixes (X.fix35 to X.fix40): empty-lookup calls and 16-bit index overflows are refused before fea-rs sees
@@ -170,13 +190,39 @@ _Updated: 2026-10-19, after the batch of 17 packages of M8 to M12 and six small 
     project-compile paths are checked against the read root; convert outputs and collections are staged; split-dump
     parts cannot lead outside the dump folder through links; stored selections are never written back cut; staged
     audit findings stay until the report is written.
-- **New dependencies between crates:** `engine` and `textlayout` depend on `shaping`, `ui-egui` on `io-pdf` (all internal); `hinting` re-exports `ttasm`; `engine` re-exports `fea`.
+  - The feature-code lookup guard counts lookups as fea-rs groups them and is an upper bound (X.fix41, X.fix47): it
+    may refuse valid code only very near 65,535 lookups written in rare forms.
+  - `optimize` with no step named keeps implied on-curve points, as fontTools does. When the step is named it tests
+    every tuple-peak instance and keeps points that composites, anchors or carets number. `GPOS` compaction is off
+    unless a level is given (X.opt1, X.opt2, X.fix50).
+  - Project compile writes OS/2 version 3 by default, as makeotf does (M12.40d).
+  - Variable `COLR` is instanced in full and partial instances; fontTools leaves it untouched, so this is a guess
+    (M12.21b). Variable fonts will merge as variable fonts only with identical axes, every rule ours (M12.23c,
+    next batch).
+  - Of two same-named instances the later wins with a warning, as fontmake does (M12.22b).
+  - Audit folder entries outside the read root are skipped with a warning (`docs/mcp.md`; X.fix45).
+  - Subset `--drop-tables` is a whole list (`=`, `+=`, `-=` as pyftsubset); the output container follows the input
+    (M12.18b).
+  - Every command that writes `GPOS` back fits class-pair record counts to the class definitions
+    (`fit_pair_classes`, X.fix52); fontTools keeps the stored counts.
+  - The preview font and `features.compile` share one build per revision and master; a compile always builds `GPOS`
+    with the generated kerning and marks (X.edit1).
+  - Review fixes (X.fix47 to X.fix54): the lookup guard follows flags through nested lookup blocks; a colour
+    reference to a glyph the compile leaves out draws as an outline, and reference checks take linear work per
+    master; Unicode Variation Sequence values and ranges are checked, and a stub `cmap` keeps the Mac and format 14
+    subtables; `mort` state cells are charged for their entries' actions; `VARC` records are parsed once and an
+    empty unused store is kept; the UFO colour-layer fold looks up each layer glyph's users; removing a glyph
+    removes its strike bitmaps; unkeyed includes never reuse a kept preview build; layout-only masters are checked
+    against the read root first; shared variation-store subtables are charged per use and the merge heap is
+    capped; `interpolate_layout` charges every master's `GPOS` against one budget; `avar` version 2 regions merge
+    by hash; a `gvar` zero point count means all points; CFF bounds count move points; dehint copies a glyph's data
+    only up to its end.
+- **New dependencies between crates:** `engine` and `textlayout` depend on `shaping`, `ui-egui` on `io-pdf` (all internal); `hinting` re-exports `ttasm`; `engine` re-exports `fea`. This batch: `engine` depends on `io-pdf` (PDF page sizes), `io-bitmap` (strikes); `render` on `container`, which holds the gzip reader; `textlayout` on `icu_properties` (line breaking); `tables` takes `miniz_oxide` as a dev-dependency.
 - **New crates and dependencies:** `crates/shaping` (harfrust), `crates/io-bitmap` (BDF and PCF),
   `crates/io-pdf` (lopdf, with a hand-written reader and rasteriser under limits). `ureq` with rustls serves
   HTTPS downloads in the desktop app only. `craft-print` is a workspace dependency and is not in the
   lock file until M12.36 uses it (that needs network).
-- **Known failures:** none in the gate. Two UI tests that failed before the integration (a Delete
-  shortcut clash and the Variable tab expectation) are fixed.
+- **Known failures:** none in the gate.
 - Test layout: the gate runs the tests with cargo nextest (all test binaries in parallel,
   doctests apart). The command sweep is 16 tests (4 states times 4 chunks, chunked by a stable
   hash of the command id), and one randomised pathops test reserves 8 threads
@@ -194,8 +240,8 @@ _Updated: 2026-10-19, after the batch of 17 packages of M8 to M12 and six small 
   (`cargo test --release -p fontcraft-features --test corpus_auto -- --ignored --nocapture`).
 - Variable fonts (`fontcraft-cli oracle --corpus --variable`; `--instances` for static instances)
   are compared with fontc's or fontmake's at masters, virtual masters, instances and midpoints
-  between masters. Over 158 sources: against fontc 101 equal, 37 different, 20 failed; against
-  fontmake 104, 38, 16 (before M9.12: 100/37/21 and 103/38/17; before the variable compile all
+  between masters. Over 158 sources: against fontc 103 equal, 35 different, 20 failed; against
+  fontmake 106, 36, 16 (before the eleventh batch: 101/37/20 and 104/38/16; before M9.12: 100/37/21 and 103/38/17; before the variable compile all
   158 were not built). Per check, against
   fontc / fontmake (equal and different): outlines 127 and 8 / 128 and 11; `GSUB` variations 129
   and 8 / 135 and 6; `GPOS` kerning 135 and 1 / 141 and 0; marks 134 and 2 / 139 and 2. fontc and
@@ -284,8 +330,8 @@ _Updated: 2026-10-19, after the batch of 17 packages of M8 to M12 and six small 
 - The module runtime (M13.2) on 1,000 synthetic layers: a filter takes 292 ms (target under 1 s);
   a reporter takes 0.35 ms per layer uncached (target 5 ms) and 0.4 µs cached (target 1 ms). No
   module commands, export filters and check modules call it (M13.3 to M13.5).
-- Round trips: `.glyphs` 122/1/118/4 (native and model), `.glyphspackage` 22/0/7/0, UFO 133/7, designspace
-  112 (was 59 identical and 53 failed; UFO was 125, 2 and 13).
+- Round trips: `.glyphs` native 122/1/118/4, `.glyphspackage` 22/0/7/0, designspace native 59/0/0/53, UFO model
+  125/0/2/13.
 - Measures: console completion takes 2.28 ms at worst (target 5 ms, met). The alignment pass of the
   follow-up hook after a one-glyph edit on Inter takes 0.24 ms (target 2 ms, met). Detect Composites on
   Inter finishes in 224 ms (met) and rebuilds 63.0% of the composites from the same bases (target 95%);
@@ -312,8 +358,8 @@ linked file is checked against it, and a linked file outside the read root reads
 
 ## Where to start
 
-1. **Push `master`** once the owner confirms the gate (this batch's 196 commits are local). Then check
-   the disk: build output is large (`cargo clean` or delete the target directory when the disk passes
+1. **Run the pending AFDKO measures** (State of the tree › Measures not run in this batch) and record them here.
+   Check the disk: build output is large (`cargo clean` or delete the target directory when the disk passes
    about 75%).
 2. **Tune the measures that missed** (numbers above, under "Measures that missed their targets"):
    - M10.21b: the autohinter's x-height rows (92.9% against 95%) and zone agreement (98.29% against 99%).
@@ -325,60 +371,45 @@ linked file is checked against it, and a linked file outside the read root reads
      candidate base). Measure: `cargo test --release -p fontcraft-engine --test engine detect:: -- --ignored
      --nocapture`.
 3. **The remaining packages per milestone** (`docs/plans/M<n>.md` § 6 gives each one's inputs):
-   - M6.19; M7.20; M8.24; M9.25, M9.26; M10.32.
+   - M6.19; M7.20; M8.24; M9.26; M10.32.
    - M11.20.
    - M12.1a to M12.1c, M12.36, M12.65.
    - M13.40 to M13.42 (caps, waiting for a trial), M13.59 (waits for a trial's saved Glyphs project),
      M13.61. M13.60 is dropped.
-   - Written, not yet integrated into `master`: M12.19c (subset of `VARC`), X.fix41 (the `SVG ` parse charged once
-     in the subset, a lookup count that follows fea-rs) and X.fix42 (flat per-glyph buffers and limits for full CJK
-     fonts; the ignored test `a_full_cjk_font_fits_the_charstring_and_point_limits` takes a font path in
-     `FONTCRAFT_CJK_FONT`).
+   - Written for the next batch, on branches not yet merged into `master`: `w-M12.23c` (variable fonts merged as
+     variable fonts; every rule is ours, as fontTools has no variable merge), `w-M12.25c` (CFF2 specialisation and
+     subroutines at export; CFF version 1 byte identity to confirm), `w-M12.7f` (TTX writer bitmap image forms and
+     external image files), `w-M12.41b` (the ROS parameter as CID data), `w-M11.14b` (Edit View and the `SVG `
+     table draw `PaintColrGlyph` references) and `w-M13.55c` (an `EBDT` and `EBLC` writer for the model's strikes,
+     and strike rasterising).
    Derive the order from each plan's dependency table.
 4. **Follow-up packages the writers named:**
-   - TTX readers: `mort` and `morx`, and bitmap images that are not raw. M12.10b: spot listings, the CFF literal
-     view, tx options.
-   - Instances: same-named instances where compile skips the earlier one (an edge of X.fix33); partial instances
-     refuse `VARC`, `avar` version 2 and variable `COLR`; instances from sources lack
-     `layoutOnly`, normalisation and custom parameters (M12.22). Model flag for stated style-map names; instance
-     font-info numbers for non-default sources only; feature-variation tags for a rule that feeds several
-     features (CustomFeatures); the two `.notdef` glyphs of InterpolateLayout3.
-   - M13.55b: bitmap strikes in the model, then `bitmap.importStrikes` and `exportStrikes`.
-   - `io-pdf` wired into the engine: a PDF branch in `clipboard.rs` and the image decode path.
-   - `audit.fix`: the full contour order in `compat.rs`; glyph-data fixes (binary-to-source mapping), component
-     steps, stage 3; on compiled fonts, recompiling CFF and the CFF Top DICT, `vhea`, `maxp` counts and
-     families.
-   - Instance, transform and merge: `post` formats 3 and 4 names, the `maxp` recalculation in `outlines`.
-   - TTX reader (M12.8, M12.9): the font bounding box of one CFF font.
-   - Merge: variable fonts as variable fonts (they merge as default outlines), and CFF2, CID-keyed fonts and `JSTF`,
-     which fontTools refuses too. Transform: CFF and CFF2, `--glyph-table`, `fd`, `--to`, matrices on variable
-     fonts. The instancer keeps its own CFF and CFF2 reader and writer; merge them with `crates/cff`.
-   - Convert (M12.30): Type 1, bare CFF and TTX input, UFO output from a binary, `--glyphs`, GOADB, CID keying,
-     `--location` and overlap removal.
-   - Project compile (M12.40 to M12.42): two-byte Mac CMaps, `-ci` UVS, project-file CMap keys, the ROS parameter
-     as CID data, `InputFontPath`, `OutputFontPath` and `FeaturePath`, the licence code, `-osbOn` and `-osv`, the
-     bold partner range, and the 3 corpus UFOs that still differ from makeotf (advance widths and composite
-     outlines).
-   - Subset: `VARC` (M12.19c), compressed `SVG ` documents, composite bitmaps.
-   - Opening compiled fonts (M8.23): one writer for feature code instead of the copy in `crates/tables`; a pair
-     kerning entry that is turned back on kerns twice.
-   - UFO: full-colour layers with paths as `.colorN` layer glyphs on save; `PaintColrGlyph`, variable paints and
-     turned gradients.
+   - TTX: M12.10b spot listings, the CFF literal view, tx options; the font bounding box of one CFF font in the
+     reader (M12.8, M12.9).
+   - Instances: `--layout-only` for `.glyphs` sources and fontmake's compiled-instance path; instance font-info
+     numbers for non-default sources only; feature-variation tags for a rule that feeds several features
+     (CustomFeatures); the two `.notdef` glyphs of InterpolateLayout3.
+   - Bitmap strikes: the `EBDT` and `EBLC` writer and rasterising (`w-M13.55c`).
+   - `io-pdf` wired into the clipboard (a PDF branch in `clipboard.rs`) and the image decode path.
+   - `audit.fix`: `recompileCff` on compiled font files.
+   - Merge: variable fonts as variable fonts (`w-M12.23c`), and CFF2, CID-keyed fonts and `JSTF`, which fontTools
+     refuses too. The instancer keeps its own CFF and CFF2 reader and writer; merge them with `crates/cff`.
+   - Convert (M12.30): UFO output from a binary, `--glyphs`, GOADB, CID keying, `--location` and overlap removal.
+   - Project compile (M12.40 to M12.42): the ROS parameter as CID data (`w-M12.41b`), and the 3 corpus UFOs that
+     still differ from makeotf (advance widths and composite outlines).
+   - Subset: `--pretty-svg`, `--xml`, `--option?` and `--show-defaults`.
+   - CFF2: blended hints (specialisation and subroutines are `w-M12.25c`).
+   - Colour: Edit View drawing of `PaintColrGlyph` references (`w-M11.14b`); `SVG ` clip paths, masks, patterns and
+     filters in the colour Text Preview. Space Center: images in the display menu. Colour drawing: screenshots.
    - Table Viewer (M12.38): the source of the last export, a control-channel measure and screenshots.
-   - CFF2 subroutines; `optimize` placeholders (`GPOS` compaction, variation stores, `gvar` IUP, implied on-curve
-     points, `COLR` reuse); the subroutiniser refuses charstrings above 8.4 million tokens (large CJK fonts).
-   - Edit View: one compile for `features.compile` and the preview font.
-   - Images in Edit View: palette transforms, nudging, delete, PDF scaling (a PDF page has no pixel size).
-   - Space Center: images in the display menu. Colour drawing: screenshots. Text Preview: line breaking on
-     shaped widths and vertical text. Colour Text Preview: compressed `SVG ` documents, the `SVG ` viewBox,
-     embedded images, `CBDT`, and showing a build error.
+   - Text Preview: the vertical positioning features (`vrt2`, `vkrn`).
    - `edit.showAllMasters` (needs a tab model with a layer per text item).
-   - Small UI leftovers: Shift+B cycling from Pencil to Pixel; the Smart windows from the inspector's
-     Cmd+Alt+I; Copy and Paste of instances in the project window; the Font Info Exports tab's preview line
-     and aliases; theme tokens for the new aids and syntax colours; menu checkmarks for the suggest
-     switches; one undo step for an arrow-key nudge of several hints; Instructor badge drag, extra nodes and Delete on instructions;
-     beam dragging; `view.newTab` master after a document switch; `plugin.installFromFile` from a drop;
-     the CLI's repeated `--check` keeps only the last value.
+   - Small UI leftovers: check marks on the other menu toggles; the Font Info Exports tab's preview line and
+     aliases; one undo step for an arrow-key nudge of several hints; Instructor badge drag, extra nodes and Delete
+     on instructions; beam dragging; `view.newTab` master after a document switch; `plugin.installFromFile` from a
+     drop; the CLI's repeated `--check` keeps only the last value.
+   - Owner decision: whether CJK exports subroutinise by default (the subroutiniser takes 136 s on Source Han Serif
+     TC Bold).
 5. **Builder packages and the suite libraries**, one at a time in the main checkout: M12.36 (the PDF proof
    through `craft-print`; the first use needs network to fetch it). Then, in order:
    - X.suite2: `craft-quit`, native macOS quit and window-close handling for the desktop app; the
@@ -393,12 +424,12 @@ linked file is checked against it, and a linked file outside the read root reads
 6. **The M13.15b base-choice follow-up**: the recovery on Inter is 63.0% against the 95% target; the
    remaining misses are composites whose outline equals that of several candidate bases.
    Hint follow-up: upkeep on background layers and for corner and cap hints.
-   CFF2 follow-ups: hints, subroutines and specialisation. TrueType follow-ups: the variation of
+   CFF2 follow-up: blended hints. TrueType follow-ups: the variation of
    composites with intermediate layers; `cvar` and instruction deltas in variable fonts and
    special layers' own instructions (M10.19).
    Audit follow-ups: a per-glyph hash cache, several `checkOutlines` and `compareFamily`
    options, source-field names beyond the common `OS/2`, `hhea`, `head`, `post` and `name`
-   fields, and a look at the outline warnings on decoded compiled fonts. Subset follow-ups: `VARC`, several pyftsubset
+   fields, and a look at the outline warnings on decoded compiled fonts. Subset follow-ups: four pyftsubset
    options, subsetting sources.
    Other follow-ups: M8.11 (the ligature, fraction, ordinal, ornament and aalt generators; the
    automatic framework has no entries for them yet), text-token expansion in
@@ -422,11 +453,6 @@ linked file is checked against it, and a linked file outside the read root reads
 
 Low findings from the last review (the automation roots), for a later fix pass:
 
-- Reading a UFO folder under roots still follows links inside the UFO (for example from
-  `glyphs/` to a folder outside the roots). Link entries should be skipped or checked while
-  roots are in force (`io.rs`, `read_folder`).
-- Following a reference to a file opens it even when it is a named pipe, which blocks. It should
-  return without opening unless the target is a regular file (`io.rs`, `follow_references`).
 - A timing bound in the variable-font decompile test (`few*2+20` ms) may fail under load. If it
   does, count comparisons through a hook instead.
 - An image path taken from the document and resolved through links can be stored with `../..`
@@ -660,11 +686,11 @@ atomic failure; WebAssembly plug-ins and no Python; no compiled fonts in the rep
   CFF, plain, WOFF and WOFF2; the core tables match fontc and fontmake over the corpus (with
   allow-listed causes: bracket and colour glyphs, the glyph database, smart components); overlaps
   are removed, strokes expanded and masks applied at export; `gasp`, `GDEF`, the mark features,
-  compiled feature code and the `SVG ` table are written. Variable TrueType fonts match fontc's in 101 of
-  158 sources and fontmake's in 104; variable CFF2 fonts match fontmake's in 104 of 158. TrueType exports carry the glyph programs of manual instructions or the autohinter's (no `cvar`). Colour fonts carry `COLR` (versions 0 and 1, also variable), `CPAL`, `sbix`, `CBDT` and `CBLC` (through `Options::cbdt`, the export commands, the Export dialog and the CLI) and `SVG `. No CFF2 hints, subroutines or specialisation; static CFF exports carry subroutines when that makes them smaller
+  compiled feature code and the `SVG ` table are written. Variable TrueType fonts match fontc's in 103 of
+  158 sources and fontmake's in 106; variable CFF2 fonts match fontmake's in 104 of 158. TrueType exports carry the glyph programs of manual instructions or the autohinter's (no `cvar`). Colour fonts carry `COLR` (versions 0 and 1, also variable), `CPAL`, `sbix`, `CBDT` and `CBLC` (through `Options::cbdt`, the export commands, the Export dialog and the CLI) and `SVG `. No CFF2 hints, subroutines or specialisation; static CFF exports carry subroutines when that makes them smaller
   (`docs/plans/M2.md` § 5, `docs/plans/M3.md` § 5, `docs/spec/40-compile.md` § 4).
 - **Most M10 to M12 corpus measures have not been run.** The audit runner (M12.44), subset
-  (M12.17), the TTX reader and writers, instance, partial instances, merge, transform, the `variations` tools, the CFF subroutiniser, convert, project compile, CID-keyed CFF and the compile extras have; the other packages were tested against small outputs of the oracles, and each
+  (M12.17), the TTX reader and writers, instance, partial instances, merge, transform, the `variations` tools, the CFF subroutiniser, convert, project compile, CID-keyed CFF, the compile extras, `optimize`, TTX `mort` and `morx` and the UFO colour layers have; the other packages were tested against small outputs of the oracles, and each
   plan's § 5 lists the corpus runs still owed.
 - **`docs/spec/20-cli.md` is very long** (about 26,000 words). Read the section for the subcommand
   you are building, not the whole file.
@@ -1290,3 +1316,23 @@ Append one terse entry per session: what landed, numbers, what is still open.
   of 10 corpus UFOs; the other baselines are under "State of the tree". The measures that missed their targets did not
   move. Gate: 4,237 tests passed, 0 failed, 46 skipped. Open: everything under "Where to start", with M12.19c, X.fix41
   and X.fix42 written and waiting to be integrated; the push waits for the owner.
+
+- **2026-10-20, the eleventh batch: M9.25 and 20 follow-up packages of M8 to M13, X.fix41 to X.fix45, X.tables2,
+  X.ui1, X.audit2, X.audit3, X.opt1, X.opt2, X.edit1, X.integ13 to X.integ16, X.fix47 to X.fix54, X.gate15.**
+  Written in parallel in separate worktrees, merged in two waves, tested in X.integ13 to X.integ16, reviewed in four
+  parts and fixed in X.fix47 to X.fix54, then gated once in X.gate15. Landed: higher-order interpolation data on
+  nodes (M9.25); subsetting of `VARC` and compressed `SVG ` and pyftsubset's list options (M12.19c, M12.19d,
+  M12.18b); TTX `mort`, `morx` and bitmap image forms (M12.7d, M12.7e); convert from Type 1, bare CFF and TTX
+  (M12.30b); transform of CFF, CFF2 and variable fonts (M12.24b, M12.24c); partial instances of `avar` version 2,
+  `VARC` and variable `COLR` fonts (M12.21b); the rest of instances from sources and `--layout-only` (M12.22b,
+  M12.22c); `optimize` (X.opt1, X.opt2); the subroutiniser and convert on full CJK fonts (M12.25b, X.fix42);
+  makeotf's project keys (M12.40d); `PaintColrGlyph` in UFO and compiled `COLR` (M11.5c, M11.7b); the rest of the
+  colour Text Preview (M11.17b); image editing in Edit View (M11.13b); line breaking and vertical text in Text
+  Preview (M8.20b); one feature compile for the previews (X.edit1); bitmap strikes in the model (M13.55b); one
+  feature-code writer (M8.23b); the rest of `audit.fix` (X.audit2, X.audit3); `post` and `maxp` after instance,
+  transform and merge (X.tables2); small UI leftovers (X.ui1). The review found a lookup-guard undercount that could
+  let fea-rs abort and an out-of-memory path in the `mort` reader. Numbers: 917 of 1,004 commands live (was 914);
+  255 of 277 packages (was 254); feature parity about 35% (35.0, was 34.5); variable fonts against fontc 103/35/20
+  and fontmake 106/36/16 (was 101/37/20 and 104/38/16); instances from sources 0 glyph differences (was 6); the
+  other baselines are under "State of the tree". The AFDKO-tool measures are pending. Gate: 4,431 tests passed, 0
+  failed, 49 skipped. Open: everything under "Where to start", with six next-batch branches written and not merged.

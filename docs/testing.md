@@ -216,6 +216,17 @@ the fonts can be checked with other readers (fontTools' `TTFont(...).ensureDecom
   `--optimize-cff 1`, records what its charstring pen receives, has the `cff_from_json` example
   build the table from that recording, and compares the two tables byte for byte. On a
   difference it names the first differing DICT entry or charstring.
+- **Cross-check scripts.** Each runs locally with the fontmake tool's Python (`python -I`), outside the gate. The
+  docstring at the top of each gives its arguments. The `tables` and `io-ufo` scripts call `fontcraft-cli`
+  (`--cli`, default `target/release/fontcraft-cli`).
+  - `crates/cff/crosscheck/subr_check.py`: the CFF subroutiniser (through the `subr_measure` example) against
+    cffsubr over the corpus: outlines, fontTools warnings and size. tx needs a writable temporary folder.
+  - `crates/tables/crosscheck/morph.py`: the TTX writer and reader of `mort` and `morx` against ttx. The corpus
+    has neither table, so `--build N` writes random fonts of each with fontTools.
+  - `crates/tables/crosscheck/optimize.py`: the `optimize` steps (`gvar` IUP, implied on-curve points, variation
+    store, `GPOS` compaction, `COLR` layer reuse) against the same work done by fontTools.
+  - `crates/io-ufo/crosscheck/color_layers.py`: a UFO's colour layer list, palettes and layer glyphs against
+    glyphsLib's UFOs, and their round trip through FontCraft.
 - **Glyph database.** `cargo xtask glyphdata --check` (outside the gate; needs
   `cargo xtask glyphdata --fetch` first) looks up about 200,000 names in FontCraft's database, in
   fontc's `glyphs-reader` 1.0.0 and in glyphsLib (through `crates/glyphdata/crosscheck/glyphslib.py`,
