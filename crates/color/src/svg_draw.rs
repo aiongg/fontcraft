@@ -12,11 +12,15 @@
 //!   the canvas shows what the `SVG ` table holds.
 //! - Fills are solid colours or gradients; strokes are expanded to outlines by usvg's stroker.
 //!   Group and paint opacity multiply into the paint's alpha.
-//! - Not drawn: text (usvg reads files without text), embedded images, patterns, clip paths,
+//! - [`items`] also gives the file's embedded PNG and JPEG images, undecoded, with their
+//!   placement, for Text Preview's colour glyphs; [`shapes`] leaves them out.
+//! - Not drawn: text (usvg reads files without text), embedded images ([`shapes`]), patterns, clip paths,
 //!   masks and filters. Even-odd fills are filled with the non-zero rule, which differs only for
 //!   overlapping contours. A radial gradient under a non-uniform transform keeps circles, with
 //!   radii scaled by the transform's mean scale.
 //! - At most [`MAX_SVG_SHAPES`] outlines; walking stops at [`crate::MAX_SVG_DEPTH`] groups.
+
+use std::sync::Arc;
 
 use fontcraft_geom::{Affine, BezPath, Point};
 use fontcraft_model::Extend;
@@ -37,19 +41,62 @@ pub struct SvgShape {
     pub paint: Paint,
 }
 
+/// An embedded PNG or JPEG image of an SVG file, not yet decoded.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SvgImage {
+    /// The encoded image.
+    pub data: Arc<Vec<u8>>,
+    /// From the unit square of the image (y down from its top left) to font units, y up.
+    pub place: Affine,
+    /// Group opacity, from 0 to 1.
+    pub opacity: f64,
+}
+
+/// What an SVG file draws, in paint order.
+#[derive(Clone, Debug, PartialEq)]
+pub enum SvgItem {
+    Shape(SvgShape),
+    Image(SvgImage),
+}
+
 /// The outlines of the SVG file `svg` placed by `transform` (the layer's image transform), in
 /// paint order, the first at the bottom.
 pub fn shapes(svg: &[u8], transform: Affine) -> Result<Vec<SvgShape>, ColorError> {
-    let document = crate::svg_import::import(svg, transform, 0)?;
+    let items = read(svg, |_, _| transform, false)?;
+    Ok(items.into_iter().filter_map(|i| if let SvgItem::Shape(s) = i { Some(s) } else { None }).collect())
+}
+
+/// The outlines and embedded PNG and JPEG images of the SVG file `svg`, in paint order, placed
+/// by the transform `place` chooses from the width and height of the file's viewport (its
+/// `width` and `height`, else its `viewBox`'s, else 100). The transform maps the viewport, y up
+/// with its bottom left at the origin, to font units.
+pub fn items(svg: &[u8], place: impl FnOnce(f64, f64) -> Affine) -> Result<Vec<SvgItem>, ColorError> {
+    read(svg, place, true)
+}
+
+fn read(svg: &[u8], place: impl FnOnce(f64, f64) -> Affine, images: bool) -> Result<Vec<SvgItem>, ColorError> {
+    let document = crate::svg_import::import_placed(svg, place, 0)?;
+    let resolve_data: usvg::ImageHrefDataResolverFn<'static> = if images { Box::new(bitmap_data) } else { Box::new(|_, _, _| None) };
     let options = usvg::Options {
         resources_dir: None,
-        image_href_resolver: usvg::ImageHrefResolver { resolve_data: Box::new(|_, _, _| None), resolve_string: Box::new(|_, _| None) },
+        image_href_resolver: usvg::ImageHrefResolver { resolve_data, resolve_string: Box::new(|_, _| None) },
         ..usvg::Options::default()
     };
     let tree = usvg::Tree::from_str(&document, &options).map_err(|e| ColorError::BadSvg(e.to_string()))?;
     let mut out = Vec::new();
     walk(tree.root(), 1.0, 0, &mut out)?;
     Ok(out)
+}
+
+/// PNG and JPEG data, by their signatures; nothing else is drawn.
+fn bitmap_data(_: &str, data: Arc<Vec<u8>>, _: &usvg::Options) -> Option<usvg::ImageKind> {
+    if data.starts_with(&[0x89, b'P', b'N', b'G']) {
+        Some(usvg::ImageKind::PNG(data))
+    } else if data.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        Some(usvg::ImageKind::JPEG(data))
+    } else {
+        None
+    }
 }
 
 fn affine(t: tiny_skia_path::Transform) -> Affine {
@@ -61,7 +108,7 @@ fn to_font(t: tiny_skia_path::Transform) -> Affine {
     Affine::new([1.0, 0.0, 0.0, -1.0, 0.0, 0.0]) * affine(t)
 }
 
-fn walk(group: &usvg::Group, opacity: f64, depth: usize, out: &mut Vec<SvgShape>) -> Result<(), ColorError> {
+fn walk(group: &usvg::Group, opacity: f64, depth: usize, out: &mut Vec<SvgItem>) -> Result<(), ColorError> {
     if depth > MAX_SVG_DEPTH + 4 {
         return Ok(());
     }
@@ -70,13 +117,28 @@ fn walk(group: &usvg::Group, opacity: f64, depth: usize, out: &mut Vec<SvgShape>
         match node {
             usvg::Node::Group(g) => walk(g, opacity, depth + 1, out)?,
             usvg::Node::Path(p) if p.is_visible() => path_shapes(p, opacity, out)?,
+            usvg::Node::Image(i) if i.is_visible() => image(i, opacity, out)?,
             _ => {}
         }
     }
     Ok(())
 }
 
-fn path_shapes(path: &usvg::Path, opacity: f64, out: &mut Vec<SvgShape>) -> Result<(), ColorError> {
+fn image(image: &usvg::Image, opacity: f64, out: &mut Vec<SvgItem>) -> Result<(), ColorError> {
+    let data = match image.kind() {
+        usvg::ImageKind::PNG(d) | usvg::ImageKind::JPEG(d) => d.clone(),
+        _ => return Ok(()),
+    };
+    if out.len() >= MAX_SVG_SHAPES {
+        return Err(ColorError::LimitExceeded { what: "outlines drawn from one SVG file", limit: MAX_SVG_SHAPES });
+    }
+    let size = image.size();
+    let place = to_font(image.abs_transform()) * Affine::scale_non_uniform(f64::from(size.width()), f64::from(size.height()));
+    out.push(SvgItem::Image(SvgImage { data, place, opacity: opacity.clamp(0.0, 1.0) }));
+    Ok(())
+}
+
+fn path_shapes(path: &usvg::Path, opacity: f64, out: &mut Vec<SvgItem>) -> Result<(), ColorError> {
     let place = to_font(path.abs_transform());
     let fill = path.fill().and_then(|f| {
         let paint = paint_of(f.paint(), opacity * f64::from(f.opacity().get()), place)?;
@@ -96,7 +158,7 @@ fn path_shapes(path: &usvg::Path, opacity: f64, out: &mut Vec<SvgShape>) -> Resu
             return Err(ColorError::LimitExceeded { what: "outlines drawn from one SVG file", limit: MAX_SVG_SHAPES });
         }
         if !shape.outline.elements().is_empty() {
-            out.push(shape);
+            out.push(SvgItem::Shape(shape));
         }
     }
     Ok(())

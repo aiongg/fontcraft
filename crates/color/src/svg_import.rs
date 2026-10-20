@@ -33,6 +33,12 @@ const MAX_SVG_NODES: u32 = 1_000_000;
 /// The document of glyph `gid` drawing the SVG file `svg`, placed by `transform` (the layer's
 /// image transform, font units, y up).
 pub fn import(svg: &[u8], transform: Affine, gid: u16) -> Result<String, ColorError> {
+    import_placed(svg, |_, _| transform, gid)
+}
+
+/// [`import`] with the transform chosen by `place` from the width and height usvg gives the
+/// file's viewport (its `width` and `height`, else its `viewBox`'s, else 100).
+pub(crate) fn import_placed(svg: &[u8], place: impl FnOnce(f64, f64) -> Affine, gid: u16) -> Result<String, ColorError> {
     if svg.len() > MAX_SVG_FILE_BYTES {
         return Err(ColorError::BadSvg(format!("it is {} bytes; at most {MAX_SVG_FILE_BYTES} are read", svg.len())));
     }
@@ -53,6 +59,7 @@ pub fn import(svg: &[u8], transform: Affine, gid: u16) -> Result<String, ColorEr
     };
     let tree = usvg::Tree::from_xmltree(&xml, &options).map_err(|e| ColorError::BadSvg(e.to_string()))?;
     let height = f64::from(tree.size().height());
+    let transform = place(f64::from(tree.size().width()), height);
 
     // Ids from the file get a prefix, so none of them can be the glyph group's `glyph<ID>`.
     let write = usvg::WriteOptions {

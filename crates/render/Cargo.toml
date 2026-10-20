@@ -12,6 +12,7 @@ workspace = true
 
 [dependencies]
 fontcraft-color.workspace = true
+fontcraft-container.workspace = true
 fontcraft-geom.workspace = true
 fontcraft-imagery.workspace = true
 fontcraft-model.workspace = true
